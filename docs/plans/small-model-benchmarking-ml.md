@@ -1,6 +1,14 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.9
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.10
+
+2026-09-03 (v1.10, `data-scientist`) — §11.7's renderings are **measured** (50 warm calls against
+`qwen/qwen3-4b-2507`, following one cold load), and taking them reversed two of v1.9's own rulings:
+LM-Studio-side TTFT **excludes** the JIT load (cold call 3 625.0 ms wall against 49.7 ms `ttft`), so
+§11.4 keeps `ttftMs`/prefill/`tokensPerSecond` on a contaminated item with **their own denominator**
+rather than withholding them, and slot 3 stops naming a load cost — v1.9's *"about 21 s"* is false
+of a 3.625 s load. New **§11.5.1**: the same gap is a detector for R-14's in-call-reload residual
+(3 485.6 ms cold against −11.3…+7.6 ms warm, 461×), with a 1 000 ms threshold and its basis.
 
 2026-09-03 (v1.9, `data-scientist`) — plan R-13 closed on all three of its inputs: new **§11**
 settles the latency percentile as **Hyndman-Fan type 1** (inverse ECDF, integer-ceiling rank, one
@@ -1935,7 +1943,7 @@ rather than one blended threshold.
   comparison is like-for-like. Two packs' figures are different order statistics of different item
   sets and are not comparable; nothing in the report may place them in one column.
 
-### 11.4 The denominator — `Y` is the item count, and the withholding is per *item*, not per field
+### 11.4 The denominator — `Y` is the item count, and which fields the withholding governs
 
 **`Y = len(run.items)`** — every item the run recorded — and **`X` = the count of items whose timing
 survived**. No item is removed from `Y` for any reason.
@@ -1949,35 +1957,46 @@ unnetted, largest denominator is the conservative one *for this sentence*, the s
 gives the observable floor the **unfloored** `n_effective`. It also keeps the latency line on the
 same base as every other rate in the report (§4.3's `k/n` discipline).
 
-**And the withholding is a property of the call, so it governs the whole FR-11 timing block —
-review G3-3, answered here rather than deferred.** `ttftMs`, the `prefillMsPer1kPromptTokens`
-input and `tokensPerSecond` are read off the **same response** as the discarded `latencyMs`. Whether
-LM-Studio-side TTFT includes the JIT load is, as G3-3 correctly says, **not established** — §2.5
-recorded the cold call's wall clock and not what `stats` reported on it. That is precisely why the
-rule goes the conservative way:
+**And which fields the withholding governs is settled by measurement, not by a conservative
+default — review G3-3.** `ttftMs`, the `prefillMsPer1kPromptTokens` input and `tokensPerSecond` are
+read off the **same response** as the discarded `latencyMs`, and v1.9 withheld all four on the
+grounds that whether LM-Studio-side TTFT includes the JIT load was *not established*. **It is now,
+and it does not.** Measured this session against **`qwen/qwen3-4b-2507` (Q4_K_M)** from a genuinely
+non-resident start — `residency()` returned `[]` before the call and named the model after it:
 
-> **A withheld item's *entire* timing block is withheld** — `latencyMs`, `ttftMs`, the prefill
-> figure and `tokensPerSecond` — and every aggregate over those fields carries the **same `X` of
-> `Y`** and the same floors as p50/p95. There is one coverage number per run, not four.
+| | client wall clock | `stats.time_to_first_token` | `stats.generation_time` | wall − (ttft + gen) |
+|---|---|---|---|---|
+| **cold call (the JIT load)** | **3 625.0 ms** | 49.7 ms | 89.8 ms | **3 485.6 ms** |
+| 50 warm calls, same model | 55.1 / 78.2 / 114.6 ms (min/median/max) | — | — | **−11.3 … +7.6 ms** |
 
-The burden is on establishing that a field is *clean*, never on establishing that it is dirty: a
-per-field carve-out ("generation was after the load, so `tokensPerSecond` survives") cannot be
-verified from the response, and an unverifiable carve-out is how a confident wrong number gets
-printed. `tokensPerSecond` is FR-11 *diagnostic-only* and is still covered, because a diagnostic
-printed over an unstated subset is the same defect one severity down.
-**The evidence that would reopen this:** G3-3's own free measurement — record the warm-up's `stats`
-beside its wall clock on a known-cold load. If TTFT provably excludes the load, `ttftMs` and prefill
-may be carved back out with their own denominator; until that measurement exists, they are withheld.
-**The aggregates over `ttftMs` and prefill are medians**, so they take §11.6's **p50** gate, not the
-tail gate.
+The load is 3 485.6 ms that LM Studio's own `stats` never sees. So:
+
+> **Only `latencyMs` — the client wall clock — is withheld on a contaminated item.** `ttftMs`, the
+> prefill figure and `tokensPerSecond` measure generation that happened *after* the load, are
+> **kept**, and are each printed with **their own denominator** — which is the other half of G3-3's
+> fix, and the half that survives the measurement.
+
+**This reverses v1.9's ruling, and the order matters more than the outcome.** The conservative
+default — withhold everything until a field is shown clean — was correct *while the question was
+open*, and keeping it once the question closed would have been the same defect one document up:
+discarding good measurements to honour a caveat that no longer describes reality. **The wall clock
+is the contaminated field and `stats` is the clean one**, and their difference is a detector
+(§11.5.1). Aggregates over `ttftMs` and prefill are **medians**, so they take §11.6's **p50** gate
+against **their own** coverage, which will normally be `Y of Y` while the wall-clock block is short;
+`tokensPerSecond` is FR-11 diagnostic-only and still prints its denominator, because a diagnostic
+over an unstated subset is the same defect one severity down.
 
 ### 11.5 The missingness is informative, and its direction is known exactly
 
 **Two producers of a withheld timing, and both are right-censoring** — which is what lets one rule
 cover them:
 
-- **Model-load contamination** (plan §3.6). The call ran with a JIT load inside it; a load costs
-  ~21 s against ~1.3 s for a warm turn (plan §2.5, §2.2).
+- **Model-load contamination** (plan §3.6). The call ran with a JIT load inside it. **The load's
+  cost varies by an order of magnitude** and no report may name a single figure for it: plan §2.5
+  measured **21.068 s**, this session measured **3.625 s** on the same box and the same surface
+  (page-cache state is the obvious difference), against warm turns of ~1.3 s in plan §2.2's
+  experiment and 55–115 ms for the minimal calls of §11.4's table. That range is why §11.7's slot 3
+  names a magnitude and not a number.
 - **A scored call that hits `requestTimeoutSeconds`** (review G3-5, whose recommended disposition —
   scored per the pack's rule, `latencyMs = None`, timeout count printed on its own line — this
   section adopts and depends on; §11.9). A censored observation is **not a measurement**: storing
@@ -2013,6 +2032,30 @@ Worked, exactly, at `Y = 38` — including plan §3.6's own `34 of 38` sketch:
 | 36 | 35 | 92.1 | 18 | 47.3 | both |
 | 35 | 34 | **89.4** | 18 | 47.3 | **p50 only** |
 | **34** | 33 | **86.8** | 17 | **44.7** | **neither** |
+
+#### 11.5.1 The in-call reload detector — R-14's residual, closed by the same measurement
+
+Plan R-14 accepts one residual it cannot see: a reload that **begins and ends inside a single timed
+call** is invisible to a between-item residency probe, which only ever looks *between* items.
+§11.4's table closes it, and the separation is not marginal:
+
+> **`latencyMs − (ttftMs + generation_time)` is the load, isolated.** Measured: **3 485.6 ms** on the
+> cold call against **−11.3 … +7.6 ms** across 50 warm calls — the cold gap is **461×** the largest
+> warm gap observed.
+
+**Recommendation:** `runner` computes that gap per item and withholds `latencyMs` as a contamination
+(§11.5) whenever it exceeds **1 000 ms**. That threshold sits ~130× above the largest warm gap
+measured here and ~3.5× below the smallest cold load measured anywhere (this session's 3 625 ms;
+plan §2.5's is 21 068 ms). **It is a starting value with a named basis, not a derived constant** — it
+rests on one cold observation here plus one in the plan — so it should be re-checked against the
+first real pack run, and the two quantities that would move it are the warm gap's maximum and the
+cold load's minimum. The negative warm gaps are expected rather than anomalous (the client wall clock
+and the server's own timers bracket different work), which is why the rule is a one-sided threshold
+on a magnitude and never `gap > 0`.
+
+This detector is **additive to** the residency probe, not a replacement: the probe catches a reload
+that happened *before* an item, the gap catches one *inside* it, and neither sees what the other
+does. Placing it is `architect`'s (§11.9); the metric, the threshold and its basis are here.
 
 ### 11.6 Floor 2 — the level floor, which refuses; and how the two floors divide the work
 
@@ -2102,6 +2145,15 @@ load · `<MT>` withheld for timeout · `<TAIL>` = `max` when `r95 == X` (§11.3)
 `<p50>`/`<tail>` in **milliseconds, rounded to the nearest integer** · `<s> = X − r95` ·
 `<L95>`/`<L50>` **truncated** to 1 dp.
 
+**The values in the renderings below are measured, not illustrative.** Source: **50 warm
+`POST /api/v0/chat/completions` calls against `qwen/qwen3-4b-2507` (Q4_K_M)** on this box,
+`temperature: 0`, `max_tokens: 16`, one short prompt each, following the single cold warm-up call of
+§11.4's table on a model `residency()` had just reported non-resident. The **first 38** calls are the
+`Y = 38` sample and the **last 12** the `Y = 12` sample; each partial-coverage rendering withholds
+the **k slowest** calls of that same sample, which is exactly what the guard does to it. These are
+minimal chat calls and so run an order of magnitude faster than plan §2.2's ~1.3 s pack turns — what
+is being pinned is the **shape** of the block, and the ranks and levels in it are exact.
+
 **The unit is milliseconds and the block never prints seconds.** `ItemResult.latencyMs` is a float
 in ms; `coldLoadSeconds` is the only latency field in this tool measured in seconds, it is reported
 separately (plan §3.6) and it never appears inside this block. **The values round to nearest**, not
@@ -2111,8 +2163,8 @@ must not be copied from the bounds beside it.
 
 **Slot 1 — the figures.** Exactly one variant, prefixed `Latency (client wall clock): `.
 
-- both printed → `p50 = 1284 ms, p95 = 3907 ms.`  *(or `max = 3907 ms` when `<TAIL>` is `max`)*
-- p50 only → `p50 = 1284 ms; no p95 is reported.`  *(`no max is reported` under `<TAIL>` = `max`)*
+- both printed → `p50 = 78 ms, p95 = 112 ms.`  *(or `max = 104 ms` when `<TAIL>` is `max`)*
+- p50 only → `p50 = 76 ms; no p95 is reported.`  *(`no max is reported` under `<TAIL>` = `max`)*
 - neither → `not reported for this run.`
 
 **Slot 2 — the denominator.** Always present. Two variants, on `M == 0`:
@@ -2121,6 +2173,11 @@ must not be copied from the bounds beside it.
 
 > `latency n = 36 of 38 items; timings withheld: 2 (model load 2, request timeout 0).`
 
+A **second denominator line follows it whenever the two differ**, because §11.4 keeps the
+server-side timings on an item the wall clock was withheld for:
+
+> `ttft/prefill/tokens-per-second n = 38 of 38 items; these are LM-Studio-side figures and a model load is outside them (see the note's 11.4).`
+
 The cause split is mandatory and both counts print even at zero: the two causes carry very different
 operator actions — a TTL reload is a re-run, a timeout is a hung model — and a reader who sees only
 the total cannot tell which run they have. Printing both at zero also makes the line's shape
@@ -2128,7 +2185,13 @@ constant, so a reader who has learned it once reads every run the same way.
 
 **Slot 3 — the mechanism.** Present only when `M > 0`. One variant, true under both producers:
 
-> `Every withheld call was slower than every timed call — a model load costs about 21 s against a warm turn, and a timed-out call by definition exceeded the request budget — so the figures below are lower bounds.`
+> `Every withheld call was slower than every timed call — a model load adds seconds to a call that otherwise takes tens to hundreds of milliseconds, and a timed-out call by definition exceeded the request budget — so the figures below are lower bounds.`
+
+**Slot 3 names a magnitude and never a figure, and that is a correction to v1.9**, which wrote
+*"a model load costs about 21 s"* into the string. §11.5's own measurements refute it: the cold load
+was **3.625 s** this session and **21.068 s** in plan §2.5. A string that carries a load cost is a
+string that is false on most of the runs that render it — the exact defect class four review passes
+have been spent removing, reproduced by this note in the act of documenting it.
 
 **Slot 4 — the levels.** Omitted entirely when `M == 0` (nothing was withheld, so the levels are
 nominal and a clause restating that would be noise that drifts). Otherwise one variant:
@@ -2170,6 +2233,17 @@ names. **And no paired latency interval is printed on any path:** the intersecti
 timed items is doubly selected by the same informative mechanism, so §3.2d's paired bootstrap has no
 valid sample here even though latency is a continuous metric.
 
+**One block assembled end to end**, the `X = 36, Y = 38` case (measured sample, two slowest calls
+withheld), because a grammar is only checkable against at least one full rendering:
+
+> `Latency (client wall clock): p50 = 76 ms, p95 = 105 ms.`
+> `latency n = 36 of 38 items; timings withheld: 2 (model load 2, request timeout 0).`
+> `ttft/prefill/tokens-per-second n = 38 of 38 items; these are LM-Studio-side figures and a model load is outside them (see the note's 11.4).`
+> `Every withheld call was slower than every timed call — a model load adds seconds to a call that otherwise takes tens to hundreds of milliseconds, and a timed-out call by definition exceeded the request budget — so the figures below are lower bounds.`
+> `The p95 figure is at worst percentile 92.1 of the run's 38 items, and the p50 figure at worst percentile 47.3.`
+> `Timed calls slower than the p95 figure: 1 of 36.`
+> `Latency is descriptive: it is in no pack's verdictMetrics, it carries no verdict, no confidence interval and no Holm step, and no difference between two arms' latency figures is printed unless both arms report the same order statistic.`
+
 ### 11.8 Where the figures live
 
 - **`RunResult` / the record:** `latencyMsP50` and the tail figure are **`None` exactly when the
@@ -2196,11 +2270,17 @@ so one plan revision can serve both.
    then biased *high* by a configuration constant while the level clause claims it is a lower bound,
    and §11.7's slot 3 becomes a false sentence. If the architect chooses to abort the run instead,
    everything above still holds with `MT` pinned at 0.
-2. **G3-3 — the guard must null the whole timing block**, not `latencyMs` alone (§11.4). Without
-   that, the report prints one denominated figure beside three undenominated siblings drawn from the
-   same contaminated response, which is the defect §11.4 exists to prevent. G3-3's free measurement
-   (the warm-up's `stats` recorded beside its wall clock) is the evidence that could later carve
-   `ttftMs`/prefill back out; until it exists, they are withheld.
+2. **G3-3 — the three siblings need their own denominator; they must *not* be nulled.** G3-3's
+   free measurement has been taken (§11.4): LM-Studio-side TTFT **excludes** the JIT load, so
+   `ttftMs`, prefill and `tokensPerSecond` stay on a contaminated item and print `n = Y of Y` beside
+   the wall clock's `n = X of Y`. The defect G3-3 names is real and its fix is the **denominator**,
+   not the nulling. **This reverses what this section asked for at v1.9**, on the evidence G3-3
+   itself proposed gathering.
+2a. **New, from the same measurement: the in-call reload detector (§11.5.1).** `runner` computes
+   `latencyMs − (ttftMs + generation_time)` per item and withholds `latencyMs` above **1 000 ms**.
+   It closes R-14's acknowledged residual — a reload inside a single timed call, which the
+   between-item probe structurally cannot see — at the cost of one subtraction per item, and it
+   needs no new probe. Its placement is the plan's; the metric and the threshold are §11.5.1's.
 3. **G3-4 — the guard's first comparand.** §11.6(2) shows the floor holds either way, so this is not
    a blocker for R-13. It should still be fixed as G3-4 specifies (baseline = a probe taken *after*
    the warm-up returns), because otherwise `MT`/`ML` count a systematically absent item 1 as a
@@ -2244,13 +2324,25 @@ any tolerance would hide the defect it was meant to catch.
    that fails if the 5-point tolerance is silently moved.
 6. **The clean-run invariant.** For every `X` in `1…200`, a run with `X == Y` has both figures
    present. §11.6(1) is a theorem; a fire means the gate is wrong, not the data.
-7. **The whole-block rule.** An item withheld by the guard contributes to **none** of `latencyMs`,
-   `ttftMs`, prefill or `tokensPerSecond`, and all four aggregates print the **same** `X of Y`. A
-   test that asserts only `latencyMs` is the G3-3 defect written as a test.
+7. **The two denominators (§11.4).** An item withheld by the guard contributes to **no**
+   `latencyMs` aggregate and **does** contribute to `ttftMs`, prefill and `tokensPerSecond`; the
+   rendered block prints **both** denominator lines and they differ (`n = 36 of 38` against
+   `n = 38 of 38`). A test asserting one denominator for all four fields pins v1.9's withdrawn
+   ruling and must fail.
+7a. **The in-call reload detector (§11.5.1).** An item whose
+   `latencyMs − (ttftMs + generation_time)` exceeds 1 000 ms has its `latencyMs` withheld and is
+   counted under model load; one at 7.6 ms — the largest warm gap measured — does not. Both sides of
+   the threshold, since a threshold tested on one side is an untested inequality.
 8. **String rendering.** Five blocks rendered against fixtures and asserted **verbatim**, the way
-   §7.2's resolving-power line is: `(X=Y=38)` · `(X=Y=12)`, the `max` case · `(X=36, Y=38)` ·
-   `(X=35, Y=38)`, p50 only · `(X=34, Y=38)`, both refused. Plus one with `MT > 0`, so the cause
-   split is exercised rather than assumed.
+   §7.2's resolving-power line is, with §11.7's measured sample as the fixture:
+   `(X=Y=38)` → `p50 = 78 ms, p95 = 112 ms`, `1 of 38` slower ·
+   `(X=Y=12)` → `p50 = 77 ms, max = 104 ms`, the `max` case ·
+   `(X=36, Y=38)` → `p50 = 76, p95 = 105`, levels 92.1 / 47.3 ·
+   `(X=35, Y=38)` → `p50 = 76` only, levels 89.4 / 47.3 ·
+   `(X=34, Y=38)` → both refused, levels 86.8 / 44.7.
+   Plus one with `MT > 0`, so the cause split is exercised rather than assumed. **The fixture is the
+   measured sample, so the ranks and levels are checkable by hand against it** — which is the
+   property a hand-invented fixture does not have.
 9. **The unit guard.** Every printed figure in the block carries ` ms`, and no latency in the block
    is printed in seconds. The ms/s boundary sits one field away from `coldLoadSeconds`, and a figure
    printed in the wrong unit is a defect no reader can detect from the report.
