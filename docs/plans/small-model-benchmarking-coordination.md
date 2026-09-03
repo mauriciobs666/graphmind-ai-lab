@@ -33,10 +33,11 @@ Stakeholder decisions, 2026-09-02:
 |---|---|---|---|---|---|---|
 | U1 — Plan gate: review plan v1.1 + `-ml` note against the requirements | `analyst` | `a0e3b74e34e1d4c40` | delivered | `docs/reviews/small-model-benchmarking.md` — **needs changes**: 3 blockers, 11 majors, 8 minors, 3 nits | — (is the gate) | 174k tok / 33 tools |
 | U2 — S0 component skeleton | `coder` | `aa5b28bd14869593c` | accepted | `model-bench/**` (15 files), root `AGENTS.md` (+8 lines) | teco-verified — see note | 113k tok / 30 tools |
-| U3a — Revise the method note; **resumed** for the `verdictMetrics` rename | `data-scientist` | `a394671cfc28bef87` | in-flight (v1.3) | `docs/plans/small-model-benchmarking-ml.md` **v1.2** (+562/−130), new §3.4 stats contract | `analyst` re-gate (Pass 2) → — | 168k tok / 56 tools |
+| U3a — Revise the method note; **resumed** for the `verdictMetrics` rename | `data-scientist` | `a394671cfc28bef87` | delivered | `docs/plans/small-model-benchmarking-ml.md` **v1.3** — §3.4 stats contract, then the rename | `analyst` re-gate (Pass 2) → — | 184k tok / 9 tools cumulative |
 | U3b — Fold U1's findings + U2's S0 defects + the three decisions into the plan; **resumed** to reconcile vocabulary with the note | `architect` | `a3e258f27b83e764d` | delivered | `docs/plans/small-model-benchmarking.md` **v1.3** — 3 blockers + 13 majors + 8 minors + 4 nits dispositioned, then vocabulary reconciled | `analyst` re-gate (Pass 2) → — | 216k tok / 13 tools cumulative |
 | U3c — FR-22a's illustrative clause cites the superseded 4×4 sampling | `tico` | `ae6ffeeb440ee967a` | accepted | `docs/requirements/small-model-benchmarking.md` (+13/−1) | folded into the Pass 2 re-gate | 88k tok / 12 tools |
-| U4 — S1 core (fingerprint, results, stats, report; no model calls) | `tdd-engineer` | — | queued (after U3) | `modelbench/{fingerprint,results,stats,report,roles,cli}.py` + tests 1–6 | `analyst` + `data-scientist` (stats) → — | — |
+| U3d — Pass 2 re-gate over plan v1.3 + note v1.3 + the amended requirements | `analyst` | `a0e3b74e34e1d4c40` (resumed) | in-flight | `docs/reviews/small-model-benchmarking.md` `## Pass 2` | — (is the gate) | — |
+| U4 — S1 core (fingerprint, results, stats, report; no model calls) | `tdd-engineer` | — | queued (after U3d) | `modelbench/{fingerprint,results,stats,report,roles,cli}.py` + tests 1–6 | `analyst` + `data-scientist` (stats) → — | — |
 | U5 — S2 packs, LM Studio adapter, host info, convo, tooling, runner | `coder` | — | queued (after U4) | `modelbench/{packs,lmstudio,hostinfo,convo,tooling,runner}.py` + tests 7b–12 | `analyst` → — | — |
 | U6 — S3 `embedder` pack + `refresh_golden.py`, first live run | `coder` | — | queued (after U5) | `packs/embedder/**`, `scripts/refresh_golden.py`, one stored `RunResult` | `analyst` → — | — |
 
@@ -192,3 +193,17 @@ re-drawn against U4's actual delivery before dispatch.
 - **Known stale, deliberately not chased:** that pairing block will read "note **v1.2**" once the
   in-flight rename lands the note at v1.3. Flagged into the Pass 2 brief as already-reported rather
   than spending a round trip on one token.
+
+- **2026-09-02 — U3a delivered note v1.3; the rename was not mechanical after all.** Three sentences
+  were **wrong** under the new vocabulary rather than merely awkward, and a find-and-replace would
+  have shipped all three: §7.3's heading and §3.3 both said *"two headlines rather than one/none"*,
+  which is backwards — the pack has **zero** headlines and two verdict metrics — and §4.6 still
+  labelled `cleanThroughTurnH` `Primary:`, the last place the retired word did structural work.
+  Four occurrences of the retired singular survive **deliberately**, naming it as history: retiring
+  a name is only legible if the name still appears somewhere saying it was retired.
+- **One trap closed that neither document's wording had closed:** the note now states *why*
+  `advanceRecall` carries no verdict — a metric and its own complement are **one test, not two**, so
+  counting both inflates *k* to 3 against a difference that is by construction identical, costing
+  resolving power (α=0.017 rather than 0.025) for zero information. An implementer reading only
+  "printed as a complement" could reasonably have added it to `verdictMetrics` to be thorough; that
+  is now explicitly a defect.

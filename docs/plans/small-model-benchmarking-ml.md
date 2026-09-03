@@ -1,6 +1,9 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.2
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.3
+
+2026-09-02 (v1.3, `data-scientist`) — `primaryMetrics` renamed **`verdictMetrics`** throughout
+(`architect`'s naming authority, plan v1.3); semantics unchanged, `headlineMetric` unchanged.
 
 2026-09-02 (v1.2, `data-scientist`) — tool-caller resampled to **12 distinct scripts × 1 run**,
 `guard-judge` given **no headline metric**, S3's self-check pinned as diagnostic-only (three
@@ -277,29 +280,34 @@ made correctly.
 Seven tool-calling counts × ~9 turn positions × several metrics is dozens of tests; at α=0.05 each,
 a false "better" is close to certain. Cheapest correct handling, and the recommendation:
 
-**Each task pack pre-registers, in its versioned config, a `primaryMetrics` list of one or more
+**Each task pack pre-registers, in its versioned config, a `verdictMetrics` list of one or more
 metrics, and a `headlineMetric` that is either exactly one member of that list or `null`.** Only
-members of `primaryMetrics` receive a better / not-distinguishable *verdict*; every other number is
+members of `verdictMetrics` receive a better / not-distinguishable *verdict*; every other number is
 printed with its CI and labelled `exploratory — no significance claim`. Pre-registration in pack
-config is what stops the primary metric from being chosen after the results exist.
+config is what stops the verdict-carrying metrics from being chosen after the results exist.
 
-*(v1.2 — this replaces "exactly one `primaryMetric`". Stakeholder decision 2 gives `guard-judge`
-two co-equal primaries and no headline, so a one-metric schema cannot express the pack that most
-needs expressing. The two fields are separable and both are needed: `primaryMetrics` controls
-**inference** — how many verdicts, hence the multiplicity correction — while `headlineMetric`
-controls **presentation** — what a reader is entitled to read as "the" number. A pack with
-`headlineMetric: null` prints its primaries side by side, in a fixed declared order, with no
-summary line above them and no arithmetic combining them.)*
+*(v1.2/v1.3 — this **retires** the singular `primaryMetric` rather than redefining it.
+Stakeholder decision 2 gives `guard-judge` two co-equal verdict metrics and no headline, so a
+one-metric schema cannot express the pack that most needs expressing; and re-pointing an
+established name at "may now be `null`" is a trap, since the old meaning is already fixed in the
+requirements, the review and two plan versions. The replacement is named `verdictMetrics`
+(`architect`, plan v1.3) — a plural one character away from the retired singular would be
+indistinguishable in a JSON manifest and in a diff, which is intolerable for the one field whose
+entire job is pre-registration. The two fields are separable and both are needed:
+**`verdictMetrics` controls inference** — `len(verdictMetrics)` *is* the multiplicity *k*, hence the
+correction below — while **`headlineMetric` controls presentation**, i.e. what a reader is entitled
+to read as "the" number. A pack with `headlineMetric: null` prints its verdict metrics side by side,
+in a fixed declared order, with no summary line above them and no arithmetic combining them.)*
 
-| Role | `primaryMetrics` | `headlineMetric` | Unit |
+| Role | `verdictMetrics` | `headlineMetric` | Unit |
 |---|---|---|---|
 | tool-caller | `cleanThroughTurnH` (`H` pack-declared, default 4) | same | conversation |
-| **guard-judge** | **`falseAdvanceRate` (40 `clear_suspend`) + `falseSuspendRate` (30 `clear_advance`)** | **`null`** | item |
+| **guard-judge** | **`["falseAdvanceRate", "falseSuspendRate"]`** — scored on the 40 `clear_suspend` and 30 `clear_advance` items respectively | **`null`** | item |
 | nlq-generator | Layer-1 exact-match rate | same | item |
 | chat-responder | deterministic checklist pass rate | same | item |
 | embedder | MRR | same | query |
 
-**When `len(primaryMetrics) > 1`, family-wise error control is mandatory, not optional.** Two
+**When `len(verdictMetrics) > 1`, family-wise error control is mandatory, not optional.** Two
 co-equal verdicts at α=0.05 each carry a ~9.75% chance of at least one false "better" under the
 null — which would hand the stakeholder exactly the fishing artefact pre-registration exists to
 prevent. Apply **Holm–Bonferroni across the declared family** (order the p-values; test the
@@ -309,10 +317,13 @@ adjusted threshold beside each p-value.
 **And it changes what the resolving-power line must print:** the guaranteed-detectable threshold for
 a k-member family is the one computed at **α/k**, since a metric can be required to clear that step.
 For `guard-judge` (k=2) that is α=0.025, and §7.3 carries the recomputed figures — they are
-materially worse than the α=0.05 ones, which is the honest price of two headlines rather than one.
+materially worse than the α=0.05 ones, which is the honest price of two verdict metrics rather than
+one. §3.4 Rule 4 is the mechanism: `verdict()` raises unless
+`resolving.alpha == 0.05 / len(family)`, so a k-member family cannot be reported at α=0.05 by
+oversight.
 
 *Reversal trigger:* if the stakeholder later ranks the two guard-judge errors, drop the loser out of
-`primaryMetrics` into the exploratory block and the family collapses back to k=1 with α=0.05
+`verdictMetrics` into the exploratory block and the family collapses back to k=1 with α=0.05
 (floor 15.0 pp instead of 17.5 pp on `clear_suspend`). That is a real gain in resolving power and
 it is available whenever the product question "which error costs more?" becomes answerable.
 
@@ -360,7 +371,7 @@ McNemar no longer applies, which is the correct outcome, not an inconvenience.
 class ResolvingPower:
     n_units: int
     unit_kind: str
-    alpha: float                 # 0.05, or 0.05/k for a k-member primaryMetrics family (§3.3)
+    alpha: float                 # 0.05, or 0.05/k for a k-member verdictMetrics family (§3.3)
     design_effect: float         # Kish; >= 1.0
     basis: Literal["by-construction", "measured", "assumed"]
     n_effective: float           # n_units / design_effect
@@ -648,7 +659,7 @@ conversation, for exactly the reason §4.4 gives. **The cluster bootstrap requir
 one level: resample the 12 conversations, recompute the pooled rate inside each resample** (§3.4
 rule 6). The consequence worth printing: with 12 clusters, **the effective n of any turn-pooled
 count is capped at 12** no matter how many turns feed it — 80 turns at ρ=1 is 12, not 80 — so a
-turn-pooled count resolves ~50 pp at best and can never be a primary metric. It isn't one (§4.6);
+turn-pooled count resolves ~50 pp at best and can never be a verdict metric. It isn't one (§4.6);
 this is the arithmetic that says it never can be at this pack size.
 
 **(ii) Shape-level correlation, which now has nowhere to go.** The 12 scripts are 4 per shape × 3
@@ -732,8 +743,8 @@ one and the headline becomes a weighted average of script lengths.
 
 **Recommended headline: a survival statistic at a pack-declared turn depth.**
 
-- Primary: **`cleanThroughTurnH`** — the fraction of conversations with zero failure of any kind
-  through turn `H`, where `H = min(script length)` across all conditions in the pack (4 for the
+- Headline (`headlineMetric`): **`cleanThroughTurnH`** — the fraction of conversations with zero
+  failure of any kind through turn `H`, where `H = min(script length)` across all conditions in the pack (4 for the
   A/B/C set). Every conversation of every condition contributes exactly one observation, so it is
   length-independent by construction, it is a proper binomial over conversations, and it is the
   statistic that would have caught `qwen3-4b` on the first run.
@@ -1026,7 +1037,7 @@ difference that *could* be called significant if it landed perfectly. It is not 
 tool reliably *detects*. Both numbers follow from the McNemar exact floor and were computed here:
 
 - **Observable floor = `b_min(α)/n_eff`** — `6/n_eff` at α=0.05, **`7/n_eff` at α=0.025** (the
-  step a two-metric primary family can be required to clear, §3.3). Below it, no paired binary
+  step a two-member `verdictMetrics` family can be required to clear, §3.3). Below it, no paired binary
   result reaches significance whatever happens.
 - **MDD₈₀ — computed exactly, never from a rule of thumb** (§3.4 rule 3). The `n·δ ≈ 7.7` mnemonic
   holds only over n≈20–120 (recomputed: 7.33 at n=20 → 7.81 at n=120) and **breaks below it —
@@ -1088,7 +1099,7 @@ the 15–50 pp band at this sample size.
 | Role | n | Unit of n | Instrument | Observable floor | MDD₈₀ | Existing golden data adequate? |
 |---|---|---|---|---|---|---|
 | **tool-caller** | **12** (3 shapes × 4 distinct scripts × **1 run**) | **conversation ≡ script**, one observation per cluster, **DEFF 1.00 by construction** | McNemar exact on `cleanThroughTurn4` — **valid at this design**, plus one-level cluster bootstrap over the 12 conversations for any turn-pooled count | **50.0 pp** | **57.8 pp** | **No — must be built (FR-22/FR-22a).** 12 distinct human-verified scripts; §4.5 is the sizing and §4.5.3 the honest consequence. |
-| **guard-judge** | 85 total, but the decision is **class-conditional** and the family has **two co-primaries** (α=0.025) | item | McNemar per class, Holm across the two | see below | see below | **Partly** — see §7.3 |
+| **guard-judge** | 85 total, but the decision is **class-conditional** and the family has **two verdict metrics** (α=0.025) | item | McNemar per class, Holm across the two | see below | see below | **Partly** — see §7.3 |
 | **nlq-generator** | 40 | item | McNemar on Layer-1 exact match | 15.0 pp | 19.1 pp | **Yes, marginally.** Answers "clearly better" only. |
 | **chat-responder** | 30 (new) | item | McNemar on checklist pass | 20.0 pp | 25.1 pp | **No — does not exist** (§6.2) |
 | **embedder** | 38 queries | query | paired bootstrap on per-query MRR | n/a (continuous) | see §7.4 | **Yes for MRR; no for recall@k** — see §7.4 |
@@ -1112,42 +1123,52 @@ fix. Compare what the plan's `min_detectable_difference(48)` would have printed:
 number 3.5× more optimistic than the design supports, with no unit, no design effect and no
 conditionality.
 
-### 7.3 Guard-judge — n=85 is misleading, and there are two headlines rather than none
+### 7.3 Guard-judge — n=85 is misleading, and this pack has two verdict metrics and no headline
 
 The decision-relevant statistic is class-conditional (a bias-to-suspend judge is mis-gated by
 pooled accuracy for the same reason §6.2's judge is), and the class slices are small.
 
 **Stakeholder decision 2, encoded:** `guard-judge` has **no `headlineMetric`**. Both
-class-conditional error rates are co-primaries, reported with equal weight, in a fixed declared
-order, with no summary number above them and no arithmetic combining them. **Nothing in this note
-depends on that pack having a single primary metric** — v1.1's §7.3 called false-advance "the
-primary" and §3.3's table named it; both are corrected in v1.2, and no formula, denominator or
-threshold anywhere in the note took a `primaryMetric` as input.
+class-conditional error rates are co-equal members of `verdictMetrics`, reported with equal weight,
+in a fixed declared order, with no summary number above them and no arithmetic combining them.
+**Nothing in this note depends on that pack having a single verdict-carrying metric** — v1.1's §7.3
+called false-advance "the primary" and §3.3's table named it; both are corrected, and no formula,
+denominator or threshold anywhere in the note ever took the retired singular `primaryMetric` as
+input.
 
-**Naming, settled (gate nit).** Report **both co-primaries as error rates in the same direction**,
-so neither reads as "better is higher" beside one that reads "better is lower":
+**As built (plan v1.3), and nothing here conflicts with it:**
+`verdictMetrics = ["falseAdvanceRate", "falseSuspendRate"]`, `headlineMetric = null`, bare metric
+names with **no `@slice` suffix** — the slice is the metric's denominator, stated once in the table
+below, not part of its identity — and `advanceRecall` **printed as a labelled complement that
+carries no verdict**.
+
+**Naming, settled (gate nit).** Report **both verdict metrics as error rates in the same
+direction**, so neither reads as "better is higher" beside one that reads "better is lower":
 
 - **`falseAdvanceRate`** = P(judge advances | gold says suspend), on the 40 `clear_suspend` items.
 - **`falseSuspendRate`** = P(judge suspends | gold says advance), on the 30 `clear_advance` items.
 
 `advance-recall` (v1.1's name for the second) is the **complement**: `advanceRecall = 1 −
 falseSuspendRate`. Same quantity, and it stays printed as the complement so a reader looking for
-recall finds it — but the *verdict* is rendered on the error rate, because two co-equal headlines
-pointing the same way is the only presentation in which "worse on one, better on the other" is
-readable at a glance.
+recall finds it — but it **carries no verdict**, because a metric and its own complement are one
+test, not two, and counting both would inflate *k* against a difference that is by definition
+identical. The verdict is rendered on the error rate, because two co-equal verdict metrics pointing
+the same way is the only presentation in which "worse on one, better on the other" is readable at a
+glance.
 
 Recomputed at **α=0.025** — the Holm step-1 threshold a two-member family can be required to clear
-(§3.3) — with the α=0.05 figures kept alongside so the price of the second headline is visible:
+(§3.3) — with the α=0.05 figures kept alongside so the price of the second verdict metric is
+visible:
 
-| slice | n | co-primary statistic | floor @0.025 | MDD₈₀ @0.025 | (floor / MDD₈₀ @0.05) |
+| slice | n | verdict metric | floor @0.025 | MDD₈₀ @0.025 | (floor / MDD₈₀ @0.05) |
 |---|---|---|---|---|---|
 | `clear_suspend` | 40 | **`falseAdvanceRate`** | **17.5 pp** | **21.9 pp** | 15.0 / 19.1 pp |
 | `clear_advance` | 30 | **`falseSuspendRate`** | **23.3 pp** | **28.7 pp** | 20.0 / 25.1 pp |
-| `boundary` (all expected-suspend) | 15 | false-advance on near-misses — **not a primary** | — | — | 40.0 / 47.6 pp |
+| `boundary` (all expected-suspend) | 15 | false-advance on near-misses — **not a verdict metric** | — | — | 40.0 / 47.6 pp |
 
 So: **the naive read "n=85 → ~9 pp" is wrong**, and the honest figures are now 21.9 / 28.7 pp
 rather than v1.1's 19.1 / 25.1 — the ~2.8–3.6 pp of resolving power that a second co-equal verdict
-costs. (v1.1's boundary-tier MDD of "53 pp" was the `8/n` rule of thumb; the exact value at n=15 is
+metric costs. (v1.1's boundary-tier MDD of "53 pp" was the `8/n` rule of thumb; the exact value at n=15 is
 **47.6 pp**, recomputed here.) The `boundary` tier is **descriptive only** at n=15 and must be
 printed with `no significance claim` — it is also the tier where disagreement is legitimate by
 construction, so pooling it into an overall accuracy would let a model look better or worse for the
@@ -1304,7 +1325,7 @@ arithmetic must be exercised by the §9.1 fixtures and the synthetic traces inst
 | R2 | Conditional-denominator laundering — a model that collapses early scores *better* on (c)–(g) | **high** | §4.3: mandatory funnel table, `k/n` on every rate, printed `n/a` tallies, paired-n intersection |
 | R3 | Judge-mediated chat-responder number read as equal in strength to a ground-truth one | **high** | §6.2: separate table, fixed banner, split self-preference caveats, hard error on judge==candidate |
 | R4 | Corpus embedding cache shared across models or prefix settings → invalid comparison, no visible trace | medium | §5.5: cache key = (model, quantization, docPrefix, corpus version) |
-| R5 | Multiple comparisons across 7 counts × turn positions → a false "better" is near-certain | medium | §3.3: pre-registered `primaryMetrics` (1..k) per pack, Holm–Bonferroni when k > 1, everything else labelled exploratory |
+| R5 | Multiple comparisons across 7 counts × turn positions → a false "better" is near-certain | medium | §3.3: pre-registered `verdictMetrics` (1..k) per pack, Holm–Bonferroni when k > 1, everything else labelled exploratory |
 | R6 | Temperature-0 replicates counted as independent n | **retired** — the design no longer buys replicates | §4.5: `replicatesPerScript = 1`; still printed next to every conversation-level n (FR-18), now as the field that says DEFF = 1 by construction |
 | R6a | The *inverse* of R6: with replicates gone, run-to-run variability is unmeasurable, so model flakiness at temperature 0 is invisible | medium | §4.5.1(iii): a 2-script determinism probe per model, diagnostic and outside `n`; a non-identical result is stated in the report as an unmeasured variance source |
 | R9 | The 50.0 pp tool-caller floor read as "no difference exists" when it means "this pack cannot see one" | medium | §7.1's mandatory resolving-power line with unit, unit count, DEFF, basis and α; §4.5.3's named 15–50 pp dark band and its costed reversal trigger |
@@ -1318,10 +1339,11 @@ arithmetic must be exercised by the §9.1 fixtures and the synthetic traces inst
    deterministic layer only. §6.2's 30-item checklist set and 40-item balanced calibration set
    describe the design to build *when* it is funded; §6.3's costed conditional stands as the
    trigger, not as an open ask.
-2. ~~`primaryMetric` per pack — the stakeholder may prefer a different guard-judge headline.~~
+2. ~~`primaryMetric` per pack (the retired singular) — the stakeholder may prefer a different
+   guard-judge headline.~~
    **Closed by stakeholder decision 2 (2026-09-02): `guard-judge` gets no headline**; both
-   class-conditional error rates are co-primaries with equal weight. Encoded in §3.3
-   (`primaryMetrics` + `headlineMetric: null`) and §7.3 (recomputed at α=0.025). The stakeholder
+   class-conditional error rates are co-equal verdict metrics with equal weight. Encoded in §3.3
+   (`verdictMetrics` + `headlineMetric: null`) and §7.3 (recomputed at α=0.025). The stakeholder
    declined to rank the two errors; §3.3's reversal trigger says what to do the day that changes.
 3. ~~Extending the retrieval golden set to ~60 queries.~~ **Closed as a backlog follow-up**, not a
    first-delivery ask (§7.4). Trigger unchanged: the embedder role becoming decision-critical, or a
