@@ -431,13 +431,23 @@ ENVELOPE_HANDLERS: frozenset[type[BaseException]] = frozenset(
 # rather than excusing it.
 #
 # **Every reason below is a checked claim, not prose** — which is what P11-1
-# found it was not. The two shapes have two mechanisms, both AST-read off this
-# file by `tests/test_storefront_api.py`: *"no storefront route calls layer X"*
-# is `test_the_router_reaches_exactly_the_service_calls_the_exemptions_assume`
-# (the router's whole `services.<name>` surface is three names, and a fourth
-# reddens), and *"no storefront route raises it"* is
-# `test_the_router_raises_only_the_two_classes_whose_handlers_re_shape` (the
-# router raises `ENVELOPE_HANDLERS`' two classes and nothing else).
+# found it was not. The two shapes have two mechanisms, both AST-read by
+# `tests/test_storefront_api.py`.
+#
+# *"No storefront route calls layer X"* is
+# `test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume`:
+# it pins the **whole set of `Services` methods a route can reach** — the
+# router's own `services.<name>` / `shop._services.<name>` accesses **plus**
+# `self._services.<name>` in every `Storefront` method the router reaches,
+# transitively, since a route calls the layer through `shop.<method>` as
+# readily as directly. Nine today; a tenth reddens. Reading only the direct
+# spelling was P12-1: the guard fired on the one placement S9 rejected and
+# stayed green on both it takes.
+#
+# *"No storefront route raises it"* is
+# `test_the_router_raises_only_the_two_classes_whose_handlers_re_shape`, over
+# the **whole module** rather than the router node — a raise one helper call
+# out of a route body is still a raise on the route (P12-2).
 INHERITED_HANDLERS: dict[type[BaseException], str] = {
     # FastAPI/Starlette defaults, on every app ever built.
     StarletteHTTPException: (
