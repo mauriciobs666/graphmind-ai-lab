@@ -139,7 +139,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S8b gate** — Pass 11: is P10-1 closed? is `SERVICE_ERROR_ROUTES` a measurement? + S8b's three counter-claims against Pass 10 | `analyst` (**fresh, not Pass 10's author**) | `a6adcb0f5a590acce` | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 2 major, 4 minor, 4 nits), committed `a80a232`. **All six Pass 10 mutation survivors die**; 18 mutations on byte-copies, all five files md5-matched to `HEAD` after. **P10-1 is closed as reported and its class re-opens one bucket over** — `INHERITED_HANDLERS` excuses 11 of 17 handlers by prose and credits a sweep that arms only `ServiceError` faults (P11-1, N-F escaped), and `_raised_refusals` reads only `StorefrontHTTPError` calls while its own docstring and `StarletteHTTPException`'s exemption both claim it catches a bare `HTTPException` (P11-2, N-E escaped green). **Adjudicated S8b's three counter-claims: 1 upheld-with-correction (the escape count is *two*, not three — S8b's own docstring concedes `UnknownActorError` is unreachable through the wire), 1 upheld on half, 1 not sustained** (P10-1 asserted no blast radius, so the measurement strengthens an absence rather than fixing an error). Verified independently by me: `ws:acme` 14 labels / `Message` 52 / `Entity` 544 / `WorkflowRun` 21, unchanged; `falkor-chat/` tree clean; P11-2 and P11-5 reproduced at source. | `docs/reviews/salesperson-ui-impl.md` `## Pass 11` + Appendix P11-A | — | 198k tok / 86 tools |
 | **S8c** — close Pass 11: P11-1 (the `services.` access guard), P11-2, 4 minors, 4 nits, **+ P10-9** (open two passes) | `coder` (**fresh**) | `a213382761bc926ec` | **delivered — committed `2e27835`** | `storefront_api.py` (+45/−3), `test_storefront_api.py` (+434/−31, 7 tests) | `analyst` (Pass 12) → — | 196k tok / 77 tools |
 | **S8c gate** — Pass 12: do the ten closures hold? is the guard as strong as the argument for it? + 2 disagreements with Pass 11 | `analyst` (**fresh** — must judge Pass 11, and its author was at 86 tool uses) | `abe2ad6a7b8091e72` | **NEEDS CHANGES** (0 blockers, 1 major, 1 minor, 2 nits) — committed `fb11268` | `docs/reviews/salesperson-ui-impl.md` `## Pass 12` + Appendix P12-A | — | 181k tok / 70 tools |
-| **S8d** — P12-1: widen the guard to the reach its excuses claim (3 of 8 → 8 of 8); P12-2 + 2 nits | `coder` | `a213382761bc926ec` (resumed — wrote the guard; 196k tok / 77 tools) | in-flight (**holds the live DB**) | `storefront_api.py`, `test_storefront_api.py` | `analyst` (Pass 13) → — | — |
+| **S8d** — P12-1: widen the guard to the reach its excuses claim (3 of 8 → 9 of 9); P12-2 + 2 nits | `coder` | `a213382761bc926ec` (resumed) | **PARTIAL — committed `769adc3`; killed mid-run by a session rate limit (429) while starting P12-2.** P12-1 complete and teco-verified; **P12-2 + 2 nits still open** | `storefront_api.py`, `test_storefront_api.py` | `analyst` (Pass 13, **after S8d completes**) → — | — |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
 | **U31** — stakeholder decision: how a dead turn becomes visible to the participant | stakeholder | — | **delivered — option B**, the additive `lastTurn: 'failed' \| null` field | option B recorded in v1.23 (below) | — | — |
 | **v1.23** — write option B into the contract: §5.2's `turn` shape, §5.3 C6a, S9's row, + the client rows that inherit it | `architect` | `ad81e9cdb12dfbb28` (resumed ×2) | **accepted — committed `10f2b72`** (68/7) | `docs/plans/salesperson-ui.md` **v1.23** | teco-verified: **exactly the 4 announced rows moved** (S9, S12a, S13, S15), no delivered row moved, all 21 rows 7 cells on a pipe-aware count | 224k tok / 26 tools |
@@ -1771,3 +1771,63 @@ the mutant survives the whole file.** A bare count in a mutation ledger is one d
 distribution, and this build has been treating such counts as facts for twelve passes. Where a kill
 depends on `set` iteration order over `str`, the honest ledger entry is a distribution or a fixed
 seed — not a number.
+
+## RESUME HERE — clean checkpoint, 2026-09-03 (session limit reboot)
+
+Everything is committed and the tree is clean. `HEAD` = `769adc3`. Read this section, then the
+ledger; nothing else is needed to restart.
+
+**State of the working tree.** Full suite **2615 passed / 14 deselected**, two-file
+(`test_storefront_api.py` + `test_app.py`) **183 passed**, `ruff` clean, `falkorchat/storefront.py`,
+`falkorchat/app.py` and `tests/test_app.py` byte-unchanged since S8. No mutation is left in the tree
+— I verified this rather than assuming it, because S8d was killed mid-run and its method applies
+mutations to the live file from byte-copies held outside the repo. `reference` is seeded
+(`verify_catalog.sh` exit 0, 15 products); `ws:acme` is intact (14 labels, `Message` 52, `Entity`
+544, `WorkflowRun` 21).
+
+**What happened.** S8d (`a213382761bc926ec`) was closing Pass 12's four findings when the session
+rate limit killed it. Its completion notification carried a **mid-task placeholder** — *"Now P12-2 —
+widening the raise walk to the whole module"* — not a final report, which is the tell that the unit
+is partial rather than delivered.
+
+**Done and verified: P12-1.** The guard now resolves the router's direct `services.<name>` and
+`shop._services.<name>` accesses **plus** `self._services.<name>` in every `Storefront` method the
+router reaches transitively. Nine names today; a tenth reddens; `start_workflow_run` deliberately
+absent. Renamed to `test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume`. All
+three spellings S9 could take are pinned by synthetic controls — including
+`shop.enqueue_turn` → `self._services.start_workflow_run`, which is the placement v1.22 decided and
+the one the first guard could not see. I read the assertion body myself rather than accepting the
+report.
+
+**Open, in dispatch order:**
+
+1. **Finish S8d** — **P12-2** (the bare-`HTTPException` walk is scoped to `raise` inside the router,
+   so a module-level helper escapes it; Pass 12 measured N-M surviving with a wire answer of
+   `410 '{"detail":"gone"}'` and reports verifying that a module-wide walk with a three-name
+   allowlist is sufficient) **and Pass 12's two nits**, which are in `## Pass 12` and were never
+   summarised into a brief. Resume `a213382761bc926ec` by `SendMessage` — it holds the reasoning for
+   the reader it just rewrote. If the id no longer resolves, a fresh `coder` needs `## Pass 12`,
+   Appendix P12-A, and the note that P12-1 is already done.
+2. **Pass 13** — gate the whole of S8d. A **fresh** `analyst`: Pass 12's author is at 70 tool uses
+   and, more importantly, Pass 13 judges the fix to Pass 12's own major.
+3. **A small plan touch** — §5.1's S9 row still describes the guard as pinning "the accesses inside
+   `build_storefront_router`", which P12-1 made inaccurate. The architect (`ad81e9cdb12dfbb28`)
+   should re-word it from S8d's final report. **Not urgent, but it must precede S9's dispatch**, or
+   S9's implementer reads a done-condition that misdescribes the mechanism it has to redden.
+4. **S9** — fully specified and unblocked once 1–3 land. Placement decided (worker, not request
+   thread), both Pass 11 obligations in its row, the dead-turn `lastTurn` contract written, and the
+   `set_turn_state(idle)`-deletes-the-entry trap pinned so the latch is not stored in the `TurnState`
+   entry. It owns `storefront.py` next in the serialization chain.
+5. **The S7→S8d documentation debt**, held deliberately (see the section above): `falkor-chat/docs/HISTORY.md`
+   and `docs/SERVER.md` §1.3/§1.4. Dispatch as **one** unit once the S8 chain closes. It needs no
+   database, so it is the one unit that can run in parallel with a gate.
+
+**One trivial fix I made myself**, flagged because it is the kind of thing that should not pass
+silently: the interrupted edit left `import gc` unused (its only consumer had been rewritten away).
+I removed it with the project's own `ruff check --fix` rather than hand-editing, and re-ran both
+suites after. Whether the rewritten test still pins what its predecessor did is a **Pass 13
+question**, not something I resolved.
+
+**Still the stakeholder's, and still not blocking anything before S11:** the `WorkflowDef` registry
+in the `reference` graph is absent — my own verification runs wiped it — and restoring it means
+running `seed_workflows.sh` / `seed_salesperson.sh`, which write into `ws:acme`. S11 and S15 need it.
