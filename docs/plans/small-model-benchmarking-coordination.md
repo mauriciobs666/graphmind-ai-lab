@@ -668,3 +668,32 @@ re-drawn against U4's actual delivery before dispatch.
 - **The plan moved under the interrupted agent** (v1.6 → v1.7, U10 landing mid-run). The recovery
   brief flags it explicitly, because a resumed agent's most dangerous inheritance is a quotation
   from a document version that no longer exists.
+
+### LM Studio probed live (2026-09-03) — S3's prerequisite is met, and S2 has a design problem
+
+Stakeholder confirmed LM Studio runs with **auto-load (JIT)**, so a request is all that is needed.
+Verified directly rather than taken on report:
+
+- **Reachable from WSL at `http://localhost:1234/v1`** — the same base URL `falkor-chat/config/`
+  uses. **19 models** in the catalog, including every model that component names
+  (`qwen/qwen3-4b-2507`, `mistralai/ministral-3-3b`, `text-embedding-qwen3-embedding-0.6b`).
+- **Auto-load confirmed end to end.** A cold `POST /v1/chat/completions` against
+  `mistralai/ministral-3-3b` at `temperature: 0` returned the expected content. **It took 21 s**,
+  essentially all of it JIT load — a number S2's timeout design must accommodate, since the
+  harness's first call to each arm pays it and no per-request timeout tuned to warm latency will
+  survive it.
+- **`/api/v0/models` (LM Studio's native API) carries the fingerprint metadata the REST v1 endpoint
+  does not**: `state`, `quantization`, `arch`, `type`, `max_context_length`, `capabilities`. This is
+  a better source for FR-7 host/model fields than anything §3.4.4 currently names.
+
+**The finding that matters, and it is the plan's to answer, not mine:** `lms` is **not on PATH** on
+this box. §3.4.4 and §6 R-1 both assume the `lms` CLI exists — `residentModelsAtStart` is specified
+as `lms ps --json`, with `[]` on a clean box called out as the correct value. That command cannot
+run here. The REST substitute is `/api/v0/models` filtered on `state != "not-loaded"`, which is
+strictly richer, but it is a **contract change in the host-info design**, so it goes to `architect`
+as part of S2's dispatch rather than being decided by an implementer mid-run. R-1's own claim (no
+programmatic source for the app version and the KV-cache setting) is untouched by this and still
+stands — if anything the missing CLI reinforces it.
+
+**Net effect on scope:** S3's live-run prerequisite is met and needs nothing further from the
+stakeholder. S2 gains one design question to settle before its runner unit is briefed.
