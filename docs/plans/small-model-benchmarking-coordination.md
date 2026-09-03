@@ -46,7 +46,7 @@ Stakeholder decisions, 2026-09-02:
 | U7a — Re-gate the fix round (engineering, `## Pass 2`) | `analyst` | `aa9d6d24849f63006` (resumed) | delivered | `docs/reviews/small-model-benchmarking-impl.md` `## Pass 2` — **approve with suggestions**; 18/18 closed, 1 new major | — (is the gate) | 281k tok / 29 tools |
 | U7b — Re-gate the fix round (statistics, `## Pass 2`) | `data-scientist` | `a7fbf4d59bfa1d0da` (resumed) | delivered | `## Pass 2` — **needs changes**: 1 blocker, 1 major, 1 minor (all new) | — (is the gate) | 237k tok / 13 tools |
 | U8a — Note: the α ruling, Rule 7 split by path, the unified principle | `data-scientist` | — | queued | `docs/plans/small-model-benchmarking-ml.md` v1.6 | teco-verified | — |
-| U8b — Plan sweep: `PackRef.contentHash` / Appendix A identity triple | `architect` | — | queued | `docs/plans/small-model-benchmarking.md` v1.6 | teco-verified | — |
+| U8b — Plan sweep: `PackRef.contentHash` / Appendix A identity triple | `architect` | `a5ca583515c0979f1` (resumed) | accepted | `docs/plans/small-model-benchmarking.md` **v1.6** | teco-verified | 158k tok / 37 tools |
 | U8c — Code: B-ML-2, m-ML-6, P2-1…P2-5 | `tdd-engineer` | — | queued (after U8a) | `model-bench/**` | re-gate → — | — |
 | U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | queued (after the re-gates) | `docs/plans/small-model-benchmarking.md` v1.6 | teco-verified | — |
 | U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | queued (after U6a, to avoid a read-write race) | `docs/plans/small-model-benchmarking-ml.md` v1.6 | teco-verified | — |
@@ -511,3 +511,26 @@ re-drawn against U4's actual delivery before dispatch.
   **exactly three points under n ≤ 1000 — n = 10, 20, 40 at α=0.025** — and n=40 is both a published
   §7.1 row and §7.3's `clear_suspend` slice. **The pinning test must keep using that exact
   expression, not an equivalent-looking one.**
+
+- **2026-09-03 — U8b: the `architect` pre-empted the next divergence instead of creating it.**
+  Rather than leave three α/k restatements that note v1.6 was about to contradict, it **withdrew**
+  them — §3.3(ii), §3.8.2 and §3.9 point 3 now *cite* the note instead of naming an α, and the plan
+  states nowhere what the new rule is, keeping only the plan-owned half (correction mandatory,
+  threshold printed beside every p-value, **the rule applied must equal the rule printed**). That is
+  §7 rules 1–2 *executed* rather than described: the alternative was shipping v1.6 with clauses its
+  paired note contradicts on arrival.
+- **The `contentHash` judgement was accepted with a reason the gate left implicit:** the divergence
+  is not new — S2's `Pack` has carried a total `contentHash: str` since v1.1 while `PackRef` is what
+  `compare_report` takes — v1.5 simply had not named it. `None` vs `""` is **the plan's own
+  absent-versus-empty rule (§3.4.2) applied one level up**. The stricter alternative (drop the field
+  from `PackRef` so `None` is unrepresentable) was **considered and rejected**: it would make the
+  report's parameter type depend on whether a pack happens to be loaded, for a field the report is
+  *forbidden* to read. Three rules now bound it, including a named totality boundary
+  (`Pack.ref()`) — *without one, S2 would have invented one.*
+- **A live code-side restatement found that the code fix must check:** `PackMetrics.alpha`
+  (`0.05 / k`) in `modelbench/packs.py` is the code-side counterpart of the three clauses just
+  withdrawn. **If the note's v1.6 moves the floor to the unadjusted α, whoever implements it must
+  sweep `packs.py`, not only `stats.py`.** Carried into U8c's brief.
+- **Carried a third time, still unfixed:** §5's numbered test list is not stage-scoped, and **both
+  gates have now had to reason it out independently**. A recurring cost that a one-line preface
+  would remove — logged rather than chased.

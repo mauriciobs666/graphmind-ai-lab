@@ -1,6 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.5 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.6 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md`
+
+2026-09-03 — v1.6: the S1 fix round's seam changes (`3ad27d3`, engineering re-gate `8b7b60a`) — `PackRef.contentHash` becomes `str | None` with `Pack.ref()` as the totality boundary (§3.3, §4 S2, Appendix A), `stats.holm_steps`/`HolmStep`/`verdict(holm_tested=)` and `compare_report`'s two-pass structure replace `holm_thresholds` (§4 S1), §7 records S1's real state (not closed — the statistics re-gate has one open blocker), and the three places that restated the note's family-adjusted α (§3.3(ii), §3.8.2, §3.9) now cite it instead, ahead of the note's v1.6 ruling.
 
 2026-09-03 — v1.5: the S1 implementation gate's plan-side corrections (`docs/reviews/small-model-benchmarking-impl.md` §4) — §3.4.1's forbidden-field list becomes a derivation over §3.4.2's now-complete field set, Appendix A's `PackRef` and `FieldProblem` catch up with §3.3 and the shipped code, §4 S1 records `RunResult.designEffect`/`basis` as required-with-no-default, §6 opens R-13 (`_percentile`'s definition), and §7 gains the intra-document half of its staleness rule plus S1's delivery status. (v1.4 closed Pass 2's N-1/N-2/N-4 and narrowed §7's precedence rule; v1.3 aligned the vocabulary to the `-ml` note; v1.2 closed the Pass 1 gate.)
 
@@ -393,11 +395,17 @@ Key decisions:
   above them and no arithmetic combining them.
 
   **(ii)** When `len(verdictMetrics) > 1`, family-wise error control is **mandatory, not optional**
-  (`-ml` §3.3): Holm–Bonferroni across the declared family, with the adjusted threshold printed
-  beside each p-value. **And the resolving-power line's α changes with it** — a k-member family
-  computes at `α/k`, which is materially worse than at α=0.05 and is the honest price of a second
-  co-equal verdict. `stats.verdict()` asserts `alpha == 0.05 / len(family)` and refuses otherwise
-  (`-ml` §3.4 Rule 4), so a report cannot print a family verdict at the wrong threshold.
+  (`-ml` §3.3): Holm–Bonferroni across the declared family, with each member's adjusted threshold
+  printed beside its p-value and the step-down stop applied to the decision, never only to the
+  printout. That much is the harness surface and this plan owns it. **Which α each figure is
+  computed at — the ladder's steps, the resolving-power line, and the observable floor — is the
+  note's and is not restated here** (`-ml` §3.3 and Rule 7; the α/k arithmetic v1.5 spelled out in
+  this paragraph is withdrawn in v1.6 rather than re-stated, because the note's v1.6 revision moves
+  it). What the plan does require is that the numbers a report *prints* and the rule it *applies*
+  are the same rule: `verdict()` refuses rather than warns when its preconditions do not hold, so a
+  family verdict cannot be printed at a threshold other than the one that decided it. That
+  guarantee is not a matter of taste — printing one rule and applying another was the S1 gate's
+  blocker (impl review Pass 1 B-1), and the two-pass `compare_report` in §4 S1 is its fix.
 
   **(iii)** Pre-registration in a content-hashed manifest is what stops a headline being chosen
   after the results exist.
@@ -444,6 +452,28 @@ Key decisions:
   versions get forgotten; a hash cannot. `compare` flags a mismatch in **either** (AC-3), which
   also catches the nastier case: same declared version, different bytes. This mirrors
   `cypher-mcp`'s content-hash image tag — a stale pack should be unrepresentable.
+
+  **The triple is total for a *loaded* pack, and only for one** *(v1.6, following the S1 fix round)*.
+  Hashing the triple's third component means reading every file in the pack directory, which only
+  `load_pack` does (§4 S2). The two carriers therefore differ deliberately: **`Pack.contentHash: str`
+  is total** — a loaded pack always knows its bytes — while **`PackRef.contentHash: str | None`**
+  carries `None` for a reference built from a manifest read alone, which is all S1's `compare` has.
+  `None` means *"not loaded"*; it never means *"hashed to empty"*, and the two must stay
+  distinguishable in the one field whose entire job is identity — the same absent-versus-empty rule
+  §3.4.2 applies to fingerprints, one level up. Three consequences:
+  - **`Pack.ref()` is the totality boundary** (§4 S2). A `PackRef` obtained from a loaded pack never
+    has `contentHash is None`; that is `load_pack`'s postcondition and an S2 test, and it is what
+    keeps the identity triple total exactly where this bullet claims it.
+  - **Test `is None`, never truthiness.** `if ref.contentHash:` re-merges `None` and `""` and
+    silently undoes the distinction the type was widened to express.
+  - **No report path may substitute `PackRef.contentHash` for the AC-3 banner.** The banner's
+    question is *what did these runs actually execute against*, which only each run's recorded
+    `fingerprint.packContentHash` answers; the currently-loaded pack cannot, whatever it hashes to.
+    (Judged rather than adopted: this is the engineering re-gate's reading, `docs/reviews/small-model-benchmarking-impl.md`
+    Pass 2. It holds, and the plan already implied it — S2's `Pack` carried a total `contentHash: str`
+    from v1.1 while `PackRef` is what `compare_report` takes. Dropping the field from `PackRef`
+    entirely was the alternative, and it is rejected: it would make the report's type depend on
+    whether a pack happens to be loaded, for a field the report is forbidden to read anyway.)
 - **A pack may ship executable Python** (`tools/sim.py`), loaded via `importlib` from the pack
   directory. That is a deliberate plugin seam, not an accident: FR-10 requires ground truth from a
   dispatched-call trace and resulting state, which needs a real (simulated) tool implementation.
@@ -893,11 +923,12 @@ checks today.
   the labelled complement** of `falseSuspendRate`, so a reader looking for recall still finds it,
   but it carries no verdict.
 - **The two-member family costs resolving power, and the report says so.** Holm–Bonferroni is
-  mandatory here (§3.3(ii)), so the resolving-power line for each class computes at **α/2**, not
-  α=0.05; `-ml` §7.3 carries the recomputed figures for both slices and the plan does not restate
-  them. `-ml` §7.3 also records a costed **reversal trigger**: if the stakeholder ever ranks the two
-  errors, the loser moves out of `verdictMetrics` into the exploratory block, the family collapses
-  to k=1 at α=0.05, and resolving power improves measurably. That trade is the stakeholder's to
+  mandatory here (§3.3(ii)), so each class's resolving-power line is computed at the family-adjusted
+  α the note specifies; `-ml` §7.3 carries that α and the recomputed figures for both slices, and
+  the plan restates neither. `-ml` §7.3 also records a costed **reversal trigger**: if the
+  stakeholder ever ranks the two errors, the loser moves out of `verdictMetrics` into the
+  exploratory block, the family collapses to k=1, and resolving power improves measurably. That
+  trade is the stakeholder's to
   make later, not the implementer's to make quietly.
 - This is the pack that makes §3.3's `headlineMetric: null` a first-class case rather than a special
   case; a future pack that wants no headline needs no further harness work.
@@ -1207,7 +1238,10 @@ each one's arithmetic is at the cited section:
 3. **Each pack pre-registers its verdict family** — `verdictMetrics` (1..k) plus an explicit
    `headlineMetric` that may be `null` (§3.3). Only a `verdictMetrics` member can receive a verdict;
    everything else prints `exploratory — no significance claim`. A family with k > 1 takes
-   Holm–Bonferroni **and** computes its resolving power at α/k. (`-ml` §3.3. v1.1's "exactly one
+   Holm–Bonferroni, and the α at which each printed figure is computed — the ladder's steps, the
+   resolving-power line and the observable floor — is the note's, not this plan's. (`-ml` §3.3 and
+   Rule 7; v1.5's "computes its resolving power at α/k" is withdrawn here as a **restatement**, not
+   contradicted — see §3.3(ii). v1.1's "exactly one
    `primaryMetric`" is superseded by the 2026-09-02 stakeholder decision on
    `guard-judge`, and v1.2's field names are superseded by §3.3's.)
 4. **Per-turn-position rates are computed over conversations, never over turns**, and no interval
@@ -1366,7 +1400,13 @@ def mover_d_interval(a: int, b: int, c: int, d: int) -> tuple[float, float]: ...
 def paired_bootstrap(diffs: Sequence[float], *, B: int, seed: int) -> tuple[float, float]: ...
 # PairedOutcomes, ResolvingPower, resolving_power(), min_detectable_difference(),
 # observable_floor(), verdict(), cluster_bootstrap(), design_effect(), effective_n():
-# signatures and semantics are -ml §3.4's six binding rules. Not restated here — see below.
+# signatures and semantics are -ml §3.4's binding rules. Not restated here — see below.
+
+@dataclass(frozen=True) class HolmStep:      # one family member's rung on the ladder
+    p: float; rank: int; threshold: float; tested: bool; rejected: bool
+def holm_steps(p_values: Sequence[float], *, alpha: float = 0.05) -> list[HolmStep]: ...  # len == k
+def verdict(..., alpha_step: float | None = None, holm_tested: bool = True) -> Verdict: ...
+                                             # remaining inputs and all semantics: -ml §3.4
 
 # report.py
 def compare_report(runs: Sequence[RunResult], *, pack: PackRef,
@@ -1415,6 +1455,32 @@ N-2), and `report.py` can recompute neither after the fact. Three rules go with 
 
 `items` is a `tuple`, not a `list`: `RunResult` is frozen, and a frozen record holding a mutable
 sequence is frozen in name only.
+
+**The multiplicity surface changed in the fix round, and S2 wires against the new one** *(v1.6,
+commit `3ad27d3`)*. `stats.holm_thresholds(p_values, alpha) -> list[float]` is **removed**, not
+deprecated; **`stats.holm_steps` returns one `HolmStep` per family member**, carrying `rank`,
+`threshold`, `tested` and `rejected`, and `verdict()` gained `holm_tested`. Three things follow that
+an implementer must not re-derive:
+
+- **`rejected` and `tested` are separate fields, not one tri-state.** A member past the step-down
+  stop still has a printed `threshold` — §3.3(ii) requires the adjusted threshold beside every
+  p-value, which is what makes the correction auditable — but `tested=False` says the threshold did
+  not decide anything. A `list[float]` could not express the stop at all, which is exactly how the
+  Pass 1 blocker was possible: the ladder was printed and plain Bonferroni was applied.
+- **`compare_report` runs two passes over the family, and that is structural rather than an
+  optimisation.** Holm is a property of the *family*, so no member can be decided until every
+  member's p-value exists: pass 1 computes each metric's paired rows and p-value, `holm_steps` then
+  ranks the family, and pass 2 renders each metric with the `alpha_step`/`holm_tested` its rung
+  gives it. A single-pass report cannot apply a step-down correction, whatever it prints.
+- **The list is exactly `k` long, positionally aligned with `verdictMetrics`.** Consumers zip it
+  against the family; a short return would silently drop a pre-registered metric from a report
+  (impl review Pass 2, P2-3), so the length is a postcondition of `holm_steps` and the zip is
+  `strict=True`. `k` is `len(pack.metrics.verdictMetrics)` and nothing else — §3.3's pre-registration
+  is what makes the correction honest rather than chosen after the fact.
+
+The **semantics** these types carry — which α each rung is tested at, how the floor interacts with a
+rung, and what may veto a verdict — are the note's, and the note's v1.6 revision governs them. This
+plan fixes the shape and the two-pass ordering; it deliberately names no α (§3.3(ii), §7 rule 2).
 
 **The clustering-aware and decision-making surface of `stats.py` is deliberately absent from this
 block.** `-ml` §3.4 is now a **binding six-rule contract** for exactly that surface — written, in its
@@ -1526,10 +1592,11 @@ interval, not marginal overlap.
 ```python
 # packs.py
 @dataclass(frozen=True) class Pack:
-    packId: str; packVersion: str; role: str; contentHash: str
+    packId: str; packVersion: str; role: str; contentHash: str   # total: a loaded pack knows its bytes
     manifest: Mapping[str, Any]; root: Path
     def data_path(self, key: str) -> Path: ...
     def load_tool_module(self) -> ModuleType: ...   # importlib from pack root
+    def ref(self) -> PackRef: ...                   # §3.3: contentHash never None on this path
 def load_pack(root: Path) -> Pack: ...
 def content_hash(root: Path) -> str: ...            # SHA-256, sorted paths, excludes PROVENANCE.md
 def validate_pack(pack: Pack) -> list[str]: ...
@@ -1571,7 +1638,11 @@ row-count identity (48 distinct values where 12 are required), one declaring
 `analysisUnit` outside its own `pairingKey[0]` is rejected structurally, and one declaring
 `replicatesPerScript > 1` is rejected per `-ml` §3.4 Rule 6; `validate_pack`'s AST import check
 rejects a fixture pack module that imports outside the
-allowlist, and `run` is shown to call it and fail closed (§3.3); `lmstudio` is unit-tested against
+allowlist, and `run` is shown to call it and fail closed (§3.3); **`load_pack(...).ref().contentHash`
+is not `None`** and equals `content_hash(root)`, while a `PackRef` from `pack_ref_from_manifest`
+is `None` there — the §3.3 totality boundary, asserted rather than assumed, and `validate_pack`
+reuses `packs.check_sampling_contract` rather than re-implementing the rule (impl review Pass 1,
+§4 item 6); `lmstudio` is unit-tested against
 recorded JSON payloads, including the §3.6 eligibility gate on the three real catalog entries that
 break the naive rule (an `embeddings` model advertising `tool_use` → refused; an entry with **no**
 `capabilities` key → admitted; an `llm` with `tool_use` → admitted); `attest` writes a `host.json`
@@ -1989,7 +2060,7 @@ verdict string in this feature**, plus the deferred judge design. It is not opti
 particular **§3.4, six binding rules that are `stats.py`'s contract**, and **§7.2's verbatim
 resolving-power string**, which is a test target.
 
-**Version pairing:** this plan **v1.5** is aligned to the note **v1.5**. They share one vocabulary
+**Version pairing:** this plan **v1.6** is aligned to the note **v1.6**. They share one vocabulary
 (`verdictMetrics` + `headlineMetric`, the plan's names), one `guard-judge` metric pair
 (`falseAdvanceRate` + `falseSuspendRate`, the note's), one `H` contract (pack-declared and validated
 `H ≤ min(script length)`, the plan's), and one analysis-unit rule (the outermost component of
@@ -2055,16 +2126,41 @@ tool-caller scripts × 1 run at temperature 0** (§3.8.4), **`guard-judge` has n
 (§3.8.2, with §3.3 making a headline-less pack a first-class case), and **S3's self-check is a
 diagnostic, never a gate** (S3 done-condition 5).
 
-**S0 is delivered** (commit `0522ffd`) and **S1 is delivered** (commit `ab91419`, gated at `d6c4997`
-— verdict *needs changes*: one blocker, six majors, all dispatched as fixes against the shipped
-code, not as design changes). Read S0's and S1's own text before starting — they record what
-shipped rather than what v1.1 asked for, including the one real smoke test and the working-directory
-rule that every done-condition in §4 depends on. **S2 is the next stage**, and it inherits three
-things from the S1 gate that this plan states rather than leaves in the review: `RunResult`'s two
-new fields must be set by the runner with no default (§4 S1), `validate_pack` calls the existing
-`packs.check_sampling_contract` rather than re-implementing the rule, and `_percentile`'s definition
-(nearest-rank vs interpolated) must be decided and written down before latency figures start being
-compared across runs — that last one is a `data-scientist` call, open as §6 R-13.
+**S0 is delivered** (commit `0522ffd`). **S1 is built and not yet closed**, which is a different
+state and the plan says so deliberately. Engineering gates:
+`docs/reviews/small-model-benchmarking-impl.md`; statistics gates:
+`docs/reviews/small-model-benchmarking-ml.md`.
+
+| S1 event | commit | outcome |
+|---|---|---|
+| first delivery | `ab91419` | 233 tests |
+| engineering gate, pass 1 | `d6c4997` | *needs changes* — 1 blocker, 6 majors |
+| statistics gate, pass 1 | `6cfafaa` | *needs changes* |
+| fix round | `3ad27d3` | **296 tests**; all 18 engineering findings fixed, both gates addressed |
+| engineering re-gate, pass 2 | `8b7b60a` | **approve with suggestions** — 0 blockers, 1 major, 2 minors, 2 nits; **S2 may be dispatched** |
+| statistics re-gate | `d79acca` | **needs changes** — one blocker still open |
+
+So: **S2 may start, S1 may not be marked done.** The open statistics blocker is the note's to rule
+on and a `tdd-engineer` round follows it. It lands inside `stats.py` and `report.py` — neither of
+which S2 constructs — so S2's runner, packs and adapter are unaffected; if the ruling moves a
+`verdict()` input, that is the `tdd-engineer` round's work, not a change to what S2 hands the
+report (§7 rule 2). Read S0's and S1's own text before starting: they record
+what shipped rather than what v1.1 asked for, including the one real smoke test and the
+working-directory rule that every done-condition in §4 depends on.
+
+**What S2 inherits from the two gates**, stated here rather than left in the reviews:
+
+- **`RunResult.designEffect` / `.basis` are required with no default** — the runner sets both (§4 S1).
+- **`BinaryMetric.unit` is required with no default**, so every S2 scorer states its denominator
+  unit. There are no stored records to migrate (`results/runs/` does not exist yet); that is free
+  now and would not have been one stage later.
+- **The multiplicity surface is `holm_steps`/`HolmStep`/`verdict(holm_tested=)`**, consumed by a
+  two-pass `compare_report` (§4 S1). `holm_thresholds` is gone; nothing may call it.
+- **`load_pack(...).ref().contentHash` is never `None`** — §3.3's totality boundary, asserted in S2's
+  done-condition; and `validate_pack` reuses `packs.check_sampling_contract` rather than
+  re-implementing the rule.
+- **`_percentile`'s definition** (nearest-rank vs interpolated) must be decided and written into the
+  note **before** any latency figure is stored — a `data-scientist` call, open as §6 R-13.
 
 Two items are already recorded in `model-bench/docs/BACKLOG.md` (seeded at S0, re-checked at S8):
 the **deferred judged-quality layer** for `chat-responder` (design preserved in §3.8.5 and
@@ -2089,8 +2185,10 @@ its rows here in the same pass.
 | `FieldProblem` | `fingerprint` | `NamedTuple(field: str, reason: Literal["absent","empty","null","forbidden","unknown"])`. **`unknown` is v1.5's fifth value**, for a *discriminator this build cannot interpret* — an unrecognised `armKind`, or a `benchSchemaVersion` from the future (§3.4.3). Neither is absent, empty, null or forbidden, so the four-value set would have forced a mislabel; it is the field-level counterpart of `InvalidRecord.reason == "unknown_schema"`. |
 | `Fingerprint` | `fingerprint` | frozen dataclass, §3.4.1–§3.4.2; `armKind` discriminates |
 | `ItemResult`, `RunResult`, `InvalidRecord`, `Aggregates` | `results` | as given in S1 |
+| `BinaryMetric` | `results` | frozen dataclass `(name, successes, n, unit: str)` — a count and **the unit its denominator is in**, `unit` required with no default (v1.6). It is what lets `report.py` honour `-ml` §4.4's "never print a Wilson interval over a turn-pooled count": without it a per-conversation rate and a turn-pooled one are the same type. Every S2 scorer therefore states its denominator unit; the permitted values are the note's denominators (`-ml` §4.2). |
+| `HolmStep` | `stats` | frozen dataclass `(p, rank, threshold, tested, rejected)`, one per pre-registered family member, returned by `holm_steps` in the family's own order and always exactly `k` long. **v1.6 — it replaces `holm_thresholds`' `list[float]`, which could not express the step-down stop.** `tested=False` marks a member past the stop: its `threshold` is still printed (§3.3(ii)) and decided nothing. The α it is computed at is the note's (`-ml` §3.3). |
 | `PairedOutcomes`, `ResolvingPower`, `Verdict`, `BootstrapResult` | `stats` | **`-ml` §3.4's, verbatim** — not restated here. `PairedOutcomes.from_units` is the only constructor and raises on a repeated analysis-unit id; `resolving_power()`'s inputs are keyword-only with no defaults. (v1.2's `PairedResult` was this plan's own invention and is withdrawn.) |
-| `PackRef` | `packs` | `NamedTuple(packId, packVersion, contentHash, role, metrics, pairingKey: tuple[str, ...], analysisUnit: str)` — the identity triple, what the report must print, and §3.3's two `sampling` declarations. **The last two are v1.5's**: `report.py` resolves the analysis-unit id from `analysisUnit` and **no call site chooses it** (§3.3, DC-5(c)), so without them the resolution has nowhere to come from; the five-field form predated §3.3's v1.4 `sampling` block. Derived, not stored: `analysisUnitIndex = pairingKey.index(analysisUnit)`, which is `0` whenever `check_sampling_contract` has passed. |
+| `PackRef` | `packs` | `NamedTuple(packId, packVersion, contentHash: str \| None, role, metrics, pairingKey: tuple[str, ...], analysisUnit: str)` — pack identity as a *report* sees it, plus §3.3's two `sampling` declarations. **`contentHash` is `str \| None` (v1.6)**, `None` meaning "not loaded" and never "hashed to empty"; it is total only on `Pack.ref()`, and no report path may read it in place of a run's own `fingerprint.packContentHash` — §3.3's identity bullet carries the rule and the reasoning. **`pairingKey`/`analysisUnit` are v1.5's**: `report.py` resolves the analysis-unit id from `analysisUnit` and **no call site chooses it** (§3.3, DC-5(c)), so without them the resolution has nowhere to come from; the five-field form predated §3.3's v1.4 `sampling` block. Derived, not stored: `analysisUnitIndex = pairingKey.index(analysisUnit)`, which is `0` whenever `check_sampling_contract` has passed. |
 | `Pack` | `packs` | frozen dataclass, S2 |
 | `ModelInfo` | `lmstudio` | one catalog entry, verbatim: `id, type, publisher, arch, compatibility_type, quantization, state, max_context_length, capabilities?, loaded_context_length?` |
 | `ChatResult` | `lmstudio` | `message, tool_calls, toolCallForm, stats, model_info, runtime, usage, wallClockMs` |
