@@ -37,8 +37,8 @@ Stakeholder decisions, 2026-09-02:
 | U3b — Fold U1's findings + U2's S0 defects + the three decisions into the plan; **resumed** to reconcile vocabulary with the note | `architect` | `a3e258f27b83e764d` | delivered | `docs/plans/small-model-benchmarking.md` **v1.3** — 3 blockers + 13 majors + 8 minors + 4 nits dispositioned, then vocabulary reconciled | `analyst` re-gate (Pass 2) → — | 216k tok / 13 tools cumulative |
 | U3c — FR-22a's illustrative clause cites the superseded 4×4 sampling | `tico` | `ae6ffeeb440ee967a` | accepted | `docs/requirements/small-model-benchmarking.md` (+13/−1) | folded into the Pass 2 re-gate | 88k tok / 12 tools |
 | U3d — Pass 2 re-gate over plan v1.3 + note v1.3 + the amended requirements | `analyst` | `a0e3b74e34e1d4c40` (resumed) | delivered | `docs/reviews/small-model-benchmarking.md` `## Pass 2` — **approve with suggestions**; 3 blockers + 11 majors closed, 3 new findings | — (is the gate) | 250k tok / 29 tools cumulative |
-| U3e — Close N-1, N-2, N-4 in the plan | `architect` | — | queued | `docs/plans/small-model-benchmarking.md` v1.4 | teco-verified (gate findings, already reviewed) | — |
-| U3f — Close N-3 in the note (`H` definition regression) | `data-scientist` | — | queued | `docs/plans/small-model-benchmarking-ml.md` v1.4 | teco-verified | — |
+| U3e — Close N-1, N-2, N-4 in the plan | `architect` | `a3e258f27b83e764d` (resumed) | accepted | `docs/plans/small-model-benchmarking.md` **v1.4** | teco-verified | 254k tok / 12 tools cumulative |
+| U3f — Close N-3 in the note (`H` definition regression) | `data-scientist` | `a394671cfc28bef87` (resumed) | accepted | `docs/plans/small-model-benchmarking-ml.md` **v1.4** | teco-verified | 194k tok / 5 tools cumulative |
 | U4 — S1 core (fingerprint, results, stats, report; no model calls) | `tdd-engineer` | — | queued (after U3d) | `modelbench/{fingerprint,results,stats,report,roles,cli}.py` + tests 1–6 | `analyst` + `data-scientist` (stats) → — | — |
 | U5 — S2 packs, LM Studio adapter, host info, convo, tooling, runner | `coder` | — | queued (after U4) | `modelbench/{packs,lmstudio,hostinfo,convo,tooling,runner}.py` + tests 7b–12 | `analyst` → — | — |
 | U6 — S3 `embedder` pack + `refresh_golden.py`, first live run | `coder` | — | queued (after U5) | `packs/embedder/**`, `scripts/refresh_golden.py`, one stored `RunResult` | `analyst` → — | — |
@@ -241,3 +241,32 @@ re-drawn against U4's actual delivery before dispatch.
   occurrences under any name: no stage, no done-condition, no budget for its two conversations.
   Closing it needs no new statistics — a non-identical probe degrades `basis` to `assumed`, which
   via Rule 4 automatically moves McNemar out of the decision seat.
+
+- **2026-09-03 — U3e/U3f accepted; plan v1.4 ↔ note v1.4, and the gate's findings closed harder
+  than they were raised.** N-1's fix uses the `data-scientist`'s outermost-component **rule** rather
+  than a per-pack field list (which would go stale the moment a pack is added): `sampling.pairingKey`
+  is ordered pack data and `sampling.analysisUnit` is fixed by rule as its outermost component, with
+  no parameter through which a call site could choose otherwise. `validate_pack` enforces it by
+  **two independent routes** — structurally (`analysisUnit == pairingKey[0]`) and **by arithmetic**
+  over the unit's own values, which is the one that catches a *consistently* wrong choice the
+  structural check cannot.
+- **The `architect` corrected an overstatement of its own that the gate exposed.** S1's DC-4 had
+  claimed Rule 1 was "the mechanism that stops a clustered design reaching `verdict()`". It now names
+  Rule 1 a **backstop** and points at Rule 6 and the `sampling` contract as load-bearing — left
+  standing, that sentence would have propagated the exact misreading into the S1 brief.
+- **N-2 closed with a fail-safe stronger than the gate asked for:** `basis = "by-construction"`
+  requires `replicatesPerScript == 1` **and** the probe ran **and** both vectors were identical —
+  otherwise `"assumed"`, **including when the probe never ran**. An unrun probe cannot silently buy
+  the stronger instrument, so N-2 cannot recur by the omission that created it.
+- **The precedence rule that caused N-3 is gone, replaced by ownership.** v1.3's "where the two
+  disagree, the note is right" did not resolve a conflict — it propagated a stale clause, turning a
+  fixed M-11 back into a live regression. **A blanket precedence rule launders staleness with
+  exactly the authority it was given to settle disputes, and the more trustworthy the senior
+  document, the more efficiently it does so.** Replaced with three rules: a disagreement is
+  *presumed staleness* reconciled by which side changed last; precedence applies only when both are
+  current and is split **by ownership, not seniority**; and neither document resolves a disagreement
+  by editing the other.
+- **Context-budget note for future routing:** `architect` is now at ~254k cumulative tokens and
+  `analyst` at ~250k. Per teco's own rule, a further *small, self-contained* follow-up to either
+  should be a **fresh dispatch**, not a resume — resuming buys their undocumented reasoning at a
+  cost that no longer pays for itself.

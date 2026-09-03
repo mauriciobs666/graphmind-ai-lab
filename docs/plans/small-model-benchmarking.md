@@ -1,8 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.3 · **Reviews:** `docs/reviews/small-model-benchmarking.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.4 · **Reviews:** `docs/reviews/small-model-benchmarking.md`
 
-2026-09-02 — v1.3: aligned to `-ml` v1.2 — one vocabulary (`verdictMetrics` + `headlineMetric`), `guard-judge`'s co-primaries both error rates, and `stats.py`'s decision surface deferred to the note's binding §3.4 contract. (v1.2 folded in the Pass 1 gate, the three stakeholder decisions and S0's as-built findings.)
+2026-09-03 — v1.4: closes Pass 2's N-1 (the analysis unit is fixed by rule and enforced twice at pack validation), N-2 (the determinism probe is built, budgeted and wired to `basis`) and N-4; §7's precedence rule is narrowed after it propagated a stale clause. (v1.3 aligned the vocabulary to the `-ml` note; v1.2 closed the Pass 1 gate.)
 
 Design for [`../requirements/small-model-benchmarking.md`](../requirements/small-model-benchmarking.md)
 (Status: *Ready for design*, 23 FRs / 5 ACs). This plan covers the whole feature: the new top-level
@@ -349,7 +349,10 @@ mismatches to be detectable after the fact.
   },
   "data": {"conversations": "conversations.jsonl", "catalog": "catalog.json"},
   "tools": {"module": "tools/sim.py", "entrypoint": "build_environment"},
-  "sampling": {"scripts": 12, "replicatesPerScript": 1, "seed": 20260902},
+  "sampling": {"scripts": 12, "replicatesPerScript": 1, "seed": 20260902,
+               "pairingKey": ["scriptId", "replicate", "turnIndex"],
+               "analysisUnit": "scriptId",
+               "determinismProbeScripts": ["A-01", "B-03"]},
   "metrics": {
     "verdictMetrics": ["cleanThroughTurnH"],
     "headlineMetric": "cleanThroughTurnH",
@@ -405,6 +408,37 @@ Key decisions:
   distinguish the list would leave two fields one character apart in every manifest and every diff.
   `verdictMetrics` names what the field controls and collides with nothing; `headlineMetric` does
   the same for the presentation half.)*
+- **`sampling` declares the analysis unit, and the harness never chooses one.** *(New in v1.4,
+  closing gate finding N-1.)* `-ml` §3.4 Rule 1 makes `PairedOutcomes.from_units` raise on a repeated
+  analysis-unit id — but **that guard only fires if the id passed in is the *cluster* key.** 48
+  conversations drawn from 12 scripts have 48 *distinct conversation ids*, so a caller who passes
+  conversation ids sees no error and gets an anti-conservative verdict from correlated rows. Rule 1
+  is a backstop; the contract that actually closes it is here, in the pack:
+  - **`sampling.pairingKey`** — the ordered component names of `ItemResult.pairingKey`
+    (`["scriptId", "replicate", "turnIndex"]` for the tool-caller; `["itemId"]` for the four
+    item-level packs). The pairing key stops being a scorer convention and becomes pack data.
+  - **`sampling.analysisUnit`** — the independent unit of analysis, and it is fixed by a **rule**,
+    not chosen per pack: **the analysis unit is the *outermost* component of `pairingKey` — the one
+    whose *repetition* is what would indicate correlated rows.** For the tool-caller that is
+    **`scriptId`, never a conversation id**; for the four item-level packs it is `itemId`. A rule
+    rather than a per-pack list because a list goes stale the moment a pack is added, and because
+    the rule is what a reviewer can check by reading. `report.py` resolves the unit id from this
+    field and passes it to `from_units`; **no call site chooses it, and there is no parameter
+    through which a caller could.** It is one declaration per pack rather than per metric because
+    the rule is structural: every verdict metric in a pack shares the same independent unit.
+  - **`validate_pack` enforces the rule twice, by two independent routes.**
+    **(i) Structural:** `analysisUnit` must equal `pairingKey[0]`, and `pairingKey` is ordered
+    outermost → innermost. This catches the pack that declares a correct unit against a
+    wrongly-ordered key.
+    **(ii) By the data — the check that catches a *consistently* wrong choice, which (i) cannot.**
+    The row-count identity, computed over `analysisUnit`'s own values: the data file holds exactly
+    `scripts × replicatesPerScript` rows, the number of distinct `analysisUnit` values is exactly
+    `scripts`, and **each appears exactly `replicatesPerScript` times.** A pack that declared
+    `analysisUnit: "conversationId"` under `scripts: 12, replicatesPerScript: 4` fails immediately —
+    48 distinct values where 12 are required — which is precisely the N-1 shortcut, caught by
+    arithmetic rather than by intent. It also catches the pack that declares
+    `replicatesPerScript: 1` and ships four conversations per script, the case that slips past
+    Rule 6's declaration check *and* past Rule 1 at once.
 - **Identity is `(packId, packVersion, contentHash)`.** `contentHash` = SHA-256 over the sorted
   relative paths and bytes of every file in the pack directory except `PROVENANCE.md`. Declared
   versions get forgotten; a hash cannot. `compare` flags a mismatch in **either** (AC-3), which
@@ -691,7 +725,7 @@ met — owned by no stage. One table, and each command is assigned to the stage 
 | `index rebuild` | — | Regenerates `results/index.csv` from `results/runs/` | **S1** |
 | `models --tested` | `--pack <id>` · `--role <role>` | Lists models with stored results (`armKind == "model"`); from S2 also intersects with the installed catalog | **S1**, catalog half **S2** |
 | `attest` | `--lms-path <path>` · non-interactive `--set k=v` | Prompts for the four operator-attested fields, probes LM Studio, writes `host.json` (§3.4.4) | **S2** |
-| `validate --pack <path>` | `--strict` | Runs `validate_pack`: manifest schema, `metrics` block, ids, provenance, paraphrase rule, pack-module import allowlist, `H ≤ min(script length)` | **S2** |
+| `validate --pack <path>` | `--strict` | Runs `validate_pack`: manifest schema, `metrics` block, `sampling` contract (§3.3 — `analysisUnit == pairingKey[0]`, row-count identity, `replicatesPerScript`), ids, provenance, paraphrase rule, pack-module import allowlist, `H ≤ min(script length)` | **S2** |
 | `run --pack <id> --model <key>` | `--session <id>` · `--reference <key>` · `--warmup <n>` · `--no-cold-load` | One model × one pack; calls `validate` first and fails closed | **S2** plumbing, first usable **S3** |
 
 **Exit codes.** `0` whenever the tool ran and reported, *whatever the scores* — the requirements rule
@@ -953,6 +987,35 @@ checks today.
     absence must be an error rather than an approximation nobody notices. So the field cannot be
     raised invisibly *or* silently mis-analysed — raising it is a deliberate act that first requires
     the note's two-level function to exist.
+- **The determinism probe — the evidence behind `basis: "by-construction"`** *(new in v1.4, gate
+  finding N-2)*. `-ml` §3.4 Rule 4 lets McNemar decide **only** when `design_effect == 1.0` **and**
+  `basis == "by-construction"`, and §4.5.1 grants that basis to 12 × 1 on the grounds that each
+  script contributes one observation. But §4.5.1(iii) also states that this design makes run-to-run
+  variability *unmeasurable*, that LM Studio at temperature 0 is "near-deterministic but not
+  guaranteed bit-deterministic", and prescribes the evidence: **re-run 2 of the 12 scripts a second
+  time, once per model, and report whether the outcome vector is identical.** v1.3 asserted the
+  basis and built no probe, so the one input deciding whether McNemar may decide the flagship metric
+  was an attestation. Now:
+  - **The pack names the two scripts** (`sampling.determinismProbeScripts`, one shape-A and one
+    shape-B script — the long and the write-mutating shapes, where non-determinism is most likely to
+    bite), so which two is pack data and cannot be chosen after seeing a result.
+  - **Budget: 2 extra conversations per model** (~14 turns, one shape-A + one shape-B), stated here
+    because it is a real cost that must appear in the run plan rather than surprise S6. It runs in
+    the same session, after the 12 scored conversations.
+  - **Diagnostic, outside `n`, never pooled into it** (`-ml` §4.5.1(iii)). The probe's conversations
+    are excluded from every denominator and appear only in the report's own probe line.
+  - **The outcome is wired to `basis`, and absence of evidence degrades it.** `runner` sets the
+    `basis` passed to `resolving_power()` to `"by-construction"` **only if** all three hold:
+    `replicatesPerScript == 1`, the probe **ran**, and both probe scripts produced outcome vectors
+    identical to their scored runs. Otherwise `basis = "assumed"` — including the case where the
+    probe simply was not run. Via `-ml` §3.4 Rule 4 that automatically moves McNemar out of the
+    decision seat and the cluster-bootstrap CI into it, with McNemar's p still printed and labelled
+    `anti-conservative under clustering — not the decision`. **The fail-safe default is the point**:
+    an unrun probe can never silently buy the stronger instrument, so N-2 cannot recur by omission
+    the way it arose.
+  - **Carried in the record:** `ToolCallAggregates.determinismProbe =
+    {scriptIds, ran: bool, identical: bool, differingTurns: [...]}`, so a stored run's `basis` is
+    re-derivable years later rather than trusted.
 - **Honest consequence, printed not buried:** twelve conversations is a small *n*, and the
   resolving-power line computed from it (§3.9 point 2) will be a large number. That is the true
   precision of the previous design too — it was simply hidden inside a design effect. The effects
@@ -999,9 +1062,23 @@ checks today.
   version silently redefines the headline from `cleanThroughTurn4` to `cleanThroughTurn3` — the
   primary metric changing meaning under a fixed name, which is the exact failure this tool exists
   to prevent, and one AC-3's version banner would report as "the data changed" rather than "the
-  headline now measures something else". So: `H` is pack data, `validate` fails a pack where
-  `H > min(script length)`, and the report prints the resolved `H` beside the metric name every
-  time (`cleanThroughTurn4`, never `cleanThroughTurnH`). The **per-turn hazard** — P(first failure at *t* | clean
+  headline now measures something else". So `H` is pack data, and three consequences follow:
+  - **`validate` *fails* a pack where `H > min(script length)` — it never clamps `H`, and never
+    warns.** The methodological reason, and it is stronger than tidiness (`-ml` §4.6, v1.4): a
+    headline computed at `H > min` is **selection-conditioned**, because short scripts cannot reach
+    turn `H` at all, so the metric quietly becomes a rate over long conversations only. That is
+    `-ml` §4.3's laundering failure landing in the one number the report calls its headline —
+    precisely the thing §3.8.4's funnel table exists to prevent everywhere else. A clamp would
+    silently produce a *different, valid* metric under the declared name, which is M-11 again by
+    another route; a warning would be ignored. Fail closed.
+  - **`H` is printed beside the metric name in every report** — `cleanThroughTurn4`, never
+    `cleanThroughTurnH`.
+  - **`H` strictly below `min(script length)` is legitimate, and the gap is reported.** Declaring
+    `H < min` keeps the headline's meaning stable across pack versions, at the price that turns
+    `H+1 … min` are scored and then excluded from the headline — the metric becomes **coarser, not
+    wrong** (`-ml` §4.6, v1.4). So when the gap is non-zero the report carries a line naming it as
+    discriminating information deliberately left on the table. It is **zero today** (`H = 4 =
+    min(script length)`), which is why the line renders only when it is not. The **per-turn hazard** — P(first failure at *t* | clean
   through *t*−1) — is the required diagnostic, because it is the only statistic that separates
   "gradual degradation" from "deterministic collapse", which is the entire reason FR-9 exists.
   Turn-pooled rates are never the headline.
@@ -1218,7 +1295,9 @@ class Fingerprint:
 @dataclass(frozen=True)
 class ItemResult:
     itemId: str                     # the pack's stable id — the pairing key's first component
-    pairingKey: tuple[str, ...]     # tool-caller: (scriptId, replicate, turnIndex); item roles: (itemId,)
+    pairingKey: tuple[str, ...]     # components named by the pack's sampling.pairingKey (§3.3)
+                                    # the analysis-unit id is pairingKey[pack.analysisUnitIndex],
+                                    # resolved from sampling.analysisUnit — never chosen by a caller
     outcome: Literal["pass", "fail", "n_a", "parse_failure"]
     scoreable: Mapping[str, bool]   # per conditional count: was its precondition met? (-ml §4.3)
     counts: Mapping[str, int]       # per-count numerator contributions
@@ -1319,10 +1398,13 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
 4. **`stats` reproduces the note's `(a,b,c,d)` regression fixtures to the tolerance the note
    states** — the tolerance is the note's to set, and this plan does not restate it. Plus the two
    contract assertions `-ml` §3.4 calls out by name: `PairedOutcomes.from_units` **raises** on a
-   repeated analysis-unit id (Rule 1 — the mechanism that stops a clustered design reaching
-   `verdict()` at all), and the ρ = 1 identity holds (Rule 5 — when within-cluster correlation is 1,
-   effective *n* must equal the cluster count; it is the one assertion that catches a squaring error
-   in either direction).
+   repeated analysis-unit id (Rule 1), and the ρ = 1 identity holds (Rule 5 — when within-cluster
+   correlation is 1, effective *n* must equal the cluster count; it is the one assertion that
+   catches a squaring error in either direction). **Rule 1 is a backstop, not the mechanism**, and
+   v1.3 overstated it: `from_units` only raises if the id it is handed is the *cluster* key, so 48
+   conversation ids drawn from 12 scripts are unique and would be accepted (gate finding N-1). What
+   closes the clustered-design case is Rule 6 plus §3.3's `sampling` contract, at pack validation —
+   which is why DC-5(c) below tests *which key is used*, not merely that something raised.
 5. **`min_detectable_difference` is verifiably not a constant, and verifiably not naive.** Two
    tests: it returns different values for different *n*; and — the B-1 detector — **calling it with
    only an item count, for a pack whose sampling unit is clustered, must fail rather than return a
@@ -1330,10 +1412,31 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    line for a clustered pack cannot be produced from a bare *n*, and `report.py` refuses to render
    one when the required input is absent. This is the test that would have caught v1.1's
    `min_detectable_difference(48)` printing a materially over-optimistic figure for the tool-caller
-   pack. **It needs a synthetic clustered pack fixture**, because under §3.8.4's sizing no shipped
-   pack is clustered any more — which is exactly why the guard must be tested rather than assumed
+   pack. **It needs a synthetic clustered fixture**, because under §3.8.4's sizing no shipped pack
+   is clustered any more — which is exactly why the guard must be tested rather than assumed
    unreachable: the next conversation pack that raises `replicatesPerScript` reintroduces the case,
    and by then S1 is long closed.
+
+   **DC-5(c) — the fixture must assert *which key* is used as the unit id, not merely that something
+   raised.** *(Gate finding N-1. Written to be lifted verbatim into the S1 brief.)* The fixture is an
+   in-memory `Sequence[ItemResult]` plus a `PackRef` — S1 has no pack loader, that is S2 — built as
+   **12 clusters × 4 rows = 48 rows**, each row's `pairingKey` being a **unique** `(scriptId,
+   replicate)` pair, with `PackRef` declaring `pairingKey = ["scriptId", "replicate"]` and
+   `analysisUnit = "scriptId"`. The test asserts all three of:
+
+   1. **Identity of the unit ids.** Capture the `unit_ids` argument actually passed to
+      `PairedOutcomes.from_units` and assert it is the rows' **`scriptId`** values — the *outermost*
+      component of `pairingKey`, 12 distinct values each appearing 4 times — resolved from
+      `PackRef.analysisUnit`. Assert the captured argument itself, not a property inferred from the
+      outcome.
+   2. **Consequence.** `from_units` therefore raises on the repeated unit id.
+   3. **A negative control on the guard itself.** Passing the 48 *unique conversation ids*
+      (`f"{scriptId}-{replicate}"`) to `from_units` directly is **accepted without error** — which
+      proves `from_units` alone does not close this, and that assertion 1 is what does.
+
+   **A test that asserts only 2 passes while testing nothing**: 48 conversation ids are unique, so
+   the wrong unit-id choice raises nothing and the fixture goes green on a harness that would
+   silently produce an anti-conservative verdict. Assertions 1 and 3 are what make the test real.
 5b. **The rendered resolving-power line matches the note's verbatim string.** `-ml` §7.2 carries the
    tool-caller pack's line as four mandatory sentences; the report test asserts against that string,
    parameterised only by `<packId>@<packVersion>`. This is the acceptance surface for §3.9 point 2:
@@ -1404,7 +1507,12 @@ which is FR-8(b) and must be decided at the transport boundary where the evidenc
 "a stored result with a **complete** fingerprint" — is unreachable until `host.json` exists.
 
 **Done when:** `packs`/`convo`/`tooling` are unit-tested offline against a stub LLM and a fixture
-pack; `validate_pack`'s AST import check rejects a fixture pack module that imports outside the
+pack; **`validate_pack` enforces the §3.3 `sampling` contract** — a fixture pack declaring
+`analysisUnit: "conversationId"` under `scripts: 12, replicatesPerScript: 4` is rejected on the
+row-count identity (48 distinct values where 12 are required), one declaring
+`analysisUnit` outside its own `pairingKey[0]` is rejected structurally, and one declaring
+`replicatesPerScript > 1` is rejected per `-ml` §3.4 Rule 6; `validate_pack`'s AST import check
+rejects a fixture pack module that imports outside the
 allowlist, and `run` is shown to call it and fail closed (§3.3); `lmstudio` is unit-tested against
 recorded JSON payloads, including the §3.6 eligibility gate on the three real catalog entries that
 break the naive rule (an `embeddings` model advertising `tool_use` → refused; an entry with **no**
@@ -1484,7 +1592,10 @@ the tool result, and called a tool when none was required). This is the piece wh
 invisible and expensive, and synthetic traces are the only way to test it deterministically.
 
 **Done when:** each FR-8 count (including the restraint count and the three-way call-form partition)
-has at least one synthetic trace that moves it and one that does not; denominators and `n/a` tallies
+has at least one synthetic trace that moves it and one that does not; the **outcome-vector
+comparison the determinism probe needs** exists as a pure function over two `ConversationTrace`s and
+is unit-tested on identical and one-turn-differing pairs (§3.8.4 — no new statistics, and S6 must
+not be the first place it runs); denominators and `n/a` tallies
 behave per `-ml` §4.2–§4.3, verified by test, including the laundering case — a model that collapses
 at turn 2 must not score *better* than one that reaches turn 8; the funnel table renders; and
 `report.py` renders both the per-turn-position table and the hazard curve. Per amended FR-8(d),
@@ -1508,12 +1619,21 @@ double-counted as two sibling failures, never classified by scorer heuristics.
 3. **Human verification of every turn's expectations** (FR-19): each `expect` block is checked by a
    person against the simulated environment's actual behavior, not against a model's output.
    `provenance.verifiedBy` is filled per conversation.
-4. Run the known-answer validation: `qwen/qwen3-4b-2507` vs `mistralai/ministral-3-3b`, and compare
+4. Declare `sampling.determinismProbeScripts` (one shape-A, one shape-B) and **run the determinism
+   probe** — those two scripts a second time, once per model, in the same session, outside `n`
+   (§3.8.4). Record `determinismProbe` in each run and let it set `basis`.
+5. Run the known-answer validation: `qwen/qwen3-4b-2507` vs `mistralai/ministral-3-3b`, and compare
    the per-turn profile to §8.2's recorded finding.
 
-**Done when:** step 4 is **run and its outcome recorded** in `model-bench/docs/test-reports/`;
-AC-1 holds on real output (per-failure-kind **and** per-turn-position, with no blended headline
-anywhere in the report); and the pack validates, including `H ≤ min(script length)`.
+**Done when:** step 5 is **run and its outcome recorded** in `model-bench/docs/test-reports/`;
+**step 4's determinism probe has run for both models and its result is recorded, with `basis` set
+from it** — an identical outcome vector on both probe scripts leaves `basis: "by-construction"` and
+McNemar deciding; anything else records `basis: "assumed"`, and the report must then show the
+cluster-bootstrap CI as the decision with McNemar labelled anti-conservative (`-ml` §3.4 Rule 4).
+Both outcomes satisfy the condition — what does not is the probe not having run. AC-1 holds on real
+output (per-failure-kind **and** per-turn-position, with no blended headline anywhere in the
+report); and the pack validates, including `H ≤ min(script length)`, the `sampling` row-count
+identity and `analysisUnit` membership (§3.3).
 
 **If the contrast does not appear**, the stage is still completable: R-3's bisect is executed and
 its result recorded, and the pack ships flagged `known-answer validation: not reproduced` in every
@@ -1621,8 +1741,18 @@ bad**, not the ones that prove it reports a number when the data is good.
     tool the pack's own `schemas.json` declares, the `metrics` block well-formed (§3.3 — including
     a non-null `headlineMetric` that is not a `verdictMetrics` member being rejected), `H ≤ min(
     script length)` for the tool-caller pack, **`replicatesPerScript > 1` rejected while only the
-    one-level `cluster_bootstrap` exists** (`-ml` §3.4 Rule 6), and `validate_pack`'s AST import
-    check rejecting a pack module that imports outside stdlib + `modelbench.tooling`.
+    one-level `cluster_bootstrap` exists** (`-ml` §3.4 Rule 6), the **`sampling` contract** (§3.3 —
+    `analysisUnit == pairingKey[0]`; the row-count identity over `analysisUnit`'s values, with a
+    fixture declaring `analysisUnit: "conversationId"` under `scripts: 12` rejected for having 48
+    distinct values where 12 are required), and `validate_pack`'s AST import check rejecting a pack
+    module that imports outside stdlib + `modelbench.tooling`.
+12b. **The determinism probe's wiring** (§3.8.4) — the outcome-vector comparison is exact on
+    identical traces and localises the first differing turn; and `runner` sets `basis` correctly in
+    all four cases: probe ran and identical → `"by-construction"`; probe ran and differed →
+    `"assumed"`; **probe did not run → `"assumed"`** (the fail-safe, asserted explicitly); and
+    `replicatesPerScript > 1` → `"assumed"` regardless. A `basis` of `"assumed"` must be shown to
+    move the decision off McNemar and onto the cluster-bootstrap CI (`-ml` §3.4 Rule 4), with
+    McNemar's p still printed under its anti-conservative label.
 
 **Integration (`-m live`, opt-in, real LM Studio)**
 
@@ -1787,16 +1917,39 @@ diverge, and the two implementations' numbers are never compared to each other b
 **Method note:** `docs/plans/small-model-benchmarking-ml.md` (`data-scientist`) — **the single
 source of truth for every formula, constant, threshold, tolerance, denominator, sample size and
 verdict string in this feature**, plus the deferred judge design. It is not optional background:
-`modelbench/stats.py` implements it, this plan cites it, and where the two ever appear to disagree
-the note is right. Read it before starting S1 — in particular **§3.4, six binding rules that are
-`stats.py`'s contract**, and **§7.2's verbatim resolving-power string**, which is a test target.
+`modelbench/stats.py` implements it and this plan cites it. Read it before starting S1 — in
+particular **§3.4, six binding rules that are `stats.py`'s contract**, and **§7.2's verbatim
+resolving-power string**, which is a test target.
 
-**Version pairing:** this plan **v1.3** is aligned to the note **v1.2**. They share one vocabulary
-(`verdictMetrics` + `headlineMetric`, the plan's names) and one `guard-judge` metric pair
-(`falseAdvanceRate` + `falseSuspendRate`, the note's). A future revision of either that changes a
-name, a number or a signature must sweep the other in the same pass — the Pass 1 gate's finding was
-silent divergence between exactly these two documents, and the fix is not a one-time correction but
-a standing obligation.
+**Version pairing:** this plan **v1.4** is aligned to the note **v1.4**. They share one vocabulary
+(`verdictMetrics` + `headlineMetric`, the plan's names), one `guard-judge` metric pair
+(`falseAdvanceRate` + `falseSuspendRate`, the note's), one `H` contract (pack-declared and validated
+`H ≤ min(script length)`, the plan's), and one analysis-unit rule (the outermost component of
+`pairingKey`, the note's). A future revision of either that changes a name, a number, a signature or
+a contract must sweep the other in the same pass — the Pass 1 gate's finding was silent divergence
+between exactly these two documents, and the fix is not a one-time correction but a standing
+obligation.
+
+**How to resolve an apparent disagreement — and why this is not a simple precedence rule.** v1.3
+said "where the two ever appear to disagree the note is right". That sentence caused a defect. When
+the plan moved `H` from derived to declared-and-bounded (M-11) and the note's §4.6 still carried the
+old derived definition, the precedence rule did not resolve a conflict — it **propagated the stale
+clause**, converting a fixed finding back into a live one (Pass 2, N-3). A blanket precedence rule
+launders staleness with exactly the authority it was given to settle disputes, and the more
+trustworthy the senior document, the more efficiently it does so. So:
+
+1. **A disagreement is presumed to be staleness, not a conflict.** Find which document changed last
+   on that point and reconcile both; do not apply precedence to a clause one side has already
+   superseded. Both documents carry version numbers and dated revision lines for this purpose.
+2. **Precedence applies only when both sides are current, and it is split by ownership, not by
+   seniority.** **The note owns method** — formulas, constants, thresholds, tolerances,
+   denominators, sample sizes, instrument selection, `stats.py`'s signatures. **This plan owns the
+   pack-manifest contract and the harness surface** — field names, validation rules, `H`'s
+   declaration semantics, the CLI, the result schema. `H` is the worked example: the *statistics* of
+   `cleanThroughTurnH` are the note's, the *rule that `H` is declared and bounded* is the plan's.
+3. **Neither document may resolve a disagreement by editing the other.** Raise it; the owner fixes
+   it in their own file. That is what kept N-3 a one-clause fix rather than a merge conflict between
+   two agents editing in parallel.
 
 New standalone component `model-bench/`, zero runtime dependencies, Python 3.12, eight stages:
 S0 skeleton → S1 core (fingerprint/results/stats/report, no model calls; delivers AC-2/AC-3/AC-4) →
