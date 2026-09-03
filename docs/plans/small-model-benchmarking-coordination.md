@@ -33,8 +33,8 @@ Stakeholder decisions, 2026-09-02:
 |---|---|---|---|---|---|---|
 | U1 — Plan gate: review plan v1.1 + `-ml` note against the requirements | `analyst` | `a0e3b74e34e1d4c40` | delivered | `docs/reviews/small-model-benchmarking.md` — **needs changes**: 3 blockers, 11 majors, 8 minors, 3 nits | — (is the gate) | 174k tok / 33 tools |
 | U2 — S0 component skeleton | `coder` | `aa5b28bd14869593c` | accepted | `model-bench/**` (15 files), root `AGENTS.md` (+8 lines) | teco-verified — see note | 113k tok / 30 tools |
-| U3a — Revise the method note for B-1/M-1 + the new sampling design | `data-scientist` | `a394671cfc28bef87` | delivered | `docs/plans/small-model-benchmarking-ml.md` **v1.2** (+562/−130), new §3.4 stats contract | `analyst` re-gate (Pass 2) → — | 168k tok / 56 tools |
-| U3b — Fold U1's findings + U2's S0 defects + the three decisions into the plan; **resumed** to reconcile vocabulary with the note | `architect` | `a3e258f27b83e764d` | in-flight (v1.3) | `docs/plans/small-model-benchmarking.md` **v1.2** — 3 blockers + 13 majors + 8 minors + 4 nits all dispositioned | `analyst` re-gate (Pass 2) → — | 184k tok / 40 tools |
+| U3a — Revise the method note; **resumed** for the `verdictMetrics` rename | `data-scientist` | `a394671cfc28bef87` | in-flight (v1.3) | `docs/plans/small-model-benchmarking-ml.md` **v1.2** (+562/−130), new §3.4 stats contract | `analyst` re-gate (Pass 2) → — | 168k tok / 56 tools |
+| U3b — Fold U1's findings + U2's S0 defects + the three decisions into the plan; **resumed** to reconcile vocabulary with the note | `architect` | `a3e258f27b83e764d` | delivered | `docs/plans/small-model-benchmarking.md` **v1.3** — 3 blockers + 13 majors + 8 minors + 4 nits dispositioned, then vocabulary reconciled | `analyst` re-gate (Pass 2) → — | 216k tok / 13 tools cumulative |
 | U3c — FR-22a's illustrative clause cites the superseded 4×4 sampling | `tico` | `ae6ffeeb440ee967a` | accepted | `docs/requirements/small-model-benchmarking.md` (+13/−1) | folded into the Pass 2 re-gate | 88k tok / 12 tools |
 | U4 — S1 core (fingerprint, results, stats, report; no model calls) | `tdd-engineer` | — | queued (after U3) | `modelbench/{fingerprint,results,stats,report,roles,cli}.py` + tests 1–6 | `analyst` + `data-scientist` (stats) → — | — |
 | U5 — S2 packs, LM Studio adapter, host info, convo, tooling, runner | `coder` | — | queued (after U4) | `modelbench/{packs,lmstudio,hostinfo,convo,tooling,runner}.py` + tests 7b–12 | `analyst` → — | — |
@@ -171,3 +171,24 @@ re-drawn against U4's actual delivery before dispatch.
   resolving power never changed and the decision only made it visible. Restating the range is a
   scope change the stakeholder owns. **It belongs in the same packet as the 48-distinct-scripts
   question**, not in a wording fix.
+
+- **2026-09-02 — U3b delivered v1.3; the divergence is closed, and the fix outlived the instance.**
+  Naming decided as the **synthesis**, not either candidate: `verdictMetrics` + `headlineMetric`.
+  `primaryMetric` is **retired rather than redefined** (re-pointing an established name at "may now
+  be `null`" is its own trap), and `primaryMetrics` was rejected because it sits one character from
+  that retired singular — indistinguishable in a JSON manifest or a diff, in the one field whose
+  entire job is pre-registration. `guard-judge`'s pair was adopted from the note verbatim, `@slice`
+  suffixes dropped rather than introducing a third vocabulary.
+- **Reading the note's new §3.4 surfaced three further divergences teco's message had not listed** —
+  `PairedResult` was the plan's own invention and is withdrawn in favour of the note's
+  `PairedOutcomes`/`ResolvingPower`/`Verdict`; §3.4's six rules are now named as a binding contract
+  in S1's done-conditions; and the note's Rule 6 carried a plan-side obligation nobody had written
+  down (`validate` must fail a pack declaring `replicatesPerScript > 1` while only the one-level
+  `cluster_bootstrap` exists). **Routing a known defect to the agent that owns the document found
+  three more than the coordinator's own cross-check did.**
+- **The recurrence, not just the instance, is addressed:** plan §7 now carries a **version-pairing
+  block** — plan v1.3 ↔ note v1.2, the shared vocabulary and the shared metric pair named, with the
+  standing rule that revising either document must sweep the other in the same pass.
+- **Known stale, deliberately not chased:** that pairing block will read "note **v1.2**" once the
+  in-flight rename lands the note at v1.3. Flagged into the Pass 2 brief as already-reported rather
+  than spending a round trip on one token.

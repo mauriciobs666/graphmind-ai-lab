@@ -1,8 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.2 · **Reviews:** `docs/reviews/small-model-benchmarking.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.3 · **Reviews:** `docs/reviews/small-model-benchmarking.md`
 
-2026-09-02 — v1.2: revised against the Pass 1 gate, the three stakeholder decisions of the same day and S0's as-built findings; the statistics are now cited from the `-ml` note, never restated here.
+2026-09-02 — v1.3: aligned to `-ml` v1.2 — one vocabulary (`verdictMetrics` + `headlineMetric`), `guard-judge`'s co-primaries both error rates, and `stats.py`'s decision surface deferred to the note's binding §3.4 contract. (v1.2 folded in the Pass 1 gate, the three stakeholder decisions and S0's as-built findings.)
 
 Design for [`../requirements/small-model-benchmarking.md`](../requirements/small-model-benchmarking.md)
 (Status: *Ready for design*, 23 FRs / 5 ACs). This plan covers the whole feature: the new top-level
@@ -352,7 +352,7 @@ mismatches to be detectable after the fact.
   "sampling": {"scripts": 12, "replicatesPerScript": 1, "seed": 20260902},
   "metrics": {
     "verdictMetrics": ["cleanThroughTurnH"],
-    "primaryMetric": "cleanThroughTurnH",
+    "headlineMetric": "cleanThroughTurnH",
     "cleanThroughTurnH": {"H": 4}
   },
   "provenance": "PROVENANCE.md"
@@ -370,21 +370,41 @@ Key decisions:
   testable variable (two packs differing only in `historyReplay` answer "is the replay style what
   breaks at turn 4?").
 - **`metrics` pre-registers the verdict family, and a pack may legitimately have no headline.**
-  *(New in v1.2, from the stakeholder decision that `guard-judge` gets no `primaryMetric`.)*
-  `verdictMetrics` is the closed, pre-registered list of metrics that may receive a
-  better / not-distinguishable **verdict**; `primaryMetric` is an **explicit** pointer into that
-  list naming the headline, or an **explicit `null`**. Everything not in `verdictMetrics` prints
-  with `exploratory — no significance claim`. `validate_pack` fails when `verdictMetrics` is absent
-  or empty, when the `primaryMetric` **key** is absent (omission is not the same statement as
-  `null`, and only the latter is a decision), or when a non-null `primaryMetric` is not a member of
-  `verdictMetrics`. Two consequences the implementer must build rather than infer: **(i)** when
-  `primaryMetric` is `null`, `report.py` has **no code path that synthesises a headline** from
-  `verdictMetrics` — the same structural refusal FR-20 gets in §3.5 — and the report instead prints
-  the verdict metrics side by side under a sentence saying the pack deliberately has no headline
-  number and why; **(ii)** when `verdictMetrics` has more than one member, the family is multiple
-  comparisons and the note's own stated handling applies (`-ml` §3.3: Holm–Bonferroni across the
-  pre-declared family, adjusted threshold printed beside each p-value). Pre-registration in a
-  content-hashed manifest is what stops a headline being chosen after the results exist.
+  Two separable fields, because they control different things — `-ml` §3.3 states the split and
+  this plan owns the names:
+  - **`verdictMetrics`** — the closed, pre-registered list (1..k) of metrics that may receive a
+    better / not-distinguishable **verdict**. It controls **inference**: its length *is* the
+    multiplicity correction's `k`.
+  - **`headlineMetric`** — either exactly one member of that list, or an **explicit `null`**. It
+    controls **presentation**: what a reader is entitled to read as "the" number.
+
+  Everything not in `verdictMetrics` prints with `exploratory — no significance claim`.
+  `validate_pack` fails when `verdictMetrics` is absent or empty, when the `headlineMetric` **key**
+  is absent (omission is not the same statement as `null`, and only the latter is a decision), or
+  when a non-null `headlineMetric` is not a member of `verdictMetrics`. Three consequences the
+  implementer must build rather than infer:
+
+  **(i)** When `headlineMetric` is `null`, `report.py` has **no code path that synthesises a
+  headline** from `verdictMetrics` — the same structural refusal FR-20 gets in §3.5 — and the report
+  prints the verdict metrics side by side **in the manifest's declared order**, with no summary line
+  above them and no arithmetic combining them.
+
+  **(ii)** When `len(verdictMetrics) > 1`, family-wise error control is **mandatory, not optional**
+  (`-ml` §3.3): Holm–Bonferroni across the declared family, with the adjusted threshold printed
+  beside each p-value. **And the resolving-power line's α changes with it** — a k-member family
+  computes at `α/k`, which is materially worse than at α=0.05 and is the honest price of a second
+  co-equal verdict. `stats.verdict()` asserts `alpha == 0.05 / len(family)` and refuses otherwise
+  (`-ml` §3.4 Rule 4), so a report cannot print a family verdict at the wrong threshold.
+
+  **(iii)** Pre-registration in a content-hashed manifest is what stops a headline being chosen
+  after the results exist.
+
+  *(Naming, settled in v1.3 and aligned with the note. The retired field is the singular
+  `primaryMetric`, and it is retired rather than redefined: re-pointing an
+  established name at new semantics — "may now be `null`" — is its own trap, and pluralising it to
+  distinguish the list would leave two fields one character apart in every manifest and every diff.
+  `verdictMetrics` names what the field controls and collides with nothing; `headlineMetric` does
+  the same for the presentation half.)*
 - **Identity is `(packId, packVersion, contentHash)`.** `contentHash` = SHA-256 over the sorted
   relative paths and bytes of every file in the pack directory except `PROVENANCE.md`. Declared
   versions get forgotten; a hash cannot. `compare` flags a mismatch in **either** (AC-3), which
@@ -596,7 +616,7 @@ and there is no API to load across packs; `report.py` has no code path that aggr
 `README.md` says why. The same shape of refusal carries the two other "the report must not be able
 to say this" rules: no path emits a pooled 85-item guard accuracy (§3.8.2), no path emits a blended
 tool-calling percentage (§3.8.4), and no path synthesises a headline for a pack whose
-`primaryMetric` is `null` (§3.3). Each is a **missing function**, not a guarded one — §3.5's
+`headlineMetric` is `null` (§3.3). Each is a **missing function**, not a guarded one — §3.5's
 argument about `index.csv` applied to the report: a rule you cannot express is a rule you cannot
 break under deadline pressure.
 
@@ -767,7 +787,7 @@ checks today.
   comparable one), aggregated as median + p10 + fraction > 0 (`-ml` §5.2); plus output dimension,
   RAM cost, embedding throughput (texts/s and tokens/s), max input length and observed truncation
   behavior, and the prefix convention used.
-- **`verdictMetrics = ["mrr"]`, `primaryMetric = "mrr"`**, and the report carries two honesty lines
+- **`verdictMetrics = ["mrr"]`, `headlineMetric = "mrr"`**, and the report carries two honesty lines
   the note requires
   (`-ml` §5.1, §7.4): precision@k is an exact rescaling of recall@k on this set (|R| = 1 for 36 of
   38 items) and is printed for FR-12 compliance with that footnote; and **recall@10 = 37/38 leaves
@@ -787,21 +807,34 @@ checks today.
   reading: an unparseable reply is a **parse failure counted in the denominator**, never a
   fabricated verdict).
 - **Reported — class-conditional, and deliberately *not* a pooled 85-item accuracy figure**
-  (`-ml` §7.3): **false-advance rate** on the 40 `clear_suspend` items, **advance-recall** on the 30
-  `clear_advance` items (the note's name for what v1.1 called "false-suspend rate" — the same
-  quantity under two names in two documents was a finding, and the note's name wins), and the 15
-  `boundary` items **descriptive only** at that n. Split by evidence path (`understanding` /
-  `turns`) as a diagnostic, plus a parse-failure count in the denominator. `report.py` has no code
-  path that emits a pooled 85-item accuracy number.
+  (`-ml` §7.3): **`falseAdvanceRate`** = P(judge advances | gold says suspend) on the 40
+  `clear_suspend` items, **`falseSuspendRate`** = P(judge suspends | gold says advance) on the 30
+  `clear_advance` items, and the 15 `boundary` items **descriptive only** at that n and explicitly
+  not a verdict metric. Split by evidence path (`understanding` / `turns`) as a diagnostic, plus a
+  parse-failure count in the denominator. `report.py` has no code path that emits a pooled 85-item
+  accuracy number.
 - **This pack has no headline number, deliberately** *(stakeholder decision, 2026-09-02)*:
-  `verdictMetrics = ["falseAdvanceRate@clear_suspend", "advanceRecall@clear_advance"]`,
-  `primaryMetric = null`. Both class-conditional rates get a verdict, with equal weight and no
-  ranking between them — the stakeholder declined to declare which error is costlier in the product,
-  which is precisely the judgement `-ml` §10's open question 2 said could not be made by the
-  analyst. The report prints both side by side under a sentence saying so, and the multiplicity
-  handling for the two-member family is the note's (`-ml` §3.3). This is the pack that makes
-  §3.3's `primaryMetric: null` a first-class case rather than a special case; a future pack that
-  wants no headline needs no further harness work.
+  `verdictMetrics = ["falseAdvanceRate", "falseSuspendRate"]`, `headlineMetric = null`. Both
+  class-conditional rates get a verdict, with equal weight and no ranking between them — the
+  stakeholder declined to declare which error is costlier in the product, which is precisely the
+  judgement `-ml` §10's open question 2 said could not be made by the analyst.
+- **Both co-primaries are error rates pointing the same way, and that is a requirement rather than a
+  style choice** (`-ml` §7.3, authoritative). v1.2 paired `falseAdvanceRate` with **advance-recall**,
+  which is `1 − falseSuspendRate` — the same quantity read backwards. Two co-equal verdict metrics
+  where one reads "better is lower" and the other "better is higher" makes "worse on one, better on
+  the other" unreadable at a glance, in the one pack where the stakeholder deliberately declined to
+  rank the two errors. So both verdicts render on error rates; **`advanceRecall` stays printed as
+  the labelled complement** of `falseSuspendRate`, so a reader looking for recall still finds it,
+  but it carries no verdict.
+- **The two-member family costs resolving power, and the report says so.** Holm–Bonferroni is
+  mandatory here (§3.3(ii)), so the resolving-power line for each class computes at **α/2**, not
+  α=0.05; `-ml` §7.3 carries the recomputed figures for both slices and the plan does not restate
+  them. `-ml` §7.3 also records a costed **reversal trigger**: if the stakeholder ever ranks the two
+  errors, the loser moves out of `verdictMetrics` into the exploratory block, the family collapses
+  to k=1 at α=0.05, and resolving power improves measurably. That trade is the stakeholder's to
+  make later, not the implementer's to make quietly.
+- This is the pack that makes §3.3's `headlineMetric: null` a first-class case rather than a special
+  case; a future pack that wants no headline needs no further harness work.
 - **Cost:** low.
 
 #### 3.8.3 `nlq-generator` — pack `nlq-structured-query`
@@ -844,7 +877,7 @@ checks today.
   items; and the report puts unanswerable items in a **separate, named bucket** excluded from the
   accuracy denominator. Keeping them is still worthwhile — they measure whether a model correctly
   abstains instead of fabricating — but as their own count, not as accuracy.
-- **Reported:** `verdictMetrics = ["layer1ExactMatchRate"]`, `primaryMetric =
+- **Reported:** `verdictMetrics = ["layer1ExactMatchRate"]`, `headlineMetric =
   "layer1ExactMatchRate"` — the note's choice for this role (`-ml` §3.3, §7.2), and v1.1 declared
   none at all, which under §3.3's own rule would have labelled every number in this pack's report
   `exploratory` and made a verdict impossible. Beside it, exploratory: correct/incorrect split by
@@ -894,8 +927,14 @@ checks today.
   kinds, including "stopping when done" and "final reply matches what the tool returned".
 - **Sizing: 12 distinct scripts (4 per shape) × 1 run each = 12 conversations, at
   `temperature: 0.0`** — *stakeholder decision, 2026-09-02, replacing v1.1's 4 scripts × 4
-  replicates × 3 shapes.* Same total run budget; the money moves from re-running scripts to writing
-  them, and the authoring cost lands in S6. It satisfies **FR-22a**, and it is taken on `-ml` §4.5's
+  replicates × 3 shapes.* The authoring cost lands in S6. **Correction, v1.3:** this decision was
+  put to the stakeholder as "the same total run budget", and that was wrong — 12 × 1 is roughly a
+  **quarter** of the previous design's inference budget, not a re-allocation of it (`-ml` §4.5.2
+  carries the measured basis, §4.5.3 the honest consequence, and a costed reversal trigger). The
+  correction is being relayed to the stakeholder separately; the design is **not** revisited on it
+  here, because the resolving power it buys is unchanged — the old nominal 48 never supported more,
+  which is the whole reason the decision was taken. It satisfies **FR-22a**, and it is taken on
+  `-ml` §4.5's
   own argument: at temperature 0, replicates of an identical prompt are near-duplicates that add
   almost no information, so 48 conversations clustered in 12 scripts carried an effective *n* the
   note put "closer to 12 than 48". Buying the 12 outright makes the honest number the real one
@@ -908,8 +947,12 @@ checks today.
     `-ml` note, not here** (see §3.9). This plan does not restate it, and `stats.py` implements the
     note's signatures verbatim.
   - **The pack declares `replicatesPerScript: 1` in its manifest and the report prints it beside
-    every conversation-level *n***, with `temperature`, as `-ml` §4.5 requires. The field exists
-    precisely so that a future pack raising it above 1 cannot do so invisibly.
+    every conversation-level *n***, with `temperature`, as `-ml` §4.5 requires. **`validate` fails
+    any pack declaring `replicatesPerScript > 1`** while `stats.py` carries only the one-level
+    `cluster_bootstrap` (`-ml` §3.4 Rule 6): a replicated pack needs the two-level resample, and its
+    absence must be an error rather than an approximation nobody notices. So the field cannot be
+    raised invisibly *or* silently mis-analysed — raising it is a deliberate act that first requires
+    the note's two-level function to exist.
 - **Honest consequence, printed not buried:** twelve conversations is a small *n*, and the
   resolving-power line computed from it (§3.9 point 2) will be a large number. That is the true
   precision of the previous design too — it was simply hidden inside a design effect. The effects
@@ -948,7 +991,7 @@ checks today.
     (`-ml` §4.3). Paired *n* is the intersection of both arms' scoreable items, printed, with a
     one-model-only `asymmetry` count.
 - **Headline and diagnostic (`-ml` §4.6).** `verdictMetrics = ["cleanThroughTurnH"]`,
-  `primaryMetric = "cleanThroughTurnH"` — the fraction of conversations with no failure through
+  `headlineMetric = "cleanThroughTurnH"` — the fraction of conversations with no failure through
   turn *H*: one observation per conversation, length-independent by construction, and the statistic
   that would have caught the incumbent model. ***H* is declared in `pack.json`
   (`metrics.cleanThroughTurnH.H`, `4` for the A/B/C set), never derived from the data.** v1.1
@@ -1004,7 +1047,7 @@ picked up without re-deriving it.
   - **grounding** — FR-21a's "faithfulness to what was actually returned", here the retrieved
     context: `mustContain` / `mustNotContain` / `mustAbstain` containment, using the same
     canonicalization as the `nlq-generator` scorer.
-  - `verdictMetrics = ["groundingRate"]`, `primaryMetric = "groundingRate"`; the format counts and
+  - `verdictMetrics = ["groundingRate"]`, `headlineMetric = "groundingRate"`; the format counts and
     the latency block are exploratory beside it.
 - **Cost: moderate, and it is now the *smallest* of the three data-bearing new assets** — 30
   human-verified items, with the expensive half (30 further calibration items plus a judge harness)
@@ -1045,15 +1088,19 @@ each one's arithmetic is at the cited section:
    marginal-overlap check is retained as a **diagnostic line** with a footnote saying why it is not
    the verdict. Test names, the exact constants, the bootstrap parameters and the three verdict
    strings: `-ml` §3.2. Why the old rule could not fire: `-ml` §3.1.
-2. **Every report prints its own resolving power**, computed by `stats` from its own actual *n* and
-   sampling structure — never quoted from the requirements, never a literal in the codebase. The
-   sentence template and both numbers in it are `-ml` §7.1's. `min_detectable_difference` is the one
-   function that must never be hardcoded, and S1's done-condition tests exactly that.
-3. **Each pack pre-registers its verdict family** — `verdictMetrics` plus an explicit
-   `primaryMetric` that may be `null` (§3.3). Only a `verdictMetrics` member can receive a verdict;
-   everything else prints `exploratory — no significance claim`. A family with more than one member
-   takes the note's multiplicity handling. (`-ml` §3.3. Note that v1.1's "exactly one
-   `primaryMetric`" is superseded by the 2026-09-02 stakeholder decision on `guard-judge`.)
+2. **Every report prints its own resolving power**, computed by `stats` from its own **effective**
+   *n*, its analysis unit, its design effect and its family-adjusted α — never quoted from the
+   requirements, never a literal in the codebase, and never derivable from a bare observation count.
+   The template, the mandatory sentences and every number in them are `-ml` §7.1/§7.2/§7.3's; the
+   note carries the **tool-caller pack's rendered line verbatim** (`-ml` §7.2), and that string is
+   what S1's report test asserts against. `min_detectable_difference` is the one function that must
+   never be hardcoded, and S1's done-condition tests exactly that.
+3. **Each pack pre-registers its verdict family** — `verdictMetrics` (1..k) plus an explicit
+   `headlineMetric` that may be `null` (§3.3). Only a `verdictMetrics` member can receive a verdict;
+   everything else prints `exploratory — no significance claim`. A family with k > 1 takes
+   Holm–Bonferroni **and** computes its resolving power at α/k. (`-ml` §3.3. v1.1's "exactly one
+   `primaryMetric`" is superseded by the 2026-09-02 stakeholder decision on
+   `guard-judge`, and v1.2's field names are superseded by §3.3's.)
 4. **Per-turn-position rates are computed over conversations, never over turns**, and no interval
    is ever printed over a turn-pooled count. **Under the 12 × 1 sampling design (§3.8.4) the
    clustering treatment is materially different from what `-ml` v1.1 assumed, and the note owns the
@@ -1081,7 +1128,7 @@ each one's arithmetic is at the cited section:
 | Store results only as CSV (stakeholder preference read literally) | Cannot represent per-turn × per-failure-kind breakdowns without becoming unreadable; JSON is the truth, CSV is the derived human view (§3.5). |
 | The original FR-15 marginal-CI-overlap rule as the decision instrument | Cannot fire at all at n ≤ 40 with baseline ≥ 0.90 — this lab's actual regime — and discards FR-16's pairing (`-ml` §3.1). **FR-15/AC-4 amended 2026-09-02** to the paired-difference interval (§6 R-9); the overlap check survives as a printed diagnostic. |
 | Pooling turn-level outcomes into one accuracy rate | Turns within a conversation are not independent; the prior experiment's 280 turns (§2.2) carried roughly the information of its 40 conversations (`-ml` §4.4). Per-turn slices over conversations. |
-| 4 distinct scripts × 4 replicates × 3 shapes for the tool-caller pack (v1.1's sizing) | At `temperature: 0` the replicates are near-duplicates, so 48 conversations carried an effective *n* the note put closer to 12 (`-ml` §4.5) — a real precision hidden inside a design effect. **Stakeholder decision, 2026-09-02:** spend the same budget on 12 distinct scripts × 1 run (§3.8.4). |
+| 4 distinct scripts × 4 replicates × 3 shapes for the tool-caller pack (v1.1's sizing) | At `temperature: 0` the replicates are near-duplicates, so 48 conversations carried an effective *n* the note put closer to 12 (`-ml` §4.5) — a real precision hidden inside a design effect. **Stakeholder decision, 2026-09-02:** 12 distinct scripts × 1 run (§3.8.4). |
 | Replicates at `temperature > 0` instead of more scripts | Informative about run-to-run variance, but it adds a second variance source to a comparison whose subject is the *model*, and it weakens what FR-18's temperature pinning means. Declined with the same decision. |
 | `numpy`/`scipy` for the numerics | Zero runtime dependencies keeps old results reproducible years later; the workload is seconds of pure Python. Reversal trigger stated in §3.2. |
 | A declarative mini-language for simulated tools instead of pack Python | Would become a worse Python; pack code is content-hashed, so it is versioned data like everything else (§3.3). |
@@ -1203,7 +1250,9 @@ def wilson_interval(successes: int, n: int, *, z: float = _Z_95) -> tuple[float,
 def mcnemar_exact(b: int, c: int) -> float: ...              # conditional binomial, math.comb
 def mover_d_interval(a: int, b: int, c: int, d: int) -> tuple[float, float]: ...   # Newcombe
 def paired_bootstrap(diffs: Sequence[float], *, B: int, seed: int) -> tuple[float, float]: ...
-def verdict(paired: PairedResult) -> str: ...                # the note's exact verdict strings
+# PairedOutcomes, ResolvingPower, resolving_power(), min_detectable_difference(),
+# observable_floor(), verdict(), cluster_bootstrap(), design_effect(), effective_n():
+# signatures and semantics are -ml §3.4's six binding rules. Not restated here — see below.
 
 # report.py
 def compare_report(runs: Sequence[RunResult], *, pack: PackRef,
@@ -1230,14 +1279,18 @@ def compare_report(runs: Sequence[RunResult], *, pack: PackRef,
 - **`compare_report` takes `invalid`.** `load_history` returns two lists and v1.1's signature had a
   parameter for one of them, while AC-2 requires the excluded record to be *named in the report*.
 
-**The clustering-aware surface of `stats.py` is deliberately absent from this block.** Under §3.8.4's
-12 × 1 sampling design the clustering treatment changed, and the `-ml` note owns it: the exact
-signature and parameters of `min_detectable_difference`, whether a design-effect input is required,
-and any cluster-resampling function are **specified there and implemented verbatim**. Pinning a
-signature here is what produced the v1.1 divergence (`min_detectable_difference(n)` against a note
-that requires the sampling structure as an input), and this plan does not repeat it. What this plan
-*does* own is the requirement that S1's done-condition can detect a non-conforming implementation —
-see below.
+**The clustering-aware and decision-making surface of `stats.py` is deliberately absent from this
+block.** `-ml` §3.4 is now a **binding six-rule contract** for exactly that surface — written, in its
+own words, so that "the anti-conservative version does not typecheck, and the honest one is the only
+one that runs" — and it is the single source of truth for `PairedOutcomes` (whose `from_units` is the
+*only* constructor and raises on a repeated analysis-unit id), `ResolvingPower`/`resolving_power()`
+(whose `design_effect`, `basis`, `unit_kind` and `alpha` are keyword-only **with no defaults**),
+`min_detectable_difference` (which takes `n_effective: float`, never `n: int`), `verdict()` (which
+asserts four preconditions and refuses rather than warns), `design_effect` (a **variance** ratio —
+the width ratio *squared*), and `cluster_bootstrap` (one level only). Pinning any of these here is
+what produced the v1.1 divergence — `min_detectable_difference(n)` against a note that requires the
+sampling structure as an input — and this plan does not repeat it. What this plan *does* own is that
+S1's done-condition can detect a non-conforming implementation; see below.
 
 `compare_report` is where AC-2/AC-3/AC-4 become visible output: an excluded-invalid block naming
 each record and its problems, a pack version/hash mismatch banner, a `SCHEMA VERSIONS IN THIS
@@ -1264,7 +1317,12 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    worked example that carried the FR-15 amendment, and the one the *old* marginal-overlap rule got
    backwards). §5 test 6 states the same thing; these two must not diverge again.
 4. **`stats` reproduces the note's `(a,b,c,d)` regression fixtures to the tolerance the note
-   states** — the tolerance is the note's to set, and this plan does not restate it.
+   states** — the tolerance is the note's to set, and this plan does not restate it. Plus the two
+   contract assertions `-ml` §3.4 calls out by name: `PairedOutcomes.from_units` **raises** on a
+   repeated analysis-unit id (Rule 1 — the mechanism that stops a clustered design reaching
+   `verdict()` at all), and the ρ = 1 identity holds (Rule 5 — when within-cluster correlation is 1,
+   effective *n* must equal the cluster count; it is the one assertion that catches a squaring error
+   in either direction).
 5. **`min_detectable_difference` is verifiably not a constant, and verifiably not naive.** Two
    tests: it returns different values for different *n*; and — the B-1 detector — **calling it with
    only an item count, for a pack whose sampling unit is clustered, must fail rather than return a
@@ -1276,6 +1334,11 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    pack is clustered any more — which is exactly why the guard must be tested rather than assumed
    unreachable: the next conversation pack that raises `replicatesPerScript` reintroduces the case,
    and by then S1 is long closed.
+5b. **The rendered resolving-power line matches the note's verbatim string.** `-ml` §7.2 carries the
+   tool-caller pack's line as four mandatory sentences; the report test asserts against that string,
+   parameterised only by `<packId>@<packVersion>`. This is the acceptance surface for §3.9 point 2:
+   a line missing the unit, the design effect, the best-case caveat or the conditionality clause
+   fails, whatever number it prints.
 6. **`armKind` (B-3)** — a `deterministic` fingerprint with no model fields **validates**; the same
    record with `modelKey: "bm25"` added **fails on write** (forbidden field), as does a `model`
    record missing `runtimeName`; and `compare_report` renders a model arm and a deterministic arm
@@ -1283,9 +1346,9 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
 7. **Schema versioning (M-4)** — a record written under `benchSchemaVersion: 1` still validates
    after a hypothetical field is added at version 2, and a record declaring version 99 lands in
    `invalid` with `reason == "unknown_schema"`.
-8. **`primaryMetric: null` (§3.3)** — a pack fixture with two `verdictMetrics` and a null
-   `primaryMetric` renders both verdicts and **no headline**; a fixture omitting the
-   `primaryMetric` key entirely fails validation.
+8. **`headlineMetric: null` (§3.3)** — a pack fixture with two `verdictMetrics` and a null
+   `headlineMetric` renders both verdicts and **no headline**; a fixture omitting the
+   `headlineMetric` key entirely fails validation.
 9. **`--negative-control` smoke check** — two copies of the same stored run report
    not-distinguishable. Labelled a smoke check in the test's own docstring, because with two copies
    `b = c = 0` by construction and it **cannot fail**: it proves the mode is wired, not that the
@@ -1480,7 +1543,7 @@ covers containment, exclusion and correct abstention; **the format scorer covers
 constraints** — `maxWords`, `mustBeSingleParagraph`, `forbiddenPatterns` — read from pack data with
 per-item override, each a separate count never pooled with grounding (§3.8.5; v1.1 shipped two of
 FR-21a's three layers and this closes the third); the report prints `groundingRate` as
-`primaryMetric` alongside the format counts and the standard latency block; and the report says in
+`headlineMetric` alongside the format counts and the standard latency block; and the report says in
 words that reply *quality* is not measured by this pack.
 
 ### S8 — Documentation and close
@@ -1530,8 +1593,10 @@ bad**, not the ones that prove it reports a number when the data is good.
    rule; the instruments-disagree case renders the both-components prose. The resolving-power
    functions are computed from the run's own sampling structure and asserted never to return a
    constant, **and asserted to refuse a bare item count for a clustered pack** (S1 done-condition 5,
-   the B-1 detector). Every number in this test comes from the `-ml` note; none is a literal in this
-   plan. **(AC-4)**
+   the B-1 detector), and the rendered line is asserted against `-ml` §7.2's verbatim four-sentence
+   string. `PairedOutcomes.from_units` raises on a duplicate unit id, and the ρ = 1 / effective-n
+   identity holds (`-ml` §3.4 Rules 1 and 5). Every number in this test comes from the `-ml` note;
+   none is a literal in this plan. **(AC-4)**
 7. `scoring/toolcalls` — the synthetic-trace matrix from S5, one per failure kind, plus denominator
    edge cases (turn where no tool was required — the restraint count; turn where the model emitted
    nothing at all; conversation that ended early) and the **laundering test**: a trace that
@@ -1548,14 +1613,16 @@ bad**, not the ones that prove it reports a number when the data is good.
 11. `test_metrics_agreement.py` — all 20 transcribed cases from §3.1 point 2, reading only
     `model-bench/tests/fixtures/`, including the two `ValueError` cases. A test that skips or
     xfails any case is a failing test: the case count is the guarantee.
-11b. `report.py` structural refusals — a pack fixture with `primaryMetric: null` renders both
-    verdict metrics and no headline; a manifest omitting the `primaryMetric` key fails
+11b. `report.py` structural refusals — a pack fixture with `headlineMetric: null` renders both
+    verdict metrics and no headline; a manifest omitting the `headlineMetric` key fails
     `validate_pack`; a metric outside `verdictMetrics` always renders with the `exploratory` label.
 12. **Pack integrity, per pack:** unique ids, required fields, per-item provenance present (with
     `originGitSha`), paraphrase rule for retrieval-style packs, every `expect` block referring to a
-    tool the pack's own `schemas.json` declares, the `metrics` block well-formed (§3.3), `H ≤ min(
-    script length)` for the tool-caller pack, and `validate_pack`'s AST import check rejecting a
-    pack module that imports outside stdlib + `modelbench.tooling`.
+    tool the pack's own `schemas.json` declares, the `metrics` block well-formed (§3.3 — including
+    a non-null `headlineMetric` that is not a `verdictMetrics` member being rejected), `H ≤ min(
+    script length)` for the tool-caller pack, **`replicatesPerScript > 1` rejected while only the
+    one-level `cluster_bootstrap` exists** (`-ml` §3.4 Rule 6), and `validate_pack`'s AST import
+    check rejecting a pack module that imports outside stdlib + `modelbench.tooling`.
 
 **Integration (`-m live`, opt-in, real LM Studio)**
 
@@ -1721,7 +1788,15 @@ diverge, and the two implementations' numbers are never compared to each other b
 source of truth for every formula, constant, threshold, tolerance, denominator, sample size and
 verdict string in this feature**, plus the deferred judge design. It is not optional background:
 `modelbench/stats.py` implements it, this plan cites it, and where the two ever appear to disagree
-the note is right. Read it before starting S1.
+the note is right. Read it before starting S1 — in particular **§3.4, six binding rules that are
+`stats.py`'s contract**, and **§7.2's verbatim resolving-power string**, which is a test target.
+
+**Version pairing:** this plan **v1.3** is aligned to the note **v1.2**. They share one vocabulary
+(`verdictMetrics` + `headlineMetric`, the plan's names) and one `guard-judge` metric pair
+(`falseAdvanceRate` + `falseSuspendRate`, the note's). A future revision of either that changes a
+name, a number or a signature must sweep the other in the same pass — the Pass 1 gate's finding was
+silent divergence between exactly these two documents, and the fix is not a one-time correction but
+a standing obligation.
 
 New standalone component `model-bench/`, zero runtime dependencies, Python 3.12, eight stages:
 S0 skeleton → S1 core (fingerprint/results/stats/report, no model calls; delivers AC-2/AC-3/AC-4) →
@@ -1738,7 +1813,7 @@ one tracks a live corpus and the other must freeze for results to stay comparabl
 **Nothing is blocked.** The four requirement defects this design pass raised were settled on
 2026-09-02 (requirements commit `afe4aef`) and the plan is built to the amended text throughout
 (§6). The gate's three open questions were settled the same day and are folded in: **12 distinct
-tool-caller scripts × 1 run at temperature 0** (§3.8.4), **`guard-judge` has no `primaryMetric`**
+tool-caller scripts × 1 run at temperature 0** (§3.8.4), **`guard-judge` has no `headlineMetric`**
 (§3.8.2, with §3.3 making a headline-less pack a first-class case), and **S3's self-check is a
 diagnostic, never a gate** (S3 done-condition 5).
 
@@ -1764,7 +1839,7 @@ Named above and defined here so an implementer is not inferring them from usage.
 | `FieldProblem` | `fingerprint` | `NamedTuple(field: str, reason: Literal["absent","empty","null","forbidden"])` |
 | `Fingerprint` | `fingerprint` | frozen dataclass, §3.4.1–§3.4.2; `armKind` discriminates |
 | `ItemResult`, `RunResult`, `InvalidRecord`, `Aggregates` | `results` | as given in S1 |
-| `PairedResult` | `stats` | `(a, b, c, d, n_paired, asymmetry, metricName, armLabels)` — what `verdict()` consumes; the note owns any further fields its instruments need |
+| `PairedOutcomes`, `ResolvingPower`, `Verdict`, `BootstrapResult` | `stats` | **`-ml` §3.4's, verbatim** — not restated here. `PairedOutcomes.from_units` is the only constructor and raises on a repeated analysis-unit id; `resolving_power()`'s inputs are keyword-only with no defaults. (v1.2's `PairedResult` was this plan's own invention and is withdrawn.) |
 | `PackRef` | `packs` | `NamedTuple(packId, packVersion, contentHash, role, metrics)` — the identity triple plus what the report must print |
 | `Pack` | `packs` | frozen dataclass, S2 |
 | `ModelInfo` | `lmstudio` | one catalog entry, verbatim: `id, type, publisher, arch, compatibility_type, quantization, state, max_context_length, capabilities?, loaded_context_length?` |
