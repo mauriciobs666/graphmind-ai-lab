@@ -125,7 +125,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S7** — Storefront state, reset, catalog, images | `coder` (**fresh** — see note) | `a26100cb193d95085` | delivered — **committed `dd78e70`**, suite **2473** teco-verified solo; +465/-9 and +950, two files. **13 mutations killed, 4 benign refactors kept green** (S6b's false-positive discipline, adopted unprompted). **Found a delivered-code gap that blocks two of its own deliverables** — `services.filter_products` projects no `productId` (teco confirmed at `repository.py:2762`) — and shipped a documented `1+n` workaround rather than editing a delivered step's file. **Proved a plan statement false**: the post-reset profile re-write `MERGE`s the `Customer` back, so §4.8's delete inventory is true of the delete and false of the end state. **Answered the `lookup` question: no** | `storefront.py`, `test_storefront.py` | `analyst` Pass 7 → — | 227k tok / 81 tools |
 | **S7 gate** — Pass 7 on the largest impl diff + **three rulings** teco will not self-decide | `analyst` | `a24e4bcbd0b9a1f8e` (resumed — reviewed S6 in this same module) | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, **0 major**, 3 minor, 1 nit) — committed `e9b0363`. **Dissolved Ruling 1's blocker instead of weighing it** (below). **S7-1: proved the quiesce tests don't assert the wait** by running the worker-finishes-first ordering — all four stayed green; safety was timing, not assertion. Verified the `lookup` grep and found the **sharper** reason not to delete (below) | `docs/reviews/salesperson-ui-impl.md` `## Pass 7` + Appendix K | — | 253k tok / 36 tools |
 | **S7b** — close Pass 7: assert the wait (S7-1), pin the two error-path evictions (S7-2), stop a broken deadline hanging (S7-3) | `coder` | `a26100cb193d95085` (resumed — its own findings, same two files) | delivered — **committed `d9d2f2b`**, suite **2476** teco-verified solo; `storefront.py` **byte-identical** to `dd78e70`, so all three findings were about what the tests assert, not code defects. **Overrode the reviewer's suggested fix on two of three, with argument** — and on S7-3 **showed the reviewer's own fix does not catch the reviewer's own mutant** (a call that never returns is never followed by its assertion) | `test_storefront.py` only | `analyst` Pass 8 → — | 267k tok / 23 tools |
-| **S7b gate** — do the two overrides deliver what the findings asked, or only look more rigorous? | `analyst` (**fresh** — the Pass 7 reviewer ended at 253k tok; this check is self-contained) | `a893ac5083e24f334` | in-flight (**holds the live DB**) | `docs/reviews/salesperson-ui-impl.md` `## Pass 8` | — | — |
+| **S7b gate** — do the two overrides deliver what the findings asked, or only look more rigorous? | `analyst` (**fresh** — the Pass 7 reviewer ended at 253k tok; this check is self-contained) | `a893ac5083e24f334` | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 0 major, 1 minor, 2 nits) — committed `6464b32`. **Both overrides upheld by execution**: it re-ran Pass 7's own suggested fix against Pass 7's own mutant and watched it **hang** (terminated 32 s, exit 143), and proved S7-1's substitute detects with the stub sleep set to **zero** (8/8), so detection genuinely does not depend on a duration. **S8-1: found the silent margin inside the fix that was justified by rejecting a margin** — `started_at` is stamped on the calling thread before `worker.start()` (teco confirmed at `test_storefront.py:103`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 8` + Appendix L | — | 113k tok / 52 tools |
+| **S7b2** — close Pass 8: stamp `started_at` on the worker thread (S8-1) + two nits | `coder` (**fresh** — the S7b author ended at 267k tok; the review fully specifies the work) | `a1af13ddaad935f25` | in-flight (**holds the live DB**) | `test_storefront.py` only | `analyst` → — | — |
 | **U28** — Plan v1.18: the four **proved** corrections (Rulings 1-3 + S7's `storefront_dir` wiring) | `architect` (**fresh** — the v1.17 architect ended at 102 tool uses) | `a29f3ebb7c1908730` | **accepted — committed `039cae3`** (50/18, one file); all seven step-row hashes **teco-re-derived independently** and matching. **Improved two of teco's four framings** (below) and **closed a pre-existing §5.0 map gap** — S9 listed no test file at all, despite every S9 done-condition being a test. **Refused a coordination decision rather than taking it** — see the split, next row | `docs/plans/salesperson-ui.md` **v1.18** | **none — plan gates stopped** | 147k tok / 62 tools |
 | **U29** — Plan v1.19: **split Ruling 1 out of S8** into `S7c` ahead of it; carry S9's cache decision in the S9 row | `architect` | `a29f3ebb7c1908730` (resumed ×2) | **accepted — committed `732f5e0`** (27/19). **Decided S9's cache question rather than parking it** — remove `_records` whole, with S7-2 banked as *dissolved rather than fixed* and S8's now-vacuous tripwire recorded as the **correct** end state. **Self-reported a miss in its own v1.18 delivery** (§9 never received v1.18's map changes). Renamed off the `S7b` collision teco caught, and **argued for keeping two mentions as tombstones** rather than a clean grep — the sequence gap is otherwise unexplained plan-side, and closing it would recreate the collision | `docs/plans/salesperson-ui.md` **v1.19**; S7c `2f03c064`, S8/S9 unmoved by the rename | **none — plan gates stopped** | 181k tok / 3 tools (rename) |
 | **S7c** — Ruling 1's catalog projection + removal of S7's `1+n` workaround | `coder` | — | queued (**serialized behind the S7b gate — shared live DB**; no file in common with S8, so they *could* parallelize if the DB allowed) | `repository.py`, `storefront.py`, `test_repository.py`, `test_storefront.py`, `QUERIES.md` §15.2 | `analyst` → — | — |
@@ -1027,6 +1028,30 @@ workspace, and pinning it would make it wrong for its purpose.
 §7's `Agent`-owned orphan residual is described more broadly than it is. Pass 3 established it only
 arises when the thread died in an *earlier* reset. Fold into the next natural touch of this document
 rather than a dedicated unit. Owner: `graph-dba`.
+
+## The strongest result in the build so far — a suggested fix that provably does not work
+
+Worth stating on its own, because it changes how much weight a review's *suggested fix* should carry
+relative to its *finding*.
+
+Pass 7 found that a broken quiesce deadline **hangs** instead of failing, and suggested an
+elapsed-time assertion. S7b refused it and argued structurally: a call that never returns is never
+followed by its assertion, so an elapsed form converts *slow-but-returning* into a failure and cannot
+touch a hang. Pass 8 then **ran Pass 7's suggestion against Pass 7's own mutant** and watched it hang
+— terminated at 32 s, exit 143 — while the substitute failed in 3.34 s with both test names printed.
+
+Twice now in this coordination an implementer has improved on its reviewer's suggested fix, and this
+time the suggestion was not merely weaker but **structurally incapable** of catching the defect that
+motivated it. **The finding was right and the fix was wrong**, and only execution could tell them
+apart — which is Pass 8's stopping-rule argument arriving from the other direction.
+
+The corollary teco is carrying forward: brief a reviewer's suggested fix to an implementer as *a
+candidate to beat*, never as the deliverable. Both units that did so produced something better.
+
+**And the symmetry is worth keeping.** Pass 8's own finding (S8-1) is that `_call_bounded` stamps its
+start instant on the *calling* thread — so the fix justified by rejecting a thin margin quietly
+contains the same thread-start skew, only unmeasured. Nobody in this chain has been right by default;
+each has been right where the next one actually looked.
 
 ## Step ids and unit ids are one namespace — the `S7b` collision (teco, 2026-09-03)
 
