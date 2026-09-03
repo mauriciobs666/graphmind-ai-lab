@@ -59,7 +59,8 @@ Stakeholder decisions, 2026-09-02:
 | U17 — Plan v1.9: close Pass 3's blockers and majors | `architect` (resumed, `aee9ac26e4c41f8ea`) | `aee9ac26e4c41f8ea` | in-flight | `docs/plans/small-model-benchmarking.md` v1.9 | re-gate → — | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
-| U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | in-flight | `model-bench/**` | re-gate (both, fresh) → — | — |
+| U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | **accepted** — `5878014` | `model-bench/**` (10 files, +1490/−61); 353→389 tests | re-gate (both, fresh) → — | 348k tok / 130 tools |
+| U18 — Rule on §3.4 Rule 4's closed-form half + P3-5's seed contract | `data-scientist` (fresh) | `ae4bd1d99239907a6` | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.11 if changed | `analyst` → — | — |
 | U10 — Plan sweep (n-ML-7 + §5 stage-scoping, flagged 3×) | `architect` (fresh) | `ae512d667fe7f0c49` | accepted | commit `9b63c5c` — plan **v1.7**; 6 restatements withdrawn, stage table added | teco-verified | 139k tok / 64 tools |
 | U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | abandoned — **delivered by U8b** in plan v1.6 (`5594be8`), never dispatched separately | — | — | — |
 | U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | abandoned — **delivered by U8a** as Rule 3's generalisation in note v1.6 (`a54a667`), never dispatched separately | — | — | — |
@@ -983,3 +984,80 @@ with measured numbers. A method note publishing invented latencies — even labe
 shape as the defect this component exists to refuse, one document up; and one ~21 s JIT load is
 exactly what the harness itself will pay. Cheap to fix, and expensive later to re-establish which
 numbers were real.
+
+
+### U14 accepted — and the measurement I authorised reversed a ruling mid-flight
+
+`5878014`. Every Pass 4 finding across both gates, closed. **353 → 389 tests**, 389 collected equals
+389 run, nothing skipped or xfailed, `ruff` clean. **48 behaviour-changing mutations, 48 killed** —
+plus one deliberate no-op control included so the harness is shown capable of *reporting* a survivor
+rather than only ever printing "killed". That control is the right instinct: a mutation harness that
+has never produced a survivor is indistinguishable from one that cannot.
+
+**The two I re-derived myself, both in a sandbox copy of the working tree:**
+
+- **P4-2's mutation now dies.** `holm_tested=True` — the mutation that survived all 353 tests, and
+  Pass 1's blocker verbatim — now fails
+  `test_a_metric_past_the_holm_stop_never_carries_a_significance_claim`. Four passes to pin a defect
+  that was fixed once and left unguarded.
+- **DC-10's literal selector fails a test.** Mutating the corrected predicate back to
+  `metric.unit == pack.analysisUnit` fails `test_no_wilson_interval_is_printed_over_a_turn_pooled_count`,
+  so the corrected check is demonstrably **not vacuous** — the property G3-6 warned would be
+  invisible in a green suite.
+
+**Two deviations from DC-10, both reported rather than silently taken**, which is the behaviour the
+brief asked for and the reason the spec defect surfaced as a finding instead of as a bug: the literal
+selector was never implemented (verified disjoint: `unit_kind('guard-judge') == 'item'` against
+`analysisUnit == 'itemId'`), and no catch was added to `_cmd_compare` because it would be
+**unreachable** — the wide `except` is on `pack_ref_from_manifest`, not on `compare_report`, and the
+implementer reproduced the traceback before fixing it. It cited this codebase's own P2-4 principle
+back at me: an unreachable guard is worse than none.
+
+**The signature defect, one more time, in the fix round's own work.** Its P4-4 fix left two
+individually-true sentences contradicting each other — the block said the arms were *excluded* while
+the line below still said *"fewer than two arms were selected … check `--models`"*, sending a scorer
+author to their command line for a defect in their record. Found by printing the page. Six passes
+now, and **not one of these has ever been found by reading assertions.**
+
+### The §11.7 republish paid for itself twice over
+
+I authorised spending a JIT load to replace §11.7's illustrative millisecond values with measured
+ones, on the grounds that a method note publishing invented latencies is the same shape as the defect
+the component exists to refuse. It returned two **reversals**, neither of which was the point of the
+exercise:
+
+**1. G3-3 resolves the opposite way, and the note reversed its own v1.9 ruling.** Measured:
+LM-Studio-side TTFT **excludes** the JIT load — 3 485.6 ms of it that `stats` never sees, against a
+warm gap of ±12 ms. So `ttftMs`, prefill and `tokensPerSecond` are **not** contaminated and must not
+be nulled; only `latencyMs` is withheld, and the others keep their own denominator. **G3-3's defect
+is real and its fix is the denominator, not the nulling.** I had relayed the nulling to `architect`
+an hour earlier as a requirement; the reversal went out the moment it landed, before v1.9 of the plan
+could bake it in.
+
+**2. The note caught itself publishing a false string, in the act of documenting the rule against
+false strings.** v1.9's slot 3 read *"a model load costs about 21 s"* — **my** figure, measured on
+`ministral-3-3b`. This cold load measured **3.625 s**, same box, same call surface, different model.
+Both real; the string false on most runs that render it. Slot 3 now names a magnitude, never a
+figure. **A coordinator-supplied number propagated into a published string and had to be caught by a
+delegate** — the least-reviewed-input failure again, and this time nothing in my brief flagged the
+figure as provisional.
+
+**Bonus: R-14's acknowledged residual is closable.** `latencyMs − (ttft + generation_time)` isolates
+the load at **3 485.6 ms cold against ±12 ms warm — 461×**. §11.5.1 proposes withholding at a
+**1 000 ms** gap, named as a starting value on two cold observations rather than a derived constant,
+with the two quantities that would move it. Additive to the residency probe: the probe sees a reload
+*before* an item, the gap sees one *inside* it.
+
+### The fork U14 returned, and why it was not mine to answer
+
+v1.8 §3.4 Rule 4's **closed-form percentile** is unimplemented. Implementing it **retires P3-5's
+delivered contract** — `verdict`'s `bootstrap_seed`, `PackRef.seed`'s justification, the
+`decided by: … (seed N)` line and four tests — because nothing would be decided by a resample. That
+is a public signature S2 wires against *and* a prior gate's accepted deliverable, so U14 took the
+reversible branch and returned the fork. Correct call.
+
+The stakeholder principle answers **whether** (a residual seed-dependent printed bound is the same
+defect as M-ML-8, smaller — the implementer measured it still moving between −27.1 and −33.3 pp at
+`(4,5,3,0)`), so what remains is statistical and contractual, not a scope question: U18 rules on it.
+Dispatched **fresh** rather than resuming Rule 4's author, whose context is at ~244k tokens — over
+the threshold where continuing buys less than a self-contained brief costs.
