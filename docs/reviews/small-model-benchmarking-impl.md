@@ -3,8 +3,9 @@
 > **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/plans/small-model-benchmarking.md` §4 S1
 
 **Pass 1** gated `ab91419` (needs changes). **Pass 2** re-gated `3ad27d3` (approve with
-suggestions). **Pass 3** re-gates `95b4c88` — jump to [`## Pass 3`](#pass-3--2026-09-03) for the
-current verdict; the earlier passes are kept intact because the three are meant to be read together.
+suggestions). **Pass 3** re-gated `95b4c88` (needs changes). **Pass 4** re-gates `d55f4d8` — jump to
+[`## Pass 4`](#pass-4--2026-09-03) for the current verdict; the earlier passes are kept intact
+because the four are meant to be read together.
 
 ## Pass 1 — 2026-09-03
 
@@ -968,3 +969,353 @@ survivor reported above was therefore **re-verified in a fresh sandbox built fro
 re-checks reproduced. `git diff --stat -- model-bench` is empty at the end of this pass — the
 working tree was never modified by me, and the other session's edits to
 `docs/plans/small-model-benchmarking-ml.md` and `falkor-chat/server/**` are untouched.
+
+---
+
+## Pass 4 — 2026-09-03
+
+### Scope & verdict
+
+**Re-gated:** commit `d55f4d8` (`fix(model-bench): S1 Pass 3 gate round — absence is not an
+outcome`), reviewed as the **current state of `model-bench/`** at that commit rather than as a
+diff. Baseline: Pass 3's fifteen findings, plan **v1.7** §4 S1 / §5, and the rendered output of the
+built harness. Scope is S1 — `modelbench/{stats,report,results,packs,cli}.py` and their tests; S2's
+absent modules are out of scope and are not reported as findings. Run by a **fresh reviewer**;
+nothing carried over from Passes 1–3 except the three written passes.
+
+**Deferred to `data-scientist`, as briefed** — every formula, constant, tolerance and verdict string
+is `docs/plans/small-model-benchmarking-ml.md` v1.7's. One item is routed there below; I judged the
+rest only where the *code* prints a claim it does not compute.
+
+**CPG: considered, not relevant** — no CPG graph exists for `model-bench` (the dispatch brief
+confirms it, and `cpg_model-bench` is not loaded). Every finding below comes from reading the files,
+**rendering reports and reading the English**, running the suite, and **128 source mutations of my
+own**, all in a sandbox built from `git archive d55f4d8` outside the repository.
+
+**Verdict: approve with suggestions.** — **0 blockers, 5 majors, 5 minors, 3 nits**, all new. All
+fifteen Pass 3 findings are fixed, each verified individually. **The stakeholder judgement is in
+[§ Is this converging?](#is-this-converging) — the residue does not block S2.**
+
+**What I ran, from `model-bench/`:**
+
+| command | result |
+|---|---|
+| `.venv/bin/python -m pytest -q` | `353 passed in 4.52s`, exit 0 |
+| `.venv/bin/python -m pytest -q -m "" -rsx` | `353 passed` — nothing deselected, skipped or xfailed |
+| `.venv/bin/python -m pytest --collect-only -q -m ""` | `353 tests collected` — collected equals run |
+| `.venv/bin/ruff check .` | `All checks passed!`, exit 0 |
+| `compare` / `compare --negative-control` end-to-end on temp roots | see P4-1, P4-5 |
+| exhaustive `verdict()` branch sweep, 8 `(n, k)` configurations | see the `data-scientist` routing |
+| **128 mutations**, four batches | **109 killed, 19 survived** (4 equivalent, **15 genuine gaps**) |
+
+### New findings
+
+**P4-1 (major) — `--negative-control` writes a durable report whose banner is false, and
+self-contradicting, when no arms were selected.**
+
+`report.py:331-332` emits `_NEGATIVE_CONTROL_BANNER` before `_comparison_pair` is consulted. With no
+stored runs for the pack, `cli.py:113`'s `if negative_control and candidates` is false and
+`_select_arms` returns `[]` — so the report opens with
+
+> **NEGATIVE CONTROL (WIRING SMOKE CHECK)** — both arms are the *same stored record*, so
+> `b = c = 0 by construction` and this comparison **cannot fail**.
+
+and then, ten lines below in the same document, *"None: fewer than two arms were selected, so there
+is nothing to compare."* Verified end-to-end through the CLI: **exit 0**, report written to
+`reports/<packId>-<date>-01.md`. This is P3-4's own failure mode — a durable artifact asserting
+something untrue of itself — re-entered through the case P3-4's fix did not cover. Mutation Z03
+(`if negative_control and len(runs) >= 2`) survives all 353 tests, so nothing pins either behaviour.
+*Fix:* gate the banner on `len(runs) >= 2`, or emit a distinct one-line refusal naming the mode and
+the empty history; add the test. **On the brief's question — the "cannot fail" claim is otherwise
+true of the code:** with two copies of one record `b = c = 0` ⇒ `diff = 0`, so neither `p <= alpha`
+nor a zero-excluding CI is reachable on either path and `distinguishable` cannot be returned. The
+defect is the zero-arm case, not the claim.
+
+**P4-2 (major) — the report's Holm wiring has no regression test, and breaking it reproduces the
+Pass 1 blocker with a green suite.**
+
+`report.py:483` passes `holm_tested=step.tested`. Hardcoding it to `True` leaves **353 passed**
+(mutation W16). Rendered under that mutation, on a k=2 family with both p-values at 0.039 (b=8,
+c=1, n=40), the report prints
+
+> `cand is better than incumbent on mB: +17.5 pp (95% CI [2.9, 32.6] pp) … McNemar exact p=0.039`
+
+three paragraphs above a family table whose own row for `mB` reads `not tested (Holm stops here)` —
+a significance claim for a metric Holm never tested, contradicted inside the same document. That is
+verbatim Pass 1's blocker (the ladder printed, the correction not applied). `verdict()`'s *internal*
+use of `holm_tested` is pinned (Z28 killed) and the sibling wiring `alpha_step=step.threshold` is
+pinned (W15 killed); only this one keyword is unguarded. *Fix:* one test on the two-metric family
+above asserting `"is better than" not in md` for the stopped member and the `not tested` row beside
+it. Full rendered pair in Appendix D.1.
+
+**P4-3 (major) — the family-wise paragraph's α attribution is unpinned; swapping the two αs inside
+it is green.**
+
+`report.py:521-527` prints *"Every **MDD** above is computed at the family-adjusted
+alpha={alpha_mdd}; every **observable floor** is computed at the unadjusted alpha={alpha_family}"*.
+Exchanging the two expressions leaves **353 passed** (W08). The rendered result labels 0.05 as
+family-adjusted and 0.025 as unadjusted, and contradicts the provenance parenthetical three
+paragraphs above, which still prints `alpha=0.025` for the MDD. This is **P3-6 one section over**:
+that finding pinned the provenance parenthetical and the floor's own α, and left the paragraph whose
+whole job is to explain the pair. Third pass running in which an α-attribution string is found
+unpinned. *Fix:* assert the paragraph's two clauses verbatim in the existing k=2 report test.
+
+**P4-4 (major) — P3-1's deliberate deferral: judged, and it does not hold. The Arms table and the
+paired-rows refusal print mutually exclusive statements about the same metric in the same report.**
+
+Rendered (Appendix D.2), an arm whose aggregates declare `BinaryMetric(successes=0, n=10)` for a
+metric no item declares scoreable produces, in one document:
+
+> `| cand | falseAdvanceRate | 0/10 | 0.000 | [0.000, 0.278] |`   (`report.py:387-390`)
+>
+> **No verdict: no paired data.** … An arm carrying no data for a metric is not an arm that failed
+> every item of it. (`report.py:229-233`)
+
+The round's three reasons, taken in turn. (i) *"the arm misreports, the reporter does not infer"* —
+true, and not exculpatory: the report is the instrument, and an instrument that renders a
+self-inconsistent input without noticing is one you cannot stand behind. (ii) *"the table is
+labelled descriptive"* — `_DESCRIPTIVE_NOTE` (`report.py:32-35`) caveats the **interval**
+(*"Per-arm intervals are Wilson score intervals…"*); it says nothing about the rate, and `0.000`
+over a denominator of 10 is a claim that ten items were scored. (iii) *"the cross-check is S2's
+because S2's scorer produces both"* — the *contract* is S2's, but the *check* is S1-local and needs
+nothing S2 provides: at `compare_report` time both `run.items` and `run.aggregates` are in hand, and
+for each verdict-family `BinaryMetric` whose `unit` is the analysis unit, `metric.n` must equal the
+count of items with `scored_outcome(metric) is not None`. `IncompleteItemRecord` is the precedent —
+refuse an internally inconsistent record rather than render it. *Fix:* that one comparison, raising
+(or banner-ing) on mismatch, plus a test. **It must land before S3**, the first stage that produces
+real scored data: a net added after the thing it protects has shipped is how all four of these
+passes began.
+
+**P4-5 (major) — `IncompleteItemRecord` takes down the whole comparison with an uncaught traceback,
+outside the documented exit-code set, naming neither the record nor its path.**
+
+`results.py:147` raises; `report.py:127` is the only caller; `cli.py:146-152` catches only
+`PackConfigError`. Verified end-to-end: one item with `scoreable={"m": True}, counts={}` in **one**
+of two otherwise-valid stored records aborts `compare` with an uncaught `IncompleteItemRecord`, exit
+1 — not one of `cli.py`'s closed set (`0/2/3/4/5`) — **no report written at all**, and the valid arm
+lost with it. `store()` accepts the record (its validation is fingerprint-only) and `load_history`
+accepts it, so the refusal lands at the furthest possible point from its producer, and AC-2's actual
+mechanism — *excluded on read **and named*** in the `INVALID RESULTS EXCLUDED` block — is bypassed.
+On the brief's two questions: **the refusal cannot be bypassed** on the paired intersection (X01,
+X02, X03 all killed; a truthy non-bool `scoreable` value still demands a count), though it never
+fires for an item present in only one arm, which is dropped before `scored_outcome` is called; and
+the message names the **item and metric** but not the run, so a scorer author holding forty stored
+records gets `item 'i9' …` and a grep. *Fix:* validate items in `load_history` and route a failure to
+`InvalidRecord(reason="field")` so the record is excluded and named; or minimally catch it in
+`_cmd_compare`, return `EXIT_FINGERPRINT`, and name `run.runId` and `path`.
+
+**P4-6 (minor) — an aggregate `BinaryMetric` with `n == 0` vanishes from the Arms table, and the
+guard that drops it is also the only thing preventing a `ZeroDivisionError`.** `report.py:376`'s
+`and metric.n` is doing two jobs and is tested in neither: relaxing it to `metric.n >= 0` leaves
+**353 passed** (Y08), which means no test constructs a zero-denominator aggregate anywhere. Rendered,
+a two-arm comparison in which one arm declares the metric with `n=0` prints a **one-row** "Arms"
+table, with nothing saying the second arm is missing. *Fix:* one test asserting the row is rendered
+as `0/0 — no observations` (or explicitly asserting the drop, if the drop is the decision), and one
+asserting no exception.
+
+**P4-7 (minor) — the §4.3 tally's arm-B-only half is entirely untested.** `only_in_b = 0`
+(`report.py:141`, mutation X06) and `considered = len(a_keys)` (`report.py:146`, Z04) both survive
+all 353 tests; the printed labels and the other four counters are pinned (W01, W02, W03, Z06 all
+killed). Asymmetric coverage caused by the *second* arm is exactly what §4.3 rule 2's tally exists to
+surface. *Fix:* one fixture where arm B carries two pairing keys arm A does not, asserting both the
+denominator and the `in {b_label} only` cell.
+
+**P4-8 (minor) — the marginal-overlap diagnostic is unpinned in both directions.** Inverting the
+printed `yes`/`no` (`report.py:495`, Z20) and computing both margins from the same arm
+(`stats.py:770-771`, Z21) each leave 353 passed. `tests/test_report.py:180` asserts only that the
+label substring is present, and `tests/test_stats.py:657` is the suite's only assertion on the value
+— `is True`. No test anywhere asserts it is ever `False`. It is a declared diagnostic and `-ml` §3.1
+says it is inert in this regime, which caps the severity; it is still a printed FR-15 output that can
+say the opposite of the truth with a green suite. *Fix:* one `is False` case in `stats`, and assert
+the rendered line whole in `report`.
+
+**P4-9 (minor) — the manifest-`packId`-not-directory-name fix is half-pinned.** `cli.py:135`'s
+`load_history(root, packId=pack.packId)` survives being re-pointed at `args.pack` (Y47), while the
+`_report_path` half P3-14 closed is pinned (Y45 killed). The two lines are the two halves of Pass 1's
+m-6, and they carry consecutive comments saying so. *Fix:* extend the P3-14 test's fixture so the
+pack **directory** name differs from the manifest's `packId` and assert the arms still load.
+
+**P4-10 (minor) — the report cannot distinguish two arms of the same model, which is the exact shape
+of plan §5 test 19a.** Rendered on two independent runs of one `modelKey` in different sessions
+(Appendix D.3), the Arms table has two identical `arm` cells, the §4.3 tally reads *"0 scoreable for
+qwen/qwen3-4b-2507 only, 0 scoreable for qwen/qwen3-4b-2507 only"*, and a significant verdict would
+read *"X is better than X"*. `runId` and `sessionId` are never printed. §5 test 19a — *"the highest-
+value single test in the harness"* — is precisely two independent runs of the same model, so the
+report is unreadable for the one comparison the value claim rests on. *Fix:* in `_arm_label`, when
+two arms share a `modelKey`, append the distinguishing `sessionId` (or `runId`).
+
+**P4-11 (nit) — `mover_d_interval`'s three clamps are untested, the unclosed twin of P3-15.**
+Replacing `max(0.0, lo_rad)` with `abs(lo_rad)` (`stats.py:133`, W11) and dropping the `[-1, 1]`
+clamps (`stats.py:136`, W12) both survive. Both are reachable — swept over every `(a,b,c,d)` with
+`n <= 60`: 6 tables have a negative radicand (magnitude ~3e-17) and 14 produce a bound outside
+`[-1, 1]` (magnitude ~2e-16) — and both are sub-display, exactly P3-15's finding. The docstring
+calls them *"required, not cosmetic"*, which is now the only claim of its kind with no test.
+
+**P4-12 (nit) — `holm_tested`'s effect on `floor_demoted` is untested.** Dropping it from
+`stats.py:840`'s `fired` conjunction survives (Z29). It is unreachable on the `mcnemar-exact` path
+(Rule 7 is a theorem there), but on the cluster path it would relabel a Holm-untested member's
+decision cell as *"below the observable floor"*. One assertion.
+
+**P4-13 (nit) — three untested renderer details.** The `_NO_PAIRED_DATA_TALLY` pointer sentence
+(`report.py:468`, W06), the exploratory-metric dedup that stops both arms listing the same metric
+twice (`report.py:572-574`, Z11), and which stored record `--negative-control` duplicates
+(`cli.py:117` — `candidates[-1]` survives, X13; nothing documents that it is the first).
+
+### Routed to `data-scientist`, not filed as a finding
+
+**The `|diff| == mdd80` boundary prints "is above that" at exact equality.** `stats.py:664`'s
+comparison is strict, so equality takes the alternate branch — **the right branch**, since the MDD
+claim is `>=` — but `stats.py:666` then renders *"the observed 10.0 pp is above that"* when it is
+exactly equal. I confirmed equality is reachable **through `verdict()`'s else branch**, not merely
+through `_mdd_clause` in isolation: sweeping every `(a,b,c,d)` at eight `(n, k)` configurations,
+**1 300** tables print the alternate clause at exact equality, the first being n=90, k=2,
+`(a=0, b=6, c=15, d=69)` — `diff = -10.0` pp against `mdd80 = 0.1` exactly. The sentence is §3.2e's,
+published verbatim, so the wording is yours. **One second-order check came back clean:** the clause's
+closing *"this comparison is not strictly dominant (b=…, c=…)"* is never printed with `b == 0` or
+`c == 0` in any of those sweeps, so it never contradicts the counts beside it.
+
+### Disposition of Pass 3's findings — 15/15 fixed
+
+| # | Disposition | Evidence I rechecked |
+|---|---|---|
+| **P3-1** absence scored as a loss | **Fixed** | `scored_outcome` is the sole decider. Restoring either old default is killed (X01, X02); `counts[m] > 0` → `>= 0` killed (X03); the four tally counters killed (X04, X05, W02, W03); the empty-intersection refusal and its Holm `—` cell killed (X07, X08, X09). **Residue judged separately: P4-4, P4-5.** |
+| **P3-2** unconditional "is below that" | **Fixed** | Conditional at `stats.py:664`. Unconditional, inverted and `<=` all killed (X19, X18, X17). |
+| **P3-3** false widening clause | **Fixed** | `>= 1.0`, branch swap, and a constant `assumed` all killed (X20, X21, X22). |
+| **P3-4** `--negative-control` unlabelled | **Fixed for the two-arm case**; the zero-arm case is new (**P4-1**). Banner suppressed and "may fail" both killed (X10, X11). |
+| **P3-5** bootstrap seed a literal | **Fixed** | `PackRef.seed`, no default. The literal restored in either place is killed (X14, X15), as are the manifest check (Y36) and printing the seed off the bootstrap path (X16). |
+| **P3-6** α attribution untested | **Fixed at the two named seams**; the family-wise paragraph is not (**P4-3**). `provenance` and `unattainable_clause` naming the wrong α are killed (X23, X24), as is `floor_clause`'s (X25). |
+| **P3-7** exploratory label test could not fail | **Fixed** | Inverting the filter now fails (Y01). |
+| **P3-8** `--session` untested | **Fixed** | Deleting the filter fails (Y03). |
+| **P3-9** `index.csv` `valid` untested | **Fixed** | Hardcoding it True fails, both ways (Y04, Z34). |
+| **P3-10** `armKind` absent-vs-null | **Fixed** | `d.get("armKind", None)` fails (Z02). |
+| **P3-11** two design-effect guards | **Fixed** | Both fail: removing `verdict()`'s precondition (Y20) and restoring `resolving_power`'s old `<= 0` bound (X30). |
+| **P3-12** headline-membership guard | **Fixed** | Removing it fails (Y02). |
+| **P3-13** second literal `0.05` | **Fixed by removal, and the reading of the plan is correct.** Plan v1.7 §4 S1 line 1414 shows `def holm_steps(p_values, *, alpha: float)` with no default, and the comment below it reads *"none of these parameters gets a literal default here"*. Grepped: every other `0.05` in `modelbench/` is inside a comment or docstring; `ALPHA_FAMILY` is the only literal. |
+| **P3-14** two untruths in names | **Fixed** | Dead assignment gone; `_report_path(root, pack.packId)` pinned (Y45). The sibling `load_history` call is not — **P4-9**. |
+| **P3-15** two undistinguished guards | **Fixed for the two named** | `wilson_interval`'s clamps and `pack_ref_from_manifest`'s `analysisUnit` check both fail now (Z01, Y37). The same class in `mover_d_interval` is untouched — **P4-11**. |
+
+**m-ML-8's surviving mutant is genuinely equivalent, and the claim that matters is pinned.** The
+survivor is the restoration of an *identical* duplicate of the MDD stem in `report.py`; identical
+text renders identically, so no test can distinguish it — equivalent by definition rather than by
+argument. What the finding was actually about is the **drift**, and that is killed: editing the stem
+in `stats.py` while a stale duplicate remains fails the suite (X26).
+
+### What's solid
+
+**The computational core is not where the residue is.** Every mutation I aimed at a number died:
+both αs and their routing (X23–X25, Y18, Y19, Y39), the floor's truncation and its bin-edge guard
+(X27, X28), the MDD's ceiling and its unfloored/floored denominator asymmetry (Y29, Y30), Rule 7 on
+both paths including the compare-against-the-printed-value trap (Y26, Y27), the McNemar veto and
+`mcnemar_may_decide`'s two conjuncts (Y24, Y25), Holm's ordering, threshold formula and step-down
+stop (X29, Z32, Y34), the design-effect/basis fail-safe propagation and its two legacy `from_dict`
+defaults (Y05, Y06 in batch Y, Z36, Z37), the paired table's b/c classification and unit-diff sign (Z22, Z23),
+the winner-first CI flip (Y28), every AC-2/AC-3 banner (Y13–Y16, Z38), the
+`_require_effective` type detector (Y31) and the duplicate-analysis-unit backstop (Y33). **109 of
+128 mutations died**, and of the nineteen survivors four are equivalent and the fifteen above are
+the residue — none of them a wrong number.
+
+**Four survivors are equivalent mutants, stated so they are not re-chased.** `_unit_ids`'
+`analysisUnitIndex` → `0` (Pass 3's F11 again: `check_sampling_contract` forces it, and the
+behaviour is still pinned — `index = -1` is killed, Y12). `b_min`'s loop starting at `b = 2` — it
+can only matter if `mcnemar_exact(1, 0) = 1.0 <= alpha`, i.e. `alpha >= 1.0`. `holm_steps`'
+`p <= threshold` → `<`: `mcnemar_exact` returns a dyadic rational and `0.05/k` is not dyadic —
+swept every `(b, c)` with `b + c <= 60` against `0.05`, `0.025` and `0.05/3`, **zero** exact
+equalities. `mcnemar_exact(c, b)`: the function is symmetric in its two arguments by construction
+(`m = b + c`, `k = min(b, c)`).
+
+<a id="is-this-converging"></a>
+### Is this converging? — the stakeholder judgement, explicitly
+
+**Yes, and the residue does not block building S2 on top of S1.**
+
+The count is flat (Pass 3: 1 blocker + 6 majors; Pass 4: 0 blockers + 5 majors) but the *character*
+has changed, and that is the signal. Pass 3's blocker rendered `+100.0 pp, p=0.002` against an arm
+holding no data, and four of its majors were sentences that were simply false. **Nothing in Pass 4
+is a wrong number.** Two of my five majors are report-surface defects reachable only through an
+operator mistake (P4-1) or a scorer that does not exist yet (P4-4); the other three are **missing
+nets over code that is correct** (P4-2, P4-3, P4-5).
+
+The reason Pass 3 found more than Pass 2 is worth stating plainly for the stakeholder: Pass 3 was
+the first pass to render reports and read the English, and to run a mutation campaign at scale. The
+*method* changed, not the code's quality. Pass 4 applied that same method plus 128 mutations to a
+larger surface and found no blocker and no false printed clause on any path I could reach. That is
+what convergence looks like from the outside.
+
+**What I would gate on, and where.** None of P4-1…P4-13 changes a signature S2 wires against, and
+none produces a wrong number today, so **S2 (adapter, host info, runner) can be dispatched now**.
+Two of them should gate **S3** — the first stage that produces real scored data — rather than S2:
+
+- **P4-4**, the aggregates-versus-items cross-check, because it is the net that catches the first
+  real scorer's first mistake, and it is S1-local and cheap.
+- **P4-2**, the Holm-wiring regression test, because it is the only thing standing between this
+  build and a verbatim recurrence of the Pass 1 blocker.
+
+P4-1, P4-3 and P4-5 are a half-day of work and can ride alongside S2. Everything from P4-6 down is a
+follow-up.
+
+**One process observation, and it is `architect`'s, not the implementer's.** Plan §5's
+stage-attribution table landed at v1.7 and closes Pass 3's thrice-carried item — I read this pass's
+scope off it directly and did not have to re-derive the S1/S2 split. It is the first gate of this
+component that did not.
+
+### Open questions
+
+1. **P4-4's severity depends on a scope call I cannot make.** If S2's scorers will be built to
+   compute `aggregates` *from* `items` in one pass, the inconsistency is unrepresentable and the
+   cross-check is belt-and-braces. If they are two independent code paths — which is what
+   `ClassificationAggregates` being a stored field rather than a derived property implies — the
+   check is load-bearing. `architect` owns which shape S2 takes.
+2. **P4-10 may be `architect`'s rather than a bug.** Disambiguating two same-model arms could equally
+   be solved by the runner refusing to compare two runs of one model outside the negative-control
+   mode. §5 test 19a requires exactly that comparison, so it cannot simply be refused — but where the
+   label comes from is a design call.
+
+### Appendix D — Pass 4 evidence
+
+**D.1 — P4-2 reproduction.** k=2 family, both metrics at `(b=8, c=1)` in n=40, so both p-values are
+0.039: rank 0 is tested at 0.025 and fails, Holm stops, rank 1 is `tested=False` with a printed
+threshold of 0.05. Unmutated, `mB` renders *"Not distinguishable at this sample size. Not tested:
+Holm–Bonferroni stops at the first non-rejection…"*. With `holm_tested=True` hardcoded at
+`report.py:483` — **353 passed** — the same fixture renders:
+
+```
+### mB
+cand is better than incumbent on mB: +17.5 pp (95% CI [2.9, 32.6] pp), n=40 paired items
+(unit: item, design effect 1.00), McNemar exact p=0.039 (b=8, c=1).
+…
+| mB | 0.039 | 0.0500 | not tested (Holm stops here) |
+```
+
+**D.2 — P4-4 reproduction.** Two arms, ten items each, every item `scoreable={m: False}`; each arm's
+stored aggregate declares `BinaryMetric(m, successes=0, n=10, unit="item")`:
+
+```
+| qwen/qwen3-4b-2507 | falseAdvanceRate | 0/10 | 0.000 | [0.000, 0.278] |
+…
+**No verdict: no paired data.** No item is scoreable for `falseAdvanceRate` in both arms … An arm
+carrying no data for a metric is not an arm that failed every item of it (`-ml` §4.3).
+- paired n: 0 of 10 items (… 10 unscoreable in both …) — §4.3
+```
+
+**D.3 — P4-10 reproduction.** Two runs of `qwen/qwen3-4b-2507`, `sessionId` `s1` and `s2`, 40 items
+each. `Comparison kind: **paired, cross-session**` is correct; every arm-identifying string in the
+report below it is the same token twice, and neither `runId` nor `sessionId` appears anywhere.
+
+**D.4 — 128 mutations, four batches, 19 survivors.**
+
+| batch | area | run | killed | survivors |
+|---|---|---|---|---|
+| X | the P3-1/P3-2/P3-3/P3-5 fix surface, the negative-control banner, the MDD boundary | 30 | 28 | X06 (→ P4-7), X13 (→ P4-13) |
+| Y | the other Pass 3 fixes, `verdict()`'s preconditions, banners, packs, `load_history`, CLI | 46 | 43 | Y08 (→ P4-6), Y11 *(equivalent)*, Y47 (→ P4-9) |
+| Z | untouched surface: tally, `_decision`, resolving-power line, `stats` core, index, exit codes | 38 | 30 | Z03 (→ P4-1), Z04 (→ P4-7), Z11 (→ P4-13), Z20/Z21 (→ P4-8), Z25 *(equivalent)*, Z29 (→ P4-12), Z33 *(equivalent)* |
+| W | tally strings, family-wise prose, MOVER-D, the Holm wiring seam | 14 | 8 | W06 (→ P4-13), W08 (→ P4-3), W11/W12 (→ P4-11), W13 *(equivalent)*, W16 (→ P4-2) |
+
+Three further mutations in batches Z and W turned out to be syntactic no-ops on inspection and are
+excluded from the 128 rather than counted as survivors.
+
+**D.5 — isolation.** Every mutation ran in `/tmp/gate-p4-eng-mbx/`, built from
+`git archive d55f4d8 model-bench | tar -x`, against a pristine copy restored between mutations, with
+`PYTHONPATH` pointed at the sandbox (verified: `modelbench.__file__` resolves inside it). Every
+scratch file carries the `_mbx` suffix. `git status --porcelain -- model-bench` is empty at the end
+of this pass; nothing outside `docs/reviews/small-model-benchmarking-impl.md` was written in the
+repository.
