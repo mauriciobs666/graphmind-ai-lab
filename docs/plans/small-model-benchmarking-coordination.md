@@ -45,7 +45,7 @@ Stakeholder decisions, 2026-09-02:
 | U6a — Fix both gates' findings in the code | `tdd-engineer` (fresh) | `a79396bc49b0280d8` | delivered | 14 files, +1909/−168, **296 tests**; 34 mutations, 0 survivors | U7a + U7b → — | 322k tok / 74 tools |
 | U7a — Re-gate the fix round (engineering, `## Pass 2`) | `analyst` | `aa9d6d24849f63006` (resumed) | delivered | `docs/reviews/small-model-benchmarking-impl.md` `## Pass 2` — **approve with suggestions**; 18/18 closed, 1 new major | — (is the gate) | 281k tok / 29 tools |
 | U7b — Re-gate the fix round (statistics, `## Pass 2`) | `data-scientist` | `a7fbf4d59bfa1d0da` (resumed) | delivered | `## Pass 2` — **needs changes**: 1 blocker, 1 major, 1 minor (all new) | — (is the gate) | 237k tok / 13 tools |
-| U8a — Note: the α ruling, Rule 7 split by path, the unified principle | `data-scientist` | — | queued | `docs/plans/small-model-benchmarking-ml.md` v1.6 | teco-verified | — |
+| U8a — Note: the α ruling, Rule 7 split by path, the unified principle | `data-scientist` | `a394671cfc28bef87` (resumed) | accepted | `docs/plans/small-model-benchmarking-ml.md` **v1.6** | teco-verified | 253k tok / 14 tools |
 | U8b — Plan sweep: `PackRef.contentHash` / Appendix A identity triple | `architect` | `a5ca583515c0979f1` (resumed) | accepted | `docs/plans/small-model-benchmarking.md` **v1.6** | teco-verified | 158k tok / 37 tools |
 | U8c — Code: B-ML-2, m-ML-6, P2-1…P2-5 | `tdd-engineer` | — | queued (after U8a) | `model-bench/**` | re-gate → — | — |
 | U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | queued (after the re-gates) | `docs/plans/small-model-benchmarking.md` v1.6 | teco-verified | — |
@@ -534,3 +534,28 @@ re-drawn against U4's actual delivery before dispatch.
 - **Carried a third time, still unfixed:** §5's numbered test list is not stage-scoped, and **both
   gates have now had to reason it out independently**. A recurring cost that a one-line preface
   would remove — logged rather than chased.
+
+- **2026-09-03 — U8a: the α ruling accepted, and a whole column of the note **deleted**.** §7.1's
+  second floor column (58.3 / 46.6 / 23.3 / 17.5 at α=0.025) is gone — *it asserted impossibilities
+  that are attainable*. One floor column remains, at the unadjusted α, with the reason stated: the
+  floor does not move with *k*; **only the MDD pays for multiplicity.** `ResolvingPower` now carries
+  three αs — `alpha_family` (floor), `alpha_mdd` (α/k), `alpha_step` (α/(k−i), known only after
+  ranking).
+- **The generalisation is now Rule 3, and it resolves as a 2×3 table:** MDD rounds **up** / takes
+  the **tightest** α / uses the **floored** `n_eff`; the observable floor rounds **down** / takes the
+  **loosest** α / uses the **unfloored** `n_eff`. Each cell is conservative *for its own sentence*,
+  and unifying any row makes one bound anti-conservative — which is why n-ML-1 was correctly
+  **declined rather than harmonised**.
+- **The Rule 7 theorem was re-derived exhaustively before the split was written** — all `(b,c)` with
+  `b+c ≤ 400`, zero violations at either α. The note also records *why the split depends on the α
+  ruling*: at α/k the McNemar branch is reachable, so `raise` would fire on correct data.
+- **The guard's justification did not survive its own pass — the third instance of this pattern.**
+  The bin-edge guard was load-bearing on `17.5 pp` at n=40, **which is precisely the cell the α
+  ruling deleted**. Swept to n ≤ 2000: with `b_min = 7` naive truncation misfires at n = 5, 10, 20,
+  40; with `b_min = 6` — which v1.6's floor always uses — **it never misfires**. The guard is kept
+  and re-justified (`b_min` is a function of α, so a future α reopens the hazard, and it costs one
+  expression) but is now **defensive, not a regression pin on a published value**. The test's own
+  comment must be corrected or it will document a cell that no longer exists.
+- **Pattern worth naming, since it has now bitten three times:** *a justification computed against a
+  state that the same pass changed.* Each time it was caught only because someone re-derived rather
+  than re-read.

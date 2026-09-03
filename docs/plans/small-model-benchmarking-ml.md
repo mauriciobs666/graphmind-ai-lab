@@ -1,6 +1,10 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.5
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.6
+
+2026-09-03 (v1.6, `data-scientist`) — the observable floor moves to the **unadjusted α** (review
+M-ML-6), §3.4 Rule 3 is generalised into the printed-bound principle that governs it, Rule 7 splits
+by path, and Rule 4 states that McNemar is permitted as a **veto**.
 
 2026-09-03 (v1.5, `data-scientist`) — §3.2c's fixtures republished at 10 dp so the mandated 1e-9
 tolerance is assertable (review m-ML-1), the floor/MDD rounding directions separated and three §7.1
@@ -341,13 +345,23 @@ prevent. Apply **Holm–Bonferroni across the declared family** (order the p-val
 smallest at α/k, the next at α/(k−1), …, stopping at the first non-rejection) and print the
 adjusted threshold beside each p-value.
 
-**And it changes what the resolving-power line must print:** the guaranteed-detectable threshold for
-a k-member family is the one computed at **α/k**, since a metric can be required to clear that step.
-For `guard-judge` (k=2) that is α=0.025, and §7.3 carries the recomputed figures — they are
-materially worse than the α=0.05 ones, which is the honest price of two verdict metrics rather than
-one. §3.4 Rule 4 is the mechanism: `verdict()` raises unless
-`resolving.alpha == 0.05 / len(family)`, so a k-member family cannot be reported at α=0.05 by
-oversight.
+**And it changes what the resolving-power line must print — for the MDD only.** The
+guaranteed-detectable threshold for a k-member family is computed at **α/k**, since a metric can be
+required to clear that step. For `guard-judge` (k=2) that is α=0.025, and §7.3 carries the
+recomputed figures — materially worse than the α=0.05 ones, which is the honest price of two verdict
+metrics rather than one. §3.4 Rule 4 is the mechanism: `verdict()` raises unless
+`resolving.alpha_mdd == alpha_family / len(family)`, so a k-member family cannot report its MDD at
+α=0.05 by oversight.
+
+**The observable floor takes the opposite α, on purpose — do not "fix" the two to match.** The floor
+stays at the **unadjusted α=0.05** whatever *k* is. The two bounds carry different sentences, and
+each takes the α that makes its own sentence true (§3.4 Rule 3): the MDD promises power *whatever
+rank the member draws*, so it needs the tightest step; the floor asserts an impossibility *at any
+step the member could face*, so it needs the loosest. Setting the floor to α/k understates nothing —
+it **overstates** what is impossible, and prints a threshold that an ordinary Holm rejection walks
+straight under. It also double-charges the multiplicity: the price of a second verdict metric is
+already paid in the MDD, and paying it again in the floor collapses Holm to Bonferroni for any
+difference in `[6/n, 7/n)` — exactly the band §7.3 prices.
 
 *Reversal trigger:* if the stakeholder later ranks the two guard-judge errors, drop the loser out of
 `verdictMetrics` into the exploratory block and the family collapses back to k=1 with α=0.05
@@ -409,14 +423,37 @@ def resolving_power(n_units: int, *, unit_kind: str, design_effect: float,
                     basis: str, alpha: float, power: float = 0.80) -> ResolvingPower: ...
 ```
 
-`design_effect`, `basis`, `unit_kind` and `alpha` are **keyword-only with no default value**. A
+`design_effect`, `basis`, `unit_kind` and both αs are **keyword-only with no default value**. A
 default of `1.0` would rebuild B-1 by omission — the caller who forgets clustering is exactly the
 caller the gate found. `min_detectable_difference` takes **`n_effective: float`** (never `n: int`),
 so passing a raw observation count is a visible mislabel at the call site rather than an invisible
-one inside the function. `observable_floor` takes `alpha`, because the floor is `6/n` only at
-α=0.05 — at α=0.025 it is `7/n` (§7.3).
+one inside the function. `observable_floor` still takes an `alpha` parameter — `b_min` is a function
+of α in general, not the constant 6 — but **`resolving_power` must call it with `alpha_family`, the
+unadjusted α, never with `alpha_mdd`** (Rule 3's α row). Keeping the parameter while fixing the
+call site is deliberate: the formula stays general, and the *choice* lives in one auditable place.
 
-**Rule 3 — MDD and floor are computed exactly and rounded in *opposite* directions; the `8/n` rule
+**Rule 3 — the printed-bound principle. Every printed bound takes the rounding direction, the α,
+and the denominator that keep *its own claim* true.**
+
+This is one rule, not a list of special cases, and it is the rule three separate adjudications in
+this document's review history each rediscovered the hard way. A printed bound is a *sentence*, and
+the sentence is what has to be true — so every free parameter in computing it is fixed by asking
+"which value makes this sentence true?", never by consistency with the bound printed next to it.
+Two bounds sitting side by side routinely take **opposite** values of the same parameter, and that
+is correct rather than sloppy. The three instances, all live in this note:
+
+| parameter | MDD — *"resolves differences ≥ X with 80% power"* | observable floor — *"differences below Y cannot reach significance at any observed outcome"* |
+|---|---|---|
+| **rounding** | **up** — at the printed value the power claim must hold (19.0 pp has power 0.798) | **down** — a printed 15.8 at n=38 is false, since the attainable `6/38 = 15.789` reaches significance |
+| **α** | **tightest** step, `α/k` — the claim must hold whatever rank the member takes under Holm | **loosest** step, unadjusted `α` — a member *can* be tested at 0.05, so `7/n` asserts a false impossibility |
+| **denominator** | **floored** `n_effective` — flooring is what keeps X conservative | **unfloored** `n_effective` — flooring here would *raise* Y and overstate what is impossible |
+
+Each cell is the conservative choice **for that sentence**; unifying any row would make one of the
+two bounds anti-conservative, which is why the denominator nit (`n-ML-1`) was correctly declined
+rather than harmonised. When a new printed bound is added, derive its three parameters from its
+sentence before writing the formula.
+
+**Rule 3a — MDD and floor are computed exactly and rounded in *opposite* directions; the `8/n` rule
 of thumb is not code.**
 `min_detectable_difference` bisects on δ for the smallest difference at which
 `P(reject) ≥ power` under the exact McNemar rejection region, then **rounds up to the printed
@@ -440,6 +477,17 @@ each printed bound in the direction that keeps its own claim true.**
   line says *distinguishable* while its own honesty line says the difference cannot reach
   significance. Truncation to 58.3 removes the contradiction.
 - Exact values (`6/40 = 15.0`) print exactly under either rule; only inexact ones diverge.
+- **Truncate with the same expression the caller uses.** `math.floor(x/precision)` and
+  `math.floor(x*1000)` are not interchangeable: the double nearest `0.001` is slightly *above* it,
+  so `(7/40)/0.001 = 174.99999999999997` truncates across the bin edge to **17.4 pp** where
+  `(7/40)*1000 = 175.0` gives the correct 17.5. Swept in this session over `n ≤ 2000`: with
+  `b_min = 7` this bites at **n = 5, 10, 20, 40**; with `b_min = 6` it **never** bites.
+  **So under v1.6's floor — always `6/n_eff` — the guard is defensive, not load-bearing on any cell
+  this note prints.** It was load-bearing under the `α/k` floor that v1.6 removes (17.5 pp at n=40
+  was a published cell), and the two changes arrived in the same review pass, which is precisely how
+  a justification outlives the thing that justified it. Keep the guard anyway — `b_min` is a
+  function of α, not the constant 6, so any future α reopens the hazard, and the cost is one
+  expression — and pin it with the **code's own expression**, never an equivalent-looking one.
 
 *(v1.5 corrects three §7.1 cells where v1.2–v1.4 ceilinged an inexact floor — 15.8→15.7 at n=38 and
 7.1→7.0 at n=85 in the α=0.05 column, 46.7→46.6 at n=15 in the α=0.025 column. The note was
@@ -455,15 +503,31 @@ def verdict(outcomes: PairedOutcomes, *, resolving: ResolvingPower,
 Raises — never warns, never silently proceeds — unless all four hold:
 1. `resolving.n_units == outcomes.n_units` (the printed resolving power belongs to *this* table);
 2. `resolving.unit_kind == outcomes.unit_kind`;
-3. `resolving.alpha == 0.05 / len(family)` and `metric_name in family` (§3.3's multiplicity);
+3. `resolving.alpha_mdd == alpha_family / len(family)` and `metric_name in family` (§3.3's
+   multiplicity). **This precondition is unchanged by v1.6 and must not be "fixed" to match the
+   floor**: `alpha_mdd` is the *pre-registration* α — the tightest step, which is what makes the MDD
+   claim rank-independent. Three αs coexist deliberately, and `ResolvingPower` carries all three:
+   `alpha_family` (unadjusted, 0.05 — the **floor's** α, Rule 3), `alpha_mdd` (`α/k` — the **MDD's**),
+   and `alpha_step` (`α/(k−i)`, Holm's actual data-dependent threshold for this member at decision
+   time, which lies between the two and is known only after the family's p-values are ranked);
 4. `resolving.design_effect >= 1.0`.
 
 And the decision rule branches on the design effect, which is the fix B-1 asks for:
 - **`design_effect == 1.0` and `basis == "by-construction"`** → McNemar exact decides, MOVER-D
   quantifies (§3.2b/c). This is the only configuration in which McNemar is valid.
-- **otherwise** → McNemar is anti-conservative and must not decide. The decision is *"the
+- **otherwise** → McNemar is anti-conservative and must not **decide alone**. The decision is *"the
   cluster-bootstrap CI on the paired difference excludes zero"*; McNemar's p may still be printed,
   labelled `anti-conservative under clustering — not the decision`.
+
+**McNemar as a *veto* is permitted on that path, and is the recommended form.** Making the
+non-`by-construction` decision a **conjunction** — distinguishable iff the widened CI excludes zero
+**and** `mcnemar_exact(b, c) ≤ alpha_step` — does not violate this rule, and the reason is worth
+stating because the rule reads as if it forbids what the fix requires. **The objection to McNemar
+under clustering is that it *rejects* too readily.** A necessary condition can only ever *remove*
+rejections, so the conjunction is uniformly at least as conservative as either instrument alone: at
+DEFF = 1 it restores the exact test's calibration exactly, and at DEFF > 1 the widened interval
+remains the binding constraint it already was. What the rule forbids is McNemar deciding *for*
+distinguishability under clustering; using it to withhold that verdict is the opposite operation.
 
 **Rule 5 — design effect is a variance ratio, not a width ratio.** (A correction to v1.1 §4.4,
 which called the width ratio "the design effect"; an implementer following v1.1 literally would have
@@ -490,12 +554,26 @@ either surfaces as a contradiction rather than as a plausible number. It is what
 bootstrap that silently resamples correlated rows i.i.d.: such a substitution changes the
 instrument's name and not its interval, and an interval alone cannot report that.
 
-Two details that decide whether it works:
+Three details that decide whether it works:
 - Compare against the **exact** floor, never the display-rounded one (Rule 3) — otherwise the
   invariant inherits the presentation layer's rounding and can fire or fail to fire by 0.05 pp.
 - **The converse is not an invariant.** `|diff| ≥ observable_floor` does *not* imply
   `distinguishable`; the floor is necessary, never sufficient. Asserting the converse would be a
   bug that hides the discordance structure McNemar exists to read.
+- **The response splits by path, because the invariant has two different statuses.**
+  - On **`mcnemar-exact`** it is a **theorem, so a fire is a module bug → raise.** With the floor at
+    the unadjusted α (Rule 3), `p ≤ α_step ≤ 0.05` implies `|b−c| ≥ b_min(0.05) = 6`, hence
+    `|diff| ≥ 6/n`, at *every* Holm step. Verified exhaustively in this session over all `(b, c)`
+    with `b + c ≤ 400`: **zero violations at α=0.05 and zero at α=0.025.** Silently demoting here
+    would discard exactly the detector property this rule exists for.
+  - On **`cluster-bootstrap`** it is a **guard, so a fire demotes and names** — the verdict becomes
+    not-distinguishable with the floor breach printed as the reason. Raising would abort on ordinary
+    clustered data: at DEFF = 2 on `(34, 6, 0, 0)` the widened interval still excludes zero at a
+    15.0 pp difference while the floor has moved to 30.0 pp, which is a legitimate disagreement
+    between a widened interval and a shrunken effective *n*, not a defect.
+  - **This split only works with the floor at the unadjusted α.** At `α/k` the McNemar branch is
+    reachable — a member rejected at a 0.05 Holm step with `|b−c| = 6` sits below a `7/n` floor —
+    so the theorem is not available and `raise` would fire on correct data.
 
 **Rule 6 — `cluster_bootstrap` is one-level, and a pack that needs two must fail validation.**
 
@@ -507,6 +585,20 @@ Each inner sequence is the observations belonging to one independent unit (for a
 the turns of one conversation). Under 12×1 there are 12 members. `validate` **fails any pack
 declaring `replicatesPerScript > 1`** while only this one-level function exists — the two-level
 resample (§4.5) is then required and its absence must be an error, not an approximation.
+
+**On the `√DEFF` widening used as the interim substitute, and why it is safe rather than merely
+cheap.** Widening a percentile interval by `√DEFF` is exact for what it claims — DEFF is a variance
+ratio and a CI half-width scales as `1/√n`, so `√DEFF` is precisely the factor carrying an interval
+computed at `n_units` to one computed at `n_units/DEFF` — but it **rescales a variance it cannot
+discover**, and in particular it does **not reproduce the few-clusters degeneracy** a genuine
+cluster bootstrap has (§4.5.1(ii) rejects bootstrapping 3 shapes for exactly that reason). It only
+widens; it never becomes unusable. **That gap is closed by a different mechanism, and the two
+compose:** the floor is computed at `n_eff = n/DEFF`, so a too-few-clusters configuration is caught
+by Rule 7 or by `UnattainablePower` rather than by the interval. Verified: at n=12, DEFF=7 the floor
+is `6/1.714 = 350 pp`, i.e. no difference is resolvable at all and the run says so. **Neither
+mechanism is sufficient alone** — the widening handles variance the floor cannot see, the floor
+handles degeneracy the widening cannot — which is what makes the interim defensible until a pack
+with `replicatesPerScript > 1` makes the structural primitive buildable against real data.
 
 ---
 
@@ -1128,39 +1220,51 @@ The requirements' "roughly 15 percentage points" is the **observable floor at n=
 difference that *could* be called significant if it landed perfectly. It is not the difference the
 tool reliably *detects*. Both numbers follow from the McNemar exact floor and were computed here:
 
-- **Observable floor = `b_min(α)/n_eff`** — `6/n_eff` at α=0.05, **`7/n_eff` at α=0.025** (the
-  step a two-member `verdictMetrics` family can be required to clear, §3.3). Below it, no paired binary
-  result reaches significance whatever happens.
+- **Observable floor = `b_min(α_family)/n_eff` = `6/n_eff`, computed at the *unadjusted* α=0.05 —
+  never at `α/k`** (Rule 3's α row; review M-ML-6). Under Holm a member's threshold is
+  data-dependent, so no single α makes the floor's sentence true by construction and one must be
+  chosen: *"below this, nothing can reach significance"* is true only at the **loosest step a member
+  can face**, which is the unadjusted α. Printed at `α/k` it is `7/n_eff` and is **false** — at
+  n=40, `b=6, c=0` gives p=0.031, which a rank-2 member *does* clear at its 0.05 Holm step, and
+  15.0 pp sits below the printed 17.5. Same falsity class as the `15.8` withdrawn in v1.5.
+  Floor-at-0.05 is additionally conservative for every member, and it is what makes Rule 7's
+  McNemar branch a theorem.
 - **MDD₈₀ — computed exactly, never from a rule of thumb** (§3.4 rule 3). The `n·δ ≈ 7.7` mnemonic
   holds only over n≈20–120 (recomputed: 7.33 at n=20 → 7.81 at n=120) and **breaks below it —
   6.94 at n=12** — which is exactly the range the tool-caller pack now lives in.
 
 **All figures recomputed in this session** by exact search over the McNemar rejection region.
-**MDD columns are ceilinged to 0.1 pp; floor columns are truncated** — opposite directions, for the
-reason in §3.4 Rule 3. The exact MDD values are shown so nobody re-derives them; the floors are
-exactly `b_min(α)/n` (`b_min` = 6 at α=0.05, 7 at α=0.025) and need no table of their own:
+**MDD columns are ceilinged to 0.1 pp; the floor column is truncated** — opposite directions, for
+the reason in §3.4 Rule 3. The exact MDD values are shown so nobody re-derives them; the floor is
+exactly `6/n_eff`, truncated with the caller's own expression (Rule 3a's bin-edge guard):
 
-| n_eff | floor, α=0.05 | MDD₈₀, α=0.05 | (exact) | floor, α=0.025 | MDD₈₀, α=0.025 |
-|---|---|---|---|---|---|
-| **12** | **50.0 pp** | **57.8 pp** | 57.794 | 58.3 pp | 65.6 pp |
-| 15 | 40.0 pp | 47.6 pp | 47.559 | 46.6 pp | 54.2 pp |
-| 20 | 30.0 pp | 36.7 pp | 36.646 | — | — |
-| 30 | 20.0 pp | 25.1 pp | 25.075 | 23.3 pp | 28.7 pp |
-| 38 | 15.7 pp | 20.1 pp | 20.009 | — | — |
-| 40 | 15.0 pp | 19.1 pp | 19.046 | 17.5 pp | 21.9 pp |
-| 48 | 12.5 pp | 16.0 pp | 15.972 | — | — |
-| 60 | 10.0 pp | 12.9 pp | 12.857 | — | — |
-| 85 | 7.0 pp | 9.2 pp | 9.142 | — | — |
-| 120 | 5.0 pp | 6.6 pp | 6.509 | — | — |
+| n_eff | **observable floor** (α=0.05, *every* k) | MDD₈₀ at α=0.05 (k=1) | (exact) | MDD₈₀ at α=0.025 (k=2) |
+|---|---|---|---|---|
+| **12** | **50.0 pp** | **57.8 pp** | 57.794 | 65.6 pp |
+| 15 | 40.0 pp | 47.6 pp | 47.559 | 54.2 pp |
+| 20 | 30.0 pp | 36.7 pp | 36.646 | — |
+| 30 | 20.0 pp | 25.1 pp | 25.075 | 28.7 pp |
+| 38 | 15.7 pp | 20.1 pp | 20.009 | — |
+| 40 | 15.0 pp | 19.1 pp | 19.046 | 21.9 pp |
+| 48 | 12.5 pp | 16.0 pp | 15.972 | — |
+| 60 | 10.0 pp | 12.9 pp | 12.857 | — |
+| 85 | 7.0 pp | 9.2 pp | 9.142 | — |
+| 120 | 5.0 pp | 6.6 pp | 6.509 | — |
+
+**There is one floor column and there always will be**: the floor does not move with *k*, because
+its α is the unadjusted one whatever the family size. Only the MDD pays for multiplicity. *(v1.6
+deletes v1.2–v1.5's second floor column — 58.3 / 46.6 / 23.3 / 17.5 pp at α=0.025 — which asserted
+impossibilities that are attainable.)*
 
 **Every report prints, computed from its own `n_effective` and its own α, never hardcoded:**
 
 > `This pack resolves differences of >=X pp with 80% power at n=N effective <unit>s (<U> units,
-> design effect D, <basis>, alpha=A). Differences below Y pp cannot reach significance at any
-> observed outcome.`
+> design effect D, <basis>, alpha=A_mdd). Differences below Y pp cannot reach significance at any
+> observed outcome, at any Holm step (alpha <= A_family).`
 
-Every field is mandatory. The unit, the raw unit count, the design effect and its basis are what
-make the line auditable — a bare `n` is the shape gate B-1 rejected, because 48 turns, 48
+Every field is mandatory, **including both αs** — they differ whenever k > 1, and a reader shown
+only one cannot tell which bound it governs. The unit, the raw unit count, the design effect and its
+basis are what make the line auditable — a bare `n` is the shape gate B-1 rejected, because 48 turns, 48
 conversations and 12 scripts print the same sentence and mean three different things.
 
 **One assumption behind every MDD above, and it is optimistic.** The power model is **strict
@@ -1193,7 +1297,7 @@ the 15–50 pp band at this sample size.
 | Role | n | Unit of n | Instrument | Observable floor | MDD₈₀ | Existing golden data adequate? |
 |---|---|---|---|---|---|---|
 | **tool-caller** | **12** (3 shapes × 4 distinct scripts × **1 run**) | **conversation ≡ script**, one observation per cluster, **DEFF 1.00 by construction** | McNemar exact on `cleanThroughTurn4` — **valid at this design**, plus one-level cluster bootstrap over the 12 conversations for any turn-pooled count | **50.0 pp** | **57.8 pp** | **No — must be built (FR-22/FR-22a).** 12 distinct human-verified scripts; §4.5 is the sizing and §4.5.3 the honest consequence. |
-| **guard-judge** | 85 total, but the decision is **class-conditional** and the family has **two verdict metrics** (α=0.025) | item | McNemar per class, Holm across the two | see below | see below | **Partly** — see §7.3 |
+| **guard-judge** | 85 total, but the decision is **class-conditional** and the family has **two verdict metrics** (MDD at α=0.025; floor at the unadjusted α=0.05) | item | McNemar per class, Holm across the two | see below | see below | **Partly** — see §7.3 |
 | **nlq-generator** | 40 | item | McNemar on Layer-1 exact match | 15.0 pp | 19.1 pp | **Yes, marginally.** Answers "clearly better" only. |
 | **chat-responder** | 30 (new) | item | McNemar on checklist pass | 20.0 pp | 25.1 pp | **No — does not exist** (§6.2) |
 | **embedder** | 38 queries | query | paired bootstrap on per-query MRR | n/a (continuous) | see §7.4 | **Yes for MRR; no for recall@k** — see §7.4 |
@@ -1250,20 +1354,22 @@ identical. The verdict is rendered on the error rate, because two co-equal verdi
 the same way is the only presentation in which "worse on one, better on the other" is readable at a
 glance.
 
-Recomputed at **α=0.025** — the Holm step-1 threshold a two-member family can be required to clear
-(§3.3) — with the α=0.05 figures kept alongside so the price of the second verdict metric is
-visible:
+**The MDD is recomputed at α=0.025** — the tightest Holm step a two-member family can be required to
+clear (§3.3) — with the k=1 figure alongside so the price of the second verdict metric is visible.
+**The floor stays at the unadjusted α=0.05** and is therefore the same number it would be for a
+one-metric pack:
 
-| slice | n | verdict metric | floor @0.025 | MDD₈₀ @0.025 | (floor / MDD₈₀ @0.05) |
+| slice | n | verdict metric | observable floor (α=0.05) | MDD₈₀ @α=0.025 | (MDD₈₀ @α=0.05, for contrast) |
 |---|---|---|---|---|---|
-| `clear_suspend` | 40 | **`falseAdvanceRate`** | **17.5 pp** | **21.9 pp** | 15.0 / 19.1 pp |
-| `clear_advance` | 30 | **`falseSuspendRate`** | **23.3 pp** | **28.7 pp** | 20.0 / 25.1 pp |
-| `boundary` (all expected-suspend) | 15 | false-advance on near-misses — **not a verdict metric** | — | — | 40.0 / 47.6 pp |
+| `clear_suspend` | 40 | **`falseAdvanceRate`** | **15.0 pp** | **21.9 pp** | 19.1 pp |
+| `clear_advance` | 30 | **`falseSuspendRate`** | **20.0 pp** | **28.7 pp** | 25.1 pp |
+| `boundary` (all expected-suspend) | 15 | false-advance on near-misses — **not a verdict metric** | 40.0 pp | — | 47.6 pp |
 
-*(Floors here are `b_min(α)/n` **truncated**, MDDs ceilinged — §3.4 Rule 3. `23.3` is not a typo for
-`23.4`: `7/30 = 23.333…` and the sentence the number carries is "differences below this cannot reach
-significance", which ceiling-rounding would make false. `17.5`, `15.0`, `20.0` and `40.0` are exact
-and unaffected.)*
+*(v1.6: the floor column was `17.5 / 23.3 / —` at α=0.025 in v1.2–v1.5 and is now `15.0 / 20.0 /
+40.0` at the unadjusted α — review M-ML-6. All three are exact `6/n`, so neither the truncation rule
+nor Rule 3a's bin-edge guard has anything to do here; `17.5` at α=0.025 *was* the cell where the
+guard mattered, and moving the floor to α=0.05 retired that hazard rather than the guard. MDDs are
+ceilinged, the floor truncated — §3.4 Rule 3.)*
 
 So: **the naive read "n=85 → ~9 pp" is wrong**, and the honest figures are now 21.9 / 28.7 pp
 rather than v1.1's 19.1 / 25.1 — the ~2.8–3.6 pp of resolving power that a second co-equal verdict
