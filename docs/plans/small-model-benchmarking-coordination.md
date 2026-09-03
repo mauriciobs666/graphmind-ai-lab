@@ -48,8 +48,10 @@ Stakeholder decisions, 2026-09-02:
 | U8a — Note: the α ruling, Rule 7 split by path, the unified principle | `data-scientist` | `a394671cfc28bef87` (resumed) | accepted | `docs/plans/small-model-benchmarking-ml.md` **v1.6** | teco-verified | 253k tok / 14 tools |
 | U8b — Plan sweep: `PackRef.contentHash` / Appendix A identity triple | `architect` | `a5ca583515c0979f1` (resumed) | accepted | `docs/plans/small-model-benchmarking.md` **v1.6** | teco-verified | 158k tok / 37 tools |
 | U8c — Code: B-ML-2, M-ML-6, m-ML-6, P2-1…P2-5 | `tdd-engineer` (fresh) | `accddcf5d6ef280aa` | accepted | commit `95b4c88` — 10 files, **314 tests**; 22 mutations, 1 survivor (equivalent by construction) | U9a + U9b → — | 285k tok / 95 tools |
-| U9a — Re-gate statistics (`## Pass 3`) + note v1.7 (3 routed defects) | `data-scientist` (fresh) | `ad7584d05e2136de4` | in-flight | `docs/reviews/small-model-benchmarking-ml.md` `## Pass 3` + `docs/plans/small-model-benchmarking-ml.md` v1.7 | — (is the gate) | — |
-| U9b — Re-gate engineering (`## Pass 3`) | `analyst` (fresh) | `a066343742ae42c4e` | in-flight | `docs/reviews/small-model-benchmarking-impl.md` `## Pass 3` | — (is the gate) | — |
+| U9a — Re-gate statistics (`## Pass 3`) + note v1.7 (3 routed defects) | `data-scientist` (fresh) | `ad7584d05e2136de4` | delivered | commit `89e11e1` — note **v1.7**; `## Pass 3` **needs changes**: 1 major (M-ML-7), 2 minors, 4 nits | — (is the gate) | 200k tok / 54 tools |
+| U9b — Re-gate engineering (`## Pass 3`) | `analyst` (fresh) | `a066343742ae42c4e` | delivered | commit `d4d847b` — `## Pass 3` **needs changes**: 1 blocker (P3-1), 6 majors, 5 minors, 3 nits | — (is the gate) | 217k tok / 70 tools |
+| U11 — Close both gates' Pass 3 findings (P3-1…P3-7, M-ML-7, m-ML-7, minors) | `tdd-engineer` (fresh) | `aeedc9f1724f1264c` | in-flight | `model-bench/**` | re-gate (fresh reviewers) → — | — |
+| U10 — Plan sweep (n-ML-7 + §5 stage-scoping, flagged 3×) | `architect` (fresh) | `ae512d667fe7f0c49` | in-flight | `docs/plans/small-model-benchmarking.md` v1.7 | teco-verified | — |
 | U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | queued (after the re-gates) | `docs/plans/small-model-benchmarking.md` v1.6 | teco-verified | — |
 | U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | queued (after U6a, to avoid a read-write race) | `docs/plans/small-model-benchmarking-ml.md` v1.6 | teco-verified | — |
 | U6b — Republish the `-ml` fixtures at 10 dp | `data-scientist` | `a394671cfc28bef87` (resumed) | accepted | `docs/plans/small-model-benchmarking-ml.md` **v1.5** — + Rule 7, floor rounding corrected | teco-verified | 218k tok / 8 tools |
@@ -583,3 +585,34 @@ re-drawn against U4's actual delivery before dispatch.
 - **Three note-side defects were routed to `data-scientist` rather than edited in place** by the
   implementer — correct ownership behaviour, and they are Part 1 of U9a rather than a separate unit,
   since the same agent must gate the code against whatever the note becomes.
+
+### Pass 3: both gates fail the build, and my parallel dispatch collided outside the repo
+
+- **Both gates returned `needs changes` independently, and they found the same major independently
+  too** — `_mdd_clause` asserting *"the observed X pp is below that"* without checking. Filed as
+  `M-ML-7` by statistics and `P3-2` by engineering, from different evidence (1,580 clause-printing
+  tables vs. 5,525 else-branch tables at two pack sizes). Independent agreement is stronger evidence
+  than either alone. I reproduced it myself before accepting: at n=20, b=13, c=5 the harness renders
+  *"resolves differences of >=36.7 pp with 80% power … ; the observed 40.0 pp is below that."*
+- **P3-1 is the first Pass-3 blocker and the worst defect this component has produced.** Two
+  defaults compose: `scoreable.get(metric, True)` reads a missing declaration as scoreable, and
+  `counts.get(metric, 0) > 0` reads missing data as a failed item — so an arm with **no data at
+  all** is scored as losing every item, rendering `+100.0 pp … p=0.002`, while §4.3's tally, whose
+  only job is to make dropped rows visible, prints `0 unscoreable in both`. Confirmed in the source.
+  **S2's scorers are what will emit those mappings**, so the fix is a contract, not a patch.
+- **Four of this component's defects now live in what the instrument *says*, not in what it
+  computes** (CI orientation, Holm printed-not-applied, the "best case" caveat, and now the MDD
+  clause) — plus `P3-3`'s *"widened by sqrt(DEFF)=1.00 for the declared clustering"* on the path
+  every comparison currently takes, and `P3-4`'s unlabelled `--negative-control` report. Every one
+  was found by **rendering output and reading it**, never by reading assertions.
+- **A scratchpad collision I caused.** The two parallel gates shared a session-scoped temp
+  directory, and one reviewer's mutation driver was **overwritten mid-pass by the other's file of
+  the same name**, so it ran the wrong mutation list under its own invocation. It caught this,
+  rebuilt a sandbox from `git archive 95b4c88`, and reproduced every survivor — but the recovery was
+  its doing, not my dispatch's. **My serialize-on-shared-file rule was scoped to repo paths;** the
+  sharing axis here was a temp path outside the tree, invisible to any diff-based check. Fix
+  applied to the fix-round brief: scratch files must carry a unique suffix and no agent may assume
+  a temp path is its own.
+- **A reviewer recorded that its own earlier premise was wrong** — Pass 2's P2-4 claimed three
+  redundant entries; only one was. That correction is now in the review rather than only in my
+  ledger, which is where it belongs.
