@@ -1110,3 +1110,57 @@ dated measurement* with the 3.625 s counter-example beside it, and test 15's *"o
 became a magnitude assertion — which, as the architect put it, would have been false for the next
 model. My own measurement, correctly demoted from a constant to an observation, two documents from
 where I first stated it.
+
+
+## PAUSED — 2026-09-03, at `4d99504`
+
+Stakeholder called a pause. **Everything I verified is committed; nothing of mine is outstanding.**
+This section is the resume point — read it before the ledger, then reconcile the ledger against
+`git log` per step 1.
+
+### State of the tree at the pause
+
+- **Committed and verified:** S1 is green at `5878014` — **389 tests**, 389 collected equals 389 run,
+  nothing skipped or xfailed, `ruff` clean, 48 mutations all killed. Plan at **v1.9** (`81a3ef7`),
+  method note at **v1.10** (`69256a2`), both gates' Pass 4 reviews committed.
+- **Uncommitted, and deliberately so:** `docs/plans/small-model-benchmarking-ml.md` shows **v1.11**
+  with ~285 added lines. That is **U18 mid-write**, not my work left behind — the agent had not
+  returned when the pause landed, so nothing in it has been declared finished by its author or
+  verified by me. **Do not commit it on sight.** Either wait for U18's result, or, if the agent is
+  gone, treat the file as a state-recovery input: read it, verify its claims independently, and only
+  then commit it with an honest message saying it was recovered from disk rather than delivered.
+- **Not mine, never touch:** `falkor-chat/server/**` belongs to a second, unrelated session that has
+  been committing to this repo throughout (`salesperson-ui`). Two of its commits are interleaved with
+  mine in `git log`; that is expected, not a problem to clean up.
+
+### In flight when the pause landed
+
+| Unit | Agent id | What it owes |
+|---|---|---|
+| **U18** | `ae4bd1d99239907a6` | Ruling on §3.4 Rule 4's unimplemented closed-form half: mandatory or not; what replaces P3-5's seed contract if so; whether the bound-by-bound reading of *"the wider of"* is right; whether any published string changes. Note v1.11 is its working state. |
+| **U19** | `a84c263e5998ba953` | `## Pass 4` of the plan review (`docs/reviews/small-model-benchmarking.md`), re-gating plan v1.9. Must state explicitly **whether S2 can be dispatched from this plan**, and must rule on whether G3-6's pooled-metric residual is *blocked on unbuilt work* or *deferred by choice*. |
+
+Both are addressable by `SendMessage` at those ids; a completion notification for either may still
+arrive. **Neither has been verified, so neither may be reported as done.**
+
+### Queued, not dispatched
+
+- **U20** — the residency element-shape assertion. Plan v1.9 created this as a **new S1
+  done-condition** (S1 DC-1) and it is specified but unimplemented: `tests/conftest.py:40` still
+  declares `{"modelKey": …, "sizeBytes": …}` against §3.4.4a's `{id, state}`, and `REQUIRED_PRESENT`
+  never checks element shape. I confirmed this directly.
+- **The Rule 4 closed-form implementation**, if U18 rules it mandatory. Its cost is entirely in
+  rewriting P3-5's delivered seed contract — a public signature S2 wires against.
+
+### Where the work resumes
+
+**S2 is not dispatched and must not be** until U19 says the plan can carry it. The stakeholder's
+scope boundary for this pass is unchanged: **through S3, the first real end-to-end run**, then check
+back. S3's external prerequisite is met — LM Studio is reachable, auto-load is on, and the fingerprint
+source question that blocked it is settled at plan v1.9.
+
+**The standing principle that governs whatever comes next:** defects are not carried into later
+stages. *Approve with suggestions, residue rides as follow-ups* is not an available disposition —
+severity ranks order within a fix unit, never whether a finding is fixed. A gate returning a residual
+must be asked which kind it is, because "blocked on unbuilt work" and "deferred by choice" are
+treated differently and only the first is acceptable.
