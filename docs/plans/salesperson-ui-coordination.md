@@ -124,8 +124,10 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S6c** — S6+S6b close-out in `falkor-chat/docs/HISTORY.md` (S3's "Review close-out" precedent) | `coder` | `a5db169a0966bad59` (resumed — **holds the observed figures**; a fresh agent would reconstruct them, which is the fabrication risk) | **accepted — committed `62aa638`**, +74/-0, one file; storefront files verified untouched and no suite run, so S7's DB window was never contended. **The resume-for-figures call paid off exactly as intended**: it attributed the three *pre-fix survival* counts to the review's Appendix J rather than claiming them, and **left pass counts out** where it only had them against a different test-count denominator — declining to reconstruct rather than producing a plausible total | `falkor-chat/docs/HISTORY.md` | — | 235k tok / 5 tools |
 | **S7** — Storefront state, reset, catalog, images | `coder` (**fresh** — see note) | `a26100cb193d95085` | delivered — **committed `dd78e70`**, suite **2473** teco-verified solo; +465/-9 and +950, two files. **13 mutations killed, 4 benign refactors kept green** (S6b's false-positive discipline, adopted unprompted). **Found a delivered-code gap that blocks two of its own deliverables** — `services.filter_products` projects no `productId` (teco confirmed at `repository.py:2762`) — and shipped a documented `1+n` workaround rather than editing a delivered step's file. **Proved a plan statement false**: the post-reset profile re-write `MERGE`s the `Customer` back, so §4.8's delete inventory is true of the delete and false of the end state. **Answered the `lookup` question: no** | `storefront.py`, `test_storefront.py` | `analyst` Pass 7 → — | 227k tok / 81 tools |
 | **S7 gate** — Pass 7 on the largest impl diff + **three rulings** teco will not self-decide | `analyst` | `a24e4bcbd0b9a1f8e` (resumed — reviewed S6 in this same module) | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, **0 major**, 3 minor, 1 nit) — committed `e9b0363`. **Dissolved Ruling 1's blocker instead of weighing it** (below). **S7-1: proved the quiesce tests don't assert the wait** by running the worker-finishes-first ordering — all four stayed green; safety was timing, not assertion. Verified the `lookup` grep and found the **sharper** reason not to delete (below) | `docs/reviews/salesperson-ui-impl.md` `## Pass 7` + Appendix K | — | 253k tok / 36 tools |
-| **S7b** — close Pass 7: assert the wait (S7-1), pin the two error-path evictions (S7-2), stop a broken deadline hanging (S7-3) | `coder` | `a26100cb193d95085` (resumed — its own findings, same two files) | in-flight (**holds the live DB**) | `storefront.py`, `test_storefront.py` | `analyst` → — | — |
-| **U28** — Plan v1.18: the four **proved** corrections (Rulings 1-3 + S7's `storefront_dir` wiring) | `architect` (**fresh** — the v1.17 architect ended at 102 tool uses) | `a29f3ebb7c1908730` | in-flight | `docs/plans/salesperson-ui.md` **v1.18** | **none — plan gates stopped** | — |
+| **S7b** — close Pass 7: assert the wait (S7-1), pin the two error-path evictions (S7-2), stop a broken deadline hanging (S7-3) | `coder` | `a26100cb193d95085` (resumed — its own findings, same two files) | delivered — **committed `d9d2f2b`**, suite **2476** teco-verified solo; `storefront.py` **byte-identical** to `dd78e70`, so all three findings were about what the tests assert, not code defects. **Overrode the reviewer's suggested fix on two of three, with argument** — and on S7-3 **showed the reviewer's own fix does not catch the reviewer's own mutant** (a call that never returns is never followed by its assertion) | `test_storefront.py` only | `analyst` Pass 8 → — | 267k tok / 23 tools |
+| **S7b gate** — do the two overrides deliver what the findings asked, or only look more rigorous? | `analyst` (**fresh** — the Pass 7 reviewer ended at 253k tok; this check is self-contained) | `a893ac5083e24f334` | in-flight (**holds the live DB**) | `docs/reviews/salesperson-ui-impl.md` `## Pass 8` | — | — |
+| **U28** — Plan v1.18: the four **proved** corrections (Rulings 1-3 + S7's `storefront_dir` wiring) | `architect` (**fresh** — the v1.17 architect ended at 102 tool uses) | `a29f3ebb7c1908730` | **accepted — committed `039cae3`** (50/18, one file); all seven step-row hashes **teco-re-derived independently** and matching. **Improved two of teco's four framings** (below) and **closed a pre-existing §5.0 map gap** — S9 listed no test file at all, despite every S9 done-condition being a test. **Refused a coordination decision rather than taking it** — see the split, next row | `docs/plans/salesperson-ui.md` **v1.18** | **none — plan gates stopped** | 147k tok / 62 tools |
+| **U29** — Plan v1.19: **split Ruling 1 out of S8** into its own step ahead of it; carry S9's cache decision in the S9 row | `architect` | `a29f3ebb7c1908730` (resumed) | in-flight | `docs/plans/salesperson-ui.md` **v1.19** | **none — plan gates stopped** | — |
 | **S3** — Two wiring switches: responder kill switch + §4.9's `dev_surface` un-mounting | `tdd-engineer` | `adebab5c261838206` | delivered — suite **2391** teco-verified. **Caught the `_IncludedRouter` trap while writing the test**: FastAPI 0.139 keeps an included router as ONE opaque entry, so the naive `app.routes` read sees 7 of 37 paths and the obvious assertion passes *while the router is mounted*. Added a **positive control** so the empty-table assertion can't pass vacuously. 7 mutations, 7 killed | `config.py`, `app.py`, `test_app.py`, `SERVER.md`, `HISTORY.md` | `analyst` Pass 5 → — | 175k tok / 49 tools |
 | **S3 gate** — Pass 5 on the impl review | `analyst` (**fresh**) | `a24e4bcbd0b9a1f8e` | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers). **Found the 7th instance, *pre-planted***: `_route_paths` is prefix-blind, harmless in S3, but S8 is told to reuse it for a route table whose whole content **is** a prefix. Proved S3's vacuity mode empirically (renamed the traversal attr → assertion still passed, control failed) | `docs/reviews/salesperson-ui-impl.md` `## Pass 5` + Appendix I | — | 109k tok / 45 tools |
 | **S3b** — P5-1 prefix threading, P5-2 raise-don't-skip, 2 nits | `tdd-engineer` | `adebab5c261838206` (resumed) | **accepted — committed `673342b`**. Suite **2394** + prefix fix teco-verified on an S8-shaped 2-level app (`/shop/api/join`). **Went past the review**: the gate called P5-4 unreachable, its own mutation confirmed the fix was *unpinned*, so it wrote the test anyway — 3 distinct prefix mutants, "three independent ways to be wrong" | `app.py`, `config.py`, `test_app.py`, `SERVER.md`, `HISTORY.md` | `analyst` Pass 5 → **approve w/ suggestions, closed** | 186k tok / 15 tools |
@@ -1024,6 +1026,41 @@ workspace, and pinning it would make it wrong for its purpose.
 §7's `Agent`-owned orphan residual is described more broadly than it is. Pass 3 established it only
 arises when the thread died in an *earlier* reset. Fold into the next natural touch of this document
 rather than a dedicated unit. Owner: `graph-dba`.
+
+## The Ruling 1 split (teco, 2026-09-03) — one gate should judge one thing
+
+The architect scoped Ruling 1's fix into S8 as instructed, then **declined to restructure the plan
+around it** and handed the decision back, correctly: creating a step is a coordination call.
+
+**Taken: split it into its own step, sequenced ahead of S8.** The argument is not "S8 is big" — it is
+that **Pass 8's stopping rule names S8's gate as the specific place where review resumes**, because
+that gate proves the `{handlers} × {routes}` assertion actually fails when a handler has no row.
+That gate is the payoff for closing eight plan passes without a Pass 9. Handing it an unrelated
+catalog refactor — five delivered artifacts, two of them previously gated — dilutes precisely the
+review that trade bought.
+
+Scope of the new step: `repository.filter_products`'s projection + row mapping, `_catalog_rows`'s
+simplification (dropping the second read **and** the `if product is None: continue` silent-drop
+branch), `QUERIES.md` §15.2's `RETURN` line, and one tripwire test, with a done-condition that fails
+if the projection lands without the simplification, so the two cannot drift apart.
+
+## Two framings the architect corrected, both better than the adjudication
+
+**1. `storefront_dir`.** Teco wrote *"or every `imageUrl` is `null`"*. That holds **only when
+`FALKORCHAT_STOREFRONT_DIR` is unset** — and S11 sets it, so in the real demo deployment a
+`create_app` that forgets to forward still works by fallback. The failure that actually bites is the
+**mismatch**: `/shop` serving tree A while the manifest is built from tree B, which yields *wrong*
+URLs rather than null ones and is **invisible to the obvious test** (one tmp dir, config unset). The
+done-condition is now written against a second, also-populated directory.
+
+**2. Ruling 1's cost.** Teco called it "the one with a real trade-off", meaning technical risk. The
+architect relocated the cost: the technical call is right, but "reach into a delivered file" is five
+delivered artifacts landing on the largest step in the plan. That reframing is what produced the
+split above.
+
+**The pattern across both:** teco stated a failure mode in the form that made the point vividly, and
+in each case the vivid form was the *less likely* failure. An implementer or reviewer working from
+the vivid form writes the test that catches it — and misses the real one.
 
 ## Ruling 1 was dissolved, not weighed — and that is the reusable lesson
 
