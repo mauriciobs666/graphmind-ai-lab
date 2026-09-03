@@ -40,7 +40,7 @@ Stakeholder decisions, 2026-09-02:
 | U3e — Close N-1, N-2, N-4 in the plan | `architect` | `a3e258f27b83e764d` (resumed) | accepted | `docs/plans/small-model-benchmarking.md` **v1.4** | teco-verified | 254k tok / 12 tools cumulative |
 | U3f — Close N-3 in the note (`H` definition regression) | `data-scientist` | `a394671cfc28bef87` (resumed) | accepted | `docs/plans/small-model-benchmarking-ml.md` **v1.4** | teco-verified | 194k tok / 5 tools cumulative |
 | U4 — S1 core (fingerprint, results, stats, report; no model calls) | `tdd-engineer` | `ac6ef3c82b078903a` | delivered | commit `ab91419` — 8 modules + 6 test files, **233 tests**, offline | U5a + U5b → — | 258k tok / 70 tools |
-| U5a — Gate the S1 diff (engineering) | `analyst` | `aa9d6d24849f63006` | in-flight | `docs/reviews/small-model-benchmarking-impl.md` | — (is the gate) | — |
+| U5a — Gate the S1 diff (engineering) | `analyst` | `aa9d6d24849f63006` | delivered | `docs/reviews/small-model-benchmarking-impl.md` — **needs changes**: 1 blocker, 6 majors, 7 minors, 4 nits | — (is the gate) | 213k tok / 47 tools |
 | U5b — Methodology review of `stats.py` | `data-scientist` | `a7fbf4d59bfa1d0da` | in-flight | `docs/reviews/small-model-benchmarking-ml.md` | — (is the gate) | — |
 | U5 — S2 packs, LM Studio adapter, host info, convo, tooling, runner | `coder` | — | queued (after U4) | `modelbench/{packs,lmstudio,hostinfo,convo,tooling,runner}.py` + tests 7b–12 | `analyst` → — | — |
 | U6 — S3 `embedder` pack + `refresh_golden.py`, first live run | `coder` | — | queued (after U5) | `packs/embedder/**`, `scripts/refresh_golden.py`, one stored `RunResult` | `analyst` → — | — |
@@ -298,3 +298,24 @@ re-drawn against U4's actual delivery before dispatch.
   found (an unassertable tolerance in the note, and two stale enumerations in the plan) all route to
   documents the two reviewers are **reading right now**. Editing under a reader is the read-write
   race version of the mistake that produced the v1.2 divergence.
+
+- **2026-09-03 — U5a delivered: `needs changes`.** The reviewer ran **29 source mutations** of its
+  own against a scratch copy (working tree untouched): **19 killed, 10 survived** — against the
+  implementer's own 11. Four of the six majors *are* those surviving mutations, i.e. tests that pass
+  against a broken implementation of a stated guarantee. **The lesson for briefs: asking an
+  implementer to mutation-test its own work is worth doing and is not a substitute for a reviewer
+  doing it independently — the implementer mutates what it was thinking about.**
+- **Blocker B-1 is the CI-orientation defect's twin, in a different metric.** Holm–Bonferroni is
+  *printed* but never *applied*: `report.py` calls `verdict()` without the `alpha_step` parameter
+  `stats.py` built for exactly that purpose, so every metric is decided at plain Bonferroni α/k.
+  Reproduced at k=2, the report declares a metric "not distinguishable … does not reach alpha=0.025
+  (p=0.031)" and **two lines below** prints its threshold as `0.0500`. Conservative in direction, so
+  no false positive — but self-contradictory rendered output, which is the same defect class the
+  implementer had already found and fixed once for the CI orientation. **Twice now, in one stage, a
+  defect has lived in what the instrument *says* rather than in what it computes.**
+- **All four of the implementer's judgement calls were independently confirmed**, including that
+  `packs.py` contains no loader (verified line by line: no `hashlib`, no `ast`/`importlib`, no
+  row-count check) and that the two stale enumerations are **the documents'** defects, not the
+  code's. **DC-5(c) was judged the best-built test in the diff:** mutating the pairing index to
+  `pairingKey[-1]` still raises, so assertion (2) stays green and assertion (1) is the only thing
+  that catches it — the three-assertion structure was load-bearing exactly as specified.
