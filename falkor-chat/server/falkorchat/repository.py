@@ -2750,6 +2750,18 @@ class Repository:
         scan anchor (`Product.price` is, via the literal-sentinel bounds
         above), so swapping which property the equality residual filter runs
         against doesn't change what the planner anchors on.
+
+        `salesperson-ui` S7c: now also returns `productId` — the **identical
+        additive change K-053 already made to `lookup_product`** above. The
+        `Product` node always carried the property, it just wasn't selected;
+        every caller keys on the row by name, so widening the projection
+        breaks none of them. What it removes is `Storefront._catalog_rows`'s `1 + n`
+        (a second `lookup_product` point read per row, purely to recover the
+        id) and the silent-drop branch that went with it
+        (`docs/plans/salesperson-ui.md` §5.1 S7c). `tools.FilterProductsTool`
+        returns these rows verbatim to the model, so the slug now reaches the
+        LLM's context — deliberate, and consistent with
+        `LookupProductFactTool`, which has done exactly that since K-053.
         """
         category_normalized = (
             normalize_name(category) if category is not None else None
@@ -2759,7 +2771,8 @@ class Repository:
             "WHERE p.categoryNormalized = coalesce($categoryNormalized, p.categoryNormalized) "
             "  AND p.price >= coalesce($minPrice, -1.0) "
             "  AND p.price <= coalesce($maxPrice, 1000000000.0) "
-            "RETURN p.name AS name, p.category AS category, p.price AS price "
+            "RETURN p.productId AS productId, p.name AS name, "
+            "       p.category AS category, p.price AS price "
             "ORDER BY p.price ASC LIMIT $limit",
             {
                 "categoryNormalized": category_normalized, "minPrice": min_price,
@@ -2767,7 +2780,10 @@ class Repository:
             },
         )
         return [
-            {"name": row[0], "category": row[1], "price": row[2]}
+            {
+                "productId": row[0], "name": row[1],
+                "category": row[2], "price": row[3],
+            }
             for row in res.result_set
         ]
 

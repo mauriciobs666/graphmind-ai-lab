@@ -696,59 +696,42 @@ class Storefront:
         """The `CallContext` the catalog reads take.
 
         The catalog is **global `reference` data** — `repository.filter_products`
-        and `repository.lookup_product` take no `ws` and no customer at all, and
-        `services` accepts a `ctx` for interface parity without reading either
-        field. Naming the demo `Agent` as the actor keeps that honest: no
-        participant identity is invented for a read that has nothing to do with
-        one, and no route can leak one participant's scope into another's
-        catalog.
+        takes no `ws` and no customer at all, and `services` accepts a `ctx` for
+        interface parity without reading either field. Naming the demo `Agent`
+        as the actor keeps that honest: no participant identity is invented for
+        a read that has nothing to do with one, and no route can leak one
+        participant's scope into another's catalog.
         """
         return CallContext(ws=self._ws, actor=self._agent_id)
 
     def _catalog_rows(self) -> list[dict[str, Any]]:
-        """The whole catalog as `{productId, name, category, price}` rows.
+        """The whole catalog as `{productId, name, category, price}` rows —
+        **one read**.
 
-        **Two calls, and the second one is a plan defect worked around here
-        rather than fixed.** `services.filter_products` is the delivered catalog
-        list (S2/S4, `docs/QUERIES.md` §15.2) and its projection is
-        `{name, category, price}` — **it does not return `productId`**, while
-        §5.2's `GET /shop/api/catalog` contract and §4.7's whole image design are
-        keyed on exactly that field. So each row's id is resolved with a second,
-        index-anchored point read (`services.lookup_product`, which *does*
-        project `productId`). The alternatives were both worse from inside S7's
-        two files: re-deriving the slug from the name would duplicate
-        `scripts/seed_catalog.sh`'s `_slugify` in the serving path and fail
-        silently the day either copy changed, and widening
-        `repository.filter_products`'s projection edits a delivered step's file
-        **and** changes what `tools.FilterProductsTool` hands the LLM. The cost
-        is `1 + n` indexed reads of a static, 15-row global catalog on a route
-        the client fetches once per session; the fix is one line in
-        `repository.filter_products` if that is ever judged worth the two-file
-        reach.
+        `services.filter_products` (S2/S4, `docs/QUERIES.md` §15.2) projects
+        exactly the row §5.2's `GET /shop/api/catalog` contract and §4.7's
+        image manifest are keyed on, so this method is the pass-through it
+        looks like.
+
+        **S7 shipped a `1 + n` here and S7c removed it.** At S7 the delivered
+        projection was `{name, category, price}` with no `productId`, so each
+        row's id came from a second, index-anchored `services.lookup_product`
+        point read, and a row whose name no longer resolved was silently
+        dropped — the catalog route's only unbounded failure path. S7c widened
+        `repository.filter_products`'s projection instead (the identical
+        additive change K-053 made to `lookup_product`), which deletes both the
+        second read and the silent drop. The two halves are bound by one test
+        — `test_the_catalog_is_read_once_not_once_per_product`, which patches
+        `services.lookup_product` to raise — so neither can be reverted alone
+        (`docs/plans/salesperson-ui.md` §5.1 S7c).
 
         `limit=CATALOG_LIMIT` is the **explicit** bound: the delivered default is
         `20`, right for 15 products and silently truncating at 21.
-
-        A row whose name no longer resolves is dropped — reachable only by a
-        catalog re-seed landing between the two reads, which is why it is
-        silent rather than raised (the same posture `services._priced_cart_lines`
-        takes for a cart line whose product vanished).
         """
-        ctx = self._catalog_ctx
-        rows = self._services.filter_products(
-            ctx, category=None, min_price=None, max_price=None,
+        return self._services.filter_products(
+            self._catalog_ctx, category=None, min_price=None, max_price=None,
             limit=CATALOG_LIMIT,
         )
-        resolved: list[dict[str, Any]] = []
-        for row in rows:
-            product = self._services.lookup_product(ctx, name=row["name"])
-            if product is None:
-                continue
-            resolved.append({
-                "productId": product["productId"], "name": row["name"],
-                "category": row["category"], "price": row["price"],
-            })
-        return resolved
 
     def build_image_manifest(self) -> dict[str, str]:
         """`{productId: "/shop/products/<productId>.<ext>"}` from the **served**

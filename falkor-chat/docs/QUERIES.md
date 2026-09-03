@@ -2593,7 +2593,8 @@ MATCH (p:Product)
 WHERE p.categoryNormalized = coalesce($categoryNormalized, p.categoryNormalized)
   AND p.price >= coalesce($minPrice, -1.0)
   AND p.price <= coalesce($maxPrice, 1000000000.0)
-RETURN p.name AS name, p.category AS category, p.price AS price
+RETURN p.productId AS productId, p.name AS name,
+       p.category AS category, p.price AS price
 ORDER BY p.price ASC
 LIMIT $limit
 ```
@@ -2655,6 +2656,19 @@ construction and stays consistent with the rest of this file. Live-`GRAPH.PROFIL
 the change: every filter combination, including a differently-cased `category` argument, still
 anchors on `Node By Index Scan | (p:Product)` via `Product.price` — the regression this section
 already documents once was not reintroduced.
+
+**`productId` in the projection (`salesperson-ui` S7c, 2026-09-03).** The `RETURN` above
+originally projected `{name, category, price}` only. `Repository.lookup_product` had already
+widened the same way at K-053 (it selects `p.productId` for `services.add_cart_item`); this is the
+identical additive change on the list side — the `Product` node always carried the property, it
+just wasn't selected, and the scan anchor (`Product.price`) is untouched, so none of the
+`GRAPH.PROFILE` findings above change. What it buys: the storefront catalog route
+(`docs/plans/salesperson-ui.md` §5.2 `GET /shop/api/catalog`, §4.7's image manifest) is keyed on
+`productId`, and without it `Storefront._catalog_rows` had to resolve each listed row's id with a
+second `lookup_product` point read — a `1 + n` plus a silent-drop branch for a row that failed to
+re-resolve, both deleted by this projection. `FilterProductsTool` returns these rows verbatim to
+the model, so the slug now reaches the LLM's context: deliberate, and consistent with
+`LookupProductFactTool`, which has returned it verbatim since K-053.
 
 **Fully implemented (K-052 M6, plan §4 steps 3-9):** `Repository.lookup_product`/
 `filter_products`, `Services.lookup_product`/`filter_products`,

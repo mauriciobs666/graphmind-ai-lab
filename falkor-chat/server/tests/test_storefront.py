@@ -994,6 +994,59 @@ def test_list_catalog_returns_all_fifteen_rows(stocked, conn):
     }
 
 
+def test_the_catalog_is_read_once_not_once_per_product(stocked, conn, monkeypatch):
+    """S7c's binding test: the `productId` projection and the removal of S7's
+    `1 + n` workaround cannot ship apart (`docs/plans/salesperson-ui.md` §5.1
+    S7c).
+
+    S7 listed the catalog with `services.filter_products` — which projected no
+    `productId` — and recovered each row's id with a second
+    `services.lookup_product` point read, dropping any row that failed to
+    re-resolve. S7c widened the projection instead. Patching
+    `lookup_product` to raise makes the two halves inseparable in one
+    assertion:
+
+    * revert the projection and this reddens with `KeyError: 'productId'`, in
+      `list_catalog`'s `manifest.get(row["productId"])`;
+    * revert only the projection's *consumer* — put the second read back —
+      and it reddens with the `_CatalogSecondRead` below.
+
+    The catalog is 15 rows because that is the demo's real size, and one of
+    them (`opaque-sku-42`) carries a `productId` that is **not** the slug of
+    its name. `seed_catalog.sh` happens to slugify names today, so a
+    `_catalog_rows` that re-derived the id from `row["name"]` — the
+    name-slugify alternative S7's docstring weighed and rejected — would
+    satisfy both a key-presence check and a `widget-{i:03d}` pattern check
+    against the ordinary fixture. It cannot satisfy this one: `productId` is
+    an opaque key that only the projection can supply.
+    """
+
+    class _CatalogSecondRead(Exception):
+        """Raised if the catalog route resolves ids one product at a time."""
+
+    def _boom(*args, **kwargs):
+        raise _CatalogSecondRead(
+            "list_catalog must not call services.lookup_product per row"
+        )
+
+    seeded = _catalog_rows(15)
+    seeded[6] = {**seeded[6], "productId": "opaque-sku-42"}
+    _seed_catalog(conn, seeded)
+    monkeypatch.setattr(stocked._services, "lookup_product", _boom)
+
+    rows = stocked.list_catalog()
+
+    assert [row["productId"] for row in rows] == [
+        product["productId"] for product in seeded
+    ]
+    assert rows[6]["productId"] == "opaque-sku-42"
+    assert rows[6]["name"] == "Widget 007"
+    assert all(
+        set(row) == {"productId", "name", "category", "price", "imageUrl"}
+        for row in rows
+    )
+
+
 def test_list_catalog_carries_an_explicit_bound_past_the_delivered_default(
     stocked, conn
 ):

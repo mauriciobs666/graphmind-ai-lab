@@ -2916,6 +2916,37 @@ def test_filter_products_unfiltered_lists_whole_catalog_price_ascending(conn, wf
     ]
 
 
+def test_filter_products_projects_productid_alongside_name_category_price(
+    conn, wf_repo
+):
+    """`salesperson-ui` S7c: the row is exactly `{productId, name, category,
+    price}` — the same additive widening K-053 made to `lookup_product`.
+
+    Asserted as a **key set on every row**, not just a lookup of the new field:
+    a projection that lost `name`/`category`/`price` while gaining `productId`
+    would satisfy a `"productId" in row` check and break every existing caller.
+    The storefront catalog route (`docs/plans/salesperson-ui.md` §5.2, §4.7's
+    image manifest) is keyed on `productId`, and `FilterProductsTool` hands
+    these rows to the model verbatim, so the shape is a contract on both sides.
+    """
+    _seed_products(conn)
+
+    rows = wf_repo.filter_products(
+        category=None, min_price=None, max_price=None, limit=20,
+    )
+
+    assert all(
+        set(row) == {"productId", "name", "category", "price"} for row in rows
+    )
+    assert rows[0] == {
+        "productId": "prod1", "name": "Wireless Mouse",
+        "category": "Accessories", "price": 25.0,
+    }
+    assert [r["productId"] for r in rows] == [
+        "prod1", "prod4", "prod2", "prod5", "prod3",
+    ]
+
+
 def test_filter_products_category_only(conn, wf_repo):
     _seed_products(conn)
 
