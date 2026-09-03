@@ -129,7 +129,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S7b2** — close Pass 8: stamp `started_at` on the worker thread (S8-1) + two nits | `coder` (**fresh** — the S7b author ended at 267k tok; the review fully specifies the work) | `a1af13ddaad935f25` | delivered — **committed `6fbe541`**, suite **2476** (baseline exactly) teco-verified solo; `storefront.py` byte-identical; 11 executable lines. **Reproduced the reviewer's false-green at HEAD, then killed it.** The adverse-ordering margin **grew** 54 µs → 142 µs, so the fix strengthens detection rather than merely not weakening it. **Rejected the suggested `expect_error` kwarg** for the literal `pytest.raises` idiom, deleting two bookkeeping asserts and a dead third notion of elapsed time. **Refused a widening that looked free** — a blind-sleep mutant showed `seconds=10` would turn the idle test green, trading a live detection for a flake that has never fired. **Sized a margin its own change created** (max thread-start skew 0.1446 ms vs 150 ms) | `test_storefront.py` only | **folded into the S7c gate** (same file; see note) | 119k tok / 38 tools |
 | **S7c** — Ruling 1's catalog projection + removal of S7's `1+n` workaround | `coder` (**fresh**) | `a0633c22b2d2eaba5` | delivered — **committed `f5291e6`**, suite **2478** teco-verified solo; five files, both test files **pure insertions**, S7's catalog tests green **unedited** as the plan predicted. **Caught a false negative in its own first-draft tripwire** — the fixture slugs were exactly `slugify(name)`, so a `_catalog_rows` fabricating ids would have passed; one row is now `opaque-sku-42`/`Widget 007`. **Found the query gate is structurally blind** (finding below) and **sharpened the plan's counterweight at the mechanism level**: no test in this repo *can* observe what `FilterProductsTool` hands the model | `repository.py`, `storefront.py`, `test_repository.py`, `test_storefront.py`, `QUERIES.md` §15.2 | `analyst` → — | 139k tok / 65 tools |
 | **S7c2** — the stale query-gate constant + §15.1's pre-existing drift (**teco-authorized scope widening**) | `coder` | `a0633c22b2d2eaba5` (resumed — it measured both fixes) | **accepted — committed `8aaeca3`**. **Refused to treat 408/408 as the evidence** and proved fidelity by AST instead — extracting the code's real query text, so the code side is the string the engine receives rather than a re-typing. **Corrected teco's overstatement of the defect** (the script self-checks its own header; it is blind across the code boundary only) and **sized the whole-document audit**: 109 blocks, 66 matching, 43 leads. **Pushed back on teco's scope line and was right** → S7c3 | `scripts/test_queries.sh`, `QUERIES.md` §15.1 | folded into the S7c gate | 164k tok / 16 tools |
-| **S7c3** — `$LOOKUP`'s two coupled constants: the other half of the same K-053 instance | `coder` | `a0633c22b2d2eaba5` (resumed) | in-flight | `scripts/test_queries.sh` only | folded into the S7c gate | — |
+| **S7c3** — `$LOOKUP`'s two coupled constants: the other half of the same K-053 instance | `coder` | `a0633c22b2d2eaba5` (resumed) | **accepted — committed `83af07c`**, two lines. All four §15 cells now agree. **Delivered the follow-up-16 design** (fence marker, three rules, both alternatives rejected with reasons) and **the comparator in prose rather than as a file** — teco rebuilt it from that description and reproduced both `MATCH` results, which is the test of whether a description is durable | `scripts/test_queries.sh` only | folded into the S7c gate | 173k tok / 7 tools |
 | **U28** — Plan v1.18: the four **proved** corrections (Rulings 1-3 + S7's `storefront_dir` wiring) | `architect` (**fresh** — the v1.17 architect ended at 102 tool uses) | `a29f3ebb7c1908730` | **accepted — committed `039cae3`** (50/18, one file); all seven step-row hashes **teco-re-derived independently** and matching. **Improved two of teco's four framings** (below) and **closed a pre-existing §5.0 map gap** — S9 listed no test file at all, despite every S9 done-condition being a test. **Refused a coordination decision rather than taking it** — see the split, next row | `docs/plans/salesperson-ui.md` **v1.18** | **none — plan gates stopped** | 147k tok / 62 tools |
 | **U29** — Plan v1.19: **split Ruling 1 out of S8** into `S7c` ahead of it; carry S9's cache decision in the S9 row | `architect` | `a29f3ebb7c1908730` (resumed ×2) | **accepted — committed `732f5e0`** (27/19). **Decided S9's cache question rather than parking it** — remove `_records` whole, with S7-2 banked as *dissolved rather than fixed* and S8's now-vacuous tripwire recorded as the **correct** end state. **Self-reported a miss in its own v1.18 delivery** (§9 never received v1.18's map changes). Renamed off the `S7b` collision teco caught, and **argued for keeping two mentions as tombstones** rather than a clean grep — the sequence gap is otherwise unexplained plan-side, and closing it would recreate the collision | `docs/plans/salesperson-ui.md` **v1.19**; S7c `2f03c064`, S8/S9 unmoved by the rename | **none — plan gates stopped** | 181k tok / 3 tools (rename) |
 | **S7c** — Ruling 1's catalog projection + removal of S7's `1+n` workaround | `coder` | — | queued (**serialized behind the S7b gate — shared live DB**; no file in common with S8, so they *could* parallelize if the DB allowed) | `repository.py`, `storefront.py`, `test_repository.py`, `test_storefront.py`, `QUERIES.md` §15.2 | `analyst` → — | — |
@@ -1069,8 +1069,43 @@ question is its **false-positive discipline** (allowlist? fence marker? naming c
 a gate that cries wolf on forty legitimate blocks is abandoned in a week, which is precisely how this
 one came to be trusted for something it does not do.
 
+**The design answer, worked out and recorded here so the follow-up starts from it rather than from
+scratch.** The implementer's judgment, and teco's, is that the mechanism is a **marker in the fence**
+— ` ```cypher verbatim=Repository.filter_products ` — with three rules:
+
+1. every **marked** block is compared against that symbol's literal and fails on mismatch;
+2. every **marked** block fails if the symbol does not exist (this is what catches a **rename** — the
+   failure a doc gate most needs and the one a naming convention silently misses);
+3. **unmarked** blocks are *counted and reported, never failed*.
+
+Rule 3 is the false-positive discipline, and it is the whole design. A legitimately illustrative
+block costs nothing and never trains anyone to ignore output, while the unmarked count is a visible,
+monotonically-improving figure (**43 → 0**) that makes the audit incremental work anyone can pick up
+rather than one large triage nobody schedules. The claim lives *inside* the block it governs, one
+line above the text — impossible to change the query without seeing it.
+
+Both alternatives were considered and rejected with reasons worth keeping: an **allowlist** puts the
+claim in a fourth artifact that can itself drift and **fails open** (a new section with no entry is
+silently unchecked, so coverage erodes invisibly — the same defect class being fixed); a **naming
+convention** is nearly free and already roughly honoured, but it is *inference rather than a claim*,
+and it breaks silently on a section documenting two methods, on a query held in a module constant,
+and on anything composed in `services.py`.
+
+**The caveat that must ship with it, so the gate is not oversold the way 408/408 was:** this can only
+ever check **verbatim transcriptions**. Much of `QUERIES.md`'s value is the prose *around* the blocks
+— §15.2's `GRAPH.PROFILE` deviation note is the clearest case — and nothing mechanical will notice
+when that reasoning goes stale.
+
+**The pairing rule is the part that does not generalize**, and knowing that is what makes the sizing
+number honest: the sweep that produced "43" asked only *is this block's text in the set of all query
+literals?* — set membership, no pairing — so it can say a block has no counterpart but not which
+method it was meant to transcribe, and therefore cannot separate real drift from a block that never
+claimed to be a transcription. The marker is precisely the missing pairing, written down.
+
 Discovered by the S7c implementer, which also filed it to `kaizen_team` (`entryId 16ab10b7-…`)
-because the property is durable and written down nowhere.
+because the property is durable and written down nowhere. The comparator itself lived only in `/tmp`;
+teco asked for it **in prose rather than as a file**, and then rebuilt it from that description and
+reproduced both `MATCH` results — so the description, not the script, is the durable artifact.
 
 ## Two scope calls, opposite directions, same reasoning (teco, 2026-09-03)
 
