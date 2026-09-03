@@ -50,7 +50,8 @@ Stakeholder decisions, 2026-09-02:
 | U8c — Code: B-ML-2, M-ML-6, m-ML-6, P2-1…P2-5 | `tdd-engineer` (fresh) | `accddcf5d6ef280aa` | accepted | commit `95b4c88` — 10 files, **314 tests**; 22 mutations, 1 survivor (equivalent by construction) | U9a + U9b → — | 285k tok / 95 tools |
 | U9a — Re-gate statistics (`## Pass 3`) + note v1.7 (3 routed defects) | `data-scientist` (fresh) | `ad7584d05e2136de4` | delivered | commit `89e11e1` — note **v1.7**; `## Pass 3` **needs changes**: 1 major (M-ML-7), 2 minors, 4 nits | — (is the gate) | 200k tok / 54 tools |
 | U9b — Re-gate engineering (`## Pass 3`) | `analyst` (fresh) | `a066343742ae42c4e` | delivered | commit `d4d847b` — `## Pass 3` **needs changes**: 1 blocker (P3-1), 6 majors, 5 minors, 3 nits | — (is the gate) | 217k tok / 70 tools |
-| U11 — Close both gates' Pass 3 findings (P3-1…P3-7, M-ML-7, m-ML-7, minors) | `tdd-engineer` (fresh) | `aeedc9f1724f1264c` | in-flight | `model-bench/**` | re-gate (fresh reviewers) → — | — |
+| U11 — Close both gates' Pass 3 findings (P3-1…P3-7, M-ML-7, m-ML-7, minors) | `tdd-engineer` (fresh) | `aeedc9f1724f1264c` | **killed by a platform 500 mid-run** — work preserved on disk (+428 lines, 6 files; 329 pass / 2 deliberate RED) | `model-bench/**`, uncommitted | — | — |
+| U11b — Resume U11 from disk state (P3-3 mid-cycle; P3-1 + M-ML-7 appear landed) | `tdd-engineer` (fresh, state-recovery brief) | `a8dd64de4bab140c4` | in-flight | `model-bench/**` | re-gate (fresh reviewers) → — | — |
 | U10 — Plan sweep (n-ML-7 + §5 stage-scoping, flagged 3×) | `architect` (fresh) | `ae512d667fe7f0c49` | accepted | commit `9b63c5c` — plan **v1.7**; 6 restatements withdrawn, stage table added | teco-verified | 139k tok / 64 tools |
 | U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | abandoned — **delivered by U8b** in plan v1.6 (`5594be8`), never dispatched separately | — | — | — |
 | U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | abandoned — **delivered by U8a** as Rule 3's generalisation in note v1.6 (`a54a667`), never dispatched separately | — | — | — |
@@ -642,3 +643,28 @@ re-drawn against U4's actual delivery before dispatch.
   in §2.1's data inventory and §6 R-4, attributed to `-ml` §6.1 — one attributed copy in the plan's
   own inventory versus zero copies. The `architect` declined to rule on its own document and handed
   it to the reviewer, which is the right instinct.
+
+### U11 killed by a platform 500 — recovered by state, not by restart
+
+- **Second platform kill in this coordination** (the first was a 429 during the Pass 2 gate). Same
+  handling: a transient platform failure is **not a deficient result**, so nothing is re-briefed
+  from scratch. I read the tree before writing the recovery brief — `git diff` showed **+428 lines
+  across 6 files**, the suite at **329 passed / 2 failed**, and the two failures were the
+  *deliberate RED tests for P3-3* that the agent's last line said it was writing. A clean,
+  legible stopping point.
+- **The difference between the two kills is worth recording.** The 429 hit before anything was
+  written, so recovery cost nothing. This one hit with an uncommitted half-finished fix round in
+  the tree — which is exactly the state in which the never-mutate-the-tree rule stops being
+  hygiene and starts being the only thing preventing the loss. The recovery brief says so
+  explicitly rather than assuming it.
+- **The brief tells the successor to trust the tree over the brief.** My summary of what landed
+  (`ItemResult.scored_outcome`, the `_NO_PAIRED_DATA` refusal path, `stats.mdd_clause` as a single
+  home) is a starting point for it to verify, not an authority — I read a diff, I did not run the
+  reasoning that produced it.
+- **The interrupted run opened a finding of its own, `m-ML-8`:** the MDD stem was duplicated
+  between `report.py` and `stats.py`, and M-ML-7's fix would have edited one copy — *scheduled
+  drift*, named as such. It collapsed the copies while fixing the finding. Carried into U11b so it
+  does not die with the transcript.
+- **The plan moved under the interrupted agent** (v1.6 → v1.7, U10 landing mid-run). The recovery
+  brief flags it explicitly, because a resumed agent's most dangerous inheritance is a quotation
+  from a document version that no longer exists.
