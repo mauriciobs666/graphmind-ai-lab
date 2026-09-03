@@ -55,7 +55,7 @@ Stakeholder decisions, 2026-09-02:
 | U12a — Engineering gate, Pass 4 | `analyst` (fresh) | `a693f15e5c2de88b2` | **accepted** — `e8bedce` | `docs/reviews/small-model-benchmarking-impl.md` `## Pass 4` | self → **approve with suggestions** (0 blockers, 5 majors) | 213k tok / 64 tools |
 | U12b — Statistics gate, Pass 4 | `data-scientist` (fresh) | `a6cd549ed24ce965d` | delivered — **approve with suggestions** (1 major M-ML-8, 4 minors, 2 nits); note revised to **v1.8**; one sub-claim sent back for reproduction, uncommitted until answered | `docs/reviews/small-model-benchmarking-ml.md` `## Pass 4`; `docs/plans/small-model-benchmarking-ml.md` v1.8 | self → approve w/ suggestions | 229k tok / 71 tools |
 | U13 — Plan v1.8: host-info source, first-call JIT budget, P4-4 stage re-attribution | `architect` | `aee9ac26e4c41f8ea` | in-flight | `docs/plans/small-model-benchmarking.md` v1.8 | `analyst` → — | — |
-| U14 — Fix unit: P4-2, P4-4, M-ML-8 (the three gating S3) | `tdd-engineer` | — | queued — blocked on note v1.8 settling | `model-bench/**` | re-gate (both) → — | — |
+| U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | in-flight | `model-bench/**` | re-gate (both, fresh) → — | — |
 | U10 — Plan sweep (n-ML-7 + §5 stage-scoping, flagged 3×) | `architect` (fresh) | `ae512d667fe7f0c49` | accepted | commit `9b63c5c` — plan **v1.7**; 6 restatements withdrawn, stage table added | teco-verified | 139k tok / 64 tools |
 | U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | abandoned — **delivered by U8b** in plan v1.6 (`5594be8`), never dispatched separately | — | — | — |
 | U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | abandoned — **delivered by U8a** as Rule 3's generalisation in note v1.6 (`a54a667`), never dispatched separately | — | — | — |
@@ -806,3 +806,29 @@ coordination twice — I asked for the exact reproduction. M-ML-8 does not depen
 **published rationale** does, and an unreproducible rationale is what a later pass rediscovers as a
 defect. `docs/plans/small-model-benchmarking-ml.md` v1.8 and its review are **held uncommitted**
 until that answer lands.
+
+
+### A stakeholder principle, and it retires a question I keep re-asking
+
+Mid-run on U14, the stakeholder stated it plainly: **defects should not be carried into later
+stages, because errors accumulate and multiply.** Standing principle, not a one-off call.
+
+That supersedes the sequencing question I had been putting to them once per gate — *bank the residue
+or keep gating?* — and it supersedes my own brief: U14 went out narrow, closing four findings, with
+an explicit instruction to leave P4-1, P4-3 and P4-5 alone. I expanded it in place by
+`SendMessage` rather than queuing a second unit, because all of it lands in `report.py` and
+same-file serialization means it is one agent's work either way.
+
+**U14 is now every major and every minor in both gates' `## Pass 4` sections**, nits at the
+implementer's judgement. I told it to sequence the verdict-affecting fixes (P4-2, P4-3, m-ML-12,
+M-ML-8) ahead of the CLI-surface ones (P4-1, P4-5) so a partial delivery is still coherent, and to
+tell me where to cut rather than thin any individual fix — the one failure mode a scope expansion
+mid-run actually invites.
+
+**What this changes going forward.** The "approve with suggestions, residue rides as follow-ups"
+disposition — which both Pass 4 gates recommended and which I was ready to act on — is **not
+available in this project**. A gate verdict of *approve with suggestions* now means *close the
+suggestions*, not *proceed and track them*. Brief future gates accordingly: their job is to find and
+severity-rank, and the severity ranking drives **order within a fix unit**, not whether a finding
+gets fixed at all. Four passes of evidence support the stakeholder here — P4-2 is Pass 1's blocker
+returning **verbatim** after being fixed once, which is precisely what a deferred defect does.
