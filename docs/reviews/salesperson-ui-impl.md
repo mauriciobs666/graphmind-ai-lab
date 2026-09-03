@@ -1435,6 +1435,127 @@ graph key and deleted none; `ws:s1v6`, `ws:s1v7`, `ws:probe-s0r3`, `ws:probe-s4b
 
 ---
 
+## Pass 8 — 2026-09-03 (S7b: the two overrides, gated)
+
+**Reviewed:** commit **`d9d2f2b`** — `tests/test_storefront.py` only (+166/−8), against Pass 7's
+three minors **S7-1, S7-2, S7-3**. `falkorchat/storefront.py` is byte-identical to its parent and
+to `dd78e70` (`md5 47ffe3abe13aafcad552c5f836a53921` at all three), so this is a test-only unit and
+the production surface is unchanged. Gated **fresh**, by a different reviewer than Pass 7, for one
+reason: the implementer **rejected the suggested fix on S7-1 and S7-3 and substituted its own**.
+Everything below was executed, not read. Not reviewed: S7-4 (deferred to S8 with Ruling 1),
+S8/S9/S10.
+
+**Verdict: approve with suggestions.** 0 blockers · 0 major · 1 minor · 2 nits.
+
+**Both overrides are substantively better than what they replaced, and the sharper claim is
+correct.** I reproduced S7-3's counter-claim directly: Pass 7's suggested elapsed-assert form,
+applied to the very test it was suggested for, **hangs** under Pass 7's own deadline mutant — killed
+at 30 s, exit 143 (Appendix L §3). Pass 7's suggestion was structurally wrong and the implementer
+was right to refuse it. S7-1's substitute is likewise stronger than the duration floor: its
+detection power is genuinely duration-free — with the stub turn's sleep set to **zero** the no-wait
+mutant is still caught **8/8** (§L §2), which no floor could survive. The one thing I found is where
+one of the two instants is stamped.
+
+CPG: considered, not relevant — `cpg_falkorchat` predates `storefront.py` entirely (established by
+three prior units in this coordination); nothing here is a reachability question in any case, and
+every claim below is settled by execution against the live `ws:test`.
+
+### S8-1 · **Minor** · `started_at` is stamped on the *calling* thread, so the ordering assertion tolerates a scheduling gap — and tolerates it **green**
+
+`_call_bounded` takes `started = time.monotonic()` at function entry (`tests/test_storefront.py:103`)
+and stores it **before** the `Thread` is constructed and before `worker.start()`. So
+`outcome["started_at"]` is *when the test asked for the reset*, not when `reset_participant` began
+running, and `assert outcome["started_at"] < finished_at` tolerates the whole
+main-thread-to-daemon-thread scheduling gap — in the direction that passes.
+
+Demonstrated (§L §2): with `_await_quiesce` replaced by `return True` — no wait whatsoever — plus a
+300 ms delay injected between the stamp and the call to emulate a descheduled daemon thread, the test
+**passes**. Stamping inside `run()` instead turns the same probe **red**.
+
+It matters because the commit message and the test comment claim "no margin at all". The margin is
+the thread-start skew — the same quantity used to reject the duration floor — roughly `TURN_WORK_S`
+wide, failing silently instead of loudly. Remote in practice (it needs a >150 ms thread-start delay),
+hence minor.
+
+**Suggested improvement:** one line — drop `box["started_at"] = started` and make
+`box["started_at"] = time.monotonic()` the first statement of `run()`. Verified: closes the probe, and
+10 consecutive runs of the 7 reset/quiesce tests stay green.
+
+### S8-2 · **Nit** · `IMMEDIATE_S`'s comment mis-sizes the one bounded call that commits a write
+
+The comment says the bounded calls take "~0.2 ms". Measured (§L §5): **0.142 ms**, **0.140 ms**, and
+**2.435 ms**. The outlier is `test_an_idle_participant_is_not_made_to_wait`, which is the only
+bounded call that performs a real delete-and-remint rather than an immediate refusal. The margin is
+still 411×, so this is not a flake risk — but it is the one site where a tripped bound leaves a
+daemon thread that will go on to **commit a graph mutation into the shared `ws:test`** after the
+test that owned it has ended, and the assertion message would then misdiagnose it as "a wait bounded
+by the code under test hung". Forcing `IMMEDIATE_S = 0.0001` trips exactly that test and no other
+test was contaminated in that run — the per-test `ws:test` wipe absorbed the straggler — so the
+exposure is narrow, not zero.
+
+**Suggested improvement:** correct the figure and name the idle site in the comment ("~0.15 ms for
+the two refusals, ~2.5 ms for the idle reset, which is the one that writes").
+
+### S8-3 · **Nit** · `_call_bounded` inverts `pytest.raises` — a forgotten assertion is a silent pass
+
+`box["error"] = exc` swallows the exception and returns normally, so a call site that forgets to
+check `outcome` turns a raising call into a green test. All four current sites do check
+(`assert "error" not in outcome` / `assert isinstance(outcome.get("error"), …)`), so nothing is wrong
+today; it is a trap laid for the next site. **Suggested improvement:** re-raise `box["error"]` unless
+the caller passes an explicit `expect_error=True` (or `expect=SomeError`), which restores the
+default that a surprise exception fails. Separately, `box["seconds"]` is set and never read by any
+test.
+
+### Disposition of Pass 7's findings
+
+- **S7-1** — **fixed, by substitution, and the substitution is stronger.** Adverse ordering (worker
+  joined before the reset) now reddens **exactly one** test on the **first** assertion, 3 others
+  green — the implementer's claim, reproduced verbatim (§L §1). `_await_quiesce → return True` is
+  caught by the second assertion, margin 0.153 s. Residual: S8-1.
+- **S7-2** — **fixed.** Both error-path evictions now pinned: removing `_cache_drop` from
+  `_reset_state_unknown` reddens both parametrizations; removing it from the `status is None` branch
+  reddens the new zero-row test (§L §4). The `[times-out-too]` parametrization pulls its weight — a
+  mutant that moves the drop *after* the re-read is caught by **that param only**.
+- **S7-3** — **fixed, by substitution; the reviewer's own suggestion was wrong.** Verified by running
+  it: the elapsed-assert form still had to be killed at 30 s under the deadline mutant, exactly as
+  the implementer reported. `_call_bounded` turns the same mutant into **2 failed in 3.34 s** with
+  both test names printed, whole-file, no hang (§L §3). Coverage is complete — under the mutant the
+  whole file terminates, and no other test file reaches `Storefront.reset_participant`.
+- **S7-4** — **not addressed, correctly.** Deferred to S8 with Ruling 1's one-line fix, which
+  removes it entirely. Still open.
+
+### The three things you asked about
+
+1. **Is `seconds=10` thin?** No. Measured 188 ms against it (53×), and the storefront's own 5 s
+   `quiesce_s` sits *inside* the bound, so a genuine refusal still surfaces as a refusal rather than
+   as a bound trip. Correctly chosen.
+2. **Are the false-positive probes the right ones?** They are benign but they stress the *easy*
+   direction — more time. The informative probes are the tight ones, and I ran them: `QUIESCE_POLL_S`
+   at **0.00001** (2000× tighter, the real stress on `returned_at >= finished_at`) → green ×3; and
+   `TURN_WORK_S` at **0.0** → green ×5 *while still catching the no-wait mutant 8/8*. That last
+   result is the strongest evidence in the unit for the implementer's own "no duration" claim and is
+   worth more than the doubling probe that was reported.
+3. **Does any new assertion pass while proving nothing?** No. Each of the seven new or changed
+   assertions is mutation-backed except `assert "error" not in outcome`, which is bookkeeping the
+   helper forces rather than a claim — see S8-3. One residual neither form can reach: a
+   `_await_quiesce` replaced by a **blind `time.sleep(0.5)`** satisfies both ordering assertions (and
+   would satisfy the duration floor too), but the file still reddens on it — the two `quiesce_s=0`
+   tests refuse to refuse (§L §6). Nothing to fix.
+
+### What's solid (Pass 8)
+
+The unit does the thing this coordination keeps asking for and rarely gets: it **ran the reviewer's
+suggested fix against the reviewer's own mutant before rejecting it**, and the rejection is correct.
+`_call_bounded`'s docstring states the structural reason (an assertion after a call that never
+returns is never reached) rather than asserting a preference, and both new eviction tests carry the
+mutation result that motivated them. Every one of the four claims in the commit message reproduced.
+
+### Open questions (Pass 8)
+
+None. S8-1 is a one-line change with a verified before/after; S8-2 and S8-3 are optional.
+
+---
+
 ## Appendix
 
 ### Appendix A — F-1 causal chain (all links verified by execution or by document)
@@ -1846,3 +1967,67 @@ lists the 14 deselected tests: AC-5 chat grounding, 10 × querygen NLQ, and one 
 
 **§8 — suite and lint.** Pristine tree, serially: **2473 passed, 14 deselected** (18.1 s).
 `ruff check falkorchat/storefront.py tests/test_storefront.py` → **All checks passed**.
+
+### Appendix L — Pass 8 evidence (commit `d9d2f2b`, live `ws:test`, `.venv/bin/python -m pytest`)
+
+Every mutation below was applied to a byte-copy of the file, run, and reverted; both files were
+`md5sum -c` verified against `8098db988561145ba07f6f16711bf125` (`tests/test_storefront.py`) and
+`47ffe3abe13aafcad552c5f836a53921` (`falkorchat/storefront.py`) after each block, and
+`git status --porcelain falkor-chat/` is empty. No tree-mutating git was run. Clean baseline:
+**82 passed in 1.15 s** for the file; `ruff check` on both S7 files → **All checks passed**. The
+whole-suite figure (2476 passed / 14 deselected) is taken as given from the dispatch, not re-run.
+
+**§1 — S7-1, the adverse ordering.** `turn.join(timeout=5)` moved *before* the `_call_bounded` call,
+so the turn is finished and there is nothing to wait for:
+
+```
+FAILED test_the_reset_waits_for_an_in_flight_turn_before_it_deletes
+E  AssertionError: the reset was not issued while the turn was in flight …
+E  assert 53950.693443919 < 53950.69338935
+1 failed, 3 passed, 78 deselected in 0.57s
+```
+
+Exactly one test, on the **first** assertion, three quiesce tests still green — the implementer's
+claim, reproduced. Detection margin at the moment of failure is 54 µs, but it is monotone-safe: any
+extra delay in that ordering pushes `started_at` *later*, never earlier.
+
+**§2 — S7-1, attacking the substitute.** Three probes.
+
+| Probe | Result |
+|---|---|
+| `_await_quiesce` → `return True` (no wait at all) | **red** on the 2nd assertion, `53967.415 >= 53967.568` false — margin 0.153 s |
+| `return True` **+** 300 ms sleep injected in `run()` before `fn(...)` (emulating a descheduled daemon thread) | **1 passed** — a false green, S8-1 |
+| the same, with `started_at` re-stamped as the first line of `run()` | **red**, `53991.478 < 53991.341` false; with only that change and no mutant, 10 consecutive runs of the 7 reset/quiesce tests → 7 passed each time |
+| `TURN_WORK_S = 0.0` alone | green ×5 |
+| `TURN_WORK_S = 0.0` **+** `return True` | **red 8/8** — detection does not depend on the stub sleep |
+
+**§3 — S7-3, both forms against the deadline mutant** (`deadline = … + self._quiesce_s + 3600`):
+
+- Pass 7's suggested form — `t0 = time.monotonic()` / `with pytest.raises(QuiesceTimeoutError): shop.reset_participant(record)` / `assert time.monotonic() - t0 < 1.0`, on
+  `test_a_quiesce_timeout_changes_nothing_and_leaves_the_turn_running`: `timeout 30` → **Terminated,
+  `real 0m32.031s`, EXIT=143**. The suggestion cannot work; the implementer's structural argument is
+  correct.
+- `_call_bounded` as shipped, **whole file**: `2 failed, 80 passed in 3.34 s`, both names printed
+  (`…quiesce_timeout…`, `…two_reset_failures…`), no hang. `grep -rl` over `tests/` shows only
+  `test_storefront.py` and `test_repository.py` mention `reset_participant`, and the latter's are
+  `Repository.reset_participant` — no quiesce, not hang-prone. Coverage complete.
+
+**§4 — S7-2, the two eviction mutants and the parametrization's worth.**
+
+| Mutant | Result |
+|---|---|
+| `_cache_drop` removed from `_reset_state_unknown` | **2 failed** — `…times_out_evicts…[succeeds]` and `[times-out-too]` |
+| `_cache_drop` removed from the `status is None` branch | **1 failed** — `…finds_no_participant_evicts…` |
+| `_cache_drop` **moved after** `get_state(ctx)` inside the `try` | **1 failed — `[times-out-too]` only** |
+
+The third is why the parametrization is not decoration.
+
+**§5 — measured bounded-call durations** (a `sys.stderr.write` added to `_call_bounded`, reverted):
+188.028 ms (the waiting test, bound 10 s), 0.142 ms, **2.435 ms** (the idle reset — the only one that
+writes), 0.140 ms (bound 1.0 s each). Leak probe: `IMMEDIATE_S = 0.0001` → `1 failed, 81 passed`,
+the failure confined to `test_an_idle_participant_is_not_made_to_wait`, no downstream contamination.
+
+**§6 — ruled out.** A blind-sleep `_await_quiesce` (`time.sleep(0.5); return True`) satisfies both of
+the new ordering assertions — and would satisfy the duration floor too — but the file catches it
+anyway: `2 failed, 80 passed in 9.14 s`, the two `quiesce_s=0` tests, because a reset that sleeps
+blindly then succeeds never raises `QuiesceTimeoutError`. Not a finding.
