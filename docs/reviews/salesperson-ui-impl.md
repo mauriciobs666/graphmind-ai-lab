@@ -2666,3 +2666,348 @@ on the delivered app, **1 failed** under M-C.
   `since is not None`.
 - *`x-storefront-tokens` breaks OpenAPI generation.* **No.** `/openapi.json` → `200`, extensions
   emitted verbatim; `/docs` → `200`.
+
+---
+
+## Pass 11 — 2026-09-03 (S8b: the whole handler set, the three escapes, and the owed row)
+
+**Reviewed:** commit **`18b675a`** — `falkorchat/storefront_api.py` (+310/−65),
+`tests/test_storefront_api.py` and `tests/test_app.py` (+~1030) — against
+`docs/plans/salesperson-ui.md` **v1.21** (`ac6741c`) §4.9, §5.1 S8/S10, §5.2, §5.3, and against
+`## Pass 10`'s twelve findings. Not reviewed: S9/S10/S12 content, the SPA. `falkorchat/storefront.py`
+and `falkorchat/app.py` are byte-unchanged — re-confirmed (`git status` on `falkor-chat/` clean at
+start and end; `md5sum` on both files matches `HEAD`).
+
+**I reviewed Pass 10 as a document, not as prior reasoning of my own** — three of its calls are
+adjudicated below, and two of them do not survive intact.
+
+**CPG: considered, not relevant — `cpg_falkorchat` returns `0` for
+`MATCH (f:File) WHERE f.name CONTAINS 'storefront'`, so it models neither `storefront.py` nor
+`storefront_api.py`; every claim below is from direct read, execution against the live FalkorDB, or
+source mutation.**
+
+**Verdict: approve with suggestions** — **0 blockers, 2 majors, 4 minors, 4 nits**. S8b's substance
+is right and I could not weaken it where it was aimed: all **six** Pass 10 mutation survivors die,
+the `ServiceError` route set really is a measurement (a second route reaching the family reddens it),
+and `DemoNotSeededError` is closed three ways. The two majors are not wrong responses — they are two
+places where the *new* guard excuses a handler by prose and one of them names a mechanism that cannot
+check it. **P10-1's reported defect is closed; P10-1's defect class re-opens one bucket over**, and I
+reproduced an escape through it. Both majors are cheap and both belong to S9's dispatch rather than
+to a backlog: S9's own row is what makes one of them live.
+
+### What I ran (all of it, solo, serially)
+
+Full suite **2608 passed / 14 deselected** twice (48.3 s, 43.4 s) — re-derived, not inherited;
+`tests/test_storefront_api.py` + `tests/test_app.py` alone: **176 passed** (baseline for every
+mutation). **Fourteen source mutations**, each applied to a byte-copy held outside the repo and
+restored from it (`md5sum` re-verified after every run; `storefront_api.py` `4e92d03a…`, `app.py`
+`e6bf735a…`, `storefront.py` `a713e2c5…`, `test_storefront_api.py` `16e68f96…`, `test_app.py`
+`fcf877ac…` — all matching `HEAD` at the end). Two throw-away probe tests, appended and removed.
+`ruff check` clean on all three changed files. Ledger and transcripts: **Appendix P11-A**.
+
+**Database.** `ws:test` and `reference` only. **`ws:acme` untouched** — 14 labels, `Message` 52,
+`Entity` 544, `WorkflowRun` 21, identical before and after. The suite wiped `reference` as expected;
+re-seeded (`seed_catalog.sh` → `verify_catalog.sh` exit **0**). `verify_workflows.sh` /
+`verify_salesperson.sh` remain non-zero, unchanged from Pass 10's arrival state and deliberately not
+repaired (they write into `ws:acme`).
+
+### Majors
+
+#### P11-1 · **Major** · `INHERITED_HANDLERS` is a prose exemption with no mechanism, and the file attributes its verification to a sweep that cannot perform it
+
+Eleven of the seventeen handlers are excused from the cross product by a reason string.
+`test_every_inherited_handler_states_why_it_produces_no_row` asserts only that the strings are
+non-empty, and its docstring says "*the sweep above is what checks the reasons are true*" — the
+sweep arms three `ServiceError` faults and no workflow fault, so it checks these eleven reasons in
+an empty intersection. **Mutation N-F, survived (176 passed):** a `/shop/api` route raising
+`WorkflowEngineDisabledError` answers `503 {"error":"WorkflowEngineDisabledError","detail":…}` — an
+unruled `(route, response)` colliding in status with `graph_unavailable`/`demo_not_seeded`, the two
+C9 dispatches on. This is P10-1's exact shape, one bucket over.
+
+**It is not hypothetical past S8.** §5.1's S9 row adds the trigger enqueue to `POST /shop/api/messages`;
+`services.start_workflow_run` → `_require_executor` raises `WorkflowEngineDisabledError`
+(`services.py:1996`), plus `WorkflowInputRejectedError` on the `run_ctx` bound (`services.py:2056` —
+F-2's unbounded write) and `WorkflowDefNotFoundError` on a missing snapshot. Three of the eleven
+excuses become falsifiable in the next step.
+
+**Suggested fix (cheap, and it reddens at exactly the right moment):** every excuse has the form
+*"no storefront route calls layer X"*, which is AST-readable. Assert that the `services.<name>`
+attribute accesses inside `build_storefront_router` are exactly a declared set — today
+`{read_messages, post_message, get_current_order}` — so S9 adding a fourth reddens and has to
+re-derive the exemption. Full generality (arming an inherited fault per route, the `_ArmedRepo`
+pattern) is available and I would not spend it yet.
+
+#### P11-2 · **Major** · a bare `HTTPException` is invisible to the check whose docstring names exactly that case, and `StarletteHTTPException`'s exemption cites that check as its proof
+
+`_raised_refusals` (`tests/test_storefront_api.py:2739`) collects only `ast.Call` nodes whose func is
+`StorefrontHTTPError`. `test_no_route_can_raise_a_refusal_it_does_not_declare`'s docstring says
+"*A route that raised an undeclared `410` would sail through both*" and claims to close it.
+**Mutation N-E, survived (176 passed):** `raise HTTPException(status_code=410, detail="gone")` in the
+`join` body → the probe answers `410 {"detail":"gone"}` (transcript in P11-A) — no `error` token, no
+row, no declaration, and green through both halves of the gate, the four-bucket partition and the
+ownership check. `HTTPException` is already imported in `storefront_api.py:74`.
+
+`INHERITED_HANDLERS[StarletteHTTPException]`'s reason asserts "*No `/shop/api` route raises a bare
+`HTTPException` … (asserted by `_raised_refusals`)*". `_raised_refusals` asserts nothing of the kind.
+A claim naming a mechanism that cannot check it is what P10-5 was, and it is the thing that stops the
+next reviewer looking.
+
+**Suggested fix:** in the same walk, collect `HTTPException(` calls and `raise` targets named
+`HTTPException`, and assert the set is empty — every refusal must be a `StorefrontHTTPError`. Then
+the reason string becomes true. ~8 lines, one control assertion.
+
+### Minors
+
+- **P11-3 · the `ServiceError` wrapper's `/shop/api` path scope is dead and untested.** **N-A**
+  (`if request.url.path.startswith(API_PREFIX)` → `if True`) survives, 176 passed. The legacy
+  surface is protected by `app.py:427`'s `if shop is not None` and `create_app`'s
+  `storefront and dev_surface` refusal — the wrapper is never on an app that mounts the legacy
+  router. The commit message ("*delegates elsewhere, so the legacy surface is byte-identical,
+  asserted in `test_app.py`*") and §5.3's third narrowing ("*a `/shop/api`-scoped handler*") both
+  credit the path check; `test_the_default_deployment_is_untouched_by_the_storefront_parameters`
+  passes because the wrapper is absent, not because of the scope. Fix: say which mechanism is
+  load-bearing, and pin the scope with an app carrying one non-`/shop/api` route that raises.
+- **P11-4 · the "compares every candidate" test asserts "every" over a set of size one** — the sixth
+  instance of this build's signature defect. `test_presenter_token_verification_compares_every_candidate_in_constant_time`
+  mints **one** token, so **N-K** (`any(compare_digest(known, token) for known in candidates)` →
+  `compare_digest(candidates[0], token)`) survives it; the mutant dies only *incidentally*, in
+  `test_only_post_messages_can_raise_a_service_error[thread|actor]`, whose helper happens to mint a
+  second presenter token. The property is real (a presenter who logs in twice must not be locked
+  out, and S10 moves this code). Fix: mint two tokens, assert both verify and both appear in `seen`.
+- **P11-5 · §5.3's new row did not reach §5.2's own row for that route.** §5.2's preamble names
+  **exactly three** responses omitted on purpose (the cross-cutting ones) and §5.3 rules that "*a new
+  `(route, response)` pair is not shipped until it has a row here, **and §5.2 is updated to match***".
+  v1.21 added `503 demo_not_seeded` to §5.3's `POST /shop/api/messages` row and to §5.2's ***join***
+  row, but §5.2's `POST /shop/api/messages` row still reads `the posted row · 409 TurnInProgress · 422`.
+  A reader of that row — S12a's audience — does not see it. *(Same paragraph, lesser: `401` is absent
+  from every §5.2 row and is not one of the three licensed omissions. Either license it or add it.)*
+- **P11-6 · the one *behavioural* unreachability claim of the seven is pinned by nothing.**
+  `SERVICE_ERRORS_UNREACHABLE[UnknownOrderTransitionError]` argues `422` answers first because
+  `AdvanceOrderIn.transition` is a `Literal` of exactly the three `Services._ORDER_TRANSITIONS`
+  accepts. **N-H** (widen the `Literal` by `"refund"`) survives, 176 passed, and would put an
+  unmapped `ServiceError` — `400 {"error":"UnknownOrderTransitionError"}` — on
+  `POST /shop/api/order/advance`. The other six reasons are "no storefront route calls that layer",
+  which P11-1's fix covers. Fix, one line:
+  `assert set(get_args(AdvanceOrderIn.model_fields["transition"].annotation)) == set(Services._ORDER_TRANSITIONS)`.
+
+### Nits
+
+- **P11-7** · `assert len(registered) == 17` duplicates what the partition assertion two lines below
+  already catches, and it is the enumerated-vs-derived trade §4.9 explicitly decided the *other* way
+  for `_FASTAPI_BUILTIN_PATHS` ("a framework upgrade must not red-fail an assertion about this app").
+  Drop the count, keep the partition; the failure message is no worse.
+- **P11-8** · `_takes_params`' sub-dependency recursion is dead today — **N-J** (`return False` for
+  the recursive arm) survives. Correct forward-looking code; just not evidence of anything, and the
+  `test_the_derived_422_routes_are_the_five_that_declare_one` control does not reach it.
+- **P11-9** · `test_every_row_of_the_table_was_produced_by_execution` skips on `-k` only. Selecting a
+  single node id (`pytest tests/test_storefront_api.py::test_health_reports_status_enabled_and_the_locale_list`)
+  leaves `config.option.keyword` empty, so it runs and fails on a test the caller did not select.
+  Key the skip on the subset actually observed (e.g. `if not _OBSERVED >= {some floor}`), or on
+  `config.option.file_or_dir` carrying `::`.
+- **P11-10** · `service_error_response`'s MRO walk is unexercised — **N-B** (walk → exact-type
+  lookup) survives — and mildly contradicts its neighbour: a future subclass of `ThreadNotFoundError`
+  placed in `SERVICE_ERRORS_UNREACHABLE` would still be *mapped* by the walk, so the partition guard
+  would not mean what it says. Either drop the walk (the guard forces explicit classification anyway)
+  or assert the two agree.
+
+### Disposition of Pass 10's findings (rechecked, not inherited)
+
+| # | Disposition | What I rechecked |
+|---|---|---|
+| P10-1 | **Fixed as reported; class re-opens** → P11-1 | `registered_handlers` returns all **17** (printed off the live app); N-D neuters `_assert_handler_ownership` → both ownership tests red, so they are non-vacuous |
+| P10-2 | **Fixed** | M-Q (drop `except DemoNotSeededError`) → **3 red**, incl. the AST family guard and the produced-by-execution check |
+| P10-3 | **Fixed** | M-C (`/catalog` gains `page: int = Query(1, ge=1)`) → **13 red**; the derivation control reproduces the five declaring routes exactly |
+| P10-4 | **Fixed** | M-N (`unresolved = None` → `raise`) → 1 red; `_FailingAfterNCalls` asserts `roster.calls == 2`, so the re-read genuinely ran |
+| P10-5 | **Fixed** | M-D → 3 red, M-V → 2 red. The `_OBSERVED` recording client is a better mechanism than the tagging I suggested |
+| P10-6 | **Fixed** | `_STEP_10_INTERIM` now says "two of the four", names `repo`/`presenter_key`, and states `services`/`agent_id` stay; §5.1's S10 row carries it |
+| P10-7 | **Fixed** | M-O → 1 red; §5.2 carries the fallback spec and the reachability argument |
+| P10-8 | **Fixed** | N-C (remove the `except KeyError`) → 1 red |
+| P10-9 | **Not fixed** | `repo.list_participants` still sits outside the `try` (`storefront_api.py:1230`); neither the code comment nor `test_a_reset_all_that_times_out_…` says why a pre-write read failure may honestly report `504`. Still a minor, still correct behaviour |
+| P10-10 | **Fixed** | M-P → 1 red — but see P11-4: the new test's *name* outruns its fixture |
+| P10-11 | **Fixed** | `test_the_credential_route_sets_are_the_ones_the_dependencies_declare` derives both sets from each route's `dependant` and asserts disjointness |
+| P10-12 | **Fixed in v1.21** | `create_app(storefront=True, dev_surface=False).routes` carries `/docs`, `/docs/oauth2-redirect`, `/openapi.json`, `/redoc` — **four**, as §4.9 now says; `_FASTAPI_BUILTIN_PATHS` is derived from a bare `FastAPI()`, which is the same four |
+
+Pass 10's two open questions are both answered by the delivery: the family got a re-shaping handler
+(question 1), and the reset-window response is `401 invalid_token` — a row `POST /shop/api/messages`
+already carried, so S10's stop-intake flag does not owe it anything (question 2).
+
+### The seven questions in the brief
+
+1. **Is P10-1 closed?** Yes as reported, and the four-bucket classification **does** have a hole the
+   partition check cannot see — two, P11-1 and P11-2. The coder's argument that `__module__` is the
+   axis that moves is **correct and I tested it rather than restating it**: N-D neuters
+   `_assert_handler_ownership` and both directions go red, and the two negative tests set
+   `__module__` explicitly and `match=` on the specific message. What the argument does not cover is
+   a handler whose *key* was always there and whose excuse is prose.
+2. **Is `SERVICE_ERROR_ROUTES` a measurement?** **Yes, and I proved it detects rather than merely
+   reports.** **N-G** — `GET /shop/api/state` gains a `services.list_thread_participants` call, the
+   realistic way a second route reaches the family — reddens
+   `test_only_post_messages_can_raise_a_service_error[thread]`. On fault-set completeness: the
+   storefront's whole service-call surface is `read_messages`, `post_message`, `get_current_order`
+   plus `Storefront`'s own `save_profile`/`get_profile`/`get_cart`/`filter_products`/
+   `lookup_product`/`order_belongs_to_customer`/`advance_order`/`get_snapshot`; of the ten
+   `ServiceError` subclasses only `_validate_and_derive_role`'s three and `_dispatch_write`'s two
+   (the same two types) are reachable from it, and `advance_order`'s `UnknownOrderTransitionError` is
+   `Literal`-blocked. So a fourth fault would **not** move a second route — **subject to P11-6**,
+   which is the one link in that chain nothing pins. The plan owing one row rather than a section is
+   correct.
+3. **Is P10-2 closed, and is the family guard sound?** Closed (M-Q → 3 red). The AST guard is sound
+   for what it claims: it resolves `ast.Tuple` clauses and both `ast.Name`/`ast.Attribute` shapes,
+   carries a positive control (`QuiesceTimeoutError` found) and a negative one (`NeverCaughtError`
+   reported), and reads the live class tree rather than a list. Its limit is that "caught somewhere
+   in the file" is not "caught on the route that can raise it" — acceptable here, because
+   `_raised_refusals` + the declaration half + `_OBSERVED` cover the second question, and I would not
+   spend more on it.
+4. **Do v1.21's three §5.3 changes match the code?** Two yes, one incomplete. The new row
+   (`POST /shop/api/messages` · `503 demo_not_seeded` · C9) matches: `mentions=[agent_id]` is
+   server-side (`storefront_api.py:994`), and `_validate_and_derive_role` raises before any write
+   (`services.py:846`, ahead of `_dispatch_write`), so C9's *nothing changed* is exact. The third
+   narrowing's "whole contribution is two pairs on one route" matches `service_error_pairs` and
+   both pairs are in `TABLE`. §5.2's *join* row's narrowed claim is true —
+   `DemoNotSeededError` is raised at `storefront.py:461`, inside `join`, and nowhere else in the
+   package. The incompleteness is **P11-5**, in §5.2's messages row.
+5. **A sixth "test that cannot exercise the rule it names"?** **Found: P11-4.** Also P11-8 (a
+   recursion no control reaches) and the near-miss in P11-2, where the check exists but reads the
+   wrong node type.
+6. **A third "stated in two places, updated in one"?** The test file's `TABLE` is **not** it — I
+   compared all 62 `(route, status, token)` cells against §5.3's per-route and cross-cutting tables
+   by hand and they agree in both directions, including the nine `graph_unavailable` rows, the four
+   `graph_read_timeout` rows and the five `504`s. Nothing checks that agreement, which is a standing
+   risk rather than a present defect. The live instance is **P11-5**, between §5.2 and §5.3.
+7. **Was Pass 10 right where S8b says it was wrong?** Adjudicated below.
+
+### Adjudicating S8b's three counter-claims against Pass 10
+
+- **"P10-1 undercounts — three escapes, not one, and probe 2 printed the third."**
+  **Upheld against Pass 10, and S8b overshoots in the other direction.** P10-1's body names one
+  escape ("*the one that provably fires*") while its own Appendix P10-A probe 2 prints a second
+  (`400 UnknownMemberError`) and labels it "*P10-1's family from the same probe*" without folding it
+  into the count. A fix keyed on the reported `404` would indeed have left one behind — the criticism
+  lands. But **three** is not the demonstrated number either: S8b's own
+  `test_the_service_error_map_is_read_off_the_one_seam` docstring concedes `UnknownActorError` "*has
+  no graph state that produces it without also failing `resolve_token` first, so it is unreachable
+  through the wire*", and it is asserted at the seam, not driven. The honest count of escapes
+  reachable on the delivered app is **two**; the third is type-reachable under fault injection only.
+- **"P10-1's implied blast radius is larger than the truth — one route of eleven, measured."**
+  **Not sustained as a correction.** P10-1 did not assert a radius; its suggested fix said "*at
+  minimum `POST /shop/api/messages` gains rows*", which is where the measurement landed. What S8b
+  built is a genuine strengthening — an unmeasured radius replaced by a measured one, and N-G shows
+  the measurement bites — but it corrects an *absence* in Pass 10, not an error.
+- **"P10-10's 'harmless' framing went untested; M-P is killable in six lines."**
+  **Upheld, on the "untested" half only.** M-P dies (verified). The harmlessness itself is not
+  disputed — S8b's own new comment repeats it verbatim ("*Harmless — the response already reveals
+  validity*"). The real lesson is narrower and worth keeping: *"harmless"* is a statement about
+  consequence and Pass 10 let it stand in for *"not worth pinning"*, which is a different judgment.
+  And the replacement test inherits a smaller version of the same problem (P11-4).
+
+### What's solid
+
+**The `_OBSERVED` recording client is the best thing in this commit and better than what P10-5
+asked for.** I suggested tagging each contract test with the `(method, path, status, token)` it
+proves; S8b rebound `TestClient` module-wide and records what the server actually said. A tag is a
+claim that can be wrong; a recorded response cannot be. It is what makes M-D, M-V and M-Q die on the
+`⊇` direction, and it catches an unruled response on a route nobody wrote a contract test for. The
+`⊆` direction is correctly stated as safe under any subset while the `⊇` direction skips — the
+reasoning is right even where the skip predicate is not (P11-9).
+
+**The measurement pattern is the right answer to P10-11's objection and generalises.** `_ArmedRepo`
+arms at the *repository* seam — `thread_exists`, `resolve_member_kinds` — not by patching the
+service function under test, so the sweep is not circular; and every response it sees is checked
+against `TABLE`, which makes it a standing guard on any route added later, not a one-shot
+derivation. P11-1's fix is available precisely because this machinery exists.
+
+**`_FailingAfterNCalls` does exercise the rule it names**, which is the thing P10-4 warned it might
+not: `roster.calls == 2` proves the re-read ran and `repo.calls == 1` proves nothing retried. The
+choice of `participants: null` over an absent key is deliberate and documented, and it matches §5.1's
+S10 done-condition ("*no state body, never a `500`*").
+
+**The wiring-order refusal is the right shape.** `register_storefront_error_handlers` raising a named
+`RuntimeError` at wiring time, rather than letting an absent incumbent surface as a `TypeError`
+*inside* an exception handler on a participant's first `ServiceError`, is exactly the "loud at boot"
+posture §4.9 argues for everywhere else.
+
+**Ownership on `__module__` is the correct axis and it is tested in both directions** — a key-set
+comparison cannot see an override, and N-D confirms the two negative tests are live rather than
+decorative.
+
+### Open questions (need `teco`'s or the architect's call)
+
+1. **Do P11-1 and P11-2 go to S8c, or into S9's row as preconditions?** My recommendation: **S9's
+   row**, as two named done-conditions. P11-1's fix reddens exactly when S9 adds its fourth
+   `services.` call, which is the moment it is worth something; P11-2 is ~8 lines and can ride
+   along. A third S8 round buys nothing that S9 does not already have to touch.
+2. **Does §5.2's `POST /shop/api/messages` row get the `503 demo_not_seeded` line, and does the
+   preamble license the `401` omission?** (P11-5) One is a plan edit the architect owns; the second
+   is a choice — either list `401` per route or say once that credential responses live in §5.3.
+
+### Appendix P11-A — mutation ledger and probe transcripts (Pass 11)
+
+**Method.** Every mutation applied to `falkorchat/storefront_api.py` (or `tests/test_storefront_api.py`
+where noted) from a byte-copy held outside the repo, restored from that copy after each run, `md5sum`
+re-verified each time. Command: `.venv/bin/python -m pytest tests/test_storefront_api.py tests/test_app.py -q`.
+**Baseline: 176 passed.** No `git` tree-mutating command was used at any point.
+
+| # | Mutation | Result |
+|---|---|---|
+| N-A | `_handle_service_error`: `startswith(API_PREFIX)` → `True` (path scope removed) | **survived** → P11-3 |
+| N-B | `service_error_response`: MRO walk → exact-type lookup | **survived** → P11-10 |
+| N-C | `_cross_cutting_json`: the `except KeyError` guard removed (P10-8's fix) | **1 failed** |
+| N-D | `_assert_handler_ownership` → no-op (test-file mutation) | **2 failed** — both ownership tests |
+| N-E | `join` raises a bare `HTTPException(410)` on an unexercised branch | **survived** → P11-2 |
+| N-F | `join` raises `WorkflowEngineDisabledError` on an unexercised branch | **survived** → P11-1 |
+| N-F2 | same, `SearchNotAvailableError` (a `ServiceError` with its own inherited handler) | **survived** → P11-1 |
+| N-G | `GET /state` gains a `services.list_thread_participants` call | **1 failed** — the sweep, `[thread]` |
+| N-H | `AdvanceOrderIn.transition` `Literal` widened by `"refund"` | **survived** → P11-6 |
+| N-I | reset-all's second-timeout `unresolved = None` → `raise` (P10 M-N) | **1 failed** |
+| N-J | `_takes_params`: sub-dependency recursion → `False` (test-file mutation) | **survived** → P11-8 |
+| N-K | `_PresenterSessions.verify` → `compare_digest(candidates[0], token)` | **2 failed** — but *not* the test that names the rule → P11-4 |
+| M-C | `/catalog` gains `page: int = Query(1, ge=1)` (P10 survivor) | **13 failed** |
+| M-D | `reset` loses its `except UnknownParticipantError` (P10 survivor) | **3 failed** |
+| M-O | `_welcome` loses its locale fallback (P10 survivor) | **1 failed** |
+| M-P | presenter-token verify → `token in candidates` (P10 survivor) | **1 failed** |
+| M-Q | `join` loses its `except DemoNotSeededError` (P10-2's fix) | **3 failed** |
+| M-V | `advance_order` loses its `except UnknownOrderError` (P10 survivor) | **2 failed** |
+
+**Probe 1 — the escapes, driven through the wire.** Mutation in place, one throw-away test appended
+to `tests/test_storefront_api.py`, run under `-k`, then both files restored from the byte-copies:
+
+```
+N-E  POST /shop/api/session -> 410 '{"detail":"gone"}'
+N-F  POST /shop/api/session -> 503 '{"error":"WorkflowEngineDisabledError","detail":"engine off"}'
+N-F2 POST /shop/api/session -> 503 '{"error":"SearchNotAvailableError","detail":"no index"}'
+```
+
+Note on N-F2: `SearchNotAvailableError` is a `ServiceError` subclass, but `app.py` registers a
+handler for it *directly*, so Starlette's MRO walk picks that one and the storefront's re-shaper —
+including its "no mapping, say so in the log" branch — is never entered. The re-shaper's safety net
+does not cover family members that carry their own inherited handler.
+
+**Probe 2 — the live app, enumerated.** `create_app(storefront=True, dev_surface=False)`:
+17 exception handlers; top-level paths `''` (the `_IncludedRouter` carrying the eleven `/shop/api`
+routes), `/health`, `/docs`, `/docs/oauth2-redirect`, `/openapi.json`, `/redoc`. A bare `FastAPI()`
+registers the same four documentation paths — so §4.9's derived exemption and its stated value agree
+today.
+
+**Probe 3 — `TABLE` against §5.3, by hand, both directions.** All 62 cells agree: eleven route keys,
+§5.3's per-route rows, the nine `503 graph_unavailable` rows (classes `writes` + `reads-only`), the
+four `503 graph_read_timeout` rows (`reads-only`), the five `504 <op>_state_unknown` rows, and the
+three documented departures (the `422` field collapse, `5xx` written `500`/`unhandled`, and
+reset-all's two `200` rows). No drift found.
+
+**Hypotheses ruled out** (so the next pass does not re-walk them):
+
+- *The four-bucket partition can be defeated by dumping a storefront-registered handler into
+  `INHERITED_HANDLERS`.* **No.** `_assert_handler_ownership` rejects it on `__module__`, in both
+  directions, and N-D proves the two tests that cover it are live.
+- *`SERVICE_ERROR_ROUTES` is circular — the sweep arms what only `POST /messages` calls.* **No.**
+  Both arms are repository methods (`thread_exists`, `resolve_member_kinds`) available to every
+  route, and N-G shows a second route reaching the family reddens the assertion.
+- *`UnknownMemberError` → `503 demo_not_seeded` could mis-report a client error.* **No.** The route
+  passes `mentions=[agent_id]` server-side (`storefront_api.py:994`); `PostMessageIn` carries only
+  `text`, and pydantic ignores an extra `mentions` key rather than forwarding it.
+- *The `503` the re-shaper mints could be confused with a quiesce `503` by C9.* **No** — they carry
+  different tokens (`demo_not_seeded` vs `quiesce_timeout`) and §5.3 rules on the token. This is
+  precisely what P11-1's `WorkflowEngineDisabledError` escape would break, since that one carries a
+  class name where the token belongs.
+- *`storefront.py`/`app.py` drifted.* **No.** `md5sum` matches `HEAD` at start and end;
+  `git status` on `falkor-chat/` is clean.
