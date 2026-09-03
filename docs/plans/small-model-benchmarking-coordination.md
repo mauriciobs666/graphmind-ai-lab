@@ -56,7 +56,9 @@ Stakeholder decisions, 2026-09-02:
 | U12b — Statistics gate, Pass 4 | `data-scientist` (fresh) | `a6cd549ed24ce965d` | delivered — **approve with suggestions** (1 major M-ML-8, 4 minors, 2 nits); note revised to **v1.8**; one sub-claim sent back for reproduction, uncommitted until answered | `docs/reviews/small-model-benchmarking-ml.md` `## Pass 4`; `docs/plans/small-model-benchmarking-ml.md` v1.8 | self → approve w/ suggestions | 229k tok / 71 tools |
 | U13 — Plan v1.8: host-info source, first-call JIT budget, P4-4 stage re-attribution | `architect` | `aee9ac26e4c41f8ea` | **accepted** — `aebb611` | `docs/plans/small-model-benchmarking.md` v1.8 (+434/−62) | U15 → — | 173k tok / 80 tools |
 | U15 — Gate plan v1.8 | `analyst` (fresh) | `a86335b5fb049e72c` | **accepted** — `ff499d5` | `docs/reviews/small-model-benchmarking.md` `## Pass 3` | self → **needs changes** (2 blockers, 6 majors) | 174k tok / 55 tools |
-| U17 — Plan v1.9: close Pass 3's blockers and majors | `architect` (resumed, `aee9ac26e4c41f8ea`) | `aee9ac26e4c41f8ea` | in-flight | `docs/plans/small-model-benchmarking.md` v1.9 | re-gate → — | — |
+| U17 — Plan v1.9: close Pass 3's blockers and majors | `architect` (resumed) | `aee9ac26e4c41f8ea` | **accepted** — `81a3ef7` | `docs/plans/small-model-benchmarking.md` v1.9 | U19 → — | 301k tok / 100 tools |
+| U19 — Re-gate plan v1.9 (Pass 4) | `analyst` (fresh) | `a84c263e5998ba953` | in-flight | `docs/reviews/small-model-benchmarking.md` `## Pass 4` | — → — | — |
+| U20 — S1: residency element-shape assertion (plan v1.9 S1 DC-1) | `tdd-engineer` | — | queued — specified at v1.9, not yet implemented | `model-bench/**` | re-gate → — | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | **accepted** — `5878014` | `model-bench/**` (10 files, +1490/−61); 353→389 tests | re-gate (both, fresh) → — | 348k tok / 130 tools |
@@ -1061,3 +1063,50 @@ defect as M-ML-8, smaller — the implementer measured it still moving between �
 `(4,5,3,0)`), so what remains is statistical and contractual, not a scope question: U18 rules on it.
 Dispatched **fresh** rather than resuming Rule 4's author, whose context is at ~244k tokens — over
 the threshold where continuing buys less than a self-contained brief costs.
+
+
+### Plan v1.9: the general fix, and one residual that is genuinely blocked rather than deferred
+
+`81a3ef7`. All 13 Pass 3 findings closed, plus R-13's four follow-ups and n-ML-9.
+
+**The blockers were fixed at the general case, and the general case was bigger than the gate's.**
+Pass 3 diagnosed §3.4.4a as *"a source-of-truth section governing one of four sources"*. v1.9 accepts
+that and finds **five**, publishing the table (13 + 2 + 2 + 4 + 9 = **30**, arithmetic verified),
+stating explicitly that the converse of the refusal rule is false, and pinning a ten-step capture
+order — with the staleness trip-wire at step 6, argued as *the first instant its comparands exist and
+the last instant before an item is consumed*. A reviewer's diagnosis extended by the author rather
+than merely applied.
+
+**G3-1 closes without anyone typing the four fields.** The required set becomes a function of
+`callSurface` as well as `armKind` (`armProfile` ∈ {`model:chat`, `model:embeddings`,
+`deterministic`}), and §3.4.1's forbidden-derivation rule generalises from a pairwise difference to
+*union-of-others minus mine* — so `model:embeddings` **derives** as `model:chat` minus its four
+fields. A hand-typed list is a fifth place to drift; a derivation is not.
+
+**A deviation worth recording as precedent.** The gate proposed renumbering test 15b to 11d/12c;
+the architect **kept the number and moved the test**, on the grounds that three reviews cite `15b`
+and citation stability is a hard constraint here. It identified that the actual defect was a `live`
+marker acquired **by adjacency** rather than by declaration — so placement plus a one-line pointer
+fixes the defect while renumbering would have broken working citations to fix nothing. Correct, and
+the general form is worth keeping: *when a fix and a constraint collide, check whether the fix is
+addressing the real defect or its position.*
+
+**One residual, disclosed rather than implied fixed.** Turn- and call-pooled `BinaryMetric`s fall
+outside DC-10's selector, so **P4-4's defect stays printable for a pooled metric** — a number with no
+interval. The architect argues closing it needs a scorer-side declaration of a pooled denominator's
+provenance, which is unscoped S2 work. Under the stakeholder principle this is the distinction that
+matters: **blocked on unbuilt work is not the same as deferred by choice**, and I have asked U19 to
+rule on which it is rather than accepting the framing.
+
+**New S1 work the plan created, queued as U20.** §3.4.2's edit list grew to four sites, and the
+structural fix for the fourth is a **new element-shape assertion in S1 DC-1** — not the fixture edit
+— because `REQUIRED_PRESENT` never checks element shape. I confirmed `tests/conftest.py:40` still
+declares `{"modelKey": …, "sizeBytes": …}` against §3.4.4a's `{id, state}`, so this is specified and
+unimplemented. A plan revision that lands new S1 done-conditions is easy to lose between stages;
+it gets a ledger row rather than a mention.
+
+**And every load-cost figure is out of the design's sizing.** §2.5 keeps 21.068 s as *one model's
+dated measurement* with the 3.625 s counter-example beside it, and test 15's *"of the order of 21 s"*
+became a magnitude assertion — which, as the architect put it, would have been false for the next
+model. My own measurement, correctly demoted from a constant to an observation, two documents from
+where I first stated it.
