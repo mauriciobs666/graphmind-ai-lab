@@ -352,3 +352,201 @@ report the shrunken `n` — the residual risk is **visibility, not correctness**
   not edit it in this run, by the brief's constraint.
 - **m-ML-2** additionally touches `tests/test_stats.py::test_mdd_and_floor_at_the_family_adjusted_alpha`,
   which must move with the note.
+
+---
+
+## Pass 2 — 2026-09-03, commit `3ad27d3`
+
+**Verdict: needs changes.** 1 new blocker, 1 new major, 1 new minor. Every Pass 1 finding is
+**fixed** or correctly **declined** — the fix round is good work, and both of the judgements the
+coordinator put to me come back mostly in the implementer's favour. What is not fixed is a corner
+the fix opened up: the same class of defect as B-ML-1, surviving in the one configuration
+`sqrt(DEFF)` cannot reach.
+
+Re-ran the suite from `model-bench/`: **296 passed in 2.11s**. All figures below re-derived in this
+run.
+
+### The three judgements asked for
+
+**1. `sqrt(DEFF)` inflation of a percentile interval — defensible as an interim. Accepted.** The
+conversion is exact in the sense claimed, not a fudge: Kish's DEFF is a variance ratio and a CI
+half-width scales as `1/sqrt(n)`, so `sqrt(DEFF)` is precisely the factor carrying an interval
+computed at `n_units` to one computed at `n_units/DEFF`. I checked the arithmetic against a
+hand-computed scaling of the raw percentile interval about the point estimate — exact to 1e-12 at
+DEFF ∈ {1, 2, 4, 7} — and confirmed the clamps hold. Scaling the two half-widths **separately**
+preserves the resample's skew rather than symmetrising it, which is the right choice of the two
+available. Its real limitation is the one the docstring already states — it rescales a variance it
+cannot *discover* — plus one it does not: with few clusters a genuine cluster bootstrap degenerates
+(the note's own §4.5.1(ii) rejects bootstrapping 3 shapes for exactly this), and `sqrt(DEFF)`
+widening does not reproduce that failure mode, it only widens. That gap is covered by a different
+guard — the floor is computed at `n_eff = n/DEFF`, so a too-few-clusters configuration is caught by
+Rule 7 or by `UnattainablePower` rather than by the interval. The two mechanisms compose; worth
+saying so in the note rather than leaving it to be re-derived.
+
+**The deferral argument is sound, and I would not build the structural primitive before S5/S6.**
+The seam genuinely does not exist: a paired resample *of clusters of rows* needs a grouping that can
+only arrive from a pack declaring `replicatesPerScript > 1`, and Rule 6 makes that a validation
+error while only the one-level bootstrap exists. Building the primitive now means building it
+against no data, no caller and no test fixture that isn't synthetic — and the thing that would
+falsify the interim (a pack whose clusters are not its rows) is the same event that unlocks the
+real one. Build it when the pack that needs it is specified, not on a calendar.
+
+**2. Rule 7 as demote-and-name — right on the substitute path, wrong on the McNemar path.** Their
+reasoning for demoting is correct and I verified the case they cite: at DEFF = 2 on `(34, 6, 0, 0)`
+the widened interval `[0.9, 32.7]` still excludes zero while 15.0 pp sits below the 30.0 pp floor,
+so raising there would abort on ordinary clustered data. Demote-and-name is the right reading —
+**there**. On the McNemar branch the invariant is a *theorem*, not a guard: I re-confirmed
+exhaustively that no `(b, c)` with `p <= 0.05` has `|b−c|/n` below `b_min(0.05)/n`, over
+n ∈ {12, 20, 30, 40, 48, 85}, zero violations. A fire on that branch is therefore a bug in the
+module, and silently demoting it discards exactly the detector property Rule 7's own docstring
+claims for it ("the only cheap check tying together two quantities computed by completely
+independent routes"). Split it by path: demote on `cluster-bootstrap`, raise on `mcnemar-exact`.
+This is **m-ML-6** below, and it depends on M-ML-6 — as built, the McNemar branch *is* reachable,
+but only through the α gap that is itself the defect.
+
+**3. The Holm/floor α gap — I contest the resolution, not the concern.** The concern is right and is
+my own rule: a verdict must never contradict the honesty line beside it. But there are two ways to
+remove a contradiction, and the build picked the one that bends the decision instead of the one that
+corrects the claim. Ruling: **the printed floor is wrong, and the Holm rejection is right.**
+
+Under Holm a member's threshold is data-dependent, so no single α makes the floor's sentence true by
+construction — you have to pick one, and the choice is settled by the same principle that settled
+the rounding direction in Pass 1: **each bound takes the parameter value that keeps its own claim
+true.**
+
+- The floor claims *"differences below Y cannot reach significance at any observed outcome."* That
+  is true only at the **loosest step the member can face**, α = 0.05, giving `6/n`. Printed at α/k
+  it is `7/n` — and the sentence is **false**, because a 15.0 pp difference at n = 40 (b=6, c=0,
+  p = 0.031) *does* reach significance when the member is tested at 0.05. This is the identical
+  falsity class as the `15.8` I withdrew in Pass 1: an attainable, significant outcome sitting below
+  a printed floor that says it cannot exist.
+- The MDD claims *"resolves ≥ X with 80% power."* True only at the **tightest step**, α/k, which is
+  where it already is. Unchanged.
+
+Measured counterfactual at n = 40, k = 2:
+
+| case | p | Holm step | floor @ α/k = 17.5 | floor @ 0.05 = 15.0 |
+|---|---|---|---|---|
+| b=6, c=0, rank 2 | 0.031 | 0.05 | **demoted** (Holm gain lost) | not demoted — **correct** |
+| b=6, c=0, rank 1 | 0.031 | 0.025 | not rejected anyway | not rejected anyway |
+| b=7, c=0, rank 1 | 0.016 | 0.025 | consistent | consistent |
+
+Floor-at-0.05 is also *conservative for every member*: it understates Y, and understating a bound of
+the form "below Y nothing can happen" is the safe direction. And it restores the theorem — with the
+floor at the loosest step, Rule 7 becomes unreachable on the McNemar path at **every** Holm step
+(verified, 0 violations), which is what makes judgement 2's split coherent.
+
+Cost of the build's resolution, stated so the trade is visible: it reduces Holm to Bonferroni for
+any member whose difference lands in `[6/n, 7/n)` — the 15.0–17.5 pp band at n = 40 — which is
+*precisely* the band §7.3 already priced as the cost of a second verdict metric. The current build
+charges that price twice. The alternative the implementer rejected (printing two floors) is
+correctly rejected; the fix is one floor, at the right α.
+
+***What `-ml` should state.*** §7.1: the floor is computed at **α = 0.05, the loosest Holm step any
+family member can face**, and the printed sentence names that (`"...cannot reach significance at any
+observed outcome, at any Holm step (alpha <= 0.05)"`); the MDD stays at the family-adjusted α/k, and
+the line names both. §3.3: add one sentence saying the two figures take different αs on purpose, and
+why. §3.4: Rule 4's precondition 3 continues to fix `resolving.alpha == 0.05/len(family)` — that is
+the *pre-registration* α and the MDD's — while `ResolvingPower` gains the floor computed at the
+unadjusted α. And the generalisation is now worth stating **once** rather than as three special
+cases: *every printed bound takes the rounding direction, the α, and the denominator that keep its
+own claim true* — Pass 1's rounding adjudication, this α ruling, and the declined n-ML-1 are three
+instances of one rule.
+
+### New findings
+
+**B-ML-2 (blocker) — the fail-safe basis degradation is anti-conservative, in the one corner
+`sqrt(DEFF)` cannot reach.** At `design_effect == 1.0` with `basis == "assumed"` — the fail-safe
+that plan §5 test 12b creates whenever a determinism probe has not run and agreed, i.e. **every
+comparison until S2 lands the probe** — the decision moves off McNemar onto the bootstrap, and
+`sqrt(1.0) = 1.0`, so nothing is widened. The substitute is then a bare percentile interval that
+fires where the exact test does not. Measured at n = 40, `basis="assumed"`, DEFF = 1.0:
+
+| b | c | McNemar p | exact test | bootstrap CI | bootstrap decision |
+|---|---|---|---|---|---|
+| 7 | 1 | 0.0703 | not distinguishable | [2.5, 27.5] | **distinguishable** |
+| 9 | 2 | 0.0654 | not distinguishable | [2.5, 32.5] | **distinguishable** |
+| 11 | 3 | 0.0574 | not distinguishable | [2.5, 37.5] | **distinguishable** |
+
+Three inversions in nine spot-checked tables, all at p ≈ 0.057–0.070. Rule 7 does not catch them —
+15.0, 17.5 and 20.0 pp are all at or above the 15.0 pp floor — and
+`test_the_clustered_interval_is_not_narrower_than_the_mover_d_it_replaces` does not cover them,
+because it parameterises DEFF over {2, 4, 7} only. So a degradation introduced to be *safe* makes
+the tool declare differences the exact test refuses, on the path that is currently the default.
+
+*Suggested fix, minimal and correct:* on any non-`by-construction` path make the decision a
+**conjunction** — distinguishable iff the widened bootstrap CI excludes zero **and**
+`mcnemar_exact(b, c) <= alpha_step`. Using McNemar as a *veto* rather than as the decision does not
+violate Rule 4: the note's objection is that McNemar **rejects** too readily under clustering, and a
+necessary condition only ever removes rejections, so the result is uniformly at least as
+conservative as either instrument alone. At DEFF = 1 it restores the exact test's calibration
+exactly; at DEFF > 1 it keeps the widened interval as the binding constraint it already is. The
+structural version, later: make `"assumed"` require a declared inflation factor > 1, so the basis
+that says "we did not measure this" cannot also assert DEFF = 1.
+
+**M-ML-6 (major) — the printed observable floor is computed at α/k, which makes its own sentence
+false under Holm.** Full argument and the recommended note wording in judgement 3 above. Touches
+`stats.observable_floor`'s call site in `resolving_power`, `_floor_clause`, `resolving_power_line`,
+Rule 7's comparison, and `test_rule_7_uses_the_family_adjusted_floor_the_report_prints` (whose
+docstring is an honest statement of a trade that should not be taken).
+
+**m-ML-6 (minor) — Rule 7 should raise on the McNemar path and demote only on the substitute
+path.** See judgement 2. Sequence it after M-ML-6, since the McNemar branch is only unreachable once
+the floor is at the loosest step.
+
+### Dispositions — Pass 1
+
+- **B-ML-1** — **fixed.** `paired_cluster_bootstrap` widens as specified; the CI that was identical
+  at DEFF 2/4/7 is now [0.9, 32.7] / [−5.0, 40.0] / [−11.5, 48.1], and the DEFF = 7 headline case
+  now renders *not distinguishable* with the interval covering zero. Rule 7 is enforced in
+  `verdict()` on every path, against the exact float. Residual is B-ML-2, a different corner.
+- **M-ML-1** — **fixed.** `UnattainablePower`, `mdd80: float | None`, and `unattainable_clause`
+  replace both sentences; rendered at DEFF = 7 it now says "No difference is resolvable at
+  n=5.71429 effective conversations … fewer than the b_min=6 net wins any outcome must reach", and
+  no "100.0 pp with 80% power" survives anywhere.
+- **M-ML-2** — **fixed.** `holm_steps` carries the step-down stop, `report.py` runs two passes
+  because Holm is a family property, `verdict()` receives `alpha_step`/`holm_tested`, and the table
+  gained a `decision` column so a threshold is never readable in isolation. The α gap this exposed
+  is M-ML-6, not a regression.
+- **M-ML-3** — **fixed.** `BinaryMetric.unit` is required with no default; a count whose denominator
+  is not the analysis unit prints `— (n is turns; not the analysis unit)` with the §4.4 footnote,
+  and the count itself is never suppressed. `_metric_from_dict` refuses to guess a unit.
+- **M-ML-4** — **fixed.** `PairedRows` + `_pairing_tally` print the `asymmetry` split per arm,
+  unscoreable-in-both, and present-in-one-only, always — including all zeros, which is the case that
+  makes a full `n` legible as full.
+- **m-ML-1** — **fixed** (implementation half). The docstring's "four orders tighter" is gone and
+  replaced with the correct relation between the 4-dp publication and the 1e-9 mandate. The note
+  half (publish the ten bounds at 10 dp, keep 1e-9) stays open for the note revision.
+- **m-ML-2** — **superseded, confirmed.** The review text asks for a ceiling I withdrew under the
+  tie-breaker; truncation is correct and is what shipped. Nobody should re-apply the Pass 1 text.
+  The note-side change is the opposite of what m-ML-2 asked: 15.8 → 15.7 (n=38), 7.1 → 7.0 (n=85),
+  46.7 → 46.6 (n=15, α=0.025); 58.3 and 23.3 stand.
+- **m-ML-3** — **fixed.** `designEffect` and `basis` have no dataclass defaults; the legacy fallback
+  lives only in `from_dict`, where it means "written before these fields existed", which is the
+  right home for it.
+- **m-ML-4** — **fixed.** `_BASIS_STRENGTH` takes the weaker of the two actual bases instead of
+  collapsing to `"assumed"`; the decision rule is unchanged and the provenance is now true.
+- **m-ML-5** — **fixed.** `generalization to unwritten {sample_noun}`.
+- **n-ML-1** — **declined, and the decline is right — I accept it.** Their argument is better than
+  my nit: the floor's conservative error is *smaller* and only the unfloored denominator produces
+  it, while the MDD's is *larger* and only flooring produces it, so unifying them would make one of
+  the two anti-conservative. It is the same principle as the rounding direction and the α ruling
+  above, which is why it should be stated once in the note rather than three times.
+- **n-ML-2** — open, note-side, unchanged.
+- **n-ML-3** — **fixed.** The docstring now records that `_Z_95` is the 16-significant-digit decimal
+  of the double rather than the double itself, and asserts the inequality explicitly.
+
+### A correction to my own Pass 1 adjudication
+
+My sweep claimed no `n <= 500` case makes naive truncation misfire. **That was wrong, and the reason
+is narrower than "percentage points versus proportions".** I swept `math.floor(x * 1000)`; the code
+computes `math.floor(x / precision)`. For `7/40` the two disagree: `x * 1000 == 175.0` exactly,
+while `x / 0.001 == 174.99999999999997`, because the double nearest `0.001` is slightly above it and
+the division rounds down across the bin edge. Multiplying by an exact power-of-ten-ish double
+happened to round the other way, so my sweep tested an expression the code does not use.
+
+Re-run against the code's own expression: over `n <= 1000` naive truncation misfires at exactly
+**three** points, all at α = 0.025 — **n = 10, 20 and 40**. `n = 40` is both a published row of §7.1
+(17.5 pp) and the `clear_suspend` slice size in §7.3, so the guard is load-bearing on a cell the note
+prints, not defensive. `test_the_floor_truncation_is_guarded_against_the_bin_edge` pins it, and it
+should stay pinned by that expression rather than by an equivalent-looking one.

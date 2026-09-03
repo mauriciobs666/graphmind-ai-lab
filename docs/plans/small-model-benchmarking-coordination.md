@@ -44,7 +44,10 @@ Stakeholder decisions, 2026-09-02:
 | U5b — Methodology review of `stats.py` | `data-scientist` | `a7fbf4d59bfa1d0da` | delivered | `docs/reviews/small-model-benchmarking-ml.md` — **needs changes**: 1 blocker, 4 majors, 5 minors, 3 nits | — (is the gate) | 168k tok / 35 tools |
 | U6a — Fix both gates' findings in the code | `tdd-engineer` (fresh) | `a79396bc49b0280d8` | delivered | 14 files, +1909/−168, **296 tests**; 34 mutations, 0 survivors | U7a + U7b → — | 322k tok / 74 tools |
 | U7a — Re-gate the fix round (engineering, `## Pass 2`) | `analyst` | `aa9d6d24849f63006` (resumed) | delivered | `docs/reviews/small-model-benchmarking-impl.md` `## Pass 2` — **approve with suggestions**; 18/18 closed, 1 new major | — (is the gate) | 281k tok / 29 tools |
-| U7b — Re-gate the fix round (statistics, `## Pass 2`) | `data-scientist` | `a7fbf4d59bfa1d0da` (resumed) | in-flight | `docs/reviews/small-model-benchmarking-ml.md` | — (is the gate) | — |
+| U7b — Re-gate the fix round (statistics, `## Pass 2`) | `data-scientist` | `a7fbf4d59bfa1d0da` (resumed) | delivered | `## Pass 2` — **needs changes**: 1 blocker, 1 major, 1 minor (all new) | — (is the gate) | 237k tok / 13 tools |
+| U8a — Note: the α ruling, Rule 7 split by path, the unified principle | `data-scientist` | — | queued | `docs/plans/small-model-benchmarking-ml.md` v1.6 | teco-verified | — |
+| U8b — Plan sweep: `PackRef.contentHash` / Appendix A identity triple | `architect` | — | queued | `docs/plans/small-model-benchmarking.md` v1.6 | teco-verified | — |
+| U8c — Code: B-ML-2, m-ML-6, P2-1…P2-5 | `tdd-engineer` | — | queued (after U8a) | `model-bench/**` | re-gate → — | — |
 | U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | queued (after the re-gates) | `docs/plans/small-model-benchmarking.md` v1.6 | teco-verified | — |
 | U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | queued (after U6a, to avoid a read-write race) | `docs/plans/small-model-benchmarking-ml.md` v1.6 | teco-verified | — |
 | U6b — Republish the `-ml` fixtures at 10 dp | `data-scientist` | `a394671cfc28bef87` (resumed) | accepted | `docs/plans/small-model-benchmarking-ml.md` **v1.5** — + Rule 7, floor rounding corrected | teco-verified | 218k tok / 8 tools |
@@ -471,3 +474,40 @@ re-drawn against U4's actual delivery before dispatch.
   `fingerprint.packContentHash`. Suggested wording is in the review for U7c's sweep.
 - **Routing note:** `analyst` is now at ~281k cumulative tokens. The next engineering gate is a
   **fresh** dispatch; this reviewer's reasoning is fully written into Pass 1 and Pass 2.
+
+- **2026-09-03 — U7b: `needs changes`, and the new blocker is in the corner nobody parameterised.**
+  **B-ML-2:** at DEFF = 1.0 with `basis="assumed"` — which is **every comparison until S2 lands the
+  determinism probe** — the decision leaves McNemar and `√1 = 1` widens nothing, so a bare
+  percentile interval decides. Measured at n=40: `b=7,c=1` (p=0.070), `b=9,c=2` (p=0.065),
+  `b=11,c=3` (p=0.057) all render **distinguishable** where the exact test refuses. Rule 7 misses
+  them (all at or above the floor) and the new width test parameterises DEFF over {2,4,7} only.
+  Fix: on any non-`by-construction` path the decision becomes a **conjunction** — widened CI
+  excludes zero **and** `mcnemar_exact ≤ alpha_step`. Using McNemar as a *veto* does not violate
+  Rule 4, whose objection is that it **rejects** too readily; a necessary condition only removes
+  rejections.
+- **The √DEFF interim is accepted, and the deferral argument endorsed.** The conversion is exact in
+  the sense claimed (Kish's DEFF is a variance ratio, half-width scales as `1/√n`), checked against
+  a hand computation to 1e-12. The reviewer would **not** build the structural primitive before a
+  pack needs it: *the event that falsifies the interim is the same event that unlocks the real one.*
+- **Rule 7 is right on one path and wrong on the other.** Demote-and-name is correct on the
+  substitute path, but on the McNemar branch the invariant is a **theorem** — re-confirmed
+  exhaustively, zero violations over six *n* — so a fire there is a module bug, and demoting
+  silently discards the detector property Rule 7's own docstring claims. Split by path: demote on
+  `cluster-bootstrap`, **raise** on `mcnemar-exact`.
+- **The α gap: the reviewer contests the shipped resolution, by the same principle that settled the
+  rounding.** The printed floor's sentence is true only at the **loosest** step a member can face
+  (α=0.05 → `6/n`); printed at α/k it is `7/n` and **false** — b=6,c=0 at n=40 is p=0.031, reaches
+  significance at a 0.05 step, and sits below the printed 17.5 pp. *Identical falsity class to the
+  `15.8` withdrawn in Pass 1.* The shipped conservative choice also reduces Holm to Bonferroni in
+  `[6/n, 7/n)` — **charging twice** the price §7.3 already books for a second verdict metric.
+- **The generalisation now covers three rulings at once:** *every printed bound takes the rounding
+  direction, the α **and** the denominator that keep its own claim true.* The Pass 1 rounding
+  ruling, this α ruling and the declined n-ML-1 are three instances of one rule, and the note is to
+  state it once rather than three times.
+- **The reviewer corrected its own sweep again, and more precisely than teco had:** the miss was not
+  "pp versus proportions" but that it swept `math.floor(x*1000)` where the code computes
+  `math.floor(x/precision)`. For `7/40`, `x*1000 == 175.0` exactly while `x/0.001 ==
+  174.99999999999997`. Re-run against the code's own expression, naive truncation misfires at
+  **exactly three points under n ≤ 1000 — n = 10, 20, 40 at α=0.025** — and n=40 is both a published
+  §7.1 row and §7.3's `clear_suspend` slice. **The pinning test must keep using that exact
+  expression, not an equivalent-looking one.**
