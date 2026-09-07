@@ -4,8 +4,9 @@
 
 ## Pass 1 — 2026-09-02
 
-*(Current verdict is **`## Pass 5`**'s, at the end of this document: **needs changes** on plan v1.10
-/ note v1.13. Pass 4 gated plan v1.9, Pass 3 plan v1.8, both **needs changes**; Pass 2 gated plan
+*(Current verdict is **`## Pass 6`**'s, at the end of this document: **needs changes** on plan v1.11
+/ note v1.14. Pass 5 gated plan v1.10, Pass 4 plan v1.9, Pass 3 plan v1.8, all **needs changes**;
+Pass 2 gated plan
 v1.3 with **approve with suggestions**. Pass 1 gated plan v1.1 and is kept intact — the passes are
 meant to be read together, and each disposition table is only legible against the findings of the
 pass before it.)*
@@ -1794,3 +1795,272 @@ retiring `:263` leaves **both** functions production-unreachable. Note that
 | `Fingerprint` construction sites | `grep -rFn 'Fingerprint('` | 12 lines, 10 real construction sites; all but one carry `armKind` on the line, and `callSurface` as a required no-default argument breaks every one loudly — rule 5's *add* half is satisfied in substance |
 | the embedder's catalog `type` | §2.5 / Pass 4 Appendix D.3 | types across 19 entries are `{llm, vlm, embeddings}`; `text-embedding-qwen3-embedding-0.6b` is `embeddings` and advertises `capabilities: ["tool_use"]` — the evidence for **P5-1** |
 | no `model-bench` CPG | `mcp__cypher__query(graph='cpg_model_bench')` | not a loaded graph; instance lists `cpg_falkorchat`, `cpg_deprecated_salesperson` and workspace graphs only |
+
+## Pass 6 — 2026-09-07
+
+**Re-gated:** plan **v1.11** (`85a32e5`, +540/−110) against note **v1.14** (`ca69cb1`), the
+requirements as amended, and the **shipped S1 tree** — `model-bench/` at HEAD is byte-identical to
+`5878014` (`git diff --stat 5878014..HEAD -- model-bench/` is empty), re-run here: **389 passed in
+5.49 s**, `ruff check .` clean. Weighted to the brief's five questions: Pass 5's ten dispositions,
+the architect's rejection of `P5-2`'s second residual, rule 5's second formulation, the
+fix-reopens-a-finding shape, and Table E plus a sweep for defects of its class. Findings carry the
+prefix **`P6-`** (*plan-gate P6-n*; `docs/reviews/small-model-benchmarking-impl.md`'s are
+*impl-gate*). Written by a reviewer who did not write Passes 1–5.
+
+**CPG:** considered, not relevant — no `model-bench` CPG exists (the instance loads `cpg_falkorchat`
+and `cpg_deprecated_salesperson` only), and v1.11 makes no structural claim about `falkor-chat`. All
+grounding below is `grep`/`sed`/`pytest` against `model-bench/` at `5878014`.
+
+**Verified, not assumed.** The sixteen pinned counts were re-verified upstream of this pass and are
+taken as given. This pass spent its effort on (a) whether the five tables *satisfy* the rule they now
+cite, and (b) the brief's item-5 sweep — shipped S1 code correct for its current caller and wrong for
+a caller the plan commits to adding. Every claim below is a command reproduced today (Appendix F) or
+a line read at a cited location. No model was loaded in LM Studio.
+
+**Verdict: needs changes.** 1 blocker, 2 majors, 2 minors, 0 nits. **S2 may not be dispatched yet**,
+and the reason is `P6-1` specifically: its resolution may change `ItemResult`'s shape, which S2's
+runner/scorer seam constructs, so dispatching first risks the rework the S1e "free only now" argument
+exists to avoid. `P6-1` is a plan **decision** plus one specification, not unbuilt work.
+
+**All ten Pass 5 findings are fixed and none is carried** — the disposition table below is ten
+*fixed*, which is what v1.11 claims, and I checked each one against the tree rather than against the
+plan's own summary. That is a real improvement on the previous three revisions. The three findings
+below are **not** re-litigations of Pass 5: `P6-2` and `P6-3` are defects *introduced by* v1.11's
+fixes to `P5-2` and `P5-3`, and `P6-1` is the sweep the brief asked for, returning a larger instance
+of Table E's own defect class.
+
+**The two adjudications the brief asked for, up front.**
+
+**(1) The architect's rejection of `P5-2`'s second residual is correct.** `P5-2` prescribed
+`grep -rFn arm_kind modelbench tests --include='*.py' | grep -cF '"model"'` → 2 → 0. The two lines
+are `tests/conftest.py:148` (`arm_kind: str = "model"`, a parameter default) and `:160`
+(`fields = model_fields() if arm_kind == "model" else deterministic_fields()`). `armKind` keeps both
+its values by design (§3.4.1), so `:148` survives any faithful edit outright, and `:160`'s plausible
+faithful form — add a `call_surface` parameter, branch on it inside the `model` arm — keeps
+`arm_kind == "model"` too. The residual is ≥ 1 after a correct implementation. Rejecting it was
+right, and Table B's own row for `conftest.py:148`/`:160` says so on the row, which is the better
+place for it than a footnote. **The generalisation — *a residual that fails on a correct edit is a
+trap, not a check* — is sound and is the right lesson to have drawn.** It is also the rule v1.11
+breaks in the same table: `P6-2`.
+
+**(2) Rule 5, second formulation: sound as stated; not fully applied.** The restatement is honest and
+coherent — a no-forgetting guarantee over token-carrying sites, a second named command for every
+token-free site, a second-form residual wherever the token survives, plus the two bounds (a command
+reaches a construct's body through its head; a residual must not fail on a correct edit). DC-12 is
+correctly reduced to the direction a residual proves and says out loud what it does not prove.
+**Table B satisfies it**: commands 4–6 are real coverage, the eleven site rows with *found by* are
+checkable, and stating that `armKind` has no residual — with the type system named as what stands in
+its place — is exactly what 5(b) asks for. **Table E does not** (`P6-3`), and §4 S1e's scope claim
+overreaches (`P6-4`). So the rule is not the problem this pass; its application inside the revision
+that wrote it is.
+
+### New findings
+
+#### Blocker
+
+**P6-1 (blocker) — no field on the record can carry a per-item continuous value, so the continuous
+verdict path the plan commits to (MRR — the embedder pack's *only* verdict metric and its headline —
+and `sep_z`) cannot be built, and the shipped comparison path fails silently in two directions
+instead of loudly. Table E gates S3 done-condition 2 on the clamp; the interval it protects has no
+producer and no renderer.**
+*Evidence:* §3.8.1 declares `verdictMetrics = ["mrr"]`, `headlineMetric = "mrr"`; `-ml` §7.2 gives
+the embedder's instrument as "paired bootstrap on per-query MRR", floor `n/a (continuous)`, and
+§3.2d rules "the CI *is* the test — no separate significance test". §4 S1's target `ItemResult`
+carries `counts: Mapping[str, int]`, `scoreable: Mapping[str, bool]` and `detail` — the last
+"scorer-specific, **never read by `report.py`**". `paired_cluster_bootstrap` needs `diffs`,
+per-query MRR differences; **the plan's own types close every route to them.** Shipped `report.py`
+runs one binary loop over the whole family (`:606-655`): `_paired_rows` → `ItemResult.scored_outcome`
+→ `PairedOutcomes.from_units` → `mcnemar_exact` → Holm → `stats.verdict`, whose every string is
+percentage points (`stats.py:967, 984, 1008, 1015` via `_pp`). Executed, not inferred (Appendix F.2):
+`scored_outcome("mrr")` returns `True` for a reciprocal rank of 0.5 and `False` for 0.0.
+*Why it matters:* two silent outcomes, both on a green run. A scorer that declares `mrr` scoreable
+booleanises it to *did this query retrieve anything*, and the report prints a McNemar `+X pp` verdict
+for a metric the note says has no significance test — a different metric under the same name. A
+scorer that does not (the natural reading, MRR being a `ContinuousMetric` aggregate) yields
+`n_units == 0` for every unit, so `rp is None` and the pack's only verdict metric renders **"No
+verdict: no paired data"**. `RetrievalAggregates.named_metrics()` (`results.py:190-195`) likewise
+omits `separationZ`/`separationRaw`, so `sep_z` reaches no table either.
+*Fix:* three things, all plan edits available today. **(a)** Decide and state where a per-item
+continuous value lives — `counts` widened to `Mapping[str, float]`, or a new
+`ItemResult.measures: Mapping[str, float]` — and say whether `scored_outcome`'s `bool | None`
+contract gains a continuous sibling. **This is S1-local record shape, so §4 S1e's own "free only now,
+because `results/runs/` does not exist" argument makes it due with the other five tables, not at S3**;
+if it lands as a sixth table it carries rule 5's three things like the rest. **(b)** State in §4 S3
+what renders a continuous verdict — `report.py`'s family loop is binary end-to-end, and a continuous
+member has no McNemar *p* for the Holm ladder to rank. **(c)** Raise to `data-scientist` (rule 3: the
+owner fixes it in their own file) that `-ml` §3.2e publishes three verdict strings, all carrying `pp`
+and a McNemar clause, and none fits a pack whose floor is `n/a`. Then correct Table E's deadline
+sentence, which currently reads as though the clamp were the obstacle between S3 and a `sep_z`
+interval.
+
+#### Majors
+
+**P6-2 (major) — Table B's fourth residual, `{"model", "deterministic"}` → 0, fails on an
+implementation Table B itself authorises. It is the same trap the architect just rejected `P5-2`'s
+residual for being, in the table written to close `P5-2`.**
+*Evidence:* the residual's two sites today are `test_fingerprint.py:213` and `:234` (verified, 2
+lines). Table B's `fingerprint.py:137` row prescribes: "`ARM_KINDS` stays `{"model",
+"deterministic"}` — **a literal** or a derivation over `REQUIRED_BY_SCHEMA`'s profile keys split on
+`:`". Under the literal branch the edit *adds* `frozenset({"model", "deterministic"})` to
+`fingerprint.py`, and the residual is 1, not 0 — and any test pinning the decoupling (the row's whole
+point, since the coupled form makes every model record refuse) adds a second.
+*Why it matters:* DC-12 re-runs this residual and asserts zero, so S1e cannot be signed off under
+half the implementations the plan permits — and the implementer's exit is to override a
+done-condition, which is precisely the behaviour §7 rule 5(b)'s new sentence exists to prevent.
+*Fix:* one of two clauses. Either narrow the residual to the two assertion sites it means —
+`grep -rFn '{"model", "deterministic"}' tests --include='*.py'` → 2 → 0, scoped to `tests/` — or drop
+the literal branch from the `:137` row and require the derivation, which makes the unscoped residual
+honest. The first is smaller; the second also removes a hand-transcribed set that §7 rule 4 would
+have to keep swept.
+
+**P6-3 (major) — Table E names four tests that do not call `_widen`, misses the three call sites its
+edit actually breaks, and contradicts Table D on `paired_cluster_bootstrap`'s signature. It is
+rule 5(a)'s token-free-site gap, in the table added to demonstrate rule 5.**
+*Evidence:* `grep -rFn _widen modelbench tests --include='*.py'` → 7 lines; the four in
+`test_stats.py` are `:743`, `:773`, `:915`, `:1110` — **`def` lines whose test *names* contain
+"widening"/"widened"/"widens"**. All four are `verdict()`-level tests; none calls `_widen` (it is
+private) or `paired_cluster_bootstrap`, so Table E's row "the four `_widen`-related tests | keep
+their present behaviour under `clamp=(-1.0, 1.0)`" cannot be executed as written. The sites that do
+break when `clamp` becomes required-with-no-default are `test_stats.py:1270`, `:1323` and `:1330` —
+the three `paired_cluster_bootstrap(...)` test call sites — which carry no `_widen` and appear in
+**none** of Table E's commands. Separately, Table D's row says `paired_cluster_bootstrap` and
+`paired_bootstrap` are "kept, and **neither is touched** … **No edit**", while Table E's second row
+changes `paired_cluster_bootstrap`'s signature at `stats.py:162`.
+*Why it matters:* the failure is loud (a `TypeError`), so nothing ships wrong — but the implementer
+discovers Table E's site list is fiction by running the suite, which is the trust in the mechanism
+that rule 5 was adopted to build. And Table E leaves undecided what those three retained tests pass:
+`test_paired_cluster_bootstrap_scales_the_half_widths_by_sqrt_deff` (`:1317-1325`) is the executable
+statement of the √DEFF exactness argument Table D says must survive.
+*Fix:* give Table E a second command — `grep -rFn 'paired_cluster_bootstrap(' modelbench tests
+--include='*.py'` — with its per-file counts, replace the wrong test row with rows for `:1270`,
+`:1323`, `:1330` naming the clamp each passes, say at which level the new defect-reproducing test is
+written (`_widen` is private; `paired_cluster_bootstrap` is the public surface), and add four words
+to Table D's row: *not touched **by this table***.
+
+#### Minors
+
+**P6-4 (minor) — §4 S1e is titled "**The** edit set over shipped code" and DC-12 enumerates "each of
+§4 S1e's five tables", while DC-11's `ItemResult.timing` / `latencyMs`-as-property change sits
+outside all five with no command and no residual.** `grep -rFc latencyMs modelbench tests` →
+26 lines across 5 files (`results.py` 8, `test_results.py` 8, `test_report.py` 8, `conftest.py` 1,
+`test_cli.py` 1); `ItemTiming`, `LatencyBlock`, `withheldFor` and `wallClockMs` appear **0 times** in
+the tree. It is defensible under rule 5's *adds rather than retires* half — `latencyMs` is a required
+positional today, so every construction site breaks loudly — but the section should say that, because
+an implementer reading "the edit set" will not go looking for a sixth. *Fix:* one sentence in S1e's
+preamble scoping the five tables to *retiring and re-keying* edits and naming §4 S1's signature block
+plus DC-11 as the type-system-enforced remainder.
+
+**P6-5 (minor) — Table B's second residual is stated as prose in a table whose thesis is that a
+residual is a command with a count.** The row reads "`ARM_KINDS` still derived from the **forbidden
+mapping** (`fingerprint.py:137`) | 1 | **0**", which is an eyeball check; it is also doing real work,
+since residual 1 (`FORBIDDEN_BY_ARM_KIND` → 0) is satisfied by a rename that leaves `ARM_KINDS`
+coupled to the renamed mapping. *Fix:* write it as the command it already is —
+`grep -rFn 'frozenset(FORBIDDEN' modelbench --include='*.py'` → **1 → 0** (verified today;
+`fingerprint.py:137` is the only match).
+
+### Disposition of Pass 5's ten
+
+All ten re-checked against v1.11 at `85a32e5` and against the tree at `5878014`; **ten fixed, none
+unfixed, none carried.** Where a fix introduced a new defect it is named.
+
+| # | Disposition | Evidence rechecked |
+|---|---|---|
+| **P5-1** (unscoped gate refuses every embedder arm) | **Fixed, on both sides as claimed** | §3.4.4a step 3a scopes the two refusals separately; §3.4.4a's `callSurface` bullet writes the cross-check predicate out and names it the universal pre-load refusal; §3.6's gate bullet carries its own scope paragraph naming `text-embedding-qwen3-embedding-0.6b` and why the redundant half is kept. Both sentences read the same way. |
+| **P5-2** (rule 5 over-claimed; Table B incomplete) | **Fixed — and the fix carries a new trap** | §7 rule 5 restated (no-forgetting over token-carrying sites; 5(a) second command; 5(b) second-form residual; two bounds); DC-12 reduced to the sound direction with the converse denied explicitly; Table B at six commands / eleven *found by* rows / four residuals. Residue: **P6-2**. |
+| **P5-3** (`paired_cluster_bootstrap` undispositioned) | **Fixed — routed to the note and ruled *keep*** | Table D's new row carries both enumerating commands (13 and 8 lines, reproduced), the disposition *no edit*, the entry-point/engine distinction from `-ml` v1.14 §3.4 Rule 4, and an explicit "deleting them is not authorised". §4 S1's signature block carries the same distinction as a comment. Residue: the collision with Table E — **P6-3**. |
+| **P5-4** (§3.4.2 contradicts the capture order) | **Fixed** | §3.4.2's paragraph now cites §3.4.4a as owner and attaches the `loadedContextLength` constraint to the **step 8** read; the v1.8 sentence that forbade step 3a is recorded as withdrawn rather than silently dropped. |
+| **P5-5** (co-presence has no runtime disposition) | **Fixed** | §4 S2 rule **(iv-c)**: an item with `stats` but `promptTokens` absent or `≤ 0` leaves `statsCoveredCount` **and** all three medians, "a *disposition*, not an assertion: nothing raises"; rule (iv)'s identity is now the inequality `statsCoveredCount ≤ latencyItemCount − latencyWithheldForNoResponse`; §7 re-paired to note **v1.14** (`ca69cb1`), which is current. |
+| **P5-6** (`censoringExact` clause 1 unevaluable) | **Fixed, and the sweep is real** | `withheldFor` is `Literal["load","timeout","no_response"] \| None` at §4 S1 (`:2125`); swept surfaces verified present at §3.6 clause (ii) (`:1317`) and the fourth disposition (`:1340`), §3.6's `censoringExact` bullet (`:1365`), DC-11's four absent cases (`:2528`), §4 S2 (vi) three-states-two-counts (`:2957-2963`), §4 S2's `censoringExact` bullet (`:2970-2977`), §5 test 15b's four branches (`:3330-3357`), Appendix A (`:4079`), §7 (`:4012`). One counter retained. |
+| **P5-7** (rule (i) "the three figures") | **Fixed** | (i) now reads "the three **wall-clock** figures", names the four `stats`-derived ones, and states that both `None` causes are indistinguishable in the block with `statsCoveredCount` as the discriminator. |
+| **P5-8** (unit boundary raises on absent `stats`) | **Fixed, both homes** | §3.6's unit boundary (`:1207-1208`) and §4 S2's restatement (`:2814`): each derived field is `None` when its source key is absent, never `0`, and `ChatResult` construction never raises on a missing or partial `stats`. |
+| **P5-9** ("no timing at all" vs rule (vi)) | **Fixed** | §3.6's timeout clause (ii) and fourth disposition both now say the item carries an `ItemTiming` whose only populated field is `withheldFor`; §4 S1's comment keeps `timing is None` for the arm-level case. |
+| **P5-10** (`sampling.seed` in the fingerprint) | **Fixed, before S3 as asked** | §3.4.2 states the seed reaches the fingerprint **transitively through `packContentHash`** (`REQUIRED_NONEMPTY` on all three profiles), adds no field, and names what the transitive route does not buy. |
+
+### The recurring shape, answered
+
+The brief's fourth question — *a fix that reopens a closed finding, now three revisions running.*
+Verified rather than accepted: v1.11's `P5-1` fix **is** stated on both sides, and the `P5-6`/`P5-9`
+sweep **is** complete across all nine surfaces it claims. So the specific defect Pass 5 named does not
+recur. **But the shape does, twice, and both instances are now internal to a single revision rather
+than against an earlier one:** Table B's residual 4 is the trap forbidden by rule 5(b), written in the
+same edit as rule 5(b) (`P6-2`); Table E contradicts Table D's "neither is touched" and misses the
+sites 5(a) requires a second command for, written in the same edit as 5(a) (`P6-3`). The pattern has
+migrated from *sweep the other section* to *satisfy the rule you just wrote*. A cheap counter for
+v1.12: after writing a residual, ask which authorised implementation makes it non-zero, and run each
+of a new table's commands once before publishing its site rows.
+
+### The item-5 sweep
+
+Asked for: other shipped S1 code correct for its current caller and wrong for a caller the plan
+commits to adding. **One instance, and it is larger than `_widen`'s** — the whole comparison surface
+is binary-only while the plan's first real pack's only verdict metric is continuous (`P6-1`). Its
+sub-parts, so the fix is scoped rather than open-ended: `ItemResult.counts` typed `Mapping[str, int]`;
+`scored_outcome` returning `bool | None` with `counts[metric] > 0`; `_paired_rows` building `a_ok`
+/`b_ok` booleans; `mcnemar_exact` computed for every family member; `stats.verdict`'s four strings in
+`pp`; `RetrievalAggregates.named_metrics()` omitting `separationZ`/`separationRaw`. Checked and
+**clear**: `results.py`'s `_percentile` and `_index_row` (Table C owns them), `_widen`'s two callers
+(both in Table E), the Arms table's `ContinuousMetric` branch (`report.py:578-583`, renders
+`n=…, mean, —` and prints no Wilson interval — correct), and DC-10's selector, which skips
+`ContinuousMetric` by `isinstance` at `report.py:211` and so is not a source of this defect.
+
+### What's solid
+
+- **The ten dispositions are genuine.** Every one was checked at the tree or at the cited section,
+  not against the plan's own change list, and every one holds. Three consecutive revisions of
+  fourteen / ten / ten closed findings with nothing carried is a real record.
+- **Rule 5's second formulation is the right rule.** It states a narrower property than it wants to,
+  denies its own converse in DC-12, and adds two bounds that are both correct. It is now a mechanism
+  a later revision can lean on without being misled by it.
+- **Table B is the demonstration.** Commands 4–6 close exactly the blind spot Pass 5 measured, the
+  *found by* column makes each row checkable in isolation, and the refusal to fake an `armKind`
+  residual — naming the type system as what stands in its place — is the honest move.
+- **The `P5-3` and `P5-6` routings were correct.** Both were sent to `data-scientist` rather than
+  decided by the architect; a public statistical function's deletion and a censoring predicate's
+  category are not the plan's to rule, and §7 rule 3 was applied as written.
+- **Table E's design reasoning is right even though its enumeration is not.** Required-with-no-default
+  over a `(-1.0, 1.0)` default is the correct call for a value that fails silently in the printing
+  direction, the rejected manifest-field alternative carries a real reversal trigger, and the residual
+  over `max(-1.0, point` is a properly-formed second-form residual.
+
+### Open questions
+
+1. **Is the continuous verdict path S1-local or S3-local?** `P6-1`(a) is a record-shape change, which
+   S1e's own "free only now" argument says is due now; `P6-1`(b)/(c) are renderer and method work that
+   could legitimately sit at S3. The architect should split them explicitly rather than let the whole
+   thing default to S3, because only the first has a deadline that has already started running.
+2. **Does `-ml` §3.2e owe a fourth verdict string?** The three published ones all carry `pp` and a
+   McNemar clause. The embedder's verdict has neither. That is the note's call, not the plan's, and
+   the plan should raise it rather than invent one.
+
+## Appendix F — Pass 6: what was re-run and read
+
+**F.1 — commands, all against `model-bench/` at `5878014`** (`git diff --stat 5878014..HEAD --
+model-bench/` empty; suite **389 passed in 5.49 s**; `ruff check .` clean).
+
+| Check | Command / location | Result |
+|---|---|---|
+| `P5-2`'s rejected residual | `grep -rFn arm_kind … \| grep -F '"model"'` | **2** — `conftest.py:148` (`arm_kind: str = "model"`, a parameter default) and `:160` (`model_fields() if arm_kind == "model"`). Both can survive a faithful edit → the architect's rejection stands |
+| Table B residual 3 | `grep -rFn 'REQUIRED_BY_SCHEMA[1]["model"]' …` | **3** — `test_fingerprint.py:34`, `:41`, `:144`; the key is retired by the re-key, so → 0 is sound |
+| Table B residual 4 | `grep -rFn '{"model", "deterministic"}' …` | **2** — `test_fingerprint.py:213`, `:234`. The `:137` row's *literal* branch re-adds the string in `fingerprint.py` → **P6-2** |
+| Table B residual 2, as a command | `grep -rFn 'frozenset(FORBIDDEN' modelbench --include='*.py'` | **1** — `fingerprint.py:137`. Works; the table states it as prose → **P6-5** |
+| `ARM_KINDS` line numbers | `grep -rn ARM_KINDS …` | `fingerprint.py:137`, `:162` — v1.11's correction of v1.10's `:136`/`:160` reproduces |
+| Table E's enumeration | `grep -rFn _widen …` | **7** — `stats.py:188`, `:191`, `:264`; `test_stats.py:743`, `:773`, `:915`, `:1110`, all four **`def` lines matching on the test name**, none a call → **P6-3** |
+| the sites Table E breaks | `grep -rFn paired_cluster_bootstrap …` | **13** — test call sites `:1270`, `:1323`, `:1330` carry no `_widen` and are in no Table E command → **P6-3** |
+| DC-11's edit set | `grep -rFc latencyMs …` / `grep -rn 'ItemTiming\|LatencyBlock\|withheldFor\|wallClockMs'` | **26** lines / 5 files; **0** occurrences of the new types → **P6-4** |
+| the clamp | `stats.py:191-202` | `max(-1.0, …)`, `min(1.0, …)`; callers `:188`, `:264`. Table E's premise holds |
+
+**F.2 — `P6-1`, executed.** A three-line probe against the shipped package
+(`.venv/bin/python`, `ItemResult` constructed directly):
+
+```
+scored_outcome('mrr') with counts={'mrr': 0.5}  ->  True
+scored_outcome('mrr') with counts={'mrr': 0.0}  ->  False
+scored_outcome('mrr') with no declaration       ->  None
+```
+
+`results.py:119` types `counts: Mapping[str, int]`; `:146-152` returns `self.counts[metric] > 0`.
+`report.py:606-655` runs `_paired_rows` → `PairedOutcomes.from_units` → `mcnemar_exact` → Holm →
+`stats.verdict` for **every** `verdictMetrics` member, and `report.py:637-648` renders
+`_NO_PAIRED_DATA` when `outcomes.n_units == 0`. `-ml` §7.2's embedder row: instrument "paired
+bootstrap on per-query MRR", floor `n/a (continuous)`; §3.2d: "for continuous metrics the CI *is* the
+test". §3.8.1: `verdictMetrics = ["mrr"]`, `headlineMetric = "mrr"`.
