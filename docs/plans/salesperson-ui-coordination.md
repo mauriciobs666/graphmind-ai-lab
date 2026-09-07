@@ -2659,3 +2659,48 @@ Routed back to the same delegate with its own transcript intact (197k, under the
 threshold, and the follow-up needs the reasoning it did not write down). The analyst's one open
 question — the suite figures it was barred from measuring — needed no work: I measured 185 and
 2617/14 myself, and `ws:acme` at 871.
+
+## Pass 16 approved, and a verification failure of my own (2026-09-07)
+
+**Verdict: approve with suggestions** — 0 blockers, 0 majors, 2 minors, 1 nit, and the reviewer
+said plainly it is not asking for a third pass. All twelve findings re-derived against the tree
+rather than read off the fix commit; two fixes judged *better* than what the review proposed.
+
+**The item worth recording is P16-14, because I got it wrong too.**
+
+The claim was that `GET /threads/{tid}/participants` is the counter-example to §1.4's
+"list `limit`s are `Query`-bounded (1–200)". I sampled that claim and reported it confirmed. What
+I actually ran was `grep -rn "le=50" falkorchat/api.py`, which returned
+`api.py:294: limit: int = Query(10, ge=1, le=50)`. That confirms **a bound of 50 exists**. It says
+nothing about **which route owns line 294** — and the answer is `GET /threads/{tid}/workflow-runs`.
+`list_thread_participants` takes no `limit` at all.
+
+So: a check narrower than the claim it was meant to support. **That is the defect class this
+entire coordination has been about, occurring in my own verification of a fix for it**, one turn
+after I wrote that the lesson was about where we were looking. The author grepped the same way and
+so did I, which is why two independent checks agreed and were both wrong — *independent agreement
+is only evidence when the checks are actually independent, and two people running the same grep
+are one check.*
+
+The general repair is the one the author found: **a sentence quantifying over a set should name
+the set's size and let the arithmetic be checked** (`5 + 1 + 1 + 4 = 11`, now in the document).
+That is the first fix in this coordination that makes the defect *self-detecting* rather than
+merely absent — it is how the author caught its own error, and it is the thing to carry forward.
+
+**P16-13** is the same shape once more: `FALKORCHAT_STOREFRONT_QUIESCE_S` is as inert as the two
+rows above it — `Storefront.set_turn_state` (`storefront.py:632`) has **no caller in
+`falkorchat/`**, so `503 quiesce_timeout` and `409 turn_in_progress` are both unreachable today. I
+verified it. The marker convention was applied to the rows that were *reported*, not made true of
+the table; the fix now applies it to all eight rows.
+
+### First fresh dispatch on the context rule
+
+The doc author is at **264k tokens / 100 tool uses** — past both thresholds — and this work is
+small and fully specified by the review. Dispatched **fresh** rather than resumed, for the first
+time in this coordination. Continuing a large-context delegate on self-contained work buys
+nothing a good brief does not.
+
+Folded in the `salesperson/` entry-doc references to `start_demo.sh` (three, not two — including
+`README.md:95`, which instructs a reader to bring the stack up with a script that is not in the
+tree). The reviewer's priority argument is right: those are *entry* documents, so the natural next
+action after reading them is to run something that does not exist.
