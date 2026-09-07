@@ -3,6 +3,22 @@
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
 
+## 2026-09-07 — `lm-studio-model-notes.md`: a wording-iteration eval caution promoted from `coder`'s kaizen distillation (U11)
+
+- **What:** New section — on `mistralai/ministral-3-3b`, a *second* iteration of targeted prompt /
+  tool-description wording cut net task correctness from 16/20 (80%) to 14/20 (70%) while not
+  improving the defect it targeted, because it suppressed a multi-call self-correction the model
+  had been performing on its own. Two rules follow: score **net** correctness on every wording
+  iteration, not just the targeted defect rate; and treat an observed self-correction behaviour as
+  part of the baseline you can lose. Model-specific effect size, portable direction.
+- **Why:** the numbers and the mechanism exist only in `falkor-chat/docs/HISTORY.md` (2026-08-31,
+  K-057) and `docs/reviews/salesperson-tool-reliability-ml.md` §11/§14 — a milestone lookup doc and
+  a per-item review, neither of which a `data-scientist` designing a *future* prompt-wording eval
+  would read. The generalized caution is exactly what this knowledge base is for. Re-derived by
+  `cobb` from both documents (no model was loaded on the shared LM Studio server to verify).
+- **Files:** `claude/data-scientist/lm-studio-model-notes.md`. Source disposition:
+  `claude/coder/kaizen/history.md` (2026-09-07, U11).
+
 ## 2026-09-07 — `lm-studio-model-notes.md`: the measurement-surface section refined (second inbound promotion from `architect`'s kaizen distillation, chunk B)
 
 - **What:** Three clauses folded into the section created earlier the same day (entry below) — **no

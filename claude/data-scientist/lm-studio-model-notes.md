@@ -128,3 +128,37 @@ recorded by hand.
 
 **Context:** `docs/plans/small-model-benchmarking.md` (model-bench FR-7 environment fingerprint,
 FR-11 latency/RAM reporting).
+
+## More targeted wording guidance is not monotonically safer — on `mistralai/ministral-3-3b`, a second iteration cut net correctness 80% → 70% by suppressing a protective multi-call self-correction
+
+**Verified 2026-09-07** against `falkor-chat/docs/HISTORY.md` (2026-08-31, K-057) and
+`docs/reviews/salesperson-tool-reliability-ml.md` §11/§14, both live n=20 regressions on
+`mistralai/ministral-3-3b` through a `LoggingToolRegistry` harness against real LM Studio.
+
+Iteration 1 (two sentences: an inclusive-bound translation rule + a "don't state a conclusion
+before your last planned tool call returns" rule) shipped: the targeted rounding defect went to
+20/20 correct and **net full-reply correctness was 16/20 (80%)**. Iteration 2 added two more
+sentences aimed at a *newly discovered* third defect (silent category-omission at synthesis time).
+Result: the targeted defect did not improve (30% wrong vs. the shipped version's own 20%), the
+model still passed `category` 0/20 times — and **net correctness fell to 14/20 (70%)**, because the
+added guidance suppressed a multi-call self-correction pattern the model had been performing on its
+own under the shorter wording (a second, category-scoped `filter_products` call that §14.4 measured
+rescuing ~two-thirds of the reps it fired on). Iteration 2 was reverted, never shipped.
+
+**Consequence — two rules for any prompt/tool-description wording eval:**
+
+1. **Score net task correctness on every iteration, not just the targeted defect rate.** A wording
+   change is a global intervention on the model's behavior, not a patch to one code path: it can
+   fix its target and still lose ground overall. An eval that measures only the defect being fixed
+   cannot see that, and will ship a regression as a win.
+2. **Guidance can remove an emergent behavior that was already helping.** Before adding a sentence,
+   check whether the current sample shows the model self-correcting; if it does, that behavior is
+   part of the baseline you must not lose, and its rate belongs in the scorecard alongside the
+   defect rate. (`docs/reviews/…-ml.md` §11.5 had already warned of this in the abstract — steering
+   the model toward single-tool use "could plausibly remove the self-correction path"; iteration 2
+   is the measured confirmation.)
+
+Model-specific: measured only on `mistralai/ministral-3-3b` at n=20 per arm — treat the *direction*
+as a design caution, not the effect size as portable.
+
+**Context:** `falkor-chat` K-057 (salesperson demo agent tool-call reliability wording fix).

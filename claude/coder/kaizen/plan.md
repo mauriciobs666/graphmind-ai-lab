@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `coder` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-09-07
+> Last reviewed: 2026-09-07 (U11)
 
 ## Active
 
@@ -49,10 +49,12 @@
   `^`/`$` from a regex whose call site is `re.fullmatch()` is a **no-op mutant** — `fullmatch`
   enforces whole-string matching regardless of anchors in the pattern text, so the intended
   "unanchored regex" regression only appears once the call is also switched to `.match()`. The
-  general rule is worth stating somewhere the implementers read; there is no owning knowledge base
-  for testing technique today (`skills/python-web-quirks/` is scoped to web/async + pytest
-  import-timing, and `claude/qa-engineer/qa-testing-techniques.md` is scoped to black-box QA
-  mechanics), which is why the entry was discarded rather than promoted. Revisit if a
-  mutation-testing knowledge base ever earns its own file.
+  general rule is worth stating somewhere the implementers read. **A home now exists** — U11
+  (2026-09-07) promoted a sibling mutation technique (mutating a class-level Cypher constant via a
+  pytest `-p` plugin, no source edit) into `claude/analyst/review-techniques.md`, whose stated scope
+  is verification technique; that file, not a new mutation-testing knowledge base, is where this
+  lesson should land. U11 did not move it, to stay inside its own eight-entry scope. The homes ruled
+  out at U10 still are: `skills/python-web-quirks/` (web/async + pytest import-timing) and
+  `claude/qa-engineer/qa-testing-techniques.md` (black-box QA mechanics).
 - A "definition of done" checklist (suite green, behavior covered, no scope creep, honest run report) the coder self-checks before reporting completion.
 - Consider whether the coder should delegate the test-writing step to `tdd-engineer` when strict TDD is required, rather than doing it itself.

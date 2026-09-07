@@ -3,6 +3,29 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
+## 2026-09-07 — `review-techniques.md` gained two verification techniques from `coder`'s kaizen distillation (U11)
+
+- **What:** Two new sections, promoted by `cobb` out of `coder`'s `kaizen_team` capture (unit U11,
+  chunk B).
+  1. **Live graph/database state has no git provenance — and a two-sided diff cannot detect
+     common-mode staleness.** `git log --all -S` structurally cannot establish where stored state
+     came from, because the code that wrote it may have been an uncommitted working tree; and a
+     gate that compares two *derived* artifacts against each other (`services.diff_def_snapshot`:
+     `reference` vs. the workspace snapshot) is blind to staleness they share. Filed beside the
+     existing "An untracked plan/review doc has no re-verification baseline" — same family.
+  2. **Mutating a class-level constant via a pytest plugin (`-p`, `PYTHONPATH`) proves a guard is
+     load-bearing without touching source** — the safe form of a mutation ablation in a working
+     tree carrying other sessions' uncommitted changes. Written with its precondition foregrounded
+     (the constant must be read off `self` at call time, not captured at import), because that is
+     what decides whether the technique applies at all.
+- **Why:** both are verification technique, which is this file's stated scope, and both were
+  re-derived rather than taken on the entry's word: the `verify_salesperson.sh` header and check 6
+  were read as the shipped fix for (1), and `repository.py`'s class-attribute declarations plus
+  every `self._…_CYPHER` call site for (2). `analyst` did not produce either — a reviewer is the
+  reader who needs them.
+- **Files:** `claude/analyst/review-techniques.md`. Source dispositions:
+  `claude/coder/kaizen/history.md` (2026-09-07, U11).
+
 ## 2026-09-02 — one-token example refresh in the placeholder-vs-expanded-key trap (U6 of `salesperson-ui`)
 
 - **What:** `analyst.md` `:84`'s illustration of the pasted-doc-template-placeholder trap now cites

@@ -2,6 +2,29 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-09-07 — `falkordb-quirks.md` gained two more verified dialect facts from `coder`'s raw capture (U11)
+
+- **What:** `cobb`, distilling `coder`'s `kaizen_team` entries (unit U11,
+  `claude/docs/plans/kaizen-distillation2-coordination.md`, chunk B — 2026-08-31..09-02), promoted
+  two further FalkorDB facts into the *Cypher dialect & query behavior* section. Both re-derived
+  read-only by `cobb` against the live `reference` graph, module `41811` (v4.18.11) re-confirmed
+  via `MODULE LIST` first.
+  1. **A node extracted from a collected list by index degrades only in relationship patterns.**
+     The raw entry claimed `head(collect(DISTINCT n))` yields something usable as a value but never
+     as a pattern node. Re-derivation **narrowed and corrected both halves**: `MATCH (x)` on the
+     bare alias re-binds correctly (one row, the same node — not a re-scan), and only a
+     *relationship* pattern (`MATCH (x)-[r]-(y)`, `OPTIONAL MATCH (x)-[:REL]->(c)`) raises
+     `encountered unexpected type in Record; expected Node`. And the trigger is **index extraction,
+     not `head()`** — `collect(DISTINCT p)[0]` fails identically, which the raw entry had explicitly
+     attributed to `head()`. `UNWIND` is the working route; both were measured.
+  2. **Dynamic property access by variable key (`n[k]` for `k IN keys(n)`) works**, verified with a
+     positive and a negative control so the result is not vacuously true — making a whole-graph
+     "this value is stored under no property on any label" assertion a single read-only query.
+- **Why:** engine behaviour, not `coder` behaviour — it belongs in this on-demand knowledge base
+  where every agent that writes Cypher can reach it. Same routing as the four promoted at U10.
+- **Files:** `claude/graph-dba/falkordb-quirks.md`. Source dispositions:
+  `claude/coder/kaizen/history.md` (2026-09-07, U11).
+
 ## 2026-09-07 — `falkordb-quirks.md` gained four engine/client facts promoted out of `coder`'s raw capture (U10)
 
 - **What:** `cobb`, distilling `coder`'s `kaizen_team` entries (unit U10 of

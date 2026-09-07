@@ -2,6 +2,138 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-09-07 — `kaizen_team` distillation pass 2, unit U11 (chunk B of three): 8 raw entries processed — 4 promoted (2 to `graph-dba`, 1 to `data-scientist`, 2 sections to `analyst`), 4 discarded as already documented — all 8 cleared
+
+- **What:** `cobb` ran `agent-maintenance` §5 over the eight `coder`-produced `kaizen_team` entries
+  dated **2026-08-31 through 2026-09-02** — unit U11 of
+  `claude/docs/plans/kaizen-distillation2-coordination.md`. All eight were current-shape
+  (`(:Agent {agentId:'coder'})-[:PRODUCED]->`); zero legacy `author`-property entries remain
+  anywhere, so §5's legacy read was skipped. `coder`'s **seven** entries dated 2026-09-03 are
+  chunk C, a separate unit, and were **not touched** — read only, never counted, never cleared.
+- **Build confirmed before judging any version-stamped claim:** `redis-cli MODULE LIST` → graph
+  module `ver 41811` — still **v4.18.11**.
+- **Every entry re-derived, never confirmed from its own citation.** Four turned out to be already
+  published — three of those **at the point of use** (a script's header comment, a directory
+  README's own rule) rather than anywhere a docs-tree grep for the entry's own wording reaches.
+  One raw entry's stated mechanism was materially wrong and was corrected in promotion.
+
+  1. **`c1a2b3d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d` (08-31 — more targeted wording guidance is not
+     monotonically safer) — PROMOTED to `claude/data-scientist/lm-studio-model-notes.md`, new
+     section.** Re-derived from `falkor-chat/docs/HISTORY.md` (2026-08-31, K-057) and
+     `docs/reviews/salesperson-tool-reliability-ml.md` §11/§14 — both carry the numbers
+     (iteration 1 shipped at 16/20 = 80% net correct; the reverted iteration 2 fell to 14/20 = 70%,
+     the targeted category-omission defect unimproved at 30% vs. 20%) *and* the mechanism
+     (`HISTORY.md`: "while also suppressing a multi-call self-correction pattern that had rescued
+     several replies under the shipped wording"; §14.4 measures that self-correction rescuing ~2/3
+     of the reps it fires on). Not a discard, because both homes are per-item lookup documents — a
+     milestone history entry and one section of a K-item review — while the *generalized* rule
+     (score **net** correctness on every wording iteration, not just the targeted defect rate; an
+     observed self-correction is part of the baseline you can lose) is what a `data-scientist`
+     designing the next prompt-wording eval needs and would not find there. **No model was loaded
+     on the shared LM Studio server to verify** — per U7b's precedent, the documents were enough.
+  2. **`7c1f4e2a-9b83-4d15-a6c0-2e8f5d31b904` (09-02 — `git mv <dir>` moves a gitignored `.venv/`,
+     whose shebangs keep the old absolute path) — DISCARDED.** The live half verifies exactly as
+     written: `deprecated/salesperson/.venv/bin/streamlit` still begins with the pre-move
+     `…/salesperson/.venv/bin/python3` shebang, and `pyvenv.cfg`'s `command =` records the pre-move
+     path too. But the base fact — a virtualenv is not relocatable — is documented CPython
+     behaviour, the same bar that discarded `a1b2c3d4…`'s `re.fullmatch` fact at U10; and
+     `git mv` moving untracked-but-present contents follows directly from it being a filesystem
+     rename. The one project-specific consequence (the moved README's `./.venv/bin/python …`
+     instruction no longer works) is already covered by `deprecated/README.md`'s own first rule:
+     "**Nothing here is expected to still run**; a retired component's own docs describe it as it
+     was when it was retired." Nothing to add, and no `K-` item: a retired component's broken venv
+     is precisely what that rule says will not be fixed.
+  3. **`7c1e9d24-3b06-4a58-9f21-2ad4b6e0c913` (09-02 — a `WorkflowDefSnapshot` materialized into a
+     workspace is create-only per (key,version)) — DISCARDED, already documented on both sides.**
+     Mechanism verified in source: `Repository._PUBLISH_CYPHER` sets every property under
+     `ON CREATE SET` (`d.name`/`d.kind`, `st.config`, `rel.guard`), so a differing resubmit writes
+     nothing. `falkor-chat/docs/DESIGN.md` (§ the materialize decision, ~:170) already states it —
+     "Properties (`name`, `kind`, step `config`, transition `guard`) are create-only — a differing
+     resubmit of those stays a silent no-op, unchanged" — and `scripts/verify_salesperson.sh`'s
+     header (check 6) already carries the operational corollary the entry actually contributes,
+     verbatim: "`config` is create-only, so re-seeding cannot repair it; the failure text says to
+     bump the version, which is the only fix." Not merely documented — **guarded**: check 6 is a
+     shipped assertion. **No K-006 row was added for this one**, deliberately, against the routing
+     brief's default: it is not an open doc ask.
+  4. **`b4f0a7e1-95c2-4d3a-8e77-1c60f2ab5d38` (09-02 — graph content can originate from an
+     UNCOMMITTED working tree) — SPLIT: general half PROMOTED to
+     `claude/analyst/review-techniques.md`; falkor-chat corollary DISCARDED as already fixed and
+     documented.** The corollary (`services.diff_def_snapshot` compares `reference` against the
+     workspace snapshot, i.e. two *derived* artifacts against each other, so both can agree and
+     both be stale) is now shipped as `verify_salesperson.sh` check 6 and stated in that script's
+     own header — "Check 3 compares the two sides against EACH OTHER, so it is blind to a version
+     whose config was stored from an earlier or uncommitted working tree". The **general** half is
+     in no agent-facing place: `git log --all -S` structurally cannot establish the provenance of
+     anything stored in a database, because the code that wrote it may never have been committed —
+     a nil result is not evidence. Filed in `review-techniques.md` beside its own family ("An
+     untracked plan/review doc has no re-verification baseline"), with the second, structural
+     lesson attached: whenever a gate reports "in sync", ask **in sync with what**, because two
+     derived sides cannot detect common-mode staleness against their source.
+  5. **`86af3475-c64a-4137-be2a-256402f4ca76` (09-02 — repository Cypher in class-level constants
+     can be mutated without editing source) — PROMOTED to `claude/analyst/review-techniques.md`.**
+     Precondition verified in source, which is the whole technique: `repository.py` declares
+     `_RESET_PARTICIPANT_CYPHER` (`:3214`), `_PUBLISH_CYPHER` (`:1732`),
+     `_ENSURE_PARTICIPANT_CYPHER` and siblings as **class attributes**, and every call site
+     dereferences `self._…_CYPHER` (`:3661`, `:1884`, `:2604`, `:3422`, `:3712`), so a plugin
+     rebinding the attribute at import time takes effect for the whole session. Written up with the
+     precondition foregrounded — a constant captured at import into a module-level name, a default
+     argument, or a local will not respond to the rebind. Homed in `analyst`'s knowledge base
+     rather than left parked (U10's judgement, when the only candidate homes were
+     `skills/python-web-quirks/` and `claude/qa-engineer/qa-testing-techniques.md`, both out of
+     scope): `review-techniques.md`'s stated scope is verification technique and it already carries
+     "Verifying an uncommitted diff without mutating the working tree" — the same family, same
+     hazard, no scope stretch. `plan.md`'s parking-lot note updated to point there.
+  6. **`f3b1c2d4-6a58-4e19-9c07-2b8ad4e51f76` (09-02 — an alias bound by
+     `head(collect(DISTINCT <node>))`) — PROMOTED to `claude/graph-dba/falkordb-quirks.md`, with
+     the entry's stated mechanism CORRECTED in both halves.** Four read-only probes on the live
+     `reference` graph, module `41811`. The raw entry said the alias is usable as a value but
+     "cannot be re-bound as a pattern node" and that "`head()` over the list is what degrades
+     them". Both are narrower than claimed: `MATCH (x) WHERE x.name IS NOT NULL RETURN x.name`
+     re-binds the alias fine (one row, the same node — not a re-scan), so a **bare** node pattern
+     is not the trigger; only a **relationship** pattern raises (`MATCH (x)-[r]-(y)` and
+     `OPTIONAL MATCH (x)-[:REL]->(c)` both → `encountered unexpected type in Record; expected
+     Node`, raised whether or not such an edge exists). And it is not `head()`:
+     `collect(DISTINCT p)[0]` fails identically, so the trigger is **index extraction from the
+     collected list**. `WITH collect(…) AS xs UNWIND xs AS x` keeps the node fully usable —
+     measured, and now the entry's stated workaround. This is the sixth time in this pass that
+     re-derivation changed a claim rather than confirming it.
+  7. **`b1f0c3ae-6a7e-4d2c-9f31-2c7a4d5e8b90` (09-02 — FalkorDB dynamic property access by variable
+     key) — PROMOTED to `claude/graph-dba/falkordb-quirks.md`.** Re-derived with both controls on
+     module `41811`: `MATCH (n) WHERE any(k IN keys(n) WHERE n[k] = 'Wireless Mouse Pro') RETURN
+     labels(n), count(n)` → the one real match; the identical query for a value present on no node
+     → `0`, so it is not vacuously true either way. Promoted with the paired-control requirement
+     stated as part of the rule, since without it the "stored nowhere" assertion the entry exists
+     to enable degrades to a silent pass.
+  8. **`8f3a1c62-5d47-4b91-9a2e-0c7b6e41d5aa` (09-02 — this monorepo has no root-level pytest
+     configuration) — DISCARDED, already promoted.** Confirmed still true (`ls pyproject.toml
+     pytest.ini setup.cfg tox.ini` at the repo root → all four missing), and confirmed already
+     published: the root `AGENTS.md` opening paragraph, rewritten at unit U7 of this same pass,
+     already carries every clause this entry has — no root pytest config, run a component's suite
+     **with that component as the working directory**, because from the repo root pytest sets
+     `rootdir` to the monorepo, ignores the component's own `testpaths`, and walks into other
+     components' tests. Nothing new to fold; a second home would only drift.
+- **`MENTIONS` tags added: none.** Every entry that belonged to another agent's knowledge base was
+  re-derived by `cobb` first-hand and dispositioned into that file directly, so none needed to be
+  deferred to a future pass. (The 2026-08-25 pass tagged three entries precisely because confirming
+  them needed write-capable probes; that did not apply to any of these eight — all four promotions
+  were verified read-only or from source.)
+- **Cleared from `kaizen_team` this pass — all eight, each a full `DETACH DELETE`:** every entry was
+  counted first (`producedEdges + mentionEdges`); every one read `1 + 0`, so `otherRemaining == 0`
+  in all eight cases and the whole node was removed rather than just the `PRODUCED` edge. Ids:
+  `c1a2b3d4-5e6f…`, `7c1f4e2a-9b83…`, `7c1e9d24-3b06…`, `b4f0a7e1-95c2…`, `86af3475-c64a…`,
+  `f3b1c2d4-6a58…`, `b1f0c3ae-6a7e…`, `8f3a1c62-5d47…`.
+  **Id collision note:** `c1a2b3d4-5e6f-…` is one character from the `a1b2c3d4-e5f6-…` entry
+  cleared at U10, and `f3b1c2d4-6a58-…` is close to ids cleared in three other units. These ids are
+  hand-shaped, not `uuid4`; full id, date and subject were confirmed on every one before touching
+  it.
+- **Docs touched:** `claude/coder/kaizen/{plan,history}.md` · `claude/graph-dba/falkordb-quirks.md`
+  + `claude/graph-dba/kaizen/history.md` · `claude/data-scientist/lm-studio-model-notes.md` +
+  `claude/data-scientist/kaizen/history.md` · `claude/analyst/review-techniques.md` +
+  `claude/analyst/kaizen/history.md`.
+- **Plan items:** none opened, none closed. **K-006 was deliberately not extended** — both
+  falkor-chat entries in this chunk turned out already published (one of them additionally guarded
+  by a shipped assertion), so neither is an open doc ask. K-002 untouched.
+
 ## 2026-09-07 — `kaizen_team` distillation pass 2, unit U10 (chunk A of three): 12 raw entries processed — 4 promoted to `graph-dba`'s knowledge base, 4 discarded as already documented, 4 kept open as K-006 — all 12 cleared
 
 - **What:** `cobb` ran `agent-maintenance` §5 over the twelve `coder`-produced `kaizen_team`

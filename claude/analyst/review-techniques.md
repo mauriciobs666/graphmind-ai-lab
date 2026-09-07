@@ -323,3 +323,59 @@ matching-author `CREATE` was found, without checking whether the rest of the sta
 unrelated `MATCH...DETACH DELETE` or a mismatched producer-write. Both fixed in the shipped code
 (`_FOREIGN_TRIGGER_RE` now covers all four keywords; `authorize_write()` now calls
 `_has_foreign_trigger_outside_strings()` after an author-claim match, before authorizing).
+
+## Live graph/database state has no git provenance — and a two-sided diff cannot detect common-mode staleness
+
+Two related traps when an investigation has to establish **where stored state came from**.
+
+**1. `git log --all -S '<string>'` is not a provenance oracle for anything stored in a database.**
+Content reaches a live graph by *running* code, and the code that ran may have been an uncommitted
+working tree — so a nil `git log -S` result is not evidence the content was never shipped. Verified
+in this lab: a reverted experiment recorded in `falkor-chat/docs/BACKLOG.md` as "Reverted, never
+shipped" was found live as a materialized `ws:acme salesperson@v6` snapshot, and `git log --all -S`
+on its distinctive prompt string returned nothing, because it had been published from a working
+tree that was never committed. **Provenance questions about stored state are answered against the
+store itself** (read the rows, compare them to the current source constant), never against history.
+Same family as *"An untracked plan/review doc has no re-verification baseline"* above — git can only
+answer about what git was given.
+
+**2. A verification that compares two derived artifacts against EACH OTHER is structurally blind to
+staleness they share.** `falkor-chat`'s `services.diff_def_snapshot` compares `reference` against
+the workspace snapshot — both materialized from the same source constant at whatever moment they
+were written. When both were written from an older or uncommitted version of that constant, they
+agree perfectly, the topology check passes, and the version name silently denotes something the
+source file can no longer produce. Whenever a gate reports "in sync", ask **in sync with what** — if
+both sides are derived, the gate needs a third comparison against the source of truth, not a
+tighter two-sided one. Shipped precedent for the fix: `falkor-chat/scripts/verify_salesperson.sh`
+check 6 now diffs every stored step `config`, on both sides, against the `falkorchat.proof_defs`
+constant, and its header comment states the blindness explicitly.
+
+Origin: 2026-09-02, `salesperson-ui` S1 review findings F-1/F-8; distilled 2026-09-07 and
+re-derived against the shipped script and `services.diff_def_snapshot`.
+
+## Mutating a class-level constant via a pytest plugin proves a guard is load-bearing without touching source
+
+Mutation-testing a guard normally means editing the source file, running the suite, and restoring
+it — which is exactly the wrong move in a working tree carrying other sessions' uncommitted work
+(a restore step that fails, or a concurrent writer, loses real changes). When the code under test
+holds its statement in a **class-level constant read off `self`**, the mutation can happen entirely
+in a plugin at import time:
+
+- Write a plugin module in a scratch directory that imports the class and rebinds the constant
+  (`Repository._RESET_PARTICIPANT_CYPHER = <mutant text>`).
+- Run `PYTHONPATH=<scratch> .venv/bin/python -m pytest -p <plugin_module> tests/test_x.py -k …`.
+
+Every method reads the constant off `self` at call time, so the rebind takes effect for the whole
+session and the source file stays byte-untouched (`git diff` clean — which is also the evidence
+that the mutation was contained). Verified 2026-09-07 in `falkor-chat/server`:
+`repository.py` declares `_RESET_PARTICIPANT_CYPHER`/`_PUBLISH_CYPHER`/`_ENSURE_PARTICIPANT_CYPHER`
+etc. as class attributes and every call site dereferences `self._…_CYPHER`, so the precondition
+holds there today.
+
+**The precondition is the whole technique** — check it before promising the approach: a constant
+captured at import into a module-level name, a default argument, or a local, will not respond to
+the rebind. Where it does hold, this is the safe form of a mutation ablation under a shared or
+dirty working tree.
+
+Origin: 2026-09-02, `salesperson-ui` S4 — proving the two participant-reset guards were
+load-bearing while several other units' work sat uncommitted in the same tree.

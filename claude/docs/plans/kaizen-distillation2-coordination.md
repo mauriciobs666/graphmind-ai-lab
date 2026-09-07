@@ -63,7 +63,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U8 | tdd-engineer chunk A (12: ≤ 08-30) | `a23d066e2aad247f8` | accepted | `claude/tdd-engineer/tdd-engineer.md` (1 merged Principles bullet) + `kaizen/*` (K-007…K-010); `skills/python-web-quirks/SKILL.md` (1 new + 1 generalized) + `skills/agent-standards/claude-code.md` + `skills/README.md`; `claude/data-scientist/lm-studio-model-notes.md`; `claude/cobb/kaizen/history.md`; 12 nodes deleted | none → — | 182.7k tok, 74 tools |
 | U9 | tdd-engineer chunk B (8: ≥ 08-31) | `aa5d3ef4bb834eab9` | accepted | `claude/tdd-engineer/tdd-engineer.md` (1 sentence onto U8's bullet) + `kaizen/*` (K-011); `skills/python-web-quirks/SKILL.md` (folded into U7b's route-table section) + `skills/README.md`; `claude/cobb/kaizen/history.md`; 8 nodes deleted — **`tdd-engineer` closed out, 0/0** | none → — | 141.2k tok, 42 tools |
 | U10 | coder chunk A (12: ≤ 08-29) | `aacf69b25b40cbff5` (retry; `a695c632adfd6d91d` died on a rate limit) | accepted | `claude/graph-dba/falkordb-quirks.md` (+43 lines, 1 prior entry corrected) + `kaizen/history.md`; `claude/coder/kaizen/*` (K-006 consolidated, K-005 closed); 12 nodes deleted | none → — | 180.7k tok, 68 tools |
-| U11 | coder chunk B (8: 08-31…09-02) | — | queued | `claude/coder/kaizen/*`, graph cleared | none → — | — |
+| U11 | coder chunk B (8: 08-31…09-02) | `a567c2024835b0516` | accepted | `claude/analyst/review-techniques.md` (2 techniques) + `kaizen/history.md`; `claude/graph-dba/falkordb-quirks.md` (1 corrected) + `kaizen/history.md`; `claude/data-scientist/lm-studio-model-notes.md` + `kaizen/history.md`; `claude/coder/kaizen/*`; 8 nodes deleted | none → — | 172.4k tok, 59 tools |
 | U12 | coder chunk C (7: 09-03) | — | queued | `claude/coder/kaizen/*`, graph cleared | none → — | — |
 | U13 | data-scientist chunk A (10: ≤ 08-30) | — | queued | `claude/data-scientist/kaizen/*`, graph cleared | none → — | — |
 | U14 | data-scientist chunk B (9: 08-31…09-02) | — | queued | `claude/data-scientist/kaizen/*`, graph cleared | none → — | — |
@@ -231,6 +231,12 @@ dies before either leaves nothing at all — which is what happened here.
   consequence for any future pass: have each unit namespace its scratch files,
   or write nothing there at all (U7b used inline `python3` heredocs and left
   nothing behind).
+- **U11 → a parking-lot lesson is now promotable.** `claude/coder/kaizen/plan.md`
+  parks U10's "a mutant must be proven to change behavior before its survival
+  is read as a coverage gap" lesson, parked *because no owning knowledge base
+  existed*. U11 falsified that premise by putting a sibling mutation technique
+  into `claude/analyst/review-techniques.md`. It stayed parked only to respect
+  the unit's eight-entry scope — a ~15-line promotion whenever wanted.
 - **U3 → `salesperson/build.sh:68`**: the `elif command -v node` fallback
   accepts any `node` on `PATH` without the `/mnt/` rejection its own
   `npm`-only branch applies. Harmless today (only `npm` leaks in from

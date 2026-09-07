@@ -373,6 +373,30 @@ to the general fact here.
   (`size([x IN lines WHERE x.productId IS NOT NULL])`). Same family as the `sum(CASE …)` entry: a
   defined placeholder, not absence. Surfaced on `falkor-chat`'s `get_order` for a zero-line order.
 
+- **A node pulled OUT of a collected list by index (`head(...)`, `[0]`) stays usable as a value
+  and as a bare single-node pattern, but raises the moment it is an endpoint of a RELATIONSHIP
+  pattern** (verified 2026-09-07, module `41811`, read-only against a live graph).
+  `MATCH (p:Product) WITH head(collect(DISTINCT p)) AS x …` — `RETURN x.name` / `labels(x)` work,
+  and even `MATCH (x) WHERE x.name IS NOT NULL RETURN x.name` re-binds it correctly (one row, the
+  same node, not a re-scan). But `MATCH (x)-[r]-(y)` or `OPTIONAL MATCH (x)-[:REL]->(c)` fails the
+  whole query with `ResponseError: encountered unexpected type in Record; expected Node` — raised
+  whether or not any such edge exists. **The trigger is index extraction from the list, not the
+  `head()` function**: `collect(DISTINCT p)[0]` fails identically. `UNWIND` is the working route —
+  `WITH collect(DISTINCT p) AS xs UNWIND xs AS x WITH x LIMIT 1 OPTIONAL MATCH (x)-[:REL]->(c)`
+  runs clean. Consequence: any "dedupe to one node, then traverse from it" step must dedupe via
+  `UNWIND` (or re-`MATCH` the node by its id property), never by indexing the collected list — and
+  the failure is a hard error, not a wrong result, so an ablation written this way invalidates
+  itself rather than changing behavior.
+
+- **Dynamic property access by variable key works: `n[k]` evaluates for a `k` bound from
+  `keys(n)`** (verified 2026-09-07, module `41811`, positive and negative control).
+  `MATCH (n) WHERE any(k IN keys(n) WHERE n[k] = 'Wireless Mouse Pro') RETURN labels(n), count(n)`
+  returned the one real match; the same query with a value present on no node returned `0`, so it
+  is not vacuously true either way. Consequence: a whole-graph "this value is stored nowhere, under
+  any property, on any label" assertion is one read-only query — no property-name enumeration, no
+  per-label sweep. Pair it with the positive control in the same test, or a regression that breaks
+  `keys()`/`n[k]` turns the assertion into a silent pass.
+
 - **`count(*)` under-counts parallel edges between the same node pair — bind the relationship
   variable and use `count(r)` instead** (verified 2026-08-25, module `41811`, disposable graph).
   Two identical `(a)-[:REL]->(b)` edges between the same two nodes: `MATCH (a)-[:REL]->(b) RETURN
