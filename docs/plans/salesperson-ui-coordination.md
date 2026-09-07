@@ -146,6 +146,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **Pass 14** — gate S8e (`92bf842`) | `analyst` (**fresh**) | `a53a5d3a5d3ff9f2d` | **accepted — committed `a42fcca`. NEEDS CHANGES** (0 blockers, **3 majors**, 1 minor, 1 nit). **Found instances eleven and twelve inside S8e's own fix, both via the general probe rather than a reproduction.** **P14-1** the composed raise walk stops one hop short of its exemption — and the blind spot hides an **unclassified** raise, `MemberIdCollisionError`, in no table anywhere; **P14-2** `_alias_prefixes` harvests `ast.Assign` only, so S9's shape **plus a type annotation** survives (annotated locals are a house idiom, 68 in the package); **P14-3** the composition claim is right about the code and wrong about the **plan**. Reproduced all six of S8e's claims exactly. **Ruled the guard-reach statement inaccurate in 4 of 11 clauses** and named a **convergence test** | `docs/reviews/salesperson-ui-impl.md` `## Pass 14` | — | 191k tok / 69 tools |
 | **S8f** — P14-1, P14-2, P14-4, P14-5 + the syntactic restatement + the `MemberIdCollisionError` ruling | `coder` (**fresh**) | `a0b67a1e6bc22d6b8` | **accepted — committed `00827c2`** (+1019/−142). **Enumerated the reader's scope instead of implying it**: eight `ast` node types walked as a named constant, the other **19 grammar nodes excluded each with a written reason**. Raise walk closes over `self.<name>` to a fixpoint (`Services` 9→13, `Repository` 2→7). **Caught a thirteenth instance itself, before a gate did** — `raise self._mk(...)` resolving to the *method name* on the collaborator legs. **Convergence probe empty on both readers**, shipped as two tests, node list **derived from `ast`** so a new Python binding form reddens rather than opening a hole. Classified `MemberIdCollisionError` and **left it visible for review disagreement rather than burying it** | `storefront_api.py`, `test_storefront_api.py`; statement at `storefront_api.py:437–519` | `analyst` (Pass 15, **final**) → — | **260k tok** / 95 tools |
 | **Pass 15** — **final gate** on S8f (`00827c2`) | `analyst` (**fresh**) | `afb10aa0d33dab3ee` | **accepted — committed `5f8adc0`. NEEDS CHANGES** (0 blockers, 3 majors, 1 minor, 1 nit). **Convergence test NOT passed, on a precise diagnosis**: S8f finished the **target** axis (derived from `ast`, 8+19=27 verified) but all eight probe snippets hold the **value** axis at one spelling, and the block states that axis *semantically* over a mechanism that is exact source-text identity. **Fourteenth instance: `me = self`** — `ast.Assign`, first entry in the walked list, in none of the four documented stops, invisible to the two collaborator legs that seed on `receiver.attr`. **Answered the escalation question**: not a sixth cycle — the gap is alias/points-to, where each closure spawns the next — but **docs-only narrowing**, safe because zero receiver-alias bindings exist in `falkorchat/`. 9 of 17 clauses lift-ready | `docs/reviews/salesperson-ui-impl.md` `## Pass 15` | — | 219k tok / 65 tools |
+| **S8g-docs** — narrow clauses 5/6/9/15, correct 8 against v1.25, fix P15-2's 14 stale sites, P15-3, the `:3603` figure, the nit | `coder` (**fresh** — S8f ended at 260k) | `ae9e4fd13cc66c178` | in-flight (dispatched 2026-09-07) | `storefront_api.py`, `test_storefront_api.py` — **prose only**, AST-equality proof required | teco-verified (see below) → — | — |
+| **U32** — add the plan's **citation** to the finished statement in §5.1's S9 row | `architect` | — | queued (**behind S8g-docs** — the statement must be final first) | `docs/plans/salesperson-ui.md` | — | — |
 | **U30** — P14-3: settle the plan/code exception-name mismatch and the falsifiability **mapping** | `architect` (**fresh**) | `af0b1eb6551aa85e9` | **accepted — committed `a3f681e`** (3/2, one file). **Ruled the plan wrong and the code right** — `services.py:2085`'s `WorkflowRunNotFoundError` is a *workspace snapshot/trigger-anchor* miss, already documented in `start_workflow_run`'s own docstring, while `WorkflowDefNotFoundError` is a *`reference`-graph* condition whose three raise sites are unreachable from the S9 path. Two conditions, only one reachable; the row named the reachable one with the unreachable one's class. **No code change implied.** Introduced the **two-gate** framing (does the method enter the walked set / is the raise in its own body or one call further in) that the plan had collapsed | `docs/plans/salesperson-ui.md` **v1.24** | teco-verified | 107k tok / 44 tools |
 | **U31** — replace S9's unmeetable *"S8c goes red"* done-condition; account for the false-but-unmeasured excuses and `executor.run`'s own raise | `architect` (**resumed** `af0b1eb6551aa85e9`) | `af0b1eb6551aa85e9` | **accepted — committed `5d0bb9c`** (3/2, one file). **Replaced the obligation rather than deleting it**: S8c's assertion is expected to **stay green**, and staying green *is* the evidence; what it still pins is the storefront's **service surface** — red means S9 wrote `self._services` instead of the trigger, a stop-and-re-decide. Row now says **do not restore a reddens-at-S9 claim**, and why. **Corrected my framing**: it is not a *placement* tripwire — `_service_layer_reach` reads source, not threads. All three excuses convert to **one measured exemption at the response boundary**; none stays prose-only. Tells S9 to **derive** the fault list from the worker's actual service surface. **Incidentally closed Pass 12's open question 2**, flagged as an architect edit and never made | `docs/plans/salesperson-ui.md` **v1.25** | `analyst` (folded into Pass 15) → — | 129k tok / 7 tools |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
@@ -2429,3 +2431,47 @@ The general shape is the same one this coordination has hit repeatedly: **a symp
 the nearest visible anomaly rather than to the actual cause**, and the attribution then sat in a
 document as fact until something incidentally falsified it. The `v6` orphan was real and unusual, so
 it looked like the explanation.
+
+## The docs-only fix is dispatched — and why it is not a seventh cycle (teco, 2026-09-07)
+
+Stakeholder approved the docs-only answer. **S8g-docs** is dispatched to a **fresh** `coder` (S8f
+ended past 260k). This is the move Pass 14 named as option (b), U31 recommended independently, and
+Pass 15 specified clause by clause — three separate agents converging on it before it was chosen.
+
+**It is the opposite move from the six cycles before it, and the brief says so in those words.** Every
+earlier unit tried to close the gap by widening the reader; this one closes it by narrowing the
+sentence. The brief's hardest instruction is therefore a prohibition: *do not widen any reader, do not
+add a mechanism, do not "fix" an escape by making the guard catch it — if you find yourself editing an
+`ast` walk you have left this unit's scope.* An implementer's instinct on being handed a list of
+escapes is to catch them, and that instinct is precisely what produced instances eight through
+fourteen.
+
+**Why this unit still gets a real done-condition rather than trust.** Prose that overstates the
+mechanism **is** this artifact's defect. A prose-only fix is therefore not low-risk by virtue of being
+prose — it is a change to the exact surface where all fourteen instances have lived. So the brief
+demands two things that can be checked rather than believed:
+
+1. **An AST-equality proof** — parse the `HEAD` and delivered versions of both files, strip
+   docstrings, compare `ast.dump`. Any executable statement change means the unit went out of scope.
+   This is what makes "prose-only" a *measured* property instead of a promise.
+2. **A measurement behind every rewritten empirical clause**, including a demonstration that
+   `me = self` **survives** — so the narrowed clause 5 has to describe the survival rather than
+   promise the opposite. I verified that survival myself (185 passed) before dispatching, so I can
+   check the claim without re-deriving it.
+
+Plus the tell that costs nothing: suites must come back **identical** — 185 and 2617/14 — not merely
+green. A different number is a behaviour change by definition.
+
+**On gating this one.** The stakeholder's stopping rule ended the *hardening chain*; it did not
+abolish independent review in general. My judgement is that Pass 15 already performed the review this
+unit executes — it ruled on all 17 clauses and named which 9 are lift-ready — so a Pass 16 that
+re-reviews the same clauses is the ceremony, not the check. **The check is the AST-equality proof and
+the per-clause measurement**, both of which I can verify directly. If S8g-docs returns anything
+non-mechanical — a clause it could not make true without touching the reader, or a judgement call
+Pass 15 did not anticipate — that is the signal to gate it, and I will say so rather than absorb it.
+
+**U32 is queued behind it, not parallel.** The plan's §5.1 S9 row gains a **citation** to the finished
+statement (S8f's P14-5 fix made the comment block the statement's single home, licensing the plan to
+cite rather than restate). It has to wait for the statement to be final — this is the same hold that
+has now been vindicated by three separate gates, each of which ruled the then-current statement
+inaccurate.
