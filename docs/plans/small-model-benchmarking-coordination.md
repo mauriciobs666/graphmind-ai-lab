@@ -67,7 +67,9 @@ Stakeholder decisions, 2026-09-02:
 | U26 — Plan v1.11: close all 10 Pass 5 findings; rule 5 restated honestly | `architect` (fresh) | `a99cd8cce60c76d82` | **delivered** — `85a32e5` (+540/−110); all 10 closed, nothing carried | `docs/plans/small-model-benchmarking.md` **v1.11** | `analyst` Pass 6 → — | 282k tok / 121 tools |
 | U27 — Re-gate plan v1.11 + note v1.14 (Pass 6) | `analyst` (fresh) | `a6f3786437e4dab05` | **accepted** — `afca8e0` | `docs/reviews/small-model-benchmarking.md` `## Pass 6` | self → **needs changes** (1 blocker, 2 majors, 2 minors); **S2 may not be dispatched** | 161k tok / 52 tools |
 | U28 — P6-1's method half: the continuous instrument's carrier + §3.2e's verdict strings | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `0ad0e7a`; both changed the note, **plus one reversal and one unprompted ruling** | `docs/plans/small-model-benchmarking-ml.md` **v1.15** | `analyst` Pass 7 → — | 218k tok / 17 tools cumulative |
-| U29 — Plan v1.12: close all 5 Pass 6 findings; the continuous carrier as an S1 edit | `architect` (fresh) | `a74d8052842395e20` | in-flight | `docs/plans/small-model-benchmarking.md` v1.12 | `analyst` Pass 7 → — | — |
+| U29 — Plan v1.12: close all 5 Pass 6 findings; the continuous carrier as an S1 edit | `architect` (fresh) | `a74d8052842395e20` | **delivered** — `5b67416` (+521/−62); all 5 closed, **12/12 residuals re-run** | `docs/plans/small-model-benchmarking.md` **v1.12** | `analyst` Pass 7 → — | 283k tok / 91 tools |
+| U30 — Four items v1.12 raised: §3.2f's retired wording, the continuous-verdict producer's signature, the homogeneous-family enforcement point, §5.2's `sep_raw` figures | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.16 if changed | `analyst` Pass 7 → — | — |
+| U31 — Re-gate plan v1.12 + note v1.16 (Pass 7) | `analyst` (fresh) | — | queued — **held until U30 returns** | `docs/reviews/small-model-benchmarking.md` `## Pass 7` | — → — | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | **accepted** — `5878014` | `model-bench/**` (10 files, +1490/−61); 353→389 tests | re-gate (both, fresh) → — | 348k tok / 130 tools |
@@ -1649,4 +1651,49 @@ forbids the silent case later.
 
 Relayed to the in-flight `architect` — the fourth use of the mid-run relay, and the first that had to
 carry a **reversal** rather than an addition.
+
+### U29 delivered — 2026-09-07, plan v1.12 (`5b67416`)
+
+All five Pass 6 findings closed; nothing carried, nothing *deferred by choice*, nothing blocked on
+unbuilt work.
+
+**P6-1 closed and split as teco ruled.** The record half is **§4 S1e Table F**, an **S1** edit —
+`ItemResult.measures`, a `scored_value` sibling, and `scored_outcome` **raising** on a
+`measures`-resident metric, which is the single line that turns *a booleanised MRR rendered as a
+McNemar `+X pp` verdict* into a loud failure. The renderer half is stated end-to-end, and
+`DistributionSummary` carries §5.2's median and p10 so **`sep_z` reaches a table at all** — it
+previously reached none. **Table E's S3 deadline is withdrawn on the note's reversal**; S3 **DC-1** is
+gated on Table F instead, and that gate is **self-enforcing**: no carrier, no storable result. A
+deadline that enforces itself is strictly better than one a reviewer has to remember.
+
+**P6-2 and P6-3 closed with the general lesson stated rather than the instance patched** — *a
+command's output is a **superset**, never the site list.* Table E's four "`_widen` tests" are named as
+**non-sites**: `def` lines that matched on a **test name**. That is the third distinct way rule 5 has
+been mis-applied, and the first time the plan has generalised instead of patching.
+
+**All twelve residuals across the six tables re-run against the tree today**, each confirmed non-zero
+now **and** zero after a faithful edit — the specific demand the brief made after two revisions
+shipped a residual that fails on a correct implementation. **teco re-verified the new ones:**
+`frozenset(FORBIDDEN` 1 · `REQUIRED_BY_SCHEMA[1]["model"]` 3 · the key-set assertion 1 ·
+`paired_cluster_bootstrap(` **5**, split 2 `stats.py` / 3 `test_stats.py` exactly as claimed ·
+`separationRaw: float | None` 1 · `separationZ: float | None` 1. All reproduce.
+
+**Raised rather than silently absorbed** — the behaviour §7 rule 3 exists to produce: `-ml` §3.2f
+still publishes the pre-v1.11 *"cluster-bootstrap"* wording that §3.4 Rule 4 retires, and `stats.py`
+renders §3.2f **verbatim** (confirmed here — the *"Not distinguishable at this sample size. The
+cluster-bootstrap interval…"* string is in the shipped file). An implementer copying §3.2f leaves the
+retired token and **Table D's residual never reaches zero**.
+
+### U30 dispatched, and the Pass 7 gate is held behind it
+
+Four items, all the note's: §3.2f's sweep (item 1, the trip hazard above); **the continuous-verdict
+producer's signature**, which the plan calls but nobody has specified (item 2 — a gate would find it,
+and it is better written than discovered); confirmation that the homogeneous-family rule's
+enforcement point moves from `validate` to `compare_report` pass 1, since **a manifest carries no
+records** and a manifest `kind` field is the inference §3.2d refuses (item 3); and which of
+`sep_raw`'s figures print (item 4, presentational, working default already in place).
+
+**Holding the gate is deliberate and is the same call that paid at Pass 5:** items 1 and 2 would both
+become gate findings, and gating a pair about to move wastes a ~200k-token review to tell us what we
+already know.
 
