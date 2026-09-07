@@ -2,6 +2,140 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-09-07 — `kaizen_team` distillation pass 2, unit U12 (chunk C of three, closing `coder` out): 7 raw entries processed — 5 promoted into `skills/python-web-quirks/SKILL.md` (2 folded, 3 merged into one new section, 1 new section), 2 kept open as K-006 rows — all 7 cleared
+
+- **What:** `cobb` ran `agent-maintenance` §5 over the seven `coder`-produced `kaizen_team` entries
+  dated **2026-09-03** — unit U12 of `claude/docs/plans/kaizen-distillation2-coordination.md`, the
+  last of `coder`'s three chunks. All seven were current-shape
+  (`(:Agent {agentId:'coder'})-[:PRODUCED]->`); zero legacy `author`-property entries remain
+  anywhere, so §5's legacy read was skipped. With this unit `coder`'s `kaizen_team` capture is
+  empty.
+- **Versions confirmed before judging any version-stamped claim** (all probes run from the pinned
+  `falkor-chat/server/.venv`): fastapi **0.139.0**, starlette **1.3.1**, redis **8.0.1**, pytest
+  **9.1.1**, CPython **3.12.3**.
+- **Every entry re-derived, never confirmed from its own citation** — five by executing a probe
+  script against the pinned venv, two by reading the scripts and fixtures themselves. Three raw
+  claims gained a consequence the entry did not state, and one narrowed. Nothing was verified by
+  running the falkor-chat suite: `62bc71d6` is *about* a fixture that wipes the shared `reference`
+  graph, so it was established by reading `conftest.py`, `seed_catalog.sh` and `verify_catalog.sh`,
+  never by executing them.
+
+  1. **`62bc71d6-d444-4592-956e-88e97133b4db` (the `wf_repo` fixture wipes `reference` on setup
+     only, so fixture `Product` rows outlive the run) — KEPT OPEN, folded into K-006 as row 5.**
+     Whole chain verified in source without running anything: `tests/conftest.py:101-110`'s
+     `wf_repo` runs `MATCH (n) DETACH DELETE n` on `reference` and returns — no `yield`, so no
+     teardown; `scripts/seed_catalog.sh:124` is `MERGE (p:Product {productId: row.productId}) ON
+     CREATE SET …`, which cannot remove a row it did not seed; `scripts/verify_catalog.sh:33` pins
+     `EXPECTED_COUNT=15` exactly, so any survivor fails it. **Not a discard**, and the reason is
+     the U10 `9050f193…` shape: the fact is already written down at the point of use — and, better
+     than that, already *solved* in code, by `tests/test_storefront.py:839-851`'s `catalog_repo`
+     yield-fixture, whose docstring states the entire chain including the `verify_catalog.sh`
+     mismatch. But `docs/SERVER.md` §1.7's first bullet — which documents this exact fixture and
+     this exact setup-only wipe — stops at the consequence for workflow *defs* and prescribes a
+     remedy (`seed_workflows.sh`) that does not touch the catalog. The next author of a
+     `reference`-touching test reads §1.7, not another test file's fixture docstring.
+  2. **`16ab10b7-fc1e-4635-b29c-1d7a51fb2eb1` (`test_queries.sh` does not execute the code under
+     test) — KEPT OPEN, folded into K-006 as row 6.** The absolute claim survives re-derivation
+     intact, which is not what the brief's prior turned out to be: `grep -n 'python\|pytest\|
+     falkorchat\|\.venv' scripts/test_queries.sh` returns **zero** hits, and the script holds 27
+     shell query constants driven through `redis-cli` — it genuinely never reaches `repository.py`.
+     The entry's *own instance* has since been repaired (the `FILTER=` constant at `:1385` and the
+     abstention header at `:1375` both now carry `productId`), so the finding is spent as a defect
+     and durable as a property of the gate. Already documented, generally and well, at
+     `docs/QUERIES.md` §15.1 — transcribed 2026-09-03, the same day this entry was captured, and
+     ending on the lesson verbatim ("a transcription gate goes green on a wrong transcription, so
+     the doc block and the shell constant have to be checked against the code, never against each
+     other"). Kept open anyway, narrowly, for the same reason as entry 1 and against a live
+     counter-claim: `AGENTS.md:200` tells every agent that `test_queries.sh` "must pass before any
+     schema or **query** change is committed", which is precisely the reading the §15.1 note
+     exists to defeat, and §15.1 is a per-query lookup nobody consults on the way to trusting a
+     green run.
+  3. **`3f0c9b52-6a41-4d8e-9d17-2b8a5c0e77a1` (redis-py's `TimeoutError` and `ConnectionError` are
+     siblings) — PROMOTED to `skills/python-web-quirks/SKILL.md`,** as the fourth trap of the new
+     exception-handler section (entry 4 below). MROs printed on redis 8.0.1: both are
+     `(…, RedisError, Exception, …)`, `issubclass` **False in both directions**, and
+     `redis.exceptions.ConnectionError is ConnectionError` → `False`;
+     `falkorchat.db.FalkorDBUnreachableError` is `(…, builtins.ConnectionError, builtins.OSError,
+     …)`, i.e. related to neither. The shipped code agrees — `storefront_api.py:717-721` registers
+     all three separately — but *why* three are needed is nowhere in prose. **This is a considered
+     scope call, not an oversight of the brief's warning**: redis-py is not a web framework, and
+     U9's ruff-config and U10's `re.fullmatch` facts were both declined for this file. What
+     separates this one is that the skill already carries its exact sibling — the `urllib`
+     `HTTPError`/`URLError`/`TimeoutError` taxonomy entry, same genre ("your except clauses are not
+     total, here is the real hierarchy") — and that the consequence lands in a **FastAPI handler
+     map**, squarely in scope. Promoted with the version-sensitivity stated, since older redis-py
+     majors *did* nest the two and a reader's memory is the wrong thing to trust. The
+     `FalkorDBUnreachableError` half is used as the illustrating instance and opened no K-006 row:
+     `db.py:18`'s class statement is self-documenting.
+  4. **`5e3c1f42-9a77-4b6e-8c21-7d0f4a9b6e58` + `b71d8a06-3c54-4f19-9ad2-2e6c8f5b1a93` +
+     `8d2e4a17…`'s second half (the exception-MRO clause) — PROMOTED as ONE merged section,
+     "FastAPI/Starlette's exception-handler registry", with a consequence none of the three
+     stated.** They are one fact with three faces, so a merge rather than three near-duplicates
+     (the same call U8 and U9 made on their own pairs). All re-derived by probe: a bare `FastAPI()`
+     carries exactly three handler keys and `fastapi.HTTPException in app.exception_handlers` is
+     `False` while the starlette one is `True`; `add_exception_handler` on a registered type leaves
+     the key count at 1 and the incumbent readable immediately before the overwrite (delegation
+     verified end-to-end — `/shop/boom` → the wrapper, `/legacy/boom` → the captured original);
+     `starlette._exception_handler._lookup_exception_handler` read at source is
+     `for cls in type(exc).__mro__: if cls in exc_handlers`, so **registration order is irrelevant
+     and specificity is the exception hierarchy alone**, which the entries implied but did not say.
+     **The added consequence, and the reason the identity trap is worth more than a test-writing
+     note:** `add_exception_handler(fastapi.HTTPException, …)` does not replace the default at all —
+     it adds a *fourth* key, after which your handler wins for `fastapi.HTTPException` and its
+     subclasses while the bare starlette `HTTPException` that Starlette itself raises for routing
+     404s/405s silently keeps the untouched `{detail}` shape. Probed both routes; that is a live
+     hole in an error envelope, not just a mis-keyed assertion.
+  5. **`8d2e4a17-05b9-4c63-8f2a-71c6d9b3e004`'s first half (`responses={…}` stores unknown keys
+     verbatim) — PROMOTED by FOLDING into the existing "`responses={...}` is keyed by status code
+     only" section, not stacked beside it.** The brief's instruction, and independently the right
+     shape: the existing section (added at U7b) closes on "There is no declaration-side key for
+     anything inside the body: not an error token, not the offending `field`" — true about the
+     *key* set and now qualified where it needs to be, because the per-status *value* is not
+     validated. Probed: `responses={409: {"description": …, "x-storefront-error": [...]}}` on a
+     router route reached through `include_router(prefix="/shop/api")` reads back verbatim off
+     `route.responses` **and** appears intact in `app.openapi()["paths"][…]["responses"]["409"]`;
+     the `"4XX"` range form carries extensions identically. Filed as the escape hatch the existing
+     section's "structurally cannot see a finer axis" paragraph otherwise leaves the reader
+     without, with the two caveats the raw entry lacked (nothing validates the extension, so a
+     typo is just another passthrough; a non-serialisable value fails at `app.openapi()` time, not
+     at import).
+  6. **`607b0a2a-4fe0-47fa-ba88-81cb22abb6dc` (a whole-module-only test must gate on what was
+     collected) — PROMOTED to `skills/python-web-quirks/SKILL.md`, new section beside the other
+     pytest traps.** Checked against both prior candidates the brief named and it is neither:
+     U8's `pytest.raises` section is about assertion *strength*, and `tdd-engineer.md`'s "prove a
+     new assertion against the mutant" bullet is about rejecting a wrong implementation — this is
+     about a test detecting that its own precondition held, the same family as the file's
+     env-var-frozen-at-import entry ("your guard is a silent no-op"). Re-derived on pytest 9.1.1
+     with a throwaway module outside the repo, all four selectors measured:
+     `config.option.keyword` is `'probe'` under `-k` and **`''`** under a node id, under `--lf`,
+     and under `--deselect`, while `request.session.items` is correct in all four. `--lf` was
+     measured in the load-bearing direction (the gating test itself failing, so `--lf` re-selects
+     it): `KEYWORD=''`, `COLLECTED=['test_probe']` — the guard is off exactly when a developer
+     re-runs after the failure. Promoted with the measurement as a four-row table, plus the two
+     implementation traps that make the collected-set form work: `originalname` (without it every
+     parametrized test reads as uncollected and the guard skips always) and subtracting
+     marker-deselected tests from `defined` — the second lifted from the shipped test's own
+     docstring (`tests/test_storefront_api.py:4401-4410`, P12-3), which had thought further about
+     this than the raw entry did.
+- **`MENTIONS` tags added: none.** No entry was substantively about a different agent; every
+  promotion is a general Python/framework fact that `cobb` re-derived first-hand, so all five were
+  dispositioned directly rather than tagged and deferred.
+- **Cleared from `kaizen_team` this pass — all seven, each a full `DETACH DELETE`:** every entry
+  counted first (`producedEdges + mentionEdges`); every one read `1 + 0`, so `otherRemaining == 0`
+  in all seven cases and the whole node was removed rather than just the `PRODUCED` edge. Ids:
+  `62bc71d6-d444…`, `16ab10b7-fc1e…`, `3f0c9b52-6a41…`, `8d2e4a17-05b9…`, `5e3c1f42-9a77…`,
+  `b71d8a06-3c54…`, `607b0a2a-4fe0…`.
+  **Id collision note:** `3f0c9b52-6a41-…` is close to ids cleared in other units of this pass;
+  these ids are hand-shaped, not `uuid4`, so full id, date **and** subject were confirmed on every
+  one of the seven before it was touched.
+- **Docs touched:** `claude/coder/kaizen/{plan,history}.md` (this file + K-006 rows 5–6) ·
+  `skills/python-web-quirks/SKILL.md` (one fold, one merged section, one new section, frontmatter
+  `description`) · `skills/README.md` (its catalog row, both the what and the when-to-use columns).
+- **Plan items:** **K-006 extended** from four rows to six; no item opened or closed. K-002
+  untouched. The parking-lot mutation-testing lesson U11 left pointing at
+  `claude/analyst/review-techniques.md` was **not** moved — out of this unit's scope, and it is
+  still correctly parked.
+
 ## 2026-09-07 — `kaizen_team` distillation pass 2, unit U11 (chunk B of three): 8 raw entries processed — 4 promoted (2 to `graph-dba`, 1 to `data-scientist`, 2 sections to `analyst`), 4 discarded as already documented — all 8 cleared
 
 - **What:** `cobb` ran `agent-maintenance` §5 over the eight `coder`-produced `kaizen_team` entries

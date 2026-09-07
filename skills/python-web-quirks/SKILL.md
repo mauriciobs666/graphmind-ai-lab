@@ -1,15 +1,22 @@
 ---
 name: python-web-quirks
 description: >-
-  Live-verified Python gotchas beyond a quick docs read — mostly web/async, plus three
+  Live-verified Python gotchas beyond a quick docs read — mostly web/async, plus several
   pytest/import-timing traps: asyncio fire-and-forget GC-safety; FastAPI/Starlette
   BackgroundTasks' bounded thread pool vs. unbounded threading.Thread; response_model_exclude_unset
   dropping defaulted nested-model fields; FastAPI's four built-in doc routes (and which
   constructor kwargs suppress them) falsifying any "registers only these routes" claim, while an
   included router's own routes are absent from app.routes entirely and its include_router(prefix=)
   never reaches the inner path; responses={...}
-  being keyed by status code alone, so two error bodies at one status collapse; pydantic
-  Field(min_length=1) accepting whitespace-only strings; urllib's HTTPError/URLError/TimeoutError taxonomy; an
+  being keyed by status code alone, so two error bodies at one status collapse — though an x-
+  extension inside a status entry does survive verbatim onto route.responses and into app.openapi();
+  FastAPI/Starlette's exception-handler registry resolving by the raised class's MRO, keyed on
+  starlette.exceptions.HTTPException rather than fastapi.HTTPException, and replaced silently (but
+  readably) by a second add_exception_handler on the same type; pydantic
+  Field(min_length=1) accepting whitespace-only strings; urllib's HTTPError/URLError/TimeoutError
+  taxonomy and redis-py's sibling TimeoutError/ConnectionError, both falsifying a handler map
+  claimed total by exception type; a test that gates itself on config.option.keyword rather than on
+  what request.session.items collected, so a node id, --lf and --deselect all slip past it; an
   OpenAI-compatible server's HTTP-200 error envelope on a missing /v1; a bare json.loads LLM-judge
   parser failing silently on a fenced completion; an env var set after import (a monkeypatch.setenv
   or a script's own os.environ assignment in main()) being a no-op against an import-frozen
@@ -174,6 +181,61 @@ at **status** granularity and structurally cannot see a finer axis. A response t
 finer half only by executing the route. Left unsaid, the table and the gate read as contradicting
 each other.
 
+**The escape hatch, if you need the finer axis declared anyway:** the *key* set is closed, but the
+per-status *value* is not validated — FastAPI stores the `responses` dict verbatim on
+`route.responses` and passes unrecognised keys straight through into the generated OpenAPI
+operation. So an `x-`-prefixed extension inside a status entry (`responses={409: {"description":
+…, "x-storefront-error": ["ALREADY_JOINED", "THREAD_CLOSED"]}}`) survives **both** reads: off the
+route object and out of `app.openapi()`, on a router route reached through `include_router` as
+well. That turns a per-route declaration carrying a discriminator finer than the status code into
+something a gate can assert against, instead of only executing the route. Verified against FastAPI
+0.139.0; the string range form (`"4XX"`) carries extensions the same way. Two caveats: it is an
+extension, so nothing validates it — a typo in the key is silently just another passthrough — and
+a value that is not JSON-serialisable fails only at `app.openapi()` time, not at import.
+
+## FastAPI/Starlette's exception-handler registry: MRO lookup, a class identity trap, and silent replacement
+
+Verified against FastAPI 0.139.0 / Starlette 1.3.1. Four facts that decide whether an
+error-envelope map does what its author thinks — the middle two are the ones that produce a green
+test proving nothing.
+
+- **Resolution walks the raised exception's MRO and takes the first *registered* class**
+  (`starlette._exception_handler._lookup_exception_handler`: `for cls in type(exc).__mro__: if cls
+  in exc_handlers`). Registration order is irrelevant; specificity is decided entirely by the
+  exception hierarchy. The useful consequence: **subclassing** an exception claims its own envelope
+  without changing what the base class does elsewhere on the same app — a `StorefrontHTTPError
+  (HTTPException)` with its own handler returns a flat `{error, detail}` body while a plain
+  `HTTPException` raised on the next route still gets FastAPI's `{detail}`.
+- **FastAPI's built-in handler is registered on `starlette.exceptions.HTTPException`, which is not
+  the same class object as `fastapi.HTTPException`.** On a bare `FastAPI()`,
+  `fastapi.HTTPException in app.exception_handlers` is **`False`** and the Starlette one is `True`
+  (`fastapi.HTTPException is starlette.exceptions.HTTPException` → `False`; `issubclass(...)` →
+  `True`, which is why raising the FastAPI one still resolves). Two consequences: a test that
+  *enumerates or classifies* `app.exception_handlers` must key on the Starlette class or it
+  silently classifies nothing; and `add_exception_handler(fastapi.HTTPException, …)` **adds a
+  fourth key rather than replacing the default** — your handler then wins for `fastapi.HTTPException`
+  and its subclasses, while the bare `starlette` `HTTPException` that Starlette itself raises for
+  routing 404s/405s keeps the untouched `{detail}` shape. The three keys a bare app starts with are
+  `starlette.exceptions.HTTPException`, `fastapi.exceptions.RequestValidationError` and
+  `fastapi.exceptions.WebSocketRequestValidationError`.
+- **`add_exception_handler` on an already-registered type replaces the previous handler silently**
+  — it is a dict assignment, not a chain; no warning, no second entry. The incumbent is still
+  readable from `app.exception_handlers[Exc]` **immediately before** you overwrite it, which is the
+  whole idiom for scoping an app-wide handler to one path prefix with no import cycle: capture the
+  inherited handler, register a wrapper that re-shapes on its own prefix and awaits the captured one
+  everywhere else. Assert the incumbent is present at wiring time rather than assuming it — an
+  absent one otherwise surfaces as a `TypeError` *inside* an exception handler, on the first error a
+  user provokes.
+- **A handler map claimed "total by exception type" has to be checked against real MROs, because
+  library exception classes that read as a hierarchy are often siblings.** `redis.exceptions.
+  TimeoutError` and `redis.exceptions.ConnectionError` are **siblings** under `RedisError` (neither
+  is a subclass of the other, and neither is the builtin `ConnectionError`) — so `except
+  redis.exceptions.ConnectionError` catches no timeout, and catches nothing that subclasses the
+  *builtin* `ConnectionError` either. Verified on redis-py 8.0.1; older redis-py majors did nest
+  them, so a reader's memory of the hierarchy is exactly the wrong thing to trust. Each such class
+  needs its own `add_exception_handler` registration, or the uncovered one escapes as a bare 500
+  through the framework's catch-all.
+
 ## pydantic `Field(min_length=1)` does not reject whitespace-only strings
 
 `" "` has `len` 1, so `Field(min_length=1)` accepts it — a common false-safety assumption when a
@@ -282,6 +344,40 @@ mutation, not a review: disable the guard's call sites and confirm **every** par
 goes red — a case that stays green was passing for the wrong reason all along. (Observed
 graphmind-ai-lab 2026-08-26, `falkor-chat` K-049; the surviving test comments in
 `server/tests/test_services.py` around `OVERSIZED_ISOLATED_STEP` record the concrete instance.)
+
+## A test that is only valid when its whole module ran must gate on what pytest **collected**, not on how the run was **selected**
+
+A test whose assertion depends on side effects its module-mates recorded (a "every declared row was
+provoked by some test in this file" completeness check, an accumulator asserted at the end) has to
+skip itself on a partial run. Gating on the *selector* — `request.config.option.keyword`, i.e. what
+`-k` was given — covers exactly one of the four ways a run can be partial. Verified on pytest 9.1.1:
+
+| how the subset was chosen | `config.option.keyword` | `request.session.items` |
+|---|---|---|
+| `-k probe` | `'probe'` | just the matches |
+| `pytest file.py::test_probe` (a node id) | `''` | just that test |
+| `--lf` after a failure | `''` | just the failures |
+| `--deselect file.py::test_a` | `''` | everything else |
+
+So the `-k` guard is a no-op for the three cases a developer hits *most* — including `--lf`, which
+is what you reach for right after this test fails, at which point it runs against a nearly empty
+accumulator and reports every row as unproducible. Gate on collection instead:
+
+```python
+module = sys.modules[__name__]
+defined   = {n for n in dir(module) if n.startswith("test_")}
+collected = {getattr(i, "originalname", None) or i.name.split("[")[0]
+             for i in request.session.items if getattr(i, "module", None) is module}
+if defined - collected:
+    pytest.skip("this module was only partly collected")
+```
+
+`originalname` is what collapses a parametrized `test_b[1]`/`test_b[2]` back to `test_b`; without
+it every parametrized test in the module reads as uncollected and the guard skips always. **Subtract
+marker-deselected tests from `defined` yourself** if the project's `addopts` carries a marker filter
+(`-m "not live"`): the first `@pytest.mark.live` test added to the module would otherwise deselect
+itself on every default run and switch the check off permanently — visible in the skip reason, but
+off.
 
 ## A function-LOCAL `from .module import name` re-resolves fresh on every call — a function-DEFAULT bound to the same name does not
 
