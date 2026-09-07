@@ -2,6 +2,183 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-07 — Learnings-graph distillation, chunk C of 3 (U15): 10 entries — 5 promoted, 4 discarded, 1 kept open; the agent is now at zero
+
+- **What:** `cobb` processed the final 10 `data-scientist` `:KaizenEntry` nodes in `kaizen_team`
+  (2026-09-03 … 2026-09-07) per `agent-maintenance` §5, closing this agent out. Every claim was
+  **re-derived from scratch** — the statistics recomputed in stdlib Python (`decimal` at 60–80
+  digits where a fixture was at stake) against the *shipped* module, never confirmed against the
+  entry's own cited evidence; the LM Studio timing claims re-measured **live** on a genuinely cold
+  box. Seven of the ten are model-bench statistics facts, and a concurrent session held that
+  component's source and docs dirty throughout, so **nothing under `model-bench/**` or
+  `docs/**small-model-benchmarking*` was written** — the one entry needing such a write is kept
+  open below with its targets named.
+- **Promoted to the prompt (3):**
+  - `c41b8e07` (2026-09-03, a fixture table published at display precision cannot support a tighter
+    assertion tolerance) → **prompt**, one sentence on the "Evaluation engineering → Golden sets and
+    regression evals" bullet. **Re-derived at 60 digits independently:** the MOVER-D lower bound for
+    `(34,6,0,0)` is `0.031762869443060`, so v1.2–v1.4's published `3.1763` pp sat `1.3056e-7` from
+    the truth — **130.6x** the 1e-9 proportion tolerance those same subsections mandated — while the
+    shipped float implementation's worst error across all five fixtures is `1.640e-16`, about
+    `6.1e6` *inside* the mandate. **Two corrections to the entry:** it says "131x" (130.6x, fine) but
+    puts the implementation at `1.44e-16`; the worst of the ten bounds is `1.640e-16`, ~14% larger,
+    and its "7e6x inside" is correspondingly `6.1e6`. Neither moves the conclusion. The
+    project-scoped copy is already published twice — as a boxed rule in
+    `docs/plans/small-model-benchmarking-ml.md` §3.2c and as a comment block above
+    `REGRESSION_FIXTURES` in `model-bench/tests/test_stats.py` — and **acted on**: the fixtures are
+    now published at 10 dp (verified against the 60-digit truth to ≤3.8e-13) and asserted at 1e-9.
+    Only the discipline-level rule was promoted, since publishing a fixture table beside a tolerance
+    is a recurring shape of *this agent's own* `-ml.md` deliverables, and it is the shape that
+    produced the defect.
+  - `a9d2f5b3` (2026-09-03, sweep the exact expression the code uses) and `b3d7f1a2`'s transferable
+    half → **prompt**, as a new "the arithmetic of a published statistic is part of the claim"
+    bullet under "Classical ML & statistics". **Both sweeps reproduced exactly:** `7/40` gives
+    `x*1000 == 175.0` but `x/0.001 == 174.99999999999997`; over every `k/n` with `n ≤ 1000` the
+    multiply form diverges from exact rational truncation **0** times and the divide form the code
+    uses **654** times, hitting `n = 10, 20, 40` — `n = 40` being a published row of the method note.
+    Independently, `repr(0.28*25) == '7.000000000000001'`, and over `permille 1..999 × X ≤ 3000` the
+    percent spelling `ceil(pct/100*X)` diverges from `-(-num*X//den)` **1626** times, the level-first
+    spelling **755**, and the numerator-first spelling **0** — first divergence `(X=25, level=7/25)`
+    for both float forms, and **0** divergences at the four levels model-bench actually uses
+    (permille 25/500/950/975) up to `X = 2000`, so the guard is defensive there exactly as the note
+    says. The project-scoped copies are published in note §11.2.1 and Rule 3a, and at the point of
+    use in `model-bench/modelbench/stats.py:646` and `tests/test_stats.py:383` (*"a sweep run against
+    the expression the code does not use is how this was missed the first time"*).
+  - `5b8e0c62` (2026-09-03), **carrying the merged `c1f2a7d4`** → **prompt**, as a second new bullet
+    on the seeded percentile bootstrap. See the REFINES resolution below.
+- **Promoted to the knowledge base (2)** — both folded into the **existing** `/api/v0/` section's JIT
+  bullet in `lm-studio-model-notes.md`, rewriting it in place rather than stacking a sixth parallel
+  section:
+  - `c47a9e30` (2026-09-03, `stats.time_to_first_token`/`generation_time` exclude the JIT auto-load,
+    so `wall − (ttft + generation_time)` isolates the load and is an in-call reload detector).
+    **Re-measured live this session, not read:** LM Studio was up, all 19 models `not-loaded`, so the
+    probe got a genuine cold start. `residency()` was `[]` before the call and `['qwen/qwen3-4b-2507']`
+    after; the cold call was wall **3 756.3 ms** with `ttft` 33.3 ms and `generation_time` 215.7 ms —
+    a gap of **3 507.4 ms**, within 0.6% of the note's independently-measured 3 485.6 ms — against
+    **−6.5 … +6.8 ms** over 20 warm calls, so the cold gap is ~**516x** the largest warm gap (the
+    note measured 461x). The *detector* framing was the half missing from this file: it previously
+    recorded only that `ttft` excludes the load, with a pointer to §11.4. **One correction to the
+    entry:** it calls the cold-load spread "an order of magnitude"; the two figures it cites are
+    3.625 s and 21.068 s, a **5.8x** ratio, and today's 3.5 s is a third point in the same band. The
+    file already stated this correctly as "~6x" and now says so over three observations.
+  - `a3f1c8de` (2026-09-06, a withholding rule firing on a covariate is not right-censoring) →
+    **knowledge base**, same bullet, because a reader handed the detector above must not read its
+    withheld set as a slow tail. **Re-derived by construction rather than by probe:** the threshold
+    is on `unexplainedMs`, so a withheld item's *wall clock* is `gap + ttft + generation` — a 1.01 s
+    gap around 50 ms of generation is withheld at ~1.06 s while an ordinary long-pole pack turn is
+    timed at ~1.3 s, and the ordering inverts with no exotic input. The live warm data supports the
+    premise directly: warm gaps are ±7 ms, so on a clean call the wall clock *is* generation. Its
+    project-scoped copy is published, and **more carefully than the entry**, in note §11.5 (three
+    producers of a withheld timing, only two of which censor the summarised quantity) and §11.5.1
+    (v1.12, commit `fc2fcf6`), which turns the entry's "must be computed per render" into a shipped
+    per-render predicate rather than a caution. The entry's evidence clause overstates one notch —
+    it says the ordering *fails* on the ordinary case where the note says it *cannot be assumed* and
+    must be computed; the fact itself is right and is what was folded.
+- **The `5b8e0c62` / `c1f2a7d4` REFINES pair — resolved as supersession, promoted once.**
+  `5b8e0c62`'s `fact` opens with a curator instruction to merge or supersede `c1f2a7d4`. Both were
+  re-derived against the shipped `paired_bootstrap` (clean in the working tree), and **both
+  reproduced to the digit**: 12 row-shuffles of the same difference multiset at the fixed seed
+  20260902, `(b=8,c=0,n=85)`, `B=10000`, give exactly the two intervals `(3.53, 15.29)` and
+  `(3.53, 16.47)` pp that `c1f2a7d4` reports, and 20 seeds at fixed row order give the same two
+  values; `(b=5,c=3,n=12)` flips its lower bound between **−25.0** and **−33.3** pp on **107/93** of
+  200 seeds — `5b8e0c62`'s figure exactly — and 107/93 of 200 row permutations (the entry says
+  102/97; the split is permutation-RNG-dependent, the phenomenon is not); `(b=4,c=0,n=30)` is
+  identical across 60 seeds; `(b=4,c=2,n=30)` is stable at `B=10000` and moves on 6 of my 60 seeds
+  at `B=2000` (entry: 8/60, same seed-set dependence). The predictor checks out to five places:
+  exact `P(K≤13) = 0.97281` and `P(K≤14) = 0.98738` for `Bin(85, 8/85)` against a Monte-Carlo
+  standard error of `sqrt(.975×.025/10000) = 0.0016`, putting the 97.5th percentile 0.0022 from an
+  atom boundary. **`5b8e0c62` supersedes `c1f2a7d4` outright**: it contains the original's bottom
+  line (row order is a real input at a fixed seed, because `random.Random.choice` draws an *index*)
+  and corrects its framing from universal to conditional, which is the half that decides whether a
+  reader trusts a re-derivation that comes back stable. `c1f2a7d4`'s one unique contribution — the
+  closed form — was folded into the promoted bullet rather than dropped. Promoting both would have
+  shipped a flat claim beside its own refutation. The project-scoped copy of the merged statement is
+  already published in the refined form in three places (note §3.2d/§3.4, review item 3 with the
+  same 0.0022-vs-0.0016 numbers, and the shipped `stats.py:245` docstring), so only the
+  discipline-level rule was promoted.
+- **Discarded (3, plus `c1f2a7d4` as superseded above):**
+  - `b1e6c0d2` (2026-09-03, a strict-dominance MDD can be smaller than an observed non-significant
+    difference, so a hard-coded *"the observed X pp is below that"* is structurally false for mixed
+    discordance) — **mechanism re-derived exactly, and already fixed in code and documented
+    verbatim.** Driving the shipped `stats._mdd_clause` at `n=20`, DEFF 1.0, α=0.05 reproduces
+    `mdd80 = 36.7 pp` and, at `b=13, c=5` (observed 40.0 pp, `mcnemar_exact = 0.09625`), renders the
+    *"is at or above that, but the MDD assumes strict dominance…"* branch — the entry's own example,
+    with its p-value, now rendering correctly. The clause is conditional at `stats.py:736`; sweeping
+    every `(b,c)` at `n ∈ {12,15,20,30,38,40,48}` prints the false wording **0** times under the
+    current code and would print it on 2 422 of 3 820 tables under the unconditional version. The
+    finding is published in the shipped `_mdd_clause` docstring (with its numbers), in
+    `docs/reviews/small-model-benchmarking-ml.md` §604-613, and in `model-bench/docs/HISTORY.md:219`.
+    **One caveat recorded rather than promoted:** the entry's "1580 tables print the clause, 268
+    (17%) print it falsely" is **not reproducible without the sweep's exact verdict gating** — my
+    nearest reconstruction (verdict-2 tables only, i.e. McNemar p > 0.05, DEFF 1.0, no floor gate)
+    gives 1746 and 386 (22.1%). Same order, same conclusion, but the counts are conditional on
+    gating the entry does not state, and the shipped docstring carries them as if absolute.
+  - `b3d7f1a2` (2026-09-03, float rank/bin arithmetic has produced an off-by-one twice in
+    independent formulas; use integer arithmetic) — **both instances re-derived exactly** (numbers
+    above, under `a9d2f5b3`) and **already published**: note §11.2.1 carries the `0.28*25` case, the
+    integer form `-(-level.numerator * X // level.denominator)`, *and* the explicit framing the entry
+    reaches for (*"Same bin-edge class as Rule 3a's `(7/40)/0.001` case, one operation over"*), plus
+    the "defensive, not load-bearing" status at the four levels this tool actually uses. Its
+    transferable half rides in the `a9d2f5b3` promotion; nothing distinct is left.
+  - `6ef71251` (2026-09-07, in `ceil(level*X)` operand order decides exactness — 1626 / 755 / 0
+    divergences for the percent, level-first and numerator-first spellings) — **swept independently
+    and reproduced to the count**, including the first divergence at `(X=25, level=7/25)` for both
+    float forms, and confirmed that `modelbench/stats.py:299` and `results.py:573` both still spell
+    it `int(round(pct / 100.0 * (len-1)))`. **Already published, by the very work that produced it:**
+    note **v1.18** §11.2.1 carries the three-row table with 1626/755/0 verbatim *and* explicitly
+    corrects the v1.17 mis-attribution the entry reports (*"v1.17 printed it under
+    `math.ceil(permille * X / 1000)`, which is the numerator-first spelling and diverges **nowhere**
+    in that sweep"*), landed in commit `bbbf18e`. The entry arrived from a concurrent session during
+    U13's run and describes a state the repo had already left.
+- **Kept open (1) — blocked by the model-bench write constraint, target named:**
+  - `7f3c1a92` (2026-09-03, the pinned `_Z_95` is not equal to `NormalDist().inv_cdf(0.975)`, so
+    `==` fails while `< 1e-12` passes). U14 left this to this pass with two readings, both of which
+    hold. **It is not a duplicate of the already-cleared `0f3b6a1e`** — that entry was about prose
+    `1.96` versus the pin (provenance), this one about the pin literal versus the computed double
+    (exact equality); complementary halves of one rule. And it is **already published in the
+    strongest available form**, as the committed executable assertion
+    `test_z_95_matches_the_inverse_normal_cdf` (`model-bench/tests/test_stats.py:82`), which asserts
+    both `_Z_95 != NormalDist().inv_cdf(0.975)` and `abs(...) < 1e-12` and whose docstring states the
+    divergence and forbids tightening it. **But its stated mechanism carries an arithmetic error, and
+    so does every published copy.** Re-derived independently: the delta is `4.440892098500626e-16`
+    while `math.ulp(1.9599639845400536)` is `2.220446049250313e-16`, and the two doubles are **two**
+    representable steps apart — confirmed three ways (delta/ulp = 2.0, IEEE-754 bit distance = 2, and
+    `nextafter(inv_cdf, +inf)` applied **twice** reaching the pin exactly). So it is **two ULPs, not
+    one**. Also confirmed: the pin really is the 16-significant-digit decimal of that double
+    (`'%.16g' % inv_cdf` round-trips to the pin; `%.17g` does not), which is what makes the entry's
+    framing right for the wrong count. The bottom line — unequal doubles, `==` fails, `< 1e-12`
+    passes — is untouched. **The "one ULP" wording is committed in three places, all outside `cobb`'s
+    write remit and all under the concurrent session's active edit:**
+    `model-bench/tests/test_stats.py:89` (the docstring above), `model-bench/docs/HISTORY.md:387`,
+    and `docs/reviews/small-model-benchmarking-ml.md:247` (finding n-ML-3). Opened as **K-004** in
+    `plan.md` with those three paths, for the human to route once that session lands. The entry is
+    cleared from the graph; `plan.md` is its durable record.
+- **`MENTIONS` edges added: 0.** All ten are statistics or LM-Studio-measurement facts inside this
+  agent's own discipline, and every project-scoped half is already published in the component it
+  concerns, so tagging would only queue documented content into another agent's pass (chunk A/B
+  reasoning, unchanged). `7f3c1a92`'s blocked correction spans a `-ml` review this agent *itself*
+  owns under root `AGENTS.md`'s by-kind table and two model-bench files the human is routing, so a
+  tag would misdirect it rather than carry it.
+- **Verification basis, per the standing requirement.** **Two entries were verified by live probe**
+  — `c47a9e30` and (in its premise) `a3f1c8de`: LM Studio answered on `:1234`, all 19 models were
+  `not-loaded`, and one cold call plus 20 warm calls against `qwen/qwen3-4b-2507` (Q4_K_M) were
+  measured this session. **The other eight were verified by artifact and by recomputation** —
+  `decimal` at 60–80 significant digits for the MOVER-D fixtures and the inverse-normal constant,
+  exhaustive integer sweeps for the rank/bin claims, and direct calls into the *shipped, clean*
+  `modelbench.stats` for the bootstrap and MDD claims. **model-bench's test suite was deliberately
+  not run** — its `conftest.py`, `test_fingerprint.py`, `test_results.py` and `fingerprint.py` were
+  dirty in the working tree throughout, so a failure could not have been attributed; `stats.py` and
+  `test_stats.py` were clean, which is why importing and driving the module directly was sound.
+  No shared FalkorDB graph was read or written beyond `kaizen_team`, and no scratch graph key was
+  created. Publication checks again grepped **outside** the docs tree — shipped docstrings, inline
+  comments, test bodies and `model-bench/docs/HISTORY.md` — which is where four of the six
+  already-published findings were actually found.
+- **Cleared:** all 10 entries `DETACH DELETE`d after this entry was written, each having exactly one
+  `PRODUCED` edge and no `MENTIONS`. `data-scientist` is at **zero** produced entries.
+- **Docs touched:** `claude/data-scientist/{data-scientist.md, lm-studio-model-notes.md,
+  kaizen/history.md, kaizen/plan.md}`. Nothing under `model-bench/` or `docs/` was written.
+
+
 ## 2026-09-07 — Learnings-graph distillation, chunk B of 3 (U14): 9 entries — 1 promoted, 7 discarded, 1 kept open
 
 - **What:** `cobb` processed the 9 `data-scientist` `:KaizenEntry` nodes dated 2026-08-31…2026-09-02

@@ -127,9 +127,20 @@ JIT clause added 2026-09-07 from a 2026-09-03 observation).
   call is an environment flake, not a code or config defect — retry once before diagnosing; a
   harness that must not flake should warm the model with a throwaway call first.
   **Do not size a design against any single measured load cost:**
-  two cold loads measured on this box differ by ~6x. What is stable, and what a latency design
-  should key on, is that LM-Studio-side `ttft` **excludes** the JIT load while wall clock includes
-  it — measured, with the numbers, in `docs/plans/small-model-benchmarking-ml.md` §11.4.
+  three cold loads measured on this box span ~3.5 s to ~21 s (≈6x). What is stable, and what a
+  latency design should key on, is that LM-Studio-side `ttft` and `generation_time` **exclude** the
+  JIT load while the client wall clock includes it — so **`wall − (ttft + generation_time)` is the
+  load, isolated, and is therefore an in-call reload detector**: a reload that begins and ends
+  inside one timed call is invisible to a between-item residency probe but shows up in that gap.
+  The separation is not marginal — re-measured live on this box against `qwen/qwen3-4b-2507`
+  (Q4_K_M) from a residency-confirmed `[]` start: cold gap **3 507 ms**, against **−6.5 … +6.8 ms**
+  across 20 warm calls, ~500x. Threshold the gap's *magnitude*, never `gap > 0`: the warm gaps go
+  negative because the client clock and the server's timers bracket different work. Full treatment,
+  including the threshold's basis, in `docs/plans/small-model-benchmarking-ml.md` §11.4/§11.5.1.
+  **The detector withholds on a covariate, not on latency**, so it is *not* right-censoring — a
+  withheld call can be faster than a timed one (a 1.1 s gap around 0.2 s of generation is withheld
+  at 1.3 s while a clean 2.0 s call beside it is timed). Any "every withheld call was slower than
+  every timed call" claim has to be **computed per render**, never argued from the rule's shape.
 
 **Consequence:** an environment fingerprint or latency report can be collected automatically from
 `/api/v0/` plus `lms.exe`, except the app version and the KV-cache setting, which have to be

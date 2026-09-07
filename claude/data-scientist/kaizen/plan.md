@@ -11,6 +11,7 @@
 | K-001 | 2026-07-09 | med | 🔵 | First-run shakedown: a real method note + a real methodology review |
 | K-002 | 2026-07-09 | low | 🔵 | Perishable model/embedding landscape reference (skill or resource file) |
 | K-003 | 2026-09-07 | low | 🔵 | Route the eager-provider-resolution trap to `falkor-chat`'s provider-config manual (owner: `tico`) |
+| K-004 | 2026-09-07 | med | 🔵 | Correct a committed arithmetic error: the pinned `_Z_95` is **two** ULPs from `inv_cdf(0.975)`, not one (owner: `teco` to route) |
 
 ### K-001 — First-run shakedown: a real method note + a real methodology review
 - **Status:** 🔵 proposed
@@ -43,6 +44,40 @@
 - **Notes:** `manuals/` is `tico`-owned and outside `cobb`'s write remit, so this needs routing by
   the human or by `teco`. The entry is also tagged `MENTIONS → tico` in `kaizen_team`, so it will
   resurface in `tico`'s own distillation pass if it isn't routed sooner.
+
+### K-004 — Correct the committed "one ULP" wording: the pinned `_Z_95` is **two** ULPs away
+- **Status:** 🔵 proposed
+- **Priority:** medium
+- **Origin:** kaizen entry `7f3c1a92-5d64-4b0e-9a11-c8e2f0b47d31` (2026-09-03), kept open in the
+  U15 distillation pass — see `history.md`, 2026-09-07, chunk C.
+- **Rationale:** This is **not** a promotion request — the fact is already published in the
+  strongest form available to it, as the committed executable assertion
+  `test_z_95_matches_the_inverse_normal_cdf` (`model-bench/tests/test_stats.py`, line 83 as of
+  2026-09-07), which asserts both `_Z_95 != NormalDist().inv_cdf(0.975)` and
+  `abs(...) < 1e-12`, and whose docstring forbids tightening the comparison to `==`. What is open
+  is an **arithmetic error inside that published statement**: every copy says the two doubles are
+  *one* ULP apart. They are **two**. The delta is `4.440892098500626e-16`;
+  `math.ulp(1.9599639845400536)` is `2.220446049250313e-16`. Confirmed three ways in the U15 pass
+  — `delta / ulp == 2.0`, IEEE-754 bit distance 2, and `math.nextafter(inv_cdf, +inf)` applied
+  **twice** landing exactly on the pin. The bottom line is untouched: the doubles are unequal, so
+  `==` fails and `< 1e-12` passes; only the ULP count is wrong.
+- **Proposed change:** replace "one ULP" with "two ULPs" (and, where the delta is quoted, keep
+  `4.44e-16` — it is right) in the three committed places carrying the wording. Line numbers are
+  as of 2026-09-07 and drift under the concurrent session; the anchors are the names:
+  - `model-bench/tests/test_stats.py:89` — the `test_z_95_matches_the_inverse_normal_cdf`
+    docstring (*"4.44e-16 — one ULP"*).
+  - `model-bench/docs/HISTORY.md:471` — *"pinned literal is one ULP from
+    `NormalDist().inv_cdf(0.975)` and must not be tightened to `==`"*.
+  - `docs/reviews/small-model-benchmarking-ml.md:247` — finding **n-ML-3**, whose heading carries
+    the same claim.
+- **Notes:** open rather than fixed because all three paths are **outside `cobb`'s write remit**
+  *and* were under a concurrent session's active edit during U15, so nothing under `model-bench/**`
+  or `docs/**small-model-benchmarking*` was written. `teco` routes the correction once that
+  session lands. Note the split ownership: `docs/reviews/small-model-benchmarking-ml.md` is a
+  document **`data-scientist` itself owns** under root `AGENTS.md`'s by-kind table (`-ml` reviews),
+  so that one can be fixed by this agent directly; the two `model-bench/` files belong to whoever
+  is delivering that component. No `MENTIONS` tag was added in the graph — tagging would misdirect
+  a correction that is half this agent's own and half a human routing decision.
 
 ## Parking lot / ideas
 
