@@ -2749,7 +2749,7 @@ def test_every_inherited_handler_states_why_it_produces_no_row():
     below: *"no storefront route calls layer X"* is
     `test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume`,
     and *"no storefront route raises it"* is
-    `test_the_router_raises_only_the_two_classes_whose_handlers_re_shape`.
+    `test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume`.
     """
     assert all(reason.strip() for reason in INHERITED_HANDLERS.values())
     assert ServiceError not in INHERITED_HANDLERS
@@ -3045,28 +3045,54 @@ def _router_bindings(source: str) -> dict[str, str]:
     }
 
 
+def _named_class(expr) -> str:
+    """The class `Foo(...)`, `Foo` and `mod.Foo(...)` all name: `"Foo"`."""
+    if isinstance(expr, ast.Call):
+        expr = expr.func
+    if isinstance(expr, ast.Name):
+        return expr.id
+    if isinstance(expr, ast.Attribute):
+        return expr.attr
+    raise AssertionError(  # pragma: no cover — a shape it cannot resolve
+        f"unresolvable class expression: {ast.dump(expr)}"
+    )
+
+
 def _raised_class_names(node) -> set[str]:
     """Every exception class a `raise` under `node` names.
 
     `raise Foo(...)`, `raise Foo` and `raise mod.Foo(...)` all resolve to
     `"Foo"`; a bare `raise` (re-raise) names nothing and is skipped. Takes a
-    node rather than a source string so the same reader serves both scopes —
-    the router, and the whole module (P12-2).
+    node rather than a source string so the one reader serves every scope —
+    the router node, and either storefront module whole (P12-2).
+
+    **A `raise <factory>(...)` resolves through the factory.** `storefront.py`
+    has one — `raise self._reset_state_unknown(ctx, pid)`, a method that builds
+    a `ResetStateUnknownError` — and a reader that stopped at the attribute
+    would put a *method name* into a set that is supposed to hold exception
+    classes, and would be blind to a factory that returned an `HTTPException`
+    one call away from the `raise`. A name counts as a factory when the walked
+    tree defines it as a **function**; a class it defines is not one.
     """
     root = ast.parse(node) if isinstance(node, str) else node
+    factories = {
+        child.name: child
+        for child in ast.walk(root)
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
     names: set[str] = set()
     for child in ast.walk(root):
         if not isinstance(child, ast.Raise) or child.exc is None:
             continue
-        exc = child.exc
-        if isinstance(exc, ast.Call):
-            exc = exc.func
-        if isinstance(exc, ast.Name):
-            names.add(exc.id)
-        elif isinstance(exc, ast.Attribute):
-            names.add(exc.attr)
-        else:  # pragma: no cover — a shape this reader cannot resolve
-            raise AssertionError(f"unresolvable raise: {ast.dump(child.exc)}")
+        raised = _named_class(child.exc)
+        if raised in factories:
+            names |= {
+                _named_class(returned.value)
+                for returned in ast.walk(factories[raised])
+                if isinstance(returned, ast.Return) and returned.value is not None
+            }
+        else:
+            names.add(raised)
     return names
 
 
@@ -3158,7 +3184,28 @@ def test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume()
     ) == {"start_workflow_run"}
 
 
-def test_the_router_raises_only_the_two_classes_whose_handlers_re_shape():
+# Every exception class a `raise` in `storefront.py` names **today**, spelled
+# out for the same reason `SERVICE_LAYER_REACH_TODAY` is: a `/shop/api` route
+# executes this module, so a `raise` added to it has to come back here.
+#
+# All seven are `StorefrontError` subclasses, and that is what makes
+# `INHERITED_HANDLERS`' excuses true of this file rather than merely stated for
+# it: `test_every_storefront_error_subclass_is_mapped_to_a_response` already
+# holds that every member of that family is caught by a route or answered by a
+# classified handler, so none of them can arrive at a handler this table
+# excuses — and none of them is a bare `HTTPException`.
+#
+# `ResetStateUnknownError` is here because the reader resolves the factory:
+# `reset_participant` writes `raise self._reset_state_unknown(...)`, and the
+# name in that `raise` is a method.
+STOREFRONT_RAISES_TODAY = frozenset({
+    "DemoNotSeededError", "QuiesceTimeoutError", "UnknownParticipantError",
+    "UnscopedParticipantError", "ResetStateUnknownError",
+    "UnknownOrderError", "OrderTransitionRefusedError",
+})
+
+
+def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
     """**P11-2, and P11-1's other half.**
 
     `ENVELOPE_HANDLERS` are the two handlers that re-shape a response the route
@@ -3177,17 +3224,37 @@ def test_the_router_raises_only_the_two_classes_whose_handlers_re_shape():
     raising `WorkflowEngineDisabledError` / `SearchNotAvailableError`, which
     reach the inherited handlers `INHERITED_HANDLERS` excuses.
 
-    **The scope is the whole module, not the router node** (P12-2). Reading
-    only `build_storefront_router` left the escape one call out: mutation N-M —
-    a module-level `_refuse_retired_name()` raising `HTTPException(410)`, called
-    from `join` — survived the file and answered `410 {"detail":"gone"}` on the
-    wire. A helper is a route's code wherever it is defined, and the reason
-    string says "*no `/shop/api` route raises a bare `HTTPException`*", which
-    is a claim about reachability, not about lexical position.
+    **The scope is both storefront modules, whole** (P12-2). The reason string
+    says "*no `/shop/api` route raises a bare `HTTPException`*", which is a
+    claim about what a request can reach, not about lexical position — and a
+    walk of `build_storefront_router` left the escape one call out: mutation
+    N-M, a module-level `_refuse_retired_name()` in *this* file raising
+    `HTTPException(410)` and called from `join`, survived and answered
+    `410 {"detail":"gone"}` on the wire.
 
-    So both scopes are pinned: inside the router, exactly the two envelope
-    classes; module-wide, those two plus the three raises that happen at
-    wiring or boot time and can never be on a request path.
+    Widening to `storefront_api.py` whole closes that one and no more. The same
+    helper written in `storefront.py` (**N-M3**), and the `raise` put straight
+    into a `Storefront` method a route calls (**N-M2**), both survive a
+    whole-module walk of this file, and both answer the identical
+    `410 {"detail":"gone"}` from `POST /shop/api/session`: a route executes
+    `shop.<method>` exactly as it executes a local helper.
+
+    So the unit is the module and the storefront owns two of them, and neither
+    is filtered by reachability — deliberately. Both files exist only to serve
+    `/shop/api`, so a `raise` anywhere in either is one the next edit can put on
+    a request path; over-approximating costs a named line in a list, while
+    under-approximating is the same defect a second time. The filtering belongs
+    one layer down, at `services.py`, which *is* shared with the legacy surface
+    — what a route reaches there is measured rather than assumed, by
+    `test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume`.
+    That layer boundary is where this guard stops; the two guards together are
+    the whole claim.
+
+    Three scopes are pinned. Inside the router: exactly the two envelope
+    classes. `storefront_api.py` whole: those two, plus the three raises that
+    happen at wiring or boot time and can never be on a request path.
+    `storefront.py` whole: `STOREFRONT_RAISES_TODAY`, seven `StorefrontError`
+    subclasses and nothing else.
 
     This is what makes `INHERITED_HANDLERS[StarletteHTTPException]`'s reason
     true rather than merely stated.
@@ -3210,9 +3277,16 @@ def test_the_router_raises_only_the_two_classes_whose_handlers_re_shape():
         "RuntimeError", "StorefrontPreflightError", "ValueError",
     }
 
+    # ...and `storefront.py`, whose raises a route reaches through
+    # `shop.<method>` exactly as it reaches this file's own helpers
+    storefront_raises = _raised_class_names(_storefront_source())
+    assert storefront_raises == set(STOREFRONT_RAISES_TODAY)
+
     # the bare `HTTPException` half, named separately because it is the one the
-    # reason string cites and the one a reflex reaches for
-    assert "HTTPException" not in _raised_class_names(source)
+    # reason string cites and the one a reflex reaches for — over both files,
+    # since `410 {"detail":"gone"}` reaches the participant identically from
+    # either one (N-M, N-M2, N-M3)
+    assert "HTTPException" not in _raised_class_names(source) | storefront_raises
 
     # the controls: the reader resolves both mutation shapes it is shown
     assert _raised_class_names(
@@ -3238,6 +3312,38 @@ def test_the_router_raises_only_the_two_classes_whose_handlers_re_shape():
     assert _raised_class_names(n_m) == {"HTTPException"}
     assert _raised_class_names(_parse_router(n_m)) == set()
 
+    # the two shapes a walk of `storefront_api.py` alone still could not see,
+    # both of them measured survivors of this file (N-M2, N-M3)
+    assert _raised_class_names(
+        "class Storefront:\n"
+        "    def join(self, display_name):\n"
+        "        raise HTTPException(status_code=410, detail='gone')\n"
+    ) == {"HTTPException"}
+    assert _raised_class_names(
+        "def _refuse_retired_name(name):\n"
+        "    raise HTTPException(status_code=410, detail='gone')\n"
+        "class Storefront:\n"
+        "    def join(self, display_name):\n"
+        "        return _refuse_retired_name(display_name)\n"
+    ) == {"HTTPException"}
+
+    # ...and the factory resolution, which keeps a method name out of a set of
+    # exception classes and, more to the point, is not blind to a factory that
+    # builds the `HTTPException` one call away from the `raise`
+    factory = (
+        "class Storefront:\n"
+        "    def reset_participant(self):\n"
+        "        raise self._reset_state_unknown()\n"
+        "    def _reset_state_unknown(self):\n"
+        "        return {}\n"
+    )
+    assert _raised_class_names(
+        factory.replace("return {}", "return ResetStateUnknownError('p-1')")
+    ) == {"ResetStateUnknownError"}
+    assert _raised_class_names(
+        factory.replace("return {}", "return HTTPException(status_code=410)")
+    ) == {"HTTPException"}
+
 
 def _raised_refusals() -> dict[str, set[tuple[int, str]]]:
     """`{route function name: {(status, token)}}` — every `StorefrontHTTPError`
@@ -3249,7 +3355,7 @@ def _raised_refusals() -> dict[str, set[tuple[int, str]]]:
 
     It collects `StorefrontHTTPError` **only**, which is what it is for and is
     also what made it unable to see a bare `HTTPException` (P11-2). That gap is
-    closed by `test_the_router_raises_only_the_two_classes_whose_handlers_re_shape`
+    closed by `test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume`
     above, not here.
     """
     builder = _parse_router(_router_source())
@@ -3376,20 +3482,38 @@ def test_every_row_of_the_table_was_produced_by_execution(request):
     leaves `config.option.keyword` empty, so this ran against an almost-empty
     `_OBSERVED` and reported all 57 rows as unproducible. Every selector
     (`-k`, a node id, `--lf`, `--deselect`) shows up the same way here: a test
-    function of this module that pytest did not collect. Marker deselection
-    would too, and that is fine — `-m "not live"` is in this project's
-    `addopts` and deselects nothing in this file.
+    function of this module that pytest did not collect.
+
+    **Marker deselection is the one selector that must not count** (P12-3).
+    `-m "not live"` is in this project's `addopts`, so the first
+    `@pytest.mark.live` test added to this module would deselect *itself* on
+    every default run and turn this check off permanently — visibly, since the
+    skip reason prints, but off. Zero such tests exist today, which makes it
+    latent rather than live. So a `live`-marked function is not part of
+    `defined`, and the predicate reads *every offline test of this module was
+    collected* — exactly what covering the table requires. Under `-m live` this
+    test is itself deselected and never asks the question; under a marker-free
+    run the live ones collect, are absent from `defined`, and are simply extra.
     """
     module = sys.modules[__name__]
-    defined = {name for name in dir(module) if name.startswith("test_")}
+    defined = {
+        name
+        for name in dir(module)
+        if name.startswith("test_")
+        and not any(
+            mark.name == "live"
+            for mark in getattr(getattr(module, name), "pytestmark", ())
+        )
+    }
     collected = {
         getattr(item, "originalname", None) or item.name.split("[")[0]
         for item in request.session.items
         if getattr(item, "module", None) is module
     }
-    if collected != defined:
+    uncollected = defined - collected
+    if uncollected:
         pytest.skip(
-            f"{len(defined - collected)} of this module's tests were not "
+            f"{len(uncollected)} of this module's tests were not "
             "collected, so the run cannot cover the whole table"
         )
     missing = FLAT_TABLE - _OBSERVED

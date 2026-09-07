@@ -445,16 +445,18 @@ ENVELOPE_HANDLERS: frozenset[type[BaseException]] = frozenset(
 # stayed green on both it takes.
 #
 # *"No storefront route raises it"* is
-# `test_the_router_raises_only_the_two_classes_whose_handlers_re_shape`, over
-# the **whole module** rather than the router node — a raise one helper call
-# out of a route body is still a raise on the route (P12-2).
+# `test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume`,
+# over **both storefront modules whole** rather than the router node: a raise
+# one helper call out of a route body is a raise on the route, and so is one
+# inside the `Storefront` method the route calls (P12-2). It stops at the
+# `services.py` boundary, which the reach guard above covers instead.
 INHERITED_HANDLERS: dict[type[BaseException], str] = {
     # FastAPI/Starlette defaults, on every app ever built.
     StarletteHTTPException: (
         "the framework default. No `/shop/api` route raises a bare "
         "`HTTPException` — they raise `StorefrontHTTPError`, whose own handler "
         "wins the MRO walk (asserted by "
-        "`test_the_router_raises_only_the_two_classes_whose_handlers_re_shape`; "
+        "`test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume`; "
         "`_raised_refusals`, which this cited until P11-2, collects "
         "`StorefrontHTTPError` calls only and so could not see a bare one) — "
         "and the `405` Starlette raises for an unmatched method is not a "
