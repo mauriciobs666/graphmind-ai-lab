@@ -140,7 +140,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S8c** — close Pass 11: P11-1 (the `services.` access guard), P11-2, 4 minors, 4 nits, **+ P10-9** (open two passes) | `coder` (**fresh**) | `a213382761bc926ec` | **delivered — committed `2e27835`** | `storefront_api.py` (+45/−3), `test_storefront_api.py` (+434/−31, 7 tests) | `analyst` (Pass 12) → — | 196k tok / 77 tools |
 | **S8c gate** — Pass 12: do the ten closures hold? is the guard as strong as the argument for it? + 2 disagreements with Pass 11 | `analyst` (**fresh** — must judge Pass 11, and its author was at 86 tool uses) | `abe2ad6a7b8091e72` | **NEEDS CHANGES** (0 blockers, 1 major, 1 minor, 2 nits) — committed `fb11268` | `docs/reviews/salesperson-ui-impl.md` `## Pass 12` + Appendix P12-A | — | 181k tok / 70 tools |
 | **S8d** — P12-1: widen the guard to the reach its excuses claim (3 of 8 → 9 of 9); P12-2 + 2 nits | `coder` | `a213382761bc926ec` (resumed) | **PARTIAL — committed `769adc3`; killed mid-run by a session rate limit (429) while starting P12-2.** P12-1 complete and teco-verified; **P12-2 + 2 nits still open** | `storefront_api.py`, `test_storefront_api.py` | superseded by S8d2 | — |
-| **S8d2** — finish S8d: **P12-2** (module-wide bare-`HTTPException` walk) + Pass 12's **two nits** | `coder` (**fresh** — `a213382761bc926ec` no longer resolves after the session reboot; the checkpoint's own stated fallback) | `ad35d76985da040a3` | in-flight (dispatched 2026-09-06) | `storefront_api.py`, `test_storefront_api.py` + a lift-ready statement of the guard's reach | `analyst` (Pass 13, **fresh reviewer**) → — | — |
+| **S8d2** — finish S8d: **P12-2** + Pass 12's **two nits** | `coder` (**fresh** — `a213382761bc926ec` did not survive the session reboot; the checkpoint's own stated fallback) | `ad35d76985da040a3` | **accepted — committed `1887180`.** **Judged Pass 12's recommended fix insufficient rather than applying it**: two mutations (a bare `HTTPException(410)` from `Storefront.join`, and the same raise in a module-level helper in `storefront.py` called from `join`) **survive on `769adc3`** at 183 passed, both answering `410 '{"detail":"gone"}'` on the wire — the same answer Pass 12 used to justify P12-2. The guard now reads **both** storefront modules whole, stopping at the `services.py` boundary, and resolves `raise <factory>(...)` through the factory's `return`s. **Also found `769adc3`'s commit message understates its own delivery** — the module-wide walk, the allowlist and P12-4's filter had already landed | `storefront_api.py`, `test_storefront_api.py` + a lift-ready guard-reach statement | `analyst` (Pass 13) → — | 174k tok / 55 tools |
+| **Pass 13** — gate all of S8d (`769adc3` + `1887180`) | `analyst` (**fresh** — it judges the fix to Pass 12's own major) | `a67deef56ee49dde9` | in-flight (dispatched 2026-09-06) | `docs/reviews/salesperson-ui-impl.md` `## Pass 13` | — | — |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
 | **U31** — stakeholder decision: how a dead turn becomes visible to the participant | stakeholder | — | **delivered — option B**, the additive `lastTurn: 'failed' \| null` field | option B recorded in v1.23 (below) | — | — |
 | **v1.23** — write option B into the contract: §5.2's `turn` shape, §5.3 C6a, S9's row, + the client rows that inherit it | `architect` | `ad81e9cdb12dfbb28` (resumed ×2) | **accepted — committed `10f2b72`** (68/7) | `docs/plans/salesperson-ui.md` **v1.23** | teco-verified: **exactly the 4 announced rows moved** (S9, S12a, S13, S15), no delivered row moved, all 21 rows 7 cells on a pipe-aware count | 224k tok / 26 tools |
@@ -1867,3 +1868,52 @@ S8d2's report. Item 5, the S7→S8d documentation debt, **stays held** on the re
 recorded above — the S8 chain is not closed, and a `HISTORY.md` entry written before Pass 13 could be
 invalidated by it. It remains the one unit that could run in parallel with a gate, and it will get
 dispatched when the chain closes, not before.
+
+## S8d2 — a delegate that reviewed its own brief's premise and was right to (teco, 2026-09-06)
+
+I briefed S8d2 to *"judge Pass 12's recommended fix on its merits rather than adopting it
+mechanically,"* on the general reasoning that a widened walk which still cannot see a case is the
+same defect again. That was a hedge, not a prediction. **It came back with the defect actually
+present**, measured two ways on `769adc3`: a bare `HTTPException(410)` raised from `Storefront.join`,
+and the same raise moved into a module-level helper in `storefront.py` called from `join`. Both
+survive at 183 passed and both answer `410 '{"detail":"gone"}'` on the wire — **byte-identical to the
+answer Pass 12 itself used to justify P12-2 in the first place.**
+
+Pass 12 wrote that it had *"checked not guessed"* that a module-wide walk of `storefront_api.py` with
+a three-name allowlist was sufficient. The eighth instance of this build's signature defect was
+inside that check. A route executes `shop.<method>` exactly as readily as a local helper, so a walk
+that stops at the router's own file stops one file short of the rule the exemption string states.
+
+**The reusable part is not "Pass 12 erred."** It is that *"I checked, not guessed"* names the method,
+not the scope — and the scope is where every one of these eight instances has lived. A reviewer who
+reproduces a case, fixes the spelling it exhibited, and verifies the fix kills that case has checked
+something true and insufficient. The question that would have caught it is the one P12-1 itself
+asked one file earlier: **is the rule the exemption states broader than the reach the mechanism
+implements?**
+
+**A second thing worth keeping.** S8d2 found that **`769adc3`'s own commit message understates what
+it delivered** — the module-wide walk, the three-name allowlist and P12-4's package filter had all
+already landed, though the message says P12-2 is still open. I wrote that message from the killed
+agent's mid-task placeholder. So a resume record built from a placeholder can be wrong in the
+*generous* direction too, not only the optimistic one, and the correction is the same either way:
+**read the tree, not the message.** I have told Pass 13 to verify this rather than accept it.
+
+**What I verified myself before committing**, rather than accepting the report: two-file 183, full
+suite 2615/14, `ruff` clean on both files, the three must-be-unchanged files md5-matching `HEAD`,
+`ws:acme` unchanged, and — because a static read of a guard cannot show that it fires — **I re-ran
+mutation N-M2 independently** from a byte-copy. The raise guard fails, 182 pass, `storefront.py`
+restored to `a713e2c5…`. I did **not** re-run the survives-on-`769adc3` half; that adjudication is
+Pass 13's and duplicating it here would spend the gate's work twice.
+
+## Dispatch state after S8d2 (teco, 2026-09-06)
+
+**Pass 13 is the only thing in flight.** The §5.1 S9 re-word is deliberately **not** parallel with it,
+even though the two are file-disjoint (`docs/plans/` vs `docs/reviews/`). This is the test I wrote
+into this document after the S8c/v1.22 collision: *does either unit decide something the other must
+already know?* Pass 13 is asked, explicitly, whether S8d2's guard-reach statement is accurate as
+written — and that statement is the exact text the re-word would lift. Dispatching both now would
+have the architect encoding a fact the gate is still deciding. Same shape as the collision, different
+files.
+
+The S7→S8d documentation debt **stays held** on its existing reasoning, unchanged by S8d2 landing:
+Pass 13 can still move what a `HISTORY.md` entry has to say.
