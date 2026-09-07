@@ -151,7 +151,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U33** — the S7→S8g documentation debt: `HISTORY.md` + `SERVER.md` §1.3/§1.4 | `coder` | `a19762332c4ce266f` | **delivered, re-gating** (`c708423`) | `HISTORY.md`, `SERVER.md`, one `storefront_api.py` docstring | `analyst` Pass 16 → needs changes → **12 fixed + 5 found by audit** → re-check in flight | 264k / 100 |
 | **U36** — `config.py:186–208`'s three future-as-present comments (same class as P16-4, in code) | `coder` | — | queued (**behind U34** — torn-snapshot risk) | `falkor-chat/server/falkorchat/config.py`, comments only | `analyst` | — |
 | **U34** — rebuild the stale `cpg_falkorchat` CPG from `HEAD` | `graph-dba` | `a5563c5bdd32be9c7` | in-flight (dispatched 2026-09-07) | `cpg_falkorchat` graph key + reload artifacts | teco-verified → — | — |
-| **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` | — (is the gate) | 219k / 60 |
+| **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
+| **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | — | queued (**behind U34** — torn-snapshot risk) | `storefront.py`, `storefront_api.py`, `app.py`, both test files | `analyst` + `qa-engineer` | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
 | **S9c** — the dead-turn latch `turn.lastTurn` and its lifecycle | `coder` | — | queued (behind S9b) | `storefront.py`, `storefront_api.py`, tests | `analyst` | — |
@@ -2704,3 +2705,31 @@ Folded in the `salesperson/` entry-doc references to `start_demo.sh` (three, not
 `README.md:95`, which instructs a reader to bring the stack up with a script that is not in the
 tree). The reviewer's priority argument is right: those are *entry* documents, so the natural next
 action after reading them is to run something that does not exist.
+
+## A killed run, and what the tree actually said (2026-09-07)
+
+U37's first attempt (`a86a189fb8d722846`) died to a platform rate limit, returning a mid-task
+placeholder — *"All three SERVER.md items verified. Now item 4"* — rather than a deliverable.
+That is a **transient platform failure, not a deficient result**, and the response is a
+re-dispatch, not a re-think.
+
+The useful part is what checking cost: **nothing had reached disk.** `SERVER.md` and
+`salesperson/` were both clean at `HEAD`, so the correct brief was a *clean start*, not a
+state-recovery. Had I assumed recovery, I would have told a fresh agent to reconcile against
+partial work that did not exist — which is how an agent invents a diff to explain its brief.
+Two `git status` calls decided it.
+
+**And the same check corrected a bigger assumption.** `cpg_falkorchat` had vanished from the
+graph list, which reads like a failed rebuild that dropped the old graph. It is not:
+`pipeline.sh` (pid 287001) is **still running**, its log written seconds earlier, at the load
+stage with **339,972 nodes / 2,317,169 edges** transformed against the old graph's 285,546 — the
+right direction for 12k added lines. The load drops and recreates, so an absent graph mid-load is
+the expected state, not evidence of failure. `graph-dba` never died; only the *other* agent did.
+
+Had I read the absence as a dead unit I would have re-dispatched a second Joern build on top of a
+live one. **The rate limit killed one agent, and I nearly let it kill a second by inference.**
+The state of record is the process table and the log, not the shape of the failure I had just
+seen elsewhere.
+
+`ws:acme` re-verified at **871** across the whole incident. `falkor-chat/server/` clean. S9a and
+U36 stay held: the snapshot is being read *right now*, which is the hold's whole reason.
