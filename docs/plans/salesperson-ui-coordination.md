@@ -2397,3 +2397,35 @@ and never let one denial become a documented constraint that other people plan a
 re-test by retrying the same denied command in a loop**, which is the failure in the other direction.
 Re-test once when circumstances genuinely change (a later turn, an explicit stakeholder ask), report
 what actually happened, and escalate the specific still-denied command rather than the whole class.
+
+## Seed COMPLETE, 2026-09-07 — and one recorded cleanup item was misdiagnosed
+
+**All three seeds are in.** `reference` now holds **4 `WorkflowDef`** (`access-request@v1`,
+`order-fulfillment@v1`, `salesperson@v7`, `triage@v1`), **15 `Step`**, **15 `Product`**. `ws:acme`
+**unchanged at 871 nodes** across the whole operation, as required. Read-only verifiers:
+`verify_workflows.sh acme` → *"OK — 2 defs in sync"*; `verify_catalog.sh` → exit 0, *"OK — product
+catalog in sync (15 products)"*; `verify_salesperson.sh` (no argument) → **exit 0**, both defs in
+sync, `order-fulfillment@v1` topology OK.
+
+**The permission rule worked, and that is itself the finding.** A blanket `Bash` allow already existed
+in the tracked `.claude/settings.json` and did **not** stop the classifier denying
+`seed_salesperson.sh`. Adding **explicit, exact-command** rules to the gitignored
+`.claude/settings.local.json` did. So a specific allow rule is a materially stronger signal than a
+broad one — a blanket `Bash` is not a superset of `Bash(<exact command>)` in practice, however it
+reads. Worth knowing before concluding that permission rules are inert against the auto-mode
+classifier.
+
+**Correction to "Outstanding cleanup for the stakeholder" above.** That section records: *"deleting
+the `salesperson@v6` snapshot [in `ws:acme`] restores `verify_salesperson.sh` (no arg) to exit 0."*
+**That diagnosis was wrong, and the item is moot.** The `v6` snapshot is **still present** — `ws:acme`
+still carries all eight `salesperson` snapshots, `v1` through `v7` including `v6` — and
+`verify_salesperson.sh` exits **0** anyway. The verifier was failing because **`reference` was
+unseeded**, not because of the orphan; seeding it fixed the symptom the orphan was blamed for.
+**Do not delete the `v6` snapshot on the strength of that entry** — it is a delete inside a populated
+workspace, justified by a claim that does not reproduce. If it is ever removed it should be for a
+reason someone re-establishes, not this one.
+
+The general shape is the same one this coordination has hit repeatedly: **a symptom was attributed to
+the nearest visible anomaly rather than to the actual cause**, and the attribution then sat in a
+document as fact until something incidentally falsified it. The `v6` orphan was real and unusual, so
+it looked like the explanation.
