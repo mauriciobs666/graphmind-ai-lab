@@ -64,7 +64,8 @@ Stakeholder decisions, 2026-09-02:
 | U23 — Two items routed back from v1.10: rule (iv-b)'s p50-gate application, and §11.2's stale line number | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `5197ce6`; (iv-b) confirmed **by correcting the note** | `docs/plans/small-model-benchmarking-ml.md` **v1.13** | `analyst` Pass 5 → — | 140k tok / 11 tools cumulative |
 | U24 — Re-gate plan v1.10 + note v1.13 (Pass 5) | `analyst` (fresh) | `aa9af16f140993a17` | **accepted** — `b9964d1` | `docs/reviews/small-model-benchmarking.md` `## Pass 5` | self → **needs changes** (2 blockers, 4 majors, 4 minors) | 209k tok / 70 tools |
 | U25 — Three rulings Pass 5 routed: co-presence shape, `censoringExact` clause 1, `paired_cluster_bootstrap`'s necessity | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `ca69cb1`; all three changed the note, **plus a live defect the gate missed** | `docs/plans/small-model-benchmarking-ml.md` **v1.14** | `analyst` Pass 6 → — | 182k tok / 15 tools cumulative |
-| U26 — Plan v1.11: close all 10 Pass 5 findings; rule 5 restated honestly | `architect` (fresh) | `a99cd8cce60c76d82` | in-flight | `docs/plans/small-model-benchmarking.md` v1.11 | `analyst` Pass 6 → — | — |
+| U26 — Plan v1.11: close all 10 Pass 5 findings; rule 5 restated honestly | `architect` (fresh) | `a99cd8cce60c76d82` | **delivered** — `85a32e5` (+540/−110); all 10 closed, nothing carried | `docs/plans/small-model-benchmarking.md` **v1.11** | `analyst` Pass 6 → — | 282k tok / 121 tools |
+| U27 — Re-gate plan v1.11 + note v1.14 (Pass 6) | `analyst` (fresh) | `a6f3786437e4dab05` | in-flight | `docs/reviews/small-model-benchmarking.md` `## Pass 6` | — (is the gate) | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | **accepted** — `5878014` | `model-bench/**` (10 files, +1490/−61); 353→389 tests | re-gate (both, fresh) → — | 348k tok / 130 tools |
@@ -1514,4 +1515,53 @@ exists to catch. Fix is one argument, blocked on nothing, and **must land before
 
 Relayed to the in-flight `architect` immediately; it was blocked on ruling 1 and the relay carries
 the trap explicitly rather than the ruling alone.
+
+### U26 delivered — 2026-09-07, plan v1.11 (`85a32e5`)
+
+All ten Pass 5 findings closed, nothing carried, none named blocked on unbuilt work — and the
+revision is **smaller than v1.10** (+540/−110 against +738/−134), the first time the trend has turned.
+
+**The architect rejected half of the gate's own prescribed fix, and was right.** Pass 5's P5-2
+prescribed two residual commands; one — `grep -rFn arm_kind … | grep -cF '"model"'` → 2 → 0 — is
+**unsound**, because `armKind` keeps the value `"model"` by design, so `tests/conftest.py:148`'s
+`arm_kind: str = "model"` survives a *faithful* edit. **Verified here: that line is a Python parameter
+default, not a fingerprint field.** The prescribed residual would have failed on a *correct*
+implementation. It was replaced with two that hold, and the lesson generalised into rule 5 itself —
+***a residual that fails on a correct edit is a trap, not a check.*** A reviewer's prescription being
+refused with evidence is the independent-review contract working in the direction people forget it
+runs.
+
+**v1.10's own count claims did not reproduce, and v1.11 caught it unprompted:** `ARM_KINDS` was pinned
+at `fingerprint.py:135` and the membership test at `:161`; both are off by two (`:137`, `:162`) —
+confirmed here. A *counts-at-a-named-commit* claim that does not reproduce, **in the very revision
+that introduced rule 5**. Pass 5's Appendix E.1 was also off by one (14 `arm_kind` lines carrying no
+`armKind`; it is **15** — 18 total, 3 carrying).
+
+**All sixteen pinned counts across the five tables re-verified by teco against `5878014`. Every one
+reproduces.** `armKind` 50/57 · `arm_kind` 18 · `REQUIRED_BY_SCHEMA` 22 · `EXPECTED_MODEL_SCHEMA_1` 3
+· `FORBIDDEN_BY_ARM_KIND` 10 · `ARM_KINDS` 2 · `_percentile` 7 · `bootstrap_seed` 29 ·
+`conservative_envelope` 8 · `cluster-bootstrap` 27 · `DecidedBy` 3 · `paired_cluster_bootstrap` 13 ·
+`paired_bootstrap` 8 · `_widen` 7 · `Fingerprint(` 12 · `max(-1.0, point` 1.
+
+**P5-1's fix is stated on both sides** (§3.4.4a *and* §3.6) deliberately, because a one-sided scope is
+exactly how P4-5's fix reopened G3-1. The `_widen` clamp defect lands as **new §4 S1e Table E** — the
+clamp required with **no default** (rejecting a silent-wrong-default), a test that reproduces the
+defect, and **§4 S3 done-condition 2 gated on it**, the only deadline in S1e.
+
+### U27 — the Pass 6 gate
+
+Blocker trend across passes 3→4→5: **2 → 3 → 2**; majors **6 → 5 → 4**. Not converged, but every pass
+has found real defects rather than churn, so the gate keeps earning its cost.
+
+Pass 6's brief weights it to five things: the ten dispositions; **adjudicating the architect's refusal
+of P5-2's second residual** (do not defer to either side); whether **rule 5's second formulation** is
+now sound, given the counts are already verified so the effort goes to the rule; verifying — not
+accepting — the sweep against the *fix-reopens-a-finding* shape, now seen in three consecutive
+revisions; and **Table E**, plus a sweep for other shipped S1 code that is correct for its current
+caller and wrong for a caller the plan commits to adding — the shape that hid `_widen` from five
+static passes.
+
+The brief says explicitly: do not soften the verdict to unblock S2, **and do not manufacture findings
+to justify the pass** — if v1.11 is implementable, say so plainly, and say whether S2 may be
+dispatched.
 
