@@ -69,8 +69,9 @@ Stakeholder decisions, 2026-09-02:
 | U28 — P6-1's method half: the continuous instrument's carrier + §3.2e's verdict strings | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `0ad0e7a`; both changed the note, **plus one reversal and one unprompted ruling** | `docs/plans/small-model-benchmarking-ml.md` **v1.15** | `analyst` Pass 7 → — | 218k tok / 17 tools cumulative |
 | U29 — Plan v1.12: close all 5 Pass 6 findings; the continuous carrier as an S1 edit | `architect` (fresh) | `a74d8052842395e20` | **delivered** — `5b67416` (+521/−62); all 5 closed, **12/12 residuals re-run** | `docs/plans/small-model-benchmarking.md` **v1.12** | `analyst` Pass 7 → — | 283k tok / 91 tools |
 | U30 — Four items v1.12 raised: §3.2f's retired wording, the continuous-verdict producer's signature, the homogeneous-family enforcement point, §5.2's `sep_raw` figures | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `e290148`; all four changed the note | `docs/plans/small-model-benchmarking-ml.md` **v1.16** | `analyst` Pass 7 → — | 248k tok / 15 tools cumulative |
-| U32 — Plan v1.13: absorb note v1.16's four deltas. **Deliberately small** | `architect` (fresh) | `ac827e78b5339f829` | in-flight | `docs/plans/small-model-benchmarking.md` v1.13 | `analyst` Pass 7 → — | — |
-| U31 — Re-gate plan v1.13 + note v1.16 (Pass 7) | `analyst` (fresh) | — | queued — **held until U32 returns** | `docs/reviews/small-model-benchmarking.md` `## Pass 7` | — → — | — |
+| U32 — Plan v1.13: absorb note v1.16's four deltas. **Deliberately small** | `architect` (fresh) | `ac827e78b5339f829` | **delivered** — `fbe5741` (+300/−91); stayed small, 5 extras all reported | `docs/plans/small-model-benchmarking.md` **v1.13** | `analyst` Pass 7 → — | 220k tok / 99 tools |
+| U33 — Does Rule 8 take a `support` parameter? (Table E's clamp has no route to its only caller) | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.17 if changed | `analyst` Pass 7 → — | — |
+| U31 — Re-gate plan v1.13 + note v1.16 (Pass 7) | `analyst` (fresh) | `aaa942cd75fabc2ca` | in-flight | `docs/reviews/small-model-benchmarking.md` `## Pass 7` | — (is the gate) | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | **accepted** — `5878014` | `model-bench/**` (10 files, +1490/−61); 353→389 tests | re-gate (both, fresh) → — | 348k tok / 130 tools |
@@ -1741,4 +1742,59 @@ need plan absorption. That is normal convergence while the deltas shrink — v1.
 and three are citations or prohibitions rather than mechanism. If a future round's deltas do not
 shrink, the plan/note pair is oscillating rather than converging and that is the point to stop and
 re-scope rather than dispatch again.
+
+### U32 delivered — 2026-09-07, plan v1.13 (`fbe5741`) · **it stayed small**
+
+**+300/−91**, against v1.12's +521, v1.11's +540 and v1.10's +738 — the revision-size trend is now
+monotonically down, and ~75 of the added lines are one new table. The brief's unusual instruction
+held.
+
+- **Delta 1** — a mixed `verdictMetrics` family has **all** its verdicts refused. The good part is how
+  it is asserted: DC-13(e) and test 11d pin the two **negatives** — both arms render,
+  `INVALID RESULTS EXCLUDED` empty — because those are what fail if an implementer builds it as a
+  DC-10 exclusion. Asserting the negative is what catches a plausible mis-build; asserting the
+  positive would not have.
+- **Delta 2** — quantile levels become required parameters, in **its own Table G** rather than folded
+  into Table E, whose subject is a *clamp*. Residual `_percentile(means, 2.5)` → 1 → 0, **scoped to
+  `means` precisely so `cluster_bootstrap`'s surviving `_percentile(rates, 2.5)` at `stats.py:292`
+  cannot hold it above zero** — the residual-must-reach-zero discipline applied at the point where it
+  is easy to get wrong. **teco re-verified:** `_percentile(means, 2.5)` 1 · `97.5` 2 ·
+  `paired_bootstrap(` 5 · `paired_cluster_bootstrap(` 5.
+- **Deltas 3 and 4** — Rule 8 cited rather than restated, and `sep_raw`'s prohibition written in the
+  §11.7-slot-6 shape with both structural enforcements named.
+
+**Five things touched beyond the four, all reported unprompted** — including a pre-existing
+inconsistency v1.12 half-swept (the S1e preamble said "five tables" while the next paragraph said
+"six"). Self-reporting the overreach is what makes "stay small" checkable rather than a hope.
+
+### U33 — one new raise, and it exists only because delta 3 landed
+
+Rule 8 takes **no `support`**, so `continuous_verdict()` — now the *only* caller on the verdict path,
+since delta 3 stopped the loop calling `paired_cluster_bootstrap` directly — has nothing to forward as
+Table E's **required-with-no-default** clamp. The architect classified it **bounded and non-blocking**
+with a checkable reason (the embedder is the only continuous-verdict pack, `designEffect` 1.00 by
+construction, and at scale 1.0 `clamp=None` and `(-1.0,1.0)` return identical intervals for `mrr`),
+interim `clamp=None`, recommendation *Rule 8 gains `support`*.
+
+Routed to `data-scientist` with the sharp question attached: v1.16 made a deliberate point that Rule
+8's **negative** parameters are load-bearing — adding one cuts against that grain, so it must say why
+`support` differs in kind, and what an *unbounded* support does given Table E exists precisely because
+the clamp must not apply to `sep_z`.
+
+### Pass 7 dispatched in parallel, not held — and it is asked the question that decides the next step
+
+The deltas are shrinking (**four → one**), so the oscillation test set last round is passing and the
+gate's other work is independent. Pass 7 is told the `support` item is in flight, to judge **only**
+whether `clamp=None` is a safe interim, and not to spend effort on the fix.
+
+Beyond the findings, the gate is asked two things directly: **may S2 be dispatched** — in those words
+— and **is there remaining risk that static review can still reduce, or is the residual risk now the
+kind only execution finds?** Two defects here were found by asking a specialist rather than by a
+static pass (`_widen`'s clamp, the continuous carrier), both the same shape: *shipped code correct for
+its current caller and wrong for a caller the plan commits to adding.* That judgement, more than any
+single finding, decides whether a Pass 8 is worth its cost.
+
+The brief names both failure modes explicitly: do not soften the verdict to unblock S2, **and do not
+manufacture findings to justify the pass** — after six passes the pressure to produce a list is real,
+and a gate that finds something because it is expected to is worse than no gate.
 
