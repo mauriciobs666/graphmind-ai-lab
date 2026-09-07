@@ -1,6 +1,25 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.17
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.18
+
+2026-09-07 (v1.18, `data-scientist`) — plan-gate Pass 8's `P8-1`, the half that is this note's
+under §7 rule 3. **A quantile level is an exact rational — `percentile(values, *, level:
+Fraction)` — and `stats.py:159` is not exempted from it.** `permille: int` cannot express a
+family-corrected `α/(2k)` (12.5 ‰ at k=2, 8.33 ‰ at k=3) and **no decimal unit can**: `1/120 ·
+10^m` is never an integer, so widening the unit fails at the first k divisible by 3. Rounding the
+level outward is sound and is **rejected on price** — it owes a printed attained level in every
+continuous verdict string and borrows §11.6's machinery for a quantity §11.6 does not measure —
+where a numerator/denominator pair is exact for every k and keeps §11.2.1's integer rank verbatim.
+The **exemption is refused on a measured cost, not on scope**: what `:159` would keep is not a
+different unit but the different *estimator* §11.2 rejects, which at `B = 10 000` selects the
+**adjacent** order statistic to type 1's at the lower bound for k = 1, 2 and 5 and the same one at
+k = 3 and 4 — a one-sided, k-dependent, anti-conservative shift on the one path where the interval
+**is** the test. **§11.2.1's own attribution is corrected**: over levels `n/1000` and `X ≤ 3000`
+the **1626** divergences belong to the percent spelling, the level-first spelling gives **755**,
+and the expression v1.17 printed gives **0** — a sweep run against an expression the code does not
+use, this note's own warning landing in the section that quotes it. **§11.10(3)'s
+one-implementation rule is restated repo-wide** *(new §11.2.2)*, which is the clause the cheap fix
+leaned on.
 
 2026-09-07 (v1.17, `data-scientist`) — plan v1.13's §7 rule 3 raise, ruled. **Rule 8 gains
 `support: tuple[float, float] | None`, keyword-only and required with no default — and still takes
@@ -403,8 +422,9 @@ to be asserted against**. The delivered implementation was never the problem; it
 
 McNemar does not apply to MRR, score separation, or latency. Use a seeded paired bootstrap:
 resample the *items* (with replacement, n draws), recompute the mean per-item difference each
-time, B = 10 000, take the 2.5th/97.5th percentiles (**the percentile estimator is §11's, and
-there is one of it**). ~15 lines of stdlib (`random.Random(seed)`).
+time, take the two quantile levels §3.3 fixes — `1/40` and `39/40` at `k = 1`, **exact rationals
+and never percent floats** *(v1.18, §11.2.2)* — at B = 10 000 (**the percentile estimator is §11's,
+and there is one of it, package-wide**). ~15 lines of stdlib (`random.Random(seed)`).
 The seed goes into the environment fingerprint (FR-7) so a report is reproducible. Decision:
 **the CI excludes zero.** No separate significance test — for continuous metrics the CI *is* the
 test, and reporting both would be redundant, not extra rigour.
@@ -674,7 +694,11 @@ interval *is* the test. So a `verdictMetrics` list mixing a binary member with a
 no ordering, hence no ladder, and the correction silently fails to happen for one of them. Two
 consequences, both free today: the mixed family is **refused where the records are**, and **an
 all-continuous family with `k > 1` takes its correction in the interval rather than in a ladder** — each member's
-bootstrap percentiles are taken at `100·α/(2k)` and `100 − 100·α/(2k)` instead of 2.5 and 97.5. That
+bootstrap percentiles are taken at `α/(2k)` and `1 − α/(2k)` instead of `1/40` and `39/40`. **The
+levels are exact rationals on the unit interval, never percent floats** *(v1.18, §11.2.2)*: at
+α = 0.05 the pair is `Fraction(1, 40k)` and `Fraction(40k − 1, 40k)` — `1/80` and `79/80` at k = 2,
+`1/120` and `119/120` at k = 3 — and the k = 3 pair is expressible in no decimal unit at all, which
+is why the estimator's level parameter is a rational rather than a finer integer one. That
 is Bonferroni and it is deliberately not Holm: Holm's gain comes from ordering by p-value, and there
 is nothing here to order. The embedder is `k = 1`, so this binds nothing today — and it is written
 now for the same reason pre-registration is written now.
@@ -1059,18 +1083,21 @@ three values, so a resample of `n` rows with replacement gives
   type 1, the inverse CDF, applied to the **exact** distribution where §11.2 applies it to an
   empirical sample. This is precisely what §11.2 reason 2 already claims, so the two agree by
   construction.
-- **The levels are `permille = 25` and `permille = 975`, exactly — never the level the resample
-  happened to estimate.** The shipped `ordered[int(round(pct/100·(B−1)))]` picks the 251st and
+- **The levels are `LEVEL_CI95_LO = 1/40` and `LEVEL_CI95_HI = 39/40`, exactly — never the level
+  the resample happened to estimate** *(spelled as exact rationals at v1.18, §11.2.2; they were
+  `permille` 25 and 975)*. The shipped `ordered[int(round(pct/100·(B−1)))]` picks the 251st and
   9 750th of 10 000, which estimate levels `251/10 001` and `9 750/10 001`, not `0.025`/`0.975`.
   Measured: the atom selected at those two level pairs differs on **2** `(b, c)` pairs at n=30,
   **12** at n=40 and **113** at n=85 — one whole atom, `1/n`, on a printed bound each time. `B` is
-  an artefact of the resample and must not survive into a formula that has no `B`. `permille` 25 and
-  975 are already among the four levels §11.2.1's sweep names.
+  an artefact of the resample and must not survive into a formula that has no `B`. Both are already
+  among the four literal levels §11.2.1 sweeps.
 - **Integer arithmetic, so there is no tolerance to choose and no bin edge to guard.** Every atom's
   probability is a rational with denominator `n**n`:
   `P(S = s) = Σ_{n₊−n₋ = s} multinomial(n; n₊, n₀, n₋)·b^n₊·(a+d)^n₀·c^n₋ / n**n`.
   Accumulate the integer numerators in ascending `s` and select the first atom satisfying
-  `1000 · cum ≥ permille · n**n`. That is an exact integer comparison: **the atom is never chosen by
+  `level.denominator · cum ≥ level.numerator · n**n` *(v1.18: one representation for both
+  estimators; the expression was `1000 · cum ≥ permille · n**n`)*. That is an exact integer
+  comparison: **the atom is never chosen by
   a float tie-break**, which is Rule 3a's and §11.2.1's hazard *removed* rather than guarded — the
   third time this document meets it and the first time it can be deleted instead of pinned. Verified
   against a float-CDF implementation on all 455 + 5 456 + 12 341 tables at n = 12/30/40: zero
@@ -1334,9 +1361,11 @@ The four provenance fields it would have supplied are passed directly instead. (
 §3.2d rules the interval *is* the test. (iv) **percentile levels** — see the next paragraph.
 
 **The multiplicity correction is made unrepresentable rather than guarded.** The function takes
-`alpha_family` and `family` and computes its own quantile levels as `100·α/(2k)` and
-`100 − 100·α/(2k)` with `k = len(family)` (§3.3); it exposes **no percentile parameter**, so a caller
-cannot render a `k = 3` family at 2.5/97.5 by omission. This is Rule 4's `n != len(diffs)` lesson
+`alpha_family` and `family` and computes its own quantile levels as the **exact rationals** `α/(2k)`
+and `1 − α/(2k)` with `k = len(family)` (§3.3), α recovered as `Fraction(str(alpha_family))` and
+never as `Fraction(alpha_family)` — the second is the double's exact value rather than the declared
+decimal, and §11.2.2 measures what that costs. It exposes **no percentile parameter**, so a caller
+cannot render a `k = 3` family at `1/40` / `39/40` by omission. This is Rule 4's `n != len(diffs)` lesson
 applied at the signature: remove the guard by making the error it catches unrepresentable. It
 **raises** when `metric_name not in family`, for the same reason `verdict()` does.
 
@@ -1350,7 +1379,8 @@ report a CI of zero width as though it were a measurement.
 **Two changes the engine needs before it can serve this** (§3.4 Rule 4's `paired_cluster_bootstrap`
 is still §3.2d's entry point, and `paired_bootstrap` still its engine, not a second one): the
 **quantile levels must be parameters** rather than the hard-coded 2.5/97.5, or the `k > 1` correction
-above has nowhere to land; and **`_widen`'s `[-1, 1]` clamp must be conditional**, since it is a
+above has nowhere to land — and their type is `tuple[Fraction, Fraction]`, since `permille: int` and
+a percent `float` both fail at `k ≥ 2` *(v1.18, §11.2.2)*; and **`_widen`'s `[-1, 1]` clamp must be conditional**, since it is a
 difference-of-proportions assumption and `sep_z` is unbounded (Rule 4). Both are noted there; they
 are named here because they are this function's preconditions, and a plan that calls it without them
 calls something that cannot render string 4 correctly for two of the three continuous metrics.
@@ -2516,8 +2546,12 @@ direction **alternates with X**: measured this session, at X = 4 the p50 index i
 the two middle values) and at X = 6 it is 2 again (the *lower* of the middle pair). An estimator
 whose tie-break flips with the sample size is not a definition anyone can reason about.
 
-**One implementation, and the two call sites may not differ.** `stats.percentile` is the only copy;
-`results.py` imports it and keeps no private helper. The plan's own §3.9 says why — *two copies of a
+**One implementation, and it is the only quantile in the package** *(scope restated at v1.18 —
+plan-gate P8-1's cheapest fix read the narrower v1.17 wording as licence to put one call site on a
+second estimator; §11.2.2 refuses that and §11.10(3) carries the check)*. `stats.percentile` is the
+**only** percentile or quantile implementation anywhere in `modelbench`: no module defines a private
+helper, `results.py` imports this one, and both bootstrap call sites in `stats.py` call it too. The
+plan's own §3.9 says why — *two copies of a
 formula is one copy and one bug* — and the S1 implementation review is the evidence: a duplicated
 helper is exactly what let `index.csv` compute `latencyMsP95` at the 50th percentile and stay green
 (review M27). The function **sorts a copy of its input internally**; requiring a pre-sorted argument
@@ -2525,32 +2559,148 @@ is a precondition a caller can silently violate, and `results.py`'s copy sorted 
 did not.
 
 ```python
-def percentile(values: Iterable[float], *, permille: int) -> float:
-    """Hyndman-Fan type 1 (inverse empirical CDF). `permille` is the level x10: p95 is 950.
+def percentile(values: Iterable[float], *, level: Fraction) -> float:
+    """Hyndman-Fan type 1 (inverse empirical CDF). `level` is an EXACT RATIONAL in (0, 1].
 
-    Raises ValueError on an empty input: whether a figure exists at all is decided by
-    `latency_summary` (§11.6), never by returning None from here.
+    `fractions.Fraction`, stdlib, inside §1's dependency budget. p95 is `Fraction(19, 20)`; a
+    k-member continuous family's lower level is `Fraction(1, 40 * k)` at alpha = 0.05 (§11.2.2).
+
+    Raises TypeError on a `float` level — a float level reopens the bin-edge hazard the integer
+    rank exists to close (§11.2.1) — ValueError outside (0, 1], and ValueError on an empty input:
+    whether a figure exists at all is decided by `latency_summary` (§11.6), never by returning
+    None from here.
     """
 ```
 
 #### 11.2.1 The rank is computed in integers, and this is the same hazard as Rule 3a
 
-`math.ceil(permille * X / 1000)` is a float expression and it is **wrong on real inputs**: measured
-this session, `0.28 * 25` is `7.000000000000001`, so the float form returns rank **8** where the
-exact rank is **7**. Same bin-edge class as Rule 3a's `(7/40)/0.001` case, one operation over. The
-binding form is integer ceiling division:
+The rank is one integer expression over the level's numerator and denominator, and it is the whole
+of the estimator. Same bin-edge class as Rule 3a's `(7/40)/0.001` case, one operation over:
 
 ```python
-r = max(1, min(X, -(-permille * X // 1000)))     # ceil(permille*X/1000), exactly
+r = max(1, min(X, -(-level.numerator * X // level.denominator)))   # ceil(level * X), exactly
 ```
 
-**Status of the guard, stated the way Rule 3a states its own.** Swept this session over the four
-levels this tool actually uses (`permille ∈ {25, 500, 950, 975}`) and `X ≤ 2000`: **zero divergence**
-between the float and integer forms. So on today's call sites the integer form is **defensive, not
-load-bearing** — exactly as Rule 3a's guard is under the v1.6 floor. It is mandated anyway for
-Rule 3a's reason: sweeping `permille = 1…999` over `X ≤ 3000` finds **1626** divergences, the first
-at `(X = 25, p = 28.0)`, so the hazard is one new call site away and the cost of the guard is one
-expression. **Pin the code's own expression, never an equivalent-looking one.**
+**Three float spellings, and only one of them is safe — v1.17 pinned the safe one and attributed the
+unsafe one's number to it** *(corrected at v1.18)*. Re-measured this session over the same lattice
+and range v1.17 swept — levels `n/1000` for `n = 1…999`, `X ≤ 3000` — counting ranks that differ
+from the integer form:
+
+| Float spelling | Divergences | First (by X) |
+|---|---|---|
+| `math.ceil(pct / 100 * X)` — the percent form, and the shipped `_percentile`'s | **1626** | `X = 25`, `p = 28.0` |
+| `math.ceil(float(level) * X)` — level-first | **755** | `X = 25`, `level = 7/25` |
+| `math.ceil(level.numerator * X / level.denominator)` — numerator-first | **0** | — |
+
+v1.17's `0.28 * 25 == 7.000000000000001` is measured and true, and it belongs to the **percent** and
+**level-first** spellings; v1.17 printed it under `math.ceil(permille * X / 1000)`, which is the
+numerator-first spelling and diverges **nowhere** in that sweep — `permille * X` is an exact integer
+and the division that follows is correctly rounded. The number and the expression printed beside it
+came from two different spellings. That is `format_floor_pp`'s own docstring warning — *"a sweep run
+against the expression the code does not use is how this was missed the first time"* — landing in
+the section that cites it, which is why this subsection now names every spelling it measured.
+
+**The numerator-first spelling is safe here and is still not the mandate.** It is exact only while
+`level.numerator · X` stays an exactly representable integer, which is a property of the *levels*
+reaching it and not of the expression: on a level built from a float — `Fraction(0.05)`, denominator
+`2**56` — it diverges from the integer form on **1000** of `X ≤ 20 000`, first at `X = 20`. One
+expression that needs no reasoning about which levels reach it is cheaper than a second
+correct-for-now spelling.
+
+**Status of the guard, stated the way Rule 3a states its own — and v1.18 does not upgrade it.**
+Measured this session: over the four levels this tool takes literally (`1/2`, `19/20`, `1/40`,
+`39/40`) at `X ≤ 3000`, and over the whole family lattice `α/(2k)` and `1 − α/(2k)` for `k ≤ 25` at
+`X ≤ 20 000`, the level-first spelling diverges **21** times (first at `X = 2520`, on `k = 21`'s
+lower level `1/840`) and the numerator-first spelling **0** times; at `X = B = 10 000` — the
+resample size §3.2d fixes, and the only `X` a family level meets — **no spelling diverges at any
+`k ≤ 25`**. So the integer form stays **defensive, not load-bearing**, exactly as Rule 3a's guard is
+under the v1.6 floor. **P8-1's new call site does not make it load-bearing and this note declines to
+claim it does**: the reason to mandate it is that the level lattice is now open in two directions —
+`k` is any family size and α is any declared level — and the cost of the guard is one expression.
+**Pin the code's own expression, never an equivalent-looking one.**
+
+#### 11.2.2 The level is an exact rational, because a family-corrected level is not a decimal
+
+**The question, and the decision it serves** *(v1.18, plan-gate P8-1(c) — a §7 rule 3 raise)*. The
+plan's §4 S1e Table C makes `stats.percentile` the package's single percentile, and Table G makes
+`paired_bootstrap`'s quantile levels required parameters because an all-continuous `k > 1` family
+takes its Bonferroni correction **in the interval** (§3.3) and has nowhere else to put it. The two
+collide on `stats.py:159`: at α = 0.05 that line's level is `α/(2k)` — **12.5 ‰ at k = 2, 8.33 ‰ at
+k = 3** — and `permille: int` holds neither. The implementer needs one answer before writing the
+line, and it is a statistics decision.
+
+**Ruling: the level is an exact rational — `level: Fraction`, `fractions` being stdlib and inside
+§1's dependency budget — and `stats.py:159` is not exempted from it.** Three things follow, each a
+decision rather than a consequence.
+
+**(1) Widening the integer unit fails, and it fails at k = 3 rather than late.** Per-10⁴ buys k = 2
+(125) and loses k = 4 (62.5) and k = 3 outright: `1/120 · 10^m` is `25 · 10^(m−3) / 3`, never an
+integer for any `m` — measured at m = 3, 4, 6, 9 and 12. A **fixed** decimal unit expressing
+`α/(2k)` for every k does not exist, because the denominator is `40k` and 3 divides one of them. A
+unit re-chosen per family is not a unit.
+
+**(2) Rounding the level outward is sound and is rejected on price.** It works, and for the record
+its shape is: round the lower level **down** and the upper level **up** onto the chosen lattice, so
+the interval only widens — the conservative direction on the one path where the interval is the test
+— with the error bounded by one lattice step per bound (`10⁻⁴` at per-10⁴, so at most `2 × 10⁻⁴` of
+tail mass across the interval), and the attained pair printed in strings 4 and 5 beside the nominal
+one. What it costs is permanent: a second number on every continuous verdict whose entire content is
+that the tool could not represent its own level (*"interval taken at 0.8333 %/99.1667 % against a
+nominal 0.8333… %"*), and a **second meaning for "attained level"** in one report — §11.6's is a
+*coverage* shortfall (how many items were timed) and has nothing to do with where a quantile sits,
+so a reader who meets both has two ways to read each. The exact form costs one integer division and
+prints nothing. Keep outward rounding named as the fallback for a level that is genuinely
+irrational; **no level in this note is** — every one is a ratio of declared quantities — so the
+rational form is *closed* over the tool's whole level space, and that closure is what decided it.
+
+**(3) The exemption is refused on a measured cost, not on scope.** P8-1(b) reads §11.10(3) correctly
+— its v1.17 wording obliged only `modelbench.results` — so the exemption is legal against the letter
+and it is refused anyway. What `stats.py:159` would keep is not a different *unit*; it is the
+different **estimator** §11.2 rejects, `int(round(pct/100·(X−1)))`. Measured at `B = 10 000` against
+type 1 at the family levels, the two select the **adjacent** order statistic at the lower bound for
+`k = 1` (index 250 against 249), `k = 2` (125 against 124) and `k = 5` (50 against 49), and the
+**same** one at `k = 3` and `k = 4`; every upper bound coincides. So the exemption ships a
+*k*-dependent, one-sided, anti-conservative shift of the bound that decides, on the one path where
+§3.2d rules the interval **is** the test, at the only call site in the package whose level is not a
+literal — the M27 defect class re-entering exactly where the most is at stake. That it can reach the
+published verdict is demonstrated rather than assumed: on a constructed 38-unit sample shifted so
+the resample distribution carries an atom at zero, the two estimators disagree on *excludes zero* on
+**2 of 60 seeds** (type 1's lower bound `0.0`, the shipped estimator's the next atom up). The
+construction is deliberate, as v1.11's `(a=1, b=25, c=12, d=2)` was; the frequency on real data is
+**not measured and is not claimed**.
+
+**The signature, and the two places a level is written.** `percentile(values, *, level: Fraction)`;
+`levels: tuple[Fraction, Fraction]` on `paired_bootstrap` and `paired_cluster_bootstrap`,
+keyword-only and required with no default — Table G's ruling stands and only the element type moves
+— plus one refusal Table G could not have: **`levels[0] >= levels[1]` raises**, because a transposed
+pair returns an inverted interval that no other check sees.
+
+- **Literal levels are module constants, never call-site expressions.** `LEVEL_P50 = Fraction(1, 2)`,
+  `LEVEL_P95 = Fraction(19, 20)`, `LEVEL_CI95_LO = Fraction(1, 40)`, `LEVEL_CI95_HI =
+  Fraction(39, 40)` — names recommended, naming being the architect's as `DecidedBy`'s tokens were.
+  Those four are the whole literal space, and a constant cannot be built from a float by accident.
+- **Exactly one level is computed, and the computation is Rule 8's.** `continuous_verdict()` derives
+  `α/(2k)` and `1 − α/(2k)` from `alpha_family` and `len(family)` and forwards them; nothing else
+  derives a level. **The conversion is `Fraction(str(alpha_family))`, and it is the one line where
+  this can go wrong.** `Fraction(0.05)` is legal and is *not* `1/20` — it is the double's exact
+  value, `3602879701896397/72057594037927936` — and its ranks differ from `1/20`'s on **1000** of
+  `X ≤ 20 000`, first at `X = 20`. `str()` on a float is its shortest round-tripping decimal, so
+  `Fraction(str(0.05)) == Fraction(1, 20)` exactly (measured), which recovers the decimal the pack
+  author declared. Its precondition is that `alpha_family` is **declared, never computed** — it is
+  read from the pack manifest, and `Fraction(str(0.1 + 0.2))` would recover
+  `0.30000000000000004` faithfully and uselessly.
+- **The check is an equality on the level, not on the interval** (§11.10(2b)). A `k = 2` family at
+  α = 0.05 derives exactly `(Fraction(1, 80), Fraction(79, 80))` — Fraction equality, no tolerance —
+  so `Fraction(alpha_family)` in place of `Fraction(str(alpha_family))` fails at the level rather
+  than three functions later at a bound nobody can hand-check.
+
+**The closed form takes the same representation** (§3.4 Rule 4). Its atom selector was written
+`1000 · cum ≥ permille · n**n` and becomes `level.denominator · cum ≥ level.numerator · n**n` —
+still one exact integer comparison, still no tolerance and no bin edge, and now over the same object
+the sample estimator takes, which is what §11.2 reason 2 claims and v1.17 could not quite deliver.
+Its own levels do not move: the paired **binary** path takes its `k` correction in the Holm ladder
+and never in the interval (§3.3), so it passes `LEVEL_CI95_LO` and `LEVEL_CI95_HI` and no `k`
+reaches it.
 
 ### 11.3 Floor 1 — the identity floor at X = 20, which renames rather than refuses
 
@@ -3114,6 +3264,25 @@ so one plan revision can serve both.
    wider and therefore the correct condition. The distinction is the field's whole content: `0` on
    the chat surface is a real signal and must stay distinguishable from *no such figure exists here*.
 
+6. **New at v1.18: what §11.2.2's ruling changes in §4 S1e, stated as the plan's edit list**
+   *(plan-gate P8-1; the note rules the method, the tables are `architect`'s)*. **(a)** Table C's
+   replacement is **not** scoped away from `stats.py:159` — there is no exemption, and the reason is
+   §11.2.2(3) rather than the width of §11.10(3), which is now package-wide anyway. **(b)** The new
+   signature Table C's four site rows move to is `percentile(values, *, level: Fraction)`, and
+   `stats.py:296`'s replacement is the public `percentile` with the four `LEVEL_*` constants beside
+   it. **(c)** Table G's `levels` parameter becomes `tuple[Fraction, Fraction]`; every row that
+   passes `(2.5, 97.5)` passes `(LEVEL_CI95_LO, LEVEL_CI95_HI)` instead, and its new `k = 2` test's pair is
+   `(Fraction(1, 80), Fraction(79, 80))` — a pair `permille: int` could not express and this one
+   can. Its **both-bounds-move-outward** assertion survives intact and is checkable in advance: at
+   `B = 10 000` the ranks move from 250/9 750 to 125/9 875, measured. **(d)** Table G's two
+   residuals are restated over the surviving spelling of `:159`, which after Table C is
+   `percentile(means, level=…)` and carries neither retired literal — so the pair must be re-derived
+   rather than re-scoped, and the two tables' collision is named on both rows the way Table D/E's is
+   on `stats.py:263`. **(e)** Table C's residual gains the `stats.py` half plan-gate P8-3 asks for,
+   over all three sites, plus §11.10(3)'s package-wide command as the one that cannot be passed by a
+   half-application. **(f)** Nothing here reopens Table G's *"required rather than defaulted"*
+   argument, which is unaffected by the element type.
+
 Two consequences that are the standing sweep obligation of plan §7 rather than new asks:
 **§3.6's `latency n = X of Y` sketch and §5 test 15b's assertion are superseded by §11.7's slots** —
 the plan cites them, as §3.9 already cites §3.2e's verdict strings, and does not restate them; and
@@ -3126,16 +3295,38 @@ Pure functions and rendered strings; no network, no model. Asserted **exactly** 
 here is an integer, a string, or a value copied from the input, so no tolerance is appropriate and
 any tolerance would hide the defect it was meant to catch.
 
-1. **Rank fixtures.** `rank(950, X)` for `X ∈ {1, 12, 19, 20, 38, 40, 85, 100}` equals
-   `{1, 12, 19, 19, 37, 38, 81, 95}`, and `rank(500, X)` equals `{1, 6, 10, 10, 19, 20, 43, 50}`.
-   Integer equality. This is §11.3's table and it is the one test that pins the estimator itself.
-2. **The bin-edge guard.** `percentile(range(25), permille=280)` returns the **7th** value; the float
-   form `math.ceil(0.28 * 25)` returns the 8th. The test asserts the integer form's answer, so a
-   "simplification" back to the float expression fails. Basis: `0.28 * 25 == 7.000000000000001`,
-   measured.
-3. **One implementation.** `modelbench.results` exposes no private percentile helper, and its
-   percentile *is* `stats.percentile` (identity, not equality of behaviour). This kills review M27's
-   defect class at the import boundary rather than at a call site.
+1. **Rank fixtures.** `rank(LEVEL_P95, X)` for `X ∈ {1, 12, 19, 20, 38, 40, 85, 100}` equals
+   `{1, 12, 19, 19, 37, 38, 81, 95}`, and `rank(LEVEL_P50, X)` equals
+   `{1, 6, 10, 10, 19, 20, 43, 50}`. Integer equality. This is §11.3's table and it is the one test
+   that pins the estimator itself. **Both rows were re-measured at the rational level form** *(v1.18
+   — a unit change invalidates a fixture table until it is re-run, §3.2c's trap)* and neither moved:
+   `19/20` and `1/2` are exactly the numbers `950` and `500` named, and only the spelling moved.
+2. **The bin-edge guard, and it is now two assertions, because one float spelling is invisible to
+   the other's fixture** *(v1.18)*.
+   **(2a) The rank expression.** `percentile(range(25), level=Fraction(7, 25))` returns the **7th**
+   value — `6` — where `math.ceil(float(level) * X)` returns the 8th. Basis:
+   `float(Fraction(7, 25)) * 25 == 7.000000000000001`, measured. **This fixture cannot catch the
+   numerator-first spelling**, which returns 7 here and diverges nowhere over any level this tool
+   reaches (§11.2.1) — so its scope is stated with it: it guards against a *level-first*
+   simplification and against nothing else, and saying so is the difference between a guard and a
+   guard believed to be wider than it is.
+   **(2b) The level's construction.** `percentile(range(20), level=Fraction(1, 20))` returns the
+   **1st** value — `0` — and the same call with the level built as `Fraction(0.05)` returns the
+   **2nd**. Measured: those two levels disagree on **1000** of `X ≤ 20 000`, first at `X = 20`. The
+   assertion that carries the rule rather than its symptom is on the level itself: a `k = 2` family
+   at α = 0.05 derives exactly `(Fraction(1, 80), Fraction(79, 80))`, asserted as Fraction equality
+   with no tolerance, which fails the moment `Fraction(str(alpha_family))` becomes
+   `Fraction(alpha_family)` (§11.2.2).
+3. **One implementation, package-wide** *(scope corrected at v1.18 — the v1.17 wording named
+   `modelbench.results` only, and plan-gate P8-1's cheapest fix read the gap as licence to leave the
+   family-dependent call site on the rejected estimator)*. **No module in `modelbench` defines a
+   percentile or quantile helper; `stats.percentile` is the only one, and `results.py`'s percentile
+   *is* that object** (identity, not equality of behaviour). Checkable in one line:
+   `grep -rEn 'def [A-Za-z_]*(percentile|quantile)' modelbench tests --include='*.py'` returns
+   **2 today** — `stats.py:296` and `results.py:573`, both the rejected `int(round(…))` estimator —
+   and must return **1**, the public `percentile`, after the edit. It is stated over the *estimator*
+   rather than over one module's private helper because that is the shape of review M27's defect,
+   and a rule scoped to one module licenses the second copy in the other.
 4. **The identity floor.** At `X = 19` the record's `latencyMsP95` is `None` and the rendered block
    contains `max = ` and slot 5's `max` variant; at `X = 20` it contains `p95 = ` and
    `Timed calls slower than the p95 figure: 1 of 20.` The boundary is asserted on both sides,
@@ -3189,9 +3380,13 @@ any tolerance would hide the defect it was meant to catch.
 9. **The unit guard.** Every printed figure in the block carries ` ms`, and no latency in the block
    is printed in seconds. The ms/s boundary sits one field away from `coldLoadSeconds`, and a figure
    printed in the wrong unit is a defect no reader can detect from the report.
-10. **Empty input.** `percentile([], permille=950)` raises; `latency_summary` over a run with no
-    timed item renders the `X == 0` variant. The absent-or-present decision lives in exactly one
-    place.
+10. **Empty input, and the level's own preconditions.** `percentile([], level=LEVEL_P95)` raises;
+    `latency_summary` over a run with no timed item renders the `X == 0` variant. The
+    absent-or-present decision lives in exactly one place. *(v1.18)* Three more refusals are
+    asserted at the same boundary, each one line: a `float` level raises `TypeError`, a level
+    outside `(0, 1]` raises `ValueError`, and `paired_bootstrap` with `levels[0] >= levels[1]`
+    raises — the transposed pair being the one error that otherwise returns a plausible inverted
+    interval (§11.2.2).
 
 **Acceptance:** every item above passes, and no stored record carries a `latencyMsP95` whose attained level is
 below 90.0 or whose rank equals its `X` — both checkable over `results/runs/` at any time, and
