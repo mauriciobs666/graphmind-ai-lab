@@ -4,8 +4,10 @@ import { defineConfig, devices } from '@playwright/test'
 // this file (add projects, fixtures, a webServer block).
 //
 // The storefront is served by falkor-chat's FastAPI process at /shop, so
-// Playwright is pointed at a *running* server rather than starting one:
-// bring it up with falkor-chat/scripts/start_demo.sh first.
+// Playwright is pointed at a *running* server rather than starting one.
+// falkor-chat/scripts/start_demo.sh *will* bring it up, but that script is
+// not built yet (plan step S11) — until then see "Bringing the stack up:
+// manual until S11" in ./README.md.
 // Override the target with SALESPERSON_E2E_BASE_URL.
 const baseURL =
   process.env.SALESPERSON_E2E_BASE_URL ?? 'http://127.0.0.1:8000/shop/'
