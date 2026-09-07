@@ -65,7 +65,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U10 | coder chunk A (12: ≤ 08-29) | `aacf69b25b40cbff5` (retry; `a695c632adfd6d91d` died on a rate limit) | accepted | `claude/graph-dba/falkordb-quirks.md` (+43 lines, 1 prior entry corrected) + `kaizen/history.md`; `claude/coder/kaizen/*` (K-006 consolidated, K-005 closed); 12 nodes deleted | none → — | 180.7k tok, 68 tools |
 | U11 | coder chunk B (8: 08-31…09-02) | `a567c2024835b0516` | accepted | `claude/analyst/review-techniques.md` (2 techniques) + `kaizen/history.md`; `claude/graph-dba/falkordb-quirks.md` (1 corrected) + `kaizen/history.md`; `claude/data-scientist/lm-studio-model-notes.md` + `kaizen/history.md`; `claude/coder/kaizen/*`; 8 nodes deleted | none → — | 172.4k tok, 59 tools |
 | U12 | coder chunk C (7: 09-03) | `accaa936d2c07807c` | accepted | `skills/python-web-quirks/SKILL.md` (1 fold, 1 merged section from 3 entries, 1 new section, frontmatter) + `skills/README.md`; `claude/coder/kaizen/*` (K-006 4→6 rows); 7 nodes deleted — **`coder` closed out, 0/0** | none → — | 165.7k tok, 64 tools |
-| U13 | data-scientist chunk A (10: ≤ 08-30) | — | queued | `claude/data-scientist/kaizen/*`, graph cleared | none → — | — |
+| U13 | data-scientist chunk A (10: ≤ 08-30) | `a21cdcb05d80c9e1f` | accepted | `claude/data-scientist/data-scientist.md` (1 clause) + `lm-studio-model-notes.md` (folded, 1 stale claim corrected) + `kaizen/*`; **8 of 10 discarded** — 3 falsified, 1 obsolete, 4 already published at the point of use; 10 nodes deleted | none → — | 178.8k tok, 67 tools |
 | U14 | data-scientist chunk B (9: 08-31…09-02) | — | queued | `claude/data-scientist/kaizen/*`, graph cleared | none → — | — |
 | U15 | data-scientist chunk C (9: 09-03…09-06) | — | queued | `claude/data-scientist/kaizen/*`, graph cleared | none → — | — |
 | U16 | teco chunk A (8: ≤ 09-01) | — | queued | `claude/teco/kaizen/*`, graph cleared | none → — | — |
@@ -231,6 +231,16 @@ dies before either leaves nothing at all — which is what happened here.
   consequence for any future pass: have each unit namespace its scratch files,
   or write nothing there at all (U7b used inline `python3` heredocs and left
   nothing behind).
+- **U12 → `architect` needs a top-up unit, like `qa-engineer`.** U7b closed
+  `architect` out at 0/0 on 2026-09-03. By U12's close (2026-09-07) it had
+  **four new entries**, all created that same day by a concurrent session:
+  `0a4b6b2e`, `f4ee08b9`, `b7f3a1c2`, `73df8a0d` (three plan-authoring
+  techniques plus one falkor-chat `services.py:2085` fact). This is the
+  live-graph property the pass has been recording from the start — "closed
+  out" means *every pinned entry was dispositioned*, never `count() == 0` at
+  some later moment. A top-up unit is owed before the pass closes, alongside
+  the `qa-engineer` one U7 opened.
+
 - **U11 → a parking-lot lesson is now promotable.** `claude/coder/kaizen/plan.md`
   parks U10's "a mutant must be proven to change behavior before its survival
   is read as a coverage gap" lesson, parked *because no owning knowledge base

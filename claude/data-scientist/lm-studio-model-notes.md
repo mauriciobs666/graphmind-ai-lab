@@ -65,9 +65,11 @@ default file declared `lmstudio` at an unreachable LAN IP listing only an unrela
 `config/models.json`'s `defaults.guard` named `lmstudio/qwen/qwen3-4b-2507` — a model the provider
 file never mentioned. `ProviderCatalog`/`_resolve_element` (`modelconfig.py`) validates only the
 **provider id**, not the model id, so this kind of mismatch resolves silently (wrong/unreachable
-`baseURL`) rather than failing loudly. Separately, the repo sets **no** `temperature` key anywhere
-for any kind — an uncontrolled sampling parameter for any determinism-sensitive eval design that
-assumes one is pinned near 0.
+`baseURL`) rather than failing loudly. Separately, **what is pinned changes between
+revisions, in both directions** — when this section was first written the repo set no
+`temperature` key at all for any kind; `config/models.json`'s `models` block now pins
+`temperature: 0` for `lmstudio/qwen/qwen3-4b-2507` and `lmstudio/mistralai/ministral-3-3b`.
+Read it, never assume it.
 
 **Consequence — two reusable habits:** (1) before trusting a report's provenance header on any
 project using a machine-local provider config, live-check the actually-reachable endpoint —
@@ -75,7 +77,14 @@ LM Studio's `curl :1234/api/v0/models` gives `quantization` and `state: loaded|n
 model, exactly what a provenance header needs — rather than reading only the repo's static config,
 since the two can diverge per-box with no loud failure. (2) grep the whole repo for `temperature`
 (or the sampling-param equivalent) before writing any non-determinism-handling section (k
-replicates, flip-rate, etc.) that assumes a pinned value.
+replicates, flip-rate, etc.) that assumes a pinned value — **and never read a pin as
+determinism.** A pinned `temperature: 0` on this stack is not run-to-run stable: 40
+identical-script repeated conversations against `qwen/qwen3-4b-2507` put a behavioural
+onset turn at 4 in 39/40 runs and at 3 in 1/40 — same prompt, same params, different
+outcome — and `falkor-chat`'s later K-062 measurements found the pin did not narrow a much
+wider swing between sessions either (`falkor-chat/docs/BACKLOG.md`). A pin buys
+comparability, not repeatability: every eval on this stack is a sampling design, so report
+a rate with its interval and never a single draw as a measurement.
 
 **Context:** `falkor-chat/docs/plans/guard-judge-calibration-ml.md` (K-027 item 3).
 

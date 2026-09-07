@@ -2,6 +2,123 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-07 — Learnings-graph distillation, chunk A of 3 (U13): 10 oldest entries — 2 promoted, 8 discarded
+
+- **What:** `cobb` processed the 10 oldest `data-scientist` `:KaizenEntry` nodes in `kaizen_team`
+  (2026-08-26 … 2026-08-30) per `agent-maintenance` §5. Every entry was re-derived independently
+  rather than confirmed against its own cited evidence; three re-derivations **falsified** the
+  entry outright and one found it fixed in code since it was written. Verification basis is stated
+  per entry below — LM Studio *was* reachable this session, so four entries got live probes.
+- **Promoted (2):**
+  - `b6e2a1f4` (2026-08-29, published tool-calling benchmarks don't test the K-056 failure mode)
+    → **prompt**, one clause on the "Model selection" bullet: a benchmark number is evidence only
+    for the construct that benchmark actually measures. *Re-derived live* against the primary
+    source (`gorilla.cs.berkeley.edu` BFCL V3 multi-turn blog), not the entry's own citation: BFCL
+    multi-turn is **pre-scripted with human-labelled ground-truth trajectories** and grades
+    dependent-call chaining within one task — it cannot observe spontaneous cessation of tool use
+    in open-ended conversation. The falkor-chat-specific half is already published
+    (`falkor-chat/docs/reviews/salesperson-tool-reliability-ml.md` §~776 and the xLAM table), so
+    only the discipline-level rule was promoted; the project-scoped copy would never reach a
+    future model-selection session.
+  - `b2f7a2b5` (2026-08-29, `temperature: 0` is not run-to-run deterministic on this stack)
+    → **knowledge base**, *folded into* `lm-studio-model-notes.md`'s existing provenance section
+    (habit 2), not stacked as a new section — that file had already been written to four times
+    this pass. The fold also **corrected a stale claim in place**: the section asserted "the repo
+    sets **no** `temperature` key anywhere for any kind", which `falkor-chat/config/models.json`
+    now contradicts (`temperature: 0` pinned for `qwen/qwen3-4b-2507` and `ministral-3-3b`). The
+    39/40-vs-1/40 measurement itself was **verified by artifact, not by a live re-run** — the
+    eval script was never committed, and re-running 40 conversations would touch shared graphs;
+    the rate is published with a Wilson CI in
+    `falkor-chat/docs/plans/workflow-salesperson-demo-coordination.md` (U40) and independently
+    reinforced by K-062 in `falkor-chat/docs/BACKLOG.md`, which measured that the pin did **not**
+    narrow a much wider between-session swing. That K-062 statement is the stronger, later form
+    of the same lesson, so the promoted text cites it rather than restating the entry.
+- **Discarded (8):**
+  - `e2a2b1a0` (2026-08-26, `ws:acme` holds only QA fixture data — "~10-12 entities, almost all
+    Organization/Other, ~6-8 relationships, **no** Person/Location/Product/Event/Concept")
+    — **falsified by a read-only live probe.** `ws:acme` today holds 544 `Entity` nodes across
+    **all seven** taxonomy types (Other 146, Product 139, Concept 92, Organization 50, Event 49,
+    Location 36, Person 32), 29 `Document`, 87 `Chunk`, 381 `RELATES_TO`. Every one of the five
+    types the entry said were absent is present. The corpus grew after the entry was written, so
+    its conclusion — that the document-ingestion graph is unusable as a second-schema golden-set
+    candidate — no longer follows from its own premise. An entry that asserts a *live graph's
+    contents* is the fastest-rotting kind there is.
+  - `c4a7d891` (2026-08-28, LM Studio "silently ignores" `tool_choice: "required"`, and adding it
+    triggers runaway repetition) — **mechanism falsified by live probe**, and already published.
+    A control call (tools offered, no `tool_choice`) reproduced the skip shape exactly: 0
+    `tool_calls`, plain prose, `finish_reason=stop`. Re-sending the identical request with
+    `tool_choice: "required"` returned `finish_reason=tool_calls`, one clean `post_message` call,
+    no text and **no** degenerate loop; sending `tool_choice: "auto"` explicitly did the same.
+    So the serving stack **does** implement the field — the observed ignore was specific to one
+    degenerate prompt state, not an LM Studio behaviour. The published account
+    (`salesperson-tool-reliability-ml.md` §4.2) already hedges correctly ("for this request
+    shape", n=1); it is the kaizen entry that over-generalized. The original byte-identical
+    failing prompt was never committed, so that exact shape could not be replayed — a synthetic
+    six-turn rapport conversation did not reproduce the skip at all (control tool-called).
+  - `b7e3f1a2` (2026-08-29, qwen3-4b "systematically" emits numerics as quoted JSON strings,
+    silently breaking a Cypher comparison) — **fixed in code, documented at the point of use, and
+    not reproducible.** `querygen.py` now coerces a numeric-looking string by the property's
+    declared type and raises on one that genuinely doesn't parse ("U29f fix A", with the quirk
+    named verbatim in the docstring and the inline comment), and `tools.py`'s
+    `_QUERY_REQUEST_INSTRUCTIONS` now says `a bare JSON number … (e.g. 50, never "50")`. Live
+    probe: 5/5 bare JSON numbers at `temperature: 0` — three draws under the current hardened
+    prompt and two under a loose prompt reconstructing the entry's own stated condition ("a
+    string, number, or boolean"). The consequence clause ("no error, just zero matching rows") is
+    now false by construction.
+  - `c3a8b3c6` (2026-08-29, `gpt-oss-20b` HTTP 400 "peg-native format" on multi-tool-call turns)
+    — **already published verbatim**, including the exact error string, 6/8 with a Wilson CI, the
+    harmony-format-vs-grammar diagnosis and the repeated-`post_message` behaviour, in
+    `salesperson-tool-reliability-ml.md` §~412-425. Not re-probed live: the model is
+    `not-loaded` and a cold 20B MXFP4 load buys nothing the published account lacks.
+  - `d4b9c4d7` (2026-08-29, a mid-node `ProviderCallError` after a committed tool call leaves
+    `WorkflowRun.status=failed` with zero `StepRun`/`TraceEvent`) — **already published in the
+    same passage** as `c3a8b3c6`, which states the observability gap in the entry's own terms
+    ("left the engine's own `StepRun`/`TraceEvent` audit trail entirely unwritten for that turn
+    … a total absence of any record for an action that actually happened"). Mechanism
+    independently re-derived from source and confirmed, with one detail the entry missed: because
+    `_record` never runs, the `StepRun -[:PRODUCED]-> Message` audit link and the `toolsUsed`
+    property are lost too, so the committed `Message` is left **orphaned**, not merely untraced.
+    The deferred record→trace lifecycle is already documented in `StepResult`'s own docstring
+    (Option B, K-023), so no new prose was warranted.
+  - `a1f3c9d2` (2026-08-30, a tool's internal LLM call resolves through the step-kind default,
+    not the calling node's `config.model` pin) — **already published at the point of use.**
+    `falkor-chat/docs/HISTORY.md` states it as a parenthetical on the K-057 verification line:
+    "real `ModelGateway.from_env()` (not `StaticModelGateway` — `query_graph_data` resolves its
+    own model independently of the `assistant` step's pin)", covering both the divergence and the
+    test-double corollary. Re-derived from source and confirmed exactly:
+    `executor.py` passes `requested=config.get("model")`, `tools.py`'s `QueryGraphDataTool.run`
+    calls `self._models.llm("step", ws=ctx.ws)` with no `requested=`. One staleness note: the
+    entry cites `salesperson@v4`; the shipped version is now `v5`.
+  - `b1e3f6a2` (2026-08-28, the run-level `trace` flag persists across `resume_workflow_run`)
+    — mechanism **re-derived and correct** (`trigger.py` rule 2 resumes a waiting run rather than
+    starting a new one; `_drive_loop` selects the tracer from the persisted `run["trace"]`;
+    `app.py` constructs `WorkflowTrigger` with no `trace` kwarg, so the default `False` stands),
+    but it follows directly from `docs/DESIGN.md`'s run-model note that `trace` is a field **on**
+    `WorkflowRun` gating all trace writes. Discarded as already-derivable from documented design;
+    the weakest of the eight discards, and it is a falkor-chat harness mechanic rather than an
+    ML-method fact, so it had no home in this agent's knowledge base either.
+  - `a1e6f1a4` (2026-08-29, `/v1/models` lists more models than `config/models.json` pins; unloaded
+    models auto-load; "no `lms` CLI available in WSL2") — **near-duplicate of content already
+    promoted into `lm-studio-model-notes.md` this pass, and its one novel clause is false.** The
+    19-model catalog, the JIT auto-load on first request, and the `lms` CLI situation are all
+    already in that file; re-confirmed live today (19 models, `ministral-3-3b` and `gpt-oss-20b`
+    both listed and both `not-loaded`). The "no `lms` CLI available in WSL2" clause is wrong — the
+    Windows binary is reachable from WSL and the file has said so, `Verified: 2026-09-07`, since
+    U11.
+- **`MENTIONS` edges added: none.** Four entries touch another discipline (`d4b9c4d7` and
+  `b1e3f6a2` are engine/observability, `a1f3c9d2` carries a test-double-fidelity corollary), but
+  every one of them is already published in `falkor-chat`'s own docs, so tagging would only queue
+  already-documented content into another agent's future pass.
+- **Verification basis:** live probes for `e2a2b1a0` (read-only Cypher against `ws:acme`),
+  `c4a7d891`, `b7e3f1a2`, `a1e6f1a4` (LM Studio, reachable this session) and `b6e2a1f4` (primary
+  source over the web); source re-derivation for `b1e3f6a2`, `d4b9c4d7`, `a1f3c9d2`; **artifact
+  only** for `b2f7a2b5` and `c3a8b3c6` (the eval scripts were never committed, and re-running
+  either would touch shared graphs or cold-load a 20B model). No shared graph was written to and
+  no scratch key was created.
+- **Cleared:** all 10 entries resolved out of `kaizen_team` after this entry was written.
+- **Docs touched:** `claude/data-scientist/{data-scientist.md,lm-studio-model-notes.md,
+  kaizen/{history,plan}.md}`.
+
 
 ## 2026-09-07 — `lm-studio-model-notes.md`: a wording-iteration eval caution promoted from `coder`'s kaizen distillation (U11)
 

@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `data-scientist` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-27
+> Last reviewed: 2026-09-07
 
 ## Active
 
@@ -24,6 +24,14 @@
 - **Proposed change:** If model-selection questions recur, add `data-scientist/model-landscape.md` (dated entries, re-verify stamps) and point the prompt at it — kept out of the always-on prompt.
 
 ## Parking lot / ideas
+
+- **`lm-studio-model-notes.md`'s provenance section now carries two topics (noted 2026-09-07,
+  U13 distillation).** The "A live-run report's provenance … verify live" section's habit (2) has
+  grown from "grep for a pinned `temperature`" into a full determinism-vs-comparability rule, so
+  the section is now *provenance drift* **and** *sampling design* under one heading. Minor — the
+  two are genuinely linked through the same config file, and the fold was deliberately chosen over
+  a fifth parallel section. Split into its own "a pin is not determinism" section if a third
+  sampling-design fact lands there.
 
 - **Judged and kept, do not re-litigate (2026-08-24, C5 lint).** Two restatements will read as
   class-7 duplicates to a future dedup sweep; both are keeps.
