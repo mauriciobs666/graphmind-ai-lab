@@ -54,11 +54,13 @@ today:
 > hyphens stripped: `falkor-chat` → `cpg_falkorchat`) is the right *first* move, but it
 > is a guess, not a fact — always confirm the graph you landed on actually covers the
 > code you mean, because a component can be renamed or retired while a graph built from
-> its old contents keeps the old name. The `CpgBuildInfo` marker (§1) settles it in one
+> its old contents keeps the old name. The `CpgBuildInfo` marker (§1) answers it in one
 > query — read `SOURCE_ORIGIN` for *which* directory the graph was built from and
-> `SOURCE_TREE` for *which revision of it*, before you analyse the wrong codebase. Don't
-> read `SOURCE_PATH` for this: it is usually a staged, throwaway copy of the source whose
-> path name tells you nothing about the content (see the FAQ).
+> `SOURCE_TREE` for *which revision of it*, before you analyse the wrong codebase. Both
+> are absent on a marker stamped before 2026-09-07 — including `cpg_falkorchat`'s, the
+> graph most readers of this manual open — and the FAQ says what to read instead. What
+> never answers the question is `SOURCE_PATH`: it is usually a staged, throwaway copy of
+> the source, whose path name tells you nothing about the content.
 
 **Two very different naming conventions.** This is the single most common mistake when
 switching between families:
@@ -495,7 +497,7 @@ Then read it by the question you're actually asking:
 | Your question | The field that answers it |
 |---|---|
 | *Which code is in here?* | **`SOURCE_ORIGIN`** — the repo-relative directory the graph was built from. |
-| *Is it the revision I mean?* | **`SOURCE_TREE`** — compare it with `git rev-parse --short HEAD:<SOURCE_ORIGIN>` from the repo root. Equal means the source is unchanged since it was captured, so the graph is current however old the build is. (If `SOURCE_DIRTY` is true the parse also took in uncommitted work, so equality only covers the committed part.) |
+| *Is it the revision I mean?* | **`SOURCE_TREE`** — compare it with the tree `git` reports for `SOURCE_ORIGIN` at `HEAD` (the exact command, and the cases it has to special-case, are in `skills/cpg-analysis/references/freshness.md`). Equal means the source is unchanged since it was captured, so the graph is current however old the build is. (If `SOURCE_DIRTY` is true the parse also took in uncommitted work, so equality only covers the committed part.) |
 | *How current is the content?* | **`PARSED_AT`** — when the source snapshot was taken. Not `BUILT_AT`, which is only when the *load* finished; on a multi-hour build the two are hours apart, and `PARSED_AT` is the one that bounds what code is in here. |
 | *Did the parse also swallow uncommitted work?* | **`SOURCE_DIRTY`** — scoped to the source directory alone, so it says nothing about the rest of the repo. |
 | *How much can I trust the four above?* | **`PROVENANCE`** — `parse-root` or `source-origin` means a real git identity was captured; `none` means there wasn't one (see the next FAQ entry). |
@@ -508,9 +510,12 @@ Two fields that look like answers and aren't:
   revision it holds, and which `git log` reports zero commits for without complaining.
   Read it to see *how* the parse was scoped; never to decide whether the graph covers
   your code.
-- **`SOURCE_COMMIT` on its own is weaker than `SOURCE_TREE`.** A commit can be recorded
-  for a tree that was never parsed. Compare trees when you have one; fall back to the
-  commit only when you don't.
+- **`SOURCE_COMMIT` on its own is weaker than `SOURCE_TREE`.** A commit tells you where
+  `HEAD` was; the tree tells you what the content *was*, so comparing trees answers by
+  identity rather than by counting commits that may have touched the path and reverted
+  it. On a pre-2026-09-07 marker the commit is weaker still — it may name a tree that was
+  never parsed at all. Compare trees when you have one; fall back to the commit only when
+  you don't.
 
 **The marker is missing `PROVENANCE`, or `SOURCE_TREE`, or isn't there at all — is the
 graph broken?** No. Each of those is a real, meaningful state, not a defect:
@@ -520,12 +525,17 @@ graph broken?** No. Each of those is a real, meaningful state, not a defect:
   than a plausible-looking commit that would have answered "unchanged" about code it
   never saw. There is no commit, tree or dirty flag to read; `PARSED_AT` age is your
   signal. This is the honest answer, and it's the intended behaviour.
-- **No `PROVENANCE` property at all** — a marker stamped before 2026-09-07, carrying only
-  the four original fields. The live `cpg_falkorchat` is one of these today, so you will
-  meet one. Its `SOURCE_COMMIT` and `SOURCE_DIRTY` were derived *after* the load and
+- **No `PROVENANCE` property, but a real timestamp in `BUILT_AT`** — a marker stamped
+  before 2026-09-07, carrying only the four original fields. The live `cpg_falkorchat`
+  is one of these today, so you will meet one. Its `SOURCE_COMMIT` and `SOURCE_DIRTY`
+  were derived *after* the load and
   repo-wide rather than scoped to the source, so treat both as approximate: the commit
   may name a tree that was never parsed, and the dirty flag may be reacting to a file
   nowhere near the source.
+- **`PROVENANCE` present but `SOURCE_TREE` absent** — the source wasn't committed when
+  the build captured it, so there was no tree object to record (`SOURCE_DIRTY` will be
+  true). `SOURCE_COMMIT` still tells you where `HEAD` was, but there is no content
+  identity to compare against; fall back to `PARSED_AT` age.
 - **No `CpgBuildInfo` node at all** — the graph predates the marker, or its build failed
   verification before stamping. You have no freshness signal, which is a reason for
   caution rather than something to debug.
