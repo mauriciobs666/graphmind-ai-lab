@@ -296,6 +296,140 @@ read-only. Worth handing to `qa-engineer` (or doing inline with the B1 fix) as t
 
 ---
 
+## Pass 2 — 2026-09-07 · gating M4 (`docs/manuals/graph-ontology.md`, commit `c92f35d`)
+
+**Scope:** the manual only. Field names and meanings re-derived from `git-provenance.sh:113-121`
+and `pipeline.sh:89-102,197-198` (not from the Pass 1 summary), both live markers re-read with
+`keys(b)` via `mcp__cypher__query`, and the `git log`/`git rev-parse` claims run. No other artifact
+was re-reviewed; Pass 1's blocker and majors M1-M3 and minors m1-m5 stand except where noted.
+
+**Verdict: approve with suggestions.** The fix is real and went further than the finding asked.
+One item (**P2-1**) must land with `cobb`'s in-flight round rather than after it.
+
+**M4 — fixed.** All eight producer fields are now listed at `:121`, with names and meanings matching
+the producer exactly (`BUILT_AT`, `PARSED_AT`, `SOURCE_PATH`, `SOURCE_ORIGIN`, `SOURCE_COMMIT`,
+`SOURCE_TREE`, `SOURCE_DIRTY`, `PROVENANCE`); the `PROVENANCE` values are the producer's three
+literals; `PARSED_AT` vs `BUILT_AT`, the scoping of `SOURCE_DIRTY`, and the "`SOURCE_PATH` is a parse
+root, not an identity" correction are all accurate. The fourth spot tico found (the Overview
+blockquote, now `:57-61`) was a real miss on my part — I cited three line numbers and it swept the
+file, which is the right instinct.
+
+### Answers to the four questions asked
+
+1. **Field accuracy** — clean. Every name and gloss checks out against the producer. One nuance,
+   not a finding: `SOURCE_ORIGIN` is a *file* path when the parse root is a single file (Pass 1 m5);
+   at manual altitude "directory" is the right word.
+2. **The pre-fix-marker claim** — **confirmed independently.** `keys(b)` on the live
+   `cpg_falkorchat` returns exactly `['BUILT_AT','SOURCE_PATH','SOURCE_COMMIT','SOURCE_DIRTY']`, no
+   `PROVENANCE` (Appendix A7). tico's claim is precisely right.
+3. **The m1 dodge** — **it works, and the manual's phrasing is the better one.** See below.
+4. **The absent cases** — the four taught are the right four and none is wrong. Two gaps: **P2-2**
+   and **P2-3**.
+
+### On question 3 — adopt the manual's wording in `freshness.md`, not the reverse
+
+"Equal means **the source is unchanged since it was captured**" is a claim about *change over time*,
+and it is true under both `parse-root` and `source-origin`: `SOURCE_TREE` is the tree of
+`SOURCE_ORIGIN` at capture, so equality today means that directory has not moved. `freshness.md:70`'s
+"byte-identical to what was parsed" is a claim about *identity of content*, and that is the one that
+breaks under `source-origin`, where the parsed thing was a pruned copy. tico's version dodges m1
+cleanly because it never asserts the copy and the origin are the same bytes.
+
+The trailing clause — "so the graph is current however old the build is" — does re-cross into
+inference, but the inference is sound for a *freshness* question: if the origin has not moved,
+re-staging it yields the same copy, so the graph is as current as it was at build time. (What it
+cannot tell you is whether the copy was faithful *when staged* — that is a build defect, not
+staleness, and `SKILL.md`'s `diff -rq` note is its right home.) The `SOURCE_DIRTY` parenthetical
+mirrors `freshness.md:73-77` correctly.
+
+**Recommendation for `cobb`'s round:** replace `freshness.md:70-72`'s "byte-identical to what was
+parsed" with the manual's formulation, rather than editing the manual toward the reference. That
+resolves m1 with no per-provenance split at all.
+
+### P2-1 — major · the manual copied the check-0 command, including its bug and its pending change
+
+`docs/manuals/graph-ontology.md:492` (question-to-field table, *Is it the revision I mean?*) restates
+`git rev-parse --short HEAD:<SOURCE_ORIGIN>` verbatim. That inherits **M1** — fatal for
+`SOURCE_ORIGIN = "."` (`fatal: Needed a single revision`, exit 128; `HEAD:./` is the working form) —
+and **m4**, the `--short` abbreviation-width drift, into a second document. Both are open against
+`freshness.md` in the round `cobb` is running now, so the manual will be silently wrong the moment
+that round lands unless it moves in the same change.
+
+This is also the duplication most likely to drift: the file otherwise cites the reference for
+procedure, and this one row is the exception.
+
+**Fix (routes to `tico`, sequenced with `cobb`):** either drop the command and let the row read
+*"compare it with the tree `git` reports for `SOURCE_ORIGIN` at `HEAD` — the exact command is in
+`skills/cpg-analysis/references/freshness.md`"*, or keep it and update both files in the same commit
+as M1/m4. I lean to the citation: the manual already defers procedure, and this row is procedure.
+
+### P2-2 — minor · the "no `PROVENANCE`" bullet mis-describes the repo's *other* live marker
+
+`:512-517` says a marker with no `PROVENANCE` is a pre-2026-09-07 stamp "carrying only the four
+original fields", and tells the reader to treat its `SOURCE_COMMIT`/`SOURCE_DIRTY` as approximate.
+`cpg_deprecated_salesperson` — one of only two `cpg_*` graphs loaded — also has no `PROVENANCE`, and
+its `keys(b)` is `['BUILT_AT','SOURCE_PATH','STATUS','MARKER_ORIGIN','MARKER_WRITTEN_AT',
+'RENAMED_FROM','NOTE']`: no `SOURCE_COMMIT`, no `SOURCE_DIRTY` (A7). A reader working down the four
+bullets matches it here and hunts for two fields that do not exist before reaching the
+`BUILT_AT: unknown` bullet at `:522` that actually describes it.
+
+This is Pass 1 **m3** reproduced in a second document — with the sting drawn, since the manual never
+teaches the `--since=unknown` trap and defers instead. **Fix:** gate the bullet — "No `PROVENANCE`
+property **and a real timestamp in `BUILT_AT`**" — and land it consistently with m3's fix in
+`freshness.md`.
+
+### P2-3 — minor · the FAQ header promises a case none of its bullets covers
+
+`:509-510` heads the section *"The marker is missing `PROVENANCE`, or **`SOURCE_TREE`**, or isn't
+there at all"*. No bullet covers a marker that **has** `PROVENANCE` but no `SOURCE_TREE` — Pass 1's
+**m2**, reproduced in testing: a source tracked in the index but not yet in `HEAD` stamps
+`PROVENANCE=parse-root, SOURCE_COMMIT=<sha>, SOURCE_TREE=NULL, SOURCE_DIRTY=true`. The `'none'`
+bullet describes all three fields absent together, which is a different state.
+
+Low reader impact (no such graph is loaded, and the `PROVENANCE` table row still steers correctly),
+but the header is the manual's own promise. **Fix:** drop "or `SOURCE_TREE`" from the header, or add
+a clause to the `'none'` bullet: *"a tree can also be absent on its own, when the source was not
+committed at capture — `SOURCE_DIRTY` will be true; fall back to `PARSED_AT` age."*
+
+### P2-4 — minor · the Overview's "settles it in one query" is false on the only CPG it can be run against
+
+`:57-61` now tells a reader to read `SOURCE_ORIGIN` and `SOURCE_TREE` to confirm a graph covers the
+code they mean. On `cpg_falkorchat` both are **null** (A7) — and that is the graph nearly every
+reader of this manual will open. The FAQ handles it 430 lines later; the Overview presents it as
+settled. **Fix:** half a clause — *"…before you analyse the wrong codebase. (Both are absent on a
+marker stamped before 2026-09-07, such as `cpg_falkorchat`'s — the FAQ says what to read then.)"*
+
+### P2-5 — minor · the reason given for preferring `SOURCE_TREE` is a pre-fix fact stated as a general one
+
+`:504-506`: *"`SOURCE_COMMIT` on its own is weaker than `SOURCE_TREE`. A commit can be recorded for a
+tree that was never parsed."* True of a pre-2026-09-07 marker — that is the defect `6012ddb` fixed.
+On a **current** marker both values come from the same pre-parse capture of the same `HEAD`
+(`git-provenance.sh:73-78`), so the commit is not the less trustworthy of the two. The tree is
+stronger for a different reason: it answers "is this still the same content?" by identity, instead of
+by counting commits that may have touched the path and reverted.
+
+As written a reader may distrust a current `SOURCE_COMMIT` for the wrong reason. **Fix:** *"a commit
+tells you where `HEAD` was; the tree tells you what the content was, so comparing trees answers by
+identity rather than by counting commits — and on a pre-2026-09-07 marker the commit may name a tree
+that was never parsed at all."*
+
+### Solid in the manual
+
+- **Altitude is right.** It teaches which field answers which question and hands the procedure to
+  `skills/cpg-analysis/references/freshness.md` in two places (`:539-541`, `:562-563`) instead of
+  restating the escalating checks. P2-1 is the single exception, which is why it is the one to fix.
+- **The `SOURCE_PATH` correction is verified true**, including the detail that makes it dangerous:
+  `git log --oneline -- cpg/.cpg-artifacts/src/falkor-chat-server` returns **zero commits, exit 0,
+  no warning** — in both the relative and the absolute form the marker actually stores (A7).
+- The absent cases are framed as legitimate states rather than faults, which is the correct reading
+  and the one Pass 1 endorsed as the author's deliberate design call.
+- The "all eight rewritten on every stamp, an absent one removed" guarantee at `:121` matches the
+  producer's intent. Note it is falsified in the failure case by Pass 1's **blocker B1** — a stamp
+  that fails silently leaves the whole previous marker standing. Inherited, not the manual's defect;
+  no manual change needed if B1 is fixed.
+
+---
+
 ## Appendix
 
 ### A1 — `redis-cli` exits 0 on an error reply, and prints it to stdout
@@ -424,3 +558,50 @@ fi
 
 Confirms `freshness.md:136–138`: derived after the load, from the parse root's containing repo, with
 no pathspec.
+
+### A7 — Pass 2 verification (read-only)
+
+Both loaded `cpg_*` markers, by `keys(b)`:
+
+```
+cpg_falkorchat:
+  keys = ['BUILT_AT', 'SOURCE_PATH', 'SOURCE_COMMIT', 'SOURCE_DIRTY']
+  builtAt=2026-09-07T22:25:45Z  commit=b795f4c  dirty=false
+  parsedAt=null  provenance=null  origin=null  tree=null
+  path=/home/mauricio/prg/graphmind-ai-lab/cpg/.cpg-artifacts/src/falkor-chat-server
+  -> exactly the four fields the manual names.  (question 2: confirmed)
+
+cpg_deprecated_salesperson:
+  keys = ['BUILT_AT', 'SOURCE_PATH', 'STATUS', 'MARKER_ORIGIN',
+          'MARKER_WRITTEN_AT', 'RENAMED_FROM', 'NOTE']
+  builtAt=unknown  provenance=null  commit=null
+  -> no PROVENANCE *and* no SOURCE_COMMIT/SOURCE_DIRTY.  (P2-2)
+```
+
+Loaded graph list at review time contains exactly two `cpg_*` keys (`cpg_falkorchat`,
+`cpg_deprecated_salesperson`), which bounds "cases a reader will actually meet" to the pre-fix
+marker and the hand-written one.
+
+The `SOURCE_PATH` silent-zero claim, both forms:
+
+```
+$ git check-ignore -v cpg/.cpg-artifacts
+cpg/.gitignore:3:.cpg-artifacts/	cpg/.cpg-artifacts
+$ git log --oneline -- cpg/.cpg-artifacts/src/falkor-chat-server
+$ echo "exit=$? commits=0"
+exit=0 commits=0                                  # no output, no warning
+$ git log --oneline -- /home/mauricio/prg/graphmind-ai-lab/cpg/.cpg-artifacts/src/falkor-chat-server
+$ echo $?
+0                                                 # same for the absolute form stored in SOURCE_PATH
+$ git log --oneline -- /tmp/cpg-src/falkor-chat-server
+fatal: Invalid path '/tmp/cpg-src': No such file or directory   # only an out-of-repo path errors
+```
+
+The check-0 command the manual copied (P2-1), re-confirmed from Pass 1:
+
+```
+$ git rev-parse --short HEAD:.        # SOURCE_ORIGIN == "." at a repo root
+fatal: Needed a single revision                   # exit 128
+$ git rev-parse --short HEAD:./
+1e4fb8f                                           # == git rev-parse --short "HEAD^{tree}"
+```
