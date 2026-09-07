@@ -139,7 +139,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S8b gate** — Pass 11: is P10-1 closed? is `SERVICE_ERROR_ROUTES` a measurement? + S8b's three counter-claims against Pass 10 | `analyst` (**fresh, not Pass 10's author**) | `a6adcb0f5a590acce` | **accepted — APPROVE WITH SUGGESTIONS** (0 blockers, 2 major, 4 minor, 4 nits), committed `a80a232`. **All six Pass 10 mutation survivors die**; 18 mutations on byte-copies, all five files md5-matched to `HEAD` after. **P10-1 is closed as reported and its class re-opens one bucket over** — `INHERITED_HANDLERS` excuses 11 of 17 handlers by prose and credits a sweep that arms only `ServiceError` faults (P11-1, N-F escaped), and `_raised_refusals` reads only `StorefrontHTTPError` calls while its own docstring and `StarletteHTTPException`'s exemption both claim it catches a bare `HTTPException` (P11-2, N-E escaped green). **Adjudicated S8b's three counter-claims: 1 upheld-with-correction (the escape count is *two*, not three — S8b's own docstring concedes `UnknownActorError` is unreachable through the wire), 1 upheld on half, 1 not sustained** (P10-1 asserted no blast radius, so the measurement strengthens an absence rather than fixing an error). Verified independently by me: `ws:acme` 14 labels / `Message` 52 / `Entity` 544 / `WorkflowRun` 21, unchanged; `falkor-chat/` tree clean; P11-2 and P11-5 reproduced at source. | `docs/reviews/salesperson-ui-impl.md` `## Pass 11` + Appendix P11-A | — | 198k tok / 86 tools |
 | **S8c** — close Pass 11: P11-1 (the `services.` access guard), P11-2, 4 minors, 4 nits, **+ P10-9** (open two passes) | `coder` (**fresh**) | `a213382761bc926ec` | **delivered — committed `2e27835`** | `storefront_api.py` (+45/−3), `test_storefront_api.py` (+434/−31, 7 tests) | `analyst` (Pass 12) → — | 196k tok / 77 tools |
 | **S8c gate** — Pass 12: do the ten closures hold? is the guard as strong as the argument for it? + 2 disagreements with Pass 11 | `analyst` (**fresh** — must judge Pass 11, and its author was at 86 tool uses) | `abe2ad6a7b8091e72` | **NEEDS CHANGES** (0 blockers, 1 major, 1 minor, 2 nits) — committed `fb11268` | `docs/reviews/salesperson-ui-impl.md` `## Pass 12` + Appendix P12-A | — | 181k tok / 70 tools |
-| **S8d** — P12-1: widen the guard to the reach its excuses claim (3 of 8 → 9 of 9); P12-2 + 2 nits | `coder` | `a213382761bc926ec` (resumed) | **PARTIAL — committed `769adc3`; killed mid-run by a session rate limit (429) while starting P12-2.** P12-1 complete and teco-verified; **P12-2 + 2 nits still open** | `storefront_api.py`, `test_storefront_api.py` | `analyst` (Pass 13, **after S8d completes**) → — | — |
+| **S8d** — P12-1: widen the guard to the reach its excuses claim (3 of 8 → 9 of 9); P12-2 + 2 nits | `coder` | `a213382761bc926ec` (resumed) | **PARTIAL — committed `769adc3`; killed mid-run by a session rate limit (429) while starting P12-2.** P12-1 complete and teco-verified; **P12-2 + 2 nits still open** | `storefront_api.py`, `test_storefront_api.py` | superseded by S8d2 | — |
+| **S8d2** — finish S8d: **P12-2** (module-wide bare-`HTTPException` walk) + Pass 12's **two nits** | `coder` (**fresh** — `a213382761bc926ec` no longer resolves after the session reboot; the checkpoint's own stated fallback) | `ad35d76985da040a3` | in-flight (dispatched 2026-09-06) | `storefront_api.py`, `test_storefront_api.py` + a lift-ready statement of the guard's reach | `analyst` (Pass 13, **fresh reviewer**) → — | — |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
 | **U31** — stakeholder decision: how a dead turn becomes visible to the participant | stakeholder | — | **delivered — option B**, the additive `lastTurn: 'failed' \| null` field | option B recorded in v1.23 (below) | — | — |
 | **v1.23** — write option B into the contract: §5.2's `turn` shape, §5.3 C6a, S9's row, + the client rows that inherit it | `architect` | `ad81e9cdb12dfbb28` (resumed ×2) | **accepted — committed `10f2b72`** (68/7) | `docs/plans/salesperson-ui.md` **v1.23** | teco-verified: **exactly the 4 announced rows moved** (S9, S12a, S13, S15), no delivered row moved, all 21 rows 7 cells on a pipe-aware count | 224k tok / 26 tools |
@@ -1831,3 +1832,38 @@ question**, not something I resolved.
 **Still the stakeholder's, and still not blocking anything before S11:** the `WorkflowDef` registry
 in the `reference` graph is absent — my own verification runs wiped it — and restoring it means
 running `seed_workflows.sh` / `seed_salesperson.sh`, which write into `ws:acme`. S11 and S15 need it.
+
+## Resumed 2026-09-06 — the checkpoint held, with one correction to its evidence
+
+Picked up from the `## RESUME HERE` section above. **Every state claim in it that I could check, I
+checked rather than trusted**, because it was three days and several unrelated coordinations old.
+
+**What held.** Tree clean for this coordination — `git diff 769adc3..HEAD -- falkor-chat/` is empty
+of source changes (the only movement is three unrelated `falkor-chat/docs/plans/*-coordination.md`
+files from other work). Two-file baseline re-run by me: **183 passed**, matching. FalkorDB up
+(`PONG`); `ws:acme` intact and matching the checkpoint's numbers exactly — 14 labels, `Message` 52,
+`Entity` 544, `WorkflowRun` 21.
+
+**The one correction.** The checkpoint says `reference` is seeded, `verify_catalog.sh` exit 0, 15
+products. It is **empty** — zero nodes of any label. This is not damage and not drift in the
+checkpoint's honesty: `falkor-chat/AGENTS.md` documents that **a default (offline) `pytest` run
+wipes `reference` at teardown**, and Pass 12 itself records re-seeding it at the end of its own run.
+Some default `pytest` run since has wiped it again. Worth writing down as a general point about
+resume records: **a state claim about a graph that the project's own test suite destroys at teardown
+has a shelf life of one suite run.** Such a claim belongs in a checkpoint as a *re-derivation
+instruction* ("`seed_catalog.sh` if you need it"), not as an observation. Nothing in dispatch item 1
+depends on it, so it blocked nothing.
+
+**The `SendMessage` resume failed, and the checkpoint had already planned for it.** `a213382761bc926ec`
+returned *"No transcript found"* — agent ids do not survive the session reboot that produced the
+checkpoint. I attempted the send first and treated the addressing error as the non-resolution signal,
+then took the fallback the checkpoint itself wrote: a **fresh `coder`** briefed with `## Pass 12`,
+Appendix P12-A, and the note that P12-1 is already done. **This is the argument for always writing the
+cold-start fallback into a resume record** — the id is the cheap path, never the reliable one, and a
+checkpoint written *because* the session died is precisely the one whose ids will not resolve.
+
+**Dispatched: S8d2 only.** Items 2 (Pass 13) and 3 (the §5.1 S9 re-word) are strictly downstream of
+S8d2's report. Item 5, the S7→S8d documentation debt, **stays held** on the reasoning already
+recorded above — the S8 chain is not closed, and a `HISTORY.md` entry written before Pass 13 could be
+invalidated by it. It remains the one unit that could run in parallel with a gate, and it will get
+dispatched when the chain closes, not before.
