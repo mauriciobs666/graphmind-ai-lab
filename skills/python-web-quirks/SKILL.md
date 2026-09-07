@@ -4,8 +4,10 @@ description: >-
   Live-verified Python gotchas beyond a quick docs read — mostly web/async, plus two
   pytest/import-timing traps: asyncio fire-and-forget GC-safety; FastAPI/Starlette
   BackgroundTasks' bounded thread pool vs. unbounded threading.Thread; response_model_exclude_unset
-  dropping defaulted nested-model fields; pydantic Field(min_length=1) accepting whitespace-only
-  strings; urllib's HTTPError/URLError/TimeoutError taxonomy; an
+  dropping defaulted nested-model fields; FastAPI's four built-in doc routes (and which
+  constructor kwargs suppress them) falsifying any "registers only these routes" claim; responses={...}
+  being keyed by status code alone, so two error bodies at one status collapse; pydantic
+  Field(min_length=1) accepting whitespace-only strings; urllib's HTTPError/URLError/TimeoutError taxonomy; an
   OpenAI-compatible server's HTTP-200 error envelope on a missing /v1; a bare json.loads LLM-judge
   parser failing silently on a fenced completion; monkeypatch.setenv as a no-op against an
   import-frozen constant; a function-local deferred import re-resolving each call vs. a
@@ -13,7 +15,8 @@ description: >-
   load order unless the deferred import is inside a function body (not a class body); and
   starlette TestClient's teardown cancelling every still-running task regardless of whether the
   app's own lifespan cancels it. Use for asyncio.create_task scheduling, background-task dispatch, a
-  FastAPI response model using exclude_unset, an HTTP client against urllib/OpenAI-compatible
+  FastAPI response model using exclude_unset, an assertion over an app's route table or its
+  responses={...} declarations, an HTTP client against urllib/OpenAI-compatible
   endpoints, an LLM-judge parser, a pytest monkeypatch touching an env var or deferred import, a
   circular-import fix, or a TestClient-driven lifespan/background-task test — coder, tdd-engineer,
   architect, analyst in a Python codebase.
@@ -108,6 +111,38 @@ was the intent.
 (or the equivalent `model_dump(exclude_unset=True)` call), check every **nested** model in the
 response shape, not just the envelope — the guard against silent field loss there is an
 exact-key-set contract assertion on the nested object, not just on the top-level one.
+
+## FastAPI's four built-in doc routes make "this app registers ONLY routes X" false — and the fourth is the one that gets missed
+
+Verified against FastAPI 0.139.0: a bare `FastAPI()` already carries four routes — `/openapi.json`,
+`/docs`, `/docs/oauth2-redirect` and `/redoc`. `/docs/oauth2-redirect` is the one routinely omitted
+from a hand-written list of three. They are **defaults, not unconditional**, and the suppression
+switches are not one-per-route: `FastAPI(openapi_url=None)` registers *none* of the four (the schema
+route gates the other three), `docs_url=None` drops `/docs` **and** `/docs/oauth2-redirect`
+together, `redoc_url=None` drops `/redoc`, and `swagger_ui_oauth2_redirect_url=None` drops the
+redirect alone. So the count is a property of how the app was constructed, not of the framework — an
+absolute claim about it needs the constructor's kwargs in hand.
+
+**Consequence for a route-table assertion:** don't enumerate the exemption, derive it —
+`frozenset(r.path for r in FastAPI().routes)` computed from a bare app at import time stays correct
+across a framework upgrade that adds a fifth doc route, where a hardcoded list of four silently
+red-fails an assertion about *your* app. The trade runs the other way too: a derived exemption means
+a future framework default is exempted silently, so an app whose own surface is the thing under test
+should assert its registered set by equality, not by count.
+
+## FastAPI's `responses={...}` is keyed by status code only — two error bodies at one status collapse into one declaration
+
+Verified against FastAPI 0.139.0: the parameter is typed `dict[int | str, dict[str, Any]]`, and the
+string form is a wildcard *range* (`"4XX"`) — coarser than a status, never finer. There is no
+declaration-side key for anything inside the body: not an error token, not the offending `field`.
+Two documented 422s on one route that differ only by which field failed therefore reach
+`route.responses` as a single `422` entry, and the collapse is correct as built, not a defect.
+
+**Consequence for a contract gate:** a check that reads declarations back off `app.routes` compares
+at **status** granularity and structurally cannot see a finer axis. A response table specified per
+`(status, field)` has to say which half each side proves — the status half by the declaration, the
+finer half only by executing the route. Left unsaid, the table and the gate read as contradicting
+each other.
 
 ## pydantic `Field(min_length=1)` does not reject whitespace-only strings
 

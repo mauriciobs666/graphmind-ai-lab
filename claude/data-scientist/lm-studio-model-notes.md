@@ -81,7 +81,8 @@ replicates, flip-rate, etc.) that assumes a pinned value.
 
 ## The machine-readable measurement surface is on `/api/v0/`, not `/v1/` — and `lms` is reachable from WSL only as `lms.exe`
 
-**Verified 2026-09-07 on this box** (re-derived; originally observed 2026-09-02).
+**Verified 2026-09-07 on this box** (re-derived; originally observed 2026-09-02, timings and the
+JIT clause added 2026-09-07 from a 2026-09-03 observation).
 
 - **`POST /api/v0/chat/completions` carries the per-call measurement fields the OpenAI-compatible
   `/v1/chat/completions` route omits:** `stats{time_to_first_token, tokens_per_second,
@@ -91,16 +92,28 @@ replicates, flip-rate, etc.) that assumes a pinned value.
 - **`GET /api/v0/models` fingerprints the catalog; `GET /v1/models` cannot.** Live response on this
   box returns, per model, `id`, `object`, `type`, `publisher`, `arch`, `compatibility_type`,
   `quantization`, `state` (`loaded`/`not-loaded`), `max_context_length` and `capabilities`. The
-  `/v1/` route returns only `id`/`object`/`owned_by`.
+  `/v1/` route returns only `id`/`object`/`owned_by`. Both routes are effectively free — 19 models
+  came back in 1.6-6.5 ms over six calls, `/v1/` no faster than `/api/v0/` — so the choice between
+  them is about content, never cost; poll either as often as you like.
 - **The `lms` CLI is not on the WSL `PATH`** (`command -v lms` exits 1), but the Windows binary is
   reachable and works from WSL at `/mnt/c/Users/<user>/.lmstudio/bin/lms.exe`. Confirmed working
   this way: `lms server status --json` (→ `{"running":true,"port":1234}`), `lms ps --json` (→ `[]`
   with nothing loaded), and `lms load --estimate-only` (documented in `lms load --help` as
   "Calculate an estimate of the resources required to load the model. Does not load the model.").
+  **Each `lms.exe` call costs ~0.30 s** (0.30/0.31/0.32 s over three `lms ps --json` runs) — the
+  WSL-to-Windows subprocess price, not the command's own work. A fingerprint collector that shells
+  out per field pays it per field; batch what you can, and prefer the HTTP routes above, which are
+  ~100x cheaper, for anything they can answer.
 - **Two gaps to design around.** `lms version` prints only a CLI commit hash (`CLI commit:
   <sha>`) — there is no LM Studio *app* version anywhere in the CLI output. And **no API field and
   no `lms load` flag exposes the KV-cache setting**; `lms load` offers `--context-length` but
   nothing for KV-cache quantization. Both must be operator-attested rather than machine-collected.
+- **A request naming an unloaded model triggers LM Studio's JIT auto-load, so the first call pays
+  the load.** `lms ps --json` returning `[]` does not mean a subsequent completion will refuse — it
+  means the next one will be cold. **Do not size a design against any single measured load cost:**
+  two cold loads measured on this box differ by ~6x. What is stable, and what a latency design
+  should key on, is that LM-Studio-side `ttft` **excludes** the JIT load while wall clock includes
+  it — measured, with the numbers, in `docs/plans/small-model-benchmarking-ml.md` §11.4.
 
 **Consequence:** an environment fingerprint or latency report can be collected automatically from
 `/api/v0/` plus `lms.exe`, except the app version and the KV-cache setting, which have to be

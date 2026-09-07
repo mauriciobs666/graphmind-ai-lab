@@ -59,7 +59,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U5 | tico (8: 08-26…09-02) | `a85a1d743ae070fa5` | accepted | `claude/tico/tico.md` (2 rules folded into existing bullets) + `kaizen/*` (K-015); `claude/AGENTS.md` git-race paragraph rewritten; 8 nodes deleted | none → — | 137.5k tok, 37 tools |
 | U6 | graph-dba (9: 09-02) | `a9bcd0c2ab80b7622` | accepted | `claude/graph-dba/falkordb-quirks.md` (6 entries, 2 merged + corrected) + `kaizen/*` (K-008); `claude/qa-engineer/qa-testing-techniques.md` + `kaizen/history.md`; 9 nodes deleted | none → — | 156.3k tok, 54 tools |
 | U7 | architect chunk A (11: ≤ 09-02) | `a8fdbd6dcd140b4e3` | accepted | `claude/architect/architect.md` + `kaizen/*` (K-004, K-005); root `AGENTS.md`; `cypher-mcp/README.md`; `claude/data-scientist/lm-studio-model-notes.md` + `kaizen/history.md`; 10 nodes deleted, 1 `PRODUCED` resolved (`MENTIONS`→`qa-engineer` kept alive) | none → — | 170.7k tok, 79 tools |
-| U7b | architect chunk B (6: 5×09-03 + 1×09-07 arrived mid-pass) | — | queued | `claude/architect/kaizen/*`, graph cleared | none → — | — |
+| U7b | architect chunk B (6: 5×09-03 + 1×09-07 arrived mid-pass) | `a035ccc6941014b46` | accepted | `claude/architect/architect.md` (1 bullet, 2 entries folded) + `kaizen/history.md`; `skills/python-web-quirks/SKILL.md` (2 sections) + `skills/agent-standards/claude-code.md` + `skills/README.md`; `claude/data-scientist/lm-studio-model-notes.md` (folded into U7's section) + `kaizen/history.md`; `claude/cobb/kaizen/history.md`; 6 nodes deleted — **`architect` closed out, 0/0** | none → — | 173.6k tok, 66 tools |
 | U8 | tdd-engineer chunk A (12: ≤ 08-30) | — | queued | `claude/tdd-engineer/kaizen/*`, graph cleared | none → — | — |
 | U9 | tdd-engineer chunk B (8: ≥ 08-31) | — | queued | `claude/tdd-engineer/kaizen/*`, graph cleared | none → — | — |
 | U10 | coder chunk A (12: ≤ 08-29) | — | queued | `claude/coder/kaizen/*`, graph cleared | none → — | — |
@@ -195,6 +195,20 @@ re-checked against this rate as each agent comes up.
   resolves by probe order alone, with zero test coverage — wants a
   `falkor-chat/docs/BACKLOG.md` test-gap item plus one docstring sentence.
   K-005: `ws:acme`'s label census belongs in `falkor-chat/AGENTS.md`.
+- **U7b → the session scratchpad is shared across every delegate, and this
+  pass proved it the hard way.** `$CLAUDE_CODE_SESSION_ID` inside a subagent
+  resolves to the **parent's** id, so every `cobb` unit in this coordination
+  writes into one directory keyed by `teco`'s session. U7b found U7's working
+  files (`arch_hist.md`, `ds_hist.md`, `v0models.json`, 08:10–08:27) still
+  sitting in what it took to be its own scratchpad; `teco` confirmed
+  independently — U6's and U7's files are all still there together. The hazard
+  is therefore **not** limited to parallel dispatch, which is how it was
+  originally recorded: strictly sequential units leave stale files a later
+  delegate can read as its own. Now widened in
+  `skills/agent-standards/claude-code.md` § "Bash tool environment". Practical
+  consequence for any future pass: have each unit namespace its scratch files,
+  or write nothing there at all (U7b used inline `python3` heredocs and left
+  nothing behind).
 - **U3 → `salesperson/build.sh:68`**: the `elif command -v node` fallback
   accepts any `node` on `PATH` without the `/mnt/` rejection its own
   `npm`-only branch applies. Harmless today (only `npm` leaks in from

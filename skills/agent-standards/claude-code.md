@@ -513,6 +513,21 @@ the always-loaded project memory (`CLAUDE.md`).
   prompt — the two are not guaranteed equivalent here. (Observed
   graphmind-ai-lab, 2026-07-26 and 2026-08-08.)
 
+- **The scratchpad directory is keyed by the *parent* session, so every subagent that session spawns
+  shares one directory — same-named files silently clobber each other.** The path handed to a
+  subagent is `/tmp/claude-<uid>/<slugified-cwd>/<session-id>/scratchpad`, and
+  `$CLAUDE_CODE_SESSION_ID` inside a subagent's Bash env resolves to the **parent's** id, not the
+  subagent's own — so two delegates of one session are handed byte-identical scratchpad paths.
+  Observed both ways in graphmind-ai-lab: a review session's mutation driver was overwritten
+  mid-pass by a concurrently-running second delegate's file of the same name and silently ran *that*
+  list, forcing every finding to be re-verified in a `git archive` sandbox
+  (`docs/reviews/small-model-benchmarking-impl.md` Appendix C.5, 2026-09-03); and on 2026-09-07 a
+  fresh delegate found the *previous* delegate's working files still sitting in "its" scratchpad
+  from twenty minutes earlier. The hazard is therefore not limited to parallel dispatch — sequential
+  reuse leaves stale files a later run can mistake for its own. Namespace every scratch filename per
+  agent/run, or work in a `mktemp -d` sandbox; a briefing that dispatches two agents expecting to
+  write scratch files should say so.
+
 - **A command manually backgrounded inside a Bash call (`cmd &`) is not the same as the tool's own
   `run_in_background` parameter, and the difference bites twice.** (1) A compound command ending in
   `&` can still stall the Bash tool call for its full timeout even after the backgrounded process

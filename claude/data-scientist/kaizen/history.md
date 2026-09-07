@@ -3,6 +3,29 @@
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
 
+## 2026-09-07 — `lm-studio-model-notes.md`: the measurement-surface section refined (second inbound promotion from `architect`'s kaizen distillation, chunk B)
+
+- **What:** Three clauses folded into the section created earlier the same day (entry below) — **no
+  second section**, per chunk A's own hand-off note. (1) Both catalog routes are effectively free
+  (19 models in 1.6-6.5 ms over six calls, `/v1/` no faster than `/api/v0/`), so the choice between
+  them is about content, never cost. (2) Each `lms.exe` call costs **~0.30 s** (0.30/0.31/0.32 s
+  over three `lms ps --json` runs) — the WSL-to-Windows subprocess price, ~100x the HTTP routes.
+  (3) A request naming an unloaded model triggers **JIT auto-load**, so `lms ps --json` → `[]`
+  means the next call is cold, not that it will refuse.
+- **Why:** `cobb` distilling `kaizen_team` entry `6f2b1d94-3c7a-4e51-b0d8-9a2e5c74f118`
+  (2026-09-03, produced by `architect`) — a refinement of `443cc4cc`, not a contradiction.
+- **Verified:** re-derived live 2026-09-07 against the LM Studio server, **without loading a
+  model** — the same constraint chunk A worked under, since the server is shared with live
+  sessions. The JIT clause is corroborated by an independent measurement in
+  `docs/plans/small-model-benchmarking-ml.md` §11.4.
+- **One figure deliberately not banked.** The source entry carried a 21.068 s cold-call
+  measurement. §11.4 measures 3 625.0 ms on the same box, and plan v1.10 records that no load-cost
+  figure is left anywhere the design is sized against, the two measured cold loads differing by
+  ~6x. The KB therefore states the *behavior* plus the stable invariant — LM-Studio-side `ttft`
+  **excludes** the JIT load while wall clock includes it — and cites §11.4 for the numbers.
+- **Full disposition record:** `claude/architect/kaizen/history.md`, 2026-09-07 chunk-B entry.
+- **Plan items:** none.
+
 ## 2026-09-07 — `lm-studio-model-notes.md` gains the measurement-surface section (inbound promotion from `architect`'s kaizen distillation)
 
 - **What:** New section in `claude/data-scientist/lm-studio-model-notes.md` — *"The machine-readable

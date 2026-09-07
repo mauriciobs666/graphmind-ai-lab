@@ -3,6 +3,33 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-07 — Two skills gained live-verified entries (distillation pass 2, U7b — `architect` chunk B)
+
+- **What:** Promotions out of `architect`'s `kaizen_team` capture landed in two skills `cobb` owns
+  the write remit for.
+  - **`skills/python-web-quirks/SKILL.md` — two new FastAPI sections** (placed with the other
+    FastAPI facts): the four built-in doc routes that falsify any "this app registers ONLY routes
+    X" claim, and `responses={...}` being keyed by status code alone so two error bodies at one
+    status collapse into one declaration. Both re-derived against **FastAPI 0.139.0** in
+    `falkor-chat/server/.venv`, and both corrected against the source entry — the doc routes are
+    *defaults, not unconditional* (`openapi_url=None` registers none of the four; `docs_url=None`
+    drops the swagger route and its oauth2 redirect together), and the `responses` string key is a
+    wildcard *range* (`"4XX"`), coarser than a status rather than finer. Frontmatter `description`
+    extended with both facts and a matching trigger clause, since the description is the routing
+    signal.
+  - **`skills/agent-standards/claude-code.md` — one new bullet under § "Bash tool environment":**
+    the scratchpad directory is keyed by the **parent** session, so every subagent that session
+    spawns is handed the same path. Verified from this session's own environment
+    (`$CLAUDE_CODE_SESSION_ID` inside a subagent resolves to the parent's id) plus a cited incident
+    and a live observation of *sequential* reuse — which widens the source entry's parallel-only
+    framing.
+  - **`skills/README.md`** — the `python-web-quirks` catalog row re-synced: the two new facts plus
+    two entries the row had already drifted on (the circular-import and `TestClient`-teardown
+    sections).
+- **Why:** unit U7b of `claude/docs/plans/kaizen-distillation2-coordination.md`. Full per-entry
+  disposition record: `claude/architect/kaizen/history.md`, 2026-09-07 chunk-B entry.
+- **Plan items:** none.
+
 ## 2026-09-06 — Distillation pass (U1): own entry `c1f9a4d2` — verified, strengthened, kept open as K-020
 
 - **Entry:** `c1f9a4d2-7b3e-4a86-9c05-2f8d61e0b774` (2026-09-06, produced by `cobb`,

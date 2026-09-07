@@ -2,6 +2,111 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-09-07 — `kaizen_team` distillation pass 2, chunk B: the remaining 6 current-shape entries (2026-09-03, plus one written 2026-09-07 during chunk A's run) — 6 promoted, 0 discarded, 0 kept open, 0 MENTIONS-tagged
+
+- **What:** `cobb` processed `architect`'s six remaining `kaizen_team` entries
+  (agent-maintenance skill §5), closing this agent out. All current-shape; the current-shape read
+  returned exactly six and the legacy read returned **zero** entries graph-wide, so the legacy read
+  was skipped per the brief. Every fact was **re-derived live** — FastAPI 0.139.0 in
+  `falkor-chat/server/.venv`, `grep` over `model-bench` at `5878014`, the plan document itself, the
+  LM Studio server, and this session's own scratchpad — not merely checked against its citation.
+  Two entries proved **narrower or wider than stated**; both were corrected before promotion.
+
+  **Promoted (6).**
+  - **`f1b987fb` + `a4079bf3` (2026-09-03 and 2026-09-07, plan-document verification method) →
+    `architect.md` Guardrails, ONE new bullet.** The brief's suspicion was right: they are the same
+    underlying rule seen twice, so they were folded rather than filed as two near-duplicate bullets
+    beside chunk A's `3c1436d8` promotion. Verified: `docs/plans/small-model-benchmarking.md`
+    §3.4.1 now reads *"The forbidden set is a derivation, never a list"* with the v1.5/v1.9
+    provenance, confirming both the original defect (a 14-name list beside prose saying "every model
+    field", certified by two analyst passes) and its repair; and in `model-bench` at `5878014`,
+    `grep -rFn armKind` returns 54 lines (26 `modelbench/`, 24 `tests/`, 4 `docs/`) against
+    `grep -rFn arm_kind`'s 18, **all 18 in `tests/`**, with only 3 lines carrying both — the
+    disjoint-vocabulary claim reproduces exactly. The plan's v1.11 note confirms rule 5 was
+    restated as a *no-forgetting guarantee over token-carrying sites*, not completeness; the bullet
+    states that honestly rather than as an absolute. New bullet: *"A completeness claim must be
+    derived, not transcribed — and its check must be able to fail."* Judged "most sessions" because
+    writing an enumeration beside an invariant, and prescribing a grep-shaped done-condition, are
+    both routine for this agent. **+120 words** (chunk A: +88; running total +208 across both
+    chunks).
+  - **`c4f8a2d1` (2026-09-03, FastAPI's built-in doc routes) →
+    `skills/python-web-quirks/SKILL.md`, new section.** The live-verified home for exactly this
+    class of fact, and in `cobb`'s remit. **Narrowed before promotion:** the entry's "FastAPI adds
+    FOUR documentation routes to **every** app" is false. Enumerated against FastAPI 0.139.0 —
+    bare `FastAPI()` → `/docs`, `/docs/oauth2-redirect`, `/openapi.json`, `/redoc`; but
+    `openapi_url=None` → **none of the four** (the schema route gates the other three);
+    `docs_url=None` → drops `/docs` *and* `/docs/oauth2-redirect` together;
+    `swagger_ui_oauth2_redirect_url=None` → drops the redirect alone. They are defaults, not
+    unconditional, so the count is a property of the constructor call. The section says so, and
+    keeps the entry's real payload (the fourth route is the one hand-written lists miss, and the
+    exemption should be derived from a bare app). The `falkor-chat` half was **already documented
+    at the site that matters** — `server/tests/test_app.py:756-760` states the four routes verbatim
+    with the derive-don't-enumerate reasoning — so nothing was added there; only the general
+    framework fact was missing anywhere.
+  - **`c1f0a7d2` (2026-09-03, `responses={...}` granularity) →
+    `skills/python-web-quirks/SKILL.md`, new section.** Verified against FastAPI 0.139.0: the
+    parameter is typed `dict[int | str, dict[str, Any]]`, and a live route declaring
+    `{422: ..., "4XX": ...}` keeps both keys — the string form is a wildcard *range*, i.e. coarser
+    than a status, never finer. There is no declaration-side key for an error token or a `field`,
+    so two 422s differing only by field genuinely collapse. The **plan-specific** conclusion is
+    already settled in `docs/plans/salesperson-ui.md` v1.20 (*"compares at **status**
+    granularity"*, line 1666) — what was undocumented anywhere is the framework fact and its
+    consequence for any declaration-reading contract gate.
+  - **`3f1c9a76` (2026-09-03, parallel subagents share one scratchpad) →
+    `skills/agent-standards/claude-code.md` § "Bash tool environment".** Per the brief, weighed for
+    an agent prompt and **rejected**: it does not change behavior in most sessions, and the
+    always-loaded bar is the highest one. It is a verified Claude Code harness fact, which is what
+    `claude-code.md` is for, and that file is in `cobb`'s write remit. **Widened before promotion,
+    from this session's own evidence:** `$CLAUDE_CODE_SESSION_ID` inside a subagent's Bash env
+    resolves to the **parent's** session id, so the scratchpad path is keyed by the parent, not by
+    the delegate — and this run found chunk A's working files (`arch_hist.md`, `ds_hist.md`,
+    `patch_*.py`, `v0models.json`, 08:10-08:27) still sitting in "its own" scratchpad at 08:33.
+    The hazard is therefore **not limited to parallel dispatch**; sequential reuse leaves stale
+    files a later delegate can read as its own. The entry's parallel incident is real and cited
+    (`docs/reviews/small-model-benchmarking-impl.md` Appendix C.5, lines 964-971). **No `MENTIONS`
+    tag:** it is a harness fact binding every agent that writes a scratch file, not a fact about
+    `teco` or any one agent's discipline, and a durable greppable reference entry serves better
+    than resurfacing a raw node.
+  - **`6f2b1d94` (2026-09-03, LM Studio measurement surface) → folded into the **existing** section
+    of `claude/data-scientist/lm-studio-model-notes.md` that chunk A created from `443cc4cc`, per
+    that pass's hand-off — no second section added.** Re-verified live 2026-09-07 without loading a
+    model (chunk A's constraint still holds): `GET /api/v0/models` → 19 models, 10 keys each
+    (`id`/`object`/`type`/`publisher`/`arch`/`compatibility_type`/`quantization`/`state`/
+    `max_context_length`/`capabilities`); `GET /v1/models` → 19 models, 3 keys
+    (`id`/`object`/`owned_by`); `command -v lms` exits 1; `lms.exe ps --json` → `[]` in
+    0.30/0.31/0.32 s over three runs. Three clauses added, all genuinely new to the section:
+    endpoint timings (1.6-6.5 ms over six calls, `/v1/` **no faster** — so the entry's implied
+    "v0 is the fast one" is wrong; the differentiator is content, not cost), the ~0.30 s
+    WSL-to-Windows `lms.exe` subprocess price per call, and JIT auto-load. **The entry's 21.068 s
+    cold-call figure was deliberately not banked:** `docs/plans/small-model-benchmarking-ml.md`
+    §11.4 measures a 3 625.0 ms cold load on the same box, and plan v1.10 records that *"no
+    load-cost figure is left anywhere the design is sized against, the two measured cold loads on
+    this box differing by ~6x"* — so the KB states the behavior and the stable invariant
+    (LM-Studio-side `ttft` **excludes** the JIT load, wall clock includes it) and cites §11.4 for
+    the numbers. Logged in `claude/data-scientist/kaizen/history.md` too.
+
+  **Discarded (0). Kept open (0).** No `K-` item was opened: every entry landed in a destination
+  inside `cobb`'s write remit, so nothing was left unresolved. K-004 and K-005 (opened by chunk A)
+  are untouched and still 🔵.
+- **Dedup check.** Every one of the six `entryId`s was grepped against this agent's `plan.md` and
+  `history.md`: zero hits. Confirmed by **date and subject**, not by 8-char prefix — `3f1c9a76`
+  (2026-09-03, subagent scratchpad) is one character from chunk A's already-cleared `3f1c9a52`
+  (2026-09-02, no root pytest config), and they are different entries.
+- **Graph ops (in order).** No `MENTIONS` tag was added in this pass, so the ordering invariant had
+  nothing to sequence against; the count-and-decide read still ran per entry before deciding.
+  All six returned `producedEdges=1, mentionEdges=0` ⇒ `otherRemaining = 0` ⇒ full-node
+  `DETACH DELETE`. This `history.md` entry landed and was confirmed **before** any graph mutation.
+- **Docs touched:** `claude/architect/{architect.md,kaizen/history.md}`,
+  `skills/python-web-quirks/SKILL.md`, `skills/agent-standards/claude-code.md`,
+  `skills/README.md` (catalog row re-synced — the two new FastAPI facts, plus two pre-existing
+  omissions the row had already drifted on), `claude/data-scientist/lm-studio-model-notes.md`
+  + its `kaizen/history.md`, `claude/cobb/kaizen/history.md`. No `claude/README.md` or
+  `claude/AGENTS.md` change: nothing here alters what this agent does or when to route to it.
+- **Why:** unit U7b of `claude/docs/plans/kaizen-distillation2-coordination.md` (pass 2; pass 1's
+  record is `claude/docs/plans/kaizen-distillation-coordination.md`). `architect` is now clear of
+  raw capture.
+- **Plan items:** none opened; K-004/K-005 unchanged.
+
 ## 2026-09-07 — `kaizen_team` distillation pass 2, chunk A: 11 current-shape entries (2026-08-26 → 2026-09-02) — 4 promoted, 5 discarded, 2 kept open, 1 MENTIONS-tagged
 
 - **What:** `cobb` processed `architect`'s eleven `kaizen_team` entries dated 2026-08-26 through
