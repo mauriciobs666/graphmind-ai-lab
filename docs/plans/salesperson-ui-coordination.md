@@ -146,7 +146,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **Pass 14** — gate S8e (`92bf842`) | `analyst` (**fresh**) | `a53a5d3a5d3ff9f2d` | **accepted — committed `a42fcca`. NEEDS CHANGES** (0 blockers, **3 majors**, 1 minor, 1 nit). **Found instances eleven and twelve inside S8e's own fix, both via the general probe rather than a reproduction.** **P14-1** the composed raise walk stops one hop short of its exemption — and the blind spot hides an **unclassified** raise, `MemberIdCollisionError`, in no table anywhere; **P14-2** `_alias_prefixes` harvests `ast.Assign` only, so S9's shape **plus a type annotation** survives (annotated locals are a house idiom, 68 in the package); **P14-3** the composition claim is right about the code and wrong about the **plan**. Reproduced all six of S8e's claims exactly. **Ruled the guard-reach statement inaccurate in 4 of 11 clauses** and named a **convergence test** | `docs/reviews/salesperson-ui-impl.md` `## Pass 14` | — | 191k tok / 69 tools |
 | **S8f** — P14-1, P14-2, P14-4, P14-5 + the syntactic restatement + the `MemberIdCollisionError` ruling | `coder` (**fresh** — S8e ended at 254k, past the resume threshold) | `a0b67a1e6bc22d6b8` | in-flight (dispatched 2026-09-07) | `storefront_api.py`, `test_storefront_api.py` + the **fact half** of the guard-reach statement + the convergence probe's output | `analyst` (Pass 15) → — | — |
 | **U30** — P14-3: settle the plan/code exception-name mismatch and the falsifiability **mapping** | `architect` (**fresh**) | `af0b1eb6551aa85e9` | **accepted — committed `a3f681e`** (3/2, one file). **Ruled the plan wrong and the code right** — `services.py:2085`'s `WorkflowRunNotFoundError` is a *workspace snapshot/trigger-anchor* miss, already documented in `start_workflow_run`'s own docstring, while `WorkflowDefNotFoundError` is a *`reference`-graph* condition whose three raise sites are unreachable from the S9 path. Two conditions, only one reachable; the row named the reachable one with the unreachable one's class. **No code change implied.** Introduced the **two-gate** framing (does the method enter the walked set / is the raise in its own body or one call further in) that the plan had collapsed | `docs/plans/salesperson-ui.md` **v1.24** | teco-verified | 107k tok / 44 tools |
-| **U31** — replace S9's unmeetable *"S8c goes red"* done-condition with the armed-fault measurement; account for the false-but-unmeasured excuses and `executor.run`'s own raise | `architect` (**resumed** `af0b1eb6551aa85e9` — 107k/44, well inside threshold, and it holds the two-gate reasoning) | `af0b1eb6551aa85e9` | in-flight (dispatched 2026-09-07) | `docs/plans/salesperson-ui.md` **v1.25** | `analyst` (folded into Pass 15) → — | — |
+| **U31** — replace S9's unmeetable *"S8c goes red"* done-condition; account for the false-but-unmeasured excuses and `executor.run`'s own raise | `architect` (**resumed** `af0b1eb6551aa85e9`) | `af0b1eb6551aa85e9` | **accepted — committed `5d0bb9c`** (3/2, one file). **Replaced the obligation rather than deleting it**: S8c's assertion is expected to **stay green**, and staying green *is* the evidence; what it still pins is the storefront's **service surface** — red means S9 wrote `self._services` instead of the trigger, a stop-and-re-decide. Row now says **do not restore a reddens-at-S9 claim**, and why. **Corrected my framing**: it is not a *placement* tripwire — `_service_layer_reach` reads source, not threads. All three excuses convert to **one measured exemption at the response boundary**; none stays prose-only. Tells S9 to **derive** the fault list from the worker's actual service surface. **Incidentally closed Pass 12's open question 2**, flagged as an architect edit and never made | `docs/plans/salesperson-ui.md` **v1.25** | `analyst` (folded into Pass 15) → — | 129k tok / 7 tools |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
 | **U31** — stakeholder decision: how a dead turn becomes visible to the participant | stakeholder | — | **delivered — option B**, the additive `lastTurn: 'failed' \| null` field | option B recorded in v1.23 (below) | — | — |
 | **v1.23** — write option B into the contract: §5.2's `turn` shape, §5.3 C6a, S9's row, + the client rows that inherit it | `architect` | `ad81e9cdb12dfbb28` (resumed ×2) | **accepted — committed `10f2b72`** (68/7) | `docs/plans/salesperson-ui.md` **v1.23** | teco-verified: **exactly the 4 announced rows moved** (S9, S12a, S13, S15), no delivered row moved, all 21 rows 7 cells on a pipe-aware count | 224k tok / 26 tools |
@@ -2185,3 +2185,50 @@ intact, so the snapshot half will report `already present — no-op`. **Read
 `seed_workflows.sh`'s header before running it** — a fresh `reference` publish alongside an
 already-materialised workspace snapshot is a documented split-brain, and it is accepted knowingly
 here rather than discovered later.
+
+## U31 — an independent read that converged with the stakeholder's, and one correction of mine
+
+I asked U31 for its own answer to *"does the S8c→S8f chain still earn its keep?"*, explicitly
+**unfiltered by mine**, because I was putting the same question to the stakeholder and did not want
+one opinion laundered through the other into an apparent consensus. The two were formed
+independently and landed in the same place, which is worth more than either alone:
+
+> **The asset earns its keep; the S9 justification is spent; further investment does not.**
+
+Its reasoning adds something mine did not have. **Marginal value of the chain for S9 is zero** — the
+three excuses that actually go false at S9 are invisible to the guard, and the re-derivation P11-1
+wanted forced is a no-op. But its *subject* was never only S9: it is the only thing keeping
+`INHERITED_HANDLERS` / `SERVICE_ERROR_RESPONSES` / `SERVICE_ERRORS_UNREACHABLE` a **mechanism**
+rather than an enumeration, across the whole storefront→`Services`/`Repository` surface, and it
+checks every future storefront step the same way. Its evidence is `MemberIdCollisionError` — raised
+by `Repository.ensure_participant`, reachable from `Storefront.join`, in **no** §5.2/§5.3 row, no
+`SERVICE_ERROR_RESPONSES` entry, no excuse. Nothing to do with S9, everything to do with today's
+shipped code.
+
+Its recommendation — *land P14-1/P14-2, then take Pass 14's option (b) wherever it is still open:
+**narrow the sentence to what the walk does and freeze it**, classify `MemberIdCollisionError`, and
+**do not open S8g*** — is the stakeholder's decision arrived at from the other side. It is now
+doctrine here, not advice.
+
+**And it corrected a framing of mine, which I am recording because I would otherwise have shipped
+it.** In my resume brief I leaned on the guard as evidence about *where* S9's call runs. It is not:
+`_service_layer_reach` reads **source, not threads**, so a direct `self._services.start_workflow_run(...)`
+reddens it on the request thread and on the worker alike. **Placement is evidenced only by the
+armed-fault `200` and the queue-position/latency assertions.** This is the same class of error as my
+v1.22 compression two sections above — reading a *code-shape* fact as a *runtime-placement* fact —
+and it is now the second time in one coordination that I have collapsed those two axes. The pair is
+the lesson: **a static reader can only ever testify about text.** Any claim about scheduling,
+threading or ordering needs something that runs.
+
+## Signal for the seed — the condition, written down (teco, 2026-09-07)
+
+The stakeholder runs the three seed scripts, and I owe the signal. **The condition is: no remaining
+unit of the S8 chain will run a default `pytest`.** Concretely that is **after Pass 15 returns and I
+have finished my own verification of S8f** — my verification runs are themselves full-suite runs, and
+they have wiped `reference` twice already.
+
+**S9 is not part of the condition.** It is a fresh implementation step that will run suites of its
+own, so if the seed is wanted durably rather than momentarily, the honest signal is *after Pass 15,
+before S9 is dispatched* — and it will need re-running after S9 too. **Nothing before S11 needs the
+registry**, which is why this is a convenience-timing question and not a blocker. I will say the word
+explicitly rather than leaving it to be inferred from a status line.
