@@ -57,7 +57,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U3 | devops (3: 2 produced 09-02 + 1 `MENTIONS`-only 08-23) | `a43632153a90a40c1` | accepted | `claude/devops/ops-quirks.md` (2 entries, scope broadened) + `devops.md` + `kaizen/*`; `claude/AGENTS.md`, `claude/README.md` catalog rows; 3 nodes deleted | none → — | 133.6k tok, 40 tools |
 | U4 | qa-engineer (7: 08-28…08-31) | `a175af41b18b446d7` | accepted | `claude/qa-engineer/qa-testing-techniques.md` (2 sections) + `kaizen/*` (K-007 carries 3 entries awaiting a `falkor-chat/` home); 7 nodes deleted | none → — | 135.7k tok, 55 tools |
 | U5 | tico (8: 08-26…09-02) | `a85a1d743ae070fa5` | accepted | `claude/tico/tico.md` (2 rules folded into existing bullets) + `kaizen/*` (K-015); `claude/AGENTS.md` git-race paragraph rewritten; 8 nodes deleted | none → — | 137.5k tok, 37 tools |
-| U6 | graph-dba (9: 09-02) | — | queued | `claude/graph-dba/kaizen/*`, graph cleared | none → — | — |
+| U6 | graph-dba (9: 09-02) | `a9bcd0c2ab80b7622` | accepted | `claude/graph-dba/falkordb-quirks.md` (6 entries, 2 merged + corrected) + `kaizen/*` (K-008); `claude/qa-engineer/qa-testing-techniques.md` + `kaizen/history.md`; 9 nodes deleted | none → — | 156.3k tok, 54 tools |
 | U7 | architect (16: 08-26…09-03) | — | queued | `claude/architect/kaizen/*`, graph cleared | none → — | — |
 | U8 | tdd-engineer chunk A (12: ≤ 08-30) | — | queued | `claude/tdd-engineer/kaizen/*`, graph cleared | none → — | — |
 | U9 | tdd-engineer chunk B (8: ≥ 08-31) | — | queued | `claude/tdd-engineer/kaizen/*`, graph cleared | none → — | — |
@@ -150,6 +150,19 @@ units, none of them a defect:
   component's always-loaded context file omits the evaluation harness it
   ships. Not filed as a `K-` item (the fact is covered for the consumer that
   exists); worth one line the next time falkor-chat's context file is revised.
+- **U6 → `graph-dba` K-008**: two verified CPG-freshness facts whose right
+  homes are `skills/joern-cpg/SKILL.md` (the "No `--exclude` flag" bullet) and
+  `skills/cpg-analysis/references/freshness.md` (**Limits**) — the latter
+  currently states its `.git`-less limitation *as if inherent*, and one of the
+  entries shows it is avoidable. Seven agents read that recipe. Kept open on
+  remit, not doubt; parking them in a `claude/graph-dba/` file to stay in-remit
+  would be exactly the hoarding §5 forbids.
+- **U6 → two scratch graph keys need cleanup**: `scratch_cobb_u6` (~155 nodes)
+  and `scratch_cobb_u6_other` (1 node), created for write-probes that could not
+  be settled by reading. `cobb` correctly did **not** delete them —
+  `GRAPH.DELETE` is destructive and reserved to `graph-dba`/`devops` behind
+  their guards. No existing key was reused, mutated, or renamed. Route the
+  two-key cleanup to `graph-dba` at pass close.
 - **U3 → `salesperson/build.sh:68`**: the `elif command -v node` fallback
   accepts any `node` on `PATH` without the `/mnt/` rejection its own
   `npm`-only branch applies. Harmless today (only `npm` leaks in from

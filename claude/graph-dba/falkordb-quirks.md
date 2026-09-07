@@ -221,7 +221,17 @@ to the general fact here.
   happen?), not just that the optional edges are correctly absent.
 - **`FOREACH (x IN CASE WHEN … THEN [1] ELSE [] END | CREATE …)`** is the working
   idiom for conditional writes without dropping rows. Nested `FOREACH`, and
-  `DELETE` inside a `FOREACH`, both work.
+  `DELETE` inside a `FOREACH`, both work. **A `FOREACH` body may hold SEVERAL `CREATE`
+  clauses whose variables bind across them, and a node variable bound OUTSIDE the `FOREACH`
+  is a legal `CREATE` relationship endpoint inside it** — so a whole multi-node subgraph is
+  writable under one guard (verified 2026-09-07, module `41811`): one guarded `FOREACH`
+  containing `CREATE (u:P{…}) CREATE (c:P{…}) CREATE (t:P{…}) CREATE (c)-[:HAS_THREAD]->(t)
+  CREATE (u)-[:MEMBER_OF]->(c) CREATE (agent)-[:MEMBER_OF]->(c)`, with `agent` bound by an
+  outer `OPTIONAL MATCH`, created 3 nodes + 3 relationships; the guarded-false path wrote
+  nothing. This is the **positive counterpart** to the map-projection restriction below — the
+  endpoint must be a *bound node variable*, and an outer-scope binding qualifies, while a
+  list subscript does not (`CREATE (ms[k])-[:NEXT]->(ms[k+1])` errors `Invalid input '['`).
+  Use it for atomic, idempotent provisioning writes: one statement, one guard, whole subgraph.
 - **`exists((n)-[:REL]->())` in a pattern returns `true` even when the edge is
   absent** (broken on this build); `count{ … }` subquery syntax is unsupported.
   For existence checks use `OPTIONAL MATCH (n)-[:REL]->(x) RETURN x IS NOT NULL`
@@ -306,6 +316,16 @@ to the general fact here.
   each block back to one row with an aggregation (`WITH d, count(st) AS stepCount`)
   so the query returns a single clean status row. The write itself is unaffected —
   this is a result-cardinality issue, not a correctness one.
+- **The same collapse rule applies to a preceding `OPTIONAL MATCH`: a still-open
+  `OPTIONAL MATCH` stream gets multiplied by any later `UNWIND`, with no error and identical
+  results — only the cost changes** (verified 2026-09-07, module `41811`, disposable graph).
+  `MATCH (u:User) WITH collect(DISTINCT u) AS users OPTIONAL MATCH (rc:ReadCursor) WHERE … UNWIND
+  users AS uu …` profiles as `Unwind | Records produced: 5100` (100 cursor rows × 51 users);
+  giving the `OPTIONAL MATCH` its own `WITH users, collect(DISTINCT rc) AS cursors` **before**
+  the `UNWIND` gives `Unwind | Records produced: 51` and the same answer — a 4× drop in the
+  downstream `Aggregate` at this trivial scale, measured at **3× wall-clock** (≈690 ms → ≈240 ms)
+  on a 50-participant / 2000-message workspace-reset write. Cheap to miss precisely because both
+  shapes are *correct*: it shows up only in timing and in `PROFILE`'s records-produced column.
 - **Cannot combine an aggregation with a reference to a prior variable in the same
   `WITH`** when building an accumulator. `WITH acc + [x IN collect(DISTINCT c.NAME)
   WHERE NOT x IN acc] AS acc2` fails at runtime with `_AR_EXP_UpdateEntityIdx:
@@ -334,6 +354,14 @@ to the general fact here.
   expecting `NULL` on empty input (it's already a defined `0.0`), and expect a `float`-vs-`int`
   JSON-serialization mismatch (`"postedCount": 1.0` instead of `1`) wherever this shape feeds a
   response model.
+
+- **A global `collect()` over a zero-row `MATCH` still returns exactly ONE row, carrying empty
+  lists — never an empty result set** (verified 2026-09-07, module `41811`).
+  `MATCH (u:User) WHERE u.userId = 'nobody' WITH collect(DISTINCT u) AS users RETURN size(users),
+  users` returns one row with `0` / `[]`. Consequence: an aggregate "status" query written this
+  way reports an all-zeros row rather than "no rows", so a caller that treats an empty result set
+  as the not-found signal will never see it — check the counts, not `len(result_set)`. Same
+  family as the `sum(CASE …)` entry above (a defined zero, not `NULL`/absent).
 
 - **`count(*)` under-counts parallel edges between the same node pair — bind the relationship
   variable and use `count(r)` instead** (verified 2026-08-25, module `41811`, disposable graph).
@@ -369,6 +397,28 @@ to the general fact here.
   and "two independent WHERE predicates fold into one Index Scan" entries below (Query tuning),
   but here the fold changes the **result**, not just the plan shape.
 
+- **SQL-style `--` is NOT a comment on this build — Cypher comments are `//`** (verified
+  2026-09-07, module `41811`). `MATCH (u:User) -- G1` + newline + `RETURN count(u)` errors
+  `Invalid input 'G': expected '>' or '('` — the parser reads `--` as the start of an operator,
+  not a line comment; the `//` form returns normally. This fails **loudly**, not silently, but
+  the error message points at the token after the dashes and reads nothing like "bad comment",
+  so it costs a debugging cycle if you don't know the rule.
+
+- **Comparing a non-string value against a string yields `NULL`, so the row is silently dropped
+  by a `WHERE`** (verified 2026-09-07, module `41811`). `RETURN 42 > ''`, `42.5 > ''` and
+  `true > ''` all return `NULL`; `'abc' > '' → true`, `'' > '' → false`. There is no cross-type
+  coercion and no error. Consequence: any predicate that compares a property to a string literal
+  is also an implicit *type filter*, and in a destructive query that is a silent under-delete.
+  See the `IS NOT NULL` index-anchor entry under *Query tuning* for the specific idiom this
+  invalidates.
+
+- **A bare `MATCH` immediately after an `OPTIONAL MATCH` is rejected — insert a `WITH`**
+  (verified 2026-09-07, module `41811`). `OPTIONAL MATCH (a:X) MATCH (b:Y) RETURN …` raises
+  *"A WITH clause is required to introduce a MATCH clause after an OPTIONAL MATCH."* A
+  pass-through `WITH` satisfies it, as does reordering so the required `MATCH` leads. Same
+  `WITH`-as-clause-boundary rule the update-clause chaining entry below turns on — the parser
+  demands the bridge, and the bridge is always trivially suppliable.
+
 - **A single Cypher statement can chain a read clause, `DETACH DELETE`, and another read clause
   — the grammar is not a barrier to an identifier-splice mutation.** An update clause cannot be
   followed *directly* by a read clause (`MATCH (v:Product) DETACH DELETE v WHERE true RETURN 1`
@@ -386,6 +436,24 @@ to the general fact here.
   a write.)
 
 ## Query tuning
+
+- **`WHERE prop IS NOT NULL` cannot anchor a range index — and the obvious `prop > ''` workaround
+  is unsound and buys nothing** (verified 2026-09-07, module `41811`, 51-node disposable graph;
+  merges and **corrects** two raw `kaizen_team` entries, the second of which overturned the
+  first). `MATCH (u:User) WHERE u.tokenHash IS NOT NULL RETURN count(u)` profiles as
+  `Node By Label Scan | (u:User) | Records produced: 51` even with `u.userId` indexed — an
+  existence predicate is not a range and gets no index. Adding an "always-true" range conjunct on
+  the indexed property (`WHERE u.userId > '' AND …`) *does* upgrade the plan to
+  `Node By Index Scan`. **Do not use it.** Two independent reasons: (1) **it is not always true**
+  — any non-string `userId` compares to `''` as `NULL` and the row vanishes, silently, with no
+  error (the same graph returned **51** rows on the bare label scan and **50** on the
+  "equivalent" index-scan form, the missing row being a `userId: 42` integer; see the
+  cross-type-comparison entry under *Cypher dialect*), which in a delete is a silent
+  under-delete; and (2) **it buys no selectivity** — both plans visit the whole label, and the
+  index form measured *slower* (0.128 ms vs 0.082 ms median over 20 runs at 52 nodes; 0.455 ms
+  vs 0.277 ms single-shot here). An index scan in the plan is not automatically a win: read
+  `Records produced`, not the operator name. If a label genuinely needs an anchored scan, index
+  the property you actually filter on, or traverse in from an indexed anchor.
 
 - **A `$param IS NULL OR prop = $param` optional-filter idiom defeats an otherwise-available
   index — even when `$param` is bound to a real, selective value** (verified 2026-08-22 on
@@ -486,6 +554,18 @@ to the general fact here.
 ## Ops, config & tooling
 
 - **`GRAPH.RO_QUERY`** routes to read replicas — use it for all read-only traffic.
+- **Renaming a graph is a plain Redis `RENAME`/`RENAMENX` on its key — atomic, non-destructive,
+  and fully supported. `GRAPH.COPY` + `GRAPH.DELETE` is NOT needed and should not be used**
+  (verified 2026-09-07, module `41811`, disposable graph). A graph is a single Redis key of type
+  `graphdata`, so `RENAME old new` moves it in place: node/edge counts identical, `db.indexes()`
+  reports the RANGE index still `OPERATIONAL`, `GRAPH.EXPLAIN` still plans `Node By Index Scan`
+  through it, reads **and** writes both work on the new name, and even the query-plan cache
+  follows the key (`Cached execution: 1` on the new name for a plan compiled under the old one)
+  — the internal `GraphContext` is moved, not rebuilt. The old key is genuinely gone: `EXISTS`
+  returns `0` and `GRAPH.RO_QUERY` on it errors *"Invalid graph operation on empty key"*, not a
+  lingering alias. **Prefer `RENAMENX`** — it returns `0` and refuses rather than clobbering when
+  the target name is taken (`1` when free). The `GRAPH.COPY` + `GRAPH.DELETE` alternative is
+  destructive and transiently doubles RAM for no benefit.
 - **`RESULTSET_SIZE` (default 10000) silently caps *every* result set, including one with an
   explicit larger `LIMIT`** — `GRAPH.CONFIG GET RESULTSET_SIZE` → `10000`; a query with `LIMIT
   50000` against a graph holding 110k+ matching rows still returns only ~10,000, with nothing in

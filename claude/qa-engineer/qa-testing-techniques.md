@@ -158,3 +158,25 @@ success may be the model reading an earlier turn instead of calling the tool at 
 fresh-thread re-ask a required step before any live-conversation observation is written up as a
 mechanism defect, and prefer short, single-purpose threads — one per test item — over one long
 session that covers several.
+
+## An extract-and-execute check over a markdown document proves the code runs, not that the document delivers it — assert extraction SHAPE, not just executability
+
+A closing code fence glued to the last line of code (`MATCH (a) RETURN a` + ``` on the *same*
+line) is **not** a valid CommonMark closing fence: a closing fence must sit on its own line. A
+conformant parser therefore leaves the block open and merges everything up to the **next opening
+fence** into one giant code block — swallowing intervening prose, tables and whole `##` sections.
+Nothing errors. Verified 2026-09-07 with `markdown-it-py` 3.0.0 (table rule enabled) on a minimal
+two-block document: correct file → 2 fenced blocks and 1 table; re-gluing a single closing fence →
+**1** fenced block of 12 lines (containing the prose, the table and a section heading) and **0**
+tables, with the second code block no longer extractable at all. On the real 1043-line design note
+where this surfaced, gluing two fences took 6 blocks/13 tables → 4 blocks/9 tables, with a
+513-line block spanning four document sections.
+
+The QA consequence is the general one: **a naive extractor reported 6 blocks and all-execute-OK in
+both states.** A loop that pulls code out of markdown and runs it is measuring the code, not the
+document — and it passes green while the document is undeliverable to the human or agent meant to
+copy from it. Whenever a document's blocks are meant to be used verbatim, assert the extraction's
+*shape* against expected values — block count, maximum block length, table count, and that every
+named canonical block is individually reachable — before asserting anything about what the
+extracted text does. Same family as the static/diff-gate entry above: the green check and the
+acceptance criterion are about different things.

@@ -2,6 +2,34 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-09-07 — `qa-testing-techniques.md` gains the markdown extract-and-execute shape-assertion rule (inbound promotion from `graph-dba`'s distillation, U6)
+
+- **What:** one new section at the end of the knowledge base — an extract-and-execute check over a
+  markdown document proves the code runs, not that the document delivers it, so a loop that pulls
+  code out of markdown must assert extraction **shape** (block count, max block length, table
+  count, every named canonical block individually reachable), not just that the extracted text
+  executes. Mechanism: a closing code fence glued to the last line of code is not a valid
+  CommonMark closing fence, so the block stays open to the next *opening* fence and silently
+  swallows the prose, tables and `##` sections in between.
+- **Why here:** the durable rule is a verification-design one, squarely `qa-engineer`'s
+  discipline, and it sits in the same family as the existing "a clean static/diff gate is
+  necessary, never sufficient" section — a green check measuring something other than the
+  acceptance criterion. It is not a FalkorDB fact and had no home in `graph-dba`'s
+  `falkordb-quirks.md`.
+- **Origin:** raw `:KaizenEntry` `f6b21d84-70ce-4e39-9a52-1c8d4f0b3e77` (produced by `graph-dba`
+  2026-09-02 as a blocker finding on a 1043-line design note whose Cypher blocks were meant to be
+  copied verbatim by an implementer), promoted by `cobb` in the `kaizen_team` distillation pass
+  U6. Fully dispositioned here rather than `MENTIONS`-tagged onto `qa-engineer`, per the U2
+  precedent. Full disposition reasoning: `claude/graph-dba/kaizen/history.md`, 2026-09-07 entry.
+- **Verified 2026-09-07 by re-derivation, not by re-reading the citation** — `markdown-it-py`
+  3.0.0 with the table rule enabled, on a freshly built minimal two-block document: correct file
+  parses to 2 fenced blocks and 1 table; re-gluing exactly one closing fence gives **1** fenced
+  block of 12 lines (containing the prose, the table and a section heading) and **0** tables, with
+  the second code block no longer extractable. The entry's field figures on the real document
+  (6 blocks/13 tables → 4 blocks/9 tables, a 513-line block across four sections) are retained as
+  the at-scale evidence.
+- **Plan items:** none opened.
+
 ## 2026-09-07 — `kaizen_team` distillation (pass 2, unit U4): 7 entries — 2 promoted to the knowledge base, 2 discarded as already documented, 3 kept open under K-007, 0 `MENTIONS` tags
 - **What:** `cobb` processed all 7 outstanding `qa-engineer` entries in the shared `kaizen_team`
   graph (agent-maintenance skill §5). All 7 were current-shape (`PRODUCED` edges, post-M8); zero

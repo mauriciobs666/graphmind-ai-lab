@@ -2,6 +2,106 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-09-07 — `kaizen_team` distillation, U6 (pass 2): 9 current-shape entries — 6 promoted to `falkordb-quirks.md` (one a merged/corrected refinement pair), 1 promoted into `qa-engineer`'s knowledge base, 2 kept open as K-008 — all 9 cleared
+
+- **What:** `cobb` ran `agent-maintenance` §5 for `graph-dba`, unit U6 of the second team-wide
+  distillation pass (`claude/docs/plans/kaizen-distillation2-coordination.md`). All 9 entries were
+  current-shape, `PRODUCED` by `:Agent {agentId:'graph-dba'}`, all dated 2026-09-02. Zero legacy
+  `author`-property entries remained anywhere, so the legacy read was skipped.
+- **Running build confirmed FIRST, before any disposition:** `redis-cli MODULE LIST` → graph
+  module `ver 41811`, Redis 8.6.3. Still **v4.18.11**, so the eight version-stamped dialect/engine
+  claims were judged against the build they were written against.
+- **Every entry re-derived, not confirmed from its citation.** Two entries were corrected in the
+  process (see 5/6 below) and one entry's own headline was found to misdescribe its own evidence.
+
+  1. **`a79dd064…` — PROMOTED verbatim (Ops, `falkordb-quirks.md`).** Renaming a graph is a plain
+     Redis `RENAME`/`RENAMENX` on its key; `GRAPH.COPY` + `GRAPH.DELETE` is unnecessary and
+     destructive. Re-derived end to end on a scratch graph: key type `graphdata`; after `RENAME`
+     the old key `EXISTS 0` and errors *"Invalid graph operation on empty key"*; counts identical
+     (155); the RANGE index survives `OPERATIONAL` and still plans `Node By Index Scan`; reads and
+     writes both work; the plan cache follows the key (`Cached execution: 1` on the new name for a
+     plan compiled under the old one). `RENAMENX` returned `0` and refused against a taken name,
+     `1` against a free one. `docs/plans/salesperson-ui-coordination.md` follow-up 10 had
+     explicitly parked this promotion for `cobb`; it is now done.
+  2. **`7f3c1a92…` — PROMOTED verbatim (Cypher dialect).** A bare `MATCH` straight after an
+     `OPTIONAL MATCH` is rejected with *"A WITH clause is required to introduce a MATCH clause
+     after an OPTIONAL MATCH."* Re-derived live against `kaizen_team` (read-only; a parse error
+     fires before execution) — exact message match. Placed immediately above the 2026-09-06
+     update-clause chaining entry and cross-referenced to it: same `WITH`-as-clause-boundary rule,
+     different clause pair. Not merged — that entry is security-flavored and would bury a general
+     dialect rule.
+  3. **`b2e94c07…` — PROMOTED, MERGED into the existing `FOREACH` bullet (Cypher dialect).** A
+     `FOREACH` body may hold several `CREATE` clauses binding across each other, and an
+     outer-bound node variable is a legal `CREATE` relationship endpoint inside it. Re-derived: one
+     guarded `FOREACH` with 3 `CREATE (…)` node clauses + 3 relationship clauses, `agent` bound by
+     an outer `OPTIONAL MATCH`, wrote 3 nodes + 3 relationships; the false path wrote nothing; the
+     list-subscript endpoint (`CREATE (ms[k])-[:NEXT]->(ms[k+1])`) errored `Invalid input '['`.
+     Merged rather than appended because the file already carried the `FOREACH`-guard idiom and
+     the map-projection-endpoint restriction this is the positive counterpart to.
+  4. **`e0d7b264…` — PROMOTED (Cypher dialect, beside the sequential-`UNWIND` entry).** An
+     `OPTIONAL MATCH` whose stream is still open when a later `UNWIND` expands rows gets
+     multiplied by it — same results, no error, only cost. Re-derived by `GRAPH.PROFILE` on a
+     51-user/100-cursor scratch graph: open-stream shape gives `Unwind | Records produced: 5100`
+     (100 × 51) and `Aggregate` 0.966 ms; collapsing the `OPTIONAL MATCH` with its own
+     `WITH … collect(DISTINCT rc)` before the `UNWIND` gives `Unwind | Records produced: 51` and
+     `Aggregate` 0.241 ms, same answer. The entry's field-measured 3× wall-clock (≈690 → ≈240 ms
+     at 50 participants / 2000 messages) is retained as the at-scale figure.
+  5. **`d41f8b60…` + `c8a5e310…` — PROMOTED as ONE MERGED, CORRECTED entry (Query tuning), plus
+     two spun-out bullets.** These are a **refinement pair**: `d41f8b60` recommends
+     `WHERE prop > ''` as an always-true conjunct to upgrade a label scan to an index scan;
+     `c8a5e310` (written later the same day) overturns it. Re-derivation confirmed the overturn on
+     a single graph: bare `WHERE u.tokenHash IS NOT NULL` → `Node By Label Scan`, 51 records;
+     adding `u.userId > ''` → `Node By Index Scan`, **50** records — the missing row is a
+     `userId: 42` integer, because `42 > ''` is `NULL`. `d41f8b60`'s own evidence line claims
+     "identical results", which is true only on an all-string population; promoting it verbatim
+     would have shipped an idiom that silently under-deletes. The promoted entry therefore states
+     the index-anchor fact **and** rejects the workaround on two independent grounds (unsound on
+     mixed types; and it buys no selectivity — both plans visit the whole label and the index form
+     measured slower, 0.128 vs 0.082 ms median over 20 runs at 52 nodes, reproduced here at 0.455
+     vs 0.277 ms). Two further facts were spun out as their own dialect bullets: the cross-type
+     comparison semantics (`42 > ''`, `42.5 > ''`, `true > ''` all `NULL`; `'abc' > '' → true`;
+     `'' > '' → false` — all re-derived) and `d41f8b60`'s independent second claim that a global
+     `collect()` over a zero-row `MATCH` still returns exactly one row carrying empty lists
+     (re-derived: `size(users)=0`, `users=[]`, one row).
+  6. **`c8a5e310…` trap (1) — PROMOTED, CORRECTED (Cypher dialect).** SQL-style `--` is not a
+     Cypher comment. Re-derived: `MATCH (u:User) -- G1` + newline + `RETURN count(u)` errors
+     `Invalid input 'G': expected '>' or '('`; the `//` form returns 51. **The entry's own headline
+     — "Two traps that both fail SILENTLY in a WHERE clause" — is wrong about this half:** it fails
+     *loudly*, with a parse error. The promoted bullet says so explicitly (the real cost is a
+     misleading error message, not silence); only trap (2), the `> ''` conjunct, is silent.
+  7. **`f6b21d84…` — PROMOTED into `claude/qa-engineer/qa-testing-techniques.md`** (a different
+     agent's knowledge base — fully dispositioned there rather than `MENTIONS`-tagged, per the U2
+     precedent). A closing code fence glued to the last code line is not a valid CommonMark
+     closing fence; the block stays open to the next opening fence, swallowing prose, tables and
+     whole sections, silently. Re-derived with `markdown-it-py` 3.0.0 (table rule on) on a minimal
+     document: 2 fences / 1 table correct → **1** fence of 12 lines / **0** tables when one closing
+     fence is glued, second code block unextractable. Routed to `qa-engineer` because the durable
+     rule is a verification-design one — an extract-and-execute loop measures the code, not the
+     document, and must assert extraction *shape* (block count, max block length, table count)
+     — and because it is not a FalkorDB fact and had no business in `falkordb-quirks.md`.
+  8. **`b701038b…` + `4f1976fc…` — KEPT OPEN as K-008.** Both verified true (the staged parse root
+     `cpg/.cpg-artifacts/src/falkor-chat-server` is gitignored and `git rev-parse` resolves inside
+     it; `pipeline.sh:139` runs `git -C "$SRC" status --porcelain` with no pathspec, and
+     `git -C claude/graph-dba status --porcelain` was confirmed to report repo-wide while the
+     pathspec-scoped form was empty). Not promoted because their correct homes —
+     `skills/joern-cpg/SKILL.md` and `skills/cpg-analysis/references/freshness.md` — are outside
+     `cobb`'s unprompted-write remit, and they are also genuinely the right homes: parking them in
+     a `claude/graph-dba/` file to stay in-remit would be the hoarding anti-pattern §5 forbids.
+     K-008 carries both `entryId`s, the verified statements, and the exact target bullets.
+- **Why:** scheduled unit of the second team-wide `kaizen_team` distillation pass
+  (`teco`-coordinated), this agent's turn.
+- **`MENTIONS` tags added:** none. The one cross-agent fact (#7) was fully dispositioned into
+  `qa-engineer`'s own knowledge base instead, so no entry was left for another agent's pass.
+- **Order of operations honored:** this entry (and `qa-engineer`'s, and K-008) was written and
+  confirmed before any graph mutation.
+- **Docs touched:** `claude/graph-dba/falkordb-quirks.md` (7 additions/merges — 1 Ops, 5 Cypher
+  dialect, 1 Query tuning), `claude/qa-engineer/qa-testing-techniques.md` (1 new section),
+  `claude/graph-dba/kaizen/plan.md` (K-008), `claude/qa-engineer/kaizen/history.md`, this file.
+- **Scratch graphs left behind (not deleted — `GRAPH.DELETE` is out of `cobb`'s remit):**
+  `scratch_cobb_u6` (probe data for entries 3–6, ~155 nodes) and `scratch_cobb_u6_other` (1 node,
+  created solely to prove `RENAMENX` refuses a taken name). Cleanup is the stakeholder's to route.
+- **Plan items:** K-008 opened.
+
 ## 2026-09-06 — `falkordb-quirks.md` gains the update-clause chaining fact (inbound promotion from `security-expert`'s distillation)
 
 - **What:** one new entry at the end of *Cypher dialect & query behavior* — a single Cypher
