@@ -143,7 +143,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S8d2** — finish S8d: **P12-2** + Pass 12's **two nits** | `coder` (**fresh** — `a213382761bc926ec` did not survive the session reboot; the checkpoint's own stated fallback) | `ad35d76985da040a3` | **accepted — committed `1887180`.** **Judged Pass 12's recommended fix insufficient rather than applying it**: two mutations (a bare `HTTPException(410)` from `Storefront.join`, and the same raise in a module-level helper in `storefront.py` called from `join`) **survive on `769adc3`** at 183 passed, both answering `410 '{"detail":"gone"}'` on the wire — the same answer Pass 12 used to justify P12-2. The guard now reads **both** storefront modules whole, stopping at the `services.py` boundary, and resolves `raise <factory>(...)` through the factory's `return`s. **Also found `769adc3`'s commit message understates its own delivery** — the module-wide walk, the allowlist and P12-4's filter had already landed | `storefront_api.py`, `test_storefront_api.py` + a lift-ready guard-reach statement | `analyst` (Pass 13) → — | 174k tok / 55 tools |
 | **Pass 13** — gate all of S8d (`769adc3` + `1887180`) | `analyst` (**fresh**) | `a67deef56ee49dde9` | **accepted — committed `c1e9f23`. NEEDS CHANGES** (0 blockers, **2 majors**, 1 minor, 1 nit). **Upheld S8d2's central judgement by re-deriving it** — reproduced both mutations as surviving on `769adc3`, both dead at `HEAD`. But found the same defect shape a **third consecutive pass**, twice inside S8d2's own fix: **P13-1** the reach guard matches three hardcoded prefix strings while claiming *any path* — an alias (`svc = self._services`) is S9's shape plus one line and survives; **P13-2** the raise walk stops at `storefront.py` while its exemption names *every route*, so a bare `HTTPException` in `services.save_profile` survives. **Ruled the guard-reach statement inaccurate as written**, which is why the S9 re-word was held | `docs/reviews/salesperson-ui-impl.md` `## Pass 13` | — | 151k tok / 55 tools |
 | **S8e** — close P13-1 + P13-2 (majors), P13-3, the nit, and **correct the guard-reach statement** | `coder` (**resumed** `ad35d76985da040a3`) | `ad35d76985da040a3` | **accepted — committed `92bf842`** (314/65). **Replaced enumeration with derivation**: `_alias_prefixes()` closes a seed set over `ast.Assign` bindings to a fixpoint, applied on **all four legs**, not the two Pass 13 named — the frontier walks were the identical defect one field over. Nine names unchanged, so no re-baselining. **Took closure (a) AND (b) on P13-2**, reasoning that "the defect is only ever the gap" means closing it has two moves; raise walk now spans **four scopes**. **Closed the leg Pass 13 called latent** and asserted it cannot empty silently. **Reversed itself on P13-3** after checking the rebuttal — its own P11-7 analogy was wrong — and proved the cross-check killable (183 without / 1 failed with) | `storefront_api.py`, `test_storefront_api.py` + a corrected guard-reach statement | `analyst` (Pass 14) → — | **254k tok** / 38 tools |
-| **Pass 14** — gate S8e (`92bf842`) | `analyst` (**fresh** — standing precedent: it judges the fix to Pass 13's own majors) | `a53a5d3a5d3ff9f2d` | in-flight (dispatched 2026-09-07) | `docs/reviews/salesperson-ui-impl.md` `## Pass 14` | — | — |
+| **Pass 14** — gate S8e (`92bf842`) | `analyst` (**fresh**) | `a53a5d3a5d3ff9f2d` | **accepted — committed `a42fcca`. NEEDS CHANGES** (0 blockers, **3 majors**, 1 minor, 1 nit). **Found instances eleven and twelve inside S8e's own fix, both via the general probe rather than a reproduction.** **P14-1** the composed raise walk stops one hop short of its exemption — and the blind spot hides an **unclassified** raise, `MemberIdCollisionError`, in no table anywhere; **P14-2** `_alias_prefixes` harvests `ast.Assign` only, so S9's shape **plus a type annotation** survives (annotated locals are a house idiom, 68 in the package); **P14-3** the composition claim is right about the code and wrong about the **plan**. Reproduced all six of S8e's claims exactly. **Ruled the guard-reach statement inaccurate in 4 of 11 clauses** and named a **convergence test** | `docs/reviews/salesperson-ui-impl.md` `## Pass 14` | — | 191k tok / 69 tools |
+| **S8f** — P14-1, P14-2, P14-4, P14-5 + the syntactic restatement + the `MemberIdCollisionError` ruling | `coder` (**fresh** — S8e ended at 254k, past the resume threshold) | `a0b67a1e6bc22d6b8` | in-flight (dispatched 2026-09-07) | `storefront_api.py`, `test_storefront_api.py` + the **fact half** of the guard-reach statement + the convergence probe's output | `analyst` (Pass 15) → — | — |
+| **U30** — P14-3: settle the plan/code exception-name mismatch and the falsifiability **mapping** | `architect` (**fresh**) | `af0b1eb6551aa85e9` | in-flight (dispatched 2026-09-07) | `docs/plans/salesperson-ui.md` §5.1 S9 row | `analyst` (folded into Pass 15) → — | — |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
 | **U31** — stakeholder decision: how a dead turn becomes visible to the participant | stakeholder | — | **delivered — option B**, the additive `lastTurn: 'failed' \| null` field | option B recorded in v1.23 (below) | — | — |
 | **v1.23** — write option B into the contract: §5.2's `turn` shape, §5.3 C6a, S9's row, + the client rows that inherit it | `architect` | `ad81e9cdb12dfbb28` (resumed ×2) | **accepted — committed `10f2b72`** (68/7) | `docs/plans/salesperson-ui.md` **v1.23** | teco-verified: **exactly the 4 announced rows moved** (S9, S12a, S13, S15), no delivered row moved, all 21 rows 7 cells on a pipe-aware count | 224k tok / 26 tools |
@@ -2024,3 +2026,62 @@ at the end of its run, and **my own full-suite verification then wiped it again*
 default-`pytest` teardown. That is the third time this has happened in two days, and it is a standing
 property of verifying on this component, not an accident. The stakeholder's seed decision is still
 pending; whoever runs it should run it **after** the last suite of the chain, not before.
+
+## Twelve instances, and the first stated convergence test (teco, 2026-09-07)
+
+Pass 14 found the eleventh and twelfth, both inside S8e's fix. The full chain is now:
+
+| Pass | Found the defect inside |
+|---|---|
+| Pass 12 | the mechanism built to close the sixth instance |
+| S8d2 | **Pass 12's own sufficiency check** ("checked not guessed") |
+| Pass 13 | S8d2's fix for the eighth |
+| Pass 14 | S8e's fix for the ninth and tenth |
+
+Five consecutive artifacts, each containing the defect it was built to close. I record this as a
+**property of the artifact class, not of any agent's care** — every one of these was produced by a
+competent delegate that mutation-tested its own work, and every one of them missed a sibling
+spelling. Hand-written AST readers whose docstrings make semantic claims regenerate this defect
+indefinitely, because the docstring is prose and the body is a pattern match, and nothing in the test
+suite compares the two.
+
+**What is genuinely new: Pass 14 stated a convergence test rather than just another finding.**
+
+> The sentences must state a **syntactic** scope — node types walked, files read, method sets closed —
+> instead of a semantic one, **and** an *enumerate-every-syntactic-form-and-run-the-reader* probe must
+> come back empty.
+
+That is the first falsifiable stopping condition anyone has offered in twelve instances, and it is
+cheap: both of Pass 14's probes were one script each. It is now S8f's actual done-condition, above
+the four findings — a fix that closes P14-1/2/4/5 without an empty probe is **not done**, and I said
+so in the brief. **If a sixth cycle finds a thirteenth instance despite an empty probe, the probe is
+wrong and the artifact needs a different kind of answer, not another pass.** That is the decision
+point I will bring to the stakeholder, and I am naming it in advance so it is not re-litigated ad hoc.
+
+**One finding is not guard pedantry and should not be filed with the rest.** P14-1's blind spot hides
+`MemberIdCollisionError`, a raise that appears **in no table anywhere** — an uncaught service error on
+a request path is a bare `500`. That is a product defect the guard happened to surface, and it is why
+this cycle was worth dispatching on its merits regardless of any view about when the hardening stops.
+
+## Splitting one sentence between two parallel units, at a seam (teco, 2026-09-07)
+
+S8f (`coder`) and U30 (`architect`) run in parallel. They are file-disjoint — `falkor-chat/**` versus
+`docs/plans/salesperson-ui.md` — but this coordination has already paid once for trusting the file
+test, so I applied the premise test: *does either decide something the other must already know?*
+
+It did, in exactly one sentence — the guard-reach statement's composition clause, which says what the
+walk reports **and** which `INHERITED_HANDLERS` excuses that makes falsifiable. P14-3 is a ruling on
+the second half; the first half is a measurement of today's code. **So I split the sentence rather
+than serialising the units:**
+
+- **S8f owns the measured fact** — what the walk reports over today's code, measured by running it.
+- **U30 owns the mapping** — which excuses become falsifiable, and the plan-side exception names.
+
+Each brief states the seam *and* states that the other unit exists and owns the other half, so
+neither fills the gap helpfully. This is the first time I have decomposed a **sentence** rather than a
+file set, and it is the right generalisation of the lesson: the unit of collision is the claim, not
+the artifact.
+
+**The re-word unit stays queued behind both, and behind Pass 15.** It has now been held through three
+gates, and each gate has vindicated the hold — Pass 13 and Pass 14 both ruled the then-current
+statement inaccurate. It gets dispatched when a gate says the statement is lift-ready, not before.
