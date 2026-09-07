@@ -4,10 +4,11 @@
 
 **Pass 1** gated `ab91419` (needs changes). **Pass 2** re-gated `3ad27d3` (approve with
 suggestions). **Pass 3** re-gated `95b4c88` (needs changes). **Pass 4** re-gated `d55f4d8` (needs
-changes). **Pass 5** gates `8fc2341` — the first of S1e's three implementation units (§4 S1e Tables
-A and B, the `fingerprint.py` re-key) — jump to [`## Pass 5`](#pass-5--2026-09-07) for the current
-verdict; the earlier passes are kept intact because they are meant to be read together. Passes 1–4
-gate the S1 build; Pass 5 opens the S1e fix round, whose remaining two units are not yet delivered.
+changes). **Pass 5** gated `8fc2341`, the first of S1e's three implementation units (needs changes).
+**Pass 6** re-gates its fix round `c523a35` — jump to [`## Pass 6`](#pass-6--2026-09-07) for the
+current verdict; the earlier passes are kept intact because they are meant to be read together.
+Passes 1–4 gate the S1 build; Passes 5–6 are S1e's first unit (§4 S1e Tables A and B, the
+`fingerprint.py` re-key), whose remaining two units are not yet delivered.
 
 ## Pass 1 — 2026-09-03
 
@@ -1706,3 +1707,210 @@ is doing real work and should hold. The fix round for **P5-1 / P5-2 / P5-4** tou
    Table B's fourth residual). Whether that warrants anything beyond the one-line DC-1 reword — a
    sweep of the other six tables' done-conditions for the same shape — is a call for `architect` and
    the stakeholder, not for this review.
+
+## Pass 6 — 2026-09-07
+
+### 1. Scope & verdict
+
+**Reviewed:** commit `c523a35` (`fix(model-bench): Pass 5 fix round — three states for callSurface,
+two decisions pinned`), the diff `8fc2341..c523a35 -- model-bench/` — 4 files, +207/−26:
+`modelbench/fingerprint.py`, `tests/test_fingerprint.py`, `docs/HISTORY.md`, `AGENTS.md`.
+
+**Baseline:** Pass 5's seven findings, plus the plan sections each rests on — §3.4.1, §3.4.2, §4 S1's
+signature block (line 2245), DC-1, DC-6, Appendix A's `FieldProblem` and `Fingerprint` rows.
+
+**Not reviewed:** the plan (P5-3's plan half and P5-5 are `architect`'s and are dispositioned, not
+re-argued, below). `stats.py`, `results.py`, `report.py`, `test_report.py` and `conftest.py` are
+untouched by this diff.
+
+**CPG:** considered, not relevant — no CPG exists for `model-bench/`.
+
+**Verdict: needs changes.** — 0 blockers, 0 majors, **1 minor** (**P6-1**, new), 0 nits. Pass 5's
+four majors and both plan-side items are **fixed**; P5-7 is **withdrawn**.
+
+This is a strong fix round. Every Pass 5 finding is closed at the mechanism rather than at the
+symptom, and the round corrected the gate twice — both corrections check out (§3.2), and the design
+I recommended for P5-1 is one the suite now actively refuses (mutation N3, §4). The single new
+finding is **P6-1**: `to_dict` keys its omission on the *value* rather than on the arm kind, so a
+model record whose surface is `null` serialises to one whose surface is *absent* — the exact
+information loss P5-1 was raised to prevent, one method over. Unreachable through today's writers
+(`store()` validates first), reachable through `model-bench migrate`, which §3.4.3 commits to. The
+fix is one line and I verified it costs nothing: **475 passed**, round trip symmetric, P5-2's pin
+still green.
+
+It is a minor, and under the standing ruling a minor is still fixed rather than carried — but **it
+should not hold the `stats.py` unit.** P6-1 touches `modelbench/fingerprint.py` alone, which neither
+remaining S1e unit opens.
+
+Per the docs convention this pass is compact: one disposition line for each Pass 5 finding, and full
+treatment only for what is genuinely new.
+
+### 2. Disposition of Pass 5's findings
+
+| # | Disposition | Evidence I rechecked |
+|---|---|---|
+| **P5-1** | **Fixed** — with a better mechanism than I proposed, and my framing of it was partly wrong (§3.1, §3.2) | `validate()` gains an `elif self.callSurface is None → "null"` branch ahead of the `absent` one; `from_dict` gains a per-arm missing-key sentinel. Executed: on a model record, missing key → `absent`, `""` → `absent`, stored `null` → **`null`** |
+| **P5-2** | **Fixed** — pinned, not commented | `test_a_deterministic_record_omits_the_call_surface_rather_than_storing_null` asserts `"callSurface" not in reference_arm.to_dict()` plus the positive twin on both model surfaces. See §3.2 for the mutation that confirms it was needed |
+| **P5-3** | **Fixed, both halves** — and the plan's fix is better than the reword I suggested | Plan **v1.16** restates DC-1 over the element's *key set* and re-scopes Table A's second residual to `modelbench` + `tests/conftest.py`, so the literal is legal in `tests/test_fingerprint.py`. Re-ran: `grep -rFn sizeBytes modelbench tests/conftest.py --include='*.py'` → **no match**; the token now appears only at `tests/test_fingerprint.py:240,251,254,269,270`, the prescribed home. `test_the_retired_residency_element_is_refused_by_value` names **both** retired keys and, on both snapshots, asserts the two `forbidden` problems *and* the two `absent` ones |
+| **P5-4** | **Fixed** | `test_a_half_swapped_residency_element_is_invalid` now carries an `expected` parameter and asserts the surviving retired key's own `FieldProblem` — `residentModelsAtEnd[0].modelKey` / `…sizeBytes`, both `forbidden` — instead of `!= []`. The second case's stand-in `bytesOnDisk` is replaced by the real `sizeBytes`, which v1.16's re-scope makes legal |
+| **P5-5** | **Fixed on the plan side; code comment swept too** | Appendix A's widening was `architect`'s; the module's `ProblemReason` comment now reads "a **value** this build cannot interpret, in three families (plan Appendix A)" and enumerates them |
+| **P5-6** | **Not fixed, and correctly not fixed here** — it is a brief-and-plan item for the `stats.py` unit, not a code change. Carried forward unchanged | `tests/test_results.py` is untouched by `c523a35`, so the R-13 comment is still at `:543` against Table C's `:507` |
+| **P5-7** | **Withdrawn** — see §3.4 | — |
+
+### 3. Adjudications
+
+#### 3.1 The substituted fix for P5-1 — the coder's design is right and mine was worse
+
+I recommended (b), or (a) via a distinct `_ABSENT` sentinel. The coder implemented (a) with a
+**per-arm** missing-key sentinel — `""` on a model record, `None` on a deterministic one
+(`fingerprint.py`, `from_dict`: `missing = None if arm_kind == "deterministic" else ""`). **Its
+objection to my `_ABSENT` is correct and I should not have proposed it.** `callSurface` is typed
+`Literal["chat", "embeddings"] | None` in the plan's §4 S1 signature block (line 2245) and again in
+Appendix A's `Fingerprint` row; a third sentinel inhabitant widens a type the plan closes. And it
+breaks the deterministic round trip: `to_dict` omits the key on that arm, so `from_dict` must
+reconstruct `None` there — a blanket sentinel reconstructs `""`, which the deterministic branch
+(`if self.callSurface is not None`) then reports as `forbidden`. I verified that branch directly:
+`Fingerprint(armKind="deterministic", callSurface="", …).validate()` →
+`[FieldProblem(field='callSurface', reason='forbidden')]`. So a blanket `""` would report a correct
+reference arm as carrying a forbidden surface — exactly what `AGENTS.md`'s new clause says.
+
+The per-arm sentinel keys off `armKind`, which `from_dict` reads one line earlier and which is
+already the record's primary discriminator, so it introduces no new state and no new inhabitant. It
+is the right substitution. Executed and confirmed: both valid profiles still round-trip equal and
+valid.
+
+#### 3.2 The coder's two challenges to Pass 5 — one is right outright, one is right and I was wrong
+
+**(b) — the `armKind` precedent. The coder is right; my prose overstated it.** Executed, both
+discriminators, all three stored shapes:
+
+| stored shape | `armKind` | `callSurface` (after `c523a35`) |
+|---|---|---|
+| key missing | `absent` | `absent` |
+| `""` | `absent` | `absent` |
+| explicit `null` | `null` | `null` |
+
+`armKind` gives **two reasons over three shapes**, not three — it collapses missing-key with `""`
+for the same reason `callSurface` now does, because `""` *is* its missing-key sentinel. My Pass 5
+finding quoted the module's "absent is not empty, and `null` is neither" and objected that
+`callSurface=""` reported `absent` where "under that discipline a blank `nonempty` value reports
+`empty`". That objection had no precedent in the module and I should not have made it: the
+discipline that is load-bearing for a *discriminator* is `null`-versus-the-rest, which is what P3-10
+established and what was genuinely missing. **The substance of P5-1 stands and is fixed; the
+`empty` half of my framing was wrong.** The replacement comment at `test_fingerprint.py:175-181` —
+"Two reasons for three stored shapes, and the suite says which two rather than claiming three" — is
+the accurate statement, and it also repairs the comment I criticised.
+
+**(a) — "fixing P5-1(a) would kill M2 as a side effect". False, and the coder was right to pin P5-2
+separately.** *(Mutation evidence in §4.)* The claim was wrong under the coder's design and, on
+re-examination, under my own too: with a missing-key sentinel in place, an unconditional
+`"callSurface": self.callSurface` writes `null` on a deterministic arm, `from_dict` reads the key as
+*present* with value `None`, and `None` is that arm's legitimate value — so the record round-trips
+equal and validates clean, and the mutation is invisible to every test that does not assert the
+stored shape directly. P5-2's separate pin is not belt-and-braces; it is the only thing that catches
+it. Recorded here rather than defended: the gate was wrong on the mechanism.
+
+#### 3.3 P6-1 (new, minor) — `to_dict`'s omission is keyed on the value, not the arm, so a model record's lost surface is laundered back into an absence
+
+`fingerprint.py`, `to_dict`: `surface = {} if self.callSurface is None else {…}`. The condition is
+the *value*, so it fires on a **model** record whose surface is `None` too. Executed:
+
+```
+Fingerprint(armKind="model", callSurface=None, fields=model_fields())
+  .validate()            -> [FieldProblem(field='callSurface', reason='null')]
+  .to_dict()             -> no 'callSurface' key
+  from_dict(to_dict())   -> callSurface == ''   (not equal to the original)
+  .validate()            -> [FieldProblem(field='callSurface', reason='absent')]
+```
+
+So a record diagnosed **`null`** — "something had the value and lost it" — serialises to a record
+diagnosed **`absent`** — "never written". That is precisely the information loss P5-1 was raised to
+prevent, reintroduced one method over, and the round trip is asymmetric for that shape where it is
+total for every other.
+
+**Is it reachable today? No — and that is the whole of the defence.** `store()` calls
+`validate()` and raises `InvalidFingerprint` before `RunResult.to_dict()` (`results.py:416`,
+`:308`), so this package never serialises a fingerprint it has refused; `load_history` re-validates
+and quarantines without rewriting. The coordinator's reading is right that far, and the `null`
+reason's job — diagnosing a **foreign** record on AC-2's quarantine line — is served correctly.
+
+**It is still a defect, for the reason this coordination has now hit five times: correct for its
+current caller, wrong for a caller the plan commits to adding.** §3.4.3 states that
+`REQUIRED_BY_SCHEMA` is "mutable by design: **`model-bench migrate`** and the schema-2 regression
+test both key off it". A `migrate` step reads records with `from_dict` and writes them back with
+`to_dict` — that is what a migration is — and on this path a `null` surface silently becomes an
+omitted key. The record that gets migrated is by definition one that did not validate under the
+old contract, so the invalid-record path is the *only* path `migrate` walks.
+
+**Suggested improvement — one line, and it makes the round trip total without touching P5-2's pin:**
+
+```python
+surface = {} if self.armKind == "deterministic" else {"callSurface": self.callSurface}
+```
+
+Omission then means "this arm calls no surface" (the fact §3.4.2 reserves it for), and a model
+record with no captured surface stores `null` (the fact §3.4.2 reserves *that* for) and reads back
+as `null`. Verified in §4 that this keeps the suite green, including both halves of P5-2's pin.
+
+#### 3.4 P5-7 — withdrawn, on the coder's rebuttal
+
+I am withdrawing it rather than restating it, and the reason is that my finding was built on a
+miscount. I called the `AGENTS.md` paragraph's first half "a third copy" of the module docstring and
+the `HISTORY.md` entry. That is not what the convention's "never a third copy" targets: an
+always-loaded context file exists to tell an editor what is true **without opening the module**, so
+the docstring is not a competing copy of it — it is the same fact at a different reading surface,
+for a reader who has already opened the file. The record is `HISTORY.md`, and only `HISTORY.md`.
+Two surfaces plus one record is the split the convention prescribes, not a violation of it.
+
+The measurable bars, re-run: `awk 'length($0)>700' AGENTS.md` → no output; `wc -w` → **1,790**
+against the ~2,500 smell. The added clause is a live constraint by the file's own test — it changes
+what the next editor does, and the thing it prevents is a plausible simplification
+(`d.get("callSurface")`) that silently reverts P5-1 — and it is accurate: I confirmed the failure it
+names by executing the deterministic-with-`""` case in §3.1. Adding it rather than trimming was the
+right call.
+
+This is a withdrawal, not a deferral: there is no residue and nothing is carried.
+
+### 4. Mutation audit
+
+Four counter-implementations against `model-bench/modelbench/fingerprint.py`, each run alone —
+`cp` aside, mutate, run, `cp` back, `diff -q` (all four reported `restored-ok`). The suite baseline
+is **475 passed**.
+
+| # | The wrong implementation | Result | What it settles |
+|---|---|---|---|
+| N1 | `to_dict` writes `"callSurface"` unconditionally (the Pass 5 M2 mutation, re-run against the fixed code) | **1 failed**, 474 passed — and the single failure is `test_a_deterministic_record_omits_the_call_surface_rather_than_storing_null` | My Pass 5 claim that P5-1(a) would kill M2 as a side effect is **false**. Nothing but P5-2's own pin catches it |
+| N2 | *not a defect mutation* — my proposed P6-1 fix, `surface = {} if self.armKind == "deterministic" else {…}` | **475 passed** | The fix is free: no test moves, and the model/`None` round trip becomes equal with the reason preserved as `null`, while deterministic still omits and still round-trips |
+| N3 | the per-arm sentinel replaced by a blanket `missing = ""` — **the design I recommended in Pass 5** | **2 failed**: `test_round_trips_through_a_dict[deterministic]` and `test_the_arm_kind_discriminator_keeps_absent_distinct_from_null` | The coder's refusal of my `_ABSENT` proposal is not a preference — the suite refuses it |
+| N4 | the `elif self.callSurface is None → "null"` branch deleted (P5-1 reverted) | **2 failed** | P5-1's fix is pinned in both of its surfaces, matching the coordinator's independent reproduction |
+
+N3 is the one worth recording. The Pass 5 gate proposed a fix that the Pass 6 suite fails on two
+distinct assertions, and the implementer's substitution is the one the plan's own type
+(`Literal["chat","embeddings"] | None`) admits. A gate's suggested fix is a claim like any other, and
+this one did not survive being run.
+
+### 5. What's solid
+
+- **All four Pass 5 majors are closed at the mechanism, not at the symptom.** P5-1 gained a branch
+  *and* a sentinel; P5-2 and P5-4 gained assertions that fail on the exact counter-implementations
+  that motivated them; P5-3 was closed on both sides, the plan side by a re-scope that is better than
+  the reword I asked for — it keeps the residual's *before* value at 1, which my reword would have
+  left unaddressed.
+- **The fix round corrected the gate twice**, on `armKind`'s precedent and on M2's side-effect claim,
+  and both corrections check out against the tree. The replacement comments say something true and
+  narrower than what they replace ("two reasons for three stored shapes").
+- **`test_the_retired_residency_element_is_refused_by_value` is stronger than DC-1 requires**: it
+  asserts the two `forbidden` problems *and* the two `absent` ones, on **both** snapshots, so the
+  retired element is diagnosed rather than merely rejected.
+- **Scope held again.** `results.py`, `stats.py`, `report.py`, `test_report.py` and `conftest.py` are
+  untouched; the `AGENTS.md` edit is four lines and stays inside both of the file's own bars.
+
+### 6. Open items
+
+- **P6-1** — one line in `to_dict`, verified green (N2). Owner: the same coder. Not blocked on
+  anything.
+- **P5-6** — carried forward, and it is **not residue from this diff**: `tests/test_results.py`'s
+  R-13 comment sits at `:543` against plan Table C's `:507`, so the `stats.py` unit's brief must
+  re-derive that row by grep. It is an input to the next unit, not an open defect in this one.
+
+Nothing else is open, and nothing is deferred by choice.
