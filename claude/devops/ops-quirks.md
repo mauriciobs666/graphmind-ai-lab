@@ -1,8 +1,8 @@
-# Docker / container ops quirks — this lab's verified facts
+# Ops quirks — this lab's verified facts
 
-> **Live-verified knowledge base for `devops`.** Facts confirmed by hands-on testing (Docker
-> 29.6.1/BuildKit unless noted), not just docs. Treat as **verified for the cited version** —
-> re-check on a Docker/BuildKit upgrade.
+> **Live-verified knowledge base for `devops`.** Facts confirmed by hands-on testing, not just
+> docs. Treat each as **verified for the version it names** (Docker 29.6.1/BuildKit unless
+> noted) — re-check on a toolchain upgrade.
 >
 > **This is a cache, not the source of truth.** Origin: distilled 2026-08-11 from the `devops`
 > agent's learnings inbox via `agent-maintenance` skill §5. `devops.md` (the always-on prompt)
@@ -89,3 +89,27 @@ producer error (confirmed: a healthy tree reported a fabricated "'find' failed" 
 file** (`2>"$errfile"`; `[ -s "$errfile" ]`), never by exit status, when a pipe may legitimately be
 read only partially by design; and keep any expression that could carry a SIGPIPE-tainted status
 inside an `if !`/`if ! var=$(...)` so `errexit` can never fire on it directly.
+
+## On WSL2, a `command -v npm` toolchain probe can pass on a box with no Linux Node at all — the `npm` it finds is the Windows shim inherited from the Windows `PATH`
+
+Re-verified 2026-09-07: `node` is **not found** on this box, while `npm` resolves to `/mnt/c/Program
+Files/nodejs/npm` (11.11.0), because WSL2 appends the Windows `PATH`. The failure is late and
+misdirecting — that `npm` installs Windows-native binaries (`esbuild`, `rollup`, `lightningcss`)
+that a Linux bundler cannot load, and the error surfaces at bundle time looking like a broken
+dependency rather than a wrong toolchain. **Probe for `node`, never for `npm`**, and reject any
+interpreter resolving under `/mnt/`. Two corollaries for provisioning: a per-user tarball install
+needs no sudo (`sudo -n true` fails here), and exporting its bin dir in one shell does **not**
+persist — nothing rewrites the login `PATH`, so a build script must resolve the interpreter itself
+rather than trust `PATH`. Worked instance: `salesperson/scripts/install_node.sh` +
+`salesperson/build.sh`'s resolution order (`salesperson/README.md` § Prerequisites).
+
+## npm 11.19.0 can crash internally — `TypeError: Cannot read properties of null (reading 'children')` in `@npmcli/arborist` — where it should have reported an `ERESOLVE` peer conflict
+
+Trigger: **one** `npm install` line mixing a pinned major with an unpinned sibling that resolves to
+a *different* major — `vitest@^3` alongside a bare `@vitest/ui` that resolved to 4.x. The crash
+names no package, so it reads as a broken npm rather than a version conflict; only the debug log
+shows the cause (`placeDep ROOT @vitest/ui@4.1.11` immediately before the throw, while the manifest
+fetched for the `vitest` spec was 3.2.7). **Workaround:** split the install into small groups until
+the crashing pair is isolated, then pin both siblings to the same major. Verified 2026-09-02 on npm
+11.19.0 / Node v24.20.0; the npm bug will be fixed upstream, but the *diagnostic* pattern — an
+internal `TypeError` standing in for a peer conflict — outlives the fix.

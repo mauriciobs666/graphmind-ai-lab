@@ -46,7 +46,7 @@ live-verified and perishable — re-verify on upgrades — and `falkordb-referen
 Joern via the `joern-cpg` skill, on demand, to build a repo's CPG and export/load it into
 FalkorDB as Cypher — a rare capability, not a proactive default) ·
 `devops` (user-scoped — runs in every project; carries an on-demand knowledge base:
-`ops-quirks.md` — live-verified Docker/BuildKit/Bash-scripting traps) ·
+`ops-quirks.md` — live-verified Docker/BuildKit/Bash-scripting and host-toolchain traps) ·
 `security-expert` (on-demand deep security reviewer: code/app security, agent/prompt-safety,
 secrets/infra-hardening, compliance checklists — advisory to `analyst`/`cobb`/`devops`; the only
 agent on this team gated to attempt active exploitation, local/dev targets only, fresh explicit

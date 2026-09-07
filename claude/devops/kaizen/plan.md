@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `devops` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-07-02
+> Last reviewed: 2026-09-07
 
 ## Active
 
@@ -54,6 +54,11 @@
   start by reading that deleted file rather than from scratch.
 - **(this repo)** A `salesperson` Streamlit app image. `falkor-chat/Dockerfile` and
   `cypher-mcp/Dockerfile` already exist; salesperson is the remaining gap.
+- **(this repo)** `salesperson/build.sh`'s third resolution branch (`elif command -v node`) accepts
+  whatever `node` is on `PATH` without applying the `/mnt/` rejection that its own `npm`-only branch
+  and `claude/devops/ops-quirks.md` both state. Harmless today (there is no Windows `node` on this
+  box's `PATH`, only `npm`), but it is the one gap between the script and the rule. Observed
+  2026-09-07 during the U3 distillation pass; `salesperson/` is not `cobb`'s to edit.
 - A behavioral eval in the cobb/TESTING.md harness style — e.g. assert the agent (a) reads the
   project's README/docs before proposing infra changes, and (b) refuses to `docker volume rm` a
   shared data volume without confirmation.

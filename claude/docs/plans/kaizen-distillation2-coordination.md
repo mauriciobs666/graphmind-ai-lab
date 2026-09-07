@@ -54,7 +54,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 |---|---|---|---|---|---|---|
 | U1 | cobb (1: 2026-09-06) | `a2c2c175f4d6976cb` | accepted | kept open as `claude/cobb/kaizen/plan.md` K-020 + `history.md`; node `DETACH DELETE`d | none (see above) → — | 99.1k tok, 20 tools |
 | U2 | security-expert (2: 08-26, 08-30) | `a4621faebf86763bd` | accepted | `claude/security-expert/security-expert.md` (step-3 clause) + `kaizen/history.md`; `claude/graph-dba/falkordb-quirks.md` + `kaizen/history.md`; both nodes deleted | none → — | 126.8k tok, 47 tools |
-| U3 | devops (3: 2 produced 09-02 + 1 `MENTIONS`-only 08-23) | — | queued | `claude/devops/kaizen/*`, graph cleared | none → — | — |
+| U3 | devops (3: 2 produced 09-02 + 1 `MENTIONS`-only 08-23) | `a43632153a90a40c1` | accepted | `claude/devops/ops-quirks.md` (2 entries, scope broadened) + `devops.md` + `kaizen/*`; `claude/AGENTS.md`, `claude/README.md` catalog rows; 3 nodes deleted | none → — | 133.6k tok, 40 tools |
 | U4 | qa-engineer (7: 08-28…08-31) | — | queued | `claude/qa-engineer/kaizen/*`, graph cleared | none → — | — |
 | U5 | tico (8: 08-26…09-02) | — | queued | `claude/tico/kaizen/*`, graph cleared | none → — | — |
 | U6 | graph-dba (9: 09-02) | — | queued | `claude/graph-dba/kaizen/*`, graph cleared | none → — | — |
@@ -79,9 +79,50 @@ Deliverable paths above are the guaranteed minimum (every pass touches the
 agent's own kaizen files and the graph); each row is rewritten on delivery with
 the actual promotion targets — agent prompts, knowledge bases, project docs.
 
+## The graph is live during this pass
+
+The 196-entry snapshot at open is **not** a fixed target: other sessions keep
+running while this sweep proceeds, and their agents keep writing new
+`:KaizenEntry` nodes. Observed concretely between U2 and U3 — `teco` went 31 →
+33 while three unrelated entries were being cleared, so the graph total read
+192 where naive arithmetic predicted 190. Consequences for the remaining
+units, none of them a defect:
+
+- **Re-query the agent's entry list immediately before each dispatch**, and
+  pin the brief to explicit `entryId`s or a closed date range. Never let a unit
+  scope itself with an open-ended "everything this agent has".
+- A chunk defined as "the newest date range" will drift upward. That is fine —
+  the last chunk for an agent takes whatever exists when it is dispatched, and
+  anything arriving after that is simply pass 3's problem.
+- **This pass will never observe an empty graph**, and shouldn't try to. Done
+  means every entry in the pinned per-unit scope is dispositioned, not that
+  `count(:KaizenEntry)` reaches zero.
+
 ## Follow-ups
 
 - Pass 1's open follow-up (`coder` K-005, the `verify_workflows.sh`
   false-negative) is **closed** — `tdd-engineer` fixed `Repository._read_structure`
   under `falkor-chat/docs/plans/workflow-diff-absent-key-coordination.md`;
   nothing to re-route.
+- **U1 → `cobb` K-020**: `cypher-mcp/server.py:881` advises `docker start
+  falkordb-dev`, which no launch path in this repo can satisfy. A one-line
+  string fix in another component's code, outside `cobb`'s write remit — needs
+  an implementer, small enough to fold into any other `cypher-mcp` touch.
+- **U2 → §5's legacy read is dead.** Zero `author`-property entries survive
+  anywhere in the graph, so the dual legacy/current read that
+  `skills/agent-maintenance/SKILL.md` §5 step 1 mandates "while any legacy
+  entry still exists" now has a false precondition. The skill anticipates this
+  ("can eventually be dropped"). A `cobb` edit, deliberately deferred until
+  this pass closes rather than changing the procedure mid-sweep.
+- **U3 → `scripts/audit-team.sh` exits FAIL, pre-existing.** Three check-7
+  hits (git email, username, home path) across five already-committed docs:
+  `claude/docs/plans/bypass-permissions-subagent-gap{,-coordination}.md`,
+  `claude/docs/reviews/bypass-permissions-subagent-gap.md`,
+  `docs/plans/doc-reference-convention.md`, `docs/plans/salesperson-ui.md`.
+  Not introduced by this pass — `cobb` grepped every file it touched and came
+  back clean. Owners are spread across agents, so it wants its own unit.
+- **U3 → `salesperson/build.sh:68`**: the `elif command -v node` fallback
+  accepts any `node` on `PATH` without the `/mnt/` rejection its own
+  `npm`-only branch applies. Harmless today (only `npm` leaks in from
+  Windows). Parked in `claude/devops/kaizen/plan.md`; `salesperson/` is not
+  `cobb`'s to edit.
