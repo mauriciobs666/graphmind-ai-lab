@@ -65,7 +65,9 @@ Stakeholder decisions, 2026-09-02:
 | U24 — Re-gate plan v1.10 + note v1.13 (Pass 5) | `analyst` (fresh) | `aa9af16f140993a17` | **accepted** — `b9964d1` | `docs/reviews/small-model-benchmarking.md` `## Pass 5` | self → **needs changes** (2 blockers, 4 majors, 4 minors) | 209k tok / 70 tools |
 | U25 — Three rulings Pass 5 routed: co-presence shape, `censoringExact` clause 1, `paired_cluster_bootstrap`'s necessity | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `ca69cb1`; all three changed the note, **plus a live defect the gate missed** | `docs/plans/small-model-benchmarking-ml.md` **v1.14** | `analyst` Pass 6 → — | 182k tok / 15 tools cumulative |
 | U26 — Plan v1.11: close all 10 Pass 5 findings; rule 5 restated honestly | `architect` (fresh) | `a99cd8cce60c76d82` | **delivered** — `85a32e5` (+540/−110); all 10 closed, nothing carried | `docs/plans/small-model-benchmarking.md` **v1.11** | `analyst` Pass 6 → — | 282k tok / 121 tools |
-| U27 — Re-gate plan v1.11 + note v1.14 (Pass 6) | `analyst` (fresh) | `a6f3786437e4dab05` | in-flight | `docs/reviews/small-model-benchmarking.md` `## Pass 6` | — (is the gate) | — |
+| U27 — Re-gate plan v1.11 + note v1.14 (Pass 6) | `analyst` (fresh) | `a6f3786437e4dab05` | **accepted** — `afca8e0` | `docs/reviews/small-model-benchmarking.md` `## Pass 6` | self → **needs changes** (1 blocker, 2 majors, 2 minors); **S2 may not be dispatched** | 161k tok / 52 tools |
+| U28 — P6-1's method half: the continuous instrument's carrier + §3.2e's fourth verdict string | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.15 if changed | `analyst` Pass 7 → — | — |
+| U29 — Plan v1.12: close all 5 Pass 6 findings; the continuous carrier as an S1 edit | `architect` (fresh) | `a74d8052842395e20` | in-flight | `docs/plans/small-model-benchmarking.md` v1.12 | `analyst` Pass 7 → — | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | **accepted** — `5878014` | `model-bench/**` (10 files, +1490/−61); 353→389 tests | re-gate (both, fresh) → — | 348k tok / 130 tools |
@@ -1564,4 +1566,52 @@ static passes.
 The brief says explicitly: do not soften the verdict to unblock S2, **and do not manufacture findings
 to justify the pass** — if v1.11 is implementable, say so plainly, and say whether S2 may be
 dispatched.
+
+### U27 delivered — 2026-09-07, plan gate Pass 6 (`afca8e0`) · **needs changes, S2 still blocked**
+
+**Converging.** Blockers across passes 3→6: **2, 3, 2, 1**. Majors: **6, 5, 4, 2**. All ten Pass 5
+findings confirmed fixed *against the tree rather than the change list*, with `model-bench/`
+byte-identical to `5878014`.
+
+**Both of v1.11's adjudications upheld**, which settles them: the architect's rejection of Pass 5's
+prescribed residual was correct, and **rule 5's second formulation is sound as stated**, Table B
+satisfying it. What fails is its *application* — see P6-2/P6-3 below.
+
+**P6-1 (blocker) — the item-5 sweep, and the class is larger than `_widen`.** The embedder pack
+declares `verdictMetrics = ["mrr"]` and `headlineMetric = "mrr"`, but **no field on the record can
+carry a per-item continuous value.** Verified here: `ItemResult.counts` is `Mapping[str, int]` and
+`scored_outcome` returns `self.counts[metric] > 0` — a reciprocal rank of 0.5 is **unstorable** and
+any positive count is `True`. The comparison loop is binary end-to-end (McNemar + Holm, every string
+in `pp`); `separationZ` reaches no table because `named_metrics()` omits it. Two silent outcomes on a
+**green** run: a booleanised MRR rendered as a McNemar `+X pp` verdict, or *"No verdict: no paired
+data"* for the pack's only verdict metric. And the sharp edge: **Table E gates S3 DC-2 on the `_widen`
+clamp, but the interval that clamp protects has no producer and no renderer.**
+
+This is the second instance of the shape that hid `_widen` from five static passes — *shipped code
+correct for its current caller and wrong for a caller the plan commits to adding*. It is invisible to
+a gate that reads the plan and the tree as they stand, which is why the sweep had to be asked for
+explicitly.
+
+**P6-2 and P6-3 (majors) — v1.11 breaking its own new rule, internally.** Table B's residual
+`{"model", "deterministic"}` → 0 fails on the implementation Table B's *own* `fingerprint.py:137` row
+authorises, so DC-12 fails on a correct edit — **the exact trap the architect had just rejected Pass
+5's residual for, reintroduced one table over.** And Table E's four "`_widen`-related tests" are
+`verdict()` tests whose *names* contain "widen"; none calls `_widen`, while the three sites the edit
+actually breaks are in no command. The rule is sound; the party that wrote it could not apply it
+twice in the same revision. v1.12's brief therefore requires **every residual in all six tables run
+against the tree** and shown to be non-zero now *and* zero after a faithful edit.
+
+### Routing — U28 and U29, parallel on disjoint files
+
+**One coordinator decision taken, and stated to both so it is not re-litigated:** P6-1's
+**record-shape half lands in S1, not S2.** §4 S1e's own *free only now* argument applies —
+`results/runs/` does not exist, so no stored record is invalidated and no migration is owed; deferring
+means changing a record schema *after* records exist. That was the gate's open question 1, put to
+teco, and it is a sequencing call within the agreed scope rather than a stakeholder decision.
+
+The **method half** is `data-scientist`'s and is not guessed: what the continuous instrument needs per
+item (type, domain, unscoreable representation, absent-versus-zero), whether `separationZ` shares the
+carrier, and the gate's open question 2 — whether §3.2e owes a **fourth verdict string** for a pack
+with no McNemar and an `n/a` floor, today's three all assuming a binary instrument with `pp` as the
+unit. Relayed to the in-flight `architect` when it lands, the pattern now used three times.
 
