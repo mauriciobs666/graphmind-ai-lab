@@ -142,7 +142,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S8d** — P12-1: widen the guard to the reach its excuses claim (3 of 8 → 9 of 9); P12-2 + 2 nits | `coder` | `a213382761bc926ec` (resumed) | **PARTIAL — committed `769adc3`; killed mid-run by a session rate limit (429) while starting P12-2.** P12-1 complete and teco-verified; **P12-2 + 2 nits still open** | `storefront_api.py`, `test_storefront_api.py` | superseded by S8d2 | — |
 | **S8d2** — finish S8d: **P12-2** + Pass 12's **two nits** | `coder` (**fresh** — `a213382761bc926ec` did not survive the session reboot; the checkpoint's own stated fallback) | `ad35d76985da040a3` | **accepted — committed `1887180`.** **Judged Pass 12's recommended fix insufficient rather than applying it**: two mutations (a bare `HTTPException(410)` from `Storefront.join`, and the same raise in a module-level helper in `storefront.py` called from `join`) **survive on `769adc3`** at 183 passed, both answering `410 '{"detail":"gone"}'` on the wire — the same answer Pass 12 used to justify P12-2. The guard now reads **both** storefront modules whole, stopping at the `services.py` boundary, and resolves `raise <factory>(...)` through the factory's `return`s. **Also found `769adc3`'s commit message understates its own delivery** — the module-wide walk, the allowlist and P12-4's filter had already landed | `storefront_api.py`, `test_storefront_api.py` + a lift-ready guard-reach statement | `analyst` (Pass 13) → — | 174k tok / 55 tools |
 | **Pass 13** — gate all of S8d (`769adc3` + `1887180`) | `analyst` (**fresh**) | `a67deef56ee49dde9` | **accepted — committed `c1e9f23`. NEEDS CHANGES** (0 blockers, **2 majors**, 1 minor, 1 nit). **Upheld S8d2's central judgement by re-deriving it** — reproduced both mutations as surviving on `769adc3`, both dead at `HEAD`. But found the same defect shape a **third consecutive pass**, twice inside S8d2's own fix: **P13-1** the reach guard matches three hardcoded prefix strings while claiming *any path* — an alias (`svc = self._services`) is S9's shape plus one line and survives; **P13-2** the raise walk stops at `storefront.py` while its exemption names *every route*, so a bare `HTTPException` in `services.save_profile` survives. **Ruled the guard-reach statement inaccurate as written**, which is why the S9 re-word was held | `docs/reviews/salesperson-ui-impl.md` `## Pass 13` | — | 151k tok / 55 tools |
-| **S8e** — close P13-1 + P13-2 (both majors), P13-3, the nit, and **correct the guard-reach statement** | `coder` (**resumed** `ad35d76985da040a3` — 174k/55 is well inside the fresh-dispatch threshold, and both majors are in the AST reader it wrote) | `ad35d76985da040a3` | in-flight (dispatched 2026-09-07) | `storefront_api.py`, `test_storefront_api.py` + a **true** guard-reach statement | `analyst` (Pass 14) → — | — |
+| **S8e** — close P13-1 + P13-2 (majors), P13-3, the nit, and **correct the guard-reach statement** | `coder` (**resumed** `ad35d76985da040a3`) | `ad35d76985da040a3` | **accepted — committed `92bf842`** (314/65). **Replaced enumeration with derivation**: `_alias_prefixes()` closes a seed set over `ast.Assign` bindings to a fixpoint, applied on **all four legs**, not the two Pass 13 named — the frontier walks were the identical defect one field over. Nine names unchanged, so no re-baselining. **Took closure (a) AND (b) on P13-2**, reasoning that "the defect is only ever the gap" means closing it has two moves; raise walk now spans **four scopes**. **Closed the leg Pass 13 called latent** and asserted it cannot empty silently. **Reversed itself on P13-3** after checking the rebuttal — its own P11-7 analogy was wrong — and proved the cross-check killable (183 without / 1 failed with) | `storefront_api.py`, `test_storefront_api.py` + a corrected guard-reach statement | `analyst` (Pass 14) → — | **254k tok** / 38 tools |
+| **Pass 14** — gate S8e (`92bf842`) | `analyst` (**fresh** — standing precedent: it judges the fix to Pass 13's own majors) | `a53a5d3a5d3ff9f2d` | in-flight (dispatched 2026-09-07) | `docs/reviews/salesperson-ui-impl.md` `## Pass 14` | — | — |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
 | **U31** — stakeholder decision: how a dead turn becomes visible to the participant | stakeholder | — | **delivered — option B**, the additive `lastTurn: 'failed' \| null` field | option B recorded in v1.23 (below) | — | — |
 | **v1.23** — write option B into the contract: §5.2's `turn` shape, §5.3 C6a, S9's row, + the client rows that inherit it | `architect` | `ad81e9cdb12dfbb28` (resumed ×2) | **accepted — committed `10f2b72`** (68/7) | `docs/plans/salesperson-ui.md` **v1.23** | teco-verified: **exactly the 4 announced rows moved** (S9, S12a, S13, S15), no delivered row moved, all 21 rows 7 cells on a pipe-aware count | 224k tok / 26 tools |
@@ -1965,3 +1966,61 @@ collision produced, and this time the test caught it before dispatch rather than
 
 **S8e now owes a corrected statement as part of its deliverable**, not as a follow-up — the re-word
 unit stays queued behind it, and behind Pass 14.
+
+## S8e — the first fix in this chain that changed the *kind* of mechanism (teco, 2026-09-07)
+
+Every previous fix in this sequence widened a **list**: three spellings became more spellings, one
+file became two files. S8e replaced the list with a **derivation** — `_alias_prefixes()` closes a seed
+set over the file's own `ast.Assign` bindings to a fixpoint — and that is the first structural answer
+the chain has produced. The tell that it is structural: **`SERVICE_LAYER_REACH_TODAY` needed no
+re-baselining.** The derived reader returns the identical nine names on the clean tree, so the change
+is purely in what the reader *can* see, not in what it reports today.
+
+It also applied the fixpoint on **all four legs** rather than the two Pass 13 named, on the reasoning
+that the `shop.<method>` / `self.<method>` frontier walks are the same defect one field over. That is
+the first time in this chain a fix went looking for the sibling instance instead of waiting for the
+next gate to find it — which is exactly the behaviour the ten-instance pattern should induce.
+
+**Two judgement calls worth keeping.**
+
+**It refused Pass 13's either/or.** Pass 13 offered closure (a) extend the mechanism, or (b) narrow
+the sentence. I passed that to S8e as a deliberate choice. It took **(a) and then did (b)'s work
+too**, arguing from Pass 13's own sentence — *"the defect is only ever the gap between them"* — that
+closing a gap has two moves and picking the cheap one leaves a demonstrated wire-level escape live.
+I think that is right, and it retires the framing I recorded one section above as if it were a binary.
+The choice is real, but "both" is usually the answer when the claim is about the wire.
+
+**It reversed itself on P13-3 by checking, not by deferring.** In its previous unit it declined the
+`⊆ StorefrontError family` cross-check, arguing it repeated P11-7's criticism. Pass 13 rebutted that.
+S8e re-derived the rebuttal, concluded its own analogy had been wrong — P11-7 was an enumeration
+restating a *derived* partition, whereas this is a cross-check between two **independent** sources
+(an AST read and the live class tree) — and produced the A/B that shows it killable (183 passed
+without the cross-check, 1 failed with). A delegate that changes its mind on evidence it generated
+itself is worth more than one that was right the first time.
+
+**And it self-reported the failure I would otherwise have had to find.** Its own S8d clause — *"it
+stops at the `services.py` boundary, which the reach guard above covers instead"* — was a composition
+claim that composed nothing, and it said so plainly: the reach guard measures *which* methods, never
+*what they raise*. Its note is the durable one — **the boundary sentence is the artefact that needs
+mutation-testing hardest, and the one thing a test cannot check about itself.**
+
+**Cost note.** S8e ended at **254k tokens** / 38 tool uses, which crosses my fresh-dispatch threshold.
+Any further follow-up on this artifact that is small and self-contained goes to a **fresh** `coder`
+with the guard-reach statement and the relevant review section, not back to this delegate.
+
+## What I verified before committing `92bf842` (teco, 2026-09-07)
+
+Two-file 183, full suite 2615/14, `ruff` clean on both files, all **five** must-be-unchanged files
+md5-matching `HEAD` (`storefront.py`, `services.py`, `repository.py`, `app.py`, `test_app.py`), tree
+scope exactly the two in-scope files, `ws:acme` unchanged at 871 nodes.
+
+And, because a static read of a guard cannot show that it fires on the shape that matters, **I
+injected the alias escape myself** — `svc = self._services` / `svc.start_workflow_run(...)` on a
+router-reached `Storefront` method, which is S9's decided spelling plus one line and **survived** on
+`1887180`. It now **fails the reach guard, 182 pass**. `storefront.py` restored to `a713e2c5…`.
+
+**One thing I did to the environment and am recording rather than hiding:** S8e re-seeded `reference`
+at the end of its run, and **my own full-suite verification then wiped it again** — the documented
+default-`pytest` teardown. That is the third time this has happened in two days, and it is a standing
+property of verifying on this component, not an accident. The stakeholder's seed decision is still
+pending; whoever runs it should run it **after** the last suite of the chain, not before.
