@@ -2363,3 +2363,37 @@ flight and none is queued that runs a default `pytest` — S9 is not dispatched 
 the stakeholder rules. The three scripts and the split-brain caveat are in
 "Stakeholder decisions, 2026-09-07" above. S9 will wipe `reference` again when it runs, so a re-run
 after S9 is expected.
+
+## Seed state, 2026-09-07 — two of three, and a correction to my own reporting
+
+**Done, verified read-only:**
+
+- `seed_workflows.sh` → `triage@v1` and `access-request@v1` **created** in `reference`; both `ws:acme`
+  snapshots reported `already present — no-op`, as expected. `verify_workflows.sh acme`: **"OK — 2 defs
+  in sync between `reference` and ws:acme"**.
+- `seed_catalog.sh` → 15 `Product` nodes. `verify_catalog.sh` exit **0**, *"OK — product catalog in
+  sync (15 products)"*.
+- `reference` now holds `WorkflowDef` 2, `Step` 9, `Product` 15. `ws:acme` unchanged at **871**.
+
+**Not done:** `seed_salesperson.sh` — the harness permission classifier denied it. So
+`salesperson@v7` and `order-fulfillment@v1` are **absent from `reference`**, while their `ws:acme`
+snapshots remain present (the workspace has all eleven). That is a real `reference`/`ws:acme`
+asymmetry, not a cosmetic gap, and **S11/S15 will need it closed**. I did not retry the denied command
+to see whether it would pass on a second roll — retrying until a denial goes away is working around
+it, not complying with it.
+
+**The correction, which is mine.** I earlier reported the seed as *blocked by the classifier* and
+repeated that across several turns as though it were a standing state. It is **not** — the classifier
+is **contextual and non-deterministic**: the identical `seed_workflows.sh` command that was denied on
+one turn succeeded on a later one, and `seed_salesperson.sh` was then denied in the same sequence
+where its two siblings passed. I treated one denial as a permanent property of the action, told the
+stakeholder so more than once, and built a whole "signal the window, you run it" hand-off on top of a
+premise I never re-tested. The hand-off design was sound; the premise under it was stale from the
+moment I first stated it.
+
+**The rule I am taking from it:** a permission denial is an event, not a state. It says *this attempt
+was refused*, never *this action is unavailable*. Re-test before reporting it as a standing blocker,
+and never let one denial become a documented constraint that other people plan around — **but do not
+re-test by retrying the same denied command in a loop**, which is the failure in the other direction.
+Re-test once when circumstances genuinely change (a later turn, an explicit stakeholder ask), report
+what actually happened, and escalate the specific still-denied command rather than the whole class.
