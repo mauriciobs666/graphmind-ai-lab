@@ -150,7 +150,10 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U32** — add the plan's **citation** to the finished statement in §5.1's S9 row, and compact what the citation now carries | `architect` | `ae7164b33e933e793` | **accepted** (`a69422f`) | `docs/plans/salesperson-ui.md` v1.26 | teco-verified → **accept** (2 defects found + fixed) | 80k / 25 |
 | **U33** — the S7→S8g documentation debt: `HISTORY.md` + `SERVER.md` §1.3/§1.4 | `coder` | `a19762332c4ce266f` | **delivered, re-gating** (`c708423`) | `HISTORY.md`, `SERVER.md`, one `storefront_api.py` docstring | `analyst` Pass 16 → needs changes → **12 fixed + 5 found by audit** → re-check in flight | 264k / 100 |
 | **U36** — `config.py:186–208`'s three future-as-present comments (same class as P16-4, in code) | `coder` | — | queued (**behind U34** — torn-snapshot risk) | `falkor-chat/server/falkorchat/config.py`, comments only | `analyst` | — |
-| **U34** — rebuild the stale `cpg_falkorchat` CPG from `HEAD` | `graph-dba` | `a5563c5bdd32be9c7` | in-flight (dispatched 2026-09-07) | `cpg_falkorchat` graph key + reload artifacts | teco-verified → — | — |
+| **U34** — rebuild the stale `cpg_falkorchat` CPG from `HEAD` | `graph-dba` | `a5563c5bdd32be9c7` | **accepted** | `cpg_falkorchat` @ `b795f4c`, 339,972 nodes / 2,317,169 edges | teco-verified → **accept** | 125k / 80 |
+| **U37** — Pass 16's minors + `salesperson/`'s `start_demo.sh` references | `coder` (fresh) | `a38711140b2ecc8ec` | **accepted** (`ba368a0`, `7a85c1c`) | `SERVER.md`, `salesperson/{AGENTS,README}.md`, `playwright.config.ts` (mine) | teco-verified → **accept** | 127k / 52 |
+| **U36** — `config.py`'s three future-as-present comments + the documentation `HISTORY.md` entry | `coder` | `aa9b68b68151bca8a` | in-flight (dispatched 2026-09-07) | `falkorchat/config.py` (comments only), `docs/HISTORY.md` | teco-verified | — |
+| **U38** — `pipeline.sh`'s provenance stamp races `HEAD` and scopes `SOURCE_DIRTY` repo-wide | `cobb` | `a42739600c7b41e1d` | in-flight (dispatched 2026-09-07) | `skills/joern-cpg/scripts/pipeline.sh` + consumer refs | `analyst` | — |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | — | queued (**behind U34** — torn-snapshot risk) | `storefront.py`, `storefront_api.py`, `app.py`, both test files | `analyst` + `qa-engineer` | — |
@@ -2733,3 +2736,39 @@ seen elsewhere.
 
 `ws:acme` re-verified at **871** across the whole incident. `falkor-chat/server/` clean. S9a and
 U36 stay held: the snapshot is being read *right now*, which is the hold's whole reason.
+
+## The CPG is rebuilt, and its one caveat is discharged (2026-09-07)
+
+`cpg_falkorchat` rebuilt from **`b795f4c`** — a *clean* tree, verified byte-identical to the
+commit, unlike the old `SOURCE_DIRTY: true` build that corresponded to no commit at all.
+**339,972 nodes / 2,317,169 edges**, up 19% from 285,546 / 1,935,681. ~3h wall clock, which is a
+planning number worth keeping: a CPG rebuild is not a coffee break.
+
+**The storefront failure mode I asked to be caught was real and is not present.** Before: **0**
+methods matching `storefront`. Now 522 by `graph-dba`'s count, 596 by mine over `FULL_NAME` — the
+counts differ because the queries do, and both are right. I verified the named methods resolve at
+source line numbers: `build_storefront_router`:860, `resolve_token`:511, `set_turn_state`:632.
+
+**`enqueue_turn` is absent, and that is correct** — it exists only in a docstring at
+`storefront.py:637` as a planned S9 method. That is now confirmed from three independent
+directions: the review's reading, U37's `grep`, and the CPG's own node set. The same three agree
+`set_turn_state` has no caller. When three methods that different agree, the fact is settled.
+
+**The caveat came back discharged rather than accepted.** `graph-dba` honestly flagged a 16-line
+delta: `c708423` touched `storefront_api.py` after the parse. But that commit is the docstring fix
+whose *executable code* I had already proved unchanged — and re-running the AST comparison between
+`b795f4c` and `HEAD` for that file gives **stripped-AST equal, 27 docstring owners both sides,
+differing only in docstring text**. So the graph is not "16 lines stale, probably fine": it is
+**structurally identical to `HEAD`**. The AST-equality method paid for itself a third time, and
+this is the pattern — *an AST proof taken once keeps answering questions asked later.*
+
+### A found bug, routed out
+
+`pipeline.sh` computes `SOURCE_COMMIT`/`SOURCE_DIRTY` via `git -C "$SRC"` **at stamp time**, after
+the load, and `$SRC` sits inside the work tree. Over a 3h build `HEAD` moved four times, so it
+stamped `2624425` — *a tree never parsed* — and `SOURCE_DIRTY=true` from a dirty file under
+`claude/`, outside the parse root entirely. Both directions are live failures: a stamp that races
+`HEAD` makes a stale graph look fresh, and a repo-wide dirty flag makes a clean graph look
+untrustworthy. Since `CpgBuildInfo` exists *only* to answer the freshness question I run before
+dispatching CPG-leaning work, this is a bug in the thing I rely on. Routed to `cobb` with the
+concurrent-session collision rule attached, since `skills/` is contested.
