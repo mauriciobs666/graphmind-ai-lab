@@ -1,6 +1,20 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.11
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.12
+
+2026-09-06 (v1.12, `data-scientist`) — the plan gate's Pass 4 open question 2 and its two routed
+minors, ruled. **§11.5's exactness argument does not extend to §11.5.1's detector**: it withholds on
+a *covariate* rather than on the wall clock, so *"every withheld call was slower than every timed
+call"* is not true of every render — and it fails on the ordinary case of the very pack that will
+fire it, not a corner one. The attained-level bound is re-derived without the ordering assumption
+(it needs only that the timed items are a subset of the run), so §11.6's floor, its 5-point constant
+and §11.5's table are untouched; §11.7's slot 3 gains a second variant and a **computed** selector,
+and two slot-4 clauses that had the ordering baked into them are rewritten. §11.5.1's threshold
+**survives at 1 000 ms** and its *"~3.5× below the smallest cold load"* margin is **withdrawn** —
+plan-gate P4-11 is right that the two cold loads differ in model, quantization *and* route, so the
+data bounds no load from below — replaced by the asymmetry of the detector's two error costs.
+§11.7's second denominator line renders only where the call surface produces a `stats` object, on a
+`None`-never-`0` carrier (plan-gate P4-13, confirmed, on the surface rather than on the profile).
 
 2026-09-03 (v1.11, `data-scientist`) — §3.4 Rule 4's closed-form percentile becomes **binding**, and
 the reason is not the one v1.8 gave: measured against the shipped `stats.conservative_envelope`
@@ -2262,42 +2276,63 @@ against **their own** coverage, which will normally be `Y of Y` while the wall-c
 `tokensPerSecond` is FR-11 diagnostic-only and still prints its denominator, because a diagnostic
 over an unstated subset is the same defect one severity down.
 
-### 11.5 The missingness is informative, and its direction is known exactly
+### 11.5 The missingness is informative, and how far its direction is known
 
-**Two producers of a withheld timing, and both are right-censoring** — which is what lets one rule
-cover them:
+**Three producers of a withheld timing, and only two of them censor the quantity being summarised**
+— which is what the strings have to be built on:
 
-- **Model-load contamination** (plan §3.6). The call ran with a JIT load inside it. **The load's
-  cost varies by an order of magnitude** and no report may name a single figure for it: plan §2.5
-  measured **21.068 s**, this session measured **3.625 s** on the same box and the same surface
-  (page-cache state is the obvious difference), against warm turns of ~1.3 s in plan §2.2's
-  experiment and 55–115 ms for the minimal calls of §11.4's table. That range is why §11.7's slot 3
-  names a magnitude and not a number.
+- **Model-load contamination caught by the between-item probe** (plan §3.6). The call ran with a JIT
+  load inside it. **The load's cost varies by an order of magnitude** and no report may name a single
+  figure for it: plan §2.5 measured **21.068 s** and this session measured **3.625 s** on the same
+  box — but on a different model, a different quantization *and* a different route (plan-gate
+  P4-11), so **nothing in the pair identifies a cause**, and this note's earlier reading of it as
+  page-cache state named one confound out of three. Warm turns are ~1.3 s in plan §2.2's experiment
+  and 55–115 ms for the minimal calls of §11.4's table. That range is why §11.7's slot 3 names a
+  magnitude and not a number.
 - **A scored call that hits `requestTimeoutSeconds`** (review G3-5, whose recommended disposition —
   scored per the pack's rule, `latencyMs = None`, timeout count printed on its own line — this
   section adopts and depends on; §11.9). A censored observation is **not a measurement**: storing
   `latencyMs = 120000` would put the timeout *constant* into the p95, where it is by construction
   the largest value, so the report would print a figure about the configuration rather than about
-  the model. That is the opposite bias to contamination and it is the more dangerous of the two,
-  because it arrives as a number rather than as a gap.
+  the model. That is the opposite bias to contamination and it is the more dangerous of the two
+  wall-clock producers, because it arrives as a number rather than as a gap.
+- **The in-call reload detector** (§11.5.1), and it is different **in kind** from the two above:
+  it withholds on `unexplainedMs`, a **covariate**, never on the wall clock. Nothing ties a withheld
+  item's latency to a timed item's — an item with a 1.1 s gap around 0.2 s of generation is withheld
+  at 1.3 s while a clean 2.0 s call beside it is timed.
 
-Both share the one property the strings need: **the withheld call was slower than every timed call,
-and its true value is unknown.** Two exact consequences:
+**What all three share is weaker than what two of them share, and every published sentence has to sit
+on the weaker one.** Producers 1 and 2 censor the summarised quantity itself, so their withheld calls
+do sit above every timed call — **by construction** for the timeout (a timed call returned inside the
+budget) and **on measured magnitudes** for the probe-detected load. Producer 3 does not, and its
+failure is not exotic: it needs only a timed call slower than the threshold, which on §2.2's ~1.3 s
+pack turns is the ordinary case. **So the ordering stops being argued and starts being computed**
+(§11.5.1's `censoringExact`), and §11.7's slot 3 selects on the result.
 
-- **`p50` is robust.** All withheld points sit above the median, so the reported median moves by
-  about `M/2` ranks in the densest part of the sample — the smallest displacement available anywhere
-  in the distribution.
-- **The tail figure is not, and the damage is computable rather than qualitative.** Since the `X`
-  timed items occupy full-run ranks `1 … X`, the printed figure sits at full-run rank `r`, so it is
-  — at worst — the quantile of the **whole run** at level
+**One consequence survives the loss with no qualification at all, and it is the load-bearing one.**
+The printed figure is the `r`-th smallest of the `X` timed items, so **at least `r` of the run's `Y`
+items are ≤ it** and its position in the whole run is at worst level
 
-  > **`L = r / Y`**, the **attained level**, with `r` the integer rank of §11.2.1.
+> **`L = r / Y`**, the **attained level**, with `r` the integer rank of §11.2.1.
 
-  `L` is a *lower bound* on the figure's true level (exactly `p` when nothing was withheld), so the
-  clause that prints it must **truncate**, never round to nearest — §3.4 Rule 3's rounding row,
-  applied to a new printed bound. The **gate compares the exact integer rank, never the
-  display-truncated level** (Rule 7's precedent: an invariant that inherits the presentation layer's
-  rounding fires or fails to fire by a display unit).
+That argument uses only that the timed items are a **subset** of the run — no ordering, no producer,
+no distributional assumption — so §11.6's floor, its 5-point constant and the table below are
+untouched by the ruling above, and the floor stays conservative in the safe direction (it can refuse
+a figure whose true level was fine, never bless one whose was not). `L` is a *lower bound* on the
+figure's true level (exactly `p` when nothing was withheld), so the clause that prints it must
+**truncate**, never round to nearest — §3.4 Rule 3's rounding row, applied to a new printed bound.
+The **gate compares the exact integer rank, never the display-truncated level** (Rule 7's precedent:
+an invariant that inherits the presentation layer's rounding fires or fails to fire by a display
+unit).
+
+**Two further consequences are conditional on the ordering, and therefore on the same computed
+predicate** — which is exactly why they live in a selected string rather than in the standing one:
+
+- **`p50` is robust.** When the withheld points all sit above the median, the reported median moves
+  by about `M/2` ranks in the densest part of the sample — the smallest displacement available
+  anywhere in the distribution.
+- **The printed figures are lower bounds on the run's own figures.** This is slot 3's claim, and it
+  is the one that inverts when a fast call is withheld on its gap.
 
 Worked, exactly, at `Y = 38` — including plan §3.6's own `34 of 38` sketch:
 
@@ -2320,14 +2355,50 @@ call** is invisible to a between-item residency probe, which only ever looks *be
 > warm gap observed.
 
 **Recommendation:** `runner` computes that gap per item and withholds `latencyMs` as a contamination
-(§11.5) whenever it exceeds **1 000 ms**. That threshold sits ~130× above the largest warm gap
-measured here and ~3.5× below the smallest cold load measured anywhere (this session's 3 625 ms;
-plan §2.5's is 21 068 ms). **It is a starting value with a named basis, not a derived constant** — it
-rests on one cold observation here plus one in the plan — so it should be re-checked against the
-first real pack run, and the two quantities that would move it are the warm gap's maximum and the
-cold load's minimum. The negative warm gaps are expected rather than anomalous (the client wall clock
-and the server's own timers bracket different work), which is why the rule is a one-sided threshold
-on a magnitude and never `gap > 0`.
+(§11.5) whenever it exceeds **1 000 ms**. The negative warm gaps are expected rather than anomalous
+(the client wall clock and the server's own timers bracket different work), which is why the rule is
+a one-sided threshold on a magnitude and never `gap > 0`.
+
+**The basis is the asymmetry of the detector's two errors, not a margin against the smallest load**
+*(revised at v1.12; plan-gate P4-11)*. The withdrawn clause read the threshold as sitting *"~3.5×
+below the smallest cold load measured anywhere"*. It cannot: the two cold loads are one observation
+each and differ in model, quantization and route (§11.5), so **the data bounds no load from below**,
+and the page-cache-warm reload this note itself hypothesised is precisely the case a sample of two
+unattributed cold starts cannot exclude from landing under a second. What does size the value is
+that its two errors do not cost alike:
+
+- **A false positive** — a warm call misread as a load — is **discrete and can be severe**: it
+  withholds a good wall clock *and* misreports it under §11.7 slot 2's model-load cause, and three of
+  them at `Y = 38` take the run below §11.6's floor, so a clean run prints no latency summary at all.
+- **A false negative** — a load smaller than the threshold — is **continuous and bounded by the
+  threshold itself**: the retained wall clock carries at most that much foreign time, by the
+  detector's own definition.
+
+A bounded, disclosed error against an unbounded, discrete one puts the threshold **high**, and
+1 000 ms is the highest value that still has a *measured* false-positive margin: **~130× the largest
+warm gap** in §11.4's table. So the value stands and its second margin does not. **What it must not
+be read as claiming:** 1 000 ms is roughly three-quarters of a §2.2 pack turn, so this detects a
+**load-magnitude** event — R-14's residual, which is seconds — and does not protect a latency figure
+to within a fraction of its own scale.
+
+**It remains a starting value with a named basis, not a derived constant, and the re-check is
+scheduled rather than deferred — it needs no new instrumentation.** The plan already
+stores `unexplainedMs` on every item and reports its maximum below the threshold; that maximum, on
+the first real pack run, *is* the false-positive margin on realistic payloads, which is what §11.4's
+50 minimal calls of one model cannot supply. The asymmetry above says the value should not move
+**down** before that measurement exists.
+
+**The detector is not right-censoring, so slot 3's ordering is computed rather than assumed**
+*(v1.12; plan gate Pass 4 open question 2)*. The predicate, evaluated per render whenever `M > 0`:
+
+> **`censoringExact`** — **true** when every withheld item is a timeout, or when the smallest wall
+> clock among the load-withheld items exceeds the largest among the timed ones; **false** otherwise,
+> and **false whenever a withheld item's wall clock is not readable from the record**.
+
+A timeout needs no comparison — it exhausted a budget every timed call returned inside. The
+comparison needs the withheld wall clock to survive on the item, which §11.6 already promises the
+reader it does (§11.9 item 2b); where it does not, the predicate **fails safe** to the weaker string
+rather than to the stronger one. One comparison per render, over numbers the record already holds.
 
 This detector is **additive to** the residency probe, not a replacement: the probe catches a reload
 that happened *before* an item, the gap catches one *inside* it, and neither sees what the other
@@ -2449,35 +2520,69 @@ must not be copied from the bounds beside it.
 
 > `latency n = 36 of 38 items; timings withheld: 2 (model load 2, request timeout 0).`
 
-A **second denominator line follows it whenever the two differ**, because §11.4 keeps the
-server-side timings on an item the wall clock was withheld for:
+A **second denominator line follows it when the arm's call surface produces a `stats` object and the
+two counts differ**, because §11.4 keeps the server-side timings on an item the wall clock was
+withheld for:
 
 > `ttft/prefill/tokens-per-second n = 38 of 38 items; these are LM-Studio-side figures and a model load is outside them (see the note's 11.4).`
+
+**The surface condition is a ruling, not decoration** *(v1.12; plan-gate P4-13, confirmed — and
+placed on the surface rather than on the arm profile, which is the wider condition)*.
+`POST /api/v0/embeddings` returns no `stats`, so on an embedder arm the three figures do not exist
+and a coverage line for them is a line about nothing; a `deterministic` arm is the second case, and a
+profile-shaped condition would miss it. So the carrier must distinguish *this surface has no such
+figure* from *this surface has them and none arrived*: `statsCoveredCount` is **`None`** wherever the
+surface returns no `stats` and the line is **not rendered at all**, while `0` keeps its meaning on
+the chat surface, where it says every response lacked `stats` and is a real signal (§11.9 item 5).
+Absent-never-zero is the move `coldLoadSeconds` already makes (§11.6). One consequence worth naming:
+with no `stats` there is no `unexplainedMs`, so §11.5.1's detector does not run on those arms and
+their only load producer is the between-item probe.
 
 The cause split is mandatory and both counts print even at zero: the two causes carry very different
 operator actions — a TTL reload is a re-run, a timeout is a hung model — and a reader who sees only
 the total cannot tell which run they have. Printing both at zero also makes the line's shape
-constant, so a reader who has learned it once reads every run the same way.
+constant, so a reader who has learned it once reads every run the same way. *(If the plan widens the
+second counter from `requestTimeoutSeconds` alone to any scored call that returned no response —
+plan-gate P4-7 — the cause reads `no response <MT>` and nothing else in this grammar moves: the label
+names what the counter counts, and the split stays exhaustive.)*
 
-**Slot 3 — the mechanism.** Present only when `M > 0`. One variant, true under both producers:
+**Slot 3 — the mechanism.** Present only when `M > 0`. **Two variants, selected on §11.5.1's
+computed `censoringExact`** — not on the producer, and not on an argument *(v1.12)*:
 
-> `Every withheld call was slower than every timed call — a model load adds seconds to a call that otherwise takes tens to hundreds of milliseconds, and a timed-out call by definition exceeded the request budget — so the figures below are lower bounds.`
+- `censoringExact` true →
+  > `Every withheld call was slower than every timed call — a model load adds seconds to a call that otherwise takes tens to hundreds of milliseconds, and a timed-out call by definition exceeded the request budget — so the figures below are lower bounds.`
+- `censoringExact` false →
+  > `The withheld calls are not all slower than the timed ones: a call is also withheld when too much of its wall clock is unaccounted for by the server's own timers, which can withhold a call that was not among this run's slowest. So the figures below are computed over the surviving calls only and are not lower bounds on the run's own figures; the levels below hold either way.`
 
-**Slot 3 names a magnitude and never a figure, and that is a correction to v1.9**, which wrote
+**Why two strings rather than one weaker one that is always true.** The true branch is the ordinary
+case — both wall-clock-censoring producers land in it, and §11.7's own measured fixtures withhold the
+`k` slowest calls, so it is what the assembled rendering below shows — and it carries the reading an
+operator acts on. Deleting it would cost every render the statement that is true on most of them; the
+selector is *computed*, so neither string is ever rendered where it is false, which is the property
+four review passes have been spent buying for this block.
+
+**Slot 3 names a magnitude and never a figure — in both branches**, and that is a correction to
+v1.9, which wrote
 *"a model load costs about 21 s"* into the string. §11.5's own measurements refute it: the cold load
 was **3.625 s** this session and **21.068 s** in plan §2.5. A string that carries a load cost is a
 string that is false on most of the runs that render it — the exact defect class four review passes
-have been spent removing, reproduced by this note in the act of documenting it.
+have been spent removing, reproduced by this note in the act of documenting it. The same rule is why
+the false branch says *"too much of its wall clock"* and never *"more than a second"*: §11.5.1's
+threshold is a starting value, and a string carrying it would be the same defect one constant over.
 
 **Slot 4 — the levels.** Omitted entirely when `M == 0` (nothing was withheld, so the levels are
-nominal and a clause restating that would be noise that drifts). Otherwise one variant:
+nominal and a clause restating that would be noise that drifts). Otherwise one variant — and **every
+sentence in them is a statement about a *level*, never about a value**, which is what makes slot 4
+independent of `censoringExact`: at v1.11 two of these clauses said *"stands as a lower bound"* and
+*"this run's faster calls"*, both of which are value claims that the ordering carried, so both are
+rewritten *(v1.12)*.
 
 - both printed →
   > `The p95 figure is at worst percentile 92.1 of the run's 38 items, and the p50 figure at worst percentile 47.3.`
 - p50 only →
-  > `The 95th percentile of the timed calls is at worst percentile 89.4 of the run's 38 items, more than 5 points below the level its name claims, so no p95 is reported for this run. The p50 figure stands as a lower bound: at worst percentile 47.3.`
+  > `The 95th percentile of the timed calls is at worst percentile 89.4 of the run's 38 items, more than 5 points below the level its name claims, so no p95 is reported for this run. The p50 figure is still reported: at worst percentile 47.3.`
 - neither →
-  > `The 95th percentile of the timed calls is at worst percentile 86.8 of the run's 38 items and the 50th at worst percentile 44.7, both more than 5 points below the level their names claim, so the 34 surviving timings are this run's faster calls rather than a sample of it. The per-item timings are in the run record — the summary is withheld, not the data. A latency summary for this model needs a re-run in which the model stays resident throughout, and the scored outcomes are unaffected either way.`
+  > `The 95th percentile of the timed calls is at worst percentile 86.8 of the run's 38 items and the 50th at worst percentile 44.7, both more than 5 points below the level their names claim, so the 34 surviving timings are a selected subset of this run rather than a sample of it. The per-item timings are in the run record — the summary is withheld, not the data. A latency summary for this model needs a re-run in which the model stays resident throughout, and the scored outcomes are unaffected either way.`
 - `X == 0` → replaces slots 2–4 entirely:
   > `latency n = 0 of 38 items; no item's timing survived. The scored outcomes are unaffected; only the timing is absent.`
 
@@ -2543,9 +2648,10 @@ so one plan revision can serve both.
    depends on a timed-out scored call yielding **`latencyMs = None`** (scored per the pack's rule,
    run continues), which is G3-5's own recommendation. Under the alternative reading —
    `latencyMs = 120000` stored as a measurement — **§11.5's mechanism inverts**: the tail figure is
-   then biased *high* by a configuration constant while the level clause claims it is a lower bound,
-   and §11.7's slot 3 becomes a false sentence. If the architect chooses to abort the run instead,
-   everything above still holds with `MT` pinned at 0.
+   then biased *high* by a configuration constant, which is the opposite of what §11.7's slot 3
+   asserts, and **no computed predicate catches it**, because such an item is not withheld at all and
+   so never reaches `censoringExact`. If the architect chooses to abort the run instead, everything
+   above still holds with `MT` pinned at 0.
 2. **G3-3 — the three siblings need their own denominator; they must *not* be nulled.** G3-3's
    free measurement has been taken (§11.4): LM-Studio-side TTFT **excludes** the JIT load, so
    `ttftMs`, prefill and `tokensPerSecond` stay on a contaminated item and print `n = Y of Y` beside
@@ -2557,6 +2663,14 @@ so one plan revision can serve both.
    It closes R-14's acknowledged residual — a reload inside a single timed call, which the
    between-item probe structurally cannot see — at the cost of one subtraction per item, and it
    needs no new probe. Its placement is the plan's; the metric and the threshold are §11.5.1's.
+2b. **New at v1.12: a withheld item's wall clock must stay readable on the record.** §11.5.1's
+   `censoringExact` is one comparison between the withheld and the timed wall clocks, and §11.6
+   already promises the reader that *the summary is withheld, not the data* — so the number has to
+   survive somewhere other than `latencyMs`, whose absence is what keeps it out of every aggregate.
+   **The field's name is the plan's**, and the per-item fields plan-gate P4-3 asks for already
+   reconstruct it exactly (`unexplainedMs + ttftMs + generationMs`) if the architect prefers adding
+   none. **This is not a blocker:** without it the predicate fails safe and §11.7's slot 3 prints its
+   weaker variant on every render that withheld anything for load.
 3. **G3-4 — the guard's first comparand.** §11.6(2) shows the floor holds either way, so this is not
    a blocker for R-13. It should still be fixed as G3-4 specifies (baseline = a probe taken *after*
    the warm-up returns), because otherwise `MT`/`ML` count a systematically absent item 1 as a
@@ -2568,6 +2682,12 @@ so one plan revision can serve both.
    requirement is that the number have a home. **Recommended alongside it:** columns carrying `X`
    and `Y`, so coverage is visible to a CSV reader. That one is a readability improvement rather
    than a correctness requirement — the gate is what makes the existing columns honest without it.
+5. **New at v1.12: `statsCoveredCount` is `None`, never `0`, on a call surface that returns no
+   `stats`** — today `POST /api/v0/embeddings`, and every `deterministic` arm. §11.7's second
+   denominator line renders on exactly that condition, and §4 S2's invariant over the field is then
+   scoped to the surfaces where it is a number — **by surface, not by arm profile**, which is the
+   wider and therefore the correct condition. The distinction is the field's whole content: `0` on
+   the chat surface is a real signal and must stay distinguishable from *no such figure exists here*.
 
 Two consequences that are the standing sweep obligation of plan §7 rather than new asks:
 **§3.6's `latency n = X of Y` sketch and §5 test 15b's assertion are superseded by §11.7's slots** —
@@ -2609,6 +2729,18 @@ any tolerance would hide the defect it was meant to catch.
    `latencyMs − (ttftMs + generation_time)` exceeds 1 000 ms has its `latencyMs` withheld and is
    counted under model load; one at 7.6 ms — the largest warm gap measured — does not. Both sides of
    the threshold, since a threshold tested on one side is an untested inequality.
+7b. **The censoring predicate, all four branches (§11.5.1).** A run whose one load-withheld item has
+   a wall clock **below** the largest timed one renders slot 3's `censoringExact == false` variant;
+   the same run with that wall clock above renders the true variant; a run whose only withholding is
+   a timeout renders the **true** variant without reading any withheld wall clock; and a
+   load-withheld item whose wall clock is unreadable renders the **false** variant. The fourth is the
+   fail-safe, and it is the branch an implementer will skip because no fixture produces it by
+   accident.
+7c. **A surface that returns no `stats` (§11.7).** On such an arm `statsCoveredCount` is `None`, the
+   rendered block contains **no** `ttft/prefill/tokens-per-second` line and no item carries an
+   `unexplainedMs`; on a chat arm with `statsCoveredCount == 0` that line **is** rendered. Asserted
+   on the **absence** — a line that should not exist is invisible to a test that only checks the
+   lines that should.
 8. **String rendering.** Five blocks rendered against fixtures and asserted **verbatim**, the way
    §7.2's resolving-power line is, with §11.7's measured sample as the fixture:
    `(X=Y=38)` → `p50 = 78 ms, p95 = 112 ms`, `1 of 38` slower ·
@@ -2616,9 +2748,10 @@ any tolerance would hide the defect it was meant to catch.
    `(X=36, Y=38)` → `p50 = 76, p95 = 105`, levels 92.1 / 47.3 ·
    `(X=35, Y=38)` → `p50 = 76` only, levels 89.4 / 47.3 ·
    `(X=34, Y=38)` → both refused, levels 86.8 / 44.7.
-   Plus one with `MT > 0`, so the cause split is exercised rather than assumed. **The fixture is the
-   measured sample, so the ranks and levels are checkable by hand against it** — which is the
-   property a hand-invented fixture does not have.
+   Plus one with `MT > 0`, so the cause split is exercised rather than assumed, and one on the
+   **false** branch of §11.5.1's predicate, so both slot-3 strings are pinned verbatim rather than
+   one of them *(v1.12)*. **The fixture is the measured sample, so the ranks and levels are checkable
+   by hand against it** — which is the property a hand-invented fixture does not have.
 9. **The unit guard.** Every printed figure in the block carries ` ms`, and no latency in the block
    is printed in seconds. The ms/s boundary sits one field away from `coldLoadSeconds`, and a figure
    printed in the wrong unit is a defect no reader can detect from the report.
@@ -2626,6 +2759,6 @@ any tolerance would hide the defect it was meant to catch.
     timed item renders the `X == 0` variant. The absent-or-present decision lives in exactly one
     place.
 
-**Acceptance:** all ten pass, and no stored record carries a `latencyMsP95` whose attained level is
+**Acceptance:** every item above passes, and no stored record carries a `latencyMsP95` whose attained level is
 below 90.0 or whose rank equals its `X` — both checkable over `results/runs/` at any time, and
 together they are the invariant §11.8 sells.
