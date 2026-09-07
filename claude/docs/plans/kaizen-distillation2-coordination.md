@@ -71,7 +71,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U16 | teco chunk A (8: ≤ 09-01) | `a91f2d49861381ba8` | accepted | `claude/AGENTS.md` (concurrent-write paragraph, closing sentence replaced) + `claude/teco/teco.md` (review-gate clause) + `kaizen/history.md`; **2 promoted, 6 discarded**, both promotions in-place sharpenings; 8 nodes deleted | none → — | 153.0k tok, 49 tools |
 | U17 | teco chunk B (12: 09-02, incl. one corrupt all-`PLACEHOLDER` node) | `a3b31a7efe468e5c0` | accepted | `claude/teco/teco.md` (6 promotions) + `claude/AGENTS.md` (2) + `kaizen/history.md`; `claude/cobb/kaizen/plan.md` (K-021); **8 promoted, 4 discarded**; 11 nodes deleted, 1 `PRODUCED` resolved (`MENTIONS`→`architect`) | none → — | 187.9k tok, 55 tools |
 | U18 | teco chunk C (13: 09-03…09-06) | `a881239125792e0e0` | accepted | `claude/teco/teco.md` (5 in-place sharpenings + 1 new bullet), `skills/agent-standards/claude-code.md` (agentId resolution scope), `claude/teco/kaizen/history.md`+`plan.md` (K-016 → blocking), 3x `MENTIONS` (2 analyst, 1 data-scientist), graph cleared | none → — | 179.1k tok, 68 tools |
-| U18b | teco chunk D (14: 09-07, all arrived after pass open) | — | queued | `claude/teco/kaizen/*`, graph cleared | none → — | — |
+| U18b | teco chunk D (14: 09-07, all arrived after pass open) | `adcb31af6bc3fc428` | in-flight | `claude/teco/kaizen/*`, graph cleared | none → — | — |
 | U19 | analyst chunk A (12: ≤ 08-30) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U20 | analyst chunk B (6: 08-31…09-01) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U21 | analyst chunk C (15: 09-02) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
@@ -99,6 +99,18 @@ units, none of them a defect:
 - **This pass will never observe an empty graph**, and shouldn't try to. Done
   means every entry in the pinned per-unit scope is dispositioned, not that
   `count(:KaizenEntry)` reaches zero.
+- **A `closed out, 0/0` note in this ledger is a statement about its unit's
+  pinned scope at the moment that unit ran — never a claim the agent is
+  finished.** Census taken after U18 (2026-09-07): `analyst` 56 (up from the 53
+  this pass planned four chunks against, 12 of them dated today), `teco` 14,
+  **`architect` 7**, **`coder` 1**, **`graph-dba` 1** — the last three all
+  marked closed out at U7b, U12 and U6 respectively, all refilled with entries
+  dated today, plus one new `teco` entry that appeared mid-U18. Team total 85
+  (79 produced + 6 `MENTIONS`-only). The refill is not drift to correct: those
+  are real learnings from other sessions running today, and they are pass 3's
+  scope unless a top-up unit is dispatched here. What it does mean is that
+  **the top-up list below is a floor, and must be re-queried immediately before
+  the pass is declared closed** rather than read off this table.
 
 ## Observed cost, and the one re-chunk
 
