@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `teco` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-08-25
+> Last reviewed: 2026-09-07
 
 ## Active
 
@@ -41,6 +41,19 @@
   the trigger to know to load the file, so only the mechanics (two-hop chain, resume addressing)
   can move; the trigger and ledger shape must stay inline. Same test applies to the
   misrouting/staleness rules already named above.
+
+- **2026-09-07 (kaizen chunk B distillation, `cobb`) — the ledger moved against K-016 again.**
+  `teco.md` is now **6,388 w** (5,343 w at the 2026-08-24 measurement above): the 2026-09-06
+  environment-readiness change spent ~370 w (K-017 recovers most of it), chunk A spent one clause,
+  and chunk B spent ~340 w across six promotions. Four of the six were deliberately folded into
+  existing sentences rather than added as bullets, and two of those extended lines already past the
+  700-char smell — the *"Close the loop on the same delegate"* bullet is now **1,447 ch** and the
+  Documentation-curation unfiltered-sweep bullet **1,029 ch**. Both are prime candidates for the
+  consolidation half of this item: the first is the largest member of the verify-family this item
+  already proposes merging, and it now carries four distinct sub-rules. The new step-5 bullet
+  *"Your own rebuttal of a delegate's report is the least-checked claim"* is a **fifth** member of
+  that same family and was placed adjacent to it on purpose, so the merge is a local edit when this
+  item is worked.
 
 ### K-017 — a `devops`-owned `ensure-services.sh`, so the trigger costs one line
 - **Status:** 🔵 proposed · **Priority:** medium

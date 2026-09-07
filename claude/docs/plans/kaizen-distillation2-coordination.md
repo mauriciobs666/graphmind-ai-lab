@@ -69,7 +69,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U14 | data-scientist chunk B (9: 08-31…09-02) | `a62ee471d5c0c8407` | accepted | `claude/data-scientist/data-scientist.md` (Uncertainty bullet) + `kaizen/*` (K-003 kept open); **7 discarded, 1 promoted, 1 kept open**; 8 nodes deleted, 1 `PRODUCED` resolved (`MENTIONS`→`tico` kept alive) | none → — | 195.5k tok, 78 tools |
 | U15 | data-scientist chunk C (10: 09-03…09-07, incl. `6ef71251` arrived mid-U13) | `ae7d55eeefd996462` (died on a rate limit after all writes, before the clear); recovery `aecf048606b51a19f` | accepted | `claude/data-scientist/data-scientist.md` (3 promotions) + `lm-studio-model-notes.md` (JIT bullet rewritten in place) + `kaizen/*` (K-004 kept open); **5 promoted, 4 discarded, 1 kept open**; 10 nodes deleted — **`data-scientist` closed out, 0/0** | none → — | recovery 80.6k tok, 26 tools (dead run unreported) |
 | U16 | teco chunk A (8: ≤ 09-01) | `a91f2d49861381ba8` | accepted | `claude/AGENTS.md` (concurrent-write paragraph, closing sentence replaced) + `claude/teco/teco.md` (review-gate clause) + `kaizen/history.md`; **2 promoted, 6 discarded**, both promotions in-place sharpenings; 8 nodes deleted | none → — | 153.0k tok, 49 tools |
-| U17 | teco chunk B (12: 09-02) | — | queued | `claude/teco/kaizen/*`, graph cleared | none → — | — |
+| U17 | teco chunk B (12: 09-02, incl. one corrupt all-`PLACEHOLDER` node) | `a3b31a7efe468e5c0` | accepted | `claude/teco/teco.md` (6 promotions) + `claude/AGENTS.md` (2) + `kaizen/history.md`; `claude/cobb/kaizen/plan.md` (K-021); **8 promoted, 4 discarded**; 11 nodes deleted, 1 `PRODUCED` resolved (`MENTIONS`→`architect`) | none → — | 187.9k tok, 55 tools |
 | U18 | teco chunk C (13: 09-03…09-06) | — | queued | `claude/teco/kaizen/*`, graph cleared | none → — | — |
 | U18b | teco chunk D (12: 09-07, all arrived after pass open) | — | queued | `claude/teco/kaizen/*`, graph cleared | none → — | — |
 | U19 | analyst chunk A (12: ≤ 08-30) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
@@ -258,6 +258,29 @@ dies before either leaves nothing at all — which is what happened here.
 - **U14 → three `claude/scripts/audit-team.sh` check-7 FAILs stand, none in
   scope.** All three are personal-identifier leaks elsewhere in the repo. Not
   this pass's work; worth a routed unit of its own.
+
+- **U17 → the commit-footer conflict, resolved by the stakeholder mid-pass.**
+  U17 promoted a rule into `claude/AGENTS.md` telling every agent to omit the
+  `Claude-Session:` footer, on the grounds that the harness `system-reminder`
+  carrying it is a platform default with no knowledge of this user's settings
+  (`includeCoAuthoredBy: false`), memory, or repo docs. That contradicted this
+  session's own practice — all 40 most recent commits carry the footer, six of
+  them mine. **Put to the stakeholder, who confirmed the memory wins: drop the
+  footer.** The promotion ships as written; commits from U17 onward carry no
+  trailer; the six already made keep theirs, since rewriting history is out of
+  bounds.
+
+- **U17 → an `entryId` collision on the full first eight characters, verified.**
+  `b7e41c92-3f8a-…` (09-02, chunk B) and `b7e41c92-3d5a-…` (09-03, chunk C)
+  share all eight leading characters and are entirely different facts. Seven
+  units this pass hit false-positive dedup matches on 8-char prefixes; this is
+  the first pair that a prefix check *cannot* distinguish. Every §5 curator
+  operation is keyed on `entryId`, so a colliding id makes a clear silently
+  take the wrong node. `cobb` filed **K-021** proposing an id-shape guard in
+  `cypher-mcp/server.py`'s write authorizer — deliberately on id shape only,
+  not on content: content validation automates a judgment the curator already
+  makes, and any agent can route around it with a differently-useless string.
+  Not implemented; component code, outside `cobb`'s write remit.
 
 - **U16 → a standing-memory disagreement, flagged for the human, not acted
   on.** The user's `subagent-permission-mitigation` memory names running the

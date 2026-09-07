@@ -182,6 +182,12 @@ grants stand exactly as documented above, and this still isn't a delegation of *
 an agent running interactively still only commits what it itself verified, never another agent's
 in-flight work.
 
+**No attribution footer on a commit or PR.** The `Claude-Session:` guidance that arrives as a
+harness `system-reminder` is a platform default with no knowledge of this user's settings,
+memory or repo docs — all three of which forbid the footer. `includeCoAuthoredBy: false` is
+already set and does **not** suppress that injection, so its recurrence every session is not
+evidence the preference changed. Write a clean message; this is not a conflict to escalate.
+
 **`git add` then `git commit` is not atomic against a concurrent process sharing the same working
 tree.** A staged file sits in the shared git index until the commit actually runs — a second
 agent/process that stages and commits its own files in that window can commit *both* sets
@@ -197,6 +203,10 @@ then name in one:** the commit takes that path's *whole* working-tree content an
 index to match, silently discarding the hunks you staged — so a `git diff --cached` beforehand
 shows your hunks and proves nothing about what lands, and a concurrent session's edit to the same
 file is committed under your message. Other paths' staged entries survive untouched either way.
+The same concurrency makes any `git status` snapshot stale mid-session: a file that was
+**untracked** at session start can become **tracked** by another session's commit, which reads
+as its having vanished from your untracked list. Confirm with `ls` plus `git ls-files` and
+`git log --all -- <path>` before treating an apparent disappearance as data loss.
 
 ## Maintenance rules
 

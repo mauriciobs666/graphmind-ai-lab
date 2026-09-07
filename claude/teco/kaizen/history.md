@@ -2,6 +2,134 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-09-07 — Kaizen distillation, chunk B (the twelve 2026-09-02 entries)
+
+- **What:** U17 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled the
+  twelve `teco` `:KaizenEntry` nodes dated 2026-09-02 in `kaizen_team`. Result: **8 promoted**
+  (6 into `teco.md`, 2 into `claude/AGENTS.md`; six of the eight as in-place clause extensions or
+  short bullets, never a paragraph appended after a previous author's), **4 discarded**, 0 kept
+  open, **1 `MENTIONS` tag** added. Every entry was re-derived from primary sources rather than
+  confirmed against its own cited evidence; one entry's stated mechanism was **falsified** that way.
+- **The correction group — `d41e8b07` / `f38a6d15` / `5d8a1c34`, resolved as supersession, one
+  promotion.** `5d8a1c34` declared itself a correction to the other two. Re-deriving the underlying
+  incident settled it: commit `ef02c7a` (2026-09-02 19:10:15, *"docs: context-file convention +
+  repo-wide AGENTS.md bloat sweep"* — a different session's workstream entirely) really did rewrite
+  the `seed_salesperson.sh` and `verify_salesperson.sh` rows of `falkor-chat/AGENTS.md`, and its
+  version does carry `salesperson@v7` plus its own burned-`v6` clause, exactly as the `coder`
+  delegate reported. That commit's own message even states it swept in teco's concurrent L83. So the
+  "concurrent writer" was real; **`f38a6d15`'s confabulation diagnosis is false for its only cited
+  incident**, and it carries no second instance — discarded as superseded rather than merged (the
+  U15 precedent). `d41e8b07` is untouched by the correction and independently true (below). The two
+  surviving entries share one root cause — teco's rebuttal of a delegate rested on evidence that
+  could not see what the delegate was claiming — so they were promoted **once**, as a single rule
+  with both instances as its two clauses.
+- **Promoted → `claude/teco/teco.md`:**
+  - `d41e8b07-2c95-4f63-a1b8-6e3d0c7f4a29` + `5d8a1c34-7b62-4e09-9f15-3a4c8e2d76b1` → step 5, new
+    bullet before *"Close the loop on the same delegate"*: your own rebuttal of a delegate's report
+    is the least-checked claim in the coordination. Re-derived independently and both halves hold.
+    Graph-vs-git: `git log -S '"v6"' -- proof_defs.py` returns no commits, `git show
+    HEAD:…proof_defs.py | grep -c '"v6"'` is 0 and the working tree is 0 — while a live read of
+    `ws:acme` returns a `Salesperson v6` `WorkflowDefSnapshot` sitting there right now. A shared
+    graph really does hold an artifact that exists in no file and no commit. Scope half: `ef02c7a`
+    above. The entry's corollary (never tell a review gate one of your own conclusions is settled
+    and out of scope) is kept as the bullet's closing clause.
+  - `c04b7f92-6d18-4a35-8e71-93f2c5a08b6d` → step 3, extending the *"Brief contents"* bullet: a
+    brief is the one input no gate reads, so route a mandate by stating it and asking where it
+    belongs, never by supplying the answer as background fact. Re-derived: `FALKORDB_SOCKET_TIMEOUT`
+    is defined at `falkor-chat/server/falkorchat/config.py:29` and consumed at `db.py:44` as the
+    FalkorDB client's `socket_timeout=` — a server-side Redis timeout, so the brief's premise that
+    it belonged to the SPA's reset UX was wrong at both cited line numbers, exactly as recorded.
+    The existing bullet already forbade *paraphrasing a plan* into a brief; it said nothing about
+    the coordinator's own asserted premises, which is the gap.
+  - `a7d3e619-5c84-4f27-9b13-2e60d8a5c194` → step 5, new bullet: closing an upstream artifact on its
+    gate verdict is not absorbing it; sweep its "handed onward" list into the downstream artifact
+    item by item at closure. Re-derivation made the entry **stronger** than written:
+    `docs/plans/salesperson-ui-graph.md:1021-1027` carries the §12 hand-off list verbatim (including
+    the four-part quiesce mandate), the four-part done-condition reached the plan only in the later
+    remedial commit `acb5a2a` ("plan v1.3-v1.16 — … S0 mandates …"), and the coordination ledger's
+    **U14c** row shows a dedicated remedial unit was commissioned to absorb §12 and found **four**
+    unabsorbed items, not the three the entry claims.
+  - `c7e41d92-8b3a-4f16-9d02-5a8ef31b7c40` → Guardrails, new bullet before *"A clean pass on a
+    brand-new mechanism…"*: a repeated gate has a decidable stopping signal and the reviewer sets
+    it, not coordinator patience. Re-derived: `docs/reviews/salesperson-ui.md` carries Passes 2–8,
+    all dated 2026-09-02; `:1966` reads *"Mis-ruled — open, and demonstrably still being
+    generated. P8-1, P8-2 and P8-3 are three…"*, `:1528` attributes all three to *"the v1.16 delta
+    that was meant to close the class"*, and `:1983-1985` is the reviewer itself writing
+    *"Recommendation on further passes: stop … A ninth full pass has negative expected value."*
+    Nothing in `teco.md` addressed when an iterating gate should stop.
+  - `f3a9e21c-7d64-4b08-a5e1-2c9f8b0d6e33` → step 5, sharpening the existing large-context
+    **Exception** in place rather than adding a bullet: its carve-out ("doesn't need the delegate's
+    own undocumented reasoning") now also reads "**or figures only it observed**". Re-derived from
+    the ledger's S6c row — the `coder` was resumed at `a5db169a0966bad59` (~235k tok, i.e. right at
+    the threshold that would normally route fresh) and the row records the payoff: it attributed
+    three pre-fix survival counts to the review's Appendix J rather than claiming them, and left
+    pass counts out where it only had them against a different denominator. The prompt's **Model
+    routing** bullet already covered the *model-tier* axis of this; the resume-vs-fresh axis was the
+    uncovered one.
+  - `b28c5e43-1f76-4d92-a305-7c6e1b9f4a82` → Documentation curation, extending the unfiltered-sweep
+    sentence: the same discipline applies **inside one document** — the SCOPE column is the build
+    instruction, so sweeping only the done-conditions leaves a removed contract still commissioned.
+    Re-derived: `docs/reviews/salesperson-ui.md:776-780` records that `messageCount`/`cartTotal`/
+    `orderStatus` are "produced by nothing", the delivered `list_participants`
+    (`repository.py:3580`+) projects no activity data, and the ledger's **U19** row shows the
+    remedial sweep found 4 hits, 1 of them a defect. Folded into the existing sentence because the
+    entry itself calls it "same class as the repo-wide rename rule" — a second bullet would have
+    been the duplication the rule is about.
+- **Promoted → `claude/AGENTS.md`:**
+  - `b7e41c92-3f8a-4d16-9c05-1a2e8f7b3d40` → a new short paragraph in the Git-commit authority
+    section: the injected `Claude-Session:` attribution guidance is a harness default that knows
+    nothing of this user's settings, memory or repo docs, and `includeCoAuthoredBy: false` does not
+    suppress it — so its recurrence is not evidence the preference changed, and it is not a conflict
+    to escalate. Re-derived first-hand rather than from the entry: `includeCoAuthoredBy: false` is
+    present in `~/.claude/settings.json`, the injection fired in this very distillation session
+    while that setting was live, `grep -rn 'Claude-Session'` over the repo returns exactly one hit
+    (`falkor-chat/docs/plans/workflow-timers-coordination.md:24`, which *forbids* the footer), and
+    the user memory file forbids it. The two are different features, not one broken one.
+  - `e5c1f284-9a37-4d60-b8e2-71f4a90c3e58` → appended one sentence to the concurrent-write
+    paragraph (the one U16 had just rewritten): a file untracked at session start can become
+    **tracked** by another session's commit, which reads as its having vanished — check `ls`,
+    `git ls-files` and `git log --all -- <path>` before calling it data loss. The entry's other two
+    claims were already published in that same paragraph (commit by explicit path, never
+    `git add -A`) and were deliberately **not** restated. Concurrency re-derived live rather than
+    from the entry's stale byte counts: `git log` on 2026-09-07 interleaves salesperson-ui,
+    model-bench and kaizen commits minutes apart, and this session opened with
+    `M docs/plans/small-model-benchmarking.md` dirty in another session's hands.
+- **Discarded — falsified:**
+  - `f38a6d15-4e72-4b90-9c31-8d05e2a7f6b4` (a long-running delegate misrecognising its own edit as a
+    concurrent writer). Superseded by `5d8a1c34`; see the correction group above. **This is the
+    entry whose stated mechanism the re-derivation overturned** — the delegate was right and the
+    coordinator was wrong, the reverse of what the entry records. Not promoted in any form.
+- **Discarded — already documented:**
+  - `c92f5a3e-7b41-4d28-8e06-5f1c9a2b6d73` (an unrecorded `agentId` makes a dispatched unit
+    unrecoverable). The preventive rule is already in `teco.md` verbatim — *"**Record the identity**
+    … write it into that unit's ledger row **at dispatch, always**"* — and step 5 already states
+    both the fallback order and "you have no agent-enumeration tool". The entry's addressing fact is
+    already in `skills/agent-standards/claude-code.md` under "Nested-delegation notification
+    routing", which records the same `"No agent named 'teco' is reachable"` failure for the reverse
+    direction. What remained was a detection heuristic and a recovery path for a rule the prompt
+    already makes unbreakable — below the "every session pays for it" bar, especially against open
+    item K-016.
+- **Discarded — corrupt node, no content to route:**
+  - `9f2b6c07-3e51-4a88-b174-c6d90e melhor` — `fact`, `evidence` and `context` all the literal
+    string `PLACEHOLDER`, `suggestedHome: 'unsure'`, and an `entryId` that is a truncated uuid4 with
+    the Portuguese word `melhor` appended **after a literal space** (37 characters). Confirmed to
+    match exactly one node before clearing. Nothing to verify or route. The node's *existence* is
+    the finding and it is not teco's: the curator write path accepted an all-`PLACEHOLDER` entry
+    under a malformed id, so nothing validates entry content or id shape at write time — filed
+    against `cobb`'s own machinery in `claude/cobb/kaizen/plan.md`, not here.
+- **`MENTIONS` tags added:** one — `b28c5e43…` → `architect`. The incident is teco's (it
+  commissioned the trim and re-gated it), which is why the rule was promoted here, but the artifact
+  swept is the architect's own step table and the sweep is a plan-editing discipline. Tagged so it
+  resurfaces in `architect`'s own pass rather than being lost with teco's clear.
+- **Clearing:** all 12 nodes had exactly one `PRODUCED` edge and no `MENTIONS` edge, except
+  `b28c5e43…` which was tagged first (ordering invariant: the tag committed before the
+  count-and-decide read), leaving `otherRemaining = 1` — so its `PRODUCED` edge was resolved and the
+  node kept alive for `architect`. The other 11 had `otherRemaining = 0` and were `DETACH DELETE`d
+  whole. Every history append landed before its graph mutation.
+- **Cost of this pass, for K-016:** `teco.md` 6,046 → 6,388 words. Two of the six promotions
+  extended lines that were already past the 700-char smell (1,266 → 1,447 and 770 → 1,029); the
+  count of >700-char lines is unchanged at 17, so no new one was created. Noted in `plan.md`.
+
 ## 2026-09-07 — Kaizen distillation, chunk A (8 oldest entries, 2026-08-25 → 2026-09-01)
 
 - **What:** U16 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled the

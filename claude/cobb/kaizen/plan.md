@@ -18,6 +18,7 @@
 | K-015 | 2026-07-31 | medium | 🔵 | `analyst/kaizen/inbox.md` has a substantial backlog of already-verified, "suggested home: prompt" entries never distilled (stub-package HEAD-vs-working-tree import, review-safe pytest subset, isolatable snapshot side, byte-identity AST hash, line-number-invariance re-gate, exclude_unset nested-model gotcha, scratch-copy-reverse-patch). Run a full §5 pass: verify each still holds, promote the prompt-worthy ones into `analyst.md` (or a knowledge base for the FastAPI/FalkorDB/MCP-version-sensitive ones), log in `analyst/kaizen/history.md`, clear the inbox. |
 | K-017 | 2026-08-20 | low | 🔵 | Item 4 of the "Broader team-verbosity reduction" diagnosis (surfaced 2026-08-19; items 1-3 delivered, see `history.md`): prune hedge-stacking once a rule has structural backup (a hook, a routing table) instead of three defensive clauses. No specific instances identified yet — start with a scan across the agent prompts for hedge-stacked clauses backed by real harness enforcement (a `PreToolUse` hook, a routing table) and trim each to one clean statement. |
 | K-020 | 2026-09-06 | medium | 🔵 | `cypher-mcp/server.py:881`'s FalkorDB-unreachable message advises `docker start falkordb-dev`, which cannot work — no launch path in this repo leaves a stopped container by that name. Out of cobb's write remit (component code); route to an implementer via `teco`. |
+| K-021 | 2026-09-07 | medium | 🔵 | Validate `entryId` **shape** in the `cypher-mcp` producer-write authorizer — a malformed or colliding id is load-bearing for the curator-clear path. Content validation deliberately **not** proposed. |
 | K-019 | 2026-08-21 | **high — filed upstream** | 🔵 | **Systemic, now confirmed matcher-agnostic too. `PreToolUse` "ask" hooks do not reliably pause execution in this session under Auto Mode, on either `Bash` or `Write`/`Edit`, regardless of hook source or execution context.** Four independent, isolated live tests, 2026-08-21, Claude Code 2.1.238, all under Auto Mode: (1) `graph-dba`'s own frontmatter `Bash` hook, Task-dispatched with `subagent_type` explicitly correct — didn't fire. (2) The identical guard mirrored as a session-wide `.claude/settings.local.json` `Bash` hook, run from `cobb`'s own **main session** — didn't fire. (3) Same test repeated after the user explicitly reloaded hook config via `/hooks` (visibly listed as registered, `[Local] Bash — 1 hook`) — still didn't fire. (4) **`cobb`'s own frontmatter `Write`/`Edit` hook** (`guard-cobb-topic-writes.sh`) — a `Write` to a path plainly outside cobb's allowlist (`docs/_hook_test_k019_scratch.md`) went through with zero interruption; re-fed the exact real payload to the script directly afterward and confirmed it correctly returns `ask` for that path. **Every test used a real, disposable payload (scratch graph or scratch file, immediately cleaned up) and independently pipe-test-confirmed correct hook logic** — ruling out `subagent_type` omission, stale config, hook-not-registered, and matcher-specific quirks as explanations. **Working hypothesis:** Auto Mode's classifier layer silently resolves/overrides a correctly-emitted `ask` decision before a human ever sees it, across both tool matchers tested. **Filed upstream 2026-08-21** via `/feedback` (user-submitted, confirmed "Feedback / bug report submitted") with the 3-test Bash repro; the 4th (Write/Edit) test landed after filing, not yet included in a follow-up report. **Practical consequence, effective immediately: every "harness-enforced" Guardrails claim across every guarded agent in this team — all three destructive-ops guards, all eight doc-write allow-list guards, the one broad-write deny-list guard — is currently unverified, and actively disconfirmed on the two mechanisms tested, under Auto Mode, in every execution context tried.** Not yet tested: the Write/Edit + Task-dispatched-subagent combination specifically (all 4 tests covered 3 of the 4 matcher×context cells) — very likely shares the gap given the pattern, not confirmed. **Next steps:** (1) monitor for an Anthropic response to the filed report; (2) treat this as the standing state of the team's enforcement model — Auto Mode being off is the only known workaround, untested/not decided; (3) fill the last untested cell (Write/Edit, subagent-dispatched) if a clean answer is ever needed before Anthropic responds. |
 
 ### K-001 — Re-verify standards against live docs
@@ -75,6 +76,37 @@
   alone: `docs/plans/cpg-query-access.md:626` specifies the same wording but is `Status: archived`
   (archived documents are not amended), and `cypher-mcp/README.md` already points at the script,
   never at `docker start`.
+
+### K-021 — the producer-write authorizer validates Cypher shape but not `entryId` shape
+- **Status:** 🔵 proposed · **Priority:** medium
+- **Trigger:** the 2026-09-07 chunk-B distillation of `teco` (U17) found
+  `9f2b6c07-3e51-4a88-b174-c6d90e melhor` in `kaizen_team` — `fact`, `evidence` and `context` all
+  the literal string `PLACEHOLDER`, and an `entryId` that is a truncated uuid4 with the Portuguese
+  word `melhor` appended after a **literal space** (37 chars). It had sat there since 2026-09-02.
+  The `cypher-mcp` write authorizer validates the *Cypher shape* of a producer-write (the
+  `MERGE (:Agent)` + `CREATE (…)-[:PRODUCED]->(…:KaizenEntry)` form, with a matching `agentId`) and
+  nothing about the values written.
+- **The call (cobb's, made at U17): guard the id, not the content.** Two different risks, only one
+  worth machinery.
+  - **`entryId` — yes.** Every curator operation in `agent-maintenance` §5 is keyed on `entryId`:
+    the count-and-decide read, the edge-resolve, and the full-node `DETACH DELETE`. A malformed id
+    is survivable (this one was), but a **colliding** id is not — a clear would silently take the
+    wrong node, and the failure raises no error. This graph already demonstrates the hazard: its
+    ids are hand-shaped rather than `uuid4()` output, and U17's own twelve-entry scope contained
+    `b7e41c92-3f8a-…` alongside a chunk-C entry `b7e41c92-3d5a-…` sharing the full first **eight**
+    characters. Seven units of the 2026-09 pass hit false-positive dedup matches on 8-char
+    prefixes. A `^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$` check at
+    the authorizer is a few lines and closes it at the one chokepoint every agent passes through.
+  - **Content — no.** Rejecting `PLACEHOLDER`/empty `fact` automates a judgment the curator
+    already performs, and its whole cost is one discard line in a history entry. A sentinel
+    blocklist would also be trivially routed around by any agent writing a differently-useless
+    string, so it buys the appearance of validation rather than validation.
+- **Where it lives:** the write authorizer in `cypher-mcp/server.py`, alongside the existing
+  producer-write shape check — **not** a prompt rule. Every agent's Learning-capture section already
+  says `entryId: '<uuid4>'`; the corrupt node is the evidence that prompt-level instruction is not
+  enforcement, which is exactly the case for a harness-side check.
+- **Out of cobb's write remit** (component code, same shape as K-020) — route to an implementer via
+  `teco`. Filed, not implemented; U17 was scoped to distillation only.
 
 ## Parking lot / ideas
 - **`bypassPermissions` revert landed (U3, 2026-09-01)** — `.claude/settings.json`'s
