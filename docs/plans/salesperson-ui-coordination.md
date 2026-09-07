@@ -144,7 +144,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **Pass 13** — gate all of S8d (`769adc3` + `1887180`) | `analyst` (**fresh**) | `a67deef56ee49dde9` | **accepted — committed `c1e9f23`. NEEDS CHANGES** (0 blockers, **2 majors**, 1 minor, 1 nit). **Upheld S8d2's central judgement by re-deriving it** — reproduced both mutations as surviving on `769adc3`, both dead at `HEAD`. But found the same defect shape a **third consecutive pass**, twice inside S8d2's own fix: **P13-1** the reach guard matches three hardcoded prefix strings while claiming *any path* — an alias (`svc = self._services`) is S9's shape plus one line and survives; **P13-2** the raise walk stops at `storefront.py` while its exemption names *every route*, so a bare `HTTPException` in `services.save_profile` survives. **Ruled the guard-reach statement inaccurate as written**, which is why the S9 re-word was held | `docs/reviews/salesperson-ui-impl.md` `## Pass 13` | — | 151k tok / 55 tools |
 | **S8e** — close P13-1 + P13-2 (majors), P13-3, the nit, and **correct the guard-reach statement** | `coder` (**resumed** `ad35d76985da040a3`) | `ad35d76985da040a3` | **accepted — committed `92bf842`** (314/65). **Replaced enumeration with derivation**: `_alias_prefixes()` closes a seed set over `ast.Assign` bindings to a fixpoint, applied on **all four legs**, not the two Pass 13 named — the frontier walks were the identical defect one field over. Nine names unchanged, so no re-baselining. **Took closure (a) AND (b) on P13-2**, reasoning that "the defect is only ever the gap" means closing it has two moves; raise walk now spans **four scopes**. **Closed the leg Pass 13 called latent** and asserted it cannot empty silently. **Reversed itself on P13-3** after checking the rebuttal — its own P11-7 analogy was wrong — and proved the cross-check killable (183 without / 1 failed with) | `storefront_api.py`, `test_storefront_api.py` + a corrected guard-reach statement | `analyst` (Pass 14) → — | **254k tok** / 38 tools |
 | **Pass 14** — gate S8e (`92bf842`) | `analyst` (**fresh**) | `a53a5d3a5d3ff9f2d` | **accepted — committed `a42fcca`. NEEDS CHANGES** (0 blockers, **3 majors**, 1 minor, 1 nit). **Found instances eleven and twelve inside S8e's own fix, both via the general probe rather than a reproduction.** **P14-1** the composed raise walk stops one hop short of its exemption — and the blind spot hides an **unclassified** raise, `MemberIdCollisionError`, in no table anywhere; **P14-2** `_alias_prefixes` harvests `ast.Assign` only, so S9's shape **plus a type annotation** survives (annotated locals are a house idiom, 68 in the package); **P14-3** the composition claim is right about the code and wrong about the **plan**. Reproduced all six of S8e's claims exactly. **Ruled the guard-reach statement inaccurate in 4 of 11 clauses** and named a **convergence test** | `docs/reviews/salesperson-ui-impl.md` `## Pass 14` | — | 191k tok / 69 tools |
-| **S8f** — P14-1, P14-2, P14-4, P14-5 + the syntactic restatement + the `MemberIdCollisionError` ruling | `coder` (**fresh** — S8e ended at 254k, past the resume threshold) | `a0b67a1e6bc22d6b8` | in-flight (dispatched 2026-09-07) | `storefront_api.py`, `test_storefront_api.py` + the **fact half** of the guard-reach statement + the convergence probe's output | `analyst` (Pass 15) → — | — |
+| **S8f** — P14-1, P14-2, P14-4, P14-5 + the syntactic restatement + the `MemberIdCollisionError` ruling | `coder` (**fresh**) | `a0b67a1e6bc22d6b8` | **accepted — committed `00827c2`** (+1019/−142). **Enumerated the reader's scope instead of implying it**: eight `ast` node types walked as a named constant, the other **19 grammar nodes excluded each with a written reason**. Raise walk closes over `self.<name>` to a fixpoint (`Services` 9→13, `Repository` 2→7). **Caught a thirteenth instance itself, before a gate did** — `raise self._mk(...)` resolving to the *method name* on the collaborator legs. **Convergence probe empty on both readers**, shipped as two tests, node list **derived from `ast`** so a new Python binding form reddens rather than opening a hole. Classified `MemberIdCollisionError` and **left it visible for review disagreement rather than burying it** | `storefront_api.py`, `test_storefront_api.py`; statement at `storefront_api.py:437–519` | `analyst` (Pass 15, **final**) → — | **260k tok** / 95 tools |
+| **Pass 15** — **final gate** on S8f (`00827c2`) | `analyst` (**fresh**) | `afb10aa0d33dab3ee` | in-flight (dispatched 2026-09-07) | `docs/reviews/salesperson-ui-impl.md` `## Pass 15` | — | — |
 | **U30** — P14-3: settle the plan/code exception-name mismatch and the falsifiability **mapping** | `architect` (**fresh**) | `af0b1eb6551aa85e9` | **accepted — committed `a3f681e`** (3/2, one file). **Ruled the plan wrong and the code right** — `services.py:2085`'s `WorkflowRunNotFoundError` is a *workspace snapshot/trigger-anchor* miss, already documented in `start_workflow_run`'s own docstring, while `WorkflowDefNotFoundError` is a *`reference`-graph* condition whose three raise sites are unreachable from the S9 path. Two conditions, only one reachable; the row named the reachable one with the unreachable one's class. **No code change implied.** Introduced the **two-gate** framing (does the method enter the walked set / is the raise in its own body or one call further in) that the plan had collapsed | `docs/plans/salesperson-ui.md` **v1.24** | teco-verified | 107k tok / 44 tools |
 | **U31** — replace S9's unmeetable *"S8c goes red"* done-condition; account for the false-but-unmeasured excuses and `executor.run`'s own raise | `architect` (**resumed** `af0b1eb6551aa85e9`) | `af0b1eb6551aa85e9` | **accepted — committed `5d0bb9c`** (3/2, one file). **Replaced the obligation rather than deleting it**: S8c's assertion is expected to **stay green**, and staying green *is* the evidence; what it still pins is the storefront's **service surface** — red means S9 wrote `self._services` instead of the trigger, a stop-and-re-decide. Row now says **do not restore a reddens-at-S9 claim**, and why. **Corrected my framing**: it is not a *placement* tripwire — `_service_layer_reach` reads source, not threads. All three excuses convert to **one measured exemption at the response boundary**; none stays prose-only. Tells S9 to **derive** the fault list from the worker's actual service surface. **Incidentally closed Pass 12's open question 2**, flagged as an architect edit and never made | `docs/plans/salesperson-ui.md` **v1.25** | `analyst` (folded into Pass 15) → — | 129k tok / 7 tools |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
@@ -2232,3 +2233,57 @@ own, so if the seed is wanted durably rather than momentarily, the honest signal
 before S9 is dispatched* — and it will need re-running after S9 too. **Nothing before S11 needs the
 registry**, which is why this is a convenience-timing question and not a blocker. I will say the word
 explicitly rather than leaving it to be inferred from a status line.
+
+## S8f — the first unit to catch an instance of the defect *itself* (teco, 2026-09-07)
+
+Thirteen instances, and this is the first one **not** found by a gate. S8f's own convergence probe
+returned `MISSED ['_mk'] *** MISS ***` on its first run: `raise self._mk(...)` on the collaborator
+legs resolved to the **method name** rather than the class, because `_raised_class_names` was being
+handed one method at a time so the factory sat outside its walk — while the *same source* read
+whole-module in `storefront.py` resolved correctly. It fixed it and re-ran before delivering.
+
+**That is the convergence test doing precisely the job it was introduced to do**, and it is the
+strongest evidence so far that Pass 14's framing was the right answer rather than one more finding.
+Five gates found five instances at a cost of a full review cycle each; the probe found the thirteenth
+inside the unit that created it, for the price of one script. **The lesson is about where the
+mechanism sits, not about diligence:** every previous delegate mutation-tested its own work
+conscientiously and still shipped the defect, because a mutation test asks *"does my reproduction
+die?"* while the probe asks *"what can this reader not see?"* — the second question is the one this
+artifact has been failing for thirteen instances, and it is cheap to ask.
+
+**The structural move worth carrying elsewhere:** the probe's node list is **derived from `ast`
+itself**, not written down. A future Python version that adds a name-binding form makes the probe
+**redden** rather than silently opening a hole. That is the difference between a check that decays
+and one that ages correctly, and it is the same principle as S8e's derivation-over-enumeration, now
+applied to the checker rather than the checked.
+
+**One reported figure of S8f's did not reproduce, and I am recording it rather than waving it
+through.** It reports the documented non-reach mutations as *"184 passed (survives)"*; I re-ran one
+(an attribute store) and observed **185**, the correct baseline. The substantive claim is confirmed —
+the non-reach genuinely survives, the guard stays green — but the number was measured against a
+moving baseline, almost certainly before its own second new test existed. **Not a defect; a
+reminder that a figure in a report is a claim like any other.** I have asked Pass 15 to check whether
+the staleness is confined to that line. This is the third time in this coordination that a
+count-shaped claim has needed re-deriving, after Pass 12's seed-dependent kill counts and Pass 8's
+arithmetic.
+
+## Pass 15 is briefed as the last gate, including how to fail (teco, 2026-09-07)
+
+I gave Pass 15 the stakeholder's stopping rule **as its frame, not as a footnote**, and told it what
+happens on each branch: pass → the guard is done and S9 proceeds on the armed-fault measurement;
+fourteenth instance → **stop and escalate, no fix dispatched.** I also warned it against **both**
+failure modes the frame creates — softening a finding because it would trigger the escalation, and
+manufacturing one because five previous passes each found something. A reviewer who knows its verdict
+ends a chain is under pressure in two directions at once, and naming both is cheaper than hoping.
+
+And I asked for something a normal gate does not owe: **if it finds a fourteenth instance, its report
+must be good enough for a human to decide what *kind* of answer this artifact needs instead of
+another pass** — not merely what to patch. That is the deliverable the escalation branch actually
+needs, and a reviewer cannot produce it retroactively.
+
+**One thing I flagged that a gate would not otherwise look at.** After S9, three `INHERITED_HANDLERS`
+reason strings of the form *"no storefront route calls that layer"* become **false in truth while
+staying invisible to both guards** — the same defect class, at the architecture level. The plan
+(v1.25) rules how that is handled. I asked Pass 15 to judge whether the **delivered comment block and
+docstrings** are honest about it, because that is the one place a technically-passing guard could
+still be telling a lie, and no probe over `ast` node types would ever surface it.
