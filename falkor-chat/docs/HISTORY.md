@@ -11,10 +11,13 @@
 guards that state their own reach — delivered as `18b675a` (S8b), `2e27835` (S8c), `769adc3` +
 `1887180` (S8d, killed mid-run by a session rate limit and finished as S8d2), `92bf842` (S8e),
 `00827c2` (S8f) and `b720bd3` (S8g-docs), gated by `docs/reviews/salesperson-ui-impl.md`
-`## Pass 10` through `## Pass 15`. Two files only —
-`falkor-chat/server/falkorchat/storefront_api.py` and `falkor-chat/server/tests/test_storefront_api.py`
-— with `storefront.py`, `app.py` and `tests/test_app.py` byte-unchanged across the whole chain
-(md5-checked at every unit's close). **One entry rather than six**, because six near-identical
+`## Pass 10` through `## Pass 15`. Three files —
+`falkor-chat/server/falkorchat/storefront_api.py` and
+`falkor-chat/server/tests/test_storefront_api.py` throughout, plus
+`falkor-chat/server/tests/test_app.py` **once**, in S8b (`+22/−1`, the `ServiceError`-ownership
+assertion) — with the two *production* files `falkorchat/storefront.py` and `falkorchat/app.py`
+byte-unchanged across the whole chain (md5-checked from S8d onward; S8b's own commit message claims
+it for exactly those two). **One entry rather than six**, because six near-identical
 entries would say *the guard was widened again* six times and bury the only thing worth reading:
 why it had to be.
 
@@ -107,7 +110,9 @@ forever.**
 
 **Stopped by rule, not by exhaustion.** After Pass 14 the stakeholder set an explicit stopping rule;
 Pass 15 found the fourteenth instance and it fired. No S8h was opened and none should be without a
-fresh stakeholder decision. There is no Pass 16 — Pass 15 had already ruled clause by clause on all
+fresh stakeholder decision — and **no sixteenth pass on the guard-reach clauses** should be either
+(a later `## Pass 16` on a different subject, the component documentation, is not one). Pass 15 had
+already ruled clause by clause on all
 17 clauses of the guard-reach statement (nine lift-ready as written, four needing narrowing, one
 needing correction against v1.25), so a re-review of the same clauses would be ceremony; the real
 check was the AST proof and the re-derived collateral figures, and `teco` ran both. The

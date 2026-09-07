@@ -67,17 +67,25 @@ the internal layering. The scope decisions in §1.1 were locked for M1 and still
 
 ### 1.3 The auth/tenancy seam
 
-The hardcoded scope lives in **one FastAPI dependency**, not scattered through the code:
+The process-wide scope lives in **one FastAPI dependency**, not scattered through the code:
 
 ```python
-# config.py
-WS_ID = "acme"
-USER_ID = "u1"
+# config.py — env-resolved once, at import
+WS_ID   = os.environ.get("FALKORCHAT_WS_ID", "acme")
+USER_ID = os.environ.get("FALKORCHAT_USER_ID", "u1")
 
-# api.py
 def get_context() -> CallContext:        # the seam
     return CallContext(ws=WS_ID, actor=USER_ID)
+
+# api.py — the FastAPI dependency routes actually depend on
+from .config import get_context as _resolve_context
+def get_context() -> CallContext:        # a wrapper, so tests can override it
+    return _resolve_context()
 ```
+
+It is **process-constant, not literal**: both values come from the environment at import time, which
+is what lets a deployment point the process at its own workspace (§4.9). What it is not is
+*per-caller* — every REST and MCP call resolves to the same actor.
 
 Services and the repository already take `ws` / `actor` as parameters, so when auth lands
 (token → user + workspace claim, or the `identity` graph as source of truth) **only `get_context`
@@ -120,25 +128,29 @@ a 404 — a 404 is returned both when a route is absent and when it exists but e
 
 | Env var | Default | Effect |
 |---|---|---|
-| `FALKORCHAT_STOREFRONT_ENABLED` | off | **When set (`=1`)**, `_build_default_app` builds the storefront deployment — `storefront=True` (the `/shop/api` router, its error map, the `/shop` mount and the startup preflight) with `mount_mcp=False`, `dev_surface=False`. Unset, the app shape is unchanged |
+| `FALKORCHAT_STOREFRONT_ENABLED` | off | **When set (`=1`)**, `_build_default_app` builds the storefront deployment — `storefront=True` (the `/shop/api` router, its error map, the startup preflight, and the `/shop` SPA mount **only when `FALKORCHAT_STOREFRONT_DIR` names an existing directory**) with `mount_mcp=False`, `dev_surface=False`. Unset, the app shape is unchanged |
 | `FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH` | **on** | **When cleared (`=0`)**, `WorkflowTrigger(responder=None)`: a message matching no workflow reaches nothing instead of the M2 responder, whose retrieval is workspace-**wide** (`hybrid_search` with `channel_id=None`) and would otherwise surface another participant's messages. Left on, the M2 fall-through behaves as it always has |
-| `FALKORCHAT_STOREFRONT_DIR` | unset (`None`) | The **served** SPA build directory (`salesperson/dist/`), mounted at `/shop` and the root of the product-image manifest (`<dir>/products/`). Unset resolves to `None`, never `""` — `Path("")` is the process working directory, which would silently serve whatever the operator happened to `cd` into. The manifest is built from what is *served*, never from the source tree |
-| `FALKORCHAT_STOREFRONT_PRESENTER_KEY` | `""` | The one operator secret for `/shop/presenter`, exchanged for a presenter bearer token. Demo-session scoping, not authentication. **Empty means "no presenter surface" and must never authenticate**: `hmac.compare_digest("", "")` is `True`, so a login path has to reject an unset key *before* comparing — `Storefront.presenter_configured` is that check |
-| `FALKORCHAT_STOREFRONT_TURN_WORKERS` | `4` | Size of the storefront's own bounded turn executor, sized to LM Studio's configured parallelism. Agent turns run there rather than on `BackgroundTasks`, so a deep turn queue never touches anyio's thread limiter and poll reads stay instant |
-| `FALKORCHAT_STOREFRONT_QUIESCE_S` | `30` | How long either reset waits for in-flight turns to drain after intake stops, before giving up and changing nothing (`503`). Comfortably under the 180 s agent timeout |
-| `FALKORCHAT_STOREFRONT_LOCALES` | `en,pt-BR,es` | The languages a participant may join in — the enum `POST /shop/api/session` validates against, in the UI's offer order. A blank or all-separator value falls back to the default rather than yielding an empty set, which would reject every language a participant could pick |
-| `FALKORCHAT_THREAD_LIMIT` | `100` | The anyio thread limiter the storefront raises **inside `_lifespan`, before `yield`** (`to_thread.current_default_thread_limiter()` is event-loop scoped). Headroom for the poll path, explicitly **not** load-bearing — the turn executor above is what keeps agent turns off this limiter |
+| `FALKORCHAT_STOREFRONT_DIR` | unset (`None`) | The **served** SPA build directory (`salesperson/dist/`), mounted at `/shop` and the root of the product-image manifest (`<dir>/products/`). Unset resolves to `None`, never `""` — `Path("")` is the process working directory, which would silently serve whatever the operator happened to `cd` into. The manifest is built from what is *served*, never from the source tree. **Unset or naming a nonexistent directory skips the `/shop` mount entirely and silently** (`create_app` guards it with `Path(served_dir).is_dir()`): the manifest is empty, the preflight logs `images=0` and continues, and `/shop/api` serves normally — so the default configuration is a storefront API with no SPA behind it |
+| `FALKORCHAT_STOREFRONT_PRESENTER_KEY` | `""` | The one operator secret, exchanged at `POST /shop/api/presenter/session` for a presenter bearer token. Demo-session scoping, not authentication. (The `/shop/presenter` *screen* that types it is **not built yet — S12b/S12d**; the route it posts to is delivered.) **Empty means "no presenter surface" and must never authenticate**: `hmac.compare_digest("", "")` is `True`, so a login path has to reject an unset key *before* comparing — `Storefront.presenter_configured` is that check |
+| `FALKORCHAT_STOREFRONT_TURN_WORKERS` | `4` | **Not built yet — S9** (§4.4 measure 1). The value is read into `Storefront` and exposed as a property; **nothing consumes it**, so setting it changes nothing today (`storefront.py`'s own comment says S9 adds the `ThreadPoolExecutor`). It will size the storefront's bounded turn executor, sized to LM Studio's configured parallelism, so agent turns run there rather than on `BackgroundTasks` and a deep turn queue never touches anyio's thread limiter |
+| `FALKORCHAT_STOREFRONT_QUIESCE_S` | `30` | How long either reset waits for in-flight turns to drain before giving up and changing nothing (`503`). Comfortably under the 180 s agent timeout. **The wait is delivered; the *stop-intake* that is designed to precede it is not — S10**, so today a post landing mid-drain extends the wait instead of being refused (`presenter_reset_all`'s own comment says so) |
+| `FALKORCHAT_STOREFRONT_LOCALES` | `en,pt-BR,es` | The languages a participant may join in, in the UI's offer order — the set `POST /shop/api/session` validates against. Not a `Literal`: `JoinIn.language` is a length-bounded string and the route checks membership against this per-deployment list, raising the same `RequestValidationError` Pydantic would. A blank or all-separator value falls back to the default rather than yielding an empty set, which would reject every language a participant could pick |
+| `FALKORCHAT_THREAD_LIMIT` | `100` | **Not built yet — S9** (§4.4 measure 2). `config.THREAD_LIMIT` is defined and **read by nothing** in `falkorchat/`; no `to_thread.current_default_thread_limiter()` call exists, so setting it changes nothing today. When it lands it must be raised **inside `_lifespan`, before `yield`** — the limiter is event-loop scoped and raises outside a running loop. Headroom for the poll path, explicitly **not** load-bearing — the turn executor above is what keeps agent turns off this limiter |
 
 **There is no `FALKORCHAT_DEMO_WS`, and there never will be.** The storefront's workspace *is*
 `config.WS_ID` (`salesperson-ui.md` §4.9 move 2): a second workspace variable buys nothing once
 the unauthenticated surfaces are un-mounted, while creating the only thing that made the
-seed-the-wrong-graph trap possible — two variables that can disagree. `start_demo.sh` pins the one
-variable to a dedicated value; `tests/test_storefront.py` carries the tripwire against
-reintroducing the second.
+seed-the-wrong-graph trap possible — two variables that can disagree. `tests/test_storefront.py`
+carries the tripwire against reintroducing the second. **`scripts/start_demo.sh`, which is designed
+to pin the one variable to a dedicated value, does not exist yet — S11**; until it does, an operator
+pins `FALKORCHAT_WS_ID` by hand and `config.py`'s `"acme"` default is the repo's populated dev
+workspace, not a demo one.
 
 **The storefront adds a *second* auth path, and it is per-caller.** `get_context()` above is
-process-constant and the `/shop/api` surface never uses it. Every storefront route resolves its own
-`CallContext` from the credential on the request:
+process-constant, and **no `/shop/api` request resolves through it** — the one thing the storefront
+takes from that seam is its *workspace*, read once at construction as `provider().ws`
+(`app.py:324`), so an injected `context_provider` pins the storefront too. The `actor` half is
+per-request:
 
 ```python
 # storefront_api.py — the two credential dependencies
@@ -160,19 +172,26 @@ Storefront.context_for(pid) -> CallContext(ws=WS_ID, actor=pid)   # actor *is* c
   as **not an auth path** — the router never calls it, pinned by an AST call-site tripwire.
 - **Every failure is one answer.** `resolve_token` returns `None` — never an exception, never a
   partial answer — for an absent, malformed or wrong-scheme header; an unknown participant id; a
-  `User` carrying no `tokenHash` (`seed_demo.sh`'s `u1`, the lifespan's `config.USER_ID` node); a
-  participant deleted by either reset; and a valid id carrying the wrong token, including another
-  participant's. The dependency maps all of them to one `401 invalid_token`. The hash comparison is
-  `hmac.compare_digest`, pinned by a spy at the comparison seam rather than by a timing measurement.
+  `User` that is not a participant (`seed_demo.sh`'s `u1`, the lifespan's `config.USER_ID` node);
+  a participant deleted by either reset; and a valid id carrying the wrong token, including another
+  participant's. The middle three are **one** branch, not three: `get_participant_record`'s query
+  carries `WHERE u.tokenHash IS NOT NULL`, so a non-participant and a deleted participant both come
+  back as zero rows, indistinguishable from an id that never existed. The dependency maps every case
+  to one `401 invalid_token`. The hash comparison is `hmac.compare_digest`, pinned by a spy at the
+  comparison seam rather than by a timing measurement.
 - **The two credentials cannot be used for each other's routes.** A presenter token presented on a
   participant route parses as participant id `presenter`, which no `User` carries, so it resolves to
   `None` and answers the ordinary `401` — held structurally, not by a special case. In the other
-  direction `get_presenter` keeps two meanings apart: **`403 wrong_credential_type`** when the
-  request carried something that is not the presenter principal (a participant token, typically),
-  **`401 presenter_session_gone`** when it carried no credential or a presenter token this process
-  never minted. Presenter tokens are minted in-process by `_PresenterSessions` from
-  `FALKORCHAT_STOREFRONT_PRESENTER_KEY` and are **not** graph state, so they do not survive a
-  restart — the operator logs in again.
+  direction `get_presenter` keeps two meanings apart, **and the `403` is narrower than it reads**:
+  `parse_bearer` runs first, so **`403 wrong_credential_type`** fires only when the header *parses*
+  as `Bearer <principal>.<token>` with a principal other than `presenter` — a participant token,
+  typically. **`401 presenter_session_gone`** answers everything else: no header, any header
+  `parse_bearer` rejects (a non-`Bearer` scheme, a missing `.`, an empty half — so `Basic abc`,
+  `Bearer garbage` and `Bearer presenter` all land here), and a presenter token this process never
+  minted. A client or test written from the looser reading asserts the wrong code. Presenter tokens
+  are `secrets.token_urlsafe(32)` minted in-process by `_PresenterSessions` **in exchange for**
+  `FALKORCHAT_STOREFRONT_PRESENTER_KEY` rather than derived from it, and are **not** graph state, so
+  they do not survive a restart — the operator logs in again.
 - **This is demo-session scoping, not authentication** (`docs/plans/salesperson-ui.md` §4.3;
   K-016/K-017/K-018 stay open). What it does give is the per-participant tenancy the platform seam
   cannot: `ctx.actor` is the participant id and every cart/order/profile service keys on it, so
@@ -252,7 +271,8 @@ An LLM-bearing process def would want the background path; noted, not built.
 **merged** ctx bound, the reserved-key rule and the parked-step declaration check live in
 `services.py`, because MCP tools and direct service callers never reach a pydantic model.
 
-**Reserved run-ctx keys — `threadId` and `error` — are rejected on both routes, in the service.**
+**Reserved run-ctx keys — `services.RESERVED_CTX_KEYS`, today `threadId`, `error` and
+`timerFired` — are rejected on both routes, in the service.**
 `threadId` is the resume denorm anchor: a caller-set one would park a process run against a live
 chat thread, and the trigger's step 2 would then advance it on the next ordinary human message
 there — no input, no guard data. A process run parks with `waitingThreadId = ''`,
@@ -287,26 +307,49 @@ reaches the same envelope without raising.
 
 Request bodies are size-bounded at the Pydantic boundary (`schemas.py`: text ≤ 8000 chars,
 name/title ≤ 200, mentions ≤ 50) — message text lands in graph RAM *and* the full-text index,
-so the transport caps it (RAM rule 6). List `limit`s are `Query`-bounded (1–200; thread window
-1–1000).
+so the transport caps it (RAM rule 6). The `limit`s on the routes above are `Query`-bounded
+(1–200; thread window 1–1000); other routes on the same router set their own — `GET
+/threads/{tid}/participants` is 1–50 — so read the route rather than generalising from this one.
 
 The **two append variants** (`DESIGN.md` §5.3) stay hidden inside `post_message`: the service checks whether
 the thread already has a `HEAD`/`TAIL` and dispatches the correct single-`GRAPH.QUERY` write. The
 API only ever sees "post a message."
 
-**The `/shop/api` storefront surface.** Present only under `create_app(storefront=True)` (§1.3), and
-mounted alongside a `StaticFiles` mount of the SPA build at `/shop`. Eleven routes at
-`API_PREFIX = "/shop/api"`; every one of them resolves `ctx` from the request's own credential, so
-the `QUERIES.md` column below is reached under the *participant's* `actor`, never
-`config.USER_ID`. **Cred:** `P` = `get_participant`, `K` = `get_presenter`, `—` = none.
+**The `/shop/api` storefront surface.** Eleven routes at `API_PREFIX = "/shop/api"`, present only
+under `create_app(storefront=True)` (§1.3). The SPA build is mounted beside them at `/shop`, but
+**only when `FALKORCHAT_STOREFRONT_DIR` names an existing directory** — unset (the documented
+default) or mistyped and the mount is skipped silently while `/shop/api` serves normally.
+
+**What holds for all eleven:** none resolves through the process-constant `get_context()`, and
+`config.USER_ID` is reached by no route at all (it is touched once at startup, by
+`services.ensure_actor` in `_lifespan`). **What does not hold for all eleven is the `actor`**, and
+the table's `Cred` column is where the four shapes separate:
+
+- **Five routes build `ctx` from the presented credential** — `GET /state`, `GET`/`POST /messages`,
+  `POST /order/advance`, `POST /reset` — via `Storefront.context_for(participantId)`, so the cited
+  query runs under that participant's own `actor` in `ws:{WS_ID}`.
+- **`POST /session` builds `ctx` from the id it has just minted**, not from a credential; there is
+  none yet.
+- **`GET /catalog` authenticates a participant and then reads under the demo `Agent`.**
+  `Storefront._catalog_ctx` is `CallContext(ws, actor=AGENT_ID)`, deliberately: the catalog is
+  global `reference` data — `Repository.filter_products` takes **no `ws`** and no customer — so no
+  participant identity is invented for a read that has nothing to do with one. That row's §15.2 is
+  therefore reached under neither the participant's actor nor `ws:{WS_ID}`.
+- **The four remaining routes build no `ctx` at all** — the two no-graph routes (`GET /health`,
+  `POST /presenter/session`) issue no query, and the two presenter routes call
+  `repo.list_participants(shop.ws)` / `reset_all_participants(shop.ws)` on the repository directly.
+
+  (5 + 1 + 1 + 4 = 11.)
+
+**Cred:** `P` = `get_participant`, `K` = `get_presenter`, `—` = none.
 
 | Endpoint | Cred | Reaches | `QUERIES.md` |
 |---|---|---|---|
 | `GET /shop/api/health` | — | nothing — liveness plus the locale list the join screen's chooser reads | *(no query)* |
 | `POST /shop/api/session` | — | `Storefront.join` → `ensure_participant`, `set_participant_record`, `services.save_profile` | §18.1, §18.3, §17.1 |
-| `GET /shop/api/state` | P | `Storefront.get_state` → `get_profile` / `get_cart` / `get_current_order`, plus the in-process turn state | §17.2, §16.5, §18.8 |
+| `GET /shop/api/state` | P | `Storefront.get_state` → `get_profile` / `get_cart` / `get_current_order`, plus the in-process turn state. `get_cart` is **two** reads: `read_cart` in `ws:{WS_ID}`, then `lookup_products_by_id` against the **global `reference`** graph to price the lines — the only cross-graph read on the 2 s poll path | §17.2, §16.5 **+ §16.9**, §18.8 |
 | `GET /shop/api/messages` | P | `services.read_messages` with an **explicit** `since` | §9.1 |
-| `POST /shop/api/messages` | P | `services.post_message`, mentioning the demo agent | §4 |
+| `POST /shop/api/messages` | P | `services.post_message`, mentioning the demo agent — `thread_exists` + `resolve_member_kinds` **before** the write, which is where this route's `ServiceError` re-shapes come from | §2, then §4 |
 | `GET /shop/api/catalog` | P | `Storefront.list_catalog` → `services.filter_products` + the startup image manifest | §15.2 |
 | `POST /shop/api/order/advance` | P | `services.get_current_order`, then `Storefront.advance_own_order` → `order_belongs_to_customer` → `advance_order` | §18.8, §18.9, §16.10 |
 | `POST /shop/api/reset` | P | `Storefront.reset_participant` — quiesce, then `repo.reset_participant`, then `services.save_profile` | §18.4, §17.1 |
@@ -314,9 +357,12 @@ the `QUERIES.md` column below is reached under the *participant's* `actor`, neve
 | `GET /shop/api/presenter/participants` | K | `repo.list_participants`, projected to four keys | §18.3 |
 | `POST /shop/api/presenter/reset-all` | K | `repo.list_participants` (pre-drain roster), then `repo.reset_all_participants` | §18.3, §18.5 |
 
-**No route takes an id from the client.** The thread id comes from the resolved
-`ParticipantRecord`, the order id from `services.get_current_order` on the server side, the
-workspace from `Storefront.ws`. That is what makes `POST /order/advance`'s `404`/`409` mean *stale
+**No route accepts a client-supplied `threadId`, `customerId`, `orderId` or `ws`** — there is no
+parameter to tamper with. (The *participant* id is client-supplied, inside
+`Bearer <participantId>.<token>`, and becomes `ctx.actor` — which **is** the `customerId`; what makes
+that safe is the `hmac.compare_digest` check against the graph row for that id, not the absence of
+an id.) The thread id comes from the resolved `ParticipantRecord`, the order id from
+`services.get_current_order` on the server side, the workspace from `Storefront.ws`. That is what makes `POST /order/advance`'s `404`/`409` mean *stale
 button* and never *someone else's order* — and `advance_own_order` re-checks ownership before the
 CAS anyway, so the guarantee holds at two layers rather than by one route's discipline.
 
@@ -339,10 +385,13 @@ see that handler drift.
 carries a `responses={…}` block naming its own statuses and their error tokens (`invalid_token`,
 `turn_in_progress`, `no_current_order`, `order_transition_refused`, `quiesce_timeout`,
 `unscoped_participant`, `unknown_participant`, `reset_state_unknown`, `demo_not_seeded`,
-`validation_failed`, `bad_presenter_key`, `presenter_session_gone`, `wrong_credential_type`), and
-the gate reads them back off `app.routes` rather than off the source — refusing a declared status
+`validation_failed`, `bad_presenter_key`, `presenter_session_gone`, `wrong_credential_type`, plus
+`unhandled` on the `500` rows of the two reset routes), and the gate reads them back off
+`app.routes` rather than off the source — refusing a declared status
 with no producer, a producer with no declaration, an unclassified route and a route with no
-declaration at all.
+declaration at all. One token is emitted but declared nowhere: `_cross_cutting_json`'s defensive
+`state_unknown` branch, reachable only by a route absent from `ROUTE_CLASSES` and therefore
+unreachable by construction.
 
 **The `ServiceError` handler wraps rather than replaces, and is path-scoped.**
 `register_storefront_error_handlers` captures the incumbent handler and registers a wrapper that

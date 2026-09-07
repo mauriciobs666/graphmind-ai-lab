@@ -906,13 +906,22 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
     def get_presenter(authorization: str | None = Header(default=None)) -> None:
         """Verify `Bearer presenter.<presenterToken>`.
 
-        §5.3 keeps two responses apart here, and the split is the contract:
-        **`403` wrong credential type** when the request carried a participant
-        token (or anything else that is not the presenter principal), and
-        **`401` presenter session gone** when it carried no credential or a
-        presenter token this process never minted. C2 clears the presenter
-        credential on both; the client cannot act on the difference, but the
-        auth matrix can.
+        §5.3 keeps two responses apart here, and the split is the contract —
+        **stated as the branch below rather than as what it means**, because
+        the looser reading is wider than the code
+        (`docs/reviews/salesperson-ui-impl.md` `## Pass 16`, P16-3):
+
+        - **`403` wrong credential type** only when `parse_bearer` *succeeds*
+          and the principal half is something other than `presenter` — a
+          participant token, typically.
+        - **`401` presenter session gone** for everything else: no header, any
+          header `parse_bearer` rejects (a non-`Bearer` scheme, a missing `.`,
+          an empty half — so `Basic abc`, `Bearer garbage` and
+          `Bearer presenter` all answer `401`, not `403`), and a presenter
+          token this process never minted.
+
+        C2 clears the presenter credential on both; the client cannot act on
+        the difference, but the auth matrix can.
         """
         parsed = parse_bearer(authorization)
         if parsed is None:
