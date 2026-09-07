@@ -162,13 +162,27 @@ def test_a_model_record_without_a_call_surface_fails_before_any_mapping_is_consu
     true one buried among them. Without a `callSurface` there is no profile, so there is no
     contract to report the fields against at all.
     """
-    fp = Fingerprint(armKind="model", callSurface=None, fields={"benchSchemaVersion": 1})
+    fp = Fingerprint.from_dict({"armKind": "model", "benchSchemaVersion": 1})
     assert fp.validate() == [FieldProblem(field="callSurface", reason="absent")]
 
-    # ...and it is *absent*, not empty or null: the same three-state discipline §3.4.2 applies to
-    # the fields applies to the discriminator that decides which fields are read.
+    # ...and *absent* is not *null* (review P5-1): a stored `"callSurface": null` was written by
+    # something that had the value and lost it, where a missing key was never written at all, and
+    # AC-2's quarantine line prints the reason it is given. This is the distinction review P3-10
+    # made load-bearing for `armKind`, on the discriminator added after it.
+    nulled = Fingerprint.from_dict(
+        {"armKind": "model", "callSurface": None, "benchSchemaVersion": 1}
+    )
+    assert nulled.validate() == [FieldProblem(field="callSurface", reason="null")]
+
+    # *Empty* does collapse into *absent*, deliberately and only here: `""` is the missing-key
+    # sentinel `from_dict` uses for this field — as it does for `armKind` — so a blank value and a
+    # missing key are indistinguishable by construction, where a `null` is not. Two reasons for
+    # three stored shapes, and the suite says which two rather than claiming three.
     blank = Fingerprint(armKind="model", callSurface="", fields=model_fields())
     assert blank.validate() == [FieldProblem(field="callSurface", reason="absent")]
+    assert Fingerprint.from_dict(
+        {"armKind": "model", "callSurface": "", "benchSchemaVersion": 1}
+    ).validate() == [FieldProblem(field="callSurface", reason="absent")]
 
 
 def test_an_unknown_call_surface_is_reported_rather_than_crashing() -> None:
@@ -208,31 +222,69 @@ def test_a_residency_element_carrying_any_other_key_is_refused(field: str, extra
     green and travels into S2, where `residency()` emits `{id, state}` and the two disagree with
     nothing to catch them.
 
-    The check is over the element's **whole key set**, which is what makes it refuse *either*
-    retired key — including `modelKey`, which can have no grep residual of its own because it
-    keeps its meaning as a required field of the very same record (§7 rule 5(b)'s named
-    alternative, and §4 S1e Table A's row). The other retired key is asserted through the rule
-    rather than by name: Table A's second residual retires that token from the tree to zero, so
-    spelling it here — even in a comment — would leave the residual standing at one.
+    The check is over the element's **whole key set**, so a key nobody anticipated is refused by
+    construction rather than by having been named — which is the property a denylist cannot have.
+    The retired element itself is asserted **by value**, both of its keys named, in the test
+    below; these three stand-in keys are the generality half of the same rule.
     """
     element = {"id": "qwen/qwen3-4b-2507", "state": "loaded", extra: "whatever"}
     problems = _problems("model", model_fields(**{field: [element]}))
     assert FieldProblem(field=f"{field}[0].{extra}", reason="forbidden") in problems
 
 
+@pytest.mark.parametrize("field", ["residentModelsAtStart", "residentModelsAtEnd"])
+def test_the_retired_residency_element_is_refused_by_value(field: str) -> None:
+    """S1 done-condition 1's instance, asserted by value with **both** retired keys named
+    (plan v1.16, impl-gate P5-3).
+
+    `{modelKey, sizeBytes}` is the `lms ps --json` element whose only source plan v1.8 removed,
+    and the shape the shipped `conftest.py` fixture declared until `8fc2341`. The rule that
+    refuses it is key-set-exact, but a rule can be right in the code and held there by nothing:
+    an extra-key loop carrying a one-name tolerance for either retired key passed the **entire**
+    472-test suite. Naming both keys in the assertion is what closes that, and this file is the
+    one place the retired literal may live — §4 S1e Table A's second residual is scoped to
+    `modelbench` and `tests/conftest.py` precisely so that this test can exist.
+
+    Both snapshots, because the rule is §3.4.2's and §3.4.4a's over the element shape; Table A's
+    row names only the second because that is where the stale *fixture* was.
+    """
+    element = {"modelKey": "qwen/qwen3-4b-2507", "sizeBytes": 2 << 30}
+    problems = _problems("model", model_fields(**{field: [element]}))
+    assert FieldProblem(field=f"{field}[0].modelKey", reason="forbidden") in problems
+    assert FieldProblem(field=f"{field}[0].sizeBytes", reason="forbidden") in problems
+    # ...and the keys it does not carry are named too, so the element is not merely rejected but
+    # diagnosed: it is the wrong shape in both directions at once.
+    assert FieldProblem(field=f"{field}[0].id", reason="absent") in problems
+    assert FieldProblem(field=f"{field}[0].state", reason="absent") in problems
+
+
 @pytest.mark.parametrize(
-    "element",
+    "element,expected",
     [
-        {"modelKey": "qwen/qwen3-4b-2507", "state": "loaded"},
-        {"id": "qwen/qwen3-4b-2507", "bytesOnDisk": 2 << 30},
+        (
+            {"modelKey": "qwen/qwen3-4b-2507", "state": "loaded"},
+            FieldProblem(field="residentModelsAtEnd[0].modelKey", reason="forbidden"),
+        ),
+        (
+            {"id": "qwen/qwen3-4b-2507", "sizeBytes": 2 << 30},
+            FieldProblem(field="residentModelsAtEnd[0].sizeBytes", reason="forbidden"),
+        ),
     ],
     ids=["retired-identity-key-kept", "retired-size-key-kept"],
 )
-def test_a_half_swapped_residency_element_is_invalid(element: dict) -> None:
+def test_a_half_swapped_residency_element_is_invalid(element: dict, expected) -> None:
     """Each of these swaps one key of the retired pair and keeps the other — the half-application
-    §7 rule 5(b) forbids a table's checks from passing. Neither is merely unused; both are
-    refused, so a fixture edit that stopped halfway fails here rather than shipping green."""
-    assert _problems("model", model_fields(residentModelsAtEnd=[element])) != []
+    §7 rule 5(b) forbids a table's checks from passing. A fixture edit that stopped halfway fails
+    here rather than shipping green.
+
+    **It asserts the surviving retired key's own problem, not merely that some problem exists**
+    (review P5-4). Each case is *also* missing one of `{id, state}`, which produces an `absent`
+    problem on its own — so `!= []` was satisfied whether or not the extra-key rule existed at
+    all, and deleting that rule entirely left both cases of this test green. The test written to
+    be the redundancy was the one test in the group that had none.
+    """
+    problems = _problems("model", model_fields(residentModelsAtEnd=[element]))
+    assert expected in problems
 
 
 def test_the_current_residency_element_shape_is_valid() -> None:
@@ -327,6 +379,28 @@ def test_round_trips_through_a_dict(profile: str) -> None:
     # which is the failure `from_dict` strips both names to prevent.
     assert "armKind" not in fp.fields and "callSurface" not in fp.fields
     assert Fingerprint.from_dict(fp.to_dict()).validate() == []
+
+
+def test_a_deterministic_record_omits_the_call_surface_rather_than_storing_null() -> None:
+    """The stored shape of a surfaceless arm, pinned rather than commented (review P5-2).
+
+    A deterministic arm calls no surface, which is a different fact from "we did not capture
+    this" — the one thing `null` means in this record (§3.4.2). So `to_dict` **omits** the key
+    rather than writing `null`, and the round-trip test cannot see the difference: `from_dict`
+    reads a stored `null` back as the same `None` the omission restores. Writing
+    `"callSurface": self.callSurface` unconditionally therefore passed the whole suite, and this
+    is the assertion that refuses it — on a decision S2's runner and S3's `load_history` both read
+    off disk.
+    """
+    reference_arm = Fingerprint(
+        armKind="deterministic", callSurface=None, fields=deterministic_fields()
+    )
+    assert "callSurface" not in reference_arm.to_dict()
+
+    # ...and the positive twin, so "omit it" cannot be over-applied into "never write it".
+    for surface, fixture in (("chat", model_fields), ("embeddings", embeddings_fields)):
+        stored = Fingerprint(armKind="model", callSurface=surface, fields=fixture()).to_dict()
+        assert stored["callSurface"] == surface
 
 
 # --- M-4: the contracts are pinned against literals, not against themselves ----------------------
@@ -539,9 +613,25 @@ def test_the_arm_kind_discriminator_keeps_absent_distinct_from_null() -> None:
     bogus = Fingerprint.from_dict({"armKind": "robot", "benchSchemaVersion": 1})
     assert bogus.validate() == [FieldProblem(field="armKind", reason="unknown")]
 
-    # The second discriminator reads the same way. A stored model record with no `callSurface`
-    # key is one written before the profile existed or by something that lost it; it has no
-    # profile, so it has no contract, and saying so is the only honest answer (§3.4.1).
+    # The second discriminator reads the same way, and review P5-1 is why it now does. A stored
+    # model record with no `callSurface` key is one written before the profile existed; one that
+    # says `"callSurface": null` was written by something that had the value and lost it. Those
+    # are two failures, not one, so `from_dict` reconstructs the missing key as `""` — the same
+    # missing-key sentinel it uses for `armKind` — and never as `None`, which is this field's
+    # legitimate *deterministic* value and would collapse the two.
     surfaceless = Fingerprint.from_dict({"armKind": "model", "benchSchemaVersion": 1})
-    assert surfaceless.callSurface is None
+    assert surfaceless.callSurface == ""
     assert surfaceless.validate() == [FieldProblem(field="callSurface", reason="absent")]
+
+    lost = Fingerprint.from_dict({"armKind": "model", "callSurface": None, "benchSchemaVersion": 1})
+    assert lost.validate() == [FieldProblem(field="callSurface", reason="null")]
+
+    # ...while on a *deterministic* record the missing key is not an absence at all: `None` is
+    # that arm's value (§3.4.1, "`None` iff deterministic"), which is what `to_dict` omits, so the
+    # sentinel must not reach it — a deterministic record reconstructed with `""` would report its
+    # own correct shape as a forbidden surface.
+    reference_arm = Fingerprint.from_dict(
+        {"armKind": "deterministic", **deterministic_fields()}
+    )
+    assert reference_arm.callSurface is None
+    assert reference_arm.validate() == []

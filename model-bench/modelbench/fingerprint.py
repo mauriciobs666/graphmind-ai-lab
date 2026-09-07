@@ -41,10 +41,10 @@ ArmKind = Literal["model", "deterministic"]
 CallSurface = Literal["chat", "embeddings"]
 Tier = Literal["nonempty", "present"]
 
-#: Why a field failed. `unknown` covers a value this build cannot interpret — an unrecognized
-#: `armKind` or `callSurface`, a `benchSchemaVersion` from the future (plan Appendix A names the
-#: other four; see this module's HISTORY entry for why the fifth is needed), or a residency
-#: element that is not a mapping of strings.
+#: Why a field failed. `unknown` covers a **value** this build cannot interpret, in three
+#: families (plan Appendix A): a discriminator it does not recognize (`armKind`, `callSurface`), a
+#: `benchSchemaVersion` from the future, and a residency snapshot that is not a list, an element
+#: that is not a mapping, or an element value that is not a string.
 ProblemReason = Literal["absent", "empty", "null", "forbidden", "unknown"]
 
 
@@ -281,9 +281,18 @@ class Fingerprint:
         # consulted** (§3.4.1, S1 done-condition 6): without a `callSurface` there is no profile,
         # so there is no required set to report a record against, and answering with thirty
         # `absent` problems would bury the one that is true.
+        #
+        # It reports `null` and `absent` as two different failures, for the reason `armKind` does
+        # (review P3-10): a stored `"callSurface": null` was written by something that *had* the
+        # value and lost it, where a missing key was never written at all, and AC-2's quarantine
+        # line prints the reason. `empty` collapses into `absent` here — and only here — because
+        # `""` is the missing-key sentinel `from_dict` uses, so on this field the two states are
+        # indistinguishable by construction; `null` is not, which is why it stays apart.
         if self.armKind == "deterministic":
             if self.callSurface is not None:
                 return [FieldProblem(field="callSurface", reason="forbidden")]
+        elif self.callSurface is None:
+            return [FieldProblem(field="callSurface", reason="null")]
         elif not self.callSurface:
             return [FieldProblem(field="callSurface", reason="absent")]
         elif self.callSurface not in CALL_SURFACES:
@@ -324,8 +333,15 @@ class Fingerprint:
         # Both discriminators are stripped, for the same reason: a discriminator left in `fields`
         # is a field of no required set and so lands in every profile's *forbidden* set.
         fields = {k: v for k, v in d.items() if k not in _DISCRIMINATORS}
+        arm_kind = d.get("armKind", "")
+        # A missing key and a stored `null` are two different failures, so the missing-key
+        # sentinel is `""` — the same one `armKind` uses one line up — and never `None`, which
+        # would collapse the two into one reason (review P5-1). On a *deterministic* record the
+        # missing key is not an absence at all: `None` **is** that arm's value (§3.4.1, "`None`
+        # iff deterministic"), and it is what `to_dict` omits, so the round trip restores it.
+        missing: str | None = None if arm_kind == "deterministic" else ""
         return cls(
-            armKind=d.get("armKind", ""), callSurface=d.get("callSurface"), fields=fields
+            armKind=arm_kind, callSurface=d.get("callSurface", missing), fields=fields
         )
 
     def to_dict(self) -> dict[str, Any]:

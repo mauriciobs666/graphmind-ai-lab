@@ -2,6 +2,77 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-07 — S1e Tables A and B, fix round: three states for the second discriminator, and two decisions that were held by comments
+
+**What:** `docs/reviews/small-model-benchmarking-impl.md` **`## Pass 5`** findings **P5-1**, **P5-2**
+and **P5-4**, plus **P5-3**'s code half once plan **v1.16** (`1ed8599`) made it writable.
+`modelbench/fingerprint.py` and `tests/test_fingerprint.py` only — no other file in the package
+moved, and neither remaining S1e unit opens either. **472 → 475 tests**, `.venv/bin/ruff check .`
+clean, **7 mutations run, 7 killed**.
+
+**P5-1 — `callSurface` reported *absent*, *empty* and *null* as one failure, under a test comment
+claiming it did not.** The collapse was in `from_dict`: `d.get("callSurface")` maps a missing key
+and a stored `null` to the same `None`, so a record written by something that *had* the surface and
+lost it was reported to the operator as one that never carried it. The fix is `armKind`'s own
+mechanism, applied one field over: the missing-key sentinel is `""`, and `validate()` answers `null`
+before it answers `absent`. **Two reasons for three stored shapes, and the suite now says which
+two** — `empty` still collapses into `absent`, because `""` *is* the sentinel and the two states are
+indistinguishable on this field by construction, where `null` is not. That is the honest half of the
+old comment, which claimed a three-state discipline directly above an assertion pinning the
+collapse.
+
+**The one subtlety, and it is why the sentinel is chosen per record rather than globally.** `None`
+is not an absence marker on a **deterministic** arm — it is that arm's *value* (§3.4.1, "`None` iff
+deterministic"), and it is what `to_dict` omits. So `from_dict` reconstructs a missing key as `None`
+on a deterministic record and as `""` on a model one; a sentinel applied to both would report a
+correct reference-arm record as carrying a forbidden surface, and fails the round trip.
+
+**P5-2 — `to_dict` omits `callSurface` on a deterministic arm rather than writing `null`, and
+nothing held it there.** The decision is right — that arm calls no surface, which is a different
+fact from "we did not capture this", the one thing `null` means in this record (§3.4.2) — but the
+round-trip test cannot see it, because `from_dict` reads a stored `null` back as the same `None` the
+omission restores. Writing `"callSurface": self.callSurface` unconditionally passed all 472 tests.
+It is now pinned by an assertion on the stored shape, with its positive twin on both model profiles
+so "omit it" cannot be over-applied into "never write it". This matters beyond tidiness: S2's runner
+and S3's `load_history` read that shape off disk.
+
+**P5-3 — the retired residency element is now asserted by value, both keys named.** Plan v1.16
+restates S1 done-condition 1 over the element's **key set** and re-scopes §4 S1e Table A's second
+residual to `modelbench` plus `tests/conftest.py`, which makes `tests/test_fingerprint.py` the one
+place the retired `lms ps --json` literal may live — and therefore makes the assertion writable at
+all. Before it, an extra-key loop carrying a one-name tolerance for either retired key passed the
+entire suite: the rule was right in the code and held by nothing. The new test constructs the
+retired element on **both** snapshots and names both keys' `forbidden` problems, plus the two keys
+it lacks. The residual stays at its stated target: `grep -rFn sizeBytes modelbench tests/conftest.py
+--include='*.py'` → **0**.
+
+**P5-4 — the half-swap test did not detect the half-application it is named for.** It asserted
+`!= []`, and each of its two cases is *also* missing one of `{id, state}`, which produces an
+`absent` problem on its own — so the assertion was satisfied whether or not the extra-key rule
+existed. Deleting that rule entirely left both of its cases green while failing six other
+parameters. It now asserts the surviving retired key's own `forbidden` problem, and its size case
+uses the real retired spelling rather than the stand-in v1.15 forced on it.
+
+**The mutations.** Each was applied to a file copied aside and restored by copy immediately, never
+by `git restore`; the tree was verified byte-identical after every one.
+
+| # | The wrong implementation | Result |
+|---|---|---|
+| 1 | `validate()` collapses `null` back into `absent` | 2 failed — killed |
+| 2 | `from_dict` drops the missing-key sentinel (`d.get("callSurface")`) | 2 failed — killed |
+| 3 | `to_dict` writes `"callSurface"` unconditionally — the review's M2, which had survived | 1 failed — killed |
+| 4 | extra-key loop tolerates the retired size key — the review's M1, which had survived | 3 failed — killed |
+| 5 | extra-key loop tolerates the retired identity key | 5 failed — killed |
+| 6 | the extra-key `forbidden` loop deleted — the review's M5 | **10** failed — killed, where before this round it was 6 and **both** half-swap cases passed |
+| 7 | the missing-key sentinel reaches a deterministic record too | 2 failed — killed |
+
+**Also swept:** `ProblemReason`'s comment named two of `unknown`'s three families and omitted the
+non-list snapshot; plan v1.16's Appendix A now writes all three out, so the module docstring says
+what the plan says.
+
+**Not in this round.** P5-5 and P5-6 are plan-side and closed at v1.16. Nothing from Pass 5 is
+carried.
+
 ## 2026-09-07 — S1e Tables A and B: the residency source, the third arm profile, and the element shape
 
 **What:** Plan **v1.15** §4 S1e **Table A** (`lmsCliCommit` → `residencySource`) and **Table B**

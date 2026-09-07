@@ -25,7 +25,11 @@ derives from `armKind` (still two-valued, and every `armKind == "model"` filter 
 `report.py` is unchanged by that) and `callSurface` (required, no default, `None` **iff**
 deterministic). Both are members of no required set and are checked **before any mapping is
 consulted**: without a surface there is no profile, so there is no contract to report the fields
-against. Re-deriving `ARM_KINDS` from the profile mapping makes its members the three profiles, so
+against. **`from_dict`'s missing-key sentinel for `callSurface` is `""` on a model record and
+`None` on a deterministic one, and the split is load-bearing**: `None` is the deterministic arm's
+*value*, so a plain `d.get("callSurface")` reports a stored `null` — a surface something had and
+lost — as one that was never written, while a blanket `""` reports a correct reference-arm record
+as carrying a forbidden surface. Re-deriving `ARM_KINDS` from the profile mapping makes its members the three profiles, so
 `armKind == "model"` fails the membership test and **every model record refuses on write** — a green
 mapping and a dead harness. The forbidden sets stay a union-minus-mine **set operation, never a
 list**; that is what forbids `runtimeName`, `runtimeVersion`, `temperature` and `maxTokens` on an
