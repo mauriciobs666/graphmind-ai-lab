@@ -59,7 +59,7 @@ Stakeholder decisions, 2026-09-02:
 | U17 — Plan v1.9: close Pass 3's blockers and majors | `architect` (resumed) | `aee9ac26e4c41f8ea` | **accepted** — `81a3ef7` | `docs/plans/small-model-benchmarking.md` v1.9 | U19 → — | 301k tok / 100 tools |
 | U19 — Re-gate plan v1.9 (Pass 4) | `analyst` (fresh) | `a84c263e5998ba953` | **accepted** — `bb0cacf`; recovered from disk after a kill, **verified 2026-09-06** (see the resume section) | `docs/reviews/small-model-benchmarking.md` `## Pass 4` | self → **needs changes** (3 blockers, 5 majors, 5 minors, 1 nit) | — (killed before reporting) |
 | U20 — S1: residency element-shape assertion (plan v1.9 S1 DC-1) | `tdd-engineer` | — | queued — specified at v1.9, not yet implemented | `model-bench/**` | re-gate → — | — |
-| U21 — Rule on Pass 4's three routed statistical questions (gap-detector right-censoring, threshold margin, §11.7's second denominator) | `data-scientist` (fresh) | `a4e06f8c810bbbbb8` | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.12 if changed | `analyst` → — | — |
+| U21 — Rule on Pass 4's three routed statistical questions (gap-detector right-censoring, threshold margin, §11.7's second denominator) | `data-scientist` (fresh) | `a4e06f8c810bbbbb8` | **delivered** — `fc2fcf6`; all three changed the note | `docs/plans/small-model-benchmarking-ml.md` **v1.12** | `analyst` re-gate → — | 119k tok / 39 tools |
 | U22 — Plan v1.10: close all 14 plan-gate Pass 4 findings + fold note v1.11's binding closed form | `architect` (fresh) | `aaf7ade9ddbc63e8b` | in-flight | `docs/plans/small-model-benchmarking.md` v1.10 | `analyst` → — | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
@@ -1301,4 +1301,40 @@ restatement finding is exactly what cross-editing produces here.
   work* or *deferred by choice*. Both briefs carry it.
 - **FalkorDB is unreachable this session** (`host.docker.internal:6379`). No CPG exists for
   `model-bench` anyway, and every unit here is offline work — but kaizen writes will fail.
+
+### U21 delivered — 2026-09-06, note v1.12 (`fc2fcf6`)
+
+All three routed questions changed the note; none resolved as a no-op.
+
+- **Q1 — the exactness argument fails, and the failure is not marginal.** §11.5's *"every withheld
+  call was slower than every timed call"* does not extend to §11.5.1's detector, which withholds on
+  `unexplainedMs` — a **covariate** — never on the wall clock, so nothing orders a withheld call
+  against a timed one. It needs only one timed call slower than the threshold, which at plan §2.2's
+  ~1.3 s pack turns is **the ordinary case of the very pack that fires it**. The fix has the right
+  shape: `censoringExact` becomes a **computed per-render flag** with §11.7 slot 3 selecting on it,
+  so the claim is checkable at runtime rather than argued — the pattern this coordination has needed
+  repeatedly. The gate's Open question 2 is closed.
+- **Q2 — the 1 000 ms threshold survives; its second margin is withdrawn.** P4-11 was right: the two
+  cold loads are n=1 each and differ in model, quantization *and* route, so they bound no load from
+  below and *"~3.5× below the smallest cold load"* was unsupportable. Rebased on **asymmetric error
+  costs** — a false positive is discrete and severe (three of them take a Y=38 run below §11.6's
+  floor, so no latency summary at all), a false negative continuous and bounded by the threshold
+  itself. The re-check is scheduled against a field the plan already stores, so it is not a deferral.
+- **Q3 — suppression confirmed, condition corrected** to gate on the **call surface**, not the arm
+  profile: a `deterministic` arm returns no `stats` either, so a profile-shaped condition misses it.
+
+**§11.6 does not move** — the attained-level bound re-derives without the ordering assumption (it
+needs only *subset*), so the floor, its 5-point constant and §11.5's table are untouched. Blast
+radius on the plan is two asks, not a redesign.
+
+**Two new plan asks, both non-blocking, relayed to the architect while still in flight** rather than
+held — §11.9 **2b** (a withheld item's wall clock must stay readable somewhere other than
+`latencyMs`; the fields `plan-gate P4-3` already adds may reconstruct it, so the architect may owe no
+new field) and §11.9 **5** (`statsCoveredCount` is `None`, never `0`). 2b interacts directly with the
+P4-3 closure U22 is writing now, which is why it could not wait.
+
+Committed by explicit path — `docs/plans/small-model-benchmarking.md` is dirty with U22's in-flight
+work and must not be swept into a commit.
+
+**Not yet accepted:** v1.12 rides into the same `analyst` re-gate as plan v1.10.
 
