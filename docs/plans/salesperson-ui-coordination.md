@@ -154,7 +154,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U37** — Pass 16's minors + `salesperson/`'s `start_demo.sh` references | `coder` (fresh) | `a38711140b2ecc8ec` | **accepted** (`ba368a0`, `7a85c1c`) | `SERVER.md`, `salesperson/{AGENTS,README}.md`, `playwright.config.ts` (mine) | teco-verified → **accept** | 127k / 52 |
 | **U36** — `config.py`'s three future-as-present comments + the documentation `HISTORY.md` entry | `coder` | `aa9b68b68151bca8a` | **accepted** (`3fe3d8f`) | `falkorchat/config.py` (**5** comments, full-AST equal), `docs/HISTORY.md` | teco-verified → **accept** | 116k / 28 |
 | **U38** — `pipeline.sh`'s provenance stamp races `HEAD` and scopes `SOURCE_DIRTY` repo-wide | `cobb` | `a42739600c7b41e1d` | in-flight (fix round) | `6012ddb` — 5 files, `git-provenance.sh` new | `analyst` `a98a748e49a559ead` → **needs changes** (`docs/reviews/cpg-provenance-stamp.md`, `7c7536d`) | 145k tok / 44 tools |
-| **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | in-flight (dispatched 2026-09-07) | `docs/manuals/graph-ontology.md` | `analyst` (resume `a98a748e49a559ead`) → — | — |
+| **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | gated | `c92f35d` — `docs/manuals/graph-ontology.md` | `analyst` `a98a748e49a559ead` Pass 2 → — | 70k tok / 11 tools |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | in-flight (dispatched 2026-09-07, after U36) | `storefront.py`, `storefront_api.py`, `app.py`, both test files, **+ `config.py`/`SERVER.md`/`HISTORY.md`** | `analyst` + `qa-engineer` | — |
@@ -2907,3 +2907,43 @@ now actively misleading, since that path is usually a gitignored staged copy who
 says nothing about which revision it holds. Manuals are `tico`'s, so `cobb` was told
 explicitly to leave the file alone. Its gate resumes the same `analyst`, which already
 holds all eight fields in context and found the drift.
+
+## U39, and a delegate that swept instead of trusting my line numbers
+
+`tico` delivered the manual correction (`c92f35d`) and did the thing I most wanted
+and had only implied: it swept the whole file for `CpgBuildInfo`/`SOURCE_`/provenance
+rather than fixing the three line numbers the reviewer handed it, and found a
+**fourth** stale spot — the Overview blockquote telling readers `SOURCE_PATH`
+"settles it in one query". That sentence sat above everything else in the document,
+so a reader who never reached the FAQ met the wrong advice first. Worth generalising:
+a review finding's line numbers are where a reviewer *happened to be looking*, and a
+brief should say so explicitly rather than leave the delegate to infer it.
+
+The repair is the same shape as the one I liked in the `SERVER.md` pass — it makes the
+defect class detectable rather than merely absent. The FAQ now presents a
+**question→field table** (`SOURCE_ORIGIN` for which directory, `SOURCE_TREE` for which
+revision of it, `PARSED_AT` rather than `BUILT_AT` for freshness, `SOURCE_DIRTY` scoped
+to the source, `PROVENANCE` as the trust qualifier) followed by two "looks like an
+answer, isn't" bullets for `SOURCE_PATH` and a bare `SOURCE_COMMIT`. A reader who asks
+the wrong field now gets told that they did, instead of getting a plausible value.
+
+A new FAQ entry teaches the **absent** cases as legitimate states rather than faults —
+`PROVENANCE: 'none'`, a pre-fix marker with no `PROVENANCE` at all, no marker, and the
+hand-written `BUILT_AT: unknown` one. That matters more than it looks: U38's deliberate
+regression means absent fields are now the *honest* output, and a document that treats
+absence as breakage would push a reader straight back toward the wrong-but-present value
+the whole change removed.
+
+One judgment call I'm sending to the gate rather than accepting on report. On tree
+equality `tico` wrote "the source is unchanged since it was captured" instead of
+"byte-identical to what was parsed", deliberately, to avoid inheriting the reviewer's
+open finding m1 — under `PROVENANCE: source-origin` the tree describes the origin
+directory while the parse root was a *pruned copy* of it. If that phrasing is right,
+then a downstream document is currently more accurate than the reference it cites, and
+`cobb`'s in-flight fix round should be made consistent with the manual rather than the
+reverse. I asked the reviewer that question directly; it is not mine to settle.
+
+Gate is `analyst` resumed on its own transcript as `## Pass 2` — it already holds all
+eight fields and wrote m1, so the consistency question costs it nothing to answer.
+`tico` skipped a verification consult of its own, correctly: a targeted correction
+against two authoritative sources plus a live graph read is not a rewrite.
