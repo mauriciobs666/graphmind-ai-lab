@@ -192,9 +192,11 @@ does not avoid this — the race is on the index, not on any one path. Commit **
 involved: `git commit -F - -- <path>…` (or `git commit -m … -- <path>…`) commits exactly those
 paths' working-tree content and leaves every other session's staged entries untouched. `git add`
 first only when a path is still untracked — a pathspec commit cannot name a file git does not know
-yet. If you do stage, re-check `git status`/`git diff --cached --name-only` immediately before
-`git commit` and stop if anything that is not yours has appeared: that narrows the window, it does
-not close it.
+yet, and that is the only staging a path-limited commit needs. **Never partial-stage a path you
+then name in one:** the commit takes that path's *whole* working-tree content and rewrites the
+index to match, silently discarding the hunks you staged — so a `git diff --cached` beforehand
+shows your hunks and proves nothing about what lands, and a concurrent session's edit to the same
+file is committed under your message. Other paths' staged entries survive untouched either way.
 
 ## Maintenance rules
 

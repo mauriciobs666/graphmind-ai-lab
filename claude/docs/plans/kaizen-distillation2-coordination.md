@@ -68,9 +68,10 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U13 | data-scientist chunk A (10: ≤ 08-30) | `a21cdcb05d80c9e1f` | accepted | `claude/data-scientist/data-scientist.md` (1 clause) + `lm-studio-model-notes.md` (folded, 1 stale claim corrected) + `kaizen/*`; **8 of 10 discarded** — 3 falsified, 1 obsolete, 4 already published at the point of use; 10 nodes deleted | none → — | 178.8k tok, 67 tools |
 | U14 | data-scientist chunk B (9: 08-31…09-02) | `a62ee471d5c0c8407` | accepted | `claude/data-scientist/data-scientist.md` (Uncertainty bullet) + `kaizen/*` (K-003 kept open); **7 discarded, 1 promoted, 1 kept open**; 8 nodes deleted, 1 `PRODUCED` resolved (`MENTIONS`→`tico` kept alive) | none → — | 195.5k tok, 78 tools |
 | U15 | data-scientist chunk C (10: 09-03…09-07, incl. `6ef71251` arrived mid-U13) | `ae7d55eeefd996462` (died on a rate limit after all writes, before the clear); recovery `aecf048606b51a19f` | accepted | `claude/data-scientist/data-scientist.md` (3 promotions) + `lm-studio-model-notes.md` (JIT bullet rewritten in place) + `kaizen/*` (K-004 kept open); **5 promoted, 4 discarded, 1 kept open**; 10 nodes deleted — **`data-scientist` closed out, 0/0** | none → — | recovery 80.6k tok, 26 tools (dead run unreported) |
-| U16 | teco chunk A (8: ≤ 09-01) | — | queued | `claude/teco/kaizen/*`, graph cleared | none → — | — |
+| U16 | teco chunk A (8: ≤ 09-01) | `a91f2d49861381ba8` | accepted | `claude/AGENTS.md` (concurrent-write paragraph, closing sentence replaced) + `claude/teco/teco.md` (review-gate clause) + `kaizen/history.md`; **2 promoted, 6 discarded**, both promotions in-place sharpenings; 8 nodes deleted | none → — | 153.0k tok, 49 tools |
 | U17 | teco chunk B (12: 09-02) | — | queued | `claude/teco/kaizen/*`, graph cleared | none → — | — |
-| U18 | teco chunk C (11: 09-03…09-06) | — | queued | `claude/teco/kaizen/*`, graph cleared | none → — | — |
+| U18 | teco chunk C (13: 09-03…09-06) | — | queued | `claude/teco/kaizen/*`, graph cleared | none → — | — |
+| U18b | teco chunk D (12: 09-07, all arrived after pass open) | — | queued | `claude/teco/kaizen/*`, graph cleared | none → — | — |
 | U19 | analyst chunk A (12: ≤ 08-30) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U20 | analyst chunk B (6: 08-31…09-01) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U21 | analyst chunk C (15: 09-02) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
@@ -257,6 +258,26 @@ dies before either leaves nothing at all — which is what happened here.
 - **U14 → three `claude/scripts/audit-team.sh` check-7 FAILs stand, none in
   scope.** All three are personal-identifier leaks elsewhere in the repo. Not
   this pass's work; worth a routed unit of its own.
+
+- **U16 → a standing-memory disagreement, flagged for the human, not acted
+  on.** The user's `subagent-permission-mitigation` memory names running the
+  parent session in **`acceptEdits`** as the mitigation for auto mode's
+  classifier review of subagent actions. `.claude/settings.json` now carries
+  **no `defaultMode` key at all** — `6f719ae` pinned `bypassPermissions` on
+  2026-08-29 and `4bb96e1` reverted it — so the parent runs on the harness
+  default (`auto`). The forensics that justified the revert indicted
+  `bypassPermissions` only; `acceptEdits`, whose earlier evidence showed
+  *partial per-run stickiness* that `auto` does not give, was never re-tested.
+  So the shipped config may have discarded a real if partial mitigation on
+  evidence that never examined it. A config decision for the stakeholder, not
+  a distillation one.
+
+- **U16 → three already-closed agents are accumulating again.** At U16's close
+  `architect` held 5 entries and `graph-dba` 1, all dated 2026-09-07, and
+  `analyst`'s newest is the same date. Capture is outpacing the pass on agents
+  it has already closed. The top-up units owed at pass close are now
+  `qa-engineer` (1 `MENTIONS`), `tico` (1 `MENTIONS`), `architect` (5) and
+  `graph-dba` (1).
 
 - **U12 → `architect` needs a top-up unit, like `qa-engineer`.** U7b closed
   `architect` out at 0/0 on 2026-09-03. By U12's close (2026-09-07) it had

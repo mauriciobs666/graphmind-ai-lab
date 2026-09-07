@@ -2,6 +2,101 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-09-07 — Kaizen distillation, chunk A (8 oldest entries, 2026-08-25 → 2026-09-01)
+
+- **What:** U16 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled the
+  8 oldest `teco` `:KaizenEntry` nodes in `kaizen_team`. Result: **2 promoted** (both as one-clause
+  in-place sharpenings of existing text, not new bullets), **6 discarded**, 0 kept open, 0
+  `MENTIONS` tags. Every entry was re-derived independently rather than confirmed against its own
+  cited evidence.
+- **Promoted:**
+  - `b3f1a2c4-7e2a-4b9a-9c1e-1a2b3c4d5e6f` (2026-08-25, pathspec `git commit` ignores the index for
+    the named paths) → **`claude/AGENTS.md`**, concurrent-write paragraph, replacing its closing
+    "if you do stage, re-check `git diff --cached`" sentence. Empirically re-derived in a throwaway
+    scratchpad repo (git 2.43.0), never against the shared tree: with only hunk A staged for `f.txt`
+    and hunk B added to the working tree afterwards, `git commit -m x -- f.txt` committed **both**
+    hunks and left the index clean, while the identical setup committed **without** a pathspec
+    honoured the index and committed hunk A alone. A separately-staged unrelated path survived the
+    pathspec commit untouched, confirming the remedy the paragraph already mandates. The entry's
+    wording ("silently re-stages the current working-tree content") is exactly right — the index is
+    rewritten to match, not merely bypassed. The replaced sentence was the defect: it recommended
+    `git diff --cached` as the pre-commit check, which under the mandated path-limited form shows
+    your hunks and proves nothing about what lands — the precise false assurance behind commit
+    `d41da78`, where a concurrent session's `repository.py` content shipped under this team's
+    message. Replaced rather than appended per root `AGENTS.md`'s context-file rule.
+  - `a1e2c3d4-5f6a-4b7c-8d9e-0f1a2b3c4d5e` (2026-08-28, a live LLM run caught a bug a green offline
+    suite and a static plan review both missed) → **`teco.md`**, Guardrails, extending the existing
+    "Neither gate is execution" sentence by one clause. The incident itself is already documented at
+    the point of use — `falkor-chat/server/falkorchat/repository.py:2740-2751` records the live run
+    lowercasing "audio" against the seeded "Audio" and the `categoryNormalized` fix — and
+    `docs/reviews/workflow-catalog-lookup-impl.md:88` corroborates the three extra `test_queries.sh`
+    assertions U15b added on top. What was **not** written down anywhere is the routing consequence:
+    the existing sentence offers "a test **or** the live system" as interchangeable proof of
+    execution, so a coordinator could accept "1810 tests green" as satisfying it — which is what
+    happened. The clause states that a green offline suite is not that run when the behavior depends
+    on a live model's free-text output. Kept to one clause deliberately, given open plan item K-016
+    (`teco.md` bloat).
+- **Discarded — already published:**
+  - `b7c4e9a1-3f52-4d18-9a6e-7c1b0e4f8d92` (2026-09-01, the resolved `bypassPermissions`
+    subagent-write gap) and its superseded predecessor `f3e6b1a2-9c4d-4e7a-8b1f-2d5c7a9e0b31`
+    (same day, the unresolved observation), handled as one. Every claim of the resolved entry is
+    already in `skills/agent-standards/claude-code.md`: the header banner (background subagents by
+    default since v2.1.232; `Write`/`Edit` prompts persist under a parent confirmed continuously in
+    literal `bypassPermissions`), the `## Hooks` 2026-09-01 resolution block (the four-point root
+    cause, including the tool-class-specific finding that not one `Bash` call ever produced a
+    confirmation gap), and the record that this repo's `defaultMode` pin was reverted 2026-09-01.
+    Re-derived independently: `.claude/settings.json` today carries **no** `defaultMode` key at all
+    (`git log` — `6f719ae` pinned `bypassPermissions` 2026-08-29, `4bb96e1` reverted it), so the
+    superseded entry's stated premise no longer holds and promoting it would have shipped a false
+    config claim. The full investigation trail is `claude/docs/plans/bypass-permissions-subagent-gap.md`.
+  - `b3f2a1c4-8e9d-4a5b-9c1e-7d2f6a8b3c05` (2026-08-30, the `BACKLOG.md`/`HISTORY.md` asymmetry at
+    milestone close). Root `AGENTS.md` already carries the rule in full — "**The human applies the
+    list**" and "`BACKLOG.md` is forward-looking only — a delivered item does not stay in it".
+    **The entry's stated mechanism is wrong**: it frames the asymmetry as a write-permission one
+    ("appending `HISTORY.md` entries is routine and teco does it directly"), but re-deriving
+    `teco/hooks/guard-coordination-doc-writes.sh` shows its allowlist is `docs/plans/*` plus the
+    mechanical `Status: archived` flip — `<component>/docs/HISTORY.md` matches neither, so a
+    `HISTORY.md` append escalates to the human exactly as a `BACKLOG.md` edit does. The real
+    asymmetry is doctrinal, not guard-level. `.claude/settings.json` additionally gates
+    `Edit(**/docs/BACKLOG.md)` behind an explicit `permissions.ask` rule.
+  - `e7c1a9d4-3b6f-4e2a-9d8c-1f5a7b2c4e60` (2026-08-30, two file-disjoint units colliding through a
+    shared DB fixture). `teco.md`'s dispatch bullet already carries the rule at strictly broader
+    scope — one agent owns a shared database/graph key whenever both units' suites exercise it,
+    "**not only when a unit destructively wipes it**" — so the destructive case is covered a
+    fortiori. **The entry's stated mechanism is also wrong in two ways**: re-deriving
+    `falkor-chat/server/tests/conftest.py:100-110`, the `reference`-graph `MATCH (n) DETACH DELETE n`
+    runs in the body of the opt-in `wf_repo` fixture, i.e. at **setup**, not at teardown; and it is
+    not reached by a "destructive default `pytest`" — only by tests that request that fixture.
+  - `a1e6f0d2-8c3b-4e1a-9f7d-2b5c6a4d1e90` (2026-08-27, `architect` refusing an agent-to-agent
+    resume asking it to edit `docs/BACKLOG.md`). Substantively about `architect`, but re-derivation
+    found **both** halves already documented, so there was nothing left for an `architect`-side pass
+    to decide and no `MENTIONS` tag was added: `architect.md`'s Guardrails state the scope and its
+    harness enforcement verbatim ("Your `Write`/`Edit` access exists for one purpose… a `PreToolUse`
+    hook escalates any `Write`/`Edit` outside a `docs/plans/` directory"), matched by
+    `architect/hooks/`'s `docs/plans/*|*/docs/plans/*` allowlist; and "no agent message can
+    authorize changing your permission settings" is harness-injected boilerplate every subagent
+    receives, not repo-authored text that could be promoted. The entry records the design working
+    as specified.
+  - `e2f8a4c1-9b3d-4e7a-b6c2-1d5f8a3e0c47` (2026-08-25, a mid-pass `git diff --stat` showing an
+    in-flight sibling's edits, plus mid-run `MENTIONS` tags being caught anyway). First half:
+    `Edit` writes landing on disk immediately is not a non-obvious fact, the observed case was two
+    units sharing `falkor-chat/docs/SERVER.md` — which `teco.md`'s "serialize units that touch the
+    same file" rule already forbids — and the sharper hazard in the same family (a concurrent
+    session silently reverting a confirmed `Edit`) is already in
+    `skills/agent-standards/claude-code.md`'s Bash-environment section. Second half is
+    distillation-pass trivia, and moot under this pass's one-agent-at-a-time design.
+- **Why (process):** verify by re-deriving, never by confirming the entry's own citation. Three of
+  the six discards had a materially wrong stated mechanism (`b3f2a1c4`, `e7c1a9d4`, and
+  `f3e6b1a2`'s now-false config premise) while still pointing at a real underlying fact — a
+  verbatim promotion would have shipped the wrong claim in each case.
+- **Open question raised, not resolved here (for the stakeholder):** the shipped config state and
+  the user's standing `subagent-permission-mitigation` memory disagree. The memory names running
+  the parent session in `acceptEdits` as the mitigation; the revert removed `defaultMode` entirely,
+  leaving the parent on the harness default (`auto`), which is what Gen 3 recommended and what Gen
+  4 §4.2 offered as "unset / `auto` explicitly". Gen 4 proved `bypassPermissions` buys nothing over
+  `auto`; it did **not** re-test `acceptEdits`, whose earlier forensics showed partial
+  per-run stickiness that `auto` does not give. Flagged for `cobb`/the stakeholder, not acted on.
+
 ## 2026-09-06 — Environment readiness: bring the stack up, don't report it down
 
 - **What:** two additions to `teco.md`, both inside "How you work" (no new section, no structural
