@@ -141,7 +141,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S8c gate** — Pass 12: do the ten closures hold? is the guard as strong as the argument for it? + 2 disagreements with Pass 11 | `analyst` (**fresh** — must judge Pass 11, and its author was at 86 tool uses) | `abe2ad6a7b8091e72` | **NEEDS CHANGES** (0 blockers, 1 major, 1 minor, 2 nits) — committed `fb11268` | `docs/reviews/salesperson-ui-impl.md` `## Pass 12` + Appendix P12-A | — | 181k tok / 70 tools |
 | **S8d** — P12-1: widen the guard to the reach its excuses claim (3 of 8 → 9 of 9); P12-2 + 2 nits | `coder` | `a213382761bc926ec` (resumed) | **PARTIAL — committed `769adc3`; killed mid-run by a session rate limit (429) while starting P12-2.** P12-1 complete and teco-verified; **P12-2 + 2 nits still open** | `storefront_api.py`, `test_storefront_api.py` | superseded by S8d2 | — |
 | **S8d2** — finish S8d: **P12-2** + Pass 12's **two nits** | `coder` (**fresh** — `a213382761bc926ec` did not survive the session reboot; the checkpoint's own stated fallback) | `ad35d76985da040a3` | **accepted — committed `1887180`.** **Judged Pass 12's recommended fix insufficient rather than applying it**: two mutations (a bare `HTTPException(410)` from `Storefront.join`, and the same raise in a module-level helper in `storefront.py` called from `join`) **survive on `769adc3`** at 183 passed, both answering `410 '{"detail":"gone"}'` on the wire — the same answer Pass 12 used to justify P12-2. The guard now reads **both** storefront modules whole, stopping at the `services.py` boundary, and resolves `raise <factory>(...)` through the factory's `return`s. **Also found `769adc3`'s commit message understates its own delivery** — the module-wide walk, the allowlist and P12-4's filter had already landed | `storefront_api.py`, `test_storefront_api.py` + a lift-ready guard-reach statement | `analyst` (Pass 13) → — | 174k tok / 55 tools |
-| **Pass 13** — gate all of S8d (`769adc3` + `1887180`) | `analyst` (**fresh** — it judges the fix to Pass 12's own major) | `a67deef56ee49dde9` | in-flight (dispatched 2026-09-06) | `docs/reviews/salesperson-ui-impl.md` `## Pass 13` | — | — |
+| **Pass 13** — gate all of S8d (`769adc3` + `1887180`) | `analyst` (**fresh**) | `a67deef56ee49dde9` | **accepted — committed `c1e9f23`. NEEDS CHANGES** (0 blockers, **2 majors**, 1 minor, 1 nit). **Upheld S8d2's central judgement by re-deriving it** — reproduced both mutations as surviving on `769adc3`, both dead at `HEAD`. But found the same defect shape a **third consecutive pass**, twice inside S8d2's own fix: **P13-1** the reach guard matches three hardcoded prefix strings while claiming *any path* — an alias (`svc = self._services`) is S9's shape plus one line and survives; **P13-2** the raise walk stops at `storefront.py` while its exemption names *every route*, so a bare `HTTPException` in `services.save_profile` survives. **Ruled the guard-reach statement inaccurate as written**, which is why the S9 re-word was held | `docs/reviews/salesperson-ui-impl.md` `## Pass 13` | — | 151k tok / 55 tools |
+| **S8e** — close P13-1 + P13-2 (both majors), P13-3, the nit, and **correct the guard-reach statement** | `coder` (**resumed** `ad35d76985da040a3` — 174k/55 is well inside the fresh-dispatch threshold, and both majors are in the AST reader it wrote) | `ad35d76985da040a3` | in-flight (dispatched 2026-09-07) | `storefront_api.py`, `test_storefront_api.py` + a **true** guard-reach statement | `analyst` (Pass 14) → — | — |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
 | **U31** — stakeholder decision: how a dead turn becomes visible to the participant | stakeholder | — | **delivered — option B**, the additive `lastTurn: 'failed' \| null` field | option B recorded in v1.23 (below) | — | — |
 | **v1.23** — write option B into the contract: §5.2's `turn` shape, §5.3 C6a, S9's row, + the client rows that inherit it | `architect` | `ad81e9cdb12dfbb28` (resumed ×2) | **accepted — committed `10f2b72`** (68/7) | `docs/plans/salesperson-ui.md` **v1.23** | teco-verified: **exactly the 4 announced rows moved** (S9, S12a, S13, S15), no delivered row moved, all 21 rows 7 cells on a pipe-aware count | 224k tok / 26 tools |
@@ -1917,3 +1918,50 @@ files.
 
 The S7→S8d documentation debt **stays held** on its existing reasoning, unchanged by S8d2 landing:
 Pass 13 can still move what a `HISTORY.md` entry has to say.
+
+## The ninth instance, and the first time the pattern predicted itself (teco, 2026-09-07)
+
+Pass 13's two majors are the **ninth and tenth** appearances of this build's signature defect — *a
+stated rule broader than the reach the mechanism implements*. What is new is the sequence:
+
+- **Pass 12** found the seventh, inside the mechanism built to close the sixth.
+- **S8d2** found the eighth, inside **Pass 12's own sufficiency check**.
+- **Pass 13** found the ninth and tenth, inside **S8d2's fix for the eighth**.
+
+Three consecutive passes, each finding the defect inside the artifact that closed the previous one.
+At that point it is not a run of bad luck; it is a property of the work. The mechanism is a
+hand-written AST reader whose docstring makes a **semantic** claim ("every `Services` method a route
+can reach, by any path") while its body performs a **syntactic** match (three hardcoded prefix
+strings). Every instance is the same gap between those two sentences, and every fix so far has
+closed one spelling and left the gap open.
+
+**So the standing question for every remaining gate on this artifact is not "does the guard fire?"
+but "what is the smallest edit to the production code that satisfies the docstring and survives the
+body?"** P13-1 is exactly that edit: `svc = self._services` — S9's decided shape plus one line. A
+reviewer who asks the general question finds it in one probe; a reviewer who asks "does my
+reproduction die?" does not.
+
+**Pass 13 also named the real choice, which nobody had stated plainly before.** For P13-2 it offers
+two closures — extend the mechanism's reach to the claim, or narrow the claim to the reach. **Both
+are correct, and the defect is only ever the gap between them.** That framing is worth keeping past
+this coordination: an over-claiming docstring is not automatically a demand for more machinery. I
+put the choice to S8e explicitly rather than letting it assume the widening branch, because this
+build has widened three times running and a retreat has never once been considered.
+
+**A cost note for the record.** S8d2 is at 174k tokens / 55 tool uses. My rule sends a follow-up to a
+fresh agent once a delegate carries roughly 250k+ tokens or 100+ tool uses **and** the work is
+self-contained. Neither half holds here: it is inside the threshold, and P13-1/P13-2 are edits to the
+reader it designed, where its own undocumented reasoning about why the reader is shaped as it is has
+real value. Resumed, not respawned.
+
+## The S9 re-word hold paid for itself (teco, 2026-09-07)
+
+I held the §5.1 S9 re-word off Pass 13 despite the two units being file-disjoint, on the premise-coupling
+test rather than the file test. **Pass 13 ruled S8d2's guard-reach statement inaccurate as written** —
+two of its four clauses overstate reach. Had I dispatched the re-word in parallel, the architect would
+have lifted a false statement into the plan verbatim, and S9's implementer would have built against a
+done-condition describing a mechanism that does not exist. That is the same failure the S8c/v1.22
+collision produced, and this time the test caught it before dispatch rather than a gate catching it after.
+
+**S8e now owes a corrected statement as part of its deliverable**, not as a follow-up — the re-word
+unit stays queued behind it, and behind Pass 14.
