@@ -2,6 +2,71 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-09-06 — Environment readiness: bring the stack up, don't report it down
+
+- **What:** two additions to `teco.md`, both inside "How you work" (no new section, no structural
+  change):
+  1. **Step 1 gained an "Environment readiness" paragraph.** When any unit, gate, or teco's own
+     learnings capture will touch FalkorDB / a CPG / `mcp__cypher__query`, teco probes once at
+     orientation (`redis-cli -p 6379 ping`, or a cheap `mcp__cypher__query` read) and, on a miss,
+     **starts the service itself** — `./falkor-chat/scripts/start_falkordb.sh -d`, re-probe, retry
+     the failed query. The paragraph carries four facts teco demonstrably didn't have: (a)
+     `docker start falkordb-dev` is the wrong path, because that script runs `docker run --rm` so
+     there is normally no stopped container to start; (b) graphs live in the named volume
+     `falkordb-data` and survive a restart, so this is not data-destructive; (c) a service start is
+     additive/idempotent and therefore inside teco's existing `Bash` grant, while `docker rm -f` /
+     `GRAPH.DELETE` / volume removal / `pipeline.sh … --reset` are not and stay with
+     `devops`/`graph-dba` behind their destructive-ops guards; (d) a *failed* bring-up is an
+     environment blocker for `devops` — the routing row that already existed — not something to
+     hand back to the user.
+  2. **Step 3's CPG-freshness bullet gained a refresh clause.** A stale or absent CPG the task
+     genuinely leans on is now a **unit** (`graph-dba` rebuild, freshness evidence in the brief,
+     dependent unit sequenced behind it), not a caveat pasted into someone's brief. Explicitly
+     contrasted with the FalkorDB case: the rebuild is a multi-minute Joern run whose load step is
+     destructively guarded, so it is never teco's to run itself.
+- **Why:** stakeholder report — a live `teco` session found FalkorDB not running and reported
+  "some things won't work (kaizen_team)" instead of starting it. The prompt already routed
+  *implementers'* environment blockers to `devops` ("instead of returning them to the user") but
+  said nothing about a blocker teco hits **itself**, at orientation, before any unit exists to
+  route. The stakeholder's ask was explicitly proactive: bring up everything the task needs,
+  including refreshing the CPG.
+- **Why teco-only, not team-wide:** exactly the argument that already centralized CPG-freshness
+  checking here (2026-08-19, `docs/plans/cpg-agent-adoption2.md`) — the coordinator sees the whole
+  goal before any specialist is spawned, so one check at orientation replaces the same rule
+  duplicated across twelve always-loaded prompts. A specialist run standalone still gets neither
+  check; that trade was accepted for freshness and is accepted again here.
+- **Honesty correction made during authoring:** the first draft asserted "the MCP server's
+  connection pool recovers without restarting the session" as fact, citing
+  `docs/plans/cpg-query-access.md` §7.3. The §7.3 row is a *plan* row; the matching report
+  (`docs/archive/test-reports/cpg-query-access-report.md`) records that the stop/restart case was
+  **deliberately not executed** — stopping the shared `falkordb-dev` needs stakeholder approval a
+  subagent can't obtain — and lists it as an untested recovery path with residual risk. The
+  shipped wording now says the recovery is *expected*, names both documents, and notes that one
+  retry settles it either way and a non-recovery is worth capturing. Not live-verified in this
+  session either, deliberately: another `teco` session was using the shared instance.
+- **Not changed:** decomposition, dispatch, the ledger, gates, guardrails, commit authority,
+  hooks, frontmatter. No roster change, so no team-coherence re-certification was triggered.
+- **Two composition conflicts found by the §7 lint and fixed in the same pass** — the new rule
+  contradicted Guardrails as originally written, in both directions:
+  1. The `Bash` guardrail enumerated teco's write actions exhaustively as "one narrow write action:
+     integration commits". Now reads "two narrow write actions", naming the service start and
+     pointing at step 1.
+  2. "Never touch, stage, or commit any file outside the coordination you're actively running, **or
+     any running service**" would have forbidden the new rule by its last clause. Rewritten to the
+     sharper property the rule actually needs: **a service that is up is untouchable** — never
+     stop, restart, or reset one, and never assume you are its only user (`falkordb-dev` is shared
+     by other sessions and components) — while starting one that is *down* is the step-1 exception
+     and the only one. This is a real safety gain independent of the lint: it was previously only
+     implied, and this very session found two other agents' work live in the tree.
+- **Cost:** +370 words on the team's heaviest prompt (5,511 → 5,881 body words, measured), which cuts
+  against open item K-016. Accepted deliberately: the rule is a **proactive trigger** — teco must
+  fire it before it knows anything is wrong — so it cannot live in an on-demand knowledge base
+  (the same test K-016's own notes apply to the paused-unit protocol). A follow-up that *does*
+  reclaim the words is filed in `plan.md` (K-017).
+- **Docs updated:** `claude/README.md` — the teco row's CPG-freshness sentence extended to cover
+  environment readiness. `claude/AGENTS.md` needed no change (its teco entry is name-only).
+- **Verified:** `bash claude/scripts/audit-team.sh` — see the run recorded below.
+
 ## 2026-09-01 — Symmetric update for tico's new docs-only coordination capability
 - **What:** small, targeted additions (not a rewrite) so `teco` recognizes the new boundary from
   its own side. Full design and rationale live in `tico/kaizen/history.md`'s 2026-09-01 entry —

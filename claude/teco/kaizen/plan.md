@@ -9,6 +9,7 @@
 | ID | Added | Priority | Status | Summary |
 |------|------------|----------|--------|---------|
 | K-016 | 2026-08-21 | high | 🔵 | Consolidation pass on `teco.md` (dedicated `cobb` pass): merge same-family incident bullets, split rare-path rules into an on-demand `coordination-techniques.md` knowledge base |
+| K-017 | 2026-09-06 | medium | 🔵 | Move the environment-readiness bring-up mechanics into a `devops`-owned idempotent script, leaving a one-line trigger in `teco.md` |
 
 ### K-016 — consolidate teco.md + split rare-path rules into an on-demand knowledge base
 - **Status:** 🔵 proposed · **Priority:** high
@@ -40,6 +41,27 @@
   the trigger to know to load the file, so only the mechanics (two-hop chain, resume addressing)
   can move; the trigger and ledger shape must stay inline. Same test applies to the
   misrouting/staleness rules already named above.
+
+### K-017 — a `devops`-owned `ensure-services.sh`, so the trigger costs one line
+- **Status:** 🔵 proposed · **Priority:** medium
+- **Rationale:** the 2026-09-06 environment-readiness change (history) added 370 words of
+  always-loaded prompt, most of which is *mechanics* — which probe, which script, why not
+  `docker start`, which volume holds the data, which ops are destructive. Mechanics are exactly
+  what belongs in a script: deterministic, testable, and reusable by `graph-dba`, `qa-engineer`
+  and `devops`, all of whom hit the same stack. What must stay in the prompt is only the
+  **policy** (when to probe, that a missing service is teco's to fix, that a stale CPG is a
+  `graph-dba` unit) — roughly one line plus the CPG clause.
+- **Proposed change:** `devops` authors an idempotent `ensure-services.sh` (probe → start FalkorDB
+  if down → re-probe → report status, non-destructive by construction, never touching a graph or a
+  volume); `cobb` then replaces the mechanics paragraph in `teco.md` with the trigger and the
+  script path. Net effect on K-016's ledger: recovers most of the 370 words this change spent.
+- **Why not done in the same pass (2026-09-06):** the script is **ops tooling, not an agent
+  artifact** — `devops` owns "automation scripts" by its own description, and `claude/scripts/` is
+  not in `cobb`'s `PreToolUse` allowlist, so cobb writing it would have meant leaning on a
+  human-approval escalation for something outside its remit. Filed rather than forced.
+- **Sequencing note:** independent of K-016 but lands in the same file; if both are worked, do
+  K-017 first — it is a mechanical extraction, and K-016's editorial floor should be measured on
+  the post-extraction text, not before it.
 
 ## Parking lot / ideas
 - **A delegation-summary table cites, it does not restate (routed here 2026-08-25, prompt-waste
