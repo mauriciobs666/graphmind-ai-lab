@@ -20,7 +20,7 @@ from modelbench.results import (
     ToolCallAggregates,
 )
 
-# A complete, valid `model` fingerprint field set at benchSchemaVersion 1 (plan §3.4.2). Tests
+# A complete, valid `model:chat` fingerprint field set at benchSchemaVersion 1 (plan §3.4.2). Tests
 # blank/remove one key at a time from a copy of this, so the baseline must itself be valid.
 MODEL_FIELDS: dict[str, Any] = {
     "modelKey": "qwen/qwen3-4b-2507",
@@ -35,9 +35,12 @@ MODEL_FIELDS: dict[str, Any] = {
     "modelCapabilitiesPresent": True,
     "runtimeName": "llama.cpp",
     "runtimeVersion": "1.52.0",
-    "lmsCliCommit": "07b7252",
+    "residencySource": "lmstudio-api-v0",
     "residentModelsAtStart": [],
-    "residentModelsAtEnd": [{"modelKey": "qwen/qwen3-4b-2507", "sizeBytes": 2 << 30}],
+    # `{id, state}` with the literal state string kept — plan §3.4.4a's element shape, and the
+    # shape `residency()` will emit in S2. The retired `lms ps --json` element it replaces is now
+    # refused by `validate()`, not merely unused.
+    "residentModelsAtEnd": [{"id": "qwen/qwen3-4b-2507", "state": "loaded"}],
     "temperature": 0.0,
     "maxTokens": 1024,
     "packId": "tool-caller-shop-assistant",
@@ -83,6 +86,21 @@ def model_fields(**overrides: Any) -> dict[str, Any]:
             fields.pop(key, None)
         else:
             fields[key] = value
+    return fields
+
+
+def embeddings_fields(**overrides: Any) -> dict[str, Any]:
+    """A complete, valid `model:embeddings` field set — the chat 26, plan §3.4.2.
+
+    Built by *removing* the four fields that profile forbids rather than by transcribing 26 names:
+    the independently written literal that guards against a silently shrinking contract lives in
+    `test_fingerprint.py` (review M-4), and a second copy here would be the drift it exists to
+    catch, one file over.
+    """
+    fields = model_fields(**overrides)
+    for name in ("runtimeName", "runtimeVersion", "temperature", "maxTokens"):
+        if name not in overrides:
+            fields.pop(name, None)
     return fields
 
 
@@ -146,6 +164,7 @@ def run(
     *,
     fingerprint_fields: dict[str, Any] | None = None,
     arm_kind: str = "model",
+    call_surface: str | None = "chat",
     role: str = "guard-judge",
     items: list[ItemResult] | None = None,
     aggregates: Any = None,
@@ -155,9 +174,19 @@ def run(
 ) -> RunResult:
     from modelbench.fingerprint import Fingerprint
 
+    # `arm_kind` stays — `armKind` keeps its two values (plan §3.4.1) — but the *branch* is
+    # profile-aware, because otherwise a `model:embeddings` fixture is not expressible at all.
+    if arm_kind == "deterministic":
+        call_surface = None
+    profile = arm_kind if call_surface is None else f"{arm_kind}:{call_surface}"
+
     fields = fingerprint_fields
     if fields is None:
-        fields = model_fields() if arm_kind == "model" else deterministic_fields()
+        fields = {
+            "model:chat": model_fields,
+            "model:embeddings": embeddings_fields,
+            "deterministic": deterministic_fields,
+        }[profile]()
     items = items if items is not None else []
     if aggregates is None:
         hits = sum(1 for it in items if it.outcome == "pass")
@@ -167,7 +196,7 @@ def run(
         sessionId=session_id,
         role=role,
         armKind=arm_kind,
-        fingerprint=Fingerprint(armKind=arm_kind, fields=fields),
+        fingerprint=Fingerprint(armKind=arm_kind, callSurface=call_surface, fields=fields),
         items=tuple(items),
         aggregates=aggregates,
         designEffect=design_effect,
@@ -191,6 +220,7 @@ __all__ = [
     "ToolCallAggregates",
     "classification_aggregates",
     "deterministic_fields",
+    "embeddings_fields",
     "guard_pack",
     "item",
     "model_fields",

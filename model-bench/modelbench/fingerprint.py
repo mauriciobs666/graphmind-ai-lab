@@ -3,11 +3,17 @@
 Design: `docs/plans/small-model-benchmarking.md` §3.4 (and §3.4.1–§3.4.3). Three ideas carry the
 whole module:
 
-* **`armKind` discriminates** (§3.4.1). A BM25 reference arm has no model, no quantization and no
-  runtime, so `validate()` branches on the arm kind and never on field presence. The `deterministic`
-  kind *forbids* every model field: `{"modelKey": "bm25", "quantization": "n/a"}` is the shortcut a
-  time-pressed implementer reaches for, and it must fail loudly on write rather than quietly become
-  a sixth model in the history.
+* **Two discriminators combine into one profile key** (§3.4.1). A BM25 reference arm has no model,
+  no quantization and no runtime, so `validate()` branches on the arm and never on field presence.
+  The `deterministic` kind *forbids* every model field: `{"modelKey": "bm25", "quantization":
+  "n/a"}` is the shortcut a time-pressed implementer reaches for, and it must fail loudly on write
+  rather than quietly become a sixth model in the history. `armKind` keeps its two values; a second
+  discriminator `callSurface` (`"chat"` / `"embeddings"`, `None` iff deterministic) joins it, and
+  the mapping key is the **derived** `armProfile` — `model:chat`, `model:embeddings` or
+  `deterministic`. An embeddings call has no `runtime` object to observe and no sampling parameters
+  to obey, so that profile is *forbidden* `runtimeName`, `runtimeVersion`, `temperature` and
+  `maxTokens` rather than merely excused from them. Both discriminators are members of no required
+  set and are checked before any mapping is consulted.
 * **Absent is not empty** (§3.4.2). `residentModelsAtStart: []` is the correct value on a clean box
   and the catalog omits `capabilities` entirely for several models, so each required field declares
   a tier: `nonempty` (present *and* truthy) or `present` (`[]`, `0`, `False`, `""` all valid).
@@ -26,16 +32,19 @@ collapses the two states §3.4.2 exists to separate.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Literal, Mapping, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 ArmKind = Literal["model", "deterministic"]
+CallSurface = Literal["chat", "embeddings"]
 Tier = Literal["nonempty", "present"]
 
-#: Why a field failed. `unknown` covers a discriminator this build cannot interpret — an
-#: unrecognized `armKind` or a `benchSchemaVersion` from the future (plan Appendix A names the
-#: other four; see this module's HISTORY entry for why the fifth is needed).
+#: Why a field failed. `unknown` covers a value this build cannot interpret — an unrecognized
+#: `armKind` or `callSurface`, a `benchSchemaVersion` from the future (plan Appendix A names the
+#: other four; see this module's HISTORY entry for why the fifth is needed), or a residency
+#: element that is not a mapping of strings.
 ProblemReason = Literal["absent", "empty", "null", "forbidden", "unknown"]
 
 
@@ -59,7 +68,7 @@ _PRESENT = FieldSpec(tier="present")
 # The auto-captured half (§3.4.2): no human input, and it cannot be wrong without the tool being
 # wrong. `loadedContextLength` exists only once a model is loaded, which is why capture ordering is
 # part of the contract.
-_MODEL_SCHEMA_1: dict[str, FieldSpec] = {
+_MODEL_CHAT_SCHEMA_1: dict[str, FieldSpec] = {
     # model identity, verbatim from the LM Studio catalog — never a normalized alias (§2.3 R-8)
     "modelKey": _NONEMPTY,
     "modelPublisher": _NONEMPTY,
@@ -76,7 +85,11 @@ _MODEL_SCHEMA_1: dict[str, FieldSpec] = {
     # runtime identity, free from the /api/v0 chat route's `runtime` object
     "runtimeName": _NONEMPTY,
     "runtimeVersion": _NONEMPTY,
-    "lmsCliCommit": _NONEMPTY,
+    # which surface answered the residency and catalog probe (§3.4.2, §3.4.4a). It replaces the
+    # retired `lms`-build field one-for-one: nothing in the harness runs that CLI any more, so
+    # that field had no source and could only have been kept by defaulting it to `""` — the
+    # silently-defaulted fingerprint field FR-7 exists to refuse.
+    "residencySource": _NONEMPTY,
     # residency: [] is the correct value on a clean box
     "residentModelsAtStart": _PRESENT,
     "residentModelsAtEnd": _PRESENT,
@@ -100,6 +113,18 @@ _MODEL_SCHEMA_1: dict[str, FieldSpec] = {
     "otherResidentWorkloads": _PRESENT,
 }
 
+#: An embeddings call returns no `runtime` object and obeys no sampling parameters (§3.4.4a), so
+#: `model:embeddings` is `model:chat`'s 30 fields minus these four — 26 in total (§3.4.2). Derived
+#: rather than transcribed: a field added to the chat set reaches this one without a second edit,
+#: and §3.4.1's union-minus-mine derivation then *forbids* these four on an embeddings record.
+_EMBEDDINGS_HAVE_NO: frozenset[str] = frozenset(
+    {"runtimeName", "runtimeVersion", "temperature", "maxTokens"}
+)
+
+_MODEL_EMBEDDINGS_SCHEMA_1: dict[str, FieldSpec] = {
+    name: spec for name, spec in _MODEL_CHAT_SCHEMA_1.items() if name not in _EMBEDDINGS_HAVE_NO
+}
+
 # A deterministic arm is reproducible from (packContentHash, armParametersHash, benchVersion)
 # alone, which is why host state is not merely optional for it but forbidden: recording a KV-cache
 # setting beside a BM25 score would imply the score depends on it (§3.4.1).
@@ -117,31 +142,109 @@ _DETERMINISTIC_SCHEMA_1: dict[str, FieldSpec] = {
     "endedAt": _NONEMPTY,
 }
 
-#: `{schemaVersion: {armKind: {field: FieldSpec}}}` — plan §3.4.3. A record is validated against
+#: `{schemaVersion: {armProfile: {field: FieldSpec}}}` — plan §3.4.3. A record is validated against
 #: its own entry here, so an added field at a later version never invalidates an older record.
+#: The inner key is the *profile* (§3.4.1), not the arm kind: schema 1 has exactly three.
 #: Mutable by design: `model-bench migrate` and the schema-2 regression test both key off it.
 REQUIRED_BY_SCHEMA: dict[int, dict[str, dict[str, FieldSpec]]] = {
-    1: {"model": _MODEL_SCHEMA_1, "deterministic": _DETERMINISTIC_SCHEMA_1},
+    1: {
+        "model:chat": _MODEL_CHAT_SCHEMA_1,
+        "model:embeddings": _MODEL_EMBEDDINGS_SCHEMA_1,
+        "deterministic": _DETERMINISTIC_SCHEMA_1,
+    },
 }
 
-#: What each arm kind may not carry (§3.4.1). The forbid half is the point of the discriminator.
-FORBIDDEN_BY_ARM_KIND: Mapping[str, frozenset[str]] = MappingProxyType(
-    {
-        # every model field, plus the four operator-attested LM Studio fields
-        "deterministic": frozenset(_MODEL_SCHEMA_1) - frozenset(_DETERMINISTIC_SCHEMA_1),
-        # a model run has no arm parameters to hash
-        "model": frozenset({"armId", "armParametersHash"}),
+
+def _forbidden_by_profile(schema: int) -> dict[str, frozenset[str]]:
+    """§3.4.1's forbidden set, as **a set operation and never a list**.
+
+    `FORBIDDEN[p] = (⋃ required(q) for every other profile q) − required(p)` — a record may not
+    carry a field that only *some other* profile is required to have. Written as the operation so
+    that adding a field to any profile forbids it on the others for free: through plan v1.4 this
+    was a hand-typed list of fourteen model fields that had already drifted from the field set it
+    claimed to complement, and a set difference cannot drift from its own intent. It is also what
+    earns `model:embeddings` its four forbidden runtime/sampling fields — nobody wrote those names
+    down, and forbidding them is exactly right, because a record carrying either is claiming
+    something an embeddings call cannot have measured.
+    """
+    profiles = REQUIRED_BY_SCHEMA[schema]
+    return {
+        p: frozenset().union(*(frozenset(profiles[q]) for q in profiles if q != p))
+        - frozenset(profiles[p])
+        for p in profiles
     }
+
+
+#: What each arm *profile* may not carry (§3.4.1). The forbid half is the point of the
+#: discriminators. Keyed by profile, over schema 1 — the version every live record declares.
+FORBIDDEN_BY_ARM_PROFILE: Mapping[str, frozenset[str]] = MappingProxyType(_forbidden_by_profile(1))
+
+#: The two `armKind` values, **decoupled from the forbidden mapping** (§4 S1e Table B). Deriving
+#: this from `FORBIDDEN_BY_ARM_PROFILE` — which is what shipped before the re-key — would make its
+#: members the three *profiles*, so `armKind == "model"` would fail the membership test below and
+#: every model record would return `FieldProblem("armKind", "unknown")` and refuse on write.
+#: `armKind` keeps its two values and its meaning; the profile is the mapping key alone.
+ARM_KINDS: frozenset[str] = frozenset(p.split(":", 1)[0] for p in REQUIRED_BY_SCHEMA[1])
+
+#: The `callSurface` values, from the same split — the profile suffix, `chat` or `embeddings`.
+CALL_SURFACES: frozenset[str] = frozenset(
+    p.split(":", 1)[1] for p in REQUIRED_BY_SCHEMA[1] if ":" in p
 )
 
-ARM_KINDS: frozenset[str] = frozenset(FORBIDDEN_BY_ARM_KIND)
+#: A residency snapshot element is `{id, state}` with the **literal `state` string** kept
+#: (§3.4.4a) — not normalised to a boolean, because the only state the 2026-09-03 probe observed
+#: is the one value and any other is a value this plan has not seen.
+RESIDENCY_ELEMENT_KEYS: frozenset[str] = frozenset({"id", "state"})
+
+#: The two fields holding such snapshots. Their tier is `present` — `[]` is the correct, informative
+#: answer on a clean box — and `REQUIRED_PRESENT` checks presence and **never element shape**, which
+#: is why the shape is checked here as well: without it the retired `lms ps --json` element —
+#: whose only source plan v1.8 removed, and whose two keys are *neither* of these — validates,
+#: ships green and travels into S2, where the probe emits `{id, state}` and the two disagree with
+#: nothing to catch them (plan §3.4.2, S1 done-condition 1). The check is over the element's whole
+#: key set, so **any** key that is not `id` or `state` is refused, which is what makes an element
+#: half-swapped out of the retired shape fail as loudly as the retired shape itself.
+_RESIDENCY_FIELDS: frozenset[str] = frozenset({"residentModelsAtStart", "residentModelsAtEnd"})
+
+#: The discriminators, which are members of no required set and therefore never live in `fields`.
+_DISCRIMINATORS: tuple[str, ...] = ("armKind", "callSurface")
+
+
+def _residency_problems(name: str, value: Any) -> list[FieldProblem]:
+    """Every problem in one residency snapshot, each naming the element and key it came from."""
+    if not isinstance(value, (list, tuple)):
+        return [FieldProblem(field=name, reason="unknown")]
+    problems: list[FieldProblem] = []
+    for index, element in enumerate(value):
+        where = f"{name}[{index}]"
+        if not isinstance(element, Mapping):
+            problems.append(FieldProblem(field=where, reason="unknown"))
+            continue
+        for key in sorted(RESIDENCY_ELEMENT_KEYS):
+            if key not in element:
+                problems.append(FieldProblem(field=f"{where}.{key}", reason="absent"))
+            elif element[key] is None:
+                problems.append(FieldProblem(field=f"{where}.{key}", reason="null"))
+            elif not isinstance(element[key], str):
+                problems.append(FieldProblem(field=f"{where}.{key}", reason="unknown"))
+            elif not element[key]:
+                problems.append(FieldProblem(field=f"{where}.{key}", reason="empty"))
+        for key in sorted(set(element) - RESIDENCY_ELEMENT_KEYS):
+            problems.append(FieldProblem(field=f"{where}.{key}", reason="forbidden"))
+    return problems
 
 
 @dataclass(frozen=True)
 class Fingerprint:
-    """One run's environment record. `armKind` discriminates; `fields` holds everything else."""
+    """One run's environment record. Two discriminators; `fields` holds everything else.
+
+    `callSurface` is **required with no default**: it is what selects the contract the fields are
+    read against, and a default would pick one silently for a caller that never decided (§3.4.1).
+    It is `None` if and only if `armKind == "deterministic"` — that arm calls no surface at all.
+    """
 
     armKind: str
+    callSurface: str | None
     fields: Mapping[str, Any]
 
     def __post_init__(self) -> None:
@@ -149,6 +252,13 @@ class Fingerprint:
         # in name only: the record could change under a report that had already validated it. A
         # copy behind a `MappingProxyType` makes the freeze real (review n-2).
         object.__setattr__(self, "fields", MappingProxyType(dict(self.fields)))
+
+    @property
+    def armProfile(self) -> str:
+        """The mapping key (§3.4.1) — derived from both discriminators, never stored twice."""
+        if self.armKind == "deterministic":
+            return self.armKind
+        return f"{self.armKind}:{self.callSurface}"
 
     @property
     def benchSchemaVersion(self) -> Any:
@@ -167,6 +277,18 @@ class Fingerprint:
                 reason = "absent"
             return [FieldProblem(field="armKind", reason=reason)]
 
+        # The second discriminator, checked here so that it is decided **before any mapping is
+        # consulted** (§3.4.1, S1 done-condition 6): without a `callSurface` there is no profile,
+        # so there is no required set to report a record against, and answering with thirty
+        # `absent` problems would bury the one that is true.
+        if self.armKind == "deterministic":
+            if self.callSurface is not None:
+                return [FieldProblem(field="callSurface", reason="forbidden")]
+        elif not self.callSurface:
+            return [FieldProblem(field="callSurface", reason="absent")]
+        elif self.callSurface not in CALL_SURFACES:
+            return [FieldProblem(field="callSurface", reason="unknown")]
+
         schema = self.fields.get("benchSchemaVersion")
         if "benchSchemaVersion" not in self.fields:
             return [FieldProblem(field="benchSchemaVersion", reason="absent")]
@@ -181,7 +303,7 @@ class Fingerprint:
             return [FieldProblem(field="benchSchemaVersion", reason="unknown")]
 
         problems: list[FieldProblem] = []
-        for name, spec in REQUIRED_BY_SCHEMA[schema][self.armKind].items():
+        for name, spec in REQUIRED_BY_SCHEMA[schema][self.armProfile].items():
             if name not in self.fields:
                 problems.append(FieldProblem(field=name, reason="absent"))
                 continue
@@ -190,23 +312,37 @@ class Fingerprint:
                 problems.append(FieldProblem(field=name, reason="null"))
             elif spec.tier == "nonempty" and not value:
                 problems.append(FieldProblem(field=name, reason="empty"))
-        for name in sorted(FORBIDDEN_BY_ARM_KIND[self.armKind]):
+            elif name in _RESIDENCY_FIELDS:
+                problems.extend(_residency_problems(name, value))
+        for name in sorted(FORBIDDEN_BY_ARM_PROFILE[self.armProfile]):
             if name in self.fields:
                 problems.append(FieldProblem(field=name, reason="forbidden"))
         return problems
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "Fingerprint":
-        fields = {k: v for k, v in d.items() if k != "armKind"}
-        return cls(armKind=d.get("armKind", ""), fields=fields)
+        # Both discriminators are stripped, for the same reason: a discriminator left in `fields`
+        # is a field of no required set and so lands in every profile's *forbidden* set.
+        fields = {k: v for k, v in d.items() if k not in _DISCRIMINATORS}
+        return cls(
+            armKind=d.get("armKind", ""), callSurface=d.get("callSurface"), fields=fields
+        )
 
     def to_dict(self) -> dict[str, Any]:
-        return {"armKind": self.armKind, **dict(self.fields)}
+        # `callSurface` is omitted rather than written `null` on a deterministic arm: that arm
+        # calls no surface, which is a different fact from "we did not capture this" — the one
+        # thing `null` means in this record (§3.4.2).
+        surface = {} if self.callSurface is None else {"callSurface": self.callSurface}
+        return {"armKind": self.armKind, **surface, **dict(self.fields)}
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Fingerprint):
             return NotImplemented
-        return self.armKind == other.armKind and dict(self.fields) == dict(other.fields)
+        return (
+            self.armKind == other.armKind
+            and self.callSurface == other.callSurface
+            and dict(self.fields) == dict(other.fields)
+        )
 
     def __hash__(self) -> int:
         """Hash the field *values*, not just their names (review n-2).
@@ -219,4 +355,4 @@ class Fingerprint:
         raise on the unhashable ones.
         """
         canonical = json.dumps(dict(self.fields), sort_keys=True, default=repr)
-        return hash((self.armKind, canonical))
+        return hash((self.armKind, self.callSurface, canonical))

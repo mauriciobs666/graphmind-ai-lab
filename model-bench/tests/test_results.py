@@ -10,7 +10,7 @@ import inspect
 import json
 
 import pytest
-from conftest import deterministic_fields, model_fields, run
+from conftest import deterministic_fields, embeddings_fields, model_fields, run
 
 from modelbench.fingerprint import Fingerprint
 from modelbench.results import (
@@ -69,6 +69,28 @@ def test_store_refuses_a_deterministic_arm_carrying_a_model_field(tmp_root) -> N
 
 def test_store_accepts_a_clean_deterministic_arm(tmp_root) -> None:
     assert store(_run("r4", arm_kind="deterministic"), tmp_root).exists()
+
+
+def test_store_accepts_a_clean_embeddings_arm(tmp_root) -> None:
+    """S1 done-condition 6's third profile — the write surface asserts all three, not two.
+
+    A `model:embeddings` record carries no `runtimeName`, `runtimeVersion`, `temperature` or
+    `maxTokens` and is *correct*: that profile forbids them (§3.4.2, §3.4.4a).
+    """
+    assert store(_run("r5", call_surface="embeddings"), tmp_root).exists()
+
+
+def test_store_refuses_an_embeddings_arm_carrying_a_chat_only_field(tmp_root) -> None:
+    """The forbid half, on the profile the derivation invented it for: an embeddings call has no
+    `runtime` object to observe, so a record naming one is claiming an unmeasurable fact."""
+    bad = _run(
+        "r6",
+        call_surface="embeddings",
+        fingerprint_fields=embeddings_fields(runtimeName="llama.cpp"),
+    )
+    with pytest.raises(InvalidFingerprint) as excinfo:
+        store(bad, tmp_root)
+    assert "runtimeName (forbidden)" in str(excinfo.value)
 
 
 # --- read quarantines ------------------------------------------------------------------------
@@ -240,6 +262,16 @@ def test_models_with_stored_results_excludes_deterministic_arms(tmp_root) -> Non
     assert models_with_stored_results(tmp_root) == ["qwen/qwen3-4b-2507"]
 
 
+def test_models_with_stored_results_still_includes_an_embeddings_arm(tmp_root) -> None:
+    """`armKind` keeps its two values and every `armKind == "model"` filter is unchanged by the
+    profile re-key (§3.4.1) — including this one. An embeddings run is a *model* run; a filter
+    that had become profile-aware would silently drop the embedder from `models --tested`."""
+    store(_run("e", call_surface="embeddings", fingerprint_fields=embeddings_fields(
+        modelKey="text-embedding-qwen3-embedding-0.6b"
+    )), tmp_root)
+    assert models_with_stored_results(tmp_root) == ["text-embedding-qwen3-embedding-0.6b"]
+
+
 # --- P3-1: an item's metric outcome is declared, never inferred --------------------------------
 
 
@@ -276,8 +308,12 @@ def test_an_item_that_declares_a_metric_scoreable_and_records_no_count_is_refuse
 
 
 def test_a_fingerprint_dataclass_keeps_absent_distinct_from_null() -> None:
-    absent = Fingerprint(armKind="model", fields=model_fields(kvCacheSetting=...))
-    nulled = Fingerprint(armKind="model", fields=model_fields(kvCacheSetting=None))
+    absent = Fingerprint(
+        armKind="model", callSurface="chat", fields=model_fields(kvCacheSetting=...)
+    )
+    nulled = Fingerprint(
+        armKind="model", callSurface="chat", fields=model_fields(kvCacheSetting=None)
+    )
     assert [p.reason for p in absent.validate()] == ["absent"]
     assert [p.reason for p in nulled.validate()] == ["null"]
 
@@ -409,7 +445,7 @@ def test_run_result_requires_the_design_effect_and_its_basis(omitted: str) -> No
 
     kwargs = {
         "runId": "r", "sessionId": None, "role": "guard-judge", "armKind": "model",
-        "fingerprint": Fingerprint(armKind="model", fields=model_fields()),
+        "fingerprint": Fingerprint(armKind="model", callSurface="chat", fields=model_fields()),
         "items": (), "aggregates": ClassificationAggregates(),
         "designEffect": 1.0, "basis": "by-construction",
     }

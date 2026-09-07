@@ -2,6 +2,90 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-07 — S1e Tables A and B: the residency source, the third arm profile, and the element shape
+
+**What:** Plan **v1.15** §4 S1e **Table A** (`lmsCliCommit` → `residencySource`) and **Table B**
+(`armKind` → `armProfile`, and `ARM_KINDS` decoupled), the first of the S1 fix round's three
+implementation units. `modelbench/fingerprint.py` plus its three test surfaces; nothing else in
+the package moved. **389 → 472 tests**, `.venv/bin/ruff check .` clean, all six of the two tables'
+residuals at their stated target of zero, and **11 mutations run, 11 killed**.
+
+**Table A — one field swapped, one element shape enforced.** `lmsCliCommit` recorded which `lms`
+build produced the residency snapshot; after plan §3.4.4a nothing in the harness runs that CLI, so
+the field had no source and could only have been kept by defaulting it to `""` — the
+silently-defaulted fingerprint field FR-7 exists to refuse. `residencySource` replaces it
+one-for-one on both model profiles: a `nonempty` token naming the surface the residency and catalog
+data actually came from. The count is unchanged at 26 + 4 = 30.
+
+**The fourth site carried no token, and it is the one that mattered.** `tests/conftest.py`'s
+`residentModelsAtEnd` fixture declared the retired `lms ps --json` element where §3.4.4a's shape is
+`{id, state}`. That field's tier is `present`, which checks presence and **never element shape**, so
+the stale element validated, shipped green, and would have travelled into S2 — where `residency()`
+emits `{id, state}` and the two disagree with nothing to catch them. The structural fix is
+therefore not the fixture edit but the missing assertion (plan S1 done-condition 1):
+`validate()` now checks each residency element's **whole key set** — exactly `{id, state}`, both
+non-empty strings — so any key outside the pair is `forbidden`, a missing one `absent`, a `None`
+`null`, and a non-string `unknown`. Problems name the element and key they came from
+(`residentModelsAtEnd[0].modelKey`), which is what lets AC-2's block print them. Reverting the
+fixture to the retired element now fails **63** tests where it previously failed none.
+
+**Why that check has no residual over `modelKey`.** The retired element carried two keys and
+Table A states a residual over only one of them, because `modelKey` keeps its meaning as a required
+field of the same record — 90 lines in the tree — so a residual over it would fail on a *faithful*
+edit, which is the trap §7 rule 5(b) forbids. The element-shape assertion is rule 5(b)'s named
+alternative and covers that half: a half-application that swaps one retired key and keeps the other
+fails there rather than in a count.
+
+**Table B — the mapping key becomes a profile, the arm kind does not.** `REQUIRED_BY_SCHEMA[1]` is
+re-keyed to the three profiles `model:chat` (30 fields), `model:embeddings` (26 — the chat set minus
+`runtimeName`, `runtimeVersion`, `temperature`, `maxTokens`) and `deterministic` (11).
+`FORBIDDEN_BY_ARM_KIND` becomes `FORBIDDEN_BY_ARM_PROFILE`, still the union-minus-mine **set
+operation** and never a list, now over three profiles instead of two kinds. It resolves to exactly
+what §3.4.1's table says, checked against independently written literals in the suite:
+`{armId, armParametersHash}` on `model:chat`, those two plus the four chat-only fields on
+`model:embeddings`, and 21 fields on `deterministic`. That last row is the derivation earning its
+keep — nobody wrote the four embeddings names down, and forbidding them is exactly right, because
+an embeddings call has no `runtime` object to observe and no sampling parameters to obey, so a
+record carrying either is claiming something it cannot have measured.
+
+**`ARM_KINDS` had to stop being derived from the forbidden mapping in the same edit.** It was
+`frozenset(FORBIDDEN_BY_ARM_KIND)`; re-keying that mapping and leaving the derivation makes its
+members the three *profiles*, so `armKind == "model"` fails the membership test in `validate()` and
+**every model record returns `FieldProblem("armKind", "unknown")` and refuses on write** — a green
+mapping and a dead harness. It is now derived from the profile keys' prefixes
+(`p.split(":", 1)[0]`), which is decoupled from the forbidden mapping while staying a derivation
+rather than a second hand-maintained list, and pinned by value in the suite. `CALL_SURFACES` comes
+from the same split. Every `armKind == "model"` / `== "deterministic"` filter in `results.py` and
+`report.py` is unchanged by design and was re-read to confirm each still means the two-valued
+discriminator; `models --tested` is asserted to still return an embeddings arm.
+
+**`callSurface` is a second discriminator, required with no default.** `Fingerprint` takes
+`armKind` and `callSurface` (`None` **iff** deterministic) and derives `armProfile`; both are
+members of no required set and are checked **before any mapping is consulted**, because without a
+surface there is no profile and so no contract to report the fields against — answering a
+surface-less model record with thirty `absent` problems would bury the one that is true. A
+deterministic record carrying a surface is `forbidden`; a surface this build has never seen is
+`unknown` rather than resolved to a profile key no mapping carries. `from_dict` strips both
+discriminators (one left in `fields` lands in every profile's forbidden set) and `to_dict` omits
+`callSurface` rather than writing `null` on a deterministic arm — that arm calls no surface, which
+is a different fact from "we did not capture this". Identity (`__eq__`/`__hash__`) includes it.
+Being required with no default is what made the type system enumerate the ten real `Fingerprint(`
+construction sites for us, which is §7 rule 5's *adds rather than retires* half.
+
+**Suite.** Both model profiles now get the per-required-field treatment — 30 + 26 cases for the
+absent loop and the same for the null loop, where only `model` had them before — and the M-4
+hand-transcribed literal gains a `model:embeddings` sibling, transcribed independently and
+deliberately **not** derived from the chat one. Write-side acceptance covers all three profiles: a
+clean embeddings arm stores, and one carrying `runtimeName` is refused on write.
+
+**A plan friction worth recording.** S1 done-condition 1 names both retired residency keys, which
+invites a test that spells the second one — and Table A's second residual requires that token to
+reach **zero** across `modelbench` and `tests`, comments included. Written literally, the two
+cannot both hold. Resolved by making the *implementation* rule key-set-exact, so it refuses either
+retired key by construction, and asserting it through the rule and through `modelKey` (which has no
+residual) rather than by naming the retired token. The tree therefore carries the token nowhere and
+the behaviour is still pinned.
+
 ## 2026-09-03 — S1 fourth gate round: the nets that catch the first scorer's first mistake
 
 **What:** Closed every major and minor from the fourth gate round on S1 —

@@ -18,6 +18,22 @@ that touches the outside world** — `lmstudio.py`, `hostinfo.py`, the real pack
 those three commands are still absent, so the stage boundary is checked rather than promised.
 `docs/plans/small-model-benchmarking.md` §4 sequences S2–S8.
 
+**The fingerprint has two discriminators and one derived key, and `ARM_KINDS` is deliberately not
+derived from the forbidden mapping.** `REQUIRED_BY_SCHEMA[schema]` and `FORBIDDEN_BY_ARM_PROFILE`
+are keyed by `armProfile` — `model:chat`, `model:embeddings`, `deterministic` — which `Fingerprint`
+derives from `armKind` (still two-valued, and every `armKind == "model"` filter in `results.py` and
+`report.py` is unchanged by that) and `callSurface` (required, no default, `None` **iff**
+deterministic). Both are members of no required set and are checked **before any mapping is
+consulted**: without a surface there is no profile, so there is no contract to report the fields
+against. Re-deriving `ARM_KINDS` from the profile mapping makes its members the three profiles, so
+`armKind == "model"` fails the membership test and **every model record refuses on write** — a green
+mapping and a dead harness. The forbidden sets stay a union-minus-mine **set operation, never a
+list**; that is what forbids `runtimeName`, `runtimeVersion`, `temperature` and `maxTokens` on an
+embeddings arm without anyone typing those four names. And `validate()` checks each residency
+element's whole key set (`{id, state}`, both non-empty strings), because the `present` tier checks
+presence and **never** element shape — the gap that let a retired fixture element validate and ship
+green.
+
 **`stats.py` implements `docs/plans/small-model-benchmarking-ml.md` and no other source.** Every
 formula, constant, threshold, tolerance and verdict string is that note's, cited by section; the
 plan deliberately does not restate them, and neither should this file. Its shape is §3.4's **seven**
