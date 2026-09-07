@@ -62,7 +62,9 @@ Stakeholder decisions, 2026-09-02:
 | U21 — Rule on Pass 4's three routed statistical questions (gap-detector right-censoring, threshold margin, §11.7's second denominator) | `data-scientist` (fresh) | `a4e06f8c810bbbbb8` | **delivered** — `fc2fcf6`; all three changed the note | `docs/plans/small-model-benchmarking-ml.md` **v1.12** | `analyst` re-gate → — | 119k tok / 39 tools |
 | U22 — Plan v1.10: close all 14 plan-gate Pass 4 findings + fold notes v1.11/v1.12 | `architect` (fresh) | `aaf7ade9ddbc63e8b` | **delivered** — `3e5dc50` (+738/−134); all 14 closed, **no residuals** | `docs/plans/small-model-benchmarking.md` **v1.10** | `analyst` Pass 5 → — | 293k tok / 96 tools |
 | U23 — Two items routed back from v1.10: rule (iv-b)'s p50-gate application, and §11.2's stale line number | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `5197ce6`; (iv-b) confirmed **by correcting the note** | `docs/plans/small-model-benchmarking-ml.md` **v1.13** | `analyst` Pass 5 → — | 140k tok / 11 tools cumulative |
-| U24 — Re-gate plan v1.10 + note v1.13 (Pass 5) | `analyst` (fresh) | `aa9af16f140993a17` | in-flight | `docs/reviews/small-model-benchmarking.md` `## Pass 5` | — (is the gate) | — |
+| U24 — Re-gate plan v1.10 + note v1.13 (Pass 5) | `analyst` (fresh) | `aa9af16f140993a17` | **accepted** — `b9964d1` | `docs/reviews/small-model-benchmarking.md` `## Pass 5` | self → **needs changes** (2 blockers, 4 majors, 4 minors) | 209k tok / 70 tools |
+| U25 — Three rulings Pass 5 routed: co-presence shape, `censoringExact` clause 1, `paired_cluster_bootstrap`'s necessity | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.14 if changed | `analyst` Pass 6 → — | — |
+| U26 — Plan v1.11: close all 10 Pass 5 findings; rule 5 restated honestly | `architect` (fresh) | `a99cd8cce60c76d82` | in-flight | `docs/plans/small-model-benchmarking.md` v1.11 | `analyst` Pass 6 → — | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | **accepted** — `5878014` | `model-bench/**` (10 files, +1490/−61); 353→389 tests | re-gate (both, fresh) → — | 348k tok / 130 tools |
@@ -1429,4 +1431,51 @@ assertion.
 
 The brief states plainly that the verdict must not be softened to unblock S2 — an unfounded approval
 costs more than a fifth revision.
+
+### U24 delivered — 2026-09-07, plan gate Pass 5 (`b9964d1`) · **needs changes**
+
+**v1.10's central claim holds: all fourteen Pass 4 findings are fixed, none unfixed.** But five carry
+a residual, and **two of v1.10's own fixes introduced a new defect while closing the old one** — the
+failure mode this coordination should now expect from a large single-revision closure.
+
+**P5-2 is the finding that matters, and it vindicates weighting the brief at the mechanism rather
+than the instance.** §7 rule 5 — adopted to stop a *third* incomplete edit list — **does not work as
+stated.** It claims a table is "complete by construction"; it is not, twice: (a) sites carrying no
+token are invisible to the grep — **verified here: 18 `arm_kind` (snake_case) lines that Table B's
+`grep -rFn armKind` (camelCase) structurally cannot see**, including fixtures and the tests pinning
+the required-field contract; (b) `armKind` **survives by design**, so there is no zero residual over
+the token the table is about, and DC-12 checks two auxiliary tokens that zero out from the mapping
+rename alone. The converse DC-12 needs — *residual zero ⇒ nothing missed* — is false. Stated as a
+guarantee it would have been trusted by the next revision exactly as v1.8's and v1.9's lists were.
+The fix is concrete and its commands are verified in Appendix E.1; Table A's `sizeBytes` row is
+already the right pattern and becomes the rule.
+
+**P5-1: a fix that reopened a closed finding.** The sentence written to close P4-5 applies §3.6's
+*tool-calling* eligibility gate unscoped, so every `model:embeddings` arm exits `4` — refusing
+`text-embedding-qwen3-embedding-0.6b`, the exact model §4 S3's done-condition 1 names as the first
+real run. G3-1 re-entering through its own fix.
+
+**No finding is blocked on unbuilt work.** The gate was explicit: every one is a plan edit available
+today, most one sentence. That is why the verdict is *needs changes* rather than
+*approve with suggestions*, and it means v1.11 should be a much smaller revision than v1.10 was.
+
+**The dependency sweep the brief asked for found one instance** — v1.10 pairs itself to note v1.12
+while the note is at v1.13 (P5-5) — plus **P5-6, the inverse of the same class**: a note claim
+invalidated by a plan change made in the *same* revision (P4-7 merged timeout into
+`latencyWithheldForNoResponse`, leaving `censoringExact`'s clause 1 unevaluable, so a timeout-only
+run silently prints slot 3's weaker string). The class is now demonstrated in both directions.
+
+### Routing — U25 and U26, parallel on disjoint files
+
+**Three findings needed a method ruling before the plan can close them**, and are routed to
+`data-scientist` rather than guessed: the **co-presence shape** (the note leans to a separate count
+for prefill, the reviewer recommends the conservative single count — the architect is blocked on
+this one), **whether `censoringExact` clause 1 survives** the widened no-response category, and
+**whether `paired_cluster_bootstrap` is still needed at all** — Table D retires its only production
+caller, and `paired_bootstrap`'s only production call site is inside it, so an architect working
+Table D verbatim would be deleting a public statistical function on its own judgement.
+
+`architect` is fresh (the v1.10 author closed at 293k tokens, and this work is self-contained). Its
+brief sequences the three inbound rulings **last** and I relay them mid-run, the pattern that worked
+for U21→U22.
 
