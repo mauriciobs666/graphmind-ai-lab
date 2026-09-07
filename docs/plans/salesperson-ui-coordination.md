@@ -154,7 +154,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U37** — Pass 16's minors + `salesperson/`'s `start_demo.sh` references | `coder` (fresh) | `a38711140b2ecc8ec` | **accepted** (`ba368a0`, `7a85c1c`) | `SERVER.md`, `salesperson/{AGENTS,README}.md`, `playwright.config.ts` (mine) | teco-verified → **accept** | 127k / 52 |
 | **U36** — `config.py`'s three future-as-present comments + the documentation `HISTORY.md` entry | `coder` | `aa9b68b68151bca8a` | **accepted** (`3fe3d8f`) | `falkorchat/config.py` (**5** comments, full-AST equal), `docs/HISTORY.md` | teco-verified → **accept** | 116k / 28 |
 | **U38** — `pipeline.sh`'s provenance stamp races `HEAD` and scopes `SOURCE_DIRTY` repo-wide | `cobb` | `a42739600c7b41e1d` | in-flight (fix round) | `6012ddb` — 5 files, `git-provenance.sh` new | `analyst` `a98a748e49a559ead` → **needs changes** (`docs/reviews/cpg-provenance-stamp.md`, `7c7536d`) | 145k tok / 44 tools |
-| **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | in-flight (fix round) | `c92f35d` — `docs/manuals/graph-ontology.md` | `analyst` `a98a748e49a559ead` Pass 2 → **approve with suggestions** (`131229d`) | 70k tok / 11 tools |
+| **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | delivered — held for cross-document check | `c92f35d` + fix round | `analyst` Pass 2 → **approve with suggestions**, all 5 taken as written (`131229d`) | 156k tok / 15 tools |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | in-flight (dispatched 2026-09-07, after U36) | `storefront.py`, `storefront_api.py`, `app.py`, both test files, **+ `config.py`/`SERVER.md`/`HISTORY.md`** | `analyst` + `qa-engineer` | — |
@@ -2993,3 +2993,37 @@ commits, exit 0, no warning** in both the relative and absolute forms the marker
 the silent-empty-answer failure mode that makes `SOURCE_PATH` dangerous rather than merely
 uninformative. That is the sharpest single piece of evidence for why the manual's
 correction was needed at all.
+
+## U39's fix round, and the one check I am keeping for myself
+
+All five Pass 2 findings taken as written, none disputed (`8779ee8`). I verified P2-1
+myself rather than on report, because it is the finding whose whole value is an absence:
+`grep -n 'rev-parse'` over the manual returns nothing, and the single surviving `git log`
+mention is prose describing the hazard — that `SOURCE_PATH` reports zero commits without
+complaining — rather than a procedure to run. The file now holds no copied command at all;
+three citations to `skills/cpg-analysis/references/freshness.md` carry the procedure.
+
+P2-4 was solved rather than hedged, which is the outcome I asked for and not the cheaper
+one available. The Overview still says the marker answers the question in one query, then
+immediately says both fields are absent on a pre-2026-09-07 marker — *naming*
+`cpg_falkorchat` as the graph most readers of this manual will open — and hands them to
+the absent-cases entry. The hedge would have been to soften the promise; instead the
+first encounter a real reader has is now routed correctly.
+
+**I am not re-gating this unit yet, and the reason is the delegate's own closing flag.**
+Two of the marker shapes it just documented — `PROVENANCE` present with `SOURCE_TREE`
+absent, and the `BUILT_AT`-gating that routes `cpg_deprecated_salesperson` correctly —
+are the same shapes `cobb`'s in-flight round is touching from the reference side (Pass 1
+m2 and m3). Neither delegate can see the other's file. A re-gate now would approve the
+manual against a reference that is about to change, and a second re-gate afterwards would
+cost more than one check placed correctly. So U39 sits **delivered, held** until `cobb`
+lands, and then one check covers the question that actually matters: do the two documents
+describe the *same set* of marker shapes.
+
+That is the same failure mode as M4 and P2-1 at a higher altitude. M4 was a field list
+copied into a second document and left to drift; P2-1 was a command copied into a second
+document and left to drift; this would be a *set of enumerated states* described in two
+documents by two agents who cannot see each other. The first two were caught by a reviewer
+after the fact. This one is catchable before it lands, but only by me — it is the one thing
+in this chain that no single delegate is positioned to check, which is a reasonable
+definition of what integration is for.
