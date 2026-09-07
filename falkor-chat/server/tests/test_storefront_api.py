@@ -3087,20 +3087,28 @@ def _bindings(node) -> list[tuple[str, str]]:
     One branch per member of `_ALIAS_BINDING_NODES`. The reader this replaced
     had exactly one — `ast.Assign` — while the sentence above it said "any
     local name transitively bound to it", and `svc: object = self._services`,
-    which is §5.1 S9's decided shape plus a type annotation, survived the whole
-    file at 183 passed (`docs/reviews/salesperson-ui-impl.md` `## Pass 14`,
-    P14-2). Annotated local assignment is a house idiom in the two files S9
-    edits, so that was not an exotic spelling; it was the ordinary one.
+    the spelling this tripwire exists to redden on plus a type annotation,
+    survived the whole file at 183 passed
+    (`docs/reviews/salesperson-ui-impl.md` `## Pass 14`, P14-2). Annotated
+    local assignment is a house idiom in the two files S9 edits, so that was
+    not an exotic spelling; it was the ordinary one.
 
     `with <expr> as x` is read as a binding of `<expr>` although what is
     actually bound is `<expr>.__enter__()`. That over-approximates on purpose:
     an over-approximation here can only make the guard fire on a call the
     request cannot reach — a false **red**, which is loud and cheap — while the
-    under-approximation is the defect this file has now produced twelve times.
+    under-approximation is the defect this file has now produced fourteen
+    times (`## Pass 15`).
 
     A `for`/comprehension target is read only over a **literal** sequence
     (`for svc in (self._services,)`), because that is the only iterable whose
     elements are visible to a reader that runs nothing.
+
+    **This is the target axis only.** What each pair's *value* half means is
+    decided by `_alias_prefixes`, and it is `ast.unparse(value) in prefixes` —
+    exact source-text identity. Every node type here is read at that
+    granularity, so widening this dict does not widen what counts as naming
+    the object (`## Pass 15`, P15-1).
     """
     found: list[tuple[str, str]] = []
     for child in ast.walk(node):
@@ -3128,9 +3136,10 @@ def _alias_prefixes(node, seeds: set[str]) -> set[str]:
     """`seeds`, closed over every local name bound to one under `node`.
 
     A reader that matches a list of spellings guards against the spellings it
-    listed. `svc = self._services` followed by `svc.start_workflow_run(ctx)` is
-    §5.1 S9's decided shape plus one line, and it walked straight past a reader
-    holding the three literal prefixes — as did a second router alias
+    listed. `svc = self._services` followed by `svc.start_workflow_run(ctx)` —
+    the shape this tripwire exists to redden on, written in two lines instead
+    of one — walked straight past a reader holding the three literal prefixes,
+    as did a second router alias
     (`docs/reviews/salesperson-ui-impl.md` `## Pass 13`, P13-1).
 
     So the prefixes are **derived, not listed**: any name bound to something
@@ -3145,6 +3154,25 @@ def _alias_prefixes(node, seeds: set[str]) -> set[str]:
     test is the enumeration, in the file: deriving the prefixes fixed the
     spelling problem and left a node-type problem exactly one shape smaller
     (`## Pass 14`, P14-2), and only an enumeration closes that.
+
+    **And that closes the *target* axis only.** The line below —
+    `if value in prefixes` — is the *value* axis, and it is **exact
+    source-text identity** against a prefix already derived, nothing more. So
+    a name is added when what it is bound to is spelled exactly like a prefix,
+    and not when the reader would have to work out that it denotes the same
+    object. The consequence worth naming, because it is a **documented stop
+    rather than a bug**: seeded on `self`, this closure adds `me` from
+    `me = self` — seeded on `self._services`, it does not, so
+    `me._services.<name>` is invisible on the collaborator legs while
+    `me.<method>` is followed on the frontier legs. Measured on the delivered
+    suite: `me = self` / `me._services.start_workflow_run(...)` injected on the
+    router-reached `Storefront.join` survives at **185 passed**, where
+    `svc = self._services` on the same point is **1 failed / 184**
+    (`## Pass 15`, P15-1). Conditional expressions, container round-trips and
+    non-literal iterables stop the same way, for the same reason. Closing that
+    axis is alias analysis rather than another node type, and it is **not**
+    closed here by decision (`docs/plans/salesperson-ui-coordination.md`,
+    "STOPPED — the stopping rule fired").
     """
     prefixes = set(seeds)
     bindings = _bindings(node)
@@ -3207,9 +3235,9 @@ def _collaborator_reach(
     `INHERITED_HANDLERS` are claims about **both**: directly, as
     `<router_attr>.<name>` in the router body, and one or more hops down
     through `shop.<method>`, where `Storefront` calls `<self_attr>.<name>` on
-    the router's behalf. Reading only the first is what let S9's decided shape
-    — the trigger enqueued on the turn worker, so the `start_workflow_run` call
-    lives in `storefront.py` — stay invisible (`## Pass 12`, P12-1).
+    the router's behalf. Reading only the first is what let a call written in
+    `storefront.py` — the half of the surface a route reaches through
+    `shop.<method>` — stay invisible (`## Pass 12`, P12-1).
 
     **One function for both collaborators**, because the `Services` leg and the
     `Repository` leg are the same walk one attribute over, and reading the
@@ -3224,9 +3252,15 @@ def _collaborator_reach(
 
     **Where it stops**, said as a property of the walk rather than as a claim
     about the code: the collaborator object is followed only through attribute
-    access on a name `_bindings` can bind, so a call made by handing the object
+    access on a name `_bindings` can bind **to an expression spelled exactly
+    like a prefix already derived**. So a call made by handing the object
     somewhere else — passed to a helper, returned, stored on an attribute — is
-    outside it, and so is `getattr(svc, "start_workflow_run")`.
+    outside it, and so is `getattr(svc, "start_workflow_run")`; and so, on
+    these two legs specifically, is an alias of the **receiver**
+    (`me = self` then `me._services.<name>`), whose value text `self` is not
+    the prefix `self._services`. `_storefront_reach`, seeded on `shop`/`self`,
+    does follow that one — the asymmetry is documented and measured, not
+    accidental (`## Pass 15`, P15-1).
     """
     router = _parse_router(api_source)
     methods = _class_methods(storefront_source, "Storefront")
@@ -3275,6 +3309,19 @@ def _reached_methods(source: str, class_name: str, seeds) -> set[str]:
     `self` is alias-resolved here for the same reason it is everywhere else in
     this file — a walk that resolves aliases on three legs and not the fourth
     is the defect one field over, and this chain has produced that twice.
+
+    **On one axis the fourth leg genuinely is different, and it is written
+    down rather than left to be discovered** (`## Pass 15`, P15-1). Seeded on
+    `self`, this walk and `_storefront_reach` follow an alias of the
+    *receiver*: `me = self` then `me.<name>` is seen. `_collaborator_reach` is
+    seeded on `self._services`/`self._repo`, and `_alias_prefixes` compares
+    **source text**, so `me = self` adds nothing there and
+    `me._services.<name>` is missed — measured, at **185 passed** where the
+    equivalent `svc = self._services` is **1 failed / 184**. That is a
+    documented stop under a stakeholder decision not to widen the reader
+    further, not an oversight
+    (`docs/plans/salesperson-ui-coordination.md`, "STOPPED — the stopping rule
+    fired").
     """
     methods = _class_methods(source, class_name)
     missing = set(seeds) - methods.keys()
@@ -3386,23 +3433,27 @@ def _raised_class_names(node) -> set[str]:
 # `join`/`reset_participant` → `save_profile`, and `list_catalog` →
 # `_catalog_rows` → `filter_products`, which is two hops down.
 #
-# Deliberately *not* forward-looking: §5.1's S9 row adds the trigger enqueue,
-# and v1.22 decided it runs **on the turn worker** — `shop.enqueue_turn(...)`
-# in the router, `self._services.start_workflow_run(...)` in `storefront.py`.
-# A set written to accommodate that in advance would be a guard that cannot
-# fail at the one moment it is worth something
-# (`docs/reviews/salesperson-ui-impl.md` `## Pass 11`, P11-1) — which is also
-# why the *reader* has to see that shape and not only the alias spelling S9
-# rejected (`## Pass 12`, P12-1).
+# Deliberately *not* forward-looking — and **not expected to move at S9**.
+# `docs/plans/salesperson-ui.md` v1.25 places the trigger on the turn worker,
+# reaching the workflow layer through `trigger.maybe_trigger`, whose own
+# `start_workflow_run` call site (`trigger.py:82`) is outside all four scopes
+# these two guards walk. So this set is a **service-surface tripwire**: red
+# means a `Services` call was acquired through the storefront's own
+# `self._services` rather than through the trigger — a stop-and-re-decide, not
+# a mechanical bump — and S9's done-condition is that it stays **green**. A set
+# written to accommodate a forecast would be a guard that cannot fail at the
+# one moment it is worth something (`docs/reviews/salesperson-ui-impl.md`
+# `## Pass 11`, P11-1); a reader that sees only one spelling of the
+# acquisition is the other half of the same failure (`## Pass 12`, P12-1).
 #
-# **Which `INHERITED_HANDLERS` excuses that step falsifies is not stated here,
-# and that is deliberate.** The version of this comment that named three of
-# them named one the row does not carry and dropped one it does, because the
-# plan row it was written against mis-maps the missing snapshot to
-# `WorkflowDefNotFoundError` (`## Pass 14`, P14-3). The mapping is being
-# settled in the plan; what belongs in a test file is the **measurement** —
-# after S9, `_raises_of` over the closed reach reports the classes, and
-# whichever of the excuses those name is then a fact rather than a forecast.
+# **Which `INHERITED_HANDLERS` excuses S9 falsifies is not stated here, and
+# that is deliberate.** The version of this comment that named three of them
+# named one the row does not carry and dropped one it does (`## Pass 14`,
+# P14-3). The mapping is settled in the plan — and under v1.25 **no walk in
+# this file can see it**: `_raises_of` over the closed reach reports none of
+# the three, because the trigger's call site is outside every scope. The
+# evidence is §5.1's S9 row's armed-fault measurement at the response
+# boundary, not anything measured here (`## Pass 15`, P15-2).
 SERVICE_LAYER_REACH_TODAY = frozenset({
     # direct, in the router body
     "read_messages", "post_message", "get_current_order",
@@ -3427,14 +3478,14 @@ def test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume()
 
     **"Calls layer X" is reachability, not one spelling.** The first version of
     this guard pinned `services.<name>` in the router and nothing else, so it
-    reddened on `services.start_workflow_run(...)` — the placement §5.1's S9
-    row rejects — and stayed green on both placements S9 actually takes:
+    reddened on `services.start_workflow_run(...)` and stayed green on the two
+    other ways the same acquisition is written:
     `shop._services.start_workflow_run(...)` in the router (an Attribute on an
     Attribute, a spelling `storefront_api.py` already uses), and
     `self._services.start_workflow_run(...)` inside the `Storefront` method the
     router calls, which is not in the parsed file at all. The router's true
-    reach is **nine** methods; that guard measured **three**, and S9's call
-    landed in the six it could not see.
+    reach is **nine** methods; that guard measured **three**, and six of the
+    nine were invisible to it.
 
     So the reader takes the union: both direct spellings in the router, plus
     `self._services.<name>` in every `Storefront` method the router reaches,
@@ -3442,8 +3493,8 @@ def test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume()
 
     **And a local alias is one of those paths** (P13-1). Listing three
     spellings guarded against those three: `svc = self._services` /
-    `svc.start_workflow_run(ctx)` — S9's decided shape plus one line — survived
-    the whole file at 183 passed, and so did a second router alias,
+    `svc.start_workflow_run(ctx)` — the same acquisition plus one line —
+    survived the whole file at 183 passed, and so did a second router alias,
     `svc2 = shop._services`. The direct spelling on the same injection point
     reddened, so the difference was purely the binding. Every prefix on every
     leg is therefore **derived** from the file's own bindings to a fixpoint
@@ -3460,6 +3511,23 @@ def test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume()
     every other name-binding node in the grammar cannot carry an alias, is
     `test_the_alias_reader_covers_every_binding_form_the_grammar_has`, which
     takes its enumeration from `ast` rather than from a list here.
+
+    **All of that is the *target* axis, and the reader has two** (`## Pass 15`,
+    P15-1). The value half is `_alias_prefixes`' `value in prefixes` — exact
+    source-text identity — so what reddens here is an acquisition written on
+    one of the derived prefixes, or on a local name bound to an expression
+    spelled **exactly** like one. An alias of the *receiver* does not:
+    `me = self` then `me._services.start_workflow_run(...)`, injected on the
+    router-reached `Storefront.join`, survives the two-file suite at **185
+    passed**, where `svc = self._services` on the same point is
+    **1 failed / 184**. A conditional expression, a container round-trip and a
+    non-literal iterable stop for the same reason. Those are **documented
+    stops, not open defects**: closing them is alias analysis rather than one
+    more node type, and the decision to narrow the sentence instead of widening
+    the reader is recorded in `docs/plans/salesperson-ui-coordination.md`,
+    "STOPPED — the stopping rule fired". Under v1.25 that is enough, because
+    what this guard is for is narrower than the shapes it misses — a
+    **service-surface tripwire** on the storefront's own `self._services`.
     """
     api, sf = _router_source(), _storefront_source()
 
@@ -3471,9 +3539,9 @@ def test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume()
 
     assert _service_layer_reach(api, sf) == set(SERVICE_LAYER_REACH_TODAY)
 
-    # the controls on the reader: every spelling S9 could take is resolved —
-    # the three the first version of this guard was widened for, and the two
-    # aliased ones it still walked past (P13-B, P13-C)
+    # the controls on the reader: the five spellings it was widened for are
+    # resolved — the three direct ones, and the two aliased ones it still
+    # walked past (P13-B, P13-C)
     api_stub = (
         "def build_storefront_router(shop):\n"
         "    services = shop._services\n"
@@ -3498,8 +3566,8 @@ def test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume()
         "        return self._services.start_workflow_run(ctx)\n",
     ) == {"start_workflow_run"}
 
-    # P13-B — the alias inside the `Storefront` method, which is S9's decided
-    # shape written in two lines instead of one
+    # P13-B — the alias inside the `Storefront` method: the same acquisition
+    # written in two lines instead of one
     assert reach(
         "return shop.enqueue_turn(None)",
         "class Storefront:\n"
@@ -3532,16 +3600,25 @@ def test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume()
 
 
 # One snippet per member of `_ALIAS_BINDING_NODES`: the body of a `Storefront`
-# method the router reaches, writing S9's decided call through a local name
+# method the router reaches, writing a `Services` call through a local name
 # bound in that form. Every one must resolve to `{"start_workflow_run"}`.
 #
 # This is the enumeration `## Pass 14` asked to be shipped in the file rather
 # than run once in a transcript — *"enumerate every syntactic way to write the
 # thing the sentence names, run the delivered reader over each, and list the
-# misses"*. The list is empty because the sentence now names node types and
-# these are them; what keeps that from being circular is the assertion in the
-# test below, which takes the node types from the **grammar** and not from this
+# misses"*. What keeps it from being circular is the assertion in the test
+# below, which takes the node types from the **grammar** and not from this
 # dict, so a binding form nobody classified fails rather than passing silently.
+#
+# **It enumerates one of the reader's two axes, and says so rather than
+# implying otherwise** (`## Pass 15`, P15-1). Every snippet holds the *value*
+# fixed at the single spelling `self._services` and varies only the *target*
+# node type. Run over the value axis the same enumeration returns misses —
+# an alias of the receiver, a conditional expression, a container round-trip,
+# a non-literal iterable — three of which survive the delivered suite. Those
+# are documented stops, listed in `_alias_prefixes`' docstring and in
+# `storefront_api.py`'s guard-reach block. So this dict is a complete
+# enumeration **of the target axis**, not of the mechanism.
 _ALIAS_FORM_SNIPPETS: dict[type, str] = {
     ast.Assign: (
         "    def enqueue_turn(self, ctx):\n"
@@ -3590,20 +3667,35 @@ def test_the_alias_reader_covers_every_binding_form_the_grammar_has():
     """**The enumeration, in the file** (`## Pass 14`, P14-2 and its closing
     condition).
 
-    This artifact has produced one defect twelve times — *a stated rule broader
-    than the reach the mechanism implements* — and five review passes each
-    found it inside the fix for the previous one. Every fix widened what the
-    reader looked at: three prefix spellings, then two files, then a fixpoint
-    over `ast.Assign`. Each was correct and each left the next instance one
-    spelling away, because the sentence above the reader kept naming a
-    **semantic** scope ("any local name transitively bound to it") that no
-    finite reader implements, while the body walked a **syntactic** one.
+    This artifact has produced one defect fourteen times — *a stated rule
+    broader than the reach the mechanism implements* — and six review passes
+    each found it inside the fix for the previous one. Every fix widened what
+    the reader looked at: three prefix spellings, then two files, then a
+    fixpoint over `ast.Assign`, then this enumeration. Each was correct and
+    each left the next instance one spelling away, because the sentence above
+    the reader kept naming a **semantic** scope ("any local name transitively
+    bound to it") that no finite reader implements, while the body walked a
+    **syntactic** one.
 
-    P14-2 is that gap at its smallest: `svc: object = self._services` — S9's
-    decided shape plus a type annotation, and a house idiom (68 annotated local
-    assignments in this package, 16 in `storefront_api.py`) — survived the
-    whole file at 183 passed, while the same two lines without `: object` were
-    `1 failed`.
+    P14-2 is that gap at its smallest: `svc: object = self._services` — the
+    acquisition this guard trips on plus a type annotation, and a house idiom
+    (**68** annotated local assignments *inside function bodies* in this
+    package, **14** of them in `services.py`, 5 in `storefront_api.py`, 3 in
+    `storefront.py`) — survived the whole file at 183 passed, while the same
+    two lines without `: object` were `1 failed`. That one definition is
+    stated because counting at *all* scopes yields different figures, and the
+    earlier version of this sentence quoted a package total from one
+    definition beside a per-file count from the other (`## Pass 15`, P15-4).
+
+    **What this test closes is the target axis, and only that** (`## Pass 15`,
+    P15-1). It enumerates which node types can bind a name; which *values*
+    count as naming the object is `_alias_prefixes`' exact-source-text
+    comparison, documented there and in `storefront_api.py`'s guard-reach
+    block, and deliberately left open. The fourteenth instance was found in
+    the gap between the two axes, and the answer adopted was to narrow the
+    sentences to the reader rather than widen the reader again
+    (`docs/plans/salesperson-ui-coordination.md`, "STOPPED — the stopping rule
+    fired").
 
     So the sentence now names node types, and this test is what makes that a
     closed statement instead of a shorter one. It takes the binding forms from
@@ -3612,8 +3704,10 @@ def test_the_alias_reader_covers_every_binding_form_the_grammar_has():
     `names`, `asname`, `arg`, `rest`) is a place the language can introduce a
     name, and each must be classified — walked by `_bindings`, or excluded with
     a written reason that says what it binds instead. A Python version that
-    adds a binding form reddens here rather than opening a thirteenth instance
-    in silence.
+    adds a binding form reddens here rather than opening another instance in
+    silence — **so long as it carries one of the eight `_fields` names the set
+    below keys on**; a node spelled `_fields = ('var', 'value')` would open a
+    hole quietly, and none in Python 3.12 is (`## Pass 15`, P15-5).
 
     The exclusions are not a shorter promise. `ast.arg` is the one that matters
     and it is the one the reach statement already names as outside the walk: a
@@ -3648,8 +3742,9 @@ def test_the_alias_reader_covers_every_binding_form_the_grammar_has():
     assert all(reason.strip() for reason in _NON_ALIAS_BINDING_NODES.values())
 
     # ...and every walked form is exercised against the **delivered** reader,
-    # on the leg S9 writes: `shop.enqueue_turn(...)` in the router,
-    # `<local>.start_workflow_run(...)` in `storefront.py`.
+    # on the leg the tripwire watches: `shop.enqueue_turn(...)` in the router,
+    # `<local>.start_workflow_run(...)` in `storefront.py`. The value half is
+    # held fixed at `self._services` throughout: this is the target axis.
     api_stub = (
         "def build_storefront_router(shop):\n"
         "    def post(body):\n"
@@ -3883,25 +3978,35 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
     Neither collaborator is read whole — both are shared with the legacy
     surface, and only the methods a request executes are on this path.
 
-    Composition is the point, not economy. When S9 adds `start_workflow_run` to
-    the reach, this walk follows it with nobody re-pointing it, and what it
-    then reports is a **measurement** this test will make rather than a
-    prediction this docstring should make: §5.1's S9 row and the exception
-    names it maps are under a separate ruling, and naming them here is how the
-    previous version of this paragraph put a wrong exception name in front of
-    S9's implementer. What is stated instead is the walk: at S9 the closure
-    runs from `start_workflow_run` over its own `self.<name>` callees, so a
-    class raised in a helper that method only *calls* is inside the walk and no
-    longer a prose argument.
+    Composition is the point, not economy: the closure runs from each seed
+    over its own `self.<name>` callees, so a class raised in a helper a reached
+    method only *calls* is inside the walk rather than a prose argument.
+
+    **This walk reports nothing new at S9, and that is stated rather than
+    forecast away.** Under `docs/plans/salesperson-ui.md` v1.25 the trigger
+    runs on the turn worker and reaches the workflow layer through
+    `trigger.maybe_trigger`, whose `start_workflow_run` call site
+    (`trigger.py:82`) is outside all four scopes — so `start_workflow_run`
+    never enters the seed set and none of the three workflow classes enters
+    this one. S9's evidence is §5.1's S9 row's armed-fault measurement at the
+    response boundary, not anything this test can see. The version of this
+    paragraph that predicted otherwise was written to fix a docstring making a
+    claim about the plan the plan contradicts, and reproduced it
+    (`## Pass 14`, P14-3; `## Pass 15`, P15-2).
 
     **Where it does stop, stated as node types rather than as intent:** at
     calls that are not `self.<name>` on the walked class — `Services` into
     `Repository`, `Repository` into redis. None of that is walked, and none of
-    it is excused here either: the graph faults are S8's typed handlers' own
-    rows, and the `ServiceError` family is covered by the
-    `SERVICE_ERROR_RESPONSES` / `SERVICE_ERRORS_UNREACHABLE` partition. A
-    `raise` a route can reach from outside all four scopes is not something
-    this test can see, and no reason string may claim otherwise.
+    it is excused here either **except `WorkflowConfigError`**, whose raise
+    sites are `guards.py`'s fourteen, reached through
+    `Services` → `self._executor` → `executor` → `guards` — squarely this
+    unwalked region — and which no mechanism in either file checks
+    (`## Pass 15`, P15-3). For the rest: the graph faults are S8's typed
+    handlers' own rows, and the `ServiceError` family is covered by the
+    `SERVICE_ERROR_RESPONSES` / `SERVICE_ERRORS_UNREACHABLE` partition, which
+    `WorkflowConfigError` is outside on both counts. A `raise` a route can
+    reach from outside all four scopes is not something this test can see, and
+    no reason string may claim otherwise without saying that it is prose.
 
     Four scopes are pinned. Inside the router: exactly the two envelope
     classes. `storefront_api.py` whole: those two, plus the three raises that

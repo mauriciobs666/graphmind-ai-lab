@@ -430,18 +430,27 @@ ENVELOPE_HANDLERS: frozenset[type[BaseException]] = frozenset(
 # provably fires, so the storefront overrides it (`RESHAPED_HANDLERS` below)
 # rather than excusing it.
 #
-# **Every reason below is a checked claim, not prose** — which is what P11-1
-# found it was not. The two shapes have two mechanisms, both AST-read by
-# `tests/test_storefront_api.py`.
+# **Every reason below is a checked claim, not prose — except one.** Prose is
+# what P11-1 found all eleven were. Nine are checked by the two mechanisms
+# below, both AST-read by `tests/test_storefront_api.py`. The exception is
+# `WorkflowConfigError`, whose reason is **prose**: its only raise sites are
+# `guards.py`'s fourteen, reached through
+# `Services` → `self._executor` → `executor` → `guards`, which is outside every
+# scope either mechanism walks — and it is not a `ServiceError` subclass
+# either, so neither partition below covers it (`## Pass 15`, P15-3).
+# `WebSocketRequestValidationError`'s is checked only indirectly:
+# `storefront_routes` iterates `entry.methods`, which a websocket route does
+# not carry.
 #
 # Each mechanism is stated here at the reach it actually has, **as the syntax
-# it walks rather than as the behaviour it means to cover**. Five passes of
+# it walks rather than as the behaviour it means to cover**. Six passes of
 # this review found the same defect — a rule written broader than the walk
-# beneath it, five times inside the artifact that closed the previous one — and
+# beneath it, each time inside the artifact that closed the previous one — and
 # every one of those rules named a semantic scope ("any path", "any local name",
-# "a route reaches") that no finite reader implements. So what follows names
-# node types, file boundaries and closed method sets; where a reader stops, it
-# stops at a shape you can point at (`## Pass 13`, `## Pass 14`).
+# "a route reaches", "the names bound to it") that no finite reader implements.
+# So what follows names node types, file boundaries, closed method sets and the
+# exact string comparison the value side is; where a reader stops, it stops at
+# a shape you can point at (`## Pass 13`, `## Pass 14`, `## Pass 15`).
 #
 # *"No storefront route calls layer X"* is
 # `test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume`.
@@ -449,32 +458,87 @@ ENVELOPE_HANDLERS: frozenset[type[BaseException]] = frozenset(
 # attribute access anywhere in `build_storefront_router`; and (2) the same
 # access in every `Storefront` method the router reaches through
 # `shop.<method>`, closed over `self.<method>` to a fixpoint. On each leg
-# `<prefix>` is the seed attribute — `shop._services`/`self._services` for the
-# collaborator, `shop`/`self` for the frontier — closed over the names bound to
-# it in that scope, to a fixpoint. **Nine today, and a tenth added by either
-# path, written in any of the binding forms below, reddens.**
+# `<prefix>` starts as the seed attribute — `shop._services`/`self._services`
+# for the collaborator, `shop`/`self` for the frontier — and is closed to a
+# fixpoint over the local names that scope binds to it.
+#
+# **That closure has two axes, and both are narrow.** *Target* — the name has
+# to be bound by one of the eight `ast` node types below. *Value* — the
+# expression it is bound to has to **unparse to a string that is already a
+# prefix** (`ast.unparse(value) in prefixes`): exact source-text identity, not
+# an analysis of what the expression denotes. So on the collaborator leg
+# `svc = self._services` adds `svc`, and `me = self` adds nothing: `'self'` is
+# a prefix on the *frontier* leg, where `me.<method>` is duly followed, and is
+# not one on the collaborator leg, whose prefix is `'self._services'`, so
+# `me._services.<name>` is invisible there. **That asymmetry is a documented
+# stop, and it is measured, not assumed** (`## Pass 15`, P15-1): `me = self`
+# then `me._services.start_workflow_run(...)` on the router-reached
+# `Storefront.join` survives the two-file suite at **185 passed**, where
+# `svc = self._services` on the same injection point fails it at **1/184**.
+#
+# **Nine today. A tenth reddens when it is written on one of those prefixes
+# directly, or through a local name bound — in one of the eight forms below —
+# to an expression whose source text is exactly one of them.** A tenth written
+# any other way does not; the stop list below is where those shapes are named.
 #
 # **"Bound" is a closed list of eight `ast` node types**, not a promise about
 # names: `Assign`, `AnnAssign`, `NamedExpr`, `For`, `AsyncFor`, `comprehension`,
-# `withitem`, `MatchAs`. Every *other* name-binding node in the grammar is
-# classified as unable to carry an alias, each with the reason, and that
-# classification is held against `ast`'s own enumeration of binding nodes by
-# `test_the_alias_reader_covers_every_binding_form_the_grammar_has` — so a
-# binding form nobody classified fails rather than passing quietly. Deriving
-# the prefixes instead of listing three spellings was P13-1; deriving them over
-# `ast.Assign` alone still let `svc: object = self._services` through, which is
-# S9's decided shape plus a type annotation and a house idiom in both files
-# (P14-2).
+# `withitem`, `MatchAs` — and three of those are read **narrower than the node
+# type**. `For`/`AsyncFor`/`comprehension` are read only over a literal
+# `Tuple`/`List`/`Set` iterable, that being the only iterable whose elements a
+# reader running nothing can see; `Assign`'s sequence destructuring is paired
+# only when both sides are literal sequences of equal length with no `*` on
+# either, and `svc, *_ = ...` is declined loudly rather than guessed.
 #
-# **Where it stops, as syntax:** the object is followed only through
-# `<name>.<attr>`, where `<name>` is one of those derived prefixes. It is
-# therefore not followed into a **call argument** (`_go(self._services)` — the
-# parameter is bound by the caller, which is the one non-reach no enumeration
-# of binding forms can close), into a **return value**, onto an **attribute**
-# (`self._svc = self._services` — a *local* store is followed, an attribute
-# store is not), or through `getattr`. That is a statement about the walk, not
-# a claim about the code; the moment one of those is written, this comment is
-# what has to change with it.
+# Every *other* name-binding node in the grammar is classified as unable to
+# carry an alias, each with the reason, and that classification is held against
+# `ast`'s own enumeration of binding nodes by
+# `test_the_alias_reader_covers_every_binding_form_the_grammar_has` — so a
+# binding form nobody classified fails rather than passing quietly, **so long
+# as it carries one of the eight `_fields` names that enumeration keys on**
+# (`target`, `targets`, `optional_vars`, `name`, `names`, `asname`, `arg`,
+# `rest`). A future node spelled `_fields = ('var', 'value')` would open a hole
+# in silence; no node in Python 3.12 does (`## Pass 15`, P15-5).
+#
+# Deriving the prefixes instead of listing three spellings was P13-1; deriving
+# them over `ast.Assign` alone still let `svc: object = self._services`
+# through, annotated local assignment being a house idiom in both files
+# (P14-2). **That spelling is not S9's shape:**
+# `docs/plans/salesperson-ui.md` v1.25 puts the trigger on the turn worker,
+# reaching the service layer through `trigger.maybe_trigger`, whose own
+# `start_workflow_run` call site (`trigger.py:82`) is outside all four scopes
+# below. The reach therefore does **not** move at S9, and this guard is a
+# **service-surface tripwire**: red means a `Services` call was acquired
+# through the storefront's own `self._services` rather than through the
+# trigger (`## Pass 15`, P15-2).
+#
+# **Where it stops, as syntax.** Two rules generate every stop: a prefix is
+# followed only where it is *written*, as `<name>.<attr>`; and a binding
+# extends the prefix set only when the bound expression's **source text** is
+# already a prefix. What that leaves outside the walk, each shape run against
+# the delivered reader rather than argued (`## Pass 15`, P15-1 and Appendix
+# P15-A):
+#
+#   * a **call argument** — `_go(self._services)`; the parameter is bound by
+#     the caller, which is the one non-reach no enumeration of binding forms
+#     can ever close;
+#   * a **return value**; an **attribute** store (`self._svc = self._services`
+#     — a *local* store is followed, an attribute store is not); `getattr`;
+#   * an alias of the **receiver**, on the two collaborator legs:
+#     `me = self` then `me._services.<name>`, whose value text `self` is not
+#     the prefix `self._services`. The frontier legs, seeded on `shop`/`self`,
+#     do follow it — the asymmetry is stated above and measured;
+#   * any value the reader would have to **evaluate**: a conditional
+#     expression (`svc = self._services if c else self._services`), a container
+#     round-trip (`pair = [self._services]` then `svc = pair[0]`), a
+#     non-literal iterable (`for svc in self._pool`).
+#
+# That is a statement about the walk, not a claim about the code; the moment
+# one of those is written, this comment is what has to change with it. Closing
+# the value axis is alias analysis rather than one more node type, and the
+# chain that tried five times to widen its way there is stopped by decision,
+# not by oversight (`docs/plans/salesperson-ui-coordination.md`, "STOPPED —
+# the stopping rule fired").
 #
 # *"No storefront route raises it"* is
 # `test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume`,
@@ -498,9 +562,14 @@ ENVELOPE_HANDLERS: frozenset[type[BaseException]] = frozenset(
 # **Where it stops, as syntax:** at any call that is not `self.<name>` on the
 # walked class — `Services` into `Repository`, `Repository` into redis, and a
 # module-level helper in either collaborator file. None of that is walked, and
-# none of it is excused here: the graph faults are S8's typed handlers' own
-# rows and the `ServiceError` family is covered by the
+# none of it is excused here **except `WorkflowConfigError`**, whose raise
+# sites are `guards.py`'s fourteen — reached only through
+# `Services` → `self._executor` → `executor` → `guards`, squarely this unwalked
+# region — and which no mechanism in this file checks (`## Pass 15`, P15-3).
+# For the rest: the graph faults are S8's typed handlers' own rows and the
+# `ServiceError` family is covered by the
 # `SERVICE_ERROR_RESPONSES`/`SERVICE_ERRORS_UNREACHABLE` partition.
+# `WorkflowConfigError` falls in neither, being no `ServiceError` subclass.
 #
 # **Two classes the walk reports belong to neither exception family** —
 # `RuntimeError` (`services._dispatch_write`'s two invariant alarms) and
