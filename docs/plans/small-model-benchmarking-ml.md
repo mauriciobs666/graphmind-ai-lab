@@ -1,6 +1,25 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.14
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.15
+
+2026-09-07 (v1.15, `data-scientist`) — plan-gate Pass 6's blocker P6-1, both halves. **The
+continuous instrument's carrier is specified in §3.2d**: a *second* per-item map,
+`measures: Mapping[str, float]`, never a widened `counts` — widening makes the booleanisation
+type-legal without making it wrong; finite floats with **no domain constraint at the carrier**; a
+metric name in `counts` **or** `measures` and never both, which is what makes instrument selection
+total; absence stays `scoreable`'s job, so `0.0` is a measurement and `measures` is **not**
+`float | None`; `scored_value` as `scored_outcome`'s sibling, and `scored_outcome` **raises** on a
+continuous metric, which is the one line that turns P6-1's silent booleanised-MRR verdict into a
+loud failure; `diffs` taken **per analysis unit**, with a one-arm-only unit excluded and counted as
+§4.3 asymmetry. `separationZ` takes the **same per-item carrier and a different aggregate one** —
+§5.2 publishes a median, a p10 and a fraction, none of which is `ContinuousMetric`'s mean — and it
+is reported, not verdicted, so Rule 4's `_widen` clamp is due with the `sep_z` comparison rather
+than with S3. **§3.2e owes not one string but two** (open question 2): the decision stays binary, so
+verdicts 4 and 5 render *distinguishable* and *not distinguishable* with no `pp`, no McNemar clause
+and no MDD — a continuous metric has no observable floor, and the resolving sentence is the
+interval's own width, stated descriptively and never as a power claim. §3.3 gains the rule that
+makes both safe: **a `verdictMetrics` family is homogeneous in kind**, because Holm orders by
+p-value and a continuous verdict has none.
 
 2026-09-07 (v1.14, `data-scientist`) — the plan gate's Pass 5 routed three method questions here.
 **Co-presence (P5-5): the conservative single count, not a separate `prefillCoveredCount`** — an item
@@ -367,9 +386,75 @@ resample is **one-level over the 12 conversations**. The two-level (script → r
 returns the moment any pack declares `replicatesPerScript > 1`; §3.4 makes that a **validation
 error** rather than a silently one-level approximation. See §4.4.
 
+**What this instrument needs on the record, and none of it is there** *(v1.15, plan-gate P6-1)*. The
+gate found the embedder's only verdict metric unbuildable: `counts` is `Mapping[str, int]` and
+`scored_outcome` returns `counts[metric] > 0`, so a reciprocal rank of 0.5 is unstorable and any
+positive one booleanises into *did this query retrieve anything*. The ruling, concrete enough to
+specify a field:
+
+- **A second per-item map, not a widened one.** `counts` stays `Mapping[str, int]`; continuous
+  per-item values live in a new **`measures: Mapping[str, float]`**. Widening `counts` to `float` is
+  the tempting one-word fix and it is the wrong one — it makes the booleanisation *type-legal*
+  without making it wrong, and it puts two kinds of quantity in one key space: a count that §4.2's
+  denominators count, and a measurement that they must not.
+- **`float`, finite, and the carrier constrains no domain.** MRR is in `[0, 1]`, `sep_z` is a
+  difference of z-scores and is unbounded — §3.4 Rule 4's `_widen` clamp is that same assumption
+  made one layer up, and it must not be repeated here. A **non-finite** value is refused at the
+  carrier, because one `NaN` propagates through the mean and both percentiles and arrives as a
+  rendered interval rather than as an error.
+- **A metric name lives in `counts` or in `measures`, never in both.** This is what makes the
+  instrument selection **total**: the map a metric is in *is* the declaration of which instrument
+  decides it, so nothing infers a kind from a name or from a pack field, and a name in both maps is
+  refused rather than resolved by code order.
+- **Absence stays `scoreable`'s job — this is the absent-never-zero answer for this field, and it
+  is answered by machinery that already exists.** The three states are unchanged: absent from
+  `scoreable` → no declaration, no value; `scoreable[m] is False` → a declared precondition failure
+  and §4.3's asymmetry; `scoreable[m] is True` → the value **must** be in `measures` or the record is
+  refused (`IncompleteItemRecord`), never read as `0.0`. **An MRR of `0.0` is a measurement** — the
+  query retrieved nothing relevant in the top *k* — and it must be storable and distinguishable from
+  a query nobody judged. So `measures` is `Mapping[str, float]` and **not**
+  `Mapping[str, float | None]`: a second home for absence is a second thing to keep in step
+  (§3.2c's trap), and the first home is already correct.
+- **`scored_outcome` gains a sibling and a refusal.** `scored_value(metric) -> float | None`, the
+  same three states. And **`scored_outcome` raises when called on a metric that lives in
+  `measures`**, rather than returning `value > 0`. That is one line, and it is the line that turns
+  P6-1's first silent outcome — a booleanised MRR printed as a McNemar `+X pp` verdict, a different
+  metric under the same name — into a loud failure.
+- **What the bootstrap consumes.** `diffs` is one difference **per analysis unit**, never per
+  observation (the clustered rule above): for every unit present in **both** arms,
+  `value_A(u) − value_B(u)`, where a unit's value is its item's measure when the unit is one item —
+  the embedder's case, unit ≡ query ≡ item — and the **mean over its items** when it is not. A unit
+  scoreable in one arm and not the other is **excluded from `diffs` and counted as §4.3's
+  asymmetry**, exactly as the paired binary table already does; dropping it silently is the
+  laundering §4.3 exists to prevent, arriving on the continuous path.
+- **`separationZ` takes the same per-item carrier and a *different* aggregate one.** §5.2's
+  comparison is a paired bootstrap on per-query `sep_z` differences, so it needs
+  `measures["separationZ"]` (and `separationRaw`) exactly as MRR does. Its **aggregate** side does
+  not fit `ContinuousMetric`, which carries a mean: §5.2 publishes a **median, a p10 and the fraction
+  of queries with `sep_raw > 0`**, and none of the three is a mean, so one bare float cannot carry
+  them — that is P6-1's defect one layer up and it needs a distribution summary. It is **not** on the
+  embedder's verdict path (`verdictMetrics = ["mrr"]`, §3.3), so it is reported rather than
+  verdicted, and §3.4 Rule 4's `_widen` clamp is therefore due **with the `sep_z` comparison**, not
+  as a precondition of S3.
+- **Latency does not go here, and the exclusion is worth one clause.** It is continuous and it is
+  per-item, so it reads like a `measures` member — and it has its own carrier (§11.8's `ItemTiming`)
+  and is in no pack's `verdictMetrics` by §11.7 slot 6. Putting it in `measures` would duplicate a
+  number that already has a home and would make it eligible for a verdict this note has ruled it
+  cannot have (§11.7's closing paragraph: no paired latency interval is printed on any path).
+
+**How the carrier is proven right, and all of it is offline.** (1) `scored_outcome` on a metric in
+`measures` **raises**, asserted from both maps — the test that fails if the booleanisation is ever
+reintroduced. (2) A measure of `0.0` on a `scoreable: True` item survives a `to_dict`/`from_dict`
+round trip **as `0.0` and not as absent**, and the same item with the key missing raises
+`IncompleteItemRecord`: the absent-never-zero boundary, asserted on both sides. (3) A non-finite
+measure is refused at construction. (4) Over two arms where one unit is scoreable in only one of
+them, `diffs` has length `n_units − 1` **and** the dropped unit appears in the §4.3 asymmetry tally —
+asserted together, because either assertion alone passes on a silent drop.
+
 **(e) The decision wording, which AC-4 must be checked against.**
 
-Three verdicts, exactly these strings:
+Three verdicts for the **binary** instrument, exactly these strings — the continuous path's two are
+published below them *(v1.15)*, so this section carries five:
 
 1. **Distinguishable.**
    `A is better than B on <metric>: +15.0 pp (95% CI [3.2, 29.1] pp), n=40 paired items (unit: item, design effect 1.00), McNemar exact p=0.031 (b=6, c=0).`
@@ -409,7 +494,38 @@ quantifies. Do not AND them into a bloc — but *always print both individual ou
 prose*, as verdict 3 does, so a reader never sees an aggregate verdict without the two components
 that produced it.
 
-**One precondition on all three strings, and it is the whole of gate B-1:** McNemar exact and
+**The continuous path owes its own strings, and there are two of them** *(v1.15, plan-gate P6-1's
+open question 2)*. The three above all carry `pp`, a McNemar clause and an MDD-or-floor sentence, and
+a continuous verdict has none of the three: the unit is the metric's own (an MRR difference is not
+percentage points), §3.2d rules there is no significance test, and §7.2 gives the embedder's floor as
+`n/a (continuous)` because the observable floor is a property of a binary paired table's discordance
+lattice and does not exist here. Rendering a continuous verdict through string 1 or 2 would be false
+in three places at once. The decision is still binary — **the CI excludes zero** — so the path owes
+**two** strings and not three: *"instruments disagree"* cannot arise where there is one instrument.
+
+4. **Distinguishable (continuous).**
+   `A is better than B on mrr: +0.048 (95% CI [0.011, 0.086]), n=38 paired queries (unit: query, design effect 1.00, by-construction). The interval excludes zero; for a continuous metric the interval is the test and no significance test is run. Interval: paired bootstrap, B=10000, seed=<n> from the pack's sampling.seed.`
+5. **Not distinguishable (continuous).**
+   `Not distinguishable at this sample size. Observed difference +0.021 on mrr (95% CI [-0.014, 0.057]), n=38 paired queries (unit: query, design effect 1.00, by-construction). The interval covers zero. No power threshold is computed for a continuous metric — the observable floor and the MDD are properties of the paired binary table — so the resolving statement is the interval's own width: differences much below 0.036 are not separable from zero by this instrument at this n. Neither model is ranked above the other. Interval: paired bootstrap, B=10000, seed=<n> from the pack's sampling.seed.`
+
+**Four properties of that pair, each a decision rather than a wording preference.** (i) **The unit is
+the metric's own and never `pp`** — an MRR difference rendered in percentage points invites a reader
+to compare it against a rate difference elsewhere in the same report, and they are not the same
+quantity. (ii) **The absence of a significance test is printed, not implied**, because a reader
+trained on strings 1–3 reads a missing *p* as an omission. (iii) **The resolving sentence is
+descriptive and never a power claim** — a half-width is not an MDD, which is why it says *"not
+separable from zero by this instrument"* and not *"with 80% power"*; §7.4's `sd_d`-dependent table
+stays what it is, a sizing aid computed from a run rather than a verdict clause. (iv) **The resample
+provenance is mandatory in both** — an interval that does not name `B` and its seed is not
+reproducible, which is the whole reason §3.4 Rule 4 kept `sampling.seed` alive after the binary path
+stopped resampling.
+
+*(The numbers in strings 1–5 are **grammar, not measurements**: §3.2e publishes shapes an
+implementer tests against, and only §11.7's renderings are pinned to a measured sample. The one real
+figure above is §7.4's incumbent MRR of 0.6259, which is what makes `+0.048` a plausible shape rather
+than an arbitrary one.)*
+
+**One precondition on all three binary strings, and it is the whole of gate B-1:** McNemar exact and
 MOVER-D are valid **only when each row of the paired table is one independent analysis unit**. When
 the analysis unit contains correlated observations (design effect > 1), both are anti-conservative
 and the decision rule becomes *"the cluster-bootstrap CI on the paired difference excludes zero"*,
@@ -513,6 +629,18 @@ difference in `[6/n, 7/n)` — exactly the band §7.3 prices.
 `verdictMetrics` into the exploratory block and the family collapses back to k=1 with α=0.05
 (floor 15.0 pp instead of 17.5 pp on `clear_suspend`). That is a real gain in resolving power and
 it is available whenever the product question "which error costs more?" becomes answerable.
+
+**A family is homogeneous in kind, and `validate` refuses a mixed one** *(v1.15, plan-gate P6-1)*.
+Holm orders a family **by p-value**, and a continuous verdict has none — §3.2d rules that the
+interval *is* the test. So a `verdictMetrics` list mixing a binary member with a continuous one has
+no ordering, hence no ladder, and the correction silently fails to happen for one of them. Two
+consequences, both free today: `validate` **refuses the mixed list** (every declared pack above is
+homogeneous, so this costs nothing now and forbids the silent case later), and **an all-continuous
+family with `k > 1` takes its correction in the interval rather than in a ladder** — each member's
+bootstrap percentiles are taken at `100·α/(2k)` and `100 − 100·α/(2k)` instead of 2.5 and 97.5. That
+is Bonferroni and it is deliberately not Holm: Holm's gain comes from ordering by p-value, and there
+is nothing here to order. The embedder is `k = 1`, so this binds nothing today — and it is written
+now for the same reason pre-registration is written now.
 
 ### 3.4 The statistics-module contract (`stats.py`) — the B-1 guard
 
