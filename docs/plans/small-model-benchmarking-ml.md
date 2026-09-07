@@ -1,6 +1,19 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.16
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.17
+
+2026-09-07 (v1.17, `data-scientist`) — plan v1.13's §7 rule 3 raise, ruled. **Rule 8 gains
+`support: tuple[float, float] | None`, keyword-only and required with no default — and still takes
+no `clamp`.** That does not cut against v1.16's refusals: those four split into *the quantity does
+not exist on this path* and *the quantity is derivable from what the function already holds*, and
+`support` is neither — it is an **irreducible fact about the metric**, undiscoverable from `diffs`
+(a sample of MRR differences in `[−0.3, 0.3]` is indistinguishable from a sample of z-differences),
+which is `design_effect`'s own principle: `_widen` can no more discover a support than a resample can
+discover clustering. The **clamp is derived inside the function** and exposed nowhere, so the sign
+and order of `(lo−hi, hi−lo)` are written once. `support=None` is a **stated** value meaning
+*unbounded* — `sep_z`'s case, no clamping — never an absent one. The plan's bounded/non-blocking
+classification is **endorsed with its premise tightened**: rest it on the scale-1.0 identity, which
+holds for every metric, not on the pack census, which a new pack changes silently.
 
 2026-09-07 (v1.16, `data-scientist`) — four items back from plan v1.12 (`5b67416`). **§3.2f is
 swept** (item 1): both *"Decided by the cluster-bootstrap CI…"* variants, their selecting condition
@@ -1297,6 +1310,7 @@ def continuous_verdict(
     basis: Basis,
     B: int,
     seed: int,
+    support: tuple[float, float] | None,   # v1.17 — the METRIC's support, required, no default
     a_label: str = "A",
     b_label: str = "B",
 ) -> ContinuousVerdict: ...
@@ -1340,6 +1354,55 @@ above has nowhere to land; and **`_widen`'s `[-1, 1]` clamp must be conditional*
 difference-of-proportions assumption and `sep_z` is unbounded (Rule 4). Both are noted there; they
 are named here because they are this function's preconditions, and a plan that calls it without them
 calls something that cannot render string 4 correctly for two of the three continuous metrics.
+
+**`support` is required, and it takes no `clamp`** *(v1.17, at plan v1.13's §7 rule 3 raise; the
+plan's recommendation, accepted with a sharper shape)*. Adding a parameter to a function whose
+**negative** parameters were the point needs a reason, and the reason is that the four refused above
+are two kinds and `support` is a third:
+
+- **The quantity does not exist on this path** — `ResolvingPower`, `alpha_step`, a McNemar *p*.
+  Refusing these refuses a category error.
+- **The quantity exists and is derivable from what the function already holds** — the percentile
+  levels, computed from `alpha_family` and `family`. Refusing this removes a way to get it wrong.
+- **The quantity exists, is needed, and is *irreducible*** — `support`. It cannot be recovered from
+  `diffs`: a sample of MRR differences lying in `[−0.3, 0.3]` is indistinguishable from a sample of
+  z-differences lying there, and inferring a support from an observed range is the silent-wrong
+  default the clamp rule exists to refuse. **This is `design_effect`'s own principle** (Rule 2), and
+  the symmetry is exact: `_widen` can no more discover a metric's support than a resample can
+  discover clustering the declaration did not state. Both are facts about the *metric*, known to the
+  party that defined it, so both are **declared and forwarded, never inferred**.
+
+So the parameter is keyword-only and **required with no default**, and its `None` is a **stated
+value** — *this metric is unbounded, and I am telling you so* — never an absent one. That is this
+note's standing absent-never-defaulted discipline at a fourth field, and it is what makes wiring an
+unbounded metric a decision the caller must take rather than one it inherits.
+
+**What it does with each value.** The clamp is derived **inside** the function and exposed nowhere:
+`None` when `support is None`, otherwise `(lo − hi, hi − lo)` — the support of the *difference*, not
+of the metric, which is the conversion worth writing once rather than at each call site where its
+sign and order can be transposed. Making `clamp` unrepresentable at this surface is the same move as
+the percentile levels, so v1.16's grain is preserved rather than broken. `sep_z` passes
+`support=None` and is never clamped; `mrr` passes `(0.0, 1.0)` and is clamped to `(−1.0, 1.0)`. A
+fifth refusal joins the four above: **`support` with `lo >= hi` raises** — a degenerate support
+derives a clamp of `(0, 0)` and would pin every bound to zero silently.
+
+**Two callers, and they are not the same surface.** A **verdict** metric reaches the engine only
+through this function, which is why `support` belongs here. `sep_z` is reported and not verdicted
+(§3.2d), so its comparison calls `paired_cluster_bootstrap` directly and states that engine's
+`clamp` itself. Neither surface should be "simplified" into the other: one takes the metric's
+support and derives, the other takes the derived value because it has no metric to ask.
+
+**Why nothing built today turns on it, stated so the premise cannot go stale.** `_widen` scales
+half-widths by `sqrt(design_effect)`, so at **1.00** it returns its input interval unchanged and no
+clamp can bind — for *every* metric, not merely for `mrr`, since an unwidened bound is a bootstrap
+percentile of per-unit differences and already lies inside the difference's own support. So an
+interim `clamp=None` is correct for an unbounded metric always and inert for a bounded one at
+`design_effect == 1.00`. **Rest the interim on that identity and not on a census of which packs
+declare a continuous verdict metric** — the embedder's `designEffect` is 1.00 by construction in
+§7.2's sense (unit ≡ query ≡ item, one observation per unit, preserved by §7.4's own 38 → 60 growth
+path), but that is a fact about the packs declared today, and a pack census is the premise that goes
+stale without anyone editing the sentence that rests on it. The question goes live at
+`design_effect > 1.0` on a bounded continuous verdict metric, which nothing refuses.
 
 **Rendering precision, decided once so it is not decided three times:** `diff`, both bounds and
 string 5's half-width all print at **three decimal places**, rounded to nearest — a printed
