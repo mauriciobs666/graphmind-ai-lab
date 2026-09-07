@@ -403,6 +403,41 @@ def test_a_deterministic_record_omits_the_call_surface_rather_than_storing_null(
         assert stored["callSurface"] == surface
 
 
+@pytest.mark.parametrize(
+    "arm_kind,call_surface,fixture,reason",
+    [
+        ("model", None, model_fields, "null"),
+        ("deterministic", "chat", deterministic_fields, "forbidden"),
+    ],
+    ids=["model-lost-its-surface", "reference-arm-claiming-a-surface"],
+)
+def test_an_invalid_call_surface_survives_a_round_trip_with_its_reason(
+    arm_kind: str, call_surface: str | None, fixture, reason: str
+) -> None:
+    """The round trip is total over **invalid** records too, which is the only kind that matters
+    here (review P6-1).
+
+    `store()` validates before serialising, so this package never writes a record it refused —
+    but `model-bench migrate` (§3.4.3) reads with `from_dict` and writes with `to_dict`, and the
+    records a migration walks are by definition ones the old contract failed. Both ways of
+    narrowing the omission lose information on that path, in opposite directions: keying it on the
+    **value** omits a model record's lost surface, which then reads back as `absent` — never
+    written — and keying it on the **arm** omits a reference arm's forbidden surface, which then
+    reads back **valid**, deleting the evidence of the claim §3.4.1 exists to refuse. The
+    omission therefore means one record and not a class of them.
+    """
+    fp = Fingerprint(armKind=arm_kind, callSurface=call_surface, fields=fixture())
+    assert fp.validate() == [FieldProblem(field="callSurface", reason=reason)]
+
+    stored = fp.to_dict()
+    assert "callSurface" in stored
+    assert stored["callSurface"] == call_surface
+
+    restored = Fingerprint.from_dict(stored)
+    assert restored == fp
+    assert restored.validate() == [FieldProblem(field="callSurface", reason=reason)]
+
+
 # --- M-4: the contracts are pinned against literals, not against themselves ----------------------
 
 #: Plan §3.4.2's schema-1 `model:chat` field set, **transcribed here by hand** rather than derived

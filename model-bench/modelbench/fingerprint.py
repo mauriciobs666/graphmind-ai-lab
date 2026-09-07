@@ -345,10 +345,17 @@ class Fingerprint:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        # `callSurface` is omitted rather than written `null` on a deterministic arm: that arm
-        # calls no surface, which is a different fact from "we did not capture this" — the one
-        # thing `null` means in this record (§3.4.2).
-        surface = {} if self.callSurface is None else {"callSurface": self.callSurface}
+        # The key is omitted for **exactly one** record — a deterministic arm carrying no surface —
+        # because omission means "this arm calls no surface", a different fact from "we did not
+        # capture this", which is the one thing `null` means here (§3.4.2). Every other record
+        # writes the key, whatever it holds, so that `from_dict(to_dict(x)) == x` for *invalid*
+        # records too: a condition on the **value** alone laundered a model record's `null` into
+        # an `absent` on read, and one on the **arm** alone drops the offending surface off a
+        # deterministic record, which then reads back valid (review P6-1). `store()` refuses an
+        # invalid record before serialising it, so the writer that walks either path is
+        # `model-bench migrate` (§3.4.3) — and an invalid record is the only kind it walks.
+        omit = self.armKind == "deterministic" and self.callSurface is None
+        surface: dict[str, Any] = {} if omit else {"callSurface": self.callSurface}
         return {"armKind": self.armKind, **surface, **dict(self.fields)}
 
     def __eq__(self, other: object) -> bool:

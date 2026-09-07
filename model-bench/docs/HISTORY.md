@@ -2,6 +2,40 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-07 — P6-1: the stored `callSurface` shape, made total over invalid records
+
+**What:** `docs/reviews/small-model-benchmarking-impl.md` **`## Pass 6`** finding **P6-1** (minor,
+the pass's only one — Pass 5's four majors are dispositioned *fixed* and P5-7 *withdrawn*).
+`modelbench/fingerprint.py` and `tests/test_fingerprint.py` only. **475 → 477 tests**,
+`.venv/bin/ruff check .` clean, **3 mutations run, 3 killed**.
+
+**The defect.** `to_dict` keyed its omission on the *value* — `{} if self.callSurface is None` —
+so it fired on a **model** record whose surface was `None` too. Such a record validates as `null`
+("something had the value and lost it"), serialises with no key, and reads back as `absent`
+("never written"): the information loss the previous round closed in `validate()`, reintroduced one
+method over. Unreachable through this package's writers, because `store()` validates before
+`RunResult.to_dict()` — and reachable through **`model-bench migrate`** (§3.4.3), which reads with
+`from_dict`, writes with `to_dict`, and by definition walks records that did not validate.
+
+**The fix is the conjunction, not either half.** The gate suggested keying on the arm instead
+(`{} if self.armKind == "deterministic"`), which is a strictly worse trade on the same path:
+executed over all eight `(armKind, callSurface)` shapes, it drops a **forbidden** surface off a
+deterministic record, which then reads back **valid** — laundering an invalid reference arm into a
+clean one and deleting the evidence of the claim §3.4.1 exists to refuse. So the key is omitted for
+**exactly one** record, `armKind == "deterministic" and callSurface is None`, and written for every
+other, whatever it holds. The round trip is then total over all eight shapes — including
+`armKind == ""`, which the shipped condition also failed on equality — where the value-keyed
+condition was asymmetric on one and the arm-keyed one on two.
+
+**The mutations**, each applied to a file copied aside and restored by copy immediately, the tree
+verified byte-identical after every one:
+
+| # | The wrong implementation | Result |
+|---|---|---|
+| 1 | omission keyed on the value alone — the shipped `c523a35` condition | 1 failed — killed (`model-lost-its-surface`) |
+| 2 | omission keyed on the arm alone — **the Pass 6 gate's suggested one-liner** | 1 failed — killed (`reference-arm-claiming-a-surface`) |
+| 3 | the key always written — Pass 5's M2 / Pass 6's N1, re-run against the fix | 1 failed — killed, so P5-2's pin still holds |
+
 ## 2026-09-07 — S1e Tables A and B, fix round: three states for the second discriminator, and two decisions that were held by comments
 
 **What:** `docs/reviews/small-model-benchmarking-impl.md` **`## Pass 5`** findings **P5-1**, **P5-2**
