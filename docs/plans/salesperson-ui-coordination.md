@@ -145,7 +145,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S8e** — close P13-1 + P13-2 (majors), P13-3, the nit, and **correct the guard-reach statement** | `coder` (**resumed** `ad35d76985da040a3`) | `ad35d76985da040a3` | **accepted — committed `92bf842`** (314/65). **Replaced enumeration with derivation**: `_alias_prefixes()` closes a seed set over `ast.Assign` bindings to a fixpoint, applied on **all four legs**, not the two Pass 13 named — the frontier walks were the identical defect one field over. Nine names unchanged, so no re-baselining. **Took closure (a) AND (b) on P13-2**, reasoning that "the defect is only ever the gap" means closing it has two moves; raise walk now spans **four scopes**. **Closed the leg Pass 13 called latent** and asserted it cannot empty silently. **Reversed itself on P13-3** after checking the rebuttal — its own P11-7 analogy was wrong — and proved the cross-check killable (183 without / 1 failed with) | `storefront_api.py`, `test_storefront_api.py` + a corrected guard-reach statement | `analyst` (Pass 14) → — | **254k tok** / 38 tools |
 | **Pass 14** — gate S8e (`92bf842`) | `analyst` (**fresh**) | `a53a5d3a5d3ff9f2d` | **accepted — committed `a42fcca`. NEEDS CHANGES** (0 blockers, **3 majors**, 1 minor, 1 nit). **Found instances eleven and twelve inside S8e's own fix, both via the general probe rather than a reproduction.** **P14-1** the composed raise walk stops one hop short of its exemption — and the blind spot hides an **unclassified** raise, `MemberIdCollisionError`, in no table anywhere; **P14-2** `_alias_prefixes` harvests `ast.Assign` only, so S9's shape **plus a type annotation** survives (annotated locals are a house idiom, 68 in the package); **P14-3** the composition claim is right about the code and wrong about the **plan**. Reproduced all six of S8e's claims exactly. **Ruled the guard-reach statement inaccurate in 4 of 11 clauses** and named a **convergence test** | `docs/reviews/salesperson-ui-impl.md` `## Pass 14` | — | 191k tok / 69 tools |
 | **S8f** — P14-1, P14-2, P14-4, P14-5 + the syntactic restatement + the `MemberIdCollisionError` ruling | `coder` (**fresh**) | `a0b67a1e6bc22d6b8` | **accepted — committed `00827c2`** (+1019/−142). **Enumerated the reader's scope instead of implying it**: eight `ast` node types walked as a named constant, the other **19 grammar nodes excluded each with a written reason**. Raise walk closes over `self.<name>` to a fixpoint (`Services` 9→13, `Repository` 2→7). **Caught a thirteenth instance itself, before a gate did** — `raise self._mk(...)` resolving to the *method name* on the collaborator legs. **Convergence probe empty on both readers**, shipped as two tests, node list **derived from `ast`** so a new Python binding form reddens rather than opening a hole. Classified `MemberIdCollisionError` and **left it visible for review disagreement rather than burying it** | `storefront_api.py`, `test_storefront_api.py`; statement at `storefront_api.py:437–519` | `analyst` (Pass 15, **final**) → — | **260k tok** / 95 tools |
-| **Pass 15** — **final gate** on S8f (`00827c2`) | `analyst` (**fresh**) | `afb10aa0d33dab3ee` | in-flight (dispatched 2026-09-07) | `docs/reviews/salesperson-ui-impl.md` `## Pass 15` | — | — |
+| **Pass 15** — **final gate** on S8f (`00827c2`) | `analyst` (**fresh**) | `afb10aa0d33dab3ee` | **accepted — committed `5f8adc0`. NEEDS CHANGES** (0 blockers, 3 majors, 1 minor, 1 nit). **Convergence test NOT passed, on a precise diagnosis**: S8f finished the **target** axis (derived from `ast`, 8+19=27 verified) but all eight probe snippets hold the **value** axis at one spelling, and the block states that axis *semantically* over a mechanism that is exact source-text identity. **Fourteenth instance: `me = self`** — `ast.Assign`, first entry in the walked list, in none of the four documented stops, invisible to the two collaborator legs that seed on `receiver.attr`. **Answered the escalation question**: not a sixth cycle — the gap is alias/points-to, where each closure spawns the next — but **docs-only narrowing**, safe because zero receiver-alias bindings exist in `falkorchat/`. 9 of 17 clauses lift-ready | `docs/reviews/salesperson-ui-impl.md` `## Pass 15` | — | 219k tok / 65 tools |
 | **U30** — P14-3: settle the plan/code exception-name mismatch and the falsifiability **mapping** | `architect` (**fresh**) | `af0b1eb6551aa85e9` | **accepted — committed `a3f681e`** (3/2, one file). **Ruled the plan wrong and the code right** — `services.py:2085`'s `WorkflowRunNotFoundError` is a *workspace snapshot/trigger-anchor* miss, already documented in `start_workflow_run`'s own docstring, while `WorkflowDefNotFoundError` is a *`reference`-graph* condition whose three raise sites are unreachable from the S9 path. Two conditions, only one reachable; the row named the reachable one with the unreachable one's class. **No code change implied.** Introduced the **two-gate** framing (does the method enter the walked set / is the raise in its own body or one call further in) that the plan had collapsed | `docs/plans/salesperson-ui.md` **v1.24** | teco-verified | 107k tok / 44 tools |
 | **U31** — replace S9's unmeetable *"S8c goes red"* done-condition; account for the false-but-unmeasured excuses and `executor.run`'s own raise | `architect` (**resumed** `af0b1eb6551aa85e9`) | `af0b1eb6551aa85e9` | **accepted — committed `5d0bb9c`** (3/2, one file). **Replaced the obligation rather than deleting it**: S8c's assertion is expected to **stay green**, and staying green *is* the evidence; what it still pins is the storefront's **service surface** — red means S9 wrote `self._services` instead of the trigger, a stop-and-re-decide. Row now says **do not restore a reddens-at-S9 claim**, and why. **Corrected my framing**: it is not a *placement* tripwire — `_service_layer_reach` reads source, not threads. All three excuses convert to **one measured exemption at the response boundary**; none stays prose-only. Tells S9 to **derive** the fault list from the worker's actual service surface. **Incidentally closed Pass 12's open question 2**, flagged as an architect edit and never made | `docs/plans/salesperson-ui.md` **v1.25** | `analyst` (folded into Pass 15) → — | 129k tok / 7 tools |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
@@ -2287,3 +2287,79 @@ staying invisible to both guards** — the same defect class, at the architectur
 (v1.25) rules how that is handled. I asked Pass 15 to judge whether the **delivered comment block and
 docstrings** are honest about it, because that is the one place a technically-passing guard could
 still be telling a lie, and no probe over `ast` node types would ever surface it.
+
+## STOPPED — the stopping rule fired, 2026-09-07 (teco)
+
+Pass 15 found a **fourteenth instance**. Per the stakeholder's decision recorded above, **the chain
+stops here and no fix is dispatched.** I have not opened an S8g and a later session must not, without
+a fresh stakeholder decision. This section is the escalation.
+
+**The fourteenth instance, verified by me and not merely reported.** `me = self` followed by
+`me._services.start_workflow_run(...)`, injected on the router-reached `Storefront.join`:
+**185 passed — survives.** For contrast the same injection written `svc = self._services` fails,
+`1 failed / 184`. `storefront.py` restored to `a713e2c5…` after each. So the guard sees an alias of
+the *service attribute* and is blind to an alias of the *receiver*.
+
+**Pass 15's diagnosis is the most useful thing any pass in this chain has produced**, because it
+finally names *why* the defect regenerates instead of finding one more instance of it. The reader has
+**two axes**, and every cycle so far has hardened only one:
+
+- **Target axis** — *which binding forms bind a name.* S8f **finished** this: derived from `ast`
+  itself, complete for 3.12, 8 walked + 19 excluded-with-reasons = 27 verified. Genuinely done.
+- **Value axis** — *which expressions denote the object.* Untouched, and stated **semantically**
+  (*"the names bound **to it**"*) over a mechanism that is `ast.unparse(value) in prefixes` — exact
+  source-text identity. All eight of S8f's probe snippets hold this axis fixed at the single spelling
+  `self._services`, which is why its probe came back empty while three more escapes existed.
+
+**And this is why a sixth cycle is the wrong answer, not merely an expensive one.** Closing the value
+axis is alias/points-to analysis. `me = self` closes to a receiver-alias pass; that admits
+`(a, b) = (self, x)`, then a conditional expression, then a container round-trip, then a call
+argument — **each closure spawns the next, and the sequence does not terminate at any level of effort
+a hand-written reader can reach.** Five cycles of evidence say the same thing empirically: every one
+narrowed the gap and none closed it.
+
+### The recommendation I am escalating with
+
+**Take the docs-only answer, and take it inside S9 rather than as a new unit.** This is not a new
+idea invented to end the chain — it is **Pass 14's option (b)**, and independently **U31's**
+recommendation, both recorded before Pass 15 ran:
+
+1. **Narrow the four inaccurate clauses** (5, 6, 9, 15) to what the reader actually does, and correct
+   clause 8 against v1.25. Nine of seventeen are lift-ready as written and carry most of the useful
+   content.
+2. **Fix P15-2's 14 stale sites** — they still name `self._services.start_workflow_run(...)` as
+   "S9's decided shape", which is the compression I retracted and v1.25 replaced. **The load-bearing
+   one is a paragraph S8f *newly wrote* to fix P14-3, reproducing P14-3's own shape one turn later** —
+   and the mitigating fact is mine to own: v1.25 landed **21 minutes** before S8f's commit, and S8f's
+   brief predates it. That is a coordination timing failure, not a delegate's error.
+3. **Leave the reader as delivered.** Residual risk is low and *measured*, not assumed: **zero**
+   receiver-alias bindings exist anywhere in `falkorchat/` — I re-derived that independently. If the
+   receiver half is wanted anyway, Pass 15 measured it at **2 lines** (identical nine names, identical
+   repo reach) and it belongs **inside S9**, not in an S8g.
+
+**Why narrowing is not a retreat here.** v1.25 already moved S9's evidence to the armed-fault
+measurement. The reach guard is now a **tripwire**, and a tripwire needs a rule that is **narrow and
+true**, not one that is broad and complete. The whole reason the "broad" claim was worth defending —
+that S9's new call would redden it — was retired two units ago.
+
+**What the chain bought, stated honestly, because the cost was six cycles.** Two real product
+findings that nothing else surfaced: `MemberIdCollisionError` (an unclassified raise reaching
+`POST /shop/api/session` as a bare `500 text/plain`, now classified with a checked reason) and the
+`INHERITED_HANDLERS` exemption table converted from an enumeration into a mechanism over the whole
+storefront→`Services`/`Repository` surface. Everything else — five of the six cycles — went into
+making the guard's *self-description* true. That ratio is the argument for the doctrine now adopted:
+**a static reader must state a syntactic scope on every axis it has, or it will regenerate this
+defect forever.**
+
+### State at the stop
+
+`HEAD` = `5f8adc0`. Tree clean; every deliverable committed and gated. Full suite **2617 passed /
+14 deselected**, two-file **185**, `ruff` clean, the five frozen files md5-matching `HEAD`, `ws:acme`
+untouched at **871** nodes. **`reference` holds 0 nodes** — the stray `timers-stale-key@v1` artifact
+is gone as of Pass 15's run.
+
+**The seed window is open now, and this is the signal I owed.** No unit of this coordination is in
+flight and none is queued that runs a default `pytest` — S9 is not dispatched and will not be until
+the stakeholder rules. The three scripts and the split-brain caveat are in
+"Stakeholder decisions, 2026-09-07" above. S9 will wipe `reference` again when it runs, so a re-run
+after S9 is expected.
