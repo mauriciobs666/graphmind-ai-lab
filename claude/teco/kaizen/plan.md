@@ -8,7 +8,7 @@
 
 | ID | Added | Priority | Status | Summary |
 |------|------------|----------|--------|---------|
-| K-016 | 2026-08-21 | high | 🔵 | Consolidation pass on `teco.md` (dedicated `cobb` pass): merge same-family incident bullets, split rare-path rules into an on-demand `coordination-techniques.md` knowledge base |
+| K-016 | 2026-08-21 | **blocking** | 🔵 | Consolidation pass on `teco.md` (dedicated `cobb` pass): merge same-family incident bullets, split rare-path rules into an on-demand `coordination-techniques.md` knowledge base |
 | K-017 | 2026-09-06 | medium | 🔵 | Move the environment-readiness bring-up mechanics into a `devops`-owned idempotent script, leaving a one-line trigger in `teco.md` |
 
 ### K-016 — consolidate teco.md + split rare-path rules into an on-demand knowledge base
@@ -54,6 +54,35 @@
   *"Your own rebuttal of a delegate's report is the least-checked claim"* is a **fifth** member of
   that same family and was placed adjacent to it on purpose, so the merge is a local edit when this
   item is worked.
+
+- **2026-09-07 (kaizen chunk C distillation, `cobb`) — K-016 is now the blocking item, and the
+  ceiling of the "sharpen in place, never append" technique has been reached.** `teco.md` is
+  **6,908 w** with **21** lines past the 700-char smell (6,388 w / 17 lines before this pass).
+  Chunk C dispositioned thirteen entries as **six** statements, five of them word-replacements
+  inside existing sentences and only one a new bullet — the most disciplined promotion shape
+  available — and the file still grew **520 w**, because eleven of the thirteen were coordination
+  doctrine with no cheaper home than this prompt. That is the finding: **at this density, further
+  distillation chunks cannot be absorbed editorially.** Chunk D (thirteen more 2026-09-07 entries,
+  same doctrine class) lands next, and at least two of them (`b2d7f309`, `f3c81a92`) are already
+  covered by sentences this pass rewrote — evidence that the *content* is converging even as the
+  word count does not.
+  - **Concrete first move for whoever executes this item, now that the merge targets are named.**
+    Three of the four lines that crossed the smell in chunk C are the same family K-016 already
+    proposes merging, and they are now adjacent enough to merge locally: step 5's *"Close the loop
+    on the same delegate"* (**1,312 ch**, shortened this pass by deduplicating its `SendMessage`-
+    first clause into step 4), *"Your own rebuttal…"* (826 ch), *"Re-verify every summarized number,
+    and every new identifier"* and *"Verify a self-reported recovery independently"*. All four are
+    instances of one rule — **a delegate's claim, and your own rebuttal of it, are both unchecked
+    until you check them** — with four sub-cases. Merging them is a single edit to one contiguous
+    block, not a restructure of the file.
+  - **The strongest KB-extraction candidate has changed.** The 2026-08-24 note named the paused-unit
+    protocol and ruled most of it un-movable (reactive trigger). The better candidate now is
+    **step 3's dispatch mechanics** — the three-axis serialization rule, the step-table sizing rule,
+    the `subagent_type` rule, the fencing note, model routing, CPG freshness (~700 w across lines
+    95-102, four of them past the smell). Unlike the paused-unit protocol these are **proactive**:
+    teco loads them at decomposition time, at a point in the workflow it always reaches, so a
+    one-line "before dispatching, read `coordination-techniques.md` §Dispatch" carries no
+    recognition problem. That makes the extraction safe in a way the earlier candidate was not.
 
 ### K-017 — a `devops`-owned `ensure-services.sh`, so the trigger costs one line
 - **Status:** 🔵 proposed · **Priority:** medium

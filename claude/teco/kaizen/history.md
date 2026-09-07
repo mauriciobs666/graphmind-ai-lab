@@ -2,6 +2,130 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-09-07 — Kaizen distillation, chunk C (the thirteen 2026-09-03 / 2026-09-06 entries)
+
+- **What:** U18 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled the
+  thirteen `teco` `:KaizenEntry` nodes dated 2026-09-03 and 2026-09-06 in `kaizen_team`. Result:
+  **11 promoted as 6 statements** (5 in-place sharpenings of existing `teco.md` sentences, 1 new
+  `teco.md` bullet, 1 into `skills/agent-standards/claude-code.md`), **2 discarded**, 0 kept open,
+  **3 `MENTIONS` tags** added. Every entry was re-derived from primary sources; one entry's stated
+  mechanism was **materially wrong** and one other's was **sharper than written**.
+- **Deliberate shape of this pass: no new doctrine bullets.** Eleven of thirteen entries were
+  coordination doctrine aimed at a file already at 6,388 w with 17 lines past the 700-char smell.
+  Siblings were merged into one statement each *before* promotion, and each merged statement
+  **replaced words in an existing sentence** rather than being appended beside it. The one new
+  bullet (`agentId` resolution scope) exists because it is a hard limit on a mechanism the ledger
+  already relies on, and it paid for part of itself by letting the *"Close the loop on the same
+  delegate"* bullet shed its now-duplicated `SendMessage`-first clause (**1,436 → 1,312 ch**).
+- **Corrections to rules `teco.md` already gave — these outranked every new-bullet candidate:**
+  - `c4f8a3d1-7b26-4e95-8a13-6d09f2b5e847` → Guardrails, **correcting** *"To read a baseline use
+    `git show <ref>:<path>`"* to require an explicit sha and forbid `HEAD`. **Verdict: the prompt's
+    advice was not wrong, it was under-specified in exactly the way that produced the incident** —
+    `HEAD` is a legal `<ref>`, and teco's own integrator commit grant is what moves it. Re-derived
+    in a throwaway repo in the session scratchpad (never this tree): `git show HEAD:plan.md` at the
+    briefing commit returned `Version: v1.7`; two commits later the identical command returned
+    `v1.8`, while `git show <sha>:plan.md` still returned `v1.7`. Silent on both sides — the
+    delegate believes it followed the brief and the coordinator believes it pinned a version.
+  - `1ad53bad-b198-415d-8221-5773d2a95da1` + `7c1e2b04-9a3d-4f61-8e57-2b6a0d94f1c3` (merged) →
+    step 4, **reversing the ordering** of the transient-failure bullet, which said *"Re-dispatch
+    with a state-recovery brief"* as the first move. The delegate's edits **and** its conversation
+    context survive, so `SendMessage` to the recorded `agentId` comes first and the respawn is the
+    fallback. This also **resolved a standing contradiction**: step 5 already said to attempt the
+    `SendMessage` first, so the two bullets gave opposite first moves. Second half became the new
+    bullet: an `agentId` does not survive a session reboot, so a checkpoint written *because* the
+    session is dying is exactly the one whose ids will not resolve — each in-flight unit needs a
+    cold-start fallback. **Re-derivation changed the mechanism:** the entry says the id does not
+    "survive", implying the record is gone. It is not — subagent transcripts live under the
+    **parent session's** directory (`~/.claude/projects/<proj>/<parent-session-id>/subagents/
+    agent-<agentId>.jsonl`), and the specific reported-unresolvable id `a213382761bc926ec` is still
+    on disk under session `0b03bc60-…`. What does not survive is the **resolution scope**: a new
+    session has a new id and its own empty `subagents/` index. That corrected mechanism, not the
+    entry's, is what was promoted (to `claude-code.md`).
+- **Promoted → `claude/teco/teco.md` (in-place sharpenings):**
+  - `b8d47f05-1e39-4c72-8a06-3fd2159c7ea4` + `d51c8a73-6f20-4e94-b1a8-7c03e6f9b2d1` (merged) →
+    step 3, *"Brief contents"*. One root — **your wording is the delegate's specification and no
+    gate reads it** — already stated abstractly there; the two entries supply its operational
+    form: put a blocker as *is this premise true, and then what follows* rather than *weigh A
+    against B*, and state a failure mode in its likeliest form, not its most vivid. Re-derived:
+    `docs/plans/salesperson-ui-coordination.md:126` records the S7 gate **"Dissolved Ruling 1's
+    blocker instead of weighing it"** — the reviewer checked the premise and it was false.
+  - `b7b3bc96-21fa-4d4c-a2ba-82619bb5d3ad` + `3f8b17d2-6c40-4e93-b1a7-5d29e08c6a44` (merged) →
+    step 3, **generalizing** the QA-suggested-fix bullet from `qa-engineer` to *any* reviewer:
+    a reviewer's suggested fix is a finding to judge, not an instruction to apply, in three shapes
+    (a reproduction proves one path; *"checked, not guessed"* names the method not the scope;
+    folding a guard into the step it guards deletes it while keeping its name). Both re-derived
+    against `docs/reviews/salesperson-ui-impl.md`: Pass 12's own *"Fix, checked not guessed"* at
+    `:3106`, and the review's later independent verdict at `:3542-3547` that S8d2 was right to
+    decline the recommendation it was handed. The fold-into-S9 half is corroborated by the
+    coordination doc's `:1543-1561` (teco split it) and by `:2119` — S9's done-condition ended up
+    **unmeetable anyway** and needed remedial unit U31 (`:165`) to replace it.
+  - `5d1cca84-0036-4a28-aa07-80db6684681d` → step 3, *Dispatch*, **restructured** from two prose
+    rules into three enumerated axes so the new one fits *inside* the rule rather than beside it:
+    same file · same DB/graph key · **one unit decides a fact the other's deliverable must
+    encode**. The third is real and distinct — not a third instance of the shared-state principle:
+    S8c and the plan-revision unit shared no file and no database, and the coupling ran through
+    the *content* of a decision. Re-derived: `salesperson-ui-coordination.md:1752` (*"§5.1's S9 row
+    acquired a done-condition that cannot be met"*) and `:2119`. Worded generally enough to also
+    cover the still-uncleared chunk-D sibling `b2d7f309-6c14-4e85-a3f0-91e7cc5a2d64`.
+  - `b7e41c92-3d5a-4f18-9c60-2a8e17d34f5b` + `fcf3e7a8-1bcd-42a0-86f3-51ad7601dedb` (merged) →
+    step 5, sharpening *"Your own rebuttal of a delegate's report is the least-checked claim"*:
+    a re-derivation that comes out **clean or stable is not a refutation**. Both fully re-derived.
+    `b7e41c92`: `random.Random.choice` really is `seq[self._randbelow(len(seq))]` (index draw), and
+    a probe over six permutations of one multiset at a fixed seed produced **2 distinct intervals
+    at B=400 but only 1 at B=8000** — confirming the counterintuitive half, that *lower* B makes
+    the flip more common. `fcf3e7a8`: swept every exact rational `b/n` for `n<2000` and found
+    **99 mismatches** between `floor(x/0.001)` and `floor(x*100/0.1)`, first at `b=7,n=10`.
+    **Mechanism sharpened:** the entry frames it as a *units* error; it is a floating-point
+    representation error (the double nearest `0.001` sits slightly above it), which is why the
+    operational rule promoted is *use the code's own expression*, not *use the code's units*.
+    The domain fact itself is already documented at the point of use, in `format_floor_pp`'s
+    docstring (`model-bench/modelbench/stats.py:631-647`) — only the coordinator-facing half moved.
+  - `e2b7c940-8a15-4d63-9f71-06ad3b5e8c22` → step 5, widening *"Re-verify every summarized number"*
+    to *"…and every new identifier"*: a new plan step id is checked against `git log` and the
+    ledger, not just the plan. Re-derived: commit `d9d2f2b`'s body opens *"salesperson-ui S7b"* and
+    four later commits reference `S7b`/`S7b2`; the coordination doc's U29 row (`:171`) records the
+    plan being *"Renamed off the `S7b` collision teco caught"*.
+- **Promoted → `skills/agent-standards/claude-code.md`** ("Cross-session peer addressing"), the
+  harness half of `1ad53bad`+`7c1e2b04`, with the corrected transcript-storage mechanism above.
+  Routed there rather than into `teco.md` because it is a harness fact any agent holding
+  `SendMessage` needs, not a coordination rule.
+- **Discarded (2):**
+  - `58528320-265c-43aa-9dff-029b64fa680d` (parallel subagents share a session-scoped scratchpad)
+    — **already promoted**, by U7b/U8 of this same pass, into
+    `skills/agent-standards/claude-code.md:516-529`. That entry cites the *same* incident
+    (`docs/reviews/small-model-benchmarking-impl.md` Appendix C.5, 2026-09-03), covers the
+    sequential-reuse case the raw entry misses, and already carries the briefing consequence
+    ("a briefing that dispatches two agents expecting to write scratch files should say so").
+    Verbatim-covered a fortiori.
+  - `42c89e17-f2bc-497a-ae05-cdb38c35c0a3` (a design rule whose justification only became sound in
+    a later revision of the paired document) — **stated mechanism materially wrong.** The entry
+    names note **v1.12** as the revision that made §4 S2 rule (iv-b) sound; note v1.12 (`fc2fcf6`)
+    is *"the detector is not right-censoring"*, a different subject, and the plan's own record
+    (`docs/plans/small-model-benchmarking.md:4707-4709`) names **v1.13** — and says it *"confirmed
+    §4 S2 rule (iv-b) by correcting the note rather than the plan… **No plan change was owed, and
+    the plan's rule was right before the note's argument for it was**."* So the two gates approved
+    a **correct** rule carrying a premature justification; nothing wrong shipped and the pair
+    self-corrected one revision later, which is much weaker than the entry's *"invisible to every
+    review gate"* framing. Already recorded at the point of use in the plan itself.
+- **`MENTIONS` tags added (3)** — each landed and was confirmed committed *before* that entry's
+  count-and-decide read, per the §5 ordering invariant; each left the node alive with its
+  `MENTIONS` edge after its `PRODUCED` edge was resolved:
+  - `3f8b17d2` → `analyst` — *"checked, not guessed"* names the method, not the scope, is a rule
+    for the reviewer as much as for the coordinator reading its report.
+  - `b7b3bc96` → `analyst` — the reviewer proposing to fold a guard into the step it guards is a
+    review-authoring defect, and `analyst` is the agent that authors those recommendations.
+  - `b7e41c92` → `data-scientist` — row order being a real input to a seeded bootstrap (and lower
+    `B` making the flip more common) is a durable statistics fact in that agent's discipline.
+- **Budget:** `teco.md` **6,388 → 6,908 w**; lines past the 700-char smell **17 → 21**. One
+  bloated line shortened (*"Close the loop on the same delegate"*, 1,436 → 1,312 ch); four lines
+  crossed the smell (`Brief contents`, the reviewer's-suggested-fix bullet, the new `agentId`
+  bullet, the own-rebuttal bullet). `claude/AGENTS.md` **untouched** — it sits at 2,434 w with
+  ~60 w of headroom, and every rule here is teco-specific or harness-specific. **K-016 escalated
+  to the blocking item** it now is; see `plan.md`.
+- **Why:** U18 of the team-wide distillation pass; keeps `kaizen_team` as working memory for
+  unreviewed capture only.
+- **Plan items:** K-016 (updated with this pass's ledger and a concrete first move).
+
 ## 2026-09-07 — Kaizen distillation, chunk B (the twelve 2026-09-02 entries)
 
 - **What:** U17 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled the

@@ -224,6 +224,22 @@ conversational agent**:
   human caught the mismatch; by then the session had already done a small amount of read-only
   "safe" work (a test re-run, a state-restoring reseed) before declining — harmless here, but not
   free, and worse mixing is possible with a less careful peer.
+- **An `agentId` resolves only inside the session that spawned it — it does not survive a session
+  reboot (observed 2026-09-03/09-07, graphmind-ai-lab).** `SendMessage` to a subagent's `agentId`
+  reliably resumes it *within* the spawning session, including after that delegate was killed
+  mid-run by a transient API error (HTTP 529) — its file edits **and** its conversation context
+  both survive, and the failure notification's `<result>` is merely the last line it emitted, which
+  can read as far less progress than actually landed. After a session-limit reboot, the same call
+  returns `success:false`, *"No transcript found for agent ID"*. **The transcript itself is not
+  gone:** subagent transcripts are stored under the **parent session's** directory —
+  `~/.claude/projects/<proj>/<parent-session-id>/subagents/agent-<agentId>.{jsonl,meta.json}` — so
+  a new session, having a new id and its own empty `subagents/` index, has no path to resolve an
+  earlier session's agent even though the file is still on disk. Re-derived by locating a
+  reported-unresolvable id (`a213382761bc926ec`) still present under its original session
+  directory. Practical consequence for any checkpoint/resume record: it is written precisely when
+  the session is dying, so its recorded ids are exactly the ones that will not resolve on pickup —
+  each in-flight unit needs an explicit cold-start fallback (upstream paths, section anchors, what
+  must not be redone), not just "resume `<agentId>`".
 - **Practice:** before sending a substantive brief to a bare-named peer you did not yourself
   spawn (i.e. its identity/task isn't already known from a ledger `agentId` or this session's own
   spawn record), send a cheap identity-confirming probe first ("what are you currently
