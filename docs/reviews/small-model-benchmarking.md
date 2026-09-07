@@ -4,9 +4,11 @@
 
 ## Pass 1 — 2026-09-02
 
-*(Current verdict is Pass 3's, below: **needs changes** on plan v1.8 / note v1.8. Pass 2 gated plan
-v1.3 with **approve with suggestions**. Pass 1 gated plan v1.1 and is kept intact — the two passes are meant to be read together, and Pass 2's
-disposition table is only legible against the findings here.)*
+*(Current verdict is **`## Pass 5`**'s, at the end of this document: **needs changes** on plan v1.10
+/ note v1.13. Pass 4 gated plan v1.9, Pass 3 plan v1.8, both **needs changes**; Pass 2 gated plan
+v1.3 with **approve with suggestions**. Pass 1 gated plan v1.1 and is kept intact — the passes are
+meant to be read together, and each disposition table is only legible against the findings of the
+pass before it.)*
 
 ### 1. Scope & verdict
 
@@ -1446,3 +1448,349 @@ the evidence for **P4-6**: nothing on the surface `attest` is specified to probe
 | the two shipped `_percentile` copies | `results.py:573-578`, `stats.py:296` | `int(round(p/100·(X−1)))` — the estimator `-ml` §11.2 explicitly **rejects**; `_index_row` also computes p50/p95 inline from `run.items`, not from `run.latency`. Both are S1 code the note's closure requires rewritten, and neither appears in §3.4.2's edit table — **P4-2**'s pattern, second instance |
 | restatement sweep of v1.9's new text | `grep` for α, `1.96`, κ, verdict strings, rule counts, the 1 000 ms threshold | none reintroduced; `1.96` hits are the two deliberate negatives, κ is §2.1's attributed row; the one restatement is the detector formula — **P4-9** |
 | load-figure sweep | `grep` for `21.068`, `21 s`, `3.625`, `20 000`, `of the order` | 10 hits, all design prose or a stub value in tests 15b; nothing the tool prints — the sweep holds |
+
+## Pass 5 — 2026-09-07
+
+**Re-gated:** plan **v1.10** (`3e5dc50`, +738/−134) against note **v1.13** (`5197ce6`), the
+requirements as amended, and the **shipped S1 tree** (working tree at `2ba20d8`, `model-bench/`
+clean; re-run here: **389 passed in 6.11 s**, `ruff` clean) wherever v1.10 asserts a consequence for
+it. Weighted to v1.10's own change list: §3.6's unit boundary, §7's new **rule 5**, §4 **S1e**'s four
+grep-pinned tables, `ItemTiming`, `attestationTripWire`, `latencyWithheldForNoResponse`, DC-10's
+closure, DC-11, DC-12. Findings carry the prefix **`P5-`** (*plan-gate P5-n*, per §7's ID convention;
+`docs/reviews/small-model-benchmarking-impl.md`'s are *impl-gate*). Written by a reviewer who did not
+write Passes 1–4.
+
+**CPG:** considered, not relevant — no `model-bench` CPG exists (`cpg_model_bench` is not a loaded
+graph; the instance lists `cpg_falkorchat` and `cpg_deprecated_salesperson` only), `cpg_falkorchat`
+is stale per the brief, and v1.10 makes no structural claim about `falkor-chat`. All grounding below
+was done by reading `model-bench/modelbench/*.py` and `tests/` and by re-running the tables' own
+greps.
+
+**Verified, not assumed.** The four tables' pinned counts were re-verified upstream of this pass and
+are taken as given; this pass spent its effort on **completeness** instead, re-running each table's
+enumerating command and then searching for edit sites those commands cannot reach (Appendix E.1,
+E.2). Every claim about the shipped tree below is a `grep`/`sed` result reproduced today. No model
+was loaded in LM Studio.
+
+**Verdict: needs changes.** 2 blockers, 4 majors, 4 minors, 0 nits.
+
+**All fourteen Pass 4 findings are addressed in substance and none is unfixed** — the disposition
+table below is fourteen *fixed*, which is what v1.10 claims. Five of them carry a residual, and two
+of v1.10's own fixes introduced a new defect while closing the old one. **None of the ten findings
+below is blocked on unbuilt work**: every one is a plan edit available today, most of them one
+sentence. That is the reason the verdict is not *approve with suggestions* — nothing here needs S2,
+so nothing here is a residual the standing principle would accept carrying.
+
+**The two blockers are the pass's two assigned questions, answered.** `P5-2` answers *does rule 5
+work?* — the rule is the right instrument and its stated completeness property is **false**, in a way
+Table B demonstrates now rather than hypothetically. `P5-1` is the P4-5 fix's own collateral: the
+capture order it repaired now refuses every embedder run, which is `G3-1`'s defect re-entering
+through the sentence written to close `P4-5`.
+
+### New findings
+
+#### Blockers
+
+**P5-1 (blocker) — §3.4.4a capture-order step 3a applies §3.6's *tool-calling* eligibility gate to
+every model run, so every `model:embeddings` arm is refused at exit `4` and S3's own done-condition
+is unrunnable.**
+*Evidence:* the capture order is headed "One `model` run, in order" (§3.4.4a), and its new step 3a
+requires "**both refusals that must precede the load**: §3.6's eligibility gate (`type ∈ {llm, vlm}`
+and the capabilities rule) and the `callSurface`-versus-catalog-`type` cross-check … Either refusal
+exits before step 4 — exit `4`". §3.6 scopes that gate to one role — "**Tool-calling eligibility is
+gated before a tool-caller run**" — and its predicate is `eligible ⟺ type ∈ {"llm","vlm"} ∧ …`. An
+embeddings model's catalog `type` is `"embeddings"` (§2.5's probe: types `{llm, vlm, embeddings}`).
+*Why it matters:* §4 S3 done-condition 1 is "a real run against `text-embedding-qwen3-embedding-0.6b`
+produces a stored result" — the exact model §3.6 names as the one the gate **refuses**, and §4 S2's
+done-condition asserts that refusal as a unit test. Read as written, S3 — "the cheapest path to a
+complete real run" — exits `4` at step 3a before it ever calls the adapter. This is `G3-1` (the
+embedder unbuildable) arriving a second time through a different sentence, and it entered in the
+revision that fixed `P4-5`.
+*Fix:* scope step 3a — "§3.6's eligibility gate, **on a `tool-caller` pack only**" — and state
+plainly in §3.6 that the universal pre-load refusal is the `callSurface`/`type` cross-check, of which
+the tool-use rule is a role-specific addition. One clause in each section; no design work.
+
+**P5-2 (blocker) — §7 rule 5's completeness property does not hold, and DC-12 asserts it does.
+Table B — the largest of the four and the one rule 5 was written for — is incomplete today.**
+*Evidence:* rule 5 claims that with an enumerating command, its counts and a residual assertion "the
+table is **complete by construction** — a site the author forgot is still in the command's output and
+the residual assertion fails until it is gone", and DC-12 restates it. Two independent ways that is
+false, both instantiated in §4 S1e: **(a) a site that carries no token is invisible to the command.**
+Table A discloses one and covers it with a *second* grep (`sizeBytes` → 1) — that is the correct
+pattern. Table B does not: `grep -rFn arm_kind` finds **18 lines, 14 of which carry no `armKind`**
+(Appendix E.1), including `tests/test_fingerprint.py:201-207`, the parametrized test pinning the
+required-field contract that must gain a third profile, and `:211-213`, which asserts
+`set(REQUIRED_BY_SCHEMA[1]) == {"model","deterministic"}`; and the mapping bodies the table edits —
+`fingerprint.py:124`, `:131`, `:133` — carry none of the three tokens either, nor do
+`test_fingerprint.py:34` and `:41`, the two decorators parametrized over
+`REQUIRED_BY_SCHEMA[1]["model"]`. **(b) a rename that
+does not *retire* a token has no zero residual to assert.** `armKind` **survives by design**
+(§3.4.1 keeps its two values), so Table B's residual covers only `FORBIDDEN_BY_ARM_KIND` → 0 and
+`ARM_KINDS`'s derivation — two auxiliary tokens that go to zero from the mapping rename alone, and
+that say nothing about the 50 `armKind` lines the table is about.
+*Why it matters:* the converse DC-12 needs — *residual zero ⇒ nothing missed* — does not hold, and
+this is the mechanism the coordination adopted to stop a **third** incomplete edit list. Stated as a
+guarantee it will be trusted by the next revision exactly as v1.8's and v1.9's lists were.
+*Fix:* restate rule 5's property honestly — the command is a **no-forgetting guarantee over
+token-carrying sites**, and **every site that carries no token must be covered by a second named
+command or the table is not complete** (Table A's `sizeBytes` row is the pattern; make it the rule).
+Where the token survives, require a **second-form residual** — a command whose count *is* zero after
+the edit. Both of these run today and are the ones Table B is missing (verified, Appendix E.1):
+`grep -rFn 'REQUIRED_BY_SCHEMA[1]["model"]' modelbench tests --include='*.py'` → **3 → 0**, and
+`grep -rFn arm_kind modelbench tests --include='*.py' | grep -cF '"model"'` → **2 → 0**. Then give
+Table B its `arm_kind` command with per-file counts, and reword DC-12 to assert what the residual
+actually proves. Documentation-only.
+
+#### Majors
+
+**P5-3 (major) — Table D retires `conservative_envelope`'s last production caller and leaves
+`paired_cluster_bootstrap` unreachable and undispositioned; its 13 sites are outside all four of the
+table's commands.**
+*Evidence:* `stats.py:263` — `resample = paired_cluster_bootstrap(diffs, design_effect=…, B=B,
+seed=seed)` — is the body of `conservative_envelope`, which Table D collapses to
+`conservative_envelope(table, *, design_effect)`. That line carries none of `bootstrap_seed`,
+`conservative_envelope`, `cluster-bootstrap` or `DecidedBy`. `paired_cluster_bootstrap` has **13
+lines** (`stats.py` 5, `test_stats.py` 8) and, once `:263` goes, no production caller — and neither
+does `paired_bootstrap`, whose only production call site is `paired_cluster_bootstrap:187`
+(Appendix E.2). Note §3.4 Rule 4 says "Rule 6's `cluster_bootstrap` and `paired_bootstrap` stay
+seeded" and names `paired_cluster_bootstrap` nowhere; Table C separately asserts `stats.py:159`
+"survives", which is true of the function and not of its reachability.
+*Why it matters:* an implementer working Table D verbatim either leaves a public function and four
+direct tests (`test_stats.py:1270, 1317, 1323, 1328`) exercising a path nothing reaches, or deletes
+them — an edit the table did not authorise — and the residual (`bootstrap_seed` → 0,
+`cluster-bootstrap` → 0) is satisfied either way. This is `P5-2`(a) with consequences.
+*Fix:* add a Table D row for `paired_cluster_bootstrap` with its own enumerating command and a stated
+disposition — **keep it, unreferenced, as §3.2d's clustered continuous interval** (the honest reading
+of the note's "stays seeded") or **delete it with its four tests** — and say which, because they are
+not the same tree.
+
+**P5-4 (major) — §3.4.2's capture-ordering paragraph still states v1.8's single post-warm-up catalog
+read and calls the v1.10 sequence a validation failure.**
+*Evidence:* §3.4.2, unswept since v1.8: "`capture()` snapshots `residentModelsAtStart` **before the
+warm-up call**, reads the **catalog after the warm-up returns**, and snapshots `residentModelsAtEnd`
+after the last scored call. **A `capture()` that reads the catalog first produces a record with a
+null `loadedContextLength` and fails its own validation** — which is correct behaviour, and is why
+the ordering is stated rather than left to the implementer." §3.4.4a's pinned order now reads the
+catalog **first** (step 3a, twelve fields plus both refusals) and re-reads it at step 8 for
+`loadedContextLength` alone.
+*Why it matters:* the two sections give opposite instructions on the one sequencing question `P4-5`
+was raised about, and §3.4.2's version explicitly forbids the fix. An implementer who reads §3.4.2
+writes a single post-warm-up read and loses both pre-load refusals — the expensive refusal the
+capture order exists to prevent. It is also §7 rule 4's own failure shape (an owning section changed,
+its derived surface not swept) occurring in the revision that added rule 5.
+*Fix:* rewrite §3.4.2's paragraph to §3.4.4a's two-read sequence, keep the `loadedContextLength`
+constraint attached to the **step 8** read, and cite §3.4.4a as the owner rather than restating the
+order a third time.
+
+**P5-5 (major) — the plan's pairing is one note revision stale, and note v1.13's co-presence
+invariant lands on the plan. Ruling: yes, the plan owes a rule — and it owes a *runtime disposition*,
+not only an assertion.**
+*Evidence:* §7 states "this plan **v1.10** is aligned to the note **v1.12** (`fc2fcf6`)"; the current
+note is **v1.13** (`5197ce6`). v1.13's §11.4 adds: "`ttftMs` and `tokensPerSecond` need a `stats`
+object; the prefill figure **additionally** needs a usable `usage.prompt_tokens`. An item carrying
+`stats` but no usable token count puts prefill's true `X` below `statsCoveredCount`, so both the gate
+and §11.7 slot 2's single denominator line would overstate coverage for one figure of the three —
+silently, and in the direction that prints", closed by an assertion and by §11.10 test 7. Plan §4 S2
+rule (iv-b) pins `X = statsCoveredCount` for **all three** medians, and `ItemTiming.promptTokens` is
+declared `int | None` — so the plan's own type admits the case its denominator rule denies.
+*Why it matters:* the note's closure is a *test*-time statement ("an item carrying `stats` but no
+usable `usage.prompt_tokens` fails this test, and must"). At run time the same condition is an
+assertion with no disposition — precisely `P4-7`'s shape, where an implementer writing it as an
+`assert` crashes the run and writing it as a computed value miscounts silently.
+*Fix:* two sentences in §4 S2. (1) State co-presence as a named rule beside (iv-b): the three medians
+share one count and that count is `statsCoveredCount`. (2) Give the failing item a **runtime**
+disposition — recommended: an item with `stats` but `promptTokens` absent or `≤ 0` is **excluded from
+`statsCoveredCount` entirely**, which keeps one honest number across all three at the cost of
+understating ttft/tps coverage (conservative, and in the safe direction), with the note's alternative
+— a separate `prefillCoveredCount` — named as the resolution if it is ever more than a rarity. Then
+re-pair §7 to v1.13.
+
+**P5-6 (major) — `censoringExact`'s first clause is unevaluable on the record v1.10 defines: the
+`P4-7` merge erased the timeout/other distinction the predicate needs, so every timeout-only run
+silently prints slot 3's weaker string.**
+*Evidence:* note §11.5.1's predicate is "**true** when every withheld item is a **timeout**, or when
+the smallest wall clock among the load-withheld items exceeds the largest among the timed ones;
+false otherwise, and false whenever a withheld item's wall clock is not readable" — clause 1 resting
+on "a timeout … exhausted a budget every timed call returned inside". Slot 3's true-branch string
+says the same in prose. v1.10's `ItemTiming.withheldFor` is
+`Literal["load", "no_response"] | None`, and §3.6's fourth disposition folds a fast HTTP 500 into
+`no_response` with **no timing at all**. So `report.py` cannot tell a timeout from a 40 ms 500.
+*Why it matters:* the plan reads the merge as safe — §4 S2: "the only such item is one that returned
+no response, which has no wall clock to compare" — and it *is* safe, but it silently overrides the
+note's clause 1: a run whose only withholding is a timeout now renders the **false** branch, where
+the note says the true one is owed. Neither document records that consequence, and the plan claims
+v1.12's two asks "both land".
+*Fix:* give `withheldFor` a third value, `"timeout"`, so clause 1 is evaluable while
+`latencyWithheldForNoResponse` stays one counter (§11.7's cause split prints one `no response`
+label either way, which the note has already ruled) — then ask `data-scientist` to confirm clause 1
+survives against the widened category, since the predicate and both strings are the note's.
+
+#### Minors
+
+**P5-7 (minor) — §4 S2 rule (i)'s "the three figures" was true of v1.9's block and is
+under-determined in v1.10's, where it can be read into contradiction with (iv-a). Ruling: yes, this
+needs a plan edit.** At v1.9 the block held exactly three `float | None` figures (`latencyMsP50`,
+`P95`, `Max`), so (i) was unambiguous. v1.10 added four more and did not sweep (i), while the
+sentence immediately above it uses "its three **siblings**" for the *other* trio. Under the sibling
+reading, (i) ("`None` exactly when `-ml` §11's gates refuse them") forbids exactly the `None`s
+(iv-a) mandates for absence-of-input. `data-scientist` is right that the intended reading is
+consistent and right that it is one word away. *Fix:* write "the three **wall-clock** figures" in
+(i), and add one clause: the four `stats`-derived figures are `None` under (iv-a) for
+absence-of-input as well as under a gate refusal, and the two causes are not distinguished in the
+block.
+
+**P5-8 (minor) — §3.6's unit boundary states four `ChatResult` normalisations with no absent-`stats`
+case, while §4 S2 (iv) depends on that case existing.** The boundary reads
+`ChatResult.ttftMs = 1000 × stats.time_to_first_token` unconditionally, on construction. But (iv)
+says `statsCoveredCount` "counts items with a `stats` object" and (iv-a) says `0` "keeps its meaning
+on the chat surface, where it says **every response lacked `stats`** and is a real signal" — so a
+chat response without `stats` is an expected state, and the stated construction raises on it.
+*Fix:* one clause on the boundary — each derived field is `None` when its source key is absent,
+never `0`, and `ChatResult` construction never raises on a missing `stats`.
+
+**P5-9 (minor) — §3.6 says a no-response item "carries **no timing at all**", while §4 S2 rule (vi)
+counts it by reading `timing.withheldFor`.** Rule (vi) derives both withheld counts as "counts of
+`timing.withheldFor` values", which requires an `ItemTiming` to exist on such an item; §4 S1's own
+comment says `timing` is `None` "**iff** this arm produces no timings at all (deterministic)". The
+two are reconcilable and an implementer should not have to reconcile them. *Fix:* in §3.6 write
+"carries an `ItemTiming` whose only populated field is `withheldFor`" rather than "no timing at all".
+
+**P5-10 (minor) — the note's flagged `sampling.seed`-in-the-fingerprint gap has a deadline the note
+does not carry, and it is the plan's.** Note §3.4 Rule 4 flags that "§3.2d says *the seed goes into
+the environment fingerprint (FR-7)* and it does not — `fingerprint.py` at `5878014` contains no seed
+field", calling it pre-existing and unaffected. It is unaffected by *that* ruling; it is not
+unaffected by S3. §3.4.2's model set is closed at 30/26 and "free only now, because `results/runs/`
+does not yet exist" — the same argument S1e makes four times. If §3.2d is right, schema 1 is one
+field short and closing it after S3 costs a `migrate`. *Fix:* state in §3.4.2 that the pack seed
+reaches the fingerprint **transitively, through `packContentHash`** (the manifest is hashed and the
+seed is a manifest field), which is almost certainly what §3.2d means — and route the sentence's
+wording to `data-scientist`, but resolve the plan side before S3.
+
+### Disposition of Pass 4's fourteen
+
+All fourteen re-checked against v1.10 at `3e5dc50`; **fourteen fixed, none unfixed**. Where a fix
+leaves a residual or introduced a new defect, it is named.
+
+| # | Disposition | Evidence rechecked |
+|---|---|---|
+| **P4-1** (seconds/ms) | **Fixed** | §3.6's unit boundary: `ttftMs = 1000 × stats.time_to_first_token`, `generationMs = 1000 × stats.generation_time`, `tokensPerSecond` unconverted, `wallClockMs` client-side, normalised **on `ChatResult` construction** so no caller sees seconds; the FR-11 prefill row drops the second conversion and says why; §5 test 15b asserts `111.0` / `954.0` / `wallClockMs − 1065.0` off a stubbed `stats`; Appendix A's `ChatResult` row carries it. Residue: **P5-8**. |
+| **P4-2** (`armProfile` unowned) | **Fixed in design; the mechanism it introduced is not sound** | §4 S1e's four tables + §7 rule 5 + DC-12; `ARM_KINDS` explicitly decoupled with the `FieldProblem("armKind","unknown")` consequence spelled out; `from_dict` told to strip `callSurface`; DC-6 rewritten for three profiles. Residue: **P5-2** (Table B incomplete, rule 5 over-claimed), **P5-3** (Table D). |
+| **P4-3** (no carriers) | **Fixed** | `ItemTiming` (7 fields, all `\| None`, never `0`) on `ItemResult`; `latencyMs` demoted to a property with `to_dict`/`from_dict` re-derivation; `LatencyBlock` gains `ttftMsMedian`, `prefillMsPer1kMedian`, `tokensPerSecondMedian`, `unexplainedMsMax`; DC-11 asserts all three properties including "no printed number is computed from `timing.wallClockMs`". Residue: **P5-5**, **P5-7**. |
+| **P4-4** (R-14 vs §3.6) | **Fixed** | §6 R-14's v1.10 parenthetical states the withholding, names the model-load cause, and records that v1.9's parenthetical said the opposite; the surviving R-14-owned sentence is the "starting value, re-checked on the first real pack run" one, exactly as asked. |
+| **P4-5** (capture order) | **Fixed — and it introduced a blocker** | Step 0 (`startedAt`/`endedAt`), step 3a (`catalog()`, twelve fields, both refusals), step 8 reworded to "the same `catalog()` call as step 3a". Residue: **P5-1** (the gate is unscoped at 3a), **P5-4** (§3.4.2 unswept). |
+| **P4-6** (`attest`'s comparand) | **Fixed** | §3.4.4's example carries `observedAtAttestation: {"residencySource": …}` alone; the two runtime keys are absent-never-`""`; the first `model:chat` run back-fills them plus `runtimeObservedAt` and touches nothing else; `RunResult.attestationTripWire` records `compared` / `first-observation` / `unavailable` / `None`; §4 S2's done-condition asserts all four. Writing-empty is rejected with the absent-vs-empty reason. |
+| **P4-7** (no-response call) | **Fixed; one consequence unnoticed** | §3.6's fourth disposition, verbatim-from-the-timeout except that it does **not** re-probe or exit `3` on an error response (a connection failure still does); `latencyWithheldForTimeout` → `latencyWithheldForNoResponse` in §4 S2, Appendix A and §5; (iii)/(iv) restated over it; test 15b gains the stubbed 500 with (iii)/(iv) asserted. The note's slot-2 label was confirmed rather than assumed. Residue: **P5-6**. |
+| **P4-8** (DC-10 vs S2) | **Fixed — closed rather than disclosed, and correctly so** | `validate_pack` refuses a pooled `verdictMetrics` member; pooled `n` is the sum of reserved `"<metric>#denominator"` contributions with `#` refused in metric names; §4 S2's contract is scoped to two arithmetics in one pass; DC-10 now ranges over **every** `BinaryMetric`; test 11c gains a fourth arm. The gate's offered alternative (scope the sentence, keep the residual) is named and rejected on the stakeholder principle — the right call. |
+| **P4-9** (restated formula) | **Fixed** | The formula is gone from §3.6; the three ownership claims and the field name remain with a citation to `-ml` §11.5.1; `generationMs` is defined exactly once, in §3.6's FR-11 table, as the finding asked. |
+| **P4-10** (no optional tier) | **Fixed** | §3.4.2: `REQUIRED_PRESENT` resolves per profile — `model:chat` six, `model:embeddings` five (minus `temperature`), `deterministic` none — with the per-profile mechanism named (`FieldSpec.tier` inside `REQUIRED_BY_SCHEMA[schema][armProfile][field]`); "schema 1 has no optional tier" stated as a decision with its cost; `loadedContextLength`'s resolution is the `REQUIRED_PRESENT` route in §3.4.2, §3.4.4a **and** §4 S2's R-1 bullet. |
+| **P4-11** (6× spread) | **Fixed** | §2.5 now says the two measurements differ in model, quantization **and route**, drops "same call surface", attributes page-cache state to the note, and records the note's v1.12 withdrawal of the "~3.5× below the smallest cold load" margin; §3.6's budget prose reads "varies by model **and by page-cache state**". |
+| **P4-12** (`15b`'s role) | **Fixed** | §5's closing rule is an explicit list — "Items **13, 14, 15 and 16** follow the implementation they cover; **`15b` drives it**" — with the range-by-number trap recorded. |
+| **P4-13** (embeddings denominator) | **Fixed** | §4 S2 (iv-a): `statsCoveredCount` is `None`-never-`0` and slot 2's second line is not rendered, **conditioned on the call surface, not the arm profile** — the wider condition, confirmed against note §11.9 ask 5; the four sibling figures and `unexplainedMsMax` are `None` there too, and §3.6 records that the detector is chat-surface-only. |
+| **P4-14** (two slips) | **Fixed** | "three reviews" corrected to review + method note + coordination ledger with `kaizen-agent-ontology` named as the other `15b`; Table A's loudly column now carries "**no** — see §3.4.2; the fix is DC-1's assertion, not this row" **on the row**, and the emphasis is out of the column header. |
+
+### The dependency sweep the brief asked for
+
+Pass 4's and Pass 3's shared miss — a plan rule asserted on a note argument that did not yet hold —
+was swept for deliberately this pass. Result: **one instance, and it is the same shape with the
+polarity reversed.** Plan v1.10 pairs itself to note **v1.12** and is now one revision behind
+**v1.13**, which (a) *confirmed* (iv-b) by withdrawing the note's own `tokensPerSecond` exemption —
+no plan change owed, and the plan's rule was right before the note's argument for it was — and
+(b) added the co-presence invariant, which the plan does not carry (**P5-5**). Nothing else in
+v1.10's new text rests on a since-revised note claim: Table C's `percentile(values, *, permille)`
+matches §11.2's published signature and its four properties; Table D's "five acceptance tests" are
+§3.4 Rule 4's items 1–5, counted; the `DecidedBy` rename is the note's own recommendation with the
+architect's decision recorded; §11.6's floors, §11.5's table and §11.3's identity floor are untouched
+by v1.12 and v1.13 as §7 claims. The `censoringExact` case (**P5-6**) is the inverse defect — a note
+claim that no longer holds against a *plan* change made in the same revision — which is worth naming
+as a second face of the same class, since the sweep obligation in §7 rule 1 is symmetric and the
+plan-side half has now failed once too.
+
+### What's solid
+
+- **Rule 5 is the right instrument even though its stated property is wrong.** Naming the command,
+  pinning per-file counts at a commit, and putting the residual in a done-condition converts an
+  un-auditable list into an auditable one, and the `grep -rFc` / `grep -rFo` distinction (50 lines
+  vs 57 occurrences) is exactly the kind of precision a table needs to be reproducible. `P5-2` is a
+  correction to one sentence of the rule, not a rejection of it.
+- **`P4-8` was closed rather than disclosed, and the reasoning is the strongest in the revision.**
+  The plan took the gate's harder branch, gave the pooled denominator a per-item provenance
+  (`"<metric>#denominator"`) so one arithmetic becomes two without a second path, and rejected the
+  cheap alternative *on the stakeholder principle by name*. That is a plan reading its own gate
+  correctly.
+- **`ItemTiming` is a better answer than the one `P4-3` asked for.** Making `latencyMs` a derivation
+  rather than a second stored field removes the invariant that would have had to police them, and
+  taking the field over the note's offered reconstruction is justified with the one case the
+  reconstruction cannot cover (an embeddings arm, where all three reconstruction operands are `None`
+  and the wall clock was measured perfectly well). The reasoning names the failure mode, not the
+  preference.
+- **`P4-6`'s fix chose the honest state over the convenient one.** Absent-not-`""`, back-fill on
+  first observation, and the first run's state *named in the record* (`attestationTripWire`) rather
+  than silently indistinguishable from a comparison — the same absent-vs-empty discipline §3.4.2
+  applies one file over, applied without being asked to.
+- **The suite is green and the tree matches what the plan says about it.** 389 passed, `ruff` clean;
+  every "still outstanding" claim v1.10 makes about the shipped tree reproduces.
+
+### Open questions
+
+1. **Does `loaded_context_length` appear on a loaded *embeddings* model?** Carried from Passes 3 and
+   4, still correctly routed into S2's R-1 probe with a free-either-way resolution, and `P4-10`'s
+   fix now makes both answers safe. Unanswerable here: this run was not authorised to load a model.
+   **This is the one genuinely blocked item in the review, and it is blocked on unbuilt work (S2's
+   R-1 probe) rather than deferred.**
+2. **Does note §11.5.1's `censoringExact` clause 1 survive the widened `no_response` category?**
+   `P5-6` proposes making it evaluable; whether it *should* be — a fast HTTP 500 is not
+   right-censoring and clause 1 would then need to say "timeout" and not "no response" — is
+   `data-scientist`'s, and the predicate and both slot-3 strings are the note's.
+3. **Which co-presence resolution does `data-scientist` want in the plan** — dropping the item from
+   `statsCoveredCount` (conservative, one number, understates two figures) or a fourth
+   `prefillCoveredCount` (exact, a second denominator line to render)? `P5-5` recommends the first
+   and names the second; the note's §11.4 sentence leans the other way ("the figure that lost items
+   needs its own count"), so the two should agree before the plan writes it.
+
+## Appendix E — Pass 5: what was re-run and read
+
+**E.1 — Table B's blind spot, enumerated** (working tree at `2ba20d8`, `model-bench/` clean).
+`grep -rFn arm_kind modelbench tests --include='*.py'` → **18 lines**
+(`tests/test_fingerprint.py` 9, `tests/conftest.py` 4, `tests/test_results.py` 3,
+`tests/test_report.py` 2), of which **14 carry no `armKind`** and so appear in none of Table B's
+three commands:
+
+| Site | Why it is an edit site |
+|---|---|
+| `test_fingerprint.py:201-207` | parametrized over `[("model", EXPECTED_MODEL_SCHEMA_1), ("deterministic", …)]`, indexing `REQUIRED_BY_SCHEMA[1][arm_kind]` — must gain a `model:embeddings` row and a 26-name literal |
+| `test_fingerprint.py:211-213` | `assert set(REQUIRED_BY_SCHEMA[1]) == {"model", "deterministic"}` — the two-kind contract, asserted directly |
+| `test_fingerprint.py:21, 97, 102, 267` | `_problems(arm_kind, …)` and the three discriminator tests — semantics change once there are two discriminators |
+| `conftest.py:148, 160` | the shared fixture's `arm_kind: str = "model"` branch, which must become profile-aware |
+| `test_results.py:62, 71, 239`; `test_report.py:471, 486` | `arm_kind="deterministic"` construction sites |
+
+Also outside all three commands: `test_fingerprint.py:34` and `:41`, the two
+`@pytest.mark.parametrize("field", sorted(REQUIRED_BY_SCHEMA[1]["model"]))` decorators that drive one
+test per required field (`grep -rFn 'REQUIRED_BY_SCHEMA[1]["model"]' modelbench tests
+--include='*.py'` → **3 lines**, run today); and, in the module the table edits, `fingerprint.py:124`
+(`1: {"model": _MODEL_SCHEMA_1, …}` — the re-key itself), `:131` and `:133` (the
+`FORBIDDEN_BY_ARM_KIND` mapping **bodies**; the grep matches the name at `:128` and `:136`, not the
+entries). Most of these fail loudly through the suite, which is a real mitigation — but the table is
+what an implementer works from, and DC-12's residual is satisfied without them.
+
+**E.2 — Table D's blind spot.** `grep -rn paired_cluster_bootstrap modelbench tests --include='*.py'`
+→ **13 lines** (`stats.py:23, 162, 263, 567, 843`; `test_stats.py:41, 1270, 1317, 1323, 1328, 1330,
+1560, 1588`), none of them matching `bootstrap_seed`, `conservative_envelope`, `cluster-bootstrap` or
+`DecidedBy`. Call chain read at `stats.py`: `conservative_envelope:263` → `paired_cluster_bootstrap`
+→ `paired_bootstrap:187`; `grep -rn 'paired_bootstrap('` finds no other production call site, so
+retiring `:263` leaves **both** functions production-unreachable. Note that
+`grep -F cluster-bootstrap` (hyphen, the `DecidedBy` token, 27 lines) and `grep -F cluster_bootstrap`
+(underscore, the function, 28 lines) are disjoint vocabularies — the residual "`cluster-bootstrap`
+→ 0" says nothing about either function.
+
+**E.3 — Shipped-tree facts the v1.10 claims were checked against.**
+
+| Claim | Where | Result |
+|---|---|---|
+| S1 is green | `./.venv/bin/python -m pytest -q` | **389 passed in 6.11 s** |
+| lint clean | `./.venv/bin/python -m ruff check .` | **All checks passed!** |
+| `ARM_KINDS` is still coupled | `fingerprint.py:136` | `ARM_KINDS: frozenset[str] = frozenset(FORBIDDEN_BY_ARM_KIND)` — Table B's decoupling row is still outstanding, as the plan says |
+| the schema map is still two-kinded | `fingerprint.py:124`, `test_fingerprint.py:213` | `{"model": …, "deterministic": …}`; the test asserts exactly that set |
+| both `_percentile` copies are the rejected estimator | `results.py:573-578`, `stats.py:296-299` | `int(round(pct/100.0 * (len(ordered)-1)))` in both — Table C's premise holds |
+| `Fingerprint` construction sites | `grep -rFn 'Fingerprint('` | 12 lines, 10 real construction sites; all but one carry `armKind` on the line, and `callSurface` as a required no-default argument breaks every one loudly — rule 5's *add* half is satisfied in substance |
+| the embedder's catalog `type` | §2.5 / Pass 4 Appendix D.3 | types across 19 entries are `{llm, vlm, embeddings}`; `text-embedding-qwen3-embedding-0.6b` is `embeddings` and advertises `capabilities: ["tool_use"]` — the evidence for **P5-1** |
+| no `model-bench` CPG | `mcp__cypher__query(graph='cpg_model_bench')` | not a loaded graph; instance lists `cpg_falkorchat`, `cpg_deprecated_salesperson` and workspace graphs only |
