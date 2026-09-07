@@ -132,11 +132,13 @@ TRIGGER_DEF_VERSION: str = os.environ.get("FALKORCHAT_TRIGGER_DEF_VERSION", "v1"
 # (`trigger.py` rule 4). **On by default** — every existing deployment keeps the
 # behaviour it has today. Off (`FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH=0`) wires
 # `WorkflowTrigger(responder=None)`, so a message that matches no workflow reaches
-# nothing at all. The storefront demo turns it off (`salesperson-ui.md` §4.3 part 4):
-# the responder's retrieval is workspace-WIDE (`services.hybrid_search` with
-# `channel_id=None`), which would let one participant's question surface another
-# participant's messages — so the fall-through is made structurally unreachable
-# rather than merely unlikely.
+# nothing at all. The storefront demo is **designed** to turn it off
+# (`salesperson-ui.md` §4.3 part 4) but **nothing sets it yet** — the launcher that
+# would, `scripts/start_demo.sh`, is S11, so today an operator clears it by hand.
+# The reason it must be cleared there: the responder's retrieval is workspace-WIDE
+# (`services.hybrid_search` with `channel_id=None`), which would let one
+# participant's question surface another participant's messages — so the
+# fall-through is to be made structurally unreachable rather than merely unlikely.
 TRIGGER_RESPONDER_FALLTHROUGH: bool = _env_flag(
     "FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH", default=True
 )
@@ -170,9 +172,12 @@ STOREFRONT_ENABLED: bool = _env_flag("FALKORCHAT_STOREFRONT_ENABLED", default=Fa
 # manifest is built from what is actually served (§4.7).
 STOREFRONT_DIR: str | None = os.environ.get("FALKORCHAT_STOREFRONT_DIR") or None
 
-# The single operator secret for the presenter surface (§4.3, OQ-5) — typed once
-# at `/shop/presenter` and exchanged for a presenter bearer token. It is demo-
-# session scoping, not authentication: no accounts, no per-user credentials.
+# The single operator secret for the presenter surface (§4.3, OQ-5) — exchanged at
+# `POST /shop/api/presenter/session` for a presenter bearer token. That route is
+# delivered, so setting a key today makes presenter login work by `curl` or test;
+# the `/shop/presenter` **screen** that types it is **not built yet — S12b/S12d**.
+# It is demo-session scoping, not authentication: no accounts, no per-user
+# credentials.
 #
 # **Empty means "no presenter surface", and must never authenticate.** Every
 # check of it goes through `hmac.compare_digest`, and `compare_digest("", "")` is
@@ -181,16 +186,25 @@ STOREFRONT_DIR: str | None = os.environ.get("FALKORCHAT_STOREFRONT_DIR") or None
 # an empty key first.
 STOREFRONT_PRESENTER_KEY: str = os.environ.get("FALKORCHAT_STOREFRONT_PRESENTER_KEY", "")
 
-# §4.4 measure 1: the size of the storefront's own bounded turn executor, sized to
-# LM Studio's configured parallelism. Agent turns run there instead of on
+# §4.4 measure 1 — **not built yet, S9.** The value is read into `Storefront` and
+# exposed as its `turn_workers` property, but **nothing consumes it**: there is no
+# executor, so setting this changes nothing today. When S9 builds it, this is the
+# size of the storefront's own bounded turn executor, sized to LM Studio's
+# configured parallelism — agent turns will run there instead of on
 # `BackgroundTasks`, so a deep turn queue never touches anyio's default thread
-# limiter and poll reads stay instant.
+# limiter and poll reads stay instant. That is the reason for the default: it
+# tracks LM Studio's parallelism, not anything about the web tier.
 STOREFRONT_TURN_WORKERS: int = int(os.environ.get("FALKORCHAT_STOREFRONT_TURN_WORKERS", "4"))
 
 # §4.8/§7 of the graph note: how long either reset waits for in-flight turns to
-# drain after intake stops, before giving up and changing nothing (`503`).
-# Comfortably under the 180 s agent timeout, so a stuck turn cannot hold the
-# reset past the point where the presenter gives up on it.
+# drain before giving up and changing nothing (`503 quiesce_timeout`). **The wait
+# is delivered but has nothing to wait for — S9**: `set_turn_state` has no caller
+# anywhere in `falkorchat/`, so the turn map is never populated and both drains
+# (`Storefront._await_quiesce`, `presenter_reset_all`) pass on their first check.
+# The **stop-intake** designed to precede the wait is S10's. The value is still
+# chosen comfortably under the 180 s agent timeout, so that once S9 populates the
+# map a stuck turn cannot hold the reset past the point where the presenter gives
+# up on it.
 STOREFRONT_QUIESCE_S: float = float(os.environ.get("FALKORCHAT_STOREFRONT_QUIESCE_S", "30"))
 
 # The languages a participant may join in (FR-3/AC-9) — the enum `POST
@@ -200,11 +214,13 @@ STOREFRONT_LOCALES: tuple[str, ...] = _env_csv(
     "FALKORCHAT_STOREFRONT_LOCALES", ("en", "pt-BR", "es")
 )
 
-# §4.4 measure 2: the anyio thread limiter the storefront raises **inside
-# `_lifespan`, before `yield`** (`to_thread.current_default_thread_limiter()` is
-# event-loop scoped and raises outside a running loop). Headroom for the poll
-# path, explicitly **not** load-bearing — measure 1 is what keeps turns off this
-# limiter in the first place.
+# §4.4 measure 2 — **not built yet, S9.** Nothing in `falkorchat/` reads this and
+# no `to_thread.current_default_thread_limiter()` call exists, so setting it
+# changes nothing today. When S9 raises the anyio thread limiter it must do so
+# **inside `_lifespan`, before `yield`** (the limiter is event-loop scoped and
+# raises outside a running loop). Headroom for the poll path, explicitly **not**
+# load-bearing — measure 1 is what keeps turns off this limiter in the first
+# place, which is why this value is generous rather than tuned.
 THREAD_LIMIT: int = int(os.environ.get("FALKORCHAT_THREAD_LIMIT", "100"))
 
 

@@ -5,6 +5,89 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-07 — the storefront documentation gate (Pass 16): `SERVER.md` §1.3/§1.4 stops describing the plan as the code, and `config.py`'s comments follow
+
+**What:** A gate-and-fix cycle on the component *documentation* rather than on code —
+`9c51189` (the S7→S8g `HISTORY.md` backfill, plus `SERVER.md` §1.3 gaining the participant-token
+auth seam and §1.4 the eleven-route `/shop/api` table), gated by
+`docs/reviews/salesperson-ui-impl.md` `## Pass 16` (`a310581`, **needs changes** — 0 blockers,
+5 majors, 3 minors, 4 nits), fixed in `c708423`, re-gated by `### Pass 16, second look`
+(`9200f1e`, **approve with suggestions** — 0 blockers, 0 majors, 2 minors, 1 nit, the reviewer
+stating plainly it is not asking for a third pass), and closed out in `ba368a0` + `7a85c1c`. This
+entry adds the last piece: `falkorchat/config.py`'s module comments, the **source** §1.3 was
+transcribed from, corrected to match.
+
+**The finding that matters predates the week's work: §1.3 had been describing four mechanisms that
+do not exist** (`P16-4`). `scripts/start_demo.sh` — S11 — is absent from the tree (a `find` over the
+repo, `node_modules` excluded, returns nothing); the bounded turn executor is S9 (`_turn_workers` is
+stored in `Storefront.__init__` and exposed by a property, and no `ThreadPoolExecutor` is constructed
+anywhere in `falkorchat/`); `config.THREAD_LIMIT` is read by nothing and no
+`to_thread.current_default_thread_limiter()` call exists; and the quiesce wait, though itself
+delivered, has nothing to wait for, because `Storefront.set_turn_state` (`storefront.py:632`) has no
+caller anywhere in `falkorchat/` — only tests — so the turn map is never populated and both drains
+pass on their first check. The stop-intake designed to precede that wait is S10's. **The document
+had been describing the plan as though it were the code.**
+
+**The repair was markers, not deletions, and it was made a standing property rather than four
+sentence fixes.** Every environment row in §1.3 now says what the value does *today* and names the
+step that delivers what it is *for* — true of all **eight** `FALKORCHAT_*` rows in that table, not
+only the four that were reported. Deleting the four sentences would have removed the design
+rationale, which is the reason each default is the number it is; distinguishing built from designed
+keeps the rationale and makes the row honest. The same pass audited the rest of §1.3/§1.4 and found
+five more, four of them the same class — among them a code block showing `WS_ID = "acme"` as a
+literal when it is `os.environ.get(...)`, and the presenter key described as "typed once at
+`/shop/presenter`" when `salesperson/` is a Vite scaffold with no such screen (a case-insensitive
+`presenter` grep across it, excluding `node_modules/` and `dist/`, still returns nothing).
+
+**Correcting the derived artifact and leaving its source wrong is a repair with a short half-life,
+which is why `config.py` is in this entry.** §1.3's table was transcribed from `config.py`'s module
+comments; after `c708423` the table distinguished built from designed and the comments it came from
+still did not. That is exactly the configuration in which someone later re-syncs the documentation
+*backwards* from the code and silently undoes the fix. Three comments now carry the same marker as
+their rows — `STOREFRONT_TURN_WORKERS` and `THREAD_LIMIT` as **not built yet, S9**, and
+`STOREFRONT_QUIESCE_S` as a delivered wait with nothing to wait for until S9, its stop-intake half
+S10's — each keeping its design rationale as the reason the default is what it is once that step
+lands. Two further comments carried the same defect and were fixed with them:
+`STOREFRONT_PRESENTER_KEY` claimed the unbuilt `/shop/presenter` screen (S12b/S12d), and
+`TRIGGER_RESPONDER_FALLTHROUGH` said the storefront demo *turns it off* when nothing sets it — the
+launcher that would is S11. **Proved comments-only** rather than asserted, by the method S8g-docs
+established: parsing `config.py` at `HEAD` and as delivered with every docstring body replaced by a
+sentinel gives equal `ast.dump` output (14774 characters both sides) over an identical
+six-member docstring-owner set, so a docstring cannot have been added or removed under cover of the
+strip. `ruff` clean; the diff is `+35/−19`, all of it `#` comments.
+
+**The defect class is the one the S8b–S8g entry directly above already names**, and the recurrence is
+the transferable part. *A stated rule broader than the reach the mechanism beneath it implements* —
+fourteen instances of it in a guard, closed by a stakeholder stopping rule at Pass 15 — reappeared
+the same day in **prose**, in a document nobody was watching, and had in fact been sitting there
+longer than the guard chain it outlived. Six passes were spent on one artifact's self-description
+while the architecture document drifted the same way. A review scope drawn around the code is not a
+review scope drawn around the claims.
+
+**One finding survived two independent checks because both used the same insufficient probe.**
+`P16-14`: the counter-example to *"list `limit`s are Query-bounded (1–200)"* named the wrong route —
+`api.py:294`'s `Query(10, ge=1, le=50)` belongs to `GET /threads/{tid}/workflow-runs`, and the
+neighbour it was attributed to takes no `limit` at all. Author and reviewer had each confirmed the
+claim by grepping for the distinctive value `le=50`, finding it, and never asking which route owned
+the line; a three-line `-B3` window on the same grep reaches the route decorator in the same output.
+The general repair adopted is worth more than the fix: **a sentence quantifying over a set should
+name the set's size and let the arithmetic be checked.** `(5 + 1 + 1 + 4 = 11.)` now sits in §1.4
+(`SERVER.md:348`), and it is how the author caught an error inside its own fix (`c708423`) — a
+corrected sentence that said "the three remaining routes" when there are four.
+
+**Also delivered under this gate.** `K-063` filed against `SERVER.md` §1.5 (the item plan §5.0
+assigned and nobody filed), folded in with §1.2's storefront-less layering diagram and §1.6's M1
+tick-mark checklist sitting in a living document. `salesperson/`'s `start_demo.sh` references were
+marked as S11 and, where the doc gave an instruction, given what to do instead; the count kept
+growing as the tree was searched — the fourth was in `playwright.config.ts`, a config file nobody
+had grepped, which is the argument for an unfiltered sweep on any rename or removal.
+
+**Verification.** Per the stakeholder's standing constraint, **no pytest run** — a default run wipes
+the freshly re-seeded `reference` graph — so this entry records no suite figures and the review
+records none either; Pass 16 states its suite figures are unverified for the same reason. What was
+run here: the AST-equality proof above, `ruff check` on `config.py`, and direct re-derivation of
+each of the three `config.py` claims against the tree rather than acceptance on report.
+
 ## 2026-09-07 — salesperson-ui S8b–S8g: the `/shop/api` guard hardening chain — six cycles, closed by narrowing the claim
 
 **What:** Six gate-and-fix cycles on one artifact — the storefront router's error map and the
