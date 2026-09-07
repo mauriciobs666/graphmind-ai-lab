@@ -5,6 +5,309 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-07 — salesperson-ui S8b–S8g: the `/shop/api` guard hardening chain — six cycles, closed by narrowing the claim
+
+**What:** Six gate-and-fix cycles on one artifact — the storefront router's error map and the
+guards that state their own reach — delivered as `18b675a` (S8b), `2e27835` (S8c), `769adc3` +
+`1887180` (S8d, killed mid-run by a session rate limit and finished as S8d2), `92bf842` (S8e),
+`00827c2` (S8f) and `b720bd3` (S8g-docs), gated by `docs/reviews/salesperson-ui-impl.md`
+`## Pass 10` through `## Pass 15`. Two files only —
+`falkor-chat/server/falkorchat/storefront_api.py` and `falkor-chat/server/tests/test_storefront_api.py`
+— with `storefront.py`, `app.py` and `tests/test_app.py` byte-unchanged across the whole chain
+(md5-checked at every unit's close). **One entry rather than six**, because six near-identical
+entries would say *the guard was widened again* six times and bury the only thing worth reading:
+why it had to be.
+
+**The one cycle where production behaviour moved is the first.** Pass 10's blocker was that S8's
+gate computed `registered_storefront_handlers` as a **delta against a baseline app**, which showed
+it 5 of the 17 registered handlers (`## Pass 10`, P10-1). Replaced by `registered_handlers`, which
+returns `app.exception_handlers` whole and partitions the set into four buckets checked on the axis
+the delta was really buying — who registered each handler (`__module__`), in both directions.
+Widening the gate immediately found **three** responses escaping to `app.py`'s inherited
+`ServiceError` handler rather than one: `404 ThreadNotFoundError`, `400 UnknownActorError` and
+`400 UnknownMemberError`, all on `POST /shop/api/messages`. A fix keyed on the reported `404` would
+have left two behind. `register_storefront_error_handlers` now captures the incumbent handler and
+registers a wrapper that re-shapes only on `API_PREFIX` and delegates elsewhere, so the legacy
+envelope keeps one definition; `SERVICE_ERROR_ROUTES` is the **output of a measurement** — each
+fault armed after lifespan, all eleven routes driven — not a hand-list. `DemoNotSeededError` became
+`503 demo_not_seeded` on join (P10-2), the argument for leaving it unmapped having been falsified by
+deleting the demo `Agent` out of band after a clean start and reproducing a bare `500`.
+
+**Everything after that was one defect, found fourteen times.** The signature shape: **a stated rule
+broader than the reach the mechanism beneath it implements** — and each instance sat inside the
+artifact written to close the previous one. Pass 12 found the seventh inside S8c's guard; Pass 13 the
+ninth inside S8d's; Pass 14 the eleventh and twelfth inside S8e's; S8f's own convergence probe caught
+the thirteenth before a gate did; Pass 15 found the fourteenth inside S8f's probe. The reach itself
+did get genuinely wider each time and the widenings are correct — `_service_calls` grew from the
+router's direct `services.<name>` accesses to the whole set of `Services` methods a route can reach
+through `shop.<method>` and `self.<method>` to a fixpoint (**nine** names today, pinned as
+`SERVICE_LAYER_REACH_TODAY`); alias prefixes stopped being three hard-coded spellings and became
+derived (`_alias_prefixes` closes a seed set over `ast` bindings to a fixpoint); the raise walk grew
+from `raise` statements inside the router to both storefront modules whole plus the reached
+`Services`/`Repository` methods, resolving `raise <factory>(...)` through the factory's returns. Each
+closed the gap it was aimed at. None closed the gap.
+
+**Pass 15 diagnosed why it regenerated, and that diagnosis is the most useful thing in the batch.**
+The reader has **two axes**, and every cycle had hardened only one.
+
+- **The target axis** — *which `ast` node types bind a name* — is finishable, and S8f finished it:
+  eight walked forms enumerated as `_ALIAS_BINDING_NODES`, the other **19** grammar nodes classified
+  in `_NON_ALIAS_BINDING_NODES` each with a written reason, the partition held against `ast`'s own
+  enumeration so a future Python adding a binding form reddens instead of opening a hole.
+- **The value axis** — *which expressions denote the object* — is `ast.unparse(value) in prefixes`:
+  **exact source-text identity**, not alias analysis. It was stated semantically (*"the names bound
+  to it"*) over a mechanism that is nothing of the kind, and all eight of S8f's probe snippets held
+  this axis fixed at the single spelling `self._services` — which is why the probe came back empty
+  while escapes remained. Pass 15 measured four: `me = self` then `me._services.…`, an `IfExp` value,
+  a `Subscript` round trip, and a non-literal `for` iterable, three of them surviving the delivered
+  suite.
+
+Closing the value axis is alias/points-to analysis: `me = self` closes to a receiver-alias pass,
+which admits tuple destructuring, then a conditional expression, then a container round trip, then a
+call argument. **The sequence does not terminate at any effort a hand-written reader can reach**, and
+five cycles of evidence say so empirically. So the chain ended by **narrowing the claims instead of
+widening the reader** (S8g-docs, `b720bd3`): clauses 5, 6, 9 and 15 of the guard-reach statement now
+describe the walk they sit above, clause 8 is corrected against plan v1.25, and `me = self` is
+written down as a documented stop rather than left as a bug. The residual is measured, not assumed —
+**zero** receiver-alias bindings exist anywhere in `falkorchat/`.
+
+**S8g-docs is prose, and it was *proved* prose rather than asserted.** Parsing both files at the
+pre-change tree and as delivered, with every docstring body replaced by a sentinel, gives equal
+`ast.dump` output and an identical docstring-owner set — so a docstring cannot have been added or
+removed under cover of the strip; `storefront_api.py` is equal even **unstripped**, its whole diff
+being `#` comments. That is stronger than the measurement the brief asked for: the reader's
+executable code being byte-equivalent *proves* its behaviour on `me = self` cannot have moved, and
+every behavioural claim about the unchanged mechanism inherits its prior evidence. Worth
+generalising — an AST-equality done-condition on a prose unit does more than check prose-only.
+
+**The best thing in that diff was not asked for.** The load-bearing forecast above
+`SERVICE_LAYER_REACH_TODAY` — *"when S9 adds `start_workflow_run`, this walk follows it"* — was
+**deleted rather than re-worded.** It carried `teco`'s own retracted compression (that S9 would place
+a direct `self._services.start_workflow_run(...)` in `Storefront.enqueue_turn`), which plan v1.25
+contradicts: the trigger runs on the turn worker and its call site (`trigger.py:82`) is outside all
+four walked scopes. The same paraphrase was corrected at thirteen further sites. What replaced it
+inverts the guard's relationship to S9: the set is now a **service-surface tripwire whose S9
+done-condition is that it stays green** — red meaning a `Services` call was acquired through the
+storefront's own `self._services` rather than through the trigger, i.e. stop and re-decide. A guard
+written to accommodate a forecast cannot fail at the one moment it is worth something (`## Pass 11`,
+P11-1); this one can.
+
+**What the chain bought, and what it cost.** `teco`'s accounting at the stop
+(`docs/plans/salesperson-ui-coordination.md`, *"STOPPED — the stopping rule fired"*): two real
+product findings nothing else surfaced — `MemberIdCollisionError` reaching `POST /shop/api/session`
+as a bare `500 text/plain` (found by measurement, not argument: stubbed and driven through the wire;
+classified with a checked reason rather than handled, since no client input reaches the
+server-minted `uuid4` participant id and a handler would create a `(route, response)` pair needing a
+plan row), and the eleven-entry `INHERITED_HANDLERS` exemption table converted from an enumeration
+whose only test asserted its reason strings were non-empty into a **mechanism** measured over the
+whole storefront → `Services`/`Repository` surface. Five of the six cycles went into making the
+guard's *self-description* true. The doctrine taken from it, and the reason this entry exists: **a
+static reader must state a syntactic scope on every axis it has, or it will regenerate this defect
+forever.**
+
+**Stopped by rule, not by exhaustion.** After Pass 14 the stakeholder set an explicit stopping rule;
+Pass 15 found the fourteenth instance and it fired. No S8h was opened and none should be without a
+fresh stakeholder decision. There is no Pass 16 — Pass 15 had already ruled clause by clause on all
+17 clauses of the guard-reach statement (nine lift-ready as written, four needing narrowing, one
+needing correction against v1.25), so a re-review of the same clauses would be ceremony; the real
+check was the AST proof and the re-derived collateral figures, and `teco` ran both. The
+`INHERITED_HANDLERS` entries were deliberately **not** given `# expires at S9` markers: §5.1's S9 row
+already names those three exceptions and what replaces each reason string, and a marker whose whole
+content is *"read the plan"* is one more sentence in a file whose statements needed six passes to
+make true.
+
+**Suites, as recorded at each unit's close and independently re-run by `teco`:** 2582 → 2608 (S8b) →
+2615 (S8c) → 2617 (S8f) passed, 14 deselected throughout, with S8g-docs identical at 2617 rather than
+merely green; the two-file storefront baseline moved 176 → 183 → 185. `ruff` clean at
+every close. `ws:acme` verified untouched at 871 nodes across the chain.
+
+**One follow-up filed, outside this work.** `falkor-chat/server/tests/test_workflow_timers.py:766`
+materializes a `timers-stale-key@v1` def into the **shared** `reference` registry and never cleans it
+up, so a suite run leaves a phantom "Timers" def in the registry the storefront reads. The fix is
+that test's own teardown; removing the artifact is a destructive graph write and was deliberately not
+done here.
+
+## 2026-09-03 — salesperson-ui S8: the `/shop/api` router, the total-by-type error map, the mounts and the preflight
+
+**What:** Step S8 of the storefront build (`docs/plans/salesperson-ui.md` §5.1), commit `81a1268` —
+`falkorchat/storefront_api.py` (new), plus the `create_app` wiring in `app.py` and the stale
+reserved-key list in `schemas.py`. **Eleven routes** under `API_PREFIX = "/shop/api"`, the two
+credential dependencies, per-route `responses={…}` declarations, the storefront's typed error
+handlers registered on that deployment only, the `/shop` SPA static mount, and `storefront_preflight`.
+`create_app` gained `storefront` / `storefront_dir` and **refuses `storefront and dev_surface`
+together** — the storefront deployment must not mount the unauthenticated legacy surface — while
+`storefront_dir` is read once in `_build_default_app` and forwarded to both the `Storefront` (which
+builds the product-image manifest from `<dir>/products/`) and the `/shop` mount, so the manifest is
+always built from what is actually *served*.
+
+**`ROUTE_CLASSES` is keyed on `(METHOD, path)`, not on path, and that is load-bearing.**
+`/shop/api/messages` is `reads-only` under `GET` — its read passes an explicit `since`, so it never
+takes `services.read_messages`' cursor path and never writes — and `writes` under `POST`. A
+path-keyed table hands one of the two the other's cross-cutting row, which decides whether a
+query-time timeout means *nothing changed* (`503 graph_read_timeout`) or *unknown*
+(`504 <op>_state_unknown`, §4.8 F8). The live handler and the gate both read **one** seam,
+`cross_cutting_response`: a gate that agrees with a handler it does not share code with is a gate
+that cannot see that handler drift.
+
+**Both halves of the gate are demonstrated failing, not asserted working.** Eight mutations of a real
+app object each raise — a handler with no classification, a classification with no handler, a
+misclassified route, an unclassified twelfth route, a route with no `responses`, a declared status
+with no producer, a declared-but-unproducible status. The two no-graph-access routes (`GET
+/shop/api/health`, `POST /shop/api/presenter/session`) are asserted **negatively**: the repository
+raises on any call and both still answer, with `repo.calls` empty, against a positive control on the
+same repo. Two mutants survived the first pass and **both were unreachability, not weak assertions** —
+the `422` declaration-order rule was untested because the fixture produced a single Pydantic error,
+and the presenter-key guard was unreachable because the model refuses a blank key before the route
+runs; fixed with a two-violation fixture and a spy at the comparison seam.
+
+**Three things beyond the brief, each because the brief's mechanism had a hole.** (1) The `.lookup(`
+source tripwire was **self-tripping** on the docstring that names the rule, so it became an AST
+call-site check with its own non-vacuity test. (2) A new check catches a route raising a refusal it
+never declares — the unruled response arriving from the server, which neither half of the gate
+covers. (3) `GET /shop/api/health` reports `storefrontEnabled` from **this app's own wiring** rather
+than from `config.STOREFRONT_ENABLED`: `config.py` resolves every flag at *import* time, so reading
+the module constant would tell every test that builds the app through
+`create_app(storefront=True, dev_surface=False)` that the storefront is disabled — by the
+storefront's own route.
+
+**The preflight refuses to start a mis-seeded storefront, naming the fix command.** Three conditions,
+each of which otherwise produces a demo that comes up green but dead: the demo `Agent` resolves in
+`ws:{WS_ID}` (asked with the *same* `resolve_member_kinds` lookup every post runs, so the preflight
+asks the question the demo will), the trigger def's snapshot is materialized into that same
+workspace, and the catalog is non-empty. The image manifest is built here too (§4.7's "at startup
+only") but is deliberately **not** a condition — an empty manifest is the legitimate text-only card
+deployment, so the count is logged and startup continues.
+
+**Suite: 2478 → 2582 passed / 14 deselected** as recorded at delivery and re-derived by `teco`;
+`storefront.py` byte-untouched. Gated at `docs/reviews/salesperson-ui-impl.md` `## Pass 10` —
+**needs changes**, 2 blockers — which opened the S8b–S8g hardening chain above.
+
+## 2026-09-03 — salesperson-ui S7c: `productId` projected on `filter_products`, and `QUERIES.md` §15 made to agree with the code
+
+**What:** Step S7c (`docs/plans/salesperson-ui.md` §5.1, split out of S8 at plan v1.19 so one gate
+judges one subject) across four commits: `f5291e6` (S7c), `8aaeca3` (S7c2), `83af07c` (S7c3) and
+`f9ba659` (S7c4). `services.filter_products` now returns `productId` alongside `name`, `category` and
+`price` — **the identical additive change K-053 made to `lookup_product`** — so S7's `_catalog_rows`
+collapses to a single call, losing both the per-row second point read and the
+`if product is None: continue` silent-drop branch it needed.
+
+**The two halves cannot ship apart, and that binding is real rather than incidental.** One tripwire
+test patches `lookup_product` to raise and asserts `list_catalog()` still returns all 15 rows with
+real slugs: a missing projection is a `KeyError`, a surviving second read is the raise. Reverting
+either half alone is killed, and reverting the *consumer* half is killed by that test **alone**. Its
+first draft was a false negative the author found and fixed — the fixture slugs were exactly
+`slugify(name)`, so a `_catalog_rows` fabricating ids from the name would have passed; one fixture row
+is now `productId` `opaque-sku-42` with name `Widget 007`, which no name derivation can produce.
+
+**S7c2/S7c3 closed a `QUERIES.md` §15 drift that predated this work.** `scripts/test_queries.sh`'s
+`FILTER` and `LOOKUP` constants and `QUERIES.md` §15.1/§15.2 were brought into line with
+`Repository.lookup_product`/`filter_products` as they have actually been since K-053. Fidelity was
+checked by **extracting the code's real query text by AST** — walking the `ro_query` call and
+`literal_eval`-ing the concatenated literal, so the compared string is what the engine receives
+rather than a re-typing — then comparing token by token; the gate's own 408/408 was treated as the
+precondition, not the evidence. Mutating each edit against the other fails in both directions.
+This *sharpens* follow-up 16 rather than answering it: the script verifies that its transcription is
+internally consistent and runs live, and nothing verifies that the transcription is the query the
+code sends.
+
+**S7c4 moved the read-count spy from a method name to the graph seam** (`## Pass 9`, S9-1). The
+reviewer's one-line fix — patch a second attribute — was declined for a reason the unit verified:
+`Storefront` holds both `_services` and `_repo`, `_repo` is already used at five other sites in the
+file, so a `1 + n` through it is the shape a future author reaches for, and patching both would still
+assert only that nobody called a method *of one name* on one of two objects while the test's name
+promises a read count. The spy now sits at `Repository._reference`'s seam, patching
+`db.reference_graph`, so the count is of real round trips regardless of which method, attribute or
+`Repository` instance issued them — including one constructed on the spot. Three assertions, none
+naming a method: real slugs including an id no slugify can produce; `1 <= reads` as an anti-vacuity
+guard (killed by a probe that blinds the spy, and only this test notices); and
+`reads_for_15 == reads_for_3`, which is what *read once, not once per product* actually means.
+**Size-invariant equality rather than an absolute count, deliberately** — the figure is 2 today
+because of the double `_catalog_rows` call left for S9, so asserting 2 would make this test an
+obstacle to S9's own fix.
+
+**Confirmed there is no third consumer:** `services.filter_products` has exactly two callers,
+`FilterProductsTool` and `_catalog_rows`. The plan's counterweight was sharpened at the mechanism
+level rather than restated — `test_tools.py`'s `FilterProductsTool` tests assert against row literals
+the test itself owns, making them a pass-through identity check that would pass under any projection,
+so **no test in this repo can observe what that tool hands the model.**
+
+**Suite: 2476 → 2478 passed / 14 deselected**, held at 2478 through S7c4, as recorded and re-derived
+by `teco`; both S7c test files are pure insertions and S7's catalog tests stayed green unedited.
+Gated at `docs/reviews/salesperson-ui-impl.md` `## Pass 9` — approve with suggestions, 0 blockers,
+0 major.
+
+## 2026-09-03 — salesperson-ui S7: storefront state, reset, catalog and the image manifest
+
+**What:** Step S7 (`docs/plans/salesperson-ui.md` §5.1), commit `dd78e70` late on 2026-09-02 with its
+two gate closures `d9d2f2b` (S7b) and `6fbe541` (S7b2) the following morning —
+`falkorchat/storefront.py` gains `get_state`, `reset_participant`, `list_catalog`,
+`build_image_manifest` and `advance_own_order`, six typed exceptions, and a `storefront_dir` kwarg
+S8 must wire from `create_app` or every `imageUrl` is `null`.
+
+**The order block comes from `services.get_current_order`, not composed locally** — asserted with a
+third product live in the cart, which is the case a locally composed block reports wrong. The catalog
+carries an explicit `CATALOG_LIMIT` past the delivered `limit=20` default, so the 15-product catalog
+is not silently truncated by someone else's pagination choice. The reset quiesces, deletes atomically,
+re-writes the profile name (§4.10) and refreshes the cache; §4.8's **F8 holds in both orderings** —
+`504 reset_state_unknown` with a real state body, and with no body when the re-read *also* times out,
+never the quiesce `503` and never a bare `500`.
+
+**The quiesce assertion is made at the instant of the delete, by a spy, because asserting afterwards
+proves nothing** — the delete has by then removed both of the things the assertion would look at.
+It checks `docs/plans/salesperson-ui-graph.md` §7 (a)–(d) participant-scoping, with (d) carrying a
+second participant as a false-positive control.
+
+**A plan/repository gap was worked around rather than fixed in a delivered step's file.**
+`services.filter_products` projected no `productId`, which blocks two S7 deliverables, so
+`_catalog_rows` resolved ids with a second indexed point read and the one-line fix was documented at
+the call site for `teco` to rule on. The gate verified the workaround **correct against the real
+catalog** — 15 of 15 rows resolved, zero mis-bindings, zero drops — and the ruling split the fix out
+as S7c above, so one gate judges one subject.
+
+**Also added: a `catalog_repo` teardown fixture.** `wf_repo` wipes the global `reference` graph on
+*setup* only, so fixture `Product` rows survived into `scripts/seed_catalog.sh`'s `MERGE` and made
+`verify_catalog.sh` report a mismatch.
+
+**S7b and S7b2 are test-only — `storefront.py` is byte-identical to `dd78e70` through both** — and
+each rejected the reviewer's suggested fix after verifying it does not work, which is the reusable
+part.
+
+- **S7-1: a duration floor replaced by a pure ordering of two instants in the same process.** The
+  measured wait was 0.167–0.188 s against a 0.15 s floor — an 11 % margin, with the clock starting
+  after the worker's sleep does, so thread-startup skew alone can reach the floor from below.
+  Asserting `started_at < finished_at < returned_at` has no margin at all and splits the two failure
+  modes: the adverse ordering that had left all four quiesce tests green now reddens exactly one, on
+  its first line.
+- **S7-3: the suggested elapsed-assert does not catch the reviewer's own mutant** — verified before
+  choosing. A call that never returns is never followed by its assertion, so the elapsed form converts
+  *slow-but-returning* into a failure and cannot touch a hang. Replaced by `_call_bounded`, which runs
+  the call on a daemon thread and fails on `is_alive` after the join timeout: the hanging mutant now
+  fails in 3.18 s with both test names printed, where it previously had to be killed at 25–30 s. No
+  `pytest-timeout` dependency needed.
+- **S7b2 then fixed `_call_bounded` itself** (`## Pass 8`, S8-1): it stamped `started_at` on the
+  *calling* thread before `worker.start()`, so the ordering assertion tolerated the whole
+  main-thread-to-daemon-thread scheduling gap — the same skew the duration floor had been rejected
+  for, only unmeasured. The reviewer's probe (no wait at all, plus 300 ms injected between the stamp
+  and the call) passed before and fails after, and the adverse-ordering margin grew from 54 µs to
+  142 µs, so the fix *strengthens* that detection rather than merely not weakening it. S8-3's
+  suggested `expect_error` kwarg was rejected and the literal `pytest.raises` idiom restored —
+  forgetting becomes impossible rather than documented.
+
+**`Storefront.lookup` survives S7, and the reasoning is better than the grep.** S7's brief carried
+`teco`'s open question — *did you need it?* — as an explicit deliverable. `grep '\.lookup('` over the
+package returns only the definition, but the interesting case is `reset_participant`, the one S7
+method that genuinely needs `displayName`/`language`: `lookup` is the **wrong source** for them,
+because its cached `thread_id` is stale the instant the reset returns, so using it would need a
+`forget` first — a plain graph read with extra steps. It takes the authenticated `ParticipantRecord`
+the route has just re-read via `resolve_token` instead. **So S7 writes *through* the cache and reads
+it never**, and the deletion decision moved to S9's close, where plan v1.19 has since decided the
+per-participant record cache is removed whole.
+
+**Suite: 2441 → 2473 → 2476 passed / 14 deselected** across the three commits, as recorded and
+verified solo by `teco`; 13 mutations killed and 4 benign refactors kept green at S7. Gated at
+`docs/reviews/salesperson-ui-impl.md` `## Pass 7` (approve with suggestions, 0 blockers, 0 major,
+plus three rulings) and `## Pass 8` (approve with suggestions, 0 blockers, 0 major).
+
 ## 2026-09-02 — salesperson-ui S1: `salesperson@v7` (per-participant language + order-time address)
 
 **What:** Step S1 of the storefront build (`docs/plans/salesperson-ui.md` §5.1) — the shared

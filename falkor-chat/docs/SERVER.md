@@ -96,6 +96,8 @@ rather than by configuration** — `create_app` takes:
 ```python
 create_app(services, dev_surface=True)   # the default: today's app, unchanged
 create_app(services, dev_surface=False)  # no api.build_router, no `/` mount, no /mcp
+create_app(services, dev_surface=False, storefront=True, storefront_dir=...)
+                                         # + the /shop/api router, its typed error map, the /shop SPA mount
 ```
 
 `dev_surface=False` un-mounts the entire unauthenticated dev surface. It dominates `mount_mcp`, so
@@ -103,6 +105,12 @@ create_app(services, dev_surface=False)  # no api.build_router, no `/` mount, no
 `api.build_router`, that branch re-registers a bare liveness route with the same contract
 (`services.ping`, 503 when FalkorDB does not answer) — exactly one `/health` exists in either
 configuration.
+
+`create_app` **refuses `storefront=True` with `dev_surface=True`** — the storefront deployment must
+not mount the unauthenticated legacy surface, and that is enforced at construction rather than left
+to the operator. `storefront_dir` is read **once** and forwarded to both the `Storefront` (which
+builds the product-image manifest from `<dir>/products/`) and the `/shop` static mount, so the
+manifest is always built from what is actually served.
 
 **`dev_surface` is a function parameter and deliberately not an environment variable.** That is
 the whole point: `_build_default_app` derives it (and `mount_mcp`) as
@@ -112,7 +120,7 @@ a 404 — a 404 is returned both when a route is absent and when it exists but e
 
 | Env var | Default | Effect |
 |---|---|---|
-| `FALKORCHAT_STOREFRONT_ENABLED` | off | **When set (`=1`)**, `_build_default_app` builds the storefront deployment — `mount_mcp=False`, `dev_surface=False`. Unset, the app shape is unchanged |
+| `FALKORCHAT_STOREFRONT_ENABLED` | off | **When set (`=1`)**, `_build_default_app` builds the storefront deployment — `storefront=True` (the `/shop/api` router, its error map, the `/shop` mount and the startup preflight) with `mount_mcp=False`, `dev_surface=False`. Unset, the app shape is unchanged |
 | `FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH` | **on** | **When cleared (`=0`)**, `WorkflowTrigger(responder=None)`: a message matching no workflow reaches nothing instead of the M2 responder, whose retrieval is workspace-**wide** (`hybrid_search` with `channel_id=None`) and would otherwise surface another participant's messages. Left on, the M2 fall-through behaves as it always has |
 | `FALKORCHAT_STOREFRONT_DIR` | unset (`None`) | The **served** SPA build directory (`salesperson/dist/`), mounted at `/shop` and the root of the product-image manifest (`<dir>/products/`). Unset resolves to `None`, never `""` — `Path("")` is the process working directory, which would silently serve whatever the operator happened to `cd` into. The manifest is built from what is *served*, never from the source tree |
 | `FALKORCHAT_STOREFRONT_PRESENTER_KEY` | `""` | The one operator secret for `/shop/presenter`, exchanged for a presenter bearer token. Demo-session scoping, not authentication. **Empty means "no presenter surface" and must never authenticate**: `hmac.compare_digest("", "")` is `True`, so a login path has to reject an unset key *before* comparing — `Storefront.presenter_configured` is that check |
@@ -127,6 +135,55 @@ the unauthenticated surfaces are un-mounted, while creating the only thing that 
 seed-the-wrong-graph trap possible — two variables that can disagree. `start_demo.sh` pins the one
 variable to a dedicated value; `tests/test_storefront.py` carries the tripwire against
 reintroducing the second.
+
+**The storefront adds a *second* auth path, and it is per-caller.** `get_context()` above is
+process-constant and the `/shop/api` surface never uses it. Every storefront route resolves its own
+`CallContext` from the credential on the request:
+
+```python
+# storefront_api.py — the two credential dependencies
+get_participant(authorization)   # Bearer <participantId>.<token>   -> ParticipantRecord, else 401
+get_presenter(authorization)     # Bearer presenter.<presenterToken> -> None, else 403 / 401
+
+# storefront.py
+Storefront.context_for(pid) -> CallContext(ws=WS_ID, actor=pid)   # actor *is* customerId
+```
+
+- **The graph is the registry; the in-process map is only a cache, and the router never
+  authenticates against it.** `Storefront.resolve_token` re-reads `User.tokenHash` through
+  `Repository.get_participant_record` on **every** call and never consults `_records`. That is not
+  style: with an authoritative in-process map, the single file write that restarts uvicorn under
+  `--reload` would invalidate every token and bounce every participant to a fresh `participantId`,
+  losing their **cart and order** rather than just their session (`customerId == participantId`),
+  and a participant deleted by either reset would keep authenticating out of stale memory.
+  `Storefront.lookup` returns the *identical* `ParticipantRecord` out of the cache and is documented
+  as **not an auth path** — the router never calls it, pinned by an AST call-site tripwire.
+- **Every failure is one answer.** `resolve_token` returns `None` — never an exception, never a
+  partial answer — for an absent, malformed or wrong-scheme header; an unknown participant id; a
+  `User` carrying no `tokenHash` (`seed_demo.sh`'s `u1`, the lifespan's `config.USER_ID` node); a
+  participant deleted by either reset; and a valid id carrying the wrong token, including another
+  participant's. The dependency maps all of them to one `401 invalid_token`. The hash comparison is
+  `hmac.compare_digest`, pinned by a spy at the comparison seam rather than by a timing measurement.
+- **The two credentials cannot be used for each other's routes.** A presenter token presented on a
+  participant route parses as participant id `presenter`, which no `User` carries, so it resolves to
+  `None` and answers the ordinary `401` — held structurally, not by a special case. In the other
+  direction `get_presenter` keeps two meanings apart: **`403 wrong_credential_type`** when the
+  request carried something that is not the presenter principal (a participant token, typically),
+  **`401 presenter_session_gone`** when it carried no credential or a presenter token this process
+  never minted. Presenter tokens are minted in-process by `_PresenterSessions` from
+  `FALKORCHAT_STOREFRONT_PRESENTER_KEY` and are **not** graph state, so they do not survive a
+  restart — the operator logs in again.
+- **This is demo-session scoping, not authentication** (`docs/plans/salesperson-ui.md` §4.3;
+  K-016/K-017/K-018 stay open). What it does give is the per-participant tenancy the platform seam
+  cannot: `ctx.actor` is the participant id and every cart/order/profile service keys on it, so
+  isolation between mutually-untrusting participants sharing one workspace is **structural rather
+  than filtered**.
+- **Startup refuses a mis-seeded deployment rather than coming up green and dead.**
+  `storefront_preflight` runs from `_lifespan` and raises `StorefrontPreflightError` — naming the
+  fix command — unless the demo `Agent` resolves in `ws:{WS_ID}` (asked with the *same*
+  `resolve_member_kinds` lookup every post runs), the trigger def's snapshot is materialized into
+  that workspace, and the catalog is non-empty. The image manifest is built here too but is
+  deliberately **not** a condition: an empty manifest is the legitimate text-only deployment.
 
 ### 1.4 REST surface → service → verified query
 
@@ -236,6 +293,69 @@ so the transport caps it (RAM rule 6). List `limit`s are `Query`-bounded (1–20
 The **two append variants** (`DESIGN.md` §5.3) stay hidden inside `post_message`: the service checks whether
 the thread already has a `HEAD`/`TAIL` and dispatches the correct single-`GRAPH.QUERY` write. The
 API only ever sees "post a message."
+
+**The `/shop/api` storefront surface.** Present only under `create_app(storefront=True)` (§1.3), and
+mounted alongside a `StaticFiles` mount of the SPA build at `/shop`. Eleven routes at
+`API_PREFIX = "/shop/api"`; every one of them resolves `ctx` from the request's own credential, so
+the `QUERIES.md` column below is reached under the *participant's* `actor`, never
+`config.USER_ID`. **Cred:** `P` = `get_participant`, `K` = `get_presenter`, `—` = none.
+
+| Endpoint | Cred | Reaches | `QUERIES.md` |
+|---|---|---|---|
+| `GET /shop/api/health` | — | nothing — liveness plus the locale list the join screen's chooser reads | *(no query)* |
+| `POST /shop/api/session` | — | `Storefront.join` → `ensure_participant`, `set_participant_record`, `services.save_profile` | §18.1, §18.3, §17.1 |
+| `GET /shop/api/state` | P | `Storefront.get_state` → `get_profile` / `get_cart` / `get_current_order`, plus the in-process turn state | §17.2, §16.5, §18.8 |
+| `GET /shop/api/messages` | P | `services.read_messages` with an **explicit** `since` | §9.1 |
+| `POST /shop/api/messages` | P | `services.post_message`, mentioning the demo agent | §4 |
+| `GET /shop/api/catalog` | P | `Storefront.list_catalog` → `services.filter_products` + the startup image manifest | §15.2 |
+| `POST /shop/api/order/advance` | P | `services.get_current_order`, then `Storefront.advance_own_order` → `order_belongs_to_customer` → `advance_order` | §18.8, §18.9, §16.10 |
+| `POST /shop/api/reset` | P | `Storefront.reset_participant` — quiesce, then `repo.reset_participant`, then `services.save_profile` | §18.4, §17.1 |
+| `POST /shop/api/presenter/session` | — | nothing — key → token, entirely in-process | *(no query)* |
+| `GET /shop/api/presenter/participants` | K | `repo.list_participants`, projected to four keys | §18.3 |
+| `POST /shop/api/presenter/reset-all` | K | `repo.list_participants` (pre-drain roster), then `repo.reset_all_participants` | §18.3, §18.5 |
+
+**No route takes an id from the client.** The thread id comes from the resolved
+`ParticipantRecord`, the order id from `services.get_current_order` on the server side, the
+workspace from `Storefront.ws`. That is what makes `POST /order/advance`'s `404`/`409` mean *stale
+button* and never *someone else's order* — and `advance_own_order` re-checks ownership before the
+CAS anyway, so the guarantee holds at two layers rather than by one route's discipline.
+
+**`GET /shop/api/messages` always passes `since` explicitly, and that is a classification fact.**
+`services.read_messages` with no `since` takes its cursor path, which *advances the cursor* — a
+write, on a route polled every 2 s.
+
+**The cross-cutting error rule is computed, not listed.** `ROUTE_CLASSES` maps `(METHOD, path)` —
+**not** path — to one of three classes (`writes`, `reads-only`, `no graph access`), and
+`cross_cutting_response` turns a class plus a handler token into the answer: a lost connection is
+always `503 graph_unavailable`; a query-time timeout is `503 graph_read_timeout` on a `reads-only`
+route (nothing changed) and `504 <op>_state_unknown` on a `writes` route (§4.8's F8 — the write may
+have committed), while a `no graph access` route can produce none of the three. The method key is
+load-bearing: `/shop/api/messages` is `reads-only` under `GET` and `writes` under `POST`, so a
+path-keyed table would hand one of them the other's row. The live handlers and the test gate read
+that **one** function, because a gate that agrees with a handler it does not share code with cannot
+see that handler drift.
+
+**Per-route errors are declared on the route and checked against what it can produce.** Each route
+carries a `responses={…}` block naming its own statuses and their error tokens (`invalid_token`,
+`turn_in_progress`, `no_current_order`, `order_transition_refused`, `quiesce_timeout`,
+`unscoped_participant`, `unknown_participant`, `reset_state_unknown`, `demo_not_seeded`,
+`validation_failed`, `bad_presenter_key`, `presenter_session_gone`, `wrong_credential_type`), and
+the gate reads them back off `app.routes` rather than off the source — refusing a declared status
+with no producer, a producer with no declaration, an unclassified route and a route with no
+declaration at all.
+
+**The `ServiceError` handler wraps rather than replaces, and is path-scoped.**
+`register_storefront_error_handlers` captures the incumbent handler and registers a wrapper that
+re-shapes to the storefront's `{"error": token, "detail": …}` envelope only when the request path
+starts with `API_PREFIX`, delegating everywhere else — so the legacy envelope keeps exactly one
+definition instead of a second copy that can drift. **No delivered deployment carries both
+surfaces**, and that — not the path check — is what keeps the default app byte-identical: this
+handler is registered only when a `Storefront` exists, and `create_app` refuses `storefront` with
+`dev_surface`. The path check is what makes the handler correct on an app that carries both, which
+is a property of the handler rather than of any deployment. On `/shop/api` with **no** mapping it
+logs and still delegates: a Python class name reaching a participant is a defect, but inventing a
+token for a subclass nobody classified is a worse one. The set of routes on which a `ServiceError` can actually be raised is a **measurement**
+(faults armed, all eleven routes driven), not a hand-list.
 
 ### 1.5 Layout (as built, M1)
 
