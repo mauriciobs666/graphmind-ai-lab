@@ -3333,3 +3333,334 @@ elsewhere (`2615/2629 collected`).
   coordinator's AST check: N-A, N-B, N-H, N-K and P10-9-MOVE all reproduce the *pre-S8c* behaviour
   descriptions exactly, and the two-file baseline moved 176 → 183 on exactly seven new test
   functions.
+
+## Pass 13 — 2026-09-07 (S8d: is the widening correct, and is it complete?)
+
+**Reviewed:** commits **`769adc3`** (S8d partial) and **`1887180`** (S8d complete) as one unit —
+`falkorchat/storefront_api.py` and `tests/test_storefront_api.py` — against
+`docs/plans/salesperson-ui.md` **v1.23** §4.9, §5.1 S8/S9/S10, §5.2, §5.3, against `## Pass 12`'s
+four findings, and against `docs/plans/salesperson-ui-coordination.md`'s record of why the guard was
+built before S9. Not reviewed: S9/S10/S12 content, the SPA, `docs/HISTORY.md`/`SERVER.md`'s held
+documentation debt.
+
+**I am a fresh reviewer.** I did not write Pass 12; I treated it as a document and re-derived every
+claim of it I relied on, including the two it got wrong.
+
+**CPG: considered, not relevant — `cpg_falkorchat` models neither `storefront.py` nor
+`storefront_api.py` (Pass 12 measured 0 `File` nodes matching `storefront`, and the brief asked me
+not to re-spend on it), so every claim below is from direct read, AST analysis, or source mutation
+against the live suite.**
+
+**Verdict: needs changes** — **0 blockers, 2 majors, 1 minor, 1 nit**. S8d2's central judgement is
+**right**: Pass 12's recommended fix was insufficient, both of the mutations it cites really do
+survive `769adc3`, and widening to both storefront modules was the correct call. But the answer to
+*"is it now complete?"* is **no**, and in the same shape for the third consecutive pass: **both
+guards state a rule broader than the reach they implement.** The reach guard cannot see a
+service-layer call written through a local alias — which is S9's decided shape plus one line, so
+S9's done-condition is unmeetable again (P13-1, the ninth instance). The raise guard's exemption
+still says "no `/shop/api` route raises a bare `HTTPException`" while stopping at `storefront.py`; a
+bare `HTTPException(410)` in `services.save_profile` — one of the nine methods the sibling guard
+itself measures as reached — survives at **183 passed** and answers `410 '{"detail":"gone"}'` from
+`POST /shop/api/session` (P13-2, the tenth). Both fixes are small, both are in one test file, and
+both must land before S9 dispatches and before §5.1's S9 row lifts S8d2's reach statement.
+
+### What I ran (all of it, solo, serially)
+
+Two-file baseline **183 passed** and full suite **2615 passed, 14 deselected**, both my own runs.
+**Nine mutations** plus two wire probes, each applied to byte-copies held outside the repo and
+restored from them, `md5sum` re-verified after every run — `storefront_api.py` `7b83eb14…`,
+`storefront.py` `a713e2c5…`, `services.py` `a952f4ad…`, `app.py` `e6bf735a…`,
+`test_storefront_api.py` `a95da701…`, `test_app.py` `fcf877ac…`, all matching `HEAD` at the end,
+`git status` on `falkor-chat/` clean. Two baselines were re-created from
+`git show 769adc3:<path>` and restored the same way; **no `git` tree-mutating command at any
+point**. Ledger and transcripts: **Appendix P13-A**.
+
+**Database.** `ws:test` and `reference` only. `ws:acme` re-checked at the end and unchanged — 14
+labels with nodes, `Message` 52, `Entity` 544, `WorkflowRun` 21. `reference` was wiped by my
+full-suite run (the documented default-`pytest` teardown) and re-seeded: `seed_catalog.sh` →
+`verify_catalog.sh` exit **0**, "OK — product catalog in sync (15 products)".
+`seed_workflows.sh`/`seed_salesperson.sh` never run.
+
+### Major
+
+#### P13-1 · **Major** · the reach guard reads three hard-coded spellings, not "every `Services` method a route can reach, by any path" — a one-line local alias makes S9's own shape invisible again
+
+`_service_layer_reach`'s docstring says *"Every `Services` method a `/shop/api` route can reach, by
+any path"* and the source comment says *"Nine today; a tenth reddens."* The implementation matches
+`ast.unparse(child.value)` against the literal set `{"services", "shop._services"}` in the router and
+`{"self._services"}` in each `Storefront` method, so a value bound to a local name escapes it:
+
+- **P13-B, survived (183 passed):** `Storefront.enqueue_turn` written as `svc = self._services` /
+  `return svc.start_workflow_run(ctx)`, called from the router — §5.1 S9's decided shape with one
+  extra line. The control with `self._services.start_workflow_run(ctx)` written directly on the same
+  injection point reddens (**1 failed**), so the difference is purely the alias.
+- **P13-C, survived (183 passed):** a *second* router alias, `svc2 = shop._services` /
+  `svc2.start_workflow_run(...)`. The `services == shop._services` binding control passes, because it
+  checks a *rename* of the existing binding, not an *added* one.
+
+This is P12-1's consequence intact: S9's implementer can meet §5.1's `enqueue_turn` interface, add the
+trigger, and see green — and the eleven `INHERITED_HANDLERS` excuses revert to prose at the moment
+three of them become falsifiable. **Suggested fix (verified, not proposed):** derive the prefixes
+instead of listing them — a fixpoint over `ast.Assign` nodes whose `ast.unparse(value)` is already a
+prefix, seeded with `{"shop._services"}` in the router and `{"self._services"}` in each method. I ran
+it: it returns **the identical nine names** on the clean tree (so `SERVICE_LAYER_REACH_TODAY` needs no
+re-baselining) and catches all four spellings — direct, router alias, method alias, and a two-hop
+alias. The seeded literal `"services"` becomes derived, which makes the binding control structural
+rather than a hand-written assumption. Pin P13-B and P13-C as synthetic controls beside the three
+already there.
+
+#### P13-2 · **Major** · the bare-`HTTPException` exemption is still broader than the walk: `services.py` is on the request path, and the reach guard does not cover what it raises
+
+`INHERITED_HANDLERS[StarletteHTTPException]`'s reason is *"No `/shop/api` route raises a bare
+`HTTPException`"*, and the widened guard reads `storefront_api.py` + `storefront.py`, stating that it
+*"stops at the `services.py` boundary, **which the reach guard above covers instead**"*. That last
+clause is not true: the reach guard measures **which** `Services` methods a route reaches, not **what
+they raise**. Nothing in either file constrains the latter.
+
+- **P13-A, survived (183 passed):** `raise HTTPException(status_code=410, detail="gone")` on a dead
+  branch of `services.save_profile` — one of the nine names `SERVICE_LAYER_REACH_TODAY` itself
+  lists, reached from `Storefront.join`. Driven through the wire it answers
+  `410 '{"detail":"gone"}'` from `POST /shop/api/session`: no `error` token, no row, green through
+  both halves of the gate. **Byte-identical to the answer S8d2 used to justify widening past Pass
+  12** — the same argument, one layer further down.
+- Secondary and latent: the router binds `repo = shop._repo` and calls `repo.list_participants` /
+  `repo.reset_all_participants` directly, so `repository.py` is a fourth module on the request path
+  under no guard at all. Both methods raise nothing today, so this leg is latent, not exercised.
+
+**Two closures, either of which is sufficient — I verified the first.** (a) *Compose the two guards*:
+run `_raised_class_names` over the `Services` methods named in `SERVICE_LAYER_REACH_TODAY`. Measured
+today that reports exactly **`{UnknownOrderTransitionError}`**, which is already in
+`SERVICE_ERRORS_UNREACHABLE` with a reason — a three-line addition and a one-name constant, with no
+whole-module over-approximation of a file the legacy surface shares. (b) *Narrow the rule to the
+reach*: reword the exemption to "no storefront route **body**…" and say in the same breath that the
+service layer's raises are covered only for the `ServiceError` family, by the partition test. What is
+not defensible is the current pairing of the broad sentence with the narrow mechanism.
+
+### Minor
+
+- **P13-3 · the declined `⊆ StorefrontError family` cross-check is worth more than the reason given
+  for declining it.** S8d2 declined it as "not independently killable" and as a repeat of P11-7. Both
+  reasons are off. P11-7 was about an enumerated `len(...) == 17` *restating* a derived partition;
+  this is a cross-check between **two independent sources** — an AST read of the file and the live
+  class tree — so it is not a restatement. And it is killable by exactly the mutation shape N-J
+  already established as legitimate: add a `raise ValueError(...)` to `storefront.py` **and**
+  `"ValueError"` to `STOREFRONT_RAISES_TODAY`, which is green today and red with the cross-check.
+  That is not hypothetical maintenance behaviour — extending the allowlist is the cheapest way to
+  silence this guard, and only `HTTPException` is separately fenced. The comment above the constant
+  argues *"All seven are `StorefrontError` subclasses, and that is what makes `INHERITED_HANDLERS`'
+  excuses true of this file"* — the family is fully handled (checked), and the raises are a subset of
+  the family (**not** checked). Two lines close the unchecked premise:
+  `assert set(STOREFRONT_RAISES_TODAY) <= {c.__name__ for c in _subclasses(storefront.StorefrontError)}`
+  — which holds today, in fact as an equality (I checked both sides). The same exposure exists on
+  `envelope | {"RuntimeError", "StorefrontPreflightError", "ValueError"}`, whose three members I
+  verified are correctly described (a `field_validator`, a wiring-time refusal, a boot-time refusal).
+
+### Nits
+
+- **P13-4 · factory resolution has one silent shape; every other unresolvable shape fails loud.** I
+  probed the reader directly: a factory whose `return`s carry no value resolves the whole `raise` to
+  **`set()`** — `raise self._boom()` with `def _boom(self): return` contributes nothing at all. By
+  contrast a factory returning a local (`e = HTTPException(410); return e`) yields `{"e"}` and an
+  aliased import (`raise HX(410)`) yields `{"HX"}`, both of which redden the set equality, and a
+  non-`Name`/`Attribute`/`Call` `raise` hits `_named_class`'s `AssertionError`. So the design is
+  fail-loud with one gap that requires a factory that cannot actually raise anything — implausible,
+  but one line ends it: assert the factory branch contributed at least one name.
+
+### The two claims the brief asked me to check — both confirmed
+
+1. **`769adc3`'s commit message is wrong about its own state.** Confirmed by reading the tree at that
+   ref, not the message. `git show 769adc3:falkor-chat/server/tests/test_storefront_api.py` already
+   contains the module-wide walk (`assert _raised_class_names(source) == envelope | {...}`, line
+   3209), the three-name allowlist with its reasons (3202–3210), the N-M synthetic control
+   (3230–3239), and P12-4's package filter in `_subclasses` (2618) with the `gc` dance already gone
+   and its replacement documented in the comment at 2726–2727. The message says P12-2 is "STILL
+   OPEN". **What "S8d delivered" means in the record:** `769adc3` = P12-1 + P12-2's
+   `storefront_api.py`-wide half + P12-4; `1887180` = the widening to `storefront.py`, factory
+   resolution, P12-3, and the docstring/comment corrections. A `HISTORY.md` entry written from the
+   messages alone would misattribute three of those.
+2. **Under `-m live` the table test is deselected, not skipped.** Confirmed:
+   `pytest tests/test_storefront_api.py -m live -q` → **`131 deselected`**, zero collected, zero
+   skipped. The corrected docstring is right and the previous wording was wrong.
+
+### Is S8d2's guard-reach statement accurate as written? — **No, in two clauses**
+
+I judge the statement in the form that will actually be lifted: the source comment above
+`INHERITED_HANDLERS` (`storefront_api.py:433–452`, with the exemption string it governs at
+`:455–467`), which the coordination row at
+`docs/plans/salesperson-ui-coordination.md:143` paraphrases identically. S8d2's own report text is not
+a file I hold; if it differs from the source comment, re-check it against these four rulings.
+
+| Clause | Ruling |
+|---|---|
+| "over **both storefront modules whole** rather than the router node" | **Accurate** — verified by mutation on both files |
+| "resolves `raise <factory>(...)` through the factory's `return`s" | **Accurate**, with P13-4's one silent shape |
+| "**It stops at the `services.py` boundary, which the reach guard above covers instead**" | **Inaccurate** — the reach guard covers *which methods*, never *what they raise* (P13-2) |
+| "the **whole set of `Services` methods a route can reach** … Nine today; a tenth reddens" | **Inaccurate** — three spellings, not every path; a tenth added through an alias does **not** redden (P13-1) |
+
+**So the §5.1 S9 re-word must not lift the statement verbatim.** Lift it after P13-1 and P13-2 land,
+and state the reach the *fixed* mechanism has. If for any reason the re-word must go first, the two
+inaccurate clauses have to be narrowed to what is checked, not to what is intended — a plan row that
+promises S9's implementer a red guard that stays green is P12-1's failure written into the plan
+instead of into the test.
+
+### The three judgement calls S8d2 made — all three upheld
+
+1. **Widening past Pass 12's recommendation was right, and the two mutations are real.** I
+   reproduced both on `769adc3`: **N-M2** (bare `HTTPException(410)` on a dead branch of
+   `Storefront.join`) and **N-M3** (the same raise in a module-level `storefront.py` helper called
+   from `join`) each **survived at 183 passed**, and I drove N-M2 through the wire —
+   `POST /shop/api/session → 410 '{"detail":"gone"}'`. Both are killed at `HEAD` by
+   `test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume`.
+2. **Whole-module over reachability-filtered for `storefront.py` is the right trade.** I measured the
+   two: every `raise` in that file today lives in a method a route reaches
+   (`advance_own_order`, `join`, `reset_participant`), so the two readings agree on the same seven
+   names — S8d2's "measured, not assumed" holds. The over-approximation's named cost (N-M4, a raise
+   in `Storefront.lookup`) I reproduced: **1 failed**, as documented. That cost is even smaller than
+   stated, because §5.1's S9 row **deletes `lookup` outright** with the record cache.
+3. **P12-3's fix is the right shape.** Excluding `live`-marked names from `defined` rather than
+   inspecting selector state keeps the predicate keyed on what was collected — the P11-9 lesson —
+   and does not need the `-m live` case special-cased, since the whole module deselects there.
+
+### Disposition of Pass 12's findings
+
+| # | Disposition | What I rechecked |
+|---|---|---|
+| P12-1 | **Fixed for the three spellings it names; the defect class survives in a fourth** → **P13-1** | `direct_sf` **1 failed**; `alias_sf` **survived, 183**; `alias_router` **survived, 183** |
+| P12-2 | **Fixed, and correctly widened past the recommendation — but still short of its own rule** → **P13-2** | N-M2/N-M3 survive on `769adc3` (183 each), both die at `HEAD`; P13-A survives at `HEAD` (183) and answers `410 '{"detail":"gone"}'` |
+| P12-3 | **Fixed** | `-m live` → `131 deselected`, none skipped; `defined` excludes `pytestmark` `live` names |
+| P12-4 | **Fixed** | `_subclasses` filters on `__module__.partition(".")[0] == "falkorchat"`; the minted subclass is in `ThreadNotFoundError.__subclasses__()` and absent from `_subclasses(ServiceError)`; no `gc` import anywhere in the file |
+
+**Pass 12's evidence-discipline claim, upheld and extended.** S8d2 claims no figure it reports has
+N-K's seed-dependent shape because every kill is a set-equality assertion. I checked rather than
+accepted: both guard tests assert set equality or `in`/`not in` on a set, which is order-independent
+by construction, and N-M2 gives **`1 failed` at `PYTHONHASHSEED` 0, 3, 4 and 7** — four of the eight
+seeds Pass 12 used, including seed 4, the one where N-K survived the whole file. Every survival I
+report is also a set-equality miss, so the survivals are as deterministic as the kills.
+
+### What's solid
+
+**S8d2 did the thing this build keeps failing to do — it asked whether the rule was broader than the
+reach, one file out, and it was.** Pass 12 wrote "checked not guessed" about a scope, reproduced a
+case, fixed the spelling that case exhibited, and stopped. S8d2 declined to apply the recommendation
+it was handed and produced two wire-level survivors instead of an argument. That is the correct
+reviewer-of-a-review behaviour, and the coordination note's framing of it ("*checked, not guessed*
+names the method, not the scope") is the durable part.
+
+**The synthetic controls are the right kind.** Every widening in `1887180` ships with a snippet that
+exercises the reader on the exact mutation shape it was widened for, and `_raised_class_names` taking
+a node *or* a source string is what makes that cheap. My own fix proposals for P13-1 slot in beside
+them without new machinery.
+
+**The three allowlisted `storefront_api.py` raises are described accurately.** I read all three sites:
+`_nonblank`'s `ValueError` really is inside a `field_validator`, `register_storefront_error_handlers`'
+`RuntimeError` really is wiring-time, and `storefront_preflight`'s `StorefrontPreflightError` really
+is boot-time. The names are not tolerated, they are argued.
+
+**`769adc3` was a coherent thing to commit.** A partial unit committed with an honest "PARTIAL,
+UNGATED" header cost this pass nothing and let me build a real baseline; that it *understated* its own
+delivery is a defect of the message, not of the decision to commit.
+
+### Open questions (need `teco`'s call)
+
+1. **Does P13-1 + P13-2 go in as an S8e, or as S9's first done-condition?** My recommendation:
+   **S8e, before S9 dispatches**, on the coordinator's own argument — a guard authored inside the
+   step it guards is born accommodating, and that argument is now two passes old and has been right
+   twice. Both fixes are in one test file, and P13-1's is verified to leave
+   `SERVICE_LAYER_REACH_TODAY` unchanged, so the round is short.
+2. **Is P13-2 closed by widening (a) or by narrowing the rule (b)?** That is a scope call, not a
+   review call. (a) buys a real check for three lines; (b) costs nothing and makes the exemption
+   honest. What must not survive is the current pairing.
+3. **Does the §5.1 S9 re-word wait for S8e?** It should. The statement it would lift is inaccurate in
+   two clauses today, and correcting the plan twice is worse than dispatching the re-word once, after
+   the mechanism matches its sentence.
+
+### Appendix P13-A — mutation ledger and transcripts (Pass 13)
+
+**Method.** Every mutation applied from a byte-copy held outside the repo and restored from that copy
+after each run, `md5sum` re-verified each time. Command:
+`.venv/bin/python -m pytest tests/test_storefront_api.py tests/test_app.py -q`. **Baseline: 183
+passed** (`HEAD`), full suite **2615 passed, 14 deselected**. Baselines at `769adc3` were materialised
+with `git show 769adc3:<path> > <path>` and restored from the `HEAD` byte-copies; no `git`
+tree-mutating command was used at any point.
+
+| # | Tree | Mutation | Result |
+|---|---|---|---|
+| **N-M2** | `769adc3` | bare `HTTPException(410)` on a dead branch of `Storefront.join` (`storefront.py`) | **survived, 183 passed** |
+| **N-M3** | `769adc3` | module-level `_refuse_retired_name` in `storefront.py` raising `HTTPException(410)`, called from `join` | **survived, 183 passed** |
+| N-M2 | `HEAD` | same | **1 failed** — the raise guard, at seeds 0/3/4/7 |
+| N-M3 | `HEAD` | same | **1 failed** — the raise guard |
+| N-M4 | `HEAD` | `HTTPException(410)` in `Storefront.lookup`, which no route reaches | **1 failed** — the documented over-approximation, reproduced |
+| **P13-A** | `HEAD` | bare `HTTPException(410)` on a dead branch of `services.save_profile` | **survived, 183 passed** → P13-2 |
+| direct_sf | `HEAD` | `Storefront.enqueue_turn` → `self._services.start_workflow_run`, called from the router | **1 failed** — the reach guard (control) |
+| **P13-B** (alias_sf) | `HEAD` | the same, written `svc = self._services` / `svc.start_workflow_run(ctx)` | **survived, 183 passed** → P13-1 |
+| **P13-C** (alias_router) | `HEAD` | a second router alias `svc2 = shop._services` / `svc2.start_workflow_run(...)` | **survived, 183 passed** → P13-1 |
+
+**Probe 1 — N-M2 and P13-A driven through the wire.** Mutation in place, one throw-away test appended
+to `tests/test_storefront_api.py`, run under `-k`, then both files restored from the byte-copies:
+
+```
+N-M2  (769adc3)  POST /shop/api/session -> 410 '{"detail":"gone"}'
+P13-A (HEAD)     POST /shop/api/session -> 410 '{"detail":"gone"}'
+```
+
+**Probe 2 — the raises a route reaches, one layer past the guard's boundary.** `_raised_class_names`
+(lifted verbatim out of the test file) applied to each `Services` method named in
+`SERVICE_LAYER_REACH_TODAY`:
+
+```
+advance_order: ['UnknownOrderTransitionError']   filter_products / get_cart / get_current_order /
+get_profile / order_belongs_to_customer / post_message / read_messages / save_profile: []
+union: ['UnknownOrderTransitionError']           (already in SERVICE_ERRORS_UNREACHABLE)
+repo.<name> in the router: ['list_participants', 'reset_all_participants'] — both raise nothing today
+```
+
+**Probe 3 — the alias-resolving reader, run before being proposed.** A fixpoint over `ast.Assign`
+whose unparsed value is already a prefix, seeded `{"shop._services"}` / `{"self._services"}`:
+
+```
+clean tree   : identical to SERVICE_LAYER_REACH_TODAY (nine names)  -> True
+alias_sf     -> {'start_workflow_run'}      alias_router -> {'start_workflow_run'}
+direct_sf    -> {'start_workflow_run'}      two-hop alias -> {'start_workflow_run'}
+```
+
+**Probe 4 — whole-module vs reachability-filtered on `storefront.py`.**
+
+```
+reached methods that raise: advance_own_order, join, reset_participant
+unreached methods that raise: (none) — __init__, cached_ids, clear_turn, forget, lookup,
+  set_turn_state, storefront_dir, turn_workers all raise nothing
+whole-module union == STOREFRONT_RAISES_TODAY == live _subclasses(StorefrontError) name set (7)
+```
+
+**Probe 5 — the raise reader's edge shapes.**
+
+```
+bare-return factory  raise self._boom(); def _boom(self): return      -> set()      (silent)
+var-return factory   def _boom(self): e = HTTPException(410); return e -> {'e'}     (loud)
+aliased import       from fastapi import HTTPException as HX; raise HX -> {'HX'}    (loud)
+```
+
+**Probe 6 — the `-m live` correction.**
+
+```
+pytest tests/test_storefront_api.py -m live -q  ->  131 deselected  (zero collected, zero skipped)
+```
+
+**Hypotheses ruled out** (so the next pass does not re-walk them):
+
+- *The widening to `storefront.py` was unnecessary — Pass 12's module-wide walk of
+  `storefront_api.py` was enough.* **No.** N-M2 and N-M3 both survive `769adc3` at 183 passed and
+  both answer `410 '{"detail":"gone"}'` on the wire.
+- *Whole-module reading of `storefront.py` over-approximates in a way that will bite.* **Not today,
+  and less tomorrow.** Every raise in the file is in a route-reached method, and the one documented
+  false-red (`lookup`) is a method S9 deletes.
+- *`769adc3`'s message is right and S8d2 misread the tree.* **No.** The four features are at named
+  lines in that ref's own test file.
+- *The survivals I report might be seed-dependent, like N-K.* **No.** Every one is a set-equality
+  miss, order-independent by construction; N-M2's kill was checked at four seeds including seed 4.
+- *A raise inside `storefront.py`/`storefront_api.py` could still hide from the reader through an
+  alias or an unusual `raise` expression.* **Only one shape, and it cannot raise** — probe 5. Every
+  other unresolvable shape lands a foreign name in the set or trips `_named_class`'s
+  `AssertionError`.
+- *`repository.py`'s direct use from the router is an exercised hole.* **Latent, not exercised** —
+  `list_participants` and `reset_all_participants` raise nothing today.
