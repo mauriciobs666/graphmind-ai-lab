@@ -1,6 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.14 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.15 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+
+2026-09-07 — v1.15: the plan gate's `## Pass 8 (narrow)` (`docs/reviews/small-model-benchmarking.md`, `4cd22b9`) closed in full — one blocker, two majors, none carried — and note **v1.18** (`bbbf18e`) folded in, the plan re-paired to it: **§4 S1e Tables C and G stop colliding on `stats.py:159`**, the line Table C moved to an integer-`permille` primitive while Table G required a family-derived level that is fractional for every `k ≥ 2` — the note **refuses** the exemption the gate offered (§11.2.2(3): what that line would keep is not a different *unit* but the estimator §11.2 rejects, at the one call site in the package whose level is not a literal), so the level becomes an **exact rational** — `percentile(values, *, level: Fraction)` with four `LEVEL_*` constants, `levels: tuple[Fraction, Fraction]` on both bootstraps — the collision is **named on both tables' rows** the way Tables D and E name each other on `stats.py:263`, with the order **fixed** (C before G on that line, neither order being faithful), and **Table G's two residuals are re-derived over `:159`'s post-Table-C spelling**, the pre-C pair having been driven to zero by Table C's edit alone — so DC-12 would have passed on an implementation that never applied Table G, which is the trap §7 rule 5(b) forbids sitting inside the plan that wrote the rule (plan-gate P8-1); **Table C's residual gains the `stats.py` half it never had** — its edit retires `_percentile` at **six** production sites across two files while its residual counted three in one, so the half-application §11.10(3) actually obliges left both bootstraps on the rejected estimator with the number reading zero — plus `-ml` §11.10(3)'s package-wide identity check as the residual no half-application passes (**2 → 1**, a stated target that is not zero, with the surviving line named) and a row for the seventh line its enumerating command returns, DC-12's *already satisfies* partition corrected from three sites to six (P8-3); and **§3.3 (iv)'s "nothing else in the verdict path changes" is replaced by an enumeration over the eleven emission sites of `report.py:606-780`** — the `Family-wise error control` block renders only where a Holm ladder actually ran, with a one-line replacement for each of the two conditions that reach it (a family refused whole, and an all-continuous `k > 1` family taking its correction in the interval), which makes `_decision`'s *no verdict — no paired data* **unreachable** for a refused member rather than relabelled, so no third input state is added and the trigger that would reverse that is stated (P8-2).
 
 2026-09-07 — v1.14: the plan gate's `## Pass 7` (`docs/reviews/small-model-benchmarking.md`, `b6222c6`) closed in full — one blocker, two minors, none carried — and note **v1.17** (`1fbdb6f`) folded in, the plan re-paired to it: **§4 S1e Table F decides `DistributionSummary`'s stored form** — the `"distribution"` tag, its six keys, `support` stored as a two-element array or `null` on both continuous types and read with **no `.get` fallback**, an unrecognised tag **raising** where a third shape silently returned a raw `dict`, and `benchSchemaVersion` **not** bumping with the trigger that would reverse that stated — together with the three shipped sites v1.13's six commands could not see (`results.py:354-359`, `:385`, `:584`), two commands that do see them, a corrected sixth, a third residual and DC-13(f) (plan-gate P7-1); **§7 rule 5(a) gains its attribute-based companion**, because a retype's site list is found by the **attribute the new type lacks** and not by the type's name — the fifth instance of *shipped code correct for its current caller and wrong for a caller this plan commits to adding*, and the first that the mechanism built to catch that class missed; **Table G's residual becomes symmetric** and its new test asserts that **both bounds move outward**, the width claim being satisfied by exactly the half-applied edit the one-sided residual missed — and **Table E, the one other table that retires two literals under one residual, gains the same second residual**, its half-application having left `_widen`'s upper clamp in place and shipped Table E's own defect intact (P7-2, generalised at §7 rule 5(b) and asserted per table at DC-12); **§3.3 (iv) names the site where a refused family's `exploratory` label prints** — `report.py:767`'s family filter, which structurally excludes the members that need it (P7-3); and note **v1.17**'s two plan-side deltas land — Rule 8 now **takes `support`** and derives the clamp inside itself, so §4 S1's loop **forwards `ContinuousMetric.support` and derives nothing** and v1.13's §7 rule 3 raise is closed, while §4 S1e Table E's engine `clamp` keeps its work on the one caller that still states it directly (§3.8.1's exploratory `sep_z` comparison — two callers, two surfaces), and the non-blocking classification is re-rested on `_widen`'s **scale-1.0 identity**, which holds for every metric, rather than on the pack census v1.13 used, which goes stale without anyone editing the sentence resting on it.
 
@@ -522,9 +524,51 @@ Key decisions:
   One consequence, because it is the same question one screen down: the **headline** block
   (`report.py:744-751`) reads the headline member's verdict and falls back to `_NO_PAIRED_DATA` when
   it is absent — false for a refused family, which has paired data and a withheld claim. It prints
-  the same `exploratory — no significance claim` label instead. Nothing else in the verdict path
-  changes: the member's `### <metric>` block still names its resolved kind and still prints its
-  pairing tally.
+  the same `exploratory — no significance claim` label instead.
+
+  **Two more sites in that path print a false claim for a refused family, and v1.14's closing
+  sentence — *nothing else in the verdict path changes* — was wrong about both** *(v1.15, plan-gate
+  P8-2)*. They were found by **enumerating** the path's renderers rather than by reading around the
+  two already named, which is the only form of that sentence worth writing:
+  `awk 'NR>=606 && NR<=780 && (/lines \+=/ || /lines\.append/)' modelbench/report.py` returns
+  **11** emission sites at `5878014`, and **five of them, in four blocks, state something a
+  whole-family refusal falsifies** — `:719` and `:738` (below), `:751` (the headline, named above)
+  and `:770`/`:776` (the Exploratory section, named above). The other six are checked and named so
+  the claim is over a set rather than an impression: `:666` is the **empty-intersection** member's
+  own block, which a refused member does not reach because it *has* paired data; `:690` is the
+  verdicted member's block, not rendered for a member with no verdict; `:756` is the no-headline
+  note, which claims co-equality and never a verdict; `:741` and `:777` emit a blank line; and
+  `:779` is the marginal-overlap footnote, a diagnostic about a line this path did not print.
+
+  **(3) The `Family-wise error control` block renders on `len(family) > 1` and prints
+  "Holm–Bonferroni across the {k} pre-registered verdict metrics, applied" (`report.py:711`, the
+  prose at `:722-724`) — false whenever no ladder ran. Decision: the block renders only where a Holm
+  ladder actually ran, and one line stands in its place where it did not.** *Rejected: rendering it
+  with the prose and the decision cells relabelled.* Every column in that table — McNemar *p*,
+  Holm-adjusted threshold, decision — is a **ladder artefact**, so a relabelled block is three
+  columns of em-dash under a heading that still claims family-wise control, which is exactly the
+  *print one rule, apply another* shape (ii) above refuses one screen up. **Two conditions reach the
+  replacement line and they are different facts, so each gets its own**: a family **refused whole**
+  (this paragraph's case) — no correction was applied and no member was verdicted — and an
+  **all-continuous** family with `k > 1`, which takes its correction **in the interval** and never
+  in a ladder, the case this section's own second paragraph authorises and §4 S1's loop already
+  states (`holm_steps` is not called on a continuous family). The second is not new ground: it is
+  the same shipped line, under the other condition that reaches it, and a fix scoped to the refusal
+  alone would leave it printing the same false sentence for the family Table G exists to serve.
+
+  **(4) `_decision(None, step)` returns `"no verdict — no paired data"` (`report.py:327-330`) —
+  false for a refused member for the reason (1) gives. Decision: `_decision` keeps its two states
+  and gains no third input, because (3) makes the false string *unreachable* rather than
+  relabelled.** `_decision` has exactly **one** call site — `grep -rFn '_decision(' modelbench
+  --include='*.py'` → **2** lines, `report.py:327` the definition and `:739` the call inside the
+  family table's loop — so suppressing the block for a refused family removes the only path on which
+  `v is None` means *withheld*. The `v is None` that survives is `:660-669`'s empty paired
+  intersection, for which the string is true. **The reversal trigger is (3):** if a later revision
+  renders that block for a refused family after all, the third input state — *verdict withheld*,
+  distinct from *no paired data* — comes back with it, and this is the one place that says so.
+
+  With those four named, the rest of the verdict path is unchanged: the member's `### <metric>`
+  block still names its resolved kind and still prints its pairing tally.
 
   *(Naming, settled in v1.3 and aligned with the note. The retired field is the singular
   `primaryMetric`, and it is retired rather than redefined: re-pointing an
@@ -1700,8 +1744,9 @@ checks today.
   **`sep_z` is reported, not verdicted** (`verdictMetrics = ["mrr"]`), and §5.2's cross-model
   comparison of it — a paired bootstrap on per-query `sep_z` differences, wired through
   `paired_cluster_bootstrap` with `clamp=None` because a difference of z-scores is not bounded by 1
-  and the shipped widening clamps it, and with `levels=(2.5, 97.5)` stated at the call site (§4 S1e
-  Table G) — goes **through the engine entry point and not through `-ml` §3.4 Rule 8's
+  and the shipped widening clamps it, and with `levels=(LEVEL_CI95_LO, LEVEL_CI95_HI)` stated at the
+  call site (§4 S1e Table G; the element type is `Fraction` — `-ml` §11.2.2 — v1.15) — goes
+  **through the engine entry point and not through `-ml` §3.4 Rule 8's
   `continuous_verdict()`**, which produces a verdict, and this comparison is not one: a number
   outside `verdictMetrics` prints its interval with no significance claim and takes no family
   correction (§3.3). The comparison is **exploratory and is no stage's done-condition**; §4 S1e
@@ -2353,14 +2398,16 @@ def wilson_interval(successes: int, n: int, *, z: float = _Z_95) -> tuple[float,
 def mcnemar_exact(b: int, c: int) -> float: ...              # conditional binomial, math.comb
 def mover_d_interval(a: int, b: int, c: int, d: int) -> tuple[float, float]: ...   # Newcombe
 def paired_bootstrap(diffs: Sequence[float], *, B: int, seed: int,
-                     levels: tuple[float, float]) -> tuple[float, float]: ...
+                     levels: tuple[Fraction, Fraction]) -> tuple[float, float]: ...
                      # The ENGINE, not an entry point (-ml v1.14 §3.4 Rule 4). Wiring a continuous
                      # verdict straight to it yields a correct interval that silently ignores the
                      # pack's declared design effect. v1.13: `levels` is required with no default —
                      # the two percentiles, hard-coded at 2.5/97.5 today (§4 S1e Table G).
+                     # v1.15: its ELEMENT TYPE is `Fraction`, because a k-member family's level is
+                     # `alpha/(2k)` and no fixed decimal unit expresses that (-ml §11.2.2).
 def paired_cluster_bootstrap(diffs: Sequence[float], *, design_effect: float, B: int, seed: int,
                              clamp: tuple[float, float] | None,
-                             levels: tuple[float, float]) -> tuple[float, float]: ...
+                             levels: tuple[Fraction, Fraction]) -> tuple[float, float]: ...
                      # §3.2d's ENTRY POINT for every CONTINUOUS interval — mrr, sep_z — called with
                      # the pack's declared design_effect (identity widening at 1.00) and the pack's
                      # `sampling.seed` (§3.3), the only thing that field seeds. v1.11: `clamp` is
@@ -2375,6 +2422,13 @@ def conservative_envelope(table: tuple[int, int, int, int], *,
                      # `diffs`, `B` and `seed` are gone from this signature and the
                      # `n != len(diffs)` guard goes with them — the error is unrepresentable.
                      # Its MOVER-D arm passes clamp=(-1.0, 1.0) explicitly (Table E).
+def percentile(values: Iterable[float], *, level: Fraction) -> float: ...
+LEVEL_P50; LEVEL_P95; LEVEL_CI95_LO; LEVEL_CI95_HI          # the whole literal level space
+                     # -ml §11.2/§11.2.1/§11.2.2's: the estimator, the integer rank over the level's
+                     # numerator and denominator, and its three refusals (empty input; a `float`
+                     # level; a level outside (0, 1]). It lands HERE, replacing both shipped
+                     # `_percentile` copies, by §4 S1e Table C. The four CONSTANT NAMES are this
+                     # plan's, adopted from the note's recommendation; nothing else here is.
 # PairedOutcomes, ResolvingPower, resolving_power(), min_detectable_difference(),
 # observable_floor(), verdict(), cluster_bootstrap(), design_effect(), effective_n(),
 # and — v1.13 — continuous_verdict() with its ContinuousVerdict return:
@@ -2808,33 +2862,63 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    contributes to a figure. The test captures the values each aggregate is handed, the way DC-5(c)
    captures the unit-id argument, rather than inferring it from the output.
 
-12. **Every residual §4 S1e states is re-run and is zero** *(v1.10, §7 rule 5; reworded at v1.11 to
-   assert what a residual actually proves — plan-gate P5-2; the Table B and Table F rows are
-   v1.12's, the Table G row v1.13's — plan-gate P6-2, P6-5, P6-1)*. Each of §4 S1e's **seven** tables
-   re-runs its enumerating commands and asserts its stated residual: zero for
+12. **Every residual §4 S1e states is re-run and hits its stated target** *(v1.10, §7 rule 5;
+   reworded at v1.11 to assert what a residual actually proves — plan-gate P5-2; the Table B and
+   Table F rows are v1.12's, the Table G row v1.13's — plan-gate P6-2, P6-5, P6-1; **the target is
+   zero for every one of them except Table C's third, whose stated target is 1 — v1.15**, which is
+   why this condition is worded over a target rather than over zero)*. Each of §4 S1e's **seven**
+   tables re-runs its enumerating commands and asserts its stated residual: zero for
    `lmsCliCommit` and `sizeBytes` (A); zero for `FORBIDDEN_BY_ARM_KIND`, zero for
    `frozenset(FORBIDDEN`, zero for `REQUIRED_BY_SCHEMA[1]["model"]` and zero for the
    `REQUIRED_BY_SCHEMA[1]` **key-set assertion** the third profile makes unwritable (B); zero for
-   `_percentile` in `modelbench/results.py` (C); zero for
+   `_percentile` in `modelbench/results.py`, **zero for `_percentile` in `modelbench/stats.py`, and
+   one — not zero — for the package-wide percentile-definition check `-ml` §11.10(3) states** (C);
+   zero for
    `bootstrap_seed` and for the `cluster-bootstrap` token (D); zero for `max(-1.0, point` **and for
    `min(1.0, point`** (E); zero
    for each of the two bare-`float` separation annotations **and for `_decode`'s
    `{"binary", "continuous"}` tag literal** (F); zero for
-   `_percentile(means, 2.5)` **and for `_percentile(means, 97.5)`** (G). **All sixteen are stated on their own
+   **`percentile(means, level=LEVEL_CI95_LO)` and for `percentile(means, level=LEVEL_CI95_HI)`** (G).
+   **That is eighteen — A 2, B 4, C 3, D 2, E 2, F 3, G 2 — each stated on its own
    table as a command with a count** *(v1.12 wrote out the five that were prose — plan-gate P6-5's
-   lesson applied to every table rather than only to the row it was raised against)*, and each was re-run against `5878014` — twelve at v1.12, Table G's at v1.13, the three new ones at v1.14 — and shown
-   both non-zero now **and** zero after a faithful edit — the second half is the check v1.10 and
-   v1.11 each shipped one residual without (plan-gate P5-2's rejected residual, then P6-2). **A
-   third property joins them at v1.14, and it is a property of a table's residual *set*:** where a
+   lesson applied to every table rather than only to the row it was raised against)*, and each was re-run against `5878014` — twelve at v1.12, Table G's at v1.13, three more at v1.14,
+   and **the sixteen that are stated over the shipped tree again at v1.15**, several of them having
+   changed spelling in that revision — and shown
+   both non-zero now **and** at its target after a faithful edit — the second half is the check v1.10 and
+   v1.11 each shipped one residual without (plan-gate P5-2's rejected residual, then P6-2).
+   **Table G's two are the exception, and the exception is stated on its own table**: their *before*
+   is the intermediate state after Table C, not the shipped tree — both return **0** against
+   `5878014`, measured — so they are re-run at the **end** of the round, when both tables have
+   landed, and it is the fixed C-then-G order that makes their *before* reachable at all
+   *(v1.15, plan-gate P8-1(d))*.
+
+   **A third property joins them at v1.14, and it is a property of a table's residual *set*:** where a
    table retires more than one literal, its residuals distinguish them, so no *half*-applied edit of
-   that table can pass (§7 rule 5(b)). **All seven satisfy it and the seven partition three ways:**
+   that table can pass (§7 rule 5(b)). **All seven satisfy it. The sweep is re-run per table at each
+   revision** *(v1.15: two of the last three revisions shipped a table that broke the property the
+   same revision wrote, so this is a standing pass and not a reviewer's catch)*, **and the seven
+   partition three ways:**
    **E** (the two `_widen` bounds) and **G** (the two quantile levels) each retired two literals
-   under one residual and each gained its second at v1.14; **C**'s single command counts all three
-   of its `_percentile` sites at once, which is the same guarantee in one line; and **A**, **B**,
+   under one residual and each gained its second at v1.14; **C** gained its second and third at
+   v1.15 — its edit retires `_percentile` at **six** production sites across **two** files and its
+   residual counted three in one of them, so the `stats.py` half was unmeasured and its survival
+   silent (plan-gate P8-3; v1.14 recorded this table as *already satisfying* the property on a count
+   of three where there are six, which is what a hand-written count beside the invariant it
+   instantiates does); and **A**, **B**,
    **D** and **F** already state one residual per retired token, which the enumeration above shows
-   on its face. *(Plan-gate P7-2 found it in Table G — wiring one level and
+   on its face. *(**A** was re-derived rather than inherited at v1.15, because it is the one of the
+   four whose answer is not on the enumeration's face: its residency-**element** row retires two
+   keys, `modelKey` and `sizeBytes`, and states a residual over the second alone. The first keeps
+   its meaning everywhere else in the fingerprint — `grep -rFn modelKey modelbench tests
+   --include='*.py'` → **90** lines — so a residual over it would fail on a faithful edit, which is
+   the trap rule 5(b) forbids. Rule 5(b)'s named alternative applies and the row already names it:
+   **DC-1's element-shape assertion**, which refuses an element carrying *either* retired key, so
+   the half-application that swaps one and keeps the other fails there rather than here.)*
+   *(Plan-gate P7-2 found it in Table G — wiring one level and
    leaving the other passed the check and printed an uncorrected bound; Table E had the identical
-   shape, and its half-application would have shipped that table's own defect intact.)*
+   shape, and its half-application would have shipped that table's own defect intact. Plan-gate
+   P8-1 found the **cross**-table form: each of C's and G's residual sets was sound read alone, and
+   C's edit alone drove both of G's to zero.)*
 
    **What that proves, and what it does not.** A residual that is **not** zero is a site the table
    missed — the check is sound in that direction and is the whole reason the tables carry commands.
@@ -2871,7 +2955,17 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    `exploratory — no significance claim`, **both arms still render**, and the
    `INVALID RESULTS EXCLUDED` block is empty — the last two being what distinguish this from DC-10's
    exclusion and what fail if an implementer reaches for DC-10's mechanism (§3.3 (iv), which also
-   names the two sites the label prints at and is where that decision lives — v1.14).
+   names the **four** sites the verdict path renders this at and is where those decisions live —
+   v1.14, extended at v1.15). **Two more assertions, one per site §3.3 (iv)(3) and (4) add**
+   *(v1.15, plan-gate P8-2)*, and both are on an **absence**, which is what a test that only checks
+   the lines that should render cannot see: the rendered report contains **no
+   `### Family-wise error control` heading and no `Holm–Bonferroni` substring**, and it contains the
+   one-line replacement naming the refusal; and **no decision cell anywhere in it reads
+   *no verdict — no paired data***, which is the string that becomes unreachable rather than
+   relabelled. **A second fixture covers the other condition that reaches the same shipped line**: an
+   **all-continuous `k = 2`** family renders the *correction taken in the interval* replacement and
+   likewise no ladder — the case a fix scoped to the mixed family alone would have left printing
+   `applied`.
    **(f)** *(v1.14, plan-gate P7-1(d))* The stored form §4 S1e Table F decides is asserted, all four
    offline: a `DistributionSummary` survives `to_dict`/`from_dict` **as a `DistributionSummary`**
    — the type asserted and not merely its fields, which is the assertion that fails on `_decode`'s
@@ -2912,7 +3006,7 @@ records exist — the one thing this section's deadline exists to prevent. Its r
 S1's `compare_report` block and is S1-local too; what genuinely belongs to S3 is only the first run
 that exercises them. **Table G is v1.13's**, on the same argument and more cheaply: it changes two
 `stats.py` signatures and the test call sites that break under them, touches no stored record, and
-retires the two literals that make `-ml` v1.16 §3.4 Rule 8's family correction unreachable.
+retires the two fixed levels that make `-ml` v1.16 §3.4 Rule 8's family correction unreachable.
 
 **Six of the seven touch nothing S2 constructs. Table F is the exception, and it is why the S1 fix
 round comes *before* S2 rather than beside it** *(v1.14, plan-gate P7-1(e); v1.12 wrote "nothing S2
@@ -2921,6 +3015,11 @@ revision)*. S2's runner constructs the `ItemResult` Table F changes, and every S
 a `ContinuousMetric.support` that is **required with no default** — so an S2 written against the
 shipped shapes is rework of exactly the kind this section's deadline exists to prevent. The order
 is therefore fixed: Tables A–G with DC-11 and DC-13, **then** S2.
+
+**And within the round one pair is ordered** *(v1.15, plan-gate P8-1)*. Tables C and G both edit
+`stats.py:159`, and unlike Tables D and E on `stats.py:263` only one order is faithful: **C, then
+G**. The collision is named on both tables' rows and the reason is on Table C's, which is the one
+that moves first.
 
 **No table now carries a stage gate, and Table E's is withdrawn** *(v1.12, `-ml` v1.15 §3.2d)*.
 v1.11 gated §4 S3 done-condition 2 on Table E; the note reverses it — `separationZ` is **reported
@@ -3059,19 +3158,60 @@ Enumerate: `grep -rFn _percentile modelbench tests --include='*.py'` → **7 lin
 
 | Site | Edit |
 |---|---|
-| `modelbench/stats.py:296` | replaced by the note's public `percentile(values, *, permille)` — Hyndman–Fan type 1, integer-ceiling rank, sorting a copy of its input, raising on empty. The estimator, the rank expression and the empty-input rule are `-ml` §11.2/§11.2.1's and are not restated here |
+| `modelbench/stats.py:296` | replaced by the note's public **`percentile(values, *, level: Fraction)`** *(signature corrected at v1.15 — `-ml` v1.18 §11.2.2 replaces v1.17's `permille: int`)* — Hyndman–Fan type 1, the integer rank taken over the level's numerator and denominator, sorting a copy of its input, and raising on empty input, on a **`float` level** and on a level outside `(0, 1]`. The four module constants **`LEVEL_P50`, `LEVEL_P95`, `LEVEL_CI95_LO`, `LEVEL_CI95_HI`** land beside it and are the whole literal level space. The estimator, the rank expression, the level's type and all three refusals are `-ml` §11.2/§11.2.1/§11.2.2's and are not restated here; **the four constant names are this plan's**, adopted from the note's recommendation because naming is the architect's, as `DecidedBy`'s tokens were. **Its acceptance tests are the note's and land with this table, at S1** *(v1.15)*: `-ml` §11.10 items **1** (the rank fixtures), **2a**/**2b** (the two bin-edge guards, whose scopes the note states) and **10** (empty input plus the level's three refusals); item **3** is this table's third residual. §11.10's other items are `latency_summary` and rendering behaviour and are S2's, per §5's stage table |
 | `modelbench/results.py:573` | **deleted.** `results.py` imports `stats.percentile`; `-ml` §11.10(3) asserts *identity*, not equal behaviour, so the module may keep no private helper |
 | `results.py:599-600` | `_index_row` currently computes p50/p95 inline from `run.items`. They come from the run's own `LatencyBlock` instead (§4 S2), which is where `-ml` §11's two floors are applied — a percentile computed here bypasses both |
-| `stats.py:159`, `:292` | call sites move to the new signature. Both are resample call sites that **survive** the v1.11 ruling — `:159` is §3.2d's continuous `paired_bootstrap` and `:292` is Rule 6's `cluster_bootstrap`, and only the *paired binary* path stops resampling (§3.9 point 1, Table D) |
+| `stats.py:292` | `cluster_bootstrap`'s pair moves to the new signature and **stays literal**: `percentile(rates, level=LEVEL_CI95_LO)` and `percentile(rates, level=LEVEL_CI95_HI)`. Rule 6's one-level resample of one arm's own rate is on no verdict path, so no `k` reaches it — Table G's command 1 states the same non-site from the other side. It survives the v1.11 ruling: only the *paired binary* path stops resampling (§3.9 point 1, Table D) |
+| `stats.py:159` — **and Table G edits this same line** *(v1.15, plan-gate P8-1)* | moves to the new signature as `percentile(means, level=LEVEL_CI95_LO)` and `percentile(means, level=LEVEL_CI95_HI)`. **That post-edit spelling is prescribed rather than left open, because Table G's two residuals are stated over it** and a residual over a spelling the implementer may vary is a trap. **Table G then replaces those two levels with its own `levels[0]` / `levels[1]` on this line**, so the line is edited twice in one round. **The order is fixed — this table first, then Table G — and unlike Tables D and E on `stats.py:263`, neither order is faithful here:** Table G first would hand the shipped `_percentile(ordered, pct: float)` a `Fraction` level (`Fraction(1, 40)` is `0.025`, not `2.5`), which is a unit error one substitution away from a plausible number. `:159` is §3.2d's continuous `paired_bootstrap` and survives the v1.11 ruling for the same reason `:292` does |
+| `tests/test_results.py:507` | the comment recording R-13 as open and `_percentile` as having **two copies**: both halves are false after this edit, and it is rewritten to name `stats.percentile` as the one implementation. It is a row because the enumerating command returns the line, and a returned line with no row is how a site is forgotten — §7 rule 5's own diagnosis, applied to the seventh line rather than only to the six that execute |
 
 Both shipped copies are `int(round(p/100·(X−1)))`, the estimator `-ml` §11.2 explicitly **rejects**
 — `round` is half-to-even, so the tie-break direction alternates with the sample size. Neither
 appeared in v1.9's edit table.
-**Residual after the edit:** `grep -rFc _percentile modelbench/results.py` → **3 → 0**
-*(written out at v1.12, same lesson)*. All three go: the definition at `:573` is deleted, and
-`:599`/`:600` take p50/p95 from the run's own `LatencyBlock`. `results.py` then imports the note's
-**public** `stats.percentile`, which carries no leading underscore — so zero is reachable by the
-prescribed edit and is not an accident of naming.
+
+**This table is not scoped away from `:159`, and the refusal is the note's** *(v1.15, plan-gate
+P8-1(b)/(c); `-ml` v1.18 §11.2.2(3), §11.9 item 6(a))*. The gate's cheapest resolution was to exempt
+`:159` — the one percentile call in the package whose level is **family-dependent** — from this
+table and leave it to Table G, on the reading that `-ml` §11.10(3) obliged only
+`modelbench.results`. The reading of the v1.17 wording was right and the exemption is **refused
+anyway**, on a measured cost rather than on scope: what that line would keep is not a different
+*unit* but the **estimator** §11.2 rejects, at the only call site in the package whose level is not
+a literal, on the one path where §3.2d rules the interval **is** the test. §11.10(3) is package-wide
+as of v1.18, and its command is this table's third residual. *(The question was raised there rather
+than answered here, under §7 rule 3: the plan could state an exemption on its own authority, but it
+could not change the estimator's signature, and it is the signature that moved.)*
+
+**Residual after the edit — three commands and one stated absence, the first two commands being
+the two halves of one token** *(the
+`stats.py` half and the identity check are v1.15's — plan-gate P8-3 and `-ml` §11.9 item 6(e); the
+first was written out at v1.12)*:
+
+- `grep -rFc _percentile modelbench/results.py` → **3 → 0**. All three go: the definition at `:573`
+  is deleted, and `:599`/`:600` take p50/p95 from the run's own `LatencyBlock`. `results.py` then
+  imports the note's **public** `stats.percentile`, which carries no leading underscore — so zero is
+  reachable by the prescribed edit and is not an accident of naming.
+- `grep -rFc _percentile modelbench/stats.py` → **3 → 0** — the definition at `:296` and the two
+  bootstrap call sites at `:159`/`:292`, by the same argument: the replacement is the **public**
+  name. **This half had no residual until v1.15 and its absence was the finding**: the half
+  §11.10(3) actually obliged is the `results.py` one, so an implementer could do exactly that half,
+  leave both bootstraps on the rejected estimator, and read a residual of zero.
+- `grep -rEn 'def [A-Za-z_]*(percentile|quantile)' modelbench tests --include='*.py'` → **2 → 1** —
+  `-ml` §11.10(3)'s package-wide check, and **its stated target is 1, not zero** (§7 rule 5(b)): the
+  surviving line is `stats.py`'s public `percentile`, the only percentile or quantile definition the
+  package may hold. The two it returns today are `stats.py:296` and `results.py:573`, both the
+  rejected estimator. It is the residual **no half-application passes**, because it is stated over
+  the estimator rather than over one module's private helper — which is the shape of review M27's
+  defect.
+- **The seventh line gets a row and deliberately no residual, and rule 5(b) requires that be said.**
+  A command over `_percentile` scoped to `tests/` would fail on a faithful edit that names the
+  retired helper while recording its retirement — a comment is prose, and a residual that can fail
+  on a correct edit is a trap rather than a check. What stands in its place is the site row.
+
+**Why three commands and not one:** `3 + 3 + 1 = 7`, which is this table's enumerating command's own
+count, so every line it returns has a row; the two file-scoped residuals **partition** the six
+production sites, so a half-application is non-zero on the half it skipped and the number says which
+half; and the identity check is over a different construct entirely, so it survives any renaming of
+the private helper that the first two would miss.
 
 **Table D — the seed retires from the paired *binary* path** (`-ml` v1.11 §3.4 Rule 4).
 Enumerate: `grep -rFn bootstrap_seed modelbench tests --include='*.py'` → **29 lines**
@@ -3084,7 +3224,7 @@ Enumerate: `grep -rFn bootstrap_seed modelbench tests --include='*.py'` → **29
 |---|---|
 | `stats.py` — `verdict(..., bootstrap_seed=…)` | parameter removed, with the raise that demanded one on the clustered path |
 | `stats.py` — `conservative_envelope(diffs, table, *, design_effect, B, seed)` | collapses to `conservative_envelope(table, *, design_effect)`; the `n != len(diffs)` guard goes with the argument that made its error representable |
-| `stats.py` — the closed form itself | the exact multinomial quantile at `permille` 25 / 975 in integer arithmetic. Pinned in full by `-ml` §3.4 Rule 4 and **not restated here**; its five acceptance tests are the note's too |
+| `stats.py` — the closed form itself | the exact multinomial quantile at **`LEVEL_CI95_LO` / `LEVEL_CI95_HI`** in integer arithmetic *(v1.15: the two levels are the same numbers and only their representation moved, with the estimator's — `-ml` v1.18 §11.2.2's closing paragraph, whose atom selector stays one exact integer comparison. Swept here because this row named the retired unit; the paired **binary** path takes its `k` correction in the Holm ladder, so no family level reaches it)*. Pinned in full by `-ml` §3.4 Rule 4 and **not restated here**; its five acceptance tests are the note's too |
 | `stats.py:62` — `DecidedBy` | `"cluster-bootstrap"` → **`"conservative-envelope"`**. The note leaves this token to the architect and recommends renaming; **renamed**, because a machine token naming a resample that no longer runs is the same defect as the prose that named one arm of an envelope, and it is free while no stored record carries it. *(The same literal gains a **third** member, `"paired-bootstrap"`, for §4 S1e Table F's continuous path. Both edits land on this line and **this row owns it** — Table F cites this row rather than duplicating it, so one line has one owner — v1.12.)* |
 | `report.py:701` | the `- decided by: … (seed N, from the pack's sampling.seed)` parenthetical goes; the note publishes what replaces it (which arm bound each bound) and this plan does not restate the string |
 | `report.py:687` | `bootstrap_seed=pack.seed` goes. **`PackRef.seed` stays** — its consumer moves to `-ml` §3.2d's continuous bootstrap (§3.3) |
@@ -3351,7 +3491,7 @@ percentiles that section fixes and this one does not restate (§3.3 (iv)). Rule 
 `continuous_verdict()` computes those two levels from
 `alpha_family` and `len(family)` and has to pass them down; with the levels fixed one function below
 it, a `k = 3` family renders at 2.5/97.5 and the correction silently fails to happen. At `k = 1` the
-note's rule returns exactly the two literals the code hard-codes, so **nothing renders wrongly today
+note's rule returns exactly the two levels the code hard-codes, so **nothing renders wrongly today
 and nothing will until a pack declares a second continuous verdict metric** — which is what makes
 this invisible rather than urgent, and free rather than deferred. (No α is named in this table, for
 §4 S1's reason: how many there are and which figure each governs is the note's.)
@@ -3364,6 +3504,14 @@ share no token** (all re-run against `5878014`, working directory `model-bench/`
 | 1 | `grep -rFn 97.5 modelbench tests --include='*.py'` | **2** | `modelbench/stats.py` 2 (`:159`, `:292`) |
 | 2 | `grep -rFn 'paired_bootstrap(' modelbench tests --include='*.py'` | **5** | `modelbench/stats.py` 2, `tests/test_stats.py` 3 |
 | 3 | `grep -rFn 'paired_cluster_bootstrap(' modelbench tests --include='*.py'` | **5** | `modelbench/stats.py` 2, `tests/test_stats.py` 3 |
+
+**Command 1 enumerates against the shipped tree and Table C retires the spelling it matches**
+*(v1.15, plan-gate P8-1)*. `97.5` identifies this table's site at `5878014`; after Table C that line
+reads `percentile(means, level=LEVEL_CI95_HI)` and carries no such literal, so **after Table C the
+site is identified by the constant, not by the number** — which is also why this table's residuals
+are stated over the post-Table-C spelling rather than over the pre-Table-C one (below). The
+enumeration itself is unaffected: the two tables edit the same one line and Table C's `:159` row
+prescribes the spelling this one then rewrites.
 
 **Command 1's second line is a non-site, and it is named here so nobody re-checks it** — Table E's
 lesson, that a command's output is a superset of the sites and never the site list. `stats.py:292` is
@@ -3380,21 +3528,26 @@ reaches `paired_bootstrap`'s own callers, which neither `_widen`'s name nor
 fourth command.** Both functions are module-level names that every caller must spell, and the three
 commands above return every line in `modelbench/` and `tests/` that spells either — `test_stats.py`'s
 two `from modelbench.stats import` lines carry the names without a call and need no edit. The only
-caller that will pass a value other than `(2.5, 97.5)` does not exist yet: it is inside Rule 8's
+caller that will pass a value other than the fixed `(LEVEL_CI95_LO, LEVEL_CI95_HI)` pair does not
+exist yet: it is inside Rule 8's
 `continuous_verdict()`, which this plan does not write, and the required-with-no-default parameter is
 what makes it impossible to write without deciding the levels.
 
 | Site | Edit |
 |---|---|
-| `stats.py:148` — `paired_bootstrap(diffs, *, B, seed)` | gains `levels: tuple[float, float]`, keyword-only and **required with no default**, replacing the two literals at `:159` |
-| `stats.py:162` — `paired_cluster_bootstrap(diffs, *, design_effect, B, seed)` | gains the same keyword-only `levels`, required with no default, and forwards it at `:187`. This is the surface Rule 8's producer calls, so it is where the family-adjusted levels arrive. **Table E adds `clamp` to this same signature**: one line, two tables, and neither owns it alone |
-| `stats.py:263` — `conservative_envelope`'s resample call | passes `levels=(2.5, 97.5)` explicitly — the paired *binary* path takes its `k` correction in the Holm ladder and never in the interval. **Table D retires this call site**, so if Table D lands first the site is already gone and if this table lands first it passes the pair until it does; either order is faithful and neither leaves a site unedited |
-| `test_stats.py:890`, `:891` — `test_paired_bootstrap_is_seeded_and_reproducible` | pass `levels=(2.5, 97.5)`; the levels are inert to a determinism assertion, so no assertion in that test changes |
+| `stats.py:148` — `paired_bootstrap(diffs, *, B, seed)` | gains **`levels: tuple[Fraction, Fraction]`**, keyword-only and **required with no default**, replacing the two constant levels Table C's edit leaves at `:159`. *(Element type corrected at v1.15 from `tuple[float, float]` — `-ml` v1.18 §11.2.2: a `k`-member family's level is `alpha/(2k)`, which no fixed decimal unit expresses.)* **And `levels[0] >= levels[1]` raises** — the transposed pair is the one error that otherwise returns a plausible **inverted** interval that no other check sees (`-ml` §11.2.2), and it is a refusal this table could not have had while the pair was two literals |
+| `stats.py:159` — **Table C edits this same line first** *(v1.15, plan-gate P8-1)* | the two levels Table C's row prescribes there — `level=LEVEL_CI95_LO` and `level=LEVEL_CI95_HI` — become `level=levels[0]` and `level=levels[1]`. **The collision is named on both rows and the order is fixed, C then G**, for the reason Table C's row gives: unlike Tables D and E on `stats.py:263`, neither order is faithful here. This is the line the whole table exists for — the one percentile call in the package whose level is not a literal |
+| `stats.py:162` — `paired_cluster_bootstrap(diffs, *, design_effect, B, seed)` | gains the same keyword-only `levels`, same element type, required with no default, and forwards it at `:187`. This is the surface Rule 8's producer calls, so it is where the family-adjusted levels arrive. **Table E adds `clamp` to this same signature**: one line, two tables, and neither owns it alone |
+| `stats.py:263` — `conservative_envelope`'s resample call | passes `levels=(LEVEL_CI95_LO, LEVEL_CI95_HI)` explicitly — the paired *binary* path takes its `k` correction in the Holm ladder and never in the interval. **Table D retires this call site**, so if Table D lands first the site is already gone and if this table lands first it passes the pair until it does; either order is faithful and neither leaves a site unedited |
+| `test_stats.py:890`, `:891` — `test_paired_bootstrap_is_seeded_and_reproducible` | pass `levels=(LEVEL_CI95_LO, LEVEL_CI95_HI)`; the levels are inert to a determinism assertion, so no assertion in that test changes |
 | `test_stats.py:1321` — the unwidened baseline inside the √DEFF test | passes the same pair. It is compared against `:1323`'s widened interval, and the comparison is only meaningful if both are taken at the same levels |
-| `test_stats.py:1270`, `:1323`, `:1330` | pass `levels=(2.5, 97.5)`; each stops compiling the moment the parameter is required, which is the point of requiring it. `:1323`'s √DEFF exactness assertions hold verbatim — Table D rules that test survives — and `:1330`'s raise precedes any resampling, so the argument is needed only to make the call constructible |
-| `test_stats.py` — **one new test** | over one fixed `diffs` of distinct floats and one fixed seed, `paired_bootstrap` at the pair `-ml` §3.3's rule yields for a **`k = 2`** family returns an interval **both of whose bounds have moved outward** from the pair the code hard-codes today — the lower strictly below and the upper strictly above, **asserted as two assertions and never as one about the width** *(v1.14, plan-gate P7-2)*. A width assertion passes on the half-applied edit that wires the lower level and leaves `97.5`, whose interval is genuinely wider while its upper bound takes no family correction at all — the printing direction, silently. Both strict inequalities are checkable when the test is written, `diffs`, `B` and the seed all being fixed, so the fixture is chosen to make them hold rather than asserted in hope. The two levels are computed from the note's rule in the test, never transcribed |
+| `test_stats.py:1270`, `:1323`, `:1330` | pass `levels=(LEVEL_CI95_LO, LEVEL_CI95_HI)`; each stops compiling the moment the parameter is required, which is the point of requiring it. `:1323`'s √DEFF exactness assertions hold verbatim — Table D rules that test survives — and `:1330`'s raise precedes any resampling, so the argument is needed only to make the call constructible |
+| `test_stats.py` — **one new test** | over one fixed `diffs` of distinct floats and one fixed seed, `paired_bootstrap` at the pair `-ml` §3.3's rule yields for a **`k = 2`** family — `(Fraction(1, 80), Fraction(79, 80))`, a pair the retired integer unit could not express and this one can *(v1.15, `-ml` §11.9 item 6(c))* — returns an interval **both of whose bounds have moved outward** from the pair the code takes today, the lower strictly below and the upper strictly above, **asserted as two assertions and never as one about the width** *(v1.14, plan-gate P7-2)*. A width assertion passes on the half-applied edit that wires the lower level and leaves the upper one on `LEVEL_CI95_HI`, whose interval is genuinely wider while its upper bound takes no family correction at all — the printing direction, silently. Both strict inequalities are checkable **before** the test is written — `diffs`, `B` and the seed all being fixed, and the note having measured the rank movement at `B = 10 000` — so the fixture is chosen to make them hold rather than asserted in hope. The two levels are computed from the note's rule in the test, never transcribed |
+| `test_stats.py` — **one more new test** *(v1.15, `-ml` §11.10(10))* | `paired_bootstrap` with `levels[0] >= levels[1]` **raises**, one line, at the same boundary as the estimator's own three refusals |
 
-**Why required rather than defaulted to `(2.5, 97.5)`.** A default that is right at `k = 1` and
+**Why required rather than defaulted to `(LEVEL_CI95_LO, LEVEL_CI95_HI)`.** *(Nothing in note
+v1.18 reopens this argument, which is unaffected by the element type — §11.9 item 6(f); only the
+spelling of the pair moved, at v1.15.)* A default that is right at `k = 1` and
 silently wrong at `k > 1` is the shape this plan already refuses for `designEffect`,
 `BinaryMetric.unit`, `sampling.seed` and Table E's `clamp` — and here it is worse than usual, because
 the wrong value is the *conventional* one and prints a plausible interval beside a family that was
@@ -3409,20 +3562,39 @@ family rendered at 2.5/97.5 unrepresentable rather than guarded. The one place `
 levels itself is the **exploratory** `sep_z` comparison (§3.8.1), which is not a verdict, does not go
 through the producer, and takes no family correction.
 
-**Residual after the edit — two, one per retired literal** *(the second is v1.14's, plan-gate
-P7-2: this edit retires **two** literals and v1.13 stated a residual over one, so a half-applied
-edit passed it)*:
+**Residual after the edit — two, one per retired level, and both are re-derived over `:159`'s
+post-Table-C spelling** *(v1.15, plan-gate P8-1(d); `-ml` §11.9 item 6(d). The symmetry is v1.14's,
+plan-gate P7-2: this edit retires **two** levels and v1.13 stated a residual over one, so a
+half-applied edit passed it)*:
 
-- `grep -rFn '_percentile(means, 2.5)' modelbench --include='*.py'` → **1 → 0**
-- `grep -rFn '_percentile(means, 97.5)' modelbench --include='*.py'` → **1 → 0**
+- `grep -rFn 'percentile(means, level=LEVEL_CI95_LO)' modelbench --include='*.py'` → **1 → 0**
+- `grep -rFn 'percentile(means, level=LEVEL_CI95_HI)' modelbench --include='*.py'` → **1 → 0**
 
-Both match `stats.py:159` today — the one line that carries both literals — and both are
-second-form, both functions surviving so neither has a zero of its own (§7 rule 5(b)). **Stated
-symmetrically because the edit is symmetric:** either literal left behind is a bound taking no
-family correction, and the pair of residuals is what makes each half-application non-zero on the
-half it skipped. Each is written over `means` rather than over the bare number so that
-`cluster_bootstrap`'s `_percentile(rates, 2.5)` / `(rates, 97.5)` at `:292`, which this edit does
-not touch, cannot hold either above zero on a faithful implementation.
+**Read the arrow as *after Table C, before this table* → *after this table*, and the reason is the
+finding.** Both commands return **0** against the shipped tree today, because the spelling they
+match does not exist until Table C lands; the pair v1.14 stated — over `_percentile(means, 2.5)` and
+`_percentile(means, 97.5)`, **1** each at `5878014`, re-run and reproduced this session — was
+meaningful only against the pre-Table-C form and is **driven to zero by Table C's edit alone**, so
+DC-12 would have passed on an implementation that never applied this table. That is precisely the
+half-application §7 rule 5(b) forbids, and it was invisible because it is a *cross*-table one: each
+table's residuals were sound read alone. Re-scoping could not fix it — the retired token is gone
+either way — so the pair is **re-derived** over the surviving spelling instead, which is why Table
+C's `:159` row prescribes that spelling and why the order is fixed. **What guarantees the
+intermediate state exists** is that fixed order plus the enumerating command's own count: `:159` is
+one line, both tables name it, and DC-12 re-runs these two at the **end** of the round, when both
+tables have landed.
+
+Both are second-form, both functions surviving so neither has a zero of its own (§7 rule 5(b)).
+**Stated symmetrically because the edit is symmetric:** either level left behind is a bound taking
+no family correction, and the pair is what makes each half-application non-zero on the half it
+skipped. Each is written over `means` rather than over the constant alone so that
+`cluster_bootstrap`'s `percentile(rates, level=LEVEL_CI95_LO)` / `(rates, level=LEVEL_CI95_HI)` at
+`:292` — which Table C rewrites and this table does not touch — cannot hold either above zero on a
+faithful implementation. **What stands behind them, for the parameter this table *adds*, is the type
+system** (§7 rule 5's adding half): `levels` required with no default breaks **eight** call sites
+loudly — commands 2 and 3 return ten lines and two of them are the `def` lines — so the parameter
+cannot be skipped, only left **unused** at `:159`, which is exactly what these two residuals
+measure.
 
 ### S2 — Packs, LM Studio adapter, host info, runner
 
@@ -3982,12 +4154,15 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
     `DistributionSummary` row **without reading `mean`**, which the shipped `else` branch does.
     **And the family half** *(v1.13)*: over a fixture declaring a **mixed** `verdictMetrics` family,
     no member is verdicted, each is named with its kind, every member's number still prints as
-    exploratory — **at the two sites §3.3 (iv) names**, the widened Exploratory filter and the
-    headline block, so the test is written against the plan rather than against whatever the
+    exploratory — **at the four sites §3.3 (iv) names**: the widened Exploratory filter, the
+    headline block, the suppressed `Family-wise error control` block and the decision cell that
+    goes with it *(v1.15)*, so the test is written against the plan rather than against whatever the
     implementer chose (v1.14) — both arms render, and the `INVALID RESULTS EXCLUDED` block is
     **empty** — the two
     negative assertions being the ones that fail if the refusal is built as a DC-10 exclusion
-    (§3.3 (iv), S1 done-condition 13(e)).
+    (§3.3 (iv), S1 done-condition 13(e)). **Two of the four are asserted on an absence** and a
+    second fixture carries the **all-continuous `k = 2`** family, which reaches the same shipped
+    line by the other condition (S1 done-condition 13(e) states both — v1.15).
     **And the stored half** *(v1.14)*: S1 done-condition 13(f)'s four assertions — a
     `DistributionSummary` round-tripping **as its own type**, an unknown `"type"` tag raising rather
     than decoding to a `dict`, `support` round-tripping on both continuous types with an absent key
@@ -4388,7 +4563,7 @@ particular **§3.4, the binding rules that are `stats.py`'s contract** (their nu
 too — v1.7 stops restating it), and **§7.2's verbatim resolving-power string**, which is a test
 target.
 
-**Version pairing:** this plan **v1.14** is aligned to the note **v1.17** (`1fbdb6f`). *(v1.10 paired
+**Version pairing:** this plan **v1.15** is aligned to the note **v1.18** (`bbbf18e`). *(v1.10 paired
 itself to v1.12 and was one revision stale by the time the gate read it — plan-gate P5-5. The pairing
 is a claim about a named commit and it is re-checked in the revision that makes it.)* The two note
 revisions v1.10 folded in are separable and are recorded first: **v1.11** makes §3.4 Rule 4's
@@ -4489,7 +4664,27 @@ load-bearing. §4 S1e Table E is untouched by the ruling and its engine `clamp` 
 on the one caller that states it directly: §3.8.1's exploratory `sep_z` comparison, which has no
 metric aggregate to ask. *(v1.12's two raises were closed by note v1.16: the producer's signature is
 Rule 8, and §3.3's word "validate" moved to `compare_report` pass 1 — the note's sentence moved, not
-this plan's. With v1.13's closed here, **no §7 rule 3 raise is open**.)*
+this plan's. With v1.13's closed here, **no §7 rule 3 raise is open** — plan-gate P8-1 opened one again at
+Pass 8 and note v1.18 closed it, next paragraph.)*
+
+**Note v1.18, folded in at plan v1.15 — the §7 rule 3 raise plan-gate P8-1 opened, ruled, and one
+scope corrected** *(the raise was opened by the gate rather than by this plan, and it is the
+mechanism working: the plan could state an exemption on its own authority and could not change the
+estimator's signature)*. **v1.18 rules the level an exact rational** — `percentile(values, *, level:
+Fraction)`, `levels: tuple[Fraction, Fraction]` on both bootstraps — **and refuses the exemption**
+the gate offered for `stats.py:159`. Its two rejected alternatives are recorded there and neither is
+reopened here: a **wider integer unit** fails at `k = 3` rather than late, because the denominator
+is `40k` and 3 divides one of them; **rounding the level outward** works and is rejected on price —
+a second number on every continuous verdict whose entire content is that the tool cannot represent
+its own level, and a second meaning for *attained level* in one report. The note also **corrects
+§11.10(3)'s scope to package-wide**, its v1.17 wording having named `modelbench.results` only, which
+is the gap the exemption read as licence. Four plan-side consequences, all in §4 S1e and all listed
+as the note's own edit list at §11.9 item 6: Table C keeps `:159`, its signature moves to the
+`Fraction` level with the four `LEVEL_*` constants, Table G's element type moves with it, and
+**Table G's two residuals are re-derived over `:159`'s post-Table-C spelling**. Two things the note
+leaves here and this revision takes: the **four constant names**, and the **order** of the two
+tables on that one line. *(Also from v1.18 and cheap: `paired_bootstrap` refuses a transposed
+`levels` pair — §4 S1e Table G's last row.)*
 
 *(The v1.9↔v1.10 pairing, recorded here because its reversal is the reason §3.6 reads as it does.)*
 The note's **§11** closes R-13 and, in doing so,
@@ -4622,6 +4817,23 @@ trustworthy the senior document, the more efficiently it does so. So:
      is *n* and whose target is zero — because a single residual over *one* of two is passed by the
      implementation that retires that one and leaves the other standing, and the surviving half is
      a number that still prints.
+
+     **A residual's target need not be zero, and where it is not, the table states the target and
+     names the surviving line** *(v1.15)*. `-ml` §11.10(3)'s package-wide percentile-definition
+     check goes **2 → 1**, the survivor being the one implementation the rule requires to exist.
+     What makes a number a residual is that it is **stated in advance and re-run**, not that it is
+     zero; a rule written over zero alone would have excluded the one check in §4 S1e that no
+     half-application can pass.
+
+     **And the property is a property of the *round*, not only of a table** *(v1.15, plan-gate
+     P8-1)*. Where two tables edit one line, one table's edit can retire the very literal the
+     other's residual is stated over — so **both** of the second table's residuals go to zero from
+     the first table's work alone, and the done-condition passes on an implementation that never
+     applied the second table. Each table's set was sound read alone, which is why six passes did
+     not see it. So: two tables meeting on a line **name each other on both rows**, state whether
+     both orders are faithful, and the residual of whichever lands second is stated over the
+     **surviving** spelling — re-derived, never re-scoped, since the token it was written over is
+     gone either way.
 
    Where an edit **adds** rather than retires, the enumerating command is over the
    type's **construction sites** and the residual is asserted by the type system — a required field
@@ -4859,6 +5071,58 @@ condition that would reverse it. **Pass 7 asks for a narrow re-check of this rev
 eighth full gate**, and fixes its scope: these three findings plus note **v1.17**'s two plan-side
 deltas, both of which land here (*Version pairing* above).
 
+**Plan gate Pass 8, and what it changed here** *(v1.15)*.
+`docs/reviews/small-model-benchmarking.md` `## Pass 8 (narrow)` (`4cd22b9`) was the narrow re-check
+Pass 7 asked for — the v1.14 delta only, 25 hunks, against note v1.17 and the shipped tree — and it
+returned **needs changes** against v1.14: **1 blocker, 2 majors, 0 minors, 0 nits**, and **all three
+are closed in this revision, none carried**, per the stakeholder's standing principle. It closed all
+three Pass 7 findings, verified all eleven counts v1.14 cites and reproduced every one, and judged
+both of the questions it was set — commands 7 and 8 enumerate the class, and rule 5(a)'s new
+companion is the right statement of it. **What it found instead was a defect no pass had swept
+for**, and its shape is the lesson: **a cross-table collision**. Each of Tables C and G was sound
+read alone; read together, C's edit alone drove both of G's residuals to zero, so DC-12 would have
+passed on an implementation that never applied G — the trap §7 rule 5(b) forbids, inside the plan
+that wrote the rule. §7 rule 5(b) is therefore **generalised from a property of a table to a
+property of the round**, which is the same move P7-2's finding forced one revision earlier.
+
+| Finding | Sev. | Closed by |
+|---|---|---|
+| **P8-1** — Tables C and G both edit `stats.py:159` and prescribe incompatible forms for it, neither names the other, and **both of Table G's residuals go to zero from Table C's edit alone** | blocker | The statistics half was raised to `data-scientist` under §7 rule 3 and **ruled in note v1.18 §11.2.2**: the level is an exact `Fraction`, `stats.py:159` is **not** exempted, and §11.10(3) becomes package-wide. The plan half, all in §4 S1e: Table C's signature row moves to `percentile(values, *, level: Fraction)` with the four `LEVEL_*` constants; its `:159`/`:292` row **splits**, `:292` keeping literal levels and `:159` becoming the collision row that **prescribes its own post-edit spelling**, because Table G's residuals are stated over it; the collision is named on **both** tables' rows and the order **fixed — C then G**, unlike Tables D and E on `stats.py:263` where either order is faithful; Table G's element type becomes `tuple[Fraction, Fraction]`, its `k = 2` test's pair is `(Fraction(1, 80), Fraction(79, 80))` — a pair the retired unit could not express — and **its two residuals are re-derived, not re-scoped**, over the surviving spelling, with their *before* stated as the intermediate state and DC-12 re-running them at the end of the round. Swept for the retired representation: §4 S1's two signatures and its new `percentile` entry, Table D's closed-form row, §3.8.1 and Appendix A |
+| **P8-2** — §3.3 (iv) ends "Nothing else in the verdict path changes" and two lines contradict it: `report.py:722-724` prints Holm–Bonferroni **applied** where no ladder ran, and `_decision(None, step)` at `:329-330` returns *no verdict — no paired data*, false for a refused family | major | §3.3 (iv) names both, takes both decisions, and replaces the claim with an **enumeration** over the eleven emission sites of `report.py:606-780` — five of them, in four blocks, state something a refusal falsifies, and the other six are named. **(3)** The `Family-wise error control` block renders only where a Holm ladder actually ran, with a one-line replacement per condition; relabelling its cells is rejected, every column in it being a ladder artefact. **(4)** `_decision` gains **no** third input state, because (3) makes the false string *unreachable* — it has exactly one call site, inside that block — with (3) named as the trigger that would reverse it. DC-13(e) and §5 test 11d gain one assertion per site, both on an **absence**, plus a second fixture |
+| **P8-3** — Table C's residual is scoped to `results.py` while its edit retires three further `_percentile` sites in `stats.py`; the half-application leaves both bootstraps on the rejected estimator with the residual reading zero, and DC-12 records the table as already satisfying rule 5(b) on a count of three where there are six | major | Table C gains the `stats.py` half (**3 → 0**) and `-ml` §11.10(3)'s package-wide identity check (**2 → 1**, a stated target that is **not** zero, with the surviving line named), plus a **row** for the seventh line its enumerating command returns and an explicit statement that the seventh gets no residual, with the reason — rule 5(b)'s own named alternative. The derivation `3 + 3 + 1 = 7` is written out so the row list is checked against the command's count rather than against the prose beside it. DC-12's partition is corrected — C moves out of *already satisfies* into *gained its second at this revision* — and its wording moves from "is zero" to "hits its stated target", which the new residual required. §7 rule 5(b) gains the non-zero-target clause |
+
+**Nothing in Pass 8 is carried and nothing is blocked on unbuilt work** — the gate states that of all
+three, and the one part that needed a method ruling got one before this revision was written. **The
+two open questions the gate raised are both answered**: `percentile` gains a rational level rather
+than an exemption (note v1.18 §11.2.2, the §7 rule 3 raise closed — **no raise is open again**), and
+the `Family-wise error control` block is **suppressed with a one-line replacement** rather than
+relabelled, in §3.3 (iv), which is where this plan has been taking presentation calls with a
+reader-facing consequence.
+
+**Three changes beyond the three findings, disclosed rather than folded in** *(the discipline v1.14
+used for Table E)*.
+
+1. **§3.3 (iv)(3)'s decision covers two conditions, not the one P8-2 names.** It is stated over *no
+   ladder ran*, so it reaches both a family refused whole and an **all-continuous `k > 1`** family,
+   which takes its correction in the interval and never in a ladder. That is not new ground — it is
+   the **same shipped line**, `report.py:722-724`, under the other condition that reaches it, and
+   the condition is authorised by this section's own second paragraph and restated by §4 S1's loop
+   (`holm_steps` is not called on a continuous family). A fix scoped to the refusal alone would
+   have left the same line printing the same false sentence for exactly the family §4 S1e Table G
+   exists to serve.
+2. **Table C's row now says which of `-ml` §11.10's items land with it, at S1** — items 1, 2a, 2b
+   and 10, item 3 being its own third residual, the rest being `latency_summary` and rendering and
+   therefore S2's. Same finding applied: the signature this table lands **moved** in this revision
+   and v1.18 added two refusals to it, so the tests that pin it moved with it; Table D's row already
+   carries the same sentence for the closed form's five.
+3. **DC-12's seven-table rule 5(b) sweep is re-run per table rather than inherited, and Table A's
+   result is written out.** The brief for this revision made the sweep standing rather than a
+   reviewer's catch; six tables reproduce their prior answer and **A** did not read off the
+   enumeration — its residency-**element** row retires two keys under one residual, and what covers
+   the second is DC-1's element-shape assertion, which is rule 5(b)'s own named alternative rather
+   than a gap. Recorded in DC-12 because a sweep whose result is not written down is a sweep the
+   next revision runs again.
+
 **What S2 additionally inherits from v1.10**:
 
 - **`ItemResult.timing: ItemTiming | None` is the timing carrier, and `latencyMs` is a property over
@@ -4898,8 +5162,10 @@ deltas, both of which land here (*Version pairing* above).
   calls and which owns both the family's quantile levels and the interval (§4 S1, §4 S1e Table G;
   v1.13). The exploratory **`sep_z` comparison is the one exception and calls the entry point
   directly**, with `clamp=None` — the shipped `[-1, 1]` clamp is a difference-of-proportions
-  assumption (§4 S1e Tables D and E, `-ml` v1.14 §3.4 Rule 4) — and `levels=(2.5, 97.5)`, because it
-  is not a verdict and takes no family correction. Table E is S1-local work; **v1.12 withdraws the S3
+  assumption (§4 S1e Tables D and E, `-ml` v1.14 §3.4 Rule 4) — and
+  `levels=(LEVEL_CI95_LO, LEVEL_CI95_HI)`, because it is not a verdict and takes no family
+  correction *(v1.15: the two module constants, the levels being exact rationals — `-ml` §11.2.2)*.
+  Table E is S1-local work; **v1.12 withdraws the S3
   gate v1.11 put on it** — `sep_z` is reported, not
   verdicted (`-ml` v1.15 §3.2d), so the clamp is due with the `sep_z` comparison, which is
   exploratory and is no stage's done-condition.
