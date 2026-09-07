@@ -197,14 +197,30 @@ recommendations are acted on.
 - **U4** — K-027 item 5 marked delivered + K-048 filed (the alternation-crash defect from U3).
   Doc-only, coordinator-verified directly.
 
-**Delivered, decision pending (not a defect, not blocked on review — blocked on the user):**
+**Delivered, then unblocked and implemented:**
 - **U2** — golden-set expansion design (`docs/plans/golden-set-expansion-ml.md`). Recommends
-  26 → 85 rows with a corrected (Wilson-derived) target size. **Blocks on: who is the `boundary`
-  tier's second independent human labeler, and n=40 vs n=53 for `clear_suspend`.** No
-  implementation dispatched.
+  26 → 85 rows with a corrected (Wilson-derived) target size. Blocked on two user decisions when
+  this section was first written; **both were answered 2026-08-20** and the design note's §10
+  records them: the `boundary`-tier independent-second-labeler requirement was **dropped** (none
+  available — that tier is now sourced like the clear tiers, an explicit dated descope from item
+  4's stated intent), and `clear_suspend` was set to **n=40**, the note's own §3.1 lead
+  recommendation, which needed no numeric correction downstream.
 
-**K-027 status:** items 1–3, 5, and all six carried findings ✅ delivered. Item 4 is the only
-open item, gated on the user's decision above. **New backlog item filed: K-048**
-(`_assemble_messages`'s alternation-unsafe message shape — 🔵 proposed, unowned/undispatched).
+**K-027 status: ✅ closed 2026-08-21 — the epic, not just this run.** `tdd-engineer` landed U2's
+plan as written (fixture 26→85, all 59 §6 rows byte-exact, five literal-constant edits, a new
+offline integrity test); a live calibration run passed (G1 10.0%/120 calls, G2 86.7%/30 cases,
+verdict "wire"); `analyst` Pass 3 approved the implementation diff unconditionally. Item 4 was the
+epic's last open item, so K-027 is gone from `docs/BACKLOG.md` per the forward-looking-only rule —
+its record is `docs/HISTORY.md` (2026-08-21).
 
-**Not committed.** The commit decision is the user's, per standing practice on this component.
+**K-048** (`_assemble_messages`'s alternation-unsafe message shape), filed by U3 this run, was
+itself **closed 2026-08-26** in its own coordination
+(`docs/plans/assemble-messages-alternation-coordination.md`, archived) — `docs/HISTORY.md`.
+
+**Committed** — this run's log landed as `9a519fa`.
+
+*2026-09-06 — corrected in place, at the stakeholder's direction, in the pass that archived this
+document. Four claims above had gone stale and, frozen, would have misled every later reader: U2
+described as blocked on decisions answered the following day, K-027 item 4 as the only open item,
+K-048 as 🔵 proposed/undispatched, and the run as uncommitted. The unit record above them is
+unchanged and was accurate as written; nothing else in this document was touched.*
