@@ -2772,3 +2772,30 @@ stamped `2624425` — *a tree never parsed* — and `SOURCE_DIRTY=true` from a d
 untrustworthy. Since `CpgBuildInfo` exists *only* to answer the freshness question I run before
 dispatching CPG-leaning work, this is a bug in the thing I rely on. Routed to `cobb` with the
 concurrent-session collision rule attached, since `skills/` is contested.
+
+## S9a is not released after all — U36 makes it a same-file unit (2026-09-07)
+
+I said S9a was released once the CPG snapshot finished. That was wrong, and the reason is worth
+writing down because it nearly shipped a contradiction.
+
+U36 is marking `config.py`'s `STOREFRONT_TURN_WORKERS` and `THREAD_LIMIT` comments **"not built
+yet — S9"**. S9a *builds both* — the bounded executor and the anyio limiter are its first two work
+items. So the two units disagree by construction: U36's comments are true when written and false
+the moment S9a lands, and `SERVER.md` §1.3's matching rows go with them.
+
+That makes S9a a `config.py` unit, which I had not counted it as. Its file list — `storefront.py`,
+`storefront_api.py`, `app.py`, both test files — looked disjoint from U36's, and on that reading I
+was about to dispatch them in parallel. **They conflict through a fact, not through a diff:** one
+unit's deliverable is a statement whose truth the other unit's deliverable changes. A file-overlap
+check does not catch that; only reading both done-conditions does.
+
+So S9a **waits for U36**, and its brief carries the consequence: building the executor and the
+limiter means updating `config.py`'s two comments and `SERVER.md` §1.3's two rows **in the same
+change**, from "not built yet — S9" to what they then do. That is the documentation-is-part-of-done
+rule doing real work rather than ceremony — the alternative is a doc corrected this afternoon and
+falsified this evening by the unit it names.
+
+Worth generalising: *a unit that marks something "not built yet — X" creates a dependency on X
+that no file list shows.* The marker convention U33 and U37 established across eight env rows and
+three comments is good, and it has this cost — every marker is a promise the delivering unit must
+be briefed to keep.
