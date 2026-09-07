@@ -10,6 +10,7 @@
 |------|------------|----------|--------|---------|
 | K-001 | 2026-07-09 | med | 🔵 | First-run shakedown: a real method note + a real methodology review |
 | K-002 | 2026-07-09 | low | 🔵 | Perishable model/embedding landscape reference (skill or resource file) |
+| K-003 | 2026-09-07 | low | 🔵 | Route the eager-provider-resolution trap to `falkor-chat`'s provider-config manual (owner: `tico`) |
 
 ### K-001 — First-run shakedown: a real method note + a real methodology review
 - **Status:** 🔵 proposed
@@ -22,6 +23,26 @@
 - **Priority:** low
 - **Rationale:** Model/embedding capabilities and pricing are perishable; the prompt rightly forbids quoting them from memory, but repeated WebFetch verification is wasteful. A dated, `Verified:`-stamped resource file (pattern: `graph-dba/falkordb-quirks.md`) or skill could cache the current landscape.
 - **Proposed change:** If model-selection questions recur, add `data-scientist/model-landscape.md` (dated entries, re-verify stamps) and point the prompt at it — kept out of the always-on prompt.
+
+### K-003 — Route the eager-provider-resolution trap to its owning document
+- **Status:** 🔵 proposed
+- **Priority:** low
+- **Origin:** kaizen entry `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` (2026-08-31), kept open in the
+  U14 distillation pass — see `history.md`, 2026-09-07, chunk B.
+- **Rationale:** `ModelGateway.__init__` → `_build_providers` resolves the `{env:}`/`{file:}`
+  substitution for **every** declared provider, not the one a caller actually dispatches to, so a
+  harness pointed at `falkor-chat/config/opencode.example.json` dies on the example file's unused
+  `openai` provider unless `OPENAI_API_KEY` is set to a placeholder first. Four independent scripts
+  have hit it. The mechanism is verified; only its home is unresolved.
+- **Proposed change:** one clause in `falkor-chat/docs/manuals/llm-provider-config.md` §2 — the
+  section already tells an operator that a missing `{env:}` variable fails startup, but not that
+  this fires for a provider nothing ever resolves to. **Not** `falkor-chat/AGENTS.md`: an
+  always-loaded context file is the wrong price for a fact that binds only when someone writes a
+  new live-harness driver, and the workaround is already commented at the point of use in
+  `server/tests/eval/test_guard_calibration_live.py`.
+- **Notes:** `manuals/` is `tico`-owned and outside `cobb`'s write remit, so this needs routing by
+  the human or by `teco`. The entry is also tagged `MENTIONS → tico` in `kaizen_team`, so it will
+  resurface in `tico`'s own distillation pass if it isn't routed sooner.
 
 ## Parking lot / ideas
 

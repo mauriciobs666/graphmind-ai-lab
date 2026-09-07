@@ -2,6 +2,163 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-07 — Learnings-graph distillation, chunk B of 3 (U14): 9 entries — 1 promoted, 7 discarded, 1 kept open
+
+- **What:** `cobb` processed the 9 `data-scientist` `:KaizenEntry` nodes dated 2026-08-31…2026-09-02
+  in `kaizen_team` per `agent-maintenance` §5 (chunk A was the 10 oldest; the 2026-09-03…09-07
+  entries are chunk C and were not touched). Every claim was **re-derived from scratch** — the
+  statistics recomputed in stdlib Python from the raw data, the falkor-chat mechanics re-read from
+  source — never confirmed against the entry's own cited evidence. Two entries survived
+  re-derivation with their *arithmetic* intact but their *framing* falsified; one was falsified
+  outright.
+- **Promoted (1):**
+  - `0e07beeb` (2026-09-02, marginal-Wilson overlap is inert, not conservative, as a difference
+    test) → **prompt**, folded into the existing "Classical ML & statistics → Uncertainty" bullet
+    rather than added as a new one. The bullet already mandates the Wilson interval as this lab's
+    small-n convention and says nothing about the most common misuse of exactly that tool; the
+    existing "refusing to bless differences the sample cannot support" clause guards the opposite
+    failure (over-claiming), so the addition is genuinely uncovered ground, not a restatement.
+    **Every number re-derived independently:** 40/40 Wilson = (0.9124, 1.0000) vs 34/40 Wilson =
+    (0.7093, 0.9294) — overlapping although perfectly nested; the same table as McNemar exact
+    (b=6, c=0) gives p = 0.03125; Newcombe MOVER-D gives (3.2, 29.1) pp, matching the entry to the
+    published precision. The separation sweep confirms the strong form: at n ∈ {20, 30, 38, 40} and
+    a baseline of 0.90/0.925/0.95, **no** candidate score separates, up to and including a perfect
+    one. Minimum net discordant wins for α = 0.05 at c = 0…4 is 6/8/10/12/13, so the observable
+    floor is 6/n; the 80%-power MDD search gives n·δ = 7.33 (n=20) … 7.81 (n=120), so ≈7.7/n. The
+    project-scoped copy of this decision is already shipped in `model-bench`'s own code and docs —
+    only the discipline-level rule was promoted, since that is the half that reaches a future
+    session in any component.
+- **Discarded (7):**
+  - `a3f1c2e0` (2026-08-31, `ministral-3-3b` has no `temperature` pin, which "alone can explain
+    most of" a ~40-point swing in a repro script's precondition rate) — **falsified twice over.**
+    The pin exists: `falkor-chat/config/models.json` pins `temperature: 0` for
+    `lmstudio/mistralai/ministral-3-3b`, added by commit `9d98aa0` *on the entry's own date*, so
+    the stated mechanism was remediated immediately and the entry never described a standing
+    condition. The causal claim is separately refuted by the lab's own later measurement:
+    `falkor-chat/docs/BACKLOG.md` K-062 §18 ran three arms **under the identical pinned
+    temperature, model and script**, differing only in `systemPrompt` text, and measured 53.6% /
+    17.9% / 60.7% — baseline vs. lever (a) non-overlapping at Fisher p ≈ 0.011. That entry states
+    the conclusion plainly: "**The `temperature: 0` pin did not narrow this swing.**" U13 had
+    already promoted the stronger, later form of this lesson into `lm-studio-model-notes.md`
+    ("a pin buys comparability, not repeatability").
+  - `f3a7b2c4` (2026-08-31, a small addition to a repro script's turn text collapsed the
+    held-rejection base rate from ~58% to ~4%) — **already published, in a more careful form than
+    the entry.** `falkor-chat/docs/reviews/salesperson-tool-reliability-ml.md` §13.2 states the
+    finding with both rates, both Wilson CIs and the non-overlap, and then explicitly declines the
+    causal attribution the entry asserts ("this pass did not isolate which factor (or both) is
+    responsible"). Its consequence — that the pass was powered on a stratum that then yielded one
+    usable rep — is stated there too. The generalized rule is published as a standing live
+    constraint in K-062: an occurrence-rate difference between two sessions or two prompt variants
+    cannot by itself be read as evidence about the variable under test. Nothing left to promote.
+  - `b3f1c9a4` (2026-08-31, a deterministic per-loop customer id in a throwaway probe silently
+    reuses cart state across invocations) — **mechanism re-derived and correct, remedy already
+    published three times.** `repository.add_to_cart` is `ON MATCH SET item.quantity =
+    item.quantity + $qty` and its own docstring says "Add means increment, not replace"; the tool
+    schema says the same to the model ("quantities accumulate, they don't replace"). The incident
+    is `…-ml.md` §12.2 verbatim, including the increment citation and the "test-harness
+    id-collision artifact" diagnosis; the **remedy** is published as a construction rule in §13.2
+    (a "uuid4-derived customer id … never a loop index, specifically to foreclose the exact
+    id-collision hazard §12.2 caught") and as a standing requirement in
+    `docs/test-plans/salesperson-tool-reliability-regression.md` ("each of the 6 conversation reps
+    uses a fresh customer id … so no rep's cart or profile state can leak into another's"). The
+    entry's own `suggestedHome` of `skills/joern-cpg` is a mis-file — that skill builds Code
+    Property Graphs and has no relation to live-harness authoring.
+  - `b3f0a1c4` (2026-08-31, an exact-argument dedup guard is defeated by an optional-parameter
+    default applied inside the tool wrapper) — **fixed in code and documented at the point of use,
+    verbatim.** `executor.py` now computes the key through `_resolve_dedup_arguments`, and a
+    ~25-line comment block above it states the entry's fact, its evidence (§15.2, rep-20), the
+    exact two colliding argument shapes, and why each write tool gets its own resolver rather than
+    a shared one — including that `remove_from_cart` deliberately has no such default. The
+    accompanying docstring records that only the *key* is collapsed, never the dispatched call.
+  - `f95fc29b` (2026-09-02, `judge_calibration.json`'s raw agreement flatters the judge; relevance
+    κ = 0.211 vs. faithfulness κ = 0.833) — **arithmetic re-derived exactly, and already published
+    in the very document the entry's own context names.** Recomputed from the committed file:
+    relevance p₀ = 0.700, pₑ = 0.620 (from 7/3 gold vs. 8/2 judge marginals), κ = 0.2105;
+    faithfulness p₀ = 0.900, pₑ = 0.400, κ = 0.8333; 2 of the 3 gold-irrelevant answers judged
+    relevant. `docs/plans/small-model-benchmarking-ml.md` already carries every one of those
+    numbers in a table attributed to a recompute from that same file, calls the relevance axis
+    "close to worthless" in §6, and **acted on it** — the design drops the relevance axis entirely
+    and reuses only faithfulness. One caveat the entry does not raise and that a promotion would
+    have shipped unqualified: this repo has an explicit, reasoned standing decision *not* to
+    report κ at this n (`docs/test-reports/graphrag-eval-2026-08-16.md`, `golden-set-expansion-ml.md`
+    §"not κ — n=15–20 is too small"), and it is right — κ = 0.211 at n = 10 carries a bootstrap
+    95% CI of (−0.32, 0.80) and the class-conditional 2/3 has a Wilson CI of (0.21, 0.94). The
+    published treatment, which flags the figure for a gate rather than deciding on it, is the
+    correct handling; the entry's flat "not usable as a measurement" is stronger than n = 10
+    supports.
+  - `7c2d84b0` (2026-09-02, two traps in the published paired-statistics tables — the MDD table is
+    ceilinged not rounded, and the Kish design effect is the *square* of the CI width ratio) —
+    **re-derived exactly and already documented at the point of use.** Independent exact search
+    over the McNemar rejection region (strict-dominance model, b ~ Bin(n, δ), c = 0, reject at
+    b ≥ 6) reproduces n = 40 → 19.0464 pp, power(0.190) = 0.7980, power(0.191) = 0.8023, and the
+    ceiling reproduces the whole published row set — 36.7 / 25.1 / 20.1 / 19.1 / 12.9 / 9.2 / 6.6
+    at n = 20 / 30 / 38 / 40 / 60 / 85 / 120 — while round-to-nearest gives 36.6 / 25.1 / 20.0 /
+    19.0 / 12.9 / 9.1 / 6.5. **One correction to the entry:** it says rounding "disagrees with
+    every published figure"; it disagrees with **five of seven** (n = 30 and n = 60 agree), and
+    understates in each of the five. Both traps are already written into the shipped module:
+    `model-bench/modelbench/stats.py` documents "MDD₈₀, exact and **rounded up** to the printed
+    precision … Ceiling to 19.1 pp gives 0.8023" and, separately, "the design effect is a variance
+    ratio — the width ratio squared", with a `width_ratio` helper whose docstring says it is
+    "**not** the design effect" and a note that following the earlier wording literally "divides by
+    2.6". The Kish identity checks out independently: m = 7, ρ = 1 → DEFF = 7, √7 = 2.646,
+    n_eff = 280/7 = 40 = the cluster count.
+  - `0f3b6a1e` (2026-09-02, this lab has ONE 95% z-constant and the choice is numerically
+    irrelevant) — **already published in four documents and two committed tests, and its framing is
+    the half that is wrong.** A from-scratch MOVER-D implementation reproduced all ten published
+    fixture bounds to 10 decimal places and put the pin-vs-1.96 divergence at 3.017 × 10⁻⁴ pp,
+    matching the entry. But "numerically irrelevant … only matters for exact-equality assertions"
+    is false in the regime this lab actually operates in: the method note mandates a 1e-9
+    *proportion* tolerance, 3.0 × 10⁻⁴ pp is 3.0 × 10⁻⁶ as a proportion, and the shipped test
+    `test_the_pinned_z_constant_is_load_bearing_at_this_tolerance` asserts that `z = 1.96` misses
+    **every** bound — about 3 000× outside tolerance. The published wording has this right and the
+    entry does not: `1.96` is a typographic rounding rather than a rival convention, which is a
+    statement about provenance, **not** about interchangeability. Also already published:
+    `small-model-benchmarking-ml.md` §3.2a's "at most 3.0 × 10⁻⁴ pp", the coordination log's "M-1
+    is not a numerical defect", a whole both-z fixture table in the review, and
+    `model-bench/tests/test_stats.py`'s `assert _Z_95 != 1.96`.
+- **Kept open (1):** `e1a6c4d2` (2026-08-31, `ModelGateway.from_env()` resolves every declared
+  provider's `{env:}`/`{file:}` substitution eagerly, so pointing a live harness at
+  `config/opencode.example.json` raises `ModelConfigError` on an `openai` provider it never calls
+  unless `OPENAI_API_KEY` is set to a placeholder first) — **mechanism re-derived and exactly
+  correct**, and correct for a reason the entry did not name: it is not `from_env` but the
+  constructor it calls, `ModelGateway.__init__` → `_build_providers`, which builds a `ProviderSpec`
+  for the union of *every* catalog and overlay provider id and calls `_substitute` on each one's
+  `apiKey`, raising `ModelConfigError("{env:NAME} is not set")` — eagerly, not lazily per `.llm()`
+  call. Four independent scripts have now hit and worked around it. It is **not** promotable into
+  this agent's own files: it is a falkor-chat config-loading mechanic, not an ML-method or
+  LM-Studio fact, and `lm-studio-model-notes.md` is the wrong home for it (the same reasoning that
+  discarded `b1e3f6a2` in chunk A). Its one genuinely useful home is a clause in
+  `falkor-chat/docs/manuals/llm-provider-config.md` §2, which tells an operator that a missing
+  `{env:}` variable fails startup but **not** that this applies to providers nothing ever resolves
+  to — the surprising half. That file is `tico`-owned and outside `cobb`'s write remit, so the
+  entry is logged here, opened as **K-003** in `plan.md`, and tagged `MENTIONS → tico` in the graph
+  so it resurfaces in that agent's own distillation pass rather than being lost. Counter-argument
+  weighed and recorded: the fact *is* already documented at the point of use, in a full comment in
+  `server/tests/eval/test_guard_calibration_live.py` naming `_build_providers` by line — and the
+  entry's own author found it by copying that precedent. That is why this is a manual clause and
+  not a `falkor-chat/AGENTS.md` line: an always-loaded context file is the wrong price for a fact
+  that binds only when someone writes a new harness driver.
+- **`MENTIONS` edges added: 1** — `e1a6c4d2` → `tico`, per the kept-open routing above. The other
+  eight touch no agent substantively beyond the producer, and every one of them is already
+  published in the code or docs of the component it concerns, so tagging would only queue
+  already-documented content into another agent's pass (chunk A's reasoning, unchanged).
+- **Verification basis:** **no live model probe was needed or used.** Four entries are pure
+  statistics and were re-derived by computation in stdlib Python from the committed raw data
+  (`judge_calibration.json`, the shipped MOVER-D regression fixtures) — a live probe would have
+  added nothing a recomputation cannot settle. Five are falkor-chat mechanics and were re-derived
+  by **reading source and committed artifacts**: `repository.py`, `services.py`, `executor.py`,
+  `tools.py`, `modelconfig.py`, `config/models.json` and `git log` on the pin commit. No shared
+  FalkorDB graph was read or written, no probe script was executed, and no scratch key was created.
+  Publication checks deliberately grepped **outside** each component's `docs/` index — scripts,
+  tests, source comments, `BACKLOG.md` and shipped module docstrings — which is where five of the
+  seven discards were actually found.
+- **Cleared:** 8 entries `DETACH DELETE`d after this entry was written; `e1a6c4d2` had only its
+  `PRODUCED` edge resolved, leaving the node alive on its `MENTIONS → tico` edge.
+- **Docs touched:** `claude/data-scientist/{data-scientist.md, kaizen/history.md, kaizen/plan.md}`.
+  `lm-studio-model-notes.md` was read in full and **not** written to — nothing in this chunk was an
+  LM Studio or small-model-realism fact, and its existing claims were re-checked against
+  `config/models.json` and found current after chunk A's correction.
+
 ## 2026-09-07 — Learnings-graph distillation, chunk A of 3 (U13): 10 oldest entries — 2 promoted, 8 discarded
 
 - **What:** `cobb` processed the 10 oldest `data-scientist` `:KaizenEntry` nodes in `kaizen_team`

@@ -66,8 +66,8 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U11 | coder chunk B (8: 08-31…09-02) | `a567c2024835b0516` | accepted | `claude/analyst/review-techniques.md` (2 techniques) + `kaizen/history.md`; `claude/graph-dba/falkordb-quirks.md` (1 corrected) + `kaizen/history.md`; `claude/data-scientist/lm-studio-model-notes.md` + `kaizen/history.md`; `claude/coder/kaizen/*`; 8 nodes deleted | none → — | 172.4k tok, 59 tools |
 | U12 | coder chunk C (7: 09-03) | `accaa936d2c07807c` | accepted | `skills/python-web-quirks/SKILL.md` (1 fold, 1 merged section from 3 entries, 1 new section, frontmatter) + `skills/README.md`; `claude/coder/kaizen/*` (K-006 4→6 rows); 7 nodes deleted — **`coder` closed out, 0/0** | none → — | 165.7k tok, 64 tools |
 | U13 | data-scientist chunk A (10: ≤ 08-30) | `a21cdcb05d80c9e1f` | accepted | `claude/data-scientist/data-scientist.md` (1 clause) + `lm-studio-model-notes.md` (folded, 1 stale claim corrected) + `kaizen/*`; **8 of 10 discarded** — 3 falsified, 1 obsolete, 4 already published at the point of use; 10 nodes deleted | none → — | 178.8k tok, 67 tools |
-| U14 | data-scientist chunk B (9: 08-31…09-02) | — | queued | `claude/data-scientist/kaizen/*`, graph cleared | none → — | — |
-| U15 | data-scientist chunk C (9: 09-03…09-06) | — | queued | `claude/data-scientist/kaizen/*`, graph cleared | none → — | — |
+| U14 | data-scientist chunk B (9: 08-31…09-02) | `a62ee471d5c0c8407` | accepted | `claude/data-scientist/data-scientist.md` (Uncertainty bullet) + `kaizen/*` (K-003 kept open); **7 discarded, 1 promoted, 1 kept open**; 8 nodes deleted, 1 `PRODUCED` resolved (`MENTIONS`→`tico` kept alive) | none → — | 195.5k tok, 78 tools |
+| U15 | data-scientist chunk C (10: 09-03…09-07, incl. `6ef71251` arrived mid-U13) | — | queued | `claude/data-scientist/kaizen/*`, graph cleared | none → — | — |
 | U16 | teco chunk A (8: ≤ 09-01) | — | queued | `claude/teco/kaizen/*`, graph cleared | none → — | — |
 | U17 | teco chunk B (12: 09-02) | — | queued | `claude/teco/kaizen/*`, graph cleared | none → — | — |
 | U18 | teco chunk C (11: 09-03…09-06) | — | queued | `claude/teco/kaizen/*`, graph cleared | none → — | — |
@@ -231,6 +231,33 @@ dies before either leaves nothing at all — which is what happened here.
   consequence for any future pass: have each unit namespace its scratch files,
   or write nothing there at all (U7b used inline `python3` heredocs and left
   nothing behind).
+- **U14 → a second `MENTIONS` node is now owed at pass close, this one to
+  `tico`.** U14 tagged `e1a6c4d2` `MENTIONS`→`tico` (falkor-chat's
+  `ModelGateway.__init__`→`_build_providers` resolving `{env:}` substitution
+  for *every* declared provider, so a harness pointed at
+  `config/opencode.example.json` dies on the example file's unused `openai`
+  provider). `PRODUCED` resolved, node alive on the `MENTIONS` edge. Kept open
+  as `data-scientist` K-003, whose proposed home is
+  `falkor-chat/docs/manuals/llm-provider-config.md` §2 — a `tico`-owned
+  document, and correctly **not** `falkor-chat/AGENTS.md`: an always-loaded
+  context file is the wrong price for a fact that binds only when someone
+  writes a harness. Two `MENTIONS` nodes now stand (`qa-engineer`'s
+  `b7d5e214`, `tico`'s `e1a6c4d2`); the pass does not close while either does.
+
+- **U14 → the model-bench file collision cost nothing, but it was real.** Four
+  of chunk B's nine entries were model-bench statistics facts, dispatched under
+  a hard no-write constraint on `docs/**small-model-benchmarking*` and
+  `model-bench/**` because a concurrent session had a plan gate in flight
+  against them. All four turned out already published — three inside
+  `model-bench`'s own shipped code and tests — so nothing was blocked. The
+  constraint still earned its place: by the unit's end the concurrent session
+  had moved from those docs onto `model-bench/modelbench/fingerprint.py` and
+  three test modules, which a writing unit would have collided with.
+
+- **U14 → three `claude/scripts/audit-team.sh` check-7 FAILs stand, none in
+  scope.** All three are personal-identifier leaks elsewhere in the repo. Not
+  this pass's work; worth a routed unit of its own.
+
 - **U12 → `architect` needs a top-up unit, like `qa-engineer`.** U7b closed
   `architect` out at 0/0 on 2026-09-03. By U12's close (2026-09-07) it had
   **four new entries**, all created that same day by a concurrent session:
