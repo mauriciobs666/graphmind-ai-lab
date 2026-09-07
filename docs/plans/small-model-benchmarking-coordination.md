@@ -71,7 +71,7 @@ Stakeholder decisions, 2026-09-02:
 | U30 — Four items v1.12 raised: §3.2f's retired wording, the continuous-verdict producer's signature, the homogeneous-family enforcement point, §5.2's `sep_raw` figures | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `e290148`; all four changed the note | `docs/plans/small-model-benchmarking-ml.md` **v1.16** | `analyst` Pass 7 → — | 248k tok / 15 tools cumulative |
 | U32 — Plan v1.13: absorb note v1.16's four deltas. **Deliberately small** | `architect` (fresh) | `ac827e78b5339f829` | **delivered** — `fbe5741` (+300/−91); stayed small, 5 extras all reported | `docs/plans/small-model-benchmarking.md` **v1.13** | `analyst` Pass 7 → — | 220k tok / 99 tools |
 | U33 — Does Rule 8 take a `support` parameter? (Table E's clamp has no route to its only caller) | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `1fbdb6f`; recommendation accepted with a **sharper shape**, and the premise replaced | `docs/plans/small-model-benchmarking-ml.md` **v1.17** | `analyst` Pass 7 → — | 267k tok / 5 tools cumulative |
-| U31 — Re-gate plan v1.13 + note v1.16 (Pass 7) | `analyst` (fresh) | `aaa942cd75fabc2ca` | in-flight | `docs/reviews/small-model-benchmarking.md` `## Pass 7` | — (is the gate) | — |
+| U31 — Re-gate plan v1.13 + note v1.17 (Pass 7) | `analyst` (fresh) | `a7144f0028209bdc0` (first instance `aaa942cd75fabc2ca` **killed by a session rate limit**, wrote nothing) | in-flight | `docs/reviews/small-model-benchmarking.md` `## Pass 7` | — (is the gate) | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | **accepted** — `5878014` | `model-bench/**` (10 files, +1490/−61); 353→389 tests | re-gate (both, fresh) → — | 348k tok / 130 tools |
@@ -1839,4 +1839,30 @@ Rule 8 so nobody "simplifies" it away.
 mid-run relay, and the second to carry a correction rather than an addition. Two small plan-side
 deltas follow (swap the justifying sentence; forward-don't-derive), to be absorbed after the gate
 rather than racing it.
+
+### Pass 7's first instance killed by a session rate limit — 2026-09-07
+
+429, session limit, reset 12:50. **Checked the disk before believing the transcript**, the discipline
+this coordination learned twice the hard way — and this time the transcript was accurate: the review
+still ended at `## Pass 6`, `docs/` was clean, **nothing lost**. A platform failure, so re-dispatched
+rather than re-scoped.
+
+Two things folded into the re-dispatch rather than sent as a relay, because a fresh agent has no
+transcript to relay into:
+
+- The pair is **one revision out of step by design** — plan v1.13 was written against note v1.16, and
+  v1.17 landed after. The two resulting plan deltas are named in the brief as **known, not findings,
+  and explicitly not to be written up**; a gate that spends a section on something the coordinator
+  already routed is wasted review.
+- The gate is asked to judge the **safety classification on the note's replacement argument**, not on
+  the census the plan still carries.
+
+**One instruction added for the first time, and it should stay in every long-running brief here:**
+*write findings to disk as you go rather than composing the whole document at the end.* Three agents
+on this coordination have now been killed mid-run by session limits. Partial work on disk is
+recoverable; partial work in a transcript is not — and twice the recovery only worked because the
+agent happened to have written before dying.
+
+**Timing note for future dispatches:** the session limit is real and recurring. Two long units in
+parallel is affordable; three is what preceded this kill.
 
