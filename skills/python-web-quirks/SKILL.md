@@ -5,7 +5,9 @@ description: >-
   pytest/import-timing traps: asyncio fire-and-forget GC-safety; FastAPI/Starlette
   BackgroundTasks' bounded thread pool vs. unbounded threading.Thread; response_model_exclude_unset
   dropping defaulted nested-model fields; FastAPI's four built-in doc routes (and which
-  constructor kwargs suppress them) falsifying any "registers only these routes" claim; responses={...}
+  constructor kwargs suppress them) falsifying any "registers only these routes" claim, while an
+  included router's own routes are absent from app.routes entirely and its include_router(prefix=)
+  never reaches the inner path; responses={...}
   being keyed by status code alone, so two error bodies at one status collapse; pydantic
   Field(min_length=1) accepting whitespace-only strings; urllib's HTTPError/URLError/TimeoutError taxonomy; an
   OpenAI-compatible server's HTTP-200 error envelope on a missing /v1; a bare json.loads LLM-judge
@@ -114,7 +116,7 @@ was the intent.
 response shape, not just the envelope — the guard against silent field loss there is an
 exact-key-set contract assertion on the nested object, not just on the top-level one.
 
-## FastAPI's four built-in doc routes make "this app registers ONLY routes X" false — and the fourth is the one that gets missed
+## Asserting over a FastAPI app's route table: four built-in doc routes you didn't register, and the included router whose routes aren't there
 
 Verified against FastAPI 0.139.0: a bare `FastAPI()` already carries four routes — `/openapi.json`,
 `/docs`, `/docs/oauth2-redirect` and `/redoc`. `/docs/oauth2-redirect` is the one routinely omitted
@@ -131,6 +133,32 @@ across a framework upgrade that adds a fifth doc route, where a hardcoded list o
 red-fails an assertion about *your* app. The trade runs the other way too: a derived exemption means
 a future framework default is exempted silently, so an app whose own surface is the thing under test
 should assert its registered set by equality, not by count.
+
+**On FastAPI 0.139 `app.routes` does not contain the included router's routes at all.**
+`include_router()` stores the router as one opaque `fastapi.routing._IncludedRouter` entry rather
+than splicing its `APIRoute`s in, so `[r.path for r in app.routes]` reports the whole REST surface
+as **zero paths** — the same answer whether the router is mounted or not, which makes an
+absent-route assertion written that way unfalsifiable rather than merely wrong. Flatten via
+`route.original_router.routes`, or read `app.openapi()["paths"]` at the cost of missing
+`include_in_schema=False` routes. Two traps inside the flatten itself:
+
+- **The prefix lives on the wrapper, not on the path.** `include_router(prefix="/shop")` is stored
+  as `route.include_context.prefix`; the inner `APIRoute.path` stays `"/join"`. A walk that
+  recurses into `original_router.routes` and appends the raw `.path` therefore reports the same
+  list for a router mounted at `/shop/api`, at `/` or at `/admin`. Thread the prefix through the
+  walk and accumulate it — nested includes compose (`/shop` + `/api` + `/join`). Contrast
+  `APIRouter(prefix=…)` declared at *construction*, which **is** baked into `.path` at include
+  time; only the `include_router(prefix=…)` form is affected.
+- **Not every entry is a router or a route.** `Mount` appears directly (a `"/"` static catch-all
+  normalises to the empty string `""`), and `starlette.routing.Host` has neither
+  `original_router` nor `.path` — so the unclassified branch should raise, not skip, or the
+  surface silently shrinks.
+
+**Write a positive control for the flatten before trusting it**: in the same test, assert it sees a
+route you know exists, then use it to assert one doesn't. Every failure above is a *false green* —
+the assertion still passes while proving nothing. Verified against fastapi 0.139.0 /
+starlette 1.3.1; `create_app(mount_mcp=True)` yields 4 starlette `Route` (docs) + 1
+`_IncludedRouter` (35 inner routes) + 2 `Mount`.
 
 ## FastAPI's `responses={...}` is keyed by status code only — two error bodies at one status collapse into one declaration
 

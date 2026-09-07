@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `tdd-engineer` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-09-07 (`kaizen_team` distillation, chunk A — see history.md)
+> Last reviewed: 2026-09-07 (`kaizen_team` distillation, chunks A and B — see history.md)
 
 ## Active
 
@@ -12,10 +12,12 @@
 | K-008 | 2026-09-07 | med | 🔵 | Document the bare-workspace-id contract of the seed scripts in `falkor-chat/AGENTS.md` |
 | K-009 | 2026-09-07 | low | 🔵 | Document `DatasetSchema`'s second, non-obvious construction site in `falkor-chat/docs/SERVER.md` §1.7 |
 | K-010 | 2026-09-07 | med | 🔵 | Document that `trace=True` alone traces nothing without `tracer=GraphTracer(repo)` — `falkor-chat/docs/SERVER.md` §1.7 |
+| K-011 | 2026-09-07 | low | 🔵 | Record in `model-bench/AGENTS.md` that the shared `select = ["E","F","W","I"]` ruff config cannot detect dead code |
 
-> All four are `falkor-chat` project-doc writes, **outside `cobb`'s write remit** — that is why
-> they are kept open here rather than promoted during the distillation pass. Each belongs to
-> whoever next works the relevant `falkor-chat` area, or routes through `teco` to the doc's owner.
+> All five are project-doc writes (K-007…K-010 in `falkor-chat`, K-011 in `model-bench`),
+> **outside `cobb`'s write remit** — that is why they are kept open here rather than promoted
+> during the distillation pass. Each belongs to whoever next works the relevant component's area,
+> or routes through `teco` to the doc's owner.
 
 ### K-007 — the shared `falkordb-dev` instance makes `pytest -q` flake across unrelated files
 - **Status:** 🔵 proposed · **Priority:** medium
@@ -84,6 +86,29 @@
   identical `_default_clock` bullet already there ("a test that injects `Services(clock=…)` silently
   fails to control `StepRun.startedAt`") — same failure shape, same section, and worth phrasing to
   match it. `executor.py:447`'s docstring covers the `run["trace"]` half only.
+
+### K-011 — a `select = ["E","F","W","I"]` ruff config cannot detect dead code
+- **Status:** 🔵 proposed · **Priority:** low
+- **Source:** `kaizen_team` entry `773f87f4-…` (2026-09-03), kept open at the 2026-09-07 distillation (chunk B).
+- **Fact (re-derived 2026-09-07):** with ruff 0.14.14, `ruff check --isolated --select E,F,W,I` on a
+  file containing only `def _dead(x): return x` exits 0, "All checks passed!". `F401` covers unused
+  *imports* only; nothing in `E`/`F`/`W`/`I` reaches an uncalled module-level private function, so a
+  dead private helper passes lint indefinitely and only a grep for call sites finds it. Observed
+  live: `model-bench/modelbench/report.py:_unit_ids` shipped at `ab91419` with zero call sites while
+  `ruff check .` was green (resolved since — `model-bench/docs/HISTORY.md`, review m-2).
+- **Correction to the raw entry:** it named model-bench, mcp-monitor **and cypher-mcp** as sharing
+  this config. `cypher-mcp` has no ruff configuration at all (no `pyproject.toml`; only
+  `pytest.ini` + `requirements-dev.txt`, and no `ruff` anywhere in the component). The three that do
+  share `select = ["E","F","W","I"]` verbatim are `model-bench`, `mcp-monitor` and
+  **`falkor-chat/server`**, which is the original the other two copied.
+- **Why it matters:** it invalidates the reflex "lint would have caught it" in a review, and makes
+  a grep-for-call-sites the only mechanism. `model-bench/AGENTS.md` already carries the sibling
+  trap of this exact shape (a public name starting with `test` being collected by pytest), so the
+  reader who needs this is already looking there.
+- **Proposed change:** one sentence in `model-bench/AGENTS.md`, next to the existing `ruff` /
+  `test`-prefix conventions — the `select` line is deliberately small and buys no dead-code
+  detection. Optionally mirrored in `mcp-monitor/AGENTS.md`. Not a lint-config change: widening
+  `select` is a separate proposal with its own cost, not this item.
 
 ### K-003 — Tool permissions decision  ⚪ DEFERRED (2026-06-05)
 - **Status:** ⚪ deferred — user chose to keep `tools` unconstrained for now.

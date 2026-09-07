@@ -2,6 +2,103 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-09-07 — `kaizen_team` distillation, chunk B: 8 entries (2026-08-31 → 09-03) — 2 promotions (4 entries), 3 discarded, 1 kept open; agent closed out
+
+- **What:** `cobb`-run §5 distillation (`agent-maintenance` skill), unit **U9** of
+  `claude/docs/plans/kaizen-distillation2-coordination.md`. Scope was **chunk B** — the eight
+  current-shape entries dated 2026-08-31 through 2026-09-03, i.e. everything left after chunk A
+  (unit U8, same date). This agent now has **zero** entries in `kaizen_team`. No legacy
+  (`author`-property) entries have ever existed for it.
+- **Verification changed three dispositions.** Re-deriving rather than trusting the entry text moved
+  `a3f6e1c4`, `a93fb14a` and `f3b1c2ae` from "promote" to "already documented" — in each case the
+  fact was already written, in more depth, at the point that changes behavior (a code comment block
+  or a component `AGENTS.md`), which only a look could reveal. It also **falsified one third of**
+  `773f87f4`'s premise. Dedup grep for all eight `entryId` prefixes across the repo's markdown
+  returned nothing; the near-collision flagged in the brief (`f3c9a1d2` here vs. `architect`'s
+  `f3c9a2e1`) was confirmed distinct on the full id, date and subject.
+
+**Promoted (2 dispositions covering 4 entries):**
+
+- **`a9bf4f7c` + `c31f0e58`** (both 09-02, the FastAPI 0.139 route-table trap; the second entry
+  names itself the companion of the first) → **one merged block folded into the existing route-table
+  section** of `skills/python-web-quirks/SKILL.md`, not a third near-duplicate section beside the two
+  that unit U7b added. The fold matters because that section's standing advice
+  (`frozenset(r.path for r in FastAPI().routes)`) is the *exact* idiom the new fact defeats — correct
+  for the bare app it computes the doc-route exemption from, unfalsifiable for any app with an
+  included router. Section heading widened to cover both halves; frontmatter `description` and the
+  `skills/README.md` row updated to match. Re-verified against the entries' own probes: `app.routes`
+  holds one opaque `fastapi.routing._IncludedRouter` (35 inner routes reachable only via
+  `.original_router.routes`); `include_router(prefix=…)` lands on `route.include_context.prefix`, not
+  on the inner `APIRoute.path`, while `APIRouter(prefix=…)` declared at construction **is** baked in;
+  `Mount` appears directly with a `"/"` catch-all normalised to `""`; `starlette.routing.Host` has
+  neither attribute, so the unclassified branch must raise. The positive-control lesson (assert the
+  flatten sees a route you know exists, in the same test that uses it to assert one doesn't) was kept
+  — every failure in this family is a *false green*, not a red.
+- **`f3c9a1d2` + `2b8e40cf`** (both 09-03, mutation-testing method) → **one appended sentence on the
+  existing "Prove a new assertion against the mutant" Principles bullet** in `tdd-engineer.md` — the
+  bullet chunk A promoted hours earlier — never a second bullet on the same theme. They are the
+  operational completion of it: that bullet tells you to break the code and confirm red, and its
+  remedy is "assert the raiser's own message"; these two are the cases where following it lands you
+  wrong. `f3c9a1d2`: restoring an identical copy over a duplicated string is an **equivalent mutant
+  by construction** — nothing can kill it, and the killable form is the drift (edit the canonical
+  copy, leave the duplicate stale), which is what a "two homes" finding actually predicts. Verified
+  at `model-bench/tests/test_report.py:257`, whose assertion is `stats.mdd_clause(rp, "items") + "."
+  in line` — the report *rendering* the stats module's string, so a verbatim duplicate passes and
+  only drift fails. `2b8e40cf`: a guard whose downstream twin raises the same sentence is separable
+  only by **ordering**, never by `match=`. Verified narrower and more precisely than the entry states:
+  `stats.py:186` and `stats.py:849` do **not** raise byte-identical messages today — but both contain
+  `"precondition 4"`, which is what `test_stats.py:1598`'s `match=` reads, so the echo satisfies the
+  match either way. The fix already shipped in model-bench (the message names its own function;
+  `bootstrap_seed=None` makes the two orders diverge) — what is promoted here is the general method,
+  which model-bench's own test docstring cannot carry to another codebase.
+
+**Discarded (3) — all "already documented", each found only by looking:**
+
+- **`a3f6e1c4`** (08-31, a dispatch-time dedup guard keyed on raw tool-call JSON args defeated by a
+  wrapper-applied default) — already documented in `falkor-chat/server/falkorchat/executor.py`
+  (lines ~320-378) as a ~35-line comment block plus `_resolve_add_to_cart_dedup_args`'s docstring,
+  covering every claim in the entry and more: why a per-tool resolver rather than a generic JSON-schema
+  `default` lookup (neither tool declares one), why `remove_from_cart` is deliberately *absent* from
+  the table (an omitted `quantity` there means "remove the whole line", not an implicit number), and a
+  forward instruction to whoever adds the next write tool. `docs/reviews/salesperson-tool-reliability-ml.md`
+  §15.2 carries the incident. The entry's "can be defeated" is also past tense — the loophole is closed.
+- **`a93fb14a`** (09-03, a public Python function named `test*` collected by pytest in every module
+  that imports it) — already in `model-bench/AGENTS.md` (line ~96) as the general rule, in one
+  sentence, citing this exact incident: *"A public name starting with `test` is collected by pytest as
+  a test in every module that imports it — which is why FR-17a's function is
+  `models_with_stored_results`, not `tested_models`."* Nothing to add, and `skills/python-web-quirks/`
+  would be the wrong home for a fact already stated where the code lives.
+- **`f3b1c2ae`** (09-03, `Path(".").name` is `""` but `Path("..").name` is `".."`) — re-derived
+  (`python3 -c` over `("", ".", "..")` reproduces exactly) and already documented **at the point of
+  use**, six lines of comment at `model-bench/modelbench/results.py:424-429`, which states the
+  asymmetry, why `"."` is redundant with the first clause, why `".."` is not, what dropping it would
+  write (`results/runs/..json`), and the review finding (P2-4) that prompted the measurement. Same
+  reasoning as chunk A's `b3f0a6b2`: a second copy elsewhere is a drift risk, not a gain.
+
+**Kept open (1) — `plan.md` K-011.**
+
+- **K-011** ← `773f87f4` (09-03) — a `select = ["E","F","W","I"]` ruff config cannot detect dead code.
+  **Re-derived and true:** `ruff 0.14.14`, `ruff check --isolated --select E,F,W,I` on a file
+  containing only `def _dead(x): return x` exits 0 with "All checks passed!" — `F401` is unused
+  *imports* only, and nothing in that selection reaches an uncalled module-level private function.
+  **But the entry's component list is wrong on one of three:** `cypher-mcp` has no ruff configuration
+  at all (no `pyproject.toml`; `pytest.ini` + `requirements-dev.txt` only, and no `ruff` anywhere in
+  the component). The three that do share the selection verbatim are `model-bench`, `mcp-monitor` and
+  **`falkor-chat/server`**, which is the original the other two copied — each says so in its own
+  `[tool.ruff.lint]` comment. Kept open rather than promoted because the right home is
+  `model-bench/AGENTS.md` (beside the sibling `test`-prefix trap it already carries), **outside
+  `cobb`'s write remit**, and because `skills/python-web-quirks/` is scoped to web/async plus
+  pytest/import-timing traps — a lint-configuration fact would be stretching that scope to make it
+  fit. K-011 records the corrected component list so the eventual write does not repeat the error.
+
+- **MENTIONS tags added:** none. No entry in this chunk is substantively about a different agent —
+  the two mutation-testing entries are method facts in this agent's own discipline, and the three
+  discarded ones are project facts already at their point of use.
+- **Graph cleared:** all eight nodes fully deleted. Each was read for edge counts first
+  (`producedEdges = 1`, `mentionEdges = 0`, so `otherRemaining = 0` on every one), making the
+  `PRODUCED` edge the last edge and a whole-node `DETACH DELETE` the correct clear rather than an
+  edge resolve. This history entry was appended and confirmed **before** any graph mutation.
+
 ## 2026-09-07 — `kaizen_team` distillation, chunk A: 12 entries (2026-08-25 → 08-30) — 5 promoted, 3 discarded, 4 kept open; one new Principles bullet
 
 - **What:** `cobb`-run §5 distillation (`agent-maintenance` skill), unit **U8** of

@@ -3,6 +3,32 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-07 — Distillation pass 2, U9: `tdd-engineer` chunk B (8 entries) — 2 merged promotions, 3 discarded, 1 kept open; agent closed out
+
+- **Scope:** the eight current-shape entries `PRODUCED` by `tdd-engineer` dated 2026-08-31 → 09-03,
+  the remainder after U8's chunk A. No legacy entries have ever existed for this agent. No new
+  entry appeared during the run. After the clears, the current-shape read returns
+  `producedRemaining = 0, mentionedRemaining = 0` — `tdd-engineer` is closed out.
+- **Per-entry dispositions and reasoning:** `claude/tdd-engineer/kaizen/history.md`, 2026-09-07
+  chunk-B entry (the durable record). The one kept-open item is `plan.md` K-011, a
+  `model-bench/AGENTS.md` target outside cobb's write remit.
+- **Clears:** all 8 read `producedEdges=1, mentionEdges=0` → `otherRemaining == 0`, so every one
+  took the full-node curator clear (`DETACH DELETE`), each reporting `nodes_deleted=1,
+  relationships_deleted=1`. No `MENTIONS` tag was added, so the ordering invariant was trivially
+  satisfied. `history.md` was appended and confirmed **before** the first mutation.
+- **Artifacts changed by the promotions:** `skills/python-web-quirks/SKILL.md` (the FastAPI
+  route-table section widened to cover the included-router opacity and the
+  `include_router(prefix=…)` non-baking — a fold into the section U7b had already extended, not a
+  third near-duplicate section; frontmatter `description` widened to match) plus its
+  `skills/README.md` row; `claude/tdd-engineer/tdd-engineer.md` (one sentence appended to the
+  mutation-testing Principles bullet U8 promoted hours earlier, covering equivalent mutants and the
+  same-sentence downstream twin — deliberately not a second bullet on the same theme).
+- **Method note that keeps paying:** re-deriving rather than trusting entry text changed three of
+  eight dispositions here, and falsified a third of a fourth entry's premise. All three flips were
+  the same shape — the fact was already written, in more depth, at its point of use (a code comment
+  block, a component `AGENTS.md`), reachable only by looking. Cumulatively this is now the pattern
+  across every unit of pass 2.
+
 ## 2026-09-07 — Distillation pass 2, U8: `tdd-engineer` chunk A (12 entries) — 5 promoted, 3 discarded, 4 kept open
 
 - **Scope:** the twelve current-shape entries `PRODUCED` by `tdd-engineer` dated 2026-08-25 → 08-30.
