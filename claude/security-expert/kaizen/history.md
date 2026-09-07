@@ -2,6 +2,70 @@
 
 > Dated log of actual changes to the `security-expert` agent. Most recent first.
 
+## 2026-09-06 — `kaizen_team` distillation, U2: both current-shape entries promoted and cleared
+
+- **What:** `cobb` ran the `agent-maintenance` §5 pass over this agent's two raw `:KaizenEntry`
+  nodes in the shared `kaizen_team` graph (`a3f1c2e4-9b7d-4e21-8c6a-1f2d3e4b5a6c`, 2026-08-26;
+  `723818e1-878f-49b2-939e-b29198bf2d5b`, 2026-08-30). Both verified by re-derivation, both
+  promoted, both cleared from the graph. No `MENTIONS` tag added; no `plan.md` item opened.
+
+### `a3f1c2e4-9b7d…` (2026-08-26) — **promoted → `claude/graph-dba/falkordb-quirks.md`**
+- **The fact:** on FalkorDB v4.18.11 a single statement can chain `MATCH` → `DETACH DELETE` →
+  `WITH` → a further read clause with no semicolon; the parser's demand for a `WITH` bridge
+  between an update clause and the next read clause is trivially satisfiable. `GRAPH.RO_QUERY`
+  refuses the result at the engine's read-only check on the parsed plan, not as a syntax error.
+  Surfaced reviewing falkor-chat's `docs/plans/workflow-nl-query-generation.md` (FR-3/FR-3a
+  structural non-mutation design).
+- **Re-derived, not merely re-checked.** Two fresh probes through `mcp__cypher__query` against an
+  existing graph on the live instance (module `41811`, same build): the bare
+  `MATCH (v:Product) DETACH DELETE v WHERE true RETURN 1` returned the engine's own
+  `Invalid input 'H': expected WITH`; the same statement with a `WITH 1 AS ignore` bridge did
+  **not** return a parse error but the MCP server's `Write detected but no 'agent' supplied`
+  message. That second message is positive proof of the claim, not a confounder:
+  `cypher-mcp/server.py:975-985` runs `ro_query` first and only routes into `authorize_write()`
+  when the engine raises its read-only refusal — a path its own comment describes as
+  *"RO_QUERY itself proved it (parsed the statement, rejected it only for being a write)"*.
+  So the bridge form provably parsed at the engine.
+- **Why `graph-dba`'s knowledge base and not this prompt:** it is a general engine fact about the
+  build, not a rule that changes this agent's behavior in most sessions, and the file already
+  carries the companion parse-then-reject fact (the `GRAPH.EXPLAIN` entry under *Ops*). The
+  entry's own `suggestedHome` said the same. The promoted text keeps the security-relevant
+  consequence — a splice-point allowlist is load-bearing because Cypher grammar stops nothing —
+  since that is the reusable half for whoever reads the quirks file next.
+- **Not `MENTIONS`-tagged for `graph-dba`.** The tag exists so an entry surfaces again in the
+  mentioned agent's own future pass; this entry was fully dispositioned here, into `graph-dba`'s
+  own knowledge base and logged in its `history.md`, so tagging would have left a live node for a
+  fact already promoted — the duplicate-work case §5's dedup rule guards against.
+- **Cleared:** `PRODUCED` was the only edge (`otherRemaining == 0`), so the node was
+  `DETACH DELETE`d whole.
+
+### `723818e1-878f…` (2026-08-30) — **promoted → this agent's prompt, "How you work" step 3**
+- **The fact:** a constrained-DSL compiler that adds an independent `compile()`-level recheck for
+  every splice-worthy field, plus a `.model_construct()`-bypass test suite covering most of those
+  fields, can still miss one field entirely — the existing suite created false confidence of full
+  coverage rather than exposing the gap. Surfaced in falkor-chat K-055 U33's live adversarial
+  re-review of `query_graph_data`.
+- **Verified, and the instance is closed.** `falkor-chat/server/falkorchat/querygen.py` now
+  rejects any `filt.op` outside the closed six-value set inside `compile()`, alongside the
+  existing `filt.property` allowlist check, with a regression test reproducing the review's exact
+  payload (commit `3d01497`, recorded in `falkor-chat/docs/HISTORY.md`, 2026-08-30). The
+  project-specific half of the entry is therefore **discarded as already documented** — its record
+  lives in that component's own `HISTORY.md` and review doc, not here.
+- **What survives is the review heuristic**, which the fix does not retire: an existing
+  bypass-test suite is evidence of *intent*, never of *coverage*. Promoted as one sentence
+  appended to step 3 (*Gather evidence*), which already carries the "verify instead of
+  pattern-matching" rule this sharpens: *"When a defense is applied per field — an allowlist
+  recheck, a validator, an escape — enumerate the fields from the data model and confirm each one
+  independently; an existing bypass-test suite covering most of them is evidence of intent, never
+  of coverage."* Rule plus one clause of why, no dates or provenance in the prompt.
+- **Prompt-bar judgment (a close call, recorded so it isn't re-litigated as waste):** step 3's
+  existing text tells the agent to verify its *own* findings; it says nothing about the distinct
+  trap of reading someone else's defensive test suite as proof the defense is complete. That trap
+  is counterintuitive in the exact direction that matters — a thorough-looking suite reads as
+  coverage — and recurs across lenses 1 and 3 whenever a defense is applied per input. ~40 words.
+- **Cleared:** `PRODUCED` was the only edge (`otherRemaining == 0`), so the node was
+  `DETACH DELETE`d whole.
+
 ## 2026-08-25 — K-005 closed: FR-10's approval ritual now has a delegated-subagent path
 - **What:** `:58` gains the missing branch; 2,176 → 2,226 w (+50). The bullet said *"stop and state plainly: the target, the technique, and the blast radius — then wait for the human's confirmation."* For **Bash** that wait is mechanically real — `guard-exploitation-approval.sh` raises a `PreToolUse` ask. For **`WebFetch`** there is no hook, and this prompt's own `:20` establishes that a subagent cannot converse mid-run. So on the one branch `:56` calls *"the only control there is"*, the prescribed action was unperformable and the failure direction was **open**: narrate target/technique/blast-radius into a transcript, meet no objection because nobody is listening, proceed.
 - **Shipped text:** *"**Running as a delegated subagent you cannot perform this ritual** — there is no live human turn to state the target, technique, and blast radius *to*. On either tool, do **not** issue the call: return those three facts to the caller as a blocked item, alongside whatever else you established."*

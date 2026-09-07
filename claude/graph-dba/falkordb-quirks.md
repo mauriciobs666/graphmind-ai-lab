@@ -369,6 +369,22 @@ to the general fact here.
   and "two independent WHERE predicates fold into one Index Scan" entries below (Query tuning),
   but here the fold changes the **result**, not just the plan shape.
 
+- **A single Cypher statement can chain a read clause, `DETACH DELETE`, and another read clause
+  — the grammar is not a barrier to an identifier-splice mutation.** An update clause cannot be
+  followed *directly* by a read clause (`MATCH (v:Product) DETACH DELETE v WHERE true RETURN 1`
+  fails to parse: `Invalid input 'H': expected WITH`), but the bridge the parser demands is
+  trivially suppliable: insert `WITH 1 AS x` and `MATCH … DETACH DELETE … WITH … MATCH … RETURN …`
+  parses cleanly as **one statement, no semicolon, no injected `;` needed**. `GRAPH.RO_QUERY`
+  then refuses it — but at the engine's read-only check *on the parsed plan*, not as a syntax
+  error and not by scanning the query text. **Consequence for any query-builder DSL that splices
+  an identifier** (a label, variable, property or ordering token) into a read-only template: a
+  full mutation payload delivered through that field is a genuinely constructible statement on
+  this engine, not something Cypher grammar happens to stop. The splice-point allowlist is
+  therefore load-bearing on its own, and the read-only command is the only engine-level backstop
+  behind it. (Verified 2026-09-06 on v4.18.11, module `41811`, live against an existing graph;
+  same parse-then-reject ordering the `GRAPH.EXPLAIN` entry under *Ops* relies on to syntax-check
+  a write.)
+
 ## Query tuning
 
 - **A `$param IS NULL OR prop = $param` optional-filter idiom defeats an otherwise-available

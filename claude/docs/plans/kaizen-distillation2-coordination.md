@@ -30,11 +30,16 @@ certification pass is the periodic audit of `cobb`'s distillation work and is
 run separately on request.
 
 `frontend-engineer` had zero raw entries at open — no unit dispatched.
-`devops`'s unit includes one **legacy-shape** entry
-(`8301b20f-3e57-4761-a333-f1998bcbfcf1`, no `PRODUCED` edge, `author` null)
-reached only via the `MENTIONS`→`devops` edge that pass 1's U8 attached; it is
-cleared by resolving that one `MENTIONS` edge, and `otherRemaining` will be 0,
-so the node itself goes.
+
+**No legacy-shape (`author`-property) entry survives anywhere in the graph** —
+verified at open, `count = 0`. Every entry in this pass is current-shape, so
+§5's legacy read is not needed for any unit. `devops`'s unit does include one
+entry with **no `PRODUCED` edge left** —
+`8301b20f-3e57-4761-a333-f1998bcbfcf1`, whose producer edge pass 1's U8
+already resolved, reachable now only through the `MENTIONS`→`devops` edge that
+same unit attached. It is not a legacy entry; it is a current-shape entry
+mid-way through resolution. Resolving that one `MENTIONS` edge leaves
+`otherRemaining == 0`, so the node itself goes with it.
 
 `teco` commits each accepted unit's files by explicit path — `cobb` runs as a
 delegated subagent here, so the universal interactive-mode commit grant does
@@ -48,8 +53,8 @@ before the heavy ones. Counts are raw entries in scope at open.
 | Unit | Agent (scope) | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
 | U1 | cobb (1: 2026-09-06) | `a2c2c175f4d6976cb` | accepted | kept open as `claude/cobb/kaizen/plan.md` K-020 + `history.md`; node `DETACH DELETE`d | none (see above) → — | 99.1k tok, 20 tools |
-| U2 | security-expert (2: 08-26, 08-30) | — | queued | `claude/security-expert/kaizen/*`, graph cleared | none → — | — |
-| U3 | devops (3: 2 produced 09-02 + 1 legacy `MENTIONS` 08-23) | — | queued | `claude/devops/kaizen/*`, graph cleared | none → — | — |
+| U2 | security-expert (2: 08-26, 08-30) | `a4621faebf86763bd` | accepted | `claude/security-expert/security-expert.md` (step-3 clause) + `kaizen/history.md`; `claude/graph-dba/falkordb-quirks.md` + `kaizen/history.md`; both nodes deleted | none → — | 126.8k tok, 47 tools |
+| U3 | devops (3: 2 produced 09-02 + 1 `MENTIONS`-only 08-23) | — | queued | `claude/devops/kaizen/*`, graph cleared | none → — | — |
 | U4 | qa-engineer (7: 08-28…08-31) | — | queued | `claude/qa-engineer/kaizen/*`, graph cleared | none → — | — |
 | U5 | tico (8: 08-26…09-02) | — | queued | `claude/tico/kaizen/*`, graph cleared | none → — | — |
 | U6 | graph-dba (9: 09-02) | — | queued | `claude/graph-dba/kaizen/*`, graph cleared | none → — | — |

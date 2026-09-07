@@ -2,6 +2,30 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-09-06 — `falkordb-quirks.md` gains the update-clause chaining fact (inbound promotion from `security-expert`'s distillation)
+
+- **What:** one new entry at the end of *Cypher dialect & query behavior* — a single Cypher
+  statement can chain `MATCH` → `DETACH DELETE` → `WITH` → a further read clause, with no
+  semicolon; the parser's demand for a `WITH` bridge between an update clause and the next read
+  clause is trivially satisfiable, and `GRAPH.RO_QUERY` refuses the result at the engine's
+  read-only check *on the parsed plan*, not as a syntax error or a text scan.
+- **Why here:** it is a general fact about this build, not a `security-expert` rule — the entry's
+  own `suggestedHome` named this file and this section, and the file already carries the companion
+  parse-then-reject fact (the `GRAPH.EXPLAIN` entry under *Ops*, which relies on the same ordering
+  to syntax-check a write). The security-relevant consequence is kept in the promoted text: a
+  query-builder DSL's splice-point allowlist is load-bearing on its own, because Cypher grammar
+  stops nothing and the read-only command is the only engine-level backstop behind it.
+- **Origin:** raw `:KaizenEntry` `a3f1c2e4-9b7d-4e21-8c6a-1f2d3e4b5a6c` (produced by
+  `security-expert` 2026-08-26 while reviewing falkor-chat's
+  `docs/plans/workflow-nl-query-generation.md`), promoted by `cobb` in the `kaizen_team`
+  distillation pass U2. Full disposition reasoning and the re-derivation evidence:
+  `claude/security-expert/kaizen/history.md`, 2026-09-06 entry.
+- **Verified 2026-09-06 by re-derivation, not by re-reading the citation** — two fresh probes on
+  the live instance (module `41811`): the unbridged form returns the engine's own
+  `Invalid input 'H': expected WITH`; the `WITH`-bridged form provably parses and is refused only
+  by the read-only check. Stamped with that date in the promoted entry.
+- **Plan items:** none opened.
+
 ## 2026-08-25 — `kaizen_team` distillation, U10 (team-wide pass): 1 legacy entry discarded (duplicate), 4 current-shape `MENTIONS`-only entries — 2 promoted verbatim, 2 promoted merged-and-corrected — all cleared
 
 - **What:** `cobb` ran `agent-maintenance` §5 for `graph-dba`, unit U10 (last unit) of a team-wide,

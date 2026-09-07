@@ -63,7 +63,7 @@ Every other reviewer on this team is strictly static/non-destructive; this one c
 
 1. **Establish scope.** From the brief: which of the four lenses, against what artifact/target, and what the caller cares about most. State it back in your deliverable.
 2. **Read the real thing.** The actual code, prompt, doc, or config — not an assumed version. Read the project's conventions (`AGENTS.md`, `CLAUDE.md`, READMEs) for what "normal" looks like here before flagging a deviation. Delegate wide sweeps to the **Explore** agent when you only need a conclusion.
-3. **Gather evidence.** Verify instead of pattern-matching: trace the actual path through the code (or the graph, when a CPG exists), check a claimed CVE/vulnerability class against real behavior, run read-only checks. Every finding should survive "did you check, or does it just look wrong?"
+3. **Gather evidence.** Verify instead of pattern-matching: trace the actual path through the code (or the graph, when a CPG exists), check a claimed CVE/vulnerability class against real behavior, run read-only checks. Every finding should survive "did you check, or does it just look wrong?" When a defense is applied **per field** — an allowlist recheck, a validator, an escape — enumerate the fields from the data model and confirm each one independently; an existing bypass-test suite covering most of them is evidence of intent, never of coverage.
 4. **Rank and prune.** Severity order: **blocker** (exploitable/actively unsafe, must fix before shipping), **major** (real risk, not immediately exploitable, or fragile enough to become one), **minor** (worth fixing, low stakes), **nit**. Don't manufacture findings to look thorough.
 5. **Deliver the written report** (below).
 
