@@ -145,7 +145,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S8e** — close P13-1 + P13-2 (majors), P13-3, the nit, and **correct the guard-reach statement** | `coder` (**resumed** `ad35d76985da040a3`) | `ad35d76985da040a3` | **accepted — committed `92bf842`** (314/65). **Replaced enumeration with derivation**: `_alias_prefixes()` closes a seed set over `ast.Assign` bindings to a fixpoint, applied on **all four legs**, not the two Pass 13 named — the frontier walks were the identical defect one field over. Nine names unchanged, so no re-baselining. **Took closure (a) AND (b) on P13-2**, reasoning that "the defect is only ever the gap" means closing it has two moves; raise walk now spans **four scopes**. **Closed the leg Pass 13 called latent** and asserted it cannot empty silently. **Reversed itself on P13-3** after checking the rebuttal — its own P11-7 analogy was wrong — and proved the cross-check killable (183 without / 1 failed with) | `storefront_api.py`, `test_storefront_api.py` + a corrected guard-reach statement | `analyst` (Pass 14) → — | **254k tok** / 38 tools |
 | **Pass 14** — gate S8e (`92bf842`) | `analyst` (**fresh**) | `a53a5d3a5d3ff9f2d` | **accepted — committed `a42fcca`. NEEDS CHANGES** (0 blockers, **3 majors**, 1 minor, 1 nit). **Found instances eleven and twelve inside S8e's own fix, both via the general probe rather than a reproduction.** **P14-1** the composed raise walk stops one hop short of its exemption — and the blind spot hides an **unclassified** raise, `MemberIdCollisionError`, in no table anywhere; **P14-2** `_alias_prefixes` harvests `ast.Assign` only, so S9's shape **plus a type annotation** survives (annotated locals are a house idiom, 68 in the package); **P14-3** the composition claim is right about the code and wrong about the **plan**. Reproduced all six of S8e's claims exactly. **Ruled the guard-reach statement inaccurate in 4 of 11 clauses** and named a **convergence test** | `docs/reviews/salesperson-ui-impl.md` `## Pass 14` | — | 191k tok / 69 tools |
 | **S8f** — P14-1, P14-2, P14-4, P14-5 + the syntactic restatement + the `MemberIdCollisionError` ruling | `coder` (**fresh** — S8e ended at 254k, past the resume threshold) | `a0b67a1e6bc22d6b8` | in-flight (dispatched 2026-09-07) | `storefront_api.py`, `test_storefront_api.py` + the **fact half** of the guard-reach statement + the convergence probe's output | `analyst` (Pass 15) → — | — |
-| **U30** — P14-3: settle the plan/code exception-name mismatch and the falsifiability **mapping** | `architect` (**fresh**) | `af0b1eb6551aa85e9` | in-flight (dispatched 2026-09-07) | `docs/plans/salesperson-ui.md` §5.1 S9 row | `analyst` (folded into Pass 15) → — | — |
+| **U30** — P14-3: settle the plan/code exception-name mismatch and the falsifiability **mapping** | `architect` (**fresh**) | `af0b1eb6551aa85e9` | **accepted — committed `a3f681e`** (3/2, one file). **Ruled the plan wrong and the code right** — `services.py:2085`'s `WorkflowRunNotFoundError` is a *workspace snapshot/trigger-anchor* miss, already documented in `start_workflow_run`'s own docstring, while `WorkflowDefNotFoundError` is a *`reference`-graph* condition whose three raise sites are unreachable from the S9 path. Two conditions, only one reachable; the row named the reachable one with the unreachable one's class. **No code change implied.** Introduced the **two-gate** framing (does the method enter the walked set / is the raise in its own body or one call further in) that the plan had collapsed | `docs/plans/salesperson-ui.md` **v1.24** | teco-verified | 107k tok / 44 tools |
+| **U31** — replace S9's unmeetable *"S8c goes red"* done-condition with the armed-fault measurement; account for the false-but-unmeasured excuses and `executor.run`'s own raise | `architect` (**resumed** `af0b1eb6551aa85e9` — 107k/44, well inside threshold, and it holds the two-gate reasoning) | `af0b1eb6551aa85e9` | in-flight (dispatched 2026-09-07) | `docs/plans/salesperson-ui.md` **v1.25** | `analyst` (folded into Pass 15) → — | — |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
 | **U31** — stakeholder decision: how a dead turn becomes visible to the participant | stakeholder | — | **delivered — option B**, the additive `lastTurn: 'failed' \| null` field | option B recorded in v1.23 (below) | — | — |
 | **v1.23** — write option B into the contract: §5.2's `turn` shape, §5.3 C6a, S9's row, + the client rows that inherit it | `architect` | `ad81e9cdb12dfbb28` (resumed ×2) | **accepted — committed `10f2b72`** (68/7) | `docs/plans/salesperson-ui.md` **v1.23** | teco-verified: **exactly the 4 announced rows moved** (S9, S12a, S13, S15), no delivered row moved, all 21 rows 7 cells on a pipe-aware count | 224k tok / 26 tools |
@@ -2085,3 +2086,48 @@ the artifact.
 **The re-word unit stays queued behind both, and behind Pass 15.** It has now been held through three
 gates, and each gate has vindicated the hold — Pass 13 and Pass 14 both ruled the then-current
 statement inaccurate. It gets dispatched when a gate says the statement is lift-ready, not before.
+
+## A compression of mine that was wrong, and it shaped six units (teco, 2026-09-07)
+
+In "My parallel dispatch was file-safe and semantically coupled" I recorded v1.22's placement ruling
+as: *"the call S9 adds is `Storefront.enqueue_turn` doing `self._services.start_workflow_run(...)`,
+with the router calling `shop.enqueue_turn(...)`."* **That is my compression, and it is wrong.** The
+plan text v1.22 actually wrote — and §5.1's S9 row still says — is `trigger.maybe_trigger` →
+`services.start_workflow_run`, **on the worker**. The direct `self._services` spelling was never the
+decision; it was my paraphrase of "the trigger runs inside the worker".
+
+The consequence is not cosmetic. The reach walk follows the service object **by attribute access
+only**, so under the delivered trigger spelling `start_workflow_run` is reached through
+`self._trigger.maybe_trigger`, whose own call site is `trigger.py:82` — **not one of the walk's four
+scopes.** The walk therefore reports **none** of the three exceptions at S9, and §5.1's clause
+*"S8c's `services.` access assertion goes red on this step"* is **unmeetable as written**.
+
+**Every downstream brief inherited the compression.** My S8d2 brief, my S8e resume, my S8f brief and
+my own independent mutation test all used `svc = self._services` / `svc.start_workflow_run(...)` as
+"S9's decided shape". It is not S9's decided shape. It is a shape S9 could take and, per the plan,
+will not.
+
+**What this does and does not invalidate.** It does **not** invalidate the guard work: the reader's
+blind spots were real (an annotated assignment escaping is a defect whatever S9 writes), and P14-1
+surfaced `MemberIdCollisionError`, an unclassified raise on a request path, which is a product defect
+the guard found by accident and which stands entirely on its own. What it invalidates is the
+**stated justification** — *"the guard is built before S9 so S9's call reddens it"* — which, under the
+spelling the plan actually specifies, will not happen.
+
+**The lesson, and it is mine, not a delegate's.** A coordinator's summary of a delegate's ruling is a
+**secondary source**, and I quoted mine back into six briefs as if it were the plan. The plan text is
+the primary source and it was one `grep` away the whole time. The tell I should have caught: my
+summary named a *specific call expression*, while the architect's actual deliverable ruled on a
+*placement* (which thread the work runs on). **A ruling about where code runs does not determine how
+the call is spelled** — I filled that gap myself, in prose, and then treated my own fill as decided.
+The rule I am adopting: **when a brief needs to state a decision another unit took, quote the
+artifact, cite it by path and section, and never paraphrase a decision into a fact.** I already have
+this rule for plans in general — *never paraphrase a plan into a brief* — and I broke it against my
+own coordination doc, which is the one place I am most likely to trust myself.
+
+**Recorded, not repaired by stealth:** U31 is dispatched to replace the unmeetable clause with the
+armed-fault measurement, which was U30's own recommendation. And the deeper item U31 must settle is
+that under the trigger spelling three `INHERITED_HANDLERS` reason strings (*"no storefront route
+calls that layer"*) become **false in truth while remaining invisible to the walk** — the thirteenth
+instance of this coordination's signature defect, now at the architecture level rather than inside
+the reader.
