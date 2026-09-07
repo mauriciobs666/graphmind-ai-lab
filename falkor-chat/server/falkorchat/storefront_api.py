@@ -434,27 +434,48 @@ ENVELOPE_HANDLERS: frozenset[type[BaseException]] = frozenset(
 # found it was not. The two shapes have two mechanisms, both AST-read by
 # `tests/test_storefront_api.py`.
 #
+# Each mechanism is stated here at the reach it actually has. Three passes of
+# this review found the same defect — a rule written broader than the walk
+# beneath it — so what follows is deliberately a description of the code, not
+# of the intent (`docs/reviews/salesperson-ui-impl.md` `## Pass 13`).
+#
 # *"No storefront route calls layer X"* is
-# `test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume`:
-# it pins the **whole set of `Services` methods a route can reach** — the
-# router's own `services.<name>` / `shop._services.<name>` accesses **plus**
-# `self._services.<name>` in every `Storefront` method the router reaches,
-# transitively, since a route calls the layer through `shop.<method>` as
-# readily as directly. Nine today; a tenth reddens. Reading only the direct
-# spelling was P12-1: the guard fired on the one placement S9 rejected and
-# stayed green on both it takes.
+# `test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume`.
+# It pins the set of `Services` methods reached by: (1) `<prefix>.<name>`
+# anywhere in `build_storefront_router`, where `<prefix>` is `shop._services`
+# or any local name transitively bound to it; and (2) the same, with prefix
+# `self._services`, in every `Storefront` method the router reaches through
+# `shop.<method>`/`self.<method>` calls, transitively. **Nine today, and a
+# tenth added by any of those paths reddens.** Prefixes are derived from the
+# files' own bindings, not listed — listing them let `svc = self._services`
+# through, which is S9's decided shape plus one line (P13-1); reading only the
+# router's direct spelling was P12-1. Where it stops: it follows the service
+# object only through attribute access, so a call made by handing that object
+# somewhere else — passed to a helper, returned, stored — is outside it. That
+# is a statement about the walk, not a claim about the code; the moment one is
+# written, this comment is what has to change with it.
 #
 # *"No storefront route raises it"* is
 # `test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume`,
-# over **both storefront modules whole** rather than the router node: a raise
+# over four scopes: `storefront_api.py` and `storefront.py` **whole** — a raise
 # one helper call out of a route body is a raise on the route, and so is one
-# inside the `Storefront` method the route calls (P12-2). It stops at the
-# `services.py` boundary, which the reach guard above covers instead.
+# inside the `Storefront` method the route calls (P12-2) — plus the `Services`
+# methods the reach guard above measures and the `Repository` methods the
+# router calls through `repo.<name>`, read at those methods only because both
+# files are shared with the legacy surface. Composing the two guards is what
+# closed P13-2: the reach guard says *which* collaborator methods a request
+# runs, never *what they raise*, and a bare `HTTPException` in one of them
+# answered `410 {"detail":"gone"}` with both guards green. **It stops at what
+# those collaborators call in turn** — `Services` into `Repository`,
+# `Repository` into redis — which is covered by S8's typed handlers and by the
+# `ServiceError` partition, not by an exemption in this table.
 INHERITED_HANDLERS: dict[type[BaseException], str] = {
     # FastAPI/Starlette defaults, on every app ever built.
     StarletteHTTPException: (
         "the framework default. No `/shop/api` route raises a bare "
-        "`HTTPException` — they raise `StorefrontHTTPError`, whose own handler "
+        "`HTTPException` anywhere the guard above reaches — `storefront_api.py` "
+        "and `storefront.py` whole, plus the `Services`/`Repository` methods a "
+        "route reaches — they raise `StorefrontHTTPError`, whose own handler "
         "wins the MRO walk (asserted by "
         "`test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume`; "
         "`_raised_refusals`, which this cited until P11-2, collects "

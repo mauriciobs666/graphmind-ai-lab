@@ -64,6 +64,8 @@ from redis import exceptions as redis_exceptions
 from test_app import _FASTAPI_BUILTIN_PATHS, _route_entries
 
 from falkorchat import config, db, storefront, storefront_api
+from falkorchat import repository as repository_module
+from falkorchat import services as services_module
 from falkorchat.app import _register_error_handlers, create_app
 from falkorchat.config import CallContext
 from falkorchat.services import (
@@ -2971,6 +2973,14 @@ def _storefront_source() -> str:
     return Path(storefront.__file__).read_text(encoding="utf-8")
 
 
+def _services_source() -> str:
+    return Path(services_module.__file__).read_text(encoding="utf-8")
+
+
+def _repository_source() -> str:
+    return Path(repository_module.__file__).read_text(encoding="utf-8")
+
+
 def _attribute_targets(node, prefixes: set[str]) -> set[str]:
     """The `<prefix>.<name>` accesses anywhere under `node`.
 
@@ -2992,8 +3002,55 @@ def _attribute_targets(node, prefixes: set[str]) -> set[str]:
     }
 
 
+def _alias_prefixes(node, seeds: set[str]) -> set[str]:
+    """`seeds`, closed over every local name bound to one under `node`.
+
+    A reader that matches a list of spellings guards against the spellings it
+    listed. `svc = self._services` followed by `svc.start_workflow_run(ctx)` is
+    §5.1 S9's decided shape plus one line, and it walked straight past a reader
+    holding the three literal prefixes — as did a second router alias
+    (`docs/reviews/salesperson-ui-impl.md` `## Pass 13`, P13-1).
+
+    So the prefixes are **derived, not listed**: any name assigned something
+    that is already a prefix becomes one, to a fixpoint, which also resolves an
+    alias of an alias. The one hand-written prefix left is the attribute the
+    object is *reached* by (`shop._services`, `self._services`), which is a
+    property of the class rather than of a body someone is editing.
+    """
+    prefixes = set(seeds)
+    bindings = [
+        (target.id, ast.unparse(child.value))
+        for child in ast.walk(node)
+        if isinstance(child, ast.Assign)
+        for target in child.targets
+        if isinstance(target, ast.Name)
+    ]
+    grew = True
+    while grew:
+        grew = False
+        for name, value in bindings:
+            if value in prefixes and name not in prefixes:
+                prefixes.add(name)
+                grew = True
+    return prefixes
+
+
+def _class_methods(source: str, class_name: str) -> dict[str, ast.AST]:
+    """`{method name: node}` for one class defined in `source`."""
+    klass = next(
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.ClassDef) and node.name == class_name
+    )
+    return {
+        node.name: node
+        for node in klass.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+
 def _service_layer_reach(api_source: str, storefront_source: str) -> set[str]:
-    """Every `Services` method a `/shop/api` route can reach, by any path.
+    """The `Services` methods a `/shop/api` route reaches, by the paths below.
 
     A route reaches the service layer two ways, and the exemptions in
     `INHERITED_HANDLERS` are claims about **both**: directly, as
@@ -3007,21 +3064,25 @@ def _service_layer_reach(api_source: str, storefront_source: str) -> set[str]:
     methods the router calls, **transitively** within the class (`list_catalog`
     reaches `filter_products` through `_catalog_rows`, two hops down, and a
     guard that stopped at one would have to argue why one hop is the boundary).
+
+    **Every prefix is alias-resolved** (P13-1), on all four legs — the two that
+    reach the service layer and the two that walk `Storefront` — so a local
+    binding cannot hide a call from any of them. Listing the three literal
+    spellings instead is what let `svc = self._services` through, and that is
+    S9's decided shape written in two lines.
+
+    **Where it stops**, said plainly because "by any path" is what this
+    docstring used to claim and could not deliver: the service object is
+    followed only through attribute access, so a call made by handing the
+    object somewhere else — passed to a helper, returned, stored — is outside
+    this reader. That is a property of the walk, not a claim about the code.
     """
     router = _parse_router(api_source)
-    klass = next(
-        node
-        for node in ast.walk(ast.parse(storefront_source))
-        if isinstance(node, ast.ClassDef) and node.name == "Storefront"
-    )
-    methods = {
-        node.name: node
-        for node in klass.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-    }
+    methods = _class_methods(storefront_source, "Storefront")
 
-    reached = _attribute_targets(router, {"services", "shop._services"})
-    frontier = _attribute_targets(router, {"shop"}) & methods.keys()
+    reached = _attribute_targets(router, _alias_prefixes(router, {"shop._services"}))
+    frontier = _attribute_targets(router, _alias_prefixes(router, {"shop"}))
+    frontier &= methods.keys()
     walked: set[str] = set()
     while frontier:
         name = frontier.pop()
@@ -3029,20 +3090,37 @@ def _service_layer_reach(api_source: str, storefront_source: str) -> set[str]:
             continue
         walked.add(name)
         body = methods[name]
-        reached |= _attribute_targets(body, {"self._services"})
-        frontier |= (_attribute_targets(body, {"self"}) & methods.keys()) - walked
+        reached |= _attribute_targets(body, _alias_prefixes(body, {"self._services"}))
+        frontier |= (
+            _attribute_targets(body, _alias_prefixes(body, {"self"})) & methods.keys()
+        ) - walked
     return reached
 
 
-def _router_bindings(source: str) -> dict[str, str]:
-    """The `<name> = <expr>` bindings at the top of the router body."""
-    return {
-        target.id: ast.unparse(node.value)
-        for node in _parse_router(source).body
-        if isinstance(node, ast.Assign)
-        for target in node.targets
-        if isinstance(target, ast.Name)
-    }
+def _raises_of(source: str, class_name: str, method_names) -> set[str]:
+    """The exception classes a `raise` names in the given methods of one class.
+
+    Every name is resolved, so a method renamed out from under the caller
+    reddens here rather than silently contributing nothing to the union.
+    """
+    methods = _class_methods(source, class_name)
+    missing = set(method_names) - methods.keys()
+    assert not missing, f"`{class_name}` has no method(s) {sorted(missing)}"
+    names: set[str] = set()
+    for name in method_names:
+        names |= _raised_class_names(methods[name])
+    return names
+
+
+def _router_repository_reach(api_source: str) -> set[str]:
+    """The `Repository` methods the router calls directly, alias-resolved.
+
+    `repo = shop._repo` is a fourth module on the request path, under no guard
+    at all until P13-2. S10 moves both calls onto `Storefront`, at which point
+    this returns the empty set — which is why its caller asserts it is not.
+    """
+    router = _parse_router(api_source)
+    return _attribute_targets(router, _alias_prefixes(router, {"shop._repo"}))
 
 
 def _named_class(expr) -> str:
@@ -3086,11 +3164,21 @@ def _raised_class_names(node) -> set[str]:
             continue
         raised = _named_class(child.exc)
         if raised in factories:
-            names |= {
+            resolved = {
                 _named_class(returned.value)
                 for returned in ast.walk(factories[raised])
                 if isinstance(returned, ast.Return) and returned.value is not None
             }
+            # the one shape that would otherwise resolve to nothing at all,
+            # where every other unresolvable shape is loud (P13-4): a factory
+            # whose `return`s carry no value contributes `set()` and the raise
+            # vanishes. It cannot actually raise anything, so this is a reader
+            # invariant rather than a source claim — stated as one.
+            assert resolved, (
+                f"`raise {raised}(...)` resolved to nothing: the factory has no "
+                "`return <expr>` this reader can name"
+            )
+            names |= resolved
         else:
             names.add(raised)
     return names
@@ -3150,17 +3238,31 @@ def test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume()
     So the reader takes the union: both direct spellings in the router, plus
     `self._services.<name>` in every `Storefront` method the router reaches,
     transitively. `storefront.py` is read here and never written.
+
+    **And a local alias is one of those paths** (P13-1). Listing three
+    spellings guarded against those three: `svc = self._services` /
+    `svc.start_workflow_run(ctx)` — S9's decided shape plus one line — survived
+    the whole file at 183 passed, and so did a second router alias,
+    `svc2 = shop._services`. The direct spelling on the same injection point
+    reddened, so the difference was purely the binding. Every prefix on all
+    four legs is therefore **derived** from the file's own `ast.Assign` nodes
+    to a fixpoint rather than written down, which is also what turns the old
+    hand-written `services == shop._services` control into a structural one: a
+    rename is now followed instead of blinding the walk.
     """
     api, sf = _router_source(), _storefront_source()
 
-    # the control on the direct half: the walk assumes this binding, so a
-    # router that renamed it fails here rather than silently measuring less
-    assert _router_bindings(api).get("services") == "shop._services"
+    # the control on the direct half, structural rather than hand-written: the
+    # walk must have *derived* `services` from the router's own binding. A
+    # reader that lost the fixpoint reddens here on the delivered file, not
+    # only on a stub.
+    assert "services" in _alias_prefixes(_parse_router(api), {"shop._services"})
 
     assert _service_layer_reach(api, sf) == set(SERVICE_LAYER_REACH_TODAY)
 
-    # the controls on the reader: all three spellings S9 could have taken are
-    # resolved, including the two the first version of this guard missed
+    # the controls on the reader: every spelling S9 could take is resolved —
+    # the three the first version of this guard was widened for, and the two
+    # aliased ones it still walked past (P13-B, P13-C)
     api_stub = (
         "def build_storefront_router(shop):\n"
         "    services = shop._services\n"
@@ -3168,19 +3270,53 @@ def test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume()
         "        return {}\n"
     )
     sf_stub = "class Storefront:\n    def unrelated(self):\n        return None\n"
-    assert _service_layer_reach(
-        api_stub.replace("return {}", "return services.start_workflow_run(None)"),
-        sf_stub,
-    ) == {"start_workflow_run"}
-    assert _service_layer_reach(
-        api_stub.replace("return {}", "return shop._services.start_workflow_run(None)"),
-        sf_stub,
-    ) == {"start_workflow_run"}
-    assert _service_layer_reach(
-        api_stub.replace("return {}", "return shop.enqueue_turn(None)"),
+
+    def reach(router_line, storefront_class=sf_stub):
+        return _service_layer_reach(
+            api_stub.replace("return {}", router_line), storefront_class
+        )
+
+    assert reach("return services.start_workflow_run(None)") == {"start_workflow_run"}
+    assert reach("return shop._services.start_workflow_run(None)") == {
+        "start_workflow_run"
+    }
+    assert reach(
+        "return shop.enqueue_turn(None)",
         "class Storefront:\n"
         "    def enqueue_turn(self, ctx):\n"
         "        return self._services.start_workflow_run(ctx)\n",
+    ) == {"start_workflow_run"}
+
+    # P13-B — the alias inside the `Storefront` method, which is S9's decided
+    # shape written in two lines instead of one
+    assert reach(
+        "return shop.enqueue_turn(None)",
+        "class Storefront:\n"
+        "    def enqueue_turn(self, ctx):\n"
+        "        svc = self._services\n"
+        "        return svc.start_workflow_run(ctx)\n",
+    ) == {"start_workflow_run"}
+
+    # P13-C — a *second* router alias, which the old binding control could not
+    # see because it checked a rename of the existing one, not an added one
+    assert _service_layer_reach(
+        api_stub.replace(
+            "    def post(body):\n        return {}\n",
+            "    svc2 = shop._services\n"
+            "    def post(body):\n"
+            "        return svc2.start_workflow_run(None)\n",
+        ),
+        sf_stub,
+    ) == {"start_workflow_run"}
+
+    # ...and an alias of an alias, which is why the derivation is a fixpoint
+    assert reach(
+        "return shop.enqueue_turn(None)",
+        "class Storefront:\n"
+        "    def enqueue_turn(self, ctx):\n"
+        "        svc = self._services\n"
+        "        also = svc\n"
+        "        return also.start_workflow_run(ctx)\n",
     ) == {"start_workflow_run"}
 
 
@@ -3203,6 +3339,25 @@ STOREFRONT_RAISES_TODAY = frozenset({
     "UnscopedParticipantError", "ResetStateUnknownError",
     "UnknownOrderError", "OrderTransitionRefusedError",
 })
+
+
+# Everything the *reached* methods of the two shared collaborators raise
+# (P13-2). Not whole modules: `services.py` and `repository.py` are shared with
+# the legacy surface, so only the methods a `/shop/api` request actually
+# executes are read — the nine `SERVICE_LAYER_REACH_TODAY` names, and the two
+# the router calls through `repo.<name>`.
+#
+# `UnknownOrderTransitionError` is `services.advance_order`'s guard on an
+# unknown transition string. It is already in `SERVICE_ERRORS_UNREACHABLE` with
+# a behavioural reason (§5.3 C11: `AdvanceOrderIn.transition` is a `Literal` of
+# exactly the three it accepts, so `422 validation_failed` answers first), and
+# that reason has its own producer test — so it is exempted here by a mechanism
+# rather than by appearing in a list.
+SERVICE_RAISES_TODAY = frozenset({"UnknownOrderTransitionError"})
+
+# Empty, and asserted rather than recorded: "raises nothing today" is exactly
+# the kind of measured-once fact that stops being true in silence.
+REPOSITORY_RAISES_TODAY: frozenset[str] = frozenset()
 
 
 def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
@@ -3239,22 +3394,50 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
     `410 {"detail":"gone"}` from `POST /shop/api/session`: a route executes
     `shop.<method>` exactly as it executes a local helper.
 
-    So the unit is the module and the storefront owns two of them, and neither
-    is filtered by reachability — deliberately. Both files exist only to serve
+    So the unit is the module for the storefront's own two files, which are
+    read whole and not filtered by reachability: both exist only to serve
     `/shop/api`, so a `raise` anywhere in either is one the next edit can put on
-    a request path; over-approximating costs a named line in a list, while
-    under-approximating is the same defect a second time. The filtering belongs
-    one layer down, at `services.py`, which *is* shared with the legacy surface
-    — what a route reaches there is measured rather than assumed, by
-    `test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume`.
-    That layer boundary is where this guard stops; the two guards together are
-    the whole claim.
+    a request path, and over-approximating costs a named line in a list while
+    under-approximating is the same defect a second time.
 
-    Three scopes are pinned. Inside the router: exactly the two envelope
+    **The walk does not stop there, because the request does not** (P13-2).
+    This docstring used to say it stopped at `services.py`, "which the reach
+    guard above covers instead" — false in exactly the way this guard keeps
+    being false: that guard measures **which** `Services` methods a route
+    reaches, never **what they raise**. A bare `HTTPException(410)` on a dead
+    branch of `services.save_profile` — one of the nine names it itself lists,
+    reached from `Storefront.join` — survived the whole file at 183 passed and
+    answered the identical `410 {"detail":"gone"}` from
+    `POST /shop/api/session`. So the two guards are **composed**: this one walks
+    exactly the `Services` methods `SERVICE_LAYER_REACH_TODAY` names, and
+    exactly the `Repository` methods the router calls through `repo.<name>`.
+    Neither collaborator is read whole — both are shared with the legacy
+    surface, and only the reached methods are on this request path.
+
+    Composition is the point, not economy. When S9 adds `start_workflow_run` to
+    the reach, this walk follows it with nobody re-pointing it and reports
+    `WorkflowInputRejectedError` and `WorkflowRunNotFoundError` — two of the
+    three `INHERITED_HANDLERS` excuses §5.1's S9 row says become falsifiable at
+    that moment. The third, `WorkflowEngineDisabledError`, is raised inside
+    `_require_executor`, a helper the walked method only *calls*, so it stays a
+    prose argument. Saying which of the three this mechanism actually reaches is
+    the whole discipline the guard exists to enforce.
+
+    **Where it does stop, stated rather than implied:** at what those
+    collaborators call in turn — `Services` into `Repository`, `Repository` into
+    redis. None of that is walked, and none of it is excused here either: the
+    graph faults are S8's typed handlers' own rows, and the `ServiceError`
+    family is covered by the `SERVICE_ERROR_RESPONSES` /
+    `SERVICE_ERRORS_UNREACHABLE` partition. A `raise` a route can reach from
+    outside all four scopes is not something this test can see, and no reason
+    string may claim otherwise.
+
+    Four scopes are pinned. Inside the router: exactly the two envelope
     classes. `storefront_api.py` whole: those two, plus the three raises that
     happen at wiring or boot time and can never be on a request path.
     `storefront.py` whole: `STOREFRONT_RAISES_TODAY`, seven `StorefrontError`
-    subclasses and nothing else.
+    subclasses and nothing else. The reached methods of the two collaborators:
+    `SERVICE_RAISES_TODAY` and `REPOSITORY_RAISES_TODAY`.
 
     This is what makes `INHERITED_HANDLERS[StarletteHTTPException]`'s reason
     true rather than merely stated.
@@ -3282,11 +3465,41 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
     storefront_raises = _raised_class_names(_storefront_source())
     assert storefront_raises == set(STOREFRONT_RAISES_TODAY)
 
+    # P13-3 — the premise the constant's own comment argues from, checked
+    # against a second, independent source. The comment says the excuses hold
+    # *because* all seven are `StorefrontError`s and that family is fully
+    # handled; the family half has a test, the subset half had nothing. It
+    # matters because extending the allowlist is the cheapest way to silence
+    # the assertion above, and only `HTTPException` is separately fenced.
+    assert set(STOREFRONT_RAISES_TODAY) <= {
+        klass.__name__ for klass in _subclasses(storefront.StorefrontError)
+    }
+
+    # ...and the two shared collaborators, at the methods a request reaches —
+    # `services.py` is on the request path and nothing here read it (P13-2)
+    service_raises = _raises_of(
+        _services_source(), "Services", SERVICE_LAYER_REACH_TODAY
+    )
+    assert service_raises == set(SERVICE_RAISES_TODAY)
+
+    repo_reach = _router_repository_reach(source)
+    assert repo_reach, (
+        "the router no longer calls `repo.<name>` — S10 moves both onto "
+        "`Storefront`, and this leg has to be re-pointed rather than emptied"
+    )
+    repo_raises = _raises_of(_repository_source(), "Repository", repo_reach)
+    assert repo_raises == set(REPOSITORY_RAISES_TODAY)
+
     # the bare `HTTPException` half, named separately because it is the one the
-    # reason string cites and the one a reflex reaches for — over both files,
-    # since `410 {"detail":"gone"}` reaches the participant identically from
-    # either one (N-M, N-M2, N-M3)
-    assert "HTTPException" not in _raised_class_names(source) | storefront_raises
+    # reason string cites and the one a reflex reaches for — over all four
+    # scopes, since `410 {"detail":"gone"}` reaches the participant identically
+    # from any of them (N-M, N-M2, N-M3, P13-A)
+    assert "HTTPException" not in (
+        _raised_class_names(source)
+        | storefront_raises
+        | service_raises
+        | repo_raises
+    )
 
     # the controls: the reader resolves both mutation shapes it is shown
     assert _raised_class_names(
@@ -3343,6 +3556,21 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
     assert _raised_class_names(
         factory.replace("return {}", "return HTTPException(status_code=410)")
     ) == {"HTTPException"}
+
+    # P13-A's shape — a raise in a *reached* collaborator method, which no
+    # scope before P13-2 read; and the control that `_raises_of` really is
+    # selective, so the composed leg cannot silently read the wrong methods
+    collaborator = (
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        raise HTTPException(status_code=410, detail='gone')\n"
+        "    def unreached(self, ctx):\n"
+        "        raise SomethingElse()\n"
+    )
+    assert _raises_of(collaborator, "Services", {"save_profile"}) == {"HTTPException"}
+    assert _raises_of(collaborator, "Services", {"unreached"}) == {"SomethingElse"}
+    with pytest.raises(AssertionError, match="has no method"):
+        _raises_of(collaborator, "Services", {"renamed_away"})
 
 
 def _raised_refusals() -> dict[str, set[tuple[int, str]]]:
