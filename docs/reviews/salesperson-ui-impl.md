@@ -3664,3 +3664,425 @@ pytest tests/test_storefront_api.py -m live -q  ->  131 deselected  (zero collec
   `AssertionError`.
 - *`repository.py`'s direct use from the router is an exercised hole.* **Latent, not exercised** —
   `list_participants` and `reset_all_participants` raise nothing today.
+
+## Pass 14 — 2026-09-07 (S8e: is the *derivation*'s own reach as wide as its sentence?)
+
+**Reviewed:** commit **`92bf842`** (S8e) — `falkorchat/storefront_api.py` (+45/−24, comment and one
+reason string) and `tests/test_storefront_api.py` (+269/−41) — against
+`docs/plans/salesperson-ui.md` **v1.23** §4.9, §5.1 S8/S9/S10, §5.2, §5.3, against `## Pass 13`'s
+two majors, minor and nit, and against `docs/plans/salesperson-ui-coordination.md`'s rows 143–145
+and its two 2026-09-07 sections. Not reviewed: S9/S10/S12 content, the SPA, the held
+`HISTORY.md`/`SERVER.md` documentation debt.
+
+**I am a fresh reviewer.** I wrote neither Pass 12 nor Pass 13; I read both as documents and
+re-derived every claim of theirs I rely on below.
+
+**CPG: considered, not relevant — `cpg_falkorchat` models none of the files in scope (0 `File`
+nodes matching `storefront`, measured by Pass 12, accepted by Pass 13, and the brief asked me not
+to re-spend on it), so every claim below is from direct read, AST analysis lifted verbatim out of
+the delivered test file, or source mutation against the live suite.**
+
+**Verdict: needs changes** — **0 blockers, 3 majors, 1 minor, 1 nit**. S8e's own work is the best
+in this chain: the fixpoint is a real structural answer, the four-leg application went looking for
+the sibling instance instead of waiting for a gate, the P13-3 reversal is correct, and **every
+figure S8e reports reproduced exactly** — including the two-file 183, P13-3's 183/1-failed A/B, and
+the seed-independence claim, which I confirmed at all eight seeds. But the answer to *"is the class
+now closed?"* is **no**, in the same shape for the fourth consecutive pass and **twice inside
+S8e's own fix**:
+
+- **P14-1 (the eleventh instance).** The composed raise walk stops one hop *earlier* than the
+  sentence governing it. A bare `HTTPException(410)` in a `Services` sibling helper reached from
+  `save_profile`, and one in `Repository.ensure_participant` reached from `Storefront.join`, each
+  **survive at 183 passed** and each answer `410 '{"detail":"gone"}'` from `POST /shop/api/session`
+  — Pass 13's P13-A, one layer down, twice.
+- **P14-2 (the twelfth).** `_alias_prefixes` closes over `ast.Assign` only, while the statement says
+  "any local name transitively bound to it". `svc: object = self._services` — S9's decided shape
+  **plus one type annotation** — **survives at 183**; drop the annotation and it is `1 failed`.
+  Annotated local binding is a house idiom in the very files S9 edits (6 in `storefront.py`, 16 in
+  `storefront_api.py`).
+- **P14-3.** The composition claim that a separate unit will lift into §5.1's S9 row is **wrong
+  about the plan it cites**: the walk reports *one* of the S9 row's three excuses, not two, plus a
+  fourth the row does not name — and the row's own third is unaccounted for because the **plan**
+  mis-names it.
+
+All three are test-and-prose defects; production behaviour is untouched, which is why none is a
+blocker. All three must land before S9 dispatches and before the §5.1 re-word lifts anything.
+
+### What I ran (all of it, solo, serially)
+
+Two-file baseline **183 passed** (`tests/test_storefront_api.py` + `tests/test_app.py`), my own run.
+**Eight mutations** and **two wire probes**, each applied from byte-copies held outside the repo
+and restored from them, `md5sum` re-verified after every run — `storefront.py` `a713e2c5…`,
+`services.py` `a952f4ad…`, `repository.py` `584ce30c…`, `app.py` `e6bf735a…`, `storefront_api.py`
+`3bddcc7e…`, `test_storefront_api.py` `15874a7f…`, `test_app.py` `fcf877ac…`, all matching `HEAD`
+at the end and `git diff --stat -- falkor-chat/` empty. **Eleven extra suite runs across
+`PYTHONHASHSEED` 0–7** to settle the evidence-discipline claim. Six static probes run against the
+delivered readers **lifted verbatim** out of `tests/test_storefront_api.py` by `ast.get_source_segment`,
+so nothing below is a paraphrase of the mechanism. `ruff check` on both touched files: clean.
+**No `git` tree-mutating command at any point.** Ledger and transcripts: **Appendix P14-A**.
+
+**I did not re-run the full suite.** The coordinator ran it (2615/14) and I report only figures I
+observed; every mutation here is two-file-scoped, and a second full run would wipe `reference`
+again for no evidence I need.
+
+**Database.** `ws:test` only. `ws:acme` re-checked at the end and unchanged — **871 nodes**,
+`Message` 52, `Entity` 544, `WorkflowRun` 21. `reference` was **already empty when I started** (the
+coordinator's own documented wipe) and I left it exactly so — my two-file runs neither seeded nor
+wiped it, and `teco`'s own note says the re-seed belongs after the last suite of the chain, not
+before. No stray `timers-stale-key@v1` remains; `reference` holds zero nodes.
+`seed_workflows.sh`/`seed_salesperson.sh` never run.
+
+### Major
+
+#### P14-1 · **Major** · the composed raise walk stops one hop earlier than its exemption claims — the eleventh instance, and it is exercised today, not latent
+
+`INHERITED_HANDLERS[StarletteHTTPException]`'s reason (`storefront_api.py:475–478`) now reads *"no
+bare `HTTPException` anywhere the guard above reaches — `storefront_api.py` and `storefront.py`
+whole, plus the **`Services`/`Repository` methods a route reaches**"*. A route reaches more of both
+than the walk reads, which lists nine `Services` names and the router's two `repo.<name>` calls:
+
+- **P14-M1, survived (183 passed):** `Services._refuse_retired_name()` raising
+  `HTTPException(410)`, called from `save_profile` — a sibling method of one of the nine. Wire:
+  `POST /shop/api/session → 410 '{"detail":"gone"}'`.
+- **P14-M2, survived (183 passed):** the same raise on a dead branch of
+  `Repository.ensure_participant`, reached from `Storefront.join`, not from the router. Wire:
+  identical `410 '{"detail":"gone"}'`.
+
+The same comment states the principle it then abandons — *"a raise one helper call out of a route
+body is a raise on the route"* — and applies it whole-module to the two storefront files only. It
+is not a theoretical boundary: the nine reached methods raise **five** classes on the request path
+today, not one (`RuntimeError`, `ThreadNotFoundError`, `UnknownActorError`, `UnknownMemberError` in
+`post_message`'s two helpers, plus `UnknownOrderTransitionError`), so `SERVICE_RAISES_TODAY`'s own
+headline — *"Everything the reached methods … raise"* — is measurably false. And the blind spot is
+already hiding an **unclassified** reachable raise: `Repository.ensure_participant` raises
+`MemberIdCollisionError`, which is in no §5.2/§5.3 row, no `SERVICE_ERROR_RESPONSES` entry and no
+`INHERITED_HANDLERS` excuse.
+
+**Suggested fix — measured, not proposed (Appendix P14-A, probe 4).** Reuse the frontier idiom
+`_service_layer_reach` already contains: close the walked method set over `self.<name>` calls to a
+fixpoint. On `Services` that grows 9 → 13 and yields exactly the five names above; on `Repository`,
+adding the four methods `Storefront` reaches yields exactly `{MemberIdCollisionError}`. ~8 lines of
+reader, five names and one name in the two constants — and it makes P14-3 go away for free.
+
+#### P14-2 · **Major** · the fixpoint follows `ast.Assign` only, while the statement says "any local name transitively bound to it" — a type annotation is enough to hide S9's shape again
+
+`_alias_prefixes` collects `(target.id, ast.unparse(child.value))` for `ast.Assign` nodes with
+`ast.Name` targets. Six other ways of binding a local name to the service object are invisible.
+Measured against the delivered reader (probe 2), on the `self._services` leg:
+
+| shape | seen? |
+|---|---|
+| `svc = self._services` · `a = b = self._services` | seen (the controls) |
+| `svc: object = self._services` · `svc, _ = self._services, None` · `(svc := self._services)` · `for svc in (self._services,)` · `with self._services as svc` · comprehension target | **missed** |
+
+- **P14-M3a, survived (183 passed):** `svc: object = self._services` / `svc.start_workflow_run(...)`
+  on the router-reached `Storefront.join`, i.e. S9's decided shape plus a type annotation.
+- **P14-M3b, `1 failed`:** byte-identical but for `: object`. The difference is the annotation alone.
+
+This is not an exotic spelling: the package carries **68** annotated local assignments, **6** in
+`storefront.py` and **16** in `storefront_api.py`, and `storefront.py:966` is literally
+`state: dict[str, Any] | None = self.get_state(ctx)`. So §5.1's S9 done-condition ("the assertion
+goes red on this step") is once again unmeetable for a variation one token away from the shape S8e
+was built for. **Fix (checked):** widen the binding harvest to `ast.AnnAssign`, `ast.NamedExpr`,
+`ast.For`/`ast.comprehension` targets and `ast.withitem` `optional_vars`, and to `ast.Tuple`/`List`
+targets when the value is a matching tuple — or, if that is judged over-built, **narrow the
+sentence to "a local name bound by a plain assignment"** and pin the missed shapes as documented
+non-reach, which is the (b) move Pass 13 named and this comment is otherwise careful to make.
+
+#### P14-3 · **Major** · the composition claim is precise about the code and wrong about the plan row it cites — and that sentence is the one being lifted
+
+The test docstring (`tests/test_storefront_api.py:3417–3423`) says the walk will report
+`WorkflowInputRejectedError` and `WorkflowRunNotFoundError` — *"two of the three `INHERITED_HANDLERS`
+excuses §5.1's S9 row says become falsifiable at that moment"*. I measured the walk: it reports
+exactly those two (probe 1). But §5.1's S9 row names **`WorkflowEngineDisabledError`,
+`WorkflowInputRejectedError` and `WorkflowDefNotFoundError`**. So it is *one* of the row's three,
+plus a **fourth** excuse the row does not name; the row's third is dropped from the accounting
+silently, and it can never be reported — `WorkflowDefNotFoundError` is raised only in
+`materialize_def`, `get_workflow_def_structure` and the diff method, none reachable from
+`start_workflow_run`.
+
+The root cause is in the **plan**, not the guard: §5.1's S9 parenthetical *"(`services.py`
+`_require_executor`, the `run_ctx` bound, the missing snapshot)"* maps *the missing snapshot* to
+`WorkflowDefNotFoundError`, but `services.py:2085` raises `WorkflowRunNotFoundError` there. S8e read
+the code correctly and then described it against a row that is wrong — which is exactly the failure
+mode this chain keeps producing, one document over.
+
+**Fix, two parts.** (1) `architect` corrects §5.1's S9 row to name `WorkflowRunNotFoundError` for the
+missing snapshot and states that `WorkflowDefNotFoundError`'s excuse is untouched by S9. (2) The
+docstring sentence names the exceptions, not a count: *"reports `WorkflowInputRejectedError` and
+`WorkflowRunNotFoundError`; `WorkflowEngineDisabledError` is raised in `_require_executor`, which
+this walk does not enter; `WorkflowDefNotFoundError` is unreachable from `start_workflow_run` and its
+excuse is unaffected."* **P14-1's fix subsumes the concession** — with the sibling closure, the walk
+reports `WorkflowEngineDisabledError` too (probe 4, measured), so two of the row's three become
+mechanically measured and the "prose argument" disappears rather than being argued.
+
+### Minor
+
+- **P14-4 · P13-3's cross-check landed on one of the three allowlists, and the same commit
+  introduced the other two.** `set(STOREFRONT_RAISES_TODAY) <= {StorefrontError family}` closes the
+  allowlist-extension escape for `storefront.py` (verified: **P14-M4a `1 failed` with it, P14-M4b
+  183 passed without it** — S8e's A/B reproduces exactly). `SERVICE_RAISES_TODAY` and
+  `REPOSITORY_RAISES_TODAY` carry the identical exposure with no cross-check: **P14-M6, survived
+  (183 passed)** — `raise ValueError` added to `services.save_profile` **plus** `"ValueError"` added
+  to `SERVICE_RAISES_TODAY`, which is the cheapest way to silence the new leg. `services.py`'s
+  reached raises are not all `ServiceError`s, so the cross-check cannot be copied verbatim; the form
+  that fits is the one this file already uses for `storefront_api.py` —
+  `<= {ServiceError family} | {named non-family allowances, each with its reason}`, which today is
+  `{RuntimeError}` under P14-1's fix and `∅` without it.
+
+### Nit
+
+- **P14-5 · "duplicated so the two cannot drift" is currently unfalsifiable in the tree.**
+  `grep -rn "any local name transitively bound"` over `*.md` and `*.py` returns **one** hit —
+  `storefront_api.py:446`. There is no second in-repo copy to drift from; S8e's report text lives in
+  a transcript. That is fine today, and it is exactly the moment to say what binds them tomorrow:
+  the §5.1 S9 re-word *creates* copy two, and nothing will hold them together. One line in the
+  comment naming §5.1's S9 row as its only licensed copy, and a plan cell that cites
+  `storefront_api.py:437–471` rather than restating it, costs nothing now and is unwritable later.
+
+### Is S8e's corrected guard-reach statement accurate as written? — **No, in four clauses of eleven**
+
+I judge the statement in the form that will be lifted: the source comment at
+`storefront_api.py:437–471`, plus the two docstring paragraphs it summarises
+(`_service_layer_reach`'s *Where it stops*, `tests/test_storefront_api.py:3074–3078`; the raise
+test's, `:3426–3433`) and the `INHERITED_HANDLERS[StarletteHTTPException]` reason string it governs.
+
+**Reach guard (comment lines 442–456 — `storefront_api.py`):**
+
+| # | Clause | Ruling |
+|---|---|---|
+| 1 | "(1) `<prefix>.<name>` anywhere in `build_storefront_router`, where `<prefix>` is `shop._services` **or any local name transitively bound to it**" | **Inaccurate** — `ast.Assign`/`ast.Name` only; six binding forms missed (P14-2) |
+| 2 | "(2) the same, with prefix `self._services`, in every `Storefront` method the router reaches through `shop.<method>`/`self.<method>` calls, **transitively**" | **Accurate for the frontier**, verified; **inherits clause 1's defect for the prefix** — P14-M3a is this leg |
+| 3 | "**Nine today**" | **Accurate** — the derived reader returns exactly `SERVICE_LAYER_REACH_TODAY` (probe 1) |
+| 4 | "…**and a tenth added by any of those paths reddens**" | **Inaccurate** — P14-M3a adds a tenth on path (2) and stays green |
+| 5 | "Prefixes are **derived from the files' own bindings**, not listed" | **Over-broad** — derived from the files' `ast.Assign` bindings |
+| 6 | *Where it stops #1*: "it follows the service object only through attribute access, so a call made by handing that object somewhere else — **passed to a helper, returned, stored** — is outside it" | **Accurate for the three it names** (probe 2: `_go(self._services)` and `self._svc = self._services` both missed) but **not exhaustive**, and "stored" is ambiguous against a mechanism that *does* follow a local store and does not follow an attribute store |
+| 7 | "That is a statement about the walk, not a claim about the code; the moment one is written, this comment is what has to change with it" | **Accurate and honestly framed** — nothing enforces it, and it does not pretend otherwise |
+
+**Raise guard (comment lines 458–471, and the reason string at 475–478):**
+
+| # | Clause | Ruling |
+|---|---|---|
+| 8 | "over four scopes: `storefront_api.py` and `storefront.py` **whole**" | **Accurate** — the file-whole reading verified; Pass 13's N-M2/N-M3 die at `HEAD` |
+| 9 | "plus **the `Services` methods the reach guard above measures** and **the `Repository` methods the router calls through `repo.<name>`**, read at those methods only" | **Accurate literally** — this is the narrow, true reading, and it is the one the mechanism implements |
+| 10 | *Where it stops #2*: "**It stops at what those collaborators call in turn** — `Services` into `Repository`, `Repository` into redis" | **Inaccurate** — it also stops at `Services` into `Services` and at `Storefront` into `Repository`, both measured escapes answering `410` on the wire (P14-1) |
+| 11 | reason string: "no bare `HTTPException` anywhere the guard above reaches — … plus **the `Services`/`Repository` methods a route reaches**" | **Inaccurate** — a route reaches `Services._validate_and_derive_role` and `Repository.ensure_participant`; both are outside the walk (P14-M1, P14-M2) |
+
+**So the §5.1 S9 re-word must not lift the statement verbatim, for the third gate running.** Clauses
+3, 6, 7, 8 and 9 are the durable ones and can be lifted today. Clauses 1, 4, 10 and 11 must either
+be narrowed to what is checked or backed by P14-1's and P14-2's fixes first; clause 5 needs four
+words. The composition sentence must not be lifted at all until P14-3 is settled, because it is the
+only clause that would put a **wrong exception name** in front of S9's implementer.
+
+### The six claims the brief asked me to check
+
+| # | Claim | Ruling |
+|---|---|---|
+| 1 | P13-1 closed by derivation; four legs; nine names need no re-baselining | **Confirmed for the derivation** (probe 1: derived reach ≡ the nine; probe 3: the four legs are alias-resolved) — **but the derivation's own reach is narrower than its sentence** → P14-2 |
+| 2 | P13-2 closed by taking (a) *and* narrowing the sentence; four scopes | **Confirmed on the wire for the scopes named** — but the narrowed sentence is still broader than the four scopes → P14-1 |
+| 3 | The `repo.<name>` leg cannot empty silently | **Confirmed** (probe 5): a post-S10 router yields `∅`, `assert repo_reach` fires, and without it `_raises_of(…, ∅) == REPOSITORY_RAISES_TODAY` would pass. The assertion is load-bearing |
+| 4 | The two-of-three composition split | **Confirmed about the code, wrong about the plan row** → P14-3 |
+| 5 | P13-3 adopted and killable — 183 without, 1 failed with | **Confirmed exactly** (P14-M4a/b). The reversal reasoning is right: two independent sources, not a restatement |
+| 6 | P13-4 — the factory branch errors rather than resolving to nothing | **Confirmed** (probe 6): the bare-return factory raises `AssertionError`; the value-returning and aliased-import shapes stay loud |
+
+**Evidence discipline, checked rather than accepted.** S8e claims every assertion involved is a set
+equality or `not in` on a set and therefore order-independent. I confirmed by reading both guard
+bodies, and measured **P13-A dying `1 failed, 182 passed` at all eight `PYTHONHASHSEED` values 0–7** —
+including seed 4, where Pass 12 measured N-K surviving the entire file. My two headline **survivals**
+are equally deterministic: P14-M1 and P14-M3a both give **183 passed at seeds 4 and 7** as well as at
+the default. No figure in this pass is one draw from a distribution.
+
+### Disposition of Pass 13's findings
+
+| # | Disposition | What I rechecked |
+|---|---|---|
+| P13-1 | **Fixed for `ast.Assign`; the defect class survives in six other binding forms** → **P14-2** | P14-M3b (plain assign) **1 failed**; P14-M3a (annotated) **survived, 183**; probe 2 enumerates the six |
+| P13-2 | **Fixed for the four scopes named; the sentence still outruns them by one hop** → **P14-1** | P14-M1 **survived, 183**, wire `410 '{"detail":"gone"}'`; P14-M2 **survived, 183**, same wire answer |
+| P13-3 | **Fixed for `STOREFRONT_RAISES_TODAY`; not applied to the two constants the same commit added** → P14-4 | P14-M4a **1 failed** / P14-M4b **183 passed**; P14-M6 **survived, 183** |
+| P13-4 | **Fixed** | Probe 6 — bare-return factory now raises `AssertionError` with the named message |
+
+### What's solid
+
+**The fixpoint is the right *kind* of answer, and the coordination note is right that this is the
+first structural move in the chain.** The tell it names holds up under my own measurement rather
+than by report: the derived reader returns `SERVICE_LAYER_REACH_TODAY` unchanged, so the change is
+purely in what the reader *can* see. P14-2 narrows what that is; it does not make the move wrong.
+
+**Applying the fixpoint on all four legs, unasked, is the behaviour the pattern should induce.** Pass
+13 named two legs. S8e widened to four on an argument about the shape of the defect rather than the
+shape of the report, and that argument is correct — the frontier walks are the same defect one field
+over.
+
+**The P13-3 reversal is worth more than being right the first time.** S8e's own earlier P11-7 analogy
+was wrong, it re-derived the rebuttal, and it produced the A/B. Both halves reproduced for me at the
+reported figures.
+
+**Every leg that could empty silently now says so.** `assert repo_reach`, `_raises_of`'s `missing`
+assertion, and P13-4's factory assertion are three different silent-empty shapes closed the same
+way — a failed assertion with a sentence explaining what to do. That habit, not any one of the
+three, is the durable part.
+
+**And the self-report is real.** S8e retracted its own S8d clause (*"it stops at the `services.py`
+boundary, which the reach guard above covers instead"*) in the file, in the place a reader meets it.
+P14-1 says the replacement is still one hop short — but it is short by one hop, not by a layer.
+
+### Open questions (need `teco`'s call)
+
+1. **Does P14-1 + P14-2 go in as an S8f, or as S9's first done-condition?** My recommendation:
+   **S8f, before S9 dispatches** — the same argument, now four passes old and right three times. But
+   this is the point to weigh the alternative honestly: **for P14-2, narrowing the sentence is a
+   defensible whole answer.** The escape needs a deliberate annotation on a two-line idiom, and S9's
+   implementer will be reading a done-condition that says the guard must redden. P14-1 is different
+   — it is exercised on the wire today and hides an unclassified raise, so it needs the mechanism.
+2. **Who fixes §5.1's S9 parenthetical (P14-3)?** It is an `architect` edit to the plan, and it is a
+   *prerequisite* of the re-word unit rather than part of it: the re-word cannot state the
+   composition correctly against a row that names the wrong exception.
+3. **Does the §5.1 S9 re-word wait again?** It should, for the third time — but the hold is now
+   cheaper than it looks: clauses 3, 6, 7, 8 and 9 are lift-ready today and are most of the
+   statement's useful content. Lifting those five now and the rest after S8f would end the hold
+   without lifting anything false.
+
+### Appendix P14-A — mutation ledger, probes and transcripts (Pass 14)
+
+**Method.** Every mutation applied from a byte-copy held outside the repo and restored from that copy
+after each run, `md5sum` re-verified each time. Command:
+`.venv/bin/python -m pytest tests/test_storefront_api.py tests/test_app.py -q`. **Baseline: 183
+passed.** Static probes ran against the delivered readers lifted out of `tests/test_storefront_api.py`
+with `ast.get_source_segment`, never re-typed. No `git` tree-mutating command was used at any point.
+
+| # | Mutation | Result |
+|---|---|---|
+| **P14-M1** | `Services._refuse_retired_name()` raises `HTTPException(410)`; `save_profile` calls it | **survived, 183 passed** (also at seeds 4, 7) → P14-1 |
+| **P14-M2** | bare `HTTPException(410)` on a dead branch of `Repository.ensure_participant`, reached from `Storefront.join` | **survived, 183 passed** → P14-1 |
+| **P14-M3a** | `svc: object = self._services` / `svc.start_workflow_run(...)` on `Storefront.join` | **survived, 183 passed** (also at seeds 4, 7) → P14-2 |
+| P14-M3b | the same, written `svc = self._services` | **1 failed** — the reach guard (the control: the annotation is the whole difference) |
+| P14-M4a | `raise ValueError` in `storefront.py` **+** `"ValueError"` in `STOREFRONT_RAISES_TODAY` | **1 failed** — P13-3's cross-check, as S8e reports |
+| P14-M4b | the same, with the cross-check line deleted | **183 passed** — S8e's A/B reproduces exactly |
+| **P14-M6** | `raise ValueError` in `services.save_profile` **+** `"ValueError"` in `SERVICE_RAISES_TODAY` | **survived, 183 passed** → P14-4 |
+| P13-A | bare `HTTPException(410)` in `services.save_profile`'s **body** (Pass 13's escape) | **1 failed, 182 passed at every seed 0–7** |
+
+**Probe 1 — the delivered readers against the delivered files.**
+
+```
+SERVICE_LAYER_REACH_TODAY == _service_layer_reach(api, sf)          -> True  (nine names)
+_raises_of(services, "Services", the nine)   -> ['UnknownOrderTransitionError']  == SERVICE_RAISES_TODAY
+_router_repository_reach(api)                -> ['list_participants', 'reset_all_participants']
+_raises_of(repository, "Repository", those)  -> []                              == REPOSITORY_RAISES_TODAY
+_raises_of(services, "Services", {"start_workflow_run"})
+                     -> ['WorkflowInputRejectedError', 'WorkflowRunNotFoundError']
+```
+
+The last line is P14-3's measurement. §5.1's S9 row names `WorkflowEngineDisabledError`,
+`WorkflowInputRejectedError`, `WorkflowDefNotFoundError`; `services.py:2085` raises
+`WorkflowRunNotFoundError` for the missing snapshot, and `WorkflowDefNotFoundError` occurs only at
+`services.py:1752/1814/1869` (`materialize_def`, `get_workflow_def_structure`, the diff), none
+reachable from `start_workflow_run`.
+
+**Probe 2 — every way of binding the service object, against `_alias_prefixes` (P14-2).** Router
+stub + one `Storefront` method, reach expected `{"start_workflow_run"}`:
+
+```
+SEEN   self._services.start_workflow_run(ctx)          (control)
+SEEN   svc = self._services
+SEEN   a = b = self._services
+MISSED svc: object = self._services                     <- P14-M3a, a house idiom
+MISSED svc, _ = self._services, None
+MISSED (svc := self._services)
+MISSED for svc in (self._services,)
+MISSED with self._services as svc
+MISSED [s.start_workflow_run(ctx) for s in [self._services]]
+MISSED def _go(svc): ...; _go(self._services)           (licensed by "passed to a helper")
+MISSED self._svc = self._services                       (licensed by "stored")
+```
+
+Idiom census, `ast` over `falkorchat/`: **68** annotated local assignments (`storefront.py` 6,
+`storefront_api.py` 16, `services.py` 23), 40 tuple-target assignments, 1 walrus.
+`storefront.py:966` is `state: dict[str, Any] | None = self.get_state(ctx)`.
+
+**Probe 3 — what a route actually reaches one hop past the walk (P14-1).**
+
+```
+sibling self.<name> calls from the nine reached Services methods:
+  get_cart      -> _priced_cart_lines
+  post_message  -> _validate_and_derive_role, _dispatch_write, _next_ts
+  (start_workflow_run, at S9 -> _require_executor, _reject_reserved_keys, _drive_or_fault, …)
+their raises: RuntimeError, ThreadNotFoundError, UnknownActorError, UnknownMemberError
+              (+ WorkflowEngineDisabledError, WorkflowInputRejectedError at S9)
+  Services._validate_and_derive_role -> ThreadNotFoundError, UnknownActorError, UnknownMemberError
+  Services._dispatch_write           -> RuntimeError, ThreadNotFoundError, UnknownActorError
+Repository reached from Storefront (not from the router):
+  join -> ensure_participant, set_participant_record ; lookup/resolve_token -> get_participant_record
+  reset_participant -> reset_participant
+  their raises: MemberIdCollisionError   (Repository.ensure_participant — in no table anywhere)
+```
+
+**Probe 4 — the suggested fix, run before being suggested.** Closing the walked method set over
+`self.<name>` calls to a fixpoint, reusing `_service_layer_reach`'s own frontier idiom:
+
+```
+Services closure 9 -> 13  (+_dispatch_write, _next_ts, _priced_cart_lines, _validate_and_derive_role)
+  raises: RuntimeError, ThreadNotFoundError, UnknownActorError, UnknownMemberError,
+          UnknownOrderTransitionError                         (five names, stable)
+with start_workflow_run: closure 19, raises the five + WorkflowEngineDisabledError,
+          WorkflowInputRejectedError, WorkflowRunNotFoundError   <- P14-3's concession disappears
+Repository via router + via Storefront: raises {MemberIdCollisionError}  (one name)
+Repository via Services (for scale, not proposed): 20 methods, raises nothing today
+```
+
+**Probe 5 — the `repo.<name>` leg cannot empty silently (brief claim 3).**
+
+```
+post-S10 router stub (shop.list_participants(), no `repo` binding):
+  _router_repository_reach -> set()      -> `assert repo_reach` fires
+  without that assert: _raises_of(repo, "Repository", set()) == set() == REPOSITORY_RAISES_TODAY -> passes
+```
+
+**Probe 6 — the factory reader's edge shapes at `HEAD` (P13-4).**
+
+```
+bare-return factory   raise self._boom(); def _boom(self): return       -> AssertionError (loud)
+var-return factory    def _boom(self): e = HTTPException(410); return e -> {'e'}          (loud)
+mixed-return factory  one bare `return` + one `return HTTPException(…)` -> {'HTTPException'}
+                      (the value-less arm is dropped, but it cannot raise — same argument, accepted)
+```
+
+**Wire transcripts.** Mutation in place, one throw-away test appended to
+`tests/test_storefront_api.py`, run under `-k`, both files then restored from the byte-copies:
+
+```
+P14-M1  POST /shop/api/session -> 410 '{"detail":"gone"}'
+P14-M2  POST /shop/api/session -> 410 '{"detail":"gone"}'
+```
+
+**Hypotheses ruled out** (so Pass 15 does not re-walk them):
+
+- *The class is closed — the fixpoint is a derivation, and a derivation cannot be too narrow.* **No.**
+  A derivation is only as wide as the syntax it enumerates, and this one enumerates one statement
+  node. P14-M3a is the eleven-character edit that proves it.
+- *P14-1 is Pass 13's P13-2 not fixed.* **No.** P13-A itself dies at `HEAD` at every seed. What
+  survives is the identical shape one call out — the same relationship P12-2 has to P11-2, and
+  P13-2's N-M3 to N-M.
+- *P14-M2 is latent like Pass 13's `repo` leg.* **No.** Pass 13's leg was latent because
+  `list_participants`/`reset_all_participants` raise nothing. `Repository.ensure_participant` is on
+  `POST /shop/api/session`'s path and raises `MemberIdCollisionError` today.
+- *The `services`-binding control regressed when it became structural.* **No.** P14-M3b reddens on
+  `test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume`, and `_alias_prefixes`
+  derives `services` off the delivered router (probe 1). Pass 12's N-CTRL rename case is subsumed.
+- *S8e's reported figures might be one draw, like N-K.* **No.** P13-A is `1 failed` at all eight
+  seeds, P13-3's A/B is a set-subset assertion, and my two survivals hold at seeds 4 and 7.
+- *`SERVICE_RAISES_TODAY`'s exemption of `UnknownOrderTransitionError` is a list masquerading as a
+  mechanism.* **No.** It is a `ServiceError` subclass, it is in `SERVICE_ERRORS_UNREACHABLE`, and the
+  partition test covers it — both halves checked in the live class tree.
+- *`92bf842` changed behaviour under cover of a test-and-comment commit.* **No.** The five
+  must-be-unchanged files md5-match `HEAD`, the `storefront_api.py` diff is the comment block plus one
+  reason string, and every production-side mutation I applied reproduced the pre-S8e behaviour
+  descriptions exactly.
+
+**What would convince me the class is closed.** Not a passing suite, and not a reproduction that
+dies. Two things: (1) the guards' sentences state a **syntactic** scope — the node types walked, the
+files read, the method sets closed — rather than a semantic one ("any path", "a route reaches"), so
+that the smallest-edit question has a mechanical answer instead of a judgement; and (2) a probe of
+the shape run here — enumerate every syntactic way to write the thing the sentence names, run the
+delivered reader over each, and list the misses — comes back empty. Both probes in this pass took
+one script each. Until a fix ships with its own version of that enumeration in the file, the prior
+should stay that a thirteenth instance exists.
