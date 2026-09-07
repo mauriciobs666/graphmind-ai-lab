@@ -5,10 +5,12 @@
 **Pass 1** gated `ab91419` (needs changes). **Pass 2** re-gated `3ad27d3` (approve with
 suggestions). **Pass 3** re-gated `95b4c88` (needs changes). **Pass 4** re-gated `d55f4d8` (needs
 changes). **Pass 5** gated `8fc2341`, the first of S1e's three implementation units (needs changes).
-**Pass 6** re-gates its fix round `c523a35` — jump to [`## Pass 6`](#pass-6--2026-09-07) for the
-current verdict; the earlier passes are kept intact because they are meant to be read together.
-Passes 1–4 gate the S1 build; Passes 5–6 are S1e's first unit (§4 S1e Tables A and B, the
-`fingerprint.py` re-key), whose remaining two units are not yet delivered.
+**Pass 6** re-gated its fix round `c523a35` (needs changes). **Pass 7** re-gates `f409905` — jump to
+[`## Pass 7`](#pass-7--2026-09-07) for the current verdict; the earlier passes are kept intact
+because they are meant to be read together. Passes 1–4 gate the S1 build; Passes 5–7 are S1e's first
+unit (§4 S1e Tables A and B, the `fingerprint.py` re-key), whose remaining two units are not yet
+delivered. **Pass 7 §3 says which half of this document to trust** — the findings held, three
+suggested fixes did not.
 
 ## Pass 1 — 2026-09-03
 
@@ -1914,3 +1916,95 @@ this one did not survive being run.
   re-derive that row by grep. It is an input to the next unit, not an open defect in this one.
 
 Nothing else is open, and nothing is deferred by choice.
+
+## Pass 7 — 2026-09-07
+
+### 1. Scope & verdict
+
+**Reviewed:** `f409905` (`fix(model-bench): P6-1 — the key is omitted for one record, not a class of
+them`), the diff `c523a35..f409905 -- model-bench/` — `modelbench/fingerprint.py`,
+`tests/test_fingerprint.py`, `docs/HISTORY.md`. **CPG:** considered, not relevant — none exists for
+`model-bench/`.
+
+**Verdict: needs changes** — 0 blockers, 0 majors, **1 minor** (**P7-1**), 0 nits. **P6-1 is fixed**,
+and the coder was right to refuse my one-liner. The new finding is not in the code — the conjunction
+is correct — but in the test that holds it: two further narrowings pass the suite, and one of them
+launders the same information P6-1 was raised about. One `parametrize` closes it. **It does not
+block the `stats.py` unit** (`fingerprint.py` / `test_fingerprint.py` only).
+
+### 2. The three answers
+
+**(1) The conjunction is one rule, not two special cases — the coder's reading holds.** Omission is
+a *claim about the record*: "this arm calls no surface." Neither half can make that claim alone.
+`armKind == "deterministic"` says the arm *should* carry no surface and nothing about whether it
+does; `callSurface is None` says none is carried and nothing about whether that is legitimate. Only
+the conjunction is a fact, which is why each half alone deletes different evidence on the same
+`migrate` path. It is also the direct serialisation image of §3.4.1's "`None` **iff**
+deterministic" — an `iff` is a conjunction of two implications, and dropping either half of the
+condition drops one of them.
+
+The residual observation, and it is not a finding: that `iff` is now **transcribed in two places** —
+`validate()`'s deterministic branch and `to_dict`'s `omit` — with nothing tying them together, and
+which value a profile pins is a *schema* fact (§3.4.1) that `to_dict` now hard-codes. At schema 1
+there is exactly one such pin and the duplication is cheap. If a third transcription ever appears,
+or if a schema-2 profile pins another discriminator, that is the moment to lift the rule into the
+schema rather than the moment to write it a third time.
+
+**(2) No — it pins the two narrowings the author tried, and two others survive.** Both run alone,
+each restored by copy, tree byte-identical after each:
+
+| Candidate `omit` | Suite | What it does |
+|---|---|---|
+| `self.callSurface is None and self.armKind != "model"` | **477 passed — SURVIVES** | Omits the key on a record whose `armKind` is `""` or unrecognised and whose surface is `null`; `from_dict` restores `""`, so the round trip is no longer equal and a stored `null` is laundered into the missing-key sentinel. **P6-1's laundering, one arm-kind over** — and an unrecognised `armKind` is exactly the record `migrate` exists to walk |
+| `self.armKind == "deterministic" and not self.callSurface` | **477 passed — SURVIVES** | Omits on `("deterministic", "")`, where the shipped rule writes `""`; `from_dict` restores `None`, so a record that validates `forbidden` migrates into one that validates **clean** — the evidence-deletion my one-liner was refused for, narrowed to the blank-string case |
+
+I confirmed the shipped code holds on both shapes it is not tested against: for `armKind` `""` and
+`"robot"` with `callSurface=None`, the key is present and the round trip is equal.
+
+**P7-1 (minor).** `test_an_invalid_call_surface_survives_a_round_trip_with_its_reason` asserts the
+right five things over two shapes chosen as the two rejected narrowings, so it pins *those two
+refutations* rather than the property its own docstring claims — that the round trip is total. The
+totality was established by executing all the shapes, twice, but that verification lives in two
+transcripts and not in the suite; nothing stops the next edit from reintroducing it.
+**Fix:** replace the two-case `parametrize` with the product — `armKind` over
+`{"model", "deterministic", "", <unrecognised>}` × `callSurface` over `{"chat", "", None}` — keeping
+the same five assertions minus the reason-equality where `validate()` short-circuits on `armKind`.
+That kills both candidates above and makes the docstring true.
+
+**(3) Two overstatements, one of them mine.** Both in the same sentence, in the code comment
+(`fingerprint.py`, `to_dict`) and in the `HISTORY.md` entry: *"an invalid record is the only kind it
+[`migrate`] walks"* / *"by definition walks records that did not validate"*. That is false, and it is
+false in my Pass 6 phrasing first — the coder inherited it. §3.4.3 states a record is validated
+against **its own** schema entry, "so an added field at a later version never invalidates an older
+record": most records a migration walks are valid under their own version. The true and sufficient
+claim is narrower — `migrate` is the one writer that serialises records `store()` never validated,
+so it is the only path on which an invalid record *can* be written. The finding survives the
+correction; the sentence does not, and it should be corrected in both places.
+
+Second, a count that does not reproduce: `HISTORY.md` says the round trip was verified over **eight**
+`(armKind, callSurface)` shapes, twice; the coordinator's independent enumeration reports **nine**.
+One of the two is wrong and neither is in the suite — which is P7-1 from the other side. Closing
+P7-1 by parametrizing over the product makes the number a fact the file states rather than a claim
+it asserts.
+
+### 3. On the pattern — I agree it is real, and it is narrower than it looks
+
+Three recommendations of mine were overruled this round and all three were rightly overruled: the
+`_ABSENT` sentinel, the `armKind` three-state framing, and the `to_dict` one-liner. Every *finding*
+held, including P6-1. The split is not luck, and the mechanism is worth writing down for whoever
+reads this document next:
+
+**The findings come from executing the code; the fixes came from reasoning about it.** Each finding
+was a mutation that survived or a call whose output I printed. Each bad fix was a design I derived
+from reading the plan and the module, and none of the three was subjected to the standard I hold
+counts and greps to. The one I *did* run — Pass 6's N2, the `to_dict` one-liner, **475 passed** —
+was wrong anyway, and P7-1 is why: running a suggested fix against a green suite proves only as much
+as the suite constrains, and the property that fix broke was exactly the one nothing pinned. So the
+sharpened rule is not "run your suggested fix" but **"a suggested fix is not evidence unless you can
+name the assertion that would catch it being wrong"** — and where you cannot, say so and hand the
+design decision to the implementer, which is where it belongs.
+
+**How to read this document:** trust the findings, which are evidence-backed and were each
+reproduced by at least one other party; treat the *suggested improvements* as one option costed by
+someone who did not have to make it work. That is the right division of labour between a gate and an
+implementer, and this round demonstrated it three times.
