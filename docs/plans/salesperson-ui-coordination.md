@@ -153,7 +153,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U34** — rebuild the stale `cpg_falkorchat` CPG from `HEAD` | `graph-dba` | `a5563c5bdd32be9c7` | **accepted** | `cpg_falkorchat` @ `b795f4c`, 339,972 nodes / 2,317,169 edges | teco-verified → **accept** | 125k / 80 |
 | **U37** — Pass 16's minors + `salesperson/`'s `start_demo.sh` references | `coder` (fresh) | `a38711140b2ecc8ec` | **accepted** (`ba368a0`, `7a85c1c`) | `SERVER.md`, `salesperson/{AGENTS,README}.md`, `playwright.config.ts` (mine) | teco-verified → **accept** | 127k / 52 |
 | **U36** — `config.py`'s three future-as-present comments + the documentation `HISTORY.md` entry | `coder` | `aa9b68b68151bca8a` | **accepted** (`3fe3d8f`) | `falkorchat/config.py` (**5** comments, full-AST equal), `docs/HISTORY.md` | teco-verified → **accept** | 116k / 28 |
-| **U38** — `pipeline.sh`'s provenance stamp races `HEAD` and scopes `SOURCE_DIRTY` repo-wide | `cobb` | `a42739600c7b41e1d` | gated | `6012ddb` — 5 files, `git-provenance.sh` new | `analyst` `a98a748e49a559ead` → — | 145k tok / 44 tools |
+| **U38** — `pipeline.sh`'s provenance stamp races `HEAD` and scopes `SOURCE_DIRTY` repo-wide | `cobb` | `a42739600c7b41e1d` | in-flight (fix round) | `6012ddb` — 5 files, `git-provenance.sh` new | `analyst` `a98a748e49a559ead` → **needs changes** (`docs/reviews/cpg-provenance-stamp.md`, `7c7536d`) | 145k tok / 44 tools |
+| **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | in-flight (dispatched 2026-09-07) | `docs/manuals/graph-ontology.md` | `analyst` (resume `a98a748e49a559ead`) → — | — |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | in-flight (dispatched 2026-09-07, after U36) | `storefront.py`, `storefront_api.py`, `app.py`, both test files, **+ `config.py`/`SERVER.md`/`HISTORY.md`** | `analyst` + `qa-engineer` | — |
@@ -2856,3 +2857,53 @@ anyone acts on it. (2) `cpg_falkorchat`'s live marker can be backfilled
 `graph-dba` write, not mine, and I am not blocked without it because
 `freshness.md:135-144` now documents how to read a pre-fix marker. (3) `cobb`'s own
 kaizen history entry is deferred, per the brief's exclusion of `claude/`.
+
+## The gate found the one line that could not fail
+
+`analyst` returned **needs changes** on U38 — 1 blocker, 4 majors, 5 minors, 4 nits —
+and the blocker is in the single write that persists everything the unit built.
+
+`pipeline.sh:199` is `redis-cli … GRAPH.QUERY "$GRAPH" "$STAMP" >/dev/null`. `redis-cli`
+exits **0** on an error reply and prints it to **stdout**, so the redirect discards the
+error, `set -e` sees success, and the next line prints `pipeline: stamped …` regardless.
+I confirmed it by reading the line before routing it. On an `--append` build a silently
+failed stamp leaves the *previous* build's marker standing over new content — precisely
+the outcome the write-every-field-as-`NULL` design exists to prevent — and it falsifies
+the author's own claim at `freshness.md:108-112`.
+
+This is worth naming as a pattern, because it is the second time in two units that the
+defect was not in the logic but in what the logic could not tell you. U38 fixed a stamp
+that reported a commit describing an unparsed tree; the gate found that the same stamp
+could fail to be written at all and still announce success. Both are silent-wrong rather
+than loud-broken, and both survived their author's own testing.
+
+The three majors that matter operationally: check 0's `git rev-parse --short HEAD:<origin>`
+is **fatal** when `sourceOrigin` is `.` (`HEAD:.` is invalid, `HEAD:./` works) — the
+repo-root case the producer explicitly special-cases; `mkdir -p "$WORKDIR"` runs *before*
+the capture, so a default `./joern-work` inside the source dirties its own source and
+stamps `SOURCE_DIRTY=true`, permanently disabling check 0 for that graph; and the pre-fix
+marker guidance I rely on is correct about derivation but leaves check 2 unrunnable for
+`cpg_falkorchat`, whose `sourceOrigin` is absent and whose `sourcePath` the recipe itself
+forbids using.
+
+**Three of my stated risks came back clean**, which is the useful half of the result.
+Argument passing is safe — proved with a fake `redis-cli` (the 301-byte multi-line stamp
+arrives intact as one argv element) and a multi-line query against the live instance;
+`PARSED_AT`/`PROVENANCE` survive `--reset`/`--append` by construction; escaping is
+sufficient. So the fix round is narrow, not a rewrite.
+
+The reviewer's closing observation is the one I acted on hardest: the author's "never run
+end to end" caveat describes a **~5-second test**, not the 3h pipeline — source the helper,
+render a stamp, fire it at a throwaway graph key, read it back, delete it. The reviewer
+couldn't run it (read-only scope) and the author didn't think to. It is now a required
+part of the fix round, because it is the direct evidence for the blocker's repair rather
+than an optional extra.
+
+Routed: blocker + M1/M2/M3 back to `cobb` (resumed on its own transcript at 145k tokens —
+under the fresh-dispatch threshold, and the undocumented reasoning is worth keeping).
+**M4 is a separate unit, U39**: `docs/manuals/graph-ontology.md` documents the old
+four-field marker and tells readers `SOURCE_PATH` is the tree that was scanned — which is
+now actively misleading, since that path is usually a gitignored staged copy whose name
+says nothing about which revision it holds. Manuals are `tico`'s, so `cobb` was told
+explicitly to leave the file alone. Its gate resumes the same `analyst`, which already
+holds all eight fields in context and found the drift.
