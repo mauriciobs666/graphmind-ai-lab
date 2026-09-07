@@ -57,12 +57,14 @@ Stakeholder decisions, 2026-09-02:
 | U13 — Plan v1.8: host-info source, first-call JIT budget, P4-4 stage re-attribution | `architect` | `aee9ac26e4c41f8ea` | **accepted** — `aebb611` | `docs/plans/small-model-benchmarking.md` v1.8 (+434/−62) | U15 → — | 173k tok / 80 tools |
 | U15 — Gate plan v1.8 | `analyst` (fresh) | `a86335b5fb049e72c` | **accepted** — `ff499d5` | `docs/reviews/small-model-benchmarking.md` `## Pass 3` | self → **needs changes** (2 blockers, 6 majors) | 174k tok / 55 tools |
 | U17 — Plan v1.9: close Pass 3's blockers and majors | `architect` (resumed) | `aee9ac26e4c41f8ea` | **accepted** — `81a3ef7` | `docs/plans/small-model-benchmarking.md` v1.9 | U19 → — | 301k tok / 100 tools |
-| U19 — Re-gate plan v1.9 (Pass 4) | `analyst` (fresh) | `a84c263e5998ba953` | in-flight | `docs/reviews/small-model-benchmarking.md` `## Pass 4` | — → — | — |
+| U19 — Re-gate plan v1.9 (Pass 4) | `analyst` (fresh) | `a84c263e5998ba953` | **accepted** — `bb0cacf`; recovered from disk after a kill, **verified 2026-09-06** (see the resume section) | `docs/reviews/small-model-benchmarking.md` `## Pass 4` | self → **needs changes** (3 blockers, 5 majors, 5 minors, 1 nit) | — (killed before reporting) |
 | U20 — S1: residency element-shape assertion (plan v1.9 S1 DC-1) | `tdd-engineer` | — | queued — specified at v1.9, not yet implemented | `model-bench/**` | re-gate → — | — |
+| U21 — Rule on Pass 4's three routed statistical questions (gap-detector right-censoring, threshold margin, §11.7's second denominator) | `data-scientist` (fresh) | `a4e06f8c810bbbbb8` | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.12 if changed | `analyst` → — | — |
+| U22 — Plan v1.10: close all 14 plan-gate Pass 4 findings + fold note v1.11's binding closed form | `architect` (fresh) | `aaf7ade9ddbc63e8b` | in-flight | `docs/plans/small-model-benchmarking.md` v1.10 | `analyst` → — | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | **accepted** — `5878014` | `model-bench/**` (10 files, +1490/−61); 353→389 tests | re-gate (both, fresh) → — | 348k tok / 130 tools |
-| U18 — Rule on §3.4 Rule 4's closed-form half + P3-5's seed contract | `data-scientist` (fresh) | `ae4bd1d99239907a6` | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.11 if changed | `analyst` → — | — |
+| U18 — Rule on §3.4 Rule 4's closed-form half + P3-5's seed contract | `data-scientist` (fresh) | `ae4bd1d99239907a6` | **accepted** — `a5f42f6`; recovered from disk after a kill, headline claim reproduced independently | `docs/plans/small-model-benchmarking-ml.md` **v1.11** — the closed form is binding | teco-verified | — (killed before reporting) |
 | U10 — Plan sweep (n-ML-7 + §5 stage-scoping, flagged 3×) | `architect` (fresh) | `ae512d667fe7f0c49` | accepted | commit `9b63c5c` — plan **v1.7**; 6 restatements withdrawn, stage table added | teco-verified | 139k tok / 64 tools |
 | U7c — Plan sweep: `PackRef.contentHash` is now `str \| None` | `architect` | — | abandoned — **delivered by U8b** in plan v1.6 (`5594be8`), never dispatched separately | — | — | — |
 | U6e — Fold the adjudication's sharpened principle into the note | `data-scientist` | — | abandoned — **delivered by U8a** as Rule 3's generalisation in note v1.6 (`a54a667`), never dispatched separately | — | — | — |
@@ -1246,3 +1248,57 @@ Ordered, with dependencies:
 - **Read the shipped expression before re-deriving anything from it.** Three separate confident wrong
   answers in this coordination came from re-deriving in the units a *document* prints rather than the
   units the *code* uses. Twice they were mine.
+
+
+## RESUMED — 2026-09-06, from `d411ac7`
+
+Fresh session. Reconciled the `STOPPED CLEAN` record above against the tree before acting: working
+tree clean, `HEAD` at `d411ac7`, S1 re-run by teco → **389 passed in 5.76 s**. The record held in
+every particular.
+
+### Step 1 of the resume order — the two recovered documents are verified and now accepted
+
+Both were committed but unaccepted, their authors having been killed before declaring them
+finished. Verified here rather than re-dispatched:
+
+- **U19 (plan gate `## Pass 4`) — complete, not truncated, and unusually well evidenced.** It carries
+  its verdict, all fourteen findings, the Pass 3 disposition, what's solid, three open questions, the
+  finding-ID note and **Appendix D** (D.1–D.4: a recomputed forbidden-set derivation, the LM Studio
+  units citation, a re-probe of `GET /api/v0/models` across 19 models, and a shipped-S1 fact table).
+  A killed document does not end with its appendix.
+- **Its sharpest blocker, `plan-gate P4-1`, corroborated directly.** Plan lines **1168 and 1169 are
+  adjacent rows of the same §3.6 table**: 1168 sources `ttftMs` from `stats.time_to_first_token`
+  *directly*, 1169 computes prefill as `1000 × stats.time_to_first_token`. One table treats one field
+  as ms and as seconds, one row apart. The finding is real at the plan's own text, independent of the
+  LM Studio documentation the reviewer cites for the field being seconds.
+- **`P4-2`'s second instance re-confirmed:** both `_percentile` copies still shipped, at
+  `modelbench/results.py:573` and `modelbench/stats.py:296`.
+- **U18 (note v1.11)** was already verified at the previous stop — the closed form is binding because
+  the envelope's seed dependence reaches the *verdict*. Accepted on that record.
+
+### Step 2 — dispatched, in parallel on disjoint files
+
+**U22** (`architect`, fresh — the U17 architect is at 301k tokens and this work is self-contained)
+carries plan v1.10: all fourteen findings, note v1.11's binding closed form and the seed contract it
+retires, the `plan-gate`/`impl-gate` P4 citation split, and — explicitly — **the pattern behind
+`P4-2` rather than its instance**, this being the second plan revision to specify S1 work with an
+incomplete edit list.
+
+**U21** (`data-scientist`, fresh) carries the three questions Pass 4 routed rather than decided: the
+gap detector's right-censoring property against §11.5's two-producer exactness argument, P4-11's
+threshold margin, and P4-13's §11.7 denominator on an embeddings run.
+
+Each is told the other is live and that the other's document is not theirs to touch — the recurring
+restatement finding is exactly what cross-editing produces here.
+
+### Still true, and still binding
+
+- **S2 must not be dispatched.** The plan gate is at *needs changes*; the plan cannot yet carry S2.
+- **The S1 fix unit is step 3, not now.** It bundles U20's residency element-shape assertion, the
+  single shared `_percentile`, and the closed-form implementation — that last one a public signature
+  S2 wires against, so it waits on plan v1.10.
+- **Defects do not ride to later stages**, and a disclosed residual must be named *blocked on unbuilt
+  work* or *deferred by choice*. Both briefs carry it.
+- **FalkorDB is unreachable this session** (`host.docker.internal:6379`). No CPG exists for
+  `model-bench` anyway, and every unit here is offline work — but kaizen writes will fail.
+
