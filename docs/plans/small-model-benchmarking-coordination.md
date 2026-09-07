@@ -61,8 +61,8 @@ Stakeholder decisions, 2026-09-02:
 | U20 — S1: residency element-shape assertion (plan v1.9 S1 DC-1) | `tdd-engineer` | — | queued — specified at v1.9, not yet implemented | `model-bench/**` | re-gate → — | — |
 | U21 — Rule on Pass 4's three routed statistical questions (gap-detector right-censoring, threshold margin, §11.7's second denominator) | `data-scientist` (fresh) | `a4e06f8c810bbbbb8` | **delivered** — `fc2fcf6`; all three changed the note | `docs/plans/small-model-benchmarking-ml.md` **v1.12** | `analyst` re-gate → — | 119k tok / 39 tools |
 | U22 — Plan v1.10: close all 14 plan-gate Pass 4 findings + fold notes v1.11/v1.12 | `architect` (fresh) | `aaf7ade9ddbc63e8b` | **delivered** — `3e5dc50` (+738/−134); all 14 closed, **no residuals** | `docs/plans/small-model-benchmarking.md` **v1.10** | `analyst` Pass 5 → — | 293k tok / 96 tools |
-| U23 — Two items routed back from v1.10: rule (iv-b)'s p50-gate application, and §11.2's stale line number | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.13 if changed | `analyst` Pass 5 → — | — |
-| U24 — Re-gate plan v1.10 + note v1.12/v1.13 (Pass 5) | `analyst` (fresh) | — | queued — dispatched once U23 settles rule (iv-b) | `docs/reviews/small-model-benchmarking.md` `## Pass 5` | — → — | — |
+| U23 — Two items routed back from v1.10: rule (iv-b)'s p50-gate application, and §11.2's stale line number | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `5197ce6`; (iv-b) confirmed **by correcting the note** | `docs/plans/small-model-benchmarking-ml.md` **v1.13** | `analyst` Pass 5 → — | 140k tok / 11 tools cumulative |
+| U24 — Re-gate plan v1.10 + note v1.13 (Pass 5) | `analyst` (fresh) | `aa9af16f140993a17` | in-flight | `docs/reviews/small-model-benchmarking.md` `## Pass 5` | — (is the gate) | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | **accepted** — `5878014` | `model-bench/**` (10 files, +1490/−61); 353→389 tests | re-gate (both, fresh) → — | 348k tok / 130 tools |
@@ -1388,4 +1388,45 @@ reversed.
 **The Pass 5 re-gate is held until U23 settles item 1** — deliberately. If rule (iv-b) is wrong the
 plan changes, and gating a plan that is about to move wastes a ~200k-token review. The wait is
 minutes; the gate is not.
+
+### U23 delivered — 2026-09-06, note v1.13 (`5197ce6`)
+
+**Item 1 was not a rubber stamp: (iv-b) is confirmed by *correcting the note*, not by applying it.**
+§11.4 sent `ttftMs` and prefill to §11.6's p50 gate while exempting `tokensPerSecond` as
+diagnostic-only. But the three share **one** coverage number, so they print or refuse together by
+construction — the exemption would have printed a `tokensPerSecond` median over exactly the subset
+the gate had just judged too short. **§11.4's split is withdrawn; all three take the gate.** The plan
+was right and the note was wrong.
+
+**A defect class this coordination has demonstrated it can miss.** (iv-b) was asserted at plan v1.9
+on an argument that **did not yet hold** — the transfer needs the missingness *direction*, unknown
+for a `stats`-less item — and became sound only at note **v1.12**, when the attained-level bound was
+re-derived as distribution-free (subset-hood only). **Passes 3 and 4 both accepted it.** A rule whose
+justification postdates its assertion is invisible to a gate that reads the pair as of today, and
+Pass 5's brief now carries an explicit sweep for the same shape.
+
+**The confirmation carries one condition — co-presence.** One coverage number for three figures is
+right only while the three exist on the same items: prefill *additionally* needs a usable
+`usage.prompt_tokens`, so an item with `stats` but no token count puts prefill's true `X` below
+`statsCoveredCount` and both the gate and slot 2's denominator overstate coverage for one figure of
+three — **silently, in the direction that prints**. The note carries the assertion (§11.10 test 7);
+whether the *plan* owes a rule of its own was left open and is routed to Pass 5.
+
+Item 2 fixed and made durable: §11.2's `results.py:541` → `:573`, both copies now pinned **at
+`5878014`**, so the reference cannot go stale again under §7 rule 5.
+
+### U24 dispatched — the Pass 5 gate, and what turns on it
+
+Three consecutive plan gates returned *needs changes* and S2 has been held throughout. Pass 5's
+question is whether **v1.10 is finally implementable**, not whether it is perfect. The brief weights
+it to four things: (1) are Pass 4's fourteen genuinely closed, compactly dispositioned; (2) **does
+§7 rule 5 actually work** — the pinned counts all reproduce, so the gate's effort goes to whether the
+four tables are *complete*, given Table A already documents a site the grep cannot find, which is
+either a principled escape hatch or a reopening of the defect rule 5 exists to close; (3) the two
+items carried here deliberately — co-presence, and plan §4 S2 rule **(i)** versus **(iv-a)**, which
+are one word from contradicting; (4) the sweep for rules whose justification postdates their
+assertion.
+
+The brief states plainly that the verdict must not be softened to unblock S2 — an unfounded approval
+costs more than a fifth revision.
 
