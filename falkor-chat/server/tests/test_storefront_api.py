@@ -3002,6 +3002,128 @@ def _attribute_targets(node, prefixes: set[str]) -> set[str]:
     }
 
 
+# The `ast` node types that bind a **local name to a value expression written
+# at the binding site**, and are therefore the ones an alias can be spelled
+# with. `_bindings` handles exactly these and nothing else, and
+# `test_the_alias_reader_covers_every_binding_form_the_grammar_has` holds this
+# set plus `_NON_ALIAS_BINDING_NODES` against the grammar's own enumeration —
+# so this is a closed set by construction rather than by anyone's memory.
+#
+# `ast.MatchAs` is here rather than `ast.Match` because the *pattern* is what
+# binds; the value it binds is the enclosing `match` subject, which the pattern
+# node does not carry, so `_bindings` reaches it through `ast.Match`.
+_ALIAS_BINDING_NODES: frozenset[type] = frozenset({
+    ast.Assign, ast.AnnAssign, ast.NamedExpr, ast.For, ast.AsyncFor,
+    ast.comprehension, ast.withitem, ast.MatchAs,
+})
+
+# Every other name-binding node in the grammar, with the reason it cannot make
+# a second name for an object already named by a prefix. These are **not**
+# oversights being tolerated: each one binds something that is provably not the
+# value on its right-hand side, or is bound by a caller this reader cannot see.
+_NON_ALIAS_BINDING_NODES: dict[type, str] = {
+    ast.AugAssign: (
+        "binds `target OP value`, never `value` — the object bound is whatever "
+        "the operator returns, so it cannot be a second name for the operand"
+    ),
+    ast.Delete: "un-binds a name; it introduces none",
+    ast.FunctionDef: "binds a function object to its own `def` name",
+    ast.AsyncFunctionDef: "binds a coroutine function to its own `def` name",
+    ast.ClassDef: "binds a class object to its own `class` name",
+    ast.Import: "binds a module object, never an attribute of `self`",
+    ast.ImportFrom: "binds a module attribute resolved at import time",
+    ast.alias: "the `as` half of an import — same object, a different name",
+    ast.ExceptHandler: "binds the caught exception, and is deleted at block exit",
+    ast.Global: "declares a scope for a name; binds no value",
+    ast.Nonlocal: "declares a scope for a name; binds no value",
+    ast.arg: (
+        "a parameter, bound by the **caller** — this is precisely the "
+        "`passed to a helper` shape the reach statement names as outside the "
+        "walk. Closing it needs interprocedural analysis, not another node type"
+    ),
+    ast.keyword: "a call-site keyword name; it binds nothing in the caller's scope",
+    ast.MatchStar: "binds a `list` of the subject's unmatched items, not the subject",
+    ast.MatchMapping: "`rest` binds a `dict` of unmatched keys, not the subject",
+    ast.TypeVar: "a type parameter, in the type namespace",
+    ast.ParamSpec: "a type parameter, in the type namespace",
+    ast.TypeVarTuple: "a type parameter, in the type namespace",
+    ast.TypeAlias: (
+        "binds a `TypeAliasType` whose value is lazily evaluated in the type "
+        "namespace; a `type` statement cannot name an attribute of `self`"
+    ),
+}
+
+
+def _bind_pairs(target, value) -> list[tuple[str, str]]:
+    """`(name, unparsed value)` for one target/value pair, destructuring.
+
+    A bare `ast.Name` target is the whole of it in the common case. The
+    sequence case (`svc, _ = self._services, None`) is paired **positionally,
+    and only when the pairing is decidable without running anything**: both
+    sides literal sequences, equal length, no `*` on either side. Anything
+    else — a `Starred` target, a call on the right — contributes nothing,
+    which is a miss the reach statement names rather than a silent one.
+    """
+    if isinstance(target, ast.Name):
+        return [(target.id, ast.unparse(value))]
+    if (
+        isinstance(target, (ast.Tuple, ast.List))
+        and isinstance(value, (ast.Tuple, ast.List))
+        and len(target.elts) == len(value.elts)
+        and not any(
+            isinstance(elt, ast.Starred) for elt in [*target.elts, *value.elts]
+        )
+    ):
+        found: list[tuple[str, str]] = []
+        for sub_target, sub_value in zip(target.elts, value.elts):
+            found += _bind_pairs(sub_target, sub_value)
+        return found
+    return []
+
+
+def _bindings(node) -> list[tuple[str, str]]:
+    """Every `(local name, unparsed value)` bound under `node`.
+
+    One branch per member of `_ALIAS_BINDING_NODES`. The reader this replaced
+    had exactly one — `ast.Assign` — while the sentence above it said "any
+    local name transitively bound to it", and `svc: object = self._services`,
+    which is §5.1 S9's decided shape plus a type annotation, survived the whole
+    file at 183 passed (`docs/reviews/salesperson-ui-impl.md` `## Pass 14`,
+    P14-2). Annotated local assignment is a house idiom in the two files S9
+    edits, so that was not an exotic spelling; it was the ordinary one.
+
+    `with <expr> as x` is read as a binding of `<expr>` although what is
+    actually bound is `<expr>.__enter__()`. That over-approximates on purpose:
+    an over-approximation here can only make the guard fire on a call the
+    request cannot reach — a false **red**, which is loud and cheap — while the
+    under-approximation is the defect this file has now produced twelve times.
+
+    A `for`/comprehension target is read only over a **literal** sequence
+    (`for svc in (self._services,)`), because that is the only iterable whose
+    elements are visible to a reader that runs nothing.
+    """
+    found: list[tuple[str, str]] = []
+    for child in ast.walk(node):
+        if isinstance(child, ast.Assign):
+            for target in child.targets:
+                found += _bind_pairs(target, child.value)
+        elif isinstance(child, (ast.AnnAssign, ast.NamedExpr)):
+            if child.value is not None:
+                found += _bind_pairs(child.target, child.value)
+        elif isinstance(child, (ast.For, ast.AsyncFor, ast.comprehension)):
+            if isinstance(child.iter, (ast.Tuple, ast.List, ast.Set)):
+                for element in child.iter.elts:
+                    found += _bind_pairs(child.target, element)
+        elif isinstance(child, ast.withitem):
+            if child.optional_vars is not None:
+                found += _bind_pairs(child.optional_vars, child.context_expr)
+        elif isinstance(child, ast.Match):
+            for case in child.cases:
+                if isinstance(case.pattern, ast.MatchAs) and case.pattern.name:
+                    found.append((case.pattern.name, ast.unparse(child.subject)))
+    return found
+
+
 def _alias_prefixes(node, seeds: set[str]) -> set[str]:
     """`seeds`, closed over every local name bound to one under `node`.
 
@@ -3011,20 +3133,21 @@ def _alias_prefixes(node, seeds: set[str]) -> set[str]:
     holding the three literal prefixes — as did a second router alias
     (`docs/reviews/salesperson-ui-impl.md` `## Pass 13`, P13-1).
 
-    So the prefixes are **derived, not listed**: any name assigned something
+    So the prefixes are **derived, not listed**: any name bound to something
     that is already a prefix becomes one, to a fixpoint, which also resolves an
     alias of an alias. The one hand-written prefix left is the attribute the
     object is *reached* by (`shop._services`, `self._services`), which is a
     property of the class rather than of a body someone is editing.
+
+    **What counts as "bound" is `_bindings`, i.e. `_ALIAS_BINDING_NODES`** —
+    eight node types, held against the grammar's own list of name-binding nodes
+    by `test_the_alias_reader_covers_every_binding_form_the_grammar_has`. That
+    test is the enumeration, in the file: deriving the prefixes fixed the
+    spelling problem and left a node-type problem exactly one shape smaller
+    (`## Pass 14`, P14-2), and only an enumeration closes that.
     """
     prefixes = set(seeds)
-    bindings = [
-        (target.id, ast.unparse(child.value))
-        for child in ast.walk(node)
-        if isinstance(child, ast.Assign)
-        for target in child.targets
-        if isinstance(target, ast.Name)
-    ]
+    bindings = _bindings(node)
     grew = True
     while grew:
         grew = False
@@ -3049,38 +3172,17 @@ def _class_methods(source: str, class_name: str) -> dict[str, ast.AST]:
     }
 
 
-def _service_layer_reach(api_source: str, storefront_source: str) -> set[str]:
-    """The `Services` methods a `/shop/api` route reaches, by the paths below.
+def _storefront_reach(api_source: str, storefront_source: str) -> set[str]:
+    """The `Storefront` methods a `/shop/api` route reaches, transitively.
 
-    A route reaches the service layer two ways, and the exemptions in
-    `INHERITED_HANDLERS` are claims about **both**: directly, as
-    `services.<name>` (or `shop._services.<name>`) in the router body, and one
-    or more hops down through `shop.<method>`, where `Storefront` calls
-    `self._services.<name>` on the router's behalf. Reading only the first is
-    what let S9's decided shape — the trigger enqueued on the turn worker, so
-    the `start_workflow_run` call lives in `storefront.py` — stay invisible.
-
-    So: seed with the router's direct accesses, then walk the `Storefront`
-    methods the router calls, **transitively** within the class (`list_catalog`
-    reaches `filter_products` through `_catalog_rows`, two hops down, and a
-    guard that stopped at one would have to argue why one hop is the boundary).
-
-    **Every prefix is alias-resolved** (P13-1), on all four legs — the two that
-    reach the service layer and the two that walk `Storefront` — so a local
-    binding cannot hide a call from any of them. Listing the three literal
-    spellings instead is what let `svc = self._services` through, and that is
-    S9's decided shape written in two lines.
-
-    **Where it stops**, said plainly because "by any path" is what this
-    docstring used to claim and could not deliver: the service object is
-    followed only through attribute access, so a call made by handing the
-    object somewhere else — passed to a helper, returned, stored — is outside
-    this reader. That is a property of the walk, not a claim about the code.
+    The router's own frontier is `shop.<method>`, alias-resolved; each reached
+    method's frontier is `self.<method>`, alias-resolved, intersected with the
+    class's own methods. Walked to a fixpoint because `list_catalog` reaches
+    `filter_products` through `_catalog_rows`, two hops down, and a guard that
+    stopped at one would have to argue why one hop is the boundary.
     """
     router = _parse_router(api_source)
     methods = _class_methods(storefront_source, "Storefront")
-
-    reached = _attribute_targets(router, _alias_prefixes(router, {"shop._services"}))
     frontier = _attribute_targets(router, _alias_prefixes(router, {"shop"}))
     frontier &= methods.keys()
     walked: set[str] = set()
@@ -3090,37 +3192,129 @@ def _service_layer_reach(api_source: str, storefront_source: str) -> set[str]:
             continue
         walked.add(name)
         body = methods[name]
-        reached |= _attribute_targets(body, _alias_prefixes(body, {"self._services"}))
         frontier |= (
             _attribute_targets(body, _alias_prefixes(body, {"self"})) & methods.keys()
         ) - walked
+    return walked
+
+
+def _collaborator_reach(
+    api_source: str, storefront_source: str, router_attr: str, self_attr: str,
+) -> set[str]:
+    """The methods of one injected collaborator a `/shop/api` route reaches.
+
+    A route reaches a collaborator two ways, and the exemptions in
+    `INHERITED_HANDLERS` are claims about **both**: directly, as
+    `<router_attr>.<name>` in the router body, and one or more hops down
+    through `shop.<method>`, where `Storefront` calls `<self_attr>.<name>` on
+    the router's behalf. Reading only the first is what let S9's decided shape
+    — the trigger enqueued on the turn worker, so the `start_workflow_run` call
+    lives in `storefront.py` — stay invisible (`## Pass 12`, P12-1).
+
+    **One function for both collaborators**, because the `Services` leg and the
+    `Repository` leg are the same walk one attribute over, and reading the
+    second at the router only is how `Repository.ensure_participant` — reached
+    from `Storefront.join`, raising an exception classified nowhere — stayed
+    outside every scope (`docs/reviews/salesperson-ui-impl.md` `## Pass 14`,
+    P14-1). It also means S10's move of the two `repo.<name>` calls onto
+    `Storefront` re-points this leg instead of emptying it.
+
+    **Every prefix on every leg is alias-resolved** (P13-1): the two that reach
+    the collaborator, and the two `_storefront_reach` walks `Storefront` with.
+
+    **Where it stops**, said as a property of the walk rather than as a claim
+    about the code: the collaborator object is followed only through attribute
+    access on a name `_bindings` can bind, so a call made by handing the object
+    somewhere else — passed to a helper, returned, stored on an attribute — is
+    outside it, and so is `getattr(svc, "start_workflow_run")`.
+    """
+    router = _parse_router(api_source)
+    methods = _class_methods(storefront_source, "Storefront")
+    reached = _attribute_targets(router, _alias_prefixes(router, {router_attr}))
+    for name in _storefront_reach(api_source, storefront_source):
+        body = methods[name]
+        reached |= _attribute_targets(body, _alias_prefixes(body, {self_attr}))
     return reached
 
 
-def _raises_of(source: str, class_name: str, method_names) -> set[str]:
-    """The exception classes a `raise` names in the given methods of one class.
+def _service_layer_reach(api_source: str, storefront_source: str) -> set[str]:
+    """The `Services` methods a `/shop/api` route reaches. `storefront.py` is
+    read here and never written."""
+    return _collaborator_reach(
+        api_source, storefront_source, "shop._services", "self._services"
+    )
 
-    Every name is resolved, so a method renamed out from under the caller
-    reddens here rather than silently contributing nothing to the union.
+
+def _repository_reach(api_source: str, storefront_source: str) -> set[str]:
+    """The `Repository` methods a `/shop/api` route reaches.
+
+    Two legs, exactly as the service one has: `repo.<name>` in the router
+    (`repo = shop._repo`, which S10 moves onto `Storefront`) and
+    `self._repo.<name>` in the `Storefront` methods the router reaches — which
+    is where `join` provisions the participant.
+    """
+    return _collaborator_reach(
+        api_source, storefront_source, "shop._repo", "self._repo"
+    )
+
+
+def _reached_methods(source: str, class_name: str, seeds) -> set[str]:
+    """`seeds`, closed over the `self.<name>` calls those methods make.
+
+    The frontier idiom `_storefront_reach` uses, applied inside a collaborator.
+    Without it the raise walk stopped one hop earlier than the sentence
+    governing it: `Services._refuse_retired_name()` raising a bare
+    `HTTPException(410)` and called from the reached `save_profile` **survived
+    at 183 passed** and answered `410 {"detail":"gone"}` from
+    `POST /shop/api/session`, as did the same raise in
+    `Repository.ensure_participant` reached from `Storefront.join`
+    (`docs/reviews/salesperson-ui-impl.md` `## Pass 14`, P14-1). A raise one
+    helper call out of a *route body* has been in scope since P12-2; this is
+    the identical argument one class over.
+
+    `self` is alias-resolved here for the same reason it is everywhere else in
+    this file — a walk that resolves aliases on three legs and not the fourth
+    is the defect one field over, and this chain has produced that twice.
     """
     methods = _class_methods(source, class_name)
-    missing = set(method_names) - methods.keys()
+    missing = set(seeds) - methods.keys()
     assert not missing, f"`{class_name}` has no method(s) {sorted(missing)}"
-    names: set[str] = set()
-    for name in method_names:
-        names |= _raised_class_names(methods[name])
-    return names
+    frontier, walked = set(seeds), set()
+    while frontier:
+        name = frontier.pop()
+        if name in walked:
+            continue
+        walked.add(name)
+        body = methods[name]
+        frontier |= (
+            _attribute_targets(body, _alias_prefixes(body, {"self"})) & methods.keys()
+        ) - walked
+    return walked
 
 
-def _router_repository_reach(api_source: str) -> set[str]:
-    """The `Repository` methods the router calls directly, alias-resolved.
+def _raises_of(source: str, class_name: str, method_names) -> set[str]:
+    """The exception classes a `raise` names in the given methods of one class,
+    **and in the sibling methods those call** (`_reached_methods`).
 
-    `repo = shop._repo` is a fourth module on the request path, under no guard
-    at all until P13-2. S10 moves both calls onto `Storefront`, at which point
-    this returns the empty set — which is why its caller asserts it is not.
+    Every seed name is resolved, so a method renamed out from under the caller
+    reddens here rather than silently contributing nothing to the union.
+
+    The reached methods are handed to `_raised_class_names` as **one** synthetic
+    module rather than one at a time, which is what lets `raise self._mk(...)`
+    resolve through `_mk`'s `return`s the way it already does in the two
+    storefront modules. Read one method at a time the factory is outside the
+    walk, so the raise resolves to the *method name* — loud, because a foreign
+    name reddens the set equality, but loud with the wrong name, and the two
+    kinds of scope in this file would then resolve the same source differently.
+    The scope is still exactly the reached methods: nothing outside them is in
+    the module, so this widens what is *resolved*, never what is *read*.
     """
-    router = _parse_router(api_source)
-    return _attribute_targets(router, _alias_prefixes(router, {"shop._repo"}))
+    methods = _class_methods(source, class_name)
+    reached = _reached_methods(source, class_name, method_names)
+    scope = ast.Module(
+        body=[methods[name] for name in sorted(reached)], type_ignores=[]
+    )
+    return _raised_class_names(scope)
 
 
 def _named_class(expr) -> str:
@@ -3194,14 +3388,21 @@ def _raised_class_names(node) -> set[str]:
 #
 # Deliberately *not* forward-looking: §5.1's S9 row adds the trigger enqueue,
 # and v1.22 decided it runs **on the turn worker** — `shop.enqueue_turn(...)`
-# in the router, `self._services.start_workflow_run(...)` in `storefront.py` —
-# which makes three of `INHERITED_HANDLERS`' eleven excuses falsifiable:
-# `WorkflowEngineDisabledError` (`_require_executor`),
-# `WorkflowInputRejectedError` and `WorkflowDefNotFoundError`. A set written to
-# accommodate that in advance would be a guard that cannot fail at the one
-# moment it is worth something (`docs/reviews/salesperson-ui-impl.md`
-# `## Pass 11`, P11-1) — which is also why the *reader* has to see that shape
-# and not only the alias spelling S9 rejected (`## Pass 12`, P12-1).
+# in the router, `self._services.start_workflow_run(...)` in `storefront.py`.
+# A set written to accommodate that in advance would be a guard that cannot
+# fail at the one moment it is worth something
+# (`docs/reviews/salesperson-ui-impl.md` `## Pass 11`, P11-1) — which is also
+# why the *reader* has to see that shape and not only the alias spelling S9
+# rejected (`## Pass 12`, P12-1).
+#
+# **Which `INHERITED_HANDLERS` excuses that step falsifies is not stated here,
+# and that is deliberate.** The version of this comment that named three of
+# them named one the row does not carry and dropped one it does, because the
+# plan row it was written against mis-maps the missing snapshot to
+# `WorkflowDefNotFoundError` (`## Pass 14`, P14-3). The mapping is being
+# settled in the plan; what belongs in a test file is the **measurement** —
+# after S9, `_raises_of` over the closed reach reports the classes, and
+# whichever of the excuses those name is then a fact rather than a forecast.
 SERVICE_LAYER_REACH_TODAY = frozenset({
     # direct, in the router body
     "read_messages", "post_message", "get_current_order",
@@ -3244,11 +3445,21 @@ def test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume()
     `svc.start_workflow_run(ctx)` — S9's decided shape plus one line — survived
     the whole file at 183 passed, and so did a second router alias,
     `svc2 = shop._services`. The direct spelling on the same injection point
-    reddened, so the difference was purely the binding. Every prefix on all
-    four legs is therefore **derived** from the file's own `ast.Assign` nodes
-    to a fixpoint rather than written down, which is also what turns the old
-    hand-written `services == shop._services` control into a structural one: a
-    rename is now followed instead of blinding the walk.
+    reddened, so the difference was purely the binding. Every prefix on every
+    leg is therefore **derived** from the file's own bindings to a fixpoint
+    rather than written down, which is also what turns the old hand-written
+    `services == shop._services` control into a structural one: a rename is now
+    followed instead of blinding the walk.
+
+    **"Its own bindings" is `_bindings`, which is eight `ast` node types**
+    (P14-2). Deriving the prefixes over `ast.Assign` alone made the same
+    mistake one shape smaller: `svc: object = self._services` — the identical
+    two lines with a type annotation, which is a house idiom in the two files
+    S9 edits — survived the whole file at 183 passed, while the same lines
+    without `: object` were `1 failed`. Which node types those are, and why
+    every other name-binding node in the grammar cannot carry an alias, is
+    `test_the_alias_reader_covers_every_binding_form_the_grammar_has`, which
+    takes its enumeration from `ast` rather than from a list here.
     """
     api, sf = _router_source(), _storefront_source()
 
@@ -3320,6 +3531,194 @@ def test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume()
     ) == {"start_workflow_run"}
 
 
+# One snippet per member of `_ALIAS_BINDING_NODES`: the body of a `Storefront`
+# method the router reaches, writing S9's decided call through a local name
+# bound in that form. Every one must resolve to `{"start_workflow_run"}`.
+#
+# This is the enumeration `## Pass 14` asked to be shipped in the file rather
+# than run once in a transcript — *"enumerate every syntactic way to write the
+# thing the sentence names, run the delivered reader over each, and list the
+# misses"*. The list is empty because the sentence now names node types and
+# these are them; what keeps that from being circular is the assertion in the
+# test below, which takes the node types from the **grammar** and not from this
+# dict, so a binding form nobody classified fails rather than passing silently.
+_ALIAS_FORM_SNIPPETS: dict[type, str] = {
+    ast.Assign: (
+        "    def enqueue_turn(self, ctx):\n"
+        "        svc = self._services\n"
+        "        return svc.start_workflow_run(ctx)\n"
+    ),
+    ast.AnnAssign: (
+        "    def enqueue_turn(self, ctx):\n"
+        "        svc: object = self._services\n"
+        "        return svc.start_workflow_run(ctx)\n"
+    ),
+    ast.NamedExpr: (
+        "    def enqueue_turn(self, ctx):\n"
+        "        if (svc := self._services):\n"
+        "            return svc.start_workflow_run(ctx)\n"
+    ),
+    ast.For: (
+        "    def enqueue_turn(self, ctx):\n"
+        "        for svc in (self._services,):\n"
+        "            return svc.start_workflow_run(ctx)\n"
+    ),
+    ast.AsyncFor: (
+        "    async def enqueue_turn(self, ctx):\n"
+        "        async for svc in [self._services]:\n"
+        "            return svc.start_workflow_run(ctx)\n"
+    ),
+    ast.comprehension: (
+        "    def enqueue_turn(self, ctx):\n"
+        "        return [svc.start_workflow_run(ctx) for svc in (self._services,)]\n"
+    ),
+    ast.withitem: (
+        "    def enqueue_turn(self, ctx):\n"
+        "        with self._services as svc:\n"
+        "            return svc.start_workflow_run(ctx)\n"
+    ),
+    ast.MatchAs: (
+        "    def enqueue_turn(self, ctx):\n"
+        "        match self._services:\n"
+        "            case svc:\n"
+        "                return svc.start_workflow_run(ctx)\n"
+    ),
+}
+
+
+def test_the_alias_reader_covers_every_binding_form_the_grammar_has():
+    """**The enumeration, in the file** (`## Pass 14`, P14-2 and its closing
+    condition).
+
+    This artifact has produced one defect twelve times — *a stated rule broader
+    than the reach the mechanism implements* — and five review passes each
+    found it inside the fix for the previous one. Every fix widened what the
+    reader looked at: three prefix spellings, then two files, then a fixpoint
+    over `ast.Assign`. Each was correct and each left the next instance one
+    spelling away, because the sentence above the reader kept naming a
+    **semantic** scope ("any local name transitively bound to it") that no
+    finite reader implements, while the body walked a **syntactic** one.
+
+    P14-2 is that gap at its smallest: `svc: object = self._services` — S9's
+    decided shape plus a type annotation, and a house idiom (68 annotated local
+    assignments in this package, 16 in `storefront_api.py`) — survived the
+    whole file at 183 passed, while the same two lines without `: object` were
+    `1 failed`.
+
+    So the sentence now names node types, and this test is what makes that a
+    closed statement instead of a shorter one. It takes the binding forms from
+    the **grammar**: every `ast` node class carrying a target-shaped field
+    (`target`, `targets`, `optional_vars`) or a name-shaped one (`name`,
+    `names`, `asname`, `arg`, `rest`) is a place the language can introduce a
+    name, and each must be classified — walked by `_bindings`, or excluded with
+    a written reason that says what it binds instead. A Python version that
+    adds a binding form reddens here rather than opening a thirteenth instance
+    in silence.
+
+    The exclusions are not a shorter promise. `ast.arg` is the one that matters
+    and it is the one the reach statement already names as outside the walk: a
+    parameter is bound by the **caller**, so `_go(self._services)` needs
+    interprocedural analysis rather than another node type, and no enumeration
+    of binding forms will ever reach it. Saying that here, next to the forms
+    that *are* covered, is the difference between a documented non-reach and
+    the defect this chain keeps producing.
+    """
+    binding_nodes = {
+        obj
+        for obj in vars(ast).values()
+        if isinstance(obj, type)
+        and issubclass(obj, ast.AST)
+        and set(getattr(obj, "_fields", ()))
+        & {"target", "targets", "optional_vars", "name", "names", "asname",
+           "arg", "rest"}
+    }
+    classified = _ALIAS_BINDING_NODES | set(_NON_ALIAS_BINDING_NODES)
+
+    assert not (_ALIAS_BINDING_NODES & set(_NON_ALIAS_BINDING_NODES))
+    assert classified == binding_nodes, (
+        "the grammar's name-binding nodes and this file's classification of "
+        "them have diverged: unclassified "
+        f"{sorted(k.__name__ for k in binding_nodes - classified)}, "
+        "classified-but-gone "
+        f"{sorted(k.__name__ for k in classified - binding_nodes)}. Every one "
+        "is either a form an alias can be written in — walk it in `_bindings` "
+        "— or one that provably binds something else, which is a reason, not "
+        "an omission"
+    )
+    assert all(reason.strip() for reason in _NON_ALIAS_BINDING_NODES.values())
+
+    # ...and every walked form is exercised against the **delivered** reader,
+    # on the leg S9 writes: `shop.enqueue_turn(...)` in the router,
+    # `<local>.start_workflow_run(...)` in `storefront.py`.
+    api_stub = (
+        "def build_storefront_router(shop):\n"
+        "    def post(body):\n"
+        "        return shop.enqueue_turn(None)\n"
+    )
+    assert set(_ALIAS_FORM_SNIPPETS) == _ALIAS_BINDING_NODES
+    for node_type, body in _ALIAS_FORM_SNIPPETS.items():
+        storefront_stub = "class Storefront:\n" + body
+        # the snippet really is written in the form it is filed under, so a
+        # control cannot pass by exercising a different node type
+        assert any(
+            isinstance(node, node_type)
+            for node in ast.walk(ast.parse(storefront_stub))
+        ), f"the {node_type.__name__} snippet does not contain one"
+        assert _service_layer_reach(api_stub, storefront_stub) == {
+            "start_workflow_run"
+        }, f"{node_type.__name__} binds a local the reader cannot follow"
+
+    # the negative half of the same claim: with the binding removed and the
+    # call left in place, the reader reports nothing — so the assertions above
+    # measure the binding and not the presence of the call
+    assert _service_layer_reach(
+        api_stub,
+        "class Storefront:\n"
+        "    def enqueue_turn(self, ctx):\n"
+        "        return svc.start_workflow_run(ctx)\n",
+    ) == set()
+
+    # sequence destructuring, which is `ast.Assign` in a shape `_bind_pairs`
+    # has to pair positionally rather than by unparsing one value
+    assert _service_layer_reach(
+        api_stub,
+        "class Storefront:\n"
+        "    def enqueue_turn(self, ctx):\n"
+        "        svc, _ = self._services, None\n"
+        "        return svc.start_workflow_run(ctx)\n",
+    ) == {"start_workflow_run"}
+    # ...and the shape it declines to pair, because pairing it would need the
+    # value: a starred target. Declined loudly here rather than guessed.
+    assert _service_layer_reach(
+        api_stub,
+        "class Storefront:\n"
+        "    def enqueue_turn(self, ctx):\n"
+        "        svc, *_ = self._services, None\n"
+        "        return svc.start_workflow_run(ctx)\n",
+    ) == set()
+
+    # the three excluded forms an editor is most likely to reach for, each
+    # measured rather than asserted in prose: what they bind is not the
+    # service object, so the reader reporting nothing is correct, not a miss
+    for body in (
+        # `ast.arg` — the documented `passed to a helper` non-reach
+        "    def enqueue_turn(self, ctx):\n"
+        "        return _go(self._services, ctx)\n",
+        # `ast.ExceptHandler` — binds the caught exception
+        "    def enqueue_turn(self, ctx):\n"
+        "        try:\n"
+        "            return self._services\n"
+        "        except Exception as svc:\n"
+        "            return svc.start_workflow_run(ctx)\n",
+        # `ast.AugAssign` — binds `svc + self._services`, not `self._services`
+        "    def enqueue_turn(self, ctx):\n"
+        "        svc = 0\n"
+        "        svc += self._services\n"
+        "        return svc.start_workflow_run(ctx)\n",
+    ):
+        assert _service_layer_reach(api_stub, "class Storefront:\n" + body) == set()
+
+
 # Every exception class a `raise` in `storefront.py` names **today**, spelled
 # out for the same reason `SERVICE_LAYER_REACH_TODAY` is: a `/shop/api` route
 # executes this module, so a `raise` added to it has to come back here.
@@ -3342,22 +3741,76 @@ STOREFRONT_RAISES_TODAY = frozenset({
 
 
 # Everything the *reached* methods of the two shared collaborators raise
-# (P13-2). Not whole modules: `services.py` and `repository.py` are shared with
-# the legacy surface, so only the methods a `/shop/api` request actually
-# executes are read — the nine `SERVICE_LAYER_REACH_TODAY` names, and the two
-# the router calls through `repo.<name>`.
+# (P13-2), where "reached" is `_reached_methods`: the methods the two guards
+# above name, closed over the `self.<name>` calls those make (P14-1). Not whole
+# modules: `services.py` and `repository.py` are shared with the legacy
+# surface, so only the methods a `/shop/api` request actually executes are read.
 #
+# **Five, not one**, and that is the measurement P14-1 turned on: the nine
+# reached `Services` methods delegate to four siblings on the request path
+# today, and a walk that stopped at the nine reported one class while a route
+# could reach five. `ThreadNotFoundError`, `UnknownActorError` and
+# `UnknownMemberError` (from `_validate_and_derive_role` / `_dispatch_write`)
+# are `SERVICE_ERROR_RESPONSES` rows — mapped, not excused.
 # `UnknownOrderTransitionError` is `services.advance_order`'s guard on an
-# unknown transition string. It is already in `SERVICE_ERRORS_UNREACHABLE` with
-# a behavioural reason (§5.3 C11: `AdvanceOrderIn.transition` is a `Literal` of
-# exactly the three it accepts, so `422 validation_failed` answers first), and
-# that reason has its own producer test — so it is exempted here by a mechanism
-# rather than by appearing in a list.
-SERVICE_RAISES_TODAY = frozenset({"UnknownOrderTransitionError"})
+# unknown transition string, already in `SERVICE_ERRORS_UNREACHABLE` with a
+# behavioural reason (§5.3 C11: `AdvanceOrderIn.transition` is a `Literal` of
+# exactly the three it accepts, so `422 validation_failed` answers first) that
+# has its own producer test. So four of the five are exempted here by a
+# mechanism rather than by appearing in a list; `RuntimeError` is not a
+# `ServiceError` at all and takes a written reason in `NON_FAMILY_RAISES`.
+SERVICE_RAISES_TODAY = frozenset({
+    "RuntimeError", "ThreadNotFoundError", "UnknownActorError",
+    "UnknownMemberError", "UnknownOrderTransitionError",
+})
 
-# Empty, and asserted rather than recorded: "raises nothing today" is exactly
-# the kind of measured-once fact that stops being true in silence.
-REPOSITORY_RAISES_TODAY: frozenset[str] = frozenset()
+# `Repository.ensure_participant`'s namespace refusal, reached from
+# `Storefront.join` on `POST /shop/api/session`. It was in no table anywhere
+# while the repository leg was read at the router's two calls only (P14-1); the
+# reason it is classified rather than handled is in `NON_FAMILY_RAISES`.
+REPOSITORY_RAISES_TODAY = frozenset({"MemberIdCollisionError"})
+
+# The raises the four scopes report that belong to **neither** exception
+# family, each with the reason it is not a `(route, response)` pair.
+#
+# The three `*_RAISES_TODAY` constants are allowlists, and extending one is the
+# cheapest way to silence the guard that reads it — which is what P13-3's
+# cross-check closed for `storefront.py` and what the same commit left open on
+# the two constants it introduced (`## Pass 14`, P14-4). The close is one
+# mechanism for all three legs rather than three: a name in a family is
+# exempted by that family's own partition test, and a name outside every family
+# has no such argument and must carry its own reason **here**, asserted as an
+# equality so a reason with no raise behind it reddens too.
+#
+# Both entries are internal-invariant alarms, not participant-facing outcomes.
+# Answering either with a plan token would tell a participant that something
+# they can act on went wrong, and would take the alarm away from the operator,
+# who is the only party that can do anything about it. This is `app.py`'s own
+# posture at startup, where `MemberIdCollisionError` is left to abort loudly
+# "instead of silently shadowing it (DEF-1)".
+NON_FAMILY_RAISES: dict[str, str] = {
+    "RuntimeError": (
+        "`services._dispatch_write`'s two invariant alarms — an unrecognised "
+        "write-status row, and a retry loop that did not converge. Neither is "
+        "a state a request can put the write path into: both mean the "
+        "repository returned a row shape the service layer's own contract "
+        "rules out, which is a defect report, not a response"
+    ),
+    "MemberIdCollisionError": (
+        "`repository.ensure_participant`'s refusal to provision a participant "
+        "over an id the `Agent`/`User` namespace already holds. **No request "
+        "can reach it**: the id is `_default_participant_id()`, `'p-' + "
+        "uuid4().hex`, minted server-side with no client input, and no caller "
+        "pins `id_gen` (`test_create_app_never_pins_the_participant_id_"
+        "generator`, `tests/test_app.py`), so reaching any of its three "
+        "branches needs a pre-existing `Agent`, or a `User` with no "
+        "`tokenHash`, at that exact freshly-minted uuid4. Measured rather "
+        "than argued: raised through `POST /shop/api/session` it answers a "
+        "bare `500 text/plain 'Internal Server Error'`, which is the right "
+        "answer for a message whose own text says `manual repair required` "
+        "and the wrong one for anything a participant could cause"
+    ),
+}
 
 
 def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
@@ -3408,36 +3861,57 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
     branch of `services.save_profile` — one of the nine names it itself lists,
     reached from `Storefront.join` — survived the whole file at 183 passed and
     answered the identical `410 {"detail":"gone"}` from
-    `POST /shop/api/session`. So the two guards are **composed**: this one walks
-    exactly the `Services` methods `SERVICE_LAYER_REACH_TODAY` names, and
-    exactly the `Repository` methods the router calls through `repo.<name>`.
+    `POST /shop/api/session`. So the two guards are **composed**.
+
+    **And the composition is closed under `self.<name>`, in both directions**
+    (`## Pass 14`, P14-1). Composing at the reach guard's own frontier left
+    the walk exactly one hop short of its sentence, twice:
+    `Services._refuse_retired_name()` raising `HTTPException(410)` and called
+    from the reached `save_profile`, and the same raise in
+    `Repository.ensure_participant` reached from `Storefront.join`, each
+    **survived at 183 passed** and each answered `410 {"detail":"gone"}` from
+    `POST /shop/api/session`. Both legs are therefore seeded with the reached
+    set and closed over `self.<name>` to a fixpoint (`_reached_methods`), and
+    the repository leg reads `self._repo.<name>` in the reached `Storefront`
+    methods as well as `repo.<name>` in the router (`_repository_reach`). The
+    numbers moved with the reach and are the point of the fix: `Services` 9
+    methods to 13 and one raised class to five, `Repository` 2 methods to 7 and
+    zero raised classes to one — `MemberIdCollisionError`, which until then
+    appeared in no §5.2/§5.3 row, no `SERVICE_ERROR_RESPONSES` entry and no
+    `INHERITED_HANDLERS` excuse.
+
     Neither collaborator is read whole — both are shared with the legacy
-    surface, and only the reached methods are on this request path.
+    surface, and only the methods a request executes are on this path.
 
     Composition is the point, not economy. When S9 adds `start_workflow_run` to
-    the reach, this walk follows it with nobody re-pointing it and reports
-    `WorkflowInputRejectedError` and `WorkflowRunNotFoundError` — two of the
-    three `INHERITED_HANDLERS` excuses §5.1's S9 row says become falsifiable at
-    that moment. The third, `WorkflowEngineDisabledError`, is raised inside
-    `_require_executor`, a helper the walked method only *calls*, so it stays a
-    prose argument. Saying which of the three this mechanism actually reaches is
-    the whole discipline the guard exists to enforce.
+    the reach, this walk follows it with nobody re-pointing it, and what it
+    then reports is a **measurement** this test will make rather than a
+    prediction this docstring should make: §5.1's S9 row and the exception
+    names it maps are under a separate ruling, and naming them here is how the
+    previous version of this paragraph put a wrong exception name in front of
+    S9's implementer. What is stated instead is the walk: at S9 the closure
+    runs from `start_workflow_run` over its own `self.<name>` callees, so a
+    class raised in a helper that method only *calls* is inside the walk and no
+    longer a prose argument.
 
-    **Where it does stop, stated rather than implied:** at what those
-    collaborators call in turn — `Services` into `Repository`, `Repository` into
-    redis. None of that is walked, and none of it is excused here either: the
-    graph faults are S8's typed handlers' own rows, and the `ServiceError`
-    family is covered by the `SERVICE_ERROR_RESPONSES` /
-    `SERVICE_ERRORS_UNREACHABLE` partition. A `raise` a route can reach from
-    outside all four scopes is not something this test can see, and no reason
-    string may claim otherwise.
+    **Where it does stop, stated as node types rather than as intent:** at
+    calls that are not `self.<name>` on the walked class — `Services` into
+    `Repository`, `Repository` into redis. None of that is walked, and none of
+    it is excused here either: the graph faults are S8's typed handlers' own
+    rows, and the `ServiceError` family is covered by the
+    `SERVICE_ERROR_RESPONSES` / `SERVICE_ERRORS_UNREACHABLE` partition. A
+    `raise` a route can reach from outside all four scopes is not something
+    this test can see, and no reason string may claim otherwise.
 
     Four scopes are pinned. Inside the router: exactly the two envelope
     classes. `storefront_api.py` whole: those two, plus the three raises that
     happen at wiring or boot time and can never be on a request path.
     `storefront.py` whole: `STOREFRONT_RAISES_TODAY`, seven `StorefrontError`
-    subclasses and nothing else. The reached methods of the two collaborators:
-    `SERVICE_RAISES_TODAY` and `REPOSITORY_RAISES_TODAY`.
+    subclasses and nothing else. The reached-and-closed methods of the two
+    collaborators: `SERVICE_RAISES_TODAY` and `REPOSITORY_RAISES_TODAY`, whose
+    members outside both families carry a written reason in
+    `NON_FAMILY_RAISES` — asserted as an equality, so neither an extended
+    allowlist nor a stale reason passes (P14-4).
 
     This is what makes `INHERITED_HANDLERS[StarletteHTTPException]`'s reason
     true rather than merely stated.
@@ -3465,30 +3939,45 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
     storefront_raises = _raised_class_names(_storefront_source())
     assert storefront_raises == set(STOREFRONT_RAISES_TODAY)
 
-    # P13-3 — the premise the constant's own comment argues from, checked
-    # against a second, independent source. The comment says the excuses hold
-    # *because* all seven are `StorefrontError`s and that family is fully
-    # handled; the family half has a test, the subset half had nothing. It
-    # matters because extending the allowlist is the cheapest way to silence
-    # the assertion above, and only `HTTPException` is separately fenced.
-    assert set(STOREFRONT_RAISES_TODAY) <= {
-        klass.__name__ for klass in _subclasses(storefront.StorefrontError)
-    }
-
     # ...and the two shared collaborators, at the methods a request reaches —
-    # `services.py` is on the request path and nothing here read it (P13-2)
+    # `services.py` is on the request path and nothing here read it (P13-2) —
+    # each seeded with that collaborator's reach and closed over `self.<name>`
+    # by `_raises_of` (P14-1)
     service_raises = _raises_of(
         _services_source(), "Services", SERVICE_LAYER_REACH_TODAY
     )
     assert service_raises == set(SERVICE_RAISES_TODAY)
 
-    repo_reach = _router_repository_reach(source)
+    repo_reach = _repository_reach(source, _storefront_source())
     assert repo_reach, (
-        "the router no longer calls `repo.<name>` — S10 moves both onto "
-        "`Storefront`, and this leg has to be re-pointed rather than emptied"
+        "no `/shop/api` route reaches `Repository` at all any more — S10 moves "
+        "the router's two `repo.<name>` calls onto `Storefront`, which this "
+        "reader follows, so an empty reach means the leg lost its seed rather "
+        "than that the calls moved"
     )
     repo_raises = _raises_of(_repository_source(), "Repository", repo_reach)
     assert repo_raises == set(REPOSITORY_RAISES_TODAY)
+
+    # P13-3, applied to all three allowlists by one mechanism instead of one
+    # (P14-4). Each leg's exemption argument is "every one of these is a member
+    # of a family whose members are all already classified"; the family halves
+    # have their own partition tests, the subset halves had nothing but the
+    # `storefront.py` one. Extending an allowlist is the cheapest way to
+    # silence the three assertions above, and only `HTTPException` is
+    # separately fenced.
+    storefront_family = {
+        klass.__name__ for klass in _subclasses(storefront.StorefrontError)
+    }
+    service_family = {klass.__name__ for klass in _subclasses(ServiceError)}
+    assert set(STOREFRONT_RAISES_TODAY) <= storefront_family
+    # ...and an **equality**, not a subset, over all four scopes at once: a
+    # raise outside both families has to carry its own reason, and a reason
+    # left behind by a raise that is gone reddens the same assertion.
+    assert (
+        (storefront_raises | service_raises | repo_raises)
+        - storefront_family - service_family
+    ) == set(NON_FAMILY_RAISES)
+    assert all(reason.strip() for reason in NON_FAMILY_RAISES.values())
 
     # the bare `HTTPException` half, named separately because it is the one the
     # reason string cites and the one a reflex reaches for — over all four
@@ -3571,6 +4060,203 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
     assert _raises_of(collaborator, "Services", {"unreached"}) == {"SomethingElse"}
     with pytest.raises(AssertionError, match="has no method"):
         _raises_of(collaborator, "Services", {"renamed_away"})
+
+    # P14-M1's shape — the raise in a **sibling** of a reached method, which
+    # the composed walk missed while it stopped at the reach guard's frontier.
+    # The alias control on the same leg is the second one: `self` is resolved
+    # here exactly as it is on the four legs of the reach guard.
+    sibling = (
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        return self._refuse_retired_name(ctx)\n"
+        "    def _refuse_retired_name(self, ctx):\n"
+        "        raise HTTPException(status_code=410, detail='gone')\n"
+        "    def unreached(self, ctx):\n"
+        "        raise SomethingElse()\n"
+    )
+    assert _raises_of(sibling, "Services", {"save_profile"}) == {"HTTPException"}
+    assert _raises_of(
+        sibling.replace(
+            "        return self._refuse_retired_name(ctx)\n",
+            "        me = self\n        return me._refuse_retired_name(ctx)\n",
+        ),
+        "Services", {"save_profile"},
+    ) == {"HTTPException"}
+    # ...and it is still selective: the sibling `unreached` raises are not
+    # swept in just because the class defines them
+    assert "SomethingElse" not in _raises_of(sibling, "Services", {"save_profile"})
+
+    # `raise self.<factory>()` across a sibling, which is the shape the
+    # enumeration probe caught: read one method at a time this resolved to
+    # `{"_mk"}` — the method's own name — while the identical source read
+    # whole-module in `storefront.py` resolves to the class. The two scopes
+    # now agree.
+    assert _raises_of(
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        raise self._mk()\n"
+        "    def _mk(self):\n"
+        "        return HTTPException(status_code=410)\n",
+        "Services", {"save_profile"},
+    ) == {"HTTPException"}
+
+    # P14-M2's shape — the same raise in a `Repository` method reached from a
+    # `Storefront` method rather than from the router, which is the leg
+    # `_repository_reach` added. Both halves are controlled: the reader finds
+    # the method, and finding it is what reports the raise.
+    repo_stub = (
+        "class Repository:\n"
+        "    def ensure_participant(self, ws):\n"
+        "        raise HTTPException(status_code=410, detail='gone')\n"
+        "    def never_called(self, ws):\n"
+        "        raise SomethingElse()\n"
+    )
+    api_repo_stub = (
+        "def build_storefront_router(shop):\n"
+        "    def join(body):\n"
+        "        return shop.join(body)\n"
+    )
+    sf_repo_stub = (
+        "class Storefront:\n"
+        "    def join(self, name):\n"
+        "        return self._repo.ensure_participant(self._ws)\n"
+    )
+    assert _repository_reach(api_repo_stub, sf_repo_stub) == {"ensure_participant"}
+    assert _raises_of(
+        repo_stub, "Repository",
+        _repository_reach(api_repo_stub, sf_repo_stub),
+    ) == {"HTTPException"}
+    # the router leg of the same reader, which is what S10 empties
+    assert _repository_reach(
+        api_repo_stub.replace(
+            "        return shop.join(body)\n",
+            "        repo = shop._repo\n"
+            "        return repo.list_participants()\n",
+        ),
+        "class Storefront:\n    def unrelated(self):\n        return None\n",
+    ) == {"list_participants"}
+
+
+# Every syntactic route from a **reached** collaborator method to a `raise`,
+# and every one the walk stops at, as `{case: (source, reaches the raise?)}`.
+# The sibling of `_ALIAS_FORM_SNIPPETS`: that one enumerates the ways a call
+# can be spelled, this one the ways a raise can be reached, and both exist
+# because the defect this artifact keeps producing is a sentence wider than a
+# walk, which only an enumeration closes (`## Pass 14`, the closing condition).
+_RAISE_ROUTES: dict[str, tuple[str, bool]] = {
+    "in the seed method itself": (
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        raise HTTPException(410)\n", True),
+    "in a nested function of the seed": (
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        def inner():\n"
+        "            raise HTTPException(410)\n"
+        "        return inner\n", True),
+    "via `self.<sibling>()`": (
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        return self._h(ctx)\n"
+        "    def _h(self, ctx):\n"
+        "        raise HTTPException(410)\n", True),
+    "via an alias of `self`": (
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        me = self\n"
+        "        return me._h(ctx)\n"
+        "    def _h(self, ctx):\n"
+        "        raise HTTPException(410)\n", True),
+    "via an annotated alias of `self`": (
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        me: object = self\n"
+        "        return me._h(ctx)\n"
+        "    def _h(self, ctx):\n"
+        "        raise HTTPException(410)\n", True),
+    "two siblings deep, which is why the closure is a fixpoint": (
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        return self._a(ctx)\n"
+        "    def _a(self, ctx):\n"
+        "        return self._b(ctx)\n"
+        "    def _b(self, ctx):\n"
+        "        raise HTTPException(410)\n", True),
+    "mutually recursive siblings, which the fixpoint must terminate on": (
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        return self._a(ctx)\n"
+        "    def _a(self, ctx):\n"
+        "        return self._b(ctx)\n"
+        "    def _b(self, ctx):\n"
+        "        raise HTTPException(410)\n"
+        "        return self._a(ctx)\n", True),
+    "a `staticmethod` sibling called as `self.<name>`": (
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        return self._h()\n"
+        "    @staticmethod\n"
+        "    def _h():\n"
+        "        raise HTTPException(410)\n", True),
+    "`raise self.<factory>()`, resolved through the factory's returns": (
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        raise self._mk()\n"
+        "    def _mk(self):\n"
+        "        return HTTPException(410)\n", True),
+    # ...and the stops, each one a sentence in the comment above
+    # `INHERITED_HANDLERS` rather than an omission
+    "STOP — a bare re-raise names no class, by design": (
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        try:\n"
+        "            pass\n"
+        "        except Exception:\n"
+        "            raise\n", False),
+    "STOP — a module-level helper of the collaborator file": (
+        "def _h():\n"
+        "    raise HTTPException(410)\n"
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        return _h()\n", False),
+    "STOP — another object the collaborator calls (`self._repo.x()`)": (
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        return self._repo.x(ctx)\n", False),
+    "STOP — a sibling nothing reached calls": (
+        "class Services:\n"
+        "    def save_profile(self, ctx):\n"
+        "        return None\n"
+        "    def _other(self):\n"
+        "        raise HTTPException(410)\n", False),
+}
+
+
+def test_the_raise_walk_reaches_every_route_from_a_reached_method_it_claims():
+    """**The other half of the enumeration** (`## Pass 14`, the closing
+    condition), for the second sentence.
+
+    `_ALIAS_FORM_SNIPPETS` enumerates the ways the *call* can be spelled;
+    this enumerates the ways the *raise* can be reached from a method a route
+    runs. Both sentences above `INHERITED_HANDLERS` are of the shape that has
+    failed here five times — a scope stated more widely than the walk — and the
+    only thing that closes one is a list of the forms it covers, run against
+    the delivered reader, with the stops written down beside them rather than
+    discovered by the next gate.
+
+    The stops are the load-bearing half. A module-level helper in `services.py`
+    is *not* read, where the same helper in `storefront.py` is — because those
+    two files are read whole and the collaborators are read at the reached
+    methods only, both files being shared with the legacy surface. That
+    asymmetry is a decision (`## Pass 13`, P13-2's closure (a)), and this is
+    where it is visible as a measurement instead of as a paragraph.
+    """
+    for label, (source, reaches) in _RAISE_ROUTES.items():
+        found = _raises_of(source, "Services", {"save_profile"})
+        assert ("HTTPException" in found) is reaches, (
+            f"{label}: the walk {'missed' if reaches else 'reached'} a raise "
+            f"it says it {'reaches' if reaches else 'stops before'} — {found}"
+        )
 
 
 def _raised_refusals() -> dict[str, set[tuple[int, str]]]:

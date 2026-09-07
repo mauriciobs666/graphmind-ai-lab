@@ -434,48 +434,97 @@ ENVELOPE_HANDLERS: frozenset[type[BaseException]] = frozenset(
 # found it was not. The two shapes have two mechanisms, both AST-read by
 # `tests/test_storefront_api.py`.
 #
-# Each mechanism is stated here at the reach it actually has. Three passes of
+# Each mechanism is stated here at the reach it actually has, **as the syntax
+# it walks rather than as the behaviour it means to cover**. Five passes of
 # this review found the same defect — a rule written broader than the walk
-# beneath it — so what follows is deliberately a description of the code, not
-# of the intent (`docs/reviews/salesperson-ui-impl.md` `## Pass 13`).
+# beneath it, five times inside the artifact that closed the previous one — and
+# every one of those rules named a semantic scope ("any path", "any local name",
+# "a route reaches") that no finite reader implements. So what follows names
+# node types, file boundaries and closed method sets; where a reader stops, it
+# stops at a shape you can point at (`## Pass 13`, `## Pass 14`).
 #
 # *"No storefront route calls layer X"* is
 # `test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume`.
 # It pins the set of `Services` methods reached by: (1) `<prefix>.<name>`
-# anywhere in `build_storefront_router`, where `<prefix>` is `shop._services`
-# or any local name transitively bound to it; and (2) the same, with prefix
-# `self._services`, in every `Storefront` method the router reaches through
-# `shop.<method>`/`self.<method>` calls, transitively. **Nine today, and a
-# tenth added by any of those paths reddens.** Prefixes are derived from the
-# files' own bindings, not listed — listing them let `svc = self._services`
-# through, which is S9's decided shape plus one line (P13-1); reading only the
-# router's direct spelling was P12-1. Where it stops: it follows the service
-# object only through attribute access, so a call made by handing that object
-# somewhere else — passed to a helper, returned, stored — is outside it. That
-# is a statement about the walk, not a claim about the code; the moment one is
-# written, this comment is what has to change with it.
+# attribute access anywhere in `build_storefront_router`; and (2) the same
+# access in every `Storefront` method the router reaches through
+# `shop.<method>`, closed over `self.<method>` to a fixpoint. On each leg
+# `<prefix>` is the seed attribute — `shop._services`/`self._services` for the
+# collaborator, `shop`/`self` for the frontier — closed over the names bound to
+# it in that scope, to a fixpoint. **Nine today, and a tenth added by either
+# path, written in any of the binding forms below, reddens.**
+#
+# **"Bound" is a closed list of eight `ast` node types**, not a promise about
+# names: `Assign`, `AnnAssign`, `NamedExpr`, `For`, `AsyncFor`, `comprehension`,
+# `withitem`, `MatchAs`. Every *other* name-binding node in the grammar is
+# classified as unable to carry an alias, each with the reason, and that
+# classification is held against `ast`'s own enumeration of binding nodes by
+# `test_the_alias_reader_covers_every_binding_form_the_grammar_has` — so a
+# binding form nobody classified fails rather than passing quietly. Deriving
+# the prefixes instead of listing three spellings was P13-1; deriving them over
+# `ast.Assign` alone still let `svc: object = self._services` through, which is
+# S9's decided shape plus a type annotation and a house idiom in both files
+# (P14-2).
+#
+# **Where it stops, as syntax:** the object is followed only through
+# `<name>.<attr>`, where `<name>` is one of those derived prefixes. It is
+# therefore not followed into a **call argument** (`_go(self._services)` — the
+# parameter is bound by the caller, which is the one non-reach no enumeration
+# of binding forms can close), into a **return value**, onto an **attribute**
+# (`self._svc = self._services` — a *local* store is followed, an attribute
+# store is not), or through `getattr`. That is a statement about the walk, not
+# a claim about the code; the moment one of those is written, this comment is
+# what has to change with it.
 #
 # *"No storefront route raises it"* is
 # `test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume`,
 # over four scopes: `storefront_api.py` and `storefront.py` **whole** — a raise
 # one helper call out of a route body is a raise on the route, and so is one
-# inside the `Storefront` method the route calls (P12-2) — plus the `Services`
-# methods the reach guard above measures and the `Repository` methods the
-# router calls through `repo.<name>`, read at those methods only because both
-# files are shared with the legacy surface. Composing the two guards is what
-# closed P13-2: the reach guard says *which* collaborator methods a request
-# runs, never *what they raise*, and a bare `HTTPException` in one of them
-# answered `410 {"detail":"gone"}` with both guards green. **It stops at what
-# those collaborators call in turn** — `Services` into `Repository`,
-# `Repository` into redis — which is covered by S8's typed handlers and by the
-# `ServiceError` partition, not by an exemption in this table.
+# inside the `Storefront` method the route calls (P12-2) — plus, in each
+# collaborator module, the methods the reach walk above measures **closed over
+# the `self.<name>` calls those methods make**, to a fixpoint. Both
+# collaborator files are read at those methods only, because both are shared
+# with the legacy surface; the `Repository` seed is the union of the router's
+# `repo.<name>` calls and the reached `Storefront` methods' `self._repo.<name>`
+# calls, so S10 moving the first onto `Storefront` re-points that leg instead
+# of emptying it. Composing the two guards is what closed P13-2: the reach
+# guard says *which* collaborator methods a request runs, never *what they
+# raise*. Closing the composed set over `self.<name>` is what closed P14-1: the
+# walk had stopped at the reach guard's frontier, and a bare `HTTPException` in
+# a sibling of a reached `Services` method, and one in the `Repository` method
+# `Storefront.join` calls, each answered `410 {"detail":"gone"}` with every
+# guard green.
+#
+# **Where it stops, as syntax:** at any call that is not `self.<name>` on the
+# walked class — `Services` into `Repository`, `Repository` into redis, and a
+# module-level helper in either collaborator file. None of that is walked, and
+# none of it is excused here: the graph faults are S8's typed handlers' own
+# rows and the `ServiceError` family is covered by the
+# `SERVICE_ERROR_RESPONSES`/`SERVICE_ERRORS_UNREACHABLE` partition.
+#
+# **Two classes the walk reports belong to neither exception family** —
+# `RuntimeError` (`services._dispatch_write`'s two invariant alarms) and
+# `MemberIdCollisionError` (`repository.ensure_participant`'s namespace
+# refusal, on `POST /shop/api/session`'s path through `Storefront.join`).
+# Neither is a `(route, response)` pair: both are internal-invariant alarms
+# that answer a bare `500`, which is the operator-facing answer they are for,
+# and neither can be caused by anything a client sends. Their reasons live at
+# `NON_FAMILY_RAISES` in the test file, asserted as an **equality** against the
+# four scopes' raises minus the two families — so neither an extended allowlist
+# nor a reason whose raise is gone survives (P13-3, P14-4).
+#
+# **This block is the statement's only home.** §5.1's S9 row is licensed to
+# cite it by file and line; a row that *restates* it makes a second copy with
+# nothing holding the two together, which is how the previous restatement came
+# to name an exception the code does not raise at that call (P14-3, P14-5).
 INHERITED_HANDLERS: dict[type[BaseException], str] = {
     # FastAPI/Starlette defaults, on every app ever built.
     StarletteHTTPException: (
         "the framework default. No `/shop/api` route raises a bare "
         "`HTTPException` anywhere the guard above reaches — `storefront_api.py` "
-        "and `storefront.py` whole, plus the `Services`/`Repository` methods a "
-        "route reaches — they raise `StorefrontHTTPError`, whose own handler "
+        "and `storefront.py` whole, plus the `Services`/`Repository` methods "
+        "the reach walk measures, closed over their own `self.<name>` calls — "
+        "they raise `StorefrontHTTPError`, whose own handler "
         "wins the MRO walk (asserted by "
         "`test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume`; "
         "`_raised_refusals`, which this cited until P11-2, collects "
