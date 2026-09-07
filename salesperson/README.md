@@ -70,8 +70,9 @@ command, upgradeable by editing `.node-version` and re-running the script.
 Output lands in `dist/` — `index.html` plus content-hashed assets.
 
 **`dist/` is gitignored and never committed** (`docs/plans/salesperson-ui.md` OQ-6). This script
-is the reproducible way to regenerate it, and `falkor-chat/scripts/start_demo.sh` calls it as
-part of demo bring-up.
+is the reproducible way to regenerate it, and `falkor-chat/scripts/start_demo.sh` will call it as
+part of demo bring-up — **that script is not built yet (plan step S11)**, so today you run
+`./build.sh` yourself before starting the server (see "Test" below).
 
 ### The `/shop` base path is load-bearing
 
@@ -91,9 +92,42 @@ npm run lint      # oxlint
 ```
 
 Unit and component tests live beside the code they cover, as `src/**/*.test.tsx`. The Playwright
-suite lives in `tests/e2e/` and drives a **running** storefront rather than starting one — bring
-the stack up with `falkor-chat/scripts/start_demo.sh` first, or point Playwright elsewhere with
-`SALESPERSON_E2E_BASE_URL`.
+suite lives in `tests/e2e/` and drives a **running** storefront rather than starting one — it is
+pointed at `http://127.0.0.1:8000/shop/` unless `SALESPERSON_E2E_BASE_URL` says otherwise. (The
+suite itself is **not written yet — plan step S12b**; `tests/e2e/` holds only its `.gitkeep`, so
+`npm run test:e2e` has nothing to run today.)
+
+**Bringing the stack up: manual until S11.** `falkor-chat/scripts/start_demo.sh` — the
+one-command bring-up — **does not exist yet**; it is plan step S11
+(`docs/plans/salesperson-ui.md`), which also defines the sequence below. Until it lands, do it by
+hand: build the bundle with `./build.sh`, then, from `falkor-chat/` (server venv installed as
+`start_server.sh` does it — `python3 -m venv server/.venv && server/.venv/bin/pip install -e
+'server[dev]'`):
+
+```bash
+./scripts/start_falkordb.sh -d
+EMBEDDING_DIM=1024 ./scripts/bootstrap_schema.sh demo   # ws:demo, NOT the "acme" default
+./scripts/seed_demo.sh demo                             # the Agent the storefront posts to
+./scripts/seed_catalog.sh                               # products live in `reference`
+./scripts/seed_salesperson.sh demo                      # publishes salesperson@v7
+./scripts/verify_salesperson.sh demo && ./scripts/verify_catalog.sh   # read-only checks
+
+cd server && FALKORCHAT_WS_ID=demo FALKORCHAT_EMBEDDING_DIM=1024 \
+  FALKORCHAT_ENABLE_AGENT=1 FALKORCHAT_WORKFLOW_ENABLED=1 \
+  FALKORCHAT_TRIGGER_DEF_KEY=salesperson FALKORCHAT_TRIGGER_DEF_VERSION=v7 \
+  FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH=0 \
+  FALKORCHAT_STOREFRONT_ENABLED=1 \
+  FALKORCHAT_STOREFRONT_DIR="$PWD/../../salesperson/dist" \
+  FALKORCHAT_OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json" \
+  .venv/bin/uvicorn falkorchat.app:app
+```
+
+Two traps worth knowing before you run it. `FALKORCHAT_STOREFRONT_DIR` must name an **existing**
+directory or the `/shop` mount is skipped **silently** while `/shop/api` serves normally
+(`falkor-chat/docs/SERVER.md` §1.3) — so `./build.sh` really does come first. And
+`falkor-chat/scripts/start_server.sh` is *not* the shortcut: it also seeds the `triage` /
+`access-request` defs that S11 deliberately skips, and it defaults to `--reload`, which S11 turns
+off for a demo run.
 
 Playwright's browser binary is not installed by `npm ci`; get it once with:
 

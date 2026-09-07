@@ -20,7 +20,9 @@ Authoritative specs live at repo root, not here: `docs/requirements/salesperson-
    under that prefix. Changing it breaks the deployment. `build.sh` asserts the built
    `index.html` still contains `/shop/` and fails the build if it does not.
 2. **`dist/` is gitignored and never committed** (plan OQ-6). `./build.sh` is the only supported
-   way to produce it. `falkor-chat/scripts/start_demo.sh` invokes it during bring-up.
+   way to produce it. `falkor-chat/scripts/start_demo.sh` will invoke it during bring-up, but
+   **that script is not built yet — plan step S11**; until it lands, `./build.sh` is run by hand
+   and the server is pointed at `dist/` by hand (`README.md`, "Test").
 3. **No secrets in the bundle.** Everything Vite inlines is public. The participant bearer token
    is issued by the server at join time and lives in browser storage — it is never a build-time
    value, and no `VITE_*` variable may carry a credential.
