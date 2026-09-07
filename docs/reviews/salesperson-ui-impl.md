@@ -4818,3 +4818,163 @@ Verified in full, not spot-checked — each of these is stated correctly and I c
 
 `config.USER_ID` is reached by **no** route (it is touched once at startup, by
 `services.ensure_actor(provider())` in `_lifespan`) — that half of §1.4's sentence is correct.
+
+### Pass 16, second look — 2026-09-07 (re-gate of `c708423`)
+
+**Reviewed:** `c708423` — `falkor-chat/docs/SERVER.md` (+118/−55 across §1.3/§1.4),
+`falkor-chat/docs/HISTORY.md` (two sentences), and one docstring in
+`falkorchat/storefront_api.py`. Every disposition below was re-derived against the tree at `HEAD`,
+not read off the fix commit's message. Same constraints as the first look: no pytest, no seed
+scripts, no `cpg_falkorchat`.
+
+**Verdict: approve with suggestions** — **0 blockers, 0 majors, 2 minors, 1 nit.** All twelve
+findings are genuinely fixed, several better than I proposed. Nothing below warrants another gate:
+the three items are one-clause edits to take whenever §1.3/§1.4 is next opened, or to decline. **I
+am not asking for a third pass.**
+
+**The twelve, one line each.** All **fixed**; the two I would call improvements on my own suggestion
+are marked.
+
+| | Disposition |
+|---|---|
+| P16-1 | Fixed, and **better than proposed** — a four-bucket partition with the arithmetic shown (`5 + 1 + 1 + 4 = 11`) instead of a corrected sentence. Partition re-checked below. |
+| P16-2 | Fixed at both sites; the `FALKORCHAT_STOREFRONT_DIR` row now carries the consequence ("skips the `/shop` mount entirely and silently", `Path(served_dir).is_dir()`, `images=0`), which is what an operator needs. |
+| P16-3 | Fixed in the doc **and** in `get_presenter`'s docstring, stated as the branch (`parse_bearer` first) rather than as what the branch means, with the three concrete headers that answer `401`. |
+| P16-4 | Fixed as markers, not deletions — judged separately below. |
+| P16-5 | Fixed: "Three files … plus `test_app.py` **once**, in S8b (`+22/−1`)". Matches `git diff --stat 81a1268 b720bd3` exactly, and the md5 claim is now scoped ("from S8d onward") rather than dropped. |
+| P16-6 | Fixed — the plan's own four names (`threadId`, `customerId`, `orderId`, `ws`) restored, with the credential-carries-the-participant-id caveat kept in parentheses rather than buried. |
+| P16-7 | Fixed — `§16.5 **+ §16.9**` with "the only cross-graph read on the 2 s poll path" in the cell, and `§2, then §4` with the pre-write lookup named as the source of that route's re-shapes. |
+| P16-8 | Fixed, and **better than proposed** — it names this pass by subject ("a later `## Pass 16` on a different subject … is not one"), so the ruling survives future passes without re-editing. |
+| P16-9 | Fixed — `unhandled` added and attributed to the two reset routes' `500` rows; `state_unknown` now mentioned (one imprecision left, P16-15). |
+| P16-10 | Fixed — "minted in-process … **in exchange for** … rather than derived from it", with `secrets.token_urlsafe(32)` named. |
+| P16-11 | Fixed — "no `/shop/api` request resolves through it — the one thing the storefront takes from that seam is its *workspace*, read once at construction as `provider().ws` (`app.py:324`)". Verified. |
+| P16-12 | Fixed — "The middle three are **one** branch, not three", with `WHERE u.tokenHash IS NOT NULL` named as the reason. Matches `repository.py:3507`. |
+
+### Judgement 1 — P16-4's repair shape: right, and it works; one row it did not reach
+
+**The shape is correct and I would not change it.** The test I applied is the one the brief names:
+*would a reader skimming §1.3 for "how does this system work" come away with the right picture?*
+
+- The markers are **not quiet**. `**Not built yet — S9**` leads the cell, which is the strongest
+  position a table cell has; a skimmer reading nothing but bold text still gets it.
+- Both marked rows say **what the value does today** — "nothing consumes it, so setting it changes
+  nothing today", "read by nothing in `falkorchat/`". That is the sentence that actually protects a
+  reader, and it is stronger than a bare step reference, which would leave "so is it live or not?"
+  open. Both re-verified: `_turn_workers` has no consumer, and `config.THREAD_LIMIT` has no reader
+  anywhere in `falkorchat/`.
+- The `start_demo.sh` marker sits mid-paragraph rather than leading, but it carries the operator's
+  actual workaround (pin `FALKORCHAT_WS_ID` by hand; the `"acme"` default is the populated dev
+  workspace). That is the right trade for a paragraph rather than a table cell.
+
+**What the pass did not achieve is the standing property, and one row shows where the line fell.**
+The distinction now holds for the four sentences that were reported, not as a rule. Concretely —
+
+#### P16-13 · **Minor** · `FALKORCHAT_STOREFRONT_QUIESCE_S` is as inert today as the two rows above it, and its row says the opposite
+
+The row now reads: *"The wait is delivered; the **stop-intake** that is designed to precede it is not
+— S10, so today a post landing mid-drain extends the wait instead of being refused."* The wait is
+delivered code, but **nothing can populate the turn map**: `Storefront.set_turn_state` has no caller
+anywhere in `falkorchat/` (S9 adds it, with the executor). Grep over all 28 modules — the only
+readers are `turn_in_flight` at `storefront.py:865`, `storefront_api.py:1175` and `:1434`. So today:
+
+- `_await_quiesce` and `presenter_reset_all`'s drain loop always pass on the **first** check, and
+  `503 quiesce_timeout` cannot fire;
+- `POST /shop/api/messages`'s `409 turn_in_progress` cannot fire;
+- `GET /state`'s `turn` block is always `{"state":"idle","queuePosition":0}`;
+- **setting `FALKORCHAT_STOREFRONT_QUIESCE_S` changes nothing observable** — exactly the property the
+  two rows above it mark and this one does not.
+
+**Suggested one-clause fix:** *"**The wait is delivered but cannot yet trigger — S9**: nothing
+populates the turn map until the executor lands, so the drain passes on its first check and neither
+`503 quiesce_timeout` nor `409 turn_in_progress` is reachable today. The **stop-intake** designed to
+precede the wait is S10's."* **And the rule that makes it standing, if you want one:** *every §1.3
+env row says what setting the value does today.* Three rows now do, one half does. That is a
+convention to apply on the next touch, not a mechanism to build — a doc-level gate over eight rows
+would cost more than the defect.
+
+### Judgement 2 — the five new items: four hold, one is wrong
+
+1. **The seam code block** — holds, and it was the right catch. `config.py:16–17` are
+   `os.environ.get("FALKORCHAT_WS_ID", "acme")` / `("FALKORCHAT_USER_ID", "u1")`; `get_context` is
+   `config.py:223`; `api.py:22` imports it as `_resolve_context` and `api.py:43` is the overridable
+   wrapper routes depend on. The block now shows both, correctly labelled, and the
+   "process-constant, not literal" sentence resolves the contradiction with the `start_demo.sh`
+   paragraph.
+2. **`RESERVED_CTX_KEYS`** — holds. `services.py:111` is
+   `frozenset({"threadId", "error", TIMER_FIRED_CTX_KEY})`, `TIMER_FIRED_CTX_KEY = "timerFired"`
+   (`:110`). Citing the constant rather than the members is the right repair.
+3. **The `limit` counter-example — wrong route** (P16-14, below).
+4. **The presenter screen** — holds. `salesperson/src/` is `App.tsx`/`main.tsx`/`App.css`/
+   `index.css`/`assets`; no presenter view, no occurrence of "presenter" anywhere under `src/` or
+   `index.html`. The plan's S12d is the presenter view, mounted into S12b's shell — so the
+   `S12b/S12d` citation is right, not just plausible.
+5. **"Three remaining routes" → four** — holds, and the general fix is sound. Partition checked
+   below.
+
+#### P16-14 · **Minor** · the `le=50` counter-example names a route that has no `limit` at all
+
+`SERVER.md`: *"other routes on the same router set their own — `GET /threads/{tid}/participants` is
+1–50 — so read the route rather than generalising from this one."* `GET
+/threads/{thread_id}/participants` (`api.py:301–305`) takes **`thread_id` and `ctx` only — no
+`limit` parameter**. The `Query(10, ge=1, le=50)` at `api.py:294` belongs to its neighbour, `GET
+/threads/{thread_id}/workflow-runs` (`api.py:291`), 10 lines above. The two were added in the same
+K-036 block under one comment, which is how they got swapped. The sentence's *point* survives — I
+enumerated every `Query(` in `api.py` and that route is the **only** exception: lines 72, 87, 122,
+229, 249, 257, 327, 445 are all `le=200`, line 131 is the `le=1000` thread window. **Suggested
+fix:** name `GET /threads/{tid}/workflow-runs` instead, and it is safe to say it is the only one.
+
+**The partition is correct** (`SERVER.md:342`, the load-bearing arithmetic). Re-derived from the
+route bodies, disjoint and exhaustive: **5** build `ctx` from the credential — `GET /state`
+(`shop.get_state(shop.context_for(...))`), `GET`/`POST /messages`, `POST /order/advance`
+(`ctx = shop.context_for(...)`), `POST /reset` (inside `reset_participant`, `storefront.py:922`);
+**1** from the id it just minted (`POST /session`, via `Storefront.join`); **1** under the demo
+`Agent` (`GET /catalog`, `_catalog_ctx`); **4** build none — `GET /health` and `POST
+/presenter/session` (no query at all) and the two presenter routes (`repo.list_participants` /
+`reset_all_participants` on `shop.ws`). 5 + 1 + 1 + 4 = 11, and `ROUTE_CLASSES` has 11 entries.
+
+#### P16-15 · **Nit** · `state_unknown`'s stated reachability names the branch the log line is *not* about
+
+*"reachable only by a route absent from `ROUTE_CLASSES`"* covers one of the two ways
+`_cross_cutting_json` reaches that branch: `answer is None` arises from the `KeyError` path
+(unclassified route) **and** from `cross_cutting_response` returning `None` for a `no graph access`
+route whose typed handler fired — which is the case the code's own log line describes ("*which §5.3
+classifies as issuing no query at all*"). Both are unreachable by construction, so the conclusion is
+right and only the reason is half. **Fix:** "…by an unclassified route, or by a typed handler firing
+on a `no graph access` route".
+
+### What I re-verified independently
+
+- **The code touch is docstring-only, on my own evidence rather than on the re-run proof.** Parsing
+  `storefront_api.py` at `9c51189` and at `HEAD` with every docstring replaced by a sentinel gives
+  **equal `ast.dump`**, an identical docstring-owner set of **27**, and `git diff 9c51189..HEAD`
+  shows `storefront_api.py` as the only changed file under `server/` (the test file byte-identical).
+  All 23 changed raw lines sit inside `get_presenter`'s docstring, whose new text I checked against
+  the branch it describes. **The method is sound and I would use it again** — stripped-AST equality
+  plus an owner-set check is stronger than a prose-only claim, because it also catches a docstring
+  silently added or deleted under cover of the strip.
+- **A sample of the "fourteen holding" I could reach without the list** (I never saw it, so this is
+  my own sweep of §1.4's unchanged mechanism claims, not a re-check of theirs): `MAX_DIFF_PREVIEW =
+  200`, `MAX_STEPS`/`MAX_TRANSITIONS`/`MAX_CONFIG_LEN` all in `schemas.py`; `schemas.py`'s
+  `MAX_TEXT_LEN = 8000` / `MAX_NAME_LEN = 200` / `MAX_MENTIONS = 50`; the workflow error map's
+  404/409/400/400/503 against `app.py:126–139`; "no `latest` alias" against `api.py:346–349`;
+  exactly **3** `response_model=` in `api.py`. All hold.
+
+### The two deliberate non-fixes — my view
+
+- **`config.py:186–208`'s comment tense: holding it is right.** It is code, it is outside the
+  docstring-only licence, and a CPG snapshot of `server/` is in flight. One thing worth carrying into
+  that unit's brief, because it is the reason and not just the task: **the doc's env table is
+  transcribed from those comments**, so the derived artifact is now correct and its source is not —
+  which is the configuration in which someone "re-syncs" the doc *backwards*. The unit is three
+  comment edits and should not sit behind anything larger.
+- **`salesperson/README.md` + `AGENTS.md`: follow-up, agreed — but not a low-priority one.** Those
+  are that component's entry docs, so a reader there is likelier to *act* on the false present tense
+  than a `SERVER.md` reader was: the natural next step after reading them is to run a script that
+  does not exist. It is a two-line edit in each; worth doing whenever that component is next opened
+  rather than queued behind S9.
+
+### Open questions — closed
+
+The suite figures I was barred from measuring were measured by `teco` (185 two-file, 2617/14, and
+`ws:acme` at 871 nodes), which closes Pass 16's only open question. Nothing in this second look is
+blocked on anything.
