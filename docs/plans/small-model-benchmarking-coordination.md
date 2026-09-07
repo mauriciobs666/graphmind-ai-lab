@@ -63,7 +63,7 @@ Stakeholder decisions, 2026-09-02:
 | U22 — Plan v1.10: close all 14 plan-gate Pass 4 findings + fold notes v1.11/v1.12 | `architect` (fresh) | `aaf7ade9ddbc63e8b` | **delivered** — `3e5dc50` (+738/−134); all 14 closed, **no residuals** | `docs/plans/small-model-benchmarking.md` **v1.10** | `analyst` Pass 5 → — | 293k tok / 96 tools |
 | U23 — Two items routed back from v1.10: rule (iv-b)'s p50-gate application, and §11.2's stale line number | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `5197ce6`; (iv-b) confirmed **by correcting the note** | `docs/plans/small-model-benchmarking-ml.md` **v1.13** | `analyst` Pass 5 → — | 140k tok / 11 tools cumulative |
 | U24 — Re-gate plan v1.10 + note v1.13 (Pass 5) | `analyst` (fresh) | `aa9af16f140993a17` | **accepted** — `b9964d1` | `docs/reviews/small-model-benchmarking.md` `## Pass 5` | self → **needs changes** (2 blockers, 4 majors, 4 minors) | 209k tok / 70 tools |
-| U25 — Three rulings Pass 5 routed: co-presence shape, `censoringExact` clause 1, `paired_cluster_bootstrap`'s necessity | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.14 if changed | `analyst` Pass 6 → — | — |
+| U25 — Three rulings Pass 5 routed: co-presence shape, `censoringExact` clause 1, `paired_cluster_bootstrap`'s necessity | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `ca69cb1`; all three changed the note, **plus a live defect the gate missed** | `docs/plans/small-model-benchmarking-ml.md` **v1.14** | `analyst` Pass 6 → — | 182k tok / 15 tools cumulative |
 | U26 — Plan v1.11: close all 10 Pass 5 findings; rule 5 restated honestly | `architect` (fresh) | `a99cd8cce60c76d82` | in-flight | `docs/plans/small-model-benchmarking.md` v1.11 | `analyst` Pass 6 → — | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
@@ -1478,4 +1478,40 @@ Table D verbatim would be deleting a public statistical function on its own judg
 `architect` is fresh (the v1.10 author closed at 293k tokens, and this work is self-contained). Its
 brief sequences the three inbound rulings **last** and I relay them mid-run, the pattern that worked
 for U21→U22.
+
+### U25 delivered — 2026-09-07, note v1.14 (`ca69cb1`)
+
+All three rulings changed the note; none was a plan-only instruction. Routing them rather than
+letting the architect infer them was the right call on **all three**, and on one it was decisive.
+
+- **P5-5 — the conservative single count**, not a separate `prefillCoveredCount`. An item with
+  `stats` but no usable `promptTokens` leaves `statsCoveredCount` **and all three medians**. **The
+  trap:** the reviewer's phrasing reads either way, and one reading is a defect — dropping the item
+  from the count while keeping it in the `ttftMs`/`tokensPerSecond` medians prints a denominator that
+  does not describe its own numerator. An architect inferring this had a coin-flip chance of encoding
+  the bad half. Rule (iv)'s identity also becomes `≤`, since an excluded item was timed and sits on
+  neither side of the old equality.
+- **P5-6 — clause 1 survives, but the item needs a third state.** `withheldFor` becomes
+  `load | timeout | no_response`; the **counter stays one**. The v1.10 merge was right for the counter
+  and wrong for the item, and the reason is deeper than evaluability: a timeout is a **censored**
+  observation, a call that failed at 40 ms is a **missing** one, and v1.12 had no false branch for the
+  latter at all.
+- **P5-3 — keep both functions.** The closed form retires the *binary* paired interval only; the chain
+  lost its current caller, not its designed consumer (§3.2d's continuous verdicts — the embedder
+  pack's MRR is a committed deliverable). The keep takes `sampling.seed`'s discriminator, so it is
+  checkable rather than sentimental. **This is exactly what the routing existed to prevent:** an
+  architect working Table D verbatim would have deleted a public statistical function on its own
+  judgement.
+
+**A live defect five review passes did not reach.** `stats._widen` clamps to `[-1.0, 1.0]` — verified
+directly at `modelbench/stats.py:191`, its own docstring naming the difference of proportions it was
+written for. That is **wrong for `sep_z`** (§5.2), whose per-query differences are z-score differences
+and unbounded: an interval above 1 is silently clamped and the point estimate can land **outside its
+own interval**. The verdict survives (exclusion of zero is decided by the lower bound); the printed
+interval does not. It is invisible to a static gate because it only becomes wrong when §5.2's
+comparison is wired — a **later stage** — which is precisely the shape the stakeholder principle
+exists to catch. Fix is one argument, blocked on nothing, and **must land before §5.2 is wired**.
+
+Relayed to the in-flight `architect` immediately; it was blocked on ruling 1 and the relay carries
+the trap explicitly rather than the ruling alone.
 
