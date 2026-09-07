@@ -153,7 +153,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U34** — rebuild the stale `cpg_falkorchat` CPG from `HEAD` | `graph-dba` | `a5563c5bdd32be9c7` | **accepted** | `cpg_falkorchat` @ `b795f4c`, 339,972 nodes / 2,317,169 edges | teco-verified → **accept** | 125k / 80 |
 | **U37** — Pass 16's minors + `salesperson/`'s `start_demo.sh` references | `coder` (fresh) | `a38711140b2ecc8ec` | **accepted** (`ba368a0`, `7a85c1c`) | `SERVER.md`, `salesperson/{AGENTS,README}.md`, `playwright.config.ts` (mine) | teco-verified → **accept** | 127k / 52 |
 | **U36** — `config.py`'s three future-as-present comments + the documentation `HISTORY.md` entry | `coder` | `aa9b68b68151bca8a` | **accepted** (`3fe3d8f`) | `falkorchat/config.py` (**5** comments, full-AST equal), `docs/HISTORY.md` | teco-verified → **accept** | 116k / 28 |
-| **U38** — `pipeline.sh`'s provenance stamp races `HEAD` and scopes `SOURCE_DIRTY` repo-wide | `cobb` | `a42739600c7b41e1d` | in-flight (dispatched 2026-09-07) | `skills/joern-cpg/scripts/pipeline.sh` + consumer refs | `analyst` | — |
+| **U38** — `pipeline.sh`'s provenance stamp races `HEAD` and scopes `SOURCE_DIRTY` repo-wide | `cobb` | `a42739600c7b41e1d` | gated | `6012ddb` — 5 files, `git-provenance.sh` new | `analyst` `a98a748e49a559ead` → — | 145k tok / 44 tools |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | in-flight (dispatched 2026-09-07, after U36) | `storefront.py`, `storefront_api.py`, `app.py`, both test files, **+ `config.py`/`SERVER.md`/`HISTORY.md`** | `analyst` + `qa-engineer` | — |
@@ -2799,3 +2799,60 @@ Worth generalising: *a unit that marks something "not built yet — X" creates a
 that no file list shows.* The marker convention U33 and U37 established across eight env rows and
 three comments is good, and it has this cost — every marker is a promise the delivering unit must
 be briefed to keep.
+
+## The stamp was not racing — it was reading the wrong repository
+
+U38 came back with the reported bug confirmed and reframed. I dispatched it as a
+race: `pipeline.sh` re-derived `SOURCE_COMMIT` from git *after* a three-hour load,
+so `HEAD` had moved four times underneath it. That is true, and it is not the
+interesting failure.
+
+The parse root is a **gitignored staged copy**. `git -C <path>` changes the working
+directory but never the repository — so an untracked parse root silently resolved
+the *containing* repo's `HEAD`. Even with zero concurrency the stamp would have
+named a commit describing a different tree. The concurrent session did not cause
+the defect; it made it visible. Fixing the timing alone would have left a stamp
+that was still structurally meaningless, and I would have believed it.
+
+The fix captures provenance once, before the parse, scoped by pathspec, and carries
+it verbatim to the stamp. Two additions matter more than the timing change:
+
+- **`SOURCE_TREE`** — the tree object of the source at that commit, which is the
+  identity of the content actually parsed. I verified the discriminating case
+  myself rather than taking it on report: `b795f4c:falkor-chat/server` is `85ddeed`
+  (matching `cpg/.cpg-artifacts/MANIFEST.txt:19`, which `graph-dba` had corrected by
+  hand), and the wrongly-stamped `2624425:falkor-chat/server` is `9939257`. One
+  comparison catches the bad stamp, where the old consumer check counted commits and
+  would have reported it fresh.
+- **`PARSED_AT`** — a third instance of the same defect class, which I had not
+  reported and did not know about. `BUILT_AT` is stamped at load *completion*, and
+  the freshness recipe anchored `git log --since=<builtAt>` on it — so on a 3h build
+  it excluded every commit made during the build, which is exactly the window in
+  which a concurrent session commits. On the real build `c708423` touched the parse
+  root inside that window and would have been skipped silently.
+
+The deliberate regression is worth recording because it will look like a bug later:
+an untracked parse root with no `--source-origin` now stamps **no** commit at all.
+Absent is honest; plausible-but-wrong is what produced this incident, and a wrong
+commit makes the consumer's check answer "0 commits behind" — false freshness, with
+no signal. The bought-back coverage is the `--source-origin` flag, where the stager
+names the tracked directory the copy came from and everything else is derived from
+it.
+
+Committed as `6012ddb` before gating, not after: another session is actively writing
+under `skills/`, and a verified deliverable sitting in a shared working tree is not
+a safe place to leave it. `analyst` has the gate (`docs/reviews/cpg-provenance-stamp.md`).
+The unit's own author flagged that the pipeline has never run end to end with this
+code — the `redis-cli` argument-passing path and `--reset`/`--append` survival are
+unproven — so that is what I pointed the gate at first.
+
+**Three follow-ups, none actioned.** (1) `claude/graph-dba/kaizen/plan.md:78-105`
+tracks this bug as two open facts, and Fact 1's recommendation — stage inside the
+repo under a gitignored path so `pipeline.sh` can resolve `SOURCE_COMMIT` — is now
+*actively wrong*: that is the failure. It should be closed and corrected before
+anyone acts on it. (2) `cpg_falkorchat`'s live marker can be backfilled
+(`SOURCE_ORIGIN='falkor-chat/server'`, `SOURCE_TREE='85ddeed'`,
+`PROVENANCE='source-origin'`) so check 0 becomes available on it; that is a
+`graph-dba` write, not mine, and I am not blocked without it because
+`freshness.md:135-144` now documents how to read a pre-fix marker. (3) `cobb`'s own
+kaizen history entry is deferred, per the brief's exclusion of `claude/`.
