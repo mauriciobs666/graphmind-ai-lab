@@ -3,9 +3,11 @@
 > **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/plans/small-model-benchmarking.md` §4 S1
 
 **Pass 1** gated `ab91419` (needs changes). **Pass 2** re-gated `3ad27d3` (approve with
-suggestions). **Pass 3** re-gated `95b4c88` (needs changes). **Pass 4** re-gates `d55f4d8` — jump to
-[`## Pass 4`](#pass-4--2026-09-03) for the current verdict; the earlier passes are kept intact
-because the four are meant to be read together.
+suggestions). **Pass 3** re-gated `95b4c88` (needs changes). **Pass 4** re-gated `d55f4d8` (needs
+changes). **Pass 5** gates `8fc2341` — the first of S1e's three implementation units (§4 S1e Tables
+A and B, the `fingerprint.py` re-key) — jump to [`## Pass 5`](#pass-5--2026-09-07) for the current
+verdict; the earlier passes are kept intact because they are meant to be read together. Passes 1–4
+gate the S1 build; Pass 5 opens the S1e fix round, whose remaining two units are not yet delivered.
 
 ## Pass 1 — 2026-09-03
 
@@ -1319,3 +1321,388 @@ excluded from the 128 rather than counted as survivors.
 scratch file carries the `_mbx` suffix. `git status --porcelain -- model-bench` is empty at the end
 of this pass; nothing outside `docs/reviews/small-model-benchmarking-impl.md` was written in the
 repository.
+
+## Pass 5 — 2026-09-07
+
+### 1. Scope & verdict
+
+**Reviewed:** commit `8fc2341` (`feat(model-bench): S1e Tables A and B — the fingerprint re-key`),
+the whole diff against `bc63765` — 6 files, +640/−76, all under `model-bench/`. This is the **first
+of three** S1e implementation units; two follow (Tables C+D+E+G on `stats.py`, Table F on
+`results.py`/`report.py`).
+
+**Baseline:** `docs/plans/small-model-benchmarking.md` **v1.15** §4 S1e preamble, **Table A**,
+**Table B**, §3.4.1, §3.4.2, §3.4.4a, §4 S1 done-conditions **DC-1**, **DC-6**, **DC-12**, §7 rule 5
+and Appendix A; `docs/plans/small-model-benchmarking-ml.md` v1.18 where a table cites it.
+
+**Not reviewed:** the plan itself — this is a code review, not a tenth plan gate. Passes 1–9 of
+`docs/reviews/small-model-benchmarking.md` were read for *why* the design is as it is, not re-opened.
+`stats.py`, `results.py`, `report.py` and `test_report.py` are untouched by this commit and were read
+only where this diff's behaviour reaches them.
+
+**CPG:** considered, not relevant — no CPG exists for `model-bench/` and none was loaded during this
+pass; every finding below comes from reading the tree, running the suite, and four constructed
+counter-implementations in an isolated sandbox.
+
+**Verdict: needs changes.** — 0 blockers, 4 majors, 2 minors, 1 nit.
+
+The re-key itself is correct and well pinned; every mechanism Tables A and B exist to establish
+holds under direct attack (eight constructed counter-implementations, six killed). The four majors
+are all on the **proof** side rather than the behaviour side, and two of them are the same shape:
+a decision the implementer got *right* and defended in a comment, with nothing in the suite holding
+it there — `to_dict`'s deterministic omission (**P5-2**) and the refusal of the retired residency
+size key (**P5-3**) each survive a counter-implementation that reverses them. **P5-1** is a genuine
+behavioural defect, small in blast radius: the new discriminator collapses three states into one
+where the old one keeps them apart, and the test comment asserts the opposite of what the code does.
+**P5-4** is the test written to catch a half-applied edit, which does not catch it.
+
+**None of the four is blocked on unbuilt work**, so none may ride as a follow-up. All four are
+closable now, and **P5-3's other half is a plan edit** (`architect`), not a code change.
+
+**This does not have to block the `stats.py` unit.** The fix round for P5-1/P5-2/P5-4 touches
+`modelbench/fingerprint.py` and `tests/test_fingerprint.py` only — files neither remaining S1e unit
+opens — so it can run before, after, or beside Tables C+D+E+G without a file collision. What must
+not happen is S1e's round closing on DC-12 with these open. See §6 for the one correction the
+`stats.py` unit's brief needs (**P5-6**).
+
+### 2. What I re-ran myself
+
+| Check | Command / method | Observed |
+|---|---|---|
+| Suite | `.venv/bin/python -m pytest -q`, cwd `model-bench/` | **472 passed in 5.33s** |
+| Table A residual 1 | `grep -rFc lmsCliCommit modelbench tests --include='*.py'` | **0** on all 16 files |
+| Table A residual 2 | `grep -rFc sizeBytes modelbench tests --include='*.py'` | **0** on all 16 files |
+| Table B residual 1 | `grep -rFc FORBIDDEN_BY_ARM_KIND modelbench tests --include='*.py'` | **0** on all 16 files |
+| Table B residual 2 | `grep -rFn 'frozenset(FORBIDDEN' modelbench --include='*.py'` | **no match** |
+| Table B residual 3 | `grep -rFn 'REQUIRED_BY_SCHEMA[1]["model"]' modelbench tests --include='*.py'` | **no match** |
+| Table B residual 4 | `grep -rFn 'set(REQUIRED_BY_SCHEMA[1]) == {"model",' modelbench tests --include='*.py'` | **no match** |
+| Tree state | `git diff --stat 8fc2341 -- model-bench/` | empty, before and after every mutation |
+
+Mutation isolation: `/tmp/.../scratchpad/mbx/`, built from `git archive 8fc2341 model-bench | tar -x`,
+run with `PYTHONPATH` pointed at the sandbox (verified: `modelbench.__file__` resolves inside it),
+sandbox baseline **472 passed**. Each mutated file was copied aside and **restored by copy**
+immediately after its run. No `git restore`, no tree-mutating git command, nothing written in the
+repository outside this review document.
+
+### 3. Adjudication of the implementer's six reported items
+
+**(1) The DC-1 / Table-A-residual tension — real, and *not* fully dischargeable in code.**
+*Confirmed real.* DC-1 (plan `docs/plans/small-model-benchmarking.md` §4 S1, line 2649-2656) states
+the behaviour by naming both retired keys: *"an element carrying `modelKey` or `sizeBytes` … is
+**invalid**"*. Table A's second residual is `grep -rFc sizeBytes modelbench tests --include='*.py'`
+→ **0**, unscoped across production **and** tests, and `-F` matches comments. A test written the way
+DC-1's sentence invites puts that residual at 1 and fails DC-12 on a faithful implementation. That
+is §7 rule 5(b)'s own trap shape, inside the plan that wrote the rule. The plan is half-aware of it
+— DC-12's own note (line 2907-2916) reasons that `modelKey` can have no residual and that DC-1's
+assertion is rule 5(b)'s named alternative — but it draws that conclusion for `modelKey` only and
+never notices that the *other* key's residual then forbids the assertion from naming it.
+
+*The resolution is the best available in code, and it is not sufficient.* Making the rule key-set
+exact (`fingerprint.py`, `_residency_problems`, the `sorted(set(element) - RESIDENCY_ELEMENT_KEYS)`
+loop) does refuse both retired keys by construction, and the suite asserts the rule's generality
+through three stand-in keys (`test_fingerprint.py:199-220`) and a `bytesOnDisk` half-swap
+(`:223-235`). But **no test constrains the `sizeBytes` half**, and none can while the residual
+stands: see finding **P5-3**, where a counter-implementation carrying a one-name tolerance list
+passes all 472 tests. So the tension is discharged *in design* and left open *in proof*, and closing
+it needs a plan-side edit. See **P5-3**.
+
+**(2) The element-shape check applied to both residency snapshots — correct, not scope creep.**
+Plan §3.4.4a (line 1112-1114) states the `{id, state}` shape over **`residentModelsAtStart` /
+`residentModelsAtEnd`** jointly — "each surviving entry recorded as `{id, state}` with the literal
+`state` string kept" — and §3.4.2 gives both fields the same `present` tier. Table A's row names only
+`residentModelsAtEnd` because that is the *fixture* site carrying the retired element, not because
+the rule is one-sided; the row's own text says the fix is "DC-1's assertion, not this row". Narrowing
+the check to the named field would leave the identical silent mismatch open on the other snapshot —
+the very failure mode §3.4.2 line 819-825 describes. The choice is also **pinned**: mutation M3
+(`_RESIDENCY_FIELDS` narrowed to `{"residentModelsAtEnd"}`) → **3 failed, 469 passed**.
+
+**(3) The `ProblemReason` choice and the `field` path grammar — the grammar is not invented; the
+reason widening is right but leaves the plan stale.**
+
+*The path grammar is precedent, not invention.* `modelbench/results.py:466` already ships
+`FieldProblem(field=f"items[{item.itemId}].counts.{metric}", reason="absent")` — the same
+`<field>[<index>].<key>` grammar, predating this diff. The only consumer is `report.py:534`, which
+renders `p.field` as opaque text (`f"\`{p.field}\` ({p.reason})"`) and parses nothing. Appendix A
+types the member `field: str` and imposes no grammar. So the implementer's choice is *consistent with
+the codebase*, not a new convention, and it under-claimed by calling it invented.
+
+*The reasons are each used in their established sense, with one legitimate widening that the plan
+has not caught up with.* `absent`/`null`/`empty`/`forbidden` on element keys are exact analogues of
+their field-level meanings one level down. `unknown` is the widening: Appendix A (line 5225) defines
+it as *"a **discriminator** this build cannot interpret — an unrecognised `armKind`, or a
+`benchSchemaVersion` from the future"*, and the code now also returns it for a non-list snapshot, a
+non-mapping element, and a non-string key value. Those are type errors, not discriminators — but
+none of the other four fits, so the closed five force `unknown`, and the module docstring was
+correctly updated to say so. What is left open is Appendix A, which now describes a narrower
+`unknown` than the code implements. That is a plan sweep, not a code change — see **P5-5**.
+
+**(4) `callSurface` on a deterministic record ⇒ `FieldProblem("callSurface", "forbidden")` — the
+right reading, and the plan states it twice.** §4 S1's signature block (line 2245) reads
+`callSurface: Literal["chat", "embeddings"] | None   # v1.9 (§3.4.1, §3.4.4a); None iff
+deterministic`, and Appendix A's `Fingerprint` row (line 5226) repeats it: *"`callSurface` is `None`
+iff `armKind == "deterministic"`"*. "iff" is binding in both directions, so a deterministic record
+carrying a surface is claiming a call that arm never makes — the same species of unmeasurable claim
+`{"modelKey": "bm25"}` is, which is the module's whole thesis. `forbidden` is also the right token:
+§3.4.1 says a discriminator "is incapable of appearing in a **derived** forbidden set", and the code
+honours that — the reason is returned directly from the discriminator branch, never via
+`FORBIDDEN_BY_ARM_PROFILE`. Pinned at `test_fingerprint.py:181-185`.
+
+**(5) `to_dict` omitting `callSurface` on a deterministic arm — reasoning correct, round-trip claim
+verified, decision unpinned.** The reasoning is the plan's: §3.4.2 reserves `null` for "we did not
+capture this", and a deterministic arm's absence of a surface is a different fact. **The round-trip
+claim is true — I executed it rather than reading it:** `to_dict()` on a deterministic fingerprint
+carries no `callSurface` key; `from_dict(to_dict()) == fp` holds and `.validate() == []` for all
+three profiles (`model:chat`, `model:embeddings`, `deterministic`). But **nothing constrains the
+decision**: mutation M2, which writes `"callSurface": self.callSurface` unconditionally — i.e.
+`null` on a deterministic arm, the exact shape the comment rejects — passes all **472** tests. See
+**P5-2**.
+
+**(6) The `validate()` `KeyError` left unfixed — correct to leave, and genuinely unreachable, but
+for a reason worth writing down.** I confirmed unreachability by execution rather than by reading:
+with `ARM_KINDS == {deterministic, model}` and `CALL_SURFACES == {chat, embeddings}`, the set of
+profiles the two guards admit is exactly `{deterministic, model:chat, model:embeddings}` — the key
+set of `REQUIRED_BY_SCHEMA[1]` — so `reachable − profiles == ∅`. The residual exposure is the
+pre-existing one: a *schema 2* whose profile set differs from schema 1's, since `ARM_KINDS`,
+`CALL_SURFACES` and `FORBIDDEN_BY_ARM_PROFILE` are all derived from `REQUIRED_BY_SCHEMA[**1**]`
+while the required-set lookup is `REQUIRED_BY_SCHEMA[**schema**]`. That shape shipped before this
+change (`FORBIDDEN_BY_ARM_KIND` was schema-1-only too) and no schema 2 exists. Leaving it is right.
+
+One thing the implementer did not claim and that carries the argument: after the re-key the guard is
+no longer an exact key-set membership test but **two independent projections** of the key set, and
+what keeps the projections honest is that all four sets are pinned **by value** in the suite —
+`REQUIRED_BY_SCHEMA[1]`'s keys (`test_fingerprint.py:443`), `FORBIDDEN_BY_ARM_PROFILE`'s (`:482`),
+`ARM_KINDS` (`:455`) and `CALL_SURFACES` (`:456`). Adding a schema-1 profile therefore fails loudly
+at `:443` rather than reaching a `KeyError`. That is sufficient, and it is why I raise no finding
+here — but it is an invariant held by four separate literals a reader must combine, so if the
+`stats.py` or Table F unit is ever tempted to derive one of those literals from another, that is the
+line to refuse.
+
+### 4. Findings
+
+#### P5-1 — `callSurface` collapses *absent*, *empty* and *null* into one reason, and the suite's own comment claims it does not — major
+
+`modelbench/fingerprint.py`, `from_dict` (`callSurface=d.get("callSurface")`) and `validate()`'s
+`elif not self.callSurface: return [FieldProblem(field="callSurface", reason="absent")]`. Executed,
+not read:
+
+| stored `callSurface` | `armKind` (for comparison) | `callSurface` |
+|---|---|---|
+| key missing | `absent` | `absent` |
+| explicit `null` | **`null`** | **`absent`** |
+| `""` | `absent` | `absent` |
+
+The module's first principle is *"absent is not empty, and `null` is neither"*, and review **P3-10**
+made exactly this distinction load-bearing for the *first* discriminator — `test_fingerprint.py:522`
+exists because defaulting a missing `armKind` to `None` instead of `""` "survived all 314 tests".
+The second discriminator, added by this diff, does not have it. Worse, the suite asserts the
+collapse while describing it as the opposite: `test_fingerprint.py:168-171` reads *"it is **absent**,
+not empty or null: the same three-state discipline §3.4.2 applies to the fields applies to the
+discriminator"* immediately above an assertion that `callSurface=""` reports `absent` — under that
+discipline a blank `nonempty` value reports `empty`. `:542-547` compounds it, calling a missing key
+"one written before the profile existed **or by something that lost it**", which is precisely the
+two states `armKind`'s own test keeps apart.
+
+The harm is a misdiagnosis on the AC-2 surface: `report.py:534` renders the quarantine line from
+`p.reason`, so a stored record carrying `"callSurface": null` — written by something that had the
+value and lost it — is reported to the operator as never written.
+
+**Suggested improvement**, either of two, but not the present state:
+(a) implement the distinction — give `from_dict` a missing-key sentinel distinct from a literal
+`null` (`d["callSurface"] if "callSurface" in d else _ABSENT`), branch `is None → "null"`,
+`not value → "absent"`, and relax the deterministic branch to a truthiness test so the
+omit/round-trip identity in **P5-2** still holds; or
+(b) if the distinction is judged not worth carrying for a discriminator whose only writer is
+`to_dict`, **say so** — replace the two comments above with the honest statement that `callSurface`
+reports `absent` for all three, and why that differs from `armKind`. What cannot stand is a comment
+asserting a discipline the code beneath it does not implement.
+
+#### P5-2 — `to_dict`'s deterministic-arm omission is a decision no test constrains — major
+
+`fingerprint.py`, `to_dict`: `surface = {} if self.callSurface is None else {...}`. The reasoning is
+right (adjudication 5 above) and the round-trip holds. But **mutation M2** — replacing the whole
+expression with an unconditional `"callSurface": self.callSurface`, i.e. writing `null` on a
+deterministic arm, the exact shape the comment rejects — is **472 passed**. The round-trip test
+(`test_fingerprint.py:315-329`) cannot see it, because `from_dict` maps a missing key and a literal
+`null` to the same `None`: **P5-1's collapse is what makes P5-2 invisible.** The decision is
+therefore held in place by a comment alone, in a stored-record shape that S2's runner and S3's
+`load_history` both read, and this is the codebase's recurring defect class — correct for the current
+caller, silently revertible by the next.
+
+**Suggested improvement:** one assertion beside the round-trip test —
+`assert "callSurface" not in Fingerprint(armKind="deterministic", callSurface=None,
+fields=deterministic_fields()).to_dict()`, plus its positive twin on a model arm. Fixing P5-1(a)
+would kill M2 as a side effect; this assertion kills it either way and is worth having regardless.
+
+#### P5-3 — DC-1's `sizeBytes` half is asserted nowhere, and no test can assert it while Table A's second residual stands — major
+
+**Mutation M1** — `RESIDENCY_ELEMENT_KEYS` left alone, but the extra-key loop changed to
+`sorted(set(element) - RESIDENCY_ELEMENT_KEYS - frozenset({"sizeBytes"}))`, i.e. a residency element
+carrying the retired size key is accepted — is **472 passed**. DC-1 names that key explicitly as a
+case that must be **invalid**; the shipped behaviour is correct, and nothing in the suite holds it
+there.
+
+This is not primarily an implementer error — it is the trap adjudicated in item (1). Every
+code-side discharge I can construct either spells `sizeBytes` in a `.py` file (residual → 1, DC-12
+fails on a correct implementation) or asserts something weaker. One discharge does exist and I flag
+it as an option rather than a recommendation: the residual is scoped `--include='*.py'`, so a
+`tests/data/*.json` fixture carrying the retired element would pin DC-1 exactly and leave the
+residual at 0 — arguably more faithful, since the retired shape is a *stored record* shape, but it
+also reads as routing around a check, and that call is not mine to make.
+
+**Suggested improvement — plan-side, owner `architect`, and it is the one item here that cannot be
+closed in `model-bench/` code.** Reword DC-1 so the behaviour is stated without the token: *"an
+element whose key set is anything other than `{id, state}` — including either key of the retired
+`lms ps --json` element — is invalid"*. That preserves DC-1's meaning, keeps Table A's residual
+sound (it is the right residual: the sole pre-edit occurrence is the `conftest.py` fixture, so
+scoping it to `modelbench/` would make it zero *before* the edit and prove nothing), and lets the
+suite pin the rule by value. DC-12's note at plan line 2907-2916 should gain the same correction: it
+reasons the `modelKey` half correctly and never notices that the surviving residual forbids the
+assertion from naming the other half.
+
+#### P5-4 — the half-swap test is named for a failure it does not detect — major
+
+`test_fingerprint.py:223-235`, `test_a_half_swapped_residency_element_is_invalid`, asserts
+`_problems(...) != []`. Both its cases swap one key of the retired pair and keep the other, so the
+*missing* key of `{id, state}` alone already produces a problem — the assertion is satisfied without
+the extra-key rule existing at all. **Mutation M5** — the entire extra-key `forbidden` loop deleted,
+so an element may carry any key whatsoever — fails **exactly the 6 parameters of
+`test_a_residency_element_carrying_any_other_key_is_refused`** and **both** ids of the half-swap test
+**pass**. The test whose docstring says *"a fixture edit that stopped halfway fails here rather than
+shipping green"* is the one test in the group that would not have caught it.
+
+**Suggested improvement:** assert the problem, not its non-emptiness —
+`assert FieldProblem(field="residentModelsAtEnd[0].bytesOnDisk", reason="forbidden") in problems`
+for the size case and the matching `…[0].modelKey` for the identity case, keeping the two ids.
+That also makes this the test that carries P5-3's design half honestly.
+
+#### P5-5 — Appendix A's `unknown` is now narrower than the code — minor
+
+Plan Appendix A line 5225 defines `unknown` as *"a **discriminator** this build cannot interpret — an
+unrecognised `armKind`, or a `benchSchemaVersion` from the future"*. `fingerprint.py` now also
+returns it for a non-list residency snapshot, a non-mapping element, and a non-string element value
+— type errors, correctly assigned (the other four reasons all mean something else) but outside the
+row's stated scope. The module docstring was swept; the plan was not, and it cannot be by this unit.
+
+**Suggested improvement — owner `architect`, one line:** widen Appendix A's `FieldProblem` row from
+"a discriminator this build cannot interpret" to "a **value** this build cannot interpret", naming
+the residency-element type cases beside the two it already names. Precedent: v1.5 swept Appendix A
+for exactly this reason when `unknown` was introduced.
+
+#### P5-6 — this diff shifted `tests/test_results.py` by 36 lines, so the next unit's Table C row now points at the wrong line — minor
+
+Plan §4 S1e Table C's last site row is `tests/test_results.py:507` — the comment recording R-13 as
+open and `_percentile` as having two copies. Verified: that comment is at **`:507` in `bc63765`** and
+at **`:543` in `8fc2341`**, moved by this unit's two added test blocks. Table B's and Table F's
+`test_results.py` pins (`:62`, `:71`, `:239`) shifted likewise. Nothing in `modelbench/results.py`
+or `modelbench/stats.py` moved — those files are untouched, so every Table C/D/E/F/G pin into them
+(`results.py:573`, `:599-600`, `:354-359`, `:385`, `:584`; `stats.py:159`, `:263`, `:292`, `:296`)
+is still good.
+
+This is unavoidable line drift, not a defect in the diff — but Table C's row is now false, and the
+plan's own §7 rule 5 treats a *counts-at-a-named-commit* claim that does not reproduce as a finding
+(it corrected two such line numbers at v1.11). **Suggested improvement:** the `stats.py` unit's brief
+re-derives that row by grep (`grep -rFn _percentile tests/test_results.py`) rather than trusting
+`:507`, and `architect` re-pins Table C's row at the next plan revision.
+
+#### P5-7 — `model-bench/AGENTS.md`'s new paragraph is a live constraint and is accurate; about half of it is a third copy — nit
+
+Verified against the bar it sets for itself: no line exceeds 700 characters and the whole file is
+**1,726 words** (`awk 'length($0)>700'` → no output; `wc -w` → 1726). Verified accurate: the claim
+that "every `armKind == "model"` filter in `results.py` and `report.py` is unchanged" holds — the
+four surviving sites are `results.py:335`, `:637` and `report.py:387`, `:427`, all two-valued, none
+touched by this diff. The `ARM_KINDS` trap is a genuine live constraint: it changes what the next
+editor does, and the failure it names is silent-green-then-dead-harness.
+
+The nit: the paragraph's first half (the three profile keys, the derivation of `armProfile`, the
+union-minus-mine set operation) restates what `fingerprint.py`'s module docstring says at the code
+and what the `HISTORY.md` entry says as record — the "never a third copy" smell. **Take or leave:**
+trim to the two facts that bite an editor who has not opened the module — the `ARM_KINDS`
+decoupling and the fact that `validate()` checks residency element shape because the `present` tier
+does not — and cite `modelbench/fingerprint.py` for the rest.
+
+### 5. The mutation audit
+
+Eight constructed counter-implementations, all against `modelbench/fingerprint.py` in the sandbox,
+each restored by copy immediately after its run. The implementer reported eleven mutations killed;
+I did not re-run its eleven — I constructed my own, weighted toward the assertions I doubted rather
+than toward the ones a re-run would confirm.
+
+| # | The wrong implementation | Result |
+|---|---|---|
+| M1 | extra-key loop excepts one retired name (`- frozenset({"sizeBytes"})`) — a residency element carrying the retired size key is accepted | **472 passed — SURVIVED** (→ P5-3) |
+| M2 | `to_dict` writes `"callSurface": self.callSurface` unconditionally, so a deterministic arm stores `null` | **472 passed — SURVIVED** (→ P5-2) |
+| M3 | `_RESIDENCY_FIELDS` narrowed to `{"residentModelsAtEnd"}` — the row's literal reading | 3 failed — killed |
+| M4 | the `not isinstance(element[key], str) → unknown` branch deleted | 1 failed — killed |
+| M5 | the extra-key `forbidden` loop deleted entirely | 6 failed — killed, **but only by one test** (→ P5-4) |
+| M6 | `_DISCRIMINATORS = ("armKind",)` — `callSurface` left in `fields` | 4 failed — killed |
+| M7 | `_EMBEDDINGS_HAVE_NO` drops `maxTokens` — the derived 26-field set silently becomes 27 | 9 failed — killed |
+| M8 | the `callSurface` decision moved behind the required-set mapping, so a surfaceless model record answers with 30 `absent` problems and the true one last | 2 failed — killed |
+
+M5 is the informative kill. Its six failures are *exactly* the six parameters of
+`test_a_residency_element_carrying_any_other_key_is_refused`; both ids of
+`test_a_half_swapped_residency_element_is_invalid` passed, which is P5-4. So the extra-key rule rests
+on a single test — adequate, but with no redundancy, and the test written to be that redundancy is
+the one that does not work.
+
+**Not reached.** I did not mutate `tests/conftest.py` or `tests/test_results.py`, and I did not
+attempt a mutation of the `benchSchemaVersion` ordering (untouched by this diff and covered by
+Pass 1–4). Anyone re-running this should start there.
+
+### 6. Effect on the two remaining S1e units
+
+**Tables C+D+E+G (`stats.py`) — nothing in this diff obstructs them, with one correction.**
+`modelbench/stats.py` and `modelbench/results.py` are byte-identical to `bc63765`, so every line pin
+those tables carry into production code still resolves (`stats.py:159`, `:263`, `:292`, `:296`;
+`results.py:573`, `:599-600`). The single interaction is **P5-6**: Table C's `tests/test_results.py`
+row must be re-derived rather than trusted. Table C's own residuals
+(`grep -rFc _percentile modelbench/results.py` → 3, `modelbench/stats.py` → 3) are untouched by this
+diff and still read their stated *before* values.
+
+**Table F (`results.py`/`report.py`) — nothing contradicted, and one precedent set in its favour.**
+Table F's rule is that a measure of `0.0` survives a round trip *as `0.0` and not as absent*
+(DC-13(b)). This diff establishes the complementary half of the same discipline one type over: a key
+that is *not applicable* is **omitted**, `null` stays reserved for *not captured*, and a present
+falsy value is a real value (`to_dict`'s comment; `test_empty_list_is_valid_for_a_required_present_field`,
+`test_temperature_zero_is_valid_for_a_required_present_field`). That is consistent with Table F, not
+in tension with it — provided **P5-2** lands, since without it the omission half is a comment rather
+than a behaviour, and Table F's implementer would be reading an unenforced precedent.
+
+**Shared files.** All three units touch `tests/conftest.py`, and Tables C and F touch
+`tests/test_results.py`, which this unit also edited — so the plan's serialisation of the three units
+is doing real work and should hold. The fix round for **P5-1 / P5-2 / P5-4** touches only
+`modelbench/fingerprint.py` and `tests/test_fingerprint.py`, which **neither** remaining unit opens.
+
+### 7. What's solid
+
+- **The re-key itself is right and is pinned by value where it matters.** `REQUIRED_BY_SCHEMA[1]`'s
+  three profile keys, `FORBIDDEN_BY_ARM_PROFILE`'s three, `ARM_KINDS`'s two and `CALL_SURFACES`'s two
+  are each asserted against an independently written literal, and the three required-field contracts
+  are pinned by name *and tier* against hand-transcribed dictionaries — with
+  `EXPECTED_EMBEDDINGS_SCHEMA_1` deliberately transcribed rather than derived from
+  `EXPECTED_MODEL_SCHEMA_1`, which is exactly the M-4 discipline and is the reason M7 died.
+- **The union-minus-mine derivation is a set operation, never a list**, and it earns its keep: the
+  four fields it forbids on `model:embeddings` appear nowhere as a written-down list in production
+  code, and `test_the_forbidden_sets_are_pinned_against_literals` catches a shrinking set loudly.
+- **The `ARM_KINDS` decoupling** — the defect Table B exists to prevent — is implemented, commented
+  at the constant, recorded in `HISTORY.md`, raised to `AGENTS.md` as a live constraint, and pinned
+  by value at `test_fingerprint.py:455`.
+- **`callSurface` is required with no default**, so the type system enumerated the construction
+  sites, which is §7 rule 5's *adds rather than retires* half working as designed.
+- **The per-required-field loops now run over both model profiles** (30 + 26, absent and null), where
+  only one profile had them; and the discriminator ordering is real, not asserted — M8 died.
+- **Scope discipline held.** `stats.py`, `results.py`, `report.py` and `test_report.py` are untouched;
+  `README.md` was correctly left alone; the commit message states what it did and what it judged.
+
+### 8. Open questions
+
+1. **P5-1's fork is the caller's, not mine.** (a) implement the three states for `callSurface`, or
+   (b) state honestly that it has one. (a) is the consistent choice and costs a sentinel plus a
+   truthiness relaxation; (b) is free and is defensible for a discriminator whose only writer is
+   `to_dict`. I recommend **(b) plus P5-2's assertion** — the distinction earns its keep for
+   `armKind` because `from_dict` must default it, and `callSurface`'s `None` is already spoken for by
+   the plan's "`None` iff deterministic". What is not available is leaving the comments as they are.
+2. **P5-3's plan edit is `architect`'s and small, but it is the second time §7 rule 5(b)'s own trap
+   has been found inside the document that wrote the rule** (plan-gate P6-2 was the first, on
+   Table B's fourth residual). Whether that warrants anything beyond the one-line DC-1 reword — a
+   sweep of the other six tables' done-conditions for the same shape — is a call for `architect` and
+   the stakeholder, not for this review.
