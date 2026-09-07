@@ -55,7 +55,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U1 | cobb (1: 2026-09-06) | `a2c2c175f4d6976cb` | accepted | kept open as `claude/cobb/kaizen/plan.md` K-020 + `history.md`; node `DETACH DELETE`d | none (see above) → — | 99.1k tok, 20 tools |
 | U2 | security-expert (2: 08-26, 08-30) | `a4621faebf86763bd` | accepted | `claude/security-expert/security-expert.md` (step-3 clause) + `kaizen/history.md`; `claude/graph-dba/falkordb-quirks.md` + `kaizen/history.md`; both nodes deleted | none → — | 126.8k tok, 47 tools |
 | U3 | devops (3: 2 produced 09-02 + 1 `MENTIONS`-only 08-23) | `a43632153a90a40c1` | accepted | `claude/devops/ops-quirks.md` (2 entries, scope broadened) + `devops.md` + `kaizen/*`; `claude/AGENTS.md`, `claude/README.md` catalog rows; 3 nodes deleted | none → — | 133.6k tok, 40 tools |
-| U4 | qa-engineer (7: 08-28…08-31) | — | queued | `claude/qa-engineer/kaizen/*`, graph cleared | none → — | — |
+| U4 | qa-engineer (7: 08-28…08-31) | `a175af41b18b446d7` | accepted | `claude/qa-engineer/qa-testing-techniques.md` (2 sections) + `kaizen/*` (K-007 carries 3 entries awaiting a `falkor-chat/` home); 7 nodes deleted | none → — | 135.7k tok, 55 tools |
 | U5 | tico (8: 08-26…09-02) | — | queued | `claude/tico/kaizen/*`, graph cleared | none → — | — |
 | U6 | graph-dba (9: 09-02) | — | queued | `claude/graph-dba/kaizen/*`, graph cleared | none → — | — |
 | U7 | architect (16: 08-26…09-03) | — | queued | `claude/architect/kaizen/*`, graph cleared | none → — | — |
@@ -121,6 +121,15 @@ units, none of them a defect:
   `docs/plans/doc-reference-convention.md`, `docs/plans/salesperson-ui.md`.
   Not introduced by this pass — `cobb` grepped every file it touched and came
   back clean. Owners are spread across agents, so it wants its own unit.
+- **U4 → `qa-engineer` K-007**: three live-verified `falkor-chat` gotchas that
+  belong in `falkor-chat/docs/SERVER.md` §1.7, carried ready-to-paste because
+  the target is outside `cobb`'s write remit — plus one **code** fix,
+  `falkor-chat/config/opencode.example.json` cannot be run verbatim
+  (`modelconfig._build_providers` eagerly substitutes every catalog provider's
+  `apiKey` at `from_env()`, so the unused `openai` block's
+  `{env:OPENAI_API_KEY}` kills startup). An example config no fresh box can run
+  is the defect, not a doc gap. Needs routing to a `falkor-chat` doc owner and
+  an implementer.
 - **U3 → `salesperson/build.sh:68`**: the `elif command -v node` fallback
   accepts any `node` on `PATH` without the `/mnt/` rejection its own
   `npm`-only branch applies. Harmless today (only `npm` leaks in from

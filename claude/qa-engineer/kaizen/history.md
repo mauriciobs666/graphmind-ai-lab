@@ -2,6 +2,89 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-09-07 — `kaizen_team` distillation (pass 2, unit U4): 7 entries — 2 promoted to the knowledge base, 2 discarded as already documented, 3 kept open under K-007, 0 `MENTIONS` tags
+- **What:** `cobb` processed all 7 outstanding `qa-engineer` entries in the shared `kaizen_team`
+  graph (agent-maintenance skill §5). All 7 were current-shape (`PRODUCED` edges, post-M8); zero
+  legacy entries remained anywhere in the graph, so the legacy read was skipped. Five of the seven
+  were claims about `falkor-chat/server/`, a component under active development, so each fact was
+  **re-derived from the current source** rather than having its citation confirmed — which changed
+  one entry's bottom line outright.
+  - **`d7a92e5f` (2026-08-28) → promoted to `claude/qa-engineer/qa-testing-techniques.md`**
+    (new section): the shared `~/.config/opencode/opencode.json` `lmstudio` provider points at a
+    LAN-host address, not `localhost`, and that address can be unreachable from this WSL2 box while
+    LM Studio is up — every live call then fails `ProviderCallError`/connection-refused and the run
+    lands in `failed`, looking like a defect in whatever was under test. **Re-verified live
+    2026-09-07:** `curl localhost:1234/v1/models` → `200`; the configured LAN address → `curl`
+    exit 7, ten days after the original observation, with the shared file still unchanged.
+    Promoted as a QA technique (probe with `curl` first; fix for the pass only via
+    `FALKORCHAT_OPENCODE_CONFIG` pointed at a scratch copy; never edit the shared file) rather than
+    as the raw incident. The WSL2 networking half is already covered by the user-scope
+    `severino-wsl-lmstudio` memory, which the new section cites instead of restating.
+  - **`b3f4a1c2` (2026-08-28) → promoted to `qa-testing-techniques.md`** (new section): a finding
+    from deep inside one long `@mention` conversation is confounded evidence — the model fabricated
+    catalog facts from turn 5 on (2/2 same-thread reruns) while the identical question as turn 1 of
+    a fresh thread was correct 3/3, so accumulated context, not the tool-call path, was the cause.
+    Promoted as the durable technique (re-ask in a fresh thread before writing anything up as a
+    mechanism defect; prefer one short thread per test item), against the entry's own
+    `suggestedHome: project docs` — the transferable content is *how to read live-conversation
+    evidence*, which is testing method, not a fact about falkor-chat. Checked that the
+    model-specific half has not gone stale: `qwen/qwen3-4b-2507` is still the default `agent` and
+    `step` role in `falkor-chat/config/models.json`, so it is kept as an illustrative parenthetical.
+  - **`a7e3f8c1` (2026-08-29) → discarded, already documented, both halves.** "The server binds to
+    exactly one workspace" is `docs/SERVER.md` §1.3 (`get_context()` returning
+    `CallContext(ws=WS_ID, …)`, shown as code) plus §1.7's "`config.py` resolves its env vars once
+    at *import* time (FR-15, no reload path)" — the restart-uvicorn consequence is one step from
+    two published facts, and §1.3 additionally rules out a second workspace variable by design.
+    "`Message` carries a queryable `threadId`" is `docs/DESIGN.md` §5.1 (lines 61, 196, 225, 601),
+    including the deliberate absence of an index. Re-derived both against the code first
+    (`config.py:223-231`, `repository.py:397`).
+  - **`e1c3a6d2` (2026-08-29) → discarded, already documented.** Mention resolution needing no
+    `MEMBER_OF` edge is `docs/QUERIES.md` §"Participant mentions — how the mention block works
+    (live-verified)", which publishes the exact Cypher (`OPTIONAL MATCH (mu:User {userId: mid})` /
+    `(ma:Agent {agentId: mid})`, no membership predicate anywhere) plus an explainer covering
+    index-anchored resolution and free unknown-skip. Re-derived against
+    `repository.py:390-391/432-433/521-522/579-580` — still exactly as documented in all four write
+    paths. The QA corollary ("a fresh channel/thread needs no `MEMBER_OF` seeding") is a direct read
+    of that section, below the bar for a second copy in a private knowledge base.
+  - **`7f3d2a1c` (2026-08-29), `b2f6a3e1` (2026-08-30), `a3f0f6c2` (2026-08-31) → kept open as
+    `plan.md` K-007.** All three re-verified still true, and all three belong in `falkor-chat/docs/`
+    (SERVER.md §1.7's QA-gotchas list) where every agent sees them — not hoarded in this agent's
+    knowledge base, which is for environment/tooling technique rather than for what an endpoint
+    expects. That path is outside `cobb`'s write remit, so K-007 carries all three in ready-to-paste
+    form with the source `entryId`s recorded for a future pass's dedup grep.
+    - `7f3d2a1c` — `POST /workflow-runs/{runId}/input` needs `{"input": {…}}`; the flat shape parses
+      to `input={}` (no `extra="forbid"` on `SubmitWorkflowInputIn`) and 400s with a
+      workflow-state-sounding error. Re-derived: `schemas.py:275-283`, `services.py:2149`.
+    - `b2f6a3e1` — `config/opencode.example.json` is unusable verbatim without `OPENAI_API_KEY`.
+      Re-derived the *mechanism*, not just the symptom: `modelconfig._build_providers` (line 556)
+      builds a spec for **every** catalog provider eagerly, and `_build_provider_spec` (line 501)
+      `_substitute`s each one's `apiKey` — so an unused provider's `{env:…}` ref still kills
+      startup. K-007 routes this to a fix of the example file rather than a doc bullet: an example
+      config no fresh box can run is itself the defect.
+    - `a3f0f6c2` — **corrected on re-derivation, and this is the pass's main catch.** The entry
+      claimed a "REST/HTTP-driven workflow run writes zero `TraceEvent`s" and prescribed building
+      an in-process `trace=True` harness. `POST /workflow-runs` in fact accepts `trace: true`
+      (`schemas.StartWorkflowRunIn.trace`, shipped 2026 with K-024 U3, `670474a` — two months
+      *before* the entry was written) and `GET /workflow-runs/{runId}/trace` reads the events back
+      black-box (`api.py:435`, added as the "AC-5 observability seam" precisely so QA need not
+      reach into Cypher). The true, narrower fact is that the **chat/`@mention` trigger path** is
+      hardwired untraced: `app.py:545` builds `WorkflowTrigger` with no `trace=` kwarg (default
+      `False`, `trigger.py:44`) and `config.py` has no trace setting at all. K-007 carries the
+      corrected form; the heavy in-process harness is needed only when the pass must exercise the
+      trigger path itself. A verbatim promotion would have shipped a false absolute into the
+      component's docs *and* taught every future QA pass an unnecessary workaround.
+  - **No `MENTIONS` tags** — all seven are qa-engineer's own live-QA observations (its testing
+    method, or facts it hit driving falkor-chat black-box); none is substantively about another
+    agent's behavior.
+- **Why:** `teco`-coordinated team-wide distillation pass 2, unit U4
+  (`claude/docs/plans/kaizen-distillation2-coordination.md`).
+- **Docs touched:** `claude/qa-engineer/qa-testing-techniques.md` (two new sections) ·
+  `claude/qa-engineer/kaizen/plan.md` (K-007 opened, `Last reviewed` bumped).
+- **Graph:** all 7 entries cleared from `kaizen_team` — each carried exactly one `PRODUCED` edge
+  and no `MENTIONS` edge, so `otherRemaining == 0` for every one and each was cleared as a whole
+  node (`DETACH DELETE`), not a bare edge resolve.
+- **Plan items:** K-007 opened.
+
 ## 2026-08-25 — `kaizen_team` distillation (unit U5): 4 entries, all promoted to project docs/knowledge base, 0 discarded, 0 kept open, 0 `MENTIONS` tags
 - **What:** `cobb` processed all 4 outstanding `qa-engineer` entries in the shared `kaizen_team`
   graph (agent-maintenance skill §5) — 1 legacy (`author` property, no edges) + 3 current-shape

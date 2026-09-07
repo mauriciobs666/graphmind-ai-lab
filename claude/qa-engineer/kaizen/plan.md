@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `qa-engineer` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-08-25
+> Last reviewed: 2026-09-07
 
 ## Active
 
@@ -11,6 +11,7 @@
 | K-001 | 2026-07-01 | med | 🔵 | Ship a reusable test-plan + test-report markdown template pair (as skill or in-repo doc) so structure is consistent across runs |
 | K-003 | 2026-07-01 | low | 🔵 | Consider a handoff protocol: qa-engineer files defects → coder/tdd-engineer fix → qa-engineer re-runs (regression loop) |
 | K-004 | 2026-07-01 | low | 🔵 | Capture a first-run smoke-eval as a repeatable check; document the "new subagent isn't routable until a new session" registry-reload gotcha where users will see it |
+| K-007 | 2026-09-07 | med | 🔵 | Three live-verified `falkor-chat` QA gotchas need a home in `falkor-chat/docs/SERVER.md` §1.7 (+ one fix to `falkor-chat/config/opencode.example.json`) — outside `cobb`'s write remit, so carried here ready to paste |
 
 ### K-001 — Reusable plan/report templates
 - **Status:** 🔵 proposed
@@ -30,6 +31,49 @@
 - **Priority:** low
 - **Rationale:** the first-spin (2026-07-01) confirmed the agent works but had to be **proxy-run** because a freshly-created subagent isn't in the session's registry until a new session starts. Users will hit this; it belongs in the deploy/testing notes, not tribal memory.
 - **Proposed change:** add a one-line "restart the session to route to a newly added agent" note to `claude/README.md` deployment section (or `cobb/TESTING.md`), and keep the M1 pass as a lightweight smoke reference.
+
+### K-007 — Three falkor-chat QA gotchas awaiting a `falkor-chat/` home
+- **Status:** 🔵 proposed
+- **Priority:** medium
+- **Rationale:** the 2026-09-07 `kaizen_team` distillation pass (unit U4) re-derived three facts
+  from `qa-engineer`'s raw capture that are all still true and all belong in `falkor-chat/docs/`,
+  where every agent sees them — not in this agent's private knowledge base. `cobb`'s write remit
+  stops at `claude/`, `skills/` and a short list of MCP docs, so they are parked here in
+  ready-to-paste form rather than written by stretching the remit. Source entries (for a future
+  distillation pass's dedup grep): `7f3d2a1c-9b4e-4a6f-8c2d-1e5f7a9b3c6d`,
+  `b2f6a3e1-7c4d-4e2a-9f0b-1d8c6a5e3f42`, `a3f0f6c2-8e1a-4b7a-9d3e-6c1f2b7a9e01`.
+- **Proposed change:** whoever next works `falkor-chat/docs/` adds these three bullets to
+  `docs/SERVER.md` §1.7's "QA/acceptance-testing gotchas" list, and fixes the example config:
+  1. **`POST /workflow-runs/{runId}/input` takes the action nested, and rejects the flat shape
+     with a misleading error.** The body schema is `{"input": {...}}`
+     (`schemas.SubmitWorkflowInputIn.input: dict[str, Any]`, `default_factory=dict`); the model
+     does not forbid extra keys, so a flat `{"action": "fulfill"}` parses cleanly to `input={}`
+     and then 400s with `WorkflowInputRejectedError: no input submitted — an empty input cannot
+     advance a parked run` (`services.py:2149`). That error reads like a workflow-state defect
+     rather than a request-shape mistake — check the nesting first. (Re-verified 2026-09-07.)
+  2. **`config/opencode.example.json` cannot be used verbatim as `FALKORCHAT_OPENCODE_CONFIG` on a
+     box with no `OPENAI_API_KEY`.** It declares an `openai` provider whose `apiKey` is
+     `{env:OPENAI_API_KEY}`, and `modelconfig._build_providers` builds a `ProviderSpec` for
+     **every** provider in the catalog eagerly at `ModelGateway.from_env()`, substituting each
+     one's `{env:…}` refs whether or not that provider is ever resolved — so uvicorn dies at
+     startup with `ModelConfigError: … environment variable 'OPENAI_API_KEY' … is not set`. The
+     durable fix is to the **example file**, not a doc bullet: an `example` config that no fresh
+     box can run is the defect. Drop the `openai` block (or move it to a separate
+     `opencode.cloud.example.json`), leaving `lmstudio` — and re-**resolve** the result once via
+     `ModelGateway.resolve`, per the `options.baseURL` gotcha already in that section.
+     (Re-verified 2026-09-07: file and code both unchanged.)
+  3. **The chat/`@mention` trigger path is hardwired untraced — but a REST-started run is not.**
+     `app.py:545` constructs `WorkflowTrigger(...)` with no `trace=` kwarg (default `False`,
+     `trigger.py:44`) and `config.py` exposes no trace setting, so a run started by an `@mention`
+     writes zero `TraceEvent`s and leaves only `Message.toolsUsed` (tool names, no arguments) as
+     evidence. This is **not** a property of REST as such: `POST /workflow-runs` accepts
+     `trace: true` (`schemas.StartWorkflowRunIn.trace`, shipped with K-024 U3) and
+     `GET /workflow-runs/{runId}/trace` reads the events back black-box. So to ground-truth raw
+     tool-call **arguments**, start the run over REST with `trace: true`; reach for
+     `server/tests/test_workflow_live.py`'s in-process harness only when the pass must exercise
+     the `@mention` trigger path itself.
+- **Notes:** item 3 corrects the raw capture, which claimed REST-driven runs write zero traces in
+  general and prescribed the in-process harness unconditionally.
 
 ## Parking lot / ideas
 

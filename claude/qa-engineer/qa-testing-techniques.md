@@ -125,3 +125,36 @@ data is provably fine (confirmed via independent `size()`/`substring()` checks o
 see `cypher-mcp/README.md`'s "Result format and truncation" section for the full writeup and the
 safe single-column recipe. Relevant to any acceptance pass that needs to read back a long stored
 value (a `KaizenEntry` field, a long property) verbatim rather than just spot-check it.
+
+## Before a live LLM-backed pass, `curl` the configured `baseURL` yourself — the shared OpenCode config's LM Studio provider can point at an unreachable LAN address while `localhost` works
+
+The shared `~/.config/opencode/opencode.json` `lmstudio` provider hardcodes a **LAN-host address**
+rather than `localhost`, and that address is not reliably reachable from this WSL2 box even while
+LM Studio is up and serving. Re-verified 2026-09-07: `curl http://localhost:1234/v1/models` returned
+`200` while the configured LAN address failed to connect from the same shell (`curl` exit 7) — the
+same split that cost a full session earlier. Downstream this surfaces as a `ProviderCallError` /
+connection-refused on every live call and a `WorkflowRun` sitting in `failed`, which is
+indistinguishable from a real defect in whatever you were actually testing.
+
+So: probe reachability with `curl` **before** trusting the shared config, and when it is wrong, fix
+it for the pass only — point `FALKORCHAT_OPENCODE_CONFIG` at a scratch copy with the `baseURL`
+corrected to `localhost`. Never edit the shared file: it lives outside any repo and other sessions
+read it. (WSL2 mirrored networking is what makes `localhost` work at all here; the LAN/gateway
+address is only the documented fallback for when mirrored mode is off, and it goes stale — see the
+user-scope `severino-wsl-lmstudio` note for the networking side.)
+
+## A finding from deep inside one long multi-turn conversation is confounded evidence — re-ask it as turn 1 of a fresh thread before reporting it as a mechanism defect
+
+Driving a tool-using agent step over a single long `@mention` conversation, the local model
+(`qwen/qwen3-4b-2507` — still the default `agent`/`step` role in `falkor-chat/config/models.json`)
+reproducibly fabricated catalog facts from **turn 5 onward**: a price-range filter and an exact-name
+lookup both returned wrong answers, reproduced 2/2 on same-thread reruns — while the *identical*
+question asked as turn 1 of a **fresh** thread returned ground-truth-correct answers 3/3. Accumulated
+conversational context, not the tool-call path, was the cause.
+
+A long conversation is therefore not evidence about a specific tool-call shape **in either
+direction**: a failure late in one may be context degradation rather than a broken call, and a
+success may be the model reading an earlier turn instead of calling the tool at all. Make the
+fresh-thread re-ask a required step before any live-conversation observation is written up as a
+mechanism defect, and prefer short, single-purpose threads — one per test item — over one long
+session that covers several.
