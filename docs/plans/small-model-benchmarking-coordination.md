@@ -68,8 +68,9 @@ Stakeholder decisions, 2026-09-02:
 | U27 — Re-gate plan v1.11 + note v1.14 (Pass 6) | `analyst` (fresh) | `a6f3786437e4dab05` | **accepted** — `afca8e0` | `docs/reviews/small-model-benchmarking.md` `## Pass 6` | self → **needs changes** (1 blocker, 2 majors, 2 minors); **S2 may not be dispatched** | 161k tok / 52 tools |
 | U28 — P6-1's method half: the continuous instrument's carrier + §3.2e's verdict strings | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `0ad0e7a`; both changed the note, **plus one reversal and one unprompted ruling** | `docs/plans/small-model-benchmarking-ml.md` **v1.15** | `analyst` Pass 7 → — | 218k tok / 17 tools cumulative |
 | U29 — Plan v1.12: close all 5 Pass 6 findings; the continuous carrier as an S1 edit | `architect` (fresh) | `a74d8052842395e20` | **delivered** — `5b67416` (+521/−62); all 5 closed, **12/12 residuals re-run** | `docs/plans/small-model-benchmarking.md` **v1.12** | `analyst` Pass 7 → — | 283k tok / 91 tools |
-| U30 — Four items v1.12 raised: §3.2f's retired wording, the continuous-verdict producer's signature, the homogeneous-family enforcement point, §5.2's `sep_raw` figures | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.16 if changed | `analyst` Pass 7 → — | — |
-| U31 — Re-gate plan v1.12 + note v1.16 (Pass 7) | `analyst` (fresh) | — | queued — **held until U30 returns** | `docs/reviews/small-model-benchmarking.md` `## Pass 7` | — → — | — |
+| U30 — Four items v1.12 raised: §3.2f's retired wording, the continuous-verdict producer's signature, the homogeneous-family enforcement point, §5.2's `sep_raw` figures | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `e290148`; all four changed the note | `docs/plans/small-model-benchmarking-ml.md` **v1.16** | `analyst` Pass 7 → — | 248k tok / 15 tools cumulative |
+| U32 — Plan v1.13: absorb note v1.16's four deltas. **Deliberately small** | `architect` (fresh) | `ac827e78b5339f829` | in-flight | `docs/plans/small-model-benchmarking.md` v1.13 | `analyst` Pass 7 → — | — |
+| U31 — Re-gate plan v1.13 + note v1.16 (Pass 7) | `analyst` (fresh) | — | queued — **held until U32 returns** | `docs/reviews/small-model-benchmarking.md` `## Pass 7` | — → — | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | **accepted** — `5878014` | `model-bench/**` (10 files, +1490/−61); 353→389 tests | re-gate (both, fresh) → — | 348k tok / 130 tools |
@@ -1696,4 +1697,48 @@ records** and a manifest `kind` field is the inference §3.2d refuses (item 3); 
 **Holding the gate is deliberate and is the same call that paid at Pass 5:** items 1 and 2 would both
 become gate findings, and gating a pair about to move wastes a ~200k-token review to tell us what we
 already know.
+
+### U30 delivered — 2026-09-07, note v1.16 (`e290148`)
+
+All four items changed the note, and two of them went beyond what was asked.
+
+- **Item 1 — the sweep was six sites, not two.** The plan saw §3.2f's two variants; the same retired
+  instrument name was also in §3.2e's B-1 precondition, §3.4's decision-rule branch and Rule 7's
+  branch label. Two more found unasked, both the same defect one string over: **§3.2e verdict 3's
+  interval name is a substitution the note had never published** — it lived only inside Rule 4's sweep
+  list, so an implementer copying §3.2e, *the surface they copy*, never learned the word varies; and
+  Rule 4 still read as though the `DecidedBy` rename were an open architect's call when plan v1.11
+  had taken it. A document saying "recommended" about a decision both documents have made is how the
+  next reviewer loses an hour.
+- **Item 2 — new §3.4 Rule 8** specifies `continuous_verdict()`. Two things worth carrying:
+  `ContinuousVerdict` is a **sibling type**, not a `Verdict` with six fields left empty (the
+  "`None` until it is not" shape the note already refused for `alpha_step`); and **the multiplicity
+  correction is made *unrepresentable* rather than guarded** — the function computes its own
+  percentiles and exposes no percentile parameter, so a caller *cannot* render a `k = 3` family at
+  2.5/97.5 by omission. Rule 4's `n != len(diffs)` lesson applied at the signature.
+- **Item 3 — the enforcement *point* is confirmed, the *granularity* is corrected against the plan.**
+  v1.12 excludes and names the offending members; the note rules the refusal is of **the whole
+  family's verdicts**. `k` is pre-registered, so dropping the minority kind **shrinks `k` after
+  results exist** and hands the survivors a *weaker* correction than the one declared — the fishing
+  artefact pre-registration exists to prevent, arriving as a repair. Every number still prints,
+  labelled `exploratory — no significance claim`.
+- **Item 4 — `sep_raw` prints median, p10 and fraction above zero**, no mean for either quantity
+  (the concrete reason `ContinuousMetric` is the wrong aggregate carrier), **and no difference between
+  two models' `sep_raw` figures on any path** — it is scale-dependent per model, which is the entire
+  reason `sep_z` exists, and the shared per-item carrier makes such a difference *computable*, so the
+  prohibition has to be written rather than inferred.
+
+### U32 dispatched — and its brief's unusual instruction is to stay small
+
+v1.12 closed Pass 6 cleanly with twelve verified residuals; v1.13 absorbs **four specific deltas** and
+nothing else. The brief says plainly that **a large v1.13 would be a defect in itself**, since the
+Pass 7 gate is queued directly behind it. Only delta 2(a) — `paired_cluster_bootstrap`'s quantile
+levels becoming parameters — needs a new home in the edit set under rule 5, with a command, counts at
+`5878014` and a residual verified both ways.
+
+**Watch for oscillation.** This round's note items came *from* plan v1.12, and the note's answers now
+need plan absorption. That is normal convergence while the deltas shrink — v1.16's are four, specific,
+and three are citations or prohibitions rather than mechanism. If a future round's deltas do not
+shrink, the plan/note pair is oscillating rather than converging and that is the point to stop and
+re-scope rather than dispatch again.
 
