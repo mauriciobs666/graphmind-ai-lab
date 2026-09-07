@@ -2131,3 +2131,57 @@ that under the trigger spelling three `INHERITED_HANDLERS` reason strings (*"no 
 calls that layer"*) become **false in truth while remaining invisible to the walk** — the thirteenth
 instance of this coordination's signature defect, now at the architecture level rather than inside
 the reader.
+
+## Stakeholder decisions, 2026-09-07 — the guard chain has a stopping rule now
+
+Two calls, both the stakeholder's, both binding on later units and on any later session resuming
+this coordination.
+
+**1. One more gate, then stop.** Pass 15 runs over S8f with **Pass 14's convergence test as the bar**,
+not as a suggestion:
+
+> the sentences state a **syntactic** scope — node types walked, files read, method sets closed —
+> rather than a semantic one, **and** the *enumerate-every-syntactic-form-and-run-the-reader* probe
+> comes back empty.
+
+- **Pass 15 passes** → the guard is **done**. No cycle seven. S9 is dispatched, and its mechanism is
+  the **armed-fault measurement**, not the guard (U31 is writing that into §5.1 now).
+- **Pass 15 finds a thirteenth instance** → **stop and escalate to the stakeholder.** Do **not**
+  dispatch a fix. The pre-agreed reading is that the probe is wrong and the artifact needs a
+  different kind of answer, not another pass.
+
+This is deliberately a **falsifiable** stopping rule rather than a budget, because six cycles of
+"one more fix" is what a budget would have produced anyway. The escalation branch is written down
+**before** it fires so that a later session cannot quietly choose cycle seven as the path of least
+resistance — the temptation will be real, because each individual finding has looked worth fixing.
+
+**Why not stop now, ungated.** The stakeholder was offered that and declined it, and the record
+supports the decline: in **five of five** previous cycles the defect was found by the **gate** —
+never by the producing delegate, which mutation-tested its own work every time, and never by me,
+though I independently re-ran the decisive mutation in three of them. Ungated is precisely how a
+thirteenth instance ships.
+
+**Why not cap harder.** Also offered, also declined. The two findings S8f is closing are not
+hardening for its own sake: an annotated assignment escaping the reader is a defect under **any** S9
+spelling, and `MemberIdCollisionError` is an **unclassified raise on a request path** — a bare `500`
+— which the guard surfaced by accident and which stands entirely on its own merits.
+
+**2. The `reference` seed: the stakeholder runs it, after the chain's last suite.** Not delegated,
+no permission rule added. **My obligation is to signal the moment** — the point after which no unit
+of this coordination will run a default `pytest` again, since that is what wipes the graph. Until
+then `reference` stays empty apart from the stray `timers-stale-key@v1` pytest artifact, which is
+left alone. Nothing before **S11** needs the registry, so this blocks nothing.
+
+The commands, for whoever reads this next, from `falkor-chat/`:
+
+```
+./scripts/seed_workflows.sh      # triage@v1 + access-request@v1
+./scripts/seed_salesperson.sh    # salesperson@v7 + order-fulfillment@v1
+./scripts/seed_catalog.sh        # the 15-product catalog
+```
+
+All three are additive-only, idempotent and create-only; `ws:acme`'s eleven snapshots are already
+intact, so the snapshot half will report `already present — no-op`. **Read
+`seed_workflows.sh`'s header before running it** — a fresh `reference` publish alongside an
+already-materialised workspace snapshot is a documented split-brain, and it is accepted knowingly
+here rather than discovered later.
