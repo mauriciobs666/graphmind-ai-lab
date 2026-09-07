@@ -147,7 +147,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S8f** — P14-1, P14-2, P14-4, P14-5 + the syntactic restatement + the `MemberIdCollisionError` ruling | `coder` (**fresh**) | `a0b67a1e6bc22d6b8` | **accepted — committed `00827c2`** (+1019/−142). **Enumerated the reader's scope instead of implying it**: eight `ast` node types walked as a named constant, the other **19 grammar nodes excluded each with a written reason**. Raise walk closes over `self.<name>` to a fixpoint (`Services` 9→13, `Repository` 2→7). **Caught a thirteenth instance itself, before a gate did** — `raise self._mk(...)` resolving to the *method name* on the collaborator legs. **Convergence probe empty on both readers**, shipped as two tests, node list **derived from `ast`** so a new Python binding form reddens rather than opening a hole. Classified `MemberIdCollisionError` and **left it visible for review disagreement rather than burying it** | `storefront_api.py`, `test_storefront_api.py`; statement at `storefront_api.py:437–519` | `analyst` (Pass 15, **final**) → — | **260k tok** / 95 tools |
 | **Pass 15** — **final gate** on S8f (`00827c2`) | `analyst` (**fresh**) | `afb10aa0d33dab3ee` | **accepted — committed `5f8adc0`. NEEDS CHANGES** (0 blockers, 3 majors, 1 minor, 1 nit). **Convergence test NOT passed, on a precise diagnosis**: S8f finished the **target** axis (derived from `ast`, 8+19=27 verified) but all eight probe snippets hold the **value** axis at one spelling, and the block states that axis *semantically* over a mechanism that is exact source-text identity. **Fourteenth instance: `me = self`** — `ast.Assign`, first entry in the walked list, in none of the four documented stops, invisible to the two collaborator legs that seed on `receiver.attr`. **Answered the escalation question**: not a sixth cycle — the gap is alias/points-to, where each closure spawns the next — but **docs-only narrowing**, safe because zero receiver-alias bindings exist in `falkorchat/`. 9 of 17 clauses lift-ready | `docs/reviews/salesperson-ui-impl.md` `## Pass 15` | — | 219k tok / 65 tools |
 | **S8g-docs** — narrow clauses 5/6/9/15, correct 8 against v1.25, fix P15-2's 14 stale sites, P15-3, the `:3603` figure, the nit | `coder` (**fresh** — S8f ended at 260k) | `ae9e4fd13cc66c178` | **accepted** (`b720bd3`) | `storefront_api.py`, `test_storefront_api.py` — **prose only, proved** | teco-verified → **accept** | 175k / 57 |
-| **U32** — add the plan's **citation** to the finished statement in §5.1's S9 row, and compact what the citation now carries | `architect` | `ae7164b33e933e793` | in-flight (dispatched 2026-09-07, after `b720bd3`) | `docs/plans/salesperson-ui.md` → v1.26 | teco-verified → — | — |
+| **U32** — add the plan's **citation** to the finished statement in §5.1's S9 row, and compact what the citation now carries | `architect` | `ae7164b33e933e793` | **accepted** (`a69422f`) | `docs/plans/salesperson-ui.md` v1.26 | teco-verified → **accept** (2 defects found + fixed) | 80k / 25 |
 | **U30** — P14-3: settle the plan/code exception-name mismatch and the falsifiability **mapping** | `architect` (**fresh**) | `af0b1eb6551aa85e9` | **accepted — committed `a3f681e`** (3/2, one file). **Ruled the plan wrong and the code right** — `services.py:2085`'s `WorkflowRunNotFoundError` is a *workspace snapshot/trigger-anchor* miss, already documented in `start_workflow_run`'s own docstring, while `WorkflowDefNotFoundError` is a *`reference`-graph* condition whose three raise sites are unreachable from the S9 path. Two conditions, only one reachable; the row named the reachable one with the unreachable one's class. **No code change implied.** Introduced the **two-gate** framing (does the method enter the walked set / is the raise in its own body or one call further in) that the plan had collapsed | `docs/plans/salesperson-ui.md` **v1.24** | teco-verified | 107k tok / 44 tools |
 | **U31** — replace S9's unmeetable *"S8c goes red"* done-condition; account for the false-but-unmeasured excuses and `executor.run`'s own raise | `architect` (**resumed** `af0b1eb6551aa85e9`) | `af0b1eb6551aa85e9` | **accepted — committed `5d0bb9c`** (3/2, one file). **Replaced the obligation rather than deleting it**: S8c's assertion is expected to **stay green**, and staying green *is* the evidence; what it still pins is the storefront's **service surface** — red means S9 wrote `self._services` instead of the trigger, a stop-and-re-decide. Row now says **do not restore a reddens-at-S9 claim**, and why. **Corrected my framing**: it is not a *placement* tripwire — `_service_layer_reach` reads source, not threads. All three excuses convert to **one measured exemption at the response boundary**; none stays prose-only. Tells S9 to **derive** the fault list from the worker's actual service surface. **Incidentally closed Pass 12's open question 2**, flagged as an architect edit and never made | `docs/plans/salesperson-ui.md` **v1.25** | `analyst` (folded into Pass 15) → — | 129k tok / 7 tools |
 | **v1.22** — P11-5 (§5.2's messages row + the `401` licence) and **S9's row gains the two obligations Pass 11 created**; **decided S9's trigger placement** | `architect` | `ad81e9cdb12dfbb28` (resumed) | **accepted — committed `20deefa`** (30/3). **Ruled the trigger runs inside the turn-queue worker, not on the request thread** — three independent reasons, and S9's row had already been leaning on it (it passes the `ParticipantRecord` in from the request thread). So all three workflow exceptions are raised **after** the `200` is sent and none earns a `(route, response)` row — item 2(b) collapsed. **Corrected my framing**: `401` is not absent from *every* §5.2 row; reset's is a different response (zero rows / already-deleted) and stays. **Returned an open question rather than guessing it** — see the row below. Verified by me: 21 step rows diffed against `HEAD`, **S9 the only mover**, cell structure preserved; `falkor-chat/` untouched. | `docs/plans/salesperson-ui.md` **v1.22** | teco-verified | 192k tok / 30 tools |
@@ -2543,3 +2543,62 @@ materialized into the shared `reference` registry by
 def sitting in the registry the salesperson UI reads. **Follow-up, not scope creep, and not mine
 to delete** (removing it is a destructive graph write, and the real fix is in the test's own
 teardown). Recorded here so it is not re-discovered a third time.
+
+## U32 accepted, and S9 decomposed (2026-09-07)
+
+`a69422f`, plan **v1.26**. U32 was briefed as a citation-and-compaction unit and came back with
+**two defects**, both of them this chain's own signature failure caught one more time.
+
+**The first is the one that should sting.** §5.3's preamble still carried the reddens-at-S9 claim
+that v1.25 had removed from the S9 row — v1.25 corrected the row and never swept the document.
+So for two versions the plan has contained both the prohibition *"Do not restore a
+reddens-at-S9 claim"* and, four hundred lines away, the claim itself. The lesson is not about
+this claim: **a correction that fixes the sentence that was reported, rather than the sentences
+that say the same thing, has not been made.** v1.25's own revision note says the sweep is the
+convention here; the sweep is what was skipped.
+
+**The second was falsified by one of our own fixes.** The row's per-exception counterfactual said
+the rejected spelling's walk would report two of the three workflow classes, never
+`WorkflowEngineDisabledError` — *"unless the `Services`-sibling closure lands (P14-1)"*. It
+landed, in this same chain. I checked this **by running the reader rather than reading its
+docstring** — which is the only way worth checking it here, given the fourteen instances of a
+docstring wider than its mechanism: seeding `start_workflow_run` reaches `_require_executor` and
+reports **all three**. Dropped rather than re-derived; no S9 obligation rests on a spelling the
+row rejects.
+
+Accepted without a separate gate. I verified both findings myself (one by running the reader, one
+by reading the corrected §5.3), grepped the ten retained obligations back one at a time, and
+checked table integrity. A static reviewer would be re-reading what I had just executed.
+
+### The CPG was a trap, and is being rebuilt
+
+`cpg_falkorchat` was built 2026-09-02 at `4bb96e1`, **already `SOURCE_DIRTY` at build time**, and
+is now 18 commits and 12,152 insertions behind on `falkor-chat/server/` — a window in which the
+whole storefront layer was written. Left alone this is worse than having no graph at all: a later
+`qa-engineer` unit consults a CPG *because one exists*, and would get confident answers about code
+that has since been rewritten. Dispatched to `graph-dba` as its own unit rather than carried as a
+caveat in someone's brief.
+
+### S9 is five units, not one
+
+The plan gives S9 as a single `coder` row. It is the largest row in the table and its
+done-condition has five independent halves. This coordination has already paid twice for handing
+one agent a table-wide brief, so S9 is dispatched as a sequenced chain. Every unit touches
+`storefront.py`, so these **serialize** — none of them run in parallel with each other:
+
+| Unit | Scope |
+|---|---|
+| **S9a** | Concurrency core: bounded `ThreadPoolExecutor` keyed by `participantId`, `409 TurnInProgress` *before* the message write, queue-position accounting on `GET /shop/api/state`, the anyio limiter inside `_lifespan` before `yield`, graceful shutdown, and the post path with `run_ctx={"language": …}` and **no `_safe_embed`** |
+| **S9b** | Cancellation of a *queued* turn, in front of `_await_quiesce` and never in place of it |
+| **S9c** | The dead-turn latch: `turn.lastTurn: 'failed' \| null`, and its whole lifecycle — including that it survives `set_turn_state(idle)` |
+| **S9d** | Remove the per-participant record cache whole (`lookup`, `_records`, `cached_ids`, every `_cache_put`/`_cache_drop`) plus the tests that exist only to exercise them |
+| **S9e** | Replace the three `INHERITED_HANDLERS` reason strings with the reason true of each, cited to the armed-fault test; the armed-fault measurements themselves |
+
+**S9a is held until the CPG rebuild finishes**, which is a sequencing constraint I nearly missed:
+`graph-dba` copies `falkor-chat/server/` into a build snapshot, so an implementer writing those
+files concurrently yields a torn read — a graph that is wrong in a *new* way, which is the one
+outcome worse than the stale graph we are replacing. The units are file-disjoint on paper and
+conflict through the snapshot anyway.
+
+The S7→S8g documentation debt runs in parallel throughout: it is `falkor-chat/docs/` only, and
+conflicts with nothing.
