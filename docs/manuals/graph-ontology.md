@@ -1,5 +1,5 @@
 # Graph Ontology Reference — cpg, kaizen_team, reference & ws:* graphs
-> **Status:** active · **Owner:** `tico` · **Tracks:** — (—) · **Last updated:** 2026-09-02
+> **Status:** active · **Owner:** `tico` · **Tracks:** — (—) · **Last updated:** 2026-09-07
 
 ## Who this is for
 
@@ -54,8 +54,11 @@ today:
 > hyphens stripped: `falkor-chat` → `cpg_falkorchat`) is the right *first* move, but it
 > is a guess, not a fact — always confirm the graph you landed on actually covers the
 > code you mean, because a component can be renamed or retired while a graph built from
-> its old contents keeps the old name. Reading `CpgBuildInfo.SOURCE_PATH` (§1) settles it
-> in one query, before you analyse the wrong codebase.
+> its old contents keeps the old name. The `CpgBuildInfo` marker (§1) settles it in one
+> query — read `SOURCE_ORIGIN` for *which* directory the graph was built from and
+> `SOURCE_TREE` for *which revision of it*, before you analyse the wrong codebase. Don't
+> read `SOURCE_PATH` for this: it is usually a staged, throwaway copy of the source whose
+> path name tells you nothing about the content (see the FAQ).
 
 **Two very different naming conventions.** This is the single most common mistake when
 switching between families:
@@ -115,7 +118,7 @@ section is the schema you'll actually query against.
 | `IMPORT` | An import statement | `CODE` |
 | `UNKNOWN` | A construct the frontend couldn't classify precisely | `CODE` |
 | `CpgNode` | A **second label every node also carries** — not a real category, just a shared index anchor so an edge can look up any node by `id` without knowing its real label | `id` |
-| `CpgBuildInfo` | One node per graph, stamped by the loader with build provenance — **read it before you trust a graph**, it says which source tree this CPG actually covers and how fresh it is | `BUILT_AT`, `SOURCE_PATH`, `SOURCE_COMMIT`, `SOURCE_DIRTY` |
+| `CpgBuildInfo` | One node per graph, stamped by the build pipeline with source provenance — **read it before you trust a graph**, it says which source this CPG actually covers and how fresh it is | `BUILT_AT`, `PARSED_AT`, `SOURCE_PATH`, `SOURCE_ORIGIN`, `SOURCE_COMMIT`, `SOURCE_TREE`, `SOURCE_DIRTY`, `PROVENANCE` — all eight rewritten on every stamp (an absent one is removed, not left stale). Which field answers which question, and what to do when some are missing, is in the FAQ. Graphs stamped before 2026-09-07 carry only `BUILT_AT`, `SOURCE_PATH`, `SOURCE_COMMIT`, `SOURCE_DIRTY` |
 
 > Joern's generic vocabulary also documents `FILE`, `TYPE`, `NAMESPACE`,
 > `NAMESPACE_BLOCK`, `META_DATA` — **confirmed absent** on `cpg_falkorchat`
@@ -480,14 +483,60 @@ That graph name isn't currently loaded. The error message itself lists every gra
 right code?** Not necessarily, and this is the one CPG mistake that gives you confident
 wrong answers instead of an error. A graph key is fixed when the graph is loaded; the
 directory it was built from can be renamed, moved or retired afterwards, so a key that
-matches today's component name is not proof its *contents* do. One query settles it:
+matches today's component name is not proof its *contents* do. One query puts the whole
+marker in front of you:
 
 ```cypher
-MATCH (b:CpgBuildInfo) RETURN b.SOURCE_PATH, b.BUILT_AT, b.SOURCE_COMMIT
+MATCH (b:CpgBuildInfo) RETURN b
 ```
 
-`SOURCE_PATH` is the tree that was actually scanned — check it names the code you meant
-before you act on any answer the graph gives you.
+Then read it by the question you're actually asking:
+
+| Your question | The field that answers it |
+|---|---|
+| *Which code is in here?* | **`SOURCE_ORIGIN`** — the repo-relative directory the graph was built from. |
+| *Is it the revision I mean?* | **`SOURCE_TREE`** — compare it with `git rev-parse --short HEAD:<SOURCE_ORIGIN>` from the repo root. Equal means the source is unchanged since it was captured, so the graph is current however old the build is. (If `SOURCE_DIRTY` is true the parse also took in uncommitted work, so equality only covers the committed part.) |
+| *How current is the content?* | **`PARSED_AT`** — when the source snapshot was taken. Not `BUILT_AT`, which is only when the *load* finished; on a multi-hour build the two are hours apart, and `PARSED_AT` is the one that bounds what code is in here. |
+| *Did the parse also swallow uncommitted work?* | **`SOURCE_DIRTY`** — scoped to the source directory alone, so it says nothing about the rest of the repo. |
+| *How much can I trust the four above?* | **`PROVENANCE`** — `parse-root` or `source-origin` means a real git identity was captured; `none` means there wasn't one (see the next FAQ entry). |
+
+Two fields that look like answers and aren't:
+
+- **`SOURCE_PATH` is a parse root, not an identity.** It's the filesystem path the parser
+  was pointed at — frequently a staged, gitignored copy such as
+  `cpg/.cpg-artifacts/src/falkor-chat-server`, whose name tells you nothing about which
+  revision it holds, and which `git log` reports zero commits for without complaining.
+  Read it to see *how* the parse was scoped; never to decide whether the graph covers
+  your code.
+- **`SOURCE_COMMIT` on its own is weaker than `SOURCE_TREE`.** A commit can be recorded
+  for a tree that was never parsed. Compare trees when you have one; fall back to the
+  commit only when you don't.
+
+**The marker is missing `PROVENANCE`, or `SOURCE_TREE`, or isn't there at all — is the
+graph broken?** No. Each of those is a real, meaningful state, not a defect:
+
+- **`PROVENANCE: 'none'`** — the build had no git identity for the source (a staged copy
+  under a gitignored path is the usual reason), so the pipeline recorded *nothing* rather
+  than a plausible-looking commit that would have answered "unchanged" about code it
+  never saw. There is no commit, tree or dirty flag to read; `PARSED_AT` age is your
+  signal. This is the honest answer, and it's the intended behaviour.
+- **No `PROVENANCE` property at all** — a marker stamped before 2026-09-07, carrying only
+  the four original fields. The live `cpg_falkorchat` is one of these today, so you will
+  meet one. Its `SOURCE_COMMIT` and `SOURCE_DIRTY` were derived *after* the load and
+  repo-wide rather than scoped to the source, so treat both as approximate: the commit
+  may name a tree that was never parsed, and the dirty flag may be reacting to a file
+  nowhere near the source.
+- **No `CpgBuildInfo` node at all** — the graph predates the marker, or its build failed
+  verification before stamping. You have no freshness signal, which is a reason for
+  caution rather than something to debug.
+- **`BUILT_AT` holding the literal `unknown`** — a hand-written marker for a graph whose
+  provenance is genuinely unrecoverable but that is still worth keeping (a retired
+  component, typically). Read the whole node for its own explanation, and treat the graph
+  as a frozen snapshot.
+
+For the full procedure — the escalating staleness checks, and the exact limits of each
+field in each of these states — follow `skills/cpg-analysis/references/freshness.md`
+rather than re-deriving it from the table above.
 
 **I queried `m.name` on a `cpg_*` graph and got back nothing, even though the node
 clearly has a name.** Property keys on CPG graphs are `UPPER_CASE` — you want `m.NAME`.
@@ -510,6 +559,8 @@ Correct — it's a reserved label for a future tool/ontology catalog, indexed bu
 currently unpopulated. Not a bug.
 
 **Where do I go for more detail than this document gives?**
+- Deciding whether a CPG is fresh enough to trust (the full recipe behind the FAQ's
+  provenance answers): `skills/cpg-analysis/references/freshness.md`
 - CPG internals, live-verified topology gotchas: `skills/joern-cpg/references/cpg-model.md`
 - CPG build/query *process*, guarantees, agent usage: `docs/manuals/cpg-getting-started.md`
 - `falkor-chat`'s full design rationale (why each shape was chosen, indexes, capacity):
