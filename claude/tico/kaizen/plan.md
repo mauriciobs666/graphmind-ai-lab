@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `tico` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-08-29
+> Last reviewed: 2026-09-07
 
 ## Active
 
@@ -18,6 +18,7 @@
 | K-012 | 2026-08-29 | medium | 🔵 | Live check of the code/docs coordination boundary — tico still declines `coder`/`tdd-engineer`/`frontend-engineer` and any chain known to need one |
 | K-013 | 2026-09-01 | high | 🔵 | Live e2e spin of a docs-only coordination (ledger open, multi-unit sequencing, review gates, commit case (d)) |
 | K-014 | 2026-09-01 | high | 🔵 | Live check of a mid-chain handoff to `teco` when a code-shaped need surfaces — coordination doc becomes teco's state of record |
+| K-015 | 2026-09-07 | high | 🔵 | `docs/manuals/graph-ontology.md` §2 + FAQ still document `kaizen_team` as the flat, pre-M8 shape |
 
 ### K-001 — Live e2e spin (interactive)
 - **Status:** 🔵 proposed
@@ -130,7 +131,34 @@
 - **Notes:** the highest-risk item of the three new ones — a silent re-spend of already-delivered
   work would be a correctness failure, not a crash.
 
+### K-015 — `docs/manuals/graph-ontology.md` §2 is stale on `kaizen_team`
+- **Status:** 🔵 proposed
+- **Priority:** high
+- **Rationale:** the manual is the reference anyone points a Cypher query at these graphs by, and
+  four of its passages about `kaizen_team` are now false. Re-derived live 2026-09-07:
+  `CALL db.labels()` → `KaizenEntry`, `Agent`; `CALL db.relationshipTypes()` → `PRODUCED`,
+  `MENTIONS`; and `MATCH (k:KaizenEntry) RETURN count(k), count(k.author)` → `188, 0`. The
+  `author` property the manual calls "the *only* attribution mechanism today" exists on **zero**
+  nodes, so §2's sample query `MATCH (n:KaizenEntry {author: 'graph-dba'})` returns nothing.
+- **Proposed change:** update §2's property table (drop `author`, add the `:Agent` node and the
+  `PRODUCED`/`MENTIONS` edges with their properties), replace its "**Relationships:** none" line
+  and its Mermaid diagram, refresh both sample queries to the edge shape, and rewrite the FAQ
+  entry "`kaizen_team` came back with zero relationship types — is the graph broken?" plus the
+  "not yet built" pointer to `docs/requirements/kaizen-agent-ontology.md` (that doc is `archived`;
+  the upgrade shipped as M8). Re-verify live before writing — this file has now been wrong twice.
+- **Notes:** raised by `cobb`'s 2026-09-07 distillation from kaizen entry `e3b4c1a7…`, which
+  surfaced during salesperson-ui U11 and was deliberately left for its own unit. Not fixable by
+  `cobb`: `docs/manuals/*` is `tico`'s doc kind. `Last updated:` on the manual reads 2026-09-02 —
+  a same-day pass touched it without correcting this.
+
 ## Parking lot / ideas
+- **`tico.md`'s two `git add <path>` then `git commit` parentheticals now trail the team rule.**
+  `claude/AGENTS.md`'s concurrent-write paragraph was rewritten 2026-09-07 to lead with the
+  path-limited form (`git commit -F - -- <path>…`), which never touches the shared index; the Mode 1
+  "Commit at document boundaries" bullet and Mode 3's mirror of it still spell out the staged form.
+  Not wrong (tico's Guardrails already cite `claude/AGENTS.md` as the authority) and not worth words
+  in a prompt already past the advisory weight line — fold the idiom in during the compression pass
+  contemplated above, not before.
 - **Prompt weight crossed the audit's advisory threshold (2026-09-01): 4,344 → 5,397 w.** The
   docs-only coordination feature is the whole delta — a real new capability, not duplication, so
   no immediate compression is warranted. But this file was explicitly floored at "~3,450–3,500 w

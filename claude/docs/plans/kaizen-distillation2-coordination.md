@@ -56,7 +56,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U2 | security-expert (2: 08-26, 08-30) | `a4621faebf86763bd` | accepted | `claude/security-expert/security-expert.md` (step-3 clause) + `kaizen/history.md`; `claude/graph-dba/falkordb-quirks.md` + `kaizen/history.md`; both nodes deleted | none → — | 126.8k tok, 47 tools |
 | U3 | devops (3: 2 produced 09-02 + 1 `MENTIONS`-only 08-23) | `a43632153a90a40c1` | accepted | `claude/devops/ops-quirks.md` (2 entries, scope broadened) + `devops.md` + `kaizen/*`; `claude/AGENTS.md`, `claude/README.md` catalog rows; 3 nodes deleted | none → — | 133.6k tok, 40 tools |
 | U4 | qa-engineer (7: 08-28…08-31) | `a175af41b18b446d7` | accepted | `claude/qa-engineer/qa-testing-techniques.md` (2 sections) + `kaizen/*` (K-007 carries 3 entries awaiting a `falkor-chat/` home); 7 nodes deleted | none → — | 135.7k tok, 55 tools |
-| U5 | tico (8: 08-26…09-02) | — | queued | `claude/tico/kaizen/*`, graph cleared | none → — | — |
+| U5 | tico (8: 08-26…09-02) | `a85a1d743ae070fa5` | accepted | `claude/tico/tico.md` (2 rules folded into existing bullets) + `kaizen/*` (K-015); `claude/AGENTS.md` git-race paragraph rewritten; 8 nodes deleted | none → — | 137.5k tok, 37 tools |
 | U6 | graph-dba (9: 09-02) | — | queued | `claude/graph-dba/kaizen/*`, graph cleared | none → — | — |
 | U7 | architect (16: 08-26…09-03) | — | queued | `claude/architect/kaizen/*`, graph cleared | none → — | — |
 | U8 | tdd-engineer chunk A (12: ≤ 08-30) | — | queued | `claude/tdd-engineer/kaizen/*`, graph cleared | none → — | — |
@@ -130,6 +130,26 @@ units, none of them a defect:
   `{env:OPENAI_API_KEY}` kills startup). An example config no fresh box can run
   is the defect, not a doc gap. Needs routing to a `falkor-chat` doc owner and
   an implementer.
+- **U5 → `tico` K-015, and it is worse than the entry claimed.**
+  `docs/manuals/graph-ontology.md` §2 still documents `kaizen_team` in its
+  flat, pre-M8 shape: the property table calls `author` "the *only* attribution
+  mechanism today", the doc states "**Relationships:** none", the Mermaid
+  diagram draws four author-stringed nodes, and an FAQ answers "zero
+  relationship types — is the graph broken?". Every one of those is now false —
+  `author` is gone from all 180-odd nodes and the graph is entirely
+  `PRODUCED`/`MENTIONS` edges — and its sample query returns nothing. This is
+  the one **end-user-facing** document kind in the repo, so the staleness is
+  more costly than in an engineering doc. `manuals/` is `tico`'s, not `cobb`'s.
+- **U5 → `entryId` prefix grepping is unreliable in this dataset.** These ids
+  are hand-shaped, not `uuid4`, so 8-char prefixes repeat: `cobb` hit two
+  false-positive dedup matches (`e3a1f6b2…` against `analyst`'s history,
+  `b3f2a1d4…` against `qa-engineer`'s), both different and already-cleared
+  entries. Every remaining unit's brief must say to confirm date **and**
+  subject before concluding a prior pass already opened a `K-` item.
+- **U5 → `falkor-chat/AGENTS.md` never mentions `server/tests/eval/`** — the
+  component's always-loaded context file omits the evaluation harness it
+  ships. Not filed as a `K-` item (the fact is covered for the consumer that
+  exists); worth one line the next time falkor-chat's context file is revised.
 - **U3 → `salesperson/build.sh:68`**: the `elif command -v node` fallback
   accepts any `node` on `PATH` without the `/mnt/` rejection its own
   `npm`-only branch applies. Harmless today (only `npm` leaks in from

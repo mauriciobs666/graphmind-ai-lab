@@ -2,6 +2,114 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-09-07 — `kaizen_team` distillation: 8 entries — 4 promoted (3 into `tico.md`, 1 team-wide), 3 discarded, 1 kept open
+
+Pass 2, unit U5 of `claude/docs/plans/kaizen-distillation2-coordination.md` (curator: `cobb`). All
+eight were current-shape (`(:Agent {agentId:'tico'})-[:PRODUCED]->`); zero legacy `author`-property
+entries remain anywhere in the graph (188 entries, 0 with `author`). Every fact was re-derived
+against the live repo/graph rather than trusted from its own evidence field.
+
+**Promoted into `tico.md`** — both folded into the existing all-modes "Do your homework silently"
+bullet rather than added as new Mode-1 bullets, which would have duplicated a rule that bullet
+already owns:
+  - `b3f0b6d0…` (2026-08-29, "a plain feature ask can be a partial reversal of a decision recorded
+    only in an agent's kaizen history") **+** `e3a1f6b2…` (2026-08-26, "a `BACKLOG.md` item can read
+    open while already delivered") — promoted here; plus the generalizable half of `b3f2a1d4…`
+    ("'salesperson' names two unrelated things") and `c7a4e0d9…` ("falkor-chat already ships an
+    eval harness"), both of whose specific facts are discarded below. Four entries, one underlying
+    gap: **Mode 1 had no grounding rule at all.** Mode 2 has one ("Ground
+    every explanation in the real thing") and Mode 3 defers to it; the interview craft bullets
+    covered listening, scoping, testability and readback, nothing about checking the ask against
+    what the repo already holds. The pre-existing provenance sentence in "Do your homework
+    silently" was the closest thing and was demonstrably too narrow — it names only
+    `docs/requirements/` and `docs/plans/` status logs, and `b3f0b6d0…`'s whole point is that the
+    reversal was findable *only* in `claude/cobb/kaizen/history.md`. Two amendments: the provenance
+    grep now also names `claude/*/kaizen/history.md`, and a new "check as hard whether the thing
+    already exists" clause covers the shipping-capability / already-written-backlog-deliverable /
+    name-already-taken cases. Verified: `claude/cobb/kaizen/history.md` does carry the 2026-07-30
+    orchestrator decline that `b3f0b6d0…` cites (and its explicit 2026-08-29 partial reversal).
+  - `d1c9e6f2…` (2026-08-29, proactive archival) — one sentence appended to the Mode 1 **Handoff**
+    paragraph: when the design *and* the implementation both land in the same session, close the
+    document out yourself (`Status:`→`archived` plus the closing decision-log line) rather than
+    leaving it at Ready for design. Verified before promoting, because the entry proposes a status
+    flip and root `AGENTS.md` reserves the mechanical `archived` flip for `teco` at milestone
+    close: this is the *non-mechanical* case, which that same table routes to the by-kind owner,
+    and `requirements/*` is `tico`'s row — no authority over-claim (contrast the Mode 3 manuals
+    over-claim still sitting in `plan.md`'s parking lot, deliberately untouched here). A census of
+    every `docs/requirements/` + `claude/docs/requirements/` header confirms the convention the
+    entry assumes: every delivered doc is `archived` (10 of them), every genuinely-pending one sits
+    at `Ready for design`. `claude/docs/requirements/tico-specialist-collaboration.md` — the
+    entry's own instance — is `archived` today, flipped only after the stakeholder asked.
+
+**Promoted to `claude/AGENTS.md`** (team-wide, "Git-commit authority", concurrent-write paragraph):
+  - `b3f1c8a2…` (2026-09-02, pathspec commit under a concurrent staged index) — **re-confirmed
+    first-hand during this very pass**: `cobb` staged two `claude/cobb/kaizen/*.md` files and a
+    concurrent session in the same working tree committed in the window, sweeping both into
+    `3e5dc50 docs(model-bench): plan v1.10 …`. Nothing lost, attribution lost. `claude/AGENTS.md`
+    already documented the race but prescribed only a re-check of `git status`/`git diff --cached`
+    immediately before committing — which narrows the window and cannot close it. The paragraph now
+    leads with the path-limited form (`git commit -F - -- <path>…` / `git commit -m … -- <path>…`),
+    which commits those paths' working-tree content without touching the shared index at all, notes
+    that `git add` is needed first only for a still-untracked path (a pathspec commit cannot name a
+    file git does not know — the entry's own finding), and keeps the re-check as the weaker fallback
+    for when you do stage. The fallback is kept deliberately: `tico.md`'s session-close duty cites
+    "the concurrent-write `git status` check from `claude/AGENTS.md`" by name, and that citation
+    stays valid. Held clean across three commits in this pass.
+
+**Discarded** (3 — for two of them the *generalizable* half still landed, inside the merged
+`tico.md` promotion above; only the specific fact is discarded):
+  - `d8e2b47c…` (2026-09-02, a delegated subagent will not commit its own deliverable) — already
+    documented, and more fully than the entry states it. `claude/AGENTS.md`'s universal
+    interactive-mode grant spells out both halves: the carve-out ("does not apply when the same
+    agent is spawned as a delegated subagent") **and** the dispatcher-side corollary the entry
+    treats as its novel part ("committing stays the coordinating agent's (`teco`'s) integration
+    step, after its own verification"). Live-confirmed again this pass: every unit of this
+    coordination, this one included, is briefed not to commit, and `teco` commits by explicit path.
+  - `b3f2a1d4…` (2026-08-29, "salesperson" ambiguity) — the specific fact is already in root
+    `AGENTS.md`, twice and better than the entry has it: the `deprecated/` component entry names
+    both things and points at `docs/requirements/salesperson-ui.md`, and "Working in this repo"
+    carries an explicit "a request to work on 'the salesperson app' is almost certainly about its
+    not-yet-built replacement… confirm before touching anything under `deprecated/`". The entry
+    predates the move to `deprecated/`, so the repo's own doc is now strictly more accurate than
+    the capture. Only the generalizable half was promoted (above).
+  - `c7a4e0d9…` (2026-09-02, falkor-chat's eval harness) — fact **fully re-verified** (38-row
+    `golden_retrieval.jsonl`, 85-row `golden_guards.jsonl`, 40-row `nlq_golden_set.jsonl`,
+    `retrieval_baseline.json`, `corpus_provenance.json`, `metrics.py` all present and matching the
+    counts exactly), but already documented where it matters: it is a named design constraint in
+    `docs/requirements/small-model-benchmarking.md` (three places), in `docs/plans/
+    small-model-benchmarking-ml.md`, and in `docs/reviews/small-model-benchmarking.md`, and
+    `model-bench/AGENTS.md` encodes the one-way copy-in-with-provenance rule that depends on it.
+    **Relayed rather than filed:** `falkor-chat/AGENTS.md` — the component's own always-loaded
+    context file — never mentions `server/tests/eval/` at all. That file is not `cobb`'s to write
+    and the fact is now covered for the consumer that exists, so no `K-` item was opened; noted
+    here so a future `falkor-chat` context pass can weigh one line for it.
+
+**Kept open** (1):
+  - `e3b4c1a7…` (2026-09-02, `docs/manuals/graph-ontology.md` §2 stale) → **K-015**. Re-derived
+    against the graph's state *today*, not the entry's: `CALL db.labels()` returns `KaizenEntry`,
+    `Agent`; `CALL db.relationshipTypes()` returns `PRODUCED`, `MENTIONS`. The manual is **more**
+    wrong than the entry claims — `MATCH (k:KaizenEntry) RETURN count(k), count(k.author)` returns
+    `188, 0`, so the `author` property the manual calls "the *only* attribution mechanism today" is
+    not merely superseded, it is gone from every node in the graph, and §2's sample query
+    `MATCH (n:KaizenEntry {author: 'graph-dba'})` now returns nothing. Four passages are false:
+    §2's property table, its "Relationships: none" line, its Mermaid diagram, and the FAQ's
+    "`kaizen_team` came back with zero relationship types — is the graph broken?" answer. Not fixed
+    here: `docs/manuals/*` is `tico`'s doc kind, outside `cobb`'s write remit.
+
+**No `MENTIONS` tags added** — none of the eight is substantively about a different agent.
+`b3f1c8a2…` is team-wide git mechanics and was fully dispositioned into `claude/AGENTS.md` in this
+pass (U2's precedent: disposition it yourself rather than tag, so a future pass does not re-review
+an already-promoted fact).
+
+**Graph cleared:** all 8 read `producedEdges=1, mentionEdges=0` → `otherRemaining=0` for each →
+full-node `DETACH DELETE` on all eight, none left as a resolved-edge-only node.
+
+**Process note for future passes:** the `entryId` dedup grep by 8-char prefix produces false
+positives in this dataset — the ids are hand-shaped, not `uuid4`, so prefixes repeat. Two hits
+(`claude/analyst/kaizen/history.md:39` for `e3a1f6b2…`, `claude/qa-engineer/kaizen/history.md:108`
+for `b3f2a1d4…`) both turned out to be *different, already-cleared* entries with colliding
+prefixes, distinguishable only by date and subject. Check the date and topic, not just the prefix.
+
 ## 2026-09-01 — K-005 ✅ closed: doc-reference-convention v1.5.1 amendment (manuals/, collision-rule gloss, coordination-doc authorship)
 - **What:** `architect` shipped a v1.5.1 amendment to `docs/plans/doc-reference-convention.md` (Tracks: C-322), closing tico's kaizen K-005 item. Three additive edits: (a) `manuals/` as a recognized doc kind, per root `AGENTS.md`'s direct extension (2026-07-29+); (b) a gloss on collision rule 5 clarifying that a document reaching its approval **gate** alone does not force a successor document if nothing downstream has executed against the specific content being revised (grounded in `docs/requirements/generic-cypher-mcp2.md` and `docs/plans/generic-cypher-mcp2.md` precedent); and (c) a note on tico's new (2026-09-01) docs-only coordination-ledger authorship of `plans/<slug>-coordination.md`, with the archived-flip staying `teco`'s regardless of who ran the chain.
 - **Gated:** analyst review (`docs/reviews/doc-reference-convention.md`, Part IV): 1 major + 2 minors found at first pass, all fixed in the v1.5.1 patch, rechecked and approved.

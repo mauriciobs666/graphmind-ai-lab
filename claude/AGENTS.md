@@ -188,9 +188,13 @@ agent/process that stages and commits its own files in that window can commit *b
 together, bundling the first agent's file into a commit message it never approved (observed
 2026-08-21: an `analyst` review doc staged cleanly, but a concurrent `qa-engineer` pass staged and
 committed first, sweeping the review doc in under its own unrelated message). File-disjoint work
-does not avoid this — the race is on the index, not on any one path. Immediately before running
-`git commit`, re-check `git status`/`git diff --cached --name-only` to confirm only your own
-explicit path(s) are staged; if anything else has appeared, stop and reconcile before committing.
+does not avoid this — the race is on the index, not on any one path. Commit **path-limited**, so the shared index is never
+involved: `git commit -F - -- <path>…` (or `git commit -m … -- <path>…`) commits exactly those
+paths' working-tree content and leaves every other session's staged entries untouched. `git add`
+first only when a path is still untracked — a pathspec commit cannot name a file git does not know
+yet. If you do stage, re-check `git status`/`git diff --cached --name-only` immediately before
+`git commit` and stop if anything that is not yours has appeared: that narrows the window, it does
+not close it.
 
 ## Maintenance rules
 
