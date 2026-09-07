@@ -38,7 +38,9 @@ scripts/pipeline.sh <source> --graph cpg_myrepo --workdir ./joern-work --load \
 `pipeline.sh` is generic — the caller names the source/graph, nothing is baked in.
 Useful flags: `--language <lang>` forces a frontend (**Python → `pythonsrc`**, see
 Gotchas); `--reset` `GRAPH.DELETE`s the target graph before `--load` for a clean
-reload (destructive, guard-gated); `--repr <r>` narrows the exported layers. After
+reload (destructive, guard-gated); `--repr <r>` narrows the exported layers;
+`--source-origin <dir>` names the real tracked directory a staged parse root was
+copied from, so the build's provenance is recorded (see Provenance below). After
 transform it asserts the CPG produced nodes (a failed frontend exits 0 but yields
 an empty graph), and after `--load` it verifies node/edge counts **and**, for
 every `--verify-prefix PREFIX` given (repeatable), that `MATCH (m:METHOD) WHERE
@@ -47,6 +49,33 @@ count alone does **not** catch a wrong parse root (see Gotchas below), and this
 does. Pass `--verify-prefix` whenever a downstream query (e.g. `cpg-analysis`'s
 test-gap recipe) will filter `FILENAME` by prefix; a failing prefix exits the
 pipeline non-zero with the fix (rebuild from a parse root that includes it).
+
+### Provenance — what a `--load` stamps, and why it is captured up front
+
+After a successful load, `pipeline.sh` writes a singleton `:CpgBuildInfo` marker
+so consumers can judge the graph's freshness (`cpg-analysis`'s
+[freshness recipe](../cpg-analysis/references/freshness.md) reads it, and that
+file documents every field for readers). Two properties of the *mechanism* matter
+when you run a build:
+
+- **Provenance is captured before the parse, not at stamp time**, and scoped to
+  the source with a pathspec. A real build runs for hours; deriving `HEAD` after
+  the load records whatever the repo moved to meanwhile, and an unscoped
+  `git status` reports dirt from anywhere in the repository. Both were observed
+  on the 2026-09-07 `cpg_falkorchat` build — `HEAD` moved four times in ~3h and
+  the graph was stamped with a commit that was never parsed, plus a `true` dirty
+  flag caused by a file outside the parse root. `scripts/git-provenance.sh`
+  carries the capture and the reasoning.
+- **A staged parse root has no provenance of its own — pass `--source-origin`.**
+  Staging a pruned copy *inside* the repo under a gitignored path does **not**
+  give the build a commit: the copy is untracked, so the pipeline refuses to
+  inherit the containing repo's `HEAD` (which describes a different tree) and
+  stamps `PROVENANCE=none` with a loud warning in the first seconds of the run.
+  Name the real directory instead — `--source-origin falkor-chat/server` — and
+  the commit, tree hash and scoped dirty flag are derived from *it*. Stage
+  immediately before invoking the pipeline, since capture happens at start, and
+  confirm the copy matches its origin (`diff -rq`, modulo the paths you pruned)
+  if the build is one others will lean on.
 
 Or run the stages individually:
 
@@ -205,7 +234,11 @@ with `joern --script <file.sc> --params cpgFile=cpg.bin`.
   parse, stage the wanted subtrees into a scratch copy first (pruning
   `__pycache__`/similar) rather than expecting the tooling to filter for you.
   This is the same lever as the `FILENAME`-prefix gotcha above: the parse root
-  and what's inside it are one decision.
+  and what's inside it are one decision. **Where you stage it doesn't recover
+  the source's git identity — `--source-origin` does.** Staging inside the repo
+  under a gitignored path is fine for keeping the copy near its artifacts, but a
+  copy git doesn't track carries no commit either way; pass the real tracked
+  directory so the build gets stamped (see Provenance above).
 - **`cpg-to-falkordb.py --load` always re-transforms the export** — there's no
   "replay this `.cypher`" mode. Re-running `--load` re-reads every export CSV
   and rewrites `load.cypher` before streaming it; cheap (seconds, no re-parse)

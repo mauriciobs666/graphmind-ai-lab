@@ -6,7 +6,7 @@
 #
 # Usage: pipeline.sh <source> [--graph NAME] [--workdir DIR] [--language LANG]
 #                    [--repr R] [--reset] [--load] [--host H] [--port P]
-#                    [--verify-prefix PREFIX ...]
+#                    [--verify-prefix PREFIX ...] [--source-origin PATH]
 #   <source>     source dir/file to analyze (required)
 #   --graph      FalkorDB graph key             (default cpg_<basename>)
 #   --workdir    scratch dir for cpg.bin/export (default ./joern-work)
@@ -29,6 +29,20 @@
 #                default since the pipeline is generic. A failing prefix exits
 #                the pipeline non-zero — see SKILL.md Gotchas for the fix
 #                (rebuild from a parse root that includes the expected prefix).
+#   --source-origin PATH  the real, git-TRACKED directory <source> was staged
+#                from, when <source> is a pruned scratch copy (the documented
+#                way to scope a parse — see SKILL.md Gotchas). Provenance is
+#                then derived from PATH instead of from the parse root, which
+#                has no git identity of its own. Without it, a staged copy
+#                yields PROVENANCE=none and no SOURCE_COMMIT — deliberately,
+#                since a scratch copy sitting inside a repo would otherwise
+#                inherit that repo's HEAD, which describes a different tree.
+#
+# Provenance: SOURCE_COMMIT/SOURCE_TREE/SOURCE_DIRTY are captured BEFORE the
+# parse and scoped to the source (see scripts/git-provenance.sh for why: a
+# stamp-time `git -C "$SRC"` races HEAD across a multi-hour build and reports
+# repo-wide dirt). Capture happens when the pipeline starts, so stage the copy
+# immediately before invoking it.
 #
 # Robustness: after transform the pipeline ASSERTS the CPG produced nodes and
 # fails loudly otherwise — joern-parse exits 0 even when a frontend fails, so a
@@ -39,14 +53,16 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-SRC="${1:?usage: pipeline.sh <source> [--graph NAME] [--workdir DIR] [--language LANG] [--repr R] [--reset] [--load] [--host H] [--port P] [--verify-prefix PREFIX ...]}"
+SRC="${1:?usage: pipeline.sh <source> [--graph NAME] [--workdir DIR] [--language LANG] [--repr R] [--reset] [--load] [--host H] [--port P] [--verify-prefix PREFIX ...] [--source-origin PATH]}"
 shift
 GRAPH=""; WORKDIR="./joern-work"; LANGUAGE=""; REPR="cpg"; RESET=""; LOAD=""
 HOST="${FALKORDB_HOST:-localhost}"; PORT="${FALKORDB_PORT:-6379}"
+SOURCE_ORIGIN_ARG=""
 VERIFY_PREFIXES=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --graph) GRAPH="$2"; shift 2 ;;
+    --source-origin) SOURCE_ORIGIN_ARG="$2"; shift 2 ;;
     --workdir) WORKDIR="$2"; shift 2 ;;
     --language) LANGUAGE="$2"; shift 2 ;;
     --repr) REPR="$2"; shift 2 ;;
@@ -62,6 +78,42 @@ done
 
 mkdir -p "$WORKDIR"
 CPG="$WORKDIR/cpg.bin"; EXPORT="$WORKDIR/export"; CYPHER="$WORKDIR/load.cypher"
+
+# ---- provenance: captured HERE, before the parse, scoped to the source ----
+# Not at stamp time. A real build runs for hours; deriving the commit after the
+# load records whatever HEAD happens to be then — a tree that was never parsed
+# — and an unscoped `git status` reports dirt from anywhere in the repo. Both
+# were observed on the 2026-09-07 cpg_falkorchat build; see git-provenance.sh.
+# shellcheck source=./git-provenance.sh
+. "$HERE/git-provenance.sh"
+PARSED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+PROVENANCE=none
+if [ -n "$SOURCE_ORIGIN_ARG" ]; then
+  if cpg_provenance_capture "$SOURCE_ORIGIN_ARG"; then
+    PROVENANCE=source-origin
+  else
+    echo "pipeline: FAILED — --source-origin '$SOURCE_ORIGIN_ARG' has no usable git provenance" >&2
+    echo "pipeline: (missing path, not inside a git work tree, or inside one but untracked)." >&2
+    echo "pipeline: Failing now rather than after a multi-hour build that would stamp nothing." >&2
+    exit 2
+  fi
+elif cpg_provenance_capture "$SRC"; then
+  PROVENANCE=parse-root
+fi
+if [ "$PROVENANCE" = none ]; then
+  echo "pipeline: WARNING — no git provenance for the parse root '$SRC'." >&2
+  echo "pipeline: SOURCE_COMMIT/SOURCE_TREE/SOURCE_DIRTY will NOT be stamped (PROVENANCE=none)," >&2
+  echo "pipeline: so consumers get raw build age as their only freshness signal." >&2
+  echo "pipeline: If '$SRC' is a staged copy of a tracked directory, stop now and re-run with" >&2
+  echo "pipeline:   --source-origin <the tracked directory it was staged from>" >&2
+else
+  echo "pipeline: provenance ($PROVENANCE) — origin=$CPG_SOURCE_ORIGIN commit=$CPG_SOURCE_COMMIT" >&2
+  echo "pipeline: tree=$CPG_SOURCE_TREE dirty=$CPG_SOURCE_DIRTY parsedAt=$PARSED_AT" >&2
+  if [ "$CPG_SOURCE_DIRTY" = true ]; then
+    echo "pipeline: NOTE — '$CPG_SOURCE_ORIGIN' has uncommitted or untracked changes; this graph" >&2
+    echo "pipeline: will be stamped SOURCE_DIRTY=true, i.e. it matches no commit exactly." >&2
+  fi
+fi
 
 echo "== [1/3] build CPG ==" >&2
 JOERN_LANGUAGE="$LANGUAGE" "$HERE/build-cpg.sh" "$SRC" "$CPG"
@@ -131,14 +183,20 @@ if [ -n "$LOAD" ]; then
   # way across both --reset (fresh graph) and --append (existing graph) loads —
   # freshness tracks "when was this graph's content last touched," not "when was
   # it first created."
+  #
+  # BUILT_AT stays "when this graph's content was last touched"; PARSED_AT is
+  # the separate, earlier fact a consumer actually needs to ask "has the source
+  # moved since?" — on a 3h build the two differ by 3h, and anchoring a
+  # `git log --since` on BUILT_AT silently excludes every commit made *during*
+  # the build, which is exactly when a concurrent session commits.
+  #
+  # The provenance fields were captured before the parse (see above) and are
+  # written here verbatim — never re-derived. Absent ones are written as NULL,
+  # which removes the property, so an --append re-stamp cannot leave a previous
+  # build's SOURCE_COMMIT standing over new content.
   BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  STAMP="MERGE (b:CpgBuildInfo) SET b.BUILT_AT = \"$BUILT_AT\", b.SOURCE_PATH = \"$SRC\""
-  if command -v git >/dev/null 2>&1 && git -C "$SRC" rev-parse --short HEAD >/dev/null 2>&1; then
-    SHA="$(git -C "$SRC" rev-parse --short HEAD)"
-    DIRTY=false
-    [ -n "$(git -C "$SRC" status --porcelain 2>/dev/null)" ] && DIRTY=true
-    STAMP="$STAMP, b.SOURCE_COMMIT = \"$SHA\", b.SOURCE_DIRTY = $DIRTY"
-  fi
+  STAMP="$(cpg_provenance_stamp "$BUILT_AT" "$PARSED_AT" "$SRC" "$PROVENANCE")"
   redis-cli -h "$HOST" -p "$PORT" GRAPH.QUERY "$GRAPH" "$STAMP" >/dev/null
-  echo "pipeline: stamped '$GRAPH' — BUILT_AT=$BUILT_AT SOURCE_PATH=$SRC" >&2
+  echo "pipeline: stamped '$GRAPH' — BUILT_AT=$BUILT_AT PARSED_AT=$PARSED_AT SOURCE_PATH=$SRC" >&2
+  echo "pipeline: provenance=$PROVENANCE origin=${CPG_SOURCE_ORIGIN:-—} commit=${CPG_SOURCE_COMMIT:-—} tree=${CPG_SOURCE_TREE:-—} dirty=${CPG_SOURCE_DIRTY:-—}" >&2
 fi
