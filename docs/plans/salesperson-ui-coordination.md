@@ -154,7 +154,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U37** — Pass 16's minors + `salesperson/`'s `start_demo.sh` references | `coder` (fresh) | `a38711140b2ecc8ec` | **accepted** (`ba368a0`, `7a85c1c`) | `SERVER.md`, `salesperson/{AGENTS,README}.md`, `playwright.config.ts` (mine) | teco-verified → **accept** | 127k / 52 |
 | **U36** — `config.py`'s three future-as-present comments + the documentation `HISTORY.md` entry | `coder` | `aa9b68b68151bca8a` | **accepted** (`3fe3d8f`) | `falkorchat/config.py` (**5** comments, full-AST equal), `docs/HISTORY.md` | teco-verified → **accept** | 116k / 28 |
 | **U38** — `pipeline.sh`'s provenance stamp races `HEAD` and scopes `SOURCE_DIRTY` repo-wide | `cobb` | `a42739600c7b41e1d` | in-flight (fix round) | `6012ddb` — 5 files, `git-provenance.sh` new | `analyst` `a98a748e49a559ead` → **needs changes** (`docs/reviews/cpg-provenance-stamp.md`, `7c7536d`) | 145k tok / 44 tools |
-| **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | gated | `c92f35d` — `docs/manuals/graph-ontology.md` | `analyst` `a98a748e49a559ead` Pass 2 → — | 70k tok / 11 tools |
+| **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | in-flight (fix round) | `c92f35d` — `docs/manuals/graph-ontology.md` | `analyst` `a98a748e49a559ead` Pass 2 → **approve with suggestions** (`131229d`) | 70k tok / 11 tools |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | in-flight (dispatched 2026-09-07, after U36) | `storefront.py`, `storefront_api.py`, `app.py`, both test files, **+ `config.py`/`SERVER.md`/`HISTORY.md`** | `analyst` + `qa-engineer` | — |
@@ -2947,3 +2947,49 @@ Gate is `analyst` resumed on its own transcript as `## Pass 2` — it already ho
 eight fields and wrote m1, so the consistency question costs it nothing to answer.
 `tico` skipped a verification consult of its own, correctly: a targeted correction
 against two authoritative sources plus a live graph read is not a rewrite.
+
+## The downstream document was more accurate than the reference it cited
+
+Pass 2 came back **approve with suggestions** on U39, and it settled the question I
+deliberately refused to settle myself. `tico`'s "the source is unchanged since it was
+captured" beats `freshness.md:70`'s "byte-identical to what was parsed", on the
+reviewer's reasoning: the first is a claim about **change over time**, true under both
+provenance modes; the second is a claim about **identity of content**, which is exactly
+what breaks when the parse root was a pruned copy of its origin. So the reference gets
+corrected to match the manual, not the reverse — and the reviewer's own open finding m1
+dissolves with no per-provenance split at all.
+
+That is worth keeping as a routing lesson. I had two plausible readings and no way to
+choose between them without doing the analysis myself, which is not my job; sending the
+question to the reviewer that *wrote* m1 cost it eight tool calls, because it already
+held both documents in context. The instinct to accept a delegate's judgment call on
+report, or to overrule it from the coordinator's chair, would both have been wrong here —
+the third option, asking the party who can actually adjudicate, was cheap.
+
+I relayed the resolution to `cobb` **mid-round** rather than holding it for delivery,
+because it changes what the correct fix *is*: if `cobb` was heading toward branching the
+check-0 wording on `PROVENANCE`, that is now more machinery than the problem needs, and
+finding out after the fact would have wasted the work.
+
+**P2-1 is the finding that matters structurally.** The manual copied check 0's command
+verbatim, dragging two still-open findings against `freshness.md` — fatal when
+`SOURCE_ORIGIN` is `.`, plus `--short` width drift — into a second document. The file
+otherwise defers procedure to the reference in two places, and that row was the lone
+exception. Replacing it with a citation both fixes the inheritance and decouples U39 from
+`cobb`'s in-flight round, which is why I sent it to `tico` now instead of sequencing it
+behind the upstream fix. Field lists and commands copied between documents are the same
+defect wearing two hats; M4 was the field-list hat and P2-1 is the command hat.
+
+**A marker shape neither the producer nor I knew about:** `cpg_deprecated_salesperson`
+carries no `SOURCE_COMMIT`/`SOURCE_DIRTY` at all. Findings m3 and P2-3 are the same shape
+on opposite sides of the handoff — documented "missing field" cases that don't match the
+markers actually in the wild. Both owners have it, with instructions to end up describing
+the same set of shapes; that consistency is mine to check at acceptance, since neither of
+them can see the other's file.
+
+Also confirmed independently at the gate: `cpg_falkorchat`'s `keys(b)` is exactly the four
+pre-fix fields, and `git log -- cpg/.cpg-artifacts/src/falkor-chat-server` returns **zero
+commits, exit 0, no warning** in both the relative and absolute forms the marker stores —
+the silent-empty-answer failure mode that makes `SOURCE_PATH` dangerous rather than merely
+uninformative. That is the sharpest single piece of evidence for why the manual's
+correction was needed at all.
