@@ -60,7 +60,9 @@ Stakeholder decisions, 2026-09-02:
 | U19 — Re-gate plan v1.9 (Pass 4) | `analyst` (fresh) | `a84c263e5998ba953` | **accepted** — `bb0cacf`; recovered from disk after a kill, **verified 2026-09-06** (see the resume section) | `docs/reviews/small-model-benchmarking.md` `## Pass 4` | self → **needs changes** (3 blockers, 5 majors, 5 minors, 1 nit) | — (killed before reporting) |
 | U20 — S1: residency element-shape assertion (plan v1.9 S1 DC-1) | `tdd-engineer` | — | queued — specified at v1.9, not yet implemented | `model-bench/**` | re-gate → — | — |
 | U21 — Rule on Pass 4's three routed statistical questions (gap-detector right-censoring, threshold margin, §11.7's second denominator) | `data-scientist` (fresh) | `a4e06f8c810bbbbb8` | **delivered** — `fc2fcf6`; all three changed the note | `docs/plans/small-model-benchmarking-ml.md` **v1.12** | `analyst` re-gate → — | 119k tok / 39 tools |
-| U22 — Plan v1.10: close all 14 plan-gate Pass 4 findings + fold note v1.11's binding closed form | `architect` (fresh) | `aaf7ade9ddbc63e8b` | in-flight | `docs/plans/small-model-benchmarking.md` v1.10 | `analyst` → — | — |
+| U22 — Plan v1.10: close all 14 plan-gate Pass 4 findings + fold notes v1.11/v1.12 | `architect` (fresh) | `aaf7ade9ddbc63e8b` | **delivered** — `3e5dc50` (+738/−134); all 14 closed, **no residuals** | `docs/plans/small-model-benchmarking.md` **v1.10** | `analyst` Pass 5 → — | 293k tok / 96 tools |
+| U23 — Two items routed back from v1.10: rule (iv-b)'s p50-gate application, and §11.2's stale line number | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.13 if changed | `analyst` Pass 5 → — | — |
+| U24 — Re-gate plan v1.10 + note v1.12/v1.13 (Pass 5) | `analyst` (fresh) | — | queued — dispatched once U23 settles rule (iv-b) | `docs/reviews/small-model-benchmarking.md` `## Pass 5` | — → — | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | **accepted** — `5878014` | `model-bench/**` (10 files, +1490/−61); 353→389 tests | re-gate (both, fresh) → — | 348k tok / 130 tools |
@@ -1337,4 +1339,53 @@ Committed by explicit path — `docs/plans/small-model-benchmarking.md` is dirty
 work and must not be swept into a commit.
 
 **Not yet accepted:** v1.12 rides into the same `analyst` re-gate as plan v1.10.
+
+### U22 delivered — 2026-09-06, plan v1.10 (`3e5dc50`)
+
+**All fourteen findings closed. No residuals** — nothing deferred, nothing disclosed in place of a
+fix. The stakeholder principle held without needing to be invoked.
+
+The two structural closures worth naming:
+
+- **P4-1 → the unit boundary.** §3.6 gains one place where the seconds→milliseconds conversion is
+  written; `ChatResult` normalises at the transport boundary, raw `stats` becomes auditability-only
+  and unreadable by any timing path, and `coldLoadSeconds` is named the sole seconds figure. The
+  class of defect is closed, not the instance.
+- **P4-2 → §7 rule 5, the pattern.** *An edit list over shipped code carries the command that
+  enumerates its own sites, that command's counts at a named commit, and a done-condition that
+  re-runs it and asserts the residual.* §4 S1e's four grep-pinned tables are that list; DC-12 is the
+  assertion. This is the fix for **two** prior incomplete edit lists (v1.8's `residencySource`,
+  v1.9's `_percentile`), not just the second.
+
+**Every pinned count re-verified by teco against the tree**, since rule 5's whole value is
+reproducibility: `lmsCliCommit` 3, `sizeBytes` 1, `armKind` **50 lines / 57 occurrences** with the
+per-file breakdown exact, `FORBIDDEN_BY_ARM_KIND` 10, `ARM_KINDS` 2, `_percentile` 7. All reproduce.
+**The 50/57 corrects the Pass 4 review's "59 occurrences"** and states the lines-versus-occurrences
+distinction that makes it checkable — the reviewer's figure was loose, and rule 5 is precisely what
+stops that.
+
+**The handoff contract earned its keep.** My brief asserted that Rule 4's closed form retires
+`paired_bootstrap(diffs, *, B, seed)`. It does not: the architect read the note rather than my
+summary and found `paired_bootstrap` **keeps** its seed — only the paired *binary* path stops
+resampling, the continuous path being untouched — so `sampling.seed` and `PackRef.seed` stay, and
+§3.3 now states their object for the first time. *Never paraphrase an upstream artifact into a brief*
+is the rule that caught this; it was my error, and the instruction to read the file is what contained
+it.
+
+One decision the note left open and the architect took: `DecidedBy`'s `"cluster-bootstrap"` token is
+renamed **`"conservative-envelope"`** (27 lines), for the note's own stated reason with the sign
+reversed.
+
+### Two items routed back to the note — U23, in flight
+
+1. **§4 S2 rule (iv-b)** applies §11.6's p50 gate to the three sibling medians with
+   `X = statsCoveredCount`, `Y = latencyItemCount`. Asserted at v1.9 and accepted by the gate, but it
+   is a plan-side *application* of a note rule to a figure group §11.6 does not enumerate — so it is
+   `data-scientist`'s to confirm, not the gate's to keep accepting.
+2. **Note §11.2 cites `results.py:541`**; the shipped copy is `:573`, which I verified. Cosmetic, but
+   the plan's Table C pins the correct line and rule 5 makes the discrepancy visible.
+
+**The Pass 5 re-gate is held until U23 settles item 1** — deliberately. If rule (iv-b) is wrong the
+plan changes, and gating a plan that is about to move wastes a ~200k-token review. The wait is
+minutes; the gate is not.
 
