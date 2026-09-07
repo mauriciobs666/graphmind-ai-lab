@@ -1,6 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.15 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.16 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+
+2026-09-07 — v1.16: the implementation gate's `## Pass 5` (`docs/reviews/small-model-benchmarking-impl.md`, `cbfcda9`) closed on its three plan-side findings, none carried: **DC-1's residency-element rule is restated over the element's *key set*** rather than as a pair of refused names, and the retired `lms ps --json` element becomes an assertion the suite makes **by value** with both of its keys named — because impl-gate P5-3 built the counter-implementation whose extra-key rule carries a one-name tolerance and passes all 472 tests, and no test could close it while **§4 S1e Table A's second residual** counted that name across `tests/` as a whole: a residual counts the lines that *name* a token and cannot tell a live use from a mention that disowns it, so that residual is **re-scoped to `modelbench` plus `tests/conftest.py`** — its *before* value of **1** unchanged, its sole pre-edit line being the fixture element the row is about — and the assertion's literal is prescribed into `tests/test_fingerprint.py`, with **DC-12's note rewritten over both halves**, having reasoned the `modelKey` half correctly one paragraph away and never noticed that the other key's residual forbade the assertion it routed to; **§7 rule 5(b) gains the *disowning mention*** as a named trap shape, and DC-12 a standing sweep for it over the residual set, which found the **third** instance of the shape in the table the next unit implements — **Table C's package-wide percentile-definition check matches a test *function name*** (`def test_percentile_…`, verified by construction), so its stated target of 1 fails on a faithful edit that names `-ml` §11.10's acceptance tests naturally, and it is re-scoped to `modelbench`, which is what *package-wide* always meant; **Table C's `tests/test_results.py` row is re-pinned `:507` → `:543`** and every other Table C pin re-verified against the current tree, `results.py`/`stats.py`/`report.py` being byte-identical to `5878014` (impl-gate P5-6); **Appendix A's `unknown` becomes a *value* this build cannot interpret** rather than a discriminator, its three families written out (impl-gate P5-5); and §4 S1e gains a **`Landed:`** convention, so a table whose rows are now a record of completed work cannot be read as an instruction to apply it again — **Tables A and B carry the first two** (`8fc2341`).
 
 2026-09-07 — v1.15: the plan gate's `## Pass 8 (narrow)` (`docs/reviews/small-model-benchmarking.md`, `4cd22b9`) closed in full — one blocker, two majors, none carried — and note **v1.18** (`bbbf18e`) folded in, the plan re-paired to it: **§4 S1e Tables C and G stop colliding on `stats.py:159`**, the line Table C moved to an integer-`permille` primitive while Table G required a family-derived level that is fractional for every `k ≥ 2` — the note **refuses** the exemption the gate offered (§11.2.2(3): what that line would keep is not a different *unit* but the estimator §11.2 rejects, at the one call site in the package whose level is not a literal), so the level becomes an **exact rational** — `percentile(values, *, level: Fraction)` with four `LEVEL_*` constants, `levels: tuple[Fraction, Fraction]` on both bootstraps — the collision is **named on both tables' rows** the way Tables D and E name each other on `stats.py:263`, with the order **fixed** (C before G on that line, neither order being faithful), and **Table G's two residuals are re-derived over `:159`'s post-Table-C spelling**, the pre-C pair having been driven to zero by Table C's edit alone — so DC-12 would have passed on an implementation that never applied Table G, which is the trap §7 rule 5(b) forbids sitting inside the plan that wrote the rule (plan-gate P8-1); **Table C's residual gains the `stats.py` half it never had** — its edit retires `_percentile` at **six** production sites across two files while its residual counted three in one, so the half-application §11.10(3) actually obliges left both bootstraps on the rejected estimator with the number reading zero — plus `-ml` §11.10(3)'s package-wide identity check as the residual no half-application passes (**2 → 1**, a stated target that is not zero, with the surviving line named) and a row for the seventh line its enumerating command returns, DC-12's *already satisfies* partition corrected from three sites to six (P8-3); and **§3.3 (iv)'s "nothing else in the verdict path changes" is replaced by an enumeration over the eleven emission sites of `report.py:606-780`** — the `Family-wise error control` block renders only where a Holm ladder actually ran, with a one-line replacement for each of the two conditions that reach it (a family refused whole, and an all-continuous `k > 1` family taking its correction in the interval), which makes `_decision`'s *no verdict — no paired data* **unreachable** for a refused member rather than relabelled, so no third input state is added and the trigger that would reverse that is stated (P8-2).
 
@@ -2647,13 +2649,26 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
 1. **AC-2** — a record with a blanked attested field is excluded on read and named, with its
    problem, in the report. Plus the three states of §3.4.2: `residentModelsAtStart: []` is **valid**
    (`REQUIRED_PRESENT`), an empty `modelKey` is **invalid** (`REQUIRED_NONEMPTY`), and a `null` in
-   either tier is invalid. **Plus, new in v1.9 (G3-9), the residency *element* shape**: an element
-   is `{id, state}` with both non-empty strings; an element carrying `modelKey` or `sizeBytes` — the
-   retired `lms ps --json` shape, and the shape the shipped `conftest.py` fixture still declares —
-   is **invalid**. `REQUIRED_PRESENT` checks presence and never element shape, so without this
-   assertion a stale fixture validates, ships green and travels into S2, where `residency()` emits
-   `{id, state}` and the two disagree with nothing to catch them. The assertion is the fix; the
-   fixture edit is a consequence of it.
+   either tier is invalid. **Plus, new in v1.9 (G3-9), the residency *element* shape — stated over
+   the element's key set** *(v1.16, impl-gate P5-3; v1.9 stated it as a pair of refused names, and a
+   rule written as a list of names is one a tolerance list can be written against)*: an element's key
+   set is **exactly** `{id, state}`, both values non-empty strings, and **any other key set is
+   invalid**. The rule is key-set-exact, not a denylist, so a key nobody anticipated is refused by
+   construction rather than by having been named — and, on the same argument, so is either key of the
+   retired `lms ps --json` element, the shape the shipped `conftest.py` fixture declared until
+   `8fc2341`. **That retired element is the instance the suite must assert by value, both of its keys
+   named in the assertion.** Without it the rule is unpinned in exactly the direction that matters:
+   an extra-key rule carrying a one-name tolerance for one retired key passes the **entire** suite
+   (impl-gate P5-3's mutation M1, **472 passed**), so the rule is right in the code and held there by
+   nothing. **Where that assertion's literal may live is prescribed at §4 S1e Table A's second
+   residual and is binding** — the residual counts the lines that *name* the retired key and cannot
+   tell a live use from a disowning one, which is why the two are stated together rather than
+   separately. The rule holds on **both** snapshots, `residentModelsAtStart` and
+   `residentModelsAtEnd` alike (§3.4.2, §3.4.4a); Table A's row names only the second because that is
+   the *fixture* site, not because the rule is one-sided. `REQUIRED_PRESENT` checks presence and
+   never element shape, so without this assertion a stale fixture validates, ships green and travels
+   into S2, where `residency()` emits `{id, state}` and the two disagree with nothing to catch them.
+   The assertion is the fix; the fixture edit is a consequence of it.
 2. **AC-3** — two runs differing in `packVersion`, and separately in `packContentHash` only, both
    produce the mismatch banner and still render the comparison.
 3. **AC-4** — a paired-difference interval that includes zero renders the note's verdict-2 wording
@@ -2883,7 +2898,11 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    table as a command with a count** *(v1.12 wrote out the five that were prose — plan-gate P6-5's
    lesson applied to every table rather than only to the row it was raised against)*, and each was re-run against `5878014` — twelve at v1.12, Table G's at v1.13, three more at v1.14,
    and **the sixteen that are stated over the shipped tree again at v1.15**, several of them having
-   changed spelling in that revision — and shown
+   changed spelling in that revision *(v1.16: `8fc2341` landed Tables A and B, so the four files it
+   touched — `fingerprint.py`, `conftest.py`, `test_fingerprint.py`, `test_results.py` — no longer
+   match `5878014`. Every figure re-run at v1.16 is stated against **`612888c`** and named there;
+   every pin into `stats.py`, `results.py` and `report.py` still resolves at `5878014`, those three
+   being **byte-identical** across the two commits — verified by hash, not assumed)* — and shown
    both non-zero now **and** at its target after a faithful edit — the second half is the check v1.10 and
    v1.11 each shipped one residual without (plan-gate P5-2's rejected residual, then P6-2).
    **Table G's two are the exception, and the exception is stated on its own table**: their *before*
@@ -2907,18 +2926,46 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    instantiates does); and **A**, **B**,
    **D** and **F** already state one residual per retired token, which the enumeration above shows
    on its face. *(**A** was re-derived rather than inherited at v1.15, because it is the one of the
-   four whose answer is not on the enumeration's face: its residency-**element** row retires two
-   keys, `modelKey` and `sizeBytes`, and states a residual over the second alone. The first keeps
-   its meaning everywhere else in the fingerprint — `grep -rFn modelKey modelbench tests
-   --include='*.py'` → **90** lines — so a residual over it would fail on a faithful edit, which is
-   the trap rule 5(b) forbids. Rule 5(b)'s named alternative applies and the row already names it:
-   **DC-1's element-shape assertion**, which refuses an element carrying *either* retired key, so
-   the half-application that swaps one and keeps the other fails there rather than here.)*
+   four whose answer is not on the enumeration's face — and **corrected at v1.16, because that
+   derivation carried only one of its two halves** (impl-gate P5-3). Its residency-**element** row
+   retires two keys, `modelKey` and `sizeBytes`, under a residual over the second alone. **The
+   `modelKey` half, which v1.15 reasoned correctly:** that key keeps its meaning everywhere else in
+   the fingerprint — `grep -rFn modelKey modelbench tests --include='*.py'` → **94** lines at
+   `612888c`, 90 at `5878014` — so a residual over it would fail on a faithful edit, which is the
+   trap rule 5(b) forbids; rule 5(b)'s named alternative applies and the row names it, **DC-1's
+   element-shape assertion**. **The `sizeBytes` half, which v1.15 never reached, one paragraph
+   away:** the residual the row *does* state was scoped across `tests/` as a whole, and the very
+   assertion the first half routes to has to **name** that key in order to make it. So v1.15 held
+   *the residual forbids the assertion* on one key and *the assertion covers the residual's gap* on
+   the other, and the consequence was that DC-1's `sizeBytes` half was asserted nowhere and could
+   not be — which impl-gate P5-3 demonstrated by building it. **Both halves now rest on one
+   discharge:** the rule is key-set-exact (DC-1), the assertion names both retired keys by value,
+   and Table A's second residual is scoped to `modelbench` and `tests/conftest.py` so that it cannot
+   see that assertion. The half-application that swaps one key and keeps the other fails at DC-1's
+   assertion, and for the fixture element itself at the residual.)*
+
    *(Plan-gate P7-2 found it in Table G — wiring one level and
    leaving the other passed the check and printed an uncorrected bound; Table E had the identical
    shape, and its half-application would have shipped that table's own defect intact. Plan-gate
    P8-1 found the **cross**-table form: each of C's and G's residual sets was sound read alone, and
    C's edit alone drove both of G's to zero.)*
+
+   **A second standing sweep joins it at v1.16, and it runs over the residual *set* rather than over
+   the tables: no residual may be raised by a *disowning mention* — a line that names a retired
+   token in order to record its retirement** (§7 rule 5(b)). Derived from the eighteen rather than
+   listed beside them, over the scopes **as v1.15 stated them**: the **ten** scoped to `modelbench`
+   or to one file under it (B 2; C 1, 2; E 1, 2; F 1, 2, 3; G 1, 2) are unreachable from a test at
+   all and need checking only against a production comment or docstring; the **eight** whose scope
+   reaches `tests/` (A 1, 2; B 1, 3, 4; C 3; D 1, 2) are the ones an assertion can raise. **Six of
+   those eight are clear, on direct evidence rather than on inference:** A 1 and B 1, 3 and 4 each
+   read their stated target **0** at `612888c`, on the faithful, landed implementation of the two
+   tables that own them; D 1 and D 2 are named by no done-condition in this plan and by no `-ml`
+   acceptance item, so nothing obliges a test to spell either token. **The other two were traps and
+   both close here** — **A 2**, which impl-gate P5-3 found by building the counter-implementation
+   the residual made unassertable, and **C 3**, which this sweep found: its pattern matches a test
+   *function* name, and `-ml` §11.10's acceptance items land as exactly such tests with Table C.
+   After both re-scopings six residuals reach `tests/`, and the count of eighteen is unchanged —
+   neither correction adds or removes a command.
 
    **What that proves, and what it does not.** A residual that is **not** zero is a site the table
    missed — the check is sound in that direction and is the whole reason the tables carry commands.
@@ -3045,11 +3092,34 @@ for a residual to prove. **Table F is the one *adding* edit that is still tabled
 itself why: its new field is defaulted, so no construction site breaks, and the behaviour it changes
 is reached from sites that keep compiling either way.
 
+**A table that has landed says so, and its rows stop being an instruction** *(new in v1.16;
+impl-gate P5-3 and P5-6 were its occasion rather than its finding)*. This section is executed in
+sequenced units, so from the first unit onward some of these tables describe **completed work**
+while the rest describe work still owed — and a revision that re-pins a landed table's line numbers,
+as v1.16 does for Table C, must not read as a fresh instruction to apply it again. The convention is
+one line under a table's opening paragraph:
+
+> **Landed:** `<commit>` (`<date>`) — this table's site rows and counts are a **record**, not an
+> instruction. Its residuals remain DC-12's and are re-run at the **end** of the round, against the
+> tree as it then stands.
+
+Three things it deliberately does not do. It does not close DC-12 for that table: rule 5(b)'s last
+clause makes the residual property one of the **round**, so a later table's edit can move a landed
+table's number and the re-run at the end is what catches it. It flips no `Status:` token — the
+document's status is the whole plan's. And it is **not** a claim that the delivering unit's review
+closed: the commit is named, the gate is not. Where a landed table's row is later corrected, the
+correction says so and the `Landed:` commit is unchanged.
+
 **Table A — `lmsCliCommit` → `residencySource`** (§3.4.2; opened by G3-9).
 Enumerate: `grep -rFn lmsCliCommit modelbench tests --include='*.py'` → **3 lines**:
 `modelbench/fingerprint.py` 1, `tests/conftest.py` 1, `tests/test_fingerprint.py` 1. The fourth site
 carries no token and is why the table is not the grep alone: `tests/conftest.py`'s
 `residentModelsAtEnd` element, found by `grep -rFn sizeBytes …` → **1 line**.
+
+> **Landed:** `8fc2341` (2026-09-07) — this table's site rows and counts are a **record**, not an
+> instruction. Its residuals remain DC-12's and are re-run at the **end** of the round. *(The second
+> residual's **scope** changed at v1.16 and its target did not; see below. The row list, the
+> enumerating commands and their per-file counts are unchanged.)*
 
 | Site | Edit | Fails loudly if missed? |
 |---|---|---|
@@ -3060,13 +3130,40 @@ carries no token and is why the table is not the grep alone: `tests/conftest.py`
 
 **Residual after the edit** — the table's own two enumerating commands, re-run
 *(written out at v1.12 so DC-12 re-runs a command rather than re-deriving one — plan-gate P6-5's
-lesson applied to every table, not only to the one it was raised against)*:
+lesson applied to every table, not only to the one it was raised against; the **second command's
+scope** is v1.16's, impl-gate P5-3)*:
 
-- `grep -rFc lmsCliCommit modelbench tests --include='*.py'` → **3 → 0**
-- `grep -rFn sizeBytes modelbench tests --include='*.py'` → **1 → 0**
+- `grep -rFc lmsCliCommit modelbench tests --include='*.py'` → **3 → 0** *(observed **0** at
+  `612888c`, re-run)*
+- `grep -rFn sizeBytes modelbench tests/conftest.py --include='*.py'` → **1 → 0** *(the single
+  pre-edit line is `tests/conftest.py:40` at `5878014`, the sole match anywhere in either half of
+  the scope; observed **no match** at `612888c`, re-run. `--include` does not suppress a file named
+  explicitly on the command line — checked, because this command depends on it)*
+
+**Why the second residual is scoped to `modelbench` and `tests/conftest.py`, and the one thing the
+implementer may therefore not write** *(v1.16, impl-gate P5-3)*. A residual counts the lines that
+**name** a token, and grep cannot tell a live use from a mention that disowns it. DC-1 requires the
+retired `lms ps --json` element to be refused, and the only honest way to assert that is a test which
+**constructs** it — which names both retired keys in a `.py` file and puts v1.15's unscoped command
+at 1 on a faithful implementation. That is §7 rule 5(b)'s trap, and here it was load-bearing rather
+than merely annoying: with the assertion unwritable, a counter-implementation whose extra-key rule
+carries a one-name tolerance passes the whole suite (impl-gate P5-3's mutation M1, **472 passed**),
+so DC-1's second half was pinned by nothing at all. The scope leaves the residual's *before* value
+exactly where v1.10 put it — the sole pre-edit occurrence is `tests/conftest.py:40`'s fixture
+element, which is precisely the site this table's fourth row is about — so it still proves what it
+was added to prove, and it is **not** the narrowing to `modelbench/` alone that impl-gate P5-3 rules
+out, which would read **0** *before* the edit and prove nothing. What it costs is one prescription,
+and the prescription is binding: **the retired element's literal lives inline in
+`tests/test_fingerprint.py` and nowhere else** — not in `tests/conftest.py`, and not in a
+`modelbench/` comment or docstring, in neither case even as prose recording the retirement. A scope
+without that half is a guess about where a comment will land.
 
 **Table B — `armKind` → `armProfile`, and `ARM_KINDS` decoupled** (§3.4.1; plan-gate P4-2, its
 command set and residual corrected at v1.11 by plan-gate P5-2).
+
+> **Landed:** `8fc2341` (2026-09-07) — this table's site rows and counts are a **record**, not an
+> instruction. Its residuals remain DC-12's and are re-run at the **end** of the round. *(All four
+> re-run at `612888c` and observed at **0**; nothing in this table changed at v1.16.)*
 
 **Enumerate — six commands, because three of them reach sites the other three structurally cannot.**
 All re-run against `5878014`:
@@ -3156,6 +3253,15 @@ Enumerate: `grep -rFn _percentile modelbench tests --include='*.py'` → **7 lin
 `modelbench/stats.py` 3 (`:296` the definition, `:159`/`:292` the bootstrap call sites),
 `tests/test_results.py` 1 (a comment naming R-13).
 
+**Re-pinned against the current tree at v1.16, because `8fc2341` moved one of these lines**
+*(impl-gate P5-6)*. `modelbench/results.py` and `modelbench/stats.py` are **byte-identical** to
+`5878014` — verified by hash against `git show 5878014:…`, not assumed — so all six production pins
+below resolve unchanged. The seventh moved: the `tests/test_results.py` comment is at **`:543`**,
+not the `:507` v1.15 carried, `8fc2341`'s two added test blocks having shifted it by 36 lines. The
+enumerating command was re-run at `612888c` and returns the same **7** lines with the same per-file
+split, so the line drift is the whole delta and this is a re-pin rather than a re-enumeration. This
+table has **not** landed and carries no `Landed:` line; it is the next unit's.
+
 | Site | Edit |
 |---|---|
 | `modelbench/stats.py:296` | replaced by the note's public **`percentile(values, *, level: Fraction)`** *(signature corrected at v1.15 — `-ml` v1.18 §11.2.2 replaces v1.17's `permille: int`)* — Hyndman–Fan type 1, the integer rank taken over the level's numerator and denominator, sorting a copy of its input, and raising on empty input, on a **`float` level** and on a level outside `(0, 1]`. The four module constants **`LEVEL_P50`, `LEVEL_P95`, `LEVEL_CI95_LO`, `LEVEL_CI95_HI`** land beside it and are the whole literal level space. The estimator, the rank expression, the level's type and all three refusals are `-ml` §11.2/§11.2.1/§11.2.2's and are not restated here; **the four constant names are this plan's**, adopted from the note's recommendation because naming is the architect's, as `DecidedBy`'s tokens were. **Its acceptance tests are the note's and land with this table, at S1** *(v1.15)*: `-ml` §11.10 items **1** (the rank fixtures), **2a**/**2b** (the two bin-edge guards, whose scopes the note states) and **10** (empty input plus the level's three refusals); item **3** is this table's third residual. §11.10's other items are `latency_summary` and rendering behaviour and are S2's, per §5's stage table |
@@ -3163,7 +3269,7 @@ Enumerate: `grep -rFn _percentile modelbench tests --include='*.py'` → **7 lin
 | `results.py:599-600` | `_index_row` currently computes p50/p95 inline from `run.items`. They come from the run's own `LatencyBlock` instead (§4 S2), which is where `-ml` §11's two floors are applied — a percentile computed here bypasses both |
 | `stats.py:292` | `cluster_bootstrap`'s pair moves to the new signature and **stays literal**: `percentile(rates, level=LEVEL_CI95_LO)` and `percentile(rates, level=LEVEL_CI95_HI)`. Rule 6's one-level resample of one arm's own rate is on no verdict path, so no `k` reaches it — Table G's command 1 states the same non-site from the other side. It survives the v1.11 ruling: only the *paired binary* path stops resampling (§3.9 point 1, Table D) |
 | `stats.py:159` — **and Table G edits this same line** *(v1.15, plan-gate P8-1)* | moves to the new signature as `percentile(means, level=LEVEL_CI95_LO)` and `percentile(means, level=LEVEL_CI95_HI)`. **That post-edit spelling is prescribed rather than left open, because Table G's two residuals are stated over it** and a residual over a spelling the implementer may vary is a trap. **Table G then replaces those two levels with its own `levels[0]` / `levels[1]` on this line**, so the line is edited twice in one round. **The order is fixed — this table first, then Table G — and unlike Tables D and E on `stats.py:263`, neither order is faithful here:** Table G first would hand the shipped `_percentile(ordered, pct: float)` a `Fraction` level (`Fraction(1, 40)` is `0.025`, not `2.5`), which is a unit error one substitution away from a plausible number. `:159` is §3.2d's continuous `paired_bootstrap` and survives the v1.11 ruling for the same reason `:292` does |
-| `tests/test_results.py:507` | the comment recording R-13 as open and `_percentile` as having **two copies**: both halves are false after this edit, and it is rewritten to name `stats.percentile` as the one implementation. It is a row because the enumerating command returns the line, and a returned line with no row is how a site is forgotten — §7 rule 5's own diagnosis, applied to the seventh line rather than only to the six that execute |
+| `tests/test_results.py:543` *(`:507` before `8fc2341`; re-pinned at v1.16, impl-gate P5-6)* | the comment recording R-13 as open and `_percentile` as having **two copies**: both halves are false after this edit, and it is rewritten to name `stats.percentile` as the one implementation. It is a row because the enumerating command returns the line, and a returned line with no row is how a site is forgotten — §7 rule 5's own diagnosis, applied to the seventh line rather than only to the six that execute |
 
 Both shipped copies are `int(round(p/100·(X−1)))`, the estimator `-ml` §11.2 explicitly **rejects**
 — `round` is half-to-even, so the tie-break direction alternates with the sample size. Neither
@@ -3195,13 +3301,27 @@ first was written out at v1.12)*:
   name. **This half had no residual until v1.15 and its absence was the finding**: the half
   §11.10(3) actually obliged is the `results.py` one, so an implementer could do exactly that half,
   leave both bootstraps on the rejected estimator, and read a residual of zero.
-- `grep -rEn 'def [A-Za-z_]*(percentile|quantile)' modelbench tests --include='*.py'` → **2 → 1** —
+- `grep -rEn 'def [A-Za-z_]*(percentile|quantile)' modelbench --include='*.py'` → **2 → 1** —
   `-ml` §11.10(3)'s package-wide check, and **its stated target is 1, not zero** (§7 rule 5(b)): the
   surviving line is `stats.py`'s public `percentile`, the only percentile or quantile definition the
   package may hold. The two it returns today are `stats.py:296` and `results.py:573`, both the
   rejected estimator. It is the residual **no half-application passes**, because it is stated over
   the estimator rather than over one module's private helper — which is the shape of review M27's
-  defect.
+  defect. **Scoped to `modelbench` at v1.16, which is what *package-wide* always meant, because
+  v1.15's widening to `tests` made it a trap** *(the same shape as impl-gate P5-3, third instance,
+  found by DC-12's new per-residual sweep)*: the pattern matches a test **function name** — `def
+  test_percentile_rejects_a_float_level` and `def test_the_percentile_rank_fixtures` both match it,
+  verified by construction this session — and `-ml` §11.10 items 1, 2a, 2b and 10 land as **this
+  table's own** acceptance tests at S1, so the natural spelling of the very tests this table's first
+  row prescribes would have pushed the count above its target on a faithful edit. Nothing is lost by
+  the narrowing: both lines the command returns today are in `modelbench` (`results.py:573`,
+  `stats.py:296`), and `tests/` defines no percentile or quantile function at all — the same pattern
+  over `tests --include='*.py'` returns **no match**, re-run at `612888c` — so the *before* value of
+  **2** and the target of **1** are both exactly what v1.15 stated. The **implementer's half of the
+  bargain**, as at Table A: the retired `_percentile` spelling may not survive anywhere under
+  `modelbench/`, comments and docstrings included, since residuals 1 and 2 are scoped there and
+  count a mention exactly as they count a call. Under `tests/` it may — which is what the next
+  bullet is about.
 - **The seventh line gets a row and deliberately no residual, and rule 5(b) requires that be said.**
   A command over `_percentile` scoped to `tests/` would fail on a faithful edit that names the
   retired helper while recording its retirement — a comment is prose, and a residual that can fail
@@ -4563,7 +4683,9 @@ particular **§3.4, the binding rules that are `stats.py`'s contract** (their nu
 too — v1.7 stops restating it), and **§7.2's verbatim resolving-power string**, which is a test
 target.
 
-**Version pairing:** this plan **v1.15** is aligned to the note **v1.18** (`bbbf18e`). *(v1.10 paired
+**Version pairing:** this plan **v1.16** is aligned to the note **v1.18** (`bbbf18e`) — re-checked
+in this revision, the note being unmoved since v1.15 paired to it; v1.16 folds in no note delta and
+raises none. *(v1.10 paired
 itself to v1.12 and was one revision stale by the time the gate read it — plan-gate P5-5. The pairing
 is a claim about a named commit and it is re-checked in the revision that makes it.)* The two note
 revisions v1.10 folded in are separable and are recorded first: **v1.11** makes §3.4 Rule 4's
@@ -4824,6 +4946,29 @@ trustworthy the senior document, the more efficiently it does so. So:
      What makes a number a residual is that it is **stated in advance and re-run**, not that it is
      zero; a rule written over zero alone would have excluded the one check in §4 S1e that no
      half-application can pass.
+
+     **A residual counts the lines that *name* a token, and grep cannot tell a live use from a
+     mention that disowns it — so a residual is scoped away from wherever this plan's own
+     done-conditions require the retired spelling to be written** *(v1.16, impl-gate P5-3)*. Call
+     the shape the **disowning mention**: a comment recording a retirement, a docstring naming what
+     a function replaced, a test that must **construct** the retired shape in order to assert it is
+     refused, or a test *function name* carrying the retired word. Each is a line the residual
+     counts and none of them is a site the edit missed. What makes it worse than a false alarm is
+     that the residual and the assertion become **mutually exclusive**: the implementer's only exits
+     are to drop the assertion or to override the done-condition, and the behaviour the assertion
+     existed to pin is then held by nothing at all — which is exactly what impl-gate P5-3 found, and
+     proved by building the counter-implementation that survives. So a table in that position does
+     one of three things and **says which**: scope the residual to the files where the token
+     genuinely retires and **name the file the assertion lives in**, so the prescription is binding
+     rather than incidental (§4 S1e Table A's second residual, Table C's third); or state a
+     **non-zero target** and name each disowning line (the clause above); or state that no residual
+     is available and name what stands in its place (Table C's seventh line). A table that scopes
+     owes the other half of the bargain — **the retired spelling may not be written in the scoped
+     files at all, not even as prose recording the retirement** — because a scope without that is a
+     guess about where a comment will land. **Two of §4 S1e's eighteen residuals were in this
+     position**, in the document that wrote this rule, and neither was found by reading the table:
+     one by building the counter-implementation the residual made unassertable, one by the sweep
+     DC-12 now runs per residual rather than per table.
 
      **And the property is a property of the *round*, not only of a table** *(v1.15, plan-gate
      P8-1)*. Where two tables edit one line, one table's edit can retire the very literal the
@@ -5123,6 +5268,51 @@ used for Table E)*.
    than a gap. Recorded in DC-12 because a sweep whose result is not written down is a sweep the
    next revision runs again.
 
+**Implementation gate Pass 5, and what it changed here** *(v1.16)*.
+`docs/reviews/small-model-benchmarking-impl.md` `## Pass 5` (`cbfcda9`) is the **code** review of
+`8fc2341`, the first of S1e's three implementation units (Tables A and B), and it returned **needs
+changes** — 0 blockers, 4 majors, 2 minors, 1 nit. **Four of the seven are the implementer's** and
+are closed in `model-bench/` code, not here: P5-1 (`callSurface` collapses *absent*, *empty* and
+*null*), P5-2 (`to_dict`'s deterministic omission is unpinned), P5-4 (the half-swap test asserts
+non-emptiness, which the missing key alone satisfies) and P5-7 (`model-bench/AGENTS.md`'s third
+copy). **Three are this plan's and all three close in this revision, none carried**, per the
+stakeholder's standing principle; none is blocked on unbuilt work, and the gate says so of all
+seven. The unit's substance is **not** in dispute: the re-key is correct, the residuals were all
+observed at their targets, and six of the gate's eight constructed counter-implementations died.
+
+| Finding | Sev. | Closed by |
+|---|---|---|
+| **P5-3** — DC-1 names `sizeBytes` as a case that must be refused while Table A's second residual counts that name across `tests/`, so the assertion and the residual are mutually exclusive; the `sizeBytes` half is asserted nowhere and cannot be, and a counter-implementation whose extra-key loop excepts that one name passes all 472 tests | major | **DC-1 restated over the element's *key set*** — exactly `{id, state}`, any other key set invalid, a rule no tolerance list can be written against — with the retired `lms ps --json` element named as the instance the suite asserts **by value**, both keys named. **Table A's second residual re-scoped** to `modelbench` plus `tests/conftest.py`: *before* **1** (`tests/conftest.py:40` at `5878014`, the sole match in either scope) → **0**, both re-run, so it still proves the fixture edit landed and is not the `modelbench/`-only narrowing the gate rules out. The assertion's literal is **prescribed** into `tests/test_fingerprint.py`, with the scope's other half stated — the retired spelling may not appear in the scoped files even as prose. **DC-12's Table A note rewritten over both halves.** Generalised rather than patched: §7 rule 5(b) names the **disowning mention**, and DC-12 gains a standing sweep over the residual *set* |
+| **P5-5** — Appendix A's `unknown` is narrower than the code: `8fc2341` widened it to residency-element type errors and swept the module docstring, not the plan | minor | Appendix A's `FieldProblem` row widened from *a **discriminator** this build cannot interpret* to *a **value** this build cannot interpret*, with its **three** families written out — unrecognised discriminator, future `benchSchemaVersion`, type error inside a structured value — so a fourth is a decision rather than a drift |
+| **P5-6** — `8fc2341` shifted `tests/test_results.py` by 36 lines, so Table C's site row points at the wrong line and the next unit implements Table C | minor | Table C's row **re-pinned `:507` → `:543`**, and the gate's instruction taken wider than the one line it named: the enumerating command was **re-run** at `612888c` (same **7** lines, same per-file split) and `results.py`/`stats.py` confirmed **byte-identical** to `5878014` by hash, so all six production pins resolve unchanged and the drift is the whole delta |
+
+**One change beyond the three findings, disclosed rather than folded in** *(the discipline v1.14 and
+v1.15 used)*. **DC-12's new per-residual sweep found a third instance of P5-3's shape, in Table C —
+the table the next unit implements.** Its package-wide percentile-definition check was scoped
+`modelbench tests`, and the pattern matches a test **function name**: `-ml` §11.10's acceptance items
+land with that table as tests of `percentile`, so the natural spelling of the tests the table itself
+prescribes would push the count above its stated target of 1 on a faithful edit. Re-scoped to
+`modelbench`, which is what *package-wide* meant; *before* and target both unchanged, and `tests/`
+defines no percentile or quantile function today. This is disclosed rather than deferred because a
+defect found in the table the next unit executes is not available to carry.
+
+**Two things this revision deliberately did not do.** It did not adopt the gate's flagged option of
+moving the retired element into a `tests/data/*.json` fixture to slip the residual's
+`--include='*.py'` scope — the gate flagged it as reading like routing around a check and left the
+call here; scoping the residual to the files where the token genuinely retires answers the same
+problem without teaching that move. And it did not sweep §4 S1e's other six tables for the
+*half-application* shape a second time — DC-12 already re-runs that sweep per table at every
+revision, and the sweep this revision **adds** is the different one P5-3 actually exposed, over the
+residual set rather than the tables *(the gate's open question 2, answered: the one-line DC-1 reword
+was not sufficient, and what the second occurrence warranted was a mechanical check, not a
+re-reading)*.
+
+**A `Landed:` convention is introduced with this revision** and is proposed rather than assumed:
+§4 S1e is executed in units, so from `8fc2341` onward some of its tables are a record of completed
+work and the rest are instructions, and a revision that re-pins a landed table cannot rely on a
+reader knowing which is which. Tables A and B carry the first two lines; the convention and the three
+things it deliberately does not do are stated once, in §4 S1e's preamble.
+
 **What S2 additionally inherits from v1.10**:
 
 - **`ItemResult.timing: ItemTiming | None` is the timing carrier, and `latencyMs` is a property over
@@ -5222,7 +5412,7 @@ its rows here in the same pass.
 | Type | Module | Shape |
 |---|---|---|
 | `FieldSpec` | `fingerprint` | `NamedTuple(tier: Literal["nonempty","present"])` — §3.4.2 |
-| `FieldProblem` | `fingerprint` | `NamedTuple(field: str, reason: Literal["absent","empty","null","forbidden","unknown"])`. **`unknown` is v1.5's fifth value**, for a *discriminator this build cannot interpret* — an unrecognised `armKind`, or a `benchSchemaVersion` from the future (§3.4.3). Neither is absent, empty, null or forbidden, so the four-value set would have forced a mislabel; it is the field-level counterpart of `InvalidRecord.reason == "unknown_schema"`. |
+| `FieldProblem` | `fingerprint` | `NamedTuple(field: str, reason: Literal["absent","empty","null","forbidden","unknown"])`. **`unknown` is v1.5's fifth value**, for a ***value* this build cannot interpret** *(widened at v1.16 from v1.5's "a **discriminator** this build cannot interpret" — impl-gate P5-5: the shipped code widened at `8fc2341` and the module docstring was swept with it, this row was not, which is the rule 4 staleness this appendix warns about in its own preamble)*. Three families, and the row names all three so a fourth is a decision rather than a drift: an **unrecognised discriminator** — an `armKind` or a `callSurface` this build does not know (§3.4.1); a **`benchSchemaVersion` from the future** (§3.4.3); and a **type error inside a structured value** — a residency snapshot that is not a list, an element that is not a mapping, an element key whose value is not a string (§3.4.4a, S1 DC-1). None of the three is absent, empty, null or forbidden, so the four-value set would have forced a mislabel, and for the third the closed five leave `unknown` as the only honest answer rather than the natural one; it is the field-level counterpart of `InvalidRecord.reason == "unknown_schema"`. **`field` carries an element path for the third family** — `<field>[<index>].<key>` — which is `results.py:466`'s already-shipped grammar one level down and not a new convention; `report.py:534` renders `field` as opaque text and parses nothing, so the grammar constrains no consumer. |
 | `Fingerprint` | `fingerprint` | frozen dataclass, §3.4.1–§3.4.2. **Two discriminators (v1.9):** `armKind` and `callSurface`, combining into the derived `armProfile` key (`model:chat` / `model:embeddings` / `deterministic`). Both are members of no required set and are checked before any mapping is consulted; `callSurface` is `None` iff `armKind == "deterministic"`, and its value is *declared* by the pack, never observed (§3.4.4a) |
 | `ItemResult`, `RunResult`, `InvalidRecord`, `Aggregates` | `results` | as given in S1. **v1.12:** `ItemResult` gains **`measures: Mapping[str, float]`** beside `counts` — the per-item *continuous* values (`-ml` v1.15 §3.2d), defaulted `{}`, finite, domain-unconstrained, and **not** `float \| None` because absence stays `scoreable`'s job — plus `scored_value()` beside `scored_outcome()`, which now **raises `MetricKindError`** on a `measures`-resident metric rather than booleanising it. A metric name is in one map or the other, never both (`MetricKindError` at construction); a non-finite value is `NonFiniteMeasure`. **v1.10:** `ItemResult.timing` replaces the stored `latencyMs`, which becomes a **property** over it; `RunResult` gains `attestationTripWire: Literal["compared","first-observation","unavailable"] \| None`, required with no default and `None` iff the arm is `deterministic` |
 | `ItemTiming` | `results` | **v1.10** (plan-gate P4-3; `-ml` v1.12 §11.9 ask 2b): frozen dataclass `(wallClockMs, ttftMs, generationMs, promptTokens, tokensPerSecond, unexplainedMs, withheldFor)`, every field `\| None` and never `0`. `wallClockMs` is what the harness measured and **survives on a withheld item** — which is what makes `-ml` §11.6's *"the summary is withheld, not the data"* true of the record, and what §11.5.1's `censoringExact` compares. `withheldFor: Literal["load","timeout","no_response"] \| None` names the producer, so §4 S2's cause split is a count over the items rather than a parallel tally. **v1.11 (plan-gate P5-6):** three item states, still **one** counter — `timeout` and `no_response` both feed `latencyWithheldForNoResponse`, and they are distinct item states because `-ml` §11.5.1's `censoringExact` is satisfied by the first and falsified by the second. An item that returned no response still carries an `ItemTiming`, its `withheldFor` populated and every other field `None` (plan-gate P5-9); `timing is None` means the **arm** produces no timings at all. On a `model:embeddings` arm only `wallClockMs` and `withheldFor` are populated: that surface returns no `stats` (§3.4.4a). `ItemResult.latencyMs` — the **admitted** figure, the only timing any aggregate reads — is derived from this record and stored nowhere (§7 rule 4 prefers the derivation to the invariant two stored copies would need) |
