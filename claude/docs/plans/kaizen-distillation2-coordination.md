@@ -47,7 +47,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 
 | Unit | Agent (scope) | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
-| U1 | cobb (1: 2026-09-06) | `a2c2c175f4d6976cb` | in-flight | `claude/cobb/kaizen/*`, graph cleared | none (see above) → — | — |
+| U1 | cobb (1: 2026-09-06) | `a2c2c175f4d6976cb` | accepted | kept open as `claude/cobb/kaizen/plan.md` K-020 + `history.md`; node `DETACH DELETE`d | none (see above) → — | 99.1k tok, 20 tools |
 | U2 | security-expert (2: 08-26, 08-30) | — | queued | `claude/security-expert/kaizen/*`, graph cleared | none → — | — |
 | U3 | devops (3: 2 produced 09-02 + 1 legacy `MENTIONS` 08-23) | — | queued | `claude/devops/kaizen/*`, graph cleared | none → — | — |
 | U4 | qa-engineer (7: 08-28…08-31) | — | queued | `claude/qa-engineer/kaizen/*`, graph cleared | none → — | — |
