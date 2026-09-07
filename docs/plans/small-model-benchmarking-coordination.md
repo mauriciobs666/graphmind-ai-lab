@@ -70,7 +70,7 @@ Stakeholder decisions, 2026-09-02:
 | U29 — Plan v1.12: close all 5 Pass 6 findings; the continuous carrier as an S1 edit | `architect` (fresh) | `a74d8052842395e20` | **delivered** — `5b67416` (+521/−62); all 5 closed, **12/12 residuals re-run** | `docs/plans/small-model-benchmarking.md` **v1.12** | `analyst` Pass 7 → — | 283k tok / 91 tools |
 | U30 — Four items v1.12 raised: §3.2f's retired wording, the continuous-verdict producer's signature, the homogeneous-family enforcement point, §5.2's `sep_raw` figures | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `e290148`; all four changed the note | `docs/plans/small-model-benchmarking-ml.md` **v1.16** | `analyst` Pass 7 → — | 248k tok / 15 tools cumulative |
 | U32 — Plan v1.13: absorb note v1.16's four deltas. **Deliberately small** | `architect` (fresh) | `ac827e78b5339f829` | **delivered** — `fbe5741` (+300/−91); stayed small, 5 extras all reported | `docs/plans/small-model-benchmarking.md` **v1.13** | `analyst` Pass 7 → — | 220k tok / 99 tools |
-| U33 — Does Rule 8 take a `support` parameter? (Table E's clamp has no route to its only caller) | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.17 if changed | `analyst` Pass 7 → — | — |
+| U33 — Does Rule 8 take a `support` parameter? (Table E's clamp has no route to its only caller) | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `1fbdb6f`; recommendation accepted with a **sharper shape**, and the premise replaced | `docs/plans/small-model-benchmarking-ml.md` **v1.17** | `analyst` Pass 7 → — | 267k tok / 5 tools cumulative |
 | U31 — Re-gate plan v1.13 + note v1.16 (Pass 7) | `analyst` (fresh) | `aaa942cd75fabc2ca` | in-flight | `docs/reviews/small-model-benchmarking.md` `## Pass 7` | — (is the gate) | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
@@ -1797,4 +1797,46 @@ single finding, decides whether a Pass 8 is worth its cost.
 The brief names both failure modes explicitly: do not soften the verdict to unblock S2, **and do not
 manufacture findings to justify the pass** — after six passes the pressure to produce a list is real,
 and a gate that finds something because it is expected to is worse than no gate.
+
+### U33 delivered — 2026-09-07, note v1.17 (`1fbdb6f`)
+
+**The conclusion is endorsed and its premise replaced** — the most useful shape a ruling can take, and
+not one the question invited.
+
+The architect justified `clamp=None` on a **pack census**: the embedder is the only continuous-verdict
+pack and its `designEffect` is 1.00 by construction. True today. But **nothing refuses a future pack**
+declaring `design_effect > 1.0` on a bounded continuous verdict metric, and a census is exactly the
+premise that goes stale **without anyone editing the sentence resting on it** — the class this
+coordination has now spent four passes on.
+
+The replacement is one line and strictly stronger: **`_widen` scales half-widths by
+`sqrt(design_effect)`, so at 1.00 it returns its input unchanged and no clamp can bind — for *every*
+metric, not just `mrr`**, an unwidened bound being a bootstrap percentile of per-unit differences that
+already lies inside the difference's own support. Same conclusion, no census, nothing to go stale.
+
+**Why `support` does not breach v1.16's "negative parameters are load-bearing" grain.** The four
+refusals are **two kinds**, and `support` is a **third**: a category error (`ResolvingPower`,
+`alpha_step`, McNemar *p*); a quantity **derivable** from what the function already holds (the
+percentile levels); and a quantity that is needed and **irreducible** — `support` cannot be recovered
+from `diffs`, since a sample of MRR differences in `[−0.3, 0.3]` is indistinguishable from
+z-differences in the same range, and inferring a support from an observed range **is** the
+silent-wrong default the clamp rule exists to refuse. The note grounds this in `design_effect`'s own
+principle: *`_widen` can no more discover a metric's support than a resample can discover clustering
+the declaration did not state.*
+
+**And the shape is sharper than the plan proposed:** `continuous_verdict()` takes `support` and
+**does not take `clamp`** — the difference-support derivation happens *inside*, because that
+conversion is where a sign or an order gets transposed. So the loop **forwards
+`ContinuousMetric.support` and derives nothing**, which is *less* work than v1.13 specifies. Plus a
+fifth refusal: a `support` with `lo >= hi` **raises**, a degenerate support otherwise deriving
+`(0, 0)` and pinning every bound to zero **silently, in the direction that prints**.
+
+**Table E's required-with-no-default `clamp` still does real work** — `sep_z` is reported and not
+verdicted, so its comparison calls the engine directly. Two callers, two surfaces; now written into
+Rule 8 so nobody "simplifies" it away.
+
+**Relayed to the in-flight Pass 7 gate**, which had been asked to judge the *old* premise — the fifth
+mid-run relay, and the second to carry a correction rather than an addition. Two small plan-side
+deltas follow (swap the justifying sentence; forward-don't-derive), to be absorbed after the gate
+rather than racing it.
 
