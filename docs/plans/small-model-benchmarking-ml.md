@@ -1,6 +1,18 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.12
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.13
+
+2026-09-06 (v1.13, `data-scientist`) — plan v1.10 (`3e5dc50`) routed two items back. **§4 S2's rule
+(iv-b) is confirmed — and it corrects this note rather than merely applying it.** §11.4 sent `ttftMs`
+and prefill to §11.6's p50 gate while leaving `tokensPerSecond` with a denominator only; the three
+share **one** coverage number, so they print or refuse together by construction, and exempting the
+diagnostic would print a median over precisely the subset the gate had just declared too short to
+describe the run. The split is **withdrawn** and all three take the gate. The transfer itself is
+sound for the reason v1.12 changed: §11.5's level bound is now distribution-free, so it needs nothing
+about *why* an item lacks `stats` — at v1.11 it would have needed the missingness direction, which
+for a `stats`-less item is unknown. Confirmed **conditionally on co-presence**, with the assertion
+that makes the condition checkable. And §11.2's citation of the second shipped `_percentile` is
+corrected to **`results.py:573`**, both copies pinned at `5878014`.
 
 2026-09-06 (v1.12, `data-scientist`) — the plan gate's Pass 4 open question 2 and its two routed
 minors, ruled. **§11.5's exactness argument does not extend to §11.5.1's detector**: it withholds on
@@ -2148,8 +2160,8 @@ second quantile definition in a document whose Rule 4 already fixed one — and 
 number depend on floating-point interpolation between two observations, reopening the
 reproducibility question R-13 exists to close.
 
-**Rejected: the shipped `int(round(p/100·(X−1)))`** (both copies, `stats.py:296` and
-`results.py:541`). Beyond being a third definition, `round` is half-to-even, so its tie-break
+**Rejected: the shipped `int(round(p/100·(X−1)))`** (both copies at `5878014`, `stats.py:296` and
+`results.py:573`). Beyond being a third definition, `round` is half-to-even, so its tie-break
 direction **alternates with X**: measured this session, at X = 4 the p50 index is 2 (the *upper* of
 the two middle values) and at X = 6 it is 2 again (the *lower* of the middle pair). An estimator
 whose tie-break flips with the sample size is not a definition anyone can reason about.
@@ -2271,10 +2283,23 @@ default — withhold everything until a field is shown clean — was correct *wh
 open*, and keeping it once the question closed would have been the same defect one document up:
 discarding good measurements to honour a caveat that no longer describes reality. **The wall clock
 is the contaminated field and `stats` is the clean one**, and their difference is a detector
-(§11.5.1). Aggregates over `ttftMs` and prefill are **medians**, so they take §11.6's **p50** gate
-against **their own** coverage, which will normally be `Y of Y` while the wall-clock block is short;
-`tokensPerSecond` is FR-11 diagnostic-only and still prints its denominator, because a diagnostic
-over an unstated subset is the same defect one severity down.
+(§11.5.1). Aggregates over all three are **medians**, so **all three** take §11.6's **p50**
+gate against **their own** coverage, which will normally be `Y of Y` while the wall-clock block is
+short. *(v1.13: this note exempted `tokensPerSecond` as FR-11 diagnostic-only, owing its denominator
+rather than a refusal. Withdrawn — the three share **one** coverage number, so they print or refuse
+together by construction, and a `tokensPerSecond` median printed over exactly the subset the gate has
+just judged too short to describe the run is the unstated-subset defect with the subset stated and
+then overruled. Plan v1.10's §4 S2 rule (iv-b) already gates all three, and it is right.)*
+
+**One coverage number for three figures is correct only while the three are co-present, and that is
+an invariant rather than an assumption.** `ttftMs` and `tokensPerSecond` need a `stats` object; the
+prefill figure additionally needs a usable `usage.prompt_tokens`. An item carrying `stats` but no
+usable token count puts prefill's true `X` below `statsCoveredCount`, so both the gate and §11.7
+slot 2's single denominator line would overstate coverage for one figure of the three — silently,
+and in the direction that prints. The closure is one assertion beside the recomputation plan §4 S2
+already mandates: **the three medians are computed over the same item count, and that count is
+`statsCoveredCount`.** Where it ever fails, the figure that lost items needs its own count, not a
+share of someone else's.
 
 ### 11.5 The missingness is informative, and how far its direction is known
 
@@ -2717,14 +2742,20 @@ any tolerance would hide the defect it was meant to catch.
    because a floor tested on one side is a floor with an untested inequality.
 5. **Level-floor boundaries, at `Y = 38`.** `X = 36` → both figures present; `X = 35` → `p50`
    present and the tail `None`; `X = 34` → both `None`. Exactly §11.5's table, and it is the test
-   that fails if the 5-point tolerance is silently moved.
+   that fails if the 5-point tolerance is silently moved. **The same table's p50 column, read with
+   `X = statsCoveredCount`, gates the three sibling medians** (§4 S2 (iv-b)) — and they are asserted
+   to refuse **together**, never one of them, which is the property their shared coverage number
+   claims *(v1.13)*.
 6. **The clean-run invariant.** For every `X` in `1…200`, a run with `X == Y` has both figures
    present. §11.6(1) is a theorem; a fire means the gate is wrong, not the data.
 7. **The two denominators (§11.4).** An item withheld by the guard contributes to **no**
    `latencyMs` aggregate and **does** contribute to `ttftMs`, prefill and `tokensPerSecond`; the
    rendered block prints **both** denominator lines and they differ (`n = 36 of 38` against
    `n = 38 of 38`). A test asserting one denominator for all four fields pins v1.9's withdrawn
-   ruling and must fail.
+   ruling and must fail. **And the three siblings are co-present** *(v1.13, §11.4)*: the count of
+   items contributing to each of the three medians is one number and it is `statsCoveredCount`; an
+   item carrying `stats` but no usable `usage.prompt_tokens` fails this test, and must, because the
+   shared denominator is exactly what it breaks.
 7a. **The in-call reload detector (§11.5.1).** An item whose
    `latencyMs − (ttftMs + generation_time)` exceeds 1 000 ms has its `latencyMs` withheld and is
    counted under model load; one at 7.6 ms — the largest warm gap measured — does not. Both sides of
