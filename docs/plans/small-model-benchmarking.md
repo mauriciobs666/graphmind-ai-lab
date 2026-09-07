@@ -1,6 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.11 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.12 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+
+2026-09-07 — v1.12: the plan gate's `## Pass 6` (`docs/reviews/small-model-benchmarking.md`, `afca8e0`) closed in full — one blocker, two majors, two minors, none carried — and note **v1.15** (`0ad0e7a`) folded in, the plan re-paired to it: the embedder pack's only verdict metric gains a **representable carrier**, because nothing on the record could hold a per-item continuous value and the shipped comparison path failed silently in two directions — `ItemResult.measures: Mapping[str, float]` beside `counts`, `scored_value` beside `scored_outcome`, and `scored_outcome` **raising** on a metric that lives in `measures` rather than booleanising it — landing as **§4 S1e Table F**, an **S1** edit on S1e's own *free only now* argument, with `report.py`'s continuous verdict path, `ContinuousMetric.support`, the new `DistributionSummary` carrier for `sep_z` and DC-10's third arithmetic beside it (plan-gate P6-1; note v1.15 §3.2d, §3.2e's two new strings, §3.3's homogeneous-family rule); §4 S1e **Table B's fourth residual is narrowed** to the mapping key set it actually means, because the wider form fails on the `fingerprint.py:137` row's own literal branch — the trap §7 rule 5(b) forbids, written into the table that closed the finding about it (P6-2); **Table E is re-enumerated** over a second command, its four name-matched non-sites named as non-sites, its three real call sites given the clamp each passes, and Table D's row scoped to *not touched **by this table*** (P6-3); §4 S1e's preamble scopes its tables to **retiring and re-keying** edits and names DC-11's `latencyMs` change as the type-system-enforced remainder (P6-4); Table B's second residual becomes the command it already was (P6-5); and, **reversing v1.11**, §4 S3 done-condition 2 no longer gates on Table E — `separationZ` is reported rather than verdicted, so the clamp is due with the `sep_z` comparison and not with S3 (note v1.15 §3.2d) — while S3's meaningful gate becomes **Table F**, without which S3 done-condition 1 cannot store a result at all.
 
 2026-09-07 — v1.11: the plan gate's `## Pass 5` (`docs/reviews/small-model-benchmarking.md`, `b9964d1`) closed in full — all ten findings, none carried — and note **v1.14** (`ca69cb1`) folded in, the plan re-paired to it: §3.4.4a step 3a and §3.6 **scope the two pre-load refusals separately**, the `callSurface`-versus-catalog-`type` cross-check on every `model` run and the tool-calling gate on a `tool-caller` pack alone, because v1.10's unscoped sentence refused every `model:embeddings` arm and made S3 unrunnable (plan-gate P5-1); §7 **rule 5's property is restated honestly** — a *no-forgetting guarantee over token-carrying sites*, not completeness — with a second named command required for every token-free site and a **second-form residual** wherever the token survives, which gives §4 S1e Table B three more commands, eleven site rows and four residuals, and reduces DC-12 to the direction a residual actually proves (P5-2); §3.4.2's capture-ordering paragraph is rewritten to **cite** §3.4.4a rather than contradict it (P5-4); §4 S2 gains rule **(iv-c)**, co-presence as a runtime **disposition that raises nothing**, with rule (iv)'s identity becoming an inequality (P5-5, note §11.4) and rule (i) scoped to the wall-clock figures (P5-7); `ItemTiming.withheldFor` gains a third value, **`"timeout"`**, so `-ml` §11.5.1's `censoringExact` is evaluable, while the counter stays one (P5-6, note §11.5.1); §3.6's unit boundary states that a derived field is `None`-never-`0` and **`ChatResult` never raises on a missing `stats`** (P5-8) and that a no-response item carries an `ItemTiming` rather than no timing at all (P5-9); §3.4.2 answers the `sampling.seed`-in-the-fingerprint gap **transitively through `packContentHash`**, before S3 rather than after (P5-10); §4 S1e Table D dispositions `paired_cluster_bootstrap` as **kept** — §3.2d's entry point for every continuous verdict, `paired_bootstrap` its engine (P5-3, note §3.4 Rule 4) — and new **Table E** parameterises `_widen`'s `[-1, 1]` clamp, a live defect in shipped code that is wrong for `sep_z`, gated on §4 S3's done-condition 2.
 
@@ -443,8 +445,8 @@ Key decisions:
   Everything not in `verdictMetrics` prints with `exploratory — no significance claim`.
   `validate_pack` fails when `verdictMetrics` is absent or empty, when the `headlineMetric` **key**
   is absent (omission is not the same statement as `null`, and only the latter is a decision), or
-  when a non-null `headlineMetric` is not a member of `verdictMetrics`. Three consequences the
-  implementer must build rather than infer:
+  when a non-null `headlineMetric` is not a member of `verdictMetrics`. **Four** consequences the
+  implementer must build rather than infer *(the fourth is v1.12's)*:
 
   **(i)** When `headlineMetric` is `null`, `report.py` has **no code path that synthesises a
   headline** from `verdictMetrics` — the same structural refusal FR-20 gets in §3.5 — and the report
@@ -466,6 +468,28 @@ Key decisions:
 
   **(iii)** Pre-registration in a content-hashed manifest is what stops a headline being chosen
   after the results exist.
+
+  **(iv) A `verdictMetrics` family is homogeneous in kind, and a mixed one is refused** *(v1.12,
+  `-ml` v1.15 §3.3)*. Holm orders a family **by p-value** and a continuous verdict has none — for a
+  continuous metric the interval *is* the test (`-ml` §3.2d) — so a list mixing a binary member with
+  a continuous one has no ordering, hence no ladder, and the correction silently fails to happen for
+  one of them. An **all-continuous** family with `k > 1` takes its correction **in the interval**
+  instead of in a ladder; the percentiles it is taken at are the note's and are not restated here.
+  Every pack declared in §3.8 is homogeneous, so this binds nothing today and forbids the silent
+  case later.
+
+  **Where the refusal lives is this plan's, and it is not `validate_pack`** *(§7 rule 2 — the note
+  owns the rule, the harness surface owns its enforcement point)*. A metric's kind is declared by
+  **which per-item map it lives in** (`counts` or `measures`, §4 S1) and by the type its arm's
+  aggregate carries for it — neither of which a manifest contains. `validate_pack` sees a manifest
+  and no records, so it structurally cannot decide a family's kinds, and giving the manifest a
+  `kind` field would be exactly the *infer the instrument from a pack field* the note refuses. So
+  the family's kind is resolved in `compare_report`'s pass 1, from each member's aggregate type,
+  and a **mixed family is excluded and named in the `INVALID RESULTS EXCLUDED` block** rather than
+  raising — DC-10's mechanism, for DC-10's reason. *Raised to `data-scientist` (§7 rule 3): §3.3
+  says "`validate` refuses the mixed list", and if that word means the `validate` **CLI command**
+  the note and this plan agree; if it means `validate_pack` they do not, and the note's sentence is
+  the one that moves.*
 
   *(Naming, settled in v1.3 and aligned with the note. The retired field is the singular
   `primaryMetric`, and it is retired rather than redefined: re-pointing an
@@ -1613,9 +1637,22 @@ checks today.
   golden item invalidates the pack's.
 - **Reported (FR-12/FR-14):** recall@k, MRR, **P@1** plus precision@k, and score separation as both
   `sep_raw` (within-model, actionable) and the corpus-sd-normalized `sep_z` (the cross-model
-  comparable one), aggregated as median + p10 + fraction > 0 (`-ml` §5.2) — **compared through
-  `paired_cluster_bootstrap` with `clamp=None`, because a difference of z-scores is not bounded by 1
-  and the shipped widening clamps it** (§4 S1e Tables D and E, v1.11); plus output dimension,
+  comparable one), aggregated as median + p10 + fraction > 0 (`-ml` §5.2). **That aggregation is a
+  distribution summary and not a mean**, so `sep_z` and `sep_raw` are carried by
+  `DistributionSummary` and not by `ContinuousMetric`, whose single `mean` can hold none of the
+  three (§4 S1, §4 S1e Table F, v1.12). Both `sep_raw` and `sep_z` take that carrier, being the same
+  per-query quantity on two scales; **which** figures print for each is `-ml` §5.2's, which pins the
+  median and p10 for `sep_z` and is the surface to move if `sep_raw`'s published summary is meant to
+  differ (§7 rule 2 — the carrier is the plan's, the publication is the note's). The **fraction of queries with `sep_raw > 0` is not a third
+  stored figure** — `-ml` §5.2's own identity makes it exactly P@1, so it renders as P@1 with that
+  identity footnoted, and a second field would be a second home for one number and would let the two
+  drift. **`sep_z` is reported, not verdicted** (`verdictMetrics = ["mrr"]`), and §5.2's cross-model
+  comparison of it — a paired bootstrap on per-query `sep_z` differences, wired through
+  `paired_cluster_bootstrap` with `clamp=None` because a difference of z-scores is not bounded by 1
+  and the shipped widening clamps it — is **exploratory and is no stage's done-condition**; §4 S1e
+  Table E is that comparison's precondition and lands with the rest of S1e *(v1.12, `-ml` v1.15
+  §3.2d: v1.11 read the comparison as part of S3 and gated §4 S3 done-condition 2 on the clamp,
+  which the note reverses)*; plus output dimension,
   RAM cost, embedding throughput (texts/s and tokens/s), max input length and observed truncation
   behavior, and the prefix convention used.
 - **`verdictMetrics = ["mrr"]`, `headlineMetric = "mrr"`**, and the report carries two honesty lines
@@ -2132,6 +2169,17 @@ class ItemTiming:                   # v1.10 (§3.6's unit boundary; plan-gate P4
     # response still carries an ItemTiming — withheldFor populated, every other field None
     # (plan-gate P5-9); `timing is None` means the ARM produces no timings at all (deterministic).
 
+class MetricKindError(ValueError): ...   # v1.12 (plan-gate P6-1, -ml v1.15 §3.2d) — a metric name
+                                        # present in BOTH `counts` and `measures`, or
+                                        # `scored_outcome`/`scored_value` called for the wrong map.
+                                        # The map a name lives in IS the declaration of which
+                                        # instrument decides it, so an ambiguity is refused, never
+                                        # resolved by code order.
+class NonFiniteMeasure(ValueError): ...  # v1.12 — a `measures` value that is not finite, refused at
+                                        # construction: one NaN propagates through the mean and both
+                                        # percentiles and arrives as a rendered interval rather than
+                                        # as an error.
+
 @dataclass(frozen=True)
 class ItemResult:
     itemId: str                     # the pack's stable id — the pairing key's first component
@@ -2143,7 +2191,35 @@ class ItemResult:
     counts: Mapping[str, int]       # per-count numerator contributions, plus a pooled metric's
                                     # denominator contribution under "<metric>#denominator" (DC-10)
     timing: ItemTiming | None       # None iff this arm produces no timings at all (deterministic)
+    measures: Mapping[str, float]   # v1.12 (plan-gate P6-1; -ml v1.15 §3.2d) — the per-item
+                                    # CONTINUOUS values: mrr, separationRaw, separationZ. A SECOND
+                                    # map, never a widened `counts`: widening makes the
+                                    # booleanisation type-legal without making it wrong, and puts a
+                                    # count that §4.2's denominators count into the same key space
+                                    # as a measurement they must not. Finite floats; the carrier
+                                    # constrains NO domain (mrr is [0,1], sep_z is unbounded — a
+                                    # domain here would be Table E's clamp mistake one layer up).
+                                    # NOT `float | None`: absence stays `scoreable`'s job, so an MRR
+                                    # of 0.0 is a MEASUREMENT and stays distinguishable from an
+                                    # unjudged query. Defaults to `{}`, and that is not a
+                                    # no-defaults violation (§4 S1's `designEffect` rule): the value
+                                    # a forgetful scorer omits is refused loudly one call later by
+                                    # `scored_value`, not silently accepted as a number.
     detail: Mapping[str, Any]       # scorer-specific, never read by report.py
+
+    # v1.12 — the invariant that makes instrument selection TOTAL, checked in `__post_init__`:
+    # a metric name is in `counts` OR in `measures`, never both (MetricKindError), and every
+    # `measures` value is finite (NonFiniteMeasure). Nothing infers a kind from a name.
+    def scored_value(self, metric: str) -> float | None: ...
+                                    # `scored_outcome`'s sibling over `measures`, the SAME three
+                                    # states: absent from `scoreable` -> None; scoreable False ->
+                                    # None and -ml §4.3's asymmetry; scoreable True with no entry ->
+                                    # IncompleteItemRecord, never 0.0.
+    # And `scored_outcome` RAISES MetricKindError on a metric that lives in `measures`, instead of
+    # returning `counts[metric] > 0`. That one line is what turns plan-gate P6-1's first silent
+    # outcome — a booleanised MRR printed as a McNemar `+X pp` verdict, a different metric under the
+    # same name — into a loud failure. `to_dict`/`from_dict` carry `measures`; `from_dict` reads a
+    # missing key as `{}`, a reader's compatibility rule under §3.4.3 and not a constructor default.
 
     @property
     def latencyMs(self) -> float | None:
@@ -2157,7 +2233,32 @@ class ItemResult:
         t = self.timing
         return None if t is None or t.withheldFor is not None else t.wallClockMs
 
+@dataclass(frozen=True) class ContinuousMetric:              # v1.12 gains `support`
+    name: str; mean: float; n: int
+    support: tuple[float, float] | None                     # the METRIC's support, REQUIRED, no
+                                    # default — same discipline as `BinaryMetric.unit`. `report.py`
+                                    # is generic over packs and cannot know that mrr is [0,1] and
+                                    # sep_z unbounded, so the scorer that produced the figure states
+                                    # it and the renderer derives the paired bootstrap's clamp:
+                                    # `(lo-hi, hi-lo)` from a support, `None` from `None`. This is
+                                    # what makes §4 S1e Table E's required-with-no-default `clamp`
+                                    # reachable from a generic renderer WITHOUT the manifest field
+                                    # Table E rejects.
+@dataclass(frozen=True) class DistributionSummary:          # v1.12 (plan-gate P6-1, -ml §5.2)
+    name: str; median: float; p10: float; n: int; unit: str
+    support: tuple[float, float] | None                     # as above
+    # `-ml` §5.2 publishes a MEDIAN and a p10 for sep_z — neither is a mean, so `ContinuousMetric`
+    # cannot carry them and a bare `float | None` carries neither. Which figures are printed for
+    # each of sep_raw/sep_z is §5.2's; this is only their carrier.
+MetricValue = BinaryMetric | ContinuousMetric | DistributionSummary
+
 @dataclass(frozen=True) class RetrievalAggregates: ...      # recall@k, mrr, p@1, sep_raw, sep_z, …
+                                    # v1.12: `separationRaw`/`separationZ` become
+                                    # `DistributionSummary | None` — today they are bare floats — and
+                                    # `named_metrics()` RETURNS them, which it does not today, so
+                                    # `sep_z` reaches a table at all (plan-gate P6-1). The fraction
+                                    # of queries with sep_raw > 0 is NOT a field: §5.2's identity
+                                    # makes it exactly P@1 (§3.8.1).
 @dataclass(frozen=True) class ToolCallAggregates: ...       # per-turn table, hazard, funnel, restraint, …
 @dataclass(frozen=True) class ClassificationAggregates: ... # per-class rates + parse failures
 @dataclass(frozen=True) class ExtractionAggregates: ...
@@ -2215,7 +2316,10 @@ def verdict(..., alpha_step: float | None = None, holm_tested: bool = True) -> V
                                              # remaining inputs and all semantics: -ml §3.4
                                              # v1.10: `bootstrap_seed` is REMOVED, with the raise
                                              # that demanded one on the clustered path.
-DecidedBy = Literal["mcnemar-exact", "conservative-envelope"]   # v1.10 — renamed, §4 S1e Table D
+DecidedBy = Literal["mcnemar-exact", "conservative-envelope", "paired-bootstrap"]
+                                             # v1.10 renamed the second, §4 S1e Table D; v1.12 adds
+                                             # the third for -ml §3.2d's continuous path, because a
+                                             # token must name the instrument that actually ran
 # No α is named anywhere in this block, and none of these parameters gets a literal default here:
 # how many αs there are, which figure each governs, and where their single home is are -ml §3.3
 # and §3.4 Rules 2-4's. `alpha_step`'s `None` is a shape (it is knowable only after ranking),
@@ -2291,6 +2395,51 @@ an implementer must not re-derive:
   (impl-gate P2-3), so the length is a postcondition of `holm_steps` and the zip is
   `strict=True`. `k` is `len(pack.metrics.verdictMetrics)` and nothing else — §3.3's pre-registration
   is what makes the correction honest rather than chosen after the fact.
+
+**The family loop is binary end-to-end, and the first real pack's only verdict metric is not**
+*(new in v1.12, plan-gate P6-1(b))*. The shipped loop runs `_paired_rows` → `PairedOutcomes` →
+`mcnemar_exact` → Holm → `verdict` for **every** `verdictMetrics` member, and its verdict strings
+are percentage points throughout — so `mrr` either booleanises into *did this query retrieve
+anything* or renders *"No verdict: no paired data"*. Table F gives the per-item value a home; this
+is what reads it. Six things, and only the first two are new code paths:
+
+- **Pass 1 resolves each member's kind, and that resolution is a type fact.** A member whose arm
+  aggregate is a `BinaryMetric` is binary; a `ContinuousMetric` or `DistributionSummary` is
+  continuous. The resolution is **cross-checked against the per-item map** — a binary member's
+  values live in `counts`, a continuous member's in `measures` — and a disagreement between the two
+  is DC-10's mismatch exactly: **exclude the arm and name it**, never guess. A family mixing kinds
+  is refused here too (§3.3 (iv)).
+- **The binary branch is unchanged**, including the two-pass Holm structure above.
+- **The continuous branch takes one difference per *analysis unit*, never per observation.** For
+  every unit present in **both** arms, `value_A(u) − value_B(u)`, where a unit's value is its item's
+  `scored_value(metric)` when the unit is one item — the embedder's case, unit ≡ query ≡ item — and
+  the **mean over its items** when it is not. A unit scoreable in exactly one arm is **excluded from
+  `diffs` and counted into the `-ml` §4.3 asymmetry tally the pairing tally already prints**; a
+  silent drop is §4.3's laundering arriving on the continuous path. The interval is
+  `paired_cluster_bootstrap(diffs, design_effect=…, B=…, seed=pack.seed, clamp=…)` — the entry point,
+  never `paired_bootstrap` (§4 S1e Table D) — with `clamp` **derived from the aggregate's declared
+  `support`**, `(lo−hi, hi−lo)` or `None`. `pack.seed` is now genuinely consumed, which is what §4
+  S1e Table D kept it alive for.
+- **No p-value, so no rung.** `holm_steps` is not called on a continuous family; the family-wise
+  correction is taken in the interval (§3.3 (iv)), and `resolving_power()` is not called either —
+  an observable floor and an MDD are properties of the paired binary table, so a continuous member's
+  resolving sentence is the interval's own width (`-ml` §3.2e).
+- **The strings are `-ml` §3.2e's 4 and 5, taken from the note and quoted nowhere here** (§7 rule 2;
+  v1.7's discipline about corrected copies). Their four mandatory properties — the metric's own unit
+  and never `pp`, the absence of a significance test printed rather than implied, a descriptive
+  half-width and never a power claim, and mandatory `B`/seed provenance — are the note's decisions,
+  and the last of them is why §4 S1e Table D's retired seed parenthetical is not replaced by another
+  one in `report.py`: the provenance is **inside** the string.
+- **`DecidedBy` gains a third member, `"paired-bootstrap"`** *(the plan's decision, §7 rule 2 —
+  the note left the v1.10 rename here for the same reason)*. A machine token must name the
+  instrument that ran, and on this path neither `mcnemar-exact` nor `conservative-envelope` did. It
+  is free while no stored record carries a verdict.
+
+**What this plan does not decide, and has raised** *(§7 rule 3)*. `stats.verdict()` is shaped around
+`PairedOutcomes`, a McNemar *p* and a Holm rung, and a continuous verdict has none of the three, so
+it needs a **second producer beside it**. What that producer consumes is fixed above; its **name,
+parameter list and semantics are `-ml` §3.4's**, exactly as `verdict()`'s are, and §7 records the
+note as owing §3.4 that rule — the plan calls it and renders what it returns.
 
 The **semantics** these types carry — how many αs the module distinguishes, which one each rung,
 bound and sentence is computed at, how the floor interacts with a rung, and what may veto a verdict
@@ -2478,6 +2627,18 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    needs a scorer that does not exist yet, and both are testable at S1 against synthetic fixtures —
    the argument DC-5(c) already makes about a guard no shipped pack currently reaches.
 
+   **A third arithmetic, for a continuous member** *(v1.12, plan-gate P6-1)*. The shipped selector
+   at `report.py:211` reads `if not isinstance(metric, BinaryMetric) …: continue`, so a
+   `ContinuousMetric` or `DistributionSummary` is cross-checked by **nothing** today. It widens: for
+   a continuous member, `metric.n` must equal the number of that arm's items for which
+   `scored_value(metric) is not None`. **The same check is where a kind disagreement surfaces** — a
+   member whose aggregate is continuous while its per-item values live in `counts`, or the reverse,
+   is a mismatch of exactly DC-10's class, because the arm's aggregate path and its per-item path
+   disagree about what was measured. Excluded and named, never reconciled. `scored_value` raises
+   `IncompleteItemRecord` on the sibling malformation for the same reason `scored_outcome` does, and
+   a `MetricKindError` from either is caught and reported on the same route, so neither escapes as a
+   traceback (G3-7's rule, applied to the new call).
+
    **The counting call has a raise path, and the check must own it** *(v1.9, G3-7)*.
    `ItemResult.scored_outcome` does not return `None` for the sibling malformation: a metric
    declared `scoreable: True` with no entry in `counts` **raises `IncompleteItemRecord`**, and
@@ -2536,12 +2697,19 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    captures the unit-id argument, rather than inferring it from the output.
 
 12. **Every residual §4 S1e states is re-run and is zero** *(v1.10, §7 rule 5; reworded at v1.11 to
-   assert what a residual actually proves — plan-gate P5-2)*. Each of §4 S1e's **five** tables
+   assert what a residual actually proves — plan-gate P5-2; the Table B and Table F rows are
+   v1.12's — plan-gate P6-2, P6-5, P6-1)*. Each of §4 S1e's **six** tables
    re-runs its enumerating commands and asserts its stated residual: zero for
-   `lmsCliCommit` and `sizeBytes` (A); zero for `FORBIDDEN_BY_ARM_KIND`, `ARM_KINDS` no longer
-   derived from the forbidden mapping, zero for `REQUIRED_BY_SCHEMA[1]["model"]` and zero for
-   `{"model", "deterministic"}` (B); zero for a private `_percentile` in `results.py` (C); zero for
-   `bootstrap_seed` and for the `cluster-bootstrap` token (D); zero for `max(-1.0, point` (E).
+   `lmsCliCommit` and `sizeBytes` (A); zero for `FORBIDDEN_BY_ARM_KIND`, zero for
+   `frozenset(FORBIDDEN`, zero for `REQUIRED_BY_SCHEMA[1]["model"]` and zero for the
+   `REQUIRED_BY_SCHEMA[1]` **key-set assertion** the third profile makes unwritable (B); zero for
+   `_percentile` in `modelbench/results.py` (C); zero for
+   `bootstrap_seed` and for the `cluster-bootstrap` token (D); zero for `max(-1.0, point` (E); zero
+   for each of the two bare-`float` separation annotations (F). **All twelve are stated on their own
+   table as a command with a count** *(v1.12 wrote out the five that were prose — plan-gate P6-5's
+   lesson applied to every table rather than only to the row it was raised against)*, and each was re-run against `5878014` at v1.12 and shown
+   both non-zero now **and** zero after a faithful edit — the second half is the check v1.10 and
+   v1.11 each shipped one residual without (plan-gate P5-2's rejected residual, then P6-2).
 
    **What that proves, and what it does not.** A residual that is **not** zero is a site the table
    missed — the check is sound in that direction and is the whole reason the tables carry commands.
@@ -2555,6 +2723,24 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    sufficient alone. *(v1.10 called the tables "complete by construction" and this condition
    inherited the claim; the claim was false in both of §7 rule 5's two ways, and a mechanism adopted
    to stop a third incomplete edit list is the last place an over-claim belongs.)*
+
+13. **The continuous carrier is proven, and every proof is offline** *(new in v1.12, plan-gate
+   P6-1; `-ml` v1.15 §3.2d publishes four obligations and this is where they land)*. **(a)**
+   `scored_outcome` called on a metric that lives in `measures` **raises** `MetricKindError`,
+   asserted from both maps — the test that fails if the booleanisation is ever reintroduced.
+   **(b)** A measure of `0.0` on a `scoreable: True` item survives a `to_dict`/`from_dict` round
+   trip **as `0.0` and not as absent**, while the same item with the key missing raises
+   `IncompleteItemRecord`: the absent-never-zero boundary asserted on both sides, which is the one
+   that stops a query nobody judged from being read as a query that retrieved nothing relevant.
+   **(c)** A non-finite measure is refused at construction (`NonFiniteMeasure`), and a metric name
+   present in **both** maps is refused there too (`MetricKindError`). **(d)** Over two arms where one
+   unit is scoreable in exactly one of them, `diffs` has length `n_units − 1` **and** the dropped
+   unit appears in the `-ml` §4.3 asymmetry tally — **asserted together, because either assertion
+   alone passes on a silent drop.** Plus this plan's own two, which are the carrier's other half:
+   `named_metrics()` returns `separationRaw` and `separationZ`, so `sep_z` reaches the Arms table at
+   all (it reaches none today), and that table renders a `DistributionSummary` row **without reading
+   `mean`** — the shipped `else` branch reads it and would raise `AttributeError` on the new type.
+   §5 test 11d is the same requirement stated from the test side.
 
 This stage encodes the **amended** FR-15/AC-4 decision rule (§3.9 point 1) — the paired-difference
 interval, not marginal overlap.
@@ -2575,10 +2761,37 @@ Every count and line number below was re-run against `5878014` at v1.11; two lin
 carried were wrong by two and are corrected in place — `ARM_KINDS` is `fingerprint.py:137`, the
 membership test is `:162`.)*
 
-All five are **S1-local**: they change `modelbench/` and `tests/` only, nothing S2 constructs, and
-all five are free **only now**, because `results/runs/` does not exist so no stored record is
-invalidated and no `migrate` step is owed (§3.4.2, §7). **Table E carries a deadline the other four
-do not** — its defect is live in shipped code and the stage that would expose it is S3.
+All six are **S1-local**: they change `modelbench/` and `tests/` only, nothing S2 constructs, and
+all six are free **only now**, because `results/runs/` does not exist so no stored record is
+invalidated and no `migrate` step is owed (§3.4.2, §7). **Table F is v1.12's, and it is here rather
+than at S3 on exactly that argument** *(plan-gate P6-1, and the gate's open question 1, answered)*:
+it changes the stored record's shape, so deferring it means changing a record schema **after**
+records exist — the one thing this section's deadline exists to prevent. Its renderer half is §4
+S1's `compare_report` block and is S1-local too; what genuinely belongs to S3 is only the first run
+that exercises them.
+
+**No table now carries a stage gate, and Table E's is withdrawn** *(v1.12, `-ml` v1.15 §3.2d)*.
+v1.11 gated §4 S3 done-condition 2 on Table E; the note reverses it — `separationZ` is **reported
+rather than verdicted**, so the `_widen` clamp is due with the `sep_z` **comparison**, which is
+exploratory and is no stage's done-condition (§3.8.1). What §4 S3 is gated on instead is **Table F**,
+and not as an added condition: without the carrier, S3 done-condition 1 cannot store a result at
+all, because the embedder's only verdict metric has nowhere on the record to live.
+
+**What these tables enumerate, and what they deliberately do not** *(v1.12, plan-gate P6-4)*. The six
+are the **retiring and re-keying** edits — the ones where a site can be missed in silence, because
+the old spelling still compiles and still means something. An edit that **adds** a required field is
+enforced by the type system instead (§7 rule 5's closing paragraph) and gets no table, because a
+table says less than a failing construction site already does. That remainder is therefore not an
+omission, and it is named here so nobody reads *the* edit set and goes looking for a seventh: it is
+**§4 S1's signature block plus DC-11** — `ItemResult.timing`, `latencyMs` becoming a property over
+it, and `LatencyBlock`'s four v1.10 figures. `latencyMs` is a required positional today
+(`grep -rFc latencyMs modelbench tests --include='*.py'` → **26** lines across five files:
+`modelbench/results.py` 8, `tests/test_results.py` 8, `tests/test_report.py` 8, `tests/conftest.py`
+1, `tests/test_cli.py` 1), and `ItemTiming`, `LatencyBlock`, `withheldFor` and `wallClockMs` appear
+**0** times in the tree at `5878014` — so every construction site breaks loudly and there is nothing
+for a residual to prove. **Table F is the one *adding* edit that is still tabled**, and it states on
+itself why: its new field is defaulted, so no construction site breaks, and the behaviour it changes
+is reached from sites that keep compiling either way.
 
 **Table A — `lmsCliCommit` → `residencySource`** (§3.4.2; opened by G3-9).
 Enumerate: `grep -rFn lmsCliCommit modelbench tests --include='*.py'` → **3 lines**:
@@ -2593,7 +2806,12 @@ carries no token and is why the table is not the grep alone: `tests/conftest.py`
 | `tests/conftest.py` — the shared `MODEL_FIELDS` fixture | same swap | yes — a missing `residencySource` fails `validate()` |
 | `tests/conftest.py` — the `residentModelsAtEnd` **element** shape | `{modelKey, sizeBytes}` → `{id, state}` (§3.4.4a) | **no** — see §3.4.2; the fix is DC-1's assertion, not this row |
 
-**Residual after the edit:** `lmsCliCommit` → 0, `sizeBytes` → 0.
+**Residual after the edit** — the table's own two enumerating commands, re-run
+*(written out at v1.12 so DC-12 re-runs a command rather than re-deriving one — plan-gate P6-5's
+lesson applied to every table, not only to the one it was raised against)*:
+
+- `grep -rFc lmsCliCommit modelbench tests --include='*.py'` → **3 → 0**
+- `grep -rFn sizeBytes modelbench tests --include='*.py'` → **1 → 0**
 
 **Table B — `armKind` → `armProfile`, and `ARM_KINDS` decoupled** (§3.4.1; plan-gate P4-2, its
 command set and residual corrected at v1.11 by plan-gate P5-2).
@@ -2626,7 +2844,7 @@ name-based grep — §7 rule 5(a)'s *contract restated by value* shape, exactly.
 |---|---|---|
 | `fingerprint.py:123-125` — `REQUIRED_BY_SCHEMA[1]` | re-key `"model"` → `"model:chat"` and add `"model:embeddings"` (26 fields, §3.4.2), `"deterministic"` unchanged. The entries are the body under the declaration line | 5 |
 | `fingerprint.py:128-135` — `FORBIDDEN_BY_ARM_KIND` → `FORBIDDEN_BY_ARM_PROFILE` | the union-minus-mine **set operation** over the three profiles, never a list (§3.4.1). Again the entries (`:131`, `:133`) are the body under the declaration | 2 |
-| `fingerprint.py:137` — `ARM_KINDS = frozenset(FORBIDDEN_BY_ARM_KIND)` | **decouple it.** `ARM_KINDS` stays `{"model", "deterministic"}` — a literal or a derivation over `REQUIRED_BY_SCHEMA`'s profile keys split on `:` — because `armKind` keeps its two values (§3.4.1). Re-keying the mapping and leaving this derivation makes `ARM_KINDS` `{model:chat, model:embeddings, deterministic}`, so `armKind == "model"` fails membership at `:162` and **every model record returns `FieldProblem("armKind", "unknown")` and refuses on write** | 1, 3 |
+| `fingerprint.py:137` — `ARM_KINDS = frozenset(FORBIDDEN_BY_ARM_KIND)` | **decouple it.** `ARM_KINDS` stays `{"model", "deterministic"}` — a literal or a derivation over `REQUIRED_BY_SCHEMA`'s profile keys split on `:` — because `armKind` keeps its two values (§3.4.1). Re-keying the mapping and leaving this derivation makes `ARM_KINDS` `{model:chat, model:embeddings, deterministic}`, so `armKind == "model"` fails membership at `:162` and **every model record returns `FieldProblem("armKind", "unknown")` and refuses on write**. **Both branches survive v1.12** — narrowing residual 4 is what makes the literal branch legal again (plan-gate P6-2, below) | 1, 3 |
 | `fingerprint.py:184` — `REQUIRED_BY_SCHEMA[schema][self.armKind]` | the lookup key becomes the derived `armProfile`, which is the single line that makes the re-key real | 1, 5 |
 | `fingerprint.py` — `Fingerprint` | `callSurface` joins `armKind` as a constructor argument, `armProfile` is derived from the two, and `validate()` checks both discriminators **before** consulting any mapping | 1 |
 | `fingerprint.py` — `from_dict` / `to_dict` | `from_dict` strips `"armKind"` today (`:200`); it must strip `"callSurface"` too and pass it through, or the discriminator lands in `fields` and appears as a forbidden field | 1 |
@@ -2651,12 +2869,28 @@ the table is about. Four residuals, each zero after a faithful edit and non-zero
 | Residual command | Today | After |
 |---|---|---|
 | `grep -rFc FORBIDDEN_BY_ARM_KIND modelbench tests --include='*.py'` | 10 | **0** |
-| `ARM_KINDS` still derived from the **forbidden mapping** (`fingerprint.py:137`) | 1 | **0** |
+| `grep -rFn 'frozenset(FORBIDDEN' modelbench --include='*.py'` | **1** | **0** — `fingerprint.py:137`, the only match. This is the row that proves `ARM_KINDS` is no longer derived from the forbidden mapping, and residual 1 does not: a rename that leaves the derivation coupled to the *renamed* mapping satisfies residual 1 and leaves this one at 1 *(v1.12, plan-gate P6-5 — v1.11 stated it as prose, in a table whose thesis is that a residual is a command with a count)* |
 | `grep -rFn 'REQUIRED_BY_SCHEMA[1]["model"]' modelbench tests --include='*.py'` | **3** | **0** — the two decorators and the comment; the profile key makes the old spelling unwritable |
-| `grep -rFn '{"model", "deterministic"}' modelbench tests --include='*.py'` | **2** | **0** — `test_fingerprint.py:213` and `:234`, the two contracts asserted by value, and the only mechanical check that reaches `:213` at all |
+| `grep -rFn 'set(REQUIRED_BY_SCHEMA[1]) == {"model",' modelbench tests --include='*.py'` | **1** | **0** — `test_fingerprint.py:213`, the mapping's key set asserted by value, and the only mechanical check that reaches that line at all *(narrowed at v1.12 — plan-gate P6-2, below)* |
 
-The last two are the **second-form** residuals §7 rule 5(b) requires: they retire spellings this edit
-genuinely makes unwritable, so zero is earned rather than assumed. What stands in place of a residual
+**Residual 4 is narrowed to the mapping's key set, because v1.11's wider form failed on an
+implementation this very table authorises** *(v1.12, plan-gate P6-2)*. v1.11 asserted the bare
+two-name set display, unscoped, across `modelbench` **and** `tests` → 0. The `fingerprint.py:137`
+row above permits `ARM_KINDS` to be decoupled **as a literal**, and that literal *is* the same
+two-name set display, in production code — so under half the implementations this table permits the
+wider residual is 1 after a faithful edit, DC-12 fails on a correct implementation, and the
+implementer's only exit is to override a done-condition. That is precisely the shape §7 rule 5(b)'s
+closing sentence forbids, and precisely the shape this document rejected Pass 5's own prescribed
+residual for, one table earlier. Scoping it to `tests/` does not fix it either: a test pinning the
+decoupled `ARM_KINDS` by value — the natural way to assert the `:137` row's whole point — puts the
+same display back, in `tests/`. The narrowed command names the site that genuinely **retires**: the
+key set of `REQUIRED_BY_SCHEMA[1]`, which becomes three profiles, so the old spelling is unwritable
+and no decoupled `ARM_KINDS` can match it under either branch. `test_fingerprint.py:234`'s display
+needs no residual of its own — the retired name `FORBIDDEN_BY_ARM_KIND` is **on that same line**, so
+residual 1 reaches it and takes it to zero with the rename.
+
+Residuals 2, 3 and 4 are the **second-form** residuals §7 rule 5(b) requires: each retires a
+spelling this edit genuinely makes unwritable, so zero is earned rather than assumed. What stands in place of a residual
 over `armKind` is the **type system**: `callSurface` as a required, no-default constructor argument
 breaks every `Fingerprint(` construction site loudly — `grep -rFn 'Fingerprint(' modelbench tests
 --include='*.py'` → **12 lines** (`test_fingerprint.py` 6, `test_results.py` 3, `results.py` 2,
@@ -2680,7 +2914,11 @@ Enumerate: `grep -rFn _percentile modelbench tests --include='*.py'` → **7 lin
 Both shipped copies are `int(round(p/100·(X−1)))`, the estimator `-ml` §11.2 explicitly **rejects**
 — `round` is half-to-even, so the tie-break direction alternates with the sample size. Neither
 appeared in v1.9's edit table.
-**Residual after the edit:** a private percentile helper in `results.py` → 0.
+**Residual after the edit:** `grep -rFc _percentile modelbench/results.py` → **3 → 0**
+*(written out at v1.12, same lesson)*. All three go: the definition at `:573` is deleted, and
+`:599`/`:600` take p50/p95 from the run's own `LatencyBlock`. `results.py` then imports the note's
+**public** `stats.percentile`, which carries no leading underscore — so zero is reachable by the
+prescribed edit and is not an accident of naming.
 
 **Table D — the seed retires from the paired *binary* path** (`-ml` v1.11 §3.4 Rule 4).
 Enumerate: `grep -rFn bootstrap_seed modelbench tests --include='*.py'` → **29 lines**
@@ -2694,30 +2932,64 @@ Enumerate: `grep -rFn bootstrap_seed modelbench tests --include='*.py'` → **29
 | `stats.py` — `verdict(..., bootstrap_seed=…)` | parameter removed, with the raise that demanded one on the clustered path |
 | `stats.py` — `conservative_envelope(diffs, table, *, design_effect, B, seed)` | collapses to `conservative_envelope(table, *, design_effect)`; the `n != len(diffs)` guard goes with the argument that made its error representable |
 | `stats.py` — the closed form itself | the exact multinomial quantile at `permille` 25 / 975 in integer arithmetic. Pinned in full by `-ml` §3.4 Rule 4 and **not restated here**; its five acceptance tests are the note's too |
-| `stats.py:62` — `DecidedBy` | `"cluster-bootstrap"` → **`"conservative-envelope"`**. The note leaves this token to the architect and recommends renaming; **renamed**, because a machine token naming a resample that no longer runs is the same defect as the prose that named one arm of an envelope, and it is free while no stored record carries it |
+| `stats.py:62` — `DecidedBy` | `"cluster-bootstrap"` → **`"conservative-envelope"`**. The note leaves this token to the architect and recommends renaming; **renamed**, because a machine token naming a resample that no longer runs is the same defect as the prose that named one arm of an envelope, and it is free while no stored record carries it. *(The same literal gains a **third** member, `"paired-bootstrap"`, for §4 S1e Table F's continuous path. Both edits land on this line and **this row owns it** — Table F cites this row rather than duplicating it, so one line has one owner — v1.12.)* |
 | `report.py:701` | the `- decided by: … (seed N, from the pack's sampling.seed)` parenthetical goes; the note publishes what replaces it (which arm bound each bound) and this plan does not restate the string |
 | `report.py:687` | `bootstrap_seed=pack.seed` goes. **`PackRef.seed` stays** — its consumer moves to `-ml` §3.2d's continuous bootstrap (§3.3) |
 | `packs.py:88-95` | the docstring's justification moves from the paired table to §3.2d; the field, the no-default rule and `validate_pack`'s refusal are unchanged |
 | `test_stats.py`, `test_report.py` | the four tests pinning the seed parenthetical and the `bootstrap_seed=None` precondition-ordering test go; every fixture asserting a rendered interval on this path is **re-derived, not adjusted** (`-ml` v1.11) |
-| `stats.py` — **`paired_cluster_bootstrap` and `paired_bootstrap`: kept, and neither is touched** *(v1.11, plan-gate P5-3)*. Enumerate: `grep -rFn paired_cluster_bootstrap modelbench tests --include='*.py'` → **13 lines** (`modelbench/stats.py` 5, `tests/test_stats.py` 8); `grep -rFn paired_bootstrap …` → **8 lines** (`tests/test_stats.py` 5, `modelbench/stats.py` 3) | **No edit — and the row exists because "no edit" is a decision here rather than an omission.** Collapsing `conservative_envelope` removes `stats.py:263`, the chain's only *production* call site, leaving `conservative_envelope → paired_cluster_bootstrap → paired_bootstrap` unreachable from anything that runs today. It is kept because it lost its **current** caller and not its **designed** consumer: `-ml` §3.4 Rule 4 (v1.14) names `paired_cluster_bootstrap` as §3.2d's **entry point for every continuous verdict** — called with the pack's declared `design_effect`, the identity widening at 1.00 — and `paired_bootstrap` as its **engine, not a second entry point**. Its four direct tests (`test_stats.py:1270`, `:1317`, `:1323`, `:1328`) are the only executable statement of the `√DEFF` exactness argument and stay with it. **Deleting them is not authorised by this table and would be the wrong tree.** The keep takes the **same discriminator** already attached to `sampling.seed` (§3.3): both go if the embedder pack's continuous verdict is ever cut |
+| `stats.py` — **`paired_cluster_bootstrap` and `paired_bootstrap`: kept, and neither is touched *by this table*** *(v1.11, plan-gate P5-3; scoped at v1.12, plan-gate P6-3)*. Enumerate: `grep -rFn paired_cluster_bootstrap modelbench tests --include='*.py'` → **13 lines** (`modelbench/stats.py` 5, `tests/test_stats.py` 8); `grep -rFn paired_bootstrap …` → **8 lines** (`tests/test_stats.py` 5, `modelbench/stats.py` 3) | **No edit — and the row exists because "no edit" is a decision here rather than an omission.** Collapsing `conservative_envelope` removes `stats.py:263`, the chain's only *production* call site, leaving `conservative_envelope → paired_cluster_bootstrap → paired_bootstrap` unreachable from anything that runs today. It is kept because it lost its **current** caller and not its **designed** consumer: `-ml` §3.4 Rule 4 (v1.14) names `paired_cluster_bootstrap` as §3.2d's **entry point for every continuous verdict** — called with the pack's declared `design_effect`, the identity widening at 1.00 — and `paired_bootstrap` as its **engine, not a second entry point**. Its **three** direct tests — `test_stats.py:1259`, `:1317` and `:1328` by `def` line, calling it at `:1270`, `:1323` and `:1330` (§4 S1e Table E's command 2) — are the only executable statement of the `√DEFF` exactness argument and stay with it. *(v1.11 wrote "four", mixing two `def` lines with two call lines; corrected at v1.12 alongside plan-gate P6-3, which is the same reading error one table over.)* **Deleting them is not authorised by this table and would be the wrong tree.** **Table E *does* change `paired_cluster_bootstrap`'s signature** — `clamp`, required with no default — which is a different edit from this table's *retire the seed* one; **no edit** here means no edit **by Table D**, and v1.11's unqualified wording contradicted Table E one table over *(v1.12, plan-gate P6-3)*. The keep takes the **same discriminator** already attached to `sampling.seed` (§3.3): both go if the embedder pack's continuous verdict is ever cut |
 
-**One consequence for whoever wires §3.2d's continuous path** *(S3; stated here because this table is
-where the chain's reachability was decided)*. MRR and `sep_z` are wired to
-**`paired_cluster_bootstrap`**, never straight to `paired_bootstrap`: the second is a correct
-interval that **silently ignores a declared design effect**, which is the one failure direction the
-note refuses everywhere. Table E carries the condition that wiring depends on.
+**One consequence for whoever wires §3.2d's continuous path** *(S1's `report.py`, first exercised at
+S3 — stated here because this table is where the chain's reachability was decided)*. MRR and `sep_z`
+are wired to **`paired_cluster_bootstrap`**, never straight to `paired_bootstrap`: the second is a
+correct interval that **silently ignores a declared design effect**, which is the one failure
+direction the note refuses everywhere. **Table F carries the record shape that wiring reads and the
+renderer that calls it** *(v1.12)*, and Table E the clamp the `sep_z` comparison depends on.
 
-**Residual after the edit:** `bootstrap_seed` → 0; `cluster-bootstrap` → 0. Both are first-form
-residuals over genuinely retired tokens (§7 rule 5(b)); `paired_cluster_bootstrap` has none and owes
-none, because its disposition is *no edit*.
+**Residual after the edit** *(commands written out at v1.12)*:
+
+- `grep -rFn bootstrap_seed modelbench tests --include='*.py'` → **29 → 0**
+- `grep -rFn 'cluster-bootstrap' modelbench tests --include='*.py'` → **27 → 0**
+
+Both are first-form residuals over genuinely retired tokens (§7 rule 5(b)); `paired_cluster_bootstrap`
+has none and owes none, because its disposition is *no edit*.
+
+**One trip hazard on the second residual, and it is a staleness rather than a conflict** *(v1.12,
+§7 rule 1)*. Eleven of those 27 lines are in `stats.py`, and two of them — the trailing
+*"Decided by the …"* clause's two variants — render strings the note **publishes** at `-ml` §3.2f in
+the pre-v1.11 wording, while `-ml` §3.4 Rule 4 rules that all four such strings must stop naming one
+arm of the envelope and must name the **conservative envelope** instead. §3.4 Rule 4 is the later
+statement and governs; an implementer who copies §3.2f verbatim leaves the retired token in
+`stats.py` and this residual will not reach zero. **Raised to `data-scientist`** (§7 rule 3): §3.2f's
+two variants are the note's to sweep, and until they are, Rule 4 is what an implementer follows.
 
 **Table E — `_widen`'s clamp becomes an argument, because `[-1, 1]` is false for `sep_z`**
 *(new in v1.11, from `-ml` v1.14 §3.4 Rule 4's condition on Table D's keep; a live defect in shipped
 code that neither gate had reached)*.
-Enumerate: `grep -rFn _widen modelbench tests --include='*.py'` → **7 lines**
-(`tests/test_stats.py` 4, `modelbench/stats.py` 3), of which the three in `stats.py` are the code
-sites: `:188` (`paired_cluster_bootstrap`'s call), `:191` (the definition) and `:264`
-(`conservative_envelope`'s MOVER-D arm).
+**Enumerate — two commands, because `_widen` is private and its own name reaches none of the sites
+the edit breaks** *(both re-run against `5878014`; the second is v1.12's, plan-gate P6-3)*:
+
+| # | Command (under `model-bench/`) | Lines | Per file |
+|---|---|---|---|
+| 1 | `grep -rFn _widen modelbench tests --include='*.py'` | **7** | `tests/test_stats.py` 4, `modelbench/stats.py` 3 |
+| 2 | `grep -rFn 'paired_cluster_bootstrap(' modelbench tests --include='*.py'` | **5** | `modelbench/stats.py` 2, `tests/test_stats.py` 3 |
+
+Command 1's three `stats.py` lines are the code sites: `:188` (`paired_cluster_bootstrap`'s call),
+`:191` (the definition) and `:264` (`conservative_envelope`'s MOVER-D arm). **Its four
+`test_stats.py` lines are not sites, and they are named here so that nobody re-checks them**:
+`:743`, `:773`, `:915` and `:1110` are `def` lines matched on a **test name** containing a widening
+word, and every one is a `verdict()`-level test that calls neither `_widen` — which is private — nor
+`paired_cluster_bootstrap`. v1.11 read them as this table's test row, which made that row
+unexecutable as written. The lesson is §7 rule 5(a)'s other edge, worth stating once: **a command's
+output is a superset of the sites, never the site list itself**, so a table that transcribes the
+output without reading each line has enumerated names rather than sites.
+
+Command 2 reaches the sites the edit actually breaks. Its two `modelbench/stats.py` lines are `:162`
+(the definition) and `:263` (`conservative_envelope`'s resample call, which **Table D retires**) —
+so if Table D lands first that site is already gone, and if Table E lands first it passes
+`clamp=(-1.0, 1.0)` until it does; **either order is faithful and neither leaves a site unedited.**
+Its three `tests/test_stats.py` lines are `:1270`, `:1323` and `:1330`, the direct call sites, each
+of which stops compiling the moment `clamp` is required with no default.
 
 **The defect, in one sentence:** `_widen` clamps both bounds to `[-1.0, 1.0]` — correct for the
 difference of proportions the envelope was written for, and **wrong for `sep_z`** (`-ml` §5.2), whose
@@ -2733,7 +3005,10 @@ MRR and every rate difference pass through unchanged.
 | `stats.py:191` — `_widen(interval, point, scale)` | gains a fourth parameter, keyword-only and **required with no default**: `clamp: tuple[float, float] \| None`, `None` meaning *do not clamp*. The two literals at `:200`/`:201` become its components |
 | `stats.py:162` — `paired_cluster_bootstrap(diffs, *, design_effect, B, seed)` | gains the same keyword-only `clamp`, **required with no default**, and forwards it. This is the public surface §3.2d's continuous verdicts call, so it is where the support of the metric being differenced has to be stated |
 | `stats.py:264` — `conservative_envelope`'s MOVER-D arm | passes `clamp=(-1.0, 1.0)` **explicitly**. Both arms of the envelope keep the identical clamp — Rule 4 requires them widened the same way, and a clamp is part of "the same way" |
-| `test_stats.py` — the four `_widen`-related tests | keep their present behaviour under `clamp=(-1.0, 1.0)`, plus **one new test**: an unbounded call whose upper bound exceeds 1 comes back unclamped and its point estimate lies inside its own interval — the assertion that reproduces the defect rather than the fix |
+| `test_stats.py:1270` — the envelope's two-arms test | passes `clamp=(-1.0, 1.0)`: its `diffs` are ±1/0 differences of proportions, so the clamp *is* the present behaviour and this table changes none of its assertions. The same test is **also Table D's** — `conservative_envelope`'s signature collapses under it — so the two edits meet on this line and neither owns it alone |
+| `test_stats.py:1323` — `test_paired_cluster_bootstrap_scales_the_half_widths_by_sqrt_deff` | passes `clamp=(-1.0, 1.0)`; its bounds lie inside `[-1, 1]`, so the clamp is inert there and the √DEFF exactness assertions hold verbatim. **This test is the executable statement of the exactness argument Table D says must survive**, so it is adjusted and never deleted |
+| `test_stats.py:1330` — the `design_effect < 1.0` refusal | passes `clamp=(-1.0, 1.0)`; the raise precedes any widening, so the argument is needed only to make the call constructible |
+| `test_stats.py` — **one new test, written at the public surface** | `paired_cluster_bootstrap(…, clamp=None)` over differences whose widened upper bound exceeds 1: the bound comes back unclamped and the point estimate lies inside its own interval — the assertion that reproduces the defect rather than the fix. **At `paired_cluster_bootstrap` and not at `_widen`**, because `_widen` is private and the defect is one a caller can reach: §3.8.1 wires the `sep_z` comparison through exactly this entry point |
 
 **Why required rather than defaulted to `(-1.0, 1.0)`.** A default that is right for proportions and
 wrong for z-scores fails **silently**, in the direction that prints, which is exactly the failure the
@@ -2748,12 +3023,87 @@ metric, at which point the support belongs with the metric rather than at the ca
 (`stats.py:200`) — a second-form residual over the literal the edit retires, since `_widen` itself
 survives and has no zero (§7 rule 5(b)).
 
-**Deadline, and it is the only one in §4 S1e.** The other four tables are free until `results/runs/`
-exists; this one is free until **§5.2's comparison is wired**, which is **S3** (§3.8.1 reports
-`sep_z`, and §3.2d's paired bootstrap over per-query `sep_z` differences is what compares it). It
-lands with the rest of S1e — it is `stats.py`, S1-local, and blocked on nothing — and **S3's
-done-condition 2 may not be signed off with it outstanding**, because the first `sep_z` interval
-rendered against the clamp is a wrong number in a stored report.
+**Deadline — withdrawn, and the withdrawal is the note's** *(v1.12, `-ml` v1.15 §3.2d; plan-gate
+P6-1's last clause)*. v1.11 wrote that this table was the only one in §4 S1e carrying a deadline and
+gated **§4 S3 done-condition 2** on it. That reads as though the clamp were the one obstacle between
+S3 and a rendered `sep_z` interval, and it was not: the interval also had **no producer and no
+renderer** — no per-item carrier for a `sep_z` difference and no `named_metrics()` entry for
+`separationZ` — which is the larger defect Table F now closes. The note settles the ordering:
+`separationZ` is **reported, not verdicted** (`verdictMetrics = ["mrr"]`), so the clamp is due with
+the **`sep_z` comparison**, which §3.8.1 records as exploratory and as no stage's done-condition.
+So this table lands with the rest of S1e — it is `stats.py`, S1-local, blocked on nothing, and a
+live defect in shipped code — **and it gates no stage.** The stage gate that replaces it is
+**Table F on §4 S3 done-condition 1**, which is not a gate anyone has to remember: without the
+carrier there is no storable result to sign off.
+
+**Table F — the continuous carrier: `measures`, `scored_value`, and the aggregates `sep_z` reaches**
+*(new in v1.12, from `-ml` v1.15 §3.2d; plan-gate P6-1(a) and (b) — a live defect in shipped code
+that four gate passes did not reach)*.
+
+**The defect, in one sentence:** nothing on the record can carry a per-item **continuous** value —
+`ItemResult.counts` is `Mapping[str, int]` and `scored_outcome` returns `self.counts[metric] > 0` —
+so the embedder pack's only verdict metric and its headline, `mrr`, either **booleanises** into *did
+this query retrieve anything* and prints a McNemar `+X pp` verdict for a metric the note gives no
+significance test, or is left unscoreable and renders **"No verdict: no paired data"**. Both are
+silent, and both happen on a green run. `RetrievalAggregates.named_metrics()` omits `separationZ`
+and `separationRaw`, so `sep_z` reaches no table either.
+
+**Enumerate — six commands.** All re-run against `5878014`:
+
+| # | Command (under `model-bench/`) | Lines | Per file |
+|---|---|---|---|
+| 1 | `grep -rFn scored_outcome modelbench tests --include='*.py'` | **17** | `modelbench/report.py` 6, `tests/test_results.py` 5, `modelbench/results.py` 4, `tests/test_report.py` 2 |
+| 2 | `grep -rFn 'ItemResult(' modelbench tests --include='*.py'` | **14** | `tests/test_report.py` 7, `tests/test_results.py` 5, `tests/conftest.py` 1, `tests/test_cli.py` 1 |
+| 3 | `grep -rFn ContinuousMetric modelbench tests --include='*.py'` | **5** | `modelbench/results.py` 5 (`:79`, `:85`, `:184`, `:369`, `:373`) |
+| 4 | `grep -rn separation modelbench tests --include='*.py'` | **2** | `modelbench/results.py` 2 (`:186`, `:187`) |
+| 5 | `grep -rFn named_metrics modelbench tests --include='*.py'` | **12** | `modelbench/results.py` 6, `modelbench/report.py` 3, `tests/test_report.py` 3 |
+| 6 | `grep -rFn 'isinstance(metric, BinaryMetric)' modelbench --include='*.py'` | **3** | `modelbench/report.py` 3 (`:211`, `:553`, `:564`) |
+
+**Commands 4 and 6 are §7 rule 5(a)'s token-free coverage**, and 6 is the one no name-based sweep
+reaches: the Arms table's continuous branch is a bare **`else`** under `:564`, carries no type name,
+and reads `metric.mean` on whatever arrives — so it raises `AttributeError` the first time a
+`DistributionSummary` does. Command 2 is listed even though **no site it names breaks**, and that is
+the point: `measures` is defaulted, so the compiler says nothing, and the behaviour that changes
+(`scored_outcome`'s) is reached from sites that keep compiling either way. That is why this table
+exists at all while DC-11's larger, louder edit does not.
+
+| Site | Edit | Found by |
+|---|---|---|
+| `results.py` — `ItemResult` | gains **`measures: Mapping[str, float]`**, defaulted `{}` and placed before `detail`; a `__post_init__` refusing a metric name present in **both** maps (`MetricKindError`) and any non-finite value (`NonFiniteMeasure`); a **`scored_value(metric) -> float \| None`** sibling with `scored_outcome`'s three states; and **`scored_outcome` raising `MetricKindError`** on a `measures`-resident metric instead of returning `counts[metric] > 0`. Shape, domain, absence rule and the one-map invariant are `-ml` §3.2d's and are not restated here | 1, 2 |
+| `results.py` — `ItemResult.to_dict` / `from_dict` | `measures` round-trips, and a `0.0` round-trips **as `0.0`**; `from_dict` reads a missing key as `{}` — a *reader's* compatibility rule under §3.4.3, never a constructor default. **`benchSchemaVersion` does not bump**: the field is additive and absent-safe, and no stored record exists to migrate | 1 |
+| `results.py:79`, `:85` — `ContinuousMetric`, `MetricValue` | `support: tuple[float, float] \| None` joins `(name, mean, n)`, **required with no default** — `BinaryMetric.unit`'s discipline for `BinaryMetric.unit`'s reason; `MetricValue` gains `DistributionSummary` | 3 |
+| `results.py` — new `DistributionSummary` | `(name, median, p10, n, unit, support)`, frozen. `-ml` §5.2 publishes a **median and a p10** and neither is a mean, so `ContinuousMetric` cannot carry them and one bare float carries neither | 3, 4 |
+| `results.py:184-187` — `RetrievalAggregates` | `separationRaw` and `separationZ` change from `float \| None` to `DistributionSummary \| None`; `mrr` keeps its type and its construction site states `support=(0.0, 1.0)` | 3, 4 |
+| `results.py` — `RetrievalAggregates.named_metrics()` | returns `separationRaw` and `separationZ` as well. **This one line is what makes `sep_z` reach a table at all** — today it reaches none, whatever the scorer computes | 5 |
+| `results.py:369`, `:373` — the metric (de)serialisers | `ContinuousMetric(name=…, mean=…, n=…)` gains `support` and breaks **loudly**, being required; the `isinstance(value, (BinaryMetric, ContinuousMetric))` dispatch gains `DistributionSummary`, and **that line carries no `separation` token** | 3 |
+| `report.py:211` — DC-10's selector | widens past `isinstance(metric, BinaryMetric)` to DC-10's third arithmetic and its kind cross-check | 6 |
+| `report.py:564-584` — the Arms table | the `else` splits: a `ContinuousMetric` renders `n=…, mean, —` as it does today; a `DistributionSummary` renders its median and p10 and **no interval**. **Carries no type name**, reached only through `:564`'s head | 6 |
+| `report.py:606-700` — the family loop | pass 1 resolves each member's kind and branches, per §4 S1's `compare_report` block; `scored_outcome` is not called on a continuous member, and now raises if it is | 1, 6 |
+| `tests/test_results.py`, `tests/test_report.py`, `tests/conftest.py`, `tests/test_cli.py` | the 14 `ItemResult(` sites **do not break** and mostly do not change; what changes is the `scored_outcome` assertions, which gain the raising case, and the fixtures DC-13 needs | 1, 2 |
+
+**Why a second map and not a widened `counts`** — `-ml` v1.15 §3.2d rules it, and the reason is worth
+one clause here because it is the tempting one-word fix: widening `counts` to `float` makes the
+booleanisation **type-legal without making it wrong**, and it puts a count that §4.2's denominators
+count into the same key space as a measurement they must not.
+
+**Residual after the edit.** Two, both second-form over an annotation this edit rewrites — stated as
+commands rather than as a table so they can be copied and run verbatim:
+
+- `grep -rFn 'separationRaw: float | None' modelbench --include='*.py'` → **1 → 0**
+- `grep -rFn 'separationZ: float | None' modelbench --include='*.py'` → **1 → 0**
+
+Both are `modelbench/results.py:186` and `:187` today and are unwritable after the retype, so zero is
+earned. What stands in place of a residual over `measures` — which **adds** and retires nothing — is
+the **type system on one side and DC-13 on the other**: `ContinuousMetric.support` is required with
+no default, so `results.py:369` breaks loudly; and `scored_outcome`'s refusal is a *behaviour*, which
+no count can see, so DC-13(a) asserts it directly. Saying so is §7 rule 5(b)'s requirement, not an
+apology for a missing number.
+
+**One edit this table needs is deliberately not in its rows.** `DecidedBy` gains a third member,
+`"paired-bootstrap"`, and that literal is `stats.py:62` — a line **Table D owns and enumerates**
+(`grep -rFn DecidedBy modelbench tests --include='*.py'` → **3** lines, all `modelbench/stats.py`:
+`:62`, `:610`, `:882`). Cited here rather than duplicated, so one line has one owner and the two
+tables cannot drift on it (§7 rule 4).
 
 ### S2 — Packs, LM Studio adapter, host info, runner
 
@@ -2986,7 +3336,13 @@ surfaces `stats.time_to_first_token`.
   `turn` or `call` — `n` is the **sum of the per-item denominator contributions the scorer records
   in the same pass**, under the reserved `ItemResult.counts` key `"<metric>#denominator"` (§4 S1
   DC-10). Neither form is an item count for a pooled metric and neither is a second path: one pass,
-  two arithmetics, both confirmable from `items`. That makes S1's cross-check (S1 done-condition 10) unfalsifiable from
+  two arithmetics, both confirmable from `items`. **A continuous metric is the third** *(v1.12,
+  plan-gate P6-1)*: its per-item value goes into `ItemResult.measures` in that same pass, its
+  aggregate's `n` is the count of items the scorer marked `scored_value(metric) is not None`, and
+  the scorer states the metric's **`support`** — it is the only party that knows whether the
+  quantity is bounded. A scorer never writes one metric name into both maps; `ItemResult` refuses
+  that at construction (§4 S1e Table F), so the kind is a fact about the record rather than a
+  convention between two files. That makes S1's cross-check (S1 done-condition 10) unfalsifiable from
   inside a correct scorer, which is precisely its job: it is the net under the seam, not a substitute
   for getting the seam right, and it earns its place because the next scorer will be written by
   someone who has not read this bullet. **S2 does not re-implement the check** — it is S1's, and it
@@ -3031,14 +3387,20 @@ against. It proves the S1/S2 core end to end before the expensive packs are buil
 
 1. A real run against `text-embedding-qwen3-embedding-0.6b` produces a **stored result with a
    complete `model` fingerprint** (which requires `attest` from S2 to have written `host.json`).
+   **§4 S1e Table F must have landed** *(v1.12, plan-gate P6-1)* — not as an added gate but as a
+   precondition nobody has to remember: this pack's only verdict metric is `mrr`, a per-item
+   **continuous** value, and until `ItemResult.measures` exists there is nowhere on the record for it,
+   so no result of this pack is storable at all. The verdict this run renders is `-ml` §3.2e's string
+   **4 or 5**, never one of the three that carry `pp` and a McNemar clause.
 2. The BM25 arm is stored as its own `armKind: "deterministic"` record sharing that run's
    `sessionId`, and `compare` renders the two arms in one report with the deterministic one
-   labelled (§3.4.1, §3.8.1). **§4 S1e Table E must have landed before this condition is signed
-   off** *(v1.11)*: this is the first report to render a `sep_z` interval, `sep_z` differences are
-   unbounded, and `_widen`'s shipped `[-1, 1]` clamp would silently truncate the upper bound and can
-   put the point estimate outside its own interval (`-ml` v1.14 §3.4 Rule 4). The verdict survives
-   the clamp and the printed interval does not, which is why a green run is not evidence the
-   condition is met.
+   labelled (§3.4.1, §3.8.1), each arm's `sep_z` appearing as a **`DistributionSummary` row —
+   median and p10, and no interval** (§4 S1e Table F). **The Table E gate v1.11 attached here is
+   withdrawn** *(v1.12, `-ml` v1.15 §3.2d)*: `separationZ` is **reported, not verdicted**, so this
+   report renders no `sep_z` interval at all, and `_widen`'s `[-1, 1]` clamp is due with the `sep_z`
+   **comparison** — exploratory, and no stage's done-condition (§3.8.1, §4 S1e Table E). v1.11 read
+   the clamp as the one obstacle between S3 and a `sep_z` interval; the interval had **no producer
+   and no renderer** either, which is the larger defect and is Table F's.
 3. `test_metrics_agreement.py` passes over all 20 transcribed cases (§3.1 point 2). *(v1.1's
    done-condition asked for "byte-identical output" from running falkor-chat's own `test_metrics.py`
    fixtures through the copied implementation — that mechanism does not exist; §3.1 point 2 explains
@@ -3195,7 +3557,7 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
 
 | Stage | Items it owes | Where an item splits across stages |
 |---|---|---|
-| **S1** — core | **1, 2, 3, 5, 6, 7b, 11b, 11c** | **7b** is a `stats.py` test over a synthetic clustered fixture and needs no pack loader — S1 done-conditions 4 and 5 already require it. **11b**'s `validate_pack` clause is S2's; at S1 those same refusals go through `metrics_from_manifest`, which raises `PackConfigError`. **12**'s `metrics`-block rule (a non-null `headlineMetric` outside `verdictMetrics`) is S1's too, at that same seam. **11c** is S1's whole and does not split: `RunResult` carries `items` and `aggregates` side by side, so the cross-check needs nothing S2 produces (impl-gate P4-4, v1.8 — S1 done-condition 10). |
+| **S1** — core | **1, 2, 3, 5, 6, 7b, 11b, 11c, 11d** | **7b** is a `stats.py` test over a synthetic clustered fixture and needs no pack loader — S1 done-conditions 4 and 5 already require it. **11b**'s `validate_pack` clause is S2's; at S1 those same refusals go through `metrics_from_manifest`, which raises `PackConfigError`. **12**'s `metrics`-block rule (a non-null `headlineMetric` outside `verdictMetrics`) is S1's too, at that same seam. **11c** is S1's whole and does not split: `RunResult` carries `items` and `aggregates` side by side, so the cross-check needs nothing S2 produces (impl-gate P4-4, v1.8 — S1 done-condition 10). **11d** is S1's whole for the same reason: the continuous carrier is a record shape and a renderer branch, both S1-local, and the first *run* that exercises them is S3's (v1.12, S1 done-condition 13). |
 | **S2** — packs, adapter, host info, runner | **4, 10, 12, 12b, 13, 14, 15, 15b** | **4** is `packs.content_hash`, which S1 does not have: S1 ships `PackRef` / `metrics_from_manifest` / `check_sampling_contract` only. **12**'s rule machinery — the `sampling` contract, the AST import allowlist, `replicatesPerScript > 1` — is `validate_pack`'s, tested here against fixture packs and re-run against each real pack at that pack's own stage. **12b** splits three ways: the four `basis` cases are `runner`'s and land here, the outcome-vector comparison is S5's, and "`assumed` moves the decision off McNemar" is already S1's. **13–15** are the `-m live` adapter tests S2's done-condition names. **15b** is offline (stub clock, stub LLM) and is filed in the unit block for that reason (v1.9, G3-12); its report half — the latency block and `-ml` §11.7's rendered slots — lands here rather than at S1 for the same reason `basis` does: S2 is the first stage at which a latency exists at all. S2 does **not** own **11c**; it owns the scorer contract that makes 11c's failure unreachable (§4 S2). |
 | **S3** — embedder pack | **8, 11, 16, 18** | **16** is one arm of a per-pack obligation: each of S3–S7 owes the end-to-end run for the pack it builds. |
 | **S4** — guard-judge, nlq-generator | **9, 16** | — |
@@ -3242,7 +3604,9 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
    proportions widened with `clamp=(-1.0, 1.0)` still clamps exactly as today, and an **unbounded**
    difference widened with `clamp=None` comes back with an upper bound above 1 and a point estimate
    **inside its own interval** — the assertion that reproduces the `sep_z` defect rather than the
-   fix, and the one that fails if the clamp is ever re-hardcoded. The resolving-power
+   fix, and the one that fails if the clamp is ever re-hardcoded. **Both are written at
+   `paired_cluster_bootstrap`, the public surface, never at `_widen`, which is private** *(v1.12,
+   plan-gate P6-3)*. The resolving-power
    functions are computed from the run's own sampling structure and asserted never to return a
    constant, **and asserted to refuse a bare item count for a clustered pack** (S1 done-condition 5,
    the B-1 detector), and the rendered line is asserted against `-ml` §7.2's verbatim four-sentence
@@ -3287,6 +3651,17 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
     arm whose declared `n` matches its scoreable-item count renders normally, and a pooled metric
     whose declared `n` matches its summed contributions renders normally — so the check is shown
     to discriminate rather than to exclude everything.
+11d. **The continuous carrier** *(new in v1.12; S1's, per S1 done-condition 13 and `-ml` v1.15
+    §3.2d)*. `scored_outcome` on a metric that lives in `measures` **raises** `MetricKindError`,
+    asserted from both maps; a measure of `0.0` on a `scoreable: True` item round-trips through
+    `to_dict`/`from_dict` **as `0.0`**, while the same item with the key missing raises
+    `IncompleteItemRecord`; a non-finite measure and a name present in both maps are both refused at
+    construction; and over two arms where one unit is scoreable in exactly one of them, `diffs` is
+    `n_units − 1` long **and** the dropped unit shows in the `-ml` §4.3 asymmetry tally — **the two
+    asserted together, because either alone passes on a silent drop.** Plus the aggregate half:
+    `named_metrics()` returns `separationRaw` and `separationZ`, and the Arms table renders a
+    `DistributionSummary` row **without reading `mean`**, which the shipped `else` branch does.
+
 12. **Pack integrity, per pack:** unique ids, required fields, per-item provenance present (with
     `originGitSha`), paraphrase rule for retrieval-style packs, every `expect` block referring to a
     tool the pack's own `schemas.json` declares, the `metrics` block well-formed (§3.3 — including
@@ -3681,7 +4056,7 @@ particular **§3.4, the binding rules that are `stats.py`'s contract** (their nu
 too — v1.7 stops restating it), and **§7.2's verbatim resolving-power string**, which is a test
 target.
 
-**Version pairing:** this plan **v1.11** is aligned to the note **v1.14** (`ca69cb1`). *(v1.10 paired
+**Version pairing:** this plan **v1.12** is aligned to the note **v1.15** (`0ad0e7a`). *(v1.10 paired
 itself to v1.12 and was one revision stale by the time the gate read it — plan-gate P5-5. The pairing
 is a claim about a named commit and it is re-checked in the revision that makes it.)* The two note
 revisions v1.10 folded in are separable and are recorded first: **v1.11** makes §3.4 Rule 4's
@@ -3715,7 +4090,43 @@ counter (§3.6, §4 S1, §4 S2 (vi)); and **`paired_cluster_bootstrap` is kept**
 point for every continuous verdict with `paired_bootstrap` as its engine (§4 S1e Table D). v1.14 also
 carries **one condition neither gate had reached** — `_widen`'s `[-1, 1]` clamp is a
 difference-of-proportions assumption and is wrong for `sep_z` — which is a live defect in shipped
-S1 code and lands as **§4 S1e Table E**, gated at S3 (§4 S3 done-condition 2).
+S1 code and lands as **§4 S1e Table E**. *(v1.11 gated that table on §4 S3 done-condition 2; note
+v1.15 withdraws the gate — next paragraph.)*
+
+**Note v1.15, folded in at plan v1.12 — one blocker's method half, and one reversal.** v1.15 answers
+plan-gate **P6-1**, whose finding was that the embedder pack's only verdict metric had no
+representable carrier and that the shipped comparison path therefore failed **silently, in two
+directions**. Four rulings land here. **(1) The carrier is a second per-item map**,
+`measures: Mapping[str, float]`, never a widened `counts`; finite floats with **no domain constraint
+at the carrier** (a domain here would be Table E's clamp mistake one layer up); a metric name in
+`counts` **or** `measures` and never both, which is what makes instrument selection total; absence
+stays `scoreable`'s job, so an MRR of `0.0` is a *measurement* and `measures` is not
+`Mapping[str, float | None]`; `scored_value` as `scored_outcome`'s sibling, and **`scored_outcome`
+raising** on a continuous metric — the one line that turns a booleanised MRR into a loud failure.
+It lands as **§4 S1e Table F**, at **S1**, on S1e's own *free only now* argument. **(2) §3.2e gains
+two strings, not one** — the decision stays binary (the interval excludes zero), so *distinguishable*
+and *not distinguishable* both need renderings, and *instruments disagree* cannot arise where there
+is one instrument; their four mandatory properties are the note's and §4 S1 cites them rather than
+quoting them. **(3) §3.3 rules a `verdictMetrics` family homogeneous in kind** — Holm orders by
+p-value and a continuous verdict has none — which lands at §3.3 (iv), together with this plan's
+decision about **where** that refusal is enforced, since a manifest carries no records. **(4) The
+reversal:** `separationZ` needs the same per-item carrier but a **different aggregate** one (§5.2
+publishes a median, a p10 and a fraction; none is a mean), and it is **reported rather than
+verdicted** — so `_widen`'s clamp is due with the `sep_z` comparison and **not** as a precondition
+of S3. §4 S3 done-condition 2's gate on Table E, added at v1.11, is withdrawn, and §4 S1e's
+stage gate becomes Table F on done-condition 1. Latency is deliberately **not** a `measures` member:
+it is continuous and per-item and reads like one, and it has its own carrier (`ItemTiming`) and is
+verdict-ineligible by §11.7.
+
+**Two things raised to `data-scientist` under §7 rule 3, neither blocking** *(v1.12)*. **(a) `stats.py`
+owes a producer for a continuous verdict and its signature is §3.4's.** `verdict()` is shaped around
+`PairedOutcomes`, a McNemar *p* and a Holm rung, and a continuous verdict has none of the three; what
+the producer consumes is fixed in §4 S1, but its name and parameter list belong with `verdict()`'s,
+in the note. **(b) §3.3 says `validate` refuses a mixed family.** If that word means the `validate`
+**CLI command**, the two documents agree; if it means `validate_pack`, they do not — a manifest
+carries no records and so cannot decide a metric's kind, and a manifest `kind` field would be the
+inference-from-a-pack-field §3.2d refuses. §3.3 (iv) states this plan's enforcement point and its
+reasoning; the note's sentence is the one that moves if either does.
 
 *(The v1.9↔v1.10 pairing, recorded here because its reversal is the reason §3.6 reads as it does.)*
 The note's **§11** closes R-13 and, in doing so,
@@ -3827,7 +4238,10 @@ trustworthy the senior document, the more efficiently it does so. So:
 
    Where an edit **adds** rather than retires, the enumerating command is over the
    type's **construction sites** and the residual is asserted by the type system — a required field
-   with no default — never by a count. §4 S1e is where this plan's five tables live.
+   with no default — never by a count. §4 S1e is where this plan's **six** tables live, and its
+   preamble scopes them: the six are the *retiring and re-keying* edits, and the adding ones are
+   named there as the type-system-enforced remainder rather than left for a reader to miss
+   *(v1.12, plan-gate P6-4)*.
 
 **Finding IDs are prefixed by their review, because two reviews independently number `P4-*`**
 *(v1.10, at the plan gate's request)*. This plan cites `docs/reviews/small-model-benchmarking.md`'s
@@ -3986,8 +4400,46 @@ survives the clamp, the printed interval does not, and the point estimate can la
 interval. It lands as **§4 S1e Table E**: an enumerating command, a second-form residual
 (`max(-1.0, point` → 1 → 0), the clamp **required with no default** rather than defaulted to the
 value that is wrong for one metric, a test in §5 item 6 that reproduces the defect rather than the
-fix, and the only deadline in §4 S1e — **§4 S3 done-condition 2 may not be signed off with it
-outstanding**, because that is the first report to render a `sep_z` interval.
+fix, and — at v1.11 — the only deadline in §4 S1e, gating §4 S3 done-condition 2. *(**That
+deadline is withdrawn at v1.12.** Note v1.15 rules `separationZ` **reported rather than verdicted**,
+so the clamp is due with the `sep_z` *comparison* and not with S3; the gate that replaces it is
+Table F on S3 done-condition 1 — see Pass 6 below.)*
+
+**Plan gate Pass 6, and what it changed here** *(v1.12)*.
+`docs/reviews/small-model-benchmarking.md` `## Pass 6` (`afca8e0`) returned **needs changes** against
+v1.11 — 1 blocker, 2 majors, 2 minors — and **all five are closed in this revision, none carried**.
+The pass confirmed all ten Pass 5 dispositions against the tree, and **upheld both of v1.11's
+adjudications**: the rejection of `P5-2`'s second prescribed residual was correct, and §7 rule 5's
+second formulation is sound as stated. Neither is reopened here. One finding needed a method ruling
+and got one (note **v1.15**, `0ad0e7a`); the other four were plan edits available the day the gate
+was written.
+
+**Two of the five are the same lesson and are worth naming as one.** `P6-2` and `P6-3` are not
+disagreements with rule 5 — they are v1.11 **breaking rule 5 inside the revision that wrote it**.
+Table B's fourth residual is the trap 5(b) forbids, published one table after this document rejected
+Pass 5's residual for being exactly that; Table E's site list transcribed a command's output without
+reading it, which is 5(a)'s *superset, not a site list* edge, published in the table added to
+demonstrate 5(a). The counter this revision adopts is the gate's own and is cheap enough to be
+standing practice: **after writing a residual, name the authorised implementation that would make it
+non-zero; before publishing a table's site rows, run each of its commands once and read every line
+it returns.** Both were run for all six tables at v1.12, and every residual in §4 S1e is now shown
+**non-zero today and zero after a faithful edit** — the second half being the check the last two
+revisions each shipped one residual without.
+
+| Finding | Sev. | Closed by |
+|---|---|---|
+| **P6-1** — no field on the record can carry a per-item continuous value, so the embedder's only verdict metric is unbuildable and the shipped comparison path fails silently in two directions | blocker | Split as the gate asked, and the record half ruled **S1** rather than S3 on §4 S1e's own *free only now* argument (the gate's open question 1). **(a)** Method ruled in note **v1.15** §3.2d and landed as **§4 S1e Table F**: `ItemResult.measures: Mapping[str, float]` beside `counts` — never a widened `counts` — with `scored_value` beside `scored_outcome`, `scored_outcome` **raising** on a `measures`-resident metric, one map per metric name, no domain constraint at the carrier, and `0.0` as a measurement. Six enumerating commands, eleven site rows, two second-form residuals. **(b)** §4 S1's `compare_report` block states the continuous verdict path end to end — kind resolved from the aggregate type and cross-checked against the item map, one difference per **analysis unit**, one-arm-only units into §4.3's asymmetry tally, `paired_cluster_bootstrap` with `clamp` derived from a new required `ContinuousMetric.support`, no Holm rung, `-ml` §3.2e's strings 4 and 5 cited not quoted, `DecidedBy` gaining `"paired-bootstrap"`; `named_metrics()` returns `separationRaw`/`separationZ` and a new `DistributionSummary` carries §5.2's median and p10, so `sep_z` reaches a table at all. **(c)** Raised and answered: §3.2e now publishes **two** strings, not one, and §3.3 rules a family homogeneous in kind. DC-10 gains a third arithmetic and the kind cross-check; DC-13 and §5 test 11d carry the note's four proof obligations plus the plan's two. **And Table E's deadline is corrected by reversal** — `separationZ` is reported, not verdicted, so §4 S3 done-condition 2's gate on the clamp is **withdrawn** and the gate that means something is Table F on done-condition 1, which nobody has to remember because without the carrier no result of that pack is storable |
+| **P6-2** — Table B's fourth residual fails on an implementation Table B itself authorises | major | The residual is **narrowed to the mapping's key set** — `grep -rFn 'set(REQUIRED_BY_SCHEMA[1]) == {"model",' modelbench tests --include='*.py'` → **1 → 0** — which is the site the edit genuinely retires and which no decoupled `ARM_KINDS` can match under **either** branch of the `fingerprint.py:137` row. Scoping the wider form to `tests/` was considered and **rejected**: a test pinning the decoupled `ARM_KINDS` by value, which is that row's whole point, puts the same display back inside `tests/`. `test_fingerprint.py:234` needs no residual of its own — the retired name `FORBIDDEN_BY_ARM_KIND` is on that line, so residual 1 reaches it. Both branches of the `:137` row survive, and the row says so |
+| **P6-3** — Table E names four tests that do not call `_widen`, misses the three sites its edit breaks, and contradicts Table D | major | Table E gains a **second enumerating command** (`paired_cluster_bootstrap(` → **5** lines: `stats.py` `:162`, `:263`; `test_stats.py` `:1270`, `:1323`, `:1330`) with per-file counts. Its four `_widen` matches in `test_stats.py` are **named as non-sites** — `def` lines matched on a test *name* — with the general lesson stated: a command's output is a superset of the sites, never the site list. The three real call sites get a row each naming the clamp each passes (`(-1.0, 1.0)`, all three being differences of proportions), `:1323` is marked as the √DEFF exactness test Table D says must survive, and the new defect-reproducing test is placed at **`paired_cluster_bootstrap`, the public surface**, because `_widen` is private. Table D's row is scoped to *neither is touched **by this table***, its own three-versus-four test count corrected, and the Table D/Table E ordering on `stats.py:263` is stated as faithful either way |
+| **P6-4** — §4 S1e is titled "**the** edit set" while DC-11's 26-line `latencyMs` change sits outside all of its tables | minor | §4 S1e's preamble scopes the six tables to the **retiring and re-keying** edits — the ones a site can be missed in silence from — and names the remainder outright: §4 S1's signature block plus DC-11, where `latencyMs` is a required positional at 26 lines across five files and `ItemTiming`/`LatencyBlock`/`withheldFor`/`wallClockMs` appear 0 times, so every construction site breaks loudly and no residual has anything to prove. §7 rule 5's closing paragraph carries the same scoping. **Table F is the one adding edit still tabled**, and it states on itself why: its field is defaulted, so nothing breaks, and the behaviour that changes is `scored_outcome`'s |
+| **P6-5** — Table B's second residual is prose in a table whose thesis is that a residual is a command with a count | minor | Written as the command it already was: `grep -rFn 'frozenset(FORBIDDEN' modelbench --include='*.py'` → **1 → 0** (`fingerprint.py:137`, the only match, verified at `5878014`). The row also records what it adds over residual 1, which is the reason it is not redundant: a rename that leaves `ARM_KINDS` coupled to the *renamed* mapping satisfies residual 1 and leaves this one at 1 |
+
+**Nothing in Pass 6 is carried, and nothing is blocked on unbuilt work.** `P6-1` is the only one that
+needed anything outside this document, and what it needed was a **method ruling**, which §7 rule 3
+routes and note v1.15 delivered in the same session. Two items are raised to `data-scientist` and
+neither blocks an implementer: `stats.py`'s continuous-verdict producer needs a §3.4 signature the
+way `verdict()` has one, and §3.3's word *"validate"* needs to say which surface enforces the
+homogeneity rule. Both are named in the *Version pairing* block above.
 
 **What S2 additionally inherits from v1.10**:
 
@@ -4026,7 +4478,16 @@ outstanding**, because that is the first report to render a `sep_z` interval.
 - **§3.2d's continuous verdicts enter through `paired_cluster_bootstrap`, never through
   `paired_bootstrap`**, and **`sep_z` is compared with `clamp=None`** — the shipped `[-1, 1]` clamp
   is a difference-of-proportions assumption (§4 S1e Tables D and E, `-ml` v1.14 §3.4 Rule 4). Table E
-  is S1-local work that **S3 done-condition 2 is gated on**.
+  is S1-local work; **v1.12 withdraws the S3 gate v1.11 put on it** — `sep_z` is reported, not
+  verdicted (`-ml` v1.15 §3.2d), so the clamp is due with the `sep_z` comparison, which is
+  exploratory and is no stage's done-condition.
+- **A continuous per-item value has a carrier, and S2's scorers write it** *(v1.12, plan-gate P6-1)*.
+  `ItemResult.measures: Mapping[str, float]` sits beside `counts`; a metric name is in one map or
+  the other and never both; `scored_outcome` **raises** on a `measures`-resident metric and
+  `scored_value` is its sibling. S2's scorer contract gains the third arithmetic (§4 S2), and the
+  scorer states each continuous metric's `support` because it is the only party that knows it. This
+  is §4 S1e **Table F**, and §4 S3 done-condition 1 is gated on it — without it the embedder's only
+  verdict metric has nowhere on the record to live.
 
 **What S2 inherits from v1.8's own revision** (§2.5's probe, not a gate):
 
@@ -4075,10 +4536,11 @@ its rows here in the same pass.
 | `FieldSpec` | `fingerprint` | `NamedTuple(tier: Literal["nonempty","present"])` — §3.4.2 |
 | `FieldProblem` | `fingerprint` | `NamedTuple(field: str, reason: Literal["absent","empty","null","forbidden","unknown"])`. **`unknown` is v1.5's fifth value**, for a *discriminator this build cannot interpret* — an unrecognised `armKind`, or a `benchSchemaVersion` from the future (§3.4.3). Neither is absent, empty, null or forbidden, so the four-value set would have forced a mislabel; it is the field-level counterpart of `InvalidRecord.reason == "unknown_schema"`. |
 | `Fingerprint` | `fingerprint` | frozen dataclass, §3.4.1–§3.4.2. **Two discriminators (v1.9):** `armKind` and `callSurface`, combining into the derived `armProfile` key (`model:chat` / `model:embeddings` / `deterministic`). Both are members of no required set and are checked before any mapping is consulted; `callSurface` is `None` iff `armKind == "deterministic"`, and its value is *declared* by the pack, never observed (§3.4.4a) |
-| `ItemResult`, `RunResult`, `InvalidRecord`, `Aggregates` | `results` | as given in S1. **v1.10:** `ItemResult.timing` replaces the stored `latencyMs`, which becomes a **property** over it; `RunResult` gains `attestationTripWire: Literal["compared","first-observation","unavailable"] \| None`, required with no default and `None` iff the arm is `deterministic` |
+| `ItemResult`, `RunResult`, `InvalidRecord`, `Aggregates` | `results` | as given in S1. **v1.12:** `ItemResult` gains **`measures: Mapping[str, float]`** beside `counts` — the per-item *continuous* values (`-ml` v1.15 §3.2d), defaulted `{}`, finite, domain-unconstrained, and **not** `float \| None` because absence stays `scoreable`'s job — plus `scored_value()` beside `scored_outcome()`, which now **raises `MetricKindError`** on a `measures`-resident metric rather than booleanising it. A metric name is in one map or the other, never both (`MetricKindError` at construction); a non-finite value is `NonFiniteMeasure`. **v1.10:** `ItemResult.timing` replaces the stored `latencyMs`, which becomes a **property** over it; `RunResult` gains `attestationTripWire: Literal["compared","first-observation","unavailable"] \| None`, required with no default and `None` iff the arm is `deterministic` |
 | `ItemTiming` | `results` | **v1.10** (plan-gate P4-3; `-ml` v1.12 §11.9 ask 2b): frozen dataclass `(wallClockMs, ttftMs, generationMs, promptTokens, tokensPerSecond, unexplainedMs, withheldFor)`, every field `\| None` and never `0`. `wallClockMs` is what the harness measured and **survives on a withheld item** — which is what makes `-ml` §11.6's *"the summary is withheld, not the data"* true of the record, and what §11.5.1's `censoringExact` compares. `withheldFor: Literal["load","timeout","no_response"] \| None` names the producer, so §4 S2's cause split is a count over the items rather than a parallel tally. **v1.11 (plan-gate P5-6):** three item states, still **one** counter — `timeout` and `no_response` both feed `latencyWithheldForNoResponse`, and they are distinct item states because `-ml` §11.5.1's `censoringExact` is satisfied by the first and falsified by the second. An item that returned no response still carries an `ItemTiming`, its `withheldFor` populated and every other field `None` (plan-gate P5-9); `timing is None` means the **arm** produces no timings at all. On a `model:embeddings` arm only `wallClockMs` and `withheldFor` are populated: that surface returns no `stats` (§3.4.4a). `ItemResult.latencyMs` — the **admitted** figure, the only timing any aggregate reads — is derived from this record and stored nowhere (§7 rule 4 prefers the derivation to the invariant two stored copies would need) |
 | `LatencyBlock` | `results` | **v1.9, extended v1.10**, produced by S2 and carried as `RunResult.latency: LatencyBlock \| None`: `latencyMsP50` / `latencyMsP95` / `latencyMsMax` (`float \| None`, `None` exactly when `-ml` §11's gates refuse them), `latencyTimedCount`, `latencyItemCount`, `latencyWithheldForLoad`, **`latencyWithheldForNoResponse`** (renamed from `…ForTimeout` — plan-gate P4-7), `statsCoveredCount`, and **v1.10's four aggregate figures** `ttftMsMedian` / `prefillMsPer1kMedian` / `tokensPerSecondMedian` / `unexplainedMsMax` (each `float \| None` — plan-gate P4-3). The wall clock and the three `stats`-derived figures have **different** coverage and each prints its own (`-ml` §11.4); `statsCoveredCount` is `None`-never-`0` on a call surface returning no `stats`. The block's **nine** invariants are in §4 S2 — v1.11 adds **(iv-c)**, co-presence, and turns (iv)'s identity into an inequality (plan-gate P5-5) — and the estimator, floors and printed grammar are the note's |
 | `BinaryMetric` | `results` | frozen dataclass `(name, successes, n, unit: str)` — a count and **the unit its denominator is in**, `unit` required with no default (v1.6). It is what lets `report.py` honour `-ml` §4.4's "never print a Wilson interval over a turn-pooled count": without it a per-conversation rate and a turn-pooled one are the same type. Every S2 scorer therefore states its denominator unit; the permitted values are the note's denominators (`-ml` §4.2). |
+| `ContinuousMetric`, `DistributionSummary` | `results` | `ContinuousMetric(name, mean, n, support)` and `DistributionSummary(name, median, p10, n, unit, support)` — **v1.12** (plan-gate P6-1). `support: tuple[float, float] \| None` is the **metric's own** support, required with no default on both, and is what a generic `report.py` derives the paired bootstrap's `clamp` from — `(lo−hi, hi−lo)`, or `None` for an unbounded metric — without the manifest field §4 S1e Table E rejects. `DistributionSummary` exists because `-ml` §5.2 publishes a **median and a p10** for `sep_z` and neither is a mean; `RetrievalAggregates.separationRaw`/`separationZ` carry it in place of the bare `float \| None` they carry today, and `named_metrics()` returns them, which is what makes `sep_z` reach a table at all. |
 | `HolmStep` | `stats` | frozen dataclass `(p, rank, threshold, tested, rejected)`, one per pre-registered family member, returned by `holm_steps` in the family's own order and always exactly `k` long. **v1.6 — it replaces `holm_thresholds`' `list[float]`, which could not express the step-down stop.** `tested=False` marks a member past the stop: its `threshold` is still printed (§3.3(ii)) and decided nothing. The α it is computed at is the note's (`-ml` §3.3). |
 | `PairedOutcomes`, `ResolvingPower`, `Verdict`, `BootstrapResult` | `stats` | **`-ml` §3.4's, verbatim** — not restated here. `PairedOutcomes.from_units` is the only constructor and raises on a repeated analysis-unit id; `resolving_power()`'s inputs are keyword-only with no defaults. (v1.2's `PairedResult` was this plan's own invention and is withdrawn.) |
 | `PackRef` | `packs` | `NamedTuple(packId, packVersion, contentHash: str \| None, role, metrics, pairingKey: tuple[str, ...], analysisUnit: str, seed: int)` — pack identity as a *report* sees it, plus §3.3's two `sampling` declarations. **`contentHash` is `str \| None` (v1.6)**, `None` meaning "not loaded" and never "hashed to empty"; it is total only on `Pack.ref()`, and no report path may read it in place of a run's own `fingerprint.packContentHash` — §3.3's identity bullet carries the rule and the reasoning. **`pairingKey`/`analysisUnit` are v1.5's**: `report.py` resolves the analysis-unit id from `analysisUnit` and **no call site chooses it** (§3.3, DC-5(c)), so without them the resolution has nowhere to come from; the five-field form predated §3.3's v1.4 `sampling` block. Derived, not stored: `analysisUnitIndex = pairingKey.index(analysisUnit)`, which is `0` whenever `check_sampling_contract` has passed. **`seed` is v1.5's shipped field and this row omitted it until v1.10** — a rule 4 staleness of exactly the kind this appendix warns about. It is `sampling.seed`, required with no default, and after note v1.11 its object is `-ml` §3.2d's **continuous-metric** bootstrap alone: the paired binary path takes no seed (§3.3, §4 S1e Table D). |
@@ -4090,4 +4552,4 @@ its rows here in the same pass.
 | `Turn`, `Conversation` | `convo` | one scripted turn (`seq, user, expect`); one row of `conversations.jsonl` |
 | `ConversationTrace` | `convo` | per-turn `(messages_sent, ChatResult, dispatches, env_state, wallClockMs)` |
 | `DispatchRecord` | `tooling` | `(name, rawArguments, parsedArguments, returnValue, timestamp)` — FR-10's ground truth |
-| `DecidedBy` | `stats` | `Literal["mcnemar-exact", "conservative-envelope"]`. **v1.10 renames the second member** from `"cluster-bootstrap"`: after note v1.11 the paired binary interval is Rule 4's bound-by-bound **envelope** computed in closed form, so no cluster bootstrap runs on that path and a token naming one is the machine-readable form of the prose defect the note corrects in its own four strings. The note left the rename to this document and recommended it; §4 S1e Table D enumerates the sites |
+| `DecidedBy` | `stats` | `Literal["mcnemar-exact", "conservative-envelope", "paired-bootstrap"]`. **v1.12 adds the third member** for `-ml` §3.2d's continuous path (§4 S1): a machine token must name the instrument that ran, and on that path neither of the other two did; free while no stored record carries a verdict. **v1.10 renames the second member** from `"cluster-bootstrap"`: after note v1.11 the paired binary interval is Rule 4's bound-by-bound **envelope** computed in closed form, so no cluster bootstrap runs on that path and a token naming one is the machine-readable form of the prose defect the note corrects in its own four strings. The note left the rename to this document and recommended it; §4 S1e Table D enumerates the sites |
