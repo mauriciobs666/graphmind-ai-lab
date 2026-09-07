@@ -60,7 +60,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U6 | graph-dba (9: 09-02) | `a9bcd0c2ab80b7622` | accepted | `claude/graph-dba/falkordb-quirks.md` (6 entries, 2 merged + corrected) + `kaizen/*` (K-008); `claude/qa-engineer/qa-testing-techniques.md` + `kaizen/history.md`; 9 nodes deleted | none → — | 156.3k tok, 54 tools |
 | U7 | architect chunk A (11: ≤ 09-02) | `a8fdbd6dcd140b4e3` | accepted | `claude/architect/architect.md` + `kaizen/*` (K-004, K-005); root `AGENTS.md`; `cypher-mcp/README.md`; `claude/data-scientist/lm-studio-model-notes.md` + `kaizen/history.md`; 10 nodes deleted, 1 `PRODUCED` resolved (`MENTIONS`→`qa-engineer` kept alive) | none → — | 170.7k tok, 79 tools |
 | U7b | architect chunk B (6: 5×09-03 + 1×09-07 arrived mid-pass) | `a035ccc6941014b46` | accepted | `claude/architect/architect.md` (1 bullet, 2 entries folded) + `kaizen/history.md`; `skills/python-web-quirks/SKILL.md` (2 sections) + `skills/agent-standards/claude-code.md` + `skills/README.md`; `claude/data-scientist/lm-studio-model-notes.md` (folded into U7's section) + `kaizen/history.md`; `claude/cobb/kaizen/history.md`; 6 nodes deleted — **`architect` closed out, 0/0** | none → — | 173.6k tok, 66 tools |
-| U8 | tdd-engineer chunk A (12: ≤ 08-30) | — | queued | `claude/tdd-engineer/kaizen/*`, graph cleared | none → — | — |
+| U8 | tdd-engineer chunk A (12: ≤ 08-30) | `a23d066e2aad247f8` | accepted | `claude/tdd-engineer/tdd-engineer.md` (1 merged Principles bullet) + `kaizen/*` (K-007…K-010); `skills/python-web-quirks/SKILL.md` (1 new + 1 generalized) + `skills/agent-standards/claude-code.md` + `skills/README.md`; `claude/data-scientist/lm-studio-model-notes.md`; `claude/cobb/kaizen/history.md`; 12 nodes deleted | none → — | 182.7k tok, 74 tools |
 | U9 | tdd-engineer chunk B (8: ≥ 08-31) | — | queued | `claude/tdd-engineer/kaizen/*`, graph cleared | none → — | — |
 | U10 | coder chunk A (12: ≤ 08-29) | — | queued | `claude/coder/kaizen/*`, graph cleared | none → — | — |
 | U11 | coder chunk B (8: 08-31…09-02) | — | queued | `claude/coder/kaizen/*`, graph cleared | none → — | — |
@@ -175,12 +175,19 @@ re-checked against this rate as each agent comes up.
   entries shows it is avoidable. Seven agents read that recipe. Kept open on
   remit, not doubt; parking them in a `claude/graph-dba/` file to stay in-remit
   would be exactly the hoarding §5 forbids.
-- **U6 → two scratch graph keys need cleanup**: `scratch_cobb_u6` (~155 nodes)
-  and `scratch_cobb_u6_other` (1 node), created for write-probes that could not
-  be settled by reading. `cobb` correctly did **not** delete them —
-  `GRAPH.DELETE` is destructive and reserved to `graph-dba`/`devops` behind
-  their guards. No existing key was reused, mutated, or renamed. Route the
-  two-key cleanup to `graph-dba` at pass close.
+- **U6/U8 → three scratch graph keys need cleanup**: `scratch_cobb_u6`
+  (~155 nodes), `scratch_cobb_u6_other` (1 node) and `probe_u8_rename_dst`,
+  created for write-probes that could not be settled by reading. `cobb`
+  correctly did **not** delete any of them — `GRAPH.DELETE` is destructive and
+  reserved to `graph-dba`/`devops` behind their guards. No existing key was
+  reused or mutated. **One attribution discrepancy, recorded rather than
+  resolved:** U8 reported leaving no key behind and listed
+  `probe_u8_rename_dst` as pre-existing from an earlier unit, but U6 — the only
+  earlier unit that ran `RENAME` probes — reported exactly two keys, both
+  `scratch_cobb_u6*`. The name suggests U8's own. Redis exposes no cheap
+  creation timestamp, so this is not decidable after the fact; all three go to
+  `graph-dba` for cleanup regardless. The lesson is the same one U7b promoted:
+  namespace scratch artifacts per unit, or leave none.
 - **U7 → a `qa-engineer` top-up unit is now owed at pass close.** U7 tagged
   `b7d5e214` `MENTIONS`→`qa-engineer` (a general test-design rule: an "assert
   every survivor by label" done-condition cannot catch an over-broad delete

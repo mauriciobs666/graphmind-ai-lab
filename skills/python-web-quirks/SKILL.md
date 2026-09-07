@@ -1,7 +1,7 @@
 ---
 name: python-web-quirks
 description: >-
-  Live-verified Python gotchas beyond a quick docs read — mostly web/async, plus two
+  Live-verified Python gotchas beyond a quick docs read — mostly web/async, plus three
   pytest/import-timing traps: asyncio fire-and-forget GC-safety; FastAPI/Starlette
   BackgroundTasks' bounded thread pool vs. unbounded threading.Thread; response_model_exclude_unset
   dropping defaulted nested-model fields; FastAPI's four built-in doc routes (and which
@@ -9,8 +9,10 @@ description: >-
   being keyed by status code alone, so two error bodies at one status collapse; pydantic
   Field(min_length=1) accepting whitespace-only strings; urllib's HTTPError/URLError/TimeoutError taxonomy; an
   OpenAI-compatible server's HTTP-200 error envelope on a missing /v1; a bare json.loads LLM-judge
-  parser failing silently on a fenced completion; monkeypatch.setenv as a no-op against an
-  import-frozen constant; a function-local deferred import re-resolving each call vs. a
+  parser failing silently on a fenced completion; an env var set after import (a monkeypatch.setenv
+  or a script's own os.environ assignment in main()) being a no-op against an import-frozen
+  constant; a bare pytest.raises with no match= passing on an unrelated same-type raise from an
+  earlier check in the same validator; a function-local deferred import re-resolving each call vs. a
   def-time-bound default arg; a one-way circular import between two modules that fails in every
   load order unless the deferred import is inside a function body (not a class body); and
   starlette TestClient's teardown cancelling every still-running task regardless of whether the
@@ -208,7 +210,7 @@ judge/classifier's "unparseable" bucket is worth instrumenting separately from i
 verdicts — a spike in "unparseable" that silently resolves to one default verdict is a parser bug
 wearing the shape of a model-quality problem.
 
-## A pytest autouse fixture's `monkeypatch.setenv(...)` is a no-op for a module-level constant already computed from `os.environ.get(...)` at import time
+## Setting an env var *after* import is a no-op for a module-level constant computed from `os.environ.get(...)` at import time — in a pytest fixture and in a plain script alike
 
 A config module that resolves constants once at import (`WS_ID = os.environ.get("WS_ID", ...)` at
 module scope, "read once, no reload path" by design) freezes those values before any per-test
@@ -223,6 +225,35 @@ directly instead of the environment.
 The safe fixture sets **both** — the env var (for anything reading `os.environ` fresh, or a
 subprocess) **and** `monkeypatch.setattr(module, "ATTR", value)` (for the frozen-at-import
 constant).
+
+**The same freeze bites a plain script with no pytest anywhere in sight** (verified 2026-08-30, a
+`falkor-chat` eval harness): a top-of-file `from pkg import a, b` runs the config module's
+import-time `os.environ.get(...)` immediately, so `os.environ["X"] = ...` inside `main()` — which
+looks early enough, and is early relative to the call that consumes it — sets the variable *after*
+the constant it feeds was already computed, and the consumer fails as if the variable were never
+set. Here the fix is placement, not `setattr`: set the environment **above the package imports**,
+at the very top of the file (`os.environ.setdefault(...)` before `from pkg import ...`). A
+constant frozen at import can only be beaten before that import or at the module attribute — never
+in between.
+
+## A `pytest.raises(SomeError)` with no `match=` can pass on an unrelated raise from an earlier check in the same function
+
+A validator that checks several fields in a fixed order and raises **one** exception type for all
+of them will short-circuit on the first violation. If a test's fixture value plays two roles at
+once — the field under test *and* some earlier-checked field, or a value that also trips a
+pre-existing structural check — the bare `pytest.raises(SomeError)` is satisfied by whichever
+check fires first, and the assertion never touches the behavior it claims to pin. The failure mode
+is silent and one-directional: the test is green before the guard exists, green after, and green
+when the guard is deleted.
+
+**Consequence:** for any exception assertion where more than one code path can raise that type,
+pin `match=` to the *specific* raiser's own wording (`r"^step key would be \d+ characters, over
+the"`, not a bare `"key"` that a dangling-reference error also contains), and keep the fixture
+value out of every role but the one under test. The check that this was done correctly is a
+mutation, not a review: disable the guard's call sites and confirm **every** parametrized case
+goes red — a case that stays green was passing for the wrong reason all along. (Observed
+graphmind-ai-lab 2026-08-26, `falkor-chat` K-049; the surviving test comments in
+`server/tests/test_services.py` around `OVERSIZED_ISOLATED_STEP` record the concrete instance.)
 
 ## A function-LOCAL `from .module import name` re-resolves fresh on every call — a function-DEFAULT bound to the same name does not
 

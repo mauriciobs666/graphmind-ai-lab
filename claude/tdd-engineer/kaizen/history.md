@@ -2,6 +2,128 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-09-07 — `kaizen_team` distillation, chunk A: 12 entries (2026-08-25 → 08-30) — 5 promoted, 3 discarded, 4 kept open; one new Principles bullet
+
+- **What:** `cobb`-run §5 distillation (`agent-maintenance` skill), unit **U8** of
+  `claude/docs/plans/kaizen-distillation2-coordination.md`. Scope was **chunk A only** — the twelve
+  current-shape entries dated 2026-08-25 through 2026-08-30. This agent's **eight** entries dated
+  08-31 and later are chunk B, a separate unit, and were **not touched**. Zero legacy
+  (`author`-property) entries exist for this agent.
+- **Verification changed two dispositions.** Re-deriving against live code, rather than trusting the
+  entry text, moved `f3a1e6b2` out of "false, same premise as the U4 entry" (it is the genuinely
+  narrow true case — see K-010) and moved `a1b2c3d4`, `b3f0a6b2` and `84864fe1` into "already
+  documented" once their real homes were found. **Two 8-char `entryId` prefixes collided** with
+  unrelated entries cleared in earlier units — `b3e2f6a1` (cobb, legacy 2026-08-21, `tools:`
+  allow-list enumeration) and `a1b2c3d4` (qa-engineer, multi-column read corruption). Both were
+  confirmed distinct by date **and** subject before concluding no prior `K-` item existed; these ids
+  are hand-shaped, not `uuid4`, so a prefix grep alone is not a dedup check.
+
+**Promoted (5):**
+
+- **`b3e2f6a1`** (08-26, validation checks in a fixed order masking the field under test) **+
+  `b2c3d4e5`** (08-30, a `"WITH DISTINCT" in compiled.cypher` substring assertion surviving a
+  `zip()` column-swap mutation) — **one new Principles bullet in `tdd-engineer.md`**, placed
+  before "Fast, isolated, deterministic by default": *prove a new assertion against the mutant, not
+  just against red*. Promoted **merged**, because they are one rule with two faces: an assertion a
+  coincidence can satisfy is green before the behavior exists, green after, and green when it is
+  deleted. The existing RED-step rule ("confirm it fails *for the right reason*") does **not** cover
+  this — it proves the test *can* fail, not that the assertion can reject a *wrong* implementation.
+  Two independently-captured live incidents in one week is what closed the standing parking-lot
+  question of whether mutation-testing guidance "earns its keep" in this deliberately lean prompt;
+  the bullet is one rule + one why-clause + three concrete triggers, no incident story.
+- **`b3e2f6a1`, pytest-specific half** → new section in `skills/python-web-quirks/SKILL.md`: a
+  `pytest.raises(SomeError)` with no `match=` passes on an unrelated same-type raise from an earlier
+  check in the same validator. Both the general rule (prompt) and the language-specific mechanics
+  (skill) are needed; neither restates the other. The falkor-chat instance itself needed no write —
+  `server/tests/test_services.py`'s `OVERSIZED_ISOLATED_STEP` comment block already records it in
+  full, and the skill cites that rather than copying it.
+- **`a3f5c9d2`** (08-30, `falkorchat.config` freezing `FALKORCHAT_OPENCODE_CONFIG`/
+  `FALKORCHAT_MODEL_CONFIG` at import) → **generalized an existing** `skills/python-web-quirks/SKILL.md`
+  section rather than adding one. That section was scoped to *"a pytest autouse fixture's
+  `monkeypatch.setenv`"*; the entry's contribution is that the identical freeze bites a plain script
+  with no pytest anywhere — `os.environ[...] = ...` inside `main()` looks early but runs after the
+  top-of-file `from falkorchat import …` already computed the constant. The remedy differs too
+  (placement above the imports, not `monkeypatch.setattr`), which is why it is worth stating. Heading
+  widened, frontmatter `description` and `skills/README.md` entry updated to match ("two" → "three"
+  pytest/import-timing traps). Re-verified live at `config.py:48-51`. The falkor-chat corollary was
+  already published (`falkor-chat/docs/SERVER.md`, "A wired agent requires two config files") — no
+  project-doc write needed.
+- **`32ca9b55`** (08-25, an `Edit` silently reverting mid-task in a file with disclosed concurrent
+  uncommitted edits) → new bullet in `skills/agent-standards/claude-code.md` § "Bash tool
+  environment", as a sibling of the shared-scratchpad entry. **Not already covered:** `claude/AGENTS.md`
+  documents the `git add`/`git commit` **index** race and the skill documents the shared **scratchpad**
+  — this is a third surface, the working-tree bytes themselves, and a grep for it across both files
+  returned nothing. Kept honest about its status: a single observation, mechanism inferred (the other
+  session writing a whole-file buffer read before the edit), not re-derivable now — §5's
+  "unverifiable ≠ discard" case, kept for value with the doubt stamped in the text.
+- **`e3f1a9c2`** (08-26, LM Studio HTTP 400 `Error loading model` on the first call after idle,
+  succeeding on immediate retry) → **folded into** `claude/data-scientist/lm-studio-model-notes.md`'s
+  existing JIT auto-load bullet, not stacked as a near-duplicate section beside it: that bullet
+  already establishes that the first call after idle pays the JIT load, and this entry's news is
+  that the load can **fail** rather than merely be slow. No model was loaded on the shared LM Studio
+  server to verify — the disposition rests on the entry's own live evidence plus the already-verified
+  JIT mechanism it extends.
+
+**Discarded (3) — all "already documented", each found only by looking:**
+
+- **`a1b2c3d4`** (08-30, a reject-outright compile-time guard for "`ORDER BY` column not in `RETURN`"
+  being over-broad because it also outlaws the superlative shape) — already in
+  `claude/graph-dba/falkordb-quirks.md` (lines ~260-290, verified 2026-08-30, same day), in
+  substantially more depth than the entry: the `GRAPH.EXPLAIN` plans for both forms, the three-row
+  wrong-answer repro in both creation orders, the exact-duplicate collapse check, and the residual
+  tie caveat. The entry's own `evidence` field points there. Nothing to add.
+- **`84864fe1`** (08-28, a replayed-history tool-use breadcrumb backfiring — the model imitating the
+  breadcrumb format verbatim in customer-visible output, a false-verification claim on top of the
+  original fabrication) — already in `falkor-chat/docs/HISTORY.md` (2026-08-28 K-056 entry, ~90
+  lines) and `falkor-chat/docs/reviews/salesperson-tool-reliability-impl.md` MAJOR 1, which is where
+  the "not an inert leftover, an active severity increase" reading was established and acted on
+  (the breadcrumb was reverted). Both records are richer than the entry.
+- **`b3f0a6b2`** (08-29, `ws:nlq-eval` has no fusion/dedup applied, so a raw `count(e)` counts
+  un-fused nodes) — **live re-verified** read-only against `ws:nlq-eval`: Organization 17 nodes / 5
+  distinct names, Person 5/3, Product 7/3, Location 11/8, exactly as claimed. Discarded anyway,
+  because the fact is already recorded **at the point of use**, which is the only place it changes
+  anyone's behavior: `server/tests/eval/nlq_golden_set.jsonl`'s `nlq-31` rationale reads "17 raw
+  entity nodes (un-fused — 5 distinct organizations named across 12 documents), live-verified". A
+  second copy in a project doc would be a drift risk, not a gain.
+
+**Kept open (4) — `plan.md` K-007 … K-010.** All four are `falkor-chat` project facts whose correct
+home is `falkor-chat/docs/SERVER.md` §1.7 or `falkor-chat/AGENTS.md` — **outside `cobb`'s write
+remit**, so each is recorded with the exact target doc and section rather than half-written:
+
+- **K-007** ← `f3a8c9d2` (08-25) — a concurrently-used shared `falkordb-dev` makes `pytest -q` show
+  21-53 transient failures across unrelated test files, a different set each rerun, reproducing on a
+  `git stash`-clean HEAD and then going fully green. → `SERVER.md` §1.7.
+- **K-008** ← `a7f3c1d2` (08-28) — the seed scripts take a **bare** workspace id and prepend `ws:`
+  themselves, so passing the prefixed form `GRAPH.LIST` displays creates a bogus `ws:ws:<id>` key
+  silently, exit 0. Re-verified 2026-09-07 (`bootstrap_schema.sh:111`, no guard in any of the five);
+  the stray `ws:ws:acme` from the original incident is gone from the loaded-graph list. **Explicitly
+  checked against the cross-reference and *not* superseded** by this agent's `Repository._read_structure`
+  K-005 fix (`falkor-chat/docs/HISTORY.md`, 2026-08-25) — that fix concerns `verify_workflows.sh`
+  false-negativing an intact snapshot when `reference` was fully deleted, a different mechanism that
+  happens to surface in the same re-seed workflow. → `falkor-chat/AGENTS.md` "Key scripts" table.
+- **K-009** ← `d8f0c1e2` (08-30) — `querygen.DatasetSchema` is also hand-constructed in
+  `test_repository.py` (~3498, ~3523), so a `labels`-shape change breaks a file a `test_querygen.py`-
+  scoped grep never reaches. Re-verified 2026-09-07. → a `DatasetSchema` docstring line is the
+  cheaper fix than a doc bullet.
+- **K-010** ← `f3a1e6b2` (08-30) — `trace=True` alone writes zero `TraceEvent`s from an ad-hoc
+  in-process executor built without `tracer=GraphTracer(repo)`. **Re-derived specifically against the
+  U4 finding that a twin entry rested on a false premise**, and it survives: `executor.py:605`
+  (`tracer = self._tracer if run["trace"] else _NULL_TRACER`) plus `__init__`'s
+  `self._tracer = tracer or _NULL_TRACER` make it two independent conditions, while `app.py:540-543`
+  does pass `tracer=GraphTracer(repo)`, so the REST path is unaffected and U4's correction stands.
+  The trap is confined to a hand-rolled harness. K-010 records that scoping, because the bullet is
+  easy to write as the false general claim. → `SERVER.md` §1.7, beside the structurally identical
+  `_default_clock` bullet.
+
+- **MENTIONS tags added:** none. `e3f1a9c2` was the only candidate (LM Studio is `data-scientist`'s
+  domain) and was **fully dispositioned into that agent's knowledge base directly** instead — per §5,
+  preferred over tagging, which would only re-surface an entry already routed.
+- **Docs touched:** `claude/tdd-engineer/{tdd-engineer.md,kaizen/plan.md,kaizen/history.md}`,
+  `claude/data-scientist/lm-studio-model-notes.md`, `skills/agent-standards/claude-code.md`,
+  `skills/python-web-quirks/SKILL.md`, `skills/README.md`.
+- **Cleared:** all 12 in-scope entries removed from `kaizen_team` — see the per-entry edge counts in
+  `claude/cobb/kaizen/history.md`'s matching 2026-09-07 entry.
+
 ## 2026-08-25 — `kaizen_team` distillation pass: 2 entries reviewed, both discarded (no prompt change)
 - **What:** `cobb`-run distillation (agent-maintenance skill §5), unit U9 of a team-wide pass. Found 2 raw entries for `tdd-engineer`: 1 legacy (`author` property) and 1 current-shape (`PRODUCED` edge). Both re-verified against live code and discarded — neither required a prompt/knowledge-base/project-docs change.
   - **`4e6a2c0e-6f3b-4b8a-9d4e-2b7a1c9f5d31`** (legacy, 2026-08-22) — fact: a plan's literal pseudocode for a new catch-all rejection message can silently conflict with a brief's "existing regression suite stays unmodified" mandate; the old wording must survive as a superset, not be replaced verbatim. Evidence: implementing `cypher-mcp/server.py`'s `authorize_write()` catch-all verbatim per `docs/plans/kaizen-agent-ontology.md` §3.1 broke 4 pinned tests (7, 15, 15b, 16); fixed by extending the old sentence rather than replacing it. **Re-verified live:** `authorize_write()`'s final rejection string (server.py:612-619) still reads "neither an author-write (...) , a producer-write (...), nor a recognized curator shape (...)" — the pre-existing substring intact, new shapes appended to the same sentence; tests 7/15/15b/16 still assert `"neither an author-write" in out`. **Disposition: discard — already documented in project docs**, in more depth than the raw entry: `docs/reviews/kaizen-agent-ontology-impl.md` ("What's verified solid" section) records this exact deviation, the plan's literal pseudocode it diverged from, and the verification (`git show` diff, all 4 pinned tests independently re-run). The entry's own `suggestedHome` ("project docs") is satisfied by pre-existing work, not a gap.

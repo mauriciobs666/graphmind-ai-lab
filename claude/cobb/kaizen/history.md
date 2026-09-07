@@ -3,6 +3,55 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-07 — Distillation pass 2, U8: `tdd-engineer` chunk A (12 entries) — 5 promoted, 3 discarded, 4 kept open
+
+- **Scope:** the twelve current-shape entries `PRODUCED` by `tdd-engineer` dated 2026-08-25 → 08-30.
+  Its eight entries dated 08-31 and later are **chunk B**, a separate unit — verified untouched by
+  re-running the current-shape read after the clears (8 rows, same ids as at open). No legacy
+  entries exist for this agent. No new entry appeared during the run.
+- **Per-entry dispositions and reasoning:** `claude/tdd-engineer/kaizen/history.md`, 2026-09-07
+  entry (the durable record). Kept-open items are `plan.md` K-007 … K-010, all `falkor-chat`
+  project-doc targets outside cobb's write remit, each naming its exact doc and section.
+- **Clears:** all 12 read `producedEdges=1, mentionEdges=0` → `otherRemaining == 0`, so every one
+  took the full-node curator clear (`DETACH DELETE`), each reporting `nodes_deleted=1,
+  relationships_deleted=1`. No `MENTIONS` tag was added this pass, so the ordering invariant was
+  trivially satisfied. `history.md` was appended and confirmed **before** the first mutation.
+- **Artifacts changed by the promotions:** `claude/tdd-engineer/tdd-engineer.md` (one new Principles
+  bullet — prove a new assertion against the mutant, not just against red, merging two entries that
+  are one rule with two faces); `skills/python-web-quirks/SKILL.md` (one new section on a bare
+  `pytest.raises` with no `match=`; one existing section **generalized** from "a pytest autouse
+  fixture's `monkeypatch.setenv`" to any env var set after import, including a plain script's
+  `main()`, since the remedy differs — placement above the imports, not `setattr`); frontmatter
+  `description` and `skills/README.md` updated to match ("two" → "three" pytest/import-timing
+  traps); `skills/agent-standards/claude-code.md` (a third concurrency surface beside the shared
+  scratchpad and the git-index race — the working-tree bytes themselves);
+  `claude/data-scientist/lm-studio-model-notes.md` (cold-load-can-**fail** folded into the existing
+  JIT bullet, per the brief, rather than stacked as a near-duplicate section).
+- **§7 lint of the `tdd-engineer.md` edit** — clean on all seven dimensions. Checked specifically:
+  no contradiction with the RED step's "fails for the right reason" (the new bullet states
+  explicitly what that check does *not* prove, so the two compose rather than compete); no
+  contradiction with "Test behavior, not implementation" (mutating the implementation to check the
+  test is a verification act, not an assertion target); zero class-5/6 prompt waste — the bullet
+  carries no date, no incident story and no `kaizen/history.md` pointer, only the rule, one
+  why-clause and three concrete triggers. The file's 2026-08-24 "editorial floor" certification is
+  not contradicted: that pass certified there was nothing left to *cut*, not that nothing could be
+  added, and the parking-lot mutation-testing idea's own bar ("only add if it earns its keep") was
+  met by two independently-captured live incidents in one week.
+- **Verified:** `claude/scripts/audit-team.sh` — **3 `^FAIL` lines, all check-7 personal-info leaks
+  in files this unit did not touch** (`claude/docs/plans/bypass-permissions-subagent-gap*.md`,
+  `claude/docs/reviews/bypass-permissions-subagent-gap.md`, `docs/plans/salesperson-ui.md`), i.e. no
+  new FAIL introduced — the diff form the skill mandates over a bare pass/fail. Every other check
+  passes, including check 10 (conventions-precedence 3/3) and check 8 across all 13 agents. All ten
+  file edits re-grepped after the audit and confirmed still on disk, per the concurrent-tree hazard
+  promoted in this same pass — a concurrent session was active in the tree throughout.
+- **Method note for the next unit — the 8-char dedup grep really does collide.** Two of this
+  chunk's twelve ids share their 8-char prefix with entries cleared in earlier units:
+  `b3e2f6a1` (cobb, legacy 2026-08-21, `tools:` allow-list enumeration) and `a1b2c3d4`
+  (qa-engineer, multi-column read corruption). Both were ruled out on **date and subject**, not on
+  the prefix. These `entryId`s are hand-shaped, not `uuid4` — a prefix grep is a candidate finder,
+  never a dedup verdict.
+- **Nothing committed** — delegated subagent; files left dirty for `teco` to commit by explicit path.
+
 ## 2026-09-07 — Two skills gained live-verified entries (distillation pass 2, U7b — `architect` chunk B)
 
 - **What:** Promotions out of `architect`'s `kaizen_team` capture landed in two skills `cobb` owns

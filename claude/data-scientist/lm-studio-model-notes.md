@@ -110,7 +110,14 @@ JIT clause added 2026-09-07 from a 2026-09-03 observation).
   nothing for KV-cache quantization. Both must be operator-attested rather than machine-collected.
 - **A request naming an unloaded model triggers LM Studio's JIT auto-load, so the first call pays
   the load.** `lms ps --json` returning `[]` does not mean a subsequent completion will refuse — it
-  means the next one will be cold. **Do not size a design against any single measured load cost:**
+  means the next one will be cold. **That cold load can also *fail* rather than merely be slow** —
+  observed 2026-08-26 on an embedding model (`text-embedding-qwen3-embedding-0.6b`): the first
+  request after an idle period returned HTTP 400 `Failed to load model … Error loading model`, a
+  manual `curl` to `/v1/embeddings` against the same model then succeeded, and re-running the exact
+  same call immediately after passed with no other change. A live test that hits this on its **first**
+  call is an environment flake, not a code or config defect — retry once before diagnosing; a
+  harness that must not flake should warm the model with a throwaway call first.
+  **Do not size a design against any single measured load cost:**
   two cold loads measured on this box differ by ~6x. What is stable, and what a latency design
   should key on, is that LM-Studio-side `ttft` **excludes** the JIT load while wall clock includes
   it — measured, with the numbers, in `docs/plans/small-model-benchmarking-ml.md` §11.4.

@@ -528,6 +528,20 @@ the always-loaded project memory (`CLAUDE.md`).
   agent/run, or work in a `mktemp -d` sandbox; a briefing that dispatches two agents expecting to
   write scratch files should say so.
 
+- **The repo working tree is shared the same way, and a concurrent session can silently revert an
+  `Edit` you already confirmed landed — not only at commit time.** Observed once, graphmind-ai-lab
+  2026-08-25: an agent editing `falkor-chat/server/falkorchat/repository.py` (a file carrying
+  disclosed uncommitted changes from another in-flight session) confirmed a docstring correction
+  applied via `Read`, and a later `grep` for the same string found the **pre-fix** wording back on
+  disk, with no `Edit` of its own touching that line in between — while a substantive change to the
+  same file survived. Mechanism inferred, not proven: the other session writing a whole-file buffer
+  it had read before your edit, which would make the loss per-line and a partially-reverted file
+  normal rather than exceptional. Same class as the `git add`/`git commit` index race documented in
+  `claude/AGENTS.md`, one layer earlier — that race is on the index, this one on the file bytes, and
+  neither is avoided by working on disjoint paths. **Re-grep every edit you are relying on
+  immediately before reporting the work done**, and treat a disclosed concurrent session as a reason
+  to verify, not merely to be careful.
+
 - **A command manually backgrounded inside a Bash call (`cmd &`) is not the same as the tool's own
   `run_in_background` parameter, and the difference bites twice.** (1) A compound command ending in
   `&` can still stall the Bash tool call for its full timeout even after the backgrounded process
