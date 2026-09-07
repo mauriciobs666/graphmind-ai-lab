@@ -1,6 +1,22 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.13
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.14
+
+2026-09-07 (v1.14, `data-scientist`) — the plan gate's Pass 5 routed three method questions here.
+**Co-presence (P5-5): the conservative single count, not a separate `prefillCoveredCount`** — an item
+with `stats` but no usable `promptTokens` leaves `statsCoveredCount` **and** all three medians, since
+excluding it from the count alone would print a denominator that does not describe its numerator; the
+case is defensive against something that should not occur, and a permanent second denominator is the
+wrong price for a rarity. One consequence the plan must carry: §4 S2 rule (iv)'s identity becomes an
+**inequality**. **`censoringExact` (P5-6): clause 1 survives in substance and needs a third
+`withheldFor` value** — v1.10's merge is right for the counter and wrong for the item, because a
+timeout is a *censored* observation and a call that failed at 40 ms is a *missing* one; the predicate
+gains an explicit false branch for the second, and slot 3's weaker string names both mechanisms.
+**`paired_cluster_bootstrap` (P5-3): keep** — the closed form retires the binary paired interval and
+only that one. It is **§3.2d's entry point for every continuous verdict**, `paired_bootstrap` is its
+engine and not a second entry point, and it takes the same discriminator as `sampling.seed`. One
+condition stated with it: `_widen`'s `[-1, 1]` clamp is a difference-of-proportions assumption and is
+wrong for `sep_z`.
 
 2026-09-06 (v1.13, `data-scientist`) — plan v1.10 (`3e5dc50`) routed two items back. **§4 S2's rule
 (iv-b) is confirmed — and it corrects this note rather than merely applying it.** §11.4 sent `ttftMs`
@@ -920,6 +936,27 @@ finding is **satisfied, not reversed**, and only its object moves:
 - **Rule 6's `cluster_bootstrap` and `paired_bootstrap` stay seeded** — Rule 5's `design_effect`
   measurement needs a bootstrap width, and the two-level resample arrives with
   `replicatesPerScript > 1`.
+- **`paired_cluster_bootstrap` stays too, and this note owed it a name** *(v1.14, plan-gate P5-3)*.
+  The closed form retires the **binary** paired interval and only that one, so the chain
+  `conservative_envelope → paired_cluster_bootstrap → paired_bootstrap` loses its *current* caller,
+  not its *designed* consumer. **`paired_cluster_bootstrap` is §3.2d's entry point for every
+  continuous verdict**, called with the pack's declared `design_effect` — the identity widening at
+  1.00 — and **`paired_bootstrap` is its engine, not a second entry point.** Naming the entry point
+  is the load-bearing half: an implementer who wires MRR straight to `paired_bootstrap` gets a
+  correct interval that **silently ignores a declared design effect**, which is the one failure
+  direction this note refuses everywhere else. It is unreferenced today because §3.2d's continuous
+  path is unbuilt — the same state `sampling.seed` is in above, and it takes the **same
+  discriminator**: both go if the embedder pack's continuous verdict is ever cut. Its four direct
+  tests are the only executable statement of Rule 6's `√DEFF` exactness argument and stay with it.
+- **One condition on that reuse, stated here because leaving it unstated is a defect.** `_widen`'s
+  clamp is `[-1, 1]` — correct for the difference of proportions the envelope was written for, and
+  **wrong for `sep_z`**, whose per-query differences are differences of z-scores and are not bounded
+  by 1. Wired as it stands, a `sep_z` interval whose true upper bound exceeds 1 is silently clamped
+  to it and the point estimate can land outside its own interval; the *verdict* survives (a positive
+  difference's exclusion of zero is decided by the lower bound) but the printed interval is false.
+  So: MRR and any rate difference go through unchanged, and **`sep_z` needs that clamp parameterised
+  or absent** before §5.2's comparison is wired. Blocked on nothing — it is one argument on
+  `_widen`.
 - **P3-5's rule is unchanged: the seed is named only where a resample actually decided.** The same
   predicate, evaluated against a system with one fewer resample in it, now selects the continuous
   verdicts and not the binary ones.
@@ -2298,8 +2335,35 @@ usable token count puts prefill's true `X` below `statsCoveredCount`, so both th
 slot 2's single denominator line would overstate coverage for one figure of the three — silently,
 and in the direction that prints. The closure is one assertion beside the recomputation plan §4 S2
 already mandates: **the three medians are computed over the same item count, and that count is
-`statsCoveredCount`.** Where it ever fails, the figure that lost items needs its own count, not a
-share of someone else's.
+`statsCoveredCount`.**
+
+**The runtime disposition, ruled** *(v1.14, plan-gate P5-5)*. An item carrying `stats` whose
+`promptTokens` is absent or `≤ 0` is **excluded from `statsCoveredCount` and from all three sibling
+medians** — the conservative single count, not a second count for prefill. **Both halves of that
+sentence are load-bearing:** dropping the item from the count while still letting it into the
+`ttftMs` and `tokensPerSecond` medians would print a denominator that does not describe its own
+numerator, which is §4.3's laundering with the sign reversed and worse than either clean option. The
+cost is two good measurements discarded on such an item; the purchase is one number that is true of
+all three figures, one gate evaluation, one printed line, and a §11.7 slot 2 whose grammar does not
+fork. It is a **disposition, not an assertion** — nothing raises, so an implementer cannot turn it
+into a run-ending `assert` (plan-gate P4-7's shape).
+
+**Why not the separate `prefillCoveredCount` this note leaned toward at v1.13.** `usage.prompt_tokens`
+is a standard field of every chat completion and every pack item carries a non-empty prompt, so the
+case is **defensive against something that should not occur** rather than a regime the design serves.
+A permanent second denominator — a second gate evaluation, a second stored count, a second line in
+slot 2 — is the wrong price for a rarity, and this note has ruled the same way before (§11.6 takes
+one 5-point tolerance rather than a second level-scaled constant). *Reversal trigger, observable for
+free:* the exclusions are countable from `run.items`, so the first run in which they are **not** a
+rarity is the run that buys `prefillCoveredCount`.
+
+**One consequence the plan must carry, or its own invariant refutes the disposition.** §4 S2 rule
+(iv) pins `statsCoveredCount == latencyItemCount − latencyWithheldForNoResponse` on a `stats`-bearing
+surface. An excluded item **returned a response and was timed**, so it sits on neither side of that
+subtraction: under this ruling (iv)'s identity becomes an **inequality** (`≤`), the gap being exactly
+the co-presence exclusions. The equality that survives — and the one worth asserting — is against a
+recomputation over `run.items`: `statsCoveredCount` is the count of items carrying **both** a usable
+`stats` and a usable `promptTokens`, which §4 S2's one-pass recomputation already mandates.
 
 ### 11.5 The missingness is informative, and how far its direction is known
 
@@ -2416,14 +2480,37 @@ the first real pack run, *is* the false-positive margin on realistic payloads, w
 **The detector is not right-censoring, so slot 3's ordering is computed rather than assumed**
 *(v1.12; plan gate Pass 4 open question 2)*. The predicate, evaluated per render whenever `M > 0`:
 
-> **`censoringExact`** — **true** when every withheld item is a timeout, or when the smallest wall
-> clock among the load-withheld items exceeds the largest among the timed ones; **false** otherwise,
-> and **false whenever a withheld item's wall clock is not readable from the record**.
+> **`censoringExact`** — **true** when **every** withheld item is either an item whose withholding
+> reason is a **timeout**, or a **load**-withheld item whose wall clock is readable and exceeds the
+> largest wall clock among the timed items. **False** otherwise — in particular false whenever any
+> withheld item is a **no-response failure that is not a timeout**, and false whenever a
+> load-withheld item's wall clock is not readable from the record.
 
-A timeout needs no comparison — it exhausted a budget every timed call returned inside. The
-comparison needs the withheld wall clock to survive on the item, which §11.6 already promises the
+A timeout needs no comparison — it exhausted a budget every timed call returned inside. **The
+no-response branch is new at v1.14** (plan-gate P5-6), and it is not a fine point of evaluability:
+**a timeout is a *censored* observation and a call that failed at 40 ms is a *missing* one.** The
+first has a known bound; the second has no value in either direction, so a string asserting it was
+slower than every timed call asserts something about a measurement that never existed.
+
+**What the plan must preserve, and it is one field value.** Plan v1.10 merged timeout into
+`no_response`, which is **right for the counter** — §11.7's cause split prints one `no response`
+label either way, already ruled — and **wrong for the item**, because clause 1 is a statement about
+one item's mechanism rather than about a total. `withheldFor` therefore needs a **third value,
+`timeout`**, distinct from `no_response`. Without it the predicate is unevaluable and a timeout-only
+run silently renders the weaker string: the safe direction, but not the true one, and nothing in
+either document would record that it had happened. **The counter stays one; the item state becomes
+three.**
+
+The comparison needs the withheld wall clock to survive on the item, which §11.6 already promises the
 reader it does (§11.9 item 2b); where it does not, the predicate **fails safe** to the weaker string
 rather than to the stronger one. One comparison per render, over numbers the record already holds.
+
+**§11.5's level bound is undisturbed by any of this**, and it earns a sentence because the natural
+worry is that an item with no timing at all breaks a statement about *the run's `Y` items*: the bound
+counts only items known to be **≤** the printed figure, so an item with no value — or with a value
+nobody will ever know — can fail to be counted but can never falsify the count. That one-sidedness is
+what made the bound distribution-free at v1.12, and it is what makes it survive a third item state
+here.
 
 This detector is **additive to** the residency probe, not a replacement: the probe catches a reload
 that happened *before* an item, the gap catches one *inside* it, and neither sees what the other
@@ -2577,7 +2664,7 @@ computed `censoringExact`** — not on the producer, and not on an argument *(v1
 - `censoringExact` true →
   > `Every withheld call was slower than every timed call — a model load adds seconds to a call that otherwise takes tens to hundreds of milliseconds, and a timed-out call by definition exceeded the request budget — so the figures below are lower bounds.`
 - `censoringExact` false →
-  > `The withheld calls are not all slower than the timed ones: a call is also withheld when too much of its wall clock is unaccounted for by the server's own timers, which can withhold a call that was not among this run's slowest. So the figures below are computed over the surviving calls only and are not lower bounds on the run's own figures; the levels below hold either way.`
+  > `The withheld calls are not all slower than the timed ones: a call is also withheld when too much of its wall clock is unaccounted for by the server's own timers, and a call that returned no response has no timing to compare at all — neither is necessarily among this run's slowest. So the figures below are computed over the surviving calls only and are not lower bounds on the run's own figures; the levels below hold either way.`
 
 **Why two strings rather than one weaker one that is always true.** The true branch is the ordinary
 case — both wall-clock-censoring producers land in it, and §11.7's own measured fixtures withhold the
@@ -2753,9 +2840,10 @@ any tolerance would hide the defect it was meant to catch.
    rendered block prints **both** denominator lines and they differ (`n = 36 of 38` against
    `n = 38 of 38`). A test asserting one denominator for all four fields pins v1.9's withdrawn
    ruling and must fail. **And the three siblings are co-present** *(v1.13, §11.4)*: the count of
-   items contributing to each of the three medians is one number and it is `statsCoveredCount`; an
-   item carrying `stats` but no usable `usage.prompt_tokens` fails this test, and must, because the
-   shared denominator is exactly what it breaks.
+   items contributing to each of the three medians is one number and it is `statsCoveredCount`. An
+   item carrying `stats` but no usable `usage.prompt_tokens` is absent from that count **and** from
+   all three medians, and **the run does not raise** *(v1.14, §11.4's disposition)* — the assertion
+   is on the exclusion being applied to all four places, never on the item being impossible.
 7a. **The in-call reload detector (§11.5.1).** An item whose
    `latencyMs − (ttftMs + generation_time)` exceeds 1 000 ms has its `latencyMs` withheld and is
    counted under model load; one at 7.6 ms — the largest warm gap measured — does not. Both sides of
@@ -2763,10 +2851,12 @@ any tolerance would hide the defect it was meant to catch.
 7b. **The censoring predicate, all four branches (§11.5.1).** A run whose one load-withheld item has
    a wall clock **below** the largest timed one renders slot 3's `censoringExact == false` variant;
    the same run with that wall clock above renders the true variant; a run whose only withholding is
-   a timeout renders the **true** variant without reading any withheld wall clock; and a
-   load-withheld item whose wall clock is unreadable renders the **false** variant. The fourth is the
-   fail-safe, and it is the branch an implementer will skip because no fixture produces it by
-   accident.
+   a timeout renders the **true** variant without reading any withheld wall clock; a
+   load-withheld item whose wall clock is unreadable renders the **false** variant; and a run whose
+   only withholding is a **no-response failure that is not a timeout** renders the **false** variant
+   *(v1.14)* — the branch plan v1.10's merged `withheldFor` category could not express. The last two
+   are the fail-safes, and they are the branches an implementer will skip because no fixture produces
+   them by accident.
 7c. **A surface that returns no `stats` (§11.7).** On such an arm `statsCoveredCount` is `None`, the
    rendered block contains **no** `ttft/prefill/tokens-per-second` line and no item carries an
    `unexplainedMs`; on a chat arm with `statsCoveredCount == 0` that line **is** rendered. Asserted
