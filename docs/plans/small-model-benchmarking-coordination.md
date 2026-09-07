@@ -66,7 +66,7 @@ Stakeholder decisions, 2026-09-02:
 | U25 — Three rulings Pass 5 routed: co-presence shape, `censoringExact` clause 1, `paired_cluster_bootstrap`'s necessity | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `ca69cb1`; all three changed the note, **plus a live defect the gate missed** | `docs/plans/small-model-benchmarking-ml.md` **v1.14** | `analyst` Pass 6 → — | 182k tok / 15 tools cumulative |
 | U26 — Plan v1.11: close all 10 Pass 5 findings; rule 5 restated honestly | `architect` (fresh) | `a99cd8cce60c76d82` | **delivered** — `85a32e5` (+540/−110); all 10 closed, nothing carried | `docs/plans/small-model-benchmarking.md` **v1.11** | `analyst` Pass 6 → — | 282k tok / 121 tools |
 | U27 — Re-gate plan v1.11 + note v1.14 (Pass 6) | `analyst` (fresh) | `a6f3786437e4dab05` | **accepted** — `afca8e0` | `docs/reviews/small-model-benchmarking.md` `## Pass 6` | self → **needs changes** (1 blocker, 2 majors, 2 minors); **S2 may not be dispatched** | 161k tok / 52 tools |
-| U28 — P6-1's method half: the continuous instrument's carrier + §3.2e's fourth verdict string | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | in-flight | `docs/plans/small-model-benchmarking-ml.md` v1.15 if changed | `analyst` Pass 7 → — | — |
+| U28 — P6-1's method half: the continuous instrument's carrier + §3.2e's verdict strings | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `0ad0e7a`; both changed the note, **plus one reversal and one unprompted ruling** | `docs/plans/small-model-benchmarking-ml.md` **v1.15** | `analyst` Pass 7 → — | 218k tok / 17 tools cumulative |
 | U29 — Plan v1.12: close all 5 Pass 6 findings; the continuous carrier as an S1 edit | `architect` (fresh) | `a74d8052842395e20` | in-flight | `docs/plans/small-model-benchmarking.md` v1.12 | `analyst` Pass 7 → — | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
@@ -1614,4 +1614,39 @@ item (type, domain, unscoreable representation, absent-versus-zero), whether `se
 carrier, and the gate's open question 2 — whether §3.2e owes a **fourth verdict string** for a pack
 with no McNemar and an `n/a` floor, today's three all assuming a binary instrument with `pp` as the
 unit. Relayed to the in-flight `architect` when it lands, the pattern now used three times.
+
+### U28 delivered — 2026-09-07, note v1.15 (`0ad0e7a`)
+
+**The carrier is a *second* per-item map — `measures: Mapping[str, float]` — never a widened
+`counts`.** The reasoning is the part worth keeping: widening `counts` to `float` makes the
+booleanisation **type-legal without making it wrong**, and puts a count that §4.2's denominators count
+into the same key space as a measurement they must not. Field-level specifics:
+
+- **No domain constraint on the carrier** — MRR is `[0,1]`, `sep_z` unbounded — because constraining
+  it would be **the `_widen` clamp mistake one layer up**. Non-finite refused *at the carrier*: one
+  `NaN` propagates through the mean and both percentiles and reaches the reader as a **rendered
+  interval** rather than an error.
+- **Absence stays on `scoreable`**, so `measures` is **not** `float | None`: an **MRR of `0.0` is a
+  measurement** and must stay distinguishable from an unjudged query. A second home for absence is a
+  second thing to keep in step.
+- **A metric lives in `counts` or `measures`, never both** — the map *is* the declaration of which
+  instrument decides it; a name in both is refused, not resolved by code order.
+- **The one line that closes P6-1's silent failure:** `scored_outcome` **raises** on a `measures`
+  metric instead of returning `value > 0`.
+
+**It reverses a v1.11 decision, which is why routing it mattered.** `separationZ` is **not** on the
+verdict path (`verdictMetrics = ["mrr"]`), so **Table E's `_widen` clamp is due with the `sep_z`
+comparison, not as a precondition of S3** — v1.11 gates §4 S3 DC-2 on it and that gate must move.
+This is exactly the deadline sentence Pass 6 flagged as protecting an interval with no producer and
+no renderer; the gate saw the symptom, the note supplied the correction.
+
+**And one ruling neither the gate nor the brief asked for**, which no architect could have guessed: a
+**`verdictMetrics` family is homogeneous in kind, and `validate` refuses a mixed one.** Holm orders by
+p-value; a continuous verdict has none, so a mixed family has **no ladder** and the correction
+silently does not happen for one member. An all-continuous family with `k > 1` corrects **in the
+interval** (Bonferroni, deliberately not Holm). The embedder is `k = 1`, so it binds nothing today and
+forbids the silent case later.
+
+Relayed to the in-flight `architect` — the fourth use of the mid-run relay, and the first that had to
+carry a **reversal** rather than an addition.
 
