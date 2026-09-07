@@ -762,3 +762,14 @@ their own startup budgets, which C-310 must establish separately. `run.sh` remai
 Docker-less host. Until that wiring exists, the `cpg-analysis` skill keeps its `redis-cli` fallback
 for exactly this reason: the skill is shared with all three harnesses, but the MCP tool reaches only
 one.
+
+**A second, independent instance — no code change.** `.mcp.json` may hold several named server
+entries, and each becomes its own tool namespace (`mcp__<server-name>__query`). Point a second
+entry's `FALKORDB_HOST`/`FALKORDB_PORT` at a different FalkorDB process and that launch talks only
+to it: both vars are read once at import, per process (§"Environment variables"), and
+`docker-run.sh` forwards them into the container unmodified. Nothing in `server.py` is
+instance-aware — `authorize_write()` decides from the query text and the declared `agent` slug
+alone, so every recognized write shape (producer-write, legacy author-write, the three curator
+shapes) reproduces identically against the second backend. The same unmodified image serves both.
+This is what lets a dev/sandbox graph instance sit alongside the production one without forking the
+server (`docs/plans/kaizen-team-sandbox.md`).

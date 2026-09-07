@@ -3,6 +3,37 @@
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
 
+## 2026-09-07 — `lm-studio-model-notes.md` gains the measurement-surface section (inbound promotion from `architect`'s kaizen distillation)
+
+- **What:** New section in `claude/data-scientist/lm-studio-model-notes.md` — *"The machine-readable
+  measurement surface is on `/api/v0/`, not `/v1/` — and `lms` is reachable from WSL only as
+  `lms.exe`"*. It records which LM Studio facts can be collected automatically (`/api/v0/models`
+  per-model fingerprint fields; `/api/v0/chat/completions`'s `stats`/`model_info`/`runtime`, all
+  absent from the `/v1/` OpenAI route; `lms.exe` reachable from WSL at
+  `/mnt/c/Users/<user>/.lmstudio/bin/lms.exe` with `server status --json`, `ps --json` and
+  `load --estimate-only` working) and the two that cannot — **the LM Studio app version** (`lms
+  version` prints only a CLI commit hash) and **the KV-cache setting** (no API field, no `lms load`
+  flag), which must be operator-attested.
+- **Why:** `kaizen_team` entry `443cc4cc-9ad2-4ea9-b93c-4ae62412bbb1` was produced by `architect`
+  (2026-09-02, designing `docs/plans/small-model-benchmarking.md`) but is squarely in
+  `data-scientist`'s domain, and this file is the live-verified knowledge base for exactly it.
+  Per the U2/U6 precedent, `cobb` dispositioned it here directly rather than `MENTIONS`-tagging a
+  second agent onto it. Full disposition record: `claude/architect/kaizen/history.md` 2026-09-07,
+  unit U7 of `claude/docs/plans/kaizen-distillation2-coordination.md`.
+- **Verification:** re-derived live 2026-09-07, not taken from the entry. `GET /api/v0/models` → 200
+  with the ten documented per-model keys; `command -v lms` exits 1 while the `.exe` path answers;
+  `lms server status --json` → `{"running":true,"port":1234}`; `lms ps --json` → `[]`; `lms load
+  --help` shows `--estimate-only` and `--context-length` and no KV-cache flag; `lms version` prints
+  `CLI commit: <sha>` only. The one clause **not** re-derived is the
+  `/api/v0/chat/completions` response shape — confirming it live would mean loading a model on the
+  shared LM Studio server, which the distillation pass must not do; verified instead against
+  LM Studio's own REST reference (`lmstudio.ai/docs/developer/rest/endpoints`), which quotes all
+  three field groups. The section carries its verification date.
+- **Open, for whoever runs `architect`'s chunk B:** entry `6f2b1d94-3c7a-4e51-b0d8-9a2e5c74f118`
+  (2026-09-03) covers the same surface with response timings. It refines this section rather than
+  contradicting it — **fold it in, do not add a second section**.
+- **Plan items:** none.
+
 ## 2026-09-02 — "This lab's terrain" no longer describes the retired salesperson app (U6 of `salesperson-ui`)
 
 - **What:** `data-scientist.md` `:56` listed two graph-backed AI apps, the second being

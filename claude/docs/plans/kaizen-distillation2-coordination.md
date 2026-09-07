@@ -58,7 +58,8 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U4 | qa-engineer (7: 08-28…08-31) | `a175af41b18b446d7` | accepted | `claude/qa-engineer/qa-testing-techniques.md` (2 sections) + `kaizen/*` (K-007 carries 3 entries awaiting a `falkor-chat/` home); 7 nodes deleted | none → — | 135.7k tok, 55 tools |
 | U5 | tico (8: 08-26…09-02) | `a85a1d743ae070fa5` | accepted | `claude/tico/tico.md` (2 rules folded into existing bullets) + `kaizen/*` (K-015); `claude/AGENTS.md` git-race paragraph rewritten; 8 nodes deleted | none → — | 137.5k tok, 37 tools |
 | U6 | graph-dba (9: 09-02) | `a9bcd0c2ab80b7622` | accepted | `claude/graph-dba/falkordb-quirks.md` (6 entries, 2 merged + corrected) + `kaizen/*` (K-008); `claude/qa-engineer/qa-testing-techniques.md` + `kaizen/history.md`; 9 nodes deleted | none → — | 156.3k tok, 54 tools |
-| U7 | architect (16: 08-26…09-03) | — | queued | `claude/architect/kaizen/*`, graph cleared | none → — | — |
+| U7 | architect chunk A (11: ≤ 09-02) | `a8fdbd6dcd140b4e3` | accepted | `claude/architect/architect.md` + `kaizen/*` (K-004, K-005); root `AGENTS.md`; `cypher-mcp/README.md`; `claude/data-scientist/lm-studio-model-notes.md` + `kaizen/history.md`; 10 nodes deleted, 1 `PRODUCED` resolved (`MENTIONS`→`qa-engineer` kept alive) | none → — | 170.7k tok, 79 tools |
+| U7b | architect chunk B (6: 5×09-03 + 1×09-07 arrived mid-pass) | — | queued | `claude/architect/kaizen/*`, graph cleared | none → — | — |
 | U8 | tdd-engineer chunk A (12: ≤ 08-30) | — | queued | `claude/tdd-engineer/kaizen/*`, graph cleared | none → — | — |
 | U9 | tdd-engineer chunk B (8: ≥ 08-31) | — | queued | `claude/tdd-engineer/kaizen/*`, graph cleared | none → — | — |
 | U10 | coder chunk A (12: ≤ 08-29) | — | queued | `claude/coder/kaizen/*`, graph cleared | none → — | — |
@@ -97,6 +98,23 @@ units, none of them a defect:
 - **This pass will never observe an empty graph**, and shouldn't try to. Done
   means every entry in the pinned per-unit scope is dispositioned, not that
   `count(:KaizenEntry)` reaches zero.
+
+## Observed cost, and the one re-chunk
+
+Six units in, the rate is stable at **≈17k tokens per entry** (U1 1 entry /
+99.1k · U3 3 / 133.6k · U4 7 / 135.7k · U5 8 / 137.5k · U6 9 / 156.3k) — the
+per-run floor dominates, so small inboxes are disproportionately expensive and
+the marginal entry is cheap. That is what makes the ~12-entry cap the right
+shape rather than a smaller one.
+
+`architect` (16) was re-split at dispatch into **U7 (11, ≤ 09-02)** and **U7b
+(5, 09-03)** on this evidence: 16 × 17k projects to ~270k, past the point where
+a run risks turning over. Re-splitting at dispatch is normally friction worth
+avoiding — the ledger is drawn at decomposition for a reason — but here the
+decomposition was drawn before any cost data for *this* pass existed, and six
+units of measured rate beat the estimate it was drawn from. The remaining
+chunk boundaries in the table were sized under the same estimate and should be
+re-checked against this rate as each agent comes up.
 
 ## Follow-ups
 
@@ -163,6 +181,20 @@ units, none of them a defect:
   `GRAPH.DELETE` is destructive and reserved to `graph-dba`/`devops` behind
   their guards. No existing key was reused, mutated, or renamed. Route the
   two-key cleanup to `graph-dba` at pass close.
+- **U7 → a `qa-engineer` top-up unit is now owed at pass close.** U7 tagged
+  `b7d5e214` `MENTIONS`→`qa-engineer` (a general test-design rule: an "assert
+  every survivor by label" done-condition cannot catch an over-broad delete
+  when spared rows share labels with targets — the assertion must positively
+  name a specific seeded non-target row). `qa-engineer`'s own unit (U4) had
+  already closed, so that node sits alive with its `PRODUCED` edge resolved and
+  one `MENTIONS` edge outstanding. This is the ordinary FR-5 deferral, not a
+  defect — but the pass should not be declared closed while it is outstanding.
+- **U7 → `architect` K-004 and K-005**, both blocked on remit, both verified
+  true. K-004: `llm.py`'s `{"tool_calls": […]}` branch runs *before* the K-035
+  `_BARE_CALL_OPEN` guard (`llm.py:311-320`), so `x({"tool_calls":[…]})`
+  resolves by probe order alone, with zero test coverage — wants a
+  `falkor-chat/docs/BACKLOG.md` test-gap item plus one docstring sentence.
+  K-005: `ws:acme`'s label census belongs in `falkor-chat/AGENTS.md`.
 - **U3 → `salesperson/build.sh:68`**: the `elif command -v node` fallback
   accepts any `node` on `PATH` without the `/mnt/` rejection its own
   `npm`-only branch applies. Harmless today (only `npm` leaks in from

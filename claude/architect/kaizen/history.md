@@ -2,6 +2,150 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-09-07 — `kaizen_team` distillation pass 2, chunk A: 11 current-shape entries (2026-08-26 → 2026-09-02) — 4 promoted, 5 discarded, 2 kept open, 1 MENTIONS-tagged
+
+- **What:** `cobb` processed `architect`'s eleven `kaizen_team` entries dated 2026-08-26 through
+  2026-09-02 (agent-maintenance skill §5). All current-shape
+  (`(:Agent {agentId:'architect'})-[:PRODUCED]->(:KaizenEntry)`); zero legacy `author`-property
+  entries survive anywhere in the graph, so the legacy read was skipped. `architect`'s five
+  2026-09-03 entries are chunk B, a separate unit — **untouched by this pass.** Every fact was
+  **re-derived against live source/docs/services**, not merely checked against its own citation;
+  two entries changed disposition as a result (`e3f1c0a2` is now false, `9c2a4f81` proved narrower
+  than stated).
+
+  **Promoted (4).**
+  - **`b3f2a1e4` (2026-08-31, `cypher-mcp` is already multi-instance-ready) → `cypher-mcp/README.md`.**
+    Re-derived: `authorize_write(cypher, agent)` (`cypher-mcp/server.py:540`) takes no host, port or
+    graph argument and decides purely from the query text plus the declared slug — instance-agnostic
+    confirmed, not merely asserted; `FALKORDB_HOST` is a module-level `os.environ.get` at
+    `server.py:93` (read once per process); `.mcp.json` holds named entries, each yielding its own
+    `mcp__<name>__query` namespace. The README documented neither multi-instance operation nor the
+    reason it needs no code change — the fact lived only in `docs/plans/kaizen-team-sandbox.md`
+    (§"the access path", still `Status: active`, i.e. unbuilt). Added a closing subsection to
+    §"Wiring it elsewhere". *Why the README and not the plan:* the plan may be archived; the server's
+    own doc is where a capability of the server belongs.
+  - **`443cc4cc` (2026-09-02, LM Studio measurement surface) → `claude/data-scientist/lm-studio-model-notes.md`.**
+    The live-verified KB for exactly this domain, per the U2/U6 precedent that `cobb` dispositions a
+    single-target KB entry directly rather than `MENTIONS`-tagging it. Re-verified live 2026-09-07,
+    every checkable clause: `GET /api/v0/models` → 200 with per-model `id`/`object`/`type`/
+    `publisher`/`arch`/`compatibility_type`/`quantization`/`state`/`max_context_length`/
+    `capabilities`; `command -v lms` exits 1 while `/mnt/c/Users/<user>/.lmstudio/bin/lms.exe`
+    exists and answers; `lms server status --json` → `{"running":true,"port":1234}`; `lms ps --json`
+    → `[]`; `lms load --help` documents `--estimate-only` and offers `--context-length` but **no**
+    KV-cache flag; `lms version` prints `CLI commit: <sha>` and no app version. The one clause not
+    re-derived is the `/api/v0/chat/completions` `stats`/`model_info`/`runtime` response shape —
+    confirming it live would require **loading a model on the shared LM Studio server**, which this
+    pass must not do; verified instead against LM Studio's own REST docs
+    (`lmstudio.ai/docs/developer/rest/endpoints`), which quote all three field groups verbatim. The
+    KB section says so. Logged in `claude/data-scientist/kaizen/history.md` too.
+    **Note for chunk B:** entry `6f2b1d94` (2026-09-03) covers the same surface with timing data and
+    is a refinement, not a contradiction — fold it into this section rather than adding a second one.
+  - **`a71d5e6c` (2026-09-01, a doc-kind added mid-document must be swept into every table in the
+    family) → `architect.md` Guardrails.** Verified the incident and its repair:
+    `docs/plans/doc-reference-convention.md` v1.5 added `manuals/` to the kind list and the
+    family-chain rule but missed §9.6's own "who performs the `archived` flip, by kind" table — the
+    table that document explicitly calls *"the one place root `AGENTS.md` copies from"* (`:1491`) —
+    caught by `analyst` and fixed in v1.5.1 (§9.6's `requirements/*` row now reads
+    `requirements/*`, `manuals/*`). The document is repaired; the *generalization* was stated
+    nowhere. Promoted as an **extension of the existing sweep sentence's list**, not a new rule:
+    "…and every other structurally-identical enumeration, including a routing or authority table
+    your revision note never reasoned through." *Not* promoted to root `AGENTS.md`: adding a doc kind
+    is a once-a-year event, and that file is the most expensive prose in the repo.
+  - **`3c1436d8` (2026-09-02, a plan's own grep-based verification is defeated by prose that quotes
+    the wrong value to disown it) → `architect.md` Guardrails, one new bullet.** Verified the
+    mechanism from first principles (a grep matches a literal; it cannot see intent) and against the
+    cited v1.17 sweep of `docs/plans/salesperson-ui.md`. Promoted because both halves of the trigger
+    are routine for this agent, not rare: `architect` writes grep-shaped done-conditions, and root
+    `AGENTS.md` collision rule 5 *requires* revising a pre-approval plan in place with a dated
+    revision note — which is exactly the prose that re-quotes the old literal. Rule plus one clause
+    of why; the incident stays here.
+
+  **Discarded (5).**
+  - **`b3f1a9c2` (2026-08-26, message role is a strict user/assistant binary) → already documented
+    and already fixed.** Verified `services.py:843` still reads
+    `role = "user" if actor_kind == "User" else "assistant"` (the entry's cited `:822` is off by
+    one). But the derivation is already in `falkor-chat/docs/DESIGN.md` §1.2/§5.1 (`:53`, `:222-223`)
+    and `docs/QUERIES.md:156`; and the entry's forward-looking half — that *any* two consecutive
+    same-side turns, not just the CONTEXT tail, violate a strict-alternation template — was closed by
+    K-048 the same day the entry was written: `_append_turn` coalesces every same-role run, the
+    `_assemble_messages` docstring (`executor.py:1252-1257`) states the invariant, and
+    `docs/HISTORY.md` 2026-08-26 records a **sibling-shape test** (two consecutive user turns, no
+    assistant between) promoted from recommended to mandatory. Nothing left to add.
+  - **`e3f1c0a2` (2026-09-02, `start_workflow_run` SILENTLY IGNORES the caller `run_ctx` on the chat
+    path) → discarded, now false.** This is the U4/U6 class the pass exists to catch: promoting it
+    verbatim would have shipped a false claim into `falkor-chat`'s docs. Read
+    `services.py:2015-2085` today — the chat branch builds
+    `initial_ctx = self._dump_ctx(self._chat_start_ctx(caller_ctx, thread_id=thread_id))`, i.e. the
+    caller's ctx **merged alongside** the `threadId` anchor, and the reserved-key rejection
+    (`_reject_reserved_keys`) plus the size bound are **hoisted ahead of the branch** so both paths
+    are screened by one call site. The docstring says so explicitly. salesperson-ui S2 shipped exactly
+    the change the entry said would be needed; the entry describes the pre-fix tree.
+  - **`9c2a4f81` (2026-09-02, falkor-chat binds ALL background machinery to `config.WS_ID`) →
+    discarded: narrower than stated, and its actionable conclusion is already documented more
+    strongly.** The mechanism is real — `app._sweep_loop` calls `context_provider()` per tick
+    (`app.py:179`) and `_lifespan` calls `services.ensure_actor(provider())` (`:358`) — but
+    `provider` is `context_provider or config.get_context` (`:298`), i.e. **injectable**, and
+    `create_app` deliberately routes even the storefront's workspace through `provider().ws` rather
+    than `config.WS_ID` "so an injected `context_provider` pins the storefront too" (`:321-324`). So
+    "not to any per-request workspace" holds for the *default* wiring only. The conclusion the entry
+    drew — never add a second workspace env var — is settled in `docs/SERVER.md` §1.3 in stronger
+    terms ("There is no `FALKORCHAT_DEMO_WS`, and there never will be", with the reasoning and a
+    tripwire in `tests/test_storefront.py`).
+  - **`f3c9a2e1` (2026-09-01, a drifted spec catches up via a versioned changelog entry citing
+    upstream wording verbatim) → already documented, both halves.** The mechanism half is root
+    `AGENTS.md` collision rule 5 (revise in place, bump `Version:`, add a dated revision note — one
+    dated line, not a narrative). The verbatim-citation half is stated in the very document the entry
+    was written about: `docs/plans/doc-reference-convention.md` §9.6 (`:1491`) — *"root `AGENTS.md`
+    copies from here; implementers copy, they do not paraphrase"* — and its v1.5 changelog already
+    practises it ("already-shipped wording verbatim"). Nothing generalizable was left unstated.
+  - **`3f1c9a52` (2026-09-02, no root pytest config) → promoted, then the entry discarded as
+    superseded by its own downstream work.** Re-verified: `git ls-files` shows no root
+    `pyproject.toml`/`pytest.ini`/`setup.cfg`/`tox.ini`. It was already published twice by the work
+    that produced it — `model-bench/README.md:44-45` and `model-bench/AGENTS.md:130-131` — but only
+    inside one component, while the trap is monorepo-wide. Rather than open an item, extended root
+    `AGENTS.md`'s **existing** opening sentence ("there is **no root-level build/test script**") with
+    the pytest half and the consequence, since that sentence already occupies the exact slot and the
+    file must stay small.
+
+  **Kept open (2)** — both name a target outside `cobb`'s write remit; see `plan.md`.
+  - **`a3f5c8e2` (2026-09-01, `llm.py` bare-call vs. `tool_calls`-envelope probe collision) →
+    `plan.md` K-004.** Re-derived and **still true after K-035**, which is the non-obvious part: the
+    K-035 guard suppresses `_normalize_tool_call` when content is bare-call-shaped, but the
+    `{"tool_calls": [...]}` branch runs *before* that guard (`llm.py:311-320`), so
+    `x({"tool_calls":[...]})` still resolves as a native envelope purely by probe order. Confirmed
+    no coverage: the six K-035 pins test `name`/`action`/`tool` shadowing, and both
+    `tool_calls`-envelope tests use non-bare-call content (`test_llm.py:578-628`). The docstring
+    names a *different* residual. Targets: a `falkor-chat/docs/BACKLOG.md` test-gap item and one
+    docstring sentence — both `falkor-chat` source/docs.
+  - **`b7d5e214` (2026-09-02, `ws:acme` is not an empty scratch graph) → `plan.md` K-005, and
+    `MENTIONS`-tagged to `qa-engineer`.** Re-verified both halves. `config.py:16` still defaults
+    `WS_ID` to `"acme"`, and a live label count on `ws:acme` reproduces the entry's figures exactly
+    (Entity 544, Chunk 87, Message 52, Document 29, Channel 2, Thread 2, User 1, ReadCursor 1) plus
+    labels it did not list (StepRun 78, Step 29, WorkflowRun 21, TraceEvent 13, WorkflowDefSnapshot
+    11, Agent 1). `docs/SERVER.md` §1.3 documents the tenancy *decision*, not the "the default target
+    is populated" warning; target is `falkor-chat/AGENTS.md`. The entry's **second half is a
+    general test-design rule in a different agent's discipline** — a done-condition of the form
+    "assert every survivor by label" cannot catch an over-broad delete when the spared rows share
+    labels with the targets; the assertion must be positive and name a specific seeded non-target
+    row. Tagged `MENTIONS` → `qa-engineer` so it resurfaces in that agent's own pass.
+- **Graph ops (in order).** Tagged `MENTIONS` on `b7d5e214` → `qa-engineer` **first**, confirmed
+  committed, and only then ran that entry's count-and-decide read (§5's ordering invariant). Counts
+  read per entry before deciding: ten entries returned `producedEdges=1, mentionEdges=0`
+  ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`; `b7d5e214` returned
+  `producedEdges=1, mentionEdges=1` ⇒ `otherRemaining = 1` ⇒ **`PRODUCED` edge resolved only, node
+  and its `MENTIONS` edge kept alive** for `qa-engineer`. Every `history.md`/`plan.md` edit landed
+  and was confirmed **before** any graph mutation.
+- **Prompt cost:** `architect.md` **+88 net words** for the two promotions (one new Guardrails
+  bullet, one extension of an existing sentence's list). No catalog change: neither promotion alters
+  what this agent does or when to route to it, and `claude/README.md`/`claude/AGENTS.md` do not
+  enumerate guardrails.
+- **Why:** unit U7 of `claude/docs/plans/kaizen-distillation2-coordination.md` (pass 2; pass 1's
+  record is `claude/docs/plans/kaizen-distillation-coordination.md`).
+- **Plan items:** K-004 and K-005 opened (both 🔵). No prior pass had opened an item for any of the
+  eleven — checked by grepping every `entryId` against this agent's `plan.md` and `history.md`
+  (zero hits; the ids are hand-shaped, so 8-char prefixes were confirmed against date and subject,
+  not matched alone).
+
 ## 2026-08-25 — `kaizen_team` distillation: 6 entries (3 legacy, 3 current-shape) — 2 promoted to project docs, 1 promoted to Guardrails, 1 MENTIONS-tagged to graph-dba, 2 discarded
 
 - **What:** `cobb` processed all of `architect`'s raw entries in the shared `kaizen_team` graph

@@ -78,3 +78,33 @@ since the two can diverge per-box with no loud failure. (2) grep the whole repo 
 replicates, flip-rate, etc.) that assumes a pinned value.
 
 **Context:** `falkor-chat/docs/plans/guard-judge-calibration-ml.md` (K-027 item 3).
+
+## The machine-readable measurement surface is on `/api/v0/`, not `/v1/` — and `lms` is reachable from WSL only as `lms.exe`
+
+**Verified 2026-09-07 on this box** (re-derived; originally observed 2026-09-02).
+
+- **`POST /api/v0/chat/completions` carries the per-call measurement fields the OpenAI-compatible
+  `/v1/chat/completions` route omits:** `stats{time_to_first_token, tokens_per_second,
+  generation_time, stop_reason}`, `model_info{arch, quant, format, context_length}` and
+  `runtime{name, version}` (LM Studio REST docs, `lmstudio.ai/docs/developer/rest/endpoints`).
+  Anything that needs latency or a runtime fingerprint per call must use the `v0` route.
+- **`GET /api/v0/models` fingerprints the catalog; `GET /v1/models` cannot.** Live response on this
+  box returns, per model, `id`, `object`, `type`, `publisher`, `arch`, `compatibility_type`,
+  `quantization`, `state` (`loaded`/`not-loaded`), `max_context_length` and `capabilities`. The
+  `/v1/` route returns only `id`/`object`/`owned_by`.
+- **The `lms` CLI is not on the WSL `PATH`** (`command -v lms` exits 1), but the Windows binary is
+  reachable and works from WSL at `/mnt/c/Users/<user>/.lmstudio/bin/lms.exe`. Confirmed working
+  this way: `lms server status --json` (→ `{"running":true,"port":1234}`), `lms ps --json` (→ `[]`
+  with nothing loaded), and `lms load --estimate-only` (documented in `lms load --help` as
+  "Calculate an estimate of the resources required to load the model. Does not load the model.").
+- **Two gaps to design around.** `lms version` prints only a CLI commit hash (`CLI commit:
+  <sha>`) — there is no LM Studio *app* version anywhere in the CLI output. And **no API field and
+  no `lms load` flag exposes the KV-cache setting**; `lms load` offers `--context-length` but
+  nothing for KV-cache quantization. Both must be operator-attested rather than machine-collected.
+
+**Consequence:** an environment fingerprint or latency report can be collected automatically from
+`/api/v0/` plus `lms.exe`, except the app version and the KV-cache setting, which have to be
+recorded by hand.
+
+**Context:** `docs/plans/small-model-benchmarking.md` (model-bench FR-7 environment fingerprint,
+FR-11 latency/RAM reporting).

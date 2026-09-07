@@ -1,7 +1,10 @@
 # graphmind-ai-lab
 
 A monorepo of independent, self-contained components — there is **no root-level build/test
-script**. Each component carries its own docs and run instructions. Two themes run through the
+script**, and no root pytest config either, so run a component's suite **with that component as the
+working directory**: from the repo root, pytest sets `rootdir` to the monorepo, ignores the
+component's own `testpaths`, and walks into other components' tests. Each component carries its own
+docs and run instructions. Two themes run through the
 repo: **graph-backed AI apps** (FalkorDB + LLMs) and **agent/skill engineering** (Claude Code
 and OpenCode artifacts).
 
