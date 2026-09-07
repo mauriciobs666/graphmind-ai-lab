@@ -4544,3 +4544,277 @@ reason they matter less is that the shape that escapes the reach guard does **no
 - *`00827c2` changed behaviour under cover of a test-and-comment commit.* **No.** The five frozen
   production files md5-match `HEAD`, `storefront_api.py`'s diff is the comment block plus one reason
   string, and every production-side mutation I applied reproduced the documented behaviour exactly.
+
+---
+
+## Pass 16 — 2026-09-07 (the component documentation: `SERVER.md` §1.3/§1.4 and the S7→S8g `HISTORY.md` entries)
+
+**Scope — this pass reviews the component documentation, not the guard-reach clauses.** Passes 1–15
+judged the storefront's code and its self-describing guards; that clause-by-clause chain was closed
+by a stakeholder stopping rule at Pass 15 and is **not reopened here**. No finding of Passes 10–15 is
+re-adjudicated, and nothing below is a fifteenth cycle of it. What is under review is commit
+**`9c51189`** — two documentation files, no code:
+
+- `falkor-chat/docs/SERVER.md` **§1.3** (the storefront auth/tenancy block, `:139–186`) and **§1.4**
+  (the eleven-route `/shop/api` block, `:297–358`), plus the two §1.3 corrections at `:99–100` and
+  `:109–113`/`:123`;
+- `falkor-chat/docs/HISTORY.md` — four new entries (S7, S7c, S8, S8b–S8g).
+
+Judged against the code as delivered on `main`: `falkorchat/storefront_api.py`, `storefront.py`,
+`app.py`, `repository.py`, `services.py`, `config.py`, `docs/QUERIES.md`, and the cited commits.
+The commit's own claim that the **pre-existing** §1.3/§1.4 prose "was checked and left alone" is
+treated as a claim under review (P16-4). Not reviewed: §1.1/§1.2/§1.5–§1.8, the SPA, any code.
+
+**CPG: considered, not relevant — `cpg_falkorchat` is mid-rebuild by `graph-dba` and out of bounds
+for this run per the brief; it also modelled no storefront file at Passes 12 and 15 (0 `File` nodes
+matching `storefront`). Every claim below comes from direct read of the delivered files, from `git
+show`/`git log` on the cited commits, or from small read-only AST/regex probes over the tree.**
+
+**Not run:** the pytest suites (the stakeholder's standing constraint — a default run wipes the
+freshly re-seeded `reference` graph). Every suite figure the entries record is therefore
+**unverified here**; see *Open questions*.
+
+**Verdict: needs changes** — **0 blockers, 5 majors, 3 minors, 4 nits.** No claim I found is
+*unsafe*; all five majors are the same class the S8b–S8g entry itself names — **a stated rule
+broader than the reach the mechanism implements** — now in prose rather than in a guard. Three of
+them are in the new §1.3/§1.4 text, one is pre-existing §1.3 text the commit reports as checked, one
+is in the S8b–S8g entry.
+
+### Major
+
+#### P16-1 · **Major** · §1.4's lead sentence claims per-credential `ctx` for all eleven routes; it holds for six, and its own `Cred` column contradicts it three lines later
+
+`SERVER.md:299–301`: *"every one of them resolves `ctx` from the request's own credential, so the
+`QUERIES.md` column below is reached under the **participant's** `actor`, never `config.USER_ID`."*
+Measured route by route (full table in **Appendix P16-A**):
+
+- Three routes carry **no credential at all** — the table's own `—` rows (`GET /health`,
+  `POST /session`, `POST /presenter/session`). `POST /session` builds `ctx` from the id it has just
+  *minted*, not from a request credential.
+- **`GET /catalog` authenticates a participant and then reads under the demo `Agent`.**
+  `Storefront.list_catalog` → `_catalog_rows` → `filter_products(self._catalog_ctx, …)`, and
+  `_catalog_ctx` is `CallContext(ws, actor=self._agent_id)` (`storefront.py:694–705`). The §15.2
+  query is `reference`-global besides — `Repository.filter_products` takes **no `ws`**
+  (`repository.py:2724`). So that row's cited section is reached under neither the participant's
+  actor nor `ws:{WS_ID}`, which `storefront.py`'s own docstring states deliberately and §1.4 denies.
+- The two presenter rows call `repo.list_participants(shop.ws)` / `reset_all_participants` with **no
+  `ctx`** (`storefront_api.py:1353`, `:1423`, `:1435`).
+
+Only `GET /state`, `GET`/`POST /messages`, `POST /order/advance` and `POST /reset` match the
+sentence. **Suggested replacement:** keep the true half — *no storefront route resolves through the
+process-constant `get_context()`, and no route reaches `config.USER_ID`* — then state the three
+shapes separately: participant-`ctx` routes (five), the catalog's deliberate `Agent` actor over
+global `reference` data, and the presenter/no-graph routes that build no `ctx`.
+
+#### P16-2 · **Major** · the `/shop` SPA mount is documented as unconditional; `create_app` mounts it only when `FALKORCHAT_STOREFRONT_DIR` names an existing directory — and its documented default is *unset*
+
+`SERVER.md:123` lists what `FALKORCHAT_STOREFRONT_ENABLED=1` gives you as *"the `/shop/api` router,
+its error map, **the `/shop` mount** and the startup preflight"*, and `:298` says the router is
+*"mounted alongside a `StaticFiles` mount of the SPA build at `/shop`."* The code
+(`app.py:436–443`) guards it:
+
+```python
+if served_dir is not None and Path(served_dir).is_dir():
+    app.mount(SHOP_MOUNT, StaticFiles(directory=str(served_dir), html=True), name="shop")
+```
+
+`config.STOREFRONT_DIR` is `None` unless the operator sets it (`config.py:171`), and §1.3's own
+`FALKORCHAT_STOREFRONT_DIR` row documents *unset* as the default — a combination §1.3 elsewhere
+calls legitimate ("the text-only deployment"). So the documented default configuration produces a
+running storefront **with no `/shop` at all**, and a mistyped path skips the mount silently (the
+preflight logs `images=0` and continues; the manifest is deliberately not a precondition).
+**Suggested fix:** in both places, condition the mount on `FALKORCHAT_STOREFRONT_DIR` naming an
+existing directory, and add one clause to that env row saying an unset/nonexistent path skips the
+`/shop` mount as well as emptying the manifest, while `/shop/api` still serves.
+
+#### P16-3 · **Major** · the `403 wrong_credential_type` condition is stated broader than `get_presenter` implements — a malformed or wrong-scheme credential answers `401`
+
+`SERVER.md:170–173`: *"**`403 wrong_credential_type`** when the request carried something that is not
+the presenter principal (a participant token, typically), **`401 presenter_session_gone`** when it
+carried no credential or a presenter token this process never minted."* The mechanism
+(`storefront_api.py:917–930`) branches on `parse_bearer` **first**: `None` → `401
+presenter_session_gone`; only a credential that *parses* into `<principal>.<token>` with
+`principal != "presenter"` reaches the `403`. `parse_bearer` (`storefront.py:215–240`) returns
+`None` for an absent header, a whitespace-only one, a non-`Bearer` scheme, a missing `.`, an empty id
+half and an empty token half. So `Authorization: Basic abc`, `Bearer garbage` and `Bearer presenter`
+— each of them "something that is not the presenter principal" — all answer **`401`**, not `403`.
+A client or test written from this sentence asserts the wrong code. **Suggested fix:** *`403` when
+the header parses as `<principal>.<token>` with a principal other than `presenter`; `401` for
+everything else — no header, a header `parse_bearer` rejects, or a presenter token this process
+never minted.* The same wording sits in `get_presenter`'s docstring and is worth the same edit.
+
+#### P16-4 · **Major** · "existing content was checked and left alone" does not hold: four pre-existing §1.3 statements describe mechanisms that do not exist yet, one of them a script that is not in the tree
+
+Each verified against the delivered tree, not inferred:
+
+| `SERVER.md` | Claim | Reality |
+|---|---|---|
+| `:135` | "`start_demo.sh` pins the one variable to a dedicated value" | **The file does not exist** — `find` over the repo returns nothing, `falkor-chat/scripts/` has no such entry; it is plan step **S11** (`docs/plans/salesperson-ui.md:1070`, gated *after S5, S8*). `config.py:168` correctly writes it as future ("`scripts/start_demo.sh`, S11"). The paragraph's other half — `tests/test_storefront.py`'s `FALKORCHAT_DEMO_WS` tripwire — is real (`test_storefront.py:733`). |
+| `:127` | "Size of the storefront's own bounded turn executor… Agent turns run there rather than on `BackgroundTasks`" | No executor exists. `turn_workers` is stored and exposed and read nowhere else; `storefront.py:313` says "**S9** adds a `ThreadPoolExecutor`". Today the value is inert. |
+| `:130` | "The anyio thread limiter the storefront raises **inside `_lifespan`, before `yield`**" | `config.THREAD_LIMIT` has **no reader** in `falkorchat/`; no `current_default_thread_limiter()` call exists. Nothing raises it. |
+| `:128` | "…after intake stops" | The stop-intake flag is **S10**; `presenter_reset_all`'s own comment says so (`storefront_api.py:1400–1406`). The drain is real; the stop-intake it is described as following is not. |
+
+A document whose scope note says *"states the system as it is now"* (`SERVER.md:9`) cannot carry
+four future mechanisms in the present tense — and these are in the env-var table, which is exactly
+where an operator looks. **Suggested fix:** one step marker per row (`(S9 — not built; the value is
+inert today)`, `(S11)`), which is the shape `config.py:168` already uses. The three code comments
+`config.py:186–208` carry the same tense and are worth a sweep by their owner; that is a code change
+and is out of this pass's scope.
+
+#### P16-5 · **Major** · the S8b–S8g entry's blast-radius claim is false for one of the three files it names, and it is offered as a measurement
+
+`HISTORY.md:14–17`: *"Two files only … with `storefront.py`, `app.py` and `tests/test_app.py`
+byte-unchanged across the whole chain (md5-checked at every unit's close)."* `18b675a` (S8b) changes
+`falkor-chat/server/tests/test_app.py` — `+22/−1`, adding the `ServiceError`-ownership assertion to
+`test_the_default_deployment_is_untouched_by_the_storefront_parameters`. `git diff --stat 81a1268
+b720bd3 -- tests/test_app.py` reports the same 22 insertions across the whole chain. The two
+**production** files are byte-unchanged, and S8b's own commit message claims only that
+("`falkorchat/storefront.py` and `falkorchat/app.py` are byte-unchanged") — the HISTORY entry widened
+it. It is the sentence a later reader is least likely to re-check, because it advertises its own
+evidence. **Suggested fix:** *"Three files — `storefront_api.py`, `tests/test_storefront_api.py`, and
+`tests/test_app.py` once, in S8b (+22, the `ServiceError`-ownership assertion) — with
+`falkorchat/storefront.py` and `falkorchat/app.py` byte-unchanged across the whole chain."*
+
+### Minor
+
+#### P16-6 · **Minor** · "No route takes an id from the client" is broader than the plan's sentence and than the mechanism
+
+`SERVER.md:317`. The plan states it precisely (`docs/plans/salesperson-ui.md:386–388`): *"No
+storefront route accepts a client-supplied `threadId`, `customerId`, `orderId` or `ws`."* The
+compression drops the qualifier and is literally false: the **participant id is client-supplied**,
+inside `Bearer <participantId>.<token>`, and becomes `ctx.actor` — which *is* the `customerId`
+(`storefront.py:413–420`). What makes it safe is the `hmac.compare_digest` check against the graph
+row for that id, not the absence of an id; the sentence's own three supporting clauses (thread,
+order, workspace) never mention it. **Suggested fix:** restore the plan's four names, or write "no
+route takes an id **as a parameter**", then keep the existing two-layer argument unchanged.
+
+#### P16-7 · **Minor** · two rows of the `Reaches`/`QUERIES.md` columns under-cite what the route runs
+
+- `GET /state` — `get_cart` is not one query. `Services._priced_cart_lines` (`services.py:2670`)
+  reads `read_cart` (§16.5) **and then `lookup_products_by_id` against the global `reference`
+  graph** (`QUERIES.md` §16.9). That is the only cross-graph read on the 2 s poll path and the row
+  hides it; §16.9 is the section to add.
+- `POST /messages` — `services.post_message` runs `thread_exists` and `resolve_member_kinds`
+  (`QUERIES.md` §2) *before* the §4 write (`services.py:832–847`). That pre-write lookup is where
+  the row's `401 invalid_token` / `503 demo_not_seeded` re-shapes come from
+  (`SERVICE_ERROR_RESPONSES`), so citing §4 alone hides the only route in the table that can raise a
+  `ServiceError`.
+
+#### P16-8 · **Minor** · "There is no Pass 16" is now false at the file level
+
+`HISTORY.md:110`. The sentence's argument is sound and specific — a re-review of the same 17
+guard-reach clauses would be ceremony — but it is written as an unqualified statement about this
+review document, and this section is a Pass 16 on a different subject. **Suggested fix:** *"No
+sixteenth pass on the guard-reach clauses was opened, and none should be without a fresh stakeholder
+decision"* — which keeps the ruling and survives later passes on other subjects.
+
+### Nits
+
+- **P16-9** · `SERVER.md:339–342`'s parenthetical reads as the complete declared-token set but omits
+  **`unhandled`**, declared on the `500` rows of `POST /reset` and `POST /presenter/reset-all`
+  (`storefront_api.py:1289`, `:1387`). `_cross_cutting_json`'s defensive branch can also emit a
+  token no route declares (`state_unknown`, `:394`) — labelled unreachable by construction, so a
+  parenthetical mention is enough.
+- **P16-10** · `SERVER.md:173`: presenter tokens are not minted *"from
+  `FALKORCHAT_STOREFRONT_PRESENTER_KEY`"* — they are `secrets.token_urlsafe(32)`
+  (`storefront_api.py:837–841`), unrelated to the key; the key *gates* the mint. "in exchange for"
+  rather than "from".
+- **P16-11** · `SERVER.md:139–140`: *"the `/shop/api` surface never uses it [`get_context()`]"* is
+  true per request, but the storefront's workspace comes from `provider().ws` once at construction
+  (`app.py:324`) — i.e. from that same seam, resolved one time. One clause keeps it exact.
+- **P16-12** · `SERVER.md:161–163` lists *"a `User` carrying no `tokenHash`"* as its own failure mode.
+  The repository collapses it: `get_participant_record`'s `WHERE u.tokenHash IS NOT NULL`
+  (`repository.py:3507`) returns zero rows, the same branch as an unknown id, so
+  `resolve_token`'s `isinstance(stored_hash, str)` guard is unreachable through it. The prose is not
+  wrong about the *outcome*; it implies a branch that does not exist.
+
+### What's solid
+
+Verified in full, not spot-checked — each of these is stated correctly and I could not break it:
+
+- **The load-bearing invariant (§1.3) is exactly right, including on the error paths.**
+  `Storefront.resolve_token` calls `self._repo.get_participant_record` on every call
+  (`storefront.py:534`); `self._records` is *written* there (`_cache_put`/`_cache_drop`) and never
+  read; the only reader is `lookup`, and `storefront_api.py` contains no `.lookup(` call site — the
+  AST tripwire (`tests/test_storefront_api.py:2910`) carries its own non-vacuity test. I walked the
+  reset, the F8 timeout and the `_reset_state_unknown` re-read: none of them lets a cached record
+  answer an auth question. The "cache refresh is load-bearing" comment at `storefront.py:550–562` is
+  accurate and worth keeping.
+- **The single `401` is genuinely undifferentiated.** Every `None` from `resolve_token` becomes one
+  `StorefrontHTTPError(401, "invalid_token", "no valid participant credential")` with no branch
+  (`storefront_api.py:899–904`). The document does not claim "nine" — it enumerates five clauses
+  covering eight causes over seven `return None` points, and that enumeration is complete against the
+  code. One nuance worth keeping in mind (not a defect): the "every failure is one answer" rule is
+  scoped to *credential* failures; a graph fault inside the same dependency reaches the cross-cutting
+  handlers as `503`/`504`, which is correct and is §1.4's subject.
+- **The presenter→participant direction of the isolation claim** (`presenter` parses as a participant
+  id no `User` carries → ordinary `401`, structurally, not by a special case) — confirmed;
+  `get_participant_record` is anchored on `userId` with the `tokenHash` guard, and participant ids
+  are server-minted `p-<uuid4hex>`. Only the reverse direction is mis-stated (P16-3).
+- **The preflight paragraph** — runs from `_lifespan` **before `yield`** (`app.py:362–366`), all
+  three conditions and their fix commands as described, the manifest built there and deliberately not
+  a condition (`storefront_api.py:1479–1534`), the `resolve_member_kinds` identity with the post path
+  (`services.py:839`) exact.
+- **`GET /messages` always passes `since`, and the classification argument is right** — no-`since`
+  + `thread_id` takes `get_cursor` + `advance_cursor`, a write (`services.py:969–984`), which is why
+  `ROUTE_CLASSES` is keyed on `(METHOD, path)`.
+- **The `ServiceError`-wrapper paragraph is right about which mechanism does what** — the default app
+  is byte-identical because the handler is *absent* (`app.py:427–431` registers it only
+  `if shop is not None`; `app.py:278` refuses `storefront and dev_surface`), and the path check is a
+  property of the handler. That distinction was P11-3's finding and it survived into the doc intact.
+- **Both §1.3 corrections** (the `create_app` storefront form; `STOREFRONT_ENABLED` driving
+  `storefront=True`) match `app.py:185–192`/`:278`/`:487–489`.
+- **The eleven-route table's credentials and cited sections all check out** — every row's `P`/`K`/`—`
+  matches the route's dependencies, the eleven paths match `ROUTE_CLASSES` exactly, and §18.1, §18.3,
+  §17.1, §17.2, §16.5, §18.8, §18.9, §16.10, §18.4, §18.5, §15.2, §9.1 and §4 all resolve to the
+  right `QUERIES.md` heading. The four-key presenter projection is real (`repository.py:3599–3614`
+  projects six). P16-7 is an omission inside a correct table, not a wrong citation.
+- **The error-rule paragraphs** — `ROUTE_CLASSES` keyed on `(METHOD, path)`, the live handler and the
+  gate reading the one `cross_cutting_response` seam, and the gate reading declarations back off
+  `app.routes` with all four refusals having real tests (`test_storefront_api.py:938`, `:962`,
+  `:974`, `:2021`, `:4412`).
+- **HISTORY's re-derived figures reproduce.** `INHERITED_HANDLERS` = 11; 17 registered handlers
+  (11 + `ServiceError` + 2 envelope + 3 cross-cutting); `SERVICE_LAYER_REACH_TODAY` = 9;
+  `_ALIAS_BINDING_NODES` = 8 and `_NON_ALIAS_BINDING_NODES` = 19; **zero** receiver-alias bindings in
+  `falkorchat/` (re-measured by AST over all 28 modules: no `Assign`/`AnnAssign`/`NamedExpr` whose
+  value is `self`); all 15 cited commits resolve, with dates and file scopes matching the entries
+  (only P16-5's `test_app.py` claim fails); the follow-up's `timers-stale-key@v1` is really at
+  `tests/test_workflow_timers.py:766` with `VERSION = "v1"`.
+- **The one-entry decision for S8b–S8g is correct and should stand.** The entry's value is the shape
+  — one defect, fourteen instances, each inside the artifact that closed the previous one — and six
+  entries would bury it. It is also honest about the cost, which is rare enough in a change log to be
+  worth protecting; the "so nobody later splits it into six" clause does that job.
+
+### Open questions
+
+1. **The suite figures are unverified.** 2582 → 2608 → 2615 → 2617, "14 deselected throughout", the
+   two-file 176 → 183 → 185, and "`ws:acme` … 871 nodes" are recorded as measurements I was
+   instructed not to re-run. They are *consistent* with Pass 15's independently recorded 185/184 and
+   871-node figures, which is corroboration, not verification. If you want them re-derived, that is a
+   `pytest` run plus a read-only node count — say the word and it routes to `qa-engineer` with the
+   re-seed obligation attached.
+2. **`start_demo.sh` is cited as delivered in two further places outside this commit's files** —
+   `salesperson/README.md:73` and `salesperson/AGENTS.md:23`. Same false present tense, different
+   component; flagging it rather than reviewing it, since it is outside this pass's scope.
+3. **Where do the corrections land?** All twelve findings are documentation edits owned by the two
+   files' author, except the `config.py:186–208` comment tense noted inside P16-4, which is a code
+   change and would route to `coder`.
+
+### Appendix P16-A — what each `/shop/api` route actually resolves (evidence for P16-1)
+
+| Route | Credential | `ctx` built from | Graph reached |
+|---|---|---|---|
+| `GET /health` | none | — | none |
+| `POST /session` | none | the **server-minted** participant id (`Storefront.join` → `context_for`) | `ws:{WS_ID}` |
+| `GET /state` | participant | the credential | `ws:{WS_ID}` **+ global `reference`** (cart pricing, §16.9) |
+| `GET /messages` | participant | the credential | `ws:{WS_ID}` |
+| `POST /messages` | participant | the credential | `ws:{WS_ID}` |
+| `GET /catalog` | participant | **not built from it** — `_catalog_ctx`, `actor = config.AGENT_ID` | **global `reference`** (`filter_products` takes no `ws`) |
+| `POST /order/advance` | participant | the credential | `ws:{WS_ID}` |
+| `POST /reset` | participant | the credential | `ws:{WS_ID}` |
+| `POST /presenter/session` | none | — | none |
+| `GET /presenter/participants` | presenter | **no `ctx`** — `repo.list_participants(shop.ws)` | `ws:{WS_ID}` |
+| `POST /presenter/reset-all` | presenter | **no `ctx`** — `repo.list_participants` / `reset_all_participants` | `ws:{WS_ID}` |
+
+`config.USER_ID` is reached by **no** route (it is touched once at startup, by
+`services.ensure_actor(provider())` in `_lifespan`) — that half of §1.4's sentence is correct.

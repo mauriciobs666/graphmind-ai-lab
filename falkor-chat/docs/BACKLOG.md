@@ -40,6 +40,29 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
+### K-063 — `SERVER.md` §1.5 "Layout (as built, M1)" is an M1 snapshot presented as current (🔵 proposed — filed out of the salesperson-ui S7→S8g documentation unit, 2026-09-07)
+
+> **Why it exists.** §1.5 lists 8 of the package's modules and omits `storefront.py` and
+> `storefront_api.py` along with everything else added since M1. Its title says "as built, M1",
+> but it sits in a section a reader reaches looking for the current layout, so the qualifier does
+> not do the work it looks like it does.
+>
+> **The decision is which of two things it should be**, and that is the whole item: *refresh §1.5
+> to the current module set* — and accept that it must then be maintained on every module
+> addition — *or retitle it explicitly as a frozen M1 snapshot* and point to whatever should be
+> read instead. It is not obviously the former: a layout list is exactly the kind of prose that
+> goes stale silently, and the repo's own convention (root `AGENTS.md`) is that history belongs
+> in `HISTORY.md` rather than in a living document.
+>
+> **Why it was not fixed in place.** `docs/plans/salesperson-ui.md` §5.0 rules §1.5 out of scope
+> for every step of that plan and says this item is to be filed instead. It had not been —
+> `teco`'s own action item, missed at the time and caught by the S7→S8g documentation unit.
+>
+> Two smaller neighbours worth folding in when this is picked up, both found the same way:
+> **§1.2's layering diagram** (`api → services → repository → db`) has no storefront layer, and
+> **§1.6 "TDD build order"** is an M1 checklist with ✅ marks and a "when this code lands, update
+> `AGENTS.md`" note — frozen history sitting in a living document.
+
 ### K-060 — `salesperson@v5` sometimes silently drops a genuine match when `filter_products` returns a mixed-category result (🟡 in-progress — root-caused at n=75, low base rate, no fix warranted yet, 2026-08-31)
 
 > **Why it exists.** Live-verifying K-057's wording fix (`docs/HISTORY.md` 2026-08-31,
