@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `cobb` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-08-25
+> Last reviewed: 2026-09-06
 
 ## Active
 
@@ -17,6 +17,7 @@
 | K-009 | 2026-06-20 | medium | 🔵 | Add a CI/script guard that every component `AGENTS.md` has a sibling `CLAUDE.md` = `@AGENTS.md` stub (so Claude Code never silently misses context — it reads `CLAUDE.md`, not `AGENTS.md`). Fold into the K-005 drift job. *(Sibling shipped 2026-07-09: `claude/scripts/audit-team.sh` covers the agent-collection invariants — the `@AGENTS.md`-stub check could join it.)* |
 | K-015 | 2026-07-31 | medium | 🔵 | `analyst/kaizen/inbox.md` has a substantial backlog of already-verified, "suggested home: prompt" entries never distilled (stub-package HEAD-vs-working-tree import, review-safe pytest subset, isolatable snapshot side, byte-identity AST hash, line-number-invariance re-gate, exclude_unset nested-model gotcha, scratch-copy-reverse-patch). Run a full §5 pass: verify each still holds, promote the prompt-worthy ones into `analyst.md` (or a knowledge base for the FastAPI/FalkorDB/MCP-version-sensitive ones), log in `analyst/kaizen/history.md`, clear the inbox. |
 | K-017 | 2026-08-20 | low | 🔵 | Item 4 of the "Broader team-verbosity reduction" diagnosis (surfaced 2026-08-19; items 1-3 delivered, see `history.md`): prune hedge-stacking once a rule has structural backup (a hook, a routing table) instead of three defensive clauses. No specific instances identified yet — start with a scan across the agent prompts for hedge-stacked clauses backed by real harness enforcement (a `PreToolUse` hook, a routing table) and trim each to one clean statement. |
+| K-020 | 2026-09-06 | medium | 🔵 | `cypher-mcp/server.py:881`'s FalkorDB-unreachable message advises `docker start falkordb-dev`, which cannot work — no launch path in this repo leaves a stopped container by that name. Out of cobb's write remit (component code); route to an implementer via `teco`. |
 | K-019 | 2026-08-21 | **high — filed upstream** | 🔵 | **Systemic, now confirmed matcher-agnostic too. `PreToolUse` "ask" hooks do not reliably pause execution in this session under Auto Mode, on either `Bash` or `Write`/`Edit`, regardless of hook source or execution context.** Four independent, isolated live tests, 2026-08-21, Claude Code 2.1.238, all under Auto Mode: (1) `graph-dba`'s own frontmatter `Bash` hook, Task-dispatched with `subagent_type` explicitly correct — didn't fire. (2) The identical guard mirrored as a session-wide `.claude/settings.local.json` `Bash` hook, run from `cobb`'s own **main session** — didn't fire. (3) Same test repeated after the user explicitly reloaded hook config via `/hooks` (visibly listed as registered, `[Local] Bash — 1 hook`) — still didn't fire. (4) **`cobb`'s own frontmatter `Write`/`Edit` hook** (`guard-cobb-topic-writes.sh`) — a `Write` to a path plainly outside cobb's allowlist (`docs/_hook_test_k019_scratch.md`) went through with zero interruption; re-fed the exact real payload to the script directly afterward and confirmed it correctly returns `ask` for that path. **Every test used a real, disposable payload (scratch graph or scratch file, immediately cleaned up) and independently pipe-test-confirmed correct hook logic** — ruling out `subagent_type` omission, stale config, hook-not-registered, and matcher-specific quirks as explanations. **Working hypothesis:** Auto Mode's classifier layer silently resolves/overrides a correctly-emitted `ask` decision before a human ever sees it, across both tool matchers tested. **Filed upstream 2026-08-21** via `/feedback` (user-submitted, confirmed "Feedback / bug report submitted") with the 3-test Bash repro; the 4th (Write/Edit) test landed after filing, not yet included in a follow-up report. **Practical consequence, effective immediately: every "harness-enforced" Guardrails claim across every guarded agent in this team — all three destructive-ops guards, all eight doc-write allow-list guards, the one broad-write deny-list guard — is currently unverified, and actively disconfirmed on the two mechanisms tested, under Auto Mode, in every execution context tried.** Not yet tested: the Write/Edit + Task-dispatched-subagent combination specifically (all 4 tests covered 3 of the 4 matcher×context cells) — very likely shares the gap given the pattern, not confirmed. **Next steps:** (1) monitor for an Anthropic response to the filed report; (2) treat this as the standing state of the team's enforcement model — Auto Mode being off is the only known workaround, untested/not decided; (3) fill the last untested cell (Write/Edit, subagent-dispatched) if a clean answer is ever needed before Anthropic responds. |
 
 ### K-001 — Re-verify standards against live docs
@@ -53,6 +54,27 @@
 - **Rationale:** Cobb runs on `name`/`description`/`model` only, yet teaches a rich field set (`memory`, `disallowedTools`, `permissionMode`, `skills`, `isolation`, `effort`). A `memory: project` store (auto-injected `MEMORY.md`) would give cobb persistent cross-session knowledge of drift findings / verified-dates / gotchas — distinct from kaizen (human change-log, not auto-injected into the prompt).
 - **Proposed change:** Evaluate adding `memory: project`. Leave the `agent-maintenance` skill on-demand (do NOT pin via `skills:` — pinning defeats leanness; the on-demand choice is deliberate).
 - **Notes:** Surfaced 2026-06-07 self-review.
+
+### K-020 — Correct the cypher MCP server's FalkorDB-unreachable advice
+- **Status:** 🔵 proposed
+- **Priority:** medium
+- **Rationale:** `cypher-mcp/server.py:878-882` tells the agent that hits a connection failure to
+  `Start it (falkor-chat/scripts/start_falkordb.sh, or docker start falkordb-dev) and retry.` The
+  second half is unworkable. `falkor-chat/scripts/start_falkordb.sh:48-63` passes `--rm` in both
+  its detached and foreground branches (live-confirmed: `docker inspect falkordb-dev --format
+  '{{.HostConfig.AutoRemove}}'` → `true`), so the container is removed on exit and there is
+  nothing to `docker start`. The only other launch path, `falkor-chat/compose.yaml`, declares no
+  `container_name:`, so its engine is `falkor-chat-falkordb-1` — also never `falkordb-dev`. An
+  agent that follows the message verbatim gets `Error: No such container` and may conclude the
+  environment is broken rather than simply re-running the script.
+- **Proposed change:** drop the `, or docker start falkordb-dev` clause from the error string,
+  leaving `Start it (falkor-chat/scripts/start_falkordb.sh -d) and retry.` One line, one file.
+- **Notes:** Surfaced by kaizen entry `c1f9a4d2-7b3e-4a86-9c05-2f8d61e0b774` (distilled 2026-09-06,
+  see `history.md`). **Not cobb's to fix** — `cypher-mcp/server.py` is component code, outside
+  the topic remit; dispatch an implementer through `teco`. Two adjacent sites deliberately left
+  alone: `docs/plans/cpg-query-access.md:626` specifies the same wording but is `Status: archived`
+  (archived documents are not amended), and `cypher-mcp/README.md` already points at the script,
+  never at `docker start`.
 
 ## Parking lot / ideas
 - **`bypassPermissions` revert landed (U3, 2026-09-01)** — `.claude/settings.json`'s

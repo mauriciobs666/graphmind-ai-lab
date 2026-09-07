@@ -3,6 +3,52 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-06 — Distillation pass (U1): own entry `c1f9a4d2` — verified, strengthened, kept open as K-020
+
+- **Entry:** `c1f9a4d2-7b3e-4a86-9c05-2f8d61e0b774` (2026-09-06, produced by `cobb`,
+  `suggestedHome: project docs`). Claim: the `cypher` MCP server's FalkorDB-unreachable message
+  tells the agent to run `docker start falkordb-dev`, which normally cannot work, because
+  `falkor-chat/scripts/start_falkordb.sh` launches with `docker run --rm` — on exit the container
+  is *removed*, so there is no stopped container to start.
+- **Verification — re-derived, not confirmed from the citation.** `cypher-mcp/server.py:878-882`
+  does emit `Start it (falkor-chat/scripts/start_falkordb.sh, or docker start falkordb-dev) and
+  retry.`; `falkor-chat/scripts/start_falkordb.sh:48-63` passes `--rm` in **both** the detached
+  (`--rm -d`) and foreground (`--rm -it`) branches. Two things the entry itself left open are now
+  closed:
+  1. The entry recorded `the --rm flag was not exercised live`. It no longer needs to be —
+     `docker inspect falkordb-dev --format '{{.HostConfig.AutoRemove}}'` returns **`true`** on the
+     running container, so auto-removal is confirmed from the daemon's own view of the live
+     container rather than inferred from the script text.
+  2. The entry did not consider the **second** launch path. `falkor-chat/compose.yaml` starts the
+     same image *without* `--rm` and with `restart: unless-stopped`, so a compose-started engine
+     **is** restartable — but it declares no `container_name:`, so it is
+     `falkor-chat-falkordb-1`, never `falkordb-dev`. This strengthens rather than weakens the
+     fact: **no supported launch path in this repo produces a stopped container named
+     `falkordb-dev`**, so the advised command is wrong under both.
+- **Routing — kept open, one destination.** The prompt-level promotion had already happened *in
+  the session that produced the entry*: `teco.md` step 1's Environment-readiness paragraph carries
+  the fact (`docker start falkordb-dev` is *not* the path… the script runs `docker run --rm`), and
+  `claude/teco/kaizen/history.md`'s 2026-09-06 entry logs it. Nothing is owed there. What remains
+  is the **source** of the bad advice, and both remaining sites are outside `cobb`'s write remit:
+  - `cypher-mcp/server.py:881` — a one-line string in another component's **code**. Not a
+    documentation fix; routes to an implementer via `teco`. → **K-020**.
+  - `docs/plans/cpg-query-access.md:626` specifies the same wording, but that document is
+    `Status: archived`; an archived document is not amended (root `AGENTS.md`), so it is
+    deliberately left as the historical record of what was specified. No action.
+  - `cypher-mcp/README.md` (which *is* in remit) was checked and is **already correct** — both its
+    troubleshooting row and its recovery section point at `./falkor-chat/scripts/start_falkordb.sh
+    -d`, never at `docker start`. Recorded so a later pass does not re-derive the check. No edit
+    made, and none wanted: documenting a wrong error string in prose is second-best to fixing the
+    string.
+- **No `MENTIONS` tag.** The entry surfaced while writing `teco`'s prompt, but its substance is
+  about the `cypher-mcp` server's error text and `falkor-chat`'s start script, not about `teco` as
+  an agent — and `teco` already carries the rule, so surfacing it in `teco`'s future distillation
+  pass would produce no action.
+- **Cleared:** `PRODUCED` was the only edge (`producedEdges=1`, `mentionEdges=0`,
+  `otherRemaining=0`), so the whole node was `DETACH DELETE`d from `kaizen_team` under the
+  curator clear shape.
+- **Plan items:** opened K-020.
+
 ## 2026-09-02 — Context-file convention added; repo-wide AGENTS.md bloat sweep
 - **What:** Root `AGENTS.md` gained a **Context-file convention** bullet (257w): an always-loaded context file is rewritten not appended to, history is not context and never a third copy of it, plus a checkable bar (line >700ch = a cell being used as a changelog; whole file ~2,500w — smells, not gates). Swept all 13 tracked `AGENTS.md`/`CLAUDE.md` files. `falkor-chat/AGENTS.md`: rewrote six Key-scripts rows (`seed_salesperson` 5,174→334ch with its live traps moved to a prose block under the table; `seed_workflows` 833→688; `verify_workflows` 547→303, dropping a "Before K-005 (fixed 2026-08-25)" history clause; `bootstrap_schema` 510→374; `test_queries` 607→552; `seed_catalog` 598→501). `claude/AGENTS.md`: split the 1,351-char L3 paragraph into four labelled bullets, no content cut. Nine other context files audited clean.
 - **Why:** User asked why `falkor-chat/AGENTS.md:82` was ~5,000 chars. Traced it: seven commits (2026-08-28→09-02), each *appending* one `SALESPERSON_DEF` version's story (931→1,621→2,257→2,713→3,037→4,972→5,174ch) — and the whole narrative was a duplicate of `proof_defs.py:170-250`'s comment block, which had itself gone stale (`v1→v4`, "FOUR sibling capabilities"). The existing "an open item is rewritten, not appended to" rule sat under **Module documentation convention**, scoped to `<module>/docs/**`; the compaction rule names `AGENTS.md` but triggers only at `teco`'s milestone close. So nothing governed a context file at the **per-edit** altitude — that gap, not any author, was the defect. User chose repo-wide sweep + rule-only prevention (no lint script, no hook).
