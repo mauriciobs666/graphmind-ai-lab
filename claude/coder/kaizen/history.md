@@ -2,6 +2,146 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-09-07 — `kaizen_team` distillation pass 2, unit U10 (chunk A of three): 12 raw entries processed — 4 promoted to `graph-dba`'s knowledge base, 4 discarded as already documented, 4 kept open as K-006 — all 12 cleared
+
+- **What:** `cobb` ran `agent-maintenance` §5 over the twelve `coder`-produced `kaizen_team`
+  entries dated **2026-08-27 through 2026-08-29** — unit U10 of
+  `claude/docs/plans/kaizen-distillation2-coordination.md`. All twelve were current-shape
+  (`(:Agent {agentId:'coder'})-[:PRODUCED]->`); zero legacy `author`-property entries remain
+  anywhere, so §5's legacy read was skipped. `coder`'s **fifteen** entries dated 2026-08-31 and
+  later are chunks B and C, separate units, and were **not touched** by this pass.
+- **Build confirmed before judging any version-stamped claim:** `redis-cli MODULE LIST` → graph
+  module `ver 41811` — still **v4.18.11**, the build the FalkorDB entries were written against.
+- **Every entry re-derived, never confirmed from its own citation.** Four turned out to be already
+  published — twice **at the point of use** (a script comment, a method docstring) rather than
+  anywhere a docs-tree grep reaches. Two raw claims were sharpened or narrowed in promotion.
+
+  1. **`b3f2a1c4…` (`$param IS NULL OR` null-guard vs. a literal-sentinel `coalesce`) — PROMOTED,
+     folded into `claude/graph-dba/falkordb-quirks.md`.** Re-derived with four live
+     `GRAPH.EXPLAIN` runs against the existing `reference` graph (read-only, no probe graph
+     created): the null-guard form plans `Node By Label Scan` even with `$category` bound to a real
+     value; `p.price >= coalesce($minPrice,-1.0) AND p.price <= coalesce($maxPrice,1e9)` plans
+     `Node By Index Scan` with **every** parameter `NULL`; a self-referential coalesce on an
+     equality predicate plans a label scan, while plain `= $category` on the same indexed property
+     is a clean index scan. This **corrects** the existing 2026-08-22 quirks entry, which closed
+     with "no phrasing avoids that" full scan for the unfiltered call. Folded into that entry
+     rather than stacked beside it, and given two caveats the raw entry lacked: the whole-range
+     index scan buys no selectivity, and the sentinel bounds silently drop a `NULL`/non-numeric
+     row that the `IS NULL OR` form would have returned (`NULL >= -1.0` → `NULL`, verified).
+  2. **`a3f1c2d4…` (precomputed normalized property, not a runtime `toLower()`) — PROMOTED, engine
+     half only, new *Query tuning* entry.** Re-derived: `toLower(p.categoryNormalized) = 'audio'`
+     plans `Node By Label Scan` + `Filter`; the plain equality plans `Node By Index Scan` — there
+     are no expression/functional indexes on this build. The raw entry's `falkor-chat`-specific
+     half (whether swapping the residual filter's property was safe, given `Product.price` was the
+     real anchor) was **left out**: already published in `falkor-chat/docs/QUERIES.md` §15.2 and
+     verbatim in `Repository.filter_products`'s own docstring.
+  3. **`f3c6021e…` (a step `config`/transition `guard` reads back as an opaque JSON string) —
+     DISCARDED, already documented.** Verified true (`services._serialize_opaque`, `:275`), and
+     documented twice: `falkor-chat/docs/DESIGN.md` states `Step.config` and `TRANSITION.guard` are
+     **opaque serialized strings parsed app-side only (rule 8)**, and `_serialize_opaque`'s own
+     docstring restates it at the point of use. The entry's practical corollary (`json.loads()`
+     before comparing in a test) follows directly. Its `suggestedHome: 'prompt'` was rejected
+     outright — a single component's serialization convention never belongs in an always-loaded
+     agent prompt.
+  4. **`2ee298a8…` (`filter_products` exact, case-sensitive category match) — DISCARDED,
+     superseded by the fix.** The bug is gone: `Repository.filter_products` now normalizes the
+     caller's `category` with `extraction.normalize_name` and compares against a precomputed,
+     indexed `Product.categoryNormalized`. Confirmed live — `reference` carries a RANGE index on
+     `categoryNormalized`. The incident, the fix and its sargability rationale are all in the
+     method's docstring plus `docs/QUERIES.md` §15.2. Same-day sibling of entry 2 above, which is
+     the fix's own capture.
+  5. **`c1a9e6f0…` (`collect({map literal})` over a zero-row `OPTIONAL MATCH`) — PROMOTED, new
+     *Cypher dialect* entry in `falkordb-quirks.md`, mechanism sharpened.** Re-derived read-only:
+     on a node with no matching edge, `collect(l)` → `[]`, `collect(l.qty)` → `[]`, but
+     `collect({q: l.qty})` → `[{q: null}]`, size **1**. The raw entry reported the symptom; the
+     added contrast gives the actual rule — a map literal is a non-null value whose *fields* are
+     null, so it survives a collect that drops bare nulls. Filed beside the `sum(CASE …)` → `0.0`
+     and global-`collect()`-over-zero-rows entries it belongs with.
+  6. **`c1f2a8b4…` (a step of ANY type parks iff `config.waitsForHuman`) — KEPT OPEN, K-006.**
+     Verified by reading `executor._drive_loop` (`:634` — OUTCOME B tests
+     `config.get("waitsForHuman")` and never `step.type`) and `services._validate_def_spec`
+     (`:1446` — the requirement is applied only to `WAITING_STEP_TYPES`). The core is already
+     documented at `services.py:85` ("the executor's OUTCOME B keys on exactly that flag") and
+     demonstrated by a shipped `agent`-typed precedent. What is **not** documented is the
+     validation asymmetry: a `decision`/`agent` step that needs to park but omits the flag
+     publishes clean and fails only at runtime. That one clause belongs in `falkor-chat/docs/DESIGN.md`,
+     outside `cobb`'s write remit.
+  7. **`29b6274a…` (a Cypher-level regression is invisible to `test_services.py`) — KEPT OPEN,
+     K-006.** Verified: `tests/test_services.py:606-615`'s `FakeRepo.upsert_profile` re-implements
+     `repository.py` §17's `coalesce()`-per-field semantics in plain Python, and says so in its own
+     comment — so reverting the real Cypher to an unconditional `SET` cannot redden it. Target is
+     `falkor-chat/docs/SERVER.md` §1.7, whose existing four testing hazards are exactly this genre;
+     `falkor-chat/AGENTS.md` already points there for suite-specific hazards.
+  8. **`b7e1f0a2…` (`falkordb-py` names an un-aliased `RETURN` column by its expression text) —
+     PROMOTED, new *Ops, config & tooling* entry in `falkordb-quirks.md`.** Re-probed live from
+     `falkor-chat/server/.venv` (falkordb-py **1.6.1**): `RETURN p.name AS name, p.price AS price`
+     → `header == [[1,'name'],[1,'price']]`; the same query with no `AS` →
+     `[[1,'p.name'],[1,'count(p)']]`. `Repository.run_readonly_query`'s docstring already documents
+     the consequence for *that* method; the client-library fact itself was in no knowledge base,
+     and it binds anyone writing a generic row-to-dict mapper.
+  9. **`9050f193…` (batch document POSTs race a single JIT-loading LM Studio) — KEPT OPEN,
+     K-006, narrowly.** Verified as already documented **at the point of use**: a 16-line comment
+     at `scripts/seed_nlq_eval_corpus.py:342-353` carries the whole fact — the two background jobs
+     per chunk, the one-model-at-a-time swap, the `{"error":"Model is unloaded."}` HTTP 400, 11 of
+     12 documents `failed`, and the post-then-poll-per-document fix. Not a discard, because that
+     comment is scoped to one script while the constraint binds the *next* author of any live batch
+     driver; the ask is one generalized line in `docs/SERVER.md` §1.7's QA gotchas half.
+  10. **`a3f0e6c1…` (the shared `~/.config/opencode/opencode.json` points at an unreachable LAN
+      address) — DISCARDED, already promoted.** `claude/qa-engineer/qa-testing-techniques.md`
+      carries a fuller section on exactly this, promoted in unit U4 of this same pass and
+      re-verified 2026-09-07 (`curl http://localhost:1234/v1/models` → 200, the configured LAN
+      address → `curl` exit 7). It already states everything this entry does **plus** the rule this
+      entry lacks — never edit the shared file; point `FALKORCHAT_OPENCODE_CONFIG` at a scratch
+      copy for the pass only. Nothing to fold.
+  11. **`55364b9a…` (a new `SALESPERSON_DEF` tool `KeyError`s the offline scaffold tests) — KEPT
+      OPEN, K-006.** Verified: `tests/test_salesperson_scaffold.py` hand-mirrors the def's tool list
+      in a module-level `_SCHEMAS` dict and `StubRegistry.schema()` is a bare `_SCHEMAS[name]`
+      lookup (`:212`), so the coupling is real and unguarded — the def's 11 tools and `_SCHEMAS` are
+      kept in lockstep by hand. Same target as entry 7, `docs/SERVER.md` §1.7.
+  12. **`a1b2c3d4…` (`re.fullmatch()` already enforces whole-string matching) — DISCARDED, with the
+      general lesson kept in `plan.md`'s parking lot.** Re-verified on CPython 3.12.3: an unanchored
+      pattern under `.fullmatch()` correctly rejects `"count(v)) DETACH DELETE (v) //"`, and only
+      switching the call to `.match()` lets it through. True — but the base fact is Python's own
+      documented definition of `fullmatch`, which fails the "non-obvious environment fact" bar for a
+      standing knowledge-base entry. The *generalizable* lesson (**a mutant must be proven to change
+      behavior before its survival is read as a coverage gap**) has no owning knowledge base:
+      `skills/python-web-quirks/` is scoped to web/async plus pytest import-timing, and
+      `claude/qa-engineer/qa-testing-techniques.md` to black-box QA mechanics — stretching either
+      was declined, the same judgment unit U9 applied to a ruff-config fact. Recorded in the parking
+      lot so a future mutation-testing knowledge base can pick it up.
+      **Id collision note:** this entry shares its 8-character prefix with a `tdd-engineer` entry
+      already cleared earlier in this pass (`a1b2c3d4-5e6f-…`, an ORDER BY guard). These ids are
+      hand-shaped, not `uuid4`; full id, date and subject were all confirmed before touching it.
+- **`MENTIONS` tags added: none.** The four FalkorDB entries are engine/client facts rather than
+  facts about another *agent*, and `cobb` was able to re-derive all four read-only — so they were
+  fully dispositioned into `graph-dba`'s knowledge base directly instead of being tagged and
+  deferred (the 2026-08-25 pass tagged three such entries precisely because confirming them needed
+  write-capable probes `cobb` does not have; that did not apply here).
+- **Cleared from `kaizen_team` this pass — all twelve, each a full `DETACH DELETE`:** every entry
+  was counted first (`producedEdges + mentionEdges`), every one read `1 + 0`, so
+  `otherRemaining == 0` in all twelve cases and the whole node was removed rather than just the
+  `PRODUCED` edge. Ids: `b3f2a1c4…`, `a3f1c2d4…`, `f3c6021e…`, `2ee298a8…`, `c1a9e6f0…`,
+  `c1f2a8b4…`, `29b6274a…`, `b7e1f0a2…`, `9050f193…`, `a3f0e6c1…`, `55364b9a…`, `a1b2c3d4-e5f6…`.
+- **Docs touched:** `claude/coder/kaizen/{plan,history}.md` (this file + K-006 + the parking-lot
+  entry) · `claude/graph-dba/falkordb-quirks.md` (four promotions) ·
+  `claude/graph-dba/kaizen/history.md` (its own dated record of those four).
+- **Plan items:** **K-006 opened** (the four kept-open falkor-chat doc asks, one table).
+  **K-005 closed** — see the entry below.
+
+## 2026-09-07 — K-005 closed: `tdd-engineer` fixed `Repository._read_structure`
+
+- **What:** K-005 (opened 2026-08-25 by the previous distillation pass) is delivered and has been
+  moved out of `plan.md`. `Repository._read_structure` now catches the "empty key" `ResponseError`
+  and returns `None` per side — the same pattern as `read_index_dimension`/`services._read_or_absent`
+  — so `verify_workflows.sh` no longer reports an intact `ws:<id>` snapshot as MISSING when
+  `reference` has been fully `GRAPH.DELETE`d. The `falkor-chat/AGENTS.md` `test_queries.sh` row and
+  a `falkor-chat/docs/HISTORY.md` entry (2026-08-25) landed with it, coordinated through
+  `falkor-chat/docs/plans/workflow-diff-absent-key-coordination.md` (U1).
+- **Why:** the item existed only because both fixes sat outside `cobb`'s write remit; with them
+  shipped, `falkor-chat`'s own `HISTORY.md` is the durable record and a `coder` backlog item
+  tracking someone else's delivered work is exactly the stale row the backlog convention forbids.
+- **Plan items:** K-005 ✅ done, removed from the active table.
+
 ## 2026-08-28 — Broad-write guard added (prompt-friction fix, closes coder's FR-2 gap)
 - **What:** Added `hooks/guard-coder-broad-write.sh` (thin wrapper over
   `claude/scripts/guard-broad-write.sh`, deny-list kept in lockstep with tdd-engineer's

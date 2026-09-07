@@ -62,7 +62,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U7b | architect chunk B (6: 5×09-03 + 1×09-07 arrived mid-pass) | `a035ccc6941014b46` | accepted | `claude/architect/architect.md` (1 bullet, 2 entries folded) + `kaizen/history.md`; `skills/python-web-quirks/SKILL.md` (2 sections) + `skills/agent-standards/claude-code.md` + `skills/README.md`; `claude/data-scientist/lm-studio-model-notes.md` (folded into U7's section) + `kaizen/history.md`; `claude/cobb/kaizen/history.md`; 6 nodes deleted — **`architect` closed out, 0/0** | none → — | 173.6k tok, 66 tools |
 | U8 | tdd-engineer chunk A (12: ≤ 08-30) | `a23d066e2aad247f8` | accepted | `claude/tdd-engineer/tdd-engineer.md` (1 merged Principles bullet) + `kaizen/*` (K-007…K-010); `skills/python-web-quirks/SKILL.md` (1 new + 1 generalized) + `skills/agent-standards/claude-code.md` + `skills/README.md`; `claude/data-scientist/lm-studio-model-notes.md`; `claude/cobb/kaizen/history.md`; 12 nodes deleted | none → — | 182.7k tok, 74 tools |
 | U9 | tdd-engineer chunk B (8: ≥ 08-31) | `aa5d3ef4bb834eab9` | accepted | `claude/tdd-engineer/tdd-engineer.md` (1 sentence onto U8's bullet) + `kaizen/*` (K-011); `skills/python-web-quirks/SKILL.md` (folded into U7b's route-table section) + `skills/README.md`; `claude/cobb/kaizen/history.md`; 8 nodes deleted — **`tdd-engineer` closed out, 0/0** | none → — | 141.2k tok, 42 tools |
-| U10 | coder chunk A (12: ≤ 08-29) | — | queued | `claude/coder/kaizen/*`, graph cleared | none → — | — |
+| U10 | coder chunk A (12: ≤ 08-29) | `aacf69b25b40cbff5` (retry; `a695c632adfd6d91d` died on a rate limit) | accepted | `claude/graph-dba/falkordb-quirks.md` (+43 lines, 1 prior entry corrected) + `kaizen/history.md`; `claude/coder/kaizen/*` (K-006 consolidated, K-005 closed); 12 nodes deleted | none → — | 180.7k tok, 68 tools |
 | U11 | coder chunk B (8: 08-31…09-02) | — | queued | `claude/coder/kaizen/*`, graph cleared | none → — | — |
 | U12 | coder chunk C (7: 09-03) | — | queued | `claude/coder/kaizen/*`, graph cleared | none → — | — |
 | U13 | data-scientist chunk A (10: ≤ 08-30) | — | queued | `claude/data-scientist/kaizen/*`, graph cleared | none → — | — |
@@ -115,6 +115,21 @@ decomposition was drawn before any cost data for *this* pass existed, and six
 units of measured rate beat the estimate it was drawn from. The remaining
 chunk boundaries in the table were sized under the same estimate and should be
 re-checked against this rate as each agent comes up.
+
+## One platform failure, cleanly recovered
+
+U10's first dispatch (`a695c632adfd6d91d`) was killed mid-run by a session
+rate limit (HTTP 429), at the point of starting verification. Before
+re-dispatching, `teco` established actual state rather than assuming it: all 27
+`coder` entries still carried their `PRODUCED` edges and no file in the tree
+was dirty, so the unit had written nothing. That made it a plain re-dispatch,
+not a state-recovery brief.
+
+The reason it recovered cleanly is §5's **append-to-`history.md`-before-mutating**
+ordering, which exists for exactly this. The two writes are independent tool
+calls, not one transaction; a run that dies between them leaves an entry
+harmlessly duplicated or partially resolved, never silently lost. A run that
+dies before either leaves nothing at all — which is what happened here.
 
 ## Follow-ups
 

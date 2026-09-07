@@ -2,6 +2,49 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-09-07 — `falkordb-quirks.md` gained four engine/client facts promoted out of `coder`'s raw capture (U10)
+
+- **What:** `cobb`, distilling `coder`'s `kaizen_team` entries (unit U10 of
+  `claude/docs/plans/kaizen-distillation2-coordination.md`, chunk A — 2026-08-27..29), promoted
+  four FalkorDB facts into `graph-dba`'s on-demand knowledge base. `graph-dba` did not produce
+  them; they are engine/client behaviour, so they belong here rather than in a `coder` file.
+  Every one was **re-derived by `cobb` read-only** against the live instance
+  (`redis-cli GRAPH.EXPLAIN` / `GRAPH.RO_QUERY` on the existing `reference` graph, plus one
+  `falkordb-py` probe from `falkor-chat/server/.venv`) — no probe graph created, no write issued.
+  Build confirmed first: `MODULE LIST` → graph module `ver 41811`, still **v4.18.11**.
+  1. **`b3f2a1c4…` — folded INTO the existing `$param IS NULL OR` tuning entry, correcting it.**
+     That entry (2026-08-22) closed with "no phrasing avoids that" full scan for the unfiltered
+     call. False for a **range** predicate: `p.price >= coalesce($minPrice,-1.0) AND p.price <=
+     coalesce($maxPrice,1e9)` plans `Node By Index Scan` with every parameter `NULL`, while the
+     `IS NULL OR` form plans `Node By Label Scan` even with a real value bound. It does **not**
+     work for equality via a self-referential coalesce (`p.categoryNormalized =
+     coalesce($category, p.categoryNormalized)` → label scan; plain `= $category` → index scan).
+     Two caveats `cobb` added that the raw entry did not carry: the whole-range index scan buys no
+     selectivity (same lesson as the `IS NOT NULL` entry), and the sentinel bounds are a silent
+     NULL/type filter that drops rows the `IS NULL OR` form would return.
+  2. **`a3f1c2d4…` — new *Query tuning* entry, narrowed to the engine fact.** Re-derived:
+     `toLower(p.categoryNormalized) = 'audio'` plans `Node By Label Scan` + `Filter`; the plain
+     equality plans `Node By Index Scan`. There are no expression/functional indexes on this
+     build, so case-insensitive matching means a precomputed normalized property plus
+     client-side parameter normalization. The raw entry's `falkor-chat`-specific half (which
+     property was the real scan anchor) was left out — already published in that component's
+     `docs/QUERIES.md` §15.2 and in `Repository.filter_products`'s docstring.
+  3. **`c1a9e6f0…` — new *Cypher dialect* entry, mechanism sharpened.** `collect()` of a **map
+     literal** over a zero-row `OPTIONAL MATCH` returns `[{q: null}]`, size 1 — not `[]`.
+     `cobb` measured the contrast the raw entry lacked: `collect(l)` → `[]` and `collect(l.qty)`
+     → `[]` on the same row, so the rule is "a map literal is a non-null value whose fields are
+     null", not "OPTIONAL MATCH pads its aggregates". Placed beside the `sum(CASE …)` / global
+     `collect()` zero-row entries it belongs with.
+  4. **`b7e1f0a2…` — new *Ops, config & tooling* entry.** `falkordb-py` 1.6.1 `result.header` is
+     `[[type_code, name], …]`, and an un-aliased `RETURN` column is named by its literal
+     expression text — probed live: `RETURN p.name AS name, p.price AS price` →
+     `[[1,'name'],[1,'price']]`; without `AS` → `[[1,'p.name'],[1,'count(p)']]`. Matters to any
+     generic row-to-dict mapper keyed off `res.header`.
+- **Why:** `agent-maintenance` §5 step 3 — engine facts route to the on-demand knowledge base that
+  owns them, never to an always-loaded prompt and never hoarded in the producing agent's files.
+- **Docs touched:** `claude/graph-dba/falkordb-quirks.md` (+43 lines). No change to
+  `graph-dba.md`, no plan item opened — nothing here is a `graph-dba` behaviour change.
+
 ## 2026-09-07 — `kaizen_team` distillation, U6 (pass 2): 9 current-shape entries — 6 promoted to `falkordb-quirks.md` (one a merged/corrected refinement pair), 1 promoted into `qa-engineer`'s knowledge base, 2 kept open as K-008 — all 9 cleared
 
 - **What:** `cobb` ran `agent-maintenance` §5 for `graph-dba`, unit U6 of the second team-wide

@@ -363,6 +363,16 @@ to the general fact here.
   as the not-found signal will never see it — check the counts, not `len(result_set)`. Same
   family as the `sum(CASE …)` entry above (a defined zero, not `NULL`/absent).
 
+- **`collect()` of a MAP LITERAL over a zero-row `OPTIONAL MATCH` yields a list holding ONE
+  all-null map, not `[]`** (verified 2026-09-07, module `41811`). Collecting the unmatched variable
+  itself, or a property of it, correctly yields `[]` — nulls are dropped — but a map literal is a
+  non-null value whose *fields* happen to be null, so it survives the collect. Measured on one node
+  with no matching edge: `collect(l)` → `[]`, `collect(l.qty)` → `[]`, `collect({q: l.qty})` →
+  `[{q: null}]` (size **1**). Consequence: `size(lines) = 0` is not the emptiness test for a
+  `collect({...})` fan-out — filter on a required non-null field first
+  (`size([x IN lines WHERE x.productId IS NOT NULL])`). Same family as the `sum(CASE …)` entry: a
+  defined placeholder, not absence. Surfaced on `falkor-chat`'s `get_order` for a zero-line order.
+
 - **`count(*)` under-counts parallel edges between the same node pair — bind the relationship
   variable and use `count(r)` instead** (verified 2026-08-25, module `41811`, disposable graph).
   Two identical `(a)-[:REL]->(b)` edges between the same two nodes: `MATCH (a)-[:REL]->(b) RETURN
@@ -472,6 +482,32 @@ to the general fact here.
   written — verified no phrasing avoids that for "list everything with no anchor" queries).
   Surfaced designing `list_matches(status=None, limit)` for `falkor-chat`'s entity-fusion audit
   surface — full comparison at `falkor-chat/docs/plans/document-ingestion-graph.md` §1.7.
+  **Refinement — a literal-sentinel `coalesce` DOES keep a RANGE predicate on `Node By Index Scan`
+  in every combination, including the fully-unfiltered call; this corrects the "no phrasing avoids
+  that" clause above for the range case** (verified 2026-09-07, module `41811`, live
+  `GRAPH.EXPLAIN` against an indexed `Product` label). `WHERE p.price >= coalesce($minPrice, -1.0)
+  AND p.price <= coalesce($maxPrice, 1e9)` plans `Node By Index Scan` with all params `NULL`, while
+  the same filters written as `IS NULL OR` guards plan `Node By Label Scan` even with a real,
+  selective value bound. **It does not work for an EQUALITY predicate via a self-referential
+  coalesce** — `WHERE p.categoryNormalized = coalesce($category, p.categoryNormalized)` alone plans
+  `Node By Label Scan` with `$category` bound and the property indexed, where plain
+  `= $category` on that same property is a clean index scan. Two caveats before reaching for it:
+  (1) an index scan spanning the entire range buys no *selectivity* on the unfiltered call — read
+  `Records produced`, not the operator name (the `IS NOT NULL` entry above); (2) the sentinel bounds
+  are a silent type/NULL filter — a row whose property is `NULL` or non-numeric compares to the
+  sentinel as `NULL` and vanishes, where the `IS NULL OR` form would have returned it (the
+  cross-type-comparison entry under *Cypher dialect*). Sound only where the property is guaranteed
+  present and of the sentinel's type. Live use: `falkor-chat`'s `Repository.filter_products`,
+  `falkor-chat/docs/QUERIES.md` §15.2.
+
+- **A function call wrapped around an indexed property forfeits the index — there are no
+  expression/functional indexes on this build** (verified 2026-09-07, module `41811`).
+  `MATCH (p:Product) WHERE toLower(p.categoryNormalized) = 'audio'` plans `Node By Label Scan` +
+  `Filter`; the identical predicate written `p.categoryNormalized = 'audio'` plans
+  `Node By Index Scan`. So case-/whitespace-insensitive matching is done by **precomputing a
+  normalized property, indexing that, and normalizing the parameter client-side** before comparing
+  — never by normalizing the property inside `WHERE`. (`falkor-chat` carries
+  `Product.nameNormalized`/`categoryNormalized` for exactly this; `docs/QUERIES.md` §15.1–15.2.)
 - **An `OR` across two label-specific properties as the scan anchor**
   (`WHERE n.propA = $x OR n.propB = $x`) profiles as an `All Node Scan` even when
   both properties are indexed. Use two separate `OPTIONAL MATCH`es (one indexed
@@ -554,6 +590,13 @@ to the general fact here.
 ## Ops, config & tooling
 
 - **`GRAPH.RO_QUERY`** routes to read replicas — use it for all read-only traffic.
+- **`falkordb-py`'s `result.header` is a list of `[type_code, column_name]` pairs, and an
+  UN-ALIASED `RETURN` expression is named by its literal expression text** (verified 2026-09-07,
+  falkordb-py 1.6.1, module `41811`). `RETURN p.name AS name, p.price AS price` gives
+  `[[1,'name'],[1,'price']]`; the same query with no `AS` gives `[[1,'p.name'],[1,'count(p)']]`.
+  Consequence for any generic row-to-dict mapper built from `res.header` — a query whose column set
+  isn't known ahead of time — expect keys like `"c.name"` and `"count(p)"`, never bare property
+  names: alias every column you intend to key on, or key on the expression text deliberately.
 - **Renaming a graph is a plain Redis `RENAME`/`RENAMENX` on its key — atomic, non-destructive,
   and fully supported. `GRAPH.COPY` + `GRAPH.DELETE` is NOT needed and should not be used**
   (verified 2026-09-07, module `41811`, disposable graph). A graph is a single Redis key of type
