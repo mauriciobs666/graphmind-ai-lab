@@ -351,9 +351,11 @@ class Fingerprint:
         # writes the key, whatever it holds, so that `from_dict(to_dict(x)) == x` for *invalid*
         # records too: a condition on the **value** alone laundered a model record's `null` into
         # an `absent` on read, and one on the **arm** alone drops the offending surface off a
-        # deterministic record, which then reads back valid (review P6-1). `store()` refuses an
-        # invalid record before serialising it, so the writer that walks either path is
-        # `model-bench migrate` (§3.4.3) — and an invalid record is the only kind it walks.
+        # deterministic record, which then reads back valid (review P6-1). `store()` validates
+        # before serialising, so the one writer that serialises a record `store()` never validated
+        # is `model-bench migrate` (§3.4.3) — which is what makes an invalid record writable on
+        # that path at all. (Most records a migration walks *are* valid: §3.4.3 validates each
+        # against its own schema entry. It is the write side that is unguarded, not the read.)
         omit = self.armKind == "deterministic" and self.callSurface is None
         surface: dict[str, Any] = {} if omit else {"callSurface": self.callSurface}
         return {"armKind": self.armKind, **surface, **dict(self.fields)}

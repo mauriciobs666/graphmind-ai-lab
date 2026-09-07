@@ -15,7 +15,11 @@ so it fired on a **model** record whose surface was `None` too. Such a record va
 ("never written"): the information loss the previous round closed in `validate()`, reintroduced one
 method over. Unreachable through this package's writers, because `store()` validates before
 `RunResult.to_dict()` — and reachable through **`model-bench migrate`** (§3.4.3), which reads with
-`from_dict`, writes with `to_dict`, and by definition walks records that did not validate.
+`from_dict` and writes with `to_dict`, and is the one writer that serialises records `store()`
+never validated. *(Corrected at Pass 7: an earlier phrasing here said a migration "by definition
+walks records that did not validate". False, and it originated in the Pass 6 finding — §3.4.3
+validates a record against **its own** schema entry, so most migrated records are valid. What is
+unguarded is the write side, not the read, and that is enough to make the defect reachable.)*
 
 **The fix is the conjunction, not either half.** The gate suggested keying on the arm instead
 (`{} if self.armKind == "deterministic"`), which is a strictly worse trade on the same path:
@@ -23,9 +27,13 @@ executed over all eight `(armKind, callSurface)` shapes, it drops a **forbidden*
 deterministic record, which then reads back **valid** — laundering an invalid reference arm into a
 clean one and deleting the evidence of the claim §3.4.1 exists to refuse. So the key is omitted for
 **exactly one** record, `armKind == "deterministic" and callSurface is None`, and written for every
-other, whatever it holds. The round trip is then total over all eight shapes — including
-`armKind == ""`, which the shipped condition also failed on equality — where the value-keyed
-condition was asymmetric on one and the arm-keyed one on two.
+other, whatever it holds. The round trip is then total over **all twelve** shapes —
+`armKind` over `model`, `deterministic`, the `""` sentinel and an unrecognised value, times
+`callSurface` over `"chat"`, `""` and `null` — where the value-keyed condition is asymmetric on
+three of them and the arm-keyed one on two. *(The count is the suite's, not a transcript's, since
+Pass 7: `ROUND_TRIP_SHAPES` in `tests/test_fingerprint.py` is that product, and this paragraph
+states what it covers. The round originally claimed eight, enumerated by hand, and an independent
+enumeration found nine — neither was in the suite, which was the finding.)*
 
 **The mutations**, each applied to a file copied aside and restored by copy immediately, the tree
 verified byte-identical after every one:
@@ -35,6 +43,21 @@ verified byte-identical after every one:
 | 1 | omission keyed on the value alone — the shipped `c523a35` condition | 1 failed — killed (`model-lost-its-surface`) |
 | 2 | omission keyed on the arm alone — **the Pass 6 gate's suggested one-liner** | 1 failed — killed (`reference-arm-claiming-a-surface`) |
 | 3 | the key always written — Pass 5's M2 / Pass 6's N1, re-run against the fix | 1 failed — killed, so P5-2's pin still holds |
+| 4 | `callSurface is None and armKind != "model"` — omits on an unrecognised arm kind, the same laundering one arm-kind over | 2 failed — killed |
+| 5 | `armKind == "deterministic" and not callSurface` — omits on `("deterministic", "")`, so a `forbidden` record migrates in clean | 1 failed — killed |
+| 6 | the key never written | 40 failed — killed |
+
+Mutations 4 and 5 are **Pass 7's** (P7-1): they passed the two-case version of the round-trip test,
+which pinned the two narrowings its author had tried rather than the rule itself. The test is now a
+`parametrize` over the product, so a wrong `omit` fails at the cell that names the record it
+mishandles.
+
+**One thing recorded rather than fixed, as a trigger.** §3.4.1's "`None` **iff** deterministic" is
+now transcribed in two places — `validate()`'s deterministic branch and `to_dict`'s `omit` — with
+nothing tying them together, and *which* value a profile pins is a **schema** fact that `to_dict`
+hard-codes. At schema 1 there is exactly one such pin and the duplication is cheap, so it stays.
+**A third transcription, or a schema-2 profile pinning another discriminator, is the moment to lift
+the rule into `REQUIRED_BY_SCHEMA` rather than the moment to write it again.**
 
 ## 2026-09-07 — S1e Tables A and B, fix round: three states for the second discriminator, and two decisions that were held by comments
 

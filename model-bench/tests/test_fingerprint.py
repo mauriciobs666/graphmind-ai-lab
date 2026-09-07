@@ -403,39 +403,50 @@ def test_a_deterministic_record_omits_the_call_surface_rather_than_storing_null(
         assert stored["callSurface"] == surface
 
 
-@pytest.mark.parametrize(
-    "arm_kind,call_surface,fixture,reason",
-    [
-        ("model", None, model_fields, "null"),
-        ("deterministic", "chat", deterministic_fields, "forbidden"),
-    ],
-    ids=["model-lost-its-surface", "reference-arm-claiming-a-surface"],
-)
-def test_an_invalid_call_surface_survives_a_round_trip_with_its_reason(
-    arm_kind: str, call_surface: str | None, fixture, reason: str
-) -> None:
-    """The round trip is total over **invalid** records too, which is the only kind that matters
-    here (review P6-1).
+#: Every `(armKind, callSurface)` a stored record can present `from_dict` with, as a **product**
+#: rather than a hand-picked few (review P7-1). `armKind` covers both valid kinds, the missing-key
+#: sentinel and an unrecognised value — a migration walks all four — and `callSurface` covers a
+#: real surface, the blank sentinel and `null`. **12 shapes.**
+ROUND_TRIP_SHAPES = [
+    (arm_kind, call_surface)
+    for arm_kind in ("model", "deterministic", "", "robot")
+    for call_surface in ("chat", "", None)
+]
 
-    `store()` validates before serialising, so this package never writes a record it refused —
-    but `model-bench migrate` (§3.4.3) reads with `from_dict` and writes with `to_dict`, and the
-    records a migration walks are by definition ones the old contract failed. Both ways of
-    narrowing the omission lose information on that path, in opposite directions: keying it on the
-    **value** omits a model record's lost surface, which then reads back as `absent` — never
-    written — and keying it on the **arm** omits a reference arm's forbidden surface, which then
-    reads back **valid**, deleting the evidence of the claim §3.4.1 exists to refuse. The
-    omission therefore means one record and not a class of them.
+
+@pytest.mark.parametrize("arm_kind,call_surface", ROUND_TRIP_SHAPES)
+def test_the_stored_call_surface_shape_is_total_over_every_record(
+    arm_kind: str, call_surface: str | None
+) -> None:
+    """`from_dict(to_dict(x)) == x`, with the same diagnosis on both sides, for **every** shape —
+    invalid ones included, which are the ones that matter here (review P6-1, P7-1).
+
+    `store()` validates before serialising, so this package never writes a record it refused;
+    `model-bench migrate` (§3.4.3) is the one writer that serialises records `store()` never
+    validated, which is what makes an invalid record writable at all on that path.
+
+    The rule is that the key is omitted for **exactly one** record — a deterministic arm carrying
+    no surface, the serialisation image of §3.4.1's "`None` **iff** deterministic". Every
+    narrowing of it deletes evidence somewhere on the grid, which is why this asserts the rule and
+    not a list of refuted candidates: keying the omission on the **value** launders a model
+    record's `null` into an `absent`; on the **arm**, a reference arm's `forbidden` surface into a
+    clean record; `is None and armKind != "model"` does the first one arm-kind over; and
+    `deterministic and not callSurface` does the second for the blank string. Each of those four
+    is one cell of this grid, and the earlier version of this test — two cells, chosen as the two
+    candidates its author had tried — passed on the other two.
     """
-    fp = Fingerprint(armKind=arm_kind, callSurface=call_surface, fields=fixture())
-    assert fp.validate() == [FieldProblem(field="callSurface", reason=reason)]
+    fields = deterministic_fields() if arm_kind == "deterministic" else model_fields()
+    fp = Fingerprint(armKind=arm_kind, callSurface=call_surface, fields=fields)
 
     stored = fp.to_dict()
-    assert "callSurface" in stored
-    assert stored["callSurface"] == call_surface
+    omitted = arm_kind == "deterministic" and call_surface is None
+    assert ("callSurface" in stored) is not omitted
+    if not omitted:
+        assert stored["callSurface"] == call_surface
 
     restored = Fingerprint.from_dict(stored)
     assert restored == fp
-    assert restored.validate() == [FieldProblem(field="callSurface", reason=reason)]
+    assert restored.validate() == fp.validate()
 
 
 # --- M-4: the contracts are pinned against literals, not against themselves ----------------------
