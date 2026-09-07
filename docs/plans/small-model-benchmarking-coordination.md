@@ -71,7 +71,8 @@ Stakeholder decisions, 2026-09-02:
 | U30 — Four items v1.12 raised: §3.2f's retired wording, the continuous-verdict producer's signature, the homogeneous-family enforcement point, §5.2's `sep_raw` figures | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `e290148`; all four changed the note | `docs/plans/small-model-benchmarking-ml.md` **v1.16** | `analyst` Pass 7 → — | 248k tok / 15 tools cumulative |
 | U32 — Plan v1.13: absorb note v1.16's four deltas. **Deliberately small** | `architect` (fresh) | `ac827e78b5339f829` | **delivered** — `fbe5741` (+300/−91); stayed small, 5 extras all reported | `docs/plans/small-model-benchmarking.md` **v1.13** | `analyst` Pass 7 → — | 220k tok / 99 tools |
 | U33 — Does Rule 8 take a `support` parameter? (Table E's clamp has no route to its only caller) | `data-scientist` | `a4e06f8c810bbbbb8` (resumed) | **delivered** — `1fbdb6f`; recommendation accepted with a **sharper shape**, and the premise replaced | `docs/plans/small-model-benchmarking-ml.md` **v1.17** | `analyst` Pass 7 → — | 267k tok / 5 tools cumulative |
-| U31 — Re-gate plan v1.13 + note v1.17 (Pass 7) | `analyst` (fresh) | `a7144f0028209bdc0` (first instance `aaa942cd75fabc2ca` **killed by a session rate limit**, wrote nothing) | in-flight | `docs/reviews/small-model-benchmarking.md` `## Pass 7` | — (is the gate) | — |
+| U31 — Re-gate plan v1.13 + note v1.17 (Pass 7) | `analyst` (fresh) | `a7144f0028209bdc0` (first instance `aaa942cd75fabc2ca` **killed by a session rate limit**, wrote nothing) | **accepted** — `b6222c6` | `docs/reviews/small-model-benchmarking.md` `## Pass 7` | self → **needs changes** (1 blocker, 0 majors, 2 minors); **plan implementable**, S2 one revision away | 190k tok / 51 tools |
+| U34 — Plan v1.14: P7-1/2/3 + note v1.17's two deltas. **Intended as the last plan revision** | `architect` (fresh) | `a4a33cf66d7db77f2` | in-flight | `docs/plans/small-model-benchmarking.md` v1.14 | **narrow re-check**, not a full Pass 8 → — | — |
 | U16 — Close R-13: `_percentile` definition + denominator under informative missingness | `data-scientist` (fresh) | `a7da5de9c6bbf19a1` | **accepted** — `460940c`; resumed to republish §11.7 with measured values | `docs/plans/small-model-benchmarking-ml.md` v1.9 §11 | re-gate → — | 176k tok / 40 tools |
 
 | U14 — Fix unit: **all Pass 4 majors + minors, both gates** (scope expanded mid-run) | `tdd-engineer` | `af08841933828b12c` | **accepted** — `5878014` | `model-bench/**` (10 files, +1490/−61); 353→389 tests | re-gate (both, fresh) → — | 348k tok / 130 tools |
@@ -1865,4 +1866,62 @@ agent happened to have written before dying.
 
 **Timing note for future dispatches:** the session limit is real and recurring. Two long units in
 parallel is affordable; three is what preceded this kill.
+
+## Pass 7 — 2026-09-07 (`b6222c6`) · the convergence point
+
+**1 blocker, 0 majors, 2 minors — the smallest set of seven passes, and the first in which no finding
+is a defect *of* the mechanism.** Trend across passes 4→7: blockers **3, 2, 1, 1**; majors
+**5, 4, 2, 0**; revision size **+738, +540, +521, +300**.
+
+**The gate answered both questions it was asked, in the words they were asked in:**
+
+> The plan **is implementable**. **S2 may not be dispatched yet**, and the gap is one small revision —
+> not a redesign. … **The residual risk is now the kind only execution finds.** A Pass 8 is not worth
+> a seventh full gate — a narrow re-check of v1.14 is.
+
+**P7-1 (blocker) — `DistributionSummary` has no stored shape, and four shipped sites break.** Table F
+retypes `separationRaw`/`separationZ` and puts them in `named_metrics()` without deciding the JSON
+shape or naming what breaks. **Verified here, all four:** `results.py:359` and `:584` are bare-`else`
+readers assuming `.mean`; `report.py:583` is a third; and `_decode`'s gate at `:385` admits only
+`{"binary","continuous"}`, so a third shape **silently returns a raw dict** where a metric belongs —
+the quiet one, and the worst of the four.
+
+**Why rule 5 missed it is the durable part.** Table F's commands missed these sites for a **spelling**
+reason: one greps the type *name* while the lines spell `"continuous"` as a string literal, and
+another pins the variable `metric` while `results.py` uses `m`. The gate's diagnosis: **rule 5's
+commands are *token*-based, and this defect class is *attribute*-based.** `grep -rn '\.mean'
+modelbench` returns **exactly** the three bare-`else` readers — confirmed. A retype's site list is
+found by *the attribute the new type lacks*, not by the type's name. This is the **fifth** instance of
+*shipped code correct for its current caller and wrong for a caller the plan commits to adding*, and
+the first with a mechanical detector.
+
+**All four requested judgements came back sound**, which is why the pass is small rather than lenient:
+the `clamp=None` classification **holds on the note's replacement argument** and is strictly stronger
+than the census it replaced; Table E's required clamp **still does real work** on the exploratory
+`sep_z` surface; Table G's `means` scoping is **principled** (every weaker form was run and cannot
+reach zero) and it **belongs as its own table**; delta 1's negative assertions **do** catch the DC-10
+mis-build, against all four plausible mis-builds.
+
+**And the convergence answer, which is the one that changes what happens next.** There *was* remaining
+static risk — P7-1 would have shipped. But the miss is explained and mechanically closable, and having
+run the attribute procedure over **every caller the plan commits to adding**, only
+`DistributionSummary` yields a finding. So: **v1.14 gets a narrow re-check, not a full Pass 8**, and
+after it the work is implementation.
+
+### U34 — intended as the last plan revision
+
+Five items: P7-1's stored shape and site rows, the **attribute-based companion to rule 5** (judge the
+shape, do not paste the grep), P7-2's symmetric residual that a *half-applied* edit cannot pass,
+P7-3's label home, and note v1.17's two deltas — the premise swap and *forward-don't-derive*, both
+already routed and deliberately excluded from Pass 7's findings.
+
+The brief states the stakes plainly: **a large v1.14 would itself be evidence the convergence
+judgement was wrong.** It also carries the write-as-you-go instruction now standard here after three
+session-limit kills.
+
+**After v1.14 clears its narrow re-check, the next dispatch is the S1 fix unit** — which has
+accumulated: U20's residency element-shape assertion, the single shared `_percentile`, the closed-form
+implementation, `_widen`'s conditional clamp, `withheldFor`'s three states, the `measures` carrier,
+bootstrap quantile levels as parameters, and now `DistributionSummary`'s stored shape. It is one
+coherent S1 diff and should be sized against the step-table rule before dispatch, not after.
 
