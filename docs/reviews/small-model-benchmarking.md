@@ -4,9 +4,11 @@
 
 ## Pass 1 — 2026-09-02
 
-*(Current verdict is **`## Pass 7`**'s, at the end of this document: **needs changes** on plan v1.13
-/ note v1.17 — 1 blocker, 2 minors, and an explicit answer on whether S2 may be dispatched. Pass 6
-gated plan v1.11, Pass 5 plan v1.10, Pass 4 plan v1.9, Pass 3 plan v1.8, all **needs changes**;
+*(Current verdict is **`## Pass 8 (narrow)`**'s, at the end of this document: **needs changes** on
+plan v1.14 / note v1.17 — 1 blocker, 2 majors, and an explicit answer on whether the plan is ready
+for implementation. Pass 8 is a **narrow** re-check of v1.14's delta, not a full gate; Pass 7 gated
+plan v1.13, Pass 6 plan v1.11, Pass 5 plan v1.10, Pass 4 plan v1.9, Pass 3 plan v1.8, all
+**needs changes**;
 Pass 2 gated plan
 v1.3 with **approve with suggestions**. Pass 1 gated plan v1.1 and is kept intact — the passes are
 meant to be read together, and each disposition table is only legible against the findings of the
@@ -2401,3 +2403,277 @@ DC-12, DC-13, §4 S1e preamble and Tables D/E/F/G, §4 S3, §5 test 11d, §7 (*N
 full. `git diff 5b67416 fbe5741` in full, classified hunk by hunk (24 hunks). Coordination doc
 U32/U33 ledger entries. Shipped `stats.py:140-300`, `results.py:180-250`, `:350-400`, `:570-600`,
 `report.py:600-712`, `:758-778`.
+
+## Pass 8 (narrow) — 2026-09-07
+
+**Scope, as commissioned:** the v1.14 delta only — `git diff 57b5715 d6556c3 --
+docs/plans/small-model-benchmarking.md` (+288/−75, **25 hunks**, all read and classified) against
+note **v1.17** (`1fbdb6f`) and the shipped tree. This is the narrow re-check `## Pass 7` recommended
+in place of an eighth full gate; it does **not** re-gate the plan as a whole and reopens nothing
+closed in Passes 1–6. Four questions were put to it: is `P7-1` closed, do commands 7 and 8 enumerate
+the class, is `P7-2`'s generalisation complete across all seven tables, and are `P7-3` plus note
+v1.17's two deltas sound. Findings carry the prefix **`P8-`** (*plan-gate P8-n*).
+
+**CPG:** considered, not relevant — no `model-bench` CPG exists (the instance loads `cpg_falkorchat`
+and `cpg_deprecated_salesperson` only) and v1.14 makes no structural claim about `falkor-chat`.
+
+**Verified, not assumed.** Every count v1.14 cites was re-run today against `model-bench/` at
+`5878014` (unchanged: `git diff --stat 5878014..HEAD -- model-bench/` empty). **All eleven
+reproduce exactly**, including both new residuals, both new commands, the corrected command 6, and
+the union claim (Appendix H). Every shipped line the new prose cites was read at its cited number.
+No model was loaded in LM Studio.
+
+### The question, answered plainly
+
+**Is the plan ready for implementation, or is another revision needed?**
+
+**Another revision is needed.** Not for anything v1.14 did — all three Pass 7 findings are closed,
+two of them completely, and the two note deltas landed correctly. It is needed for a **cross-table
+contradiction that predates v1.14 and that no pass has swept for**: §4 S1e **Tables C and G both
+edit `stats.py:159`, prescribe incompatible forms for it, and neither names the other** (`P8-1`).
+Table C replaces that line's percentile primitive with the note's integer-`permille` `percentile`;
+Table G requires the same line to take a family-derived level that is `100·α/(2k)` — **fractional
+for every `k ≥ 2`** and inexpressible as an integer permille. The seven tables land as one fix
+round by §4 S1e's own new ordering paragraph, so an implementer meets both on one line and has to
+invent a statistics decision to proceed.
+
+**Verdict: needs changes.** 1 blocker, 2 majors, 0 minors, 0 nits.
+
+The two majors are the same sweep's other results: §3.3 (iv)'s new "nothing else in the verdict path
+changes" is falsifiable at two cited lines (`P8-2`), and **Table C breaks the residual-distinguishing
+property v1.14 just wrote** — which is exactly the third table question 3 asked me to look for
+(`P8-3`).
+
+**None is blocked on unbuilt work.** All three are plan edits available today; `P8-1` additionally
+carries a question that is the note's to rule under §7 rule 3, which is that rule's normal mechanism
+and not a deferral.
+
+### Disposition of Pass 7's three
+
+| # | Disposition | Rechecked |
+|---|---|---|
+| **P7-1** (no stored form for `DistributionSummary`; 3 of 4 sites unnamed, one silent) | **Closed** | Stored form decided in Table F: `"distribution"` tag + six keys; `support` stored on both continuous types as `[lo, hi]`/`null`, read with **no `.get`** (the rule `results.py:364-365` already states for `BinaryMetric.unit` — read, correct); one tag-set home that `_metric_from_dict` dispatches on and `_decode` gates on, **unknown tag raises**; residual `{"binary", "continuous"}` → **1 → 0** (verified, `results.py:385`), which the silence-shipping half-application cannot pass; DC-13(f)'s four assertions + §5 test 11d's stored half; all four sites now rows. `load_history`'s bare `except Exception` (`results.py:489`) does surface the raise as `unparseable`, as claimed. **`benchSchemaVersion` no-bump is right on §3.4.3's own criterion** — read verbatim: increments "when the required-field set or the on-disk record shape changes in a way a *reader* must branch on"; `model-bench/results/` does not exist, so no reader ever sees the numeric form, and `REQUIRED_BY_SCHEMA` carries **fingerprint** field specs keyed by arm profile, so a `[2]` entry could not express an aggregate retype at all. Reversal trigger stated and correct |
+| **P7-2** (Table G's one-sided residual; width-only test) | **Closed, and generalised further than asked** | `_percentile(means, 97.5)` → **1 → 0** (verified, `stats.py:159`); the new test now asserts **both bounds move outward**, "never as one about the width", with the fixture chosen so both strict inequalities are checkable. Generalised at §7 rule 5(b) and asserted per table at DC-12, and applied unprompted to **Table E** — `min(1.0, point` → **1 → 0** (verified, `stats.py:201`) — whose half-application would indeed have shipped that table's own defect. Correct, and the right instinct. **Residue: `P8-3`** — the generalisation's own sweep missed Table C |
+| **P7-3** (the `exploratory` label has no home that admits family members) | **Closed in part** | Both named sites are right and both were read: `report.py:767`'s `m.name not in family` filter and `:744-751`'s headline fallback, which does read `headline is None` and print `_NO_PAIRED_DATA` — false for a refused family. Widening to "refused whole" rather than "not verdicted" is **correct** and the reason given is exactly right: `report.py:664-669`'s `rp is None` branch renders `_NO_PAIRED_DATA` in the member's own block, and "not verdicted" would migrate it out of there. Name-only line, justified on §7 rule 4. **Residue: `P8-2`** — the same paragraph's claim that nothing else in the verdict path changes is false at two more lines |
+
+### Note v1.17's two plan-side deltas — both sound
+
+**Forward, do not derive.** §4 S1's loop now "**forwards `ContinuousMetric.support` and derives
+nothing**", Rule 8 deriving the difference support inside itself and exposing no `clamp`, with the
+`lo >= hi` raise placed **there** and explicitly not repeated in the loop. That matches note v1.17
+§3.4 Rule 8 exactly and is *less* work than v1.13 specified, as it should be. Table E's `:162` row
+now carries both callers on one row, and the §4 S1 paragraph states the two surfaces and why neither
+is a simplification of the other — which is the thing most likely to be "simplified" away later.
+
+**The premise swap.** The non-blocking classification is re-rested on `_widen`'s scale-1.0 identity
+and the census is retired with its own reasoning recorded rather than deleted. I verified that
+argument independently at Pass 7 against shipped `stats.py:198-202` and Table E's specified
+`clamp=None` semantics; it holds, it is metric-generic, and it is strictly stronger than the census
+it replaces. **No §7 rule 3 raise is left open**, as §7 now states — correct as of v1.14, and
+`P8-1` opens one again.
+
+### New findings
+
+#### Blocker
+
+**P8-1 (blocker) — Tables C and G both edit `stats.py:159` and prescribe incompatible forms for it,
+and neither names the other. After Table C that line's level parameter is an integer `permille`;
+Table G requires it to carry `100·α/(2k)`, which is fractional for every `k ≥ 2`. Table G's own
+required test becomes unwritable, and Table G's two residuals are driven to zero by Table C's edit
+alone — so DC-12 passes on an implementation that never applied Table G.**
+*Evidence.* Table C's site row: "`stats.py:159`, `:292` | call sites **move to the new signature**",
+that signature being `-ml` §11.2's `percentile(values, *, permille: int)` — read at note `:2528-2529`
+("`permille` is the level x10: p95 is 950") with §11.2.1's exactness expression
+`-(-permille * X // 1000)` and its zero-divergence sweep taken over `permille ∈ {25, 500, 950, 975}`,
+integers throughout. Table G's site row: `paired_bootstrap` "gains `levels: tuple[float, float]` …
+replacing the two literals at `:159`", and **six** of its rows pass `levels=(2.5, 97.5)` — percent,
+float. Note §3.3 (`:676-678`) fixes an all-continuous family's percentiles at `100·α/(2k)` and
+`100 − 100·α/(2k)`, and Rule 8 (`:1337`) computes exactly those. At α = 0.05: `k = 1` → 2.5 % =
+**25 ‰** (integer, which is why nothing binds today); `k = 2` → 1.25 % = **12.5 ‰**; `k = 3` →
+**8.33 ‰**; `k = 4` → **6.25 ‰**. **Not an integer for any `k ≥ 2`.**
+*Why it matters:* three consequences, all concrete. (i) The two tables land in one round — §4 S1e's
+own v1.14 paragraph fixes the order as "Tables A–G with DC-11 and DC-13, **then** S2" — so the
+implementer meets both on `:159` and must invent a resolution: make `levels` permille ints (six
+Table G rows and the note's own formula then disagree), or convert with a `×10` and a rounding at
+the one line §11.2.1's exactness argument lives on. Either is a statistics decision, which §7 rule 2
+puts with the note. (ii) **Table G's prescribed new test cannot be written** — it fixes a `k = 2`
+family, whose pair is 1.25/98.75, and an integer-permille primitive cannot take it. (iii)
+**Table G's residuals are passed by Table C.** `_percentile(means, 2.5)` and `_percentile(means,
+97.5)` both go to 0 the moment `:159` reads `percentile(means, permille=25)`, with `levels` never
+added — the cross-table form of the weakness `P7-2` found within one table, and it defeats the
+residual pair v1.14 just strengthened.
+*Fix.* The plan's own convention for two tables meeting on one line (Table D/E on `stats.py:263`,
+Table E/G on `:162`) is to name the collision, name the owner, and state whether the order is
+faithful either way. Here it is **not** faithful either way, so: **(a)** state the collision on both
+rows. **(b)** Note that Table C's `stats.py` half is **wider than the obligation it cites** — `-ml`
+§11.10(3) (read at note `:3136-3138`) requires only that "`modelbench.results` exposes no private
+percentile helper, and its percentile *is* `stats.percentile`"; it says nothing about `stats.py`'s
+own private helper. The cheapest sound resolution is therefore to scope Table C's replacement to
+`results.py:573`/`:599`/`:600` plus `stats.py:292` (`cluster_bootstrap`'s fixed 25/975, which *are*
+integer permille) and to leave `:159` — **the one percentile call in the package whose level is
+family-dependent** — to Table G, stating that exemption and its reason on both tables. **(c)** If
+instead one primitive is wanted everywhere, raise to `data-scientist` under §7 rule 3: does
+`percentile` gain a form expressing a non-integer level, and what happens to §11.2.1's
+integer-rank exactness claim and its sweep when it does? That is the note's to rule, not the plan's.
+**(d)** Whichever lands, restate Table G's residuals over the surviving spelling of `:159` — the
+present pair is only meaningful against the pre-Table-C form.
+
+#### Majors
+
+**P8-2 (major) — §3.3 (iv)'s new paragraph ends "Nothing else in the verdict path changes", and two
+more lines in that path change meaning under a whole-family refusal. Both print a false claim, and
+both are the same shape as the headline fallback the paragraph does name.**
+*Evidence.* `report.py:711-741`, the **Family-wise error control** block, renders on
+`if len(family) > 1:` — and a mixed family is `k ≥ 2` by definition, so it always renders. It prints
+the prose "Holm–Bonferroni across the {k} pre-registered verdict metrics, **applied**" (`:722-724`),
+which is false when pass 1 refused the family and no ladder ran, and then one row per member whose
+decision cell comes from `_decision(v, step)` (`:327-337`); with `v is None` — which is what a
+refused member carries — `:329-330` returns **"no verdict — no paired data"**. That is false for
+precisely the reason the paragraph gives for rejecting the "not verdicted" filter one screen up:
+a refused family *has* paired data and a withheld claim. So the plan diagnoses the defect correctly
+at `:744-751` and then asserts it occurs nowhere else, at two lines where it does.
+*Why it matters:* the report attributes a **pack-authoring** defect (a mixed `verdictMetrics` list,
+one line to fix) to a **data** condition, and states that a family-wise correction was applied when
+none was. A reader goes looking for missing runs. DC-13(e) and §5 test 11d assert nothing about
+either line, so nothing catches it.
+*Fix.* Name both sites in §3.3 (iv) beside the two it already names, and take the two decisions:
+whether the Family-wise block is **suppressed** for a refused family (with the one sentence saying
+why — there is no ladder to report) or rendered with its prose and its decision cells replaced by
+the withheld-claim label; and give `_decision` a **third** input state — *verdict withheld* —
+distinct from `v is None` meaning *no paired data*, which is the same distinction `:744-751`
+needed. Then extend DC-13(e)/test 11d by one assertion per site, as was done for the first two.
+
+**P8-3 (major) — Table C breaks the residual-distinguishing property v1.14 wrote, and DC-12's own
+sweep records it as satisfying it. Its residual is scoped to `results.py` while its edit retires
+three further `_percentile` sites in `stats.py`; the half-application leaves both bootstraps on the
+estimator `-ml` §11.2 explicitly rejects, silently, with the residual reading zero.**
+*Evidence.* Table C's rows retire `_percentile` at **six** shipped sites — `results.py:573` (deleted),
+`:599`/`:600` (re-sourced from `LatencyBlock`), `stats.py:296` ("replaced by the note's public
+`percentile`"), `:159` and `:292` ("call sites move to the new signature"). Its residual is
+`grep -rFc _percentile modelbench/results.py` → **3 → 0** — verified, and verified that
+`grep -rFn _percentile modelbench/stats.py` is **3** (`:159`, `:292`, `:296`), none of them covered.
+DC-12's new v1.14 paragraph states "**C**'s single command counts all three of its `_percentile`
+sites at once, which is the same guarantee in one line" and partitions C into the *already
+satisfies* group. There are six, not three.
+*Why it matters:* the surviving half is exactly rule 5(b)'s named failure — a number that still
+prints. `stats.py`'s `_percentile` is `int(round(p/100·(X−1)))`, which Table C's own prose calls
+"the estimator `-ml` §11.2 explicitly **rejects** — `round` is half-to-even, so the tie-break
+direction alternates with the sample size". An implementer who does the `results.py` half (which the
+residual measures, and which is the half §11.10(3) actually obliges) leaves every bootstrap bound in
+`paired_bootstrap` and `cluster_bootstrap` on the rejected estimator, and DC-12 passes.
+*Fix.* One residual, scoped the way the first one is: `grep -rFc _percentile modelbench/stats.py`
+→ **3 → 0** (verified non-zero today; zero after the prescribed edit, since the replacement is the
+note's **public** `percentile`, which carries no leading underscore — the same argument Table C
+already makes for `results.py`). Correct DC-12's Table C sentence from "all three" to the six the
+table retires, and move C out of the *already satisfies* group into the *gained its second at this
+revision* one. **Sequence this with `P8-1`:** if `:159` is exempted from Table C, the residual is
+`→ 2 → 0` over `:292`/`:296` and the exemption is what the row must say.
+
+### The two judgements the re-check was asked for
+
+**(1) Commands 7 and 8 enumerate the class, and the rule they instance is stated right.**
+Re-run today: command 7 (`grep -rn '\.mean' modelbench --include='*.py'`) → **3**
+(`results.py:359`, `:584`, `report.py:583`); command 8 (`grep -rn '"continuous"' modelbench
+--include='*.py'`) → **2** (`results.py:359`, `:385`). **Union = exactly the four broken sites**, and
+each alone is insufficient in the direction the table claims — 7 misses `_decode`'s tag gate, 8
+misses `_index_row` and the Arms table. **Both are 0 under `tests/`**, verified, so the `modelbench`
+scoping is a measurement and the table says so. The corrected command 6
+(`isinstance(.*BinaryMetric`) → **6**, per file exactly as stated.
+*The rule.* §7 rule 5(a)'s new companion — a table adding a new type to an existing union enumerates
+by **the attribute the new type lacks** and by **the storage tag**, never by the type name, plus
+*a command pins the type, never the variable that holds it* — is the **right statement of the
+class**, and it is a better one than Pass 7 proposed: I named only the attribute form, and the
+storage-tag form is what reaches `_decode`, the one site that fails silently, while the
+variable-pin sub-rule is the actual root cause of command 6's original miss and generalises past
+this defect entirely. **It carries its scope obligation the way the rest of rule 5 does** — it
+states the obligation in its own text ("states each command's scope, since these forms often return
+nothing under `tests/` and a silent scope reads as an oversight") and Table F instances it on both
+new commands, checkably. One framing note, not a defect: the rule is written for *a new type joining
+a union*, while the defect class is slightly wider — any **retype** of a field breaks readers that
+assumed the old type's attributes, union or not. The narrower trigger is the checkable one and Table
+F is the only table it fires on, so the choice is defensible; if a future table retypes a field
+without widening a union, the rule as written will not fire on it.
+
+**(2) `P7-2`'s generalisation across all seven tables — I checked each myself. It is incomplete: one
+table breaks it, and it is Table C.** Re-derived from each table's own rows, not from DC-12's
+summary:
+
+| Table | Literals its edit retires | Residuals | Distinguished? |
+|---|---|---|---|
+| **A** | `lmsCliCommit`, `sizeBytes` | 2 (3 → 0, 1 → 0) | **Yes**, one each. The `residentModelsAtEnd` element shape carries no further discriminating token, and the row already says so — "fails loudly if missed? **no** — the fix is DC-1's assertion" |
+| **B** | `FORBIDDEN_BY_ARM_KIND`, `frozenset(FORBIDDEN`, `REQUIRED_BY_SCHEMA[1]["model"]`, the key-set assertion | 4 | **Yes**, one each. `armKind` survives by design and the table states that rather than faking a residual |
+| **C** | `_percentile` at **six** shipped sites — `results.py:573`/`:599`/`:600` **and** `stats.py:159`/`:292`/`:296` | 1, scoped to `results.py` (3 → 0) | **No → `P8-3`.** The `stats.py` half is unmeasured and its survival is silent |
+| **D** | `bootstrap_seed`, the `cluster-bootstrap` token | 2 (29 → 0, 27 → 0) | **Yes.** `conservative_envelope`'s retired `diffs`/`B`/`seed` parameters need none: a removed *required* parameter is enforced by the call, exactly as rule 5(b)'s closing paragraph says an added one is |
+| **E** | `max(-1.0, point`, `min(1.0, point` | 2 at v1.14 | **Yes**, and the second is v1.14's unprompted application. Verified `min(1.0, point` → **1** |
+| **F** | the two `float \| None` annotations, `{"binary", "continuous"}` | 3 | **Yes for the silent ones.** The `(BinaryMetric, ContinuousMetric)` tuple at `:373` is retired without a residual, but its survival raises `TypeError` at `json.dump` on the first store and DC-13(f)'s round-trip assertion catches it — the rule's rationale is met, and a residual there would be optional rather than owed |
+| **G** | `_percentile(means, 2.5)`, `_percentile(means, 97.5)` | 2 at v1.14 | **Yes as written** — but both are zeroed by Table C's edit alone, which is `P8-1`(iii) |
+
+So the generalisation is right, its application to Table E was the correct unprompted move, and the
+sweep that produced DC-12's seven-table partition **miscounted exactly one table** — the one whose
+residual is scoped to a single file while its edit spans two.
+
+### What's solid
+
+- **`P7-1` is closed properly, not narrowly.** The stored form is decided rather than gestured at,
+  the tag set gets one home so the encoder and the decoder cannot disagree about how many metric
+  types exist, and the residual over `{"binary", "continuous"}` is the one an implementer cannot
+  pass by adding branches everywhere except `_decode`. The `benchSchemaVersion` ruling is the
+  strongest paragraph in the revision: it declines to bump, gives the *criterion* it declines on,
+  shows the bump would be inexpressible in `REQUIRED_BY_SCHEMA`, and states the exact condition
+  that reverses it.
+- **The residual's own limit is stated.** Table F says out loud that its third residual is also zero
+  for a third *transcribed* tag in place of the mapping, and names DC-13(f) as what covers the
+  difference. A residual that discloses its reach is worth more than one that does not.
+- **`P7-2` was generalised rather than patched, and applied to a table nobody asked about.** Finding
+  Table E's identical shape unprompted is the behaviour that would have prevented three of the seven
+  passes.
+- **`P7-3`'s two decisions are both taken correctly**, and the "refused whole", not "not verdicted"
+  distinction is a genuinely subtle call made the right way for the right stated reason.
+- **The revision-size trend held.** +288/−75 with ~110 lines of it new decision text, and it closed
+  all three findings and both note deltas.
+
+### Open questions
+
+1. **Does `percentile` gain a non-integer level form, or is `stats.py:159` exempt from Table C?**
+   This is `P8-1`(c) and it is the one part of that finding that belongs to `data-scientist` under
+   §7 rule 3 rather than to the architect: §11.2.1's exactness argument and its zero-divergence
+   sweep are both stated over integer `permille`, and a `k ≥ 2` continuous family needs a level that
+   is not one. The plan can state the exemption without the note's help; it cannot change the
+   estimator's signature without it.
+2. **Is `Family-wise error control` suppressed or relabelled for a refused family?** `P8-2` names
+   the decision but it is a presentation call with a reader-facing consequence, and §3.3 (iv) is
+   where this plan has been taking those. Flagged separately only because it is a judgement rather
+   than a transcription, like `benchSchemaVersion` was.
+
+## Appendix H — Pass 8: what was re-run and read
+
+**H.1 — every count v1.14 cites, re-run under `model-bench/` at `5878014`** (tree unchanged;
+`git diff --stat 5878014..HEAD -- model-bench/` empty).
+
+| Claim | Command | Result |
+|---|---|---|
+| Table F cmd 6, corrected | `grep -rn 'isinstance(.*BinaryMetric' modelbench tests --include='*.py'` | **6** — `report.py:211`, `:553`, `:564`; `results.py:355`, `:373`, `:584`. Per-file exactly as stated; 0 under `tests/` |
+| Table F cmd 7 | `grep -rn '\.mean' modelbench --include='*.py'` | **3** — `results.py:359`, `:584`; `report.py:583`. **0** under `tests/` |
+| Table F cmd 8 | `grep -rn '"continuous"' modelbench --include='*.py'` | **2** — `results.py:359`, `:385`. **0** under `tests/`. Union with 7 = the four sites exactly |
+| Table F residual 3 | `grep -rFn '{"binary", "continuous"}' modelbench --include='*.py'` | **1** — `results.py:385` |
+| Table E residual 2 | `grep -rFn 'min(1.0, point' modelbench --include='*.py'` | **1** — `stats.py:201` |
+| Table G residual 2 | `grep -rFn '_percentile(means, 97.5)' modelbench --include='*.py'` | **1** — `stats.py:159` |
+| Table C residual, as stated | `grep -rFc _percentile modelbench/results.py` | **3** |
+| Table C, the unmeasured half | `grep -rFn _percentile modelbench/stats.py` | **3** — `:159`, `:292`, `:296` → **`P8-3`** |
+| `_encode`'s retired tuple | `grep -rFn '(BinaryMetric, ContinuousMetric)' modelbench tests --include='*.py'` | **1** — `results.py:373` |
+| stored records exist? | `ls model-bench/results` | **absent** — the no-bump argument's premise holds |
+
+**H.2 — shipped lines read at their cited numbers.** `results.py:326` (the `KeyError` →
+`unparseable` comment, quoted correctly), `:354-359`, `:363-365` (the no-`.get` rule for
+`BinaryMetric.unit`), `:373`, `:385`, `:471-500` (`load_history`'s bare `except Exception`, `:489`),
+`:584`; `report.py:327-337` (`_decision`, `v is None` → "no verdict — no paired data"), `:553-584`,
+`:664-673` (`_NO_PAIRED_DATA` in the member's own block, rendered at `:669`), `:711-741` (Family-wise error control,
+prose at `:722-724`), `:744-751` (headline fallback), `:763-777`; `stats.py:148-202`, `:296-300`.
+
+**H.3 — documents read.** Plan v1.14 §3.3 (iv) (the whole new paragraph, `:510-527`), §4 S1's
+support/clamp block, DC-12, DC-13(f), §4 S1e preamble and ordering paragraph, Tables A–G in full
+with every residual statement, §5 test 11d, §7 (rule 5(a)'s new companion, rule 5(b)'s new clause,
+the *Note v1.17* block, the Pass 7 disposition table), Appendix A. Note v1.17 §3.3 (`:671-694`),
+§3.4 Rule 8 (the level formula at `:1337`, the `support` ruling at `:1352-1400`), §11.2
+(`:2528-2551`), §11.10(3) (`:3136`). The v1.14 delta in full,
+25 hunks.
