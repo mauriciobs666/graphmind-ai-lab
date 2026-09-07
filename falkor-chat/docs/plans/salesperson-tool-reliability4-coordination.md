@@ -1,6 +1,6 @@
 # Salesperson tool-orchestration reliability — round 4 (K-060) — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-060 (post-M6, not a milestone gate)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-060 (post-M6, not a milestone gate)
 
 Successor to `docs/plans/salesperson-tool-reliability3-coordination.md` (archived 2026-08-31,
 K-059 closed) — ordinal-bumped per root `AGENTS.md`'s collision rule 5 (same kind/topic/role,

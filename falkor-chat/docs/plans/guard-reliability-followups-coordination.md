@@ -1,6 +1,6 @@
 # Guard reliability follow-ups — coordination log (K-027 items 4/5 + carried gate findings)
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-027 (post-M3 follow-up track, not a
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-027 (post-M3 follow-up track, not a
 > milestone gate)
 
 Coordinator: `teco`. Started 2026-08-20, on the user's "let's work on K-027".
