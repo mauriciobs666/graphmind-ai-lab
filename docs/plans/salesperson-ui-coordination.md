@@ -148,9 +148,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **Pass 15** — **final gate** on S8f (`00827c2`) | `analyst` (**fresh**) | `afb10aa0d33dab3ee` | **accepted — committed `5f8adc0`. NEEDS CHANGES** (0 blockers, 3 majors, 1 minor, 1 nit). **Convergence test NOT passed, on a precise diagnosis**: S8f finished the **target** axis (derived from `ast`, 8+19=27 verified) but all eight probe snippets hold the **value** axis at one spelling, and the block states that axis *semantically* over a mechanism that is exact source-text identity. **Fourteenth instance: `me = self`** — `ast.Assign`, first entry in the walked list, in none of the four documented stops, invisible to the two collaborator legs that seed on `receiver.attr`. **Answered the escalation question**: not a sixth cycle — the gap is alias/points-to, where each closure spawns the next — but **docs-only narrowing**, safe because zero receiver-alias bindings exist in `falkorchat/`. 9 of 17 clauses lift-ready | `docs/reviews/salesperson-ui-impl.md` `## Pass 15` | — | 219k tok / 65 tools |
 | **S8g-docs** — narrow clauses 5/6/9/15, correct 8 against v1.25, fix P15-2's 14 stale sites, P15-3, the `:3603` figure, the nit | `coder` (**fresh** — S8f ended at 260k) | `ae9e4fd13cc66c178` | **accepted** (`b720bd3`) | `storefront_api.py`, `test_storefront_api.py` — **prose only, proved** | teco-verified → **accept** | 175k / 57 |
 | **U32** — add the plan's **citation** to the finished statement in §5.1's S9 row, and compact what the citation now carries | `architect` | `ae7164b33e933e793` | **accepted** (`a69422f`) | `docs/plans/salesperson-ui.md` v1.26 | teco-verified → **accept** (2 defects found + fixed) | 80k / 25 |
-| **U33** — the S7→S8g documentation debt: `HISTORY.md` + `SERVER.md` §1.3/§1.4 | `coder` | `a19762332c4ce266f` | **delivered** (`9c51189`) | `falkor-chat/docs/HISTORY.md` (+303), `SERVER.md` (+122/-1) | `analyst` **Pass 16** → in flight | 197k / 63 |
+| **U33** — the S7→S8g documentation debt: `HISTORY.md` + `SERVER.md` §1.3/§1.4 | `coder` | `a19762332c4ce266f` | **gated → fixing** (resumed 2026-09-07) | `falkor-chat/docs/HISTORY.md` (+303), `SERVER.md` (+122/-1), base at `9c51189` | `analyst` **Pass 16** → **needs changes** (5 major) | 197k / 63 |
 | **U34** — rebuild the stale `cpg_falkorchat` CPG from `HEAD` | `graph-dba` | `a5563c5bdd32be9c7` | in-flight (dispatched 2026-09-07) | `cpg_falkorchat` graph key + reload artifacts | teco-verified → — | — |
-| **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | in-flight (dispatched 2026-09-07) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` | — (is the gate) | — |
+| **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` | — (is the gate) | 219k / 60 |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | — | queued (**behind U34** — torn-snapshot risk) | `storefront.py`, `storefront_api.py`, `app.py`, both test files | `analyst` + `qa-engineer` | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
 | **S9c** — the dead-turn latch `turn.lastTurn` and its lifecycle | `coder` | — | queued (behind S9b) | `storefront.py`, `storefront_api.py`, tests | `analyst` | — |
@@ -2610,3 +2610,51 @@ conflict through the snapshot anyway.
 
 The S7→S8g documentation debt runs in parallel throughout: it is `falkor-chat/docs/` only, and
 conflicts with nothing.
+
+## The fifteenth instance, and it was never in the guard (2026-09-07)
+
+Pass 16 gated the S7→S8g documentation unit and returned **needs changes**: five majors, and
+every one of them is the class this coordination has been fighting for six passes — *a stated
+rule broader than the reach the mechanism implements*. The guard chain closed on 2026-09-07 and
+the defect reappeared the same day, in prose, in a document nobody was watching.
+
+**P16-4 is the one that matters, and it predates all of this.** `SERVER.md` §1.3 has been
+describing four mechanisms that **do not exist**. I verified each rather than taking the report:
+
+| Claimed in §1.3 | Reality |
+|---|---|
+| `scripts/start_demo.sh` | absent from the tree entirely — it is plan step **S11** |
+| the bounded turn executor | `_turn_workers` is stored and exposed by a property, used nowhere — **S9** |
+| the raised anyio thread limiter | `config.THREAD_LIMIT` defined at `config.py:208`, read by **nothing** in `falkorchat/` |
+| "after intake stops" | **S10**'s flag |
+
+The document has been **describing the plan as though it were the code**. That is the same
+failure as a guard whose docstring is wider than its walk, one layer out: prose asserting a reach
+the mechanism does not have. It is worth naming as the fifteenth instance precisely because it is
+*not* in the guard — six passes of hardening watched one artifact while the component's own
+architecture doc drifted the same way, unwatched. **The lesson is about where we were looking, not
+about the guard.**
+
+The repair is not deletion — each entry describes something genuinely planned. Each is marked
+not-yet-delivered and cited to the step that delivers it, so the document distinguishes **built**
+from **designed**. A document that silently mixes the two is the mechanism of this defect, and
+the fix has to change the mechanism rather than the four sentences. I also asked for an audit of
+every remaining mechanism-describing sentence in both sections: four were found because four were
+checked, which says nothing about the rest.
+
+**P16-1** is the same shape in the new prose: *"every one of them resolves `ctx` from the
+request's own credential"* is true of **5 of 11** routes and is contradicted by its own `Cred`
+column three lines below. `GET /catalog` authenticates a participant and then reads under the
+demo `Agent`, against the global `reference` graph.
+
+**P16-5 is a small one with a large moral.** The claim that `tests/test_app.py` was
+"byte-unchanged across the whole chain (md5-checked at every unit's close)" is false — `18b675a`
+(S8b) changes it +22/−1. The md5 checks were real; they simply *started after S8b*, and the
+sentence generalised them to the whole chain. **A true observation, quantified over more than it
+was taken from.** That is this defect in its smallest possible form, and it is the one to
+remember, because it is the version that looks harmless.
+
+Routed back to the same delegate with its own transcript intact (197k, under the fresh-dispatch
+threshold, and the follow-up needs the reasoning it did not write down). The analyst's one open
+question — the suite figures it was barred from measuring — needed no work: I measured 185 and
+2617/14 myself, and `ws:acme` at 871.
