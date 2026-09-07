@@ -1,6 +1,22 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.15
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.16
+
+2026-09-07 (v1.16, `data-scientist`) — four items back from plan v1.12 (`5b67416`). **§3.2f is
+swept** (item 1): both *"Decided by the cluster-bootstrap CI…"* variants, their selecting condition
+and the two prose sentences in §3.2e and §3.4 that named the same instrument now say **conservative
+envelope** and what it is an envelope *of*, closing §3.4 Rule 4's own sweep obligation against the
+one surface an implementer copies verbatim. **New §3.4 Rule 8** (item 2) specifies the
+continuous-verdict producer `continuous_verdict()` — its parameters, its **negative** parameters
+(no `ResolvingPower`, no `alpha_step`, no McNemar *p*), a `ContinuousVerdict` return that is a
+sibling type rather than a `Verdict` with five meaningless fields, four refusals, and the two engine
+changes `paired_cluster_bootstrap` needs to serve it. **Item 3 confirmed with the note's wording
+moving**: a manifest carries no records, so `validate` cannot decide a metric's kind and a manifest
+`kind` field would be the second declaration §3.2d refuses — enforcement moves to `compare_report`
+pass 1, and a mixed family **refuses the whole family's verdicts** rather than shrinking `k` after
+the results exist. **Item 4 specified** (§5.2): `sep_raw` prints median, p10 and the fraction above
+zero, no mean anywhere, and **no cross-model difference is printed for `sep_raw` at all** — the
+shared carrier makes it comparable, and it is the quantity `sep_z` exists because you cannot compare.
 
 2026-09-07 (v1.15, `data-scientist`) — plan-gate Pass 6's blocker P6-1, both halves. **The
 continuous instrument's carrier is specified in §3.2d**: a *second* per-item map,
@@ -489,6 +505,12 @@ published below them *(v1.15)*, so this section carries five:
 3. **Instruments disagree** (MOVER-D excludes zero, McNemar does not — row 4 of the table above; real and not rare):
    `Not distinguishable at this sample size. The effect-size interval [0.2, 28.8] pp excludes zero but the exact paired test does not reach alpha=0.05 (b=8, c=2, p=0.109). Reported as not distinguishable: the exact test is the decision rule.`
 
+   **The interval's name in that string is a substitution, and this is where it is published**
+   *(v1.16 — it was named only in §3.4 Rule 4's sweep list, so an implementer copying this section
+   never learned the word varies: the same trip hazard §3.2f had)*. It renders **`effect-size`** when
+   `decided_by` is `mcnemar-exact` and **`conservative envelope`** when it is
+   `conservative-envelope` — never `cluster-bootstrap`, which named one arm of a two-arm interval.
+
 **McNemar exact is the decision; MOVER-D is the effect size.** One instrument decides, one
 quantifies. Do not AND them into a bloc — but *always print both individual outcomes in the
 prose*, as verdict 3 does, so a reader never sees an aggregate verdict without the two components
@@ -528,24 +550,27 @@ than an arbitrary one.)*
 **One precondition on all three binary strings, and it is the whole of gate B-1:** McNemar exact and
 MOVER-D are valid **only when each row of the paired table is one independent analysis unit**. When
 the analysis unit contains correlated observations (design effect > 1), both are anti-conservative
-and the decision rule becomes *"the cluster-bootstrap CI on the paired difference excludes zero"*,
-with the strings rendered against the bootstrap instead of McNemar and the design effect and its
-basis printed. §3.4 makes this a property the code cannot get wrong by omission.
+and the decision rule becomes *"the conservative envelope on the paired difference excludes zero"*
+— MOVER-D and the exact paired bootstrap, the wider of the two at each bound (Rule 4) — with the
+strings rendered against the envelope instead of McNemar and the design effect and its basis
+printed. §3.4 makes this a property the code cannot get wrong by omission.
 
 **(f) The clustered-path label — published here, because Rule 4 required it printed and this note
 published no string for it (v1.8, review m-ML-10).** It is **appended to whichever of the three
-strings above was rendered**, on every verdict whose `decided_by` is `cluster-bootstrap` — not on
-two of them, because a reader who sees one verdict must still be told which instrument produced it.
-Two variants, and the condition is the **design effect**, never the basis:
+strings above was rendered**, on every verdict whose `decided_by` is **`conservative-envelope`**
+*(v1.16 — the token and the prose are both swept to Rule 4's ruling; `cluster-bootstrap` named one
+arm of a two-arm interval and, after the closed form, a resample that no longer runs)* — not on two
+of them, because a reader who sees one verdict must still be told which instrument produced it. Two
+variants, and the condition is the **design effect**, never the basis:
 
 1. **A widening was applied (`design_effect > 1.0`):**
 
-   > `Decided by the cluster-bootstrap CI on the paired difference, widened by sqrt(DEFF)=1.41 for the declared clustering, in conjunction with McNemar's exact test (p=0.031) as a necessary condition: under clustering McNemar rejects too readily, so it may withhold a verdict but never carries one on its own.`
+   > `Decided by the conservative envelope on the paired difference — MOVER-D and the exact paired bootstrap, the wider of the two at each bound — widened by sqrt(DEFF)=1.41 for the declared clustering, in conjunction with McNemar's exact test (p=0.031) as a necessary condition: under clustering McNemar rejects too readily, so it may withhold a verdict but never carries one on its own.`
 
 2. **No widening was applied (`design_effect == 1.0`), which is *every* comparison until a
    determinism probe establishes the basis:**
 
-   > `Decided by the cluster-bootstrap CI on the paired difference — the instrument here because this comparison's design effect is assumed rather than established by construction — with no widening applied (sqrt(DEFF)=1.00), in conjunction with McNemar's exact test (p=0.031) as a necessary condition: a design effect that was never established cannot license the exact test to carry a verdict, so it may withhold one but never carries one on its own.`
+   > `Decided by the conservative envelope on the paired difference — MOVER-D and the exact paired bootstrap, the wider of the two at each bound — the instrument here because this comparison's design effect is assumed rather than established by construction, with no widening applied (sqrt(DEFF)=1.00), in conjunction with McNemar's exact test (p=0.031) as a necessary condition: a design effect that was never established cannot license the exact test to carry a verdict, so it may withhold one but never carries one on its own.`
 
    `assumed` is the `basis` field verbatim (`measured` is the other value that reaches this path).
 
@@ -634,13 +659,26 @@ it is available whenever the product question "which error costs more?" becomes 
 Holm orders a family **by p-value**, and a continuous verdict has none — §3.2d rules that the
 interval *is* the test. So a `verdictMetrics` list mixing a binary member with a continuous one has
 no ordering, hence no ladder, and the correction silently fails to happen for one of them. Two
-consequences, both free today: `validate` **refuses the mixed list** (every declared pack above is
-homogeneous, so this costs nothing now and forbids the silent case later), and **an all-continuous
-family with `k > 1` takes its correction in the interval rather than in a ladder** — each member's
+consequences, both free today: the mixed family is **refused where the records are**, and **an
+all-continuous family with `k > 1` takes its correction in the interval rather than in a ladder** — each member's
 bootstrap percentiles are taken at `100·α/(2k)` and `100 − 100·α/(2k)` instead of 2.5 and 97.5. That
 is Bonferroni and it is deliberately not Holm: Holm's gain comes from ordering by p-value, and there
 is nothing here to order. The embedder is `k = 1`, so this binds nothing today — and it is written
 now for the same reason pre-registration is written now.
+
+**Where that refusal lives — `compare_report`'s first pass, not `validate`** *(v1.16; the plan's
+objection is right and the note's v1.15 wording is what moves)*. A manifest carries no records, so
+`validate_pack` cannot see which map a metric's values arrive in, and a manifest `kind` field would
+be a **second declaration of kind** — precisely what §3.2d refuses when it rules that the map a
+metric is in *is* the declaration. A kind is a fact about the run, so it is checkable only where the
+run is. **And the refusal is of the whole family's verdicts, not of the offending members:** `k` is
+`len(verdictMetrics)` and it is pre-registered, so dropping the minority kind would shrink `k` after
+the results exist and hand the survivors a *weaker* correction than the one declared — the fishing
+artefact pre-registration exists to prevent, arriving as a repair. Choosing which kind survives is
+itself a post-hoc instrument choice. So: name the members and their kinds, print no verdict for any
+of them, and let every member's number through as `exploratory — no significance claim` under this
+section's standing rule. A mixed family is a pack-authoring defect with a one-line fix, not a data
+condition the report should paper over.
 
 ### 3.4 The statistics-module contract (`stats.py`) — the B-1 guard
 
@@ -804,8 +842,8 @@ And the decision rule branches on the design effect, which is the fix B-1 asks f
 - **`design_effect == 1.0` and `basis == "by-construction"`** → McNemar exact decides, MOVER-D
   quantifies (§3.2b/c). This is the only configuration in which McNemar is valid.
 - **otherwise** → McNemar is anti-conservative and must not **decide alone**. The decision is *"the
-  cluster-bootstrap CI on the paired difference excludes zero"*; McNemar's p may still be printed,
-  labelled `anti-conservative under clustering — not the decision`.
+  conservative envelope on the paired difference excludes zero"* (Rule 4); McNemar's p may still be
+  printed, labelled `anti-conservative under clustering — not the decision`.
 
 **McNemar as a *veto* is permitted on that path, and is the recommended form.** Making the
 non-`by-construction` decision a **conjunction** — distinguishable iff the widened CI excludes zero
@@ -1135,9 +1173,10 @@ finding is **satisfied, not reversed**, and only its object moves:
 
   > `- decided by: conservative envelope (lower bound: MOVER-D; upper bound: exact paired bootstrap, p=0.975)`
 
-  Whether the machine token `DecidedBy = "cluster-bootstrap"` is renamed with the prose is
-  `architect`'s call (27 occurrences across `stats.py`, `report.py` and two test modules).
-  **Recommended: rename it**, because a token naming a resample that no longer runs is precisely the
+  Whether the machine token `DecidedBy = "cluster-bootstrap"` is renamed with the prose was
+  `architect`'s call (27 occurrences across `stats.py`, `report.py` and two test modules), and it is
+  **settled: renamed to `conservative-envelope`** (plan v1.11, §4 S1e Table D; §3.2f and Rule 7 above
+  are written against the new token). The recommendation stood because a token naming a resample that no longer runs is precisely the
   failure Rule 7's own docstring warns about — *"such a substitution changes the instrument's name
   and not its interval, and an interval alone cannot report that"* — with the sign reversed. What is
   **not** optional either way is the prose: a sentence naming an instrument that did not produce the
@@ -1204,7 +1243,7 @@ Three details that decide whether it works:
     `|diff| ≥ 6/n`, at *every* Holm step. Verified exhaustively in this session over all `(b, c)`
     with `b + c ≤ 400`: **zero violations at α=0.05 and zero at α=0.025.** Silently demoting here
     would discard exactly the detector property this rule exists for.
-  - On **`cluster-bootstrap`** it is a **guard, so a fire demotes and names** — the verdict becomes
+  - On **`conservative-envelope`** it is a **guard, so a fire demotes and names** — the verdict becomes
     not-distinguishable with the floor breach printed as the reason. Raising would abort on ordinary
     clustered data: at DEFF = 2 on `(34, 6, 0, 0)` the widened interval still excludes zero at a
     15.0 pp difference while the floor has moved to 30.0 pp, which is a legitimate disagreement
@@ -1241,6 +1280,72 @@ with `replicatesPerScript > 1` makes the structural primitive buildable against 
 *sparse-discordant-count* degeneracy of a percentile interval — at four non-zero rows in thirty the
 2.5th percentile cannot be zero, whatever the design effect — and that is what Rule 4's
 conservative envelope with MOVER-D closes (review M-ML-8).
+
+**Rule 8 — the continuous verdict has its own producer, and it is not `verdict()` with fields left
+empty.** *(v1.16, at plan v1.12's ask. §3.2e's strings 4 and 5 need a function to render them, and
+the plan now calls one; its signature is this note's because the preconditions are.)*
+
+```python
+def continuous_verdict(
+    diffs: Sequence[float],          # one difference per analysis unit (§3.2d), never per observation
+    *,
+    metric_name: str,
+    family: Sequence[str],
+    alpha_family: float,
+    unit_kind: str,
+    design_effect: float,
+    basis: Basis,
+    B: int,
+    seed: int,
+    a_label: str = "A",
+    b_label: str = "B",
+) -> ContinuousVerdict: ...
+```
+
+**What it returns is a sibling type, not a `Verdict`.** `Verdict` carries `mcnemar_p`, `b`, `c`,
+`marginal_overlap`, `floor_demoted` and `holm_tested`; **none of the six exists on this path**, and
+filling them with `None` or a sentinel is the *"a field that is `None` until it is not"* shape this
+note has already refused once for `alpha_step`. `ContinuousVerdict` carries `metric_name`,
+`distinguishable`, `text`, `diff`, `ci`, `n_units`, `unit_kind`, `design_effect`, `basis`, `B`,
+`seed`, `alpha_used`, and `decided_by: Literal["paired-bootstrap"]` so the `- decided by:` bullet has
+something to print: `- decided by: paired bootstrap on per-<unit> differences (B=10000, seed=N)`.
+`report.py` handles a union of the two verdict types; that seam is the plan's.
+
+**The four parameters it deliberately does *not* take, each of which an implementer would otherwise
+pass.** (i) **`resolving: ResolvingPower`** — it exists to make the observable floor's and the MDD's
+sentences true, and a continuous metric has neither (§3.2e); passing it would put two meaningless
+headline numbers within reach of the renderer, which is how string 2's grammar leaks onto string 5.
+The four provenance fields it would have supplied are passed directly instead. (ii) **`alpha_step`**
+— Holm's data-dependent threshold, and there is no ladder here (§3.3). (iii) **a McNemar *p*** —
+§3.2d rules the interval *is* the test. (iv) **percentile levels** — see the next paragraph.
+
+**The multiplicity correction is made unrepresentable rather than guarded.** The function takes
+`alpha_family` and `family` and computes its own quantile levels as `100·α/(2k)` and
+`100 − 100·α/(2k)` with `k = len(family)` (§3.3); it exposes **no percentile parameter**, so a caller
+cannot render a `k = 3` family at 2.5/97.5 by omission. This is Rule 4's `n != len(diffs)` lesson
+applied at the signature: remove the guard by making the error it catches unrepresentable. It
+**raises** when `metric_name not in family`, for the same reason `verdict()` does.
+
+**Four refusals, all of them cheap and all of them silent failures otherwise.** (1) `diffs` empty —
+already `paired_bootstrap`'s behaviour and inherited here. (2) any element **non-finite** — a single
+`NaN` propagates through the mean and both quantiles and arrives as a *rendered interval* rather than
+as an error, which is §3.2d's carrier rule enforced at the second place it can be enforced.
+(3) `design_effect < 1.0`. (4) `len(diffs) < 2` — a one-unit interval is a point and the string would
+report a CI of zero width as though it were a measurement.
+
+**Two changes the engine needs before it can serve this** (§3.4 Rule 4's `paired_cluster_bootstrap`
+is still §3.2d's entry point, and `paired_bootstrap` still its engine, not a second one): the
+**quantile levels must be parameters** rather than the hard-coded 2.5/97.5, or the `k > 1` correction
+above has nowhere to land; and **`_widen`'s `[-1, 1]` clamp must be conditional**, since it is a
+difference-of-proportions assumption and `sep_z` is unbounded (Rule 4). Both are noted there; they
+are named here because they are this function's preconditions, and a plan that calls it without them
+calls something that cannot render string 4 correctly for two of the three continuous metrics.
+
+**Rendering precision, decided once so it is not decided three times:** `diff`, both bounds and
+string 5's half-width all print at **three decimal places**, rounded to nearest — a printed
+difference asserts no bound, so §3.4 Rule 3's question returns *nearest* here exactly as it does for
+§11.7's latencies. A half-width printed at a different precision from the bounds it is derived from
+is an arithmetic inconsistency a reader will find before a test does.
 
 ---
 
@@ -1638,6 +1743,23 @@ of queries with `sep_raw` > 0**. Median over mean because the distribution is sk
 catastrophic query would dominate a mean; the p10 is the tail statistic that actually predicts
 retrieval failures. Comparison across models uses the **paired bootstrap on per-query
 `sep_z` differences** (§3.2d).
+
+**`sep_raw`'s published figures, and the one comparison that is forbidden** *(v1.16, at plan v1.12's
+ask — the plan gives `sep_raw` the same per-item carrier as `sep_z`, which is right, and asks which
+of its figures print)*. Print **median `sep_raw`, 10th percentile `sep_raw`, and the fraction above
+zero** — the same three shapes, for the same reason and one more: `sep_raw` is the number a threshold
+is set against, and a threshold has to survive the bad queries, so the p10 is the figure that
+decides it and the median alone would be the wrong summary to publish for its only product use.
+**No mean, for either quantity** — which is the concrete reason `ContinuousMetric` is the wrong
+aggregate carrier for both (§3.2d).
+
+> **No difference between two models' `sep_raw` figures is printed, on any path.** `sep_raw` is
+> scale-dependent per model — that is the entire reason `sep_z` exists — so a difference of two
+> models' raw separations is a difference of two quantities measured on different scales. Giving
+> `sep_raw` the same per-item carrier as `sep_z` makes such a difference **computable**, and
+> therefore makes the prohibition worth writing down rather than leaving to the reader of §5.2's
+> first paragraph. The same shape as §11.7 slot 6's latency rule: a per-item continuous quantity
+> that is reported per arm and never differenced.
 
 Worth noting for the pack's own documentation: with 12 topics over 121 messages, the "irrelevant"
 pool contains same-topic near-misses — genuine hard negatives. That is a feature; the separation
