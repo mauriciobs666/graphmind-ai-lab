@@ -3,6 +3,152 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
+## 2026-09-08 — `kaizen_team` distillation pass 2, chunk E (unit U23): 13 entries, 12 promoted, 1 discarded
+
+`cobb` processed the thirteen `analyst`-produced `kaizen_team` entries dated 2026-09-07
+(`claude/docs/plans/kaizen-distillation2-coordination.md` U23, the last of five chunks). Every
+entry pinned by **complete** `entryId` at read, count and clear. This chunk was the pass's worst
+prefix-collision cluster — eight ids sharing 2-4 leading characters across three families
+(`b1f0e6c2`/`b1f0c7a4`; `b7f1c3a2`/`b3f1c7a2`/`b1e7c2a4`/`b18d5c47`; `3f6c2a91`/`3f6c1e28`) — and
+all thirteen were read, counted and cleared on the full 36-character id. Verified after the
+clears: the near-prefix neighbours are distinct nodes and every one survived its sibling's
+deletion. Zero kept open, zero `MENTIONS` tags, and **no always-loaded prompt gained a bullet** —
+the one `analyst.md` change replaces an existing bullet in place, as in chunks A-D.
+
+**Twelve entries landed as one new section, two folds and one knowledge-base bullet**, not
+thirteen additions. Six of the thirteen were one technique family and were written as a single
+six-part section rather than six adjacent sections.
+
+**Promoted (12 entries → 3 files):**
+
+- `claude/analyst/review-techniques.md`, **new section** *"A grep-pinned edit table is an edit
+  list, not a completeness proof"* — six entries folded into one six-part list:
+  `b1f0e6c2-9a44-4d3e-8f21-7c5a2e9d4a10` (intermediate-baseline residual),
+  `3f6c2a91-0b47-4d1e-9c58-71a2e4d0b8fa` (enumerate by the attribute the ship criterion reads),
+  `b1f0c7a4-9d2e-4c11-8a63-5e7f24d0aa19` (two cases with no completeness property),
+  `b1e7c2a4-9f3d-4a51-8c6e-2d70f1a4c983` (run the table's commands before trusting its site rows),
+  `b3f1c7a2-5d64-4e18-9a2c-7f0e41d8b6aa` (retired-token residual vs. a done-condition naming it),
+  `b18d5c47-2e93-4a06-8f71-c93a0e4bb210` (cross-table collisions).
+- `claude/analyst/review-techniques.md`, **fold** into the existing *"A guard derived from the
+  artifact it guards…"* section (its AST subsection): `b7f1c3a2-9d4e-4c18-8a6f-2e5b71d0c934`
+  (two axes), `cbfd9614-5ae1-4c55-94e9-012e06ccdf00` (mutate the aliased spelling),
+  `3f6c1e28-7a94-4d51-9b2e-0c8a5f2d41b7` (`ast.Assign`-only harvest under-reaches). Deliberately
+  a fold, not a fourth adjacent section — the concrete falkor-chat facts these three carry are
+  **already published at the point of use**, in the `_bindings` and `_alias_prefixes` docstrings
+  in `falkor-chat/server/tests/test_storefront_api.py:3107` and `:3158`, in more detail than the
+  entries hold (both axes named, the `me = self` two-hop stop measured at 185 vs. 184, the
+  annotated-local under-reach called a house idiom). What was **not** documented anywhere, and is
+  what got promoted, is the reviewer-facing generalisation plus a way to derive the binding-node
+  enumeration from the grammar.
+- `claude/analyst/analyst.md`, **existing bullet replaced in place** (Guardrails → Evidence over
+  vibes): `2f8a5d13-6b47-4c92-a1e0-83b5cf27d904` (a review-suggested fix against a green suite is
+  weak evidence) and `9c4e2b71-8a3d-4f56-b0e9-2d17c4a85f33` (a finding that suggests *design* is a
+  claim that must be run). The prompt already carried *"A regex/glob/pattern you suggest as a fix
+  is a claim, not a nit — run it"*; both entries are that same rule, generalised past regexes and
+  given a test. Widened to any suggested fix including a design, with the operative addition —
+  **a suggested fix is evidence only where you can name the assertion that would catch it being
+  wrong; where you cannot, hand the design decision to the implementer and say why.** One bullet
+  in, one bullet out; `analyst.md` 2477 → 2515 words.
+- `claude/graph-dba/falkordb-quirks.md`, **new bullet**:
+  `6eeaa03e-98f9-42ac-8c6f-d9a0d9a06791` (`redis-cli` exits 0 on an error reply). Logged in
+  `claude/graph-dba/kaizen/history.md` the same day. No `MENTIONS` edge — nothing was left
+  outstanding for `graph-dba` (see below).
+
+**Discarded (1):** `be57e2aa-8c39-47c8-927b-24b3b7d60b3e` (`git rev-parse HEAD:.` is fatal,
+`HEAD:./` works). The fact **re-derived exactly** — at the repo root `git rev-parse --short HEAD:.`
+→ `fatal: Needed a single revision`, exit 128, message on stderr; `HEAD:./` → `7ff9aa9`, identical
+to `HEAD^{tree}` (git 2.43.0, 2026-09-08) — but its own target has already fixed it and documents
+it better: `skills/cpg-analysis/references/freshness.md:104-117` now prescribes
+`git rev-parse --verify "HEAD:./<sourceOrigin>"`, states that a bare `HEAD:.` is fatal with the
+exact error and exit code, and adds two facts the entry does not have (without `--verify`,
+`rev-parse` echoes an unresolvable argument back on stdout and a script reads that as "the source
+moved"; `--short` width tracks the repo's object count, so the same tree can render 7 chars today
+and 8 next month). Already published at the point of use.
+
+**Two corrections to entries' evidence, both in the citation and not in the claim** — the same
+defect shape U20 and U21 produced, now three passes running:
+
+- `3f6c1e28`'s figures are **wrong at its own commit — and so were mine, twice, before `teco`
+  caught them.** The entry reads "68 annotated local assignments (`ast.AnnAssign`) — 6 in
+  `storefront.py`, 16 in `storefront_api.py`, 23 in `services.py` — plus 40 tuple-target assigns
+  and 1 walrus". Correct figures, re-derived by `ast` over all 28 `.py` files of
+  `falkor-chat/server/falkorchat`, at the entry's own sha `00827c2` and at the 2026-09-08 worktree
+  (**identical at both**): **65** function-local annotated assignments with a `Name` target,
+  **40** function-local tuple-target assignments, **1** walrus, per-file **3 / 3 / 14**. Only the
+  walrus was right in the entry. Its `40` is right too, but by accident of framing — tuple-target
+  reads 40 under *both* local and package-wide scope, so it is not the package-wide figure the
+  entry's sentence structure implies. Its `16` and `23` are *whole-file* `AnnAssign` counts
+  (module- and class-level annotations included, which are not local assignments at all), and
+  `16` matches the worktree rather than `00827c2`, where `storefront.py` reads 15. Its `6` matches
+  nothing under any of the five definitions enumerated below. Promoted in corrected form, with the
+  scoping trap stated in the fold, because it is exactly how this measurement goes wrong.
+  - **My own first two attempts were also wrong, and the cause was the instrument.** I reported
+    68 / 42 / per-file 3 / 5 / 14, then wrote 42 into the promoted text while my report to the
+    coordinator described 40 as package-wide — the citation drifting from the verification, a
+    fourth instance of this pass's recurring defect shape. Root cause: my script ran
+    `ast.walk(fn)` for **every** `FunctionDef` in the module, so any node inside a nested function
+    was counted once per enclosing scope. Re-run with single-visit attribution (parent links,
+    each node classified once by walking to its nearest enclosing scope) gives 65 / 40 / 3 / 3 / 14.
+    `teco` refuted it by enumerating five candidate definitions to show none yields 68 — local
+    `Name` target 65, local `Name` incl. bare declarations 65, local ANY target 79, package-wide
+    `Name` 290, package-wide ANY 304 — and I reproduce all five exactly. The 304 in the promoted
+    text was right throughout, which is the tell that both instruments agreed on the space being
+    measured and disagreed only on double-counting.
+  - **The failure was structural, not arithmetic.** Correcting the per-file breakdown consumed the
+    verification and the headline `68` rode through on the entry's authority — the inverse of the
+    trap I had named in the same disposition ("the tell I should have read was that two of its
+    other figures already matched exactly"). A refutation of part of a citation is not a
+    verification of the rest of it.
+  - **One claim survived a challenge and is stronger than I knew.** `teco` doubted "identical at
+    `00827c2` and at the worktree", having seen 749 insertions across `storefront.py` and
+    `storefront_api.py` between the two revisions (`git diff --stat`: 667 insertions, 84
+    deletions). It holds — 65 / 40 / 1 and per-file 3 / 3 / 14 at both. The churn moved
+    module- and class-level annotations (`storefront.py` whole-file 15 → 16) and left every
+    function-local count untouched.
+- `b1f0c7a4`'s per-command counts are **not re-derivable at any commit**, and this is a property
+  of plan gates rather than an error. It cites `grep -rFn armKind` at 50 lines with `arm_kind`
+  finding 18 more, 14 carrying no `armKind`, and `FORBIDDEN_BY_ARM_KIND` matching
+  `fingerprint.py:128`/`:136`. An unbounded `grep -rn FORBIDDEN_BY_ARM_KIND .` over the worktree
+  (no `--include`, no `-maxdepth`, no path prefix) returns 33 hits in **7 files, every one of them
+  a plan, review, history or kaizen document** — the symbol exists in no source file, at
+  `c523a35`, at `8fc2341`, or now. A plan gate reads the working tree, so its counts were taken
+  against a state never committed. The mechanism is independently confirmed twice over by entries
+  in the same chunk, so it was promoted on those citations and the caveat is written into the
+  section.
+
+**What was re-derived, and with what instrument** (baseline pinned at `f5e8326`; `HEAD` never used
+as a baseline):
+
+- `redis-cli 7.0.15` against `localhost:6379`, **paired control**: a good command and a bad one,
+  compared on exit status *and* which stream carries the text. `PING` → stdout `PONG`, exit 0;
+  `NOTACOMMAND` → stdout `ERR unknown command`, stderr **empty**, exit 0; a syntax-error
+  `GRAPH.RO_QUERY` → `errMsg:` on stdout, stderr empty, exit 0; `set -e` with `>/dev/null` runs on
+  past it. The control that made this a finding rather than an observation: `redis-cli -p 6399
+  PING` (nothing listening) → empty stdout, message on **stderr**, **exit 1**. So `$?` is not
+  uniformly useless, which is precisely what lets the trap survive review.
+- `python3` 3.12.3: intersecting every `ast.AST` subclass's `_fields` against
+  `{target, targets, optional_vars, name, names, asname, arg, rest}` → **exactly 27 classes**,
+  confirming `b7f1c3a2`'s completeness claim figure-for-figure.
+- `git grep` at three pinned shas for the edit-table section's three re-runnable citations —
+  `_widen` → 7 lines at `5878014`, `8fc2341` and `c523a35` alike, the 4 in `tests/test_stats.py`
+  all `def test_…` lines and none a call site (`b1e7c2a4` exact);
+  `isinstance(metric, BinaryMetric)` → exactly 3 `report.py` lines at `c523a35` with the two `m`
+  spellings and two string-literal spellings where the entry says they are, and `.mean` returning
+  exactly the three bare-`else` readers (`3f6c2a91` exact, every figure);
+  `armKind` 67 / `arm_kind` 25 / 19 carrying neither-camelCase at `8fc2341` (my own numbers at my
+  own sha, replacing `b1f0c7a4`'s un-re-derivable ones).
+- `git archive` sandboxes of `model-bench` at `c523a35` and `8fc2341` run against
+  `model-bench/.venv`: **475** and **472** tests collected, matching `2f8a5d13`'s "475 passed" and
+  `b3f1c7a2`'s "passed all 472 tests" exactly, at the right shas. `9c4e2b71`'s two named tests
+  exist at `c523a35` (`tests/test_fingerprint.py:368` and `:596`), and its "1 failed / 474 passed"
+  is internally consistent with the 475 collected.
+- `git show 6012ddb:skills/joern-cpg/scripts/pipeline.sh` → line **199** reads
+  `redis-cli -h "$HOST" -p "$PORT" GRAPH.QUERY "$GRAPH" "$STAMP" >/dev/null`, verbatim the shape
+  `6eeaa03e` names at the line it names. `9124a1f fix(joern-cpg): the stamp can now fail loudly`
+  introduced the `rq()` helper that captures stdout and `case`-matches `errMsg:*|ERR\ *|WRONGTYPE*`
+  — which is why no `MENTIONS`→`graph-dba` was tagged: the entry's actionable half is closed, by
+  the review that produced the entry.
+
 ## 2026-09-08 — `kaizen_team` distillation pass 2, chunk D (unit U22): 11 entries, 8 promoted, 3 discarded
 
 `cobb` processed the eleven `analyst`-produced `kaizen_team` entries dated 2026-09-03

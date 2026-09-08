@@ -570,6 +570,27 @@ The guard carries a control assertion — `_router_bindings(source)["services"] 
 which covers the alias being *renamed*, and not a call that never uses it at all. Two of the three
 shapes above are how the next planned step was actually specified.
 
+**Such a reader has two axes, and a probe that varies one certifies a mechanism it does not cover.**
+An alias-resolving AST reader decides two separate questions — *which node type binds a name*, and
+*which value expression counts as naming the object*. A coverage probe that enumerates every
+binding node type with the value held at one literal spelling comes back empty while real misses
+survive, so **enumerate both axes or claim neither**. The target axis can be derived from the
+grammar instead of listed: intersecting every `ast.AST` subclass's `_fields` against
+`{target, targets, optional_vars, name, names, asname, arg, rest}` yields **exactly 27 classes** on
+CPython 3.12.3 (verified 2026-09-08, system `python3`) — `Name`/`Attribute`/`Subscript` in `Store`
+are the sites, `Lambda`/`arguments` bind through `arg`. The value axis has no such enumeration: a
+reader matching `ast.unparse(value)` against a prefix set is doing exact source-text identity, so an
+alias of an alias, a conditional expression, a container round-trip and a non-literal iterable all
+stop it, and only alias analysis closes that — a stop to document, not a node type to add.
+
+**And harvesting `ast.Assign` alone under-reaches on ordinary code, not exotic code.** Census over
+`falkor-chat/server/falkorchat` (28 `.py` files; run at `00827c2` and against the 2026-09-08
+worktree, identical): **65** function-local annotated assignments (`ast.AnnAssign` with a `Name`
+target), **40** function-local tuple-target assignments, **1** walrus. `x: T = self._foo` is a house
+idiom there. Scope the census the same way you scope the reader — counting `AnnAssign` across the
+whole package instead of function bodies gives 304, and mixing the two scopes inside one evidence
+line is how this measurement goes wrong.
+
 **The move:** where a gate is generated from the artifact it gates — a parametrize source, an AST
 walk, a derived `frozenset` — the mutation that tests it is applied to the **source**, in the shape
 the next change is *decided* to take, never a synthetic call written to be seen. Read the step's
@@ -602,3 +623,55 @@ range** is honest.
 **Consequence when adjudicating.** A disagreement between two mutation ledgers over the same mutant
 is not a defect in either until you know whether either pinned anything. A single-seed *survived*
 is not a coverage gap; a single-seed *killed by three tests* is not redundancy.
+
+## A grep-pinned edit table is an edit list, not a completeness proof
+
+When a plan prescribes a change across already-shipped code by pinning each site with a `grep`
+command and a count, and closes with a **residual** (`grep -rFc <token> … → 0`), the table looks
+self-verifying and is not. Six ways the residual passes on an incomplete edit, all met in one
+plan-gate chain (`docs/plans/small-model-benchmarking.md`, Passes 5–9):
+
+1. **Sites carrying no token are invisible to the command** — a snake_case alias of a camelCase
+   field, a dict-literal body under a named mapping, a callee whose name differs from the renamed
+   symbol. Measured 2026-09-08 at `8fc2341`:
+   `git grep -Fc armKind 8fc2341 -- model-bench/modelbench model-bench/tests` sums to **67** lines,
+   `arm_kind` to **25**, of which **19 carry no `armKind` at all**.
+2. **A grep pinned to a type name — or to an `isinstance()` string that also pins a variable
+   name — misses every site spelling the construct differently.** Re-run at `c523a35`:
+   `git grep -Fn 'isinstance(metric, BinaryMetric)'` → exactly **3** lines, all in `report.py`
+   (`:211 :553 :564`); the same construct at `results.py:355` and `:584` spells the variable `m`,
+   and `results.py:359`/`:385` spell the type as the string literal `"continuous"`. **Enumerate by
+   the attribute the ship criterion actually reads**, not by the type name: `git grep -Fn .mean`
+   returns `report.py:583`, `results.py:359`, `:584` — exactly the three bare-`else` readers.
+3. **A private helper's name matches test *function names* far more often than call sites.**
+   Re-run at `5878014`, `8fc2341` and `c523a35`, byte-identical at all three:
+   `git grep -Fn _widen -- model-bench/modelbench model-bench/tests` → **7** lines, and the 4 in
+   `tests/test_stats.py` (`:743 :773 :915 :1110`) are all `def test_…widening/widened/widens…`
+   lines — **none of them calls `_widen`**. A table can enumerate 100% false positives while the
+   sites its edit actually breaks (the call sites of a function gaining a required parameter)
+   carry the token nowhere.
+4. **A rename that keeps its token alive has no zero-residual to assert**, so the done-condition
+   passes regardless of what was missed.
+5. **A retired-token residual paired with a done-condition that names that token is
+   self-contradictory** — the natural test asserting the refusal must spell the token, which puts
+   the residual back at 1. The fix is always plan-side: restate the behaviour by key-set or
+   complement ("any key outside `{id, state}`"), never by a cleverer test.
+6. **Cross-table collisions survive per-table discipline.** Where several tables land as one fix
+   round, sweep every line appearing in more than one: a residual can be driven to zero by a
+   *different* table's edit on the same line, and two tables can prescribe incompatible forms for
+   one line while each reads correct alone. Worse, a residual whose baseline is an **intermediate**
+   state — after edit-set A, before edit-set B on the same line — can never be observed non-zero,
+   so it is passed both by a faithful implementation and by one that skipped **both** edits. Judge
+   such a residual as a conjunction with the first edit-set's own residual, never per-command.
+
+**Two derived checks.** A residual command must be re-asked against *every* implementation the same
+table authorises — an authorised literal branch can re-add the very string the residual asserts to
+zero. And a required, no-default parameter added to a public function breaks that function's **call
+sites**, which the defining token never reaches.
+
+**One caution about re-deriving this class of finding.** A plan gate reads the *working tree*, so
+its per-command counts are often taken against a state that was never committed. Of the six
+citations above, the three re-runnable at a pinned sha reproduced exactly (2026-09-08); a seventh,
+from a gate against an uncommitted `S1e` tree, could not be re-derived at any sha —
+`FORBIDDEN_BY_ARM_KIND` appears in the plan and review documents at every commit in the window and
+in no source file. Re-derive at a sha, or say that you could not.

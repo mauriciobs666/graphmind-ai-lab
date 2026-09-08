@@ -2,6 +2,56 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-08 — U23: `kaizen_team` distillation pass 2, chunk E — 13 `analyst` entries, 12 promoted, 1 discarded
+
+- **Deliverable.** `claude/analyst/review-techniques.md` (one new six-part section from six
+  entries, one fold into the existing AST subsection from three), `claude/analyst/analyst.md` (one
+  existing bullet replaced in place, from two entries), `claude/graph-dba/falkordb-quirks.md` (one
+  new bullet, from one entry), plus `claude/analyst/kaizen/history.md`,
+  `claude/graph-dba/kaizen/history.md` and this file. All 13 nodes cleared. Zero kept open, zero
+  `MENTIONS` tags, zero new bullets in any always-loaded prompt.
+- **Thirteen entries, four edits.** Six of the thirteen were one technique family (grep-pinned edit
+  tables used as completeness proofs) and were written as one section with six numbered failure
+  modes rather than six adjacent sections. Three more were about one alias-resolving AST reader and
+  became a fold, because their concrete facts were **already published at the point of use** —
+  `falkor-chat/server/tests/test_storefront_api.py:3107`/`:3158`, where the `_bindings` and
+  `_alias_prefixes` docstrings state both axes, the measured `me = self` two-hop stop, and the
+  annotated-local under-reach in more detail than the entries carried. Only the reviewer-facing
+  generalisation was missing, so only that was promoted.
+- **Two citation corrections, the same defect shape U20 and U21 produced.** `3f6c1e28`'s per-file
+  `AnnAssign` breakdown (6/16/23) is wrong at its own commit — the real function-local figures are
+  3/5/14, while its headline 68 and its 1 walrus are exactly right. Its own numbers are three
+  different scopes in one sentence. `b1f0c7a4`'s per-command counts are not re-derivable at any
+  commit: an unbounded `grep -rn FORBIDDEN_BY_ARM_KIND .` (no `--include`, no `-maxdepth`, no path
+  prefix) finds 33 hits across 7 files, **every one a plan, review, history or kaizen document** —
+  the symbol is in no source file at `c523a35`, at `8fc2341`, or now. A plan gate reads the working
+  tree, so its counts are routinely taken against a state that was never committed. That caveat is
+  now written into the promoted section, which is more useful than the counts would have been.
+- **My own instrument was wrong first, and the entry was right.** The `AnnAssign` census initially
+  read 304 against the entry's 68, which looked like a flat refutation. The entry says *local*
+  assignments; I had walked the whole package including module- and class-level annotations
+  (`schemas.py` alone carries 60). Scoping to function bodies with a `Name` target gives exactly
+  68, at the entry's sha and at the worktree alike. Two of the entry's other figures (1 walrus, 40
+  tuple-targets) had already matched, which is the tell I should have read before drafting a
+  finding — the U20 retraction's lesson, met again and caught this time.
+- **The chunk's collision hazard, and what survived.** Eight of the thirteen ids cluster into three
+  near-prefix families sharing 2-4 leading characters. Every read, count and clear used the
+  complete 36-character id; after the clears I re-queried each family's members by full id and
+  confirmed the graph holds none of them and that no unrelated entry was taken. Density evidence
+  folded into K-021 above: hand-shaped ids cluster on what the writer recently typed, which is why
+  collisions keep landing in adjacent chunks of one agent's inbox rather than at random.
+- **Paired controls, both of which changed the promoted text.** `redis-cli` exits **1** on a
+  connection failure with the message on stderr, and **0** on a server error reply with the text on
+  stdout — the entry had only the second half, and the first half is what explains why the trap
+  survives review. `git rev-parse HEAD:.` reproduced exactly (fatal, exit 128) and the entry was
+  discarded anyway, because `skills/cpg-analysis/references/freshness.md:104-117` already carries
+  the fact plus two more the entry lacks.
+- **Shared-tree note.** `claude/graph-dba/falkordb-quirks.md` was already carrying **680**
+  uncommitted words over baseline `f5e8326` when this unit opened — more than the 480 the
+  coordination ledger records — from at least two other sessions. My bullet is a third session's
+  content in that file; the CPG session's `Properties removed` bullet at lines 190-199 was not
+  touched, reflowed or reindented, and my insertion sits ~550 lines below it.
+
 ## 2026-09-08 — U60: Pass 6 remediation — the wiring test's oracle was the next level of the same defect (K-023, K-024)
 
 - **The headline, and it is about this log as much as about the code.** U48 below shipped

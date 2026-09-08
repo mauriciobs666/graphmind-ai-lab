@@ -3,6 +3,67 @@
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
 
+## 2026-09-08 — `falkordb-quirks.md`: `redis-cli` exits 0 on an error reply (U23)
+
+- **What:** `cobb`, distilling `analyst`'s `kaizen_team` chunk E (unit U23, entry
+  `6eeaa03e-98f9-42ac-8c6f-d9a0d9a06791`), added one bullet under the tooling run of bullets, after
+  the `GRAPH.QUERY`-materializes-an-empty-key entry and before the `GRAPH.EXPLAIN` one: `redis-cli`
+  exits 0 on a server *error reply* and prints the error text to STDOUT, so `$?`, `||` and `set -e`
+  cannot see a rejected or malformed query. No existing bullet was rewritten. The concurrent CPG
+  session's uncommitted `Properties removed` bullet (lines 190-199) was not touched, reflowed or
+  reindented; the insertion is ~550 lines below it.
+- **Why it is a new bullet rather than a fold.** The file already carried the fact as a *clause
+  inside another bullet* — `falkordb-quirks.md:141`, "because `redis-cli` exits 0 on Redis-level
+  errors, a `set -e` script sails past it", where the subject is `CREATE VECTOR INDEX` being
+  rejected. That aside is true and undated, and it says nothing about which stream carries the
+  text, nothing about the one case that *does* exit non-zero, and nothing about what a caller
+  should do instead. Those three are the whole value.
+- **Paired control, 2026-09-08, `redis-cli 7.0.15` against `localhost:6379`, module `41811`** — a
+  good command and a bad one, compared on exit status *and* stream:
+  `PING` → stdout `PONG`, exit 0. `NOTACOMMAND` → stdout `ERR unknown command 'NOTACOMMAND'`,
+  **stderr empty**, exit 0. `GRAPH.RO_QUERY kaizen_team "MATCH (n:Agent RETURN count(n)"` → stdout
+  `errMsg: Invalid input 'R': …`, stderr empty, **exit 0**. `( set -e; redis-cli GRAPH.RO_QUERY …
+  >/dev/null; echo … )` prints its trailing echo and exits 0. **The control that turns this into a
+  finding:** `redis-cli -p 6399 PING`, nothing listening → empty stdout, `Could not connect to
+  Redis at 127.0.0.1:6399: Connection refused` on **stderr**, **exit 1**. `$?` is therefore not
+  uniformly useless — it is reliable for connection failure and blind to error replies, which is
+  exactly why a guard tested the easy way looks like it works.
+- **The named instance is real and already fixed, verified by `git show`, not by narration.**
+  `skills/joern-cpg/scripts/pipeline.sh:199` at `6012ddb` reads
+  `redis-cli -h "$HOST" -p "$PORT" GRAPH.QUERY "$GRAPH" "$STAMP" >/dev/null` — verbatim the shape
+  the entry names, at the line it names, so a failed `CpgBuildInfo` stamp was invisible after a
+  multi-hour build. `9124a1f fix(joern-cpg): the stamp can now fail loudly` replaced it with the
+  `rq()` helper that captures stdout, keeps the `||` for the connect case and `case`-matches
+  `errMsg:*|ERR\ *|WRONGTYPE*|*"read only"*` on the reply text. That structure is precisely the
+  split the paired control measures. **No `MENTIONS`→`graph-dba` edge was tagged** and no `K-`
+  item opened: nothing is outstanding for `graph-dba` to act on, so an edge would only have left
+  a node alive that the next pass could not close.
+- **The bullet was corrected before this unit closed, and the correction is the more useful half.**
+  As first written it recommended `case "$out" in errMsg:*|ERR\ *|WRONGTYPE*) return 1 ;; esac` —
+  copied from `pipeline.sh`'s `rq()`. Verifying the surviving population after the clears surfaced a
+  live `analyst` entry dated 2026-09-08, `b7f3c2a1-9d4e-4c11-8a52-6e0f1d3b7c94`, saying FalkorDB
+  error replies are **not uniformly prefixed**. Re-derived independently with a paired control
+  before acting on it (`GRAPH.RO_QUERY` against `kaizen_team`, each reply tested against that exact
+  prefix set): a parse error (`THIS IS NOT CYPHER`) → `errMsg: …` **caught**; an absent graph →
+  `ERR Invalid graph operation on empty key` **caught**; `RETURN nosuchfunc(1)` → bare
+  `Unknown function 'nosuchfunc'` **missed**; `MATCH (n:KaizenEntry) RETURN keys(n.fact)` → bare
+  `Type mismatch: expected Map, Node, Edge, or Null but was String` **missed**; all exit 0, with a
+  valid query as the control. So the recommendation I had just shipped was unsound, and
+  `skills/joern-cpg/scripts/pipeline.sh`'s `rq()` **still returns 0 on a runtime-error reply** —
+  `9124a1f` closed the discarded-output half of the trap and left the bare-error half open. The
+  bullet now says: assert the intended effect positively (read the write back), or use a client
+  that raises; a prefix `case` is a courtesy message, never the check. `pipeline.sh` is outside
+  `cobb`'s write remit, so the live defect is reported to the coordinator, not fixed here.
+- **Note for a later distillation pass:** `b7f3c2a1-…` was **not cleared** — it is dated 2026-09-08
+  and falls outside U23's pinned 2026-09-07 scope. Its content is now published in this file, so a
+  later pass will correctly find it already documented; this line is the record of why.
+- **No probe graph created.** Every read used `GRAPH.RO_QUERY` against the existing `kaizen_team`
+  key; the deliberately-failing queries were `RO_QUERY` too, which per this file's own bullet
+  materializes nothing. Confirmed for the one probe that named a fresh key —
+  `GRAPH.RO_QUERY definitely_absent_graph_u23 …` → `ERR Invalid graph operation on empty key`, then
+  `EXISTS definitely_absent_graph_u23` → **0**. No `ws:probe-*` or scratch key was created by this
+  unit.
+
 ## 2026-09-08 — `falkordb-quirks.md`: the projection half of the `UNIQUE`-vs-existence gap (U22), resolving a dangling cross-reference U21 left
 
 - **What:** `cobb`, distilling `analyst`'s `kaizen_team` chunk D (unit U22, entry

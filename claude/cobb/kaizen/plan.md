@@ -111,7 +111,14 @@
     Note what it does **not** close: both of these ids *pass* that regex. Shape validation stops
     malformed ids and raises the cost of an accidental near-duplicate; only real `uuid4()` entropy
     at the producer makes a 21-character collision implausible, so the check is a floor, not a
-    fix.
+    fix. **U23 (2026-09-08) supplies the density data point behind all three collisions:** the
+    thirteen `analyst` entries dated 2026-09-07 contain **eight** ids clustering into three
+    near-prefix families — `b1f0e6c2`/`b1f0c7a4`, `b7f1c3a2`/`b3f1c7a2`/`b1e7c2a4`/`b18d5c47`,
+    `3f6c2a91`/`3f6c1e28` — sharing 2 to 4 leading characters, produced by one agent on one day.
+    Hand-shaped ids are not uniformly distributed over the hex space; they cluster on whatever the
+    writer had recently typed, which is why collisions keep landing in *adjacent chunks of the same
+    agent's inbox* rather than at random. That is an argument about the generator, and only real
+    `uuid4()` entropy addresses it.
   - **Content — no.** Rejecting `PLACEHOLDER`/empty `fact` automates a judgment the curator
     already performs, and its whole cost is one discard line in a history entry. A sentinel
     blocklist would also be trivially routed around by any agent writing a differently-useless
