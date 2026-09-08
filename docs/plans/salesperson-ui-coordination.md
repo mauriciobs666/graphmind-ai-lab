@@ -154,7 +154,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U37** — Pass 16's minors + `salesperson/`'s `start_demo.sh` references | `coder` (fresh) | `a38711140b2ecc8ec` | **accepted** (`ba368a0`, `7a85c1c`) | `SERVER.md`, `salesperson/{AGENTS,README}.md`, `playwright.config.ts` (mine) | teco-verified → **accept** | 127k / 52 |
 | **U36** — `config.py`'s three future-as-present comments + the documentation `HISTORY.md` entry | `coder` | `aa9b68b68151bca8a` | **accepted** (`3fe3d8f`) | `falkorchat/config.py` (**5** comments, full-AST equal), `docs/HISTORY.md` | teco-verified → **accept** | 116k / 28 |
 | **U38** — `pipeline.sh`'s provenance stamp races `HEAD` and scopes `SOURCE_DIRTY` repo-wide | `cobb` | `a42739600c7b41e1d` | gated | `6012ddb` + `9124a1f` — all findings dispositioned | `analyst` Pass 1 **needs changes** → Pass 3 re-dispatched after rate-limit kill | 364k tok / 87 tools |
-| **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | delivered — held for cross-document check | `c92f35d` + fix round | `analyst` Pass 2 → **approve with suggestions**, all 5 taken as written (`131229d`) | 156k tok / 15 tools |
+| **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | **accepted** | `c92f35d` + `8779ee8` | `analyst` Pass 3 → **approve with suggestions** (`6c6e807`) | 156k tok / 15 tools |
+| **U41** — backfill `cpg_falkorchat`'s pre-fix marker honestly + remove 3 leaked scratch graphs | `graph-dba` | `a5825012b34ab9a9b` | in-flight (dispatched 2026-09-08) | live graph write, report only | self-verifying (runs `freshness.md`'s own checks) | — |
+| **U42** — P3-1/P3-2/P3-3: `SKILL.md` re-stamp line, manual overclaim, 4 statements the backfill falsifies | tbd | — | queued (behind U41) | `SKILL.md`, `freshness.md`, `graph-ontology.md` | `analyst` (Pass 4) | — |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | gated — fix blocked on U40 | `e6fa20c` — 9 files, +895/−44, 12 tests | `analyst` Pass 17 → **needs changes**, 2 majors (`20e138e`) | 305k tok / 111 tools |
@@ -3186,3 +3188,56 @@ no S9a code behaviour is wrong — but it is three to four blocks rather than tw
 names two things S9a made real that belong to *later* steps: reset-all's intake window
 (S10's stop-intake flag, already assigned) and `clear_all_turns()` now wiping entries whose
 workers still run. S9f stays behind the fix unit, since both touch `storefront_api.py`.
+
+## Pass 3: the check I held U39 open for came back clean, and the reason it held is instructive
+
+**`freshness.md`: approve. The manual: approve with suggestions, one minor. Scripts:
+approve with suggestions, one minor.** Every disposition verified against the code rather
+than the report — B1, M1, M2, M3, m1–m5, n1–n3 and P2-1…P2-5 all genuinely fixed, and
+n4's decline correct.
+
+The cross-document question is answered properly: both documents enumerated and matched
+pairwise, **six shapes each, no omission in either direction, no contradiction.** The two
+that were the whole point — the `sourceTree`-absent shape and the pre-fix/hand-written
+disambiguation — are taught by both and gated identically. The reviewer also checked the
+one place they could have diverged on *substance* rather than wording, and both are right
+that `SOURCE_DIRTY` is true in the tree-absent shape, which holds by construction.
+
+**The structural vindication is worth more than the verdict.** `9124a1f` changed check 0
+*materially* — `--short` to full OIDs, `HEAD:<origin>` to `--verify "HEAD:./<origin>"` —
+and the manual needed **no edit at all** to stay correct, because P2-1 had replaced its
+copy of the command with a citation. That is the drift this chain kept finding, caught
+prospectively for once: had the copy remained, the manual would now be teaching a command
+that was silently wrong in two ways. Holding U39 open through `cobb`'s round cost one
+resume and bought a verified answer rather than a hopeful one.
+
+**The reviewer also disproved its own Pass 1 recommendation**, ran against the live reply:
+its suggested error pattern misses `errMsg: Invalid input…`, so `cobb` was right to make
+the read-back load-bearing and keep the pattern gate as diagnostics only. A reviewer
+correcting itself against execution is the strongest form of the two-gate argument I have
+in this coordination — the static suggestion was reasonable and wrong, and only running it
+settled it.
+
+**And a fourth generation of the defect class was stopped before it was written.** The
+reviewer's closing note: a hand-backfilled marker asserting `PROVENANCE = 'source-origin'`
+would claim a capture that never happened — the pipeline capturing values before the parse,
+when in fact a human derived them afterwards. Exactly the plausible-but-wrong shape the
+whole chain exists to prevent, and it would have been *my* instruction that wrote it. I
+dispatched U41 with that fork stated explicitly and unanswered: `graph-dba` owns the
+marker's schema, so it decides the honest encoding — the reviewer's suggested
+`MARKER_ORIGIN` (a convention `cpg_deprecated_salesperson` already uses), something better,
+or the conclusion that the backfill should not happen at all. It was told that last answer
+is acceptable. U41 also removes the three leaked `scratch_cobb_*` keys.
+
+**U42 queued behind it, deliberately.** P3-3 found the backfill invalidates **four**
+statements, not the one I knew about — `freshness.md:43-47` and `:182-185`, plus the
+manual's FAQ bullet 2 and its Overview — because afterwards *no loaded graph exemplifies
+the pre-fix shape*. Conflict through a fact again, and the third time in this chain: the
+doc fix cannot be written until U41 reports what it actually wrote. P3-1 and P3-2 fold into
+the same unit — a one-line `printf` so a failed stamp prints the `$STAMP` an operator is
+told to re-run by hand (without it, a hand re-stamp that drops the `= NULL` assignments
+silently breaks the absent-field-removed guarantee both documents rest on), and one clause
+scoping the manual's unconditional "all eight rewritten on every stamp" to match the
+reference's "since 2026-09-07".
+
+U39 is **accepted** and closed.
