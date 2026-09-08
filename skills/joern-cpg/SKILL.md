@@ -55,8 +55,8 @@ pipeline non-zero with the fix (rebuild from a parse root that includes it).
 After a successful load, `pipeline.sh` writes a singleton `:CpgBuildInfo` marker
 so consumers can judge the graph's freshness (`cpg-analysis`'s
 [freshness recipe](../cpg-analysis/references/freshness.md) reads it, and that
-file documents every field for readers). Two properties of the *mechanism* matter
-when you run a build:
+file documents every field for readers). What matters about the *mechanism* when you
+run a build:
 
 - **Provenance is captured before the parse, not at stamp time**, and scoped to
   the source with a pathspec. A real build runs for hours; deriving `HEAD` after
@@ -105,9 +105,23 @@ when you run a build:
   and prints it to stdout, so the stamp is checked for an error reply *and* read
   back — the run fails unless the marker in the graph carries this build's
   `PARSED_AT`. Worth knowing because the failure is late and specific: the load
-  succeeded and only the marker is missing, so re-stamping by hand is the fix,
-  not re-parsing. Left unchecked on an `--append` build, the previous build's
-  marker would stay standing over the new content.
+  succeeded and only the marker is missing, so re-stamping is the fix, not
+  re-parsing — and every stamp failure branch now **prints the stamp Cypher
+  verbatim** between `--- begin stamp ---` markers, because it is a multi-line
+  map literal with escaped quotes and retyping it is how you get a subtly wrong
+  marker. Left unchecked on an `--append` build, the previous build's marker
+  would stay standing over the new content.
+- **If you change the stamp, run `scripts/test-stamp-wiring.sh` — it takes a
+  second and needs no FalkorDB.** It lifts the real stamp block out of
+  `pipeline.sh` between two anchors and drives it against a fake `redis-cli`,
+  covering the wiring rather than the Cypher: allow-list populated, clean pass
+  over a hand-authored marker, the `provenance=none` narrowing, a planted
+  foreign key caught, and a mutation that reverts the call site to the `$(…)`
+  form and must be refused. That last case exists because the `$(…)` form
+  *shipped*: the stamp is called as a statement precisely so it can populate the
+  caller's shell, a subshell silently discarded the allow-list, and every build
+  would have failed after a multi-hour parse. The Cypher was executed and
+  correct the whole time — it was the call path nobody ran.
 
 Or run the stages individually:
 

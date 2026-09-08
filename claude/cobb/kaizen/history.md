@@ -3,6 +3,50 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-08 — U48: Pass 5 remediation — `replay_stamp` was never defined, and a wiring test now exists (K-023, K-024)
+
+- **Found and fixed a live defect in `049f063`, which is the half of P3-1 I had not reached when the
+  session was cut:** `replay_stamp` was **called from three failure branches and defined nowhere**.
+  Under `set -euo pipefail` that aborts at 127 and swallows the message it exists to print, so all
+  three stamp-failure paths were broken. Defined it before its first use, printing the stamp Cypher
+  verbatim between `--- begin stamp ---` markers with copy instructions. This is the third time in
+  this arc that a piece was verified in isolation and broken in its wiring; I found it by grepping
+  for the definition rather than trusting the report that it existed.
+- **`skills/joern-cpg/scripts/test-stamp-wiring.sh` (new)** — the regression test the gate's open
+  question 1 asked for. It **extracts the real stamp block out of `pipeline.sh` between two
+  anchors** (never a retyped copy — that is the whole point) and drives it against a fake
+  `redis-cli` modelling FalkorDB's reply shapes. No FalkorDB, no graph write, sub-second. Six cases:
+  allow-list populated, clean pass over a hand-authored marker, `provenance=none` narrowing to four,
+  a planted foreign key caught under merge semantics, the `SOURCE_*` subsumption, and a **mutation
+  case** that reverts the call site to `STAMP="$(cpg_provenance_stamp …)"` and requires it refused.
+  All six pass. One case — merge semantics over a pipeline-clean marker — passes *by design*,
+  empirically confirming the gate's P5-2 ruling that the check cannot detect a semantics change on
+  such a graph.
+- **P5-5 (fixed)** — second tombstone to past tense, and it now says *why* it is a cautionary
+  example: it was written under a "verified by execution in both directions" credential that was
+  true of the query and untrue of the wiring that called it.
+- **Third tombstone's differentiator (fixed)** — the finding it had to absorb: *an execution
+  credential is only worth the level it covers*. It no longer claims "executed" as the
+  differentiator, since mechanisms one and two both carried execution credentials. It names **two**
+  levels — the construct (`graph-dba`'s `keys(b)` probes) and the call path (this run's wiring test)
+  — and says the credential is worth nothing without both.
+- **P4-4 (closed, open three passes)** — the `provenance` row now states the safe scripted form:
+  exact equality against the closed set, never a prefix/substring test, never a default-to-trusted
+  `else`; and `markerOrigin IS NULL` for "pipeline wrote this", since `provenance` is only a label
+  the writer chose.
+- **P5-4 (fixed)** — K-024 reframed. It said §1.1 "never listed the five hand-authored keys", which
+  would have sent an `architect` to **add five never-written keys** to a schema table. It now leads
+  with a do-not-do warning and asks for the eight properties, full OIDs, the superseded `b.X = …`
+  code block, and the schema-level fact — the property set is **closed by construction**.
+- **n1 (fixed, differently than asked)** — `SKILL.md` said "Two properties" over a four-bullet list.
+  A literal count there has now gone stale twice and my own edit was about to make it five, so I
+  removed the count instead of incrementing it.
+- **n3 (fixed)** — U47's entry above now records the behavioural reversal it omitted.
+- **Not mine, wording supplied:** P5-3, the live `cpg_falkorchat` `NOTE` still carrying mechanism
+  one's false universal. Needs a marker write; routed to `graph-dba` with proposed text.
+- **Plan items:** K-023 (delivered), K-024 (reframed, still 🔵 — routes out of cobb's remit).
+
+
 ## 2026-09-08 — U47: replaced the stamp's clearing enumeration with a map assignment — closure by construction (K-023)
 
 - **What:** `graph-dba` executed the probe I declined to ship on documentation alone, and it held, so
@@ -16,6 +60,16 @@
   of it mine from `0da3eb9`, all of it describing the enumeration.
 - **Why:** The enumeration was a closed *list*, not a closed *set*, and a list cannot enforce its own
   completeness. The map form removes the failure mode rather than detecting it.
+- **The behavioural reversal this carried, which the entry above originally omitted** (added
+  2026-09-08 on gate finding n3; it led the commit message but never reached this log). Under the
+  enumeration, a hand-authored key the stamp did not know about would have **stopped the next
+  rebuild by name** — I had written that into `SKILL.md`, `freshness.md` and `skills/README.md` an
+  hour earlier as a feature. The map form reverses it: nothing stops, the key is simply gone, and
+  the run reports success. So `cpg_falkorchat` will **not** fail its next rebuild — its ten keys
+  become eight, silently. That is the original rule ("a rebuild erases a hand-authored marker,
+  deliberately") finally being true rather than a new hazard, but it is the opposite of what three
+  documents said 60 minutes before, and a reader of this log should not have to reconstruct it from
+  a diff.
 - **The stray assertion from `0da3eb9` stays, and its role improved.** Under the enumeration it
   guarded a list that could drift; under the map it can only fire **if the replace itself did not
   happen** — a FalkorDB version treating `=` as a merge, someone simplifying the stamp back to

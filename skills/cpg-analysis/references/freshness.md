@@ -31,7 +31,7 @@ per-build history.
 | `sourceCommit` | The repo's `HEAD` when the source was captured, *before* the parse. A **full 40-char OID**. |
 | `sourceTree` | The tree object of `sourceOrigin` at `sourceCommit` — a **blob** when the source is a single file — i.e. the exact identity of that content. Also a full OID. Can be absent while `sourceCommit` is present: see check 2. |
 | `sourceDirty` | `git status --porcelain -- <sourceOrigin>` was non-empty: modified **or untracked** files under the source. Scoped — it says nothing about the rest of the repo. |
-| `provenance` | How the four `source*` values were obtained. Three values are **pipeline stamps**: `parse-root` (the parse root is itself tracked) · `source-origin` (the parse root is a staged copy; the builder named the real tracked directory) · `none` (no git identity — the three commit/tree/dirty fields are deliberately absent, not missing). A fourth, **`hand-backfilled`**, is *not* a pipeline stamp: a human derived the `source*` values after the build and `graph-dba` wrote them in. Spelled as its own word, not a variant of the other three, so a skimmer — or a scripted `startswith("source-origin")` — cannot quietly treat it as a pre-parse capture. See the fifth bullet below. |
+| `provenance` | How the four `source*` values were obtained. Three values are **pipeline stamps**: `parse-root` (the parse root is itself tracked) · `source-origin` (the parse root is a staged copy; the builder named the real tracked directory) · `none` (no git identity — the three commit/tree/dirty fields are deliberately absent, not missing). A fourth, **`hand-backfilled`**, is *not* a pipeline stamp: a human derived the `source*` values after the build and `graph-dba` wrote them in. Spelled as its own word, not a variant of the other three, so a skimmer — or a scripted `startswith("source-origin")` — cannot quietly treat it as a pre-parse capture. **If you are scripting this, the safe form is exact equality against the closed set** — `provenance IN ['parse-root','source-origin','none']` for "a pipeline stamped it" — never a prefix or substring test, and never a default-to-trusted `else`. For "was this written by the pipeline at all", test `markerOrigin IS NULL` instead: it is the reliable tell, where `provenance` is only a label the writer chose. An unrecognised value means a shape postdating this recipe, so fail closed and read the whole node. See the fifth bullet below. |
 | `markerOrigin` | Non-null **exactly when a human wrote this marker** rather than the pipeline; the pipeline never sets it. This — not `builtAt`, not `provenance` — is the reliable hand-authored tell, because a hand-authored marker may carry a real timestamp *and* a real provenance value. Non-null → read the whole node (`MATCH (b:CpgBuildInfo) RETURN b`) for `NOTE`/`STATUS` before acting on any other field. |
 
 - **One row, `provenance` a pipeline value (`parse-root`, `source-origin`,
@@ -210,26 +210,48 @@ signal, not the threshold.
   editing a different file from the one that would need updating. So the rule
   survived a **second** wrong mechanism: "the stamp writes every property on the
   node" was never true, only "the stamp writes the properties it names". What
-  makes the rule hold is now the post-stamp assertion described above, whose
-  allow-list is generated from the stamp's own assignments rather than
-  hand-copied. Verified by execution in both directions against this instance,
-  not inferred.)*
+  made the rule hold **at that point** was a post-stamp assertion whose
+  allow-list was generated from the stamp's own assignments rather than
+  hand-copied. That mechanism was itself superseded within the day — see the
+  third tombstone, which is the one in force. And read this sentence as the
+  cautionary part: it was written under a credential of "verified by execution
+  in both directions", which was true of the *query* and untrue of the *wiring
+  that called it* — the allow-list was empty in the shipped pipeline. The
+  credential was real and covered the wrong level.)*
   *(Third tombstone, same day, and this one is the mechanism that is actually
   here. The clearing enumeration above is gone: the stamp now replaces the
   marker's whole property set with `SET b = {…}`, so closure is by construction
   and there is no list at any layer. **Read the sequence rather than only the
   answer** — the rule "a rebuild erases a hand-authored marker" was stated three
   times with three different mechanisms, and the first two were both wrong while
-  sounding checkable. What separates the third is not that it is more plausible;
-  it is that it was **executed before it was written down**, on throwaway
-  graphs, with `keys(b)` read back every time: a marker carrying the eight
-  pipeline keys plus three hand-authored ones — `MARKER_EVIDENCE` among them,
+  sounding checkable. What separates the third is not that it is more plausible,
+  and — the correction that matters — not merely that it was "executed", since
+  mechanisms one and two both carried execution credentials too. **An execution
+  credential is only worth the level it covers, and both earlier ones covered
+  the primitive and not the call path.** Mechanism two's Cypher was run against
+  a live instance in both directions and was correct; the pipeline that called
+  it passed the allow-list through a `$(…)` subshell, so the shipped check saw
+  an empty list and would have failed every build. Nothing about executing the
+  query could have caught that.
+  <br>So this tombstone names both levels. **The construct:** executed on
+  throwaway graphs, with `keys(b)` read back every time — a marker carrying the
+  eight pipeline keys plus three hand-authored ones, `MARKER_EVIDENCE` among them,
   the key that had just defeated mechanism two — came back with `keys(b)` of
   size 8 and all three gone, while `count(b)` stayed 1 and `labels(b)` stayed
-  `[CpgBuildInfo]`, so `MATCH (b:CpgBuildInfo)` still finds it. Reply *counters*
-  were not used as evidence anywhere in that: they conflate properties set with
-  properties removed, and one probe reported four removals against zero actual
-  ones. If you are re-checking this, `keys(b)` is the discriminator. Don't
+  `[CpgBuildInfo]`, so `MATCH (b:CpgBuildInfo)` still finds it. **The call
+  path:** exercised by `skills/joern-cpg/scripts/test-stamp-wiring.sh`, which
+  extracts the real stamp block out of `pipeline.sh` between two anchors —
+  never a retyped copy — and drives it against a fake `redis-cli`; it asserts a
+  populated allow-list, a clean pass over a hand-authored marker, the
+  `provenance=none` narrowing, a planted foreign key caught under merge
+  semantics, and a mutation case that reverts the call site to the `$(…)` form
+  and requires it to be refused. Both levels, or the credential is worth
+  nothing. Reply *counters* were not used as evidence anywhere in that, and the
+  reason is stated as what was observed rather than as a mechanism nobody
+  checked: `Properties removed` does not track actual removals — one probe
+  reported 13 against 5 real ones, another 4 against none. Why it diverges is
+  not known here and is not asserted. If you are re-checking this, `keys(b)` is
+  the discriminator. Don't
   delete the rule on rediscovering the history.)*
 - **`sourcePath` is a parse root, not a git path.** It is what Joern was
   pointed at — frequently a pruned scratch copy staged to keep `.venv` and

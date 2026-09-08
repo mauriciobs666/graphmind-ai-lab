@@ -270,6 +270,24 @@ if [ -n "$LOAD" ]; then
     return 0
   }
 
+  # Every failure below this point leaves a graph that is fully loaded and needs
+  # NO re-parse — only the stamp has to be re-sent. Three branches used to say
+  # "re-stamping by hand is enough" without ever showing what to send, and the
+  # stamp is now a multi-line map literal with escaped quotes, strictly harder to
+  # reconstruct than the flat SET clause that advice was written for. So print it
+  # verbatim. (Called from three branches; defined here, before all of them —
+  # under `set -e` an undefined function aborts with 127 and swallows the
+  # message it was supposed to print.)
+  replay_stamp() {
+    echo "pipeline: the load succeeded and does NOT need repeating — only the stamp does." >&2
+    echo "pipeline: copy the Cypher below verbatim; do not retype it." >&2
+    echo "pipeline: --- begin stamp ---" >&2
+    printf '%s\n' "$STAMP" >&2
+    echo "pipeline: --- end stamp ---" >&2
+    echo "pipeline: save it to a file and send it with:" >&2
+    echo "pipeline:   redis-cli -h $HOST -p $PORT GRAPH.QUERY $GRAPH \"\$(cat <file>)\"" >&2
+  }
+
   if ! STAMP_OUT="$(rq "$STAMP")"; then
     echo "pipeline: FAILED — FalkorDB rejected the freshness stamp for '$GRAPH':" >&2
     echo "pipeline:   ${STAMP_OUT:-<no reply>}" >&2

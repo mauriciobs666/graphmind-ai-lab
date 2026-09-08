@@ -20,7 +20,7 @@
 | K-020 | 2026-09-06 | medium | 🔵 | `cypher-mcp/server.py:881`'s FalkorDB-unreachable message advises `docker start falkordb-dev`, which cannot work — no launch path in this repo leaves a stopped container by that name. Out of cobb's write remit (component code); route to an implementer via `teco`. |
 | K-021 | 2026-09-07 | medium | 🔵 | Validate `entryId` **shape** in the `cypher-mcp` producer-write authorizer — a malformed or colliding id is load-bearing for the curator-clear path. Content validation deliberately **not** proposed. |
 | K-022 | 2026-09-08 | high | 🔵 | The **wrong-rather-than-absent** defect class now has **five** instances in one coordination, and **two** of them are prose. The fifth appeared *inside the fix for the fourth* and isolates the mechanism: a **false justification attached to a correct rule**, which the author (`cobb`), the committer (`teco`) and a hand-back framing it as durable all passed. Decide at the next certification pass whether it earns a team-wide statement, and where — the candidate is now specific rather than open: a named check in the `agent-maintenance` §7 lint, *verify the reason, not just the rule*. |
-| K-024 | 2026-09-08 | medium | 🔵 | Two documents outside cobb's remit still describe the `:CpgBuildInfo` marker as it was before K-023 closed the stamp's property list. `docs/plans/cpg-agent-adoption-graph.md` §1.1's property table never listed the five hand-authored keys and now understates what a stamp writes (**`architect`**; per the doc convention an executed-against plan takes a successor or a header pointer, not an edit). `docs/manuals/graph-ontology.md` needs the same shape update plus gate finding **P4-3** — its FAQ classifies on the `PROVENANCE` literal alone and never on `MARKER_ORIGIN`, so a hand-authored marker reads as a pipeline stamp to a manual-only reader (**`tico`**). Both route via `teco`; neither is cobb's to write. |
+| K-024 | 2026-09-08 | medium | 🔵 | Two documents outside cobb's remit still describe the `:CpgBuildInfo` marker as it was before K-023. **The debt changed kind, not size** — do NOT add the five hand-authored keys to any schema table: the stamp never writes them, and after the map form they are not even named in the code. `docs/plans/cpg-agent-adoption-graph.md` §1.1 owes (a) the **eight** properties the stamp writes, (b) full 40-char OIDs rather than "short SHA", (c) the correction that its code block documents the superseded `SET b.X = …` write semantics, and (d) the schema-level fact this arc established — **the marker's property set is closed by construction**, so `:CpgBuildInfo` cannot be extended by any writer other than the stamp (**`architect`**; per the doc convention an executed-against plan takes a successor or a header pointer, not an edit). `docs/manuals/graph-ontology.md` needs the same shape update plus gate finding **P4-3** — its FAQ classifies on the `PROVENANCE` literal alone and never on `MARKER_ORIGIN`, so a hand-authored marker reads as a pipeline stamp to a manual-only reader (**`tico`**). Both route via `teco`; neither is cobb's to write. |
 | K-019 | 2026-08-21 | **high — filed upstream** | 🔵 | **Systemic, now confirmed matcher-agnostic too. `PreToolUse` "ask" hooks do not reliably pause execution in this session under Auto Mode, on either `Bash` or `Write`/`Edit`, regardless of hook source or execution context.** Four independent, isolated live tests, 2026-08-21, Claude Code 2.1.238, all under Auto Mode: (1) `graph-dba`'s own frontmatter `Bash` hook, Task-dispatched with `subagent_type` explicitly correct — didn't fire. (2) The identical guard mirrored as a session-wide `.claude/settings.local.json` `Bash` hook, run from `cobb`'s own **main session** — didn't fire. (3) Same test repeated after the user explicitly reloaded hook config via `/hooks` (visibly listed as registered, `[Local] Bash — 1 hook`) — still didn't fire. (4) **`cobb`'s own frontmatter `Write`/`Edit` hook** (`guard-cobb-topic-writes.sh`) — a `Write` to a path plainly outside cobb's allowlist (`docs/_hook_test_k019_scratch.md`) went through with zero interruption; re-fed the exact real payload to the script directly afterward and confirmed it correctly returns `ask` for that path. **Every test used a real, disposable payload (scratch graph or scratch file, immediately cleaned up) and independently pipe-test-confirmed correct hook logic** — ruling out `subagent_type` omission, stale config, hook-not-registered, and matcher-specific quirks as explanations. **Working hypothesis:** Auto Mode's classifier layer silently resolves/overrides a correctly-emitted `ask` decision before a human ever sees it, across both tool matchers tested. **Filed upstream 2026-08-21** via `/feedback` (user-submitted, confirmed "Feedback / bug report submitted") with the 3-test Bash repro; the 4th (Write/Edit) test landed after filing, not yet included in a follow-up report. **Practical consequence, effective immediately: every "harness-enforced" Guardrails claim across every guarded agent in this team — all three destructive-ops guards, all eight doc-write allow-list guards, the one broad-write deny-list guard — is currently unverified, and actively disconfirmed on the two mechanisms tested, under Auto Mode, in every execution context tried.** Not yet tested: the Write/Edit + Task-dispatched-subagent combination specifically (all 4 tests covered 3 of the 4 matcher×context cells) — very likely shares the gap given the pattern, not confirmed. **Next steps:** (1) monitor for an Anthropic response to the filed report; (2) treat this as the standing state of the team's enforcement model — Auto Mode being off is the only known workaround, untested/not decided; (3) fill the last untested cell (Write/Edit, subagent-dispatched) if a clean answer is ever needed before Anthropic responds. |
 
 ### K-001 — Re-verify standards against live docs
@@ -153,17 +153,34 @@
 ### K-024 — Two out-of-remit documents still describe the pre-K-023 marker
 - **Status:** 🔵 proposed
 - **Priority:** medium
-- **Rationale:** K-023 closed the stamp's property list (delivered 2026-09-08, see `history.md`),
-  which changed what a `:CpgBuildInfo` marker can contain after a rebuild. Two documents cobb does
-  not own still describe the old shape. `docs/plans/cpg-agent-adoption-graph.md` §1.1 tabulates the
-  marker's properties and never included the five hand-authored keys, so it now understates the
-  stamp. `docs/manuals/graph-ontology.md` carries the same field list for readers, and separately
+- **Rationale:** K-023 landed in three mechanisms over one day (see `history.md`, U45→U47), ending
+  at a **map assignment**: `SET b = {…the eight pipeline fields…}` replaces the marker's whole
+  property set, so everything the stamp did not write is gone after any rebuild. Two documents cobb
+  does not own still describe an earlier shape.
+  **Read this before executing it — the obvious edit is the wrong one.** An earlier version of this
+  ticket said §1.1 "never listed the five hand-authored keys and now understates what a stamp
+  writes", which would send an implementer to add `MARKER_ORIGIN`, `MARKER_WRITTEN_AT`, `NOTE`,
+  `STATUS` and `RENAMED_FROM` to a schema table. **The stamp has never written those five.** They
+  were `= NULL` clearing assignments for exactly one commit and are now deleted; a stamp writes
+  **eight** properties and no others. Adding them to the schema of the document this arc cited as
+  the ownership argument for *erasing* them would be a net loss.
+  What §1.1 actually owes is (a) those eight, (b) full 40-char OIDs rather than "short SHA", (c) the
+  fact that its code block shows the superseded `SET b.X = …` concatenation, and its "omitted, not
+  set to null/empty-string" rationale now describes an omission achieved by a `NULL` entry inside a
+  replacing map, and (d) the one genuinely new schema-level fact: **the property set is closed by
+  construction**, so `:CpgBuildInfo` cannot be extended by any writer other than the stamp — a
+  hand-authored key survives only until the next rebuild, silently.
+  `docs/manuals/graph-ontology.md` carries the same field list for readers — plus, per the gate, a
+  `§1` cell telling a reader a marker "can carry more than eight" and never saying a rebuild takes
+  them — and separately
   the gate's **P4-3**: its FAQ decision list keys entirely on the `PROVENANCE` literal and never on
   `MARKER_ORIGIN`, so a hand-authored marker classifies as a pipeline stamp for a manual-only
   reader — the exact case `freshness.md`'s bullet 1 was re-gated to catch.
 - **Proposed change:** route both via `teco` — the plan doc to `architect` (as a header pointer or
   successor, since it has been executed against and the convention forbids an in-place amendment),
-  the manual to `tico` (field list + one sentence at the head of the FAQ absent-cases list:
+  the manual to `tico` (field list, corrected to eight and to "closed by construction — a rebuild
+  silently erases anything else, including a human's note"; + one sentence at the head of the FAQ
+  absent-cases list:
   *whatever `PROVENANCE` says, a marker with a `MARKER_ORIGIN` property was written or repaired by
   a human — read the whole node before trusting any other field*).
 - **Notes:** flagged rather than written because `docs/plans/` is `architect`'s and `docs/manuals/`
