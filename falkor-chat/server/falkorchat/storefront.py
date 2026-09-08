@@ -326,9 +326,16 @@ class TurnState:
     the participant's index in the waiting line, which is a property of the
     *map* rather than of one entry, so `Storefront.turn_payload` derives it on
     every read and nothing stores it. S9a stored it here, taken once at
-    booking: a plausible integer that was wrong at every `turn_workers` but 1
-    and never counted down (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`,
-    P17-2, reproduced).
+    booking — `len(self._turns)`, *how many accepted turns were unfinished
+    when this one arrived*. That counts the **running** turn as a place in the
+    line, which §5.2 excludes, so it was wrong at **every** `turn_workers`
+    rather than at some of them: at `turn_workers=1` three arrivals read
+    `[0, 1, 2]` where the definition gives `[0, 0, 1]`, and at the delivered
+    default of 4 — where it is loudest — a fifth arrival first in line was
+    told `4`. It never counted down either
+    (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-2, reproduced;
+    `## Pass 20`, P20-3 for the "right at `turn_workers=1`" claim this
+    replaces, which was never true past the first arrival).
     """
 
     state: str = TURN_IDLE
@@ -448,6 +455,20 @@ class Storefront:
         self._executor = ThreadPoolExecutor(
             max_workers=turn_workers, thread_name_prefix=TURN_THREAD_PREFIX
         )
+        # Executor **lifecycle** — is the pool still accepting work — set
+        # once by `shutdown_turns()` and never cleared. Deliberately a plain
+        # attribute under **no lock**, because monotonic `False → True` makes
+        # a stale `True` unreachable and leaves only a stale `False`, which
+        # lands on the safe side either way: the submit is attempted, and it
+        # either succeeds (the executor has not stopped yet, and
+        # `shutdown(wait=True)` drains the turn) or is refused before it
+        # queues anything (`concurrent/futures/thread.py:170`), costing a
+        # leaked booking rather than the orphaned live turn `enqueue_turn`'s
+        # docstring rules out. This is **not** S10's reset-all stop-intake
+        # gate, which goes up and comes back down; one attribute doing both
+        # jobs would make reset-all refuse turns permanently
+        # (`docs/plans/salesperson-ui.md` §5.1's S9 row).
+        self._turns_shutdown = False
         # The product-image manifest (§4.7), built from the served directory
         # **once** — `None` until then. See `build_image_manifest`.
         self._image_manifest: dict[str, str] | None = None
@@ -782,8 +803,12 @@ class Storefront:
         """Clear that participant's slot **only if `booking` still owns it**;
         `True` when it did and the entry is gone.
 
-        Two callers, one operation: the request thread undoing a reservation
-        that never reached a worker, and `_run_turn`'s `finally`. The ownership
+        Two **roles**, one operation — and more call sites than roles: the
+        request thread undoing a reservation that never reached a worker
+        (a failed `services.post_message` in `storefront_api.py`, and
+        `enqueue_turn`'s pre-submit shutdown check), and the worker clearing
+        its own slot in `_run_turn`'s `finally` (which `set_turn_state`'s
+        `TURN_IDLE` branch delegates to). The ownership
         condition is on **both**, not on the worker alone — between a
         reservation and a failed write, a `clear_all_turns()` plus a second-tab
         post can install a different booking in that slot, and an unconditional
@@ -851,10 +876,12 @@ class Storefront:
         does four things and then answers — `reserve_turn` (the `409`
         single-flight check and the booking as one atomic step, in the route,
         *before* the message write), `services.post_message`, this submit, and
-        the response, **releasing the reservation on any path that never
-        reaches a worker**. Everything after the submit is `_run_turn`, on a
-        worker. `docs/plans/salesperson-ui.md` §5.1's S9 row decides that
-        placement rather than leaving it open, for three reasons that are not
+        the response, **releasing the reservation only where nothing was
+        queued — which is decided by a place in the sequence, before the
+        submit, never inside its `except`** (spelled out below). Everything
+        after the submit is `_run_turn`, on a worker.
+        `docs/plans/salesperson-ui.md` §5.1's S9 row decides that placement
+        rather than leaving it open, for three reasons that are not
         preferences:
 
         1. `services.start_workflow_run` is **synchronous and drives the whole
@@ -894,32 +921,105 @@ class Storefront:
         (`docs/reviews/salesperson-ui-impl.md` `## Pass 18`, P18-1). The
         exit-time fact that *is* true is a cost, not a hang: those joins mean a
         worker blocked on the turn lock delays process exit for as long as the
-        lock is held, which argues for holding it briefly. Two turns booked
-        microseconds apart may therefore reach workers in the other order,
-        which §5.2's definition accommodates by construction. Reversal trigger,
-        narrow: only if §5.2 stops defining the line by booking order — and the
-        answer then is a change to how work reaches the pool, not this lock.
+        lock is held, which argues for holding it briefly. Beneath that, an
+        application lock held across two `concurrent.futures` internals is a
+        lock-ordering hazard whose present benignity is an implementation
+        detail rather than a contract. Two turns booked microseconds apart may
+        therefore reach workers in the other order, which §5.2's definition
+        accommodates by construction. Reversal trigger, narrow — because only
+        one of the three legs is contingent: only if §5.2 stops defining the
+        line by booking order, and the answer then is a change to how work
+        reaches the pool, not this lock. **Nothing else reopens it**: the
+        exit-cost and lock-ordering legs do not depend on §5.2 at all.
 
-        **A refused `submit` releases the reservation.** `RuntimeError` after
-        `shutdown_turns()`, or `can't start new thread` under exhaustion, would
-        otherwise leave a booking no worker will ever clear: that participant
-        `409`-refused for the life of the process, every reset-mine of theirs a
-        `503 quiesce_timeout` (`docs/reviews/salesperson-ui-impl.md`
-        `## Pass 17`, P17-3, reproduced). The release is ownership-checked like
-        every other map write, so it cannot delete a booking that replaced this
-        one in the meantime.
+        **Where a refusal releases the booking is a place in the sequence, not
+        a property of the exception.** This method reads `_turns_shutdown`
+        **before** it calls `submit`; on a set flag it releases the booking —
+        ownership-checked like every other map write, so it cannot delete a
+        booking that replaced this one in the meantime — and raises
+        `RuntimeError`, having submitted nothing. That closes P17-3's shape:
+        a booking left behind by a post that raced `shutdown_turns()` would
+        `409`-refuse that participant for the life of the process and answer
+        every reset-mine of theirs `503 quiesce_timeout`
+        (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-3). **Past
+        that check the `except` around `submit` logs at `ERROR` — naming the
+        participant and the booking's ordinal — and re-raises, releasing
+        nothing.**
+
+        **Why, read out of `submit` itself** (CPython 3.12.3,
+        `/usr/lib/python3.12/concurrent/futures/thread.py`, read in the change
+        that wrote this): `submit` (`:164-180`) does `self._work_queue.put(w)`
+        at `:178` and only *then* `self._adjust_thread_count()` at `:179`,
+        whose `t.start()` (`:202`) is where `RuntimeError("can't start new
+        thread")` originates; `_worker`'s loop (`:69-95`) pulls from that same
+        shared queue and never checks who put an item on it. So an exhaustion
+        refusal raises with the work item **already queued**, and any worker —
+        one that exists now, or one a later `submit` starts — will run it.
+        Releasing the booking there manufactures a live turn that
+        `turn_in_flight` reports as `False`: §4.4 measure 1a's corrupted
+        invariant, the one `_await_quiesce` exists to make impossible, through
+        a third door (`## Pass 20`, P20-1). Reading the flag *inside* the
+        `except` would get the direction right and still be strictly weaker —
+        a `shutdown_turns()` landing between the flag write and the executor
+        actually stopping leaves a submit that queues its item, fails, sees a
+        set flag and releases.
+
+        **What that accepts, derived from `submit` rather than listed.**
+        Everything before the queue put is three guarded raises —
+        `BrokenThreadPool` (`:167`), the executor's own `_shutdown` (`:170`),
+        the interpreter's global `_shutdown` (`:172-173`) — plus the two
+        object constructions at `:175-176`, which fail only on `MemoryError`.
+        Those are the refusals that genuinely queue nothing, and wherever the
+        flag was not already set this design **leaks** a booking on them
+        instead of releasing it. That is the intended trade: a leaked booking
+        is P17-3 — minor, one participant, self-limited — while an orphaned
+        live turn breaks measure 1a's invariant for everyone `_await_quiesce`
+        serves. The residue is smaller than P17-3's own statement of it:
+        `_broken` is written in exactly one place, `_initializer_failed`
+        (`:206-208`), reached only from `_worker` (`:77`) when an `initializer`
+        raises, and this executor is constructed with `max_workers` and
+        `thread_name_prefix` only (see `__init__`), so `BrokenThreadPool` is
+        unreachable here. *(Inference rather than observation, and marked as
+        such: reading `:172-173` as "the interpreter is exiting" rests on
+        `_python_exit` being the writer that matters, not on an enumeration of
+        every writer of that module global. It changes the size of the
+        residue, never the direction of the trade.)*
+
+        Discriminating on the exception type is not an option in any case:
+        both shapes are a bare `RuntimeError` (`:170` and `:202`), and the only
+        thing that differs is CPython's message string.
+
+        *(Tombstone, 2026-09-08 — plan v1.30. Through v1.29 this paragraph said
+        a refused `submit` releases the reservation on **any** exception, and
+        named thread exhaustion as one of the two shapes it repaired. The rule
+        was and is right — a reservation that reaches no worker must not
+        survive — and the mechanism printed beside it was false on that second
+        shape, which queues before it fails. The mechanism was replaced rather
+        than the rule weakened: the release moved ahead of `submit`, where
+        "nothing was queued" is knowable. Do not restore the unconditional form
+        on rediscovering that a leaked booking is bad — it is, and it is the
+        lesser of the two.)*
 
         Returns the `Future` so a caller can wait on the turn. Nothing in the
         request path does — the response is sent without it, which is the
         point — and the map entry, not the future, is what the `409` gate and
         both quiesce drains read.
         """
+        if self._turns_shutdown:
+            self.release_turn(participant.participant_id, booking)
+            raise RuntimeError(
+                "cannot schedule new turns after shutdown_turns()"
+            )
         try:
             return self._executor.submit(
                 self._run_turn, ctx, participant, posted, booking
             )
         except BaseException:
-            self.release_turn(participant.participant_id, booking)
+            _log.exception(
+                "storefront turn submit refused, booking left standing "
+                "(participantId=%s, ordinal=%s)",
+                participant.participant_id, booking.ordinal,
+            )
             raise
 
     def _run_turn(
@@ -948,8 +1048,9 @@ class Storefront:
         replays as the `CONTEXT:` block on every LLM iteration, so it survives
         the whole conversation rather than only its first turn.
 
-        The `finally` clears the map entry whatever happened, which is what
-        re-opens the composer and releases the `409` gate. A turn that died
+        The `finally` releases the map entry **when this booking still owns
+        it**, which is what re-opens the composer and releases the `409` gate;
+        the paragraph below is why that condition is there. A turn that died
         without a reply is indistinguishable here from one that completed; the
         dead-turn signal §5.2 specifies (`turn.lastTurn`) is not built yet.
 
@@ -994,7 +1095,15 @@ class Storefront:
         "message with no reply" §4.4 measure 1a refuses to create, one layer
         down. Idempotent — a second call on an already-shut-down executor
         returns immediately.
+
+        **`_turns_shutdown` is set before the executor is told to stop, and
+        that order is the contract.** `enqueue_turn` reads the flag *before*
+        it calls `submit`, so a post racing this call is refused without ever
+        entering `submit` rather than from inside it — which is what keeps the
+        refusal on the side where nothing was queued (§5.1's S9 row, and
+        `enqueue_turn`'s own docstring for why the distinction is load-bearing).
         """
+        self._turns_shutdown = True
         self._executor.shutdown(wait=True)
 
     # ── participant state (§5.2 `GET /shop/api/state`) ──────────────────────

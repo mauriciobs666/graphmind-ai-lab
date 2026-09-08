@@ -3841,12 +3841,21 @@ def test_the_alias_reader_covers_every_binding_form_the_grammar_has():
 # out for the same reason `SERVICE_LAYER_REACH_TODAY` is: a `/shop/api` route
 # executes this module, so a `raise` added to it has to come back here.
 #
-# All seven are `StorefrontError` subclasses, and that is what makes
+# Seven of the eight are `StorefrontError` subclasses, and that is what makes
 # `INHERITED_HANDLERS`' excuses true of this file rather than merely stated for
 # it: `test_every_storefront_error_subclass_is_mapped_to_a_response` already
 # holds that every member of that family is caught by a route or answered by a
 # classified handler, so none of them can arrive at a handler this table
 # excuses — and none of them is a bare `HTTPException`.
+#
+# The eighth, `RuntimeError`, is outside that family and so carries its own
+# written reason in `NON_FAMILY_RAISES` — which the subset assertion below is
+# written to *require* rather than to tolerate, exactly as the `Services` leg
+# has required since `RuntimeError` entered `SERVICE_RAISES_TODAY`. It is
+# `Storefront.enqueue_turn`'s refusal on a set `_turns_shutdown`
+# (`docs/plans/salesperson-ui.md` v1.30 §5.1's S9 row), and it is **not a new
+# response**: the identical class reached the identical place out of
+# `concurrent.futures`' own `submit` before that flag existed.
 #
 # `ResetStateUnknownError` is here because the reader resolves the factory:
 # `reset_participant` writes `raise self._reset_state_unknown(...)`, and the
@@ -3855,6 +3864,7 @@ STOREFRONT_RAISES_TODAY = frozenset({
     "DemoNotSeededError", "QuiesceTimeoutError", "UnknownParticipantError",
     "UnscopedParticipantError", "ResetStateUnknownError",
     "UnknownOrderError", "OrderTransitionRefusedError",
+    "RuntimeError",
 })
 
 
@@ -3908,11 +3918,28 @@ REPOSITORY_RAISES_TODAY = frozenset({"MemberIdCollisionError"})
 # "instead of silently shadowing it (DEF-1)".
 NON_FAMILY_RAISES: dict[str, str] = {
     "RuntimeError": (
+        "Raised in two of the four scopes, for two different reasons, and "
+        "neither is a participant-facing outcome. (1) "
         "`services._dispatch_write`'s two invariant alarms — an unrecognised "
         "write-status row, and a retry loop that did not converge. Neither is "
         "a state a request can put the write path into: both mean the "
         "repository returned a row shape the service layer's own contract "
-        "rules out, which is a defect report, not a response"
+        "rules out, which is a defect report, not a response. (2) "
+        "`Storefront.enqueue_turn`'s refusal on a set `_turns_shutdown` — a "
+        "post that raced the lifespan's `shutdown_turns()`. That one **is** "
+        "request-reachable, and it is deliberately unchanged rather than "
+        "newly introduced: before the pre-submit flag existed the same class "
+        "reached the same place out of `concurrent.futures`' `submit` "
+        "(`cannot schedule new futures after shutdown`), uncaught by the "
+        "route, and plan v1.30's S9 row keeps it that way — *the shutdown "
+        "path raising exactly as it does today*. Measured through "
+        "`POST /shop/api/messages` with a `RuntimeError` out of "
+        "`enqueue_turn`: a bare `500 text/plain 'Internal Server Error'`, the "
+        "same answer it gave before the fix. What is pinned is the "
+        "bookkeeping, not the status — the booking is released and the raise "
+        "propagates "
+        "(`test_a_submit_refused_after_shutdown_releases_the_reservation`, "
+        "`tests/test_storefront.py`)"
     ),
     "MemberIdCollisionError": (
         "`repository.ensure_participant`'s refusal to provision a participant "
@@ -4034,8 +4061,10 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
     Four scopes are pinned. Inside the router: exactly the two envelope
     classes. `storefront_api.py` whole: those two, plus the three raises that
     happen at wiring or boot time and can never be on a request path.
-    `storefront.py` whole: `STOREFRONT_RAISES_TODAY`, seven `StorefrontError`
-    subclasses and nothing else. The reached-and-closed methods of the two
+    `storefront.py` whole: `STOREFRONT_RAISES_TODAY` — seven `StorefrontError`
+    subclasses plus `enqueue_turn`'s post-`shutdown_turns()` `RuntimeError`,
+    which is outside the family and therefore carries its own reason in
+    `NON_FAMILY_RAISES`. The reached-and-closed methods of the two
     collaborators: `SERVICE_RAISES_TODAY` and `REPOSITORY_RAISES_TODAY`, whose
     members outside both families carry a written reason in
     `NON_FAMILY_RAISES` — asserted as an equality, so neither an extended
@@ -4097,7 +4126,14 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
         klass.__name__ for klass in _subclasses(storefront.StorefrontError)
     }
     service_family = {klass.__name__ for klass in _subclasses(ServiceError)}
-    assert set(STOREFRONT_RAISES_TODAY) <= storefront_family
+    # ...the family half for `storefront.py`, minus whatever carries its own
+    # written reason instead. Subtracting `NON_FAMILY_RAISES` is not a hole:
+    # the equality below is what makes a reason mandatory *and* non-stale, so
+    # a name leaves this assertion only by entering that one — the same
+    # two-way door the `Services` leg has had since `RuntimeError` entered it.
+    assert (
+        set(STOREFRONT_RAISES_TODAY) - set(NON_FAMILY_RAISES)
+    ) <= storefront_family
     # ...and an **equality**, not a subset, over all four scopes at once: a
     # raise outside both families has to carry its own reason, and a reason
     # left behind by a raise that is gone reddens the same assertion.
@@ -4731,12 +4767,20 @@ def test_a_fifth_arrival_behind_four_running_turns_is_first_in_line(turn_app):
     `turn_workers=4`: a fifth arrival behind four *running* turns reports
     `queued`/**`0`**, not `4`.
 
-    This is the case S9a got wrong in production configuration and right in
-    every test it ran, because every one of them drove `turn_workers=1` — the
-    only setting at which "how many accepted turns were unfinished when this
-    one arrived" and "how many are ahead of me" agree
-    (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-2, reproduced at
-    `{"state": "queued", "queuePosition": 4}`).
+    This is the case S9a got wrong in production configuration and *least
+    visibly* wrong in the tests it ran, every one of which drove
+    `turn_workers=1`. The two readings — "how many accepted turns were
+    unfinished when this one arrived" and "how many are ahead of me" — never
+    agree past the first arrival, at **any** `turn_workers`: the stored number
+    counted the **running** turn as a place in the line and §5.2 excludes it,
+    so three arrivals at `turn_workers=1` read `[0, 1, 2]` where the delivered
+    definition reads `[0, 0, 1]` (which is why
+    `test_three_participants_queue_behind_one_worker_and_complete_in_order`
+    changed with the fix). What `workers=1` hid was the *size* of the error,
+    not its presence; `workers=4` is where it is loudest, and that is this
+    test (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-2,
+    reproduced at `{"state": "queued", "queuePosition": 4}`; `## Pass 20`,
+    P20-3).
 
     It is also the argument for `turn_workers` not appearing on the wire: a
     running turn occupies a worker rather than a place in the line, so the

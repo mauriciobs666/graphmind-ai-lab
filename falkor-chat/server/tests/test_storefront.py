@@ -1003,6 +1003,18 @@ def test_a_storefront_with_no_trigger_still_queues_and_clears_the_turn(
     assert [r for r in caplog.records if r.name == "falkorchat.storefront"] == []
 
 
+def _refuses_to_start(self):  # noqa: ANN001, ANN201, ARG001
+    """Stands in for `threading.Thread.start` under thread exhaustion.
+
+    CPython raises exactly this from `t.start()` inside
+    `ThreadPoolExecutor._adjust_thread_count`
+    (`/usr/lib/python3.12/concurrent/futures/thread.py:202`) when the OS
+    refuses a thread — the one shape that cannot be reproduced honestly by
+    exhausting the machine inside a unit test.
+    """
+    raise RuntimeError("can't start new thread")
+
+
 def _blocking_trigger():
     """A trigger that parks its worker inside `maybe_trigger` until released.
 
@@ -1159,6 +1171,117 @@ def test_a_submit_refused_after_shutdown_releases_the_reservation(services):
     assert shop.turn_in_flight("p-ada") is False
     # and the participant is postable again rather than locked out
     assert shop.reserve_turn("p-ada") is not None
+
+
+def test_a_submit_that_raises_after_it_queued_the_item_leaves_the_booking_standing(
+    services, caplog
+):
+    """P20-1, and the half a shutdown-shaped test cannot reach.
+
+    `ThreadPoolExecutor.submit` puts the work item on the shared queue
+    (`/usr/lib/python3.12/concurrent/futures/thread.py:178`) **before** it
+    calls `_adjust_thread_count` (`:179`), whose `t.start()` (`:202`) is the
+    only place `RuntimeError("can't start new thread")` comes from. So a
+    thread-exhaustion refusal raises with the turn already queued, and the
+    worker that is busy right now will run it as soon as it is free —
+    `_worker`'s loop (`:69-95`) never checks who put an item on that queue.
+    Releasing the booking on that shape manufactures a live turn the map says
+    is not there: `turn_in_flight` `False` under a running turn, which is
+    §4.4 measure 1a's invariant and the state `_await_quiesce` exists to make
+    impossible (`docs/reviews/salesperson-ui-impl.md` `## Pass 20`, P20-1,
+    reproduced end to end against the real `Storefront`).
+
+    **Both halves are asserted, and neither alone is the test.** The booking
+    must still be standing at the instant `enqueue_turn` raises — that is what
+    goes red on an implementation that releases from a bare `except` around
+    `submit` — *and* the queued item must then run and clear its own booking in
+    `_run_turn`'s `finally`, which is what makes the standing booking a
+    correct hand-off rather than the leak P17-3 describes. A test that read
+    only the end state would pass against the defect: both implementations
+    end idle.
+
+    Mutation-tested: reverting `enqueue_turn` to release inside the `except`
+    reddens this test on the `turn_in_flight(...) is True` line, and leaves
+    `test_a_submit_refused_after_shutdown_releases_the_reservation` green —
+    which is the whole reason this case exists beside it.
+    """
+    caplog.set_level(logging.DEBUG, logger="falkorchat.storefront")
+
+    class _BlockingRecorder:
+        """Parks the first turn until released; records every turn it ran."""
+
+        def __init__(self):
+            self.entered = threading.Event()
+            self.gate = threading.Event()
+            self._lock = threading.Lock()
+            self.seen: list[str] = []
+
+        def maybe_trigger(self, ctx, **kwargs):  # noqa: ANN001, ANN003, ARG002
+            with self._lock:
+                self.seen.append(kwargs["msg_id"])
+            self.entered.set()
+            self.gate.wait(timeout=IMMEDIATE_S)
+
+    trigger = _BlockingRecorder()
+    # Two workers, one of them busy: `_adjust_thread_count` then has no idle
+    # thread to reuse and room to make a new one, so it reaches `t.start()` —
+    # which is the only line the patch below can intercept.
+    shop = _storefront(services, trigger=trigger, turn_workers=2)
+
+    def record(pid):
+        return ParticipantRecord(
+            participant_id=pid, display_name=pid, language="en",
+            channel_id=f"ch-{pid}", thread_id=f"th-{pid}", joined_at=1,
+        )
+
+    def posted(pid, msg_id):
+        return {"msgId": msg_id, "threadId": f"th-{pid}", "text": "hi",
+                "role": "member", "mentions": [AGENT]}
+
+    busy = shop.reserve_turn("p-a")
+    first = shop.enqueue_turn(
+        shop.context_for("p-a"), record("p-a"), posted("p-a", "m-a"), busy
+    )
+    assert trigger.entered.wait(timeout=IMMEDIATE_S), "no worker is busy"
+
+    booking = shop.reserve_turn("p-b")
+    assert booking is not None
+    original_start = threading.Thread.start
+    try:
+        threading.Thread.start = _refuses_to_start  # type: ignore[method-assign]
+        with pytest.raises(RuntimeError):
+            shop.enqueue_turn(
+                shop.context_for("p-b"), record("p-b"), posted("p-b", "m-b"),
+                booking,
+            )
+    finally:
+        threading.Thread.start = original_start  # type: ignore[method-assign]
+
+    # Half one: the booking is standing at the instant the refusal propagates.
+    assert shop.turn_in_flight("p-b") is True
+    assert shop.turn_state("p-b").booking == booking
+    # ...and the refusal is on the record, with the two identifiers an operator
+    # needs to tie it to a turn — this log is the only trace it leaves.
+    refusals = [
+        r for r in caplog.records
+        if r.name == "falkorchat.storefront" and "submit refused" in r.getMessage()
+    ]
+    assert len(refusals) == 1
+    assert refusals[0].levelno == logging.ERROR
+    assert "p-b" in refusals[0].getMessage()
+    assert f"ordinal={booking.ordinal}" in refusals[0].getMessage()
+
+    # Half two: the item that was queued anyway runs on the freed worker and
+    # clears its own booking, so the standing entry was a hand-off, not a leak.
+    trigger.gate.set()
+    first.result(timeout=IMMEDIATE_S)
+    deadline = time.monotonic() + IMMEDIATE_S
+    while shop.turn_in_flight("p-b") and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert shop.turn_in_flight("p-b") is False
+    assert shop.turn_state("p-b") == IDLE_TURN
+    # the turn really ran; it was not cleared by some other path
+    assert trigger.seen == ["m-a", "m-b"]
 
 
 def test_shutdown_turns_is_idempotent(services):
