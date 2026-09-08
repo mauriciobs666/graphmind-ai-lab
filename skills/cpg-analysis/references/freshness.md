@@ -15,7 +15,8 @@ MATCH (b:CpgBuildInfo)
 RETURN b.BUILT_AT AS builtAt, b.PARSED_AT AS parsedAt,
        b.PROVENANCE AS provenance, b.SOURCE_ORIGIN AS sourceOrigin,
        b.SOURCE_COMMIT AS sourceCommit, b.SOURCE_TREE AS sourceTree,
-       b.SOURCE_DIRTY AS sourceDirty, b.SOURCE_PATH AS sourcePath
+       b.SOURCE_DIRTY AS sourceDirty, b.SOURCE_PATH AS sourcePath,
+       b.MARKER_ORIGIN AS markerOrigin
 ```
 
 **Expected shape.** Zero or one row — this is a singleton marker node, not a
@@ -30,10 +31,13 @@ per-build history.
 | `sourceCommit` | The repo's `HEAD` when the source was captured, *before* the parse. A **full 40-char OID**. |
 | `sourceTree` | The tree object of `sourceOrigin` at `sourceCommit` — a **blob** when the source is a single file — i.e. the exact identity of that content. Also a full OID. Can be absent while `sourceCommit` is present: see check 2. |
 | `sourceDirty` | `git status --porcelain -- <sourceOrigin>` was non-empty: modified **or untracked** files under the source. Scoped — it says nothing about the rest of the repo. |
-| `provenance` | How the four `source*` values were obtained: `parse-root` (the parse root is itself tracked) · `source-origin` (the parse root is a staged copy; the builder named the real tracked directory) · `none` (no git identity — the three commit/tree/dirty fields are deliberately absent, not missing). |
+| `provenance` | How the four `source*` values were obtained. Three values are **pipeline stamps**: `parse-root` (the parse root is itself tracked) · `source-origin` (the parse root is a staged copy; the builder named the real tracked directory) · `none` (no git identity — the three commit/tree/dirty fields are deliberately absent, not missing). A fourth, **`hand-backfilled`**, is *not* a pipeline stamp: a human derived the `source*` values after the build and `graph-dba` wrote them in. Spelled as its own word, not a variant of the other three, so a skimmer — or a scripted `startswith("source-origin")` — cannot quietly treat it as a pre-parse capture. See the fifth bullet below. |
+| `markerOrigin` | Non-null **exactly when a human wrote this marker** rather than the pipeline; the pipeline never sets it. This — not `builtAt`, not `provenance` — is the reliable hand-authored tell, because a hand-authored marker may carry a real timestamp *and* a real provenance value. Non-null → read the whole node (`MATCH (b:CpgBuildInfo) RETURN b`) for `NOTE`/`STATUS` before acting on any other field. |
 
-- **One row with a `provenance` value** → a stamp from the current pipeline;
-  read it with the table above.
+- **One row, `provenance` a pipeline value (`parse-root`, `source-origin`,
+  `none`) and `markerOrigin` null** → a stamp from the current pipeline; read it
+  with the table above. A non-null `provenance` does **not** on its own mean
+  "pipeline" — check `markerOrigin` too, and see the fifth bullet.
 - **One row, `provenance` null *and* `builtAt` a real timestamp** → a
   **pre-2026-09-07 stamp**. Still usable, but its `sourceCommit`/`sourceDirty`
   were derived *after* the load, repo-wide — see Limits before acting on either.
@@ -41,7 +45,10 @@ per-build history.
   is gated on the timestamp; that shape is the fourth bullet below, and it
   carries no `sourceCommit`/`sourceDirty` at all.)
 - **Zero rows** → either the graph predates this feature (built before M4; no
-  backfill was done — see the rollout note in the graph-dba design doc) or the
+  marker was ever back-filled *into a graph that had none* — see the rollout
+  note in the graph-dba design doc; that is a different act from the
+  `hand-backfilled` provenance in the fifth bullet, which fills in the *fields*
+  of a marker that already existed) or the
   pipeline run that built it failed its own verification and never reached the
   stamping step. Treat this the same as "stale": you have no freshness signal
   at all, which is itself a reason for caution, not an error to debug.
@@ -50,21 +57,47 @@ per-build history.
   provenance is genuinely unrecoverable but the graph is still worth keeping —
   a pre-M4 graph renamed rather than rebuilt, say. The tell is `BUILT_AT`
   holding the literal string `unknown`, chosen so it fails ISO parsing
-  **loudly** rather than being coalesced into a plausible date. Such a marker
-  explains itself in properties the query above doesn't return, so read the
-  whole node (`MATCH (b:CpgBuildInfo) RETURN b`) — expect `STATUS`,
-  `MARKER_ORIGIN`, `RENAMED_FROM` and a `NOTE`. Treat it as **"stale, and not
+  **loudly** rather than being coalesced into a plausible date. `markerOrigin`
+  is non-null, as it is on **every** hand-authored marker — there are two such
+  shapes now and the unparseable `builtAt` distinguishes only this one, so read
+  `markerOrigin` whenever it exists: a marker can be hand-authored and still
+  carry a real `BUILT_AT`. Such a marker explains itself in properties the query
+  above doesn't return, so read the whole node
+  (`MATCH (b:CpgBuildInfo) RETURN b`) — expect `STATUS`, `RENAMED_FROM` and a
+  `NOTE`. Treat it as **"stale, and not
   rebuildable on demand"**: you have provenance but no date, so checks 0 and 1
   are unavailable and **check 2 must not be run** (see Limits). Live example:
   `cpg_deprecated_salesperson`, the CPG of the retired Streamlit `salesperson/`
   app whose source now sits at `deprecated/salesperson/`.
+- **One row, `provenance` = `hand-backfilled`** → a **hand-backfilled marker**:
+  a real `builtAt` and real `source*` values, but derived *after* the build by a
+  human and written in by `graph-dba` — not captured by the pipeline before the
+  parse. `markerOrigin` is non-null; `parsedAt` is **absent**, because it is
+  genuinely unrecoverable after the fact and was not invented. The literal says
+  a human filled the fields in, not that they filled them in well, so trust it
+  only as far as its own `NOTE` earns: read the whole node and check what the
+  note says each value was derived from and how it was verified. When the note
+  establishes that, checks 0 and 2 are both available (see check 0's gate);
+  check 1 falls back to `builtAt`. **Live example:** `cpg_falkorchat`,
+  backfilled 2026-09-08, whose `NOTE` cites `cpg/.cpg-artifacts/MANIFEST.txt`
+  and a `diff -rq` of the staged parse root against the committed tree.
 
 **Judging staleness (a suggestion, not a rule).** Three escalating checks,
 strongest first — the threshold is yours to set given the task at hand:
 
-0. **Content identity — a yes/no, when you can get it.** Requires
-   `provenance` in (`parse-root`, `source-origin`), a `sourceTree`, and
-   `sourceDirty = false`. Run from the repo root:
+0. **Content identity — a yes/no, when you can get it.** Requires a
+   `sourceTree`, `sourceDirty = false`, a `sourceOrigin` that `git` understands,
+   and a `provenance` you can stand behind: `parse-root` or `source-origin`
+   unconditionally, or **`hand-backfilled` once you have read that marker's
+   `NOTE`** and it records where `sourceTree` came from and how it was checked.
+   That last clause is **per-marker, not per-literal** — `hand-backfilled` only
+   asserts that a human filled the fields in, so a backfilled marker whose note
+   doesn't establish the derivation stays out of this check. `cpg_falkorchat`'s
+   note does establish it, and the evidence is *stronger* than a routine
+   `source-origin` stamp's: its staged parse root was verified byte-identical to
+   the committed tree (`diff -rq`, exit 0, recorded in
+   `cpg/.cpg-artifacts/MANIFEST.txt`), where a `source-origin` stamp only implies
+   as much. Run from the repo root:
 
    ```bash
    git rev-parse --verify "HEAD:./<sourceOrigin>"   # compare to sourceTree
@@ -91,10 +124,14 @@ strongest first — the threshold is yours to set given the task at hand:
    `provenance: source-origin` the parse root was a pruned copy of
    `sourceOrigin`, and whether that copy was faithful when staged is a build
    question — `joern-cpg`'s `SKILL.md` owns it — not one this marker can settle.
+   A `hand-backfilled` marker admitted by the clause above inverts that: it is
+   admitted precisely because its note settles the staging question with
+   evidence a stamp doesn't carry.
    And when `sourceDirty = true` the parse also swallowed uncommitted work, so
    `sourceTree` describes only the committed part: skip check 0 and treat the
    graph as matching no commit exactly.)*
-1. **Raw age.** `now − parsedAt` (fall back to `builtAt` on an older marker).
+1. **Raw age.** `now − parsedAt` (fall back to `builtAt` on an older marker, and
+   on a hand-backfilled one, which has no `parsedAt`).
    There's no universal cutoff — a week-old CPG on a slow-moving component may
    be fine; an hour-old one on a component under active refactor might already
    be behind. Weigh it against how much the task leans on structural
@@ -139,7 +176,11 @@ signal, not the threshold.
   actually landed. (`redis-cli` exits 0 on an error reply, so before that a
   rejected stamp was silent and an `--append` build could leave the *previous*
   marker standing over new content. A marker whose `builtAt` predates content
-  you can see in the graph is that shape.)
+  you can see in the graph is that shape.) **A hand-authored marker is subject
+  to the same rule**, and nothing exempts it: the next successful `--load`
+  overwrites it wholesale, `NOTE` and `MARKER_ORIGIN` included. A backfilled
+  marker is therefore provisional — it stands exactly until the graph is
+  rebuilt, and whoever rebuilds inherits none of its reasoning.
 - **`sourcePath` is a parse root, not a git path.** It is what Joern was
   pointed at — frequently a pruned scratch copy staged to keep `.venv` and
   friends out of the parse. Running it straight through `git log` doesn't
@@ -179,11 +220,17 @@ signal, not the threshold.
   never `sourcePath`, which on these markers is an absolute path into a
   gitignored staged copy and returns a silent zero. Anchor on `sourceCommit`
   (`<sourceCommit>..HEAD -- <the real dir>`), not on `parsedAt`, which these
-  markers also lack. **Live example:** `cpg_falkorchat` carries exactly this
-  marker — keys `BUILT_AT`, `SOURCE_PATH`, `SOURCE_COMMIT`, `SOURCE_DIRTY` and
-  nothing else, with both git values hand-corrected afterwards to the parsed
-  truth; its real directory is `falkor-chat/server`.
-- **A hand-written marker has no date, and check 2 fails silently against it.**
+  markers also lack. **No loaded graph carries this shape any more** (checked
+  2026-09-08). `cpg_falkorchat` did — keys `BUILT_AT`, `SOURCE_PATH`,
+  `SOURCE_COMMIT`, `SOURCE_DIRTY` and nothing else, with both git values
+  hand-corrected afterwards to the parsed truth — until it was hand-backfilled
+  on 2026-09-08; it now carries ten keys and `PROVENANCE = hand-backfilled`, so
+  it is the fifth bullet's shape, not this one. The shape stays documented
+  because reloading a pre-fix export re-creates it; when you meet one, the real
+  directory is the one thing you must establish yourself (for `cpg_falkorchat`
+  it was `falkor-chat/server`).
+- **A hand-written marker — the `builtAt = unknown` shape, not the
+  hand-backfilled one — has no date, and check 2 fails silently against it.**
   When `builtAt` is the literal `unknown`, `git log --oneline --since=unknown --
   <path>` **does not error**: git accepts the unparseable approxidate and
   returns **zero commits with exit 0** — verified 2026-09-02, and reproduced
