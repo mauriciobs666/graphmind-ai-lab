@@ -159,7 +159,11 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U42a** — 6 sites in `freshness.md` + the check-0 gate decision | `cobb` | `a1cfcb25341f0b0bb` | **delivered — committed `81b43cd`** (+66/−19) | **9** sites, not 6; `MARKER_ORIGIN` added to the documented query; shape set = **5** | `analyst` Pass 4 (pairwise) — **in flight** | 80k tok / 28 tools |
 | **U42b** — 3 sites in the manual; `cpg_falkorchat` is no longer a live pre-fix example | `tico` | `a4e2b1a2f544180d8` | delivered — held for pairwise gate | `b47c84a` — **5** sites, shape set = **6** | `analyst` Pass 4 (pairwise) — **in flight** | 76k tok / 19 tools |
 | **Pass 4** — the pairwise shape-set gate: do `freshness.md` and `graph-ontology.md` teach the same set of marker shapes? | `analyst` (**resumed** — wrote m1–m5 and Passes 1–3; the only party holding both sides) | `a98a748e49a559ead` | **accepted — committed `d4214c3`**. `freshness.md` **needs changes** (1 major), `graph-ontology.md` **approve with suggestions**. **Shape sets are two partitions of one set, no omission either way** — proved by enumerating each document's *classification surface* and walking both orderings against the two live markers. **P4-1: the fifth-generation false mechanism, inside the fourth's own fix** | `docs/reviews/cpg-provenance-stamp.md` `## Pass 4` | — (is the gate) | 238k tok / 14 tools |
-| **U45** — P4-1 / K-023: make the hybrid **impossible** (clear the 5 hand-authored keys) or **detectable** (`markerWrittenAt`) — a fork I handed to `cobb` rather than settling | `cobb` | `a1cfcb25341f0b0bb` (resumed) | in-flight (dispatched 2026-09-08). Two uncommitted `freshness.md` hunks ride in its commit; the file is **knowingly self-contradictory in the tree** until it lands | `skills/joern-cpg/scripts/git-provenance.sh`, `freshness.md`, K-023 | `analyst` Pass 5 (`cpg-provenance-stamp.md`) | — |
+| **U45** — P4-1 / K-023: the hybrid fork | `cobb` | `a1cfcb25341f0b0bb` (resumed) | **delivered — committed `29538d6`**. Chose **impossible** and **reverted its own discriminator hunks**; rejected a middle option I had not listed (partition by key) because *the real data crosses that boundary*. Property list stated **CLOSED**, invariant named, tombstone applied. Net **−1** line. P4-2 fixed in passing | `git-provenance.sh`, `SKILL.md`, `freshness.md`, K-023 closed / K-024 filed | `analyst` Pass 5 | 160k tok / 11 tools |
+| **U47a** — execute the mechanism the fix rests on: does `SET b.X = NULL` **remove** the key or store a null? | `graph-dba` | `a5825012b34ab9a9b` (resumed) | in-flight (dispatched 2026-09-08) | throwaway graph, 13 keys → new stamp → `keys(b)` read-back; `GRAPH.LIST` diff | — (is the check) | — |
+| **U47b** — P4-5: the marker's `NOTE` cites a superseded gate, and must now say it is **build-scoped** | `graph-dba` | `a5825012b34ab9a9b` (same) | in-flight | `cpg_falkorchat`'s `NOTE` | — | — |
+| **U48** — K-024: `docs/plans/cpg-agent-adoption-graph.md` §1.1's property table understates the stamp (executed against → header pointer or successor, not an in-place edit) | `architect` | — | queued | `docs/plans/cpg-agent-adoption-graph.md` | `analyst` | — |
+| **U49** — K-024 + gate P4-3: the manual's FAQ classifies on the `PROVENANCE` literal alone, so a hand-authored marker reads as a pipeline stamp | `tico` | — | queued | `docs/manuals/graph-ontology.md` | `analyst` + `qa-engineer` split by claim | — |
 | **U42c** — kaizen bookkeeping, retraction handled | `cobb` | `a1cfcb25341f0b0bb` | **accepted — committed `20b8770`**. The false learning **was never written** — zero graph writes when the retraction landed. Reached P4-1 **independently** from `git-provenance.sh:138` minutes earlier, and verified my quoted docstring instead of taking it | K-022 rewritten (4→5 instances), K-023 filed, 3 `:KaizenEntry` | — (raw capture) | 122k tok / 18 tools |
 | **U46** — P4-5: `cpg_falkorchat`'s own `NOTE` cites a superseded version of the check-0 gate | `graph-dba` | — | queued (fold into the next marker touch — not worth a graph write of its own) | the live marker's `NOTE` | — | — |
 | **U42c** — the kaizen bookkeeping my own brief fenced off: `:KaizenEntry` + `claude/cobb/kaizen/history.md` | `cobb` | `a1cfcb25341f0b0bb` (resumed) | in-flight — **retraction sent mid-run**: one of the two learnings I suggested is false (P4-1), asked to clear/correct it if already written | `kaizen_team` + `claude/cobb/kaizen/history.md` | — (raw capture; `cobb` distills) | — |
@@ -170,7 +174,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | **accepted** | `d1eaa7f`+`d01f22e`+`94c1578` — plan **v1.29** | `analyst` Pass 19 → **approve** (`8418a9f`) | 528k tok / 77 tools |
 | **U43** — retract the false CPython deadlock fact from `kaizen_team` before it is promoted | `cobb` | `a69330f81cf6048ae` | delivered | `de8b5ac` — 2 entries cleared, promoted split by audience | `analyst` (prompt edit) — queued | 118k tok / 28 tools |
 | **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7, P18-6 | `coder` | `a31456adeff4788ea` | **delivered — committed `699ef52`** (7 files, +1032/−136). Suite **2639** teco-verified solo (baseline 2629, +10 net); `ws:acme` 871 intact; `reference` re-seeded. **Tripwire re-measured by me, not taken on report** — injected reach → guard red, file restored to md5. 18 mutations, 1 survivor (M10) which was a **missing test**, now red against it | `storefront.py`, `storefront_api.py`, both test files, `config.py`, `SERVER.md`, `HISTORY.md` | `analyst` **Pass 20 (fresh)** — in flight; then `qa-engineer` | 286k tok / 114 tools |
-| **Pass 20** — gate S9a-fix. **Fresh by design**: Pass 17 *prescribed* reserve-then-write, so its author judging this diff is producer-self-review one seat over (the U24 precedent) | `analyst` (**fresh**) | `afc3c09ccd5b50340` | in-flight (dispatched 2026-09-08) | `docs/reviews/salesperson-ui-impl.md` `## Pass 20` | — (is the gate) | — |
+| **Pass 20** — gate S9a-fix. **Fresh by design**: Pass 17 *prescribed* reserve-then-write, so its author judging this diff is producer-self-review one seat over (the U24 precedent) | `analyst` (**fresh**) | `afc3c09ccd5b50340` | in-flight — **killed by a session rate limit seconds in, wrote nothing; resumed 12:29 with a state-recovery brief and a 5-item priority order** | `docs/reviews/salesperson-ui-impl.md` `## Pass 20` | — (is the gate) | — |
 | **S9f** — `STOREFRONT_QUIESCE_S`'s docs describe a quiesce that S9a made live | `tico`/`coder` (tbd) | — | queued (held behind Pass 17) | `config.py` + `docs/SERVER.md` prose | `analyst` (fold into Pass 17 re-check) | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
 | **S9c** — the dead-turn latch `turn.lastTurn` and its lifecycle | `coder` | — | queued (behind S9b) | `storefront.py`, `storefront_api.py`, tests | `analyst` | — |
@@ -3861,3 +3865,71 @@ memory and there was no `entryId` to clear. Three entries were filed instead, an
 kept the *corrected mechanism* alongside the meta-lesson — declining to file only the moral, on the
 grounds that losing the mechanism is the same trade that produced the defect. That is the right
 instinct and it is the opposite of the one I had when I suggested the learning.
+
+## U45: the fork came back decided, and the middle option I missed was the interesting part
+
+`cobb` chose **impossible** over **detectable** and reverted its own two hunks — the discriminator it
+had already half-built. I had told it doing both was probably the worst option; it agreed, and gave a
+better reason than mine. I argued from prose economy. It argued from **ownership**:
+`docs/plans/cpg-agent-adoption-graph.md` §1.1 defines `CpgBuildInfo` as *the build stamp*, and the
+five hand-authored keys were introduced ad hoc by `graph-dba` and were never in that schema. The node
+has one owner and one subject, and the stamp should say so. That is an argument from what the thing
+*is*, and it survives a reader who doesn't share my taste in documentation.
+
+**It also considered and rejected a middle option I had not listed**, which is the part worth
+recording. Clear the three marker-accountability keys (`MARKER_ORIGIN`, `MARKER_WRITTEN_AT`, `NOTE`)
+and preserve `STATUS`/`RENAMED_FROM` as graph-scoped facts that outlive a rebuild. It is genuinely
+tempting — `STATUS: retired-component` *is* still true after a rebuild, which is exactly the
+counter-example I had raised. It rejected it because **the real data crosses that boundary**:
+`cpg_deprecated_salesperson`'s `NOTE` carries graph-identity content *and* marker-accountability
+content in one string, so a partition by key would be a partition the content violates. And it would
+trade one holdable invariant for a two-bucket rule that a future annotator must classify into
+correctly, losing data silently when they get it wrong — which is the clause-stacking shape K-022 is
+about.
+
+It also corrected my reasoning on my own open question. I had guessed a rebuild rightly drops a human
+`NOTE` because the explanation becomes obsolete. It said no: `STATUS: retired-component` isn't
+obsolete after a rebuild, the component is still retired. The reason is that **the node is
+build-scoped by design** and those facts have a durable home in `docs/`. The graph copy was always a
+convenience, never the record. Right conclusion, wrong reason — which is the thing this chain has
+been failing at for five generations, caught this time before it was written down.
+
+The tombstone it wrote contains a line I would not have had the nerve to write and am glad it did:
+*"this rule was documented one commit before it was true."*
+
+## The one line the fix rests on has still never been executed
+
+`cobb` named it rather than letting it pass: that `SET b.X = NULL` **removes** a property instead of
+storing a null is carried by the docstring's 2026-09-07 verification of the *same construct*, not
+re-run against these five keys. Everything else in `29538d6` is verified; this is inference from a
+neighbouring case.
+
+Normally that is fine. Here it is not, and the reason is this chain's own record: five consecutive
+defects of one shape, two of them inside the fix for the previous one, and one where a marker took the
+literal string `HEAD:./src` as a tree OID because `git rev-parse` echoes its argument back on stdout
+when it cannot resolve a rev. A careful static reading has approved a provably non-functional
+mechanism in this coordination before. So U47a goes to `graph-dba` with one specific instruction that
+is the whole point of the check: read back `keys(b)` and confirm the five are **gone from the key
+list**, not present-and-null — `RETURN b.NOTE` answering null cannot distinguish those two, and that
+distinction *is* the claim.
+
+I asked for the `GRAPH.LIST` before/after diff explicitly rather than trusting cleanup, because
+`graph-dba`'s own U41 lesson is that the only sound completeness evidence for graph cleanup is that
+diff, never recall — three scratch graphs survived a "zero survivors" claim scoped to the two keys
+their author remembered creating.
+
+## A rate limit took Pass 20 seconds in, and the discipline held again
+
+Same failure as the pair that died earlier: killed before writing a line, review file still ending at
+Pass 19, nothing lost. Everything it was reviewing was already committed as `699ef52`. That is twice
+in one session that commit-on-verify has meant an agent vanishing costs zero work, and it is the
+strongest argument I have for not batching integration to the end of a chain.
+
+Resumed on its own transcript with a state-recovery brief rather than a cold re-brief — what moved
+underneath it (`HEAD` has advanced three times from an unrelated chain and a concurrent session), the
+instruction to anchor on `699ef52` and never on the working tree, and an explicit **five-item priority
+order** with permission to deliver a partial pass with its scope stated. I would not normally impose an
+order on a reviewer, but the constraint that killed it is still live, and a Pass 20 covering the first
+three items beats an all-or-nothing attempt that dies in the same place. First on that list is the
+`lastTurn` foreclosure question, because S9c is queued directly behind it and a late answer is the
+expensive one.
