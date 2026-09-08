@@ -1,6 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.22 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.23 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+
+2026-09-08 — v1.23: the plan gate's `## Pass 12` (`docs/reviews/small-model-benchmarking.md`, `5a018a4`) closed in full — 0 blockers, 3 majors, 2 minors, 1 nit, none carried — in the same revision as the `e162ba9` re-baseline: **P12-1** returns **Table F's third residual to package-wide**, the one of the nine v1.22 narrowed whose reach *was* the check, since its `→ 0` is the `DistributionSummary` tag set's one-home claim and reads 0 file-scoped with a second home standing in `report.py`; **P12-2** bounds the scoping default — the enumerating commands are the completeness instrument, a residual's scope is its edit's, and a one-home or identity residual's scope is its purpose's; **P12-3** replaces that default's prospective-binding premise with convention 1's record argument, impl-gate F2 and F3 being landed residuals that did not hit their targets; **P12-4** retires *the narrowing costs no evidence* (a claim about *befores*, vacuous for a 0 → 0 pair) for the two-file probe and the 31-line-insertion survival, and states what the narrowing does trade; **P12-5** and **P12-6** give the scope claim and the *never re-widened* reversal one home each, across two and four sites. **Re-baseline to `e162ba9`** (the N4 fix; `stats.py` 1 418 → 1 449, 577 green): **Tables H and F** re-point, the **six** landed tables do not, Table H's commands move `bound_by` 14 → 15 and `envelope_arms` 21 → 22 and its five `stats.py` pins by 31, Table F lands on one commit at last, and **all eleven residuals re-run unchanged** — every `stats.py` line pin below the insertion broke and no exact-text residual did, which §7 rule 5(b) now records as that form's largest test.
 
 2026-09-08 — v1.22: the plan gate's `## Pass 11` (`docs/reviews/small-model-benchmarking.md`, `68b0d14`) closed in full — 0 blockers, 1 major, 2 minors, none carried. **P11-1:** v1.20's repair of residuals 2 and 3 removed the introduced local and thereby widened their match to any subscript of `SUPPORT_DIFF_PROPORTIONS` **anywhere in the package** — in the same revision that mandated a second consumer of it, since P10-2 requires `report.py` to reach the constant and `-F` matches through the `stats.` qualifier, making the count **2** against a target of **1** on the explicit-branch rendering. Both are re-scoped to `modelbench/stats.py`, as Table C's first two are scoped a file each. Generalised at **§7 rule 5(b): a residual is scoped to the files its own site rows name; a wider scope is an exception the table states** — the reason being that **a pattern's specificity and its scope's breadth are substitutes**, so shortening a pattern obliges narrowing its scope. Written as a **default rather than a caution**, because this is the seventh residual to fail on a faithful edit and the first introduced by the fix for the sixth; it binds **prospectively**, so the two unlanded tables — **H and F** — are scoped to their rows' files in this revision, all nine reading the same *before* values under either scope. **P11-2:** Table H's residual block re-points to `93b0e42`, ending a two-baselined table that DC-12's own re-run claim had already contradicted. **P11-3:** the gloss names its four sites by **test-function name**, because this table inserts Rule 4a's assertions into that very file between the second and fourth of them — and convention 2's rationale is corrected with it: a site list is stable in a site's **identity**, not in its **line number**. Also placed: DC-12's gap paragraph is dated by design, and the mechanism that makes that safe — the round-end re-run — is now stated.
 
@@ -2933,15 +2935,44 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    residual can read its target on all three)* *(v1.19: `7f865e2` landed the impl-gate Pass 8 fix
    round, so `stats.py` and `report.py` moved again. **All twenty-four were re-run at `7f865e2`** —
    the eighteen at their stated targets and Table H's six at their stated *before* values — and
-   `model-bench/` was byte-identical from `7f865e2` through HEAD when v1.19 was written. **It is not
-   any more** *(v1.21)*: `93b0e42`, the Pass 9 fix round, touched `stats.py` and `tests/test_stats.py`
-   while v1.20 was being written. So the component's current commit is **`93b0e42`**, Table H is
-   re-measured and **re-pointed** to it, and the other seven tables stay pinned where their authors
-   measured them — the rule that settles which of those two things happens is §7 rule 5's, stated
-   there rather than here. What moved under `93b0e42` is exactly one number, Table H's second
-   enumerating command; **all six of Table H's residuals, its first enumerating command, and all ten
-   `stats.py` lines pinned by Tables E, G and H are unchanged across it** — `stats.py` is 1 418 lines
-   before and after, a two-for-two in-place edit. Table H nowhere inherits `5878014`.
+   `model-bench/` was byte-identical from `7f865e2` through HEAD when v1.19 was written, and has moved
+   twice since. **The component's current commit is `e162ba9`** *(v1.23, replacing v1.21's `93b0e42`
+   statement rather than stacking on it)* — the N4 fix, which put two `math.isfinite` guards into
+   `stats.py` and took it from **1 418 to 1 449 lines**, in two blocks — **+12** after `:186` and
+   **+19** after `:262`, in `93b0e42` numbering — so a pin above `:186` does not move, one between
+   the blocks moves by 12, and one below `:262` moves by **31**; and added 123 lines to
+   `tests/test_stats.py`, all of them after `:1423`. Suite 577 green, ruff clean, tree clean at that
+   commit.
+   **What re-points and what does not** — the rule that settles it is §7 rule 5's, stated there
+   rather than here. The **two unlanded tables, H and F, are re-measured and re-pointed** to
+   `e162ba9` in this revision, which is what licenses moving their baselines; the **six landed
+   tables keep the commits their authors measured at** — A and B at `8fc2341`, C, D, E and G at
+   `cc28d48`, each named on its own `Landed:` line — because re-pointing a record falsifies what it
+   says was checked. *(Six, and the derivation is the check: eight tables, six `Landed:`
+   lines. §7 rule 5's v1.21 occasion note counted one more than that, having included Table F, which
+   has not landed; corrected there at v1.23.)*
+   **What moved:** Table H's two enumerating commands — `bound_by` **14 → 15** and `envelope_arms`
+   **21 → 22**, both the same added line in `tests/test_stats.py` — and its five `stats.py` site-row
+   pins, each by exactly 31 (`:382`/`:387` → `:413`/`:418`, `:413` → `:444`, `:896` → `:927`,
+   `:1168` → `:1199`, `:1184-1187` → `:1215-1218`). **What did not move: any residual count in this
+   section that was re-run.** Table H's six read **2 / 0 / 0 / 1 / 1 / 2**, Table F's three read
+   **1 / 1 / 1**, and Table E's landed pair — which pins `_widen`'s body, the function the N4 fix
+   edited — reads **1 / 1**; eleven for eleven, re-run at `e162ba9`. Table F's eight enumerating
+   commands were re-run in the same pass and their counts and per-file shares are **identical to
+   `5878014`**; only the line numbers inside their glosses moved, and those are re-derived on that
+   table. Neither Table H nor Table F inherits `5878014` any more.
+   **The gap this paragraph carries forward, since carrying it once is the whole point:** the six
+   landed tables' line pins are `8fc2341`- and `cc28d48`-era records and are **not re-pointed**,
+   which is correct and is not a defect to fix. The ten `stats.py` lines Tables E, G and H pinned had
+   held unchanged from `cc28d48` through `93b0e42` (v1.21, confirmed there); `e162ba9` is the first
+   commit to move any of them, and it does not move all: Table E's `:261`, its third-form pair's
+   anchor, now sits at `:292`, while Tables C and G's low pins sit above the first inserted block and
+   are unmoved (`:159` and `:162` re-read at `e162ba9`, byte-identical to `cc28d48`). What carries
+   the check where a pin did move is the residual's **count**, which did not, exactly as Table E's
+   own cost paragraph predicted. Also outstanding: §3.3 (iv)'s two
+   `report.py` pins for the refused-family label are `5878014`-era and belong to §3.3, which no
+   revision has re-measured — §4 S1e Table F cites them and, from v1.23, no longer restates their
+   numbers.
    **This paragraph is itself dated, and that is deliberate rather than overlooked** *(v1.22, raised
    by plan-gate Pass 11 as an observation rather than a finding)*: it names a commit, so it goes
    stale the next time an unrelated unit lands, exactly as the gloss it replaced did. What makes it
@@ -3019,11 +3050,15 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    *function* name, and `-ml` §11.10's acceptance items land as exactly such tests with Table C.
    After both re-scopings six residuals reach `tests/`, and the count of eighteen is unchanged —
    neither correction adds or removes a command. *(v1.19 re-runs the sweep over Table H's six and
-   adds nothing to either column: **all six are scoped to `modelbench` alone**, so no assertion can
-   raise one and the question does not arise. The one candidate that would have been exposed was
-   caught at design time and is recorded on the table — a residual over the bare `(-1.0, 1.0)`
-   rather than over `clamp=(-1.0, 1.0)` reads **3** at `7f865e2`, the third line being a sentence in
-   `_widen`'s own docstring explaining why that default is refused. Sixteen of the twenty-four are
+   adds nothing to either column: **none of them reaches `tests/`**, for the scopes stated in that
+   table's residual block and not restated here, so no assertion can raise one and the question does
+   not arise *(v1.23, plan-gate P12-5 — v1.22 re-scoped all six to a single file each and left this
+   parenthetical saying `modelbench` alone; the conclusion survives *a fortiori*, a narrower scope
+   seeing strictly less, but a scope claim gets one home like any other fact, §7 rule 4)*. The one
+   candidate that would have been exposed was caught at design time and is recorded on the table — a
+   residual over the bare `(-1.0, 1.0)` rather than over `clamp=(-1.0, 1.0)` reads **3**, the extra
+   line being a sentence in `_widen`'s own docstring explaining why that default is refused; the
+   count and its commit are that table's. Sixteen of the twenty-four are
    now `modelbench`-scoped and eight reach `tests/`, unchanged.)*
 
    **A third standing sweep joins them at v1.17, and it is the one that catches a residual which is
@@ -3129,10 +3164,15 @@ counts are **matching lines** from `grep -rFc`, not occurrences — for `armKind
 and a table that says only "59" has already lost the distinction that lets a reader reproduce it.
 Every count and line number below was re-run against `5878014` at v1.11; two line numbers v1.10
 carried were wrong by two and are corrected in place — `ARM_KINDS` is `fingerprint.py:137`, the
-membership test is `:162`. **Table H is the exception and states its own baseline** *(v1.19)*: it
-was written after Tables A–E and G had landed, so `5878014` is not reachable for it in any useful
-sense and every count on it was stated against `7f865e2` — **re-pointed to `93b0e42` at v1.21, in the
-revision that re-ran them** (§7 rule 5).)*
+membership test is `:162`. **The two unlanded tables are the exception and each states its own
+baseline, which is now `e162ba9` for both** *(Table H's since v1.19, Table F's since v1.23)*.
+Table H was written after Tables A–E and G had landed, so `5878014` was never reachable for it in
+any useful sense: it was stated against `7f865e2`, re-pointed to `93b0e42` at v1.21 and to
+`e162ba9` at v1.23. **Table F re-points at v1.23** — its residual block had moved to `93b0e42` at
+v1.22 while its enumerating commands still named `5878014`, and v1.23 re-runs all eight of those
+commands and lands the whole table on one commit. Each move is made by the revision that re-ran the
+commands, which is the only thing that licenses it (§7 rule 5). **The six landed tables keep their
+own commits** and are not re-pointed.)*
 
 All eight are **S1-local**: they change `modelbench/` and `tests/` only, and
 all eight are free **only now**, because `results/runs/` does not exist so no stored record is
@@ -3631,7 +3671,8 @@ the rule forbids, and DC-12's count of eighteen is unchanged.
 commands match `_widen`'s return expression as it actually shipped, so an unrelated refactor of that
 expression breaks them — the same bargain Table C's `:159` row strikes for Table G's pair, and the
 same reversal: when the expression is rewritten for another reason the residuals are **re-derived**
-over the new spelling, never re-scoped. What they do **not** rest on is either bound's *value*: the
+over the new spelling, never re-**widened** (§7 rule 5(b)'s third-form trigger, which is where the
+word and its reason live — v1.23, plan-gate P12-6). What they do **not** rest on is either bound's *value*: the
 same two numbers clamp four **unrelated** intervals elsewhere in `modelbench/stats.py`, so the
 obvious narrowing — dropping the operand and matching `max(-1.0,` and `min(1.0,` — is itself a trap:
 at `cc28d48`, on the faithful edit, those two read **1** (`:137`) and **4** (`:100`, `:114`, `:137`,
@@ -3692,18 +3733,23 @@ silent, and both happen on a green run. `RetrievalAggregates.named_metrics()` om
 and `separationRaw`, so `sep_z` reaches no table either.
 
 **Enumerate — eight commands** *(six at v1.12; 7 and 8 are v1.14's and 6 is corrected there)*. All
-re-run against `5878014`, working directory `model-bench/`:
+re-run against **`e162ba9`**, working directory `model-bench/` — **re-pointed from `5878014` at
+v1.23, in the revision that re-ran them** (§7 rule 5), which also ends this table's two-baselining:
+its residual block had moved to `93b0e42` at v1.22 while these commands still named the shipped tree
+three landed rounds behind it. **Every count and every per-file share below is unchanged from
+`5878014`** — the eight are 17, 14, 5, 2, 12, 6, 3, 2 at both commits — and what moved is the line
+numbers inside the glosses, which is what a re-baseline is for:
 
 | # | Command (under `model-bench/`) | Lines | Per file |
 |---|---|---|---|
 | 1 | `grep -rFn scored_outcome modelbench tests --include='*.py'` | **17** | `modelbench/report.py` 6, `tests/test_results.py` 5, `modelbench/results.py` 4, `tests/test_report.py` 2 |
 | 2 | `grep -rFn 'ItemResult(' modelbench tests --include='*.py'` | **14** | `tests/test_report.py` 7, `tests/test_results.py` 5, `tests/conftest.py` 1, `tests/test_cli.py` 1 |
-| 3 | `grep -rFn ContinuousMetric modelbench tests --include='*.py'` | **5** | `modelbench/results.py` 5 (`:79`, `:85`, `:184`, `:369`, `:373`) |
-| 4 | `grep -rn separation modelbench tests --include='*.py'` | **2** | `modelbench/results.py` 2 (`:186`, `:187`) |
+| 3 | `grep -rFn ContinuousMetric modelbench tests --include='*.py'` | **5** | `modelbench/results.py` 5 (`:80`, `:86`, `:185`, `:370`, `:374`) |
+| 4 | `grep -rn separation modelbench tests --include='*.py'` | **2** | `modelbench/results.py` 2 (`:187`, `:188`) |
 | 5 | `grep -rFn named_metrics modelbench tests --include='*.py'` | **12** | `modelbench/results.py` 6, `modelbench/report.py` 3, `tests/test_report.py` 3 |
-| 6 | `grep -rn 'isinstance(.*BinaryMetric' modelbench tests --include='*.py'` | **6** | `modelbench/report.py` 3 (`:211`, `:553`, `:564`), `modelbench/results.py` 3 (`:355`, `:373`, `:584`) |
-| 7 | `grep -rn '\.mean' modelbench --include='*.py'` | **3** | `modelbench/results.py` 2 (`:359`, `:584`), `modelbench/report.py` 1 (`:583`) |
-| 8 | `grep -rn '"continuous"' modelbench --include='*.py'` | **2** | `modelbench/results.py` 2 (`:359`, `:385`) |
+| 6 | `grep -rn 'isinstance(.*BinaryMetric' modelbench tests --include='*.py'` | **6** | `modelbench/report.py` 3 (`:211`, `:570`, `:581`), `modelbench/results.py` 3 (`:356`, `:374`, `:577`) |
+| 7 | `grep -rn '\.mean' modelbench --include='*.py'` | **3** | `modelbench/results.py` 2 (`:360`, `:577`), `modelbench/report.py` 1 (`:600`) |
+| 8 | `grep -rn '"continuous"' modelbench --include='*.py'` | **2** | `modelbench/results.py` 2 (`:360`, `:386`) |
 
 **Commands 4, 6, 7 and 8 are §7 rule 5(a)'s token-free coverage; 7 and 8 are v1.14's and 6 is
 v1.14's correction of its own earlier form** *(plan-gate P7-1; the general rule they instance is §7
@@ -3711,7 +3757,7 @@ rule 5(a)'s attribute-based companion)*. The shipped code that breaks under a th
 member spells **neither** type name: it reads an **attribute** a sibling has (`.mean`) or tests the
 **string** that tags that sibling in storage (`"continuous"`). A name-based sweep cannot reach
 either, which is why v1.13's six commands found one of the three bare-`else` `.mean` readers
-(`report.py:583`) and missed two. **Neither 7 nor 8 alone suffices and their union is exactly the
+(`report.py:600`) and missed two. **Neither 7 nor 8 alone suffices and their union is exactly the
 four sites:** 7 returns the three `.mean` readers and not `_decode`'s tag gate; 8 returns the tag
 gate and the encoder and neither `_index_row` nor the Arms table. Both are scoped to `modelbench`
 because both return **0** lines under `tests/` — re-run today, and stated so the scope reads as a
@@ -3735,7 +3781,7 @@ free to leave open.
   mean**, which is the one confusion `DistributionSummary` exists to make unrepresentable.
 - **`support` is stored, on both continuous types**, as a two-element array `[lo, hi]` or `null`,
   and is decoded back to a `tuple` or to `None`. `_metric_from_dict` reads `d["support"]` with **no
-  `.get` fallback** — the rule `results.py:364-365` already states for `BinaryMetric.unit`, in the
+  `.get` fallback** — the rule `results.py:365-366` already states for `BinaryMetric.unit`, in the
   same function and for the same reason. It is not recomputed by a reader: the scorer that knows
   the metric runs at S2 and the reader runs at compare time, and a support re-derived on read is a
   second home for a declaration. `null` is a **stated value** meaning *unbounded* (`-ml` §3.4 Rule
@@ -3749,7 +3795,7 @@ free to leave open.
   must be). A dict tagged with a `"type"` this build does not know is a record written by a build
   that knew a metric type this one does not, which §3.4.3 already names the genuinely
   uninterpretable case; the raise surfaces as `unparseable` in `load_history`, exactly as
-  `results.py:326`'s own comment says a `KeyError` in `from_dict` does.
+  `results.py:327`'s own comment says a `KeyError` in `from_dict` does.
 - **`benchSchemaVersion` does not bump** *(the plan gate's open question 1, ruled — the one part of
   this decision that is a judgement rather than a transcription)*. The `measures` row below rules
   no bump on an **additive and absent-safe** ground, and that ground does not reach this: retyping
@@ -3768,17 +3814,17 @@ free to leave open.
 |---|---|---|
 | `results.py` — `ItemResult` | gains **`measures: Mapping[str, float]`**, defaulted `{}` and placed before `detail`; a `__post_init__` refusing a metric name present in **both** maps (`MetricKindError`) and any non-finite value (`NonFiniteMeasure`); a **`scored_value(metric) -> float \| None`** sibling with `scored_outcome`'s three states; and **`scored_outcome` raising `MetricKindError`** on a `measures`-resident metric instead of returning `counts[metric] > 0`. Shape, domain, absence rule and the one-map invariant are `-ml` §3.2d's and are not restated here | 1, 2 |
 | `results.py` — `ItemResult.to_dict` / `from_dict` | `measures` round-trips, and a `0.0` round-trips **as `0.0`**; `from_dict` reads a missing key as `{}` — a *reader's* compatibility rule under §3.4.3, never a constructor default. **`benchSchemaVersion` does not bump**: the field is additive and absent-safe, and no stored record exists to migrate | 1 |
-| `results.py:79`, `:85` — `ContinuousMetric`, `MetricValue` | `support: tuple[float, float] \| None` joins `(name, mean, n)`, **required with no default** — `BinaryMetric.unit`'s discipline for `BinaryMetric.unit`'s reason; `MetricValue` gains `DistributionSummary` | 3 |
+| `results.py:80`, `:86` — `ContinuousMetric`, `MetricValue` | `support: tuple[float, float] \| None` joins `(name, mean, n)`, **required with no default** — `BinaryMetric.unit`'s discipline for `BinaryMetric.unit`'s reason; `MetricValue` gains `DistributionSummary` | 3 |
 | `results.py` — new `DistributionSummary` | `(name, median, p10, n, unit, support)`, frozen. `-ml` §5.2 publishes a **median and a p10** and neither is a mean, so `ContinuousMetric` cannot carry them and one bare float carries neither | 3, 4 |
-| `results.py:184-187` — `RetrievalAggregates` | `separationRaw` and `separationZ` change from `float \| None` to `DistributionSummary \| None`; `mrr` keeps its type and its construction site states `support=(0.0, 1.0)` | 3, 4 |
+| `results.py:185-188` — `RetrievalAggregates` | `separationRaw` and `separationZ` change from `float \| None` to `DistributionSummary \| None`; `mrr` keeps its type and its construction site states `support=(0.0, 1.0)` | 3, 4 |
 | `results.py` — `RetrievalAggregates.named_metrics()` | returns `separationRaw` and `separationZ` as well. **This one line is what makes `sep_z` reach a table at all** — today it reaches none, whatever the scorer computes | 5 |
-| `results.py:369`, `:373` — the metric (de)serialisers | `ContinuousMetric(name=…, mean=…, n=…)` gains `support`, reads it with no `.get` (above) and breaks **loudly** on construction, being required; `_metric_from_dict`'s two-branch `if` on the tag (`:363`) becomes a dispatch through the **tag mapping**, so a `"distribution"` record decodes as one; the `isinstance(value, (BinaryMetric, ContinuousMetric))` dispatch at `:373` gains `DistributionSummary`, and **that line carries no `separation` token** | 3, 6, 8 |
-| `results.py:354-359` — `_metric_to_dict`, the encoder *(v1.14)* | the bare **`else`** splits: a `DistributionSummary` encodes to the six-key `"distribution"` dict above, and the surviving `"continuous"` branch gains `"support"`. `:359` reads `m.mean` on whatever arrives, so today it **raises `AttributeError`** the first time a `DistributionSummary` is stored — loud, but not until the first store, which is S3's | 7, 8 |
-| `results.py:385` — `_decode`'s tag gate *(v1.14)* | the literal `{"binary", "continuous"}` becomes the tag mapping's keys and an unknown tag raises. **This is the site that fails silently**: a third tag falls through both `if`s today and is returned as a raw `dict`, so a field typed `DistributionSummary \| None` holds a `dict` and every later reader is wrong about a type nothing checked | 8 |
-| `results.py:584` — `_index_row`'s metrics cell *(v1.14)* | the same bare `else`, `f"{m.name}={m.mean:.4f}"` — **`AttributeError`**, so `index.csv` cannot be written for an embedder run at all. A `DistributionSummary` renders **`{name}=p50 {median:.4f}`**; the `p50` label is not decoration, because the cell's continuous form is a bare number and a median printed like a mean is §3.5's defect one column over. **p10 is not in this cell** — the index is a per-run locator and the Arms table is where a distribution prints — and the cell is a **per-arm** figure, so §3.8.1's no-`sep_raw`-difference prohibition is untouched | 6, 7 |
+| `results.py:370`, `:374` — the metric (de)serialisers | `ContinuousMetric(name=…, mean=…, n=…)` gains `support`, reads it with no `.get` (above) and breaks **loudly** on construction, being required; `_metric_from_dict`'s two-branch `if` on the tag (`:364`) becomes a dispatch through the **tag mapping**, so a `"distribution"` record decodes as one; the `isinstance(value, (BinaryMetric, ContinuousMetric))` dispatch at `:374` gains `DistributionSummary`, and **that line carries no `separation` token** | 3, 6, 8 |
+| `results.py:355-360` — `_metric_to_dict`, the encoder *(v1.14)* | the bare **`else`** splits: a `DistributionSummary` encodes to the six-key `"distribution"` dict above, and the surviving `"continuous"` branch gains `"support"`. `:360` reads `m.mean` on whatever arrives, so today it **raises `AttributeError`** the first time a `DistributionSummary` is stored — loud, but not until the first store, which is S3's | 7, 8 |
+| `results.py:386` — `_decode`'s tag gate *(v1.14)* | the literal `{"binary", "continuous"}` becomes the tag mapping's keys and an unknown tag raises. **This is the site that fails silently**: a third tag falls through both `if`s today and is returned as a raw `dict`, so a field typed `DistributionSummary \| None` holds a `dict` and every later reader is wrong about a type nothing checked | 8 |
+| `results.py:577` — `_index_row`'s metrics cell *(v1.14)* | the same bare `else`, `f"{m.name}={m.mean:.4f}"` — **`AttributeError`**, so `index.csv` cannot be written for an embedder run at all. A `DistributionSummary` renders **`{name}=p50 {median:.4f}`**; the `p50` label is not decoration, because the cell's continuous form is a bare number and a median printed like a mean is §3.5's defect one column over. **p10 is not in this cell** — the index is a per-run locator and the Arms table is where a distribution prints — and the cell is a **per-arm** figure, so §3.8.1's no-`sep_raw`-difference prohibition is untouched | 6, 7 |
 | `report.py:211` — DC-10's selector | widens past `isinstance(metric, BinaryMetric)` to DC-10's third arithmetic and its kind cross-check | 6 |
-| `report.py:564-584` — the Arms table | the `else` splits: a `ContinuousMetric` renders `n=…, mean, —` as it does today; a `DistributionSummary` renders its median and p10 and **no interval**. **Carries no type name**, reached only through `:564`'s head | 6 |
-| `report.py:606-777` — the family loop and the two renderers downstream of it | pass 1 resolves each member's kind and branches, per §4 S1's `compare_report` block; `scored_outcome` is not called on a continuous member, and now raises if it is. **The refused-family label's two sites — `:767`'s filter and `:744-751`'s headline fallback — are §3.3 (iv)'s, decided there and cited here** *(v1.14, plan-gate P7-3)* | 1, 6 |
+| `report.py:581-601` — the Arms table | the `else` splits: a `ContinuousMetric` renders `n=…, mean, —` as it does today; a `DistributionSummary` renders its median and p10 and **no interval**. **Carries no type name**, reached only through `:581`'s head | 6 |
+| `report.py:623-789` — the family loop and the two renderers downstream of it | pass 1 resolves each member's kind and branches, per §4 S1's `compare_report` block; `scored_outcome` is not called on a continuous member, and now raises if it is. **The refused-family label's two sites — a family filter and a headline fallback — are §3.3 (iv)'s, decided there and cited here, and their line numbers live there and not here** *(v1.14, plan-gate P7-3; the numbers dropped at v1.23, since restating a pin §3.3 owns is what would have put this row and that section on two different trees under this revision's re-baseline — §7 rule 4)* | 1, 6 |
 | `tests/test_results.py`, `tests/test_report.py`, `tests/conftest.py`, `tests/test_cli.py` | the 14 `ItemResult(` sites **do not break** and mostly do not change; what changes is the `scored_outcome` assertions, which gain the raising case, and the fixtures DC-13 needs | 1, 2 |
 
 **Why a second map and not a widened `counts`** — `-ml` v1.15 §3.2d rules it, and the reason is worth
@@ -3791,35 +3837,64 @@ rewrites — stated as commands rather than as a table so they can be copied and
 
 - `grep -nF 'separationRaw: float | None' modelbench/results.py` → **1 → 0**
 - `grep -nF 'separationZ: float | None' modelbench/results.py` → **1 → 0**
-- `grep -nF '{"binary", "continuous"}' modelbench/results.py` → **1 → 0** *(v1.14)*
+- `grep -rFn '{"binary", "continuous"}' modelbench --include='*.py'` → **1 → 0** *(v1.14; package-wide, and the breadth is the check — v1.23)*
 
-*(**Scoped from `modelbench` to the one file all three of their site rows name** — v1.22, §7 rule
-5(b)'s scoping default, applied here because this is the other table that has not landed. All three
-read **1** under either scope at `93b0e42`, re-run, so the narrowing costs no evidence; what it buys
-is immunity to a later `report.py` or `stats.py` line that happens to spell one of these three
-strings, which is the exposure that cost Table H three revisions.)*
+*(**Residuals 1 and 2 are scoped to the one file their site rows name; residual 3 is package-wide,
+and it is the exception §7 rule 5(b)'s scoping default provides for** — v1.23, plan-gate P12-1,
+correcting v1.22, which narrowed all three together and inverted the third one's purpose. All three
+*before* values are re-run at **`e162ba9`** and read **1**. **Why the third is different, in the
+table's own terms.** For residuals 1 and 2 a `report.py` or `stats.py` line spelling
+`separationRaw: float | None` would be **noise** — the annotation can exist nowhere but
+`results.py`, so the wide scope bought nothing and could only misfire, which is what the default is
+for. For residual 3 such a line is **the defect this table is closing**: the `DistributionSummary`
+decision above gives the tag set **one home** — the module-level mapping `_metric_from_dict`
+dispatches on and `_decode` gates on — precisely so the two functions cannot disagree about how many
+metric types exist (§7 rule 4), and the `report.py:211` row widens a **kind cross-check**, which is
+where a second transcription of the tag set would plausibly land. Package-scoped, a `→ 0` is a
+statement that the tag set has one home; `results.py`-scoped, it reads 0 with a second home standing
+one file over. Measured at `e162ba9`: `{"binary", "continuous"}` occurs **exactly once** in
+`modelbench` **and** in `tests` — `modelbench/results.py:386`, the site row's own line — so the wide
+form costs nothing today and buys the one-home check. The alternative that also works and was
+rejected for costing a row: keep all three narrow and add a fourth, package-wide residual for the
+same result.)*
 
-The first two are `modelbench/results.py:186` and `:187` today and are unwritable after the retype,
-so zero is earned. The third is `:385`'s tag gate — the silent site — and it is the one that
+*(**What the narrowing on 1 and 2 actually trades, stated because v1.22 asserted it cost nothing and
+that was established of the wrong half** — v1.23, plan-gate P12-4. Equal *before* values under
+either scope say only that no **stated** number moved; a residual's claim is its **after** value,
+and after the narrowing that assertion ranges over one file instead of the package. For these two it
+is not a loss, on the reason above and not on the equality. What backs the **form** — an exact-text
+residual scoped to a file — is two measurements rather than an argument, and neither is restated
+here: the gate's synthetic two-file probe, stated on Table H, and the `e162ba9` insertion, stated at
+§7 rule 5(b)'s exact-text-versus-line-pin paragraph.)*
+
+The first two are `modelbench/results.py:187` and `:188` today and are unwritable after the retype,
+so zero is earned. The third is `:386`'s tag gate — the silent site — and it is the one that
 **cannot be passed by the half-application that ships the silence**: an implementer who adds a
 `"distribution"` branch to both (de)serialisers and leaves `_decode` alone still has that
-two-element literal, and the residual is 1. Its limit, stated because a residual that is trusted
-past its reach is worse than none: it is also zero for a *third transcribed tag* in place of the
-mapping, which is behaviourally identical to the derivation once an unknown tag raises — and the
+two-element literal, and the residual is 1. **Its reach and its limit, both stated because a
+residual that is trusted past its reach is worse than none** *(the reach half is v1.23's, plan-gate
+P12-1)*. What the package-wide scope reaches, and a `results.py`-scoped one did not, is a **second
+copy of this two-tag literal in another file** — `report.py`'s kind cross-check being the plausible
+one — so the `→ 0` is what makes the one-home decision above *checkable* rather than merely stated.
+What it does not reach is a *third transcribed tag* written in place of the mapping
+(`{"binary", "continuous", "distribution"}` contains no substring the command matches, so that reads
+zero too), which is behaviourally identical to the derivation once an unknown tag raises — and the
 raise is what **DC-13(f)** asserts. **Command 7 is not a residual and `.mean` never becomes zero:**
 `ContinuousMetric` keeps its `mean` and the encoder keeps reading it, so the token survives by
 design (§7 rule 5(b)) — a residual over it would be a trap that fails on a faithful edit. What
 stands in place of a residual over `measures` — which **adds** and retires nothing — is
 the **type system on one side and DC-13 on the other**: `ContinuousMetric.support` is required with
-no default, so `results.py:369` breaks loudly; and `scored_outcome`'s refusal is a *behaviour*, which
+no default, so `results.py:370` breaks loudly; and `scored_outcome`'s refusal is a *behaviour*, which
 no count can see, so DC-13(a) asserts it directly. Saying so is §7 rule 5(b)'s requirement, not an
 apology for a missing number.
 
 **One edit this table needs is deliberately not in its rows.** `DecidedBy` gains a third member,
-`"paired-bootstrap"`, and that literal is `stats.py:62` — a line **Table D owns and enumerates**
-(`grep -rFn DecidedBy modelbench tests --include='*.py'` → **3** lines, all `modelbench/stats.py`:
-`:62`, `:610`, `:882`). Cited here rather than duplicated, so one line has one owner and the two
-tables cannot drift on it (§7 rule 4).
+`"paired-bootstrap"`, and that literal is the `DecidedBy` alias's declaration — a line **Table D
+owns and enumerates**, with the command, the count and the three line numbers on that table and not
+restated here *(the numbers dropped at v1.23: Table D is landed and its pins are a record at
+`cc28d48`, while this table now states its counts at `e162ba9`, so a copy here would have put one
+row on two trees)*. Cited rather than duplicated, so one line has one owner and the two tables
+cannot drift on it (§7 rule 4).
 
 **Table G — the bootstrap's quantile levels become parameters, because a `k > 1` continuous family
 has nowhere else to take its correction** *(new in v1.13, from `-ml` v1.16 §3.4 Rule 8's two engine
@@ -3982,17 +4057,18 @@ any §3.8 pack moves when it lands.
 `DecidedBy` rather than a bare `tuple[str, str]`; and `SUPPORT_DIFF_PROPORTIONS: tuple[float, float]
 = (-1.0, 1.0)`, the support as **one constant in one place**, which is the note's own
 *derivable-from-what-the-function-already-holds* category and not a new parameter. Both names are
-free at `7f865e2` — `grep -rFn SUPPORT_DIFF_PROPORTIONS modelbench tests --include='*.py'` → **0**,
+free at `e162ba9` — `grep -rFn SUPPORT_DIFF_PROPORTIONS modelbench tests --include='*.py'` → **0**,
 `grep -rFn BoundBy …` → **0**, re-run.
 
 **Enumerate — two commands, because the token the edit is *about* reaches none of the tests it
-breaks** *(both re-run at **`93b0e42`** — re-pointed from `7f865e2` at v1.21 **because this revision
-re-ran them**, which is the only thing that licenses moving a stated baseline; §7 rule 5)*:
+breaks** *(both re-run at **`e162ba9`** — re-pointed from `93b0e42` at v1.23, and from `7f865e2`
+before that at v1.21, **each time by the revision that re-ran them**, which is the only thing that
+licenses moving a stated baseline; §7 rule 5)*:
 
 | # | Command (under `model-bench/`) | Lines | Per file |
 |---|---|---|---|
-| 1 | `grep -rFn bound_by modelbench tests --include='*.py'` | **14** | `modelbench/stats.py` 5, `tests/test_stats.py` 6, `modelbench/report.py` 2, `tests/test_report.py` 1 |
-| 2 | `grep -rFn envelope_arms modelbench tests --include='*.py'` | **21** | `tests/test_stats.py` 16, `modelbench/stats.py` 5 |
+| 1 | `grep -rFn bound_by modelbench tests --include='*.py'` | **15** | `modelbench/stats.py` 5, `tests/test_stats.py` 7, `modelbench/report.py` 2, `tests/test_report.py` 1 |
+| 2 | `grep -rFn envelope_arms modelbench tests --include='*.py'` | **22** | `tests/test_stats.py` 17, `modelbench/stats.py` 5 |
 
 Command 2 is rule 5(a)'s token-free coverage and is not a flourish: the arm clamp lives at two
 `_widen` call sites that carry **no** `bound_by`, and command 2's `tests/test_stats.py` lines are
@@ -4002,8 +4078,9 @@ sites are named by test function, not by line** *(v1.22, plan-gate P11-3)*:
 `test_the_first_published_envelope_anchor_is_unmoved_by_the_closed_form`,
 `test_neither_printed_bound_is_ever_tighter_than_either_arm` and
 `test_both_arms_are_widened_about_the_same_point_by_the_same_factor`. Every other line the command
-returns in that file is an import, a `parametrize` id, docstring prose or a precondition-raise call
-that Rule 4a does not touch. *(Plan-gate P10-1 hid in this sentence — the third of the four is its
+returns in that file is an import, a `parametrize` id or source entry, docstring prose, or a call
+made to assert a **refusal** — a precondition raise or N4's non-finite guard — none of which Rule 4a
+touches. *(Plan-gate P10-1 hid in this sentence — the third of the four is its
 row. And the line numbers had to go for the reason that row is name-pinned: **this table inserts
 into this file**, landing Rule 4a's ten assertions beside the envelope tests they extend, which is
 between the second and fourth of these four — so a line-pinned gloss is stale-by-construction the
@@ -4015,8 +4092,10 @@ assertions", which was wrong twice; plan-gate P10-5 corrected it to "fifteen of 
 twenty, of which four are call sites", which was right and went stale **within the hour**, because
 `93b0e42` added one matching line and the pair became sixteen of twenty-one. The command was right
 on all three occasions. What kept breaking was the **count restated beside it**, which is §7 rule 4's
-one-home rule applied to a number. The four call sites did not move under `93b0e42`, and the gate checked whether that was merit or
-luck: the sixteenth line the command now returns is docstring prose, a genuine non-site. **But the
+one-home rule applied to a number. The four call sites have now survived **two** unrelated units, and each time the check was
+whether that was merit or luck rather than an assumption. `93b0e42` added a line of docstring prose;
+`e162ba9` added `_WIDENING_SURFACES`' `envelope_arms` entry, a lambda in a `parametrize` source that
+drives the N4 refusal sweep. Both are genuine non-sites, named rather than counted — *(v1.23)*. **But the
 claim needs its correction, which plan-gate P11-3 supplies** *(v1.22)*: a site list is stable in a
 site's **identity** and not in its **line number** — additions elsewhere leave *which tests are call
 sites* untouched while moving *where they are*. So a gloss names sites by a stable handle, which for
@@ -4024,32 +4103,33 @@ a test is its function name, and the four above are named that way.)*
 
 | Site | Edit | Found by |
 |---|---|---|
-| `stats.py:382`, `:387` — `envelope_arms`'s two `_widen` calls | `clamp=(-1.0, 1.0)` → **`clamp=None`** on both arms. The comment above them ("Both arms keep the identical clamp") goes with them; Rule 4 still requires both arms widened the same way, and `None` on both is the same way | 2 |
-| `stats.py:413` — `_compose`'s body | clamps its own result to `SUPPORT_DIFF_PROPORTIONS` and returns **`(interval, bound_by)`**. **The post-edit spelling is prescribed, and prescribing it means writing it here** *(v1.20, plan-gate P10-3 — v1.19 claimed the prescription and left the text only inside two residual commands, which is not a prescription at all)*: <br>`u_lo, u_hi = min(mover[0], exact[0]), max(mover[1], exact[1])` <br>`bound_by = (…)`  — Rule 4a point 4's two branches, computed from `u_lo`/`u_hi` against the support <br>`return (max(SUPPORT_DIFF_PROPORTIONS[0], u_lo), min(SUPPORT_DIFF_PROPORTIONS[1], u_hi)), bound_by` <br>**The local names are the note's** — `u_lo` and `u_hi` are Rule 4a point 4's own notation for the composed unclamped bounds, so an implementer reading the rule this table says it does not restate writes the same names the residuals expect. **The support is subscripted, never unpacked**: `lo_b, hi_b = SUPPORT_DIFF_PROPORTIONS` would be a faithful edit that residuals 2 and 3 cannot see. Table C's `:159` row strikes the same bargain for Table G, and writes its spelling out in the row, which is why Table G's residuals over it are safe | 1 |
+| `stats.py:413`, `:418` — `envelope_arms`'s two `_widen` calls | `clamp=(-1.0, 1.0)` → **`clamp=None`** on both arms. The comment above them ("Both arms keep the identical clamp") goes with them; Rule 4 still requires both arms widened the same way, and `None` on both is the same way | 2 |
+| `stats.py:444` — `_compose`'s body | clamps its own result to `SUPPORT_DIFF_PROPORTIONS` and returns **`(interval, bound_by)`**. **The post-edit spelling is prescribed, and prescribing it means writing it here** *(v1.20, plan-gate P10-3 — v1.19 claimed the prescription and left the text only inside two residual commands, which is not a prescription at all)*: <br>`u_lo, u_hi = min(mover[0], exact[0]), max(mover[1], exact[1])` <br>`bound_by = (…)`  — Rule 4a point 4's two branches, computed from `u_lo`/`u_hi` against the support <br>`return (max(SUPPORT_DIFF_PROPORTIONS[0], u_lo), min(SUPPORT_DIFF_PROPORTIONS[1], u_hi)), bound_by` <br>**The local names are the note's** — `u_lo` and `u_hi` are Rule 4a point 4's own notation for the composed unclamped bounds, so an implementer reading the rule this table says it does not restate writes the same names the residuals expect. **The support is subscripted, never unpacked**: `lo_b, hi_b = SUPPORT_DIFF_PROPORTIONS` would be a faithful edit that residuals 2 and 3 cannot see. Table C's `:159` row strikes the same bargain for Table G, and writes its spelling out in the row, which is why Table G's residuals over it are safe | 1 |
 | `stats.py` — **three** docstring paragraphs, in the two functions Rule 4a restructures *(extended from one at v1.20, plan-gate P10-4)* | `_compose`'s **last** paragraph — the one that says "**it is not applied here yet**" and forward-references this table — is rewritten to describe what the function now does; `7f865e2` deliberately left it as the seam. Two more go stale with the same edit and v1.19 named neither. `_compose`'s **first** paragraph says `verdict()` "needs the arms themselves **for the attribution** and so cannot go through `conservative_envelope`": the conclusion survives, the reason does not — after Rule 4a the attribution comes back *from* `_compose`. And `envelope_arms`'s docstring says "`verdict()` **reads the attribution off the same pair**": after Rule 4a `verdict()` reads no attribution, it **receives** one, and the attribution is no longer a function of the arms pair alone — the third token comes from the composed value against the support. A docstring asserting what its body no longer does is impl-gate P8-5's finding, which this table closes as collateral, so it does not get to reintroduce it | 1, 2 |
-| `stats.py:896` — `Verdict.bound_by` | `tuple[str, str] \| None` → **`BoundBy` pair \| None**; the comment gains the third token's meaning — *the `√DEFF` widening ran off the parameter space, so the interval carries no information in that direction* (`-ml` Rule 4a), which is the one thing a reader of the bullet cannot infer | 1 |
-| `stats.py:1168` — `verdict()`'s local declaration | the same retype | 1 |
-| `stats.py:1184-1187` — `verdict()`'s inline attribution | **deleted.** The attribution is computed once, in `_compose`, from the composed **unclamped** value against the support, on a **strict** comparison. `verdict()` takes both halves of `_compose`'s return and recomputes nothing — which is what finally makes `envelope_arms`'s **no-caller-recomputes-another's-arithmetic** clause true (impl-gate P8-5). *(v1.20, plan-gate P10-4: v1.19 said "docstring sentence", which over-claimed — the sentence's **other** clause, that `verdict()` reads the attribution off the arms pair, is **falsified** by the same edit and is rewritten by the docstring row above. One clause becomes true and one becomes false; only the first is this row's.)* | 1, 2 |
+| `stats.py:927` — `Verdict.bound_by` | `tuple[str, str] \| None` → **`BoundBy` pair \| None**; the comment gains the third token's meaning — *the `√DEFF` widening ran off the parameter space, so the interval carries no information in that direction* (`-ml` Rule 4a), which is the one thing a reader of the bullet cannot infer | 1 |
+| `stats.py:1199` — `verdict()`'s local declaration | the same retype | 1 |
+| `stats.py:1215-1218` — `verdict()`'s inline attribution | **deleted.** The attribution is computed once, in `_compose`, from the composed **unclamped** value against the support, on a **strict** comparison. `verdict()` takes both halves of `_compose`'s return and recomputes nothing — which is what finally makes `envelope_arms`'s **no-caller-recomputes-another's-arithmetic** clause true (impl-gate P8-5). *(v1.20, plan-gate P10-4: v1.19 said "docstring sentence", which over-claimed — the sentence's **other** clause, that `verdict()` reads the attribution off the arms pair, is **falsified** by the same edit and is rewritten by the docstring row above. One clause becomes true and one becomes false; only the first is this row's.)* | 1, 2 |
 | `report.py:338` — the `- decided by:` bullet | the `p=` clause attaches to the exact-bootstrap arm **only**, and a `support bound` token renders **with its boundary value and never with a level** — `support bound (-1)` on the lower bound, `(1)` on the upper *(v1.20, plan-gate P10-2 — v1.19 said "renders bare", which the note's assertion 10 forbids; the note's sentence is that a support token never carries a **level**, not that it carries nothing)*. **So the renderer needs the support *value*, and its source is named here rather than re-spelled**: `SUPPORT_DIFF_PROPORTIONS`, imported from `stats` exactly as `report.py` already imports `LEVEL_CI95_LO`/`LEVEL_CI95_HI` for this same expression. Writing `-1` as a literal in `report.py` would be a second home for the support, which is the one-arithmetic-two-homes shape this table is closing impl-gate P8-5 for. Today's condition tests one token against one name, so a third token falls into the `p=` branch. **The note's assertion 10 pins the *correct* bullet verbatim** — `- decided by: conservative envelope (lower bound: support bound (-1); upper bound: MOVER-D)` — and `support bound, p=0.025` is what that assertion **kills**, not what it is | 1 |
 | `stats.py` — `conservative_envelope` | returns `_compose(...)`'s **first element**. No public signature changes and no new required parameter (`-ml` Rule 4a) | 2 |
-| `tests/test_stats.py` — **`test_neither_printed_bound_is_ever_tighter_than_either_arm`**, pinned by **test name and not by line**, because a parallel unit is editing this file *(v1.20, plan-gate P10-1 — the blocker, and the one row v1.19 omitted)* | **This is the one shipped test the edit falsifies, and it is not an addition.** It asserts `lo <= mover[0] and hi >= mover[1]` (and the same for `exact`) against `envelope_arms`' return **directly**; once the arms come back unclamped and the composer clamps, that is false wherever an arm escapes the support — `-1.0 <= -1.5` is False. Measured by the gate against the `7f865e2` blob over the test's own sweep set: **0 / 38 / 78** failures at DEFF 1.0 / 1.2 / 2.0, against a **0 / 0 / 0** control on today's arm-clamped code; first failing tables `(0, 0, 9, 3)`, `(0, 0, 10, 2)`, `(0, 0, 11, 1)`. **The comparison moves to the *clamped* arms** — `lo <= max(SUPPORT_DIFF_PROPORTIONS[0], mover[0])` and `hi >= min(SUPPORT_DIFF_PROPORTIONS[1], mover[1])`, and the matching pair for `exact` — which is **Rule 4a's own restatement of the property** (*"Rule 4's own conservatism property survives verbatim: the envelope is never tighter than the **clamped** MOVER-D arm"*) and **not** a weakening. Relaxing the assertion instead would delete the executable statement of `-ml` §3.4 Rule 4 acceptance 4, which is what that test's docstring says it exists to defend. **No residual can see this** — all six are scoped to `modelbench` — and that is why it is a row: command 2 **does** return the line (`:1361`), so the enumeration was sound and only the site list was short, which is the two-command design working and the hand-written row list not | 2 |
+| `tests/test_stats.py` — **`test_neither_printed_bound_is_ever_tighter_than_either_arm`**, pinned by **test name and not by line**, because a parallel unit is editing this file *(v1.20, plan-gate P10-1 — the blocker, and the one row v1.19 omitted)* | **This is the one shipped test the edit falsifies, and it is not an addition.** It asserts `lo <= mover[0] and hi >= mover[1]` (and the same for `exact`) against `envelope_arms`' return **directly**; once the arms come back unclamped and the composer clamps, that is false wherever an arm escapes the support — `-1.0 <= -1.5` is False. Measured by the gate against the `7f865e2` blob over the test's own sweep set: **0 / 38 / 78** failures at DEFF 1.0 / 1.2 / 2.0, against a **0 / 0 / 0** control on today's arm-clamped code; first failing tables `(0, 0, 9, 3)`, `(0, 0, 10, 2)`, `(0, 0, 11, 1)`. **The comparison moves to the *clamped* arms** — `lo <= max(SUPPORT_DIFF_PROPORTIONS[0], mover[0])` and `hi >= min(SUPPORT_DIFF_PROPORTIONS[1], mover[1])`, and the matching pair for `exact` — which is **Rule 4a's own restatement of the property** (*"Rule 4's own conservatism property survives verbatim: the envelope is never tighter than the **clamped** MOVER-D arm"*) and **not** a weakening. Relaxing the assertion instead would delete the executable statement of `-ml` §3.4 Rule 4 acceptance 4, which is what that test's docstring says it exists to defend. **No residual can see this** — no residual of this table reaches `tests/` at all, for the scopes stated in the residual block below and not restated here *(v1.23, plan-gate P12-5: v1.22 re-scoped every one of the six to a single file — `modelbench/report.py` for residual 5, `modelbench/stats.py` for the rest — and left this sentence saying `modelbench`; the conclusion held *a fortiori*, a narrower scope seeing strictly less, but a scope claim with two homes is what produced the blocker this row exists for)* — and that is why it is a row: command 2 **does** return the line (`:1361`), so the enumeration was sound and only the site list was short, which is the two-command design working and the hand-written row list not | 2 |
 | `tests/test_stats.py`, `tests/test_report.py` | the note's **ten** named assertions land here, with its computed witness values — the two witness tables are `(5, 0, 7, 0)` and `(0, 0, 38, 2)`. Assertions 1–7 and 10 are single-table; 8 and 9 are the two sweeps and both run in seconds at n=12. **Values, tolerances and witnesses are the note's and are not restated here** | 1, 2 |
 
 **Residual after the edit — six, and the split is the point** *(all *before* values re-run at
-**`93b0e42`** — the block is re-pointed from `7f865e2` at v1.22, plan-gate P11-2, because this
-revision re-runs all six; the enumerating commands above moved at v1.21 and the table was
-two-baselined in between, which DC-12's own claim that the six are unchanged across `93b0e42` had
-already contradicted)*. **Every one is scoped to the file its own site rows name** — v1.22,
-plan-gate P11-1, and §7 rule 5(b)'s scoping default, of which this table is the occasion:
+**`e162ba9`** — the block is re-pointed from `93b0e42` at v1.23, in the revision that re-ran them,
+and the enumerating commands above move with it, so the table is single-baselined; it was
+two-baselined between v1.21 and v1.22, which plan-gate P11-2 closed)*. **Every one is scoped to the single
+file its own site rows name — `modelbench/stats.py` for all of them except residual 5, whose site is
+in `report.py` — so none reaches `tests/`** — v1.22, plan-gate P11-1, and §7 rule 5(b)'s scoping default, of which this
+table is the occasion:
 
 | # | Residual command (under `model-bench/`) | Form | Before → after |
 |---|---|---|---|
-| 1 | `grep -nF 'clamp=(-1.0, 1.0)' modelbench/stats.py` | first | **2 → 0** (`:382`, `:387`) |
+| 1 | `grep -nF 'clamp=(-1.0, 1.0)' modelbench/stats.py` | first | **2 → 0** (`:413`, `:418`) |
 | 2 | `grep -nF 'SUPPORT_DIFF_PROPORTIONS[0]' modelbench/stats.py` | **third** | **0 → 1** |
 | 3 | `grep -nF 'SUPPORT_DIFF_PROPORTIONS[1]' modelbench/stats.py` | **third** | **0 → 1** |
-| 4 | `grep -nF '"MOVER-D" if mover_arm[0] <= exact_arm[0]' modelbench/stats.py` | first | **1 → 0** (`:1185`) |
+| 4 | `grep -nF '"MOVER-D" if mover_arm[0] <= exact_arm[0]' modelbench/stats.py` | first | **1 → 0** (`:1216`) |
 | 5 | `grep -nF 'arm if arm == "MOVER-D" else' modelbench/report.py` | first | **1 → 0** (`:338`) |
-| 6 | `grep -nF 'tuple[str, str] \| None' modelbench/stats.py` | first | **2 → 0** (`:896`, `:1168`) |
+| 6 | `grep -nF 'tuple[str, str] \| None' modelbench/stats.py` | first | **2 → 0** (`:927`, `:1199`) |
 
 **Why the scope narrowed, and it is the third consecutive revision to restate this pair** *(v1.22,
 plan-gate P11-1)*. v1.19 pinned the whole clamp expression, which exists only in `_compose`, and was
@@ -4063,14 +4143,22 @@ DC-12 failing on a faithful edit, arriving by a different mechanism than the one
 gate settled it on a synthetic two-file probe rather than by argument — both spellings planted, the
 package-scoped command reads 2 and the `stats.py`-scoped one reads 1 — and the file scope is immune
 to whichever rendering the implementer picks, so the renderer's expression stays unprescribed and
-this table stays out of `report.py`'s business. **Nothing else moved**: all six read the same
-*before* values file-scoped as package-scoped at `93b0e42` (**2 / 0 / 0 / 1 / 1 / 2**), re-run, so
-the narrowing costs no evidence.
+this table stays out of `report.py`'s business. **Nothing stated moved**: all six read the same
+*before* values file-scoped as package-scoped (**2 / 0 / 0 / 1 / 1 / 2**), re-run at `e162ba9`.
+*(v1.23, plan-gate P12-4 — v1.22 read that equality as *the narrowing costs no evidence*, which it
+cannot establish. A *before* is not a residual's claim; the **after** is, and after the narrowing
+that assertion ranges over one file instead of the package. For residuals 2 and 3 the equality is
+worse than weak, being **0 = 0** under any scope including an empty one — and those two are the pair
+plan-gate `P11-1` was about. What the narrowing costs is therefore argued residual by residual above, and the
+**form** is backed by two measurements instead: the gate's synthetic two-file probe in this
+paragraph, and the `e162ba9` insertion — which broke every line pin in this table and moved none of
+its six counts — stated at §7 rule 5(b)'s exact-text-versus-line-pin paragraph and not restated
+here.)*
 
 **Why residual 1 carries `clamp=` and not the bare tuple, which is the measurement that decided it.**
-`grep -rFn '(-1.0, 1.0)' modelbench --include='*.py'` returns **3** lines at `7f865e2`, and the third
-is `stats.py:253` — a sentence *inside `_widen`'s docstring* explaining why a default of `(-1.0,
-1.0)` is refused. That is a **disowning mention** (§7 rule 5(b)), and a residual over the bare tuple
+`grep -rFn '(-1.0, 1.0)' modelbench --include='*.py'` returns **3** lines at `e162ba9`, and the one
+that is not a call site is `stats.py:265` — a sentence *inside `_widen`'s docstring* explaining why a
+default of `(-1.0, 1.0)` is refused. That is a **disowning mention** (§7 rule 5(b)), and a residual over the bare tuple
 would read 1 on a faithful edit and be a trap. Scoping to the keyword argument retires exactly the
 two call sites the edit changes and nothing else. Residual 1 also **distinguishes**: an implementer
 who changes one arm and not the other reads **1**, and the number says one is left.
@@ -4086,8 +4174,10 @@ shape exactly, one table over, and it is stated over the text the edit **creates
 reason. **The pair is stated separately, one per bound, because the half-application this table
 must catch is one-sided**: clamping only the lower bound reads 1 and 0, and the numbers say which
 half was skipped. The cost is rule 5(b)'s stated one — these two pin a spelling, so the spelling is
-written out in the `:413` row rather than left to the implementer, and if the expression is later
-rewritten for an unrelated reason they are **re-derived over the new spelling, never re-scoped**.
+written out in the `:444` row rather than left to the implementer, and if the expression is later
+rewritten for an unrelated reason they are **re-derived over the new spelling, never re-widened**
+(§7 rule 5(b)'s third-form trigger — v1.23, plan-gate P12-6; the scoping default of the paragraph
+below *narrows*, and this reversal forbids the opposite move, not that one).
 **Both are stated over the support constant's *subscript* and not over the whole clamp expression**
 *(v1.20, plan-gate P10-3)*: v1.19 wrote them as `max(SUPPORT_DIFF_PROPORTIONS[0], lo)` and
 `min(SUPPORT_DIFF_PROPORTIONS[1], hi)`, which pinned two **local names the plan never fixed** —
@@ -4095,7 +4185,7 @@ while Rule 4a point 4 calls those quantities `u_lo` and `u_hi` in the very expre
 implementer is told to implement. An implementer following the note would have read **0** against a
 target of **1**: a residual failing on a faithful edit, in the direction rule 5(b) forbids, inside
 the table this document held up as the first written *against* that rule rather than corrected into
-it. The subscript form depends on no local name, still reads **0** at `7f865e2` and **1** after the
+it. The subscript form depends on no local name, still reads **0** at `e162ba9` and **1** after the
 prescribed edit, and still splits one per bound.
 
 **What no residual can see, named because rule 5(b) requires it.** Three of Rule 4a's decisions are
@@ -5425,7 +5515,13 @@ trustworthy the senior document, the more efficiently it does so. So:
      actually shipped and it fails on a later refactor of that expression. That is the same bargain
      Table C's `:159` row already strikes, and the reversal trigger is the same — when the expression
      is rewritten for an unrelated reason, the residual is re-derived over the new spelling, never
-     re-scoped.
+     re-**widened**. *(v1.23, plan-gate P12-6. Before this revision the word here and at the
+     three other sites stating this reversal named a **scope change** rather than a widening, which
+     read as an absolute — and one the scoping default below contradicts on its face, that default
+     being a **narrowing**. What this reversal forbids
+     is the other direction — widening a residual's scope so that a spelling which moved is caught
+     again somewhere else — and the repair is to re-derive the residual over the text that now
+     exists. All four sites carry the corrected word; the reason is stated here and cited there.)*
 
      **A stated baseline moves only when the revision moving it *re-runs the commands*, and never
      because some other unit landed** *(v1.21)*. Clause (b) says a table carries its counts **at a
@@ -5440,7 +5536,10 @@ trustworthy the senior document, the more efficiently it does so. So:
      has moved and no revision has re-measured — the gap is carried **once**, in DC-12, as *what has
      changed since*, and not by silently editing a number nobody re-derived. *(v1.21's occasion:
      `93b0e42` landed under v1.20 while it was being written; Table H is re-measured and re-points
-     to it, the seven landed tables do not move, and DC-12 names what changed. Table F's unit will
+     to it, the landed tables do not move, and DC-12 names what changed. *(v1.21's count here was one too many: there are **six** landed
+     tables of eight, one `Landed:` line each, and the extra one it counted was Table F — which had
+     not landed and was simply not re-measured that revision. Corrected at v1.23, the revision that
+     re-measures it.)* Table F's unit will
      move `results.py` and `report.py` under exactly these tables next, so the rule is written down
      before it is needed rather than after.)*
 
@@ -5476,15 +5575,54 @@ trustworthy the senior document, the more efficiently it does so. So:
      seventh introduced by the fix for the sixth. A default is checkable: read the table's row list,
      read the residual's scope, and they either agree or the table says why not. It is also not new
      practice — Table C's first two residuals are scoped one file each and **partition** that table's
-     six production sites, which is the discipline this clause generalises. The stated exceptions are
-     the ones that earn it: Table C's third is **package-wide by design**, because `-ml` §11.10(3)'s
-     check is about the package; Tables B and D reach `tests/` because their site rows do.
-     **This clause binds prospectively.** A table whose edit has landed has something stronger than a
-     scoping heuristic — its residuals have been run against the actual faithful implementation and
-     hit their targets — so the landed tables are not re-scoped, and the two that had not landed when
-     this clause was written, **H and F**, are scoped to their rows' files in the same revision that
-     writes it. Every one of the six and the three reads the same *before* value file-scoped as
-     package-scoped, re-run, so nothing was traded for the compliance.
+     six production sites, which is the discipline this clause generalises. **Partition is the
+     property to aim for wherever a table's residuals can supply it, and it is strictly stronger than
+     narrowness** *(v1.23, plan-gate P12-2)*: it makes a half-application non-zero on the half it
+     skipped and the number says which half. Narrowness does not imply it — §4 S1e Table H's six do
+     not partition its ten site rows, nothing reaching the two `tests/` rows — which is fine and is
+     why the two properties are named separately rather than one being read off the other.
+     Tables B and D reach `tests/` because their site rows do.
+
+     **Where the default is bounded, and it is bounded by what each instrument is for**
+     *(v1.23, plan-gate P12-2)*. **The enumerating commands are the completeness instrument and a
+     residual's scope is its *edit's*** — that division of labour is what licenses narrowing at all,
+     and without it the scope silently inherits the site list's completeness. Plan-gate `P10-1` is the proof
+     that this is structural rather than hypothetical: an incomplete site list in Table H, caught by
+     an enumerating command and by no residual under either scope, because *"command 2 **does**
+     return the line … the enumeration was sound and only the site list was short"*. So the
+     mitigation is named rather than assumed — **wide enumerating commands plus DC-12's
+     per-residual sweep**, not the residual's own scope. **And where a residual's job is instead to
+     prove that a text exists nowhere wider than the edit — a one-home or an identity check — the
+     scope is that *purpose's*, and the table says so.** Two tables instance it and both state their
+     reason on themselves: **Table C's third** is `-ml` §11.10(3)'s package-wide percentile-definition
+     identity, and **Table F's third** is the `{"binary", "continuous"}` tag set, whose `→ 0` is a
+     claim that the set has one home and is therefore worth nothing file-scoped (plan-gate P12-1 —
+     the case that showed a specificity argument alone points the wrong way here, since that pattern
+     is short and its purpose is wide).
+     **This clause binds prospectively, and the reason is convention 1's and not a claim about
+     landed residuals** *(the premise corrected at v1.23, plan-gate P12-3)*. A landed table's rows
+     are a **record of what a commit did**, and re-scoping a record falsifies what it says was
+     checked — which is the same argument that stops a landed table's baseline moving, stated above, and
+     it is sufficient on its own. **What must not be said, because this document holds
+     two counter-examples to it, is that a landed table's residuals were run against the faithful
+     implementation and hit their targets.** Impl-gate **F3**: Table D's `bootstrap_seed` residual
+     *"was unreachable on a correct edit **from the moment it was written**"* and was repaired at
+     v1.17 to the whole-identifier form. Impl-gate **F2**: Table C's third residual's target moves
+     1 → 2 the moment Table D lands, and was **restated** rather than met. So *landed* certifies
+     that a residual's **statement** was repaired after being run — the opposite direction — and a
+     later reader must not treat a landed residual as validated and skip re-checking it. That
+     re-check is DC-12's, at the end of the round.
+     The two tables that had not landed when this clause was written, **H and F**, are scoped to
+     their rows' files in the same revision that writes it — **except Table F's third, which v1.23
+     returns to package-wide under the purpose clause above**. *(v1.23, plan-gate P12-4: v1.22
+     justified that compliance with *every one of the six and the three reads the same* before
+     *value under either scope, so nothing was traded*. Equal *befores* are silent about the
+     **after**, which is what a residual claims, and for Table H's third-form pair they are **0 = 0**
+     — true under any scope including an empty one, and vacuous for exactly the pair plan-gate `P11-1`
+     was about. What the narrowing trades is that the after assertion now ranges over one file, argued
+     per residual on each table; what backs the **form** is the gate's synthetic two-file probe, stated
+     on Table H, and the `e162ba9` insertion, measured and stated once in the exact-text-versus-line-pin
+     paragraph below.)*
 
      **A third-form residual is only a residual if the table *writes out* the text it pins, in the
      row, and not only inside the residual command** *(v1.20, plan-gate P10-3)*. The two forms above
@@ -5514,6 +5652,16 @@ trustworthy the senior document, the more efficiently it does so. So:
      throughout, where a line pin would have been broken twice. A residual is a claim that has to
      survive other people's edits to be worth stating, so it is written over text that only the edit
      it describes can change.
+     **The form's largest test so far, and it is the reason to keep paying the third form's cost**
+     *(v1.23)*. `e162ba9` inserted **31 lines** into `modelbench/stats.py`, above **every line pin
+     any table of this section states below `:262`**: all five of Table H's moved
+     (`:382`/`:387` → `:413`/`:418`, `:413` → `:444`, `:896` → `:927`, `:1168` → `:1199`,
+     `:1184-1187` → `:1215-1218`), and so did Table E's third-form anchor, `:261` → `:292`. **Not one
+     residual count moved** — Table H's six
+     read `2 / 0 / 0 / 1 / 1 / 2`, Table F's three read `1 / 1 / 1` and Table E's landed pair reads
+     `1 / 1`, all eleven re-run at that commit. Every line pin below the insertion broke and every
+     exact-text residual held, in one commit, which is the cleanest evidence this document is going to get for a
+     convention it argued for over three revisions.
 
      **And where a count stops discriminating, the residual's assertion is the *named line set*, not
      the number** *(v1.17, impl-gate F2)*. A count is a proxy for an identity claim, and a second
@@ -5532,8 +5680,8 @@ trustworthy the senior document, the more efficiently it does so. So:
      applied the second table. Each table's set was sound read alone, which is why six passes did
      not see it. So: two tables meeting on a line **name each other on both rows**, state whether
      both orders are faithful, and the residual of whichever lands second is stated over the
-     **surviving** spelling — re-derived, never re-scoped, since the token it was written over is
-     gone either way.
+     **surviving** spelling — re-derived, never re-**widened** (the third form's reversal trigger,
+     above), since the token it was written over is gone either way.
 
    Where an edit **adds** rather than retires, the enumerating command is over the
    type's **construction sites** and the residual is asserted by the type system — a required field
