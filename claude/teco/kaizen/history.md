@@ -2,6 +2,174 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-09-07 — Kaizen distillation, chunk D (the final fourteen 2026-09-07 entries)
+
+- **What:** U18b of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled the
+  fourteen remaining `teco` `:KaizenEntry` nodes in `kaizen_team` (all dated 2026-09-07; no date
+  filter applied, the whole remainder was chunk D). Result: **9 promoted as 12 statements**
+  (11 in-place sharpenings of existing `teco.md` sentences, 0 new `teco.md` bullets, 1 into
+  `skills/agent-standards/claude-code.md` merging two entries), **1 discarded**, **4 routed out of
+  `teco.md` entirely via `MENTIONS`**, 0 kept open, **5 `MENTIONS` tags** added. Every entry was
+  re-derived from primary sources — transcripts, the delivered guard source, the plan and
+  coordination documents, and one script I wrote myself. **All fourteen facts held**; one entry's
+  *causal mechanism* was falsified by its own sibling, and one chunk-C prediction of coverage was
+  wrong.
+- **Shape of this pass: no new bullets at all, and four entries kept out of the prompt on the
+  "most sessions" bar.** Chunk C concluded that sharpening in place had hit its ceiling. Chunk D
+  tested the next lever — **refusing the prompt as a destination** — and it worked for four of
+  fourteen: the three static-guard-authoring entries and the AST-equality done-condition are true
+  and useful but are not coordination doctrine, so they were `MENTIONS`-tagged to the agents whose
+  discipline they belong to instead of costing always-loaded words. `teco.md` still grew, because
+  the nine that *are* doctrine are doctrine.
+- **Re-derivation that changed a disposition:**
+  - `4e91c7a3` (an explicit exact-command allow rule is a materially stronger signal than a broad
+    one) — **mechanism not established, and falsified as an inference by its own sibling.** The two
+    permission entries describe the *same* incident. Re-derived independently from the session
+    transcript (`~/.claude/projects/<proj>/a2d1489d-….jsonl`): `./scripts/seed_workflows.sh` was
+    refused at `02:55:22` and the identical command **ran at `16:45:00` the same session with no
+    settings change**; the six exact-command rules were added at ~`16:53` and `seed_salesperson.sh`
+    ran at `16:53:45`. So the only evidence for the rule helping is one post-hoc success in a
+    system already demonstrated to flip without any rule change — n=1, confounded. What *is*
+    independently verified and was promoted instead: the tracked `.claude/settings.json` has
+    carried a blanket `"Bash"` allow since `c994442` (2026-08-29, committed expressly to "end
+    per-command prompt whack-a-mole") — **nine days before** these refusals — so a bare tool-name
+    allow demonstrably does not resolve a shell-script invocation at the documented
+    "explicit settings rules resolve immediately" step. Also corrected: `settings.local.json` is
+    untracked here only because the maintainer's **global** ignore file matches it
+    (`git check-ignore -v` → `~/.config/git/ignore`); the repo's own `.gitignore` has no entry.
+  - `f3c81a92` — **chunk C predicted this was already covered; it is not.** The step-3 bullet chunk
+    C generalized (*"A reviewer's suggested fix is a finding to judge"*) is about the fix's
+    **content**; this entry is about its implicit **routing**, which is teco's job alone and which
+    no existing sentence touched. Re-derived: coordination row U36 records the `data-scientist`
+    (routed there against the gate's suggestion of `architect`) refusing the exemption, **overruling
+    teco's own stated reason**, and catching a defect in its own note the gate never saw — §11.2.1's
+    1626 divergences measured against the percent spelling `math.ceil(pct / 100 * X)`, where the
+    code's numerator-first form `math.ceil(level.numerator * X / level.denominator)` diverges **0**
+    times, over levels `n/1000` for `n = 1…999` and `X ≤ 3000` (`small-model-benchmarking-ml.md`
+    §11.2.1 table; level-first gives 755). The entry's figures are exact.
+- **Promoted → `claude/teco/teco.md` (all in-place word replacements, no new bullets):**
+  - `e58c30b7` → step 2, **widening** *"The ledger cites; it does not restate"* to *"The
+    coordination doc cites…"* — a row **and your prose around it**; your own summary of a delegate's
+    ruling is a secondary source, with the drift tell (a summary naming a code expression where the
+    ruling was about placement, sequencing or ownership). Not covered by the two adjacent rules
+    despite both predating the incident (`never paraphrase a plan into a brief`, 2026-07-11;
+    `the ledger cites`, 2026-08-25): the compression lived in narrative prose, not in the ledger
+    table. Re-derived: the v1.22 ledger row rules *"the trigger runs inside the turn-queue
+    worker"* (placement); the coordination doc at `:1822` records it as
+    `self._services.start_workflow_run` (a spelling); the plan's own S9 row says
+    `trigger.maybe_trigger` → `services.start_workflow_run`, with `trigger.py:82` outside all four
+    walked scopes — so the paraphrased done-condition was unmeetable.
+  - `d471a9c8` (1) → step 3, extending Dispatch axis (c) with the **third option** it lacked: the
+    unit of collision is the claim, not the file, so split the *claim* rather than the schedule —
+    measurable half to the unit that can measure it, judgment half to the unit that owns it, seam
+    and the other's ownership in both briefs — and the units stay parallel. Re-derived verbatim
+    from `salesperson-ui-coordination.md` §"Splitting one sentence between two parallel units, at a
+    seam": S8f (`coder`) owned the measured fact, U30 (`architect`) the mapping.
+  - `f3c81a92` → step 3, closing the reviewer's-suggested-fix bullet (whose third shape was
+    compressed to part-pay for it): a gate that proposes a fix has implicitly routed it, and that
+    routing is its least trustworthy opinion — re-derive the owner from the artifact the fix would
+    change, and brief an owner chosen over the gate's with your reasoning open plus an instruction
+    to overrule it.
+  - `b7d24e10` → **two halves, two places.** Step 3's mutation-test bullet gains the brief-side
+    mitigation (restore **by copy, after each mutation, never batched**); step 4's transient-failure
+    bullet gains the detection (**on abnormal termination, diff the tree against the last commit
+    first**, ahead of checking whether the deliverable was written). Re-derived: the U40 ledger row
+    records the `analyst` `ad216ed80e4e38da2` *"killed by a session rate limit, wrote nothing, left
+    no mutation in the tree — verified on disk"* — a near miss, not a hit, which is why the tree
+    check is worth a rule. "Never restore via git" was already teco doctrine and was not restated.
+  - `7c4e08b1` + `c9a4e60f` (a) → **one doctrine, two moments.** Step 5's rebuttal bullet gains
+    *corroboration needs independence of **method**, not a second agent* — two agents running the
+    same grep are one check, and a grep hit proves the value exists, never that the entity you named
+    owns it (verify an attribution by reading the enclosing definition). Step 4's now-redundant
+    trailing clause *"and independent agreement is stronger evidence than either agent alone"* was
+    **deleted** to part-pay, because as written it was over-broad in exactly the way this entry
+    corrects. "Pause vs. proceed" gains the other moment: put the same question to a qualified
+    delegate in parallel with the stakeholder, unfiltered by yours, forming your own view first.
+    Re-derived: `api.py:294`'s `Query(10, ge=1, le=50)` belongs to `list_workflow_runs_for_thread`
+    (def at `:292`) — `list_thread_participants` (def at `:302`) takes **no limit parameter at
+    all**; and `salesperson-ui-coordination.md` §"U31 — an independent read that converged with the
+    stakeholder's" records both halves verbatim.
+  - `e4d10b73` → step 5, sharpening *"Send the re-check to the same reviewer the same way"*: where
+    an **implementer** overruled a finding, the reviewer confirms or refutes by **executing against
+    the tree, not re-arguing**, its own recommended fix included. The existing sentence routed the
+    re-check but said nothing about what to ask for. Re-derived: U41 (`coder`) *"overruled the
+    gate's own recommended fix"*; U45 resumed the Pass 5 author `ad216ed80e4e38da2`, which *"ran a
+    mutation applying its own recommended `_ABSENT` design and the suite refused it (2 failed)"* and
+    recorded two of its own Pass 5 claims as errors.
+  - `c9a4e60f` (b) → Guardrails, **rewriting** *"Neither gate is execution"* to *"Neither gate is
+    execution, and neither is a static-analysis artifact"* — a static trace, AST reader, lint rule or
+    grep guard testifies only about **text**, and is never evidence about placement, threading or
+    ordering. The redundant *"even twice independently"* went with the rewrite. Corroborated twice
+    over: U31's *"`_service_layer_reach` reads **source, not threads**"* and the plan's own S9 row
+    (*"It is **not** evidence of placement"*).
+  - `d471a9c8` (2) + `b2d64f19` (coordinator half) → Guardrails, **replacing** the stopping-signal
+    sentence's vaguer *"ask the reviewer to rule on that directly"*: ask for a **falsifiable
+    stopping condition** rather than another fix, promote it *above* the individual findings as the
+    implementer's done-condition, and say in advance what happens if it fails — plus, where the
+    recurring defect is a guard claiming more reach than its mechanism implements, put **both**
+    closures to the implementer (widen the mechanism, or narrow the claim), because a team that has
+    widened repeatedly will not propose retreating on its own. Re-derived: the coordination doc's
+    §"Twelve instances, and the first stated convergence test" (`:2066-2072`), Pass 15 briefed with
+    it *"as the bar"* (`:2157`), and §"S8f — the first unit to catch an instance of the defect
+    *itself*" (`:2255-2261`) — the probe caught the thirteenth instance pre-gate. The two-closures
+    half is in the delivered guard's own docstring: *"the decision to narrow the sentence instead of
+    widening the reader"*.
+- **Promoted → `skills/agent-standards/claude-code.md`** — `4e91c7a3` + `b3d70e94` merged into one
+  three-bullet entry after the existing `defaultMode` resolution: a classifier denial is an **event,
+  not a state** (and a settings `allow` rule does not prevent one); the exact-rule lever is
+  **not established**; and the placement rule with its verified ignore-scope caveat. Routed there
+  rather than to `teco.md` because it is harness mechanics every agent needs, not coordination
+  doctrine — and because `teco.md`'s existing guardrails already forbid the two behaviors the
+  entries prescribe against (converting a denial into a standing blocker; retrying around it).
+  `b3d70e94` was fully re-derived from the transcript and is **true**.
+- **Routed out of `teco.md` via `MENTIONS` (4 entries, 5 edges)** — true, verified, and not
+  coordination doctrine; each survives with its `MENTIONS` edge after its `PRODUCED` edge is
+  resolved, and surfaces in the tagged agent's own distillation pass:
+  - `f6b820ae` → `tdd-engineer` — a **coverage probe** and a mutation test answer different
+    questions, and only the probe catches the recurring defect; derive the probe's enumeration from
+    the language itself and ship it as a test. Verified in the delivered source: eight `ast` node
+    types walked as a named constant with the other 19 grammar nodes excluded each with a reason,
+    and `test_the_alias_reader_covers_every_binding_form_the_grammar_has` *"takes its enumeration
+    from `ast` rather than from a list here"*.
+  - `a8f3c521` → `tdd-engineer` — the **two axes** (target axis finishable and derivable from
+    `ast`; value axis is alias analysis and is not), so a probe varying only the target axis
+    certifies nothing. Verified verbatim in the guard's docstring, numbers included:
+    `me = self` then `me._services.start_workflow_run(...)` survives at **185 passed**, where
+    `svc = self._services` at the same point is **1 failed / 184**.
+  - `b2d64f19` → `tdd-engineer` **and** `analyst` — the gate question is not *"does the guard fire
+    on my reproduction?"* but *"what is the smallest edit to production code that satisfies the
+    docstring and survives the body?"*. Its coordinator-facing half was promoted (above); the
+    review-authoring half belongs to the reviewer.
+  - `f3a91c47` → `analyst` — the AST-equality done-condition for a prose-only unit over code.
+    **True and exactly reproducible** — my own script over `b720bd3^`→`b720bd3` returns
+    stripped-AST equal with identical docstring-owner sets on both files (27 and 129 owners), and
+    full-AST equal on `storefront_api.py`. Dropped from `teco.md` on the §5 "most sessions" bar
+    after first being drafted into step 2: it is a narrow unit type, and `analyst` is the agent that
+    gates a prose-only change.
+- **Discarded (1):**
+  - `b2d7f309` (file-disjoint units that still conflict) — **already covered, a fortiori**, by the
+    step-3 Dispatch axis (c) chunk C wrote for `5d1cca84` and deliberately worded to cover it:
+    *"One unit decides a fact the other's deliverable must encode … Read both done-conditions, not
+    just their file lists."* Re-derived and true — the coordination doc's own §"S9a is not released
+    after all" says *"They conflict through a fact, not through a diff … A file-overlap check does
+    not catch that; only reading both done-conditions does"* — but the existing rule covers both
+    directions (the brief asserting a fact, and the deliverable encoding one) where the entry covers
+    only the second. Its residue, *"brief X to update the marker in the same change"*, is the
+    existing **Docs ride in the brief** rule plus serialization, not a third option.
+- **Budget:** `teco.md` **6,909 → 7,318 w** (+409), lines past the 700-char smell **21 → 22**.
+  `skills/agent-standards/claude-code.md` **8,760 → 9,185 w**, lines past the smell **3 → 3**
+  (wrapped at ~100 cols). `claude/AGENTS.md` **untouched at 2,434 w** — every rule here is
+  teco-specific or harness-specific, and the file has ~60 w of headroom against its own bar.
+  A first draft of this pass came in at **+548 w**; a compression pass over my own additions plus
+  dropping `f3a91c47` recovered 139 w. **K-016 stays blocking and the case for it is now stronger,
+  not weaker:** two consecutive chunks have grown the file by ~930 w combined while promoting only
+  in-place, and the ceiling finding from chunk C is confirmed — the only lever that actually saved
+  words this pass was *refusing the destination*, which works for 4 entries in 14 and not for the
+  doctrine.
+- **Why:** U18b of the team-wide distillation pass; keeps `kaizen_team` as working memory for
+  unreviewed capture only. This clears the last `teco`-produced entry.
+- **Plan items:** K-016 (updated with this pass's ledger and the refuse-the-destination finding).
+
 ## 2026-09-07 — Kaizen distillation, chunk C (the thirteen 2026-09-03 / 2026-09-06 entries)
 
 - **What:** U18 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled the

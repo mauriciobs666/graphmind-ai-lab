@@ -84,6 +84,34 @@
     one-line "before dispatching, read `coordination-techniques.md` §Dispatch" carries no
     recognition problem. That makes the extraction safe in a way the earlier candidate was not.
 
+- **2026-09-07 (kaizen chunk D distillation, `cobb`) — the `teco` graph is now empty, and the only
+  lever that saved words was refusing the destination.** `teco.md` is **7,318 w** with **22** lines
+  past the 700-char smell (6,909 w / 21 before this pass). Chunk D dispositioned fourteen entries
+  with **zero new bullets** — eleven in-place word replacements, one merged entry routed to
+  `skills/agent-standards/claude-code.md`, one discard, and **four entries kept out of the prompt
+  entirely** by `MENTIONS`-tagging them to the agent whose discipline they belong to
+  (`f6b820ae`/`a8f3c521`/`b2d64f19` → `tdd-engineer`, `b2d64f19`/`f3a91c47` → `analyst`). The file
+  still grew 409 w. **Ledger across the three chunks: 5,343 w (2026-08-24 editorial floor) → 6,388
+  → 6,908 → 7,318.** The distillation-side counterweight this item already names — apply §5's
+  "every session pays for it" bar aggressively — was applied for the first time as an actual
+  *rejection* (`f3a91c47` was drafted into step 2 and then removed), and it is worth ~55 w per
+  entry it catches. That is not enough on its own; the consolidation half of this item is what is
+  left.
+  - **Two merge targets from chunk C's list are now larger, and one is new.** Step 5's
+    verify-family — *"Close the loop on the same delegate"*, *"Your own rebuttal…"* (which now also
+    carries the independence-of-method rule), *"Re-verify every summarized number, and every new
+    identifier"*, *"Verify a self-reported recovery independently"* — is unchanged as the primary
+    target and one member got longer. New this pass: **step 3's Dispatch axis (c)** now carries
+    both the collision test and the split-the-claim remedy, and step 4's transient-failure bullet
+    now carries the abnormal-termination tree check; both are candidates for the
+    `coordination-techniques.md` §Dispatch extraction already named above.
+  - **A promotion-shape finding worth carrying into the extraction.** Nine of the fourteen entries
+    were true coordination doctrine with no cheaper home. Chunk C called that the ceiling of
+    editorial technique; chunk D confirms it and adds the one thing that does help — a destination
+    other than the prompt. After K-016 creates `coordination-techniques.md`, that destination
+    exists for teco's *own* doctrine too, and the next distillation chunk should route to it by
+    default rather than to the prompt.
+
 ### K-017 — a `devops`-owned `ensure-services.sh`, so the trigger costs one line
 - **Status:** 🔵 proposed · **Priority:** medium
 - **Rationale:** the 2026-09-06 environment-readiness change (history) added 370 words of

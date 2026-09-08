@@ -508,6 +508,40 @@ the always-loaded project memory (`CLAUDE.md`).
   re-read this entry first: the friction is a background-subagent-dispatch/file-edit-tool bug, not
   something any persisted `defaultMode` choice currently fixes.
 
+- **A classifier denial is an *event*, not a *state* — and a settings `allow` rule does not prevent
+  one.** Re-derived 2026-09-07 from this repo's own session transcript
+  (`~/.claude/projects/<proj>/<session>.jsonl`, a top-level session under the user-scope
+  `"defaultMode": "auto"` pin): `./scripts/seed_workflows.sh` was refused at `02:55:22`
+  (*"Permission for this action was denied by the Claude Code auto mode classifier. Reason: Blocked
+  by classifier"*) and the **identical command ran at `16:45:00` in the same session**, with no
+  settings change in between; in that same `16:45` sequence `seed_salesperson.sh` was refused while
+  its two siblings `seed_workflows.sh` and `seed_catalog.sh` both passed. Two consequences.
+  **(1)** Never convert one denial into a documented standing blocker that the user and later
+  sessions plan around — re-test once when circumstances genuinely change and report what actually
+  happened; equally, never retry the same denied command in a loop until it passes, which works
+  around the denial rather than complying with it. Escalate the specific still-denied command, not
+  the class. **(2)** The tracked `.claude/settings.json` had carried a blanket `"Bash"` allow since
+  `c994442` (2026-08-29, committed expressly to *"end per-command prompt whack-a-mole"*) — nine days
+  before these refusals — so a **bare tool-name allow does not resolve a shell-script invocation** at
+  the documented step (1) *"explicit settings allow/ask/deny rules resolve immediately"*. Same
+  finding class as the delegated-`Edit(path)` refutation above: settings rules do not reach what the
+  classifier decides.
+- **Not established: that an *exact-command* allow rule is a materially stronger signal than a broad
+  one.** Six exact-command rules — both the `./scripts/…` and `<component>/scripts/…` spellings,
+  because a rule matching a literal command string misses when the agent invokes it from a different
+  cwd — were added to `.claude/settings.local.json` at ~`16:53`, and `seed_salesperson.sh` ran at
+  `16:53:45`. But the same command class had already flipped denied→allowed at `16:45` with **no**
+  rule change, so that single post-hoc success is confounded by the non-determinism above. Treat the
+  exact-rule lever as untested rather than as a working fix. **Corollary for anyone re-testing the
+  `acceptEdits`-vs-`auto` question (above):** one denial/success pair cannot distinguish a mode
+  change from classifier noise — such a test needs repetition, not one trial.
+- **Placement, which does hold independently of all that:** a personal permission grant belongs in
+  `.claude/settings.local.json`, never in the tracked `.claude/settings.json`, which silently widens
+  permissions for everyone using the repo. **Verify the ignore actually covers it** — in this repo
+  `settings.local.json` is untracked only because the maintainer's *global* ignore file matches it
+  (`git check-ignore -v` resolves to `~/.config/git/ignore`); the repo's own `.gitignore` has no
+  entry, so a fresh clone elsewhere would leave it as an ordinary, committable untracked file.
+
 ## Bash tool environment
 
 - **The Bash tool's shell shadows some coreutils with wrapper functions that
