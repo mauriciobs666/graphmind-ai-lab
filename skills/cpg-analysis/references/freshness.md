@@ -27,16 +27,19 @@ per-build history.
 | `parsedAt` | When the **source snapshot was taken**, i.e. what the graph actually describes. On a multi-hour build these differ by hours: anchor any `--since` on `parsedAt`, never `builtAt`. |
 | `sourcePath` | The parse root handed to Joern. Often a pruned scratch copy, so **not** necessarily a path `git` understands. |
 | `sourceOrigin` | The repo-relative directory the provenance below describes — **this** is the path to hand `git log` / `git rev-parse`. |
-| `sourceCommit` | The repo's `HEAD` when the source was captured, *before* the parse. |
-| `sourceTree` | The tree object of `sourceOrigin` at `sourceCommit` — the exact identity of the parsed content. |
+| `sourceCommit` | The repo's `HEAD` when the source was captured, *before* the parse. A **full 40-char OID**. |
+| `sourceTree` | The tree object of `sourceOrigin` at `sourceCommit` — a **blob** when the source is a single file — i.e. the exact identity of that content. Also a full OID. Can be absent while `sourceCommit` is present: see check 2. |
 | `sourceDirty` | `git status --porcelain -- <sourceOrigin>` was non-empty: modified **or untracked** files under the source. Scoped — it says nothing about the rest of the repo. |
 | `provenance` | How the four `source*` values were obtained: `parse-root` (the parse root is itself tracked) · `source-origin` (the parse root is a staged copy; the builder named the real tracked directory) · `none` (no git identity — the three commit/tree/dirty fields are deliberately absent, not missing). |
 
 - **One row with a `provenance` value** → a stamp from the current pipeline;
   read it with the table above.
-- **One row, `provenance` null** → a **pre-2026-09-07 stamp**. Still usable, but
-  its `sourceCommit`/`sourceDirty` were derived *after* the load, repo-wide —
-  see Limits before acting on either.
+- **One row, `provenance` null *and* `builtAt` a real timestamp** → a
+  **pre-2026-09-07 stamp**. Still usable, but its `sourceCommit`/`sourceDirty`
+  were derived *after* the load, repo-wide — see Limits before acting on either.
+  (`provenance` is null on a hand-written marker too, which is why this bullet
+  is gated on the timestamp; that shape is the fourth bullet below, and it
+  carries no `sourceCommit`/`sourceDirty` at all.)
 - **Zero rows** → either the graph predates this feature (built before M4; no
   backfill was done — see the rollout note in the graph-dba design doc) or the
   pipeline run that built it failed its own verification and never reached the
@@ -59,22 +62,38 @@ per-build history.
 **Judging staleness (a suggestion, not a rule).** Three escalating checks,
 strongest first — the threshold is yours to set given the task at hand:
 
-0. **Exact content identity — a yes/no, when you can get it.** Requires
+0. **Content identity — a yes/no, when you can get it.** Requires
    `provenance` in (`parse-root`, `source-origin`), a `sourceTree`, and
    `sourceDirty = false`. Run from the repo root:
 
    ```bash
-   git rev-parse --short HEAD:<sourceOrigin>     # compare to sourceTree
+   git rev-parse --verify "HEAD:./<sourceOrigin>"   # compare to sourceTree
    ```
 
-   **Equal** → the committed source is byte-identical to what was parsed. The
-   graph is current no matter how old `builtAt` is, and you are done: no commit
-   counting, and no false alarm from commits that touched the path and reverted.
-   **Different** → the source moved; check 2 tells you by how much.
-   *(When `sourceDirty = true` the parse also swallowed uncommitted work, so
-   `sourceTree` describes only the committed part — equality then means "the
-   commit matches", not "the graph matches what was parsed". Fall through to
-   checks 1-2 and treat the graph as matching no commit exactly.)*
+   **Use exactly that form, from the repo root.** `HEAD:./<origin>` resolves
+   both a subdirectory and the repo root itself, where a bare `HEAD:.` is fatal
+   (`Needed a single revision`, exit 128) — and `sourceOrigin` really is `.` for
+   a whole-repo build. The `./` makes it relative to your working directory, so
+   run it at the top level. `--verify` matters too: without it an unresolvable
+   path makes `git rev-parse` **echo your argument back on stdout**, which in a
+   script compares unequal and reads as "the source moved" rather than "you
+   typed the path wrong". Both sides are full 40-char OIDs; don't `--short`
+   either, since
+   abbreviation width follows the repo's object count at the moment it runs, so
+   the same tree can render 7 chars today and 8 next month and fail a string
+   comparison on width alone.
+
+   **Equal** → **the source is unchanged since it was captured**, so the graph
+   is as current as it was at build time, however old `builtAt` is — you are
+   done: no commit counting, and no false alarm from commits that touched the
+   path and reverted. **Different** → the source moved; check 2 tells you by how
+   much. *(This answers staleness, not build fidelity: under
+   `provenance: source-origin` the parse root was a pruned copy of
+   `sourceOrigin`, and whether that copy was faithful when staged is a build
+   question — `joern-cpg`'s `SKILL.md` owns it — not one this marker can settle.
+   And when `sourceDirty = true` the parse also swallowed uncommitted work, so
+   `sourceTree` describes only the committed part: skip check 0 and treat the
+   graph as matching no commit exactly.)*
 1. **Raw age.** `now − parsedAt` (fall back to `builtAt` on an older marker).
    There's no universal cutoff — a week-old CPG on a slow-moving component may
    be fine; an hour-old one on a component under active refactor might already
@@ -93,6 +112,12 @@ strongest first — the threshold is yours to set given the task at hand:
    **Use `sourceOrigin`, not `sourcePath`** — see Limits. **Both forms need a
    real `parsedAt`/`sourceCommit`**; skip this check entirely for a
    hand-written marker.
+   **A zero result means nothing in two cases**: when `sourceDirty = true`, and
+   when `sourceTree` is null while `sourceCommit` is present. The second is a
+   source tracked in the index but never committed at capture — `git log
+   <commit>..HEAD -- <origin>` then reports 0 commits about code that has no
+   commit history at all, which reads as "unchanged" when the truth is "never
+   recorded". Check `sourceDirty` before believing a zero.
 
 **Surfacing the suggestion (FR-6).** When any check makes you doubt the
 graph, say so in whatever you hand back — don't silently keep using it as if
@@ -109,7 +134,12 @@ signal, not the threshold.
   the existing marker (by design — freshness tracks "when was this graph's
   content last touched," not "when was it first created"). Every field is
   rewritten on each stamp, absent ones removed, so a marker never mixes two
-  builds.
+  builds — and since 2026-09-07 the pipeline reads the marker back and fails the
+  run unless this build's `parsedAt` is in it, so a marker you find is one that
+  actually landed. (`redis-cli` exits 0 on an error reply, so before that a
+  rejected stamp was silent and an `--append` build could leave the *previous*
+  marker standing over new content. A marker whose `builtAt` predates content
+  you can see in the graph is that shape.)
 - **`sourcePath` is a parse root, not a git path.** It is what Joern was
   pointed at — frequently a pruned scratch copy staged to keep `.venv` and
   friends out of the parse. Running it straight through `git log` doesn't
@@ -143,15 +173,29 @@ signal, not the threshold.
   parsed tree was verified byte-identical to its commit). So: check 0 is
   unavailable (no `sourceTree`), check 2's commit is approximate — a *zero*
   result from it is the untrustworthy direction — and `sourceDirty` reads only
-  as "the repo had changes somewhere". `cpg_falkorchat` carries such a marker,
-  with both values hand-corrected afterwards to the parsed truth.
+  as "the repo had changes somewhere".
+  **`sourceOrigin` is absent on this shape too**, so check 2 needs the same
+  independently-confirmed real directory as the `provenance: none` case above —
+  never `sourcePath`, which on these markers is an absolute path into a
+  gitignored staged copy and returns a silent zero. Anchor on `sourceCommit`
+  (`<sourceCommit>..HEAD -- <the real dir>`), not on `parsedAt`, which these
+  markers also lack. **Live example:** `cpg_falkorchat` carries exactly this
+  marker — keys `BUILT_AT`, `SOURCE_PATH`, `SOURCE_COMMIT`, `SOURCE_DIRTY` and
+  nothing else, with both git values hand-corrected afterwards to the parsed
+  truth; its real directory is `falkor-chat/server`.
 - **A hand-written marker has no date, and check 2 fails silently against it.**
   When `builtAt` is the literal `unknown`, `git log --oneline --since=unknown --
   <path>` **does not error**: git accepts the unparseable approxidate and
   returns **zero commits with exit 0** — verified 2026-09-02, and reproduced
   against a path with heavy recent history (`--since=unknown -- skills/` → no
   commits, while `--since=2026-08-01 -- skills/` → many). So don't run check 2
-  for this shape at all. What you can still do is read the marker's
+  for this shape at all — **and note the `provenance: none` escape hatch does
+  not apply either**, because there is no `parsedAt` or `builtAt` to anchor a
+  `--since` on even once you have confirmed the real directory. This shape also
+  carries **no `sourceCommit`/`sourceDirty` whatsoever** — don't go hunting for
+  them; `cpg_deprecated_salesperson`'s keys are `BUILT_AT`, `SOURCE_PATH`,
+  `STATUS`, `MARKER_ORIGIN`, `MARKER_WRITTEN_AT`, `RENAMED_FROM`, `NOTE`.
+  What you can still do is read the marker's
   `NOTE`/`STATUS`, and treat the graph as a frozen snapshot: for a retired
   component that is the correct reading, not a gap to close, and asking
   `graph-dba` for a rebuild is usually the wrong next step (the source may no

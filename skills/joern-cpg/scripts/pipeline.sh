@@ -57,12 +57,14 @@ SRC="${1:?usage: pipeline.sh <source> [--graph NAME] [--workdir DIR] [--language
 shift
 GRAPH=""; WORKDIR="./joern-work"; LANGUAGE=""; REPR="cpg"; RESET=""; LOAD=""
 HOST="${FALKORDB_HOST:-localhost}"; PORT="${FALKORDB_PORT:-6379}"
-SOURCE_ORIGIN_ARG=""
+SOURCE_ORIGIN_ARG=""; SOURCE_ORIGIN_SET=""
 VERIFY_PREFIXES=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --graph) GRAPH="$2"; shift 2 ;;
-    --source-origin) SOURCE_ORIGIN_ARG="$2"; shift 2 ;;
+    # SET is tracked separately so `--source-origin ""` fails fast rather than
+    # silently falling through to the parse-root branch.
+    --source-origin) SOURCE_ORIGIN_ARG="$2"; SOURCE_ORIGIN_SET=1; shift 2 ;;
     --workdir) WORKDIR="$2"; shift 2 ;;
     --language) LANGUAGE="$2"; shift 2 ;;
     --repr) REPR="$2"; shift 2 ;;
@@ -76,8 +78,14 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$GRAPH" ] || GRAPH="cpg_$(basename "$SRC" | tr -cs 'A-Za-z0-9_' '_')"
 
-mkdir -p "$WORKDIR"
 CPG="$WORKDIR/cpg.bin"; EXPORT="$WORKDIR/export"; CYPHER="$WORKDIR/load.cypher"
+
+# NOTE: `mkdir -p "$WORKDIR"` deliberately happens AFTER the capture block below,
+# not here. SOURCE_DIRTY counts untracked files under the source, so creating the
+# pipeline's own scratch directory first makes the pipeline dirty the very tree it
+# is about to measure — `pipeline.sh . --load` with the default `./joern-work`
+# could then never report a clean source, permanently disabling the consumer's
+# tree-identity check for that build shape.
 
 # ---- provenance: captured HERE, before the parse, scoped to the source ----
 # Not at stamp time. A real build runs for hours; deriving the commit after the
@@ -88,7 +96,7 @@ CPG="$WORKDIR/cpg.bin"; EXPORT="$WORKDIR/export"; CYPHER="$WORKDIR/load.cypher"
 . "$HERE/git-provenance.sh"
 PARSED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 PROVENANCE=none
-if [ -n "$SOURCE_ORIGIN_ARG" ]; then
+if [ -n "$SOURCE_ORIGIN_SET" ]; then
   if cpg_provenance_capture "$SOURCE_ORIGIN_ARG"; then
     PROVENANCE=source-origin
   else
@@ -107,12 +115,31 @@ if [ "$PROVENANCE" = none ]; then
   echo "pipeline: If '$SRC' is a staged copy of a tracked directory, stop now and re-run with" >&2
   echo "pipeline:   --source-origin <the tracked directory it was staged from>" >&2
 else
-  echo "pipeline: provenance ($PROVENANCE) — origin=$CPG_SOURCE_ORIGIN commit=$CPG_SOURCE_COMMIT" >&2
-  echo "pipeline: tree=$CPG_SOURCE_TREE dirty=$CPG_SOURCE_DIRTY parsedAt=$PARSED_AT" >&2
+  # Full OIDs are stamped (see git-provenance.sh); these log lines abbreviate for
+  # readability only.
+  if [ -n "$CPG_SOURCE_TREE" ]; then TREE_SHOWN="${CPG_SOURCE_TREE:0:12}"; else TREE_SHOWN="(none — source not committed)"; fi
+  echo "pipeline: provenance ($PROVENANCE) — origin=$CPG_SOURCE_ORIGIN commit=${CPG_SOURCE_COMMIT:0:12}" >&2
+  echo "pipeline: tree=$TREE_SHOWN dirty=$CPG_SOURCE_DIRTY parsedAt=$PARSED_AT" >&2
   if [ "$CPG_SOURCE_DIRTY" = true ]; then
     echo "pipeline: NOTE — '$CPG_SOURCE_ORIGIN' has uncommitted or untracked changes; this graph" >&2
     echo "pipeline: will be stamped SOURCE_DIRTY=true, i.e. it matches no commit exactly." >&2
   fi
+fi
+
+# Only now is it safe to create the scratch dir (see the NOTE above). A workdir
+# left inside the source by an EARLIER run is still counted, and reordering
+# cannot undo that — so say so, since such a workdir also feeds itself to the
+# parse on the next run.
+mkdir -p "$WORKDIR"
+if [ "$CPG_SOURCE_DIRTY" = true ] && command -v realpath >/dev/null 2>&1; then
+  _wd="$(realpath -m "$WORKDIR" 2>/dev/null || true)"
+  _sr="$(realpath -m "$SRC" 2>/dev/null || true)"
+  case "$_wd/" in
+    "$_sr"/*) echo "pipeline: NOTE — the workdir '$WORKDIR' sits INSIDE the parse root. If it survived" >&2
+              echo "pipeline: an earlier run, it is what made SOURCE_DIRTY true (and it will be parsed" >&2
+              echo "pipeline: too). Point --workdir outside the source." >&2 ;;
+  esac
+  unset _wd _sr
 fi
 
 echo "== [1/3] build CPG ==" >&2
@@ -196,7 +223,53 @@ if [ -n "$LOAD" ]; then
   # build's SOURCE_COMMIT standing over new content.
   BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   STAMP="$(cpg_provenance_stamp "$BUILT_AT" "$PARSED_AT" "$SRC" "$PROVENANCE")"
-  redis-cli -h "$HOST" -p "$PORT" GRAPH.QUERY "$GRAPH" "$STAMP" >/dev/null
+
+  # `redis-cli` EXITS 0 ON AN ERROR REPLY and prints the error to stdout, so the
+  # old `… >/dev/null` discarded every failure and `set -e` saw success. Probed
+  # against this FalkorDB (2026-09-07), the shapes are:
+  #   errMsg: Invalid input …      <- Cypher errors; note it does NOT start
+  #                                   with the word "error", so a /^error/i
+  #                                   pattern misses the most likely failure
+  #   ERR unknown command '…'      <- Redis layer
+  #   ERR wrong number of arguments for 'graph.QUERY' command
+  #   WRONGTYPE Operation against a key holding the wrong kind of value
+  # Pattern-matching that list is inherently incomplete, so it is only the first
+  # gate; the READ-BACK below is the load-bearing one.
+  rq() {
+    local out
+    out="$(redis-cli -h "$HOST" -p "$PORT" GRAPH.QUERY "$GRAPH" "$1" 2>&1)" || { printf '%s' "$out"; return 1; }
+    printf '%s' "$out"
+    case "$out" in
+      errMsg:*|ERR\ *|WRONGTYPE*|*"read only"*|*"read-only"*) return 1 ;;
+    esac
+    return 0
+  }
+
+  if ! STAMP_OUT="$(rq "$STAMP")"; then
+    echo "pipeline: FAILED — FalkorDB rejected the freshness stamp for '$GRAPH':" >&2
+    echo "pipeline:   ${STAMP_OUT:-<no reply>}" >&2
+    echo "pipeline: the load itself succeeded; only the provenance marker is missing. Do NOT" >&2
+    echo "pipeline: treat this graph as stamped — on an --append build the PREVIOUS build's" >&2
+    echo "pipeline: marker is still standing over the new content." >&2
+    exit 1
+  fi
+
+  # Read-back assertion. The stamp is the one write whose silent failure is
+  # invisible, and the guarantee two other documents now rest on — "every field
+  # rewritten on every stamp, an absent one removed rather than left stale" —
+  # holds only if the write actually landed. PARSED_AT is the discriminator: it
+  # is unique to this run, so a surviving older marker cannot match it.
+  STAMP_BACK="$(rq 'MATCH (b:CpgBuildInfo) RETURN b.PARSED_AT' || true)"
+  case "$STAMP_BACK" in
+    *"$PARSED_AT"*) ;;
+    *) echo "pipeline: FAILED — the freshness stamp did not land in '$GRAPH'." >&2
+       echo "pipeline: read back: ${STAMP_BACK:-<no reply>}" >&2
+       echo "pipeline: expected a CpgBuildInfo marker with PARSED_AT=$PARSED_AT. The marker now" >&2
+       echo "pipeline: in the graph, if any, describes a DIFFERENT build — do not trust it." >&2
+       exit 1 ;;
+  esac
+
   echo "pipeline: stamped '$GRAPH' — BUILT_AT=$BUILT_AT PARSED_AT=$PARSED_AT SOURCE_PATH=$SRC" >&2
-  echo "pipeline: provenance=$PROVENANCE origin=${CPG_SOURCE_ORIGIN:-—} commit=${CPG_SOURCE_COMMIT:-—} tree=${CPG_SOURCE_TREE:-—} dirty=${CPG_SOURCE_DIRTY:-—}" >&2
+  echo "pipeline: provenance=$PROVENANCE origin=${CPG_SOURCE_ORIGIN:-—} commit=${CPG_SOURCE_COMMIT:0:12}${CPG_SOURCE_COMMIT:+…} tree=${CPG_SOURCE_TREE:0:12}${CPG_SOURCE_TREE:+…} dirty=${CPG_SOURCE_DIRTY:-—} (full OIDs are in the marker)" >&2
+  echo "pipeline: stamp verified by read-back." >&2
 fi

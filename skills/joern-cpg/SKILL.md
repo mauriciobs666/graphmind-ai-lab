@@ -72,10 +72,20 @@ when you run a build:
   inherit the containing repo's `HEAD` (which describes a different tree) and
   stamps `PROVENANCE=none` with a loud warning in the first seconds of the run.
   Name the real directory instead — `--source-origin falkor-chat/server` — and
-  the commit, tree hash and scoped dirty flag are derived from *it*. Stage
+  the commit, tree object (a blob, for a single-file source) and scoped dirty
+  flag are derived from *it*. Object ids are stamped as **full 40-char OIDs**,
+  since the consumer compares them for equality and `--short` width drifts with
+  the repo's object count; the pipeline's log lines abbreviate. Stage
   immediately before invoking the pipeline, since capture happens at start, and
   confirm the copy matches its origin (`diff -rq`, modulo the paths you pruned)
   if the build is one others will lean on.
+- **A rejected stamp now fails the run.** `redis-cli` exits 0 on an error reply
+  and prints it to stdout, so the stamp is checked for an error reply *and* read
+  back — the run fails unless the marker in the graph carries this build's
+  `PARSED_AT`. Worth knowing because the failure is late and specific: the load
+  succeeded and only the marker is missing, so re-stamping by hand is the fix,
+  not re-parsing. Left unchecked on an `--append` build, the previous build's
+  marker would stay standing over the new content.
 
 Or run the stages individually:
 
