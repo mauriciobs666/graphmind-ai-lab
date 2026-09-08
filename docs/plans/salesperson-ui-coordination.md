@@ -166,7 +166,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U59** — P5-3: the live `NOTE` carried mechanism 1's **retracted** false universal, inside the artifact check 0 treats as evidence | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered.** Replaced in place with `cobb`'s wording verbatim; **round-trip proved by reverse-substitution and `sha256`, not by eye**. 2245 → 2267 chars, 10 keys, other nine fields byte-identical (`diff` empty). **I verified independently**: false universal `false`, new sentence `true`, `MANIFEST.txt:19` chain `true` | `cpg_falkorchat`'s `NOTE` | `analyst` Pass 6 | 176k tok / 7 tools |
 | **Pass 6** — gate `049f063` + `271c899` + the rewritten `NOTE`. **Fresh again**: Pass 5 both found P5-1 and prescribed the wiring test that answers it | `analyst` (**fresh**) | `aa000d6e1e597fca5` | **delivered — NEEDS CHANGES** (0 blockers, 4 major, 4 minor). Ruled the wiring test a **real guard** — anchors robust under 4 mutation modes, and the *rejected design* restored fails 4 cases. But **P6-1: the oracle reads only `rc != 0`, so deleting `replay_stamp` — the defect `271c899` is named for — passes all six cases green** (case 3 aborts at 127 after printing the lines the oracle scrapes). **teco reproduced P6-1 independently.** P6-3: the `replay_stamp` fix went to the three branches that already proved the stamp landed and skipped the two where re-sending *is* the fix — one of which sits nine lines below its definition | `docs/reviews/cpg-provenance-stamp.md` `## Pass 6` — committed `eb3a167` | — (is the gate) | 152k tok / 52 tools |
 | **U60** — close Pass 6: P6-1/2/3, P6-5, P6-6, then P6-4/P6-7/n4. **Ordered, not batched** — the credentials are written last, from what the strengthened suite's runs actually showed | `cobb` | `abeeb0ea31b20e7cc` | in-flight — briefed to **judge** the analyst's prescriptions rather than transcribe them (this chain has shipped a prescribed fix that was wrong three times), and to verify FalkorDB's real error-reply shape itself before adopting the P6-2 closure | `pipeline.sh`, `git-provenance.sh`, `test-stamp-wiring.sh`, `SKILL.md`, `freshness.md`, `cobb/kaizen/history.md` | `analyst` Pass 7 → — | — |
-| **U61** — P6-8: the `NOTE` was rewritten while `MARKER_WRITTEN_AT` stood still, so the marker no longer dates its own content | `graph-dba` | `ae44d6daf1ab9e7f9` | in-flight — **which** timestamp is honest is left to the owner, with the reasoning asked for explicitly; targeted `SET`, never the full-map stamp form | `cpg_falkorchat`'s `MARKER_WRITTEN_AT` | — | — |
+| **U61** — P6-8: the `NOTE` was rewritten while `MARKER_WRITTEN_AT` stood still, so the marker no longer dates its own content | `graph-dba` | `ae44d6daf1ab9e7f9` | **delivered.** Chose the **observed write time** and **refused to reconstruct** the rewrite's own time — knowable only to a 3h23m window, and this node already declined that exact practice by leaving `PARSED_AT` absent rather than guess it. Stated the cost it accepted (overstates the `NOTE`'s age by ≤3h44m) instead of burying it. **teco verified**: 10 keys, `NOTE` 2267, head line and `cobb`'s sentence intact, other nine fields unchanged. **Found that `MARKER_WRITTEN_AT` has no written definition anywhere** — relayed to U60 in flight | `cpg_falkorchat`'s `MARKER_WRITTEN_AT` | — (verified by teco) | 110k tok / 23 tools |
 | **U57** — ship the map form now that it is executed rather than doc-sourced; the stray assertion stays and becomes its production regression test | `cobb` | `aadea04e203b11c4f` (resumed) | in-flight | `git-provenance.sh`, `freshness.md`/`SKILL.md` prose, kaizen disposition | `analyst` — queued with U55 | — |
 | **U56a** — delete the graph key `cobb` leaked by probing a nonexistent graph (`GRAPH.QUERY` **materializes**) | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered.** Empty on all three counts before deletion. `diff` against the **U47a-close 25-key listing** is empty — not a bare count, so the concurrent session's own churn is excluded. I re-verified: 25 keys, zero `scratch_graphdba`/`nonexistent` | `GRAPH.LIST` diff | — | 162k tok / 11 tools |
 | **U56b** — execute the `SET b = {map}` claim `cobb` refused to ship on doc evidence alone | `graph-dba` | `a5825012b34ab9a9b` (same) | **delivered — it holds, four ways.** Probe 1: `MARKER_EVIDENCE` (the Case 3 survivor) **gone**, label and singleton intact. Probe 2b: a `NULL` **inside** the map omits the property — so the map mirrors `_cpg_prop`'s structure with five lines deleted. Probe 2a and Probe 3 (`--reset` create path) both correct. Routed **back to `cobb`** → U57, never applied by the validator | executed evidence, `keys(b)` throughout | — | (same run) |
@@ -177,7 +177,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U42c** — kaizen bookkeeping, retraction handled | `cobb` | `a1cfcb25341f0b0bb` | **accepted — committed `20b8770`**. The false learning **was never written** — zero graph writes when the retraction landed. Reached P4-1 **independently** from `git-provenance.sh:138` minutes earlier, and verified my quoted docstring instead of taking it | K-022 rewritten (4→5 instances), K-023 filed, 3 `:KaizenEntry` | — (raw capture) | 122k tok / 18 tools |
 | **U46** — P4-5: `cpg_falkorchat`'s own `NOTE` cites a superseded version of the check-0 gate | `graph-dba` | — | queued (fold into the next marker touch — not worth a graph write of its own) | the live marker's `NOTE` | — | — |
 | **U42c** — the kaizen bookkeeping my own brief fenced off: `:KaizenEntry` + `claude/cobb/kaizen/history.md` | `cobb` | `a1cfcb25341f0b0bb` (resumed) | in-flight — **retraction sent mid-run**: one of the two learnings I suggested is false (P4-1), asked to clear/correct it if already written | `kaizen_team` + `claude/cobb/kaizen/history.md` | — (raw capture; `cobb` distills) | — |
-| **U44** — route the `Properties removed` double-count quirk into `falkordb-quirks.md` | `graph-dba` | — | queued (blocked: concurrent session holds the file) | `claude/graph-dba/falkordb-quirks.md` | — | — |
+| **U44** — route the `Properties removed` double-count quirk into `falkordb-quirks.md` | `graph-dba` | `ae44d6daf1ab9e7f9` | **delivered incidentally, by U61** — the corrective `SET` replied `Properties set: 1` **and `Properties removed: 1`** with `keys(b)` unchanged at 10, giving a **third** live observation (1-against-0, after 13-against-5 and 4-against-none). Written up honestly as *unreliability established, mechanism not*. **Uncommitted and unstageable** — the concurrent session has three unrelated entries in the same file | `claude/graph-dba/falkordb-quirks.md` | — | (in U61) |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | gated — fix blocked on U40 | `e6fa20c` — 9 files, +895/−44, 12 tests | `analyst` Pass 17 → **needs changes**, 2 majors (`20e138e`) | 305k tok / 111 tools |
@@ -4721,3 +4721,49 @@ rate-limit kills across this coordination, and Pass 6 alone cost 152k tokens. Tw
 concurrently is the shape that produced those kills, and the recovery from each is cheap only
 because everything verified is already committed. Serializing costs latency; concurrency costs
 resumptions. Taking the latency.
+
+## U61 declined the timestamp I would have written
+
+I gave U61 the fork rather than the answer — *which* timestamp is honest — and asked for the
+reasoning explicitly, because the point of this marker is that a reader can trust what it dates. I
+was expecting it to reconstruct the moment U59's `NOTE` rewrite actually ran. It refused, and the
+refusal is better than my expectation.
+
+That moment is not knowable, only **bounded**: Pass 5 read 2,245 chars at or before `9bbadf3`
+(17:37:31Z), U59's delivery landed in `8c62aa8` (21:00:49Z). FalkorDB stamps no per-property write
+time and no artifact records the `GRAPH.QUERY`. A precise second inside that 3h23m window would be an
+invented value dressed as an observation — **and this node has already refused exactly that practice
+once**, in its own prose: `PARSED_AT` is absent because staging time is bounded only to a ~2h window
+and "an invented value would be worse than none." The narrower window makes the fabrication *less*
+defensible, not more, because here an alternative exists.
+
+So: the observed write time, self-evidencing by construction, with the cost stated in the open —
+the field now overstates the `NOTE`'s age by between ~20 minutes and ~3h44m, against a `BUILT_AT` a
+full day earlier, so no consumer the documents describe can tell. It also named and rejected a third
+option (`unknown`, the `cpg_deprecated_salesperson` style) as destroying a signal that genuinely is
+knowable.
+
+**The finding underneath is the one worth keeping.** `MARKER_WRITTEN_AT` has no written definition
+anywhere in this repo — `freshness.md:316` and the ontology manual `:125` carry it inside key lists
+and never gloss it, and Pass 4's P4-1 proposed a consumer use for it in the fix that *wasn't*
+adopted. U61's own words: *"I have just decided its semantics by writing a value, which is the wrong
+order."* An undefined field acquires its meaning from the first agent that has to act on it, and
+that agent is under time pressure and reasoning alone. I relayed it to U60 mid-flight rather than
+queueing it, because `cobb` has `freshness.md` open right now and a second agent editing the same
+file later is pure waste — and I asked `cobb` to *disagree* if it reads the field differently,
+since the value is live on the node either way and a fresh contradiction is worth more to me than
+assent.
+
+**U44 closed itself in passing.** The corrective `SET` replied `Properties set: 1` **and
+`Properties removed: 1`** while `keys(b)` stayed at 10 — a third live instance of the counter
+divergence, after 13-against-5 and 4-against-none. On this node of all nodes, a "Properties removed"
+line is exactly what would convince a reader the `NOTE` had just been eaten. It went into
+`falkordb-quirks.md` phrased as *the unreliability is established, the mechanism is not*, which is
+the right altitude for one data point that merely fits a hypothesis.
+
+**And it is stuck there uncommitted.** The concurrent session has three unrelated entries in the
+same file — `UNIQUE` on nullable properties, `EXISTS {}` being unusable, `GRAPH.INFO`'s queue-depth
+section — so committing by explicit path would sweep its work into my commit. That is the mirror
+image of the failure I already had today, when my three staged files went out inside *its* commit.
+Nothing is at risk: the entry is on disk, correct, and in the file it belongs in. Whichever session
+commits that file next carries the other's work, and the only cost is attribution. Leaving it.
