@@ -177,7 +177,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **Pass 20** — gate S9a-fix. **Fresh by design**: Pass 17 *prescribed* reserve-then-write, so its author judging this diff is producer-self-review one seat over (the U24 precedent) | `analyst` (**fresh**) | `afc3c09ccd5b50340` | **delivered — committed `ac28f2c`** (+284 lines). Survived **two** rate-limit kills, the second seconds in; resumed on its own transcript both times and lost nothing, because its predecessor artefact was already committed | `docs/reviews/salesperson-ui-impl.md` `## Pass 20` | **needs changes** — 0 blockers, **3 majors**, 2 minors, 3 nits. P17-1/P17-2 closed and closed at the right unit; my four questions all answered (see §Pass 20 below) | 150k tok / 10 tools |
 | **U50** — P20-1 is a **plan** defect: v1.29's S9 row prescribes the unconditional release the implementer faithfully wrote. Fix the release condition, tombstone the false mechanism | `architect` | `a5d8f1e2a1d897af0` | in-flight | `docs/plans/salesperson-ui.md` → **v1.30** | `analyst` (fold into Pass 21) | — |
 | **U51** — apply P20-1's corrected release + the P20-3/4/5/6 docstring corrections. **Fresh, not a resume**: S9a-fix's author is at 286k tok / 114 tools and every one of these fixes is self-contained | `coder` (fresh) | — | queued (behind U50 — needs the corrected rule; and behind U52 by file) | `storefront.py`, `test_storefront_api.py` | `analyst` Pass 21 | — |
-| **U52** — P20-2: three delivered documents state the inverse of measured behaviour about `turn_workers` and `queuePosition`. Prose-only; **measure before writing**, because this sentence position has now been wrong twice | `coder` | `a9d876aa92c41d005` | in-flight | `SERVER.md`, `config.py`, `HISTORY.md` | `analyst` Pass 21 | — |
+| **U52** — P20-2: three delivered documents state the inverse of measured behaviour about `turn_workers` and `queuePosition`. Prose-only; **measure before writing**, because this sentence position has now been wrong twice | `coder` | `a9d876aa92c41d005` | **delivered — content committed, attribution lost.** Landed inside the concurrent session's `f9d23fb`, which swept my staged index; my own commit found nothing to make. Content verified byte-identical to what I reviewed (`git diff HEAD` clean). **Numbers re-measured by me, not taken on report** — 3 / 2 / 0 at `turn_workers` 1 / 2 / 4, real-executor arm agreeing with the staged-map arm; `config.py` verified comment-only | `SERVER.md`, `config.py`, `HISTORY.md` | `analyst` Pass 21 | 98k tok / 34 tools |
 | **S9f** — `STOREFRONT_QUIESCE_S`'s docs describe a quiesce that S9a made live | `tico`/`coder` (tbd) | — | queued (held behind Pass 17) | `config.py` + `docs/SERVER.md` prose | `analyst` (fold into Pass 17 re-check) | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
 | **S9c** — the dead-turn latch `turn.lastTurn` and its lifecycle | `coder` | — | queued (behind S9b) | `storefront.py`, `storefront_api.py`, tests | `analyst` | — |
@@ -3989,3 +3989,43 @@ the review. Continuing a delegate that large buys nothing here except cost and d
 Sequencing: U50 and U52 run in parallel (disjoint files, neither needs the suite), U51 waits on
 both — on U50 for the rule, on U52 by file adjacency in `falkorchat/`. The `qa-engineer` acceptance
 pass stays held: it would be certifying a diff with three known majors in it.
+
+## U52 landed correctly and was committed by somebody else
+
+U52 came back with the right answer and the right reasoning. It measured before it wrote — two
+arms, a real executor and a staged map, agreeing at every setting — and got the review's numbers:
+the fifth of five arrivals reads **3 / 2 / 0** at `turn_workers` **1 / 2 / 4**. I re-ran its probe
+myself rather than reading its table, which is the check that distinguishes a measurement from a
+plausible table of numbers; the third generation of this sentence is not going to be wrong because
+I trusted the second.
+
+Its `HISTORY.md` judgement was better than the instruction I gave it. I offered "correct or
+annotate" as an open choice; it annotated, on the ground that the paragraph *describes what the
+S9a-fix commit shipped*, so rewriting it to the corrected wording would make a dated log claim that
+commit wrote text it did not. It added a second reason I had not thought of: the paragraph directly
+above already records **generation one** of this same sentence (P18-6), and erasing generation two
+would erase the trail that made P20-2 findable at all. A log that quietly heals is a log that hides
+a recurring defect.
+
+**Then the commit went missing.** I staged the three files, checked the diff, ran the probe, and
+issued `git commit` — which answered *no changes added to commit*. The concurrent session had
+committed in the gap, and its commit (`f9d23fb`, a `model-bench` coordination update) carries all
+three of my `falkor-chat/` files inside it. Content is intact: `git diff HEAD` against the three
+paths is clean, so what is in the tree is exactly what I reviewed. What is lost is the record — the
+P20-2 fix is now attributed to a commit whose message is about something else entirely, and the
+commit message I wrote for it, explaining the tombstone and the annotate-don't-rewrite reasoning,
+was never made.
+
+I am not repairing it. Every repair is a history mutation — amend, reset, revert-and-recommit — and
+this is a tree another session is actively working in; rewriting a commit that is not mine, on a
+branch someone else is committing to, trades a bookkeeping defect for a real one.
+
+**The mechanism is worth naming, because my own guardrail is aimed at the wrong half of it.** I am
+careful never to `git add -A`, precisely so I never sweep up another session's work. That protects
+*them* from *me*. It does nothing to protect me from them, because **the index is shared per working
+tree, not per session** — my staged files were sitting in the one index both sessions use, and a
+broad `git add` on the other side picked them up as legitimately as it picked up its own. The
+protection I actually needed was **atomicity**: stage and commit in a single invocation, so no other
+session can commit in the window between them. I have been splitting `git add` and `git commit`
+across two tool calls all session, to inspect `--cached --stat` in between — a habit that is
+good practice alone and a race in a shared tree.
