@@ -74,7 +74,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U18b | teco chunk D (14: 09-07, all arrived after pass open) | `adcb31af6bc3fc428` | accepted | `claude/teco/teco.md` (12 statements from 9 entries, **zero new bullets** — 11 lines changed, 11 removed); `skills/agent-standards/claude-code.md` (2 permission-classifier entries merged); `claude/teco/kaizen/history.md`+`plan.md`; 5 `MENTIONS` edges over 4 entries (3 tdd-engineer, 2 analyst); 10 nodes deleted, 4 `PRODUCED` resolved — **`teco` closed out, 0 produced / 0 mentioned** | none → — | 224.6k tok, 69 tools |
 | U19 | analyst chunk A (12: ≤ 08-30) | `adb247a3e028c0606` (killed by a session rate limit at its first tool call, 09-07; resumed in place by `SendMessage` 09-08 — nothing had landed, all 12 edges intact) | accepted | `claude/graph-dba/falkordb-quirks.md` (3 entries: 2 folded, 1 new regex bullet) + `kaizen/history.md`; `claude/analyst/review-techniques.md` (2, both edits to existing material — one **corrected a wrong import-resolution mechanism the file had been carrying**) + `kaizen/*`; **7 discarded**, 3 of them additionally carrying a false or misattributed claim; 1 `MENTIONS`→`devops`; 11 nodes deleted, 1 `PRODUCED` resolved. **Zero new bullets in any always-loaded prompt** — `analyst.md` and `claude/AGENTS.md` untouched | none → — | 184.9k tok, 50 tools |
 | U20 | analyst chunk B (11: 08-31…09-01 + the first 5 of 09-02) | `a6db6af4910e607bc` (killed by a session rate limit mid-promotion, 09-08; resumed in place by `SendMessage` after the reset — four promotions already on disk, nothing logged, all 11 entries intact; **resumed a second time**, which corrected a real accessor defect and refuted my stamp finding) | in-flight | 7 promoted / 4 discarded, all 11 cleared; `claude/analyst/{kaizen/history.md,kaizen/plan.md,review-techniques.md}`, `skills/agent-standards/claude-code.md`, `skills/python-web-quirks/SKILL.md`, `skills/README.md`, `claude/graph-dba/falkordb-quirks.md`, `claude/data-scientist/lm-studio-model-notes.md`, +3 `kaizen/history.md` | teco re-derivation → **accepted**; my "wrong stamps" finding was itself wrong (see below), the accessor defect it surfaced was real and is fixed | 236.4k tok, 35 tools |
-| U21 | analyst chunk C (10: all of 09-02) | `a9b3f7141f0403e35` (resumed once — plan-hashing evidence line returned for recount) | in-flight | 6 promoted / 4 discarded (2 **falsified**), all 10 cleared + curator-cleared my false `7c4e91a2…`; `claude/graph-dba/falkordb-quirks.md`, `claude/analyst/review-techniques.md`, `claude/analyst/kaizen/{history,plan}.md`, `claude/graph-dba/kaizen/history.md` | teco re-derivation → 9/10 accepted, 1 evidence line returned | 202.8k tok, 81 tools |
+| U21 | analyst chunk C (10: all of 09-02) | `a9b3f7141f0403e35` (resumed twice) | accepted | 6 promoted / 4 discarded (2 **falsified**), all 10 cleared + curator-cleared my false `7c4e91a2…`; `claude/graph-dba/falkordb-quirks.md`, `claude/analyst/review-techniques.md`, `claude/analyst/kaizen/{history,plan}.md`, `claude/graph-dba/kaizen/history.md` | teco re-derivation → **accepted** (2 resumes: evidence recount, then provenance of an unattributed bullet) | 224.0k tok, 96 tools |
 | U22 | analyst chunk D (11: 09-03) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U23 | analyst chunk E (13: 09-07, arrived after pass open) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 
@@ -253,6 +253,39 @@ instrument you have tested against known data first. Two of the three defects
 this pass turned up were found this way, and the one time I skipped testing my
 own instrument I filed a false finding against a correct delegate
 (see the retraction above).
+
+## Two sessions' uncommitted work inside one file
+
+The shared-tree hazard escalated on 2026-09-08 from *different files* to **the
+same file**. `claude/graph-dba/falkordb-quirks.md` now holds 480 uncommitted
+words from two coordinations at once: 369 from U21's promotions, and 111 from
+the concurrent CPG session — a `Properties removed` bullet citing
+`cpg_falkorchat`, `CpgBuildInfo`, `MARKER_WRITTEN_AT` and
+`skills/cpg-analysis/references/freshness.md`, every one of them a subject
+U21's brief explicitly barred.
+
+I asked `cobb` to account for the 111-word delta rather than assume it was a
+byproduct of its own probing, and it disclaimed the bullet on five independent
+grounds (wrong graph, wrong subject, wrong section of the file, exact
+arithmetic, and zero mentions in any of its three history entries). All of it
+checks out: the bullet is absent from `HEAD`, sits in a section neither of
+cobb's two `Edit`s touched, and lines 190-199 measure exactly the 111 words.
+
+**So the file is held out of U21's commit** (`04205c5`), and cobb's two
+promotions into it stay on disk, uncommitted, until the CPG session commits
+its own bullet. That is the right trade: a path-limited commit is only safe
+while each *path* belongs to one coordination, and this file no longer does.
+Committing it would have swept another session's unreviewed, unattributed work
+into a kaizen commit under my name.
+
+**What this changes for the remaining chunks.** `git status` and a path list
+are no longer sufficient to establish ownership — a file can be *partly* mine.
+The discriminator that worked is a three-way word count, `a506a34` vs `HEAD` vs
+worktree: where `HEAD` already exceeds the baseline the other session has
+committed its share and the worktree delta is wholly mine (this is why
+`claude/cobb/kaizen/history.md` was safe to commit at 811 words while
+`falkordb-quirks.md` was not). Run it per file before every integration
+commit, not per unit.
 
 ## Follow-ups
 
