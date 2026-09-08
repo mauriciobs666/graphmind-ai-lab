@@ -1675,3 +1675,149 @@ ws:acme, ws:eval, ws:nlq-eval, ws:probe-s0-reset, ws:probe-s0r2, ws:probe-s0r3, 
 ws:qa-cart-totals, ws:qa-cart-totals2, ws:qa-catalog-lookup, ws:qa-catalog-lookup2,
 ws:qa-durable-profile, ws:qa-salesperson-demo, ws:qa-tico-workflows-manual, ws:qa028, ws:s1v6,
 ws:s1v7, ws:test`.
+
+---
+
+## Pass 7 — 2026-09-08 · gating the Pass 6 fixes (`375af25`) on top of `271c899`/`049f063`
+
+**Scope:** commit `375af25` read with `git show` against its parent — `skills/joern-cpg/scripts/{pipeline.sh,test-stamp-wiring.sh}`, `skills/joern-cpg/SKILL.md`, `skills/cpg-analysis/references/freshness.md`, `claude/cobb/kaizen/{history,plan}.md`. `git-provenance.sh` confirmed unchanged (md5 `808a114…`, matching the brief and `271c899`). Working tree clean for `skills/` throughout the run, so those files are the committed ones; `claude/cobb/kaizen/{history,plan}.md` were read from `git show 375af25` because a **concurrent session** modified them mid-run (+50 / +9 lines, a different unit — the claims judged in **P7-2** are unchanged in both the committed state and the current tree, re-checked at the end). `claude/graph-dba/falkordb-quirks.md` is likewise mid-edit by that session and is cited here **only** from `git show 375af25:`. **Method:** ran the shipped suite (**12** checks, all green — see **n8**); then ran it against **seventeen byte-copy mutants** in the session scratchpad, the repo never touched; re-probed the live `redis-cli`/FalkorDB reply shapes read-only via `GRAPH.RO_QUERY`; re-read the live `cpg_falkorchat` marker; reconstructed the three tombstones from `git show <ref>:<path>` across all five revisions of `freshness.md`. `pipeline.sh` was not run. No graph write, no `GRAPH.DELETE`, no tree-mutating git, nothing staged or committed. **One disclosure:** two probes used `GRAPH.QUERY` (not `RO_QUERY`) against the already-existing `cpg_falkorchat` with a **pure read** query, to measure whether the statistics trailer is a property of the command or of the reply (**P7-5**). No write clause was sent; `size(keys(b))` is 10 before and after, `NOTE` 2267.
+
+**Verdict: needs changes** — no blocker; four majors. Every Pass 6 finding is closed at the level it was reported, both deviations from the prescription are **correct on the merits**, and the new oracle really does kill the mutants Pass 6 said it must. But the P6-3 split is guarded on one of its two halves only, and the passage that names the tombstone hazard contains a fresh instance of it — the "3-for-3" pattern is false of mechanism one, which is P6-4's defect one iteration later, in the sentence written to replace it, now load-bearing for K-022's escalation.
+
+CPG: considered, not relevant — the artefacts are Bash and Markdown, no `cpg_skills` graph exists, and `cpg_falkorchat` is the *subject* of the marker data rather than a graph of this code.
+
+### Adjudicating the two deviations from the Pass 6 prescription
+
+**P6-2 — the trailer, not the column header: correct, and better than what was prescribed.** I re-measured the reply shapes myself (**A12.1**). The trailer `Query internal execution time:` is present on **both** success shapes — rows and *zero rows* (the pass case) — and absent from **four** failure shapes, including two the old blacklist cannot see (`Unknown function 'x'`, `Type mismatch: …`), a mid-stream runtime error that discards the partial rows (`Division by zero`), and a **timeout** (`Query timed out`, `redis-cli` rc 0). The timeout shape is live, not hypothetical: `GRAPH.CONFIG GET TIMEOUT` is **1000**ms on this instance and reads enforce it (`claude/graph-dba/falkordb-quirks.md:702-709` as of the gate commit); today's stray read runs in ~0.5 ms, so it is a bound rather than a risk — but the trailer closes it for free, where the blacklist never could. Requiring the header instead would be equally fail-closed here; the trailer's stated advantage (last element, so it also excludes truncation) is real and costs nothing. Mutant `mC` (drop the third argument) fails the suite loudly. **Adopted correctly.**
+
+**Leaving the stamp *write* on the blacklist: right conclusion, sound reason (2), loose reason (1), and one uncovered cost.** Reason (2) is the one that carries it and I verified it end to end: with the fake made to return a **bare** runtime error on the `MERGE`, `rq` returns 0, the run falls through to the `PARSED_AT` read-back at `:370-379`, and that read-back — a positive assertion, `|| true` on the read so an error reply simply fails to contain the timestamp — fires with rc 1 and prints the replay block (**A12.3**). The write genuinely has a stronger backstop than any reply-shape test. See **P7-4** for what that path costs, and **P7-5** for reason (1).
+
+**P6-5(b) — `cobb` is right, the Pass 6 analyst was wrong.** Verified by mutation (**A12.2**). With the emitted Cypher changed to `SET b += {`, the suite fails on **cases 1 and 2** (`rc: expected 0, got 1`; strays `MARKER_EVIDENCE MARKER_ORIGIN NOTE`, then `MARKER_ORIGIN NOTE SOURCE_*`) and case 3 is untouched, exactly as `cobb` reports — case 3 is already in merge mode and cannot discriminate. The derivation is nonetheless load-bearing: with `qmode` forced back to `replace` **and** the `+=` in place, the whole suite goes green (`mL`). So the fix is right and its stated reason is right; only the gate's prediction of *which* case would catch it was wrong.
+
+### P7-1 — major · the P6-3 split is guarded on the `replay_stamp` half only, and the unguarded branch is the one that fires in production
+
+`replay_stamp`'s wording is asserted at both did-not-land call sites (`:361`, `:377`) — swapping either to `show_stamp` fails the suite on the wording alone (`mK`). `show_stamp`'s wording is asserted at **one** of its three (`:427`, via the `stray_error` case). Reverting `:444` — the stray-key-found branch, the branch the whole stray assertion exists to reach and the one that fires on `cpg_falkorchat`'s next rebuild — back to `replay_stamp` **passes the suite green** (`mA`), reinstating exactly P6-3's self-contradiction: `:434` tells the operator the stamp is a map assignment that already ran, then the replay tells them re-sending it is the fix. `history.md`'s U60 claim that the restored-`271c899` mutant *"fails on all three branches it got wrong"* is the same gap read from the other side: that mutant (`mR`) does fail three **cases**, but they cover one (`:427`) of the three post-read-back **branches**.
+
+**Fix:** one `must-contain` argument on the case that already drives `:444` — `run_case "regression: merge semantics, foreign key" … MARKER_EVIDENCE "the stamp is NOT what needs"` — and the same on the subsumption case. Two arguments, no new cases; verified sufficient (`mA` then fails). The same gap covers the advice *body*: rewriting `replay_stamp`'s re-send command to `GRAPH.RO_QUERY` — which cannot execute a write — also passes green (`mI`).
+
+### P7-2 — major · the "3-for-3" pattern is false of tombstone one, in three files — P6-4's defect in the sentence that replaced it
+
+`freshness.md:252-254`: *"Each of these three was written in the same sitting as the fix it certifies, by whoever had just made it — and **each has since had its own certifying sentence corrected on review**, this one included, twice."* Repeated verbatim in `claude/cobb/kaizen/history.md` (U60) and, as K-022's evidentiary base, in `claude/cobb/kaizen/plan.md` — *"a controlled experiment … a **3-for-3 failure rate** on one document."*
+
+**Tombstone one's certifying sentence has never been corrected — not on review, not at all.** Its block is byte-identical (md5 `613b803a…`, 8 lines / 90 words) across `29538d6 → 0da3eb9 → 5417f0e → 271c899 → 375af25`; *"Re-checked there, not inferred."* stands today exactly as authored (**A12.4**). Its *mechanism* was retracted the same day by its own author in tombstone two (`0da3eb9`), before any review pass saw it — `MARKER_EVIDENCE` appears nowhere in Passes 1-4, and Pass 5 gated `29538d6`/`0da3eb9`/`5417f0e` as one arc. Both qualifiers fail: not *its own sentence*, not *on review*. The rate is **2-for-3**. The first clause ("same sitting, by whoever had just made it") I did verify — all three tombstones entered in the same commit as the fix they certify.
+
+**Fix:** state what is checkable and keep the hazard, which survives intact and is arguably sharper: *two of the three have had their certifying sentence corrected on review; the third's mechanism was retracted within the day by a defect its credential could not have caught, and its sentence still stands unedited.* Correct the same clause in `history.md` (U60) and in K-022's rationale, where "3-for-3" and "controlled experiment" are the argument for escalating.
+
+### P7-3 — major · the passage instructing "one dated line, not a new narrative" grew by 41 lines in the commit that wrote it
+
+Measured across the arc, the three-tombstone block inside one bullet of `freshness.md`: **8 → 19 → 36 → 58 → 99 lines** (90 → 1,206 words). It is now **27%** of a 4,481-word document whose own header declares it is read by `teco` **at dispatch time** to decide whether to trust a graph. The gate commit adds the largest instalment yet, and inside it the instruction *"Do not write a fourth tombstone certifying the third — a further revision is one dated line, not a new narrative."* The instruction is addressed to *"whoever edits this passage next"*, so it does not literally bind its own commit; the effect is a rule whose author exempted itself, published in the artefact that motivates it. The repo convention agrees with the rule (`AGENTS.md`: history is not context; an open item is rewritten, not appended to).
+
+**Fix:** apply it retroactively in the same pass that fixes **P7-2**. `cobb`'s `kaizen/history.md` already carries the full sequence narrative; leave in `freshness.md` the rule, the current mechanism, the level its evidence covers, and one pointer — and move the historiography out. Target the bullet back under ~30 lines.
+
+### P7-4 — major · on the reply shape P6-2 measured, the operator loses the server's error text entirely
+
+`rq`'s blacklist sees `errMsg:` (Cypher *syntax*), `ERR `, `WRONGTYPE`, read-only. It does **not** see FalkorDB's **runtime** errors — the class P6-2 measured. So for that class the branch written for it, `pipeline.sh:355-363` (*"FalkorDB rejected the freshness stamp for '$GRAPH': <reply>"*), is unreachable: `rq` returns 0, `STAMP_OUT` is assigned the server's message and **never printed anywhere**, and the run lands in the read-back branch instead (**A12.3**). The operator is told *"the freshness stamp did not land … the marker now in the graph, if any, describes a DIFFERENT build"* — accurate, but with no cause — then told to copy the Cypher and re-send it, which will fail identically. A `SOURCE_PATH` containing a character that renders a type-mismatch, or any future map-value change, produces exactly this loop. The safety argument for leaving the write on the blacklist holds; the diagnostic one does not.
+
+**Fix:** one line — `echo "pipeline:   the stamp write replied: ${STAMP_OUT:-<no reply>}" >&2` in the did-not-land branch at `:373-378`. Then add the eighth case (`stamp write returns a bare runtime error`, fake mode emitting `Type mismatch: …` on the `MERGE`) asserting that text reaches the operator; without it this path has no case at all.
+
+### Minor
+
+- **P7-5** — `pipeline.sh:290-294`, reason (1) for not requiring the trailer on the write: *"the trailer was measured on `GRAPH.RO_QUERY` replies only … and no write is available to check without writing."* Literally true, and it stops one probe short. A **read** query sent via `GRAPH.QUERY` against the existing graph carries the identical trailer (measured: `Query internal execution time: 0.308207 milliseconds`), so the trailer is a property of the graph reply, not of the command — and the suite's own fake already emits it on the `MERGE` branch, i.e. the codebase encodes the belief the comment declines to hold. Reason (2) carries the decision on its own. **Fix:** replace reason (1) with the measured fact and let reason (2) be the reason; a justification that asserts an unchecked impossibility is the shape this arc keeps retracting.
+- **P7-6** — the required trailer is an **unversioned coupling to the server's output format**, hardcoded at `pipeline.sh:421` and again in the fake's `ok_trailer`. If FalkorDB rewords it, every `--load` build fails closed while the suite stays green, under a message (*"could not verify the marker's property list"*) that prints a perfectly successful reply. The repo already has the right habit — `claude/graph-dba/falkordb-quirks.md` tags **34** of its measurements with the module version (`41811`) at the gate commit, e.g. `:702-709`. **Fix:** record the module version (`41811`, re-confirmed today via `MODULE LIST`) in the comment at `:262-280` and in the fake's measured-shapes header, so the next reader diagnoses it in one line.
+- **P7-7** — `freshness.md:36` is the only row in the field table named by its **raw** property (`MARKER_WRITTEN_AT`) rather than the recipe's alias, and the recipe's `RETURN` (`:14-19`) does not project it. A reader following the doc's own instruction to "run as-is" never has the field in scope, and a scripted consumer built on that projection gets nothing. **Fix:** add `b.MARKER_WRITTEN_AT AS markerWrittenAt` to the recipe and rename the row, or state in the row that it is visible only on the whole-node read the `markerOrigin` row already sends you to.
+- **P7-8** — the `MARKER_WRITTEN_AT` obligation is written on the **reader's** side. The clause itself is sound and I confirmed it is consistent with the live node (**A12.5**): it carries a real obligation, imperatively (*"advancing this timestamp without actually re-reading the `NOTE` converts it into the false-freshness signal it exists to prevent … If you cannot honestly re-affirm the content, leave the value alone"*). But it lives in a document whose header names its consumer as `teco`, while the actor it binds is `graph-dba`; at the gate commit **no writer-facing artefact mentions the field at all** — `skills/joern-cpg/SKILL.md` has no gloss, and `claude/graph-dba/falkordb-quirks.md` at `375af25` contains no occurrence of `MARKER_WRITTEN_AT` (checked against `git show`, not the working tree; a concurrent session has since added an *uncommitted* counter-quirk bullet there at `:190-199`, which documents the write's misleading `Properties removed` reply and not the obligation). That is the same shape as `_cpg_prop`'s *"CALL IT AS A STATEMENT"* warning that, in this arc's own words, *"did not work"* because it sat one level from the call site. **Fix:** one clause beside the write mechanics in `falkordb-quirks.md`, citing `freshness.md` for the definition.
+
+### Nits
+
+- **n7** — *"it is exactly true rather than approximately"* (`freshness.md:36`) is itself a certifying sentence: a definition cannot be *exactly* true by virtue of a convention the next sentence concedes can be broken and that nothing on the node records. Prefer: *the value means "last re-affirmed" only if the writer honoured the obligation below, and the node carries no evidence either way.*
+- **n8** — `375af25`'s message says *"Suite: 13 checks green as shipped."* The shipped suite prints **12** PASS lines: 8 `run_case`s + 2 stray-guard shapes + 2 mutation cases (`grep -c '^  PASS'` = 12). Same shape as P6-n5 ("six cases" that were five), one iteration later, in the commit message certifying the fix for it.
+- **n9** — `pipeline.sh:414-420` is unreachable. `CPG_STAMPED_KEYS` is asserted non-empty at `:237` and never reassigned before `:414`, and the empty check is `cpg_provenance_stray_query`'s only failure path — which is why the P6-5(a) case has to call the function directly. `SKILL.md` lists it as one of five live failure branches. Either say it is defence-in-depth, or drop it and fold its `show_stamp` into the branch above.
+- **n10** — `plan.md` K-022 Notes: *"four of the eight instances have now been in evidence in a `cobb` run"*, enumerating the 4th-7th. The 8th — the soft oracle — was `cobb`-authored in U48 and caught by the gate, so by the paragraph's own criterion it is five, four of them self-inflicted, three inside a repair. (The 3-of-4 sentence following it inherits the same off-by-one.)
+- **n11** — `test-stamp-wiring.sh:246-251`'s comment says the `unset` shape *"proves nothing about the guard"* because `set -u` kills it either way. Observed: with the guard disabled cleanly (`if false; then`), the `unset` shape reports `expected rc 1, got 127` **and** the missing refusal — so it does discriminate, just for a second reason. The set-but-empty shape is still the load-bearing one, as stated.
+
+### Dispositions on Pass 6
+
+- **P6-1 — fixed.** `run_case` pins `expect_rc` exactly (`:172`), requires `--- begin stamp ---` and `^MERGE (b:CpgBuildInfo)$` on every failing case (`:185-194`). Re-verified by mutation: deleting the `--- begin stamp ---` echo fails five cases (`mF`); reverting the P6-6 diagnostic fails its case (`m66`). The oracle's residual blind spot is **P7-1**, not a regression of P6-1.
+- **P6-2 — fixed, deviation adopted and judged correct.** Trailer present on both success shapes, absent on four failure shapes incl. timeout (**A12.1**); `mC` kills it. Uncovered cost at the write: **P7-4**; loose justification: **P7-5**.
+- **P6-3 — fixed for the wiring, half-guarded by the suite.** `replay_stamp` at `:361`/`:377`, `show_stamp` at `:418`/`:427`/`:444`, shared `print_stamp`; `SKILL.md` now describes the two-way split correctly. See **P7-1**.
+- **P6-4 — fixed as reported, superseded by a new instance.** The false *"both covered the primitive and not the call path"* is gone and the replacement generalisation is accurate — I re-checked mechanism one's credential text (`freshness.md:205-206`) and mechanism two's shipped state at `0da3eb9` (`pipeline.sh:225` still `STAMP="$(…)"`). The same passage's new pattern claim is **P7-2**.
+- **P6-5(a) — fixed.** Direct-call case, both shapes (`:252-269`). Disabling the guard cleanly fails both (`m5a2`): set-but-empty emits `NOT k IN []` and returns 0.
+- **P6-5(b) — fixed; the gate's prediction was wrong and `cobb`'s correction is right.** Verified by `mD`/`mL` (**A12.2**).
+- **P6-6 — fixed.** `pipeline.sh:244` reports `<set, N chars>`; the new mutation case asserts the shape and that no `^MERGE` line appears. Reverting the old rendering fails it (`m66`).
+- **P6-7 — fixed.** *"no list at any layer"* replaced by the derived-list claim, which matches `_cpg_prop` (`git-provenance.sh:233-237`): the list is built in the same call that builds the map.
+- **P6-8 — fixed** (by `graph-dba`; not mine to write). Live `cpg_falkorchat`: `MARKER_WRITTEN_AT` = `2026-09-08T21:21:14Z`, later than both `BUILT_AT` (`2026-09-07T22:25:45Z`) and the `NOTE` rewrite; 10 keys, `NOTE` 2267, `PARSED_AT` absent as documented. The new gloss (**P7-8**, **n7**) is consistent with it.
+- **n4 — fixed.** "exercises", not "asserts", in both `freshness.md:272` and `SKILL.md`.
+- **n5 — fixed** in place, with a dated correction on the U48 entry. The count problem recurs at **n8**.
+- **n6 — fixed.** Explicit END-anchor check (`test-stamp-wiring.sh:128-133`); rewording the END anchor now reports *"the extracted block never reaches the END anchor"* with rc 1, and rewording START still reports *"START anchor moved"*.
+- **P3-2 — not fixed**; `tico`'s, untouched by this commit, carried by K-024.
+
+### What's solid
+
+- **The oracle fix is real and the mutation battery is not decoration.** Eleven of my fourteen implementation mutants die, several of them on assertions added in this very commit. Every assertion `freshness.md` names as covered *is* killable — I checked each one rather than the list.
+- **Both deviations from the prescription were the better call, and both are argued from measurement.** The trailer beats the column header on a shape (truncation) the header cannot see; the P6-5(b) correction is right and reports a *stronger* result than the gate predicted. Overriding a reviewer and then re-deriving the evidence is the behaviour this chain should want.
+- **The `show_stamp`/`replay_stamp` split is the right abstraction**, not just the right wiring: one `print_stamp` for the shared reason, two advice sets for the two situations, and `SKILL.md` documents the split rather than the old false universal.
+- **`git-provenance.sh` was left alone**, verified by md5, while three files around it changed — the restraint P5-1's arc needed.
+
+### Open questions
+
+1. **P7-2 lands inside K-022's evidence, not beside it.** The escalation is argued from "a 3-for-3 failure rate on one document" as a controlled experiment. At 2-for-3 the *hazard* survives, and this pass adds a ninth instance of the class — one written inside the passage warning about the class — which strengthens the case for the lint check while weakening the "controlled experiment" framing. Whether K-022 still escalates on that basis is `cobb`'s call, not mine.
+2. **P7-3 is a judgement about audience, not correctness.** If `freshness.md` is meant to double as the arc's historiography, the growth is deliberate and the finding is noise; if its declared consumer (`teco`, at dispatch) is the real one, 27% of the document is now about the document. Worth a decision rather than another revision.
+
+---
+
+## Appendix
+
+### A12 — Pass 7 verification
+
+**A12.1 — live reply shapes** (`redis-cli 7.0.15`, FalkorDB module `41811`, all through `$(… 2>&1)` exactly as `rq` reads them; `redis-cli` exit 0 on every row):
+
+| Query / command | Reply | Trailer |
+|---|---|---|
+| stray query with rows, `GRAPH.RO_QUERY` | `stray`, 9 × `STRAY_KEY=…`, `Cached execution: 1`, `Query internal execution time: 0.239640 ms` | **yes** |
+| stray query, **zero rows** (the pass case) | `stray`, blank, `Cached execution: 0`, `Query internal execution time: 0.602181 ms` | **yes** |
+| read query via **`GRAPH.QUERY`** (no write clause) | `p`, blank, `Cached execution: 0`, `Query internal execution time: 0.308207 ms` | **yes** → P7-5 |
+| `RETURN nosuchfunc(b)` | `Unknown function 'nosuchfunc'` | no |
+| `RETURN keys(b.NOTE)` | `Type mismatch: expected Map, Node, Edge, or Null but was String` | no |
+| `UNWIND [1,0] AS x RETURN 1/x` (mid-stream) | `Division by zero` — partial rows discarded | no |
+| `… TIMEOUT 1` on a long scan | `Query timed out` | no |
+| `THIS IS NOT CYPHER` | `errMsg: Invalid input 'T': …` | no |
+| wrong port | `Could not connect to Redis…`, `redis-cli` **rc 1** | n/a |
+
+`GRAPH.CONFIG GET TIMEOUT` = **1000** (ms, enforced on reads); `TIMEOUT_DEFAULT` and `TIMEOUT_MAX` are both `0`.
+
+**A12.2 — mutation battery.** Seventeen byte-copy mutants under the session scratchpad; the repo copies still md5-match `375af25` (`47e77cb…` / `8495202…` / `808a114…`). Baseline: 12 checks, rc 0.
+
+| # | Mutation | Suite |
+|---|---|---|
+| `mA` | `:444` (stray key found) `show_stamp` → `replay_stamp` | **PASSES GREEN** → **P7-1** |
+| `mB` | `:418` (stray query unbuildable) `show_stamp` → `replay_stamp` | **PASSES GREEN** (branch is dead — n9) |
+| `mA2` | all three landed branches → `replay_stamp` | FAILS — only via `:427`'s case |
+| `mR` | literal `271c899` wiring restored (no replay on the two, replay on the three) | FAILS — 3 cases, covering 1 of the 3 branches |
+| `mK` | `:361`/`:377` `replay_stamp` → `show_stamp` | FAILS — **on the wording alone**, both cases |
+| `mC` | drop the trailer argument at `:421` | FAILS — `stray_error` case, 6 problems |
+| `mD` | emitted Cypher `SET b = {` → `SET b += {` | FAILS — **cases 1 and 2**, not case 3 |
+| `mL` | `mD` **+** the fake's `qmode` forced to `replace` | **PASSES GREEN** — the derivation is what closes it |
+| `mI` | replay advice tells the operator to re-send the **write** via `GRAPH.RO_QUERY` | **PASSES GREEN** — no advice text is asserted at all |
+| `mF` | `print_stamp` loses `--- begin stamp ---` | FAILS — 5 cases |
+| `mG` | `_cpg_prop` records NULL props in the allow-list | FAILS — subsumption case |
+| `mJ` | `rq` loses its error blacklist entirely | FAILS — `stamp rejected` case, on the wording |
+| `mStray` | the `*STRAY_KEY=*` branch deleted | FAILS — 2 cases |
+| `m5a2` | empty-allow-list refusal disabled (`if false`) | FAILS — both guard shapes |
+| `m66` | P6-6 diagnostic reverted to `${…:+<set>}${…:-<empty>}` | FAILS — its mutation case |
+| `mStart2`/`mEnd` | START / END anchor reworded | FAILS with the correct diagnosis, rc 1 (n6) |
+
+**A12.3 — the stamp write's uncovered reply shape** (P7-4). Fake modified so the `MERGE` returns a **bare** `Type mismatch: …` with exit 0. Result: `rq` rc 0 → the `:355-363` "FalkorDB rejected" branch never runs → read-back fails → rc 1, `replay_stamp` printed, `outcome: FAILED(rc=1)`. Correct and fail-closed, but the whole operator-visible output contains `the freshness stamp did not land`, `read back: b.PARSED_AT`, the replay block and the re-send command — and **nowhere** the string `Type mismatch`.
+
+**A12.4 — tombstone one is byte-identical across the whole arc** (P7-2). `git show <ref>:skills/cpg-analysis/references/freshness.md`, block from `*(Tombstone, 2026-09-08` to its `Don't delete the rule…`:
+
+| Revision | Tombstone 1 md5 | lines/words | Three-tombstone block |
+|---|---|---|---|
+| `29538d6` | `613b803afba4d407f37855cc6ac92196` | 8 / 90 | 8 lines, 90 words |
+| `0da3eb9` | `613b803a…` (same) | 8 / 90 | 19 lines, 213 words |
+| `5417f0e` | `613b803a…` | 8 / 90 | 36 lines, 419 words |
+| `271c899` | `613b803a…` | 8 / 90 | 58 lines, 684 words |
+| `375af25` | `613b803a…` | 8 / 90 | **99 lines, 1,206 words** |
+
+File total over the same span: 2,986 → 4,481 words (P7-3). `MARKER_EVIDENCE` — the discovery that retracted mechanism one — appears nowhere in Passes 1-4 of this review.
+
+**A12.5 — live `cpg_falkorchat` marker** (read-only): 10 keys — `BUILT_AT, SOURCE_PATH, SOURCE_COMMIT, SOURCE_DIRTY, PROVENANCE, SOURCE_ORIGIN, SOURCE_TREE, MARKER_ORIGIN, MARKER_WRITTEN_AT, NOTE`; `PARSED_AT` **absent**, as `freshness.md:75-77` documents for a hand-backfilled marker. `MARKER_WRITTEN_AT` = `2026-09-08T21:21:14Z` (> `BUILT_AT` `2026-09-07T22:25:45Z`, and later than the `NOTE` rewrite Pass 6 recorded), `MARKER_ORIGIN` = `hand-backfilled by graph-dba, NOT a pipeline stamp`, `size(b.NOTE)` = 2267. Unchanged after the two `GRAPH.QUERY` read probes.
