@@ -165,7 +165,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U58** — P5-1 blocker, P5-2, P5-4, P5-5, P3-1, P4-4 | `cobb` | `aadea04e203b11c4f` (resumed twice) | **delivered — `049f063` + `271c899`.** Survived a rate-limit kill. **Found a defect in my own commit**: `replay_stamp` called from three branches, defined nowhere. New `test-stamp-wiring.sh` **extracts the real block from `pipeline.sh`** and drives it against a fake `redis-cli` — 6 cases, all passing on **my** run, including a P5-1 mutation that must be refused | `pipeline.sh`, `git-provenance.sh`, `test-stamp-wiring.sh`, `SKILL.md`, `freshness.md`, K-024 | `analyst` Pass 6 | 247k tok / 24 tools |
 | **U59** — P5-3: the live `NOTE` carried mechanism 1's **retracted** false universal, inside the artifact check 0 treats as evidence | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered.** Replaced in place with `cobb`'s wording verbatim; **round-trip proved by reverse-substitution and `sha256`, not by eye**. 2245 → 2267 chars, 10 keys, other nine fields byte-identical (`diff` empty). **I verified independently**: false universal `false`, new sentence `true`, `MANIFEST.txt:19` chain `true` | `cpg_falkorchat`'s `NOTE` | `analyst` Pass 6 | 176k tok / 7 tools |
 | **Pass 6** — gate `049f063` + `271c899` + the rewritten `NOTE`. **Fresh again**: Pass 5 both found P5-1 and prescribed the wiring test that answers it | `analyst` (**fresh**) | `aa000d6e1e597fca5` | **delivered — NEEDS CHANGES** (0 blockers, 4 major, 4 minor). Ruled the wiring test a **real guard** — anchors robust under 4 mutation modes, and the *rejected design* restored fails 4 cases. But **P6-1: the oracle reads only `rc != 0`, so deleting `replay_stamp` — the defect `271c899` is named for — passes all six cases green** (case 3 aborts at 127 after printing the lines the oracle scrapes). **teco reproduced P6-1 independently.** P6-3: the `replay_stamp` fix went to the three branches that already proved the stamp landed and skipped the two where re-sending *is* the fix — one of which sits nine lines below its definition | `docs/reviews/cpg-provenance-stamp.md` `## Pass 6` — committed `eb3a167` | — (is the gate) | 152k tok / 52 tools |
-| **U60** — close Pass 6: P6-1/2/3, P6-5, P6-6, then P6-4/P6-7/n4. **Ordered, not batched** — the credentials are written last, from what the strengthened suite's runs actually showed | `cobb` | `abeeb0ea31b20e7cc` | in-flight — briefed to **judge** the analyst's prescriptions rather than transcribe them (this chain has shipped a prescribed fix that was wrong three times), and to verify FalkorDB's real error-reply shape itself before adopting the P6-2 closure | `pipeline.sh`, `git-provenance.sh`, `test-stamp-wiring.sh`, `SKILL.md`, `freshness.md`, `cobb/kaizen/history.md` | `analyst` Pass 7 → — | — |
+| **U60** — close Pass 6: P6-1/2/3, P6-5, P6-6, then P6-4/P6-7/n4. **Ordered, not batched** | `cobb` | `abeeb0ea31b20e7cc` | **delivered — `375af25`.** All four majors closed. **Rejected the reviewer's P6-2 prescription** for a better one (statistics *trailer*, not column header — the trailer is last, so it also excludes a truncated reply, and it avoids coupling `pipeline.sh` to an alias `git-provenance.sh` owns) and **corrected its P6-5(b) prediction** (cases 1-2 catch `+=`, not case 3). Split `replay_stamp`/`show_stamp`. Suite 6 → **13 checks**. **teco re-ran the P6-1 mutant**: now fails on `rc: expected 1, got 127` + both block assertions | `pipeline.sh`, `test-stamp-wiring.sh`, `SKILL.md`, `freshness.md`, `cobb/kaizen/{history,plan}.md` | `analyst` Pass 7 → — | 200k tok / 76 tools |
+| **Pass 7** — re-gate `375af25`. **Fresh**: Pass 6 prescribed most of these fixes and `cobb` overrode one | `analyst` (**fresh**) | `a83054809345f72e3` | in-flight — priorities: judge the two deviations on merit; **mutate the new oracle, not just the probe**; and judge the *fourth* credential sentence by sentence, since a passage explaining why such passages keep being wrong is the highest-risk sentence in the file | `docs/reviews/cpg-provenance-stamp.md` `## Pass 7` | — (is the gate) | — |
+| **Pass 22** — re-gate v1.31 (`069f6ae`) + the guard rebuild (`0db9fb3`). **Fresh**: Pass 21 prescribed the rebuild | `analyst` (**fresh**) | `abd4df5067203c61e` | in-flight — carries the probe/oracle lesson across from the CPG arc: *what neighbouring wrong `storefront.py` would this guard still pass?*, and does `iter_child_nodes` silently drop raise sites nested in `with`/`try`/comprehension/`async`. CPG stated **stale** in the brief (tree `85ddeed0…` vs `cf62a1cd…`, 4 commits since) with my reasoning for not rebuilding | `docs/reviews/salesperson-ui-impl.md` `## Pass 22` | — (is the gate) | — |
 | **U61** — P6-8: the `NOTE` was rewritten while `MARKER_WRITTEN_AT` stood still, so the marker no longer dates its own content | `graph-dba` | `ae44d6daf1ab9e7f9` | **delivered.** Chose the **observed write time** and **refused to reconstruct** the rewrite's own time — knowable only to a 3h23m window, and this node already declined that exact practice by leaving `PARSED_AT` absent rather than guess it. Stated the cost it accepted (overstates the `NOTE`'s age by ≤3h44m) instead of burying it. **teco verified**: 10 keys, `NOTE` 2267, head line and `cobb`'s sentence intact, other nine fields unchanged. **Found that `MARKER_WRITTEN_AT` has no written definition anywhere** — relayed to U60 in flight | `cpg_falkorchat`'s `MARKER_WRITTEN_AT` | — (verified by teco) | 110k tok / 23 tools |
 | **U57** — ship the map form now that it is executed rather than doc-sourced; the stray assertion stays and becomes its production regression test | `cobb` | `aadea04e203b11c4f` (resumed) | in-flight | `git-provenance.sh`, `freshness.md`/`SKILL.md` prose, kaizen disposition | `analyst` — queued with U55 | — |
 | **U56a** — delete the graph key `cobb` leaked by probing a nonexistent graph (`GRAPH.QUERY` **materializes**) | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered.** Empty on all three counts before deletion. `diff` against the **U47a-close 25-key listing** is empty — not a bare count, so the concurrent session's own churn is excluded. I re-verified: 25 keys, zero `scratch_graphdba`/`nonexistent` | `GRAPH.LIST` diff | — | 162k tok / 11 tools |
@@ -4767,3 +4769,67 @@ section — so committing by explicit path would sweep its work into my commit. 
 image of the failure I already had today, when my three staged files went out inside *its* commit.
 Nothing is at risk: the entry is on disk, correct, and in the file it belongs in. Whichever session
 commits that file next carries the other's work, and the only cost is attribution. Leaving it.
+
+## U60 disagreed with the prescription twice, and was right twice
+
+I briefed `cobb` to **judge** the analyst's prescriptions rather than transcribe them, on the
+grounds that this chain has shipped a prescribed fix that was wrong three times. It used that
+licence twice, and both are improvements on what the reviewer asked for.
+
+**P6-2.** The reviewer proposed requiring the `stray` column header on the read-back reply.
+`cobb` required the **statistics trailer** instead, and the reason is one I would not have found:
+the header is the *first* element, so requiring it passes on a reply that was cut off part-way,
+which is exactly the failure mode the assertion exists for. The trailer is last. It also declined
+to couple `pipeline.sh` to a column alias that `git-provenance.sh` owns — a cross-file coupling of
+precisely the kind this whole arc has been about.
+
+Then it made the requirement **per call site rather than global**, and refused to extend it to the
+stamp *write*, on the ground that it had only measured the trailer on `GRAPH.RO_QUERY` replies and
+there is no way to observe a write reply without writing. Asserting it there would be *"a credential
+covering a narrower level than the claim it licenses"* — the chain's own defect class, quoted back
+at me correctly and applied to a fix it was in the middle of writing. That is the first time in this
+coordination the class has been caught *prospectively* rather than in review.
+
+**P6-5(b).** The reviewer predicted deriving the fake's mode from the query text would make case 3
+catch a `SET b = {` → `SET b += {` reversion. It doesn't — case 3 is already in merge mode and
+cannot discriminate. Cases 1 and 2 catch it, which is a stronger result than predicted.
+
+**The suite went 6 checks to 13**, and the mutant that started this round now dies loudly. I re-ran
+it myself rather than take the report: same deletion, and the failure now names `rc: expected 1, got
+127`, the absent `--- begin stamp ---` block, and the absent branch wording. Three independent
+signals where there were none.
+
+**P6-3's fix inverted the wiring**, which reading confirms: `replay_stamp` at `:361`/`:377` — the
+two branches where the stamp did *not* land and re-sending it is the fix — and a new `show_stamp` at
+`:418`/`:427`/`:444`, the three post-read-back branches, whose text now says explicitly that the
+stamp is **not** what needs repeating. The self-contradicting branch is gone.
+
+**The fourth credential is the risk, and I said so in the Pass 7 brief.** `cobb` did not just repair
+P6-4's false sentence; it named the pattern — three tombstones, each authored in the same sitting as
+the fix it certifies, by whoever made it, and all three since corrected on their *certifying*
+sentence — and proposed a mechanism: **a retraction launders credibility onto the fresh claim beside
+it.** The retraction half reports a failure that already happened and is therefore safe; the
+certification half is an unreviewed claim read at its neighbour's confidence. It closed with "do not
+write a fourth tombstone certifying the third."
+
+That is a good explanation and it is also, structurally, a fresh unreviewed claim sitting next to a
+retraction. Pass 7 is asked to judge it sentence by sentence exactly as Pass 6 judged the third,
+including whether the 3-for-3 count is right. If a passage explaining why these passages keep being
+wrong is itself wrong, that is the finding of the pass, and it is more interesting than anything in
+the scripts.
+
+**I reversed the serialization call from an hour ago.** I held Pass 22 back on the reasoning that
+two heavy reviewers concurrently is what produced eight rate-limit kills. With U60 landed there is
+only one heavy unit in flight, and the two are file-disjoint across different components — Pass 7
+reads `skills/`, Pass 22 reads `falkor-chat/server/` and the plan. The `reference`-graph hazard is
+one-sided: only Pass 22 might run pytest, and Pass 7 touches no suite. Running both costs one
+resumption if a limit lands; running them in series costs an hour with nothing else moving. The
+stated reason for serializing was never concurrency-as-such — it was that both would be reviewing
+overlapping state, and they don't.
+
+**Stale CPG, stated rather than silently tolerated.** `cpg_falkorchat` is stamped
+`SOURCE_TREE 85ddeed0…`; `falkor-chat/server` is now `cf62a1cd…`, four commits on, and its
+`storefront.py` predates every S9 change. Pass 22's brief says so and confines the graph to
+orientation on untouched surfaces. I did not open a rebuild unit: the review is diff-scoped and
+leans lightly on structure, a rebuild is a multi-minute Joern run whose load step is destructively
+guarded, and the reviewer is invited to disagree if it needs the graph for real.
