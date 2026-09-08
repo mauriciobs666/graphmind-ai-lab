@@ -1,6 +1,25 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.18
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.19
+
+2026-09-08 (v1.19, `data-scientist`) — plan-gate Pass 8's `P8-1`, adjudicated at the altitude the
+reviewer routed it to *(new §3.4 Rule 4a)*. **A support is the parameter space of the estimand, so
+it is applied once, to the interval that is printed, and never to an arm of a composition** — which
+holds for both carriers, since §3.2d's continuous path already does exactly that and only the
+paired-binary envelope moves. **The arms-versus-composed choice is immaterial to the statistics:**
+clamping and composing commute exactly (`max(L,·)`/`min(U,·)` are non-decreasing and `min`/`max`
+select rather than compute, so the identity is exact in IEEE-754), verified over all 173 472
+`(table, DEFF)` combinations at n ∈ {12, 30, 38, 40} — zero differences, and zero changes to
+coverage, width, point containment, zero-exclusion or any verdict. **So this is a reporting
+correction, not a statistical one**, which scopes it as cheaper work than `P8-1` implies. What is
+*not* cheap to get right is the audit: the defect is **larger** than the tie-break `P8-1` measured —
+every bound the clamp moves is printed beside a sentence naming an arm that did not produce it, 58
+of them at n=40 / DEFF 1.5 against `P8-1`'s 6, **all 58 on `distinguishable` verdicts** — and
+**neither** of `P8-1`'s two suggested fixes closes it, with `(0, 0, 38, 2)` at DEFF 1.5 the
+separating case where attributing from the unclamped arms is confidently wrong. `bound_by` therefore
+takes a **third token, `"support bound"`**, on a strict comparison against the support, with ten
+named assertions and the tie-break pinned at last (Pass 8's mutation 6). Closes `P8-5` as collateral:
+compose-and-clamp gets one home.
 
 2026-09-07 (v1.18, `data-scientist`) — plan-gate Pass 8's `P8-1`, the half that is this note's
 under §7 rule 3. **A quantile level is an exact rational — `percentile(values, *, level:
@@ -1162,7 +1181,9 @@ finding is **satisfied, not reversed**, and only its object moves:
   difference's exclusion of zero is decided by the lower bound) but the printed interval is false.
   So: MRR and any rate difference go through unchanged, and **`sep_z` needs that clamp parameterised
   or absent** before §5.2's comparison is wired. Blocked on nothing — it is one argument on
-  `_widen`.
+  `_widen`. *(v1.17 ships that argument as `support` on Rule 8's producer; v1.19's Rule 4a rules
+  **where** it is applied — once, on the printed interval, never on an envelope arm — and the
+  binary path's own support stays a constant rather than becoming a second parameter.)*
 - **P3-5's rule is unchanged: the seed is named only where a resample actually decided.** The same
   predicate, evaluated against a system with one fewer resample in it, now selects the continuous
   verdicts and not the binary ones.
@@ -1213,6 +1234,10 @@ finding is **satisfied, not reversed**, and only its object moves:
 
   > `- decided by: conservative envelope (lower bound: MOVER-D; upper bound: exact paired bootstrap, p=0.975)`
 
+  **A third token joins those two at v1.19** — `support bound`, for a bound the support clamp moved,
+  which neither arm produced. See **Rule 4a**, which also settles where the clamp is applied and why
+  that choice changes no number.
+
   Whether the machine token `DecidedBy = "cluster-bootstrap"` is renamed with the prose was
   `architect`'s call (27 occurrences across `stats.py`, `report.py` and two test modules), and it is
   **settled: renamed to `conservative-envelope`** (plan v1.11, §4 S1e Table D; §3.2f and Rule 7 above
@@ -1245,6 +1270,207 @@ finding is **satisfied, not reversed**, and only its object moves:
 5. **Render the page and read the English.** Every one of the five verdict strings on this path,
    printed and read, for the naming change above. Every defect in this document's five review passes
    was found that way and none by reading assertions.
+
+**Rule 4a — the support bound belongs to the *printed interval*, applied once; and a bound the
+support moved is not attributable to an arm.** *(v1.19, at plan-gate Pass 8's `P8-1`, routed here
+because the reviewer correctly declined to adjudicate it. The ruling holds for **both** carriers —
+the paired-binary envelope and §3.2d's continuous interval — and it is stated once, as a property of
+the estimand, so neither carrier owns a special case.)*
+
+**The rule, in four lines an implementer can execute without re-deriving any of what follows.**
+
+1. **A support is the parameter space of the estimand.** It is a fact about the *metric*, never
+   about an *instrument*, so it is applied **once, to the interval that is printed**, and never to
+   an input of a composition. It is never a "plausible range" or a display bound — `clamp=(0.9,
+   1.5)` is legal as a test pin and illegal as a production value (see assertion 9).
+2. **On the paired-binary path:** `envelope_arms` widens both arms with **`clamp=None`** and returns
+   them unclamped; the composition — `min` of the two lower bounds, `max` of the two upper bounds —
+   clamps its **result** to `(-1.0, 1.0)`. The support here is **not** a new parameter: a difference
+   of two proportions read off one paired table lies in `[-1, 1]` by construction, which is v1.17's
+   *second* category (*derivable from what the function already holds*), so it is a constant in one
+   place, exactly as the percentile levels are. Only `sep_z`'s support is v1.17's *third* category
+   and stays declared.
+3. **On the continuous path nothing changes**, and that is the point of stating the rule at this
+   altitude: `paired_cluster_bootstrap` already clamps the one interval it returns, and
+   `continuous_verdict` already derives that clamp from the metric's `support` (Rule 8). There is no
+   composition there, so "once, on the printed interval" is what it already does. `support=None`
+   → `clamp=None` → no clamping, unchanged.
+4. **`bound_by` becomes a three-token closed set** — `Literal["MOVER-D", "exact paired bootstrap",
+   "support bound"]` — and is computed from the composed **unclamped** value `u` against the support
+   `(L, U)`, with a **strict** comparison:
+   - lower: `u_lo < L` → `"support bound"`; otherwise `"MOVER-D"` if `mover_lo <= exact_lo` else
+     `"exact paired bootstrap"`;
+   - upper: `u_hi > U` → `"support bound"`; otherwise `"MOVER-D"` if `mover_hi >= exact_hi` else
+     `"exact paired bootstrap"`.
+
+   Strictness is load-bearing: a bound sitting *at* the support because both instruments genuinely
+   produced it is an **arm's** bound. `(0, 0, 12, 0)` at DEFF 1.00 is the witness — both arms return
+   exactly `-1.0` with no widening applied at all.
+
+**Compose-and-clamp gets exactly one home, which closes `P8-5` as collateral.** The composition rule
+is written twice today — `conservative_envelope` and the inline `min`/`max` in `verdict()`. One
+private composer takes the two unclamped arms and returns `(interval, bound_by)`;
+`conservative_envelope` returns its first element, `verdict()` takes both. No public signature
+changes and no new required parameter.
+
+**Why the location is immaterial to the number — and this is measured, not argued.** Clamping and
+composing **commute exactly**. `max(L, ·)` and `min(U, ·)` are non-decreasing, and a non-decreasing
+`f` satisfies `f(min(x, y)) = min(f(x), f(y))` and `f(max(x, y)) = max(f(x), f(y))`; `_widen` applies
+`max(L, ·)` only to the lower component and `min(U, ·)` only to the upper, so no cross-clamp breaks
+the correspondence, and `min`/`max` *select* an operand rather than compute one, so the identity is
+exact in IEEE-754 too rather than merely to a tolerance. Verified exhaustively this session over
+**every** table at n ∈ {12, 30, 38, 40} × DEFF ∈ {1.0, 1.2, 1.5, 2.0, 4.0, 7.0} — 28 912 tables,
+173 472 combinations: **zero** differences between compose-then-clamp and clamp-then-compose.
+
+*The premise that makes the one-sided clamp safe is separately measured, because it is the kind of
+thing that is true of today's caller and quietly false of tomorrow's.* `_widen` applies `max(L, ·)`
+to the lower component **only** and `min(U, ·)` to the upper **only**, so an arm whose whole widened
+interval sat above `U` would come back **inverted** (`lo > hi`) with nothing checking it. It cannot:
+widening moves each bound *away* from the point estimate, and **both arms always contain the point
+estimate** — verified over every table at n ∈ {12, 30, 38, 40, 85}, 138 648 tables and 277 296 arm
+intervals, zero exceptions. Rule 4a therefore needs no ordering guard; but a future arm that does
+not contain the point estimate reopens this, which is why the property is written down rather than
+assumed.
+
+**So state the honest headline plainly, because it scopes the work.** *Arms-versus-composed is
+immaterial to the statistics and material only to the audit bullet.* The printed interval, its
+coverage, its width and every verdict are **bit-identical** under either choice. This is a
+**reporting** correction, not a statistical one — cheaper and different work than `P8-1`'s framing
+implies. Three further properties, over the same 173 472 combinations, zero violations each:
+
+- the printed interval never excludes the point estimate (`(b−c)/n ∈ [-1, 1]` by construction, and
+  `max(-1, lo) ≤ max(-1, θ̂) = θ̂`);
+- **clamping can never change zero-exclusion, hence never a verdict** — `max(-1, x) > 0` iff `x > 0`
+  and `min(1, x) < 0` iff `x < 0`, so the clamp cannot move a bound across zero;
+- Rule 4's own conservatism property survives verbatim: the envelope is never tighter than the
+  clamped MOVER-D arm.
+
+And truncation at the support is coverage-preserving **in principle**, not merely in this sweep: the
+estimand lies in `[-1, 1]` by definition, so removing the region outside it cannot remove it. The
+clamp is a free narrowing — it buys width at no coverage cost, which is why it stays.
+
+**But the reporting defect is larger than `P8-1` measured, and *neither* of `P8-1`'s two suggested
+fixes closes it.** The tie-break is the visible symptom of a wider one: **every** bound the clamp
+moves is printed beside a sentence naming an arm that did not produce it, whether or not the
+tie-break also picks the wrong arm. Measured this session, at n=40, counting printed bounds:
+
+| DEFF | 1.0 | 1.2 | 1.5 | 2.0 | 4.0 | 7.0 |
+|---|---|---|---|---|---|---|
+| bounds whose printed value came from the **support** | 0 | 38 | 58 | 132 | 570 | 2 038 |
+| of which `P8-1`'s wrong-arm subset | 0 | 0 | 6 | 12 | 166 | 954 |
+| support-pinned tables whose verdict is **`distinguishable`** | 0 | — | 58 of 58 | 132 of 132 | 540 of 570 | — |
+
+Two things that row three settles. The false sentence is **not** confined to the not-distinguishable
+path — at the design effect a determinism probe is most likely to return, *all* of it lands beside a
+published, positive verdict. And the tie-break subset is between 10% and 47% of the false sentences,
+so fixing only it leaves the majority in place.
+
+**The separating case, and it is the one that decides between the three options.** `(a=0, b=0, c=38,
+d=2)` at n=40, DEFF 1.5 — a plausible measured design effect on the guard-judge pack's own slice:
+
+- unclamped MOVER-D `[-0.99431, -0.77289]` — **inside** the support;
+- unclamped exact paired bootstrap `[-1.01124, -0.85814]` — outside it;
+- composed unclamped lower bound `-1.01124`, printed `-1.0`;
+- verdict: **distinguishable**, CI `[-1.0, -0.77289]`.
+
+The shipped code prints `lower bound: exact paired bootstrap`. **`P8-1`'s suggested fix — attribute
+from the unclamped arms — prints the same thing**, because the exact arm *is* the more negative one.
+Both are false: the exact arm produced `-1.0112`, and `-1.0` came from the support. That is M-ML-8's
+error a third time, and only the third token removes it.
+
+**What a support-pinned bound means, stated so the reader is not left to infer it.** It says the
+`√DEFF` widening ran off the parameter space — the declared design effect has consumed more than the
+whole resolvable range on that side, so the interval carries **no information in that direction**.
+This is a labelling change, not a new gate: Rule 7's floor already refuses the degenerate
+configurations that matter (at n=12, DEFF 7 the floor is 350 pp and nothing is resolvable). A reader
+seeing `[-1.0, -0.77]` should know the `-1.0` is a boundary rather than an estimate, and the bullet
+is where that is cheapest to say.
+
+**The rendered bullet, verbatim.** The `p=` clause attaches only to the exact-bootstrap arm, exactly
+as today; **a `support bound` token never carries a level, because no level produced it**:
+
+> `- decided by: conservative envelope (lower bound: support bound (-1); upper bound: MOVER-D)`
+
+**The tie-break stays, and is now pinned.** Ties between *unclamped* arms are real but rare and
+structural — swept at DEFF 1.00 through 7.0, they are exactly the boundary tables `(0, n, 0, 0)` and
+`(0, 0, n, 0)` (both arms reach ±1) and `b = c = 0` with `a, d > 0` (both arms are the point `0`):
+3 at n=12, 2 at n=30, 3 at n=38, 3 at n=40, and the count does **not** move with the design effect,
+which is the signature of a structural tie rather than a manufactured one. In every one of them
+**both arms attain the printed bound**, so naming either is a true sentence and no fourth token is
+owed. Keep `<=` / `>=`, and assert it: Pass 8's mutation 6 shows nothing pins it today.
+
+**Rejected alternatives, with what decided each.**
+
+1. **Fix the tie-break only** — attribute from the unclamped arms, keep the arm-level clamp
+   (`P8-1`'s first suggestion). *Rejected on the separating case above*: it repairs 10–47% of the
+   false sentences and is *confidently wrong* on the rest, and it leaves two versions of each arm
+   in flight — one clamped for the interval, one unclamped for the audit — which is the
+   one-arithmetic-two-homes shape this note refuses everywhere else.
+2. **Keep the arm clamp and give a clamp-pinned bound its own token there** (`P8-1`'s second
+   suggestion). *Rejected as under-determined*: pinning is per-arm, and the composed bound can be
+   pinned in one arm and not the other — `(0, 0, 38, 2)` is exactly that — so the rule would still
+   owe an adjudication of "one arm pinned ⇒ is the composed bound a support bound?". Composing
+   first makes the question not arise.
+3. **Do not clamp at all; print `[-1.03, 0.13]`.** *Rejected*: a printed CI outside the parameter
+   space is a false statement about a difference of proportions, and it is strictly wider than
+   necessary. The clamp is a coverage-free narrowing (above).
+4. **Widen on a transformed scale — logit or arcsine — so the interval cannot leave the support.**
+   *Rejected on a cost far larger than what it buys*: Rule 5's `√DEFF` is exact **on the difference
+   scale**, because DEFF is a variance ratio there; re-scaling would change the printed interval on
+   *every* table, where the clamp touches **none** at DEFF 1.00 and 0.31%/0.47%/1.07% of the 12 341
+   tables at n=40 for DEFF 1.2/1.5/2.0 — and it would break §3.2c's *floor on conservatism* property
+   against MOVER-D. Reopen only if a metric arrives whose support makes
+   truncation bind at DEFF ≈ 1.00 — nothing in §3.8's packs does.
+
+**What must be asserted — the fix is not evidence until one of these would catch it being wrong.**
+Values below were computed against the shipped module this session; the two witness tables are
+`(5, 0, 7, 0)` (`P8-1`'s own) and `(0, 0, 38, 2)` (the separating case).
+
+1. **The arms are not clamped.** `envelope_arms((5, 0, 7, 0), design_effect=4.0)` returns
+   `mover ≈ (-1.030146, +0.133341)` and `exact ≈ (-1.083333, -0.083333)`; assert **both lower bounds
+   are `< -1.0`**. Kills a reinstated `clamp=(-1.0, 1.0)` inside `envelope_arms` — the mutation this
+   whole ruling is about.
+2. **The printed interval did not move.** `conservative_envelope((5, 0, 7, 0), design_effect=4.0)
+   == (-1.0, 0.13334065646719284)` and `conservative_envelope((0, 0, 38, 2), design_effect=1.5)
+   == (-1.0, -0.7728921326614777)`. Kills dropping the clamp from the composer (alternative 3), and
+   is the assertion that makes "the number is unchanged" evidence rather than a claim.
+3. **`P8-1`'s own cell, sharpened — and the ruling deliberately disagrees with `P8-1` here.**
+   `verdict(_outcomes(5, 0, 7, 0), resolving=_rp(12, deff=4.0, basis="measured"), metric_name="m",
+   family=["m"]).bound_by == ("support bound", "MOVER-D")`. `P8-1` asks only that `[0]` stop being
+   `"MOVER-D"`; it must **not** become `"exact paired bootstrap"` either.
+4. **The cell `P8-1`'s suggested fix gets wrong.** `verdict(_outcomes(0, 0, 38, 2), resolving=_rp(40,
+   deff=1.5, basis="measured"), …).bound_by[0] == "support bound"`, with `.distinguishable is True`
+   and `.ci[0] == -1.0` asserted in the same test — the false sentence sat beside a *positive*
+   verdict, and that is the fact the test has to carry.
+5. **Strictness of the support comparison.** `verdict(_outcomes(0, 0, 12, 0), resolving=_rp(12,
+   deff=1.0, basis="measured"), …)` has `ci[0] == -1.0` and `bound_by == ("MOVER-D", "MOVER-D")`.
+   Kills `<=` substituted for `<` in the support test — a bound at the support that no clamp moved
+   is an arm's.
+6. **The tie-break is pinned.** `verdict(_outcomes(0, 12, 0, 0), resolving=_rp(12, deff=1.0,
+   basis="measured"), …).bound_by == ("MOVER-D", "MOVER-D")`; the upper bound is a genuine unclamped
+   tie (both arms return exactly `1.0`). Kills Pass 8's surviving mutation 6 (`<=,>=` → `<,>`).
+7. **The token is about the clamp, not about the table.** `verdict(_outcomes(5, 0, 7, 0),
+   resolving=_rp(12, deff=1.0, basis="measured"), …).bound_by == ("exact paired bootstrap",
+   "MOVER-D")` — the *same* table one design effect down, where no clamp binds. Assertions 3 and 7
+   are a pair and are worth writing adjacently.
+8. **The commutation property, asserted rather than asserted-about** — the shape of Rule 4's
+   acceptance item 4. Over every table at n=12 and `DEFF ∈ {1.0, 1.5, 4.0}` (455 × 3), composing the
+   unclamped arms then clamping equals clamping each arm then composing. This is the property that
+   makes the move safe, and it is what stops a future reader "restoring" the arm clamp in the belief
+   that it changes the number.
+9. **The clamp cannot change a verdict.** Over every table at n=12 and `DEFF ∈ {1.5, 4.0}`,
+   `distinguishable` is identical whether the composer clamps or not. This is the assertion that
+   catches a *support that is not the parameter space*: a clamp inside the data's own range would
+   change verdicts, and nothing else in the suite would notice.
+10. **The rendered string.** `"- decided by: conservative envelope (lower bound: support bound (-1);
+    upper bound: MOVER-D)"` appears verbatim in the markdown for a report built on `(0, 0, 38, 2)` at
+    DEFF 1.5. Kills a renderer that formats the new token through the `p=` branch — the current
+    `zip(v.bound_by, (LEVEL_CI95_LO, LEVEL_CI95_HI))` would print `support bound, p=0.025`.
+
+Assertions 1–7 and 10 are single-table and cheap; 8 and 9 are the two sweeps, and both run in
+seconds at n=12. `P8-2`'s missing `mcnemar-exact` assertion is a separate finding and is not
+discharged by any of these.
+
 
 **Rule 5 — design effect is a variance ratio, not a width ratio.** (A correction to v1.1 §4.4,
 which called the width ratio "the design effect"; an implementer following v1.1 literally would have
@@ -1381,7 +1607,8 @@ is still §3.2d's entry point, and `paired_bootstrap` still its engine, not a se
 **quantile levels must be parameters** rather than the hard-coded 2.5/97.5, or the `k > 1` correction
 above has nowhere to land — and their type is `tuple[Fraction, Fraction]`, since `permille: int` and
 a percent `float` both fail at `k ≥ 2` *(v1.18, §11.2.2)*; and **`_widen`'s `[-1, 1]` clamp must be conditional**, since it is a
-difference-of-proportions assumption and `sep_z` is unbounded (Rule 4). Both are noted there; they
+difference-of-proportions assumption and `sep_z` is unbounded (Rule 4, and Rule 4a for *where* a
+support is applied — on this path, already correctly, to the one interval returned). Both are noted there; they
 are named here because they are this function's preconditions, and a plan that calls it without them
 calls something that cannot render string 4 correctly for two of the three continuous metrics.
 
