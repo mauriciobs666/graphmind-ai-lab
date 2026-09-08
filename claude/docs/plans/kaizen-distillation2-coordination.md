@@ -77,7 +77,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U21 | analyst chunk C (10: all of 09-02) | `a9b3f7141f0403e35` (resumed twice) | accepted | 6 promoted / 4 discarded (2 **falsified**), all 10 cleared + curator-cleared my false `7c4e91a2…`; `claude/graph-dba/falkordb-quirks.md`, `claude/analyst/review-techniques.md`, `claude/analyst/kaizen/{history,plan}.md`, `claude/graph-dba/kaizen/history.md` | teco re-derivation → **accepted** (2 resumes: evidence recount, then provenance of an unattributed bullet) | 224.0k tok, 96 tools |
 | U22 | analyst chunk D (11: 09-03) | `a9a502324e0cf4ca5` | accepted | 8 promoted / 3 discarded, all 11 cleared; `review-techniques.md`, `python-web-quirks/SKILL.md`, `agent-standards/claude-code.md`, `lm-studio-model-notes.md`, `skills/README.md`, +3 `kaizen/history.md`; `falkordb-quirks.md` **held** | teco re-derivation → **accepted**, paired-control reproduction of the pipe finding | 238.8k tok, 112 tools |
 | U23 | analyst chunk E (13: 09-07, arrived after pass open) | `a096fa1ae04ee4cae` (resumed once, for the AST correction) | accepted | 12 promoted / 1 discarded, all 13 cleared, **13 entries → 4 edits** (six became one six-part section, three a fold); `claude/analyst/{review-techniques.md,analyst.md,kaizen/history.md}`, `claude/graph-dba/{falkordb-quirks.md,kaizen/history.md}`, `claude/cobb/kaizen/{history,plan}.md` | teco re-derivation → **accepted after one correction**: 68→65, 42→40, per-file 3/3/14; re-derived at both revisions under 5 definitions. `rq()` defect confirmed by executing the helper | 190.6k + 210.5k tok, 71 tools |
-| U24 | analyst chunk F (12 of the 14 held at dispatch: all 09-08) | `a554b6fb7d89af6f0` (**killed by a host reboot, 2026-09-08; had written nothing — re-dispatch, do not resume**) | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
+| U24 | analyst chunk F (12 of the 14 held at dispatch: all 09-08) | `a554b6fb7d89af6f0` | in-flight | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U25 | analyst chunk G (2 deferred + whatever has arrived) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
@@ -390,21 +390,34 @@ count planned in advance.
 
 ## Stopped here — how to resume
 
-The pass was **paused by the stakeholder at U23's close**, ahead of a host
-reboot. It is **not finished**, which is why this document is still
-`Status: active`: archiving it would freeze the ledger that is the resume
-point.
+The stakeholder asked to **stop after U24**, the unit currently in flight. The
+pass is **not finished**, which is why this document stays `Status: active`:
+archiving it would freeze the ledger that is the resume point.
 
-**State at the stop, verified rather than assumed:**
+**State, verified rather than assumed:**
 
 - Everything through **U23 is accepted and committed** (`cfed0a0`, `bd924b1`,
   ledger `b388cdb`). `git status claude/` is clean.
-- **U24 was in flight and died having done nothing.** All 12 of its pinned
-  entries were still in the graph and it had written no file. This is the one
-  platform failure of the pass with *nothing* to recover — unlike U10/U15/U19/U20,
-  there is no half-written promotion and no unlogged disposition.
-- Its `agentId` is recorded above but is **dead after the reboot**. Re-dispatch
-  from the brief; do not try to `SendMessage` it.
+- **U24 is running.** It has written nothing to disk and cleared nothing — all
+  12 pinned entries are still in the graph. That is the expected shape of §5
+  mid-run, not a stall: the procedure verifies the whole chunk before it
+  promotes anything, so a long silent stretch with an empty `git status` is
+  normal and is **not** evidence of a dead unit.
+
+**A correction worth keeping, because it is this pass's own recurring defect
+turned on its author.** An earlier revision of this section recorded U24 as
+"killed by a host reboot, had written nothing — re-dispatch, do not resume."
+The reboot had not happened. I had observed *"nothing on disk, 12 entries
+intact"*, which is equally consistent with a healthy unit mid-verification, and
+wrote the *prediction* into the ledger in the past tense. The evidence was
+real; the tense was invented. `teco.md` already forbids stating a pending
+delegate's result before it arrives — the rule survived the moment it was
+written for, because the sentence did not feel like a prediction. Checking the
+transcript mtime (4 seconds old, 815 KB) settled it in one command.
+
+**Distinguishing a live unit from a dead one, since an empty `git status` does
+not:** the task transcript's mtime is the cheap tell. A recent mtime means it
+is working; a stale one plus an empty worktree means it died before promoting.
 
 **What remains, in order:**
 
