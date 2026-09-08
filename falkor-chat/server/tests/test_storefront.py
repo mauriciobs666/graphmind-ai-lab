@@ -1313,12 +1313,29 @@ def test_the_flag_alone_refuses_the_turn_while_the_executor_is_still_alive(
 
     Setting `_turns_shutdown` directly is the point rather than a shortcut:
     calling `shutdown_turns()` would close the executor too and collapse the
-    window back onto the case above. The `_executor` assertion below is this
-    test's **positive control** — it says the refusal came from the flag and
-    not from a stopped pool, which is what makes the case discriminating rather
-    than a second spelling of the shutdown test. Both private reads are
-    deliberate: `_work_queue.qsize()` is the only way to assert *nothing was
-    submitted* rather than *nothing was left over*.
+    window back onto the case above. The `_executor._shutdown` assertion above
+    is this test's **positive control** — it says the refusal came from the
+    flag and not from a stopped pool, which is what makes the case
+    discriminating rather than a second spelling of the shutdown test.
+
+    **`_work_queue.qsize() == 0` does not prove nothing was submitted** — it
+    proves nothing was *left over*, and those are different on a live
+    executor. `submit` starts a worker before this assertion runs
+    (`_adjust_thread_count`, CPython 3.12.3
+    `/usr/lib/python3.12/concurrent/futures/thread.py:179`), and that worker
+    drains the queue, so `qsize()` reads `0` on both sides of the refusal —
+    measured: with the flag read moved to *after* `submit`, `qsize()` is still
+    `0` even though the item **was** queued and run
+    (`docs/reviews/salesperson-ui-impl.md` `## Pass 22`, P22-1). `len(
+    shop._executor._threads)` is the actual submit-detector: a
+    `ThreadPoolExecutor` starts its first worker inside `submit` and
+    `_threads` never shrinks before `shutdown`, so it reads `0` iff no submit
+    ever happened. That equivalence holds **only for an executor nothing has
+    ever been submitted to** — this fixture's, always, since it is built fresh
+    per test and this case is the first and only call into `enqueue_turn` on
+    it. A fixture that submitted first would make this assertion fail loudly
+    rather than pass by accident, which is why that is a caveat to record
+    here rather than a reason to pick a different assertion.
     """
     shop = _storefront(services)
     record = ParticipantRecord(
@@ -1340,8 +1357,11 @@ def test_the_flag_alone_refuses_the_turn_while_the_executor_is_still_alive(
     with pytest.raises(RuntimeError):
         shop.enqueue_turn(shop.context_for("p-ada"), record, posted, booking)
 
-    # nothing was submitted...
+    # ...nothing was left over (does not by itself prove nothing was
+    # submitted — see the docstring)...
     assert shop._executor._work_queue.qsize() == 0  # noqa: SLF001
+    # ...and nothing was submitted: no worker was ever started
+    assert len(shop._executor._threads) == 0  # noqa: SLF001
     # ...and the reservation went with the refusal, since nothing will clear it
     assert shop.turn_in_flight("p-ada") is False
     assert shop.turn_state("p-ada") == IDLE_TURN
@@ -2595,6 +2615,49 @@ def test_a_socket_timeout_on_the_re_read_too_is_still_unknown_never_a_500(
     # …and it is the storefront's own refusal, not the raw client error.
     assert isinstance(exc.value, StorefrontError)
     assert not isinstance(exc.value, redis_exceptions.TimeoutError)
+
+
+def test_a_runtime_error_on_the_re_read_is_also_unknown_never_a_500(
+    stocked, conn, monkeypatch
+):
+    """`get_state`'s **other** call site, and the gap `## Pass 22` (P22-4)
+    found: `_reset_state_unknown`'s re-read used to catch only
+    `redis_exceptions.TimeoutError`, so a `RuntimeError` reached through
+    `get_state` on this leg escaped as a bare `500` instead of F8's `504` —
+    breaking the exact promise `_reset_state_unknown`'s own docstring makes
+    ("still a `504`, never a `500`"). Nothing raises `RuntimeError` through
+    `get_state` today (the module's raises-guard pins that class to
+    `enqueue_turn` alone), so this fakes the shape the guard would otherwise
+    let through unnoticed, the same way the sibling test above fakes a second
+    `TimeoutError` rather than waiting for a real socket to misbehave.
+
+    The contract is identical to the sibling test's: still `504
+    reset_state_unknown`, with no state body — a `RuntimeError` escaping
+    uncaught is the failure this rules out.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    record, _ctx = _busy_participant(stocked, conn)
+
+    def timing_out(*args, **kwargs):
+        raise _Timeout("Timeout reading from socket")
+
+    def raises_runtime_error(*args, **kwargs):
+        raise RuntimeError("no actor on the state read")
+
+    monkeypatch.setattr(stocked._repo, "reset_participant", timing_out)
+    monkeypatch.setattr(stocked._repo, "get_profile", raises_runtime_error)
+
+    with pytest.raises(ResetStateUnknownError) as exc:
+        stocked.reset_participant(record)
+
+    assert exc.value.code == "reset_state_unknown"
+    assert exc.value.state is None
+    assert exc.value.participant_id == record.participant_id
+    # …and it is `ResetStateUnknownError` itself, not the raw `RuntimeError`
+    # passing through unmapped — `StorefrontError` is a `RuntimeError`
+    # subclass, so the discriminator is the type, not the class hierarchy.
+    assert isinstance(exc.value, ResetStateUnknownError)
+    assert "no actor on the state read" not in str(exc.value)
 
 
 @pytest.mark.parametrize("reread", ["succeeds", "times-out-too"])

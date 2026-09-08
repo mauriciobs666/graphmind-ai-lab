@@ -5,6 +5,61 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-08 — salesperson-ui S9a: `## Pass 22`'s four findings — the killing test's oracle, a raise-guard blind spot, a self-falsifying comment, and `get_state`'s missed second call site
+
+**What:** Closed `docs/reviews/salesperson-ui-impl.md` `## Pass 22`'s major and three minors
+against `069f6ae` + `0db9fb3`. Two source files, two test files, one plan citation.
+
+**P22-1 (major) — `_work_queue.qsize() == 0` does not prove nothing was submitted.** On a live
+executor, `submit` starts a worker (`_adjust_thread_count`, CPython 3.12.3
+`concurrent/futures/thread.py:179`) before
+`test_the_flag_alone_refuses_the_turn_while_the_executor_is_still_alive`'s assertion runs, and that
+worker drains the queue — so `qsize()` reads `0` whether or not a submit happened. Measured: moving
+the flag read to *after* `submit` (the placement v1.30 rejected) passed the old assertion 8/8 while
+leaving `qsize=0, len(_threads)=1`, against `qsize=0, len(_threads)=0` on the delivered code. Added
+`assert len(shop._executor._threads) == 0` beside the `qsize` line — `_threads` never shrinks
+before `shutdown`, so it is `0` iff no submit ever ran — and corrected the docstring's claim that
+`qsize()` was the detector. Caveat recorded in the same docstring: the equivalence holds only for an
+executor nothing has been submitted to yet, true of this fixture today.
+
+**P22-2 (minor) — the raises-guard's site oracle was a `set`, so a second `raise RuntimeError`
+inside `enqueue_turn` itself was invisible.** `_raise_sites` now returns a `list`, not a `set`
+(`sites.extend` in place of `sites.update`), and the guard's site assertion compares list literals,
+so two raises of the same class in the same function no longer collapse onto one tuple. Measured:
+before the fix, adding a second `raise RuntimeError(...)` to the top of `enqueue_turn` left the
+guard green; after, it reddens with an extra list item. A new synthetic control pins the shape.
+
+**P22-3 (minor) — the guard comment's own verification instruction was self-falsifying.**
+`git log -S'<= service_family'` now returns `0db9fb3` itself, because that commit introduces the
+literal string inside the comment that runs the search. Replaced with a content-match form,
+`git log -G'assert.*<= service_family'`, verified to return 0 rows on the current tree, and the
+comment now says why the pickaxe form stopped working instead of asking a reader to hit the same
+trap.
+
+**P22-4 (minor, the substantive one) — `get_state` has a second call site, and it was unguarded.**
+The guard comment claimed `storefront_api.py:1103` (`GET /shop/api/state`) was `get_state`'s only
+call site; `_reset_state_unknown` (`storefront.py:1426`, reached from `POST /shop/api/reset-mine`
+on a first `TimeoutError`) is the other, and its `except` caught only
+`redis_exceptions.TimeoutError`. A `RuntimeError` surfacing from `get_state` there would have
+escaped as a bare `500`, replacing F8's deliberate `504 reset_state_unknown` — the exact failure
+`_reset_state_unknown`'s own docstring promises never happens. Widened the `except` to
+`(redis_exceptions.TimeoutError, RuntimeError)`, matching `state=None` on either, and corrected
+the comment's "only call site" claim to name both. New test
+`test_a_runtime_error_on_the_re_read_is_also_unknown_never_a_500` fakes a `RuntimeError` on the
+re-read (nothing raises one through `get_state` today) and fails against the pre-fix `except`
+clause with the `RuntimeError` propagating uncaught, then passes against the fix.
+
+**Also:** re-pointed the plan's stale `storefront.py:364` citation (S8 row) to `:435`, where the
+`Storefront(..., storefront_dir=None)` → `config.STOREFRONT_DIR` fallback construct now sits —
+drifted ~71 lines since v1.18, unrelated to this round's own diff.
+
+**Mutation testing, all four measured on a scratchpad byte-copy, never in the repo tree** (md5
+before `64be8aca9e499fc745dd25ff28c4a588` / after `cb735227a43cb7c51e67559483bff8d8` for
+`storefront.py`, restored and re-diffed against the same baseline before patching the real tree).
+Suite: **2642 passed, 14 deselected** (baseline 2641, `+1` — the new P22-4 test; P22-2's new
+control lives inside an existing test and adds no count). `ruff check` clean on all three touched
+files.
+
 ## 2026-09-08 — salesperson-ui S9a-fix: the turn `409` becomes a reservation, and the queue position is derived rather than stored
 
 **What:** The repair round on `e6fa20c`, closing `docs/reviews/salesperson-ui-impl.md`

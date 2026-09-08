@@ -1418,12 +1418,27 @@ class Storefront:
         Drops the cached record first — the delete may have committed, which
         makes the cached `threadId` wrong — then re-reads state so the response
         can report what the graph actually holds. A second `TimeoutError` from
-        that re-read is swallowed into `state=None`: still a `504`, never a
-        `500`, and never "nothing changed".
+        that re-read, **or a `RuntimeError` out of `get_state`**, is swallowed
+        into `state=None`: still a `504`, never a `500`, and never "nothing
+        changed".
+
+        **This is `get_state`'s other call site**, not just
+        `GET /shop/api/state`'s handler body (`storefront_api.py:1103`) — a
+        gap `## Pass 22` (P22-4) found the review itself had missed too. The
+        two exceptions caught below are exactly the ones this contract has to
+        survive: `TimeoutError` is F8's own premise (a stalled reset stalls
+        the re-read the same way), and `RuntimeError` is the one class this
+        module's raises-guard (`tests/test_storefront_api.py`'s
+        `_raise_sites` assertion) polices as a defensive reflex elsewhere in
+        it — catching it here means a future `raise RuntimeError` reached
+        through `get_state` still answers F8's `504` rather than turning it
+        into a bare `500`. Nothing wider: any other exception out of
+        `get_state` is a bug this method has no reason to hide behind
+        "unknown".
         """
         self._cache_drop(participant_id)
         try:
             state: dict[str, Any] | None = self.get_state(ctx)
-        except redis_exceptions.TimeoutError:
+        except (redis_exceptions.TimeoutError, RuntimeError):
             state = None
         return ResetStateUnknownError(participant_id, state=state)

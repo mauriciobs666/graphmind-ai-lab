@@ -3463,17 +3463,31 @@ def _resolve_raised(exc, factories: dict) -> set[str]:
     return resolved
 
 
-def _raise_sites(node) -> set[tuple[str, str]]:
+def _raise_sites(node) -> list[tuple[str, str]]:
     """`(enclosing function, exception class)` for every `raise` under `node`.
 
     The same raises `_raised_class_names` reads, resolved by the same helper,
-    but **not collapsed to a set of names** — which is the distinction P21-1
-    turns on. Both set assertions in the guard below compare class *names*, so
-    once a name is on an allowlist a **second, unrelated** raise of it anywhere
-    in the same module moves no set and reddens nothing. Measured on this file:
-    with `RuntimeError` allowlisted, adding
+    but **not collapsed to a set** — which is the distinction P21-1 turns on,
+    strengthened at `## Pass 22` (P22-2). A **list**, not a set: a second raise
+    of an already-seen class inside the *same* function used to collapse onto
+    the first tuple and vanish. Measured on this file: with `RuntimeError`
+    allowlisted, adding a second
+    `raise RuntimeError("enqueue_turn called with no booking")` at the top of
+    `enqueue_turn` — the one function this guard permits to raise it — left
+    the set-based guard **green**, because `{("enqueue_turn", "RuntimeError")}`
+    already had that member (`## Pass 22`, P22-2). The list-based multiset
+    assertion below reddens on it instead. The **caveat this buys**: the
+    guard now proves site *and* multiplicity for the classes it names, but
+    still says nothing about a raise of a class it was never asked about — the
+    name-level assertions above still carry that half.
+
+    Both set assertions in the guard below compare class *names*, so once a
+    name is on an allowlist a **second, unrelated** raise of it anywhere in
+    the same module still moves no set and reddens nothing there — that is
+    what the site read exists to catch instead. Measured on this file: with
+    `RuntimeError` allowlisted, adding
     `raise RuntimeError("no actor on the state read")` to `Storefront.get_state`
-    left the guard **green** (`docs/reviews/salesperson-ui-impl.md`
+    left the name-only guard **green** (`docs/reviews/salesperson-ui-impl.md`
     `## Pass 21`, P21-1 and Appendix Q §1-2). That is the class a defensive
     `raise` reflexively reaches for, in a module this guard reads **whole**
     for the reason stated above — it exists only to serve `/shop/api`, so a
@@ -3488,7 +3502,7 @@ def _raise_sites(node) -> set[tuple[str, str]]:
     """
     root = ast.parse(node) if isinstance(node, str) else node
     factories = _factories_in(root)
-    sites: set[tuple[str, str]] = set()
+    sites: list[tuple[str, str]] = []
 
     def descend(scope, enclosing: str) -> None:
         for child in ast.iter_child_nodes(scope):
@@ -3496,7 +3510,7 @@ def _raise_sites(node) -> set[tuple[str, str]]:
                 descend(child, child.name)
                 continue
             if isinstance(child, ast.Raise) and child.exc is not None:
-                sites.update(
+                sites.extend(
                     (enclosing, name)
                     for name in _resolve_raised(child.exc, factories)
                 )
@@ -4200,9 +4214,14 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
     #
     # **`Services` is not a precedent for relaxing this, and the check has been
     # run** — the earlier version of this comment claimed it was, and that was
-    # false. `git log -S'<= service_family' -- tests/test_storefront_api.py`
-    # returns **no commit at all**: the `Services` leg has never carried a
-    # family-subset assertion. `service_family` enters in exactly one commit,
+    # false. Verify with a content match, not a pickaxe: `git log
+    # -G'assert.*<= service_family' -- tests/test_storefront_api.py` returns
+    # **0 rows**, so no commit has ever written this comparison. The pickaxe
+    # form (`git log -S'<= service_family'`) is unusable to check this from
+    # here on — it now returns this very commit, because this comment
+    # introduces the literal string it searches for
+    # (`docs/reviews/salesperson-ui-impl.md` `## Pass 22`, P22-3).
+    # `service_family` enters in exactly one commit,
     # `00827c2`, used only in the four-scope equality below — and that same
     # commit introduced `NON_FAMILY_RAISES`, moved `RuntimeError` into
     # `SERVICE_RAISES_TODAY` (which before it held `UnknownOrderTransitionError`
@@ -4215,21 +4234,24 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
     assert set(STOREFRONT_RAISES_TODAY) - storefront_family == frozenset({
         "RuntimeError",
     })
-    # ...and that one name is pinned to the one function that may raise it.
-    # Both assertions above compare class **names**, so with `RuntimeError`
+    # ...and that one name is pinned to the one function that may raise it —
+    # by a **list**, not a set, so a second raise of it inside that same
+    # function cannot hide behind the first (`## Pass 22`, P22-2). Both
+    # assertions above compare class **names**, so with `RuntimeError`
     # allowlisted a second, unrelated `raise RuntimeError` elsewhere in this
-    # module moves no set and reddens nothing — measured on `get_state`, the
-    # sole handler body of `GET /shop/api/state` (`storefront_api.py:1103`,
-    # its only call site) and so request-reachable on the storefront's poll,
-    # whose answer would be an unmapped bare `500` (`## Pass 21`, P21-1,
-    # Appendix Q §1-3). Deliberately **not**
+    # module moves no set and reddens nothing — measured on `get_state`, one
+    # of `get_state`'s **two** call sites: the `GET /shop/api/state` handler
+    # body (`storefront_api.py:1103`) and, missed until `## Pass 22` (P22-4),
+    # `_reset_state_unknown` (`storefront.py:1426`) — both request-reachable,
+    # and an unmapped `RuntimeError` there would answer with an unmapped bare
+    # `500` (`## Pass 21`, P21-1, Appendix Q §1-3). Deliberately **not**
     # generalised to the `Services` and `Repository` legs: those are read
     # through a reach seed rather than whole-file, so the same blindness has a
     # much smaller surface (`## Pass 21`, open question 1).
-    assert {
+    assert [
         fn for fn, name in _raise_sites(_storefront_source())
         if name == "RuntimeError"
-    } == {"enqueue_turn"}
+    ] == ["enqueue_turn"]
     # ...and an **equality**, not a subset, over all four scopes at once: a
     # raise outside both families has to carry its own reason, and a reason
     # left behind by a raise that is gone reddens the same assertion.
@@ -4370,7 +4392,7 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
         "        raise RuntimeError('shutdown')\n"
         "    def get_state(self):\n"
         "        raise RuntimeError('no actor')\n"
-    ) == {("enqueue_turn", "RuntimeError"), ("get_state", "RuntimeError")}
+    ) == [("enqueue_turn", "RuntimeError"), ("get_state", "RuntimeError")]
     # ...a factory-resolved raise is attributed to the function that *raises*,
     # not to the one that builds, so the class still lands on a real site...
     assert _raise_sites(
@@ -4379,17 +4401,30 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
         "        raise self._boom()\n"
         "    def _boom(self):\n"
         "        return RuntimeError('no actor')\n"
-    ) == {("get_state", "RuntimeError")}
+    ) == [("get_state", "RuntimeError")]
     # ...and a raise inside a nested or module-level helper is that helper's
     # site: it does not vanish, and it does not get charged to the one
-    # function the assertion permits — either way the equality reddens
+    # function the assertion permits — either way the equality reddens...
     assert _raise_sites(
         "def _refuse(name):\n"
         "    raise RuntimeError('no actor')\n"
         "class Storefront:\n"
         "    def get_state(self):\n"
         "        return _refuse(self)\n"
-    ) == {("_refuse", "RuntimeError")}
+    ) == [("_refuse", "RuntimeError")]
+    # ...and P22-2's shape: two raises of the *same* class in the *same*
+    # function are two sites, not one. A set would collapse them onto a
+    # single tuple, which is exactly how a second `raise RuntimeError` in
+    # `enqueue_turn` used to hide from this reader.
+    assert _raise_sites(
+        "class Storefront:\n"
+        "    def enqueue_turn(self):\n"
+        "        raise RuntimeError('first')\n"
+        "        raise RuntimeError('second')\n"
+    ) == [
+        ("enqueue_turn", "RuntimeError"),
+        ("enqueue_turn", "RuntimeError"),
+    ]
     # the two readers cannot drift: they share `_resolve_raised`, and the site
     # read collapses to the name read on the real module
     assert {name for _, name in _raise_sites(_storefront_source())} == (
