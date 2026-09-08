@@ -156,8 +156,10 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U38** — `pipeline.sh`'s provenance stamp races `HEAD` and scopes `SOURCE_DIRTY` repo-wide | `cobb` | `a42739600c7b41e1d` | gated | `6012ddb` + `9124a1f` — all findings dispositioned | `analyst` Pass 1 **needs changes** → Pass 3 re-dispatched after rate-limit kill | 364k tok / 87 tools |
 | **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | **accepted** | `c92f35d` + `8779ee8` | `analyst` Pass 3 → **approve with suggestions** (`6c6e807`) | 156k tok / 15 tools |
 | **U41** — backfill `cpg_falkorchat`'s pre-fix marker honestly + remove 3 leaked scratch graphs | `graph-dba` | `a5825012b34ab9a9b` | **accepted** | marker now 10 keys, `PROVENANCE='hand-backfilled'`; 3 keys deleted | self-verified + re-verified here (`SOURCE_TREE` vs `git rev-parse`) | 115k tok / 22 tools |
-| **U42a** — 6 sites in `freshness.md` + the check-0 gate decision | `cobb` | `a1cfcb25341f0b0bb` | in-flight (dispatched 2026-09-08) | `skills/cpg-analysis/references/freshness.md` | `analyst` Pass 4 (pairwise) | — |
-| **U42b** — 3 sites in the manual; `cpg_falkorchat` is no longer a live pre-fix example | `tico` | `a4e2b1a2f544180d8` | delivered — held for pairwise gate | `b47c84a` — **5** sites, shape set = 6 | `analyst` Pass 4 (pairwise, after U42a) | 76k tok / 19 tools |
+| **U42a** — 6 sites in `freshness.md` + the check-0 gate decision | `cobb` | `a1cfcb25341f0b0bb` | **delivered — committed `81b43cd`** (+66/−19) | **9** sites, not 6; `MARKER_ORIGIN` added to the documented query; shape set = **5** | `analyst` Pass 4 (pairwise) — **in flight** | 80k tok / 28 tools |
+| **U42b** — 3 sites in the manual; `cpg_falkorchat` is no longer a live pre-fix example | `tico` | `a4e2b1a2f544180d8` | delivered — held for pairwise gate | `b47c84a` — **5** sites, shape set = **6** | `analyst` Pass 4 (pairwise) — **in flight** | 76k tok / 19 tools |
+| **Pass 4** — the pairwise shape-set gate: do `freshness.md` and `graph-ontology.md` teach the same set of marker shapes? | `analyst` (**resumed** — wrote m1–m5 and Passes 1–3; the only party holding both sides) | `a98a748e49a559ead` | in-flight (dispatched 2026-09-08) | `docs/reviews/cpg-provenance-stamp.md` `## Pass 4` | — (is the gate) | 193k tok / 52 tools at resume |
+| **U42c** — the kaizen bookkeeping my own brief fenced off: `:KaizenEntry` + `claude/cobb/kaizen/history.md` | `cobb` | `a1cfcb25341f0b0bb` (resumed) | in-flight (dispatched 2026-09-08) | `kaizen_team` + `claude/cobb/kaizen/history.md` | — (raw capture; `cobb` distills) | — |
 | **U44** — route the `Properties removed` double-count quirk into `falkordb-quirks.md` | `graph-dba` | — | queued (blocked: concurrent session holds the file) | `claude/graph-dba/falkordb-quirks.md` | — | — |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
@@ -3611,3 +3613,97 @@ between them, which is the failure mode of splitting one fallout across two owne
 **And the citation split paid a third time.** Whichever way `cobb` rules on check 0's
 admissibility, the manual needs no edit — it describes what fields mean and defers procedure.
 Held for the pairwise gate rather than accepted, same as U39 was.
+
+## U42a: nine sites, and a ruling that refused to write a blank cheque
+
+`cobb` swept rather than working my six line numbers, same as `tico` had, and found nine. That
+is now three consecutive units where the sweep beat the list — U42b found five against my three,
+this one nine against my six, and further back `U13` found eleven against a review's three. The
+list is the reviewer's *sample*; it has never once been the population. I should stop writing
+briefs that read as though it might be.
+
+The three beyond the report are worth naming, because each was a claim that was true when written
+and that only the backfill falsified:
+
+- The hand-written bullet's own header asserted **"a hand-written marker has no date"** — a blanket
+  claim, and the backfilled marker is hand-written and carries a real one. Now scoped to the
+  `builtAt = unknown` shape.
+- The one-marker-per-graph limit was not false, but became **load-bearing**: a hand-authored marker
+  gets no exemption from overwrite-on-load, so the next successful `--load` erases `NOTE` and
+  `MARKER_ORIGIN` wholesale. The backfill's entire honesty is therefore provisional by
+  construction, and whoever rebuilds inherits none of its reasoning. That is a durable property of
+  the mechanism, not a fact about this marker.
+- Check 1's fallback didn't cover a marker with a non-null `provenance` and no `parsedAt` —
+  a combination that was *impossible* until 2026-09-08 and is now live.
+
+**The ruling I asked for, and the one I did not expect.** I referred check-0 admissibility to `cobb`
+rather than settling it myself. It admitted `hand-backfilled` — but gated on the **marker**, not the
+**literal**: you may run check 0 only once you have read that marker's `NOTE` and found it records
+where `sourceTree` came from and how it was checked. Its reason is the sharper half: admitting the
+literal outright would re-run this chain's own generational defect one level up. `source-origin` can
+carry a blanket guarantee because a machine produced it under fixed rules; `hand-backfilled`'s only
+invariant is *a human was here*. A rule keyed on the literal would be a plausible, checkable-looking
+guarantee that is wrong rather than absent — the exact shape this chain has now found five times.
+
+It also went past the brief structurally, and I think correctly: `MARKER_ORIGIN` is now **on the
+documented query** (nine fields) rather than behind a second one, because a non-null `provenance` no
+longer implies "pipeline". Bullet 1 is re-gated on `provenance` being a pipeline value **and**
+`markerOrigin` null. That closes `graph-dba`'s own objection at its root instead of asking readers
+to remember a caveat.
+
+**What I verified before committing**, since a document that now instructs a reader to run a check
+is worth more than one that merely describes it: `HEAD:./falkor-chat/server` is `515ee7e`, the
+marker's `sourceTree` is `85ddeed` — **different**; check 2 returns exactly **3** commits; and
+`MANIFEST.txt:19-21` does record the `diff -rq` exit 0 that the per-marker gate leans on. So
+admitting `hand-backfilled` does not merely make check 0 *runnable* on this graph — it makes it
+*informative*, and the answer it gives is "stale, by three commits."
+
+## The gate has a live discrepancy to adjudicate, and I did not adjudicate it
+
+`cobb` teaches **five** shapes; `tico` teaches **six**. I have deliberately not decided which is
+right, because the two readings have very different consequences and I am the wrong party for both.
+Either these are two partitions of one set — `cobb`'s "pipeline stamp" bullet folding `none` and the
+`SOURCE_TREE`-absent case into its field table and check 2, where `tico` splits them out as
+reader-facing states — or one document omits a shape its own reader will meet. The counts differing
+is not the finding. Whether a reader of **either document alone** is left unable to classify a
+marker they will actually encounter is the finding, and that is a question about two files neither
+author could see together.
+
+Pass 4 resumes the reviewer that wrote m1–m5 and gated both upstreams. At 193k tokens and 52 tool
+uses it is under the fresh-dispatch threshold, and the case for resuming is stronger than the
+arithmetic: it is the only party in the coordination that has held both sides, and it is the one
+that flagged `freshness.md`'s stronger dead-example claim from inside a review of the *other* file.
+
+## The ledger row I did not write, and had to reconstruct
+
+Dispatching this gate cost me four tool calls I should not have spent. The provenance reviewer's
+`agentId` was **in no ledger row** — the U38 and U39 rows name the gate as "`analyst` Pass 1 / Pass 3"
+without an id, and the narrative describing the rate-limit resume names it not at all. I recovered
+`a98a748e49a559ead` by grepping the harness's own task-output files and distinguishing it from the
+S9a reviewer by the first line of its brief.
+
+My own instruction is to record the id **at dispatch, always** — explicitly *not* only when a
+follow-up seems likely, because that asks me to predict the future. This is precisely the failure
+that clause exists to prevent, and I committed it on the one unit whose whole design was a deferred
+check. The recovery worked because the harness keeps per-agent output files in the session
+scratchpad, which is worth knowing, but it is a recovery from a gap I created, not a substitute for
+the row. Both gate rows are now in the ledger with their ids.
+
+## A fence of mine was wider than the risk it was drawn against
+
+`cobb` reported two pieces of bookkeeping it could not do: its `:KaizenEntry` capture and its
+`kaizen/history.md` append. Both were blocked by *my* brief, and neither should have been.
+
+The graph write was barred by a blanket "no graph writes" line I had aimed at destructive and
+shared-state operations. A producer-write to `kaizen_team` is neither — it is additive and
+author-partitioned, and the MCP server authorizes exactly that shape for an agent writing under its
+own `agentId`. The file was barred by "`claude/` is off-limits", drawn to avoid colliding with the
+concurrent session — which holds `claude/analyst/`, `claude/graph-dba/` and `claude/teco/teco.md`,
+and does not hold `claude/cobb/`. A `git status` I could have run when writing the brief would have
+shown that.
+
+Both fences were cheap to state and cost a full round trip to lift. The lesson is not "fence less" —
+the concurrent session is real and I have kept its files out of every commit this session. It is that
+a fence drawn by **directory** rather than by **file** silently captures whatever else lives under
+it, and the delegate who hits it cannot tell an intentional bar from an over-broad one. It correctly
+did neither and reported both, which is the right behaviour and the reason I found out at all.
