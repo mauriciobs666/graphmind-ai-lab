@@ -31,6 +31,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import inspect
+import logging
 import re
 import threading
 import time
@@ -54,6 +55,8 @@ from falkorchat.storefront import (
     ResetStateUnknownError,
     Storefront,
     StorefrontError,
+    TurnBooking,
+    TurnState,
     UnknownOrderError,
     UnknownParticipantError,
     UnscopedParticipantError,
@@ -605,44 +608,129 @@ def test_a_minted_token_never_contains_the_separator(seeded):
 
 
 # ── the turn-state map (§4.4 measure 1) ──────────────────────────────────────
+#
+# **Nothing here fabricates a map entry**, and it could not: `reserve_turn` is
+# the only way one is created, every change to one names the booking that owns
+# it, and there is no unconditional single-slot write left to fabricate with
+# (§5.1's S9 row). So these tests drive the delivered protocol, which is also
+# why they are the ones that catch a booking losing its slot.
+
+
+def _pin_thinking(shop, participant_id: str) -> TurnBooking:
+    """A **running** turn, reserved and flipped through the real protocol."""
+    booking = shop.reserve_turn(participant_id)
+    assert booking is not None
+    assert shop.set_turn_state(participant_id, TURN_THINKING, booking=booking) is True
+    return booking
 
 
 def test_turn_state_defaults_to_idle(seeded):
     assert seeded.turn_state("p-nobody") == IDLE_TURN
-    assert seeded.turn_state("p-nobody").as_payload() == {
+    assert seeded.turn_payload("p-nobody") == {
         "state": TURN_IDLE, "queuePosition": 0,
     }
     assert seeded.turn_in_flight("p-nobody") is False
 
 
-def test_a_queued_turn_carries_its_position_and_gates_a_second_post(seeded):
-    seeded.set_turn_state("p-a", TURN_QUEUED, queue_position=2)
+def test_a_reservation_is_queued_first_in_line_and_gates_a_second_post(seeded):
+    """`reserve_turn` is the `409` check and the booking as one step (§4.4
+    measure 1a): the second reservation for the same participant **is** the
+    refusal, and it books nothing.
 
-    assert seeded.turn_state("p-a").as_payload() == {
-        "state": TURN_QUEUED, "queuePosition": 2,
+    `queuePosition: 0` on a `queued` turn is ordinary and load-bearing — *first
+    in line*, which S13 renders as a queue rather than as the absence of one
+    (§5.2).
+    """
+    booking = seeded.reserve_turn("p-a")
+
+    assert booking is not None
+    assert seeded.turn_payload("p-a") == {
+        "state": TURN_QUEUED, "queuePosition": 0,
     }
     assert seeded.turn_in_flight("p-a") is True
 
-    seeded.set_turn_state("p-a", TURN_THINKING)
-    assert seeded.turn_state("p-a").as_payload() == {
+    assert seeded.reserve_turn("p-a") is None
+    assert seeded.turn_state("p-a").booking == booking
+
+    assert seeded.set_turn_state("p-a", TURN_THINKING, booking=booking) is True
+    assert seeded.turn_payload("p-a") == {
         "state": TURN_THINKING, "queuePosition": 0,
     }
     assert seeded.turn_in_flight("p-a") is True
 
 
+def test_the_queue_position_is_the_waiting_line_index_and_counts_down(seeded):
+    """§5.2's definition, read at the **delivered default** rather than at
+    `turn_workers=1`, which is the only setting the old number was right at.
+
+    Four turns running and three waiting: the running ones occupy workers
+    rather than places in line and report `0`, and the three waiting ones read
+    `0/1/2` — so the fifth *arrival* is first in line, where a position taken
+    at booking told it `4` (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`,
+    P17-2, reproduced). Then the head of the line starts running, and every
+    number behind it **counts down** — the property a number fixed at booking
+    cannot have at any `turn_workers`.
+    """
+    for i in range(4):
+        _pin_thinking(seeded, f"p-run-{i}")
+    waiting = [seeded.reserve_turn(f"p-wait-{i}") for i in range(3)]
+
+    assert [seeded.turn_payload(f"p-run-{i}") for i in range(4)] == [
+        {"state": TURN_THINKING, "queuePosition": 0}
+    ] * 4
+    assert [
+        seeded.turn_payload(f"p-wait-{i}")["queuePosition"] for i in range(3)
+    ] == [0, 1, 2]
+
+    assert seeded.set_turn_state(
+        "p-wait-0", TURN_THINKING, booking=waiting[0]
+    ) is True
+
+    assert [
+        seeded.turn_payload(f"p-wait-{i}")["queuePosition"] for i in range(3)
+    ] == [0, 0, 1]
+
+
+def test_a_running_turn_reports_zero_even_with_an_earlier_turn_still_queued(seeded):
+    """§5.2's constant, stated over the **map** rather than over the executor:
+    `queuePosition` is `0` whenever `state` is `thinking`, because a running
+    turn has left the line — not because nothing happened to be booked before
+    it.
+
+    Without this the rule reads as an accident of ordering. Turns ordinarily
+    start in booking order, so a `thinking` turn usually has no earlier
+    *queued* one and a derivation that dropped the constant answers `0` anyway
+    — measured: deleting the `state != TURN_QUEUED ⇒ 0` branch left the whole
+    suite green. Here the earlier booking is still in the line, so the two
+    readings disagree, and the one this pins is the contract: a participant
+    whose turn is running must never be told they are waiting behind someone.
+    """
+    seeded.reserve_turn("p-first")
+    later = seeded.reserve_turn("p-second")
+    assert seeded.set_turn_state("p-second", TURN_THINKING, booking=later) is True
+
+    assert seeded.turn_payload("p-second") == {
+        "state": TURN_THINKING, "queuePosition": 0,
+    }
+    assert seeded.turn_payload("p-first") == {
+        "state": TURN_QUEUED, "queuePosition": 0,
+    }
+
+
 def test_returning_to_idle_clears_the_entry(seeded):
-    seeded.set_turn_state("p-a", TURN_THINKING)
-    assert seeded.set_turn_state("p-a", TURN_IDLE) == IDLE_TURN
+    booking = _pin_thinking(seeded, "p-a")
+    assert seeded.set_turn_state("p-a", TURN_IDLE, booking=booking) is True
+    assert seeded.turn_state("p-a") == IDLE_TURN
     assert seeded.turn_in_flight("p-a") is False
 
-    seeded.set_turn_state("p-a", TURN_QUEUED, queue_position=1)
-    seeded.clear_turn("p-a")
+    second = seeded.reserve_turn("p-a")
+    assert seeded.release_turn("p-a", second) is True
     assert seeded.turn_in_flight("p-a") is False
 
 
 def test_turn_state_is_per_participant(seeded):
-    seeded.set_turn_state("p-a", TURN_THINKING)
-    seeded.set_turn_state("p-b", TURN_QUEUED, queue_position=1)
+    _pin_thinking(seeded, "p-a")
+    seeded.reserve_turn("p-b")
 
     assert seeded.turn_in_flight("p-a") is True
     assert seeded.turn_in_flight("p-b") is True
@@ -651,6 +739,63 @@ def test_turn_state_is_per_participant(seeded):
     seeded.clear_all_turns()
     assert seeded.turn_in_flight("p-a") is False
     assert seeded.turn_in_flight("p-b") is False
+
+
+def test_no_map_write_takes_effect_once_its_booking_has_lost_the_slot(seeded):
+    """The **ownership** half of P17-1, at the unit the token protects.
+
+    `clear_all_turns()` empties the map under turns that are still running —
+    reset-all does exactly that (`docs/reviews/salesperson-ui-impl.md`
+    `## Pass 17`, Ruling 2) — and a fresh accepted post then installs a
+    *different* booking in that slot. Every write the displaced booking still
+    holds must now be a no-op: the `thinking` flip and the release alike, the
+    release included because it is the one path a worker-only rule does not
+    cover (`## Pass 18`, P18-3).
+
+    The positive controls are the point: an implementation that refused **every**
+    write would pass the three `is False` lines and fail the two below them.
+    """
+    old = seeded.reserve_turn("p-a")
+    seeded.clear_all_turns()
+    new = seeded.reserve_turn("p-a")
+
+    assert new is not None
+    assert new != old
+
+    assert seeded.set_turn_state("p-a", TURN_THINKING, booking=old) is False
+    assert seeded.release_turn("p-a", old) is False
+    assert seeded.turn_state("p-a") == TurnState(state=TURN_QUEUED, booking=new)
+    assert seeded.turn_in_flight("p-a") is True
+
+    assert seeded.set_turn_state("p-a", TURN_THINKING, booking=new) is True
+    assert seeded.release_turn("p-a", new) is True
+    assert seeded.turn_in_flight("p-a") is False
+
+
+def test_the_arrival_ordinal_is_per_storefront_monotonic_and_never_reused(
+    seeded, services
+):
+    """The ordinal does two jobs — it orders the line and it identifies the
+    booking — and a collision corrupts both at once (§5.1's S9 row).
+
+    Three spellings fail here, and each is a plausible reading of *arrival
+    ordinal*. **`len(self._turns)`** and **a counter reset in
+    `clear_all_turns()`** both restart, so the third assertion is `0 > 0`.
+    **A module-level counter** satisfies monotonicity and fails the last one:
+    every other piece of this object's mutable state is per-instance, for the
+    reason `Storefront.__init__`'s docstring gives — a second `Storefront`
+    shares nothing with the first but the graph, which is what makes the
+    restart-survival test in this file mean anything.
+    """
+    first = [seeded.reserve_turn(f"p-{i}").ordinal for i in range(3)]
+    assert first == [first[0], first[0] + 1, first[0] + 2]
+
+    seeded.clear_all_turns()
+
+    assert seeded.reserve_turn("p-0").ordinal > max(first)
+
+    other = _storefront(services)
+    assert other.reserve_turn("p-0").ordinal == 0
 
 
 # ── the turn queue (§4.4 measure 1) ──────────────────────────────────────────
@@ -686,6 +831,18 @@ def _drain(shop, future, trigger=None) -> None:
     future.result(timeout=IMMEDIATE_S)
 
 
+def _enqueue(shop, ctx, record, posted):
+    """The request thread's whole sequence, minus the graph write: reserve the
+    slot (the `409` check and the booking as one step), then submit.
+
+    Spelled as a helper because it is a **sequence**, not a call: a test that
+    submitted without reserving would be exercising a path no route can take.
+    """
+    booking = shop.reserve_turn(record.participant_id)
+    assert booking is not None, "the participant already had a turn in flight"
+    return shop.enqueue_turn(ctx, record, posted, booking)
+
+
 def test_the_turn_worker_carries_the_participants_language_in_the_run_ctx(services):
     """§4.5's carrier, and §5.1's reason for handing the record in.
 
@@ -706,7 +863,7 @@ def test_the_turn_worker_carries_the_participants_language_in_the_run_ctx(servic
     }
     ctx = shop.context_for("p-ada")
 
-    _drain(shop, shop.enqueue_turn(ctx, record, posted), trigger)
+    _drain(shop, _enqueue(shop, ctx, record, posted), trigger)
 
     assert len(trigger.calls) == 1
     call = trigger.calls[0]
@@ -744,7 +901,7 @@ def test_the_turn_worker_never_resolves_a_participant_record(services, monkeypat
     posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
               "role": "member", "mentions": [AGENT]}
 
-    _drain(shop, shop.enqueue_turn(shop.context_for("p-ada"), record, posted), trigger)
+    _drain(shop, _enqueue(shop, shop.context_for("p-ada"), record, posted), trigger)
 
     assert reads == []
     # the positive control: the spy really is on the seam a resolution uses
@@ -752,7 +909,9 @@ def test_the_turn_worker_never_resolves_a_participant_record(services, monkeypat
     assert reads == ["p-ada"]
 
 
-def test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate(services):
+def test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate(
+    services, caplog
+):
     """The turn runs after the `200` has been sent, so nothing it raises has a
     response to reach — it is logged and swallowed, exactly as
     `background._safe_run_workflow` does on both existing transports.
@@ -761,7 +920,18 @@ def test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate(servi
     without clearing would leave that participant permanently `409`-refused,
     unable to retry the thing that failed. The dominant cause is ordinary — an
     LLM endpoint that is down, or the 180 s agent timeout.
+
+    **And "logged" is asserted, not assumed.** Until `turn.lastTurn` lands
+    (S9c) this record is the *only* evidence anywhere that a turn died — the
+    participant sees their message, no reply, and a composer that quietly
+    re-enables. Replacing the `_log.exception(...)` with `pass` left the whole
+    suite green at **280 passed** (`docs/reviews/salesperson-ui-impl.md`
+    `## Pass 17`, P17-4, mutation D), so the four assertions below are what
+    make the swallow observable: one record, at `ERROR`, carrying the
+    traceback, naming both the participant and the message the operator would
+    need to find the turn.
     """
+    caplog.set_level(logging.DEBUG, logger="falkorchat.storefront")
     trigger = _RecordingTrigger(explode=True)
     shop = _storefront(services, trigger=trigger)
     record = ParticipantRecord(
@@ -771,15 +941,25 @@ def test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate(servi
     posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
               "role": "member", "mentions": [AGENT]}
 
-    future = shop.enqueue_turn(shop.context_for("p-ada"), record, posted)
+    future = _enqueue(shop, shop.context_for("p-ada"), record, posted)
     _drain(shop, future, trigger)
 
     assert future.exception(timeout=IMMEDIATE_S) is None
     assert shop.turn_in_flight("p-ada") is False
     assert shop.turn_state("p-ada") == IDLE_TURN
 
+    logged = [r for r in caplog.records if r.name == "falkorchat.storefront"]
+    assert len(logged) == 1
+    assert logged[0].levelno == logging.ERROR
+    assert logged[0].exc_info is not None
+    assert logged[0].exc_info[0] is RuntimeError
+    assert "p-ada" in logged[0].getMessage()
+    assert "m-1" in logged[0].getMessage()
 
-def test_a_storefront_with_no_trigger_still_queues_and_clears_the_turn(services):
+
+def test_a_storefront_with_no_trigger_still_queues_and_clears_the_turn(
+    services, caplog
+):
     """`trigger=None` — an app built without the workflow engine — makes the
     turn a no-op, and deliberately not a *skipped* one.
 
@@ -787,7 +967,20 @@ def test_a_storefront_with_no_trigger_still_queues_and_clears_the_turn(services)
     of the post, not of the engine: switching them off with the engine would
     make the storefront behave differently in the one configuration nobody
     tests it in.
+
+    **A no-op is also silent, and that is the half nothing asserted.**
+    `_run_turn`'s `if self._trigger is None: return` is what makes it one:
+    delete those two lines and `None.maybe_trigger` raises `AttributeError`,
+    which the isolation block catches, logs and clears — satisfying every other
+    assertion here, and putting an `ERROR` traceback in the log on **every**
+    post in the one deployment shape nobody watches. That mutation survived at
+    **280 passed** (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-7,
+    mutation E). The empty log below closes it; its positive control is the
+    neighbouring `…_trigger_raises_is_isolated…`, which asserts the same logger
+    *does* speak when a turn really dies, so "no records" cannot pass by the
+    logger being misconfigured.
     """
+    caplog.set_level(logging.DEBUG, logger="falkorchat.storefront")
     shop = _storefront(services)
     record = ParticipantRecord(
         participant_id="p-ada", display_name="Ada", language="en",
@@ -796,34 +989,26 @@ def test_a_storefront_with_no_trigger_still_queues_and_clears_the_turn(services)
     posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
               "role": "member", "mentions": [AGENT]}
 
-    future = shop.enqueue_turn(shop.context_for("p-ada"), record, posted)
+    booking = shop.reserve_turn("p-ada")
+    # the slot is occupied by the reservation, engine or no engine…
+    assert shop.turn_in_flight("p-ada") is True
+    future = shop.enqueue_turn(
+        shop.context_for("p-ada"), record, posted, booking
+    )
     future.result(timeout=IMMEDIATE_S)
+
     assert future.exception(timeout=IMMEDIATE_S) is None
+    # …and released by the worker that did nothing with it
     assert shop.turn_in_flight("p-ada") is False
+    assert [r for r in caplog.records if r.name == "falkorchat.storefront"] == []
 
 
-def test_enqueue_books_the_turn_before_it_submits(services):
-    """The ordering the whole map depends on: the request thread books the
-    entry, **then** hands the turn to a worker — never the other way round.
+def _blocking_trigger():
+    """A trigger that parks its worker inside `maybe_trigger` until released.
 
-    The harm the other order does is not "an idle-looking window" but a
-    **clobber**: the worker's own `set_turn_state(thinking)` would land first
-    and the late booking would overwrite it back to `queued`, at a position
-    nothing ever corrects, because `_run_turn` sets `thinking` exactly once. A
-    participant whose turn is running then polls `queued` forever, and
-    `_await_quiesce` waits on an entry that describes the wrong thing.
-
-    Driven with a **saturated** executor — `turn_workers=1`, its one worker held
-    inside the trigger — and synchronised on the worker having entered, so the
-    two entries below are read at the one instant that separates the orderings:
-    the running participant must read `thinking`, and the queued one must carry
-    the position it was given.
-
-    Measured against the reordering itself, not a widened caricature of it:
-    submitting first and booking after — no sleep, nothing else changed — leaves
-    `p-a` reading `{"state": "queued", "queuePosition": 1}` here on **5 of 5**
-    runs, because `Executor.submit` takes its own lock and the worker reliably
-    reaches `set_turn_state` before the caller's next statement does.
+    `(trigger, entered, gate)`. A gate rather than a sleep for the reason the
+    rest of this section gives: a sleep asserts in-flight-ness by hoping, a
+    gate asserts it.
     """
     entered = threading.Event()
     gate = threading.Event()
@@ -833,7 +1018,32 @@ def test_enqueue_books_the_turn_before_it_submits(services):
             entered.set()
             gate.wait(timeout=IMMEDIATE_S)
 
-    shop = _storefront(services, trigger=_Blocking(), turn_workers=1)
+    return _Blocking(), entered, gate
+
+
+def test_a_running_turn_holds_a_worker_and_the_one_behind_it_is_first_in_line(
+    services,
+):
+    """The two readings that separate a running turn from a waiting one, taken
+    at the one instant where they differ.
+
+    The booking is no longer taken here at all — `reserve_turn` writes the
+    entry on the request thread, *before* the message write, so "book before
+    submit" is now structural rather than a race S9a had to win. What is left
+    to measure is the worker's own write and the number derived from it: the
+    running participant reads `thinking`/`0`, and the one behind them reads
+    `queued`/**`0`** — *first in line*, because a running turn occupies a
+    worker rather than a place in the line (§5.2). The old spelling of this
+    test asserted `queued`/`1` for exactly this arrangement, which the current
+    definition falsifies.
+
+    A `_run_turn` that flipped the wrong entry, or one whose flip was
+    unconditional and landed on a booking it no longer owned, fails the first
+    of the two — and the second moves with it, since a `thinking` turn is not
+    counted and a `queued` one is.
+    """
+    trigger, entered, gate = _blocking_trigger()
+    shop = _storefront(services, trigger=trigger, turn_workers=1)
     posted = {"msgId": "m-1", "threadId": "th-x", "text": "hi",
               "role": "member", "mentions": [AGENT]}
 
@@ -843,15 +1053,26 @@ def test_enqueue_books_the_turn_before_it_submits(services):
             channel_id=f"ch-{pid}", thread_id=f"th-{pid}", joined_at=1,
         )
 
-    first = shop.enqueue_turn(shop.context_for("p-a"), record("p-a"), posted)
+    first_booking = shop.reserve_turn("p-a")
+    assert shop.turn_payload("p-a") == {
+        "state": TURN_QUEUED, "queuePosition": 0,
+    }
+    first = shop.enqueue_turn(
+        shop.context_for("p-a"), record("p-a"), posted, first_booking
+    )
     assert entered.wait(timeout=IMMEDIATE_S), "the first turn never reached a worker"
-    second = shop.enqueue_turn(shop.context_for("p-b"), record("p-b"), posted)
 
-    assert shop.turn_state("p-a").as_payload() == {
+    second_booking = shop.reserve_turn("p-b")
+    second = shop.enqueue_turn(
+        shop.context_for("p-b"), record("p-b"), posted, second_booking
+    )
+
+    assert second_booking.ordinal > first_booking.ordinal
+    assert shop.turn_payload("p-a") == {
         "state": TURN_THINKING, "queuePosition": 0,
     }
-    assert shop.turn_state("p-b").as_payload() == {
-        "state": TURN_QUEUED, "queuePosition": 1,
+    assert shop.turn_payload("p-b") == {
+        "state": TURN_QUEUED, "queuePosition": 0,
     }
 
     gate.set()
@@ -859,6 +1080,85 @@ def test_enqueue_books_the_turn_before_it_submits(services):
     second.result(timeout=IMMEDIATE_S)
     assert shop.turn_in_flight("p-a") is False
     assert shop.turn_in_flight("p-b") is False
+
+
+def test_a_live_workers_finally_does_not_clear_the_booking_that_replaced_its_own(
+    services,
+):
+    """P17-1's ownership half, with a **real worker** rather than a map probe.
+
+    `presenter_reset_all`'s `clear_all_turns()` empties the map while workers
+    are still running (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`,
+    Ruling 2), and the participant can then post again and be accepted, because
+    the map is empty. Two bookings for one participant now exist, and the map
+    holds one slot: an unconditional `finally` deletes the **second**, live
+    one, at which point `turn_in_flight` is `False` and `_await_quiesce`
+    returns `True` under a running turn — the state the quiesce order exists to
+    make impossible, reproduced in Pass 17 exactly this way.
+
+    **The same case pins the ordinal**, which is why both assertions are here:
+    the fresh booking's ordinal must be strictly greater than the wiped one's,
+    and a counter derived from the map's size restarts at `0` after the wipe —
+    so it fails `>` *and* makes the old worker's ownership check pass against
+    the new booking, deleting it. One mutation, two red assertions.
+    """
+    trigger, entered, gate = _blocking_trigger()
+    shop = _storefront(services, trigger=trigger, turn_workers=1)
+    record = ParticipantRecord(
+        participant_id="p-ada", display_name="Ada", language="en",
+        channel_id="ch-ada", thread_id="th-ada", joined_at=1,
+    )
+    posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
+              "role": "member", "mentions": [AGENT]}
+
+    old = shop.reserve_turn("p-ada")
+    future = shop.enqueue_turn(shop.context_for("p-ada"), record, posted, old)
+    assert entered.wait(timeout=IMMEDIATE_S), "the turn never reached a worker"
+
+    shop.clear_all_turns()
+    fresh = shop.reserve_turn("p-ada")
+    assert fresh is not None, "the wipe must leave the participant postable"
+    assert fresh.ordinal > old.ordinal
+
+    gate.set()
+    future.result(timeout=IMMEDIATE_S)
+
+    assert shop.turn_state("p-ada").booking == fresh
+    assert shop.turn_in_flight("p-ada") is True
+
+
+def test_a_submit_refused_after_shutdown_releases_the_reservation(services):
+    """P17-3, reproduced and closed.
+
+    `shutdown_turns()` makes `submit` raise `RuntimeError: cannot schedule new
+    futures after shutdown`, and S9a booked before submitting with no guard, so
+    the entry survived as a turn no worker would ever clear: that participant
+    `409`-refused for the life of the process, and every reset-mine of theirs
+    answering `503 quiesce_timeout`. The reachable trigger is narrow; the blast
+    radius is not.
+
+    The `RuntimeError` still propagates — the reservation is released, not the
+    failure — so the route's own `except` is what turns it into a response.
+    """
+    shop = _storefront(services)
+    shop.shutdown_turns()
+    record = ParticipantRecord(
+        participant_id="p-ada", display_name="Ada", language="en",
+        channel_id="ch-ada", thread_id="th-ada", joined_at=1,
+    )
+    posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
+              "role": "member", "mentions": [AGENT]}
+
+    booking = shop.reserve_turn("p-ada")
+    assert shop.turn_in_flight("p-ada") is True
+
+    with pytest.raises(RuntimeError):
+        shop.enqueue_turn(shop.context_for("p-ada"), record, posted, booking)
+
+    assert shop.turn_state("p-ada") == IDLE_TURN
+    assert shop.turn_in_flight("p-ada") is False
+    # and the participant is postable again rather than locked out
+    assert shop.reserve_turn("p-ada") is not None
 
 
 def test_shutdown_turns_is_idempotent(services):
@@ -1095,7 +1395,11 @@ def test_get_state_reports_profile_cart_order_and_turn(stocked, conn):
     services.save_profile(ctx, delivery_address="12 Rua das Flores")
     services.add_cart_item(ctx, product_name="Widget 001", quantity=2)
     services.add_cart_item(ctx, product_name="Widget 002", quantity=1)
-    stocked.set_turn_state(record.participant_id, TURN_QUEUED, queue_position=2)
+    # Two *other* participants booked ahead of Ada, so her derived position is
+    # `2` — the number cannot be fabricated any more, it has to be earned.
+    stocked.reserve_turn("p-ahead-1")
+    stocked.reserve_turn("p-ahead-2")
+    stocked.reserve_turn(record.participant_id)
 
     state = stocked.get_state(ctx)
 
@@ -1176,7 +1480,7 @@ def test_get_state_is_scoped_to_the_calling_participant(stocked, conn):
     bob_ctx = stocked.context_for(bob.participant_id)
     stocked._services.add_cart_item(ada_ctx, product_name="Widget 001", quantity=4)
     stocked._services.place_order(ada_ctx)
-    stocked.set_turn_state(ada.participant_id, TURN_THINKING)
+    _pin_thinking(stocked, ada.participant_id)
 
     bob_state = stocked.get_state(bob_ctx)
 
@@ -1862,7 +2166,7 @@ def test_the_reset_waits_for_an_in_flight_turn_before_it_deletes(stocked, conn,
         ctx, thread_id=record.thread_id, text="hello"
     )
     _stub_run(conn, run_id="turn-run", trigger_msg_id=posted["msgId"])
-    stocked.set_turn_state(pid, TURN_THINKING)
+    turn_booking = _pin_thinking(stocked, pid)
 
     at_delete: dict = {}
     real_reset = stocked._repo.reset_participant
@@ -1892,7 +2196,7 @@ def test_the_reset_waits_for_an_in_flight_turn_before_it_deletes(stocked, conn,
         db.workspace_graph(db.connect(), WS).query(
             "MATCH (r:WorkflowRun {runId: 'turn-run'}) SET r.status = 'done'"
         )
-        stocked.clear_turn(pid)
+        stocked.release_turn(pid, turn_booking)
         # The instant the turn left the map — i.e. the earliest moment
         # `_await_quiesce` could possibly have stopped waiting.
         turn_result["finished_at"] = time.monotonic()
@@ -1955,7 +2259,7 @@ def test_a_quiesce_timeout_changes_nothing_and_leaves_the_turn_running(
     _seed_catalog(conn, _catalog_rows(2))
     shop = _storefront(stocked._services, quiesce_s=0)
     record, ctx = _busy_participant(shop, conn)
-    shop.set_turn_state(record.participant_id, TURN_THINKING)
+    _pin_thinking(shop, record.participant_id)
     before = _one(conn, "MATCH (n) RETURN count(n)")
 
     # `_call_bounded`, not a bare call: a zero budget has nothing to wait for,
@@ -2158,7 +2462,7 @@ def test_the_two_reset_failures_are_different_exceptions(stocked, conn, monkeypa
     assert not issubclass(QuiesceTimeoutError, ResetStateUnknownError)
 
     busy = _storefront(stocked._services, quiesce_s=0)
-    busy.set_turn_state(record.participant_id, TURN_THINKING)
+    _pin_thinking(busy, record.participant_id)
     # Bounded for the same reason as above (S7-3): fail, never hang.
     with pytest.raises(QuiesceTimeoutError):
         _call_bounded(busy.reset_participant, record)

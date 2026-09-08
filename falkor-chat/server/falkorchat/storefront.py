@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import itertools
 import logging
 import secrets
 import threading
@@ -293,11 +294,45 @@ class ParticipantRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class TurnBooking:
+    """One accepted turn's **ownership token** and its place in the **arrival
+    order** — one value doing both jobs, because both answer the same question
+    of a map that holds one slot per participant: *which* turn is this?
+
+    `ordinal` comes from `Storefront`'s own strictly monotonic counter, taken
+    under the turn lock, never reset and never reused (`reserve_turn`). Both
+    jobs need exactly that. As an ordering key it decides §5.2's queue
+    position; as an ownership token it is what every map write is checked
+    against — so a value two live bookings can share mis-places the line *and*
+    lets a worker clear a slot that is not its own, which is
+    `docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-1 in a second
+    spelling. **`len(self._turns)` is a plausible reading of "arrival ordinal"
+    and is wrong for both**: it restarts after `clear_all_turns()`, so a live
+    booking and a fresh one can hold the same value (`## Pass 18`, P18-2).
+
+    A value class rather than a bare `int` for one reason worth stating: the
+    first booking a process ever makes has ordinal `0`, and `if not booking`
+    would drop it.
+    """
+
+    ordinal: int
+
+
+@dataclass(frozen=True, slots=True)
 class TurnState:
-    """One participant's agent-turn state, as `GET /shop/api/state` reports it."""
+    """One participant's agent-turn state, as `GET /shop/api/state` reports it.
+
+    **It carries no queue position, deliberately.** §5.2 defines that number as
+    the participant's index in the waiting line, which is a property of the
+    *map* rather than of one entry, so `Storefront.turn_payload` derives it on
+    every read and nothing stores it. S9a stored it here, taken once at
+    booking: a plausible integer that was wrong at every `turn_workers` but 1
+    and never counted down (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`,
+    P17-2, reproduced).
+    """
 
     state: str = TURN_IDLE
-    queue_position: int = 0
+    booking: TurnBooking | None = None
 
     @property
     def in_flight(self) -> bool:
@@ -309,8 +344,12 @@ class TurnState:
         """
         return self.state != TURN_IDLE
 
-    def as_payload(self) -> dict[str, Any]:
-        return {"state": self.state, "queuePosition": self.queue_position}
+    def as_payload(self, queue_position: int) -> dict[str, Any]:
+        """§5.2's `turn` block. `queue_position` is handed in by
+        `Storefront.turn_payload`, the only scope that can see the rest of the
+        line — an entry cannot know its own place in it.
+        """
+        return {"state": self.state, "queuePosition": queue_position}
 
 
 IDLE_TURN = TurnState()
@@ -394,6 +433,13 @@ class Storefront:
         # The turn-state map (§4.4 measure 1). Absent key == idle.
         self._turns: dict[str, TurnState] = {}
         self._turns_lock = threading.Lock()
+        # Where every booking's arrival ordinal comes from: strictly
+        # monotonic, never reset, never reused, advanced under `_turns_lock`
+        # (§5.1's S9 row). **Per-`Storefront`, never module-level** — the rule
+        # this class's docstring already gives for every other piece of its
+        # mutable state, and what keeps a second `Storefront` sharing nothing
+        # with the first but the graph.
+        self._turn_ordinals = itertools.count()
         # §4.4 measure 1's bounded turn executor, and the trigger its workers
         # drive. Constructed eagerly rather than on first use because
         # `ThreadPoolExecutor` starts no thread until the first `submit`, so a
@@ -659,26 +705,127 @@ class Storefront:
         with self._turns_lock:
             return self._turns.get(participant_id, IDLE_TURN)
 
-    def set_turn_state(
-        self, participant_id: str, state: str, *, queue_position: int = 0
-    ) -> TurnState:
-        """Record a participant's turn state; `idle` clears the entry.
+    def turn_payload(self, participant_id: str) -> dict[str, Any]:
+        """§5.2's `turn` block for one participant — **derived on read, never
+        stored**.
 
-        Driven by `enqueue_turn` (the request thread, `queued` with its
-        position) and by `_run_turn` (the worker, `thinking`); read by S8's
-        `GET /shop/api/state` and by its `409 TurnInProgress` gate.
+        `queuePosition` is the 0-based index in the waiting line: how many
+        *other* accepted turns are ahead of theirs, and the line is ordered by
+        booking. It is `0` for `idle` and for `thinking`, where it is a
+        constant rather than a position — an idle participant is in no line and
+        a running turn has already left it — so only `queued` entries booked
+        **earlier** than this one are counted. `0` on a `queued` turn is
+        ordinary and load-bearing: *first in line*.
+
+        Two properties follow, and they are why §5.2 requires the derivation
+        rather than a number taken at booking. It is **correct at every
+        `turn_workers`** — a `thinking` turn occupies a worker, not a place in
+        line, so a fifth arrival behind four *running* turns reads `0` and not
+        `4` — and it **counts down** as the queue drains, which is the whole
+        difference between a queue position and an indefinite spinner wearing a
+        number (§4.4 measure 1). The cost is one scan of a map bounded by the
+        participant count, once per poll.
+
+        One accepted under-count, stated rather than discovered: reset-all's
+        `clear_all_turns()` empties the map under workers that are still
+        running, so for at most one turn's duration a fresh arrival can read
+        `queued`/`0` while every worker is busy (§5.2 *One bound*).
+        """
+        with self._turns_lock:
+            turn = self._turns.get(participant_id)
+            if turn is None:
+                return IDLE_TURN.as_payload(0)
+            if turn.state != TURN_QUEUED:
+                return turn.as_payload(0)
+            ordinal = turn.booking.ordinal
+            ahead = sum(
+                1
+                for other in self._turns.values()
+                if other.state == TURN_QUEUED and other.booking.ordinal < ordinal
+            )
+            return turn.as_payload(ahead)
+
+    def reserve_turn(self, participant_id: str) -> TurnBooking | None:
+        """**The `409` check and the booking as one indivisible step** (§4.4
+        measure 1a): the new booking, or `None` when that participant already
+        has a turn in flight.
+
+        `None` **is** the `409 TurnInProgress` — the route raises it, still
+        before the message write. What this replaces is a check on the request
+        thread followed by a booking with a FalkorDB round trip in between, so
+        two posts from one participant could both pass the check and both book.
+        The map holds one slot per participant, so the first worker's clear
+        then erased the *second*, still-running turn's entry and
+        `turn_in_flight` reported idle under a live turn — the state
+        `_await_quiesce` exists to make impossible
+        (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-1, reproduced).
+
+        **Every path that then fails to reach a worker must `release_turn`** —
+        `services.post_message` raising, or a refused `submit`. That is not
+        tidiness. A leaked reservation `409`-locks that participant for the
+        life of the process and turns every reset-mine of theirs into a `503`
+        (P17-3); and it makes §5.3's `504 post_state_unknown` reconciliation
+        decide **wrongly** rather than merely lose information, since
+        `turn.state !== 'idle'` parks that client in *wait, as normal* forever
+        for a turn nobody will run (`## Pass 18`, question 2).
+        """
+        with self._turns_lock:
+            if self._turns.get(participant_id, IDLE_TURN).in_flight:
+                return None
+            booking = TurnBooking(ordinal=next(self._turn_ordinals))
+            self._turns[participant_id] = TurnState(
+                state=TURN_QUEUED, booking=booking
+            )
+            return booking
+
+    def release_turn(self, participant_id: str, booking: TurnBooking) -> bool:
+        """Clear that participant's slot **only if `booking` still owns it**;
+        `True` when it did and the entry is gone.
+
+        Two callers, one operation: the request thread undoing a reservation
+        that never reached a worker, and `_run_turn`'s `finally`. The ownership
+        condition is on **both**, not on the worker alone — between a
+        reservation and a failed write, a `clear_all_turns()` plus a second-tab
+        post can install a different booking in that slot, and an unconditional
+        release would delete it. That is the very defect the token exists to
+        prevent, on the one path a worker-only rule does not cover
+        (`docs/reviews/salesperson-ui-impl.md` `## Pass 18`, P18-3).
+        """
+        with self._turns_lock:
+            current = self._turns.get(participant_id)
+            if current is None or current.booking != booking:
+                return False
+            del self._turns[participant_id]
+            return True
+
+    def set_turn_state(
+        self, participant_id: str, state: str, *, booking: TurnBooking
+    ) -> bool:
+        """Move `booking`'s turn to `state`; `idle` clears the entry. `True`
+        when the write took effect, `False` when that booking no longer owns
+        the slot.
+
+        **`booking` is required, and this write is conditional on it**, exactly
+        as the release and the `finally` clear are. The reservation closes the
+        admission window; the token closes the ownership one; neither subsumes
+        the other (§5.1's S9 row). `clear_all_turns()` empties the map under
+        workers that are still running, so an unconditional `thinking` flip
+        would move a **later** booking's entry to `thinking` when the wiped
+        turn's work item finally reached a worker.
+
+        There is deliberately **no unconditional single-slot write left on this
+        class**: an entry is created by `reserve_turn`, changed here, removed
+        by `release_turn`, and dropped wholesale by the reset paths'
+        `clear_all_turns()`.
         """
         if state == TURN_IDLE:
-            self.clear_turn(participant_id)
-            return IDLE_TURN
-        turn = TurnState(state=state, queue_position=queue_position)
+            return self.release_turn(participant_id, booking)
         with self._turns_lock:
-            self._turns[participant_id] = turn
-        return turn
-
-    def clear_turn(self, participant_id: str) -> None:
-        with self._turns_lock:
-            self._turns.pop(participant_id, None)
+            current = self._turns.get(participant_id)
+            if current is None or current.booking != booking:
+                return False
+            self._turns[participant_id] = TurnState(state=state, booking=booking)
+            return True
 
     def clear_all_turns(self) -> None:
         """Drop every turn entry — the reset paths, after quiesce (S7/S10)."""
@@ -696,16 +843,19 @@ class Storefront:
         ctx: CallContext,
         participant: ParticipantRecord,
         posted: dict[str, Any],
+        booking: TurnBooking,
     ) -> Future[None]:
-        """Book a turn for `participant` and hand it to the executor.
+        """Hand `booking`'s already-reserved turn to the executor.
 
         **This method submits; it does not run the turn.** The request thread
-        does four things and then answers — the `409` single-flight check (S8's,
-        in the route, *before* the message write), `services.post_message`, the
-        turn-map bookkeeping below, and `executor.submit(...)`. Everything after
-        that is `_run_turn`, on a worker. `docs/plans/salesperson-ui.md` §5.1's
-        S9 row decides that placement rather than leaving it open, for three
-        reasons that are not preferences:
+        does four things and then answers — `reserve_turn` (the `409`
+        single-flight check and the booking as one atomic step, in the route,
+        *before* the message write), `services.post_message`, this submit, and
+        the response, **releasing the reservation on any path that never
+        reaches a worker**. Everything after the submit is `_run_turn`, on a
+        worker. `docs/plans/salesperson-ui.md` §5.1's S9 row decides that
+        placement rather than leaving it open, for three reasons that are not
+        preferences:
 
         1. `services.start_workflow_run` is **synchronous and drives the whole
            run** — up to eight chat completions against a 180 s agent timeout.
@@ -723,34 +873,61 @@ class Storefront:
            re-read it from the graph in `resolve_token`, and it is where
            `run_ctx`'s `language` comes from (§4.5).
 
-        **The queue position is taken here, once, and is not recomputed.** It is
-        `len(self._turns)` under the lock — how many turns were accepted and
-        unfinished when this one arrived, which with `turn_workers=1` is exactly
-        how many are ahead of it. The entry goes in **before** the submit, so a
-        turn is never running while the map says idle (the ordering
-        `_await_quiesce` depends on, §4.8), and it is `queued` rather than
-        `thinking` because at this instant nothing has picked it up.
-        `_run_turn` flips it to `thinking` when a worker does, and `thinking`
-        carries position 0 like `idle` does.
+        **No queue position is written here, or anywhere.** The entry already
+        exists — `reserve_turn` created it as `queued`, before the message
+        write, which is what makes a turn impossible to run while the map says
+        idle (the ordering `_await_quiesce` depends on, §4.8). Its place in the
+        line is §5.2's, derived on every read by `turn_payload`; `_run_turn`
+        flips the entry to `thinking` when a worker picks it up, and a
+        `thinking` turn is in no line at all.
+
+        **The turn lock is not held across `executor.submit(...)`, and that is
+        a rule rather than an accident** (§5.1's S9 row, which says *do not
+        delete it on finding a mechanism that does not hold — that check has
+        been run*). It rests on there being nothing to buy: §5.2 defines the
+        line by **booking** order, so forcing submit order to match it buys an
+        ordering nobody reads, at the price of an application lock underneath
+        two `concurrent.futures` internals. It is deliberately **not** a
+        deadlock claim — `_python_exit` joins every worker *outside*
+        `_global_shutdown_lock` (`/usr/lib/python3.12/concurrent/futures/
+        thread.py:23-31`, pinned 3.12.3), so no cycle can form
+        (`docs/reviews/salesperson-ui-impl.md` `## Pass 18`, P18-1). The
+        exit-time fact that *is* true is a cost, not a hang: those joins mean a
+        worker blocked on the turn lock delays process exit for as long as the
+        lock is held, which argues for holding it briefly. Two turns booked
+        microseconds apart may therefore reach workers in the other order,
+        which §5.2's definition accommodates by construction. Reversal trigger,
+        narrow: only if §5.2 stops defining the line by booking order — and the
+        answer then is a change to how work reaches the pool, not this lock.
+
+        **A refused `submit` releases the reservation.** `RuntimeError` after
+        `shutdown_turns()`, or `can't start new thread` under exhaustion, would
+        otherwise leave a booking no worker will ever clear: that participant
+        `409`-refused for the life of the process, every reset-mine of theirs a
+        `503 quiesce_timeout` (`docs/reviews/salesperson-ui-impl.md`
+        `## Pass 17`, P17-3, reproduced). The release is ownership-checked like
+        every other map write, so it cannot delete a booking that replaced this
+        one in the meantime.
 
         Returns the `Future` so a caller can wait on the turn. Nothing in the
         request path does — the response is sent without it, which is the
         point — and the map entry, not the future, is what the `409` gate and
         both quiesce drains read.
         """
-        participant_id = participant.participant_id
-        with self._turns_lock:
-            position = len(self._turns)
-            self._turns[participant_id] = TurnState(
-                state=TURN_QUEUED, queue_position=position
+        try:
+            return self._executor.submit(
+                self._run_turn, ctx, participant, posted, booking
             )
-        return self._executor.submit(self._run_turn, ctx, participant, posted)
+        except BaseException:
+            self.release_turn(participant.participant_id, booking)
+            raise
 
     def _run_turn(
         self,
         ctx: CallContext,
         participant: ParticipantRecord,
         posted: dict[str, Any],
+        booking: TurnBooking,
     ) -> None:
         """One agent turn, on a turn-executor worker.
 
@@ -775,10 +952,20 @@ class Storefront:
         re-opens the composer and releases the `409` gate. A turn that died
         without a reply is indistinguishable here from one that completed; the
         dead-turn signal §5.2 specifies (`turn.lastTurn`) is not built yet.
+
+        **Both map writes name this booking and take effect only while it still
+        owns the slot** — the `thinking` flip as much as the `finally`.
+        `clear_all_turns()` empties the map under workers that are still
+        running, so an unconditional clear would delete a *later* booking's
+        entry and an unconditional flip would move it back to `thinking`
+        (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-1;
+        `## Pass 18`, question 2). Losing the slot does not abandon the work:
+        the turn was accepted, so it runs to completion and only its
+        bookkeeping is skipped.
         """
         participant_id = participant.participant_id
         try:
-            self.set_turn_state(participant_id, TURN_THINKING)
+            self.set_turn_state(participant_id, TURN_THINKING, booking=booking)
             if self._trigger is None:
                 return
             self._trigger.maybe_trigger(
@@ -796,7 +983,7 @@ class Storefront:
                 participant_id, posted.get("msgId"),
             )
         finally:
-            self.clear_turn(participant_id)
+            self.release_turn(participant_id, booking)
 
     def shutdown_turns(self) -> None:
         """Stop accepting turns and **drain** the ones already accepted.
@@ -828,7 +1015,9 @@ class Storefront:
           ties by `orderId DESC`) and a storefront-side reconstruction would
           have to re-answer it on every poll and could disagree with the order
           route's own view.
-        * `turn` — this participant's entry in the in-process turn map.
+        * `turn` — this participant's entry in the in-process turn map,
+          with §5.2's `queuePosition` **derived here** from the rest of the map
+          rather than read off the entry (`turn_payload`).
 
         `ctx.actor` is the participant id and also their `customerId`, so all
         three graph reads are scoped structurally rather than by a filter
@@ -838,7 +1027,7 @@ class Storefront:
             "profile": self._services.get_profile(ctx),
             "cart": self._services.get_cart(ctx),
             "order": self._services.get_current_order(ctx),
-            "turn": self.turn_state(ctx.actor).as_payload(),
+            "turn": self.turn_payload(ctx.actor),
         }
 
     # ── catalog + the product-image manifest (§4.7) ─────────────────────────

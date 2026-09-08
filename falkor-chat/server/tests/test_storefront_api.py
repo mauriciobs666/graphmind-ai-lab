@@ -687,6 +687,25 @@ def _presenter(client, key: str = PRESENTER_KEY) -> dict[str, str]:
     return {"Authorization": f"Bearer presenter.{response.json()['token']}"}
 
 
+def _pin_thinking(client, participant_id: str):
+    """Put one participant into a **running** turn, through the real protocol.
+
+    There is no unconditional single-slot write on `Storefront` to fabricate a
+    turn with any more: `reserve_turn` is the only way an entry is created and
+    every change to one names the booking that owns it (§5.1's S9 row). So the
+    tests that need a busy participant — the `409` gate, both quiesce
+    refusals — reserve and flip exactly as `POST /shop/api/messages` and its
+    worker do.
+    """
+    shop = client.app.state.storefront
+    booking = shop.reserve_turn(participant_id)
+    assert booking is not None
+    assert shop.set_turn_state(
+        participant_id, storefront.TURN_THINKING, booking=booking
+    ) is True
+    return booking
+
+
 # Every route, with a request that is valid apart from its credential — so an
 # auth assertion is never confounded by a 422 from a missing body. Asserted
 # against `ROUTE_CLASSES` below, so a twelfth route cannot be added without one.
@@ -1446,7 +1465,7 @@ def test_a_second_post_while_a_turn_is_in_flight_is_409_with_nothing_written(
     """
     session = _join(client, "Ada", "en")
     headers = _bearer(session)
-    client.app.state.storefront.set_turn_state(session["participantId"], "thinking")
+    _pin_thinking(client, session["participantId"])
 
     response = client.post(f"{API_PREFIX}/messages", headers=headers,
                            json={"text": "hello"})
@@ -1589,7 +1608,7 @@ def test_reset_gives_up_on_a_turn_that_never_finishes_and_changes_nothing(
     session = _join(client, "Ada", "en")
     headers = _bearer(session)
     client.post(f"{API_PREFIX}/messages", headers=headers, json={"text": "hello"})
-    client.app.state.storefront.set_turn_state(session["participantId"], "thinking")
+    _pin_thinking(client, session["participantId"])
 
     response = client.post(f"{API_PREFIX}/reset", headers=headers)
 
@@ -1752,7 +1771,7 @@ def test_reset_everyone_gives_up_on_a_turn_that_never_finishes(client, conn):
     ada = _join(client, "Ada", "en")
     presenter = _presenter(client)
     client.post(f"{API_PREFIX}/messages", headers=_bearer(ada), json={"text": "hi"})
-    client.app.state.storefront.set_turn_state(ada["participantId"], "thinking")
+    _pin_thinking(client, ada["participantId"])
 
     response = client.post(f"{API_PREFIX}/presenter/reset-all", headers=presenter)
 
@@ -4512,24 +4531,51 @@ class _GatedExecutor:
     `work_s` is real work *after* the gate opens, used only by the shutdown
     test, where the question is whether the lifespan waited for turns that had
     not finished yet.
+
+    **Two ways to open it**, because the queue-position contract needs both.
+    `open()` releases every turn, now and in future — the teardown's blanket
+    release and the shutdown test's "no gate at all". `release_index(n)` lets
+    through **exactly one**, keyed on that turn's position in `started`, which
+    is what makes the countdown assertable: §5.2's number has to *fall* as the
+    line drains, and a test that could only release all of them at once could
+    not watch it fall.
     """
 
     step_budget = 8
 
     def __init__(self, work_s: float = 0.0) -> None:
-        self.gate = threading.Event()
         self.work_s = work_s
         self.started: list[str] = []
         self.finished: list[str] = []
         self.threads: list[str] = []
         self._cond = threading.Condition()
+        self._open = False
+        self._released: set[int] = set()
+
+    def open(self) -> None:
+        """Release every gated turn, and every turn that arrives afterwards."""
+        with self._cond:
+            self._open = True
+            self._cond.notify_all()
+
+    def release_index(self, index: int) -> None:
+        """Release the turn that entered `run` `index`-th, and only that one."""
+        with self._cond:
+            self._released.add(index)
+            self._cond.notify_all()
 
     def run(self, ctx, *, run_id):  # noqa: ANN001, ARG002 — the executor's shape
         with self._cond:
             self.started.append(ctx.actor)
             self.threads.append(threading.current_thread().name)
+            index = len(self.started) - 1
             self._cond.notify_all()
-        self.gate.wait(timeout=TURN_GATE_S)
+            deadline = time.monotonic() + TURN_GATE_S
+            while not (self._open or index in self._released):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                self._cond.wait(remaining)
         time.sleep(self.work_s)
         with self._cond:
             self.finished.append(ctx.actor)
@@ -4587,7 +4633,7 @@ def turn_app(seeded, monkeypatch):
 
     yield make
     for executor in made:
-        executor.gate.set()
+        executor.open()
     stack.close()
 
 
@@ -4625,12 +4671,24 @@ def _turn(client, session) -> dict:
 
 def test_three_participants_queue_behind_one_worker_and_complete_in_order(turn_app):
     """§5.1's first done-condition: `turn_workers=1`, three *different*
-    participants, queue positions **0/1/2**, completion **in order**.
+    participants reporting `thinking`/`0`, `queued`/`0`, `queued`/`1`, the
+    third **falling to `0`** when the first completes, and completion **in
+    order**.
 
-    The positions are the accounting `enqueue_turn` does under the turn lock —
-    how many turns were accepted and unfinished when this one arrived — and the
-    states are what separates the one on the worker from the two behind it:
-    `thinking` carries position 0 like `idle` does, `queued` carries its own.
+    The numbers are §5.2's, derived on every read from the map's booking
+    ordinals: how many other *queued* turns were booked earlier. Ada's turn is
+    on the worker, so she is in no line and reads `0` like an idle participant;
+    Bo is first in line and reads `0` too — *ordinary and load-bearing*, and
+    the reason S13 renders `0` as a queue rather than as its absence; Cy reads
+    `1`. **The old `0/1/2` is arithmetically false under this definition** and
+    was replaced rather than dropped (`docs/reviews/salesperson-ui-impl.md`
+    `## Pass 18`, question 4).
+
+    **The countdown is the half a position fixed at booking cannot pass.** Ada
+    is released alone, Bo takes the single worker, and Cy — who was `1` — reads
+    `0` without having moved. A number taken once at booking sits at whatever
+    it was until its turn starts, which is an indefinite spinner wearing a
+    number (§4.4 measure 1).
 
     `finished == []` after all three posts is the **placement** half, and it is
     the assertion that goes red if the trigger is called on the request thread:
@@ -4647,17 +4705,60 @@ def test_three_participants_queue_behind_one_worker_and_complete_in_order(turn_a
     assert executor.finished == []
 
     turns = [_turn(client, session) for session in sessions]
-    assert [turn["queuePosition"] for turn in turns] == [0, 1, 2]
+    assert [turn["queuePosition"] for turn in turns] == [0, 0, 1]
     assert [turn["state"] for turn in turns] == [
         storefront.TURN_THINKING, storefront.TURN_QUEUED, storefront.TURN_QUEUED,
     ]
 
-    executor.gate.set()
+    # the head of the line completes; the worker takes Bo, and Cy counts down.
+    executor.release_index(0)
+    executor.wait_for("started", 2)
+    assert _turn(client, sessions[1])["state"] == storefront.TURN_THINKING
+    assert _turn(client, sessions[2]) == {
+        "state": storefront.TURN_QUEUED, "queuePosition": 0,
+    }
+
+    executor.open()
     executor.wait_for("finished", 3)
     assert executor.finished == [s["participantId"] for s in sessions]
     assert executor.started == executor.finished
     # ...and the map is empty again, which is what re-opens all three composers
     assert [_turn(client, s)["state"] for s in sessions] == [storefront.TURN_IDLE] * 3
+
+
+def test_a_fifth_arrival_behind_four_running_turns_is_first_in_line(turn_app):
+    """§5.1's second done-condition, at the **delivered default**
+    `turn_workers=4`: a fifth arrival behind four *running* turns reports
+    `queued`/**`0`**, not `4`.
+
+    This is the case S9a got wrong in production configuration and right in
+    every test it ran, because every one of them drove `turn_workers=1` — the
+    only setting at which "how many accepted turns were unfinished when this
+    one arrived" and "how many are ahead of me" agree
+    (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-2, reproduced at
+    `{"state": "queued", "queuePosition": 4}`).
+
+    It is also the argument for `turn_workers` not appearing on the wire: a
+    running turn occupies a worker rather than a place in the line, so the
+    number the participant sees needs no deployment-sizing constant to be
+    interpreted.
+    """
+    client, executor = turn_app(workers=4)
+    sessions = [_join(client, n) for n in ("Ada", "Bo", "Cy", "Di", "Ed")]
+
+    for session in sessions:
+        assert _post(client, session).status_code == 200
+    executor.wait_for("started", 4)
+
+    assert [_turn(client, s) for s in sessions[:4]] == [
+        {"state": storefront.TURN_THINKING, "queuePosition": 0}
+    ] * 4
+    assert _turn(client, sessions[4]) == {
+        "state": storefront.TURN_QUEUED, "queuePosition": 0,
+    }
+
+    executor.open()
+    executor.wait_for("finished", 5)
 
 
 def test_the_turn_runs_on_a_turn_worker_never_on_the_request_thread(turn_app):
@@ -4677,7 +4778,7 @@ def test_the_turn_runs_on_a_turn_worker_never_on_the_request_thread(turn_app):
     assert executor.threads[0].startswith(storefront.TURN_THREAD_PREFIX)
     assert executor.threads[0] != threading.current_thread().name
 
-    executor.gate.set()
+    executor.open()
     executor.wait_for("finished", 1)
 
 
@@ -4712,7 +4813,7 @@ def test_two_posts_a_tenth_of_a_second_apart_write_one_message_and_start_one_run
 
     assert _counts(conn, thread_id) == (1, 1)
 
-    executor.gate.set()
+    executor.open()
     executor.wait_for("finished", 1)
     # the refusal is not a lock-out: the gate re-opens when the turn ends
     assert _turn(client, session)["state"] == storefront.TURN_IDLE
@@ -4741,9 +4842,9 @@ def test_a_poll_answers_immediately_while_the_turn_queue_is_full(turn_app):
     assert response.status_code == 200
     assert elapsed < POLL_BUDGET_S, f"the poll took {elapsed:.3f}s behind a full queue"
     assert response.json()["turn"] == {
-        "state": storefront.TURN_QUEUED, "queuePosition": 2,
+        "state": storefront.TURN_QUEUED, "queuePosition": 1,
     }
-    executor.gate.set()
+    executor.open()
 
 
 def test_the_turn_executor_drains_on_shutdown(seeded, monkeypatch, conn):
@@ -4763,7 +4864,7 @@ def test_the_turn_executor_drains_on_shutdown(seeded, monkeypatch, conn):
     """
     monkeypatch.setattr(config, "STOREFRONT_TURN_WORKERS", 1)
     executor = _GatedExecutor(work_s=0.05)
-    executor.gate.set()
+    executor.open()
     app = _build_turn_app(seeded, executor)
 
     with TestClient(app) as client:
@@ -4778,6 +4879,180 @@ def test_the_turn_executor_drains_on_shutdown(seeded, monkeypatch, conn):
         ) == storefront.IDLE_TURN
     for session in sessions:
         assert _counts(conn, _thread_of(conn, session["participantId"])) == (1, 1)
+
+
+def test_two_posts_held_concurrently_inside_the_write_write_one_message(
+    seeded, monkeypatch, conn
+):
+    """**The one spelling that tells a reservation from a check-then-act.**
+
+    Two threads driving one `TestClient`: the second request enters the handler
+    while the first is blocked *inside* `services.post_message`, on a gate this
+    test controls. That window — a graph round trip wide, milliseconds not
+    nanoseconds — is where S9a's `409` lived: the check was in the route and
+    the booking was in `enqueue_turn`, behind the write, so both posts passed
+    the check, both booked, and the map's single slot per participant meant the
+    first worker's `finally` deleted the **second**, still-running turn's entry.
+    `turn_in_flight` then reported `False` and `_await_quiesce` `True` with a
+    turn live on a worker — the state the quiesce order exists to make
+    impossible (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-1,
+    reproduced).
+
+    **A sleep-timed pair discriminates nothing here and this is why**: by the
+    time a second post issued 100 ms later is *issued*, the first booking
+    exists under either implementation, so both answer `409`. Only a pair held
+    inside the write separates them — under check-then-act the second request
+    reads an empty map and is answered `200`, writing a second `Message` the
+    graph count below then sees (`## Pass 18`, question 4; the mechanism is
+    Appendix O §1's, which the suite had no precedent for).
+
+    `writes == ["first"]` is the pre-write half stated at the seam rather than
+    inferred from a count: the refusal happens before `services.post_message`
+    is entered at all, which is what §4.4 measure 1a asks for and what keeps a
+    message that can never be answered out of the transcript.
+    """
+    monkeypatch.setattr(config, "STOREFRONT_TURN_WORKERS", 1)
+    executor = _GatedExecutor()
+    executor.open()
+    app = _build_turn_app(seeded, executor)
+
+    entered = threading.Event()
+    release = threading.Event()
+    writes: list[str] = []
+
+    with TestClient(app) as client:
+        # `app.state.storefront` exists only once the lifespan has run, and the
+        # router closed over this very object (`services = shop._services`), so
+        # patching the instance here reaches the call the route makes.
+        services = app.state.storefront._services
+        real_post = services.post_message
+
+        def gated_post(ctx, **kwargs):  # noqa: ANN001, ANN003
+            writes.append(kwargs["text"])
+            if len(writes) == 1:
+                entered.set()
+                assert release.wait(timeout=TURN_GATE_S), "the write was never released"
+            return real_post(ctx, **kwargs)
+
+        monkeypatch.setattr(services, "post_message", gated_post)
+        session = _join(client)
+        thread_id = _thread_of(conn, session["participantId"])
+        outcome: dict = {}
+
+        def first_post():
+            outcome["status"] = _post(client, session, "first").status_code
+
+        worker = threading.Thread(target=first_post, daemon=True)
+        worker.start()
+        assert entered.wait(timeout=TURN_GATE_S), (
+            "the first post never reached the write"
+        )
+
+        # …issued while the first request is still inside `post_message`.
+        second = _post(client, session, "second")
+
+        assert second.status_code == 409
+        assert second.json()["error"] == "turn_in_progress"
+        assert writes == ["first"], "the refusal must precede the second write"
+
+        release.set()
+        worker.join(timeout=TURN_GATE_S)
+        assert not worker.is_alive(), "the first post never returned"
+        assert outcome["status"] == 200
+
+    assert _counts(conn, thread_id) == (1, 1)
+
+
+def test_a_write_that_fails_releases_the_reservation(turn_app, monkeypatch, conn):
+    """The first of the two paths between a reservation and a worker, and the
+    reservation is released on it (§5.1's S9 row; `## Pass 17`, P17-3).
+
+    A `redis` socket timeout out of `services.post_message` is the ordinary
+    instance: the route answers **`504 post_state_unknown`** — *the write may
+    have committed* — and §5.3 C6b's reconciliation then reads
+    `GET /shop/api/state`. A reservation that survived its failed write does
+    not make that rule undecidable, it makes it decide **wrongly**:
+    `turn.state !== 'idle'` parks that client in *wait, as normal* forever, for
+    a turn nobody will run (`## Pass 18`, question 2). It also `409`-locks that
+    participant for the life of the process, which the third assertion pins.
+
+    So all three lines below are one claim: the slot is free, it reads free,
+    and it can be taken again.
+    """
+    client, executor = turn_app(workers=1)
+    session = _join(client)
+    services = client.app.state.storefront._services
+    real_post = services.post_message
+    armed = {"yes": True}
+
+    def flaky(ctx, **kwargs):  # noqa: ANN001, ANN003
+        if armed["yes"]:
+            armed["yes"] = False
+            raise redis_exceptions.TimeoutError("the socket timed out")
+        return real_post(ctx, **kwargs)
+
+    monkeypatch.setattr(services, "post_message", flaky)
+
+    response = _post(client, session, "first")
+
+    assert response.status_code == 504
+    assert response.json()["error"] == "post_state_unknown"
+    assert _turn(client, session) == {
+        "state": storefront.TURN_IDLE, "queuePosition": 0,
+    }
+    assert _post(client, session, "second").status_code == 200
+    executor.wait_for("started", 1)
+    executor.open()
+
+
+def test_a_wiped_booking_never_clears_the_post_that_replaced_it(turn_app, conn):
+    """A booking is cleared **only by its own worker**, over HTTP and with the
+    graph writes real.
+
+    `presenter_reset_all`'s `clear_all_turns()` empties the map under workers
+    that are still running (`## Pass 17`, Ruling 2), so the participant can
+    post again and is accepted — the map is empty. Two bookings for one
+    participant now exist against one slot. When the first worker finishes, its
+    `finally` must leave the second alone; an unconditional clear reports that
+    participant idle with a turn still queued, and reset-mine then deletes the
+    thread underneath it.
+
+    **The same case pins the ordinal**, which is why both assertions live here.
+    A counter derived from the map's size restarts at `0` after the wipe, so
+    `fresh > wiped` is `0 > 0` — *and* the old worker's ownership check then
+    passes against the new booking and deletes it, so `turn_in_flight` is
+    `False` where the row requires `True`. One mutation, two red assertions
+    (`## Pass 19`, question 2).
+
+    `wait_for("started", 2)` is what makes the reading exact rather than
+    hopeful: there is one worker, so the second turn cannot have entered the
+    executor until the first turn's `_run_turn` — `finally` included — has
+    returned.
+    """
+    client, executor = turn_app(workers=1)
+    session = _join(client)
+    pid = session["participantId"]
+    shop = client.app.state.storefront
+
+    assert _post(client, session, "first").status_code == 200
+    executor.wait_for("started", 1)
+    wiped = shop.turn_state(pid).booking
+
+    shop.clear_all_turns()
+    assert _post(client, session, "second").status_code == 200
+    fresh = shop.turn_state(pid).booking
+    assert fresh.ordinal > wiped.ordinal
+
+    executor.release_index(0)
+    executor.wait_for("started", 2)
+
+    assert shop.turn_state(pid).booking == fresh
+    assert shop.turn_in_flight(pid) is True
+    assert _turn(client, session)["state"] == storefront.TURN_THINKING
+
+    executor.open()
+    executor.wait_for("finished", 2)
+    assert _counts(conn, _thread_of(conn, pid)) == (2, 2)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

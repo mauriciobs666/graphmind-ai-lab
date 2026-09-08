@@ -1171,18 +1171,37 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
         running starts a *second* `WorkflowRun` on the same thread — and a
         written message with no reply sits in the transcript forever.
 
+        **The gate is a reservation, and that is a clause of sequence rather
+        than a different route shape** (§4.4 measure 1a). `shop.reserve_turn`
+        performs the check and the booking as **one** test-and-set under the
+        turn lock, and its `None` **is** the `409` — raised here, still before
+        the write. A check on this thread followed by a booking after the write
+        let two posts from one participant both book: the turn map holds one
+        slot per participant, so the first worker's clear erased the second,
+        still-running turn's entry and `turn_in_flight` reported idle under a
+        live turn (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-1).
+
+        **Every path from here that never reaches a worker releases the
+        reservation.** `services.post_message` raising is one and a refused
+        `submit` is the other (`Storefront.enqueue_turn` owns the second). A
+        leaked booking `409`-locks that participant for the life of the process
+        (P17-3) — and, worse, §5.3's `504 post_state_unknown` reconciliation
+        then decides *wrongly* rather than losing information, parking that
+        client in *wait, as normal* forever for a turn nobody will run
+        (§5.3 C6b; `## Pass 18`, question 2).
+
         **The turn is enqueued behind the write, and does not run here**
-        (§4.4 measure 1, §5.1's S9 row). `Storefront.enqueue_turn` books the
-        map entry and submits to the storefront's own bounded executor; the
-        trigger — and therefore `services.start_workflow_run`, up to eight chat
+        (§4.4 measure 1, §5.1's S9 row). `Storefront.enqueue_turn` submits the
+        reserved turn to the storefront's own bounded executor; the trigger —
+        and therefore `services.start_workflow_run`, up to eight chat
         completions against a 180 s agent timeout — runs on that worker. This
         route answers as soon as the message is written, which is why the
         response never carries a workflow failure: by the time one can happen
         the `200` has been sent, and the participant's evidence is
         `GET /shop/api/state`'s `turn` block.
 
-        The `409` gate and the `mentions` are here because both are properties
-        of the *post*, not of the queue. **No `_safe_embed`** (§4.4 measure 3):
+        The gate and the `mentions` are here because both are properties of the
+        *post*, not of the queue. **No `_safe_embed`** (§4.4 measure 3):
         the `salesperson` def has no `graphrag_retrieve`, so embedding a
         storefront message is pure GPU contention for zero benefit — and it is
         the second structural barrier under §4.3 part 4.
@@ -1191,15 +1210,20 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
         rather than re-resolved on the worker: this thread has already read it
         from the graph, and it carries the `language` §4.5's `run_ctx` needs.
         """
-        if shop.turn_in_flight(who.participant_id):
+        booking = shop.reserve_turn(who.participant_id)
+        if booking is None:
             raise StorefrontHTTPError(
                 409, "turn_in_progress", "a turn is already in flight"
             )
         ctx = shop.context_for(who.participant_id)
-        posted = services.post_message(
-            ctx, thread_id=who.thread_id, text=body.text, mentions=[agent_id],
-        )
-        shop.enqueue_turn(ctx, who, posted)
+        try:
+            posted = services.post_message(
+                ctx, thread_id=who.thread_id, text=body.text, mentions=[agent_id],
+            )
+        except BaseException:
+            shop.release_turn(who.participant_id, booking)
+            raise
+        shop.enqueue_turn(ctx, who, posted, booking)
         return posted
 
     @router.get(

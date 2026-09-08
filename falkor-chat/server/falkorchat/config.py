@@ -188,13 +188,20 @@ STOREFRONT_PRESENTER_KEY: str = os.environ.get("FALKORCHAT_STOREFRONT_PRESENTER_
 
 # §4.4 measure 1 — **delivered.** `max_workers` of the storefront's own bounded
 # turn executor (`Storefront.__init__`), which is where every agent turn runs:
-# `POST /shop/api/messages` writes the message, submits the turn and answers, so
-# a deep turn queue never touches anyio's default thread limiter and poll reads
-# stay instant. **Setting it changes two observable things** — how many turns run
-# at once, and therefore the `turn.queuePosition` `GET /shop/api/state` reports,
-# since a position is how many accepted turns were unfinished when this one
-# arrived. Sized to LM Studio's configured parallelism: that is the reason for
-# the default, which tracks the model server, not anything about the web tier.
+# `POST /shop/api/messages` reserves the turn, writes the message, submits and
+# answers, so a deep turn queue never touches anyio's default thread limiter and
+# poll reads stay instant. **Setting it changes one observable thing: how many
+# turns run at once.** It deliberately does **not** appear in the
+# `turn.queuePosition` `GET /shop/api/state` reports — that number is the
+# participant's index in the *waiting* line, derived on every read from the turn
+# map's booking ordinals, and a running turn occupies a worker rather than a
+# place in line, so it is excluded (§5.2 *The queue position*). The definition
+# this comment carried until S9a-fix — *a position is how many accepted turns
+# were unfinished when this one arrived* — told a fifth arrival behind four
+# running turns `4` while it was first in line
+# (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-2). Sized to LM
+# Studio's configured parallelism: that is the reason for the default, which
+# tracks the model server, not anything about the web tier.
 STOREFRONT_TURN_WORKERS: int = int(os.environ.get("FALKORCHAT_STOREFRONT_TURN_WORKERS", "4"))
 
 # §4.8/§7 of the graph note: how long either reset waits for in-flight turns to

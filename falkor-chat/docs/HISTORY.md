@@ -5,6 +5,103 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-08 — salesperson-ui S9a-fix: the turn `409` becomes a reservation, and the queue position is derived rather than stored
+
+**What:** The repair round on `e6fa20c`, closing `docs/reviews/salesperson-ui-impl.md`
+`## Pass 17`'s two majors and three of its minors against plan v1.29's amended §5.1 S9 row.
+`Storefront` gains `reserve_turn` / `release_turn` / `turn_payload` and a per-instance
+`itertools.count()`; `TurnState` carries a `TurnBooking` instead of a number; `set_turn_state` takes
+a required `booking=` and no `queue_position=`; `enqueue_turn` takes the booking and releases it on a
+refused `submit`; `POST /shop/api/messages` reserves before the write and releases on a failed one.
+Two source files, two test files, plus `config.py`'s `STOREFRONT_TURN_WORKERS` comment and
+`SERVER.md` §1.3's matching row.
+
+**P17-1 — the `409` was check-then-act, and the corrupted invariant was the point.** The check sat
+in the route and the booking in `enqueue_turn`, with `services.post_message` — a FalkorDB round
+trip — between them, so two posts from one participant both passed and both booked. The turn map
+holds **one slot per participant**, so the first worker's `finally` deleted the *second*,
+still-running turn's entry: `turn_in_flight` `False` and `_await_quiesce` `True` with a turn live on
+a worker, which is the state the quiesce order exists to make impossible. The fix is the two halves
+the row calls independent, and neither subsumes the other. `reserve_turn` is a test-and-set under
+the turn lock whose `None` **is** the `409`, so there is no window left to admit a second turn; and
+**every** map write names its booking and takes effect only while that booking still owns the slot —
+the reserve, the release, the `thinking` flip and the `finally` alike, the release included because
+between a reservation and a failed write a `clear_all_turns()` plus a second-tab post can install a
+different booking in that slot.
+
+**The ordinal does two jobs, so it is per-`Storefront`, strictly monotonic, never reset, never
+reused.** It orders the line *and* identifies the booking, and a collision mis-places the line while
+letting an ownership check pass against a foreign booking — P17-1 again in a second spelling.
+`len(self._turns)` is the plausible wrong reading (it restarts after `clear_all_turns()`) and
+module-level is the other, contradicting `Storefront.__init__`'s own rule that all mutable state is
+per-instance. Both are unsatisfiable here: a size-derived counter reddens two assertions of one test
+with one mutation, and a module-level one reddens the second `Storefront`'s first ordinal.
+
+**P17-2 — `queuePosition` is now the waiting-line index, derived on every read.** It counts the
+entries that are still `queued` and were booked earlier, and is `0` for `idle` and `thinking`, where
+it is a constant rather than a position. Two properties follow and both are the reason: it is
+correct at **every** `turn_workers` — at the delivered default of 4 a fifth arrival behind four
+running turns now reads `0`, where the stored number told it `4` while it was first in line — and it
+**counts down** as the queue drains. `set_turn_state`'s `queue_position=` parameter went with the
+field it fed, so no test can fabricate the number any more; the ones that did now earn it.
+
+**P17-3, P17-4, P17-7 — three minors, each closed by the assertion it lacked.** A refused `submit`
+(after `shutdown_turns()`, or thread exhaustion) released a booking no worker would clear, which
+`409`-locked that participant for the life of the process; it now releases and still raises. The
+`_log.exception(...)` that is the *only* evidence a turn died is pinned with `caplog` — one record,
+at `ERROR`, carrying the traceback and naming both `participantId` and `msgId`. And
+`if self._trigger is None: return` is pinned by its own claim, an **empty** log: without the guard
+`None.maybe_trigger` raises, the isolation block catches it, and the no-engine deployment gets an
+`ERROR` traceback on every post while every other assertion still passes.
+
+**Eighteen mutations, one survivor, and the survivor was a missing test rather than a false
+alarm.** Each was applied to a byte-copy held outside the repo and restored by `md5sum`, never by a
+tree-mutating git command. Dropping the in-flight test (5 red), the two wrong ordinals (4 red each),
+a module-level counter (1 red), an unconditional release (3 red) and an unconditional
+`set_turn_state` (1 red), four spellings of a wrong queue position (5–7 red each), no release on a
+refused submit (1 red), no `thinking` flip (5 red), `_log.exception` → `pass` (1 red), deleting the
+`trigger is None` guard (1 red), an empty `finally` (13 red), reverting the route to check-then-act
+(1 red) and dropping its release (4 red). **The survivor** was §5.2's *`0` whenever `thinking`*
+constant: turns ordinarily start in booking order, so a `thinking` turn usually has no earlier
+*queued* one and the derivation answers `0` either way. `test_a_running_turn_reports_zero_even_with_
+an_earlier_turn_still_queued` builds the arrangement where the two readings disagree, and closes it.
+
+**The two mutants Pass 17 found that S9a's own eleven missed are the two this round was told to
+close**, and both are now red rather than green at 289 passed. The three S8 tripwires stay green and
+are **not vacuous**: injecting `self._services.start_workflow_run(ctx)` into `_run_turn` fails
+`test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume` while the raises guard
+and the record-cache guard stay green — the same result Pass 17 measured, re-measured here against
+the changed worker.
+
+**The linchpin test is held *inside* the write.** Two threads drive one `TestClient`, and the second
+request enters the handler while the first is blocked in `services.post_message` on a gate the test
+controls. A sleep-timed pair discriminates nothing — the first booking exists by the time a post
+issued 100 ms later is issued, so both implementations answer `409` — while the held pair separates
+them exactly: under check-then-act the second request reads an empty map and is answered `200`,
+writing a second `Message`. The suite had no precedent for two threads on one `TestClient`; the
+harness is in `test_two_posts_held_concurrently_inside_the_write_write_one_message`.
+
+**Documentation was part of done.** `config.py`'s `STOREFRONT_TURN_WORKERS` comment and
+`SERVER.md` §1.3's row both stated the *old* definition verbatim — *a position is how many accepted
+turns were unfinished when this one arrived* — which v1.29 falsifies and no plan sweep could reach
+(`## Pass 18`, P18-6). Both now say that the value changes **one** observable thing, how many turns
+run at once, and that it deliberately does not move `turn.queuePosition`. **`STOREFRONT_QUIESCE_S`
+is still stale and still out of scope**, as it was at S9a: its comment and row say nothing populates
+the turn map. `storefront_api.py`'s `presenter_reset_all` comments are the same case
+(`## Pass 17`, Ruling 2) and are likewise untouched here.
+
+**Suite:** `2639 passed, 14 deselected` full (from `2629/14`), `290` for
+`tests/test_storefront.py` + `test_storefront_api.py` + `test_app.py` (from `280`) — +10: six
+`Storefront` unit tests and four HTTP-level ones, with four existing tests re-spelled against the
+new definition (`[0, 1, 2]` is arithmetically false under it) and two renamed. `ruff check` clean on
+all six touched files.
+
+**Not in this unit** (still the other four splitting S9): cancellation of a queued turn in front of
+`_await_quiesce`, the dead-turn latch `turn.lastTurn`, removal of the per-participant record cache,
+and the three `INHERITED_HANDLERS` reason strings with their armed-fault measurements. Nor P17-5
+(`shutdown(wait=True)`'s bound in `app.py`'s comment), P17-6 (`FALKORCHAT_THREAD_LIMIT=0`), P17-8
+(the unpinned `_safe_embed` claim) or P17-9/P17-10.
+
 ## 2026-09-07 — salesperson-ui S9a: the storefront turn queue — bounded executor, queue positions, and the turn off the request thread
 
 **What:** The concurrency core of §4.4, the first of five units splitting plan §5.1's S9 row.
