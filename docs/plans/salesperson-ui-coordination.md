@@ -175,7 +175,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U43** — retract the false CPython deadlock fact from `kaizen_team` before it is promoted | `cobb` | `a69330f81cf6048ae` | delivered | `de8b5ac` — 2 entries cleared, promoted split by audience | `analyst` (prompt edit) — queued | 118k tok / 28 tools |
 | **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7, P18-6 | `coder` | `a31456adeff4788ea` | **delivered — committed `699ef52`** (7 files, +1032/−136). Suite **2639** teco-verified solo (baseline 2629, +10 net); `ws:acme` 871 intact; `reference` re-seeded. **Tripwire re-measured by me, not taken on report** — injected reach → guard red, file restored to md5. 18 mutations, 1 survivor (M10) which was a **missing test**, now red against it | `storefront.py`, `storefront_api.py`, both test files, `config.py`, `SERVER.md`, `HISTORY.md` | `analyst` **Pass 20 (fresh)** → **needs changes** (`ac28f2c`) — 3 majors, routed to U50/U51/U52; `qa-engineer` held behind them | 286k tok / 114 tools |
 | **U53** — P21-4 (§5.2's summary of the residue is false through two doors its own sibling derivation opens) and P21-5 (an unnamed cost of the chosen placement) | `architect` | `ad44540e7e1aa876e` | **delivered — committed `069f6ae`** — plan **v1.31**. Fixed by **deletion, not rewording**: §5.2 cites the S9 row instead of summarising it, and `grep` now finds one statement of the residue in the whole plan. **Both doors re-verified by me** — cold pool `qsize=1 threads=0`, never ran, `shutdown(wait=True)` back in 0.0000s; warm pool ran the refused item | `docs/plans/salesperson-ui.md` **v1.31** | `analyst` Pass 22 | 99k tok / 53 tools |
-| **U54** — P21-1 (restore the guard's strength without giving up the raise), P21-2 (the false precedent, at two sites), P21-3 (the killing test), P21-6, P21-7. **Resumed, not fresh**: 157k tok / 67 tools is under both halves of the threshold and the guard sentence is its own | `coder` | `a7ebbee7e795fe497` | in-flight | `storefront.py`, both test files | `analyst` Pass 22 | — |
+| **U54** — P21-1 (restore the guard's strength without giving up the raise), P21-2 (the false precedent, at two sites), P21-3 (the killing test), P21-6, P21-7. **Resumed, not fresh**: 157k tok / 67 tools is under both halves of the threshold and the guard sentence is its own | `coder` | `a7ebbee7e795fe497` | **delivered — committed `0db9fb3`**. **Guard mutation re-run by me**: injecting a second `RuntimeError` into `get_state` reddens the shipped guard (`Extra items in the left set: 'get_state'`) and passed `d776ca8`'s. Suite **2641/14 teco-verified solo**; `storefront.py` restored by byte-copy to md5 `64be8aca` | `storefront.py`, `test_storefront.py`, `test_storefront_api.py` | `analyst` Pass 22 | 222k tok / 50 tools |
 | **Pass 21** — re-gate: v1.30's rule (`395266e`), its implementation (`d776ca8`), P20-2's three sites (inside `f9d23fb`). **Fresh again on the U24 precedent**: Pass 20 prescribed the discriminator that was implemented | `analyst` (**fresh**) | `a3ad2209fae9fb0e1` | **delivered — committed `d26fa36`**. Ran the suite (2640/14, matching my solo number) and restored every file it mutated; `git status falkor-chat/` empty, md5 back to `08daf2ea` |  `docs/reviews/salesperson-ui-impl.md` `## Pass 21` | — (is the gate) | — |
 | **Pass 20** — gate S9a-fix. **Fresh by design**: Pass 17 *prescribed* reserve-then-write, so its author judging this diff is producer-self-review one seat over (the U24 precedent) | `analyst` (**fresh**) | `afc3c09ccd5b50340` | **delivered — committed `ac28f2c`** (+284 lines). Survived **two** rate-limit kills, the second seconds in; resumed on its own transcript both times and lost nothing, because its predecessor artefact was already committed | `docs/reviews/salesperson-ui-impl.md` `## Pass 20` | **needs changes** — 0 blockers, **3 majors**, 2 minors, 3 nits. P17-1/P17-2 closed and closed at the right unit; my four questions all answered (see §Pass 20 below) | 150k tok / 10 tools |
 | **U50** — P20-1 is a **plan** defect: v1.29's S9 row prescribes the unconditional release the implementer faithfully wrote. Fix the release condition, tombstone the false mechanism | `architect` | `a5d8f1e2a1d897af0` | **delivered — committed `395266e`** — plan **v1.30**. Took the reviewer's asymmetry and **rejected its placement**: the flag is read *before* `submit`, not inside its `except`. **CPython mechanism re-verified by me** (`:178` put precedes `:179` adjust; `t.start()` at `:202`; venv 3.12.3; executor built with `max_workers`/`thread_name_prefix` only, so `BrokenThreadPool` is unreachable) | `docs/plans/salesperson-ui.md` **v1.30** | `analyst` Pass 21 | 112k tok / 32 tools |
@@ -4219,3 +4219,47 @@ I dispatched U53 and U54 in parallel on the grounds that their file sets were di
 true of *writes* and false of *citations*. Disjoint files are not disjoint enough when one unit's
 deliverable points into the other's. One pre-existing citation elsewhere in the plan is off by the
 same three lines; it is out of U53's scope and stays on the follow-up list.
+
+## U54: the guard came back stronger than it started, and I ran the mutation myself
+
+The fix takes Pass 21's shape and adds to it. Two assertions replace the relaxation — an equality on
+the exemption, and a **site-qualified** read pinning `RuntimeError` to `enqueue_turn` rather than to
+the module — behind a new `_raise_sites` reader returning `(nearest enclosing function, class)`
+pairs. It walks by child rather than `ast.walk`, so a raise inside a nested helper is *that helper's*
+and cannot hide under its outer function's name. And it shares `_resolve_raised` with the existing
+name reader, with an assertion that the site read **collapses to** the name read on the real module
+— so the two cannot drift apart, which is the failure mode a second reader normally introduces.
+
+**I ran the mutation myself rather than reading the table.** Injecting
+`raise RuntimeError("no actor on the state read")` into `Storefront.get_state` reddens the shipped
+guard with `Extra items in the left set: 'get_state'`. That is the exact mutation that passed the
+guard as committed in `d776ca8`. Suite **2641 / 14** on my own solo run; `storefront.py` restored to
+`64be8aca` by byte-copy afterwards. The net position is a guard **stronger than the one that existed
+before any of this** — it used to fence the class of raise, and now it fences the class *and* the
+site.
+
+**P21-3's killing test exists and carries a positive control I did not think to ask for.** The case
+sets `_turns_shutdown` with the executor still alive, then asserts the raise, `qsize() == 0`,
+`turn_in_flight` false — and first asserts `shop._executor._shutdown is False`, so the test cannot
+silently decay into a second spelling of the post-shutdown case it was written to complement. That
+is the same species of check as the mutation lesson itself: a test needs to be pinned against the
+*neighbouring* thing it could quietly become, not only against the code being wrong.
+
+**The false precedent was replaced, not deleted, and re-derived from history.** `git log -S` confirms
+no family-subset assertion has ever existed for the `Services` leg, and `00827c2` authored the
+asymmetry **deliberately** — introducing `NON_FAMILY_RAISES`, moving `RuntimeError` into
+`SERVICE_RAISES_TODAY`, and writing this assertion bare, all in one diff. The true reason is that
+`Services` and `Repository` are read through a **reach seed** while `storefront.py` is read **whole**
+and held tighter. The comment names the commit so the next reader does not re-derive it, and says
+plainly: do not level the two legs.
+
+**P21-7 was fixed at a site the review did not name.** The same false bound — "never true past the
+first arrival" — had survived in `TurnState`'s docstring. This is the fourth time in this
+coordination that a corrected sentence turned out to have a twin, and the pattern is stable enough
+to brief on: **when a review names one site of a false claim, grep the claim before fixing it**, not
+after.
+
+And the implementer caught an overstatement of its own before shipping — its first draft said
+`get_state` is executed by every `/shop/api` route. `grep` finds one call site. It checked its own
+sentence, in the same run in which it was fixing someone else's, and said so. That is the habit this
+chain has been trying to install for nine generations, appearing unprompted.
