@@ -153,7 +153,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U34** — rebuild the stale `cpg_falkorchat` CPG from `HEAD` | `graph-dba` | `a5563c5bdd32be9c7` | **accepted** | `cpg_falkorchat` @ `b795f4c`, 339,972 nodes / 2,317,169 edges | teco-verified → **accept** | 125k / 80 |
 | **U37** — Pass 16's minors + `salesperson/`'s `start_demo.sh` references | `coder` (fresh) | `a38711140b2ecc8ec` | **accepted** (`ba368a0`, `7a85c1c`) | `SERVER.md`, `salesperson/{AGENTS,README}.md`, `playwright.config.ts` (mine) | teco-verified → **accept** | 127k / 52 |
 | **U36** — `config.py`'s three future-as-present comments + the documentation `HISTORY.md` entry | `coder` | `aa9b68b68151bca8a` | **accepted** (`3fe3d8f`) | `falkorchat/config.py` (**5** comments, full-AST equal), `docs/HISTORY.md` | teco-verified → **accept** | 116k / 28 |
-| **U38** — `pipeline.sh`'s provenance stamp races `HEAD` and scopes `SOURCE_DIRTY` repo-wide | `cobb` | `a42739600c7b41e1d` | in-flight (fix round) | `6012ddb` — 5 files, `git-provenance.sh` new | `analyst` `a98a748e49a559ead` → **needs changes** (`docs/reviews/cpg-provenance-stamp.md`, `7c7536d`) | 145k tok / 44 tools |
+| **U38** — `pipeline.sh`'s provenance stamp races `HEAD` and scopes `SOURCE_DIRTY` repo-wide | `cobb` | `a42739600c7b41e1d` | gated | `6012ddb` + `9124a1f` — all findings dispositioned | `analyst` Pass 1 **needs changes** → Pass 3 re-dispatched after rate-limit kill | 364k tok / 87 tools |
 | **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | delivered — held for cross-document check | `c92f35d` + fix round | `analyst` Pass 2 → **approve with suggestions**, all 5 taken as written (`131229d`) | 156k tok / 15 tools |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
@@ -3084,3 +3084,46 @@ answer decides whether S9f goes to `tico` as prose or to an implementer as code.
 
 S9b–S9e stay queued behind this: they all touch `storefront.py`, which S9a has just
 rewritten substantially.
+
+## A rate limit took both gates at once, and neither had written a line
+
+Pass 3 (provenance docs) and Pass 17 (S9a) died within seconds of each other to the same
+session limit. Neither had produced anything: `cpg-provenance-stamp.md` still ended at
+Pass 2, `salesperson-ui-impl.md` at Pass 16, and the working tree held nothing of mine.
+Everything delivered was already committed — `9124a1f` and `e6fa20c` both intact — which
+is the whole argument for committing a verified deliverable the moment it is verified
+rather than at the end of a chain. Two agents vanished and the coordination lost zero work.
+
+I resumed both on their own transcripts instead of re-briefing cold. A rate-limit kill is
+a platform failure, not a deficient result, and both agents were carrying context worth
+more than the resume costs: the S9a reviewer had the plan row and the commit; the
+provenance reviewer had written m1 through m5 itself and is the only party positioned to
+answer the cross-document question. Each got a **state-recovery note** rather than a
+repeat of the brief — what is committed, what was *not* written, and the instruction to
+read the commit rather than diff the working tree, since `HEAD` has moved underneath them
+with the concurrent session's work.
+
+I also gave each an explicit **priority order**, which I would not normally do. The limit
+that killed them is still the binding constraint, so a partial pass with a stated scope is
+worth more than an all-or-nothing attempt that dies at the same place. For Pass 3 the
+first item is the cross-document consistency check, because it is the one thing no single
+delegate can do and the reason U39 is still open; for Pass 17 it is concurrency
+correctness and the plan row's clauses.
+
+**One finding travelled between the chains.** `cobb`'s round hit the same defect class a
+third time, and it is worth naming because it is now clearly the shape of this whole
+coordination: **a value that is wrong rather than absent**. `git rev-parse` echoes its
+argument back on stdout when it cannot resolve a rev while exiting 128 — so the fix for M1
+stamped the literal string `HEAD:./src` as `SOURCE_TREE`, a plausible-looking non-OID that
+check 0 would compare unequal forever. Its own regression test caught it before it shipped.
+The first generation was a commit describing a tree that was never parsed; the second was a
+stamp that could fail and still announce success; this is the third. I passed the shape to
+Pass 17 explicitly, because S9a has at least one surface with the same hazard —
+`queue_position = len(self._turns)` yields a plausible integer under every condition,
+including the ones where it means nothing.
+
+**Also found, and not mine to fix:** three leaked `scratch_cobb_*` graph keys on the live
+instance from earlier probing. `cobb` reported zero survivors, and it was right about the
+two keys it named — but not about the three it had created earlier under different names.
+A completeness claim scoped to what the author remembered creating. `GRAPH.DELETE` is never
+mine, so cleanup is folded into the queued `graph-dba` unit rather than dispatched on its own.
