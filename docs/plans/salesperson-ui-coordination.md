@@ -157,7 +157,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | delivered — held for cross-document check | `c92f35d` + fix round | `analyst` Pass 2 → **approve with suggestions**, all 5 taken as written (`131229d`) | 156k tok / 15 tools |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
-| **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | in-flight (dispatched 2026-09-07, after U36) | `storefront.py`, `storefront_api.py`, `app.py`, both test files, **+ `config.py`/`SERVER.md`/`HISTORY.md`** | `analyst` + `qa-engineer` | — |
+| **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | gated | `e6fa20c` — 9 files, +895/−44, 12 tests | `analyst` `acc1fdff560984907` Pass 17 → — ; `qa-engineer` pending | 305k tok / 111 tools |
+| **S9f** — `STOREFRONT_QUIESCE_S`'s docs describe a quiesce that S9a made live | `tico`/`coder` (tbd) | — | queued (held behind Pass 17) | `config.py` + `docs/SERVER.md` prose | `analyst` (fold into Pass 17 re-check) | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
 | **S9c** — the dead-turn latch `turn.lastTurn` and its lifecycle | `coder` | — | queued (behind S9b) | `storefront.py`, `storefront_api.py`, tests | `analyst` | — |
 | **S9d** — remove the per-participant record cache whole | `coder` | — | queued (behind S9c) | `storefront.py`, tests | `analyst` | — |
@@ -3027,3 +3028,59 @@ documents by two agents who cannot see each other. The first two were caught by 
 after the fact. This one is catchable before it lands, but only by me — it is the one thing
 in this chain that no single delegate is positioned to check, which is a reasonable
 definition of what integration is for.
+
+## S9a landed, and the green tripwire is the part I checked hardest
+
+`e6fa20c` — nine files, +895/−44, twelve tests, 305k tokens and 111 tool uses, by some
+distance the largest unit of this coordination. The turn now runs on a `storefront-turn`
+worker: the request thread books the map entry under `_turns_lock`, submits, and answers.
+
+I re-ran rather than accepted the two numbers the result rests on — **191 passed** across
+`test_storefront_api.py` + `test_app.py`, and the **three tripwire tests green** — and
+confirmed `ws:acme` still at 871. The tripwire mattered more than the count. It has been
+green through every S8 pass, and a guard that is green because it stopped *reaching* the
+code it guards is worse than no guard: `SERVICE_LAYER_REACH_TODAY` exists precisely to
+redden if a `Services` call is acquired through `self._services` instead of the trigger,
+and S9a introduced a whole new execution path it would have to follow to keep meaning
+anything. The implementer proved it does — injecting `self._services.start_workflow_run`
+into the new `_run_turn` fails the reach guard, because the walk follows `_run_turn` as a
+*value* passed to `executor.submit`. Worker code is inside the guarded reach. That is the
+single most reassuring line in the report, and it is an execution result rather than a
+static argument, which is what the S8 chain taught me to insist on.
+
+**Two surviving mutants, self-reported.** Eleven mutations, nine red immediately; two
+survived, and both turned out to be defects in the *tests* rather than in the code — a
+failure-isolation mutation that was semantically null (the `except` already swallowed, so
+moving `clear_turn` out of `finally` changed nothing observable), and a booking test that
+asserted only that *an* entry existed, which both orderings satisfy. Reporting those
+rather than quietly fixing them is the behaviour I want, and it is also exactly where the
+gate should look hardest: a test that asserted existence where the claim was about order
+is a shape that recurs, and the fix has to discriminate now rather than merely pass. I
+briefed Pass 17 to hunt that shape specifically.
+
+**The `409` is check-then-act, and I am not deciding that from this chair.** Two
+simultaneous posts from one participant can both pass; two 100 ms apart cannot, which is
+the row's stated bar. Closing it fully means reserving before the write and releasing on a
+failed write — a different route shape than §5.1's S9 row spells — so the implementer
+flagged it as a note and did not take it. That is the right instinct: silently
+re-architecting a route the plan specifies is worse than surfacing the gap. I have asked
+the reviewer for a severity and, specifically, whether it is reachable in the product's
+actual usage and whether booking-under-lock narrows or widens the window versus the
+pre-S9a code. If the answer is that the plan row is wrong, changing the row is available
+to me — it just costs a decision, and it should be taken deliberately rather than absorbed
+into an implementation.
+
+**S9f opened, held deliberately.** S9a made the quiesce genuinely live — `set_turn_state`
+has a production caller, `409` is reachable, `GET /state`'s `turn` block reports real
+states, both drains actually wait — while `config.py`'s comment and `SERVER.md`'s row still
+say nothing populates the turn map. Classic future-as-present drift, the same class the
+`SERVER.md` audit chased through fifteen instances, and it arrived the moment the code
+caught up with the prose. I am holding the fix behind Pass 17 rather than running it in
+parallel, because those two prose blocks sit inside the diff under review and moving a file
+beneath a reviewer is how a gate ends up approving something nobody shipped. I also asked
+the reviewer whether the correction is bigger than rewriting two blocks — whether anything
+in the code's quiesce *behaviour* is now wrong rather than merely under-described. That
+answer decides whether S9f goes to `tico` as prose or to an implementer as code.
+
+S9b–S9e stay queued behind this: they all touch `storefront.py`, which S9a has just
+rewritten substantially.
