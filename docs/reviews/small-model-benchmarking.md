@@ -3146,3 +3146,194 @@ points, the commutation and containment sweeps, the separating case, the four re
 and all **ten** assertions. Review `docs/reviews/small-model-benchmarking-impl.md` `## Pass 9` §5 whole
 (the `_compose` seam adjudication, its five-item next-unit edit list, and the docstring obligation
 Table H carries as its `:405-411` row) — used rather than re-derived, as commissioned.
+
+## Pass 11 — 2026-09-08
+
+**Scope, as commissioned:** two revisions — **v1.20** (`9aafc85`, +80/−14) closing this gate's five
+`P10-*`, and **v1.21** (`ed33e92`, +63/−18), the mechanical re-baseline and the two §7 rule 5
+conventions it forced. Both read in full. Measured against the worktree, which is clean and equals
+**`93b0e42`** (the last commit touching `model-bench/`). Findings carry the prefix **plan-gate
+`P11-*`** — the impl gate is numbering its own `## Pass 11` concurrently, which is the collision §7's
+prefix convention exists for and the one already open as a §7 rule 3 raise against the note.
+
+**Verdict: needs changes.** 0 blockers, 1 major, 2 minors, 0 nits. All three are closeable today;
+**none is blocked on unbuilt work and none is deferred by choice.** The one genuinely blocked item
+is unchanged and is not mine to close: the note's Rule 4a citation, **blocked on `data-scientist`**.
+
+**CPG:** considered, not relevant — no `model-bench` CPG exists on this instance.
+
+### Disposition of Pass 10's five — all five closed
+
+| # | Disposition | Rechecked |
+|---|---|---|
+| **P10-1** (blocker; the site list omits the shipped test the edit falsifies) | **Closed** | The tenth row exists and is **pinned by test name, not by line** — the right call, and made for the right stated reason. `grep -rFn test_neither_printed_bound_is_ever_tighter_than_either_arm` → **1**, re-run. It carries the corrective (comparison moves to the **clamped** arms), cites Rule 4a's own restatement so it cannot be read as a weakening, names why relaxing instead would delete Rule 4 acceptance 4, and records that no residual can see it while command 2 does return the line |
+| **P10-2** (major; the renderer row forbids what assertion 10 pins) | **Closed** | The row now states `support bound (-1)` / `(1)`, names `SUPPORT_DIFF_PROPORTIONS` as the renderer's source rather than letting `-1` become a second home, and corrects the last clause — assertion 10 pins the *correct* bullet and kills `support bound, p=0.025`. The table's own point **(iv)** summary is swept with it. `support bound (-1)` now appears in the plan (was **0**) |
+| **P10-3** (major; a prescription stated only inside two residual commands) | **Closed, and further than asked** — see `P11-1` | The `:413` row writes the three-line body out in Rule 4a's own `u_lo`/`u_hi` notation and forbids the unpacking variant explicitly; residuals 2 and 3 are additionally restated over a fragment containing no introduced name. Generalised at §7 rule 5(b). The generalisation is right; the second repair introduced `P11-1` |
+| **P10-4** (minor; two further stale docstring paragraphs, and an over-claim) | **Closed** | The docstring row extends from one paragraph to **three** and names each one's specific staleness; the v1.19 over-claim is corrected in the deletion row itself — one clause of `envelope_arms`' sentence becomes true, the other false, and only the first is that row's |
+| **P10-5** (nit) | **Closed, then superseded by v1.21** | v1.20 re-derived it correctly; `93b0e42` staled the re-derivation within the hour, and v1.21 replaced the whole construction with a site list under its new gloss convention. The correction was right and its lifetime is the argument for the convention |
+
+### Findings
+
+**P11-1 (major) — residuals 2 and 3's new scope collides with a second consumer of the same constant
+that the same revision mandates. `SUPPORT_DIFF_PROPORTIONS[0]` is stated over `modelbench` with a
+target of **1**; the `report.py:338` row requires the renderer to reach that constant too, and one
+plausible faithful spelling makes the count **2**.**
+*Evidence.* Residuals 2 and 3 are now `grep -rFn 'SUPPORT_DIFF_PROPORTIONS[0]' modelbench
+--include='*.py'` → **0 → 1** and the same for `[1]` (re-run: **0** and **0** today). The scope is
+the whole package, and `modelbench/report.py` is inside it. The `report.py:338` row, landed in the
+**same revision** by `P10-2`'s fix, says the renderer "needs the support *value*, and its source is
+named here rather than re-spelled: `SUPPORT_DIFF_PROPORTIONS`". The renderer must produce `(-1)` on
+the lower bound and `(1)` on the upper. Two faithful spellings exist and the plan prescribes neither:
+extending the existing generator's `zip` with the support pair (no subscript — count stays 1), or
+two explicit branches (`f"{arm} ({stats.SUPPORT_DIFF_PROPORTIONS[0]:g})"` — count becomes 2, since
+`-F` matches the substring through the module qualifier). Confirmed the qualifier is what
+`report.py` uses: it does `from modelbench import stats` (`:27`) and spells `stats.LEVEL_CI95_LO`
+at `:339`, so the row's "imports … exactly as it already imports the two `LEVEL_*` constants" is a
+module reference rather than an import, and either way the substring matches.
+*Why it matters.* The v1.19 form (`max(SUPPORT_DIFF_PROPORTIONS[0], lo)`) was immune to this: it
+pinned the clamp expression, which exists only in `_compose`. The repair removed the introduced
+local and in doing so **widened the match to any subscript of the constant anywhere in the package**
+— in the one revision that also mandated a second consumer of it. On the explicit-branch spelling
+DC-12 fails on a faithful edit, which is `P10-3`'s own shape arriving by a different mechanism, and
+the plan's new clause is the one that catches it: where the pinned text contains a name the edit
+must introduce — *"a local, a helper, **a constant's spelling**"* — that spelling is fixed in the
+row. The renderer's is not fixed anywhere.
+*Fix.* Scope residuals 2 and 3 to **`modelbench/stats.py`**, as Table C's first two are scoped to a
+file each: it partitions cleanly, keeps the one-per-bound split, is immune to the renderer's
+spelling, and still reads 0 → 1 — **checked on a synthetic two-file probe rather than asserted**:
+with both spellings planted, the package-scoped command reads **2** and the `stats.py`-scoped one
+reads **1**. (The alternative — prescribe the renderer's expression in the
+`report.py:338` row too — also works and costs more.) Either way, `P11-1` is the third consecutive
+revision in which Table H's residual pair has had to be restated, which is itself worth one sentence
+in the table.
+
+**P11-2 (minor) — Table H states two baselines and says nothing about the split, while DC-12 makes
+the stronger claim the table's second half does not.** The enumerating commands read "*both re-run
+at **`93b0e42`** — re-pointed from `7f865e2` at v1.21 because this revision re-ran them*"; twenty
+lines below, the residual block still reads "*all before values re-run at `7f865e2`*". Under
+v1.21's own convention 1 that is **permitted** — a baseline is a property of the measurement, and
+convention 1 states a necessary condition for moving one, not an obligation — so this is not a
+factual error, and I re-ran all six at the worktree myself: **2 / 0 / 0 / 1 / 1 / 2**, unchanged.
+What makes it a defect is narrower and is about statement, not fact: **DC-12 asserts, in this same
+revision, that "all six of Table H's residuals … are unchanged across it [`93b0e42`]"** — a claim
+that can only be made by having run them there. So the document says the six were measured at
+`93b0e42` in one place and at `7f865e2` in another, and a reader of the table where baselines are
+load-bearing hits both with no explanation. *Fix, one clause, either direction:* re-point the
+residual block to `93b0e42` on the strength of the re-run DC-12 already reports, or state on the
+table that the split is deliberate and why. I recommend the first — it makes the table
+single-baselined again and matches what the revision actually did.
+
+**P11-3 (minor) — the rewritten gloss names its four sites by *line number*, in the file its own
+table will insert into, two paragraphs above a row that is name-pinned for exactly that reason.**
+The gloss reads "**The four that are arm-value call sites are `:1260`, `:1338`, `:1361` and
+`:1422-1423`**" — all four verified at the worktree, correct today. But Table H lands the note's ten
+assertions in `tests/test_stats.py`, and their natural home is beside the envelope tests they extend
+(`test_the_verdict_records_which_arm_bound_each_printed_bound` at `:1367`,
+`test_neither_printed_bound_is_ever_tighter_than_either_arm` at `:1346`) — i.e. **between `:1338` and
+`:1422`**, which moves two of the four pins as a direct consequence of applying the table. The gloss
+is therefore stale-by-construction the moment its own edit lands. The plan already holds both halves
+of this rule: `P10-1`'s row is pinned by test name "because a parallel unit is editing this file",
+and §7 rule 5(b) says an exact-text pin is robust to edits elsewhere in a file where a line pin is
+not. *Fix.* Name the four by test-function name, as the tenth row does. *(This also repairs
+convention 2's rationale — see judgement 4.)*
+
+### The judgements the gate was asked for
+
+**(1) `P10-3`'s two repairs — can they disagree?** **Yes, and that is `P11-1`.** Taken separately
+each is sound: the written-out body is a real prescription (it fixes `u_lo`/`u_hi` from the note's
+own notation, and explicitly forbids `lo_b, hi_b = SUPPORT_DIFF_PROPORTIONS`, which is the faithful
+edit the subscript residuals could not see — a good catch); and a residual over a fragment with no
+introduced name is the stronger of the two forms in principle. What was not checked is the
+*interaction with the rest of the same revision*: the second repair's fragment is no longer unique
+to `_compose`, because `P10-2`'s fix put the same constant in `report.py`. Belt and braces hold only
+while the braces are scoped to the belt's trousers.
+
+**(2) Table H's split baseline — defect or correct by construction?** **Both, and I call it a
+minor** (`P11-2`). Correct by construction as to *provenance*: convention 1 makes a baseline a
+property of a measurement, so a table may legitimately carry two, and neither number is wrong —
+verified at the worktree. A defect as to *statement*: the split is unexplained in the one table
+where baselines are load-bearing, and it is contradicted by DC-12's own stronger sentence in the
+same revision. I did not treat the coordinator's framing as a decision and did not assume the
+answer; the deciding evidence is DC-12's "unchanged across it", which is a measurement claim the
+table's second half does not reflect.
+
+**(3) Convention 1 — a stated baseline moves only when the revision moving it re-runs the commands.
+Sound, and I checked it against the coordinator's own rejected argument rather than inheriting the
+agreement.** The architect is right, and this revision is its own witness: had v1.21 re-pointed
+Table H to `93b0e42` **without** re-running, the table would have asserted "`envelope_arms` → 20 at
+`93b0e42`", and the true count there is **21** (re-run: 21, `stats.py` 5 / `test_stats.py` 16). So
+"the implementer runs it against the tree they have" does license publishing a count nobody took,
+and it was one revision away from doing so. The two sub-rules follow correctly: a **landed** table's
+rows are a record and re-pointing falsifies it; an **unlanded** table's baseline moves in the
+revision that re-measures. One observation, not a finding: the gap is carried "once, in DC-12, as
+*what has changed since*", and that paragraph is prose with the same staleness exposure as the gloss
+— it names `93b0e42` and will be wrong when the next unit lands. It is self-limiting, since DC-12 is
+re-run at the end of the round and the implementer re-measures everything then, but it is the one
+part of the convention that has no mechanism behind it.
+
+**(4) Convention 2 — a gloss names sites and states no total. It covers both failure mechanisms *as
+they occurred*; its stated rationale over-claims, and the rewritten gloss keeps one of the two
+exposures it removes.** The rejection of the flat prohibition is right and the narrowing is the
+better rule: a gloss is what rule 5(a) asks for in spirit, and Table E's non-site list is the
+correct model — banning glosses would have cost the thing that makes these tables usable. On
+coverage: mechanism (ii), the stale total, is fully removed — with no total there is nothing an
+addition can falsify. Mechanism (i), v1.19's mis-partition, was an arithmetic claim about a total
+and cannot be written under the new rule either. **But the rationale — "a site list is stable
+against additions in a way a total never is" — is true of a site's *identity* and false of a site's
+*line number*, and the gloss states its four sites as line numbers** (`P11-3`). It also keeps a
+universally-quantified complement — "*every other line the command returns in that file is an
+import, a `parametrize` id, docstring prose or a precondition-raise call*" — which is the same
+exhaustiveness claim in words rather than numbers, and which a future addition of a genuine call
+site falsifies. Neither is fatal and both are one clause each; and the immediate application was
+sound, because I checked what `93b0e42` actually added: the new sixteenth line is `:1465`, docstring
+prose — a **non-site** — so the four-site list survived that event on its merits and not by luck.
+The catch of a second copy of both counts three sections away is the rule paying for itself on day
+one.
+
+### What's solid
+
+- **All five `P10-*` are closed on their merits, and two are closed further than the finding asked.**
+  `P10-3`'s row now forbids a faithful-but-invisible variant (`lo_b, hi_b = …`) that I did not name;
+  `P10-4`'s correction distinguishes the two clauses of one sentence rather than deleting it.
+- **The blocker's row records *why* it is a row** — no residual can see it, while command 2 does
+  return the line — which is the distinction between an enumeration failure and a transcription
+  failure, and it is the right lesson to have drawn from `P10-1`.
+- **v1.21 is the right response to going stale, and it is disciplined about scope**: three facts
+  corrected, everything else explicitly re-checked and left alone, with the byte-identity of ten
+  pinned `stats.py` lines across `93b0e42` stated as a measurement. I re-ran the six residuals, both
+  enumerating commands and the four gloss pins and reproduced all of them.
+- **Convention 1 was reached against the coordinator's stated position and is the better answer.**
+  A rule that survives its own commissioner's argument, with a demonstrated counter-example one
+  revision away, is worth more than one that was never contested.
+
+### Open questions
+
+**None for the caller.** One item remains open against another document and is **blocked on its
+owner, not deferred**: note `-ml` v1.19 Rule 4a attributes itself to *plan-gate* Pass 8's `P8-1`
+where it means *impl-gate* `P8-1`. It routes to `data-scientist`, blocks nothing, and this pass adds
+no second instance of it.
+
+## Appendix K — Pass 11: what was re-run and read
+
+**K.1 — every count relied on, re-run against the worktree (clean, `93b0e42`).** `envelope_arms` →
+**21** (`modelbench/stats.py` 5, `tests/test_stats.py` 16); `bound_by` → **14**; the six residuals →
+**2 / 0 / 0 / 1 / 1 / 2** in order (`clamp=(-1.0, 1.0)`; `SUPPORT_DIFF_PROPORTIONS[0]`;
+`SUPPORT_DIFF_PROPORTIONS[1]`; `"MOVER-D" if mover_arm[0] <= exact_arm[0]`;
+`arm if arm == "MOVER-D" else`; `tuple[str, str] | None`);
+`test_neither_printed_bound_is_ever_tighter_than_either_arm` → **1**, unique, so the name pin holds;
+the four gloss pins read at `:1260`, `:1338`, `:1361`, `:1422-1423` and each is an `envelope_arms`
+call — **all four correct**. `report.py` import style: `from modelbench import stats` (`:27`),
+`stats.LEVEL_CI95_LO` at `:339`.
+
+**K.2 — what `93b0e42` actually changed under Table H**, diffed line-by-line against the `7f865e2`
+blob: `tests/test_stats.py` gains **one** matching line, `:1465`, which is **docstring prose**; the
+seven `envelope_arms` lines at or above `:1454` shift by 1 to 23 lines and every one below is
+unmoved, which is why the four call-site pins survived. `modelbench/stats.py`'s five are unchanged.
+This is the measurement behind judgement 4.
+
+**K.3 — documents read.** The v1.20 delta in full (+80/−14) and the v1.21 delta in full (+63/−18):
+Table H's ten site rows, its two enumerating commands and rewritten gloss, its six residuals and the
+third-form paragraph, the point-(iv) summary sweep, DC-12's re-baseline paragraph, §7 rule 5(b)'s
+three new clauses (the write-out clause at v1.20, and v1.21's baseline and gloss conventions), the
+v1.19 closure block's de-duplicated row, and the *Plan gate Pass 10* closure block with its
+five-finding table.
