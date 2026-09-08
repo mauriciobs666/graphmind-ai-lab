@@ -161,7 +161,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **Pass 4** — the pairwise shape-set gate: do `freshness.md` and `graph-ontology.md` teach the same set of marker shapes? | `analyst` (**resumed** — wrote m1–m5 and Passes 1–3; the only party holding both sides) | `a98a748e49a559ead` | **accepted — committed `d4214c3`**. `freshness.md` **needs changes** (1 major), `graph-ontology.md` **approve with suggestions**. **Shape sets are two partitions of one set, no omission either way** — proved by enumerating each document's *classification surface* and walking both orderings against the two live markers. **P4-1: the fifth-generation false mechanism, inside the fourth's own fix** | `docs/reviews/cpg-provenance-stamp.md` `## Pass 4` | — (is the gate) | 238k tok / 14 tools |
 | **U45** — P4-1 / K-023: the hybrid fork | `cobb` | `a1cfcb25341f0b0bb` (resumed) | **delivered — committed `29538d6`**. Chose **impossible** and **reverted its own discriminator hunks**; rejected a middle option I had not listed (partition by key) because *the real data crosses that boundary*. Property list stated **CLOSED**, invariant named, tombstone applied. Net **−1** line. P4-2 fixed in passing | `git-provenance.sh`, `SKILL.md`, `freshness.md`, K-023 closed / K-024 filed | `analyst` Pass 5 | 160k tok / 11 tools |
 | **U55** — U47a's Case 3: the fix is a closed **list**, not a closed **set**. Decide where the invariant lives | `cobb` | `aadea04e203b11c4f` | **delivered — committed `0da3eb9`.** Chose *derive the allow-list from the stamp's own assignments* + a stray-key assertion in `pipeline.sh`. **Both load-bearing claims re-run by me**: the refactored stamp emits **byte-identical** output to `HEAD`'s across both cases including quote/backslash escaping, and the stray query on the live marker returns exactly `MARKER_ORIGIN`/`MARKER_WRITTEN_AT`/`NOTE` | `git-provenance.sh`, `pipeline.sh`, `SKILL.md`, `freshness.md`, `skills/README.md`, cobb kaizen | `analyst` — queued | 137k tok / 47 tools |
-| **Pass 5** — gate the whole stamp-closure arc: `29538d6` + `0da3eb9` + `5417f0e`. Priority 1 justifications-not-values; priority 2 *is the stray assertion a regression test or theatre*; priority 3 the silent-erasure warning | `analyst` | `a139a9bc41ccb88ce` | in-flight | `docs/reviews/cpg-provenance-stamp.md` `## Pass 5` | — (is the gate) | — |
+| **Pass 5** — gate the whole stamp-closure arc: `29538d6` + `0da3eb9` + `5417f0e` | `analyst` | `a139a9bc41ccb88ce` | **delivered — committed `9bbadf3`** | `docs/reviews/cpg-provenance-stamp.md` `## Pass 5` | **needs changes — 1 blocker, 3 majors.** P5-1 reproduced by me before I routed it: `CPG_STAMPED_KEYS` reads `<UNSET>` in the parent, query renders `NOT k IN []` | 175k tok / 48 tools |
+| **U58** — P5-1 (the allow-list is always empty: the stamp is built in a `$( )` subshell), P5-2, P5-4, P5-5, P3-1, P4-4 | `cobb` | `aadea04e203b11c4f` (resumed) | in-flight | `pipeline.sh`, `git-provenance.sh`, tombstones, K-024 | `analyst` Pass 6 | — |
+| **U59** — P5-3: `cpg_falkorchat`'s live `NOTE` still carries mechanism 1's **retracted** false universal, inside the artifact check 0 treats as evidence | `graph-dba` | — | **held behind U58** deliberately — so the `NOTE` describes the final mechanism instead of being rewritten a third time | `cpg_falkorchat`'s `NOTE` | — | — |
 | **U57** — ship the map form now that it is executed rather than doc-sourced; the stray assertion stays and becomes its production regression test | `cobb` | `aadea04e203b11c4f` (resumed) | in-flight | `git-provenance.sh`, `freshness.md`/`SKILL.md` prose, kaizen disposition | `analyst` — queued with U55 | — |
 | **U56a** — delete the graph key `cobb` leaked by probing a nonexistent graph (`GRAPH.QUERY` **materializes**) | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered.** Empty on all three counts before deletion. `diff` against the **U47a-close 25-key listing** is empty — not a bare count, so the concurrent session's own churn is excluded. I re-verified: 25 keys, zero `scratch_graphdba`/`nonexistent` | `GRAPH.LIST` diff | — | 162k tok / 11 tools |
 | **U56b** — execute the `SET b = {map}` claim `cobb` refused to ship on doc evidence alone | `graph-dba` | `a5825012b34ab9a9b` (same) | **delivered — it holds, four ways.** Probe 1: `MARKER_EVIDENCE` (the Case 3 survivor) **gone**, label and singleton intact. Probe 2b: a `NULL` **inside** the map omits the property — so the map mirrors `_cpg_prop`'s structure with five lines deleted. Probe 2a and Probe 3 (`--reset` create path) both correct. Routed **back to `cobb`** → U57, never applied by the validator | executed evidence, `keys(b)` throughout | — | (same run) |
@@ -4466,3 +4468,58 @@ named when it declined to ship on documentation. That argument is good enough th
 who did not write it to say whether it survives. A check that can only fire when something
 impossible happens is either the best kind of assertion or dead weight, and the difference is
 whether the impossible thing is reachable.
+
+## Pass 5: a blocker that existed only in the wiring, and the credential that hid it
+
+Gating the arc whole rather than by its last commit is what found this, and it found it in the one
+place none of the three previous checks could reach.
+
+**P5-1.** `pipeline.sh:228` builds the stamp inside a command substitution —
+`STAMP="$(cpg_provenance_stamp …)"` — and that subshell is the **only** place `CPG_STAMPED_KEYS` is
+ever assigned. In the parent it is unset, so `cpg_provenance_stray_query` renders `NOT k IN []` and
+every property on the marker is a stray. Every `--load` build fails, after a multi-hour parse, with
+the marker **already replaced**: the annotation is destroyed and then the build reports
+`THIS SHOULD BE IMPOSSIBLE`. I reproduced it before routing it — `CPG_STAMPED_KEYS` reads `<UNSET>`,
+the emitted query carries an empty list.
+
+`_cpg_prop`'s own comment names this exact trap — *"CALL IT AS A STATEMENT, NEVER INSIDE `$(…)`"* —
+one level **below** the call site that commits it, and files the consequence as *"at least the safe
+direction."* It is not a direction; it is the shipped state, present since `0da3eb9` and carried
+through `5417f0e`. A warning written next to the mechanism did not reach a caller two lines away.
+
+**And the justification finding is the sharpest this chain has produced.** The third tombstone's
+empirical claims all hold — I corroborated them. But its differentiator, *"what separates the third
+is not that it is more plausible; it is that it was executed before it was written down"*, is true
+of the **Cypher construct** and false of the **shipped mechanism**. The map literal, the accumulator
+and the pipeline gate were never run **together**. P5-1 is precisely what that gap hid. The reviewer
+then found the *second* tombstone making the same claim — *"Verified by execution in both
+directions"* — about a mechanism also executed in isolation and also broken in its wiring.
+
+So the generation has a name now: **an execution credential that covers the primitive and not the
+call path.** That is a real advance on "check the citation", because every citation here *was*
+checked, by three separate parties including me. What none of us checked was whether the verified
+pieces were wired to each other. My own verification pattern all session has been exactly this
+shape — I sourced the script and diffed the stamp's output, which tests the primitive; I never ran
+the block that consumes it. The habit that has been working is now the habit that missed a blocker,
+and U58's brief says to fix the wiring and verify **end to end**, not the primitive in isolation.
+
+**On the assertion itself the reviewer split the difference, correctly.** Keep it — it is not
+theatre — but the argument was overclaimed: it detects *the stamp failed to erase a pre-existing
+foreign key*, not *the replace semantics changed*. A real firing check on exactly two graphs today,
+and after each rebuilds once it cannot fire under any named trigger. One of its three named triggers
+cannot fire at all. And the missing failure mode is the one `cobb` reasoned about as a hypothetical
+and then shipped as the actual state.
+
+**U59 is deliberately held rather than dispatched in parallel.** `cpg_falkorchat`'s live `NOTE`
+still carries mechanism 1's retracted false universal — *"the stamp writes every property on this
+node"* — inside the artifact `freshness.md`'s check-0 gate treats as evidence. That wants fixing.
+But rewriting it now would be its **third** rewrite in a day, against a mechanism U58 is actively
+changing, and the churn is what produced P5-3 in the first place. U58's brief asks `cobb` for the
+two sentences it wants that `NOTE` to say, so `graph-dba` writes its wording rather than my
+paraphrase of it.
+
+**A footnote on counting.** `GRAPH.LIST` read **24** at review time against the 25 I had verified.
+Not a leak: the second session cleaned up its own `cobb_u20_scratch`. I checked which key was gone
+rather than reconciling a number, and all five keys that matter were present. The same diff-not-count
+discipline I asked `graph-dba` for, applied to a discrepancy that would otherwise have looked like
+somebody's mistake.
