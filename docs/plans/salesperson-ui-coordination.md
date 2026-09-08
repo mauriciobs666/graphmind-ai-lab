@@ -161,8 +161,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **Pass 4** — the pairwise shape-set gate: do `freshness.md` and `graph-ontology.md` teach the same set of marker shapes? | `analyst` (**resumed** — wrote m1–m5 and Passes 1–3; the only party holding both sides) | `a98a748e49a559ead` | **accepted — committed `d4214c3`**. `freshness.md` **needs changes** (1 major), `graph-ontology.md` **approve with suggestions**. **Shape sets are two partitions of one set, no omission either way** — proved by enumerating each document's *classification surface* and walking both orderings against the two live markers. **P4-1: the fifth-generation false mechanism, inside the fourth's own fix** | `docs/reviews/cpg-provenance-stamp.md` `## Pass 4` | — (is the gate) | 238k tok / 14 tools |
 | **U45** — P4-1 / K-023: the hybrid fork | `cobb` | `a1cfcb25341f0b0bb` (resumed) | **delivered — committed `29538d6`**. Chose **impossible** and **reverted its own discriminator hunks**; rejected a middle option I had not listed (partition by key) because *the real data crosses that boundary*. Property list stated **CLOSED**, invariant named, tombstone applied. Net **−1** line. P4-2 fixed in passing | `git-provenance.sh`, `SKILL.md`, `freshness.md`, K-023 closed / K-024 filed | `analyst` Pass 5 | 160k tok / 11 tools |
 | **U55** — U47a's Case 3: the fix is a closed **list**, not a closed **set**. Decide where the invariant lives | `cobb` | `aadea04e203b11c4f` | **delivered — committed `0da3eb9`.** Chose *derive the allow-list from the stamp's own assignments* + a stray-key assertion in `pipeline.sh`. **Both load-bearing claims re-run by me**: the refactored stamp emits **byte-identical** output to `HEAD`'s across both cases including quote/backslash escaping, and the stray query on the live marker returns exactly `MARKER_ORIGIN`/`MARKER_WRITTEN_AT`/`NOTE` | `git-provenance.sh`, `pipeline.sh`, `SKILL.md`, `freshness.md`, `skills/README.md`, cobb kaizen | `analyst` — queued | 137k tok / 47 tools |
-| **U56a** — delete the graph key `cobb` leaked by probing a nonexistent graph (`GRAPH.QUERY` **materializes**); `GRAPH.LIST` 26 → 25 | `graph-dba` | `a5825012b34ab9a9b` (resumed) | in-flight | `GRAPH.LIST` before/after diff | — | — |
-| **U56b** — execute the `SET b = {map}` claim `cobb` refused to ship on doc evidence alone. If it holds, the simplification routes **back to `cobb`** with the evidence, never applied by the validator | `graph-dba` | `a5825012b34ab9a9b` (same) | in-flight | `keys(b)` before/after on a throwaway | — | — |
+| **U57** — ship the map form now that it is executed rather than doc-sourced; the stray assertion stays and becomes its production regression test | `cobb` | `aadea04e203b11c4f` (resumed) | in-flight | `git-provenance.sh`, `freshness.md`/`SKILL.md` prose, kaizen disposition | `analyst` — queued with U55 | — |
+| **U56a** — delete the graph key `cobb` leaked by probing a nonexistent graph (`GRAPH.QUERY` **materializes**) | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered.** Empty on all three counts before deletion. `diff` against the **U47a-close 25-key listing** is empty — not a bare count, so the concurrent session's own churn is excluded. I re-verified: 25 keys, zero `scratch_graphdba`/`nonexistent` | `GRAPH.LIST` diff | — | 162k tok / 11 tools |
+| **U56b** — execute the `SET b = {map}` claim `cobb` refused to ship on doc evidence alone | `graph-dba` | `a5825012b34ab9a9b` (same) | **delivered — it holds, four ways.** Probe 1: `MARKER_EVIDENCE` (the Case 3 survivor) **gone**, label and singleton intact. Probe 2b: a `NULL` **inside** the map omits the property — so the map mirrors `_cpg_prop`'s structure with five lines deleted. Probe 2a and Probe 3 (`--reset` create path) both correct. Routed **back to `cobb`** → U57, never applied by the validator | executed evidence, `keys(b)` throughout | — | (same run) |
 | **U47a** — execute the mechanism the fix rests on: does `SET b.X = NULL` **remove** the key or store a null? | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered — graph writes, no file to commit. Answer: it removes.** 13-key marker → stamp → `Properties set: 8` / `removed: 13`, `keys(b)` = exactly the eight pipeline fields; `none` case → `set: 4`, `keys(b)` = four; `count(b) = 1`. Ran the `RETURN b.NOTE, …` read alongside — five `(nil)`s either way, which is why `keys(b)` was the only discriminator worth asking for. **Found a residual (Case 3) → U55.** `GRAPH.LIST` 25 → 25, diff empty; scratch graph created and deleted by it | the executed evidence, recorded here | — (I re-derived the artefacts myself) | 139k tok / 11 tools |
 | **U47b** — P4-5: the marker's `NOTE` cites a superseded gate, and must now say it is **build-scoped** | `graph-dba` | `a5825012b34ab9a9b` (same) | **delivered.** `NOTE` replaced not appended, 1,561 → 2,245 chars; per-marker gate description, the derivation discharged, all five cleared keys named. **I re-derived `SOURCE_TREE` myself** — `git rev-parse b795f4c:falkor-chat/server` = `85ddeed…`, agreeing with the marker and with `MANIFEST.txt:19`'s independently hand-written anchor. Nine other fields byte-identical to U41 | `cpg_falkorchat`'s `NOTE` | — | (same run) |
 | **U48** — K-024: `docs/plans/cpg-agent-adoption-graph.md` §1.1's property table understates the stamp (executed against → header pointer or successor, not an in-place edit) | `architect` | — | queued | `docs/plans/cpg-agent-adoption-graph.md` | `analyst` | — |
@@ -4380,3 +4381,46 @@ case created `cpg_nonexistent_graph_xyz`: a `MATCH`-only query sent through `GRA
 than `GRAPH.RO_QUERY` **materializes** the graph. `GRAPH.LIST` is 26 where U47a closed it at 25.
 Deletion is not mine and not `cobb`'s, so U56a routes it to `graph-dba` with a before/after diff
 rather than a bare count — the concurrent session is still churning its own scratch keys.
+
+## U56b: the refusal paid, and the probe that mattered was not the one I specified
+
+`SET b = {map}` holds. `graph-dba` ran `cobb`'s probe as written and then three more that it decided
+were needed to make the result *shippable* rather than merely true — which is the difference between
+answering a question and closing one.
+
+Probe 1 is the headline: an 11-key marker including **`MARKER_EVIDENCE`**, the exact key that
+survived the `NULL` enumeration in Case 3, replaced down to the eight pipeline keys. Closure by
+construction, executed. It also checked the thing that would have made this quietly catastrophic —
+`labels(b)` and `count(b)` both survive the replace, so `MATCH (b:CpgBuildInfo)` still finds the
+marker. A `SET b =` that silently dropped the label would have left every consumer's first `MATCH`
+returning nothing, and the read-backs would all still have "passed" by returning zero rows.
+
+**Probe 2b is the one I did not think to ask for and the one that decides the implementation.** An
+explicit `NULL` *inside* the map omits the property rather than storing it. That means `cobb` can
+keep emitting all thirteen names unconditionally and let `NULL` do the work — the map form mirrors
+`_cpg_prop`'s existing structure with five lines deleted, instead of a restructure. My brief asked
+"does the replace work"; the useful question was "what shape does the replacement code take", and
+the delegate found it by asking what the answer would be *used for*.
+
+The counters lied again, consistently: probe 2b reports `removed: 4` against **zero** actual
+removals. Third independent confirmation that `Properties removed` conflates removals with
+overwrites and cannot be cited as evidence — which is now stated in U57's brief as a prohibition
+rather than a caution, because it is exactly the kind of plausible number that would end up in a
+comment.
+
+**U57 sends it back to `cobb`, which is the whole point of having refused.** `graph-dba` explicitly
+did not edit the script — "`cobb` owns it; routing is yours" — so the agent that declined to ship on
+doc evidence now ships on executed evidence, in its own file, with the probe results as the
+justification rather than the documentation sentence that started it. The stray assertion from
+`0da3eb9` stays and its role *improves*: under the enumeration it caught a list that could drift;
+under the map it can only fail if the replace itself did not happen. That is the
+*prove-it-in-production-rather-than-assert-it-from-a-doc* property `cobb` named when it declined —
+it becomes the standing regression test for this very probe, on every build. Its brief says to write
+that down at the code, because the next reader will otherwise see a redundant-looking check and
+delete it.
+
+**Verified by me after the fact:** `GRAPH.LIST` is back to 25 with zero `scratch_graphdba` or
+`nonexistent` keys, and `cpg_falkorchat`'s marker is untouched — 10 keys, `hand-backfilled`,
+`SOURCE_TREE` `85ddeed…`, `NOTE` 2,245 chars. `graph-dba` diffed against the **U47a-close listing**
+rather than reporting a count, which is what I asked for and the only form that survives a
+concurrent session churning its own scratch keys in the same window.
