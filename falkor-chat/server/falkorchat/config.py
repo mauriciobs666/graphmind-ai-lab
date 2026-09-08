@@ -190,12 +190,21 @@ STOREFRONT_PRESENTER_KEY: str = os.environ.get("FALKORCHAT_STOREFRONT_PRESENTER_
 # turn executor (`Storefront.__init__`), which is where every agent turn runs:
 # `POST /shop/api/messages` reserves the turn, writes the message, submits and
 # answers, so a deep turn queue never touches anyio's default thread limiter and
-# poll reads stay instant. **Setting it changes one observable thing: how many
-# turns run at once.** It deliberately does **not** appear in the
-# `turn.queuePosition` `GET /shop/api/state` reports — that number is the
-# participant's index in the *waiting* line, derived on every read from the turn
-# map's booking ordinals, and a running turn occupies a worker rather than a
-# place in line, so it is excluded (§5.2 *The queue position*). The definition
+# poll reads stay instant. **Changing it moves two things a participant can
+# see: how many turns run at once, and the `turn.queuePosition`
+# `GET /shop/api/state` reports.** The second is easy to miss, because this
+# constant is not a term in that number — `Storefront.turn_payload` derives it
+# from the turn map alone, counting the `queued` entries booked earlier than
+# this one and never reading `turn_workers` (§5.2 *The queue position*). What it
+# does read is *which* entries are still `queued`, and a running turn occupies a
+# worker rather than a place in line, so it is left out of the count: raising
+# this moves turns out of the waiting line sooner and every position behind them
+# falls. Measured against the delivered `turn_payload`, five simultaneous
+# arrivals, the fifth one's position — `turn_workers=1` → `3`, `=2` → `2`,
+# `=4` → `0` (`docs/reviews/salesperson-ui-impl.md` `## Pass 20`, P20-2).
+# **Absence from the derivation is not independence:** the claim that setting
+# this leaves `turn.queuePosition` alone stood in this comment until Pass 20
+# measured it false; do not write it back. The definition
 # this comment carried until S9a-fix — *a position is how many accepted turns
 # were unfinished when this one arrived* — told a fifth arrival behind four
 # running turns `4` while it was first in line

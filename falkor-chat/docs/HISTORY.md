@@ -84,11 +84,15 @@ harness is in `test_two_posts_held_concurrently_inside_the_write_write_one_messa
 **Documentation was part of done.** `config.py`'s `STOREFRONT_TURN_WORKERS` comment and
 `SERVER.md` §1.3's row both stated the *old* definition verbatim — *a position is how many accepted
 turns were unfinished when this one arrived* — which v1.29 falsifies and no plan sweep could reach
-(`## Pass 18`, P18-6). Both now say that the value changes **one** observable thing, how many turns
-run at once, and that it deliberately does not move `turn.queuePosition`. **`STOREFRONT_QUIESCE_S`
-is still stale and still out of scope**, as it was at S9a: its comment and row say nothing populates
-the turn map. `storefront_api.py`'s `presenter_reset_all` comments are the same case
-(`## Pass 17`, Ruling 2) and are likewise untouched here.
+(`## Pass 18`, P18-6). Both now say that the value changes how many turns run at once. As
+delivered here they also said, in the same sentence, that it deliberately does not move
+`turn.queuePosition` — **false as written, and corrected the same day** (`## Pass 20`, P20-2):
+`turn_workers` is not a *term* in the derived position, but a running turn is excluded from the
+count, so more workers pull turns out of the waiting line and the positions behind them drop — five
+simultaneous arrivals, the fifth reads `3` / `2` / `0` at `turn_workers` `1` / `2` / `4`.
+**`STOREFRONT_QUIESCE_S` is still stale and still out of scope**, as it was at S9a: its comment and
+row say nothing populates the turn map. `storefront_api.py`'s `presenter_reset_all` comments are
+the same case (`## Pass 17`, Ruling 2) and are likewise untouched here.
 
 **Suite:** `2639 passed, 14 deselected` full (from `2629/14`), `290` for
 `tests/test_storefront.py` + `test_storefront_api.py` + `test_app.py` (from `280`) — +10: six
