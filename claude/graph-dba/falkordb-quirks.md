@@ -45,6 +45,25 @@ to the general fact here.
   confirmation; poll `CALL db.constraints()` (or `db.indexes()` for the paired index) and
   check `status` for `OPERATIONAL` before relying on the constraint being enforced.
 - **Composite constraints** (`PROPERTIES 2 key version`) are supported and operational.
+- **A `UNIQUE` node constraint does not constrain nodes that lack the property — and there is no
+  such thing as a *stored* null, so "absent" and "explicitly null" are the same state** (verified
+  2026-09-08, module `41811`, disposable graph `cobb_u21_probe`, deleted after). Any number of
+  nodes with the constrained property absent coexist; `CREATE (:Chan {name:'c', pid:null})`
+  reports `Properties set: 1` (the `name` only) and `keys(n)` comes back `[name]` — the null is
+  discarded at write, never stored, so the constraint has nothing to compare. Two nodes with the
+  same non-null string are correctly rejected (`unique constraint violation on node of type
+  Chan`), and `DETACH DELETE` followed by re-`CREATE` of the same value succeeds cleanly — the
+  index entry is released with the node, so a delete-then-recreate cycle is not a re-join hazard.
+  **Consequence: a `UNIQUE` on a *nullable marker* property is safe** (it constrains exactly the
+  rows that carry a value) — but it is emphatically **not** an existence constraint; see the
+  `RETURN n.prop` → `null` entry under *Cypher dialect* for the projection side of the same gap.
+- **`EXISTS { MATCH … }` and `exists((pattern))` are both unusable — the working orphan-detection
+  shape is `OPTIONAL MATCH … WITH x, t WHERE t IS NULL`** (verified 2026-09-08, module `41811`).
+  They fail for *different* reasons, which matters when reading the error: `WHERE EXISTS { MATCH
+  (n)-[:R]->() }` is a genuine **parse** error (*"Invalid input '(': expected ':', ',' or '}'"*),
+  while `WHERE exists((n)-[]->())` parses and then fails at plan time with *"Unable to resolve
+  filtered alias '(n)-[]->()'"*. Neither is a subquery this engine supports; the `OPTIONAL MATCH`
+  + `IS NULL` anti-join is the portable form and runs clean.
 - **Fulltext** (`db.idx.fulltext.createNodeIndex` / `queryNodes`) confirmed working. RediSearch
   fuzzy term syntax also confirmed live: `%term%` (1-edit-distance fuzzy) and `%%term%%` (2-edit)
   both match a typo'd query against an indexed exact string (verified 2026-08-22, module `41811`,
@@ -168,6 +187,31 @@ to the general fact here.
 
 ## Cypher dialect & query behavior
 
+- **Overwriting an existing scalar property reports a *removal* it did not perform** (verified
+  2026-09-08, module `41811`, live `cpg_falkorchat`). A targeted
+  `MATCH (b:CpgBuildInfo) SET b.MARKER_WRITTEN_AT = '<new>'` over an already-present value replies
+  `Properties set: 1` **and** `Properties removed: 1`, while `size(keys(b))` is unchanged (10
+  before, 10 after) and every other property is byte-identical. Nothing was removed; the counter
+  appears to charge the displaced old value. **Never read `Properties removed` as evidence that a
+  key disappeared** — `keys(n)` before/after is the only discriminator. Independently observed
+  elsewhere in this lab at wider divergences (13 reported against 5 real removals, 4 against none,
+  `skills/cpg-analysis/references/freshness.md`), so the mechanism is not established; only the
+  unreliability is.
+- **A property a node does not carry projects as `null` — never an error — so a `UNIQUE` constraint
+  is no guarantee the key is present in a projection** (verified 2026-09-08, module `41811`,
+  read-only against the live `kaizen_team` and `reference` graphs; no probe graph created).
+  `MATCH (a:Agent {agentId:'cobb'}) RETURN a.noSuchProperty` returns one row holding `null`,
+  `a.noSuchProperty IS NULL` is `true`, and `keys(a)` is `['agentId']` — nothing raises at parse,
+  plan or run time. This is the projection half of the constraint entry under *Indexing,
+  constraints & DDL*: `CALL db.constraints()` on `reference` returns
+  `UNIQUE | Product | ['productId'] | NODE | OPERATIONAL` and **no `MANDATORY` row at all** (four
+  constraints, all `UNIQUE`), so a `Product` created without `productId` is accepted and every
+  projection of it reads `null`. **A repository projection widened onto a `UNIQUE`-constrained key
+  still needs its own null check** before a caller treats that key as an identifier — the
+  constraint enforces distinctness among the rows that have a value and says nothing about the
+  rest. Observed downstream by `analyst` 2026-09-03: `filter_products` → `list_catalog` carried
+  `productId: null` out to the caller with no error (that transient row is gone — all 15 current
+  `Product` nodes carry the key).
 - **No string-repetition operator** — `CREATE (:T {code: 'x' * 400})` fails with
   `Type mismatch: expected Integer, Float, or Null but was String` (verified v4.18.11,
   falkordb-py 1.6.2). Build wide test-fixture strings in the client and pass them as a
@@ -656,6 +700,13 @@ to the general fact here.
   lingering alias. **Prefer `RENAMENX`** — it returns `0` and refuses rather than clobbering when
   the target name is taken (`1` when free). The `GRAPH.COPY` + `GRAPH.DELETE` alternative is
   destructive and transiently doubles RAM for no benefit.
+- **Queue depth is directly observable: `GRAPH.INFO` reports a `# Waiting queries` section
+  alongside `# Running queries`** (verified 2026-09-08, module `41811`, shared dev instance).
+  Paired with `GRAPH.CONFIG GET MAX_QUEUED_QUERIES` (default `25` here), that gives an
+  *observable* headroom metric — so a load-test or capacity done-condition can assert the peak
+  observed queue depth against the cap, instead of degrading to the much weaker "no query was
+  rejected", which only goes red once the cap has already been hit. `GRAPH.INFO` takes no graph
+  key: it is instance-wide, and also carries an `Object Pool` section.
 - **`RESULTSET_SIZE` (default 10000) silently caps *every* result set, including one with an
   explicit larger `LIMIT`** — `GRAPH.CONFIG GET RESULTSET_SIZE` → `10000`; a query with `LIMIT
   50000` against a graph holding 110k+ matching rows still returns only ~10,000, with nothing in
@@ -688,6 +739,42 @@ to the general fact here.
   instead grabs digits from the stats line and reports a phantom huge count
   (one run misread a real 29,447 as 273,336).
   (Verified 2026-07-17 on v4.18.11; surfaced building the CPG loader, `joern-cpg` skill.)
+- **`redis-cli` exits 0 on a server *error reply*, and prints the error text to STDOUT** — so `$?`,
+  `||` and `set -e` cannot see a rejected or malformed query, and `… >/dev/null` throws away the
+  only evidence there was. Paired control, 2026-09-08, `redis-cli 7.0.15` against
+  `localhost:6379` (module `41811`): `redis-cli PING` → stdout `PONG`, exit 0; `redis-cli
+  NOTACOMMAND` → stdout `ERR unknown command 'NOTACOMMAND'`, **stderr empty, exit 0**;
+  `GRAPH.RO_QUERY kaizen_team "MATCH (n:Agent RETURN count(n)"` → stdout `errMsg: Invalid input
+  'R': …`, stderr empty, **exit 0**; and `( set -e; redis-cli GRAPH.RO_QUERY … >/dev/null; echo … )`
+  runs its trailing `echo` and exits 0. The one case that *does* exit non-zero is a **connection**
+  failure: `redis-cli -p 6399 PING` → empty stdout, `Could not connect to Redis at
+  127.0.0.1:6399: Connection refused` on **stderr**, exit 1. That split is what lets the trap
+  survive review — `||` and `set -e` visibly work against a down server and silently do nothing
+  against a rejected query, so testing the guard the easy way confirms it.
+  **And error replies carry no uniform prefix, so classifying the captured text by prefix does not
+  rescue it.** Paired control, same session, `GRAPH.RO_QUERY` against `kaizen_team`, checking each
+  reply against the `errMsg:*|ERR\ *|WRONGTYPE*` prefix set: a **parse** error
+  (`THIS IS NOT CYPHER`) → `errMsg: Invalid input 'T': …`, caught; an **absent graph** →
+  `ERR Invalid graph operation on empty key`, caught; but two **runtime** errors come back
+  completely bare — `RETURN nosuchfunc(1)` → `Unknown function 'nosuchfunc'` and
+  `MATCH (n:KaizenEntry) RETURN keys(n.fact)` → `Type mismatch: expected Map, Node, Edge, or Null
+  but was String`. Both **missed** by that prefix set, both exit 0. A prefix-matching wrapper
+  therefore reports a real runtime error as success, and the control (a valid query) is the only
+  thing that makes the miss visible.
+  **What a caller must actually do: assert the intended effect positively, or use a client that
+  raises.** Read the write back and check the value you meant to store (`falkordb-py` raises on the
+  error reply and is the simplest correct answer). Keep the `||` for the connect case, and treat
+  any prefix `case` as a courtesy message, never the check. If you must classify a `redis-cli`
+  reply, the discriminator that held across all five probes above is **affirmative**: a successful
+  reply carries a header row plus the `Query internal execution time:` trailer, while every error
+  reply is a single bare line — measured on `GRAPH.RO_QUERY` only, so don't assume it of a
+  `GRAPH.QUERY` write reply without checking. Never `redis-cli … >/dev/null` on a write whose
+  failure matters. Live instance of the outer trap, since fixed:
+  `skills/joern-cpg/scripts/pipeline.sh:199` at `6012ddb` wrote the `CpgBuildInfo` provenance
+  marker as `redis-cli … GRAPH.QUERY "$GRAPH" "$STAMP" >/dev/null`, making a failed stamp invisible
+  after a multi-hour build; `9124a1f` replaced it with an `rq()` helper that captures stdout and
+  `case`-matches those same three prefixes — which closes the discarded-output half and **leaves
+  the bare-runtime-error half open**. `rq()` still returns 0 on a `Type mismatch:` reply.
 - **`GRAPH.EXPLAIN` (unlike `GRAPH.QUERY`/`GRAPH.RO_QUERY`) refuses to run against a graph key
   that doesn't exist yet** — `GRAPH.EXPLAIN <key> "<any syntactically valid query>"` against a
   never-created key errors `ERR Invalid graph operation on empty key` and materializes nothing
