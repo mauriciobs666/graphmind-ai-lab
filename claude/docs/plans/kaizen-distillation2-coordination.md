@@ -76,7 +76,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U20 | analyst chunk B (11: 08-31…09-01 + the first 5 of 09-02) | `a6db6af4910e607bc` (killed by a session rate limit mid-promotion, 09-08; resumed in place by `SendMessage` after the reset — four promotions already on disk, nothing logged, all 11 entries intact; **resumed a second time**, which corrected a real accessor defect and refuted my stamp finding) | in-flight | 7 promoted / 4 discarded, all 11 cleared; `claude/analyst/{kaizen/history.md,kaizen/plan.md,review-techniques.md}`, `skills/agent-standards/claude-code.md`, `skills/python-web-quirks/SKILL.md`, `skills/README.md`, `claude/graph-dba/falkordb-quirks.md`, `claude/data-scientist/lm-studio-model-notes.md`, +3 `kaizen/history.md` | teco re-derivation → **accepted**; my "wrong stamps" finding was itself wrong (see below), the accessor defect it surfaced was real and is fixed | 236.4k tok, 35 tools |
 | U21 | analyst chunk C (10: all of 09-02) | `a9b3f7141f0403e35` (resumed twice) | accepted | 6 promoted / 4 discarded (2 **falsified**), all 10 cleared + curator-cleared my false `7c4e91a2…`; `claude/graph-dba/falkordb-quirks.md`, `claude/analyst/review-techniques.md`, `claude/analyst/kaizen/{history,plan}.md`, `claude/graph-dba/kaizen/history.md` | teco re-derivation → **accepted** (2 resumes: evidence recount, then provenance of an unattributed bullet) | 224.0k tok, 96 tools |
 | U22 | analyst chunk D (11: 09-03) | `a9a502324e0cf4ca5` | accepted | 8 promoted / 3 discarded, all 11 cleared; `review-techniques.md`, `python-web-quirks/SKILL.md`, `agent-standards/claude-code.md`, `lm-studio-model-notes.md`, `skills/README.md`, +3 `kaizen/history.md`; `falkordb-quirks.md` **held** | teco re-derivation → **accepted**, paired-control reproduction of the pipe finding | 238.8k tok, 112 tools |
-| U23 | analyst chunk E (13: 09-07, arrived after pass open) | `a096fa1ae04ee4cae` | in-flight | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
+| U23 | analyst chunk E (13: 09-07, arrived after pass open) | `a096fa1ae04ee4cae` | gated | 12 promoted / 1 discarded, all 13 cleared, **13 entries → 4 edits** (six became one six-part section, three a fold); `claude/analyst/{review-techniques.md,analyst.md,kaizen/history.md}`, `claude/graph-dba/{falkordb-quirks.md,kaizen/history.md}`, `claude/cobb/kaizen/{history,plan}.md` | teco re-derivation → **correction in flight**: two figures in the AST fold don't reproduce (68→65, 42→40); everything else verified clean | 190.6k tok, 66 tools |
 | U24 | analyst chunk F (11 so far: 09-08, still growing) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
@@ -227,7 +227,7 @@ the delegate is wrong, or the probe is — and the second deserves the same
 scrutiny as the first *before* the finding is written down. I committed mine
 (`a74735d`) before testing my own instrument.
 
-## The same defect shape, twice running: right method, wrong evidence line
+## The same defect shape, four times running: right method, wrong evidence line
 
 U20 and U21 failed in exactly the same way, and neither failure was in the
 thinking. U20's retry-safety promotion was correct in substance and cited an
@@ -248,12 +248,48 @@ number appears. `claude/teco/teco.md` already demands "state only figures you
 directly observed" for units routed to a cheap model; both of these ran on the
 inherited model and produced it anyway.
 
+U23 makes it four, and adds two sub-shapes worth naming separately.
+
+**The figure drifted between the report and the promotion.** U23's report to me
+said the package held **40** tuple-target assignments. The text it wrote into
+`review-techniques.md` says **42**. Nothing else changed; the delegate verified
+one number and shipped another. A gate that only re-derives what the *report*
+claims would have passed this — the promoted file is the artifact, and it is
+the one to measure.
+
+**The corrected figure got the attention; the inherited one rode through.**
+U23 correctly refuted the entry's per-file breakdown (6/16/23) and diagnosed
+*why* it was wrong — three scopes in one sentence. Having spent its
+verification there, it passed the entry's **headline** 68 as "exactly right"
+without re-deriving it. It is 65. The report even names the trap it then fell
+into: *"the tell I should have read before drafting a finding was that two of
+its other figures already matched exactly."* Finding one defect in an evidence
+line is the moment the rest of that line is *least* likely to be checked.
+
+Sharpest detail: the paragraph carrying both wrong figures closes by warning
+that "mixing the two scopes inside one evidence line is how this measurement
+goes wrong." Stating the rule and breaking it in the same breath is not
+carelessness — it is what a summary artifact does when it is assembled from
+memory at the end of a long run instead of read off an instrument.
+
 **Standing check for the remaining chunks:** for every promoted section, re-run
-the *evidence*, not the assertion — count the things it says it counted, on an
-instrument you have tested against known data first. Two of the three defects
-this pass turned up were found this way, and the one time I skipped testing my
-own instrument I filed a false finding against a correct delegate
-(see the retraction above).
+the *evidence*, not the assertion — count the things it says it counted,
+**measured in the file that shipped, not in the report** — on an instrument you
+have tested against known data first. Three of the four defects this pass
+turned up were found this way, and the one time I skipped testing my own
+instrument I filed a false finding against a correct delegate (see the
+retraction above).
+
+**And test the instrument even when you have used it before.** Verifying U23 I
+built an AST counter that double-counted nested functions, read 79 where the
+promotion said 68, and had a refutation half-drafted before the discrepancy in
+my *own* two runs stopped me. The fix (enclosing-scope attribution via parent
+chains) gave 65. Had the buggy instrument happened to read 68 I would have
+confirmed a wrong figure instead of catching it — a false *negative* costs
+exactly as much as the false positive of U20 and is much harder to notice. What
+made the result trustworthy in the end was enumerating **five** definitions of
+the same count (65 / 65 / 79 / 290 / 304) and showing none of them yields 68,
+rather than trusting the one that agreed with my hypothesis.
 
 ## Two sessions' uncommitted work inside one file
 
@@ -336,9 +372,57 @@ takes.
 
 The **`MENTIONS`-only backlog stands at 11**, and none of them hangs off a
 produced entry — so no unit clears them incidentally and they need a unit of
-their own.
+their own. They carry **12** edges between them: one node is tagged by both
+`analyst` and `tdd-engineer`, which is why the node and edge counts differ.
+Spread: `analyst` 3, `tdd-engineer` 2, and one each for `qa-engineer`, `tico`,
+`devops`, `architect`, `data-scientist`. They are the oldest population in the
+graph — 08-30 through 09-07 — precisely because every pass so far has been
+organised by producer, and these have no producer.
+
+**The refill is measurable inside a single unit.** U23 reported a post-clear
+census of 76 nodes with `analyst` at 12. I re-queried perhaps twenty minutes
+later, during verification: **78 nodes, `analyst` at 14**. Two arrived while I
+was checking the work of the unit that had just drained that agent's inbox. So
+U24's size is not merely unknown until dispatch — it is unknown *at* dispatch,
+and the only sound close condition is a re-query that comes back empty, not a
+count planned in advance.
 
 ## Follow-ups
+
+- **Live defect in shipped tooling, confirmed by execution — route to
+  `graph-dba` (owner of the `joern-cpg` skill).**
+  `skills/joern-cpg/scripts/pipeline.sh`'s `rq()` helper returns **0 on a
+  runtime-error reply**. `9124a1f` closed the loud half of this trap (the
+  stamp's output was going to `/dev/null`, so an error was invisible) and
+  replaced it with a prefix match at line 304:
+  `errMsg:*|ERR\ *|WRONGTYPE*|*"read only"*|*"read-only"*`. That set is
+  incomplete. FalkorDB returns some runtime errors **bare**, with no prefix at
+  all. I ran the helper rather than reading it — extracted verbatim, pointed at
+  a live graph:
+
+  | probe | reply | `rq()` |
+  |---|---|---|
+  | `RETURN (((` | `errMsg: Invalid input …` | **1** (caught) |
+  | `RETURN nosuchfunc(1)` | `Unknown function 'nosuchfunc'` | **0** (missed) |
+  | `MATCH (n:KaizenEntry) RETURN keys(n.fact)` | `Type mismatch: …` | **0** (missed) |
+
+  A call site with no expected-substring third argument therefore treats a
+  failed query as success — the same class of silent pass `9124a1f` set out to
+  close, surviving in the fix. The general fact (`redis-cli` exits 0 on an
+  error reply and prints it to **stdout**; the paired control is that a
+  *connection* failure exits 1 to **stderr**, so `$?` is reliable for the
+  unreachable case and blind to the rejected one) is now published in
+  `claude/graph-dba/falkordb-quirks.md` by U23. The **fix** is outside `cobb`'s
+  write remit and unclaimed.
+
+  Its live kaizen entry is `b7f3c2a1-9d4e-4c11-8a52-6e0f1d3b7c94` (`analyst`,
+  09-08) — in the graph, out of U23's pinned scope, and **not** to be cleared
+  until the code is fixed.
+
+  This one bears on the pass's own method: I have driven `redis-cli` throughout
+  these units. Every clear was verified by a `count` read rather than by an
+  exit status, so no disposition rests on it — but that was convention, not
+  design, and it held by luck.
 
 - **A second verified full-eight-character `entryId` collision.**
   `b3f2a6d4-9e1c-4a2b-8f7d-2c6e1a9b5d40` (09-01, Claude Code settings merge
@@ -354,6 +438,34 @@ their own.
   read, tag, count, resolve, clear — is keyed on `entryId`, so a short-prefix
   match can silently disposition the wrong entry. Every brief in this pass now
   pins complete ids and says so.
+
+  **U22 found a third, and it defeats the guard K-021 proposes.**
+  `b7f3a1c2-5d84-4e19-9a6f-2c8e71d40b93` (`analyst`, 09-03) and
+  `b7f3a1c2-5d84-4e19-9a06-3c2e8f14d7b0` (`architect`, 09-07) agree on **21
+  characters**, diverging at index 21 (`6f` / `06`). Both are well-formed
+  uuid4s — I checked them against the regex, and both pass — so a **shape**
+  guard cannot see this pair. K-021 now records that limit rather than implying
+  a shape check is sufficient; the real guard is uniqueness at write time.
+
+  **U23 found a fourth, and it is the first with both members live.**
+  `b1f2c7a4-3d59-4e18-9f60-7a2c5d8e41bb` (`architect`, 09-07) and
+  `b1f2c7a4-9e33-4d61-8a52-0c6d5e77a913` (`analyst`, 09-08) share all eight
+  leading characters. Every earlier pair had one member already dispositioned;
+  these are both unprocessed and sitting in two different agents' inboxes, so
+  the collision is now a **live** hazard for the units still to run, not a
+  post-hoc curiosity.
+
+  The architect member is also a near-twin of `b1f0c7a4-9d2e-…`, which U23
+  promoted an hour earlier — same subject (a grep-with-a-count edit table
+  verified by a residual), ids differing by one character inside the first
+  eight. Whichever unit takes it must read the section U23 wrote before
+  promoting it again, or the same technique lands twice.
+
+  Four collisions in one pass, in a graph of a few hundred entries, is not
+  chance. U23's reading — folded into K-021 — is that these ids are **hand-shaped
+  by the writing agent**, so they cluster on whatever the agent recently typed;
+  that is exactly why the pairs keep landing in adjacent chunks of one inbox
+  rather than scattering.
 
 - **Falsified evidence in an `active` plan doc, surfaced by U19 — needs routing
   to `graph-dba` (its owner), not fixed here.**
