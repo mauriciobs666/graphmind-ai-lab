@@ -1448,14 +1448,24 @@ def test_the_envelope_refuses_a_design_effect_below_one(fn, deff) -> None:
         fn((34, 6, 0, 0), design_effect=deff)
 
 
-def test_the_two_envelope_refusals_name_which_layer_raised(deff: float = 0.5) -> None:
-    """Review P8-3 — the ordering half of `test_verdict_refuses_a_design_effect_below_one`, back.
+@pytest.mark.parametrize("deff", [0.5, 0.25, 0.999999, 0.0, -1.0, float("nan")])
+def test_the_two_envelope_refusals_name_which_layer_raised(deff) -> None:
+    """Reviews P8-3 and N1 — the ordering half of `test_verdict_refuses_a_design_effect_below_one`.
 
     Restoring `envelope_arms`' refusal restores a **second** raise on the same precondition, which
     is what that test's retired half existed to order against: `verdict()` must refuse before an
     instrument is selected, not get one layer down and raise the same sentence from there
     (review P3-11). The retired device was an omitted seed and there is no seed any more — but the
     two messages were already distinguishable, so the ordering re-pins directly on them.
+
+    **Parametrized over the domain, because a default argument is not a fixture** (review N1). It
+    shipped as `deff: float = 0.5` — a single un-parametrized value, twelve lines below a sibling
+    already swept over the same six for exactly this reason — and the ordering property was
+    **false at `nan`**: `verdict()`'s own guard spelled `< 1.0`, which is `False` for a NaN, so the
+    value fell through and `envelope_arms` raised its message from one layer down. Caught, but by
+    the wrong layer, which is the precise defect P3-11 installed this check to prevent. The
+    `nan` row fails on the shipped predicate; the other five pass, which is why it needed the sweep
+    rather than a second example.
     """
     below = dataclasses.replace(_rp(40), design_effect=deff, n_effective=80.0)
     with pytest.raises(ValueError) as from_verdict:
@@ -1711,10 +1721,23 @@ def test_the_bootstrap_levels_are_keyword_only_with_no_default(fn) -> None:
     assert params["levels"].default is inspect.Parameter.empty
 
 
-def test_paired_cluster_bootstrap_refuses_a_design_effect_below_one() -> None:
-    with pytest.raises(ValueError):
+@pytest.mark.parametrize("deff", [0.5, 0.25, 0.999999, 0.0, -1.0, float("nan")])
+def test_paired_cluster_bootstrap_refuses_a_design_effect_below_one(deff) -> None:
+    """Rule 4's precondition 4 on `-ml` §3.2d's **continuous** entry point (review N2).
+
+    Parametrized over the same domain its envelope sibling carries, and `nan` is the row that was
+    failing: `< 1.0` is `False` for a NaN, so a missing design effect reached `_widen`, `sqrt(nan)`
+    widened both bounds to `nan`, and the clamp's `max(-1.0, nan)`/`min(1.0, nan)` returned
+    **`(-1.0, 1.0)`** — the full support conjured out of a number nobody supplied, printed as a
+    real interval. Measured on this exact call before the respelling.
+
+    This surface needs no `dataclasses.replace` bypass to reach: `design_effect` is a bare float
+    parameter with no `resolving_power` in the path, and Rule 8's `continuous_verdict()` is
+    specified to call it with a value that arrives from a pack manifest.
+    """
+    with pytest.raises(ValueError, match="precondition 4"):
         paired_cluster_bootstrap(
-            [1.0, 0.0], design_effect=0.5, B=10, seed=1,
+            [1.0, 0.0], design_effect=deff, B=10, seed=1,
             clamp=(-1.0, 1.0), levels=(LEVEL_CI95_LO, LEVEL_CI95_HI),
         )
 

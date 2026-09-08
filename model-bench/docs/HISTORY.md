@@ -2,6 +2,81 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-08 — Implementation-review Pass 9 fix round: the same respelling at the two remaining sites
+
+**What:** the `## Pass 9` findings of `docs/reviews/small-model-benchmarking-impl.md` against
+`7f865e2`, all three in scope — **N1**, **N2** (majors) and **N3** (nit). `modelbench/stats.py`,
+`tests/test_stats.py`, `AGENTS.md`. **550 → 560 tests**, `.venv/bin/ruff check .` clean,
+**5 mutations run one at a time**, 4 killed and 1 surviving **by design** (P8-1's control again).
+P8-1 remains held, blocked on `-ml` v1.19 Rule 4a's separate unit.
+
+**One sentence for both majors: the Pass 8 round diagnosed the predicate correctly and respelled it
+at one of the three sites that carried it.** `resolving_power` was already NaN-safe before that
+round — which is why the "two spellings now coexist" worry it was briefed against turned out
+backwards, the gate having checked `cc28d48` and found the safe spelling already there, comment and
+all. `envelope_arms` joined it. `verdict()` and `paired_cluster_bootstrap` did not, and both were
+live NaN holes.
+
+**N1 (major) — `verdict()`'s precondition 4 was NaN-blind, so the layer-ordering property the
+previous round restored was false at exactly one value.** `stats.py:1126` spelled
+`resolving.design_effect < 1.0`, which is `False` for a NaN, so the value fell through and
+`envelope_arms` raised **its** message one layer down. Reproduced before fixing: at `deff=0.5`
+`verdict()` raises `verdict() precondition 4: …`, at `deff=nan` it raises
+`design_effect must be >= 1.0 (-ml §3.4 Rule 4, precondition 4)` — the inner layer's sentence. That
+is precisely the trap review P3-11 installed this check to prevent, alive again at one input.
+`test_the_two_envelope_refusals_name_which_layer_raised` could not see it because it shipped with
+`deff: float = 0.5` as a **default argument** rather than a parametrization — twelve lines below a
+sibling already swept over `nan` for this exact reason. Now parametrized over the same six values;
+the `nan` row fails on the old predicate and passes on the new one.
+
+**N2 (major) — `paired_cluster_bootstrap` returned the full support as an interval for a NaN design
+effect.** `stats.py:228`, same `< 1.0`. Reproduced verbatim before fixing:
+`paired_cluster_bootstrap([1.0, 0.0, -1.0, 1.0], design_effect=nan, B=50, seed=1,
+clamp=(-1.0, 1.0), levels=(LEVEL_CI95_LO, LEVEL_CI95_HI))` returned **`(-1.0, 1.0)`** — `sqrt(nan)`
+widens both bounds to `nan`, and the clamp's `max(-1.0, nan)`/`min(1.0, nan)` return the clamp's own
+endpoints, so a number nobody supplied prints as a maximally wide real interval. This is the same
+symptom that justified the previous round's deviation, and it needs **no `dataclasses.replace`
+bypass to reach**: `design_effect` is a bare float parameter with no `resolving_power` in the path,
+on `-ml` §3.2d's **continuous** entry point that Rule 8's `continuous_verdict()` is specified to
+call with a value arriving from a pack manifest. `test_paired_cluster_bootstrap_refuses_a_design_
+effect_below_one` gains the `parametrize` its envelope sibling twenty lines away already carried,
+plus a `match="precondition 4"` it lacked.
+
+**N3 (nit) — `AGENTS.md` described the NaN-safe guard using the NaN-unsafe spelling.** In the
+always-loaded file, in the round whose whole finding is that `< 1.0` is the wrong predicate. Fixed
+wider than the three words asked for, because N1 and N2 make the wider version the live constraint:
+the bullet now names **all four sites** that spell it `not … >= 1.0`, says why (a NaN widens to
+`nan`, which the clamp turns into full support), and says plainly *do not simplify any of them*.
+
+**Line pins — none moved.** Plan §4 S1e Tables E, G and H pin `stats.py:261`, `:382`, `:387`,
+`:413`, `:896`, `:1168` and `:1184-1187`. Both source edits were made **in place**, one line for
+one line (`git diff --numstat` reads `2 2`), the file is 1418 lines before and after, and all ten
+pinned lines are byte-identical — verified by diffing the extracted lines, not by inspection. **No
+re-pinning is required.** The NaN rationale went into an end-of-line comment at each site rather
+than a comment block precisely to keep the edits line-count-neutral; both lines are 93 and 95
+characters against the project's `line-length = 100`.
+
+**Attributed delta, +10**, entirely from turning two single-value tests into sweeps:
+`test_the_two_envelope_refusals_name_which_layer_raised` 1 → 6 ids and
+`test_paired_cluster_bootstrap_refuses_a_design_effect_below_one` 1 → 6 ids. No test was retired.
+
+**Mutation table** — each `cp` aside, mutated, run alone, `cp` back, `diff -q` byte-identical before
+the next. Both majors were verified test-first: the new test fails on the shipped predicate before
+`stats.py` is touched.
+
+| # | Mutation | Result |
+|---|---|---|
+| N1-M1 | `verdict()`'s guard reverted to the NaN-blind `< 1.0` | killed — `…which_layer_raised[nan]` |
+| N1-M2 | `verdict()`'s message stops naming itself (layers indistinguishable) | killed — `…which_layer_raised[0.5]` |
+| N2-M1 | `paired_cluster_bootstrap`'s guard reverted to `< 1.0` | killed — `…below_one[nan]` |
+| N2-M2 | that guard deleted outright | killed — `…below_one[0.5]` |
+| N-M5 | **control** — P8-1's tie-break `<=,>=` → `<,>` | **SURVIVES, as intended** (560 passed) |
+
+N1-M1 and N2-M1 are the review's own acceptance test — break the guard back and confirm the new
+assertion fires — and each is caught by the `nan` row alone, which is the evidence that the sweep
+rather than a second example was the necessary shape. N1-M2 pins the property that makes the
+ordering checkable at all: the two layers' messages must stay distinguishable.
+
 ## 2026-09-08 — Implementation-review Pass 8 fix round: two restored refusals, one composition, five new assertions
 
 **What:** the `## Pass 8` findings of `docs/reviews/small-model-benchmarking-impl.md` against

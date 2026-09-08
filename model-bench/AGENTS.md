@@ -80,11 +80,14 @@ substitute one.
   for a difference of proportions and false for `sep_z`. **`PackRef.seed`'s consumer is `-ml`
   §3.2d's continuous bootstrap alone** — the paired *binary* interval is a closed form that takes
   no seed, so `report.py` neither passes nor prints one, and re-adding a seed parenthetical there
-  would name a resample that does not run. `resolving_power` refuses `design_effect < 1.0` at
-  construction, not `<= 0` — below 1 it *inflates* effective *n* and shrinks both printed bounds;
-  `verdict()` and `envelope_arms` refuse it again at their own entry points, and only `verdict()`'s
-  message names itself, which is what keeps the two orderable. The legacy fallbacks live in
-  `from_dict` only, where they are §3.4.3 reader rules.
+  would name a resample that does not run. `resolving_power` refuses any `design_effect` **not
+  `>= 1.0`** at construction, not `<= 0` — below 1 it *inflates* effective *n* and shrinks both
+  printed bounds. **The predicate is that way round at all four sites** — `resolving_power`,
+  `verdict()`, `envelope_arms`, `paired_cluster_bootstrap` — because `< 1.0` is `False` for a NaN,
+  and a NaN widens both bounds to `nan`, which the clamp turns into the full `(-1, 1)` support
+  printed as a real interval; do not simplify any of them. Only `verdict()`'s message names itself,
+  which is what keeps the layers orderable. The legacy fallbacks live in `from_dict` only, where
+  they are §3.4.3 reader rules.
 - **An item's outcome for a metric is *declared*, never inferred.** `ItemResult.scored_outcome`
   is the only place that decides, and it has three answers: `metric` absent from `scoreable`, or
   declared `False`, is **no outcome** (the row leaves the paired table and lands in the §4.3

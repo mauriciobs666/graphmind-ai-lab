@@ -225,7 +225,7 @@ def paired_cluster_bootstrap(
     `sep_z` comparison, which reaches this entry point directly, has no metric aggregate to ask,
     and states `clamp=None`.
     """
-    if design_effect < 1.0:
+    if not design_effect >= 1.0:  # NaN-safe: a NaN here returned the full support as an interval
         raise ValueError("design_effect must be >= 1.0 (-ml §3.4 Rule 4, precondition 4)")
     lo, hi = paired_bootstrap(diffs, B=B, seed=seed, levels=levels)
     return _widen((lo, hi), sum(diffs) / len(diffs), math.sqrt(design_effect), clamp=clamp)
@@ -1123,7 +1123,7 @@ def verdict(
             "is the *pre-registration* alpha and it is unchanged by v1.6: the floor moved to "
             "alpha_family, the MDD did not (-ml §3.4 Rule 4, precondition 3)"
         )
-    if resolving.design_effect < 1.0:
+    if not resolving.design_effect >= 1.0:  # NaN-safe: a NaN fell through to the arms' own raise
         # Rule 4's precondition 4, checked **here and before any instrument is selected**. It is
         # not redundant with `paired_cluster_bootstrap`'s identical bound: that one fires only on
         # the path that reaches the resample, and it fires after the branch has already been taken
