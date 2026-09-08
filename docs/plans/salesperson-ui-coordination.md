@@ -159,7 +159,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U42a** — 6 sites in `freshness.md` + the check-0 gate decision | `cobb` | `a1cfcb25341f0b0bb` | **delivered — committed `81b43cd`** (+66/−19) | **9** sites, not 6; `MARKER_ORIGIN` added to the documented query; shape set = **5** | `analyst` Pass 4 (pairwise) — **in flight** | 80k tok / 28 tools |
 | **U42b** — 3 sites in the manual; `cpg_falkorchat` is no longer a live pre-fix example | `tico` | `a4e2b1a2f544180d8` | delivered — held for pairwise gate | `b47c84a` — **5** sites, shape set = **6** | `analyst` Pass 4 (pairwise) — **in flight** | 76k tok / 19 tools |
 | **Pass 4** — the pairwise shape-set gate: do `freshness.md` and `graph-ontology.md` teach the same set of marker shapes? | `analyst` (**resumed** — wrote m1–m5 and Passes 1–3; the only party holding both sides) | `a98a748e49a559ead` | **accepted — committed `d4214c3`**. `freshness.md` **needs changes** (1 major), `graph-ontology.md` **approve with suggestions**. **Shape sets are two partitions of one set, no omission either way** — proved by enumerating each document's *classification surface* and walking both orderings against the two live markers. **P4-1: the fifth-generation false mechanism, inside the fourth's own fix** | `docs/reviews/cpg-provenance-stamp.md` `## Pass 4` | — (is the gate) | 238k tok / 14 tools |
-| **U45** — P4-1: extend the stamp's `= NULL` list to the five hand-authored keys, so the docstring's own discipline covers properties that postdate it | `cobb` | `a1cfcb25341f0b0bb` (same thread) | **queued — explicitly told not to start**; P4-1's doc disposition depends on whether the code changes | `skills/joern-cpg/scripts/git-provenance.sh`, then `freshness.md`'s Limits bullet | `analyst` Pass 5 | — |
+| **U45** — P4-1 / K-023: make the hybrid **impossible** (clear the 5 hand-authored keys) or **detectable** (`markerWrittenAt`) — a fork I handed to `cobb` rather than settling | `cobb` | `a1cfcb25341f0b0bb` (resumed) | in-flight (dispatched 2026-09-08). Two uncommitted `freshness.md` hunks ride in its commit; the file is **knowingly self-contradictory in the tree** until it lands | `skills/joern-cpg/scripts/git-provenance.sh`, `freshness.md`, K-023 | `analyst` Pass 5 (`cpg-provenance-stamp.md`) | — |
+| **U42c** — kaizen bookkeeping, retraction handled | `cobb` | `a1cfcb25341f0b0bb` | **accepted — committed `20b8770`**. The false learning **was never written** — zero graph writes when the retraction landed. Reached P4-1 **independently** from `git-provenance.sh:138` minutes earlier, and verified my quoted docstring instead of taking it | K-022 rewritten (4→5 instances), K-023 filed, 3 `:KaizenEntry` | — (raw capture) | 122k tok / 18 tools |
 | **U46** — P4-5: `cpg_falkorchat`'s own `NOTE` cites a superseded version of the check-0 gate | `graph-dba` | — | queued (fold into the next marker touch — not worth a graph write of its own) | the live marker's `NOTE` | — | — |
 | **U42c** — the kaizen bookkeeping my own brief fenced off: `:KaizenEntry` + `claude/cobb/kaizen/history.md` | `cobb` | `a1cfcb25341f0b0bb` (resumed) | in-flight — **retraction sent mid-run**: one of the two learnings I suggested is false (P4-1), asked to clear/correct it if already written | `kaizen_team` + `claude/cobb/kaizen/history.md` | — (raw capture; `cobb` distills) | — |
 | **U44** — route the `Properties removed` double-count quirk into `falkordb-quirks.md` | `graph-dba` | — | queued (blocked: concurrent session holds the file) | `claude/graph-dba/falkordb-quirks.md` | — | — |
@@ -168,7 +169,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | gated — fix blocked on U40 | `e6fa20c` — 9 files, +895/−44, 12 tests | `analyst` Pass 17 → **needs changes**, 2 majors (`20e138e`) | 305k tok / 111 tools |
 | **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | **accepted** | `d1eaa7f`+`d01f22e`+`94c1578` — plan **v1.29** | `analyst` Pass 19 → **approve** (`8418a9f`) | 528k tok / 77 tools |
 | **U43** — retract the false CPython deadlock fact from `kaizen_team` before it is promoted | `cobb` | `a69330f81cf6048ae` | delivered | `de8b5ac` — 2 entries cleared, promoted split by audience | `analyst` (prompt edit) — queued | 118k tok / 28 tools |
-| **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7, P18-6 | `coder` | `a31456adeff4788ea` | in-flight (dispatched 2026-09-08) | `storefront.py`, `storefront_api.py`, both test files, `config.py`, `SERVER.md`, `HISTORY.md` | `analyst` Pass 20 + `qa-engineer` | — |
+| **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7, P18-6 | `coder` | `a31456adeff4788ea` | **delivered — committed `699ef52`** (7 files, +1032/−136). Suite **2639** teco-verified solo (baseline 2629, +10 net); `ws:acme` 871 intact; `reference` re-seeded. **Tripwire re-measured by me, not taken on report** — injected reach → guard red, file restored to md5. 18 mutations, 1 survivor (M10) which was a **missing test**, now red against it | `storefront.py`, `storefront_api.py`, both test files, `config.py`, `SERVER.md`, `HISTORY.md` | `analyst` **Pass 20 (fresh)** — in flight; then `qa-engineer` | 286k tok / 114 tools |
+| **Pass 20** — gate S9a-fix. **Fresh by design**: Pass 17 *prescribed* reserve-then-write, so its author judging this diff is producer-self-review one seat over (the U24 precedent) | `analyst` (**fresh**) | `afc3c09ccd5b50340` | in-flight (dispatched 2026-09-08) | `docs/reviews/salesperson-ui-impl.md` `## Pass 20` | — (is the gate) | — |
 | **S9f** — `STOREFRONT_QUIESCE_S`'s docs describe a quiesce that S9a made live | `tico`/`coder` (tbd) | — | queued (held behind Pass 17) | `config.py` + `docs/SERVER.md` prose | `analyst` (fold into Pass 17 re-check) | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
 | **S9c** — the dead-turn latch `turn.lastTurn` and its lifecycle | `coder` | — | queued (behind S9b) | `storefront.py`, `storefront_api.py`, tests | `analyst` | — |
@@ -3776,3 +3778,86 @@ when it was written, and it makes **both** documents' guarantee true rather than
 hedge. I have queued it as U45 and told `cobb` explicitly **not** to start it, and not to touch the
 Limits bullet either: P4-1's documentation disposition depends on whether the code changes, and I am
 not having it write a second sentence for the fix to falsify.
+
+## S9a-fix: the tripwire is the one check I ran myself, again
+
+Delivered and committed as `699ef52` — 1,032 insertions across seven files, suite **2639** against a
+2,629 baseline, `ws:acme` untouched at 871, `reference` re-seeded after the run wiped it. The
+implementer ran 18 mutations and reported one survivor.
+
+I re-measured **one** thing rather than the eighteen: the service-layer reach guard. Injecting
+`self._services.start_workflow_run(ctx)` as the first statement of `_run_turn` turns it red, and
+`storefront.py` restores to `020bcd89…f957ff`. I picked that one because it is the guard this
+coordination has caught being **inaccurate as written** in three consecutive passes (13, 14, 15) —
+the shape where a stated reach is wider than the mechanism. A guard with that history does not get
+integrated on a report, and the report happened to be right.
+
+The survivor is worth recording because the implementer's handling of it is the behaviour I want
+more of. M10 derived a queue position for `thinking` turns as well as queued ones, and survived —
+because a turn ordinarily starts in booking order, so a `thinking` turn *usually* has no earlier
+queued one and both readings answer `0`. It did not classify that as an equivalent mutant and move
+on. It built the arrangement where the two readings disagree, wrote the test, and re-ran M10 against
+it: red. A survivor that is a **missing test** rather than a false alarm is only distinguishable by
+someone willing to construct the disagreeing case, and the easy call was available and declined.
+
+## Pass 20 goes to a fresh reviewer, on a precedent that cost this coordination once
+
+Pass 17 did not merely find the two majors S9a-fix repairs — it **prescribed** the shape of the fix,
+reserve-then-write with a per-booking token, which became plan v1.29 and then this commit. Resuming
+it would put the author of a prescription in judgment of its implementation. It sits at 224k tokens
+and 70 tool uses, under my own resume threshold, so the arithmetic said resume and I overrode it.
+
+The precedent is in this document. At U24 I dispatched fresh for exactly this reason — the Pass 3–6
+reviewer had prescribed the fix under test — and the fresh reviewer found the defect class was **not**
+closed and that a third instance would otherwise have shipped. The resume threshold is about context
+cost; producer-self-review is about independence, and the second is not a special case of the first.
+Everything Pass 17 knows is on disk in the review file, which is the whole reason we write reviews to
+paths instead of passing them in briefs.
+
+I gave the fresh reviewer one scope boundary it would otherwise have reported as a blocker, and one
+sharper question underneath it. `turn.lastTurn` appears in S9's interface cell **and in a substantial
+clause of S9's own done-condition**, but it is S9c — step S9 is one plan row that I split into
+S9a–S9f for dispatch sizing, so S9's done-condition is evaluated at the end of that chain, not after
+this sub-unit. Its absence here is not a defect. What *is* worth asking is whether S9a-fix has
+**foreclosed** it: `set_turn_state` changed shape, `clear_turn` is gone, the map entry is
+booking-owned, and S9's done-condition requires a latch that survives the very call that deletes the
+`_turns` entry. That is the question the sub-unit split creates and only a reviewer holding both the
+plan row and the delivered code can answer.
+
+## The fork I handed back to `cobb` instead of settling
+
+P4-1's fix has two coherent answers and I own neither. Make the hybrid **impossible** — clear the five
+hand-authored keys on every stamp, the gate's recommendation and the script docstring's own principle
+applied to keys that postdate it. Or make it **detectable** — leave the stamp alone and discriminate
+on `markerWrittenAt` against `builtAt`, which is what `cobb`'s two uncommitted hunks already half-build.
+
+They are alternatives, not a sequence, and the trap is that doing both looks safest: if the hybrid
+becomes impossible, the discriminator is dead weight in the one document whose recurring failure is
+excess plausible prose. I gave `cobb` the considerations I could see — that the code fix silently
+drops deliberately-written `NOTE`s on the first rebuild of both live markers, including
+`cpg_deprecated_salesperson`'s `STATUS`/`RENAMED_FROM`, which describe the *graph's identity* rather
+than the build — said which way I lean and how loosely, and left the call with the party that owns
+the script, the skill and the docs.
+
+`cobb` had stopped exactly where I asked and flagged the consequence rather than letting me find it:
+the file is now **self-contradictory** in the working tree, its new table row pointing "See Limits" at
+the sentence Pass 4 falsified. Its argument for not reverting is the right one — a contradictory file
+is more detectable than a uniformly wrong one — and I am holding both hunks out of `main` so they land
+in the same commit as whichever fix it chooses.
+
+## The retraction arrived after the correction
+
+The part of this I did not expect: `cobb` had already found P4-1 itself, from `git-provenance.sh:138`,
+minutes before my message reached it — and had begun correcting the file. So the retraction was
+convergent rather than relayed, which is a stronger result than either alone. It then **verified the
+docstring I quoted rather than taking it on trust**, and found the invariant stronger than I had
+stated it: `git-provenance.sh:110-122` already carries the rule *and* the identical failure mode one
+field-set narrower — an `--append` re-stamp leaving a stale `SOURCE_COMMIT` describing a build that no
+longer exists. The fix is not an extension of that principle. It is that principle reaching keys that
+postdate it.
+
+Zero graph writes had been made when the retraction landed, so the false fact never reached shared
+memory and there was no `entryId` to clear. Three entries were filed instead, and `cobb` deliberately
+kept the *corrected mechanism* alongside the meta-lesson — declining to file only the moral, on the
+grounds that losing the mechanism is the same trade that produced the defect. That is the right
+instinct and it is the opposite of the one I had when I suggested the learning.
