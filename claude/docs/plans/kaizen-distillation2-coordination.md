@@ -73,7 +73,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U18 | teco chunk C (13: 09-03…09-06) | `a881239125792e0e0` | accepted | `claude/teco/teco.md` (5 in-place sharpenings + 1 new bullet), `skills/agent-standards/claude-code.md` (agentId resolution scope), `claude/teco/kaizen/history.md`+`plan.md` (K-016 → blocking), 3x `MENTIONS` (2 analyst, 1 data-scientist), graph cleared | none → — | 179.1k tok, 68 tools |
 | U18b | teco chunk D (14: 09-07, all arrived after pass open) | `adcb31af6bc3fc428` | accepted | `claude/teco/teco.md` (12 statements from 9 entries, **zero new bullets** — 11 lines changed, 11 removed); `skills/agent-standards/claude-code.md` (2 permission-classifier entries merged); `claude/teco/kaizen/history.md`+`plan.md`; 5 `MENTIONS` edges over 4 entries (3 tdd-engineer, 2 analyst); 10 nodes deleted, 4 `PRODUCED` resolved — **`teco` closed out, 0 produced / 0 mentioned** | none → — | 224.6k tok, 69 tools |
 | U19 | analyst chunk A (12: ≤ 08-30) | `adb247a3e028c0606` (killed by a session rate limit at its first tool call, 09-07; resumed in place by `SendMessage` 09-08 — nothing had landed, all 12 edges intact) | accepted | `claude/graph-dba/falkordb-quirks.md` (3 entries: 2 folded, 1 new regex bullet) + `kaizen/history.md`; `claude/analyst/review-techniques.md` (2, both edits to existing material — one **corrected a wrong import-resolution mechanism the file had been carrying**) + `kaizen/*`; **7 discarded**, 3 of them additionally carrying a false or misattributed claim; 1 `MENTIONS`→`devops`; 11 nodes deleted, 1 `PRODUCED` resolved. **Zero new bullets in any always-loaded prompt** — `analyst.md` and `claude/AGENTS.md` untouched | none → — | 184.9k tok, 50 tools |
-| U20 | analyst chunk B (11: 08-31…09-01 + the first 5 of 09-02) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
+| U20 | analyst chunk B (11: 08-31…09-01 + the first 5 of 09-02) | `a6db6af4910e607bc` | in-flight | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U21 | analyst chunk C (10: the remaining 09-02) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U22 | analyst chunk D (11: 09-03) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U23 | analyst chunk E (13: 09-07, arrived after pass open) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
@@ -168,6 +168,21 @@ that dies between them leaves an entry harmlessly duplicated or partially
 resolved, never silently lost. A run that dies before either leaves nothing.
 
 ## Follow-ups
+
+- **A second verified full-eight-character `entryId` collision.**
+  `b3f2a6d4-9e1c-4a2b-8f7d-2c6e1a9b5d40` (09-01, Claude Code settings merge
+  semantics) shares all eight leading characters with
+  `b3f2a6d4-8c1e-4a7f-9d2b-1e6f5a0c3d7a` (08-29, `conftest.py` fixtures,
+  discarded and deleted in U19) — different facts, different dates, different
+  subjects, and they landed in **adjacent chunks of the same agent's inbox**.
+  The first collision (`b7e41c92-3f8a…` / `b7e41c92-3d5a…`) was already
+  enough to justify `claude/cobb/kaizen/plan.md` K-021, an `entryId`-shape
+  guard in `cypher-mcp/server.py`'s write authorizer; two independent
+  collisions in one pass, in a graph of a few hundred entries, make the case
+  that eight characters is simply not a key here. Every §5 curator operation —
+  read, tag, count, resolve, clear — is keyed on `entryId`, so a short-prefix
+  match can silently disposition the wrong entry. Every brief in this pass now
+  pins complete ids and says so.
 
 - **Falsified evidence in an `active` plan doc, surfaced by U19 — needs routing
   to `graph-dba` (its owner), not fixed here.**
