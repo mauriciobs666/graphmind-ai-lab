@@ -1,6 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.19 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.20 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+
+2026-09-08 — v1.20: the plan gate's `## Pass 10` (`docs/reviews/small-model-benchmarking.md`, `913e159`) closed in full on §4 S1e **Table H** — 1 blocker, 2 majors, 1 minor, 1 nit, none carried, all five prose rather than arithmetic. **P10-1 (blocker):** the site list omitted the one **shipped test** the edit falsifies — `test_neither_printed_bound_is_ever_tighter_than_either_arm` compares the printed envelope against the arms **directly**, which is false once the arms come back unclamped (measured **0/38/78** failures at DEFF 1.0/1.2/2.0 against a 0/0/0 control) — so it gains a row, **pinned by test name and not by line** because a parallel unit is editing that file, moving the comparison to the **clamped** arms, which is Rule 4a's own restatement and not a weakening; command 2 already returned the line, so the enumeration was sound and only the hand-written row list was short. **P10-3:** the `stats.py:413` row claimed a prescribed post-edit spelling and never stated it — the only statement was inside residuals 2 and 3, which pinned two **locals the plan never fixed** while Rule 4a calls the same quantities `u_lo`/`u_hi`, so a faithful edit would have read 0 against a target of 1; the row now **writes the body out** and the residuals are restated over `SUPPORT_DIFF_PROPORTIONS[0]`/`[1]`, which depend on no introduced name. Generalised at **§7 rule 5(b): a third-form residual is only a residual if the table writes out the text it pins.** **P10-2:** a `support bound` token renders **with its boundary value** — `support bound (-1)`, the note's assertion 10 verbatim — not bare, and the renderer's source for that value is named as `SUPPORT_DIFF_PROPORTIONS` rather than left to become a second home for the support in `report.py`. **P10-4:** the docstring row extends from one paragraph to **three**, and v1.19's claim that the edit makes `envelope_arms`'s docstring sentence *true* is corrected — one clause becomes true and the other becomes false. **P10-5:** the fifteen-of-twenty sentence is re-derived — fifteen is the file's whole share and **four** are arm-value call sites. Table H is ten site rows; residuals stay six and DC-12 twenty-four.
 
 2026-09-08 — v1.19: **note v1.19's §3.4 Rule 4a folded in as §4 S1e Table H** — the `(-1, 1)` support moves off the envelope's arms onto the composed interval, `bound_by` gains a third token on a strict comparison, and the `- decided by:` renderer stops attaching a level to a bound no level produced. Eighth table; two enumerating commands, nine site rows, **six** residuals, all counts at `7f865e2`. Closes impl-gate P8-1, with P8-5 as collateral. **Table E does not move**: its pair pins `_widen`'s body, which Rule 4a does not touch — checked, not assumed, and both read 1. §4 S1e is eight tables and DC-12 twenty-four residuals; both standing sweeps re-run over the six. §7 rule 5(b) gains the exact-text-over-line-pin virtue, now paid for twice. One §7 rule 3 raise opened: Rule 4a cites *plan-gate* P8-1 where it means *impl-gate* P8-1.
 
@@ -3943,7 +3945,9 @@ applied **once, to the printed interval**, never to an input of a composition. H
 **(iii)** `bound_by` becomes a **three**-token closed set with `"support bound"` added, computed
 from the composed *unclamped* value against the support on a **strict** comparison; and
 **(iv)** the `- decided by:` renderer must not attach a `p=` clause to a `support bound` token,
-because no level produced it. The note's headline scopes the work and is worth carrying here in one
+because no level produced it — and must render that token **with the support's boundary value**
+instead, `support bound (-1)`, which is the string the note's assertion 10 pins verbatim
+*(v1.20, plan-gate P10-2: "no `p=` clause" is true and was incomplete)*. The note's headline scopes the work and is worth carrying here in one
 clause: **arms-versus-composed is immaterial to the statistics and material only to the audit
 bullet** — the printed interval, its coverage, its width and every verdict are bit-identical either
 way, verified over 173 472 combinations — so this is a **reporting** correction, and no number in
@@ -3967,20 +3971,27 @@ breaks** *(both re-run at `7f865e2`)*:
 | 2 | `grep -rFn envelope_arms modelbench tests --include='*.py'` | **20** | `tests/test_stats.py` 15, `modelbench/stats.py` 5 |
 
 Command 2 is rule 5(a)'s token-free coverage and is not a flourish: the arm clamp lives at two
-`_widen` call sites that carry **no** `bound_by`, and fifteen of `test_stats.py`'s twenty
-`envelope_arms` lines are the arm-level assertions Rule 4a's assertion 1 rewrites — none of which
-command 1 reaches.
+`_widen` call sites that carry **no** `bound_by`, and `tests/test_stats.py` holds **fifteen** of
+that command's twenty lines — none of which command 1 reaches. **Of those fifteen, four are
+arm-value call sites** (`:1260`, `:1338`, `:1361`, `:1422-1423`), the rest being one import (`:38`),
+two `parametrize` ids (`:1429`, `:1502`), five lines of docstring prose (`:1437`, `:1454`, `:1477`,
+`:1980`, `:1983`) and two precondition-raise calls Rule 4a does not touch (`:1464`, `:1498`).
+*(v1.19 wrote "fifteen … are the arm-level assertions", which was wrong twice — fifteen is the
+file's whole share rather than a subset, and only four of them are call sites; the command's
+coverage claim was unaffected but the sentence was not reproducible. Plan-gate P10-5, and it is
+where P10-1 hid: `:1361` is one of the four.)*
 
 | Site | Edit | Found by |
 |---|---|---|
 | `stats.py:382`, `:387` — `envelope_arms`'s two `_widen` calls | `clamp=(-1.0, 1.0)` → **`clamp=None`** on both arms. The comment above them ("Both arms keep the identical clamp") goes with them; Rule 4 still requires both arms widened the same way, and `None` on both is the same way | 2 |
-| `stats.py:413` — `_compose`'s body | clamps its own result to `SUPPORT_DIFF_PROPORTIONS` and returns **`(interval, bound_by)`**. **The post-edit spelling is prescribed rather than left open, because two of this table's residuals are stated over it** — see the residual block; a residual over a spelling the implementer may vary is a trap (§7 rule 5(b)), and Table C's `:159` row strikes the same bargain for Table G | 1 |
-| `stats.py:405-411` — `_compose`'s docstring | the paragraph that says "**it is not applied here yet**" and forward-references this table is **rewritten to describe what the function now does**. It is a row because a docstring asserting the opposite of its own body is impl-gate P8-5's finding one revision later, and because `7f865e2` deliberately left it as the seam | 1 |
+| `stats.py:413` — `_compose`'s body | clamps its own result to `SUPPORT_DIFF_PROPORTIONS` and returns **`(interval, bound_by)`**. **The post-edit spelling is prescribed, and prescribing it means writing it here** *(v1.20, plan-gate P10-3 — v1.19 claimed the prescription and left the text only inside two residual commands, which is not a prescription at all)*: <br>`u_lo, u_hi = min(mover[0], exact[0]), max(mover[1], exact[1])` <br>`bound_by = (…)`  — Rule 4a point 4's two branches, computed from `u_lo`/`u_hi` against the support <br>`return (max(SUPPORT_DIFF_PROPORTIONS[0], u_lo), min(SUPPORT_DIFF_PROPORTIONS[1], u_hi)), bound_by` <br>**The local names are the note's** — `u_lo` and `u_hi` are Rule 4a point 4's own notation for the composed unclamped bounds, so an implementer reading the rule this table says it does not restate writes the same names the residuals expect. **The support is subscripted, never unpacked**: `lo_b, hi_b = SUPPORT_DIFF_PROPORTIONS` would be a faithful edit that residuals 2 and 3 cannot see. Table C's `:159` row strikes the same bargain for Table G, and writes its spelling out in the row, which is why Table G's residuals over it are safe | 1 |
+| `stats.py` — **three** docstring paragraphs, in the two functions Rule 4a restructures *(extended from one at v1.20, plan-gate P10-4)* | `_compose`'s **last** paragraph — the one that says "**it is not applied here yet**" and forward-references this table — is rewritten to describe what the function now does; `7f865e2` deliberately left it as the seam. Two more go stale with the same edit and v1.19 named neither. `_compose`'s **first** paragraph says `verdict()` "needs the arms themselves **for the attribution** and so cannot go through `conservative_envelope`": the conclusion survives, the reason does not — after Rule 4a the attribution comes back *from* `_compose`. And `envelope_arms`'s docstring says "`verdict()` **reads the attribution off the same pair**": after Rule 4a `verdict()` reads no attribution, it **receives** one, and the attribution is no longer a function of the arms pair alone — the third token comes from the composed value against the support. A docstring asserting what its body no longer does is impl-gate P8-5's finding, which this table closes as collateral, so it does not get to reintroduce it | 1, 2 |
 | `stats.py:896` — `Verdict.bound_by` | `tuple[str, str] \| None` → **`BoundBy` pair \| None**; the comment gains the third token's meaning — *the `√DEFF` widening ran off the parameter space, so the interval carries no information in that direction* (`-ml` Rule 4a), which is the one thing a reader of the bullet cannot infer | 1 |
 | `stats.py:1168` — `verdict()`'s local declaration | the same retype | 1 |
-| `stats.py:1184-1187` — `verdict()`'s inline attribution | **deleted.** The attribution is computed once, in `_compose`, from the composed **unclamped** value against the support, on a **strict** comparison. `verdict()` takes both halves of `_compose`'s return and recomputes nothing — which is what finally makes `envelope_arms`'s docstring sentence true (impl-gate P8-5) | 1, 2 |
-| `report.py:338` — the `- decided by:` bullet | the `p=` clause attaches to the exact-bootstrap arm **only**; both `"MOVER-D"` and `"support bound"` render bare. Today's condition tests one token against one name, so a third token falls into the `p=` branch and prints `support bound, p=0.025` — the note's assertion 10 is exactly this string | 1 |
+| `stats.py:1184-1187` — `verdict()`'s inline attribution | **deleted.** The attribution is computed once, in `_compose`, from the composed **unclamped** value against the support, on a **strict** comparison. `verdict()` takes both halves of `_compose`'s return and recomputes nothing — which is what finally makes `envelope_arms`'s **no-caller-recomputes-another's-arithmetic** clause true (impl-gate P8-5). *(v1.20, plan-gate P10-4: v1.19 said "docstring sentence", which over-claimed — the sentence's **other** clause, that `verdict()` reads the attribution off the arms pair, is **falsified** by the same edit and is rewritten by the docstring row above. One clause becomes true and one becomes false; only the first is this row's.)* | 1, 2 |
+| `report.py:338` — the `- decided by:` bullet | the `p=` clause attaches to the exact-bootstrap arm **only**, and a `support bound` token renders **with its boundary value and never with a level** — `support bound (-1)` on the lower bound, `(1)` on the upper *(v1.20, plan-gate P10-2 — v1.19 said "renders bare", which the note's assertion 10 forbids; the note's sentence is that a support token never carries a **level**, not that it carries nothing)*. **So the renderer needs the support *value*, and its source is named here rather than re-spelled**: `SUPPORT_DIFF_PROPORTIONS`, imported from `stats` exactly as `report.py` already imports `LEVEL_CI95_LO`/`LEVEL_CI95_HI` for this same expression. Writing `-1` as a literal in `report.py` would be a second home for the support, which is the one-arithmetic-two-homes shape this table is closing impl-gate P8-5 for. Today's condition tests one token against one name, so a third token falls into the `p=` branch. **The note's assertion 10 pins the *correct* bullet verbatim** — `- decided by: conservative envelope (lower bound: support bound (-1); upper bound: MOVER-D)` — and `support bound, p=0.025` is what that assertion **kills**, not what it is | 1 |
 | `stats.py` — `conservative_envelope` | returns `_compose(...)`'s **first element**. No public signature changes and no new required parameter (`-ml` Rule 4a) | 2 |
+| `tests/test_stats.py` — **`test_neither_printed_bound_is_ever_tighter_than_either_arm`**, pinned by **test name and not by line**, because a parallel unit is editing this file *(v1.20, plan-gate P10-1 — the blocker, and the one row v1.19 omitted)* | **This is the one shipped test the edit falsifies, and it is not an addition.** It asserts `lo <= mover[0] and hi >= mover[1]` (and the same for `exact`) against `envelope_arms`' return **directly**; once the arms come back unclamped and the composer clamps, that is false wherever an arm escapes the support — `-1.0 <= -1.5` is False. Measured by the gate against the `7f865e2` blob over the test's own sweep set: **0 / 38 / 78** failures at DEFF 1.0 / 1.2 / 2.0, against a **0 / 0 / 0** control on today's arm-clamped code; first failing tables `(0, 0, 9, 3)`, `(0, 0, 10, 2)`, `(0, 0, 11, 1)`. **The comparison moves to the *clamped* arms** — `lo <= max(SUPPORT_DIFF_PROPORTIONS[0], mover[0])` and `hi >= min(SUPPORT_DIFF_PROPORTIONS[1], mover[1])`, and the matching pair for `exact` — which is **Rule 4a's own restatement of the property** (*"Rule 4's own conservatism property survives verbatim: the envelope is never tighter than the **clamped** MOVER-D arm"*) and **not** a weakening. Relaxing the assertion instead would delete the executable statement of `-ml` §3.4 Rule 4 acceptance 4, which is what that test's docstring says it exists to defend. **No residual can see this** — all six are scoped to `modelbench` — and that is why it is a row: command 2 **does** return the line (`:1361`), so the enumeration was sound and only the site list was short, which is the two-command design working and the hand-written row list not | 2 |
 | `tests/test_stats.py`, `tests/test_report.py` | the note's **ten** named assertions land here, with its computed witness values — the two witness tables are `(5, 0, 7, 0)` and `(0, 0, 38, 2)`. Assertions 1–7 and 10 are single-table; 8 and 9 are the two sweeps and both run in seconds at n=12. **Values, tolerances and witnesses are the note's and are not restated here** | 1, 2 |
 
 **Residual after the edit — six, and the split is the point** *(all *before* values re-run at
@@ -3989,8 +4000,8 @@ command 1 reaches.
 | # | Residual command (under `model-bench/`) | Form | Before → after |
 |---|---|---|---|
 | 1 | `grep -rFn 'clamp=(-1.0, 1.0)' modelbench --include='*.py'` | first | **2 → 0** (`stats.py:382`, `:387`) |
-| 2 | `grep -rFn 'max(SUPPORT_DIFF_PROPORTIONS[0], lo)' modelbench --include='*.py'` | **third** | **0 → 1** |
-| 3 | `grep -rFn 'min(SUPPORT_DIFF_PROPORTIONS[1], hi)' modelbench --include='*.py'` | **third** | **0 → 1** |
+| 2 | `grep -rFn 'SUPPORT_DIFF_PROPORTIONS[0]' modelbench --include='*.py'` | **third** | **0 → 1** |
+| 3 | `grep -rFn 'SUPPORT_DIFF_PROPORTIONS[1]' modelbench --include='*.py'` | **third** | **0 → 1** |
 | 4 | `grep -rFn '"MOVER-D" if mover_arm[0] <= exact_arm[0]' modelbench --include='*.py'` | first | **1 → 0** (`stats.py:1185`) |
 | 5 | `grep -rFn 'arm if arm == "MOVER-D" else' modelbench --include='*.py'` | first | **1 → 0** (`report.py:338`) |
 | 6 | `grep -rFn 'tuple[str, str] \| None' modelbench --include='*.py'` | first | **2 → 0** (`stats.py:896`, `:1168`) |
@@ -4014,8 +4025,17 @@ shape exactly, one table over, and it is stated over the text the edit **creates
 reason. **The pair is stated separately, one per bound, because the half-application this table
 must catch is one-sided**: clamping only the lower bound reads 1 and 0, and the numbers say which
 half was skipped. The cost is rule 5(b)'s stated one — these two pin a spelling, so the spelling is
-prescribed above rather than left to the implementer, and if the expression is later rewritten for
-an unrelated reason they are **re-derived over the new spelling, never re-scoped**.
+written out in the `:413` row rather than left to the implementer, and if the expression is later
+rewritten for an unrelated reason they are **re-derived over the new spelling, never re-scoped**.
+**Both are stated over the support constant's *subscript* and not over the whole clamp expression**
+*(v1.20, plan-gate P10-3)*: v1.19 wrote them as `max(SUPPORT_DIFF_PROPORTIONS[0], lo)` and
+`min(SUPPORT_DIFF_PROPORTIONS[1], hi)`, which pinned two **local names the plan never fixed** —
+while Rule 4a point 4 calls those quantities `u_lo` and `u_hi` in the very expressions the
+implementer is told to implement. An implementer following the note would have read **0** against a
+target of **1**: a residual failing on a faithful edit, in the direction rule 5(b) forbids, inside
+the table this document held up as the first written *against* that rule rather than corrected into
+it. The subscript form depends on no local name, still reads **0** at `7f865e2` and **1** after the
+prescribed edit, and still splits one per bound.
 
 **What no residual can see, named because rule 5(b) requires it.** Three of Rule 4a's decisions are
 **behaviour** and no count reaches them: that the comparison is **strict** (a bound sitting *at* the
@@ -5346,6 +5366,23 @@ trustworthy the senior document, the more efficiently it does so. So:
      is rewritten for an unrelated reason, the residual is re-derived over the new spelling, never
      re-scoped.
 
+     **A third-form residual is only a residual if the table *writes out* the text it pins, in the
+     row, and not only inside the residual command** *(v1.20, plan-gate P10-3)*. The two forms above
+     are stated over text that already exists, so a reader can always go and look at it; the third
+     is stated over text **that does not exist yet**, and a command is not a specification. Where
+     the pinned text contains any name the edit must *introduce* — a local, a helper, a constant's
+     spelling — that name is fixed **in the site row**, because the implementer reads the row and
+     the done-condition reads the command, and nothing reconciles them if they disagree. §4 S1e
+     Table H is the case that produced this sentence: it claimed a prescription, left the only
+     statement of it inside two residual commands that pinned two locals the plan never fixed, and
+     those locals differed from the notation `-ml` Rule 4a uses for the same two quantities — so an
+     implementer following the rule the table says it does not restate would have read **0** against
+     a stated target of **1**. That is a residual failing on a faithful edit, the thing this rule
+     forbids, arrived at in the inverted direction and inside the first table written *against* the
+     third form rather than corrected into it. Two repairs, and a table may take either: write the
+     text out, or state the residual over a fragment that contains **no** introduced name. Table H
+     takes both.
+
      **And the form has a third virtue, which is the reason to prefer it even where a line number
      would be shorter: an exact-text residual is robust to edits *elsewhere in the same file*, and a
      line pin is not** *(v1.19)*. This document has now watched both halves of that happen. A line
@@ -5767,7 +5804,7 @@ why it did not move.
 
 | Item | Closed by |
 |---|---|
-| **impl-gate P8-1** — the `- decided by:` audit names the arm that did not bind once the clamp binds both; the tie-break is unpinned | §4 S1e **Table H**, the implementation spec for `-ml` Rule 4a: `clamp=None` on both arms, the composer clamping its own result, `bound_by` as a **three**-token set on a **strict** comparison, and a renderer that attaches no `p=` clause to a `support bound` token. Two enumerating commands (**14** and **20** lines), nine site rows and **six** residuals. The ruling deliberately disagrees with `P8-1`'s own suggested fix — attributing from the unclamped arms prints the same false sentence on the separating case — and the note carries the witness |
+| **impl-gate P8-1** — the `- decided by:` audit names the arm that did not bind once the clamp binds both; the tie-break is unpinned | §4 S1e **Table H**, the implementation spec for `-ml` Rule 4a: `clamp=None` on both arms, the composer clamping its own result, `bound_by` as a **three**-token set on a **strict** comparison, and a renderer that attaches no `p=` clause to a `support bound` token. Two enumerating commands (**14** and **20** lines), **ten** site rows and **six** residuals *(nine at v1.19; plan-gate P10-1 added the tenth)*. The ruling deliberately disagrees with `P8-1`'s own suggested fix — attributing from the unclamped arms prints the same false sentence on the separating case — and the note carries the witness |
 | **impl-gate P8-5** — the composition rule is written twice and `envelope_arms`'s docstring says it is not | Closed as collateral. `7f865e2` already shipped the `_compose` helper with **three** deletions from Rule 4a's version recorded in its own docstring at the seam; all three are additive and Table H lands them, so nothing is reverted. Table H carries a row for that docstring paragraph, because a docstring asserting the opposite of its own body is P8-5's finding one revision later |
 | **The `Landed:` convention's first real test** | Table E's rows are a record of what `cc28d48` did, and one of them — *"both arms keep the identical clamp `(-1.0, 1.0)`"* — is now Table H's to change. The row is **kept, not rewritten**, with the supersession stated beside it; the current instruction lives on Table H's row for the same two call sites |
 
@@ -5785,6 +5822,35 @@ Table E's pair survived the Pass 8 fix round inserting a guard thirty lines abov
 changing what its call sites pass, reading 1 and 1 throughout; a line pin in the same position would
 have broken twice, which is what happened to Table C's `tests/test_results.py` row at impl-gate P5-6.
 A residual has to survive other people's edits to be worth stating.
+
+**Plan gate Pass 10, and what it changed here** *(v1.20)*.
+`docs/reviews/small-model-benchmarking.md` `## Pass 10` (`913e159`) gated the **v1.19 delta only** —
+§4 S1e Table H against note v1.19 §3.4 Rule 4a and the tree at `7f865e2` — and returned **needs
+changes**: 1 blocker, 2 majors, 1 minor, 1 nit, **all five closed here, none carried**. All five are
+**prose**: not one is an arithmetic error, and the gate re-measured Table H's six residuals and both
+enumerating commands and reproduced them exactly. What it found is that the table's *hand-written
+row list* was short and three of its rows instructed something the note contradicts — which is the
+same class of defect §7 rule 5 was written for, one level up: the commands were sound and the prose
+beside them was not.
+
+| Finding | Sev. | Closed by |
+|---|---|---|
+| **P10-1** — the site list omits the one **shipped test** the edit falsifies: `test_neither_printed_bound_is_ever_tighter_than_either_arm` compares the printed envelope against `envelope_arms`' return directly, which is false once the arms come back unclamped | blocker | A site row, **pinned by test name and not by line** — a parallel unit is editing `tests/test_stats.py` — stating that the comparison moves to the **clamped** arms, `-ml` Rule 4a's own restatement of the conservatism property rather than a weakening, with the gate's measurement carried (**0 / 38 / 78** failures at DEFF 1.0 / 1.2 / 2.0 against a **0 / 0 / 0** control, first failing tables named). The row also records *why* it is a row: **no residual can see it**, all six being scoped to `modelbench`, while command 2 **does** return the line — so the two-command design worked and the transcription did not |
+| **P10-3** — the `stats.py:413` row claims the post-edit spelling is "prescribed rather than left open" and never states it; the only statement is inside residuals 2 and 3, which pin locals the plan never fixes and which differ from Rule 4a's own `u_lo`/`u_hi` | major | The row **writes the two-line body out**, local names included and taken from the note, with the unpacking variant explicitly forbidden; and residuals 2 and 3 are restated over `SUPPORT_DIFF_PROPORTIONS[0]` / `[1]`, which contain **no introduced name** — still **0 → 1** each, re-derived from the `7f865e2` blobs. Generalised at **§7 rule 5(b)**: a third-form residual is only a residual if the table writes out the text it pins, because it is stated over text that does not exist yet and a command is not a specification |
+| **P10-2** — the `report.py:338` row prescribes a rendering assertion 10 forbids, and omits that the renderer now needs the support *value* | major | The row states the note's string — a `support bound` token renders **with its boundary value**, `support bound (-1)`, and never with a level — names `SUPPORT_DIFF_PROPORTIONS` as the source, imported as `report.py` already imports the two `LEVEL_*` constants for the same expression, and corrects the last clause: assertion 10 pins the **correct** bullet, and `support bound, p=0.025` is what it kills. The table's own four-line summary of the ruling, point **(iv)**, carried the same gap and is swept with it |
+| **P10-4** — two further docstring paragraphs state the pre-Rule-4a attribution flow and get no row; one is the sentence the plan claims the edit makes *true* | minor | The docstring row extends from one paragraph to **three** — `_compose`'s first and last, and `envelope_arms`' — and the over-claim is corrected: after Rule 4a `verdict()` **receives** an attribution rather than reading one, so of that sentence's two clauses the edit makes one true and the other false, and only the first is the deletion row's |
+| **P10-5** — "fifteen of `test_stats.py`'s twenty `envelope_arms` lines are the arm-level assertions" is wrong twice | nit | Re-derived: fifteen is the file's **whole share** of the command's twenty, and of those **four** are arm-value call sites, the rest being one import, two `parametrize` ids, five lines of docstring prose and two precondition-raise calls Rule 4a does not touch. The command's coverage claim was never in question; the sentence describing it was not reproducible — and it is where P10-1 hid |
+
+**What the gate confirmed, recorded so it is not re-defended.** Every consumer of `_compose`'s
+widened return type *is* enumerated — it has exactly two call sites at `7f865e2` and both have rows,
+and the `Verdict` construction correctly needs none. The `bound_by is None` path is invariant under
+Rule 4a and its absence from the renderer row is right; the `strict=True` zip stays safe. Residual 1
+discriminates a one-arm application and says which arm. And the **third-form trigger for residuals 2
+and 3 is correct** — the gate checked it rather than accepting it, and found that a first-form
+residual there really would have been a trap, because a faithful edit can keep the old composed
+expression intact as a *sub-expression* of the new one. The §7 rule 3 raise this plan opened against
+note v1.19's citation is confirmed and is the one item here that this document cannot close: it is
+**blocked on `data-scientist`**, and nothing in the plan depends on it.
 
 **What S2 additionally inherits from v1.10**:
 
