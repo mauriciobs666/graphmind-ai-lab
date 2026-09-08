@@ -1,5 +1,5 @@
 # Graph Ontology Reference — cpg, kaizen_team, reference & ws:* graphs
-> **Status:** active · **Owner:** `tico` · **Tracks:** — (—) · **Last updated:** 2026-09-07
+> **Status:** active · **Owner:** `tico` · **Tracks:** — (—) · **Last updated:** 2026-09-08
 
 ## Who this is for
 
@@ -57,10 +57,12 @@ today:
 > its old contents keeps the old name. The `CpgBuildInfo` marker (§1) answers it in one
 > query — read `SOURCE_ORIGIN` for *which* directory the graph was built from and
 > `SOURCE_TREE` for *which revision of it*, before you analyse the wrong codebase. Both
-> are absent on a marker stamped before 2026-09-07 — including `cpg_falkorchat`'s, the
-> graph most readers of this manual open — and the FAQ says what to read instead. What
-> never answers the question is `SOURCE_PATH`: it is usually a staged, throwaway copy of
-> the source, whose path name tells you nothing about the content.
+> are present on `cpg_falkorchat` — the graph most readers of this manual open —
+> as of 2026-09-08 (`falkor-chat/server`, tree `85ddeed0…`), but neither is guaranteed:
+> older markers can lack one or both, and the FAQ's absent-cases entry says what to read
+> instead when you meet one. What never answers the question is `SOURCE_PATH`: it is
+> usually a staged, throwaway copy of the source, whose path name tells you nothing
+> about the content.
 
 **Two very different naming conventions.** This is the single most common mistake when
 switching between families:
@@ -120,7 +122,7 @@ section is the schema you'll actually query against.
 | `IMPORT` | An import statement | `CODE` |
 | `UNKNOWN` | A construct the frontend couldn't classify precisely | `CODE` |
 | `CpgNode` | A **second label every node also carries** — not a real category, just a shared index anchor so an edge can look up any node by `id` without knowing its real label | `id` |
-| `CpgBuildInfo` | One node per graph, stamped by the build pipeline with source provenance — **read it before you trust a graph**, it says which source this CPG actually covers and how fresh it is | `BUILT_AT`, `PARSED_AT`, `SOURCE_PATH`, `SOURCE_ORIGIN`, `SOURCE_COMMIT`, `SOURCE_TREE`, `SOURCE_DIRTY`, `PROVENANCE` — all eight rewritten on every stamp (an absent one is removed, not left stale). Which field answers which question, and what to do when some are missing, is in the FAQ. Graphs stamped before 2026-09-07 carry only `BUILT_AT`, `SOURCE_PATH`, `SOURCE_COMMIT`, `SOURCE_DIRTY` |
+| `CpgBuildInfo` | One node per graph, stamped by the build pipeline with source provenance — **read it before you trust a graph**, it says which source this CPG actually covers and how fresh it is | `BUILT_AT`, `PARSED_AT`, `SOURCE_PATH`, `SOURCE_ORIGIN`, `SOURCE_COMMIT`, `SOURCE_TREE`, `SOURCE_DIRTY`, `PROVENANCE` — the eight the pipeline writes, all rewritten on every stamp (an absent one is removed, not left stale). A marker can carry **more than eight**: one written or repaired by hand adds `MARKER_ORIGIN`, `MARKER_WRITTEN_AT` and a `NOTE` that explains itself — `cpg_falkorchat`'s ten keys are that shape today, and `PARSED_AT` is the one it does *not* have. Which field answers which question, and what to do when some are missing or a value looks unfamiliar, is in the FAQ. Graphs stamped before 2026-09-07 carry only the four original fields (`BUILT_AT`, `SOURCE_PATH`, `SOURCE_COMMIT`, `SOURCE_DIRTY`) |
 
 > Joern's generic vocabulary also documents `FILE`, `TYPE`, `NAMESPACE`,
 > `NAMESPACE_BLOCK`, `META_DATA` — **confirmed absent** on `cpg_falkorchat`
@@ -498,9 +500,9 @@ Then read it by the question you're actually asking:
 |---|---|
 | *Which code is in here?* | **`SOURCE_ORIGIN`** — the repo-relative directory the graph was built from. |
 | *Is it the revision I mean?* | **`SOURCE_TREE`** — compare it with the tree `git` reports for `SOURCE_ORIGIN` at `HEAD` (the exact command, and the cases it has to special-case, are in `skills/cpg-analysis/references/freshness.md`). Equal means the source is unchanged since it was captured, so the graph is current however old the build is. (If `SOURCE_DIRTY` is true the parse also took in uncommitted work, so equality only covers the committed part.) |
-| *How current is the content?* | **`PARSED_AT`** — when the source snapshot was taken. Not `BUILT_AT`, which is only when the *load* finished; on a multi-hour build the two are hours apart, and `PARSED_AT` is the one that bounds what code is in here. |
+| *How current is the content?* | **`PARSED_AT`** — when the source snapshot was taken. Not `BUILT_AT`, which is only when the *load* finished; on a multi-hour build the two are hours apart, and `PARSED_AT` is the one that bounds what code is in here. (Absent on some markers, including `cpg_falkorchat`'s — then `BUILT_AT` is your only age signal; see the next FAQ entry.) |
 | *Did the parse also swallow uncommitted work?* | **`SOURCE_DIRTY`** — scoped to the source directory alone, so it says nothing about the rest of the repo. |
-| *How much can I trust the four above?* | **`PROVENANCE`** — `parse-root` or `source-origin` means a real git identity was captured; `none` means there wasn't one (see the next FAQ entry). |
+| *How much can I trust the four above?* | **`PROVENANCE`** — `parse-root` or `source-origin` means the pipeline captured a real git identity *before* the parse; `none` means there wasn't one; `hand-backfilled` means a human reconstructed the values *afterwards*, and is deliberately **not** one of the three the pipeline can write. The next FAQ entry covers the last two, and the case where the field is absent entirely. |
 
 Two fields that look like answers and aren't:
 
@@ -517,8 +519,9 @@ Two fields that look like answers and aren't:
   never parsed at all. Compare trees when you have one; fall back to the commit only when
   you don't.
 
-**The marker is missing `PROVENANCE`, or `SOURCE_TREE`, or isn't there at all — is the
-graph broken?** No. Each of those is a real, meaningful state, not a defect:
+**The marker is missing `PROVENANCE`, or `SOURCE_TREE`, or isn't there at all — or
+`PROVENANCE` holds a value I don't recognise. Is the graph broken?** No. Each of these
+is a real, meaningful state, not a defect:
 
 - **`PROVENANCE: 'none'`** — the build had no git identity for the source (a staged copy
   under a gitignored path is the usual reason), so the pipeline recorded *nothing* rather
@@ -526,12 +529,27 @@ graph broken?** No. Each of those is a real, meaningful state, not a defect:
   never saw. There is no commit, tree or dirty flag to read; `PARSED_AT` age is your
   signal. This is the honest answer, and it's the intended behaviour.
 - **No `PROVENANCE` property, but a real timestamp in `BUILT_AT`** — a marker stamped
-  before 2026-09-07, carrying only the four original fields. The live `cpg_falkorchat`
-  is one of these today, so you will meet one. Its `SOURCE_COMMIT` and `SOURCE_DIRTY`
-  were derived *after* the load and
+  before 2026-09-07, carrying only the four original fields. Its `SOURCE_COMMIT` and
+  `SOURCE_DIRTY` were derived *after* the load and
   repo-wide rather than scoped to the source, so treat both as approximate: the commit
   may name a tree that was never parsed, and the dirty flag may be reacting to a file
-  nowhere near the source.
+  nowhere near the source. **No CPG currently loaded on this instance is in this shape**
+  — `cpg_falkorchat` was the one live example until it was hand-backfilled on
+  2026-09-08 (next bullet). The shape is still real and you can still meet it on an
+  older graph or in another repo; there is just nothing loaded here to look at.
+- **`PROVENANCE: 'hand-backfilled'`** — the `SOURCE_*` values are real, but a **human**
+  worked them out after the build rather than the pipeline capturing them before the
+  parse. This is a fourth literal the pipeline itself never writes, and it sits in
+  `PROVENANCE` on purpose: hiding the caveat in some field the usual read path skips
+  would let you see `source-origin` and trust it as a machine stamp. Two extra
+  properties carry the accountability — `MARKER_ORIGIN` (who wrote it and that it is not
+  a pipeline stamp) and `NOTE` (how each value was derived and what was verified) — so
+  read the whole node (`MATCH (b:CpgBuildInfo) RETURN b`) before leaning on it. Expect
+  `PARSED_AT` to be **absent**: staging time usually can't be recovered, and an invented
+  one would be worse than none, so `BUILT_AT` is your age signal. How far to trust the
+  git fields is whatever the `NOTE` can evidence — on `cpg_falkorchat`, the one live
+  example today, the parsed copy was verified byte-identical to the committed tree, so
+  its `SOURCE_TREE` is a true content identity.
 - **`PROVENANCE` present but `SOURCE_TREE` absent** — the source wasn't committed when
   the build captured it, so there was no tree object to record (`SOURCE_DIRTY` will be
   true). `SOURCE_COMMIT` still tells you where `HEAD` was, but there is no content
