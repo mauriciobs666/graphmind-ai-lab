@@ -5654,3 +5654,287 @@ credibility. The tell is a sentence that cites one location and asserts a relati
 This is the same defect family this chain has been tracking since Pass 10 (*a stated reach wider
 than the mechanism*), arriving through a new door: not a guard whose walk is narrower than its
 docstring, but a citation whose coverage is narrower than its sentence.
+
+## Pass 20 — 2026-09-08 (S9a-fix: the reserve-then-write concurrency core, commit `699ef52`)
+
+**Reviewed:** commit **`699ef52`** ("S9a-fix — reserve-then-write, and a queue position nobody
+stores"), 7 files, +1032/−136, read as `git show 699ef52` rather than from the working tree (dirty
+with a concurrent session's unrelated work under `model-bench/`, `claude/`, `skills/`). **Against:**
+`docs/plans/salesperson-ui.md` **v1.29** §5.1's S9 row and §5.2 *The queue position* / *The dead-turn
+signal*, restricted to the **S9a-fix** sub-unit — the findings it answers are P17-1, P17-2, P17-3,
+P17-4, P17-7 and P18-6. **Out of scope by the coordinator's boundary and not judged as defects:**
+the dead-turn latch `turn.lastTurn` (S9c), queued-turn cancellation (S9b), removal of the
+per-participant record cache, and the prose-only unit holding `STOREFRONT_QUIESCE_S` and
+`presenter_reset_all`'s comments (Pass 17 Ruling 2). I am a **fresh reviewer by design**: Pass 17
+prescribed this fix, so its author does not judge it.
+
+**Verdict: needs changes** — 0 blockers, **3 majors**, 2 minors, 3 nits. The two majors this unit
+was built for (P17-1, P17-2) are genuinely closed, and closed at the right unit; P20-1 is a residual
+door into P17-1's own invariant that the fix opened rather than inherited, and P20-2/P20-3 are the
+false-justification class this chain has been losing to, twice more.
+
+**CPG: considered, not relevant — `cpg_falkorchat` exists but is stamped from `b795f4c` and both
+`storefront.py` and `storefront_api.py` are edited in the four commits since, so its call-graph and
+reach facts about this diff would be stale; every reach claim below is established from the tree.**
+
+**Environment note for the coordinator: I wiped the `reference` graph** — it reads **0 nodes** now.
+`tests/conftest.py:109` does it on setup of every `wf_repo`-derived fixture, so running
+`tests/test_storefront.py` alone is enough. Re-seed to the 15 `Product` nodes. `ws:acme` untouched;
+`falkorchat/storefront.py` restored after mutation and verified at md5
+`020bcd89917f6e67f2599876b8f957ff`; nothing staged or committed.
+
+### The question the coordinator asked first — has S9a-fix foreclosed `turn.lastTurn`?
+
+**No. The structure admits the latch, and S9c undoes nothing this unit built.** Traced through all
+five clauses of S9's done-condition:
+
+* *"a separate per-participant latch, never in the `_turns` entry"* — `_turns` is now
+  booking-owned, which makes the separation **more** natural, not less: a sibling
+  `self._last_turn: dict[str, str]` guarded by the existing `_turns_lock` needs no new lock and no
+  ordering rule.
+* *"composed into `get_state`'s `turn` payload"* — the composition point already exists and is
+  already the lock-owning scope: `Storefront.turn_payload` (`storefront.py:708`) is the single
+  place that builds the `turn` block, and `get_state` (`:1030`) is its only production caller. S9c
+  adds a `lastTurn` key there and a parameter to `TurnState.as_payload`; both are additive.
+* *"set by the worker, in the same isolation block that logs the failure"* — `_run_turn`'s
+  `except Exception:` block (`:980`) is intact and now carries the `booking`, so the latch write can
+  name the participant with no new plumbing.
+* *"cleared when the participant's next turn is **accepted** (the enqueue, not the `409`)"* — this
+  got **easier**: acceptance and refusal are now the same call with two return values, so
+  `reserve_turn`'s non-`None` branch is exactly "accepted" and its `None` branch is exactly the
+  `409`. One caveat worth carrying into S9c's brief: clear the latch in **`enqueue_turn`**, not in
+  `reserve_turn` — a reservation released by a failed `services.post_message` (the `504
+  post_state_unknown` path) is not an accepted turn, and clearing at reserve time would drop the
+  notice on a post that itself failed. `enqueue_turn` is reached only after a successful write,
+  which is the plan's literal wording ("the enqueue on a successful `POST`").
+* *"the latch **survives** `set_turn_state(idle)`, the delivered call that deletes the `_turns`
+  entry"* — `set_turn_state` still exists, still takes `TURN_IDLE`, and still deletes the entry (it
+  delegates to `release_turn`, `:822`). **S9c's required test is expressible verbatim**; it only has
+  to hold the booking to make the call, which `reserve_turn` hands it.
+
+The one cost S9c inherits is churn, not rework: `turn_payload`/`as_payload` are asserted as whole
+dicts in ~15 places, and every one grows a `lastTurn` key. That is inherent to adding a field.
+
+### Findings
+
+**P20-1 — major. The release on a refused `submit` is wrong on one of the two refusal shapes
+`enqueue_turn`'s own docstring names, and on that shape it re-opens P17-1's invariant.**
+`enqueue_turn` (`falkor-chat/server/falkorchat/storefront.py:918-923`) releases the booking on
+**any** exception out of `self._executor.submit(...)`, and its docstring justifies that with
+*"`RuntimeError` after `shutdown_turns()`, or `can't start new thread` under exhaustion, would
+otherwise leave a booking no worker will ever clear"*. The second half is false. On the pinned
+3.12.3, `ThreadPoolExecutor.submit` does `self._work_queue.put(w)` **before**
+`self._adjust_thread_count()` (`/usr/lib/python3.12/concurrent/futures/thread.py:164-180`), so a
+thread-start failure raises with the work item **already queued** — and any worker that already
+exists will run it. Reproduced end-to-end against the real `Storefront` (Appendix P §1):
+`enqueue_turn` raises, the booking is released, the turn then runs on a worker, and
+`turn_in_flight("p-ada")` reads **`False` while that turn is live** — P17-1's invariant exactly,
+through a third door, and the state `_await_quiesce` exists to make impossible. It is also a
+**regression against pre-fix behaviour on this one path**: S9a's non-release left the booking for
+the queued item's own `finally` to clear, which was correct here.
+**This is a plan defect first.** v1.29's S9 row prescribes the unconditional release ("`executor.submit`
+refusing (`RuntimeError` after `shutdown_turns()`, or thread exhaustion) — the reservation is
+**released**"), so the implementer followed its letter. **Suggested:** route the sentence back to
+`architect`, and release only on the shape that genuinely queued nothing — a `shutdown_turns()`-set
+flag on `Storefront` read in the `except`, leaving the ambiguous case to leak a booking (P17-3,
+minor, self-limited to one participant) rather than to orphan a live turn (P17-1, major, breaks
+quiesce for everyone). Type alone cannot discriminate: both shapes raise `RuntimeError`.
+
+**P20-2 — major. `turn_workers` demonstrably does move `turn.queuePosition`, and three delivered
+documents now say it does not.** `falkor-chat/docs/SERVER.md:135` — *"**Setting it changes one
+observable thing: how many turns run at once.** It deliberately does *not* move
+`turn.queuePosition`"* — plus `config.py:193-198` and `HISTORY.md:88`. Measured against the
+delivered `turn_payload`, five simultaneous arrivals, the fifth one's reported position:
+`turn_workers=1` → **3**, `=2` → **2**, `=4` → **0** (Appendix P §2). The mechanism is immediate:
+more workers means more of the earlier bookings are `thinking`, and `thinking` entries are excluded
+from the count, so the knob modulates the number through the map it reads. `turn_workers` not being
+a *term in the formula* (P18-6's wording, and true) is not the same claim. This inverts the truth
+for the one reader the row exists for: an operator raising `turn_workers` to shorten the queue is
+told the reported position will not move. **Suggested:** in all three, replace *"deliberately does
+not move `turn.queuePosition`"* with the accurate version — the number is not *defined* in terms of
+`turn_workers`, but raising it moves turns out of the waiting line and therefore lowers the
+positions behind them.
+
+**P20-3 — major. "wrong at every `turn_workers` but 1" is false, and this commit's own edits are the
+disproof.** `storefront.py:328-331` (`TurnState`'s docstring) says S9a's stored number was *"a
+plausible integer that was wrong at every `turn_workers` but 1"*, and
+`tests/test_storefront_api.py:4733-4737` says `turn_workers=1` is *"the only setting at which 'how
+many accepted turns were unfinished when this one arrived' and 'how many are ahead of me' agree"*.
+They never agree beyond the first arrival: at `turn_workers=1` the old value counts the **running**
+turn, which §5.2 excludes. Three arrivals at `turn_workers=1` — old `[0, 1, 2]`, delivered
+`[0, 0, 1]` (Appendix P §2, and the same commit rewrites
+`test_three_participants_queue_behind_one_worker_and_complete_in_order` from `[0, 1, 2]` to
+`[0, 0, 1]` and `test_a_poll_answers_immediately_while_the_turn_queue_is_full` from `2` to `1`,
+both at `workers=1`). A third docstring in the same commit states the truth —
+*"**The old `0/1/2` is arithmetically false under this definition**"* — so the file contradicts
+itself. Neither the plan nor Pass 17 makes the "right at 1" claim; it is invented here. It matters
+because it is the record of what the previous defect **was**: a reader who believes it will conclude
+S9a's number was a scaling bug rather than a wrong contract, and will trust a `turn_workers=1` test
+to certify the definition. **Suggested:** in both places, say the stored number counted the running
+turn as a place in line and so was wrong at **every** `turn_workers`, most visibly at the delivered
+default of 4.
+
+**P20-4 — minor. `_run_turn`'s docstring states the pre-fix contract and its correction three
+paragraphs apart, without deleting the first.** `storefront.py:951-953`: *"The `finally` clears the
+map entry **whatever happened**, which is what re-opens the composer and releases the `409` gate."*
+`:956-964` then says both writes take effect *"only while it still owns the slot"*. The first
+sentence is now false as written and is the one a skimmer reads. This is the append-instead-of-
+rewrite shape root `AGENTS.md` names for context files, arriving in a docstring. **Suggested:**
+rewrite the first sentence to *"the `finally` releases the entry when this booking still owns it"*
+and keep the ownership paragraph as its reason.
+
+**P20-5 — minor. The deadlock prohibition is reproduced with its tombstone intact but one of its
+three legs dropped, and "nothing else reopens it" is not carried.** Asked for specifically, so
+stated in full: `enqueue_turn`'s docstring (`storefront.py:883-899`) **does** carry the tombstone
+(*"which says do not delete it on finding a mechanism that does not hold — that check has been
+run"*), **does** state the rule as *"deliberately **not** a deadlock claim"*, and **does not**
+reintroduce a deadlock claim anywhere. Its one factual citation is correct: I read
+`/usr/lib/python3.12/concurrent/futures/thread.py` on the pinned 3.12.3 and lines **23–31** are
+exactly `_python_exit`, which takes `_global_shutdown_lock` only to set `_shutdown` (`:25-26`) and
+joins every worker outside it (`:30-31`). What is missing is v1.29's third leg — *"an application
+lock held across two `concurrent.futures` internals is a lock-ordering hazard whose present
+benignity is an implementation detail rather than a contract"* — and its companion sentence
+*"Nothing else reopens it: the exit-cost and lock-ordering legs do not depend on §5.2 at all."* The
+docstring keeps the *nothing to buy* leg and the exit-cost leg, then states the narrow reversal
+trigger. The rule is deliberately over-determined precisely so that disproving one leg does not
+delete it; dropping a leg while keeping the reversal trigger leaves the next reader with fewer
+reasons than the plan wrote. **Suggested:** add the lock-ordering sentence and "nothing else reopens
+it" — two clauses in a docstring that already earns its length.
+
+**P20-6 — nit. `release_turn`'s "Two callers, one operation" understates its call set.**
+`storefront.py:785` names two; there are three direct production sites — `storefront_api.py:1224`
+(failed write), `storefront.py:922` (refused submit), `storefront.py:986` (`_run_turn`'s
+`finally`) — plus `set_turn_state`'s `TURN_IDLE` delegation (`:822`). The two *roles* described do
+cover all of them, so this is a wording tightening ("two roles"), not a correctness issue.
+
+**P20-7 — nit. `TurnBooking`'s value-class rationale says "process" where the class says
+"`Storefront`".** `storefront.py:313-315`: *"the first booking a **process** ever makes has ordinal
+`0`"*. Two paragraphs above, the same docstring establishes the counter is per-`Storefront` and
+never module-level — so it is the first booking **every** `Storefront` makes, which strengthens the
+argument rather than weakening it. The reason itself (`if not booking` would drop ordinal `0`) is
+sound and worth keeping.
+
+**P20-8 — nit. `turn_payload` dereferences `turn.booking.ordinal` on a `TurnBooking | None`.**
+`storefront.py:740`. Unreachable today — `reserve_turn` is the only constructor of a live entry and
+always supplies a booking — and there is no type checker in `falkor-chat/server/.venv` to catch a
+future `TurnState(state=TURN_QUEUED)` built without one. A one-line `assert turn.booking is not
+None` documenting the invariant would cost nothing; take or leave.
+
+### Dispositions on the findings this unit answers
+
+| Finding | Disposition | Evidence I rechecked |
+|---|---|---|
+| **P17-1** (check-then-act `409`, corrupted map invariant) | **fixed**, with one residual door → P20-1 | `reserve_turn` is a test-and-set under `_turns_lock` (`storefront.py:774-780`); both map writes are ownership-conditional (`:824-829`, `:793-799`); `test_two_posts_held_concurrently_inside_the_write_write_one_message` drives the two-threads-on-one-`TestClient` shape Pass 18 Appendix O §1 designed, and `_counts` reads `(1, 1)` from the graph. Traced by hand: absent `clear_all_turns()`, two work items for one participant are now unconstructible — the entry lives from reserve to the worker's `finally`, and `reserve_turn` refuses throughout |
+| **P17-2** (`queue_position = len(self._turns)`) | **fixed** | derived in `turn_payload`; measured `[0,0,1]` at `workers=1` and `0` for a fifth arrival at `workers=4` (Appendix P §2). The countdown is asserted, not just the value, via `_GatedExecutor.release_index` |
+| **P17-3** (refused `submit` leaks the booking) | **fixed for the `shutdown_turns()` shape; inverted for the exhaustion shape** → P20-1 | `test_a_submit_refused_after_shutdown_releases_the_reservation` covers only the first; Appendix P §1 is the second |
+| **P17-4** (the dead-turn log pinned by nothing) | **fixed** | four `caplog` assertions — one record, `ERROR`, `exc_info` present, `participantId` **and** `msgId` in the message |
+| **P17-7** (`trigger is None` asserted by nothing) | **fixed**, and by the right assertion — an **empty** log, with the neighbouring raising-trigger test as its positive control |
+| **P18-6** (two prose blocks carrying the old definition) | **carried in the same change as required; content is newly false** → P20-2 |
+| **P17-10** (`test_enqueue_books_the_turn_before_it_submits` races) | **dissolved, not deferred** | the test is gone; `reserve_turn` writes the entry on the request thread before the message write, so "book before submit" is structural. Its replacement asserts the worker's own flip instead |
+| **P17-9** (no production retainer for the `Future`) | **still open, and better placed** | the route still discards it (`storefront_api.py:1226`), but `TurnBooking` now exists as the key S9b's `participantId → Future` map wanted |
+| P17-5, P17-6, P17-8 | untouched, correctly — none is in this sub-unit's scope |
+| Ruling 2's prose (`STOREFRONT_QUIESCE_S` in `config.py:202-211` and `SERVER.md`, `presenter_reset_all`'s comments) | untouched and still stale, correctly — the prose-only unit owns them. `config.py:209` still asserts *"`set_turn_state` (`storefront.py:632`) has no caller"*, now wrong twice over |
+
+### The six deviations the implementer flagged, judged
+
+1. **`queuePosition` composed in `turn_payload`, not literally in `get_state` — correct, and the
+   reason is real.** `get_state` would have needed `turn_state()` (one `_turns_lock` acquisition) and
+   then a scan of the same map (a second), which is a torn read: a booking can be released between
+   them. `turn_payload` derives it inside one acquisition (`storefront.py:733-746`), and `get_state`
+   is its only production caller, so the plan's "composed in `get_state`" holds in effect.
+2. **`clear_turn` removed rather than made conditional — correct, and nothing outside the two
+   changed modules expects it.** Verified repo-wide:
+   `grep -rn 'clear_turn\b' --include=*.py --include=*.js --include=*.ts --include=*.tsx` minus
+   `clear_all_turns` returns **no code matches** at all; the only survivors are prose in
+   `docs/reviews/`, `docs/plans/` and `falkor-chat/docs/HISTORY.md`. `SERVER.md` never named it. The
+   argument for removal is sound: an unconditional public single-slot delete is the shape P17-1 came
+   in, and leaving it as dead-but-callable would invite it back.
+3. **`TurnBooking` as a value class — correct**, and the ordinal-`0` reason is real (see P20-7 for
+   the one word to fix). The single-field-dataclass equality is what `release_turn` and
+   `set_turn_state` compare on, and `frozen=True, slots=True` matches `TurnState`'s own shape.
+4. **`enqueue_turn` holds no lock — correct, and the docstring is faithful** (P20-5 has the full
+   verification and the one omission).
+5. **The four deliberately-stale prose blocks — correctly left**, per Ruling 2. See the disposition
+   table.
+6. **M10 re-derived, not taken.** I applied the mutation myself — deleting
+   `if turn.state != TURN_QUEUED: return turn.as_payload(0)` from `turn_payload` — to a byte-copy
+   held in the scratchpad, ran `tests/test_storefront.py tests/test_storefront_api.py`, and got
+   **1 failed, 236 passed**, the single failure being
+   `test_a_running_turn_reports_zero_even_with_an_earlier_turn_still_queued`. The claim holds
+   exactly: the mutant is dead, and dead against that test alone. File restored and re-checksummed
+   (Appendix P §3).
+
+### What's solid
+
+* **The two halves are genuinely independent and both are pinned.** `reserve_turn`'s test-and-set
+  closes the admission window; the booking token closes the ownership window; and
+  `test_no_map_write_takes_effect_once_its_booking_has_lost_the_slot` carries **positive controls**
+  (`is True` lines below the `is False` lines) so an implementation that refused every write fails
+  it. That is the discipline that would have caught P17-1's fix being over-broad.
+* **The linchpin test is the one Pass 18 designed and it works.** Two threads on one `TestClient`,
+  the second entering while the first is gated inside `services.post_message`, `writes == ["first"]`
+  asserted at the seam rather than inferred from a count. `_pin_thinking` helpers in both test files
+  make fabricating a turn impossible, so every test now earns its map state through the real
+  protocol — this is why `test_get_state_reports_profile_cart_order_and_turn` had to seed two real
+  participants ahead of Ada to keep asserting `2`.
+* **The ordinal's two jobs are pinned by one case each and by one case together.**
+  `test_the_arrival_ordinal_is_per_storefront_monotonic_and_never_reused` kills `len(self._turns)`,
+  a counter reset in `clear_all_turns()`, **and** a module-level counter; the wiped-booking tests
+  then pin `fresh.ordinal > wiped.ordinal` in the same case that pins the ownership check, so one
+  wrong counter reddens two assertions.
+* **Suite and lint re-run independently:** `tests/test_storefront.py` + `tests/test_storefront_api.py`
+  → **237 passed** solo; `ruff check` clean on all five touched Python files.
+
+### Open questions
+
+1. **P20-1's remedy is a plan sentence before it is a code change.** v1.29's S9 row prescribes the
+   unconditional release; correcting the code without correcting the row leaves the next
+   implementer to re-derive the same thing. Route to `architect` first, then to an implementer.
+2. **Does the `_await_quiesce` consequence of P20-1 need its own test, or is it S10's?** The orphan
+   is only observable through `turn_in_flight` reporting `False` under a live turn, which is the
+   same observable §5.2 *One bound* already accepts for the `clear_all_turns()` window. The
+   difference is that this one is not self-correcting on a reset — it is an ordinary post path.
+
+### Appendix P — Pass 20's measurements
+
+**P §1 — the refused `submit` that already queued its work item.** Two probes on the pinned 3.12.3.
+First, plain `ThreadPoolExecutor`, `threading.Thread.start` patched to raise while one worker is
+busy:
+
+```
+(a) shutdown  -> RuntimeError cannot schedule new futures after shutdown | queued: 1
+(b) exhaustion-> RuntimeError can't start new thread | queued: 1
+    the 'refused' work item actually ran: ['b']
+```
+
+(the `queued: 1` on (a) is `shutdown()`'s `None` sentinel, not a work item — no job ran for `a`).
+Then the same shape against the delivered `Storefront.enqueue_turn` / `_run_turn`, with a trigger
+that parks inside `maybe_trigger` so the turn is genuinely live:
+
+```
+enqueue_turn raised: can't start new thread
+turn_in_flight right after the 'refused' submit: False
+the turn IS running on a worker: True
+turn_in_flight WHILE that turn runs: False
+```
+
+**P §2 — `queuePosition` against `turn_workers`, from the delivered `turn_payload`.** Five
+simultaneous arrivals; the first `workers` of them flipped to `thinking` through
+`set_turn_state`, exactly the map state the executor produces:
+
+```
+turn_workers=1: [0, 0, 1, 2, 3]   last arrival -> {'state': 'queued', 'queuePosition': 3}
+turn_workers=2: [0, 0, 0, 1, 2]   last arrival -> {'state': 'queued', 'queuePosition': 2}
+turn_workers=4: [0, 0, 0, 0, 0]   last arrival -> {'state': 'queued', 'queuePosition': 0}
+```
+
+Two readings: the knob moves the number (P20-2), and at `turn_workers=1` three arrivals read
+`[0, 0, 1]` where the stored `len(self._turns)` read `[0, 1, 2]` (P20-3).
+
+**P §3 — the M10 re-derivation.** `md5sum falkorchat/storefront.py` →
+`020bcd89917f6e67f2599876b8f957ff` before; byte-copy to the scratchpad; the two lines deleted →
+`ea7ef26d073b2d06b4191e4423349d2c`; `pytest tests/test_storefront.py tests/test_storefront_api.py`
+→ `1 failed, 236 passed`, the failure at `tests/test_storefront.py:712` in
+`test_a_running_turn_reports_zero_even_with_an_earlier_turn_still_queued`; restored from the copy
+and re-checksummed to `020bcd89917f6e67f2599876b8f957ff`, with
+`git status --porcelain falkor-chat/` clean. No tree-mutating git command was used.
