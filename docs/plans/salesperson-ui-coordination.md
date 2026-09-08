@@ -175,8 +175,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U43** — retract the false CPython deadlock fact from `kaizen_team` before it is promoted | `cobb` | `a69330f81cf6048ae` | delivered | `de8b5ac` — 2 entries cleared, promoted split by audience | `analyst` (prompt edit) — queued | 118k tok / 28 tools |
 | **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7, P18-6 | `coder` | `a31456adeff4788ea` | **delivered — committed `699ef52`** (7 files, +1032/−136). Suite **2639** teco-verified solo (baseline 2629, +10 net); `ws:acme` 871 intact; `reference` re-seeded. **Tripwire re-measured by me, not taken on report** — injected reach → guard red, file restored to md5. 18 mutations, 1 survivor (M10) which was a **missing test**, now red against it | `storefront.py`, `storefront_api.py`, both test files, `config.py`, `SERVER.md`, `HISTORY.md` | `analyst` **Pass 20 (fresh)** → **needs changes** (`ac28f2c`) — 3 majors, routed to U50/U51/U52; `qa-engineer` held behind them | 286k tok / 114 tools |
 | **Pass 20** — gate S9a-fix. **Fresh by design**: Pass 17 *prescribed* reserve-then-write, so its author judging this diff is producer-self-review one seat over (the U24 precedent) | `analyst` (**fresh**) | `afc3c09ccd5b50340` | **delivered — committed `ac28f2c`** (+284 lines). Survived **two** rate-limit kills, the second seconds in; resumed on its own transcript both times and lost nothing, because its predecessor artefact was already committed | `docs/reviews/salesperson-ui-impl.md` `## Pass 20` | **needs changes** — 0 blockers, **3 majors**, 2 minors, 3 nits. P17-1/P17-2 closed and closed at the right unit; my four questions all answered (see §Pass 20 below) | 150k tok / 10 tools |
-| **U50** — P20-1 is a **plan** defect: v1.29's S9 row prescribes the unconditional release the implementer faithfully wrote. Fix the release condition, tombstone the false mechanism | `architect` | `a5d8f1e2a1d897af0` | in-flight | `docs/plans/salesperson-ui.md` → **v1.30** | `analyst` (fold into Pass 21) | — |
-| **U51** — apply P20-1's corrected release + the P20-3/4/5/6 docstring corrections. **Fresh, not a resume**: S9a-fix's author is at 286k tok / 114 tools and every one of these fixes is self-contained | `coder` (fresh) | — | queued (behind U50 — needs the corrected rule; and behind U52 by file) | `storefront.py`, `test_storefront_api.py` | `analyst` Pass 21 | — |
+| **U50** — P20-1 is a **plan** defect: v1.29's S9 row prescribes the unconditional release the implementer faithfully wrote. Fix the release condition, tombstone the false mechanism | `architect` | `a5d8f1e2a1d897af0` | **delivered — committed `395266e`** — plan **v1.30**. Took the reviewer's asymmetry and **rejected its placement**: the flag is read *before* `submit`, not inside its `except`. **CPython mechanism re-verified by me** (`:178` put precedes `:179` adjust; `t.start()` at `:202`; venv 3.12.3; executor built with `max_workers`/`thread_name_prefix` only, so `BrokenThreadPool` is unreachable) | `docs/plans/salesperson-ui.md` **v1.30** | `analyst` Pass 21 | 112k tok / 32 tools |
+| **U51** — apply P20-1's corrected release + the P20-3/4/5/6 docstring corrections. **Fresh, not a resume**: S9a-fix's author is at 286k tok / 114 tools and every one of these fixes is self-contained | `coder` (fresh) | `a7ebbee7e795fe497` | in-flight — U50 and U52 both cleared | `storefront.py`, `test_storefront_api.py` | `analyst` Pass 21 | — |
 | **U52** — P20-2: three delivered documents state the inverse of measured behaviour about `turn_workers` and `queuePosition`. Prose-only; **measure before writing**, because this sentence position has now been wrong twice | `coder` | `a9d876aa92c41d005` | **delivered — content committed, attribution lost.** Landed inside the concurrent session's `f9d23fb`, which swept my staged index; my own commit found nothing to make. Content verified byte-identical to what I reviewed (`git diff HEAD` clean). **Numbers re-measured by me, not taken on report** — 3 / 2 / 0 at `turn_workers` 1 / 2 / 4, real-executor arm agreeing with the staged-map arm; `config.py` verified comment-only | `SERVER.md`, `config.py`, `HISTORY.md` | `analyst` Pass 21 | 98k tok / 34 tools |
 | **S9f** — `STOREFRONT_QUIESCE_S`'s docs describe a quiesce that S9a made live | `tico`/`coder` (tbd) | — | queued (held behind Pass 17) | `config.py` + `docs/SERVER.md` prose | `analyst` (fold into Pass 17 re-check) | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
@@ -4029,3 +4029,47 @@ protection I actually needed was **atomicity**: stage and commit in a single inv
 session can commit in the window between them. I have been splitting `git add` and `git commit`
 across two tool calls all session, to inspect `--cached --stat` in between — a habit that is
 good practice alone and a race in a shared tree.
+
+## U50 disagreed with the reviewer about placement, and the disagreement is the fix
+
+I asked `architect` to weigh the reviewer's suggestion rather than adopt it, and said I would rather
+have its judgement than its compliance. It took me up on exactly one clause. It **agreed** with
+Pass 20's asymmetry — prefer a leaked booking (one participant, self-limited) over an orphaned live
+turn (breaks quiesce for everyone) — and **rejected** where the reviewer put the check.
+
+Pass 20 proposed reading a `shutdown_turns()`-set flag inside the `except` around `submit`. v1.30
+reads it **before** `submit` is called at all. The difference is not stylistic: with the read inside
+the `except`, a `shutdown_turns()` landing between the flag write and the executor actually stopping
+lets a submit reach `_adjust_thread_count`, queue its item, fail, see a set flag, and release —
+**P20-1 reintroduced in a narrow window**. Reading before the call closes that window instead of
+narrowing it, because such a refusal never enters `submit`.
+
+The second reason is the one that matters for this coordination specifically. Reading before the
+call means **the plan no longer has to make any claim about exception shapes**. It does not have to
+enumerate refusal types correctly, or pin CPython's message string, or be right about which
+`RuntimeError` is which. It only has to know a place in the sequence. That is a structural retreat
+from the defect class rather than another careful statement inside it — and after six generations, a
+rule that cannot be wrong about a mechanism beats a rule that states the mechanism correctly.
+
+**I verified the CPython mechanism myself, making it three independent reads.** `_work_queue.put(w)`
+at `:178` precedes `_adjust_thread_count()` at `:179`; the three pre-queue raises are
+`BrokenThreadPool`, the executor's `_shutdown` and the interpreter's global `_shutdown`; `t.start()`
+is at `:202`; the venv really is 3.12.3; and `Storefront` builds its executor with `max_workers` and
+`thread_name_prefix` only — no `initializer` — so `_initializer_failed` is unreachable and with it
+`BrokenThreadPool`. That last one is worth having checked: it is what makes the accepted residue
+*smaller* than P17-3's own statement of it, and it is derived from the constructor rather than
+assumed.
+
+Three reads of one twenty-line function is not diligence theatre here. Generation four of this
+defect was a false claim about **this same file**, asserted confidently by an agent that had not
+opened it, and it survived a gate. The cost of the third read is about ninety seconds.
+
+Two things U50 did that I did not ask for and would not have thought to ask for. It marked one claim
+as **inference rather than observation** — it read `submit`'s three raise sites but did not
+enumerate every writer of the module-global `_shutdown`, so *"the interpreter is exiting"* is
+labelled as a reading of `:172-173`, and it notes that this sizes the accepted residue without
+changing the direction of the trade. And it added a clause forbidding `_turns_shutdown` from being
+merged with S10's stop-intake flag: one is set-once executor lifecycle, the other goes up and back
+down, and a single attribute doing both would make reset-all refuse turns forever. S10 is unstarted
+and unassigned; that clause is a message to an implementer who does not exist yet, written at the
+only moment when the reason for it is obvious.
