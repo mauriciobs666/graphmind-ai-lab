@@ -5,12 +5,14 @@
 **Pass 1** gated `ab91419` (needs changes). **Pass 2** re-gated `3ad27d3` (approve with
 suggestions). **Pass 3** re-gated `95b4c88` (needs changes). **Pass 4** re-gated `d55f4d8` (needs
 changes). **Pass 5** gated `8fc2341`, the first of S1e's three implementation units (needs changes).
-**Pass 6** re-gated its fix round `c523a35` (needs changes). **Pass 7** re-gates `f409905` — jump to
-[`## Pass 7`](#pass-7--2026-09-07) for the current verdict; the earlier passes are kept intact
+**Pass 6** re-gated its fix round `c523a35` (needs changes). **Pass 7** re-gated `f409905` (needs
+changes). **Pass 8** gates `cc28d48`, S1e's second and largest unit — jump to
+[`## Pass 8`](#pass-8--2026-09-08) for the current verdict; the earlier passes are kept intact
 because they are meant to be read together. Passes 1–4 gate the S1 build; Passes 5–7 are S1e's first
-unit (§4 S1e Tables A and B, the `fingerprint.py` re-key), whose remaining two units are not yet
-delivered. **Pass 7 §3 says which half of this document to trust** — the findings held, three
-suggested fixes did not.
+unit (§4 S1e Tables A and B, the `fingerprint.py` re-key); Pass 8 is its second (Tables C, D, E and
+G), leaving Table F undelivered. **Pass 7 §3 says which half of this document to trust** — the
+findings held, three suggested fixes did not; Pass 8 is written to that standard and names, for each
+suggested fix, the assertion that catches it being wrong.
 
 ## Pass 1 — 2026-09-03
 
@@ -2008,3 +2010,315 @@ design decision to the implementer, which is where it belongs.
 reproduced by at least one other party; treat the *suggested improvements* as one option costed by
 someone who did not have to make it work. That is the right division of labour between a gate and an
 implementer, and this round demonstrated it three times.
+
+## Pass 8 — 2026-09-08
+
+### 1. Scope & verdict
+
+**Reviewed:** commit `cc28d48` (`feat(model-bench): S1e Tables C, D, E and G — one percentile,
+parameterised clamp and levels`), the diff `c19f875..cc28d48 -- model-bench/` — 9 files, +885/−238:
+`modelbench/{stats,results,report,packs}.py`, `tests/{test_stats,test_results,test_report}.py`,
+`model-bench/AGENTS.md`, `model-bench/docs/HISTORY.md`. This is §4 S1e Tables **C, D, E and G**,
+S1e's largest unit. Plan citations are pinned to
+`git show 1ed8599:docs/plans/small-model-benchmarking.md` and
+`git show 1ed8599:docs/plans/small-model-benchmarking-ml.md`, an `architect` being mid-revision to
+v1.17 in the working copy. **CPG:** considered, not relevant — none exists for `model-bench/`.
+
+**Verdict: needs changes** — 0 blockers, **3 majors** (**P8-1**, **P8-2**, **P8-3**), 3 minors
+(**P8-4**, **P8-5**, **P8-6**), 1 nit (**P8-7**).
+
+Both adjudications go the implementer's way: `Verdict.bound_by` is not a closed type being widened
+(§2.1) and `results.py:599-600` is **blocked on unbuilt work**, not deferred by choice (§2.2). The
+statistics are right — I re-derived the closed form against an independent implementation (§5) — and
+the seven-test churn cost exactly one assertion (§3), which is P8-2. The three majors are each one
+or two lines to close and all three sit inside this unit's own blast radius. Re-ran to establish
+them, not inherited: **519 passed**, `ruff` clean, and **9 mutations** run one at a time with the
+file restored byte-identical between each (§4, Appendix E).
+
+I found **no fourth residual defect**: all five of this round's residual counts reproduce exactly as
+the coordinator reported (Appendix E, table 1), so **F1/F2/F3 stand as the whole of the plan's
+residual debt** and none of my findings is a re-statement of them.
+
+### 2. The two adjudications
+
+**2.1 `Verdict.bound_by` and `envelope_arms()` — right not to stop, and one thing the fork's
+premise did not cover.**
+
+`Verdict` is closed by neither document, so widening it is not the fork it was told to stop at.
+Appendix A (plan `1ed8599`, line 5423) makes `Verdict` "**`-ml` §3.4's, verbatim** — not restated
+here"; `-ml` §3.4's own preamble then says "**Types are illustrative; the seven rules are binding**"
+(`-ml` line 728). §3.4 prints no `class Verdict` body at all. The only field list anywhere is the
+non-exhaustive "`Verdict` carries `mcnemar_p`, `b`, `c`, `marginal_overlap`, `floor_demoted` and
+`holm_tested`" (`-ml` line 1346), which omits six fields the shipped `Verdict` demonstrably has.
+Meanwhile Rule 4's "**name which arm bound each bound**" (`-ml` line 1210) is binding and needs a
+carrier. The implementer's own distinction holds too: it left `conservative_envelope`'s return type
+alone, which the plan's Table D row *does* close.
+
+The one counter-argument, and it does not carry: the note refuses "a field that is `None` until it
+is not" (`-ml` line 1347). `bound_by` is not that shape — it is `None` **iff**
+`decided_by == "mcnemar-exact"`, a discriminated union over a field `Verdict` already carries, the
+same `None`-iff form as §3.4.1's `callSurface`/`armKind` that Pass 7 §2(1) endorsed. What is missing
+is what Pass 7 asked for *there*: **nothing pins the iff**, and `_decided_by_line` transcribes the
+discriminator a second time by branching on `bound_by` rather than on `decided_by`. Folded into
+P8-2's fix.
+
+`envelope_arms()` is the right seam in shape — the alternatives are worse, and the code comment at
+`stats.py:1112-1116` refuses the renderer-recomputes option for the correct reason. What the seam
+did cost is **P8-5**, and that is one helper away.
+
+**2.2 `results.py:599-600` — blocked on unbuilt work.**
+
+Table C's cell (plan `1ed8599`:3269) says the two values "come from the run's own `LatencyBlock`
+**(§4 S2)**" — the row assigns its own replacement to S2 in its own text, and Appendix A (plan line
+5419) records `LatencyBlock` as "produced by S2". `grep -rn LatencyBlock modelbench tests
+--include='*.py'` returns **one** line, and it is the disclosure comment this diff added. There is
+no S1 spelling of that cell: `-ml` §11's two floors are applied *inside* the block that does not
+exist, so a percentile taken here bypasses them however it is written. The half that *is* actionable
+at S1 — no private copy, `results.py` importing `stats.percentile` — was done, and drives Table C's
+first residual to 0 (verified). Named in the code (`results.py:590-597`) and in `HISTORY.md`.
+
+Not "deferred by choice", and I checked the discriminating question rather than taking the label:
+there is no cheaper faithful S1 alternative, because the floors have no S1 home.
+
+### 3. The seven deleted/renamed tests — one assertion lost, and it is P8-2
+
+| Test | Claim | Verified |
+|---|---|---|
+| `…seed_comes_from_the_pack_and_is_printed_beside_the_instrument` | parenthetical gone | **No loss.** The replacement asserts `"seed" not in md` over the whole page — strictly stronger than the deleted `"20260902" not in md` |
+| `…the_printed_seed_is_the_seed_the_interval_was_resampled_at` | nothing resamples | **No loss.** Its successor pins the two-arm rendering on `(4, 5, 3, 0)`, the separating table |
+| `…the_seed_is_not_printed_where_no_bootstrap_decided_anything` | carried by the above | **Half lost** — its `assert "- decided by: mcnemar-exact" in md` was the only positive assertion of that branch. **P8-2** |
+| `test_the_bootstrap_path_refuses_without_a_seed` | unrepresentable | **Confirmed** — `bootstrap_seed` is gone from `verdict()`, and `…takes_no_diffs_no_b_and_no_seed` asserts the parameter set |
+| `…envelope_refuses_a_table_that_does_not_describe_its_rows` | unrepresentable | **Confirmed** — no `diffs` argument survives for `n` to disagree with. See the nit in §7 on the `n <= 0` refusal that *is* still representable |
+| rename → `test_verdict_refuses_a_design_effect_below_one` | no second raise left to order against | **Confirmed for the code as delivered** — and only because of **P8-3**. `verdict`'s envelope branch reaches `envelope_arms`, which checks `design_effect` nowhere. Restoring that refusal restores the second raise; see P8-3 for how the ordering comes back with it |
+
+### 4. The two self-reported mutants
+
+**D1 — refuted as *equivalent*; correct as *unreachable on the levels the current caller supplies*,
+which is a different claim.** With `>=` → `>` at `stats.py:337` the suite passes (519), but
+`exact_paired_quantiles((0, 1, 1, 0), levels=(Fraction(1, 4), Fraction(3, 4)))` returns
+`(0.0, 1.0)` mutated against `(-1.0, 0.0)` shipped, and at `levels=(Fraction(1, 4), Fraction(1))`
+the mutant raises `IndexError`. Both are legal levels for the signature, and `Fraction(1)` is one
+`percentile`'s own test asserts. Filed as **P8-4**. The implementer's narrower claim is *true* and I
+confirmed it independently: an exhaustive sweep of every `(b, c)` at n ∈ {10, 20, 30, 40} finds **no**
+tie at `LEVEL_CI95_LO`/`LEVEL_CI95_HI` (Appendix E, table 3).
+
+**D4 — confirmed killed.** Replacing `envelope_arms`'s widened exact arm with the bare
+`exact_paired_quantiles(...)` fails `test_both_arms_are_widened_about_the_same_point_by_the_same_factor`
+on **all three** parametrized tables — including `(34, 6, 0, 0)`, where the implementer reported it
+invisible. The reason is the fix's own design: the new test asserts at the **arm** level through
+`envelope_arms`, not through the envelope, so MOVER-D binding both bounds no longer hides it.
+
+### 5. The statistics at review altitude
+
+- **`percentile`'s rank is `-ml` §11.2.1's expression, character for character** — `max(1, min(x,
+  -(-level.numerator * x // level.denominator)))` against the note's line 2581. Substituting the
+  level-first float spelling `math.ceil(float(level) * x)` kills two tests (§11.10 2a and 2b). The
+  four `LEVEL_*` values are correct. `test_the_percentile_is_the_inverse_empirical_cdf_over_its_whole_domain`
+  is a genuine oracle: the expectation is written as `inf{ v : F(v) >= level }` and never as the
+  rank, over 60 sample sizes × 20 levels, on a shuffled sample whose values are not their indices.
+- **The closed form is right, checked against a second implementation, not read.** I re-derived the
+  exact distribution by an independent n-step convolution over the three per-unit values and it
+  agrees with `exact_paired_quantiles` on all 7 tables tried, degenerate `b = c = 0` included
+  (Appendix E, table 2). The weight `n!/(n₊!n₀!n₋!)·b^n₊·(a+d)^n₀·c^n₋` over `total = n**n` is
+  exactly `n**n · P(multinomial)`, so the arithmetic is integer-exact and §11.2.1's bin-edge hazard
+  is *removed* rather than guarded, as Table D claims. The selector is `F(s) >= p` in integers — the
+  same operator `percentile` applies to a sample — so the two agree by construction.
+- **`_widen`'s `clamp`, required with no default:** the argument holds, and the tests carry it in the
+  one way a grep cannot. The `assert paired_cluster_bootstrap(diffs, clamp=(0.9, 1.5), **kw) ==
+  (0.9, 1.5)` line pins **both** components against arbitrary values, which is the right answer to
+  F1 — Table E's residuals match text the edit destroys, and this assertion does not.
+- **Routed to `data-scientist`, not adjudicated here.** Whether a `(-1, 1)` clamp belongs on the
+  envelope's *arms* at all is a methodology question P8-1 touches but does not settle: the clamp is
+  what creates the tie, and an alternative reading of Rule 4's "widened the same way" applies the
+  support bound to the **composed** interval instead, which would dissolve P8-1 rather than patch
+  its symptom. That is a statistical call, not mine.
+
+### 6. Findings
+
+**P8-1 (major) — the `- decided by:` audit names the arm that did not bind, once the clamp binds
+both.** `modelbench/stats.py:1119-1122`. The attribution is computed on the **clamped** arms, so
+when `_widen`'s `(-1.0, 1.0)` binds both, the comparison is between two equal numbers and the
+`<=`/`>=` tie-break silently prints `MOVER-D`. Measured at `(a=5, b=0, c=7, d=0)`, n=12, DEFF 4.0:
+the *unclamped* lower bounds are MOVER-D −1.0301 and exact −1.0833, so the **exact paired bootstrap**
+is the binding arm — and `verdict(...).bound_by` is `('MOVER-D', 'MOVER-D')`, which the renderer
+prints as `lower bound: MOVER-D`. Swept over every table at n ∈ {12, 38, 40}: **0** misattributions
+at DEFF 1.0 and 1.2, **2 per bound** at 1.5, **29–32 per bound** at 4.0, 680 in all (Appendix E,
+table 4). Unreachable today (every §3.8 pack declares DEFF 1.00) and reachable the moment S2's
+determinism probe measures a design effect ≥ 1.5 — the "invisible rather than urgent, free rather
+than deferred" shape Table G uses on itself. Why it matters: this bullet exists *because* "a
+sentence naming an instrument that did not produce the number beside it is the defect class this
+document exists to remove" (`-ml` line 1223), and the mutation `<=,>=` → `<,>` survives the suite,
+so nothing pins the tie-break either way. **Suggested fix — a design call, so here is the assertion
+that judges it:** attribute from the arms *before* `_widen` clamps them (`envelope_arms` already has
+them), or give a clamp-bound bound its own token. Either way,
+`verdict(_outcomes(5, 0, 7, 0), resolving=_rp(12, deff=4.0, basis="measured"), metric_name="m",
+family=["m"]).bound_by[0]` must stop being `"MOVER-D"`. It is today; I ran it.
+
+**P8-2 (major) — the `mcnemar-exact` rendering of that same bullet is now asserted nowhere.**
+`modelbench/report.py:334-335`. Mutating the `bound_by is None` branch to
+`return "- decided by: MUTANT"` gives **519 passed**. `grep -rn 'decided by: mcnemar-exact' tests/`
+returns exactly one line — `test_report.py:922` — and it is a `not in` on the envelope path. The
+positive assertion lived in the deleted `test_the_seed_is_not_printed_where_no_bootstrap_decided_anything`
+and did not move to either replacement. This is the one genuine loss in the seven-test churn, and it
+is on the `by-construction` path every tool-caller comparison takes at DEFF 1.00. **Fix:** one line
+— `assert "- decided by: mcnemar-exact" in md` — added to an existing `_nested_arms()` report test
+(`test_report.py:106` or `:857`); no new test needed. **Fold in §2.1's missing invariant** while
+there: `assert (v.bound_by is None) == (v.decided_by == "mcnemar-exact")` inside
+`test_the_verdict_records_which_arm_bound_each_printed_bound`, which already constructs both paths.
+
+**P8-3 (major) — `conservative_envelope`/`envelope_arms` silently accept `design_effect < 1.0`, a
+refusal the shipped code had and Table D did not retire.** `modelbench/stats.py:343-367`. At
+`c19f875`, `conservative_envelope(diffs, (34,6,0,0), design_effect=0.25, B=200, seed=1)` raises
+`ValueError: design_effect must be >= 1.0 (-ml §3.4 Rule 4, precondition 4)` — run against the
+`git show c19f875:` source, not inferred. Today `conservative_envelope((34,6,0,0),
+design_effect=0.25)` returns `(0.0909, 0.2204)`, **narrower** than the `(0.0318, 0.2907)` at 1.00.
+Table D retires only the `n != len(diffs)` guard; this one retired by accident, because it lived in
+`paired_cluster_bootstrap`, the call the collapse removed. `verdict()` still guards it, so nothing
+that runs today is wrong — but both functions are public, `envelope_arms` is new, and this diff's
+own `AGENTS.md` edit sits four lines from the sentence "below 1 it *inflates* effective *n* and
+shrinks both printed bounds". **Fix:** restore the raise in `envelope_arms`, reusing
+`paired_cluster_bootstrap`'s exact message. **And the honest cost:** that reintroduces a second raise
+— what the retired ordering half of `test_verdict_refuses_a_design_effect_below_one` existed to
+disambiguate. It is recoverable, because the two messages are *already* distinguishable
+(`stats.py:1071` prefixes `verdict() precondition 4:`), so the ordering re-pins as
+`pytest.raises(ValueError, match=r"verdict\(\) precondition 4")` in place of the retired seed device.
+The assertion that catches the fix being absent: `pytest.raises(ValueError, match="precondition 4")`
+on `conservative_envelope((34, 6, 0, 0), design_effect=0.5)`.
+
+**P8-4 (minor) — D1's classification, and the two-line fixture that settles it.** See §4. The mutant
+is distinguished by a legal input, so "equivalent" overstates it; "unreachable at
+`LEVEL_CI95_LO`/`LEVEL_CI95_HI`" is exactly right and is what the reader needs. **Fix:**
+`assert exact_paired_quantiles((0, 1, 1, 0), levels=(Fraction(1, 4), Fraction(3, 4))) == (-1.0, 0.0)`.
+This is not merely a mutation-killer: `(0, 1, 1, 0)` has CDF `1/4, 3/4, 1` over `s ∈ {-2, 0, 2}`, so
+the fixture lands the level **exactly on an atom boundary** — the one place `inf{ s/n : F(s) >= p }`
+and `inf{ s/n : F(s) > p }` differ, and the property the docstring's "the two agree by construction"
+claim rests on.
+
+**P8-5 (minor) — the envelope's composition rule is written twice, and `envelope_arms`'s docstring
+says it is not.** `stats.py:414` (`conservative_envelope`) and `stats.py:1118` (`verdict`) both spell
+`min(exact[0], mover[0]), max(exact[1], mover[1])`. Both are independently pinned — swapping each
+`min`/`max` costs 5 and 4 failures respectively — so this is not a live bug. What is wrong is the
+pair of claims around it: `conservative_envelope` is now **dead in production** (only tests call it,
+`grep` above), while `envelope_arms`'s docstring asserts "`conservative_envelope` composes it, and
+`verdict()` reads the attribution off it, so **neither recomputes the other's arithmetic**" — which
+`verdict` does. Plan §3.9's own rule is that two copies of a formula is one copy and one bug.
+**Fix:** one `_compose(mover, exact)` helper called from both, or have `envelope_arms` return the
+composed pair beside the arms. Either makes the docstring sentence true and restores
+`conservative_envelope` to a live caller's path.
+
+**P8-6 (minor) — `exact_paired_quantiles`'s refusals are a weaker second copy of `percentile`'s and
+`paired_bootstrap`'s, and none of them is pinned.** `stats.py:326-330`. Deleting the six-line
+transposed-pair guard outright gives **519 passed**: its twin in `paired_bootstrap` is tested
+(`test_paired_bootstrap_refuses_a_transposed_level_pair`), this one is not. The same function is
+also *weaker* than `percentile` on the two refusals it does not carry: a `float` level reaches
+`.numerator` and dies with `AttributeError` rather than §11.2.2's `TypeError`, and a level above 1
+falls off the end of the atom loop and raises `IndexError` on `bounds[1]` rather than the
+`(0, 1]` `ValueError`. Not reachable from `envelope_arms`, which hard-codes the pair — reachable from
+the signature, which advertises `levels` as the caller's. **Fix:** parametrize the existing
+transposed-pair test over both callables (its body already has the right shape), and route the level
+through the same two refusals `percentile` applies — cheapest as a shared `_check_level(level)`, one
+call in each.
+
+**P8-7 (nit) — `AGENTS.md`: both edits earn their place; two small things.** Edit 2 is
+unambiguously right — it *corrects a now-false clause* (`PackRef.seed` as what "the report both uses
+and prints"; the report no longer prints it) and folds `levels` and `clamp` into the existing
+no-defaults list, which is a live constraint an editor adding a default would otherwise revert. Edit
+1 earns its place too, and for a sharper reason than it states: it is the guard against the *wrong*
+reaction to F2's residual count of 2. Two things. **(i)** That clause states a disposition of an
+open finding `architect` has not ruled on — if v1.17 resolves F2 by renaming or by a shared
+`_quantile_from_cdf`, the always-loaded file is the highest-cost place for the stale version to sit;
+half a clause citing F2 as open would keep it honest. **(ii)** The insertion left line 81 at 131
+characters where the file otherwise wraps near 100. Both smells are clear at the bar that matters:
+1,952 words, `awk 'length($0)>700'` returns nothing. Neither is worth a change before v1.17 lands.
+
+**One nit with no number, because it is not this diff's regression.** The `n <= 0` refusal is now
+written in both `envelope_arms` and `exact_paired_quantiles` and `grep -rn 'describes no rows'
+tests/` returns nothing — no test reaches either. It is the natural home for the intent of the
+deleted `…refuses_a_table_that_does_not_describe_its_rows`, whose *own* guard was correctly retired
+as unrepresentable. And `HISTORY.md`, thorough as it is, does not say that the estimator swap
+**moves the printed figures** — over `1..100`, `latencyMsP50` goes 51 → 50 — which is a visible
+`index.csv` change across this commit for anyone comparing runs over it.
+
+### 7. What's solid
+
+- **The statistics.** The closed form verified against an independent convolution on 7 tables; the
+  rank expression verbatim from `-ml` §11.2.1 and killed by its float substitution; the four level
+  constants correct. This is the part it would have been easiest to get subtly wrong.
+- **The residual honesty.** All three plan findings are real, correctly characterised, and reported
+  in the commit message and `HISTORY.md` rather than quietly worked around — including the refusal
+  to rename `exact_paired_quantiles` to make F2's grep read 1, which would have destroyed the exact
+  property that residual exists to have. All five residual counts reproduce (Appendix E, table 1).
+- **The test work is a step up.** The inverse-ECDF oracle written from the definition; the
+  `(0.9, 1.5)` clamp assertion that answers F1 where no grep can; `test_both_arms_are_widened…`
+  parametrized over the tables that separate the arms — which is what killed D4;
+  `results_module.percentile is stats.percentile` as **identity**, not behaviour.
+- **R-13/M27 is genuinely closed.** Recomputing the `latencyMsP95` cell at `LEVEL_P50` — M27's own
+  defect, verbatim — now fails a test. It used to stay green; that is the whole point of Table C.
+- **The rendered bullet matches the note's published example byte for byte**
+  (`-ml` line 1214), which is not something the plan restated and had to be taken from the note.
+
+### 8. Open questions
+
+1. **P8-1's fix is a `data-scientist` question before it is a `coder` one** (§5, last bullet).
+   Attributing from the unclamped arms is the local patch; applying the support bound to the
+   composed interval instead removes the tie entirely. Rule 4's "widened the same way" is what
+   decides, and it is a methodology call.
+2. **P8-7(i) waits on v1.17.** If `architect` resolves F2 other than by leaving
+   `exact_paired_quantiles` named as it is, `AGENTS.md`'s new clause needs the same edit in the same
+   pass — worth putting on the v1.17 sweep list now rather than discovering later.
+
+### Appendix E — Pass 8 evidence
+
+Everything below was run this session under `model-bench/` with `.venv/bin/python`. Baseline
+**519 passed** in ~3.0 s; every mutation was applied to a `cp`-backed copy, run alone, restored, and
+`diff -q`'d byte-identical before the next.
+
+**Table 1 — the five residual counts, reproduced.**
+
+| Residual | Stated | Measured | Note |
+|---|---|---|---|
+| C-1 `grep -rFc _percentile modelbench/results.py` | 0 | **0** | — |
+| C-2 `grep -rFc _percentile modelbench/stats.py` | 0 | **0** | — |
+| C-3 `grep -rEn 'def [A-Za-z_]*(percentile\|quantile)' modelbench` | 1 | **2** | `stats.py:264` + `:464` — **F2**, already raised |
+| D-1 `grep -rFn bootstrap_seed modelbench tests` | 0 | **1** | `test_stats.py:878`, substring of `test_cluster_bootstrap_seed_…` — **F3**, already raised |
+| D-2 `grep -rFn 'cluster-bootstrap' modelbench tests` | 0 | **0** | — |
+| E-1/E-2, G-1/G-2 | 0 each | **0 each** | E's pair is blind by construction — **F1**, already raised |
+
+**Table 2 — the closed form against an independent n-step convolution** (a second implementation of
+the exact distribution, not a re-read of the first), at `(LEVEL_CI95_LO, LEVEL_CI95_HI)`:
+
+`(0,6,0,34)`, `(4,5,3,0)`, `(1,25,12,2)`, `(34,6,0,0)`, `(2,19,7,12)`, `(0,0,0,7)`, `(3,0,4,1)` —
+**7 of 7 agree exactly**, degenerate `b = c = 0` (both quantiles 0) included.
+
+**Table 3 — the D1 tie search.** Every `(b, c)` at n ∈ {10, 20, 30, 40}, testing
+`level.denominator · cum == level.numerator · n**n` at both shipped levels: **0 ties**. So the
+selector's `>=` is never exercised as an equality on this path — the implementer's claim — while
+`(0, 1, 1, 0)` at `Fraction(1, 4)` exercises it immediately at a level the signature accepts.
+
+**Table 4 — P8-1's misattribution sweep.** Every `(a, b, c, 0)` at n ∈ {12, 38, 40}, comparing the
+arm the code names (clamped) against the arm that actually binds (unclamped):
+
+| DEFF | 1.0 | 1.2 | 1.5 | 2.0 | 4.0 | 7.0 |
+|---|---|---|---|---|---|---|
+| n=12 (per bound) | 0 | 0 | 2 | 4 | 20 | 39 |
+| n=38 (per bound) | 0 | 0 | 2 | 4 | 29 | 101 |
+| n=40 (per bound) | 0 | 0 | 2 | 4 | 32 | 101 |
+
+**Table 5 — the nine mutations.**
+
+| # | Mutation | Result |
+|---|---|---|
+| 1 | `_decided_by_line`'s `bound_by is None` branch → a constant string | **519 passed — SURVIVES** → P8-2 |
+| 2 | `conservative_envelope`'s `min`/`max` swapped | 5 failed — killed |
+| 3 | `verdict`'s inline `min`/`max` swapped | 4 failed — killed (and 2+3 together are P8-5) |
+| 4 | atom selector `>=` → `>` | **519 passed — SURVIVES** → P8-4 (not equivalent; see table 3) |
+| 5 | exact arm not `sqrt(DEFF)`-widened (D4) | 3 failed — killed on all three tables |
+| 6 | `bound_by` tie-break `<=,>=` → `<,>` | **519 passed — SURVIVES** → P8-1 |
+| 7 | `exact_paired_quantiles`'s transposed-pair guard deleted | **519 passed — SURVIVES** → P8-6 |
+| 8 | `latencyMsP95` cell computed at `LEVEL_P50` (M27 verbatim) | 1 failed — killed |
+| 9 | rank → `math.ceil(float(level) * x)` | 2 failed — killed (§11.10 2a and 2b) |
+
+**Working-tree discipline.** No source, test, config or plan file was modified. `git status
+--porcelain` at close shows `docs/reviews/small-model-benchmarking-impl.md` as this review's only
+entry under my hand; the `claude/**` and `docs/plans/small-model-benchmarking.md` entries belong to
+the concurrent sessions the brief named. Nothing staged, nothing committed.
