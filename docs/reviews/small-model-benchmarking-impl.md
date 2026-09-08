@@ -7,14 +7,15 @@ suggestions). **Pass 3** re-gated `95b4c88` (needs changes). **Pass 4** re-gated
 changes). **Pass 5** gated `8fc2341`, the first of S1e's three implementation units (needs changes).
 **Pass 6** re-gated its fix round `c523a35` (needs changes). **Pass 7** re-gated `f409905` (needs
 changes). **Pass 8** gated `cc28d48`, S1e's second and largest unit (needs changes). **Pass 9**
-re-gates its fix round `7f865e2` — jump to [`## Pass 9`](#pass-9--2026-09-08) for the current
-verdict; the earlier passes are kept intact because they are meant to be read together. Passes 1–4
-gate the S1 build; Passes 5–7 are S1e's first unit (§4 S1e Tables A and B, the `fingerprint.py`
-re-key); Passes 8–9 are its second (Tables C, D, E and G), leaving Table F undelivered and P8-1
-held for `-ml` v1.19 §3.4 Rule 4a. **Pass 7 §3 says which half of this document to trust** — the
-findings held, three suggested fixes did not; Passes 8 and 9 are written to that standard and name,
-for each suggested fix, the assertion that catches it being wrong. Two more of my fixes were
-rightly overruled at Pass 9, which is the fourth and fifth across the document.
+re-gated its fix round `7f865e2` (needs changes). **Pass 10** re-gates `93b0e42` — jump to
+[`## Pass 10`](#pass-10--2026-09-08) for the current verdict; the earlier passes are kept intact
+because they are meant to be read together. Passes 1–4 gate the S1 build; Passes 5–7 are S1e's
+first unit (§4 S1e Tables A and B, the `fingerprint.py` re-key); Passes 8, 9 and 10 are its second
+(Tables C, D, E and G), leaving Table F undelivered and P8-1 held for `-ml` §3.4 Rule 4a's own
+unit. **Pass 7 §3 says which half of this document to trust** — the findings held, three suggested
+fixes did not; Passes 8, 9 and 10 are written to that standard and name, for each suggested fix,
+the assertion that catches it being wrong. Five of my fixes have now been rightly overruled and
+none of my findings has.
 
 ## Pass 1 — 2026-09-03
 
@@ -2537,3 +2538,184 @@ less.
 - **P8-1 was held cleanly rather than half-moved.** The M14 control surviving at 550 passed is the
   right evidence for that, and `_compose`'s docstring makes the next unit's edit legible without a
   handoff document.
+
+## Pass 10 — 2026-09-08
+
+### 1. Scope & verdict
+
+**Reviewed:** commit `93b0e42`, the diff `7f865e2..93b0e42 -- model-bench/` — 4 files, +113/−12:
+`modelbench/stats.py` (2/2), `tests/test_stats.py` (28/5), `model-bench/AGENTS.md` (8/5),
+`model-bench/docs/HISTORY.md` (75/0). A narrow closure pass on Pass 9's **N1**, **N2** and **N3**;
+**P8-1 remains held**, blocked on `-ml` §3.4 Rule 4a's own unit (plan v1.20, in flight).
+
+**CPG:** considered, not relevant — none exists for `model-bench/`.
+
+**Verdict: needs changes** — 0 blockers, **1 major** (**N4**), **1 minor** (**N5**), 0 nits.
+
+**All three Pass 9 findings are closed** (§2), both by exactly the respelling named, and N2's test
+gained a `match=` it never had. The two sweeps are six well-chosen examples rather than the property
+— but I checked the rejection domain for a gap and there is none, and the axis that mattered turns
+out to be *which side of the predicate is under test* (§3). The end-of-line comment shape is the
+module's own, established before the pins existed, so nothing bent (§4). N3's widening holds, and my
+three words would have left the hazard live (§5).
+
+**N4 is the answer to the fourth-path question, and it is a real one.** The four guards close the
+*below* side of `>= 1.0` by construction and nothing closes the *above* side or the data: `+inf`
+passes every guard, and `verdict()` then returns `ci = (-1.0, 1.0)` with
+`bound_by = ('MOVER-D', 'MOVER-D')` — a full-support interval attributed to a named instrument. A
+`nan` or `inf` anywhere in `diffs` does the same on the continuous entry point, which has no guard on
+its data at all. The mechanism is `_widen`'s clamp rather than the predicate, which is one step past
+where the round's own `AGENTS.md` sentence stops. **Not blocked:** I ran the candidate one-line guard
+in `_widen` — **560 passed**, all three shapes refused, and it does not collide with Rule 4a, because
+under Rule 4a `_widen` still runs before `_compose` clamps.
+
+**P8-1 remains legitimately held**, blocked on Rule 4a's own unit (plan v1.20). Nothing in this pass
+is deferred by choice: N4 and N5 are both closeable now.
+
+Spent only on what the coordinator could not check: the two probes behind N4, one candidate-fix run,
+and an id-level read of the two sweeps. I did not re-run the suite, the guard grep, the five
+mutations, the line-count pins or the word counts.
+
+### 2. Disposition of Pass 9's findings — 3 of 3 closed
+
+| # | Sev. | Disposition | Evidence I rechecked |
+|---|---|---|---|
+| **N1** | major | **Fixed** | `stats.py:1126` reads `not resolving.design_effect >= 1.0`, and `test_the_two_envelope_refusals_name_which_layer_raised` is parametrized over six values including `nan`. Ran it: at `deff=nan`, `verdict()` now raises its **own** `verdict() precondition 4: …` message where it previously fell through to `envelope_arms`' |
+| **N2** | major | **Fixed, and slightly wider than I asked** | `stats.py:228` respelled; the test swept over the same six **and gained `match="precondition 4"`**, which it never had — it was a bare `pytest.raises(ValueError)`. Ran it: the NaN call raises where it returned `(-1.0, 1.0)` |
+| **N3** | nit | **Fixed, wider than I asked, and the widening holds** — §5 | The bullet names all four sites and the mechanism; `AGENTS.md`'s longest line is unchanged at 122, which predates this round |
+| **P8-1** | major | **Still held — blocked on unbuilt work** | `-ml` §3.4 Rule 4a's own unit, plan v1.20, in flight. The coordinator's N-M5 control surviving at 560 is the right evidence that clamp placement is untouched; I did not re-run it |
+
+### 3. Do the sweeps assert the property, or six examples? — six, correctly chosen, and the question is on the wrong axis
+
+**They are six examples, not the property** — the property's domain is *every float for which
+`not d >= 1.0`*, which is uncountable and unsweepable. But the six are a **partition of the rejection
+domain by predicate-failure mode**, not a list: two ordinary sub-1 values, one boundary-adjacent
+(`0.999999`, which a `<`/`<=` slip admits), zero (the division hazard), negative (the `sqrt` domain
+hazard), and `nan` (the predicate hazard). Each row can fail for a different implementation reason,
+which is what distinguishes a partition from an anthology.
+
+**I checked for a gap inside that domain and there is none.** The one class the six omit is `-inf`;
+`not -inf >= 1.0` is `True`, so both guards fire and both messages match `-1.0`'s exactly —
+behaviourally the same row. Nothing in the rejection domain is unrepresented.
+
+**But both tests only ever look at one side of the predicate, and that is where the risk went.**
+N1's residual was never inside the rejection domain: `+inf` **satisfies** `>= 1.0`, so it passes all
+four guards, and no sweep of a *refusal* test could ever have found it. That is **N4** (§6). The
+useful answer to the question as posed is therefore: the axis that mattered here was not
+property-versus-examples but *which side of the predicate is under test*, and the answer is that
+neither test looks at the accepting side.
+
+**The strictly stronger form, if the coordination wants it**, is one loop rather than six rows:
+assert that `verdict()`'s guard and `envelope_arms`' guard **agree** — same accept/reject decision,
+`verdict()`'s message first when both reject — over a generated domain that includes the specials.
+That is closed under the predicate rather than enumerated, and it extends to the accepting side for
+free, which is exactly what would have caught N4.
+
+### 4. The end-of-line comments — readability was paid for, and the plan constraint did not bend the code
+
+**The shape is the module's own, and it predates the pin pressure.** `resolving_power` has carried
+`if not design_effect >= 1.0:  # NaN-safe: '< 1.0' would admit a NaN design effect` since before
+`cc28d48` — established in Pass 9 §3.1 against `git show cc28d48:…`. So the two new comments match
+the site that already had this exact guard with this exact comment shape. Being line-count-neutral
+is a *consequence* of matching the existing convention, not the reason for it; had the convention
+been a block, the pins would have argued for a block. The plan constraint and the house style
+agreed here, which is why nothing had to bend.
+
+**Measured rather than taken:** the four `# NaN-safe` lines are **97, 96, 85 and 97** characters
+against `line-length = 100` (`stats.py:228, 376, 855, 1126`) — I measure 97 for both new ones where
+the brief said 95 and 93; either figure is under the limit and `ruff` is clean, so the discrepancy
+changes nothing.
+
+**And they are not boilerplate, which is the real test of whether a 97-character line earns its
+width.** Each says something different and site-specific: `:228` records *what the defect produced*
+("a NaN here returned the full support as an interval"), `:1126` records *how it escaped* ("a NaN
+fell through to the arms' own raise"). A reader at either site learns the thing they could not
+recover from the predicate. Four near-identical comments would have been the failure; these are not
+that.
+
+### 5. N3's widening holds — and my three words would have left the hazard live
+
+I asked for three words that removed a false sentence. The coder's argument is that removing a false
+sentence is not the same as installing a true constraint, and it is right: nothing in the three-word
+version stops the next editor simplifying `verdict()`'s `not x >= 1.0` back to `x < 1.0` — which is
+**precisely what this round just undid at two sites**, and which the *previous* round's version of
+that same bullet had invited. The test for an always-loaded line is whether it changes what the
+reader does next. *"The predicate is that way round at all four sites … do not simplify any of them"*,
+plus the one-clause mechanism, does. *"Refuses any `design_effect` not `>= 1.0`"* does not.
+
+It is a live constraint rather than history: the four guards exist now, the temptation is
+demonstrably live, and the mechanism is one clause rather than a narrative of how it was found.
+**Second time this coder has widened one of my nits with a reason, and both times rightly** — the
+same split Pass 7 §3 named, now at five overruled fixes and no overruled finding.
+
+**One rider, and it belongs to N4 rather than to the bullet.** The mechanism clause is true and is
+attached only to the `design_effect` predicate, which invites a reader to conclude that the four
+guards close the NaN class. They do not (§6). When N4 is closed, that bullet earns one more clause;
+writing it now would be documenting a defect rather than stating a constraint, so it should wait.
+
+### 6. Yes — there is a fourth path, and it is the accepting side of the same predicate
+
+**N4 (major) — a `design_effect` of `+inf`, or a non-finite value anywhere in `diffs`, reaches the
+same clamp and prints as a real interval.** The four guards close the *below* side by construction;
+nothing closes the *above* side or the data. `not inf >= 1.0` is `False`, so `+inf` passes every one
+of them, `math.sqrt(inf)` is `inf`, `_widen` returns `(-inf, +inf)`, and the clamp's `max(-1.0, …)` /
+`min(1.0, …)` return the support bounds. All measured this session:
+
+| Call | Returns |
+|---|---|
+| `verdict(_outcomes(34,6,0,0), resolving=<deff=inf>, …)` | **`ci = (-1.0, 1.0)`, `bound_by = ('MOVER-D','MOVER-D')`** — a full-support interval attributed to a named instrument |
+| `conservative_envelope((34, 6, 0, 0), design_effect=inf)` | `(-1.0, 1.0)` |
+| `paired_cluster_bootstrap(diffs, design_effect=inf, clamp=(-1.0, 1.0), …)` | `(-1.0, 1.0)` |
+| `paired_cluster_bootstrap([nan] + diffs, design_effect=1.0, clamp=(-1.0, 1.0), …)` | `(-1.0, 1.0)` — **no guard on `diffs` at all** |
+| the same with `[inf] + diffs` | `(-1.0, 1.0)` |
+| `paired_bootstrap([nan] + diffs, …)` — no clamp applied | `(nan, nan)` — *visibly* wrong, which is the contrast that identifies the clamp as the launderer |
+
+**The mechanism is `_widen`'s clamp, not the predicate** — which is the generalisation the round's own
+`AGENTS.md` sentence invites and stops one step short of. `max(-1.0, nan)` returns `-1.0` and
+`min(1.0, nan)` returns `1.0`, because every comparison with a NaN is `False`, so the clamp converts
+"no number" into "the widest honest number" silently and in the direction that prints. Reachability
+today is the same standing N1 and N2 had when they were filed as majors: `resolving_power` refuses
+`inf` incidentally (`n_effective must be positive`), so the `verdict()` route needs the same
+`dataclasses.replace` bypass N1 did — but `conservative_envelope`, `envelope_arms` and
+`paired_cluster_bootstrap` are public, take bare floats, and the last is `-ml` §3.2d's continuous
+entry point that Rule 8's `continuous_verdict()` is specified to call with a manifest value.
+
+**Not blocked on unbuilt work — one line, at the point all three paths converge.** I ran the
+candidate rather than proposing it: adding, in `_widen` after `widened` is computed,
+
+```python
+if not all(math.isfinite(b) for b in widened):
+    raise ValueError(...)
+```
+
+gives **560 passed** — no existing test relies on a non-finite bound flowing through — and refuses
+all three shapes above. **It does not collide with the in-flight Rule 4a unit:** under Rule 4a
+`envelope_arms` widens with `clamp=None`, so `_widen` still runs and the guard still fires *before*
+`_compose` clamps, which is where it needs to be. **The assertions that catch it being absent**, and
+they fail today: `pytest.raises(ValueError)` on `conservative_envelope((34, 6, 0, 0),
+design_effect=float("inf"))` and on `paired_cluster_bootstrap([float("nan")] + diffs,
+design_effect=1.0, clamp=(-1.0, 1.0), …)`.
+
+*Honest limit on that evidence, by Pass 7 §3's own rule:* a green suite proves only as much as the
+suite constrains, and no test here exercises a deliberately infinite bound. The design question — a
+result guard in `_widen` versus an input guard at each of the three entry points — is the
+implementer's; the result guard is the one that closes all three with one assertion, and it is where
+I would start.
+
+*One clause of the same family, well below finding weight:* `percentile([1.0, nan, 3.0],
+level=LEVEL_P50)` returns `nan`, because `sorted()` does not order a NaN. It prints as `nan` rather
+than as a plausible number, so it launders nothing, and `_index_row`'s only float source is a timing.
+Named here so it is not rediscovered as new.
+
+### 7. The other new finding
+
+**N5 (minor) — the six-value design-effect domain is now written out three times.**
+`tests/test_stats.py:1430`, `:1451` and `:1724` each carry the literal
+`[0.5, 0.25, 0.999999, 0.0, -1.0, float("nan")]`. Adding a seventh class — `-inf`, or `inf` once N4
+lands — means three edits, and missing one is silent: the sweep still passes, one surface just stops
+being swept. This is plan §3.9's own rule ("two copies of a formula is one copy and one bug") on the
+test side, and it is the rule this round has now applied twice to the source (`_percentile`,
+`_compose`). **Fix:** one module-level constant, e.g. `_SUB_ONE_DESIGN_EFFECTS`, referenced by all
+three `parametrize` marks. **The assertion that catches it being wrong:** none is needed — the
+change is mechanical and the three id-lists must stay identical, which `pytest --collect-only` shows
+directly.
