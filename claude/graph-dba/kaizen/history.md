@@ -2,6 +2,37 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+
+## 2026-09-08 — `falkordb-quirks.md` gained three dialect facts from `analyst`'s raw capture (U19)
+
+- **What:** `cobb`, distilling `analyst`'s `kaizen_team` entries (unit U19,
+  `claude/docs/plans/kaizen-distillation2-coordination.md`, chunk A — 2026-08-25..08-30), promoted
+  three FalkorDB facts. All three were re-derived from scratch against a disposable graph
+  (`cobb_u19_scratch`, deleted after), module `41811` re-confirmed via `INFO modules` — none was
+  taken from the entry's own `falkor-chat`-mediated evidence.
+  1. **Chained `FOREACH`** (*Cypher dialect*, folded into the existing `FOREACH` bullet, which
+     covered nesting and multi-`CREATE` bodies but not chaining): two `FOREACH` clauses follow one
+     `WITH` with no `WITH` between them, and each sees property values written earlier in the same
+     query — by a preceding `SET` or by a preceding `FOREACH`. Both halves measured: a
+     decrement-then-branch statement returned `1/running` on `2 -> 1` and `0/ready` on `1 -> 0`,
+     and a `SET d.flag = 7` in one `FOREACH` correctly guarded the next. Makes a counter update
+     plus its terminal-state flip one atomic statement.
+  2. **`=~` is unsupported outright** (*Cypher dialect*, new bullet — the file had no regex entry
+     at all): a hard error, *"FalkorDB does not currently support =~"*, reproduced verbatim.
+     Carries the `toLower(...) CONTAINS` replacement and the `any(k IN keys(n) …)` whole-node form.
+  3. **Duplicate result columns are rejected** (*Ops, config & tooling*, folded into the
+     `result.header` bullet — same subject, un-aliased column naming). `RETURN d.id, d.id` and
+     `RETURN count(d), count(d)` both fail with *"Error: Multiple result columns with the same
+     name are not supported."* **The raw entry's mechanism was corrected before promotion:** it
+     claimed the error comes "at query time — not at parse/compile time", but `GRAPH.EXPLAIN` on
+     the same text errors identically, so it is raised in server-side validation and no rows are
+     produced. The consequence that survives is the one that matters to a caller — there is no
+     client-side parse step, so it still arrives as a `ResponseError` from `.query()`/`.ro_query()`.
+- **Why:** engine behaviour, not `analyst` behaviour — it belongs in this on-demand knowledge base
+  where every agent that writes Cypher can reach it. Same routing as U1, U10 and U11.
+- **Files:** `claude/graph-dba/falkordb-quirks.md`. Source dispositions:
+  `claude/analyst/kaizen/history.md` (2026-09-08, U19).
+
 ## 2026-09-07 — `falkordb-quirks.md` gained two more verified dialect facts from `coder`'s raw capture (U11)
 
 - **What:** `cobb`, distilling `coder`'s `kaizen_team` entries (unit U11,

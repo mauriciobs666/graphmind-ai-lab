@@ -208,6 +208,11 @@ to the general fact here.
   (verified 2026-07-09). `x STARTS WITH $a + ':' + $b` errors *"Type mismatch: expected
   Boolean but was String"* — `STARTS WITH` binds tighter than `+`. Write
   `x STARTS WITH ($a + ':' + $b)`.
+- **The regex-match operator `=~` is not supported at all** — a hard error,
+  *"FalkorDB does not currently support =~"*, with no degraded or partial form to fall back on
+  (verified 2026-09-08, module `41811`). For case-insensitive substring matching use
+  `toLower(prop) CONTAINS 'term'`, chained with `OR` across several properties, or
+  `WHERE any(k IN keys(n) WHERE toLower(toString(n[k])) CONTAINS 'term')` to sweep a whole node.
 - **`algo.*` procedures confirmed:** `BFS`, `WCC`, `pageRank`, `SPpaths`,
   `SSpaths`, `MSF`, `betweenness`, `labelPropagation`.
 - **Empty `UNWIND` collapses the row stream.** `WITH x UNWIND [] AS y …` drops
@@ -232,6 +237,16 @@ to the general fact here.
   endpoint must be a *bound node variable*, and an outer-scope binding qualifies, while a
   list subscript does not (`CREATE (ms[k])-[:NEXT]->(ms[k+1])` errors `Invalid input '['`).
   Use it for atomic, idempotent provisioning writes: one statement, one guard, whole subgraph.
+  **Two `FOREACH` clauses also chain back-to-back after a single `WITH` — no `WITH` between them —
+  and each one sees property values written earlier in the same query, by a preceding `SET` *or*
+  by a preceding `FOREACH`** (verified 2026-09-08, module `41811`, disposable graph).
+  `MATCH (d:D {id:$id}) SET d.remaining = d.remaining - 1 WITH d
+  FOREACH (_ IN CASE WHEN d.remaining = 0 THEN [1] ELSE [] END | SET d.status = 'ready')
+  FOREACH (_ IN CASE WHEN d.remaining > 0 THEN [1] ELSE [] END | SET d.status = 'running')`
+  reads the *decremented* value in both guards: `2 -> 1` returned `running`, `1 -> 0` returned
+  `ready`. Cross-`FOREACH` visibility measured separately — `FOREACH (_ IN [1] | SET d.flag = 7)`
+  followed by `FOREACH (_ IN CASE WHEN d.flag = 7 THEN [1] ELSE [] END | ...)` fires. So a
+  decrement-then-branch counter update is **one** atomic statement, not a read plus a write.
 - **`exists((n)-[:REL]->())` in a pattern returns `true` even when the edge is
   absent** (broken on this build); `count{ … }` subquery syntax is unsupported.
   For existence checks use `OPTIONAL MATCH (n)-[:REL]->(x) RETURN x IS NOT NULL`
@@ -621,6 +636,14 @@ to the general fact here.
   Consequence for any generic row-to-dict mapper built from `res.header` — a query whose column set
   isn't known ahead of time — expect keys like `"c.name"` and `"count(p)"`, never bare property
   names: alias every column you intend to key on, or key on the expression text deliberately.
+  **The hard-error corollary: two identically-named result columns are rejected outright**
+  (verified 2026-09-08, module `41811`) — `RETURN d.id, d.id` and `RETURN count(d), count(d)` both
+  fail with *"Error: Multiple result columns with the same name are not supported."* It is raised
+  during **query validation, not only at execution**: `GRAPH.EXPLAIN` on the same text errors
+  identically, so no rows are ever produced. There is still no client-side parse step, so the
+  caller meets it as a `redis.exceptions.ResponseError` raised by `.query()`/`.ro_query()` at call
+  time — any builder that assembles a projection list from model or user input must check the
+  returns list for duplicates itself (`falkor-chat`'s `querygen.compile()` does).
 - **Renaming a graph is a plain Redis `RENAME`/`RENAMENX` on its key — atomic, non-destructive,
   and fully supported. `GRAPH.COPY` + `GRAPH.DELETE` is NOT needed and should not be used**
   (verified 2026-09-07, module `41811`, disposable graph). A graph is a single Redis key of type

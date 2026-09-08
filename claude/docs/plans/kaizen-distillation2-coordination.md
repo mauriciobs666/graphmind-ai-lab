@@ -72,7 +72,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U17 | teco chunk B (12: 09-02, incl. one corrupt all-`PLACEHOLDER` node) | `a3b31a7efe468e5c0` | accepted | `claude/teco/teco.md` (6 promotions) + `claude/AGENTS.md` (2) + `kaizen/history.md`; `claude/cobb/kaizen/plan.md` (K-021); **8 promoted, 4 discarded**; 11 nodes deleted, 1 `PRODUCED` resolved (`MENTIONS`→`architect`) | none → — | 187.9k tok, 55 tools |
 | U18 | teco chunk C (13: 09-03…09-06) | `a881239125792e0e0` | accepted | `claude/teco/teco.md` (5 in-place sharpenings + 1 new bullet), `skills/agent-standards/claude-code.md` (agentId resolution scope), `claude/teco/kaizen/history.md`+`plan.md` (K-016 → blocking), 3x `MENTIONS` (2 analyst, 1 data-scientist), graph cleared | none → — | 179.1k tok, 68 tools |
 | U18b | teco chunk D (14: 09-07, all arrived after pass open) | `adcb31af6bc3fc428` | accepted | `claude/teco/teco.md` (12 statements from 9 entries, **zero new bullets** — 11 lines changed, 11 removed); `skills/agent-standards/claude-code.md` (2 permission-classifier entries merged); `claude/teco/kaizen/history.md`+`plan.md`; 5 `MENTIONS` edges over 4 entries (3 tdd-engineer, 2 analyst); 10 nodes deleted, 4 `PRODUCED` resolved — **`teco` closed out, 0 produced / 0 mentioned** | none → — | 224.6k tok, 69 tools |
-| U19 | analyst chunk A (12: ≤ 08-30) | `adb247a3e028c0606` (killed by a session rate limit at its first tool call, 09-07; resumed in place by `SendMessage` 09-08 — nothing had landed, all 12 edges intact) | in-flight | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
+| U19 | analyst chunk A (12: ≤ 08-30) | `adb247a3e028c0606` (killed by a session rate limit at its first tool call, 09-07; resumed in place by `SendMessage` 09-08 — nothing had landed, all 12 edges intact) | accepted | `claude/graph-dba/falkordb-quirks.md` (3 entries: 2 folded, 1 new regex bullet) + `kaizen/history.md`; `claude/analyst/review-techniques.md` (2, both edits to existing material — one **corrected a wrong import-resolution mechanism the file had been carrying**) + `kaizen/*`; **7 discarded**, 3 of them additionally carrying a false or misattributed claim; 1 `MENTIONS`→`devops`; 11 nodes deleted, 1 `PRODUCED` resolved. **Zero new bullets in any always-loaded prompt** — `analyst.md` and `claude/AGENTS.md` untouched | none → — | 184.9k tok, 50 tools |
 | U20 | analyst chunk B (11: 08-31…09-01 + the first 5 of 09-02) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U21 | analyst chunk C (10: the remaining 09-02) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U22 | analyst chunk D (11: 09-03) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
@@ -168,6 +168,20 @@ that dies between them leaves an entry harmlessly duplicated or partially
 resolved, never silently lost. A run that dies before either leaves nothing.
 
 ## Follow-ups
+
+- **Falsified evidence in an `active` plan doc, surfaced by U19 — needs routing
+  to `graph-dba` (its owner), not fixed here.**
+  `falkor-chat/docs/plans/oversized-indexed-property-guard-graph.md:205` asserts
+  "this schema has zero `RELATIONSHIP`-type constraints
+  (`grep -n RELATIONSHIP scripts/bootstrap_schema.sh` -> no matches)". `teco`
+  re-ran that grep: `falkor-chat/scripts/bootstrap_schema.sh:265` now reads
+  `gconstraint "$g" UNIQUE RELATIONSHIP SAME_AS PROPERTIES 1 matchId`, added
+  2026-08-24 by `8d7dcfb` (K-050 fusion). The document's conclusion (do not
+  bound `tr["on"]`) may still hold on other grounds, but its stated evidence is
+  false and the document is `Status: active`. This is the exact failure mode
+  U19 promoted into `review-techniques.md` in the same run — an honestly-run
+  negative grep that decayed reads exactly like a current one — so the instance
+  and the rule surfaced together.
 
 - Pass 1's open follow-up (`coder` K-005, the `verify_workflows.sh`
   false-negative) is **closed** — `tdd-engineer` fixed `Repository._read_structure`

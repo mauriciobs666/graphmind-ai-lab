@@ -31,10 +31,28 @@ Two techniques for gathering *executed* evidence about a change that is still un
 `skills/agent-standards/claude-code.md` § Bash tool environment for that layer):
 
 **(a) Load a `HEAD` version of a module alongside the working-tree one, via a stub package.**
-`pip install -e '.[dev]'`-style editable installs register a `MetaPathFinder` that is consulted
-before `sys.path`, so copying the tree to a scratch dir and prepending it to `PYTHONPATH` still
-imports the *working-tree* version — it does not shadow it. What works instead, with zero
-working-tree writes:
+First, the import-resolution order you are working against, measured rather than assumed
+(2026-09-08, `falkor-chat/server/.venv`, Python 3.12, marker package): a setuptools editable
+install **appends** its finder to `sys.meta_path` (`install()` does
+`sys.meta_path.append(_EditableFinder)`; the live order is
+`[BuiltinImporter, FrozenImporter, PathFinder, _EditableFinder]`), so `sys.path` beats it, and
+`import <pkg>` resolves to **(1)** a `<pkg>/` directory in the cwd (`sys.path[0] == ''` under both
+`python -c` and `python -m`), else **(2)** a `PYTHONPATH` entry, else **(3)** the finder's
+`MAPPING`, which hardcodes an *absolute* path to the tree the install was made from. Two
+consequences that decide whether an isolation attempt actually isolated anything:
+
+- A `PYTHONPATH`-prepended scratch copy **does** shadow the editable install — *unless* you invoke
+  from the real package's own parent directory, whose cwd entry beats it. That cwd precedence, not
+  finder priority, is what defeats a `PYTHONPATH` shadow attempt run from `server/`.
+- A **`git worktree` isolates the import only when Python is invoked with cwd inside the
+  worktree's own package-parent directory** (`server/`). From the worktree *repo root* nothing
+  local matches, rule (3) wins, and the run silently executes the **main** tree's uncommitted
+  source while looking isolated. Observed cost of getting this wrong: a seed script invoked from a
+  worktree repo root republished a concurrent unit's uncommitted content into the shared
+  `reference` graph under the wrong version label.
+
+The technique below never depends on that search order at all, which is why it is the robust
+route, with zero working-tree writes:
 ```python
 # 1. Extract the HEAD version of the file to scratch, unmodified:
 #    git show HEAD:path/to/module.py > $SCRATCH/module_head.py
@@ -87,10 +105,10 @@ the *real* package first — this populates `sys.modules` with every unmutated s
 its normal relative imports — then use `importlib.util.spec_from_file_location` to load *only* the
 one mutated file under the package's real dotted name (e.g. `"pkg.services"`, with `__package__`
 set correctly), `exec_module` it, and overwrite `sys.modules["pkg.services"]` with it before
-constructing any objects. `PYTHONPATH`/`sys.path.insert` does **not** reliably shadow a package
-installed via `pip install -e .` (editable install) in this environment — the editable-install
-`MetaPathFinder` is consulted before `sys.path`, so `import pkg` keeps resolving to the real
-installed copy even with a same-named mutated tree earlier on `PYTHONPATH`. This differs from (a):
+constructing any objects. A `PYTHONPATH`/`sys.path.insert` shadow is **not** reliable
+here — see the measured resolution order at the head of (a): whenever the run's cwd is the real
+package's own parent directory, the cwd entry outranks `PYTHONPATH` and `import pkg` keeps
+resolving to the working-tree copy. This differs from (a):
 (a) loads an alternate version under a *separate* namespace to diff two versions side by side; (d)
 substitutes one module *in place*, under its real name, so objects constructed afterward actually
 run the mutated code when exercised — the right shape when the claim to verify is "this specific
@@ -210,6 +228,31 @@ routed (6 to …, 1 discarded)" didn't add up to the diff's actual 8 removed hea
 reconciliation caught four more unlogged dispositions and four wrong header counts across other
 agents' inboxes.
 
+## A reused write-query precedent carries its NULL contract with it
+
+When a plan says "same shape as `<existing query>`", the precedent's treatment of a `NULL`
+parameter is part of what is being copied — and it is invisible in the Cypher, because the two
+incompatible contracts are written almost identically:
+
+- **`SET x = $x`** — `NULL` *clears* the property. Right when the caller always sends a full
+  record, so an omitted field genuinely means "unset this".
+- **`SET x = coalesce($x, x)`** — `NULL` means *leave unchanged*. Required when the caller's
+  arguments are individually optional (an LLM tool call with optional parameters, a PATCH-shaped
+  route).
+
+Plain Python `None` cannot distinguish "argument omitted" from "explicitly null" by the time it
+reaches the query params, so copying the first shape for a caller of the second kind silently
+erases previously-stored data on every *partial* update — and no test that only exercises a full
+write will ever see it. At plan-gate, for any write query, ask **which of the two contracts this
+query's callers need**, not which existing query it resembles.
+
+Origin: `falkor-chat` M6 plan-gate — `docs/plans/workflow-durable-profile-graph.md` §3 drafted
+`write_profile` on the `write_model_overrides` unconditional-`SET` precedent while
+`SaveProfileTool`'s two arguments are individually optional; raised as a v1 BLOCKER and fixed to
+`coalesce($field, c.field)`. The shipped resolution documents both contracts side by side —
+`falkor-chat/docs/QUERIES.md` §17.1 (the `coalesce` form, plus the "never pass `''` to mean *not
+provided*" corollary) against §13.1 (the clearing form and why it is right there).
+
 ## Re-gating a state-machine guard/invariant fix: two checks a "does the mechanism work" read misses
 
 Verifying that a guard/invariant fix's own reasoning is internally sound is not the same as
@@ -249,14 +292,25 @@ directly rather than accepting the narration, even when the claim reads as plaus
 One grep settles it: `grep -rn -i '<the cited event/term>' <the claimed location>` either finds the
 citation or it doesn't.
 
-Origin: two independent instances. (1) A `cobb`-authored plan cited a NULL-backfill decision as
+**A pasted grep result is the same kind of claim, and unlike a fabricated one it decays**: it was
+honestly run, it was true when it was run, and the document lands days later against a codebase
+that moved. Re-run every cited grep at review time — above all a *negative* one ("→ no matches"),
+which reads as settled and is the one nobody thinks to re-check.
+
+Origin: three independent instances. (1) A `cobb`-authored plan cited a NULL-backfill decision as
 having surfaced during a specific past investigation; `grep -rn -i backfill claude/docs/` found
 zero occurrences outside the plan doc itself, and the cited investigation was unrelated
 (hook/permission engineering, no migrations at all) — the example was plausible-sounding but
 fabricated. (2) A fix-pass plan claimed two findings were "recorded in `falkordb-quirks.md`";
 grepping the file directly at the cited line ranges confirmed both were genuinely present, not
 just asserted — the same check, run the other direction, separating a closed finding from an
-asserted-but-undone one.
+asserted-but-undone one. (3) The staleness case:
+`falkor-chat/docs/plans/oversized-indexed-property-guard-graph.md` argues against bounding one
+field because "this schema has zero `RELATIONSHIP`-type constraints (`grep -n RELATIONSHIP
+scripts/bootstrap_schema.sh` → no matches)". True when run on 2026-08-21; falsified three days
+later by commit `8d7dcfb` (K-050 fusion), which added `gconstraint … UNIQUE RELATIONSHIP SAME_AS
+PROPERTIES 1 matchId`; the doc, written 2026-08-26, repeated it verbatim and **still carries it**
+(`:205`, re-checked 2026-09-08 against `scripts/bootstrap_schema.sh:265`).
 
 ## An untracked plan/review doc has no re-verification baseline
 

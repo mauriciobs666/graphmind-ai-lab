@@ -3,6 +3,136 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
+## 2026-09-08 — `kaizen_team` distillation pass 2, chunk A (unit U19): 12 entries, 5 promoted, 7 discarded
+
+`cobb` processed the twelve `analyst`-produced `kaizen_team` entries dated 2026-08-25..2026-08-30
+(`claude/docs/plans/kaizen-distillation2-coordination.md` U19, chunk A of five). Every entry pinned
+by **complete** `entryId` at read, tag, count and resolve — this graph contains a verified
+full-eight-character prefix collision (`b7e41c92-3f8a-…` vs `b7e41c92-3d5a-…`), so a prefix is not a
+key. Full untruncated text read via `redis-cli --no-raw GRAPH.RO_QUERY`. Every claim was re-derived
+from primary sources — live FalkorDB probes on a disposable graph (`cobb_u19_scratch`, deleted
+after), a marker-package import experiment, and direct reads of current source — never by
+confirming the entry's own citation. Zero kept open; **zero new bullets in any always-loaded
+prompt** (`analyst.md` and `claude/AGENTS.md` both untouched: `claude/AGENTS.md` sits at 2,434 words
+against its own ~2,500 bar and nothing here needed the headroom).
+
+Most of these were not review doctrine at all — they were FalkorDB dialect facts, `falkor-chat`
+codebase facts and harness mechanics that `analyst` merely *discovered* during a review, so they
+routed to the home that owns the subject, not the one that produced the note.
+
+**Promoted to `claude/graph-dba/falkordb-quirks.md`** (3 entries, all live-verified 2026-09-08
+against module `41811` on a disposable graph; the established maintainer-edits-another-agent's-
+knowledge-base channel, logged in `claude/graph-dba/kaizen/history.md` too):
+  - `71c2f839-09a3-415e-a51b-eb3ed919f737` — two `FOREACH` clauses chain back-to-back after a
+    single `WITH`, and each sees property values written earlier in the same query by a preceding
+    `SET` *or* a preceding `FOREACH`. Measured directly rather than via the entry's `falkor-chat`
+    test: `SET d.remaining = d.remaining - 1 WITH d FOREACH(…d.remaining = 0…| SET
+    d.status='ready') FOREACH(…d.remaining > 0…| SET d.status='running')` returned `1/running` on
+    `2 -> 1` and `0/ready` on `1 -> 0`; cross-`FOREACH` visibility proven separately with a
+    `SET d.flag = 7` in the first clause guarding the second. Folded into the existing `FOREACH`
+    bullet, which already covered nesting and multi-`CREATE` bodies but not chaining.
+  - `e1c2a7b4-4f2a-4b9e-9c3d-2f6a8b1d5e70` — `=~` is a hard error ("FalkorDB does not currently
+    support =~"), not a degraded match. Reproduced verbatim. New bullet; the file had **no** regex
+    entry at all. Carries the `toLower(...) CONTAINS` replacement, including the
+    `any(k IN keys(n) …)` whole-node form.
+  - `7c3e1f2a-9b4d-4e21-8a6f-2d5b6e7c9a10` — duplicate result columns are rejected
+    ("Error: Multiple result columns with the same name are not supported"), reproduced for both
+    `RETURN d.id, d.id` and `RETURN count(d), count(d)`. **The entry's mechanism was corrected
+    before promotion:** it claimed the error is raised "at query time — not at parse/compile time",
+    but `GRAPH.EXPLAIN` on the same text errors identically, so it is raised during server-side
+    validation and no rows are ever produced. What survives is the consequence — there is no
+    client-side parse step, so the caller still meets it as a `ResponseError` at call time.
+    Folded into the existing `result.header` bullet (same subject: un-aliased column naming). The
+    `falkor-chat` half was already documented a fortiori at the point of use — `querygen.py`'s
+    duplicate-`returns` guard comment names the exact error string *and* why `QueryGraphDataTool`'s
+    try/except cannot catch it.
+
+**Promoted to `claude/analyst/review-techniques.md`** (2 entries, both as edits to existing
+material rather than new sections where one already covered the ground):
+  - `a2f1c8e4-3b7d-4e1a-9c2f-6d8b5a7e0f11` — a `git worktree` isolates an editable-installed
+    package only when Python runs with cwd inside the worktree's own package-parent directory.
+    Confirmed, and **the promotion also fixed a wrong mechanism this file had been carrying**:
+    §"Verifying an uncommitted diff" (a) and (d) both asserted that the editable-install
+    `MetaPathFinder` "is consulted before `sys.path`", so a `PYTHONPATH`-prepended copy cannot
+    shadow it. Measured: `install()` does `sys.meta_path.append(_EditableFinder)` and the live
+    order is `[BuiltinImporter, FrozenImporter, PathFinder, _EditableFinder]` — `sys.path` wins,
+    and a `PYTHONPATH` shadow *does* take (marker package resolved to the scratch copy). The real
+    cause of the originally-observed failure is **cwd precedence** (`sys.path[0] == ''`): from the
+    real `server/` the cwd entry outranks `PYTHONPATH`. Both passages now state the measured
+    order — cwd, then `PYTHONPATH`, then the finder's hardcoded absolute `MAPPING` — which is also
+    exactly what makes the worktree-repo-root case silently pull in the main tree. Also tagged
+    `MENTIONS -> devops` (below): the environment-level half is venv/dependency territory and
+    `claude/devops/ops-quirks.md` carries no Python-import entries at all.
+  - `a1e6c8f0-2b7d-4e3a-9c1f-6d5b8a2f7e01` — a reused write-query precedent carries its `NULL`
+    contract with it: `SET x = $x` (NULL clears) and `SET x = coalesce($x, x)` (NULL means leave
+    unchanged) look alike and are not interchangeable, and plain Python `None` cannot distinguish
+    "omitted" from "explicitly null" once it reaches the query params. The *project* fact is
+    already documented better than the entry states it — `falkor-chat/docs/QUERIES.md` §17.1 sets
+    the two contracts against each other by name, adds the "never pass `''` to mean not provided"
+    corollary and records live verification in both partial-update directions — so only the
+    plan-gate **check** was promoted, as a new section pointing at §17.1/§13.1 rather than
+    restating them.
+
+**Discarded** (7 — each already covered, at least a fortiori, by something that also covers a case
+the entry misses; three additionally had a false or misattributed claim):
+  - `b3f0e7d4-6b1a-4b2f-9c3a-2f8a7d1e5c6b` (api.py `/diff` has no `_read_or_absent` wrapper) —
+    the defect is fixed and documented at the point of use: `repository.py:1823-1831`'s docstring
+    states the empty-key catch, names `Services.diff_def_snapshot` as one of the callers the
+    uncaught `ResponseError` used to escape to, and covers the *other* callers the entry never
+    mentions. `services.diff_def_snapshot`'s own docstring documents the one-side-missing 200.
+  - `a1f3c9d2-6e4b-4a7c-9d1e-2b5f7c8a3e11` (`git stash push` blocked by the auto-mode classifier) —
+    `skills/agent-standards/claude-code.md` § Hooks has carried this since 2026-07-31, a month
+    *before* the entry, in a stronger form (`--keep-index` included, plus the design consequence:
+    prefer a substitute that needs no working-tree write). U18b's "a classifier denial is an event,
+    not a state" entry independently removes the value of a second n=1 observation.
+  - `7c2e9b1a-4f3d-4e2a-9c7b-6a1d5f8e2b30` (`wf_repo` wipes the `reference` graph per test) —
+    `falkor-chat/docs/SERVER.md` §1.7 documents it a fortiori, adding that the wipe runs at fixture
+    **setup** and never at teardown, so a finished run leaves the last workflow test's own defs in
+    `reference`. `falkor-chat/AGENTS.md` carries the default-vs-`-m live` split and the review-safe
+    subset; `conftest.py`'s own fixture docstring states it at the point of use.
+  - `b3f2a6d4-8c1e-4a7f-9d2b-1e6f5a0c3d7a` (`repo`/`conn` run against a real `ws:test`) — true, and
+    already implied where it matters (`falkor-chat/AGENTS.md`'s review-safe-subset bullet is keyed
+    on "requests no `conftest.py` fixture that reaches a real `conn`/`wf_repo`"). Its
+    distinguishing half is **false**: "only `test_services.py`/`test_tools.py` use in-memory
+    fakes/stubs" — `test_tools.py` has 3 of its 60 test functions requesting the real `repo`/`conn`
+    fixtures (`:978`, `:1038`, `:1058`, all `*_live`), while `test_services.py` has zero. AGENTS.md
+    naming `test_services.py` alone as the safe subset is correct and the entry is not.
+  - `7e6a9c1d-3b2f-4e5a-9c8b-2a1f6d4e8b7c` (querygen resolves WHERE values by exact match) — the
+    bottom line holds but **the cited evidence does not**: the "never coerced/fuzzy-matched"
+    comment is an inline note on the `label` field declaration, not on filter *values*. The actual
+    guarantee is stronger and type-level — `QueryFilter.op` is
+    `Literal["=", "<>", "<", "<=", ">", ">="]` with its own comment ("no `contains`/regex ops in
+    v1") and `value` is always a bound parameter — so the DSL has no substring operator to
+    accidentally match with. Already enforced and documented at the point of use.
+  - `b6e29d17-4a5c-4f0b-8e3a-1c9d7f2b6a44` (a seed script's stale hardcoded version default) —
+    the instance is repaired (`seed_salesperson.sh` header and body both read `v7`) and the class
+    is covered a fortiori twice over: `review-techniques.md` § "Live graph/database state has no
+    git provenance" §2 (a two-sided diff cannot see common-mode staleness) and
+    `falkor-chat/AGENTS.md`'s `verify_salesperson.sh` row, which documents check 6 as the only one
+    that can see a version whose stored `config` came from an earlier or uncommitted tree, plus the
+    fact that `config` is create-only so re-seeding cannot repair it.
+  - `f3a1b2c4-9e5d-4a7b-8c3e-1d2f6a9b7e40` (a design doc's cited grep goes stale) — not discarded
+    outright: the *rule* was already there ("A 'this already exists' claim is a grep away from
+    confirmation" already tells the reviewer to re-run the cited grep), so instead of a new section
+    that section's lead was **sharpened in place** to name staleness as a second, distinct failure
+    mode — an honestly-run negative grep that decayed reads exactly like a current one — and the
+    entry's instance was added as Origin (3). Re-derived rather than taken on trust, with a live
+    consequence: `scripts/bootstrap_schema.sh:265` does now carry
+    `UNIQUE RELATIONSHIP SAME_AS PROPERTIES 1 matchId` (added 2026-08-24 by `8d7dcfb`, K-050
+    fusion), and `falkor-chat/docs/plans/oversized-indexed-property-guard-graph.md:205` — **still
+    `Status: active`, owner `graph-dba`** — still asserts "→ no matches". Reported to the
+    coordinator; not `cobb`'s document to edit.
+
+**`MENTIONS` tags added:** one — `a2f1c8e4…` → `devops`. Its `PRODUCED` edge was resolved and the
+node left live for `devops`'s own pass to judge whether `ops-quirks.md` should carry the Python
+import-resolution order. The other eleven were resolved to their homes this pass, so tagging them
+would have created empty work rather than cross-agent visibility. The four pre-existing
+`MENTIONS`-only `analyst` entries from earlier units were out of scope and untouched.
+
+**Clearing:** count-and-decide per skill §5 on each of the twelve. This history entry landed on
+disk and was confirmed **before** any graph mutation.
+
+
 ## 2026-09-07 — `review-techniques.md` gained two verification techniques from `coder`'s kaizen distillation (U11)
 
 - **What:** Two new sections, promoted by `cobb` out of `coder`'s `kaizen_team` capture (unit U11,
