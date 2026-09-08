@@ -4978,3 +4978,310 @@ on a `no graph access` route".
 The suite figures I was barred from measuring were measured by `teco` (185 two-file, 2617/14, and
 `ws:acme` at 871 nodes), which closes Pass 16's only open question. Nothing in this second look is
 blocked on anything.
+
+## Pass 17 — 2026-09-08 (S9a: the concurrency core — the turn off the request thread)
+
+**Scope.** Commit **`e6fa20c`** only (nine files, +895/−44), diff-scoped, judged against
+`docs/plans/salesperson-ui.md` **v1.26** §5.1's S9 row, §4.4 measures 1/1a/2/3, §5.2's `turn` block,
+and `docs/plans/salesperson-ui-coordination.md`'s **S9a** scope row (the first of five units
+splitting S9: concurrency core only). `HEAD` has moved past `e6fa20c`; everything below is read
+from `git show e6fa20c` and from the files as that commit left them, not from the working tree.
+**Not reviewed:** S9b–S9e content (cancellation, `turn.lastTurn`, the record-cache removal, the
+three `INHERITED_HANDLERS` reason strings) — none of it is in this unit and its absence is not a
+finding; the SPA; anything Passes 10–15 adjudicated.
+
+**CPG: considered, not relevant — `cpg_falkorchat` is stamped from `b795f4c` and `storefront.py`
+has since changed substantially (this commit alone adds ~200 lines to it), so it is stale for every
+file in this diff and was not consulted for any claim below; the call-graph facts it could still
+answer (`set_turn_state` had no production caller, `maybe_trigger`'s only caller was
+`background._safe_run_workflow`) were re-established here by direct `grep` over the delivered tree
+instead.**
+
+**What I ran.** `tests/test_storefront.py` + `test_storefront_api.py` + `test_app.py` — **280
+passed** at `e6fa20c`'s tree state. Five mutations of my own, each applied to `falkorchat/storefront.py`
+and restored from a byte-copy held in the session scratchpad, `md5sum` re-verified as
+`d032d3ed…c675a72` after every one (Appendix N §1). Two standalone read-only probes against a
+`Storefront` built on a stub `Services`, no graph touched (Appendix N §2/§3). `ws:acme` untouched;
+no seed script run.
+
+**Verdict: needs changes** — 0 blockers, **2 majors**, 5 minors, 3 nits.
+
+Both majors are worth stating plainly for what they are: **neither is the implementer failing the
+row.** Every done-condition S9a owns is met, on evidence I re-derived rather than accepted (the
+sweep below), and the mutation discipline is the best this chain has seen. P17-1 is a race the
+row's done-condition does not sample and whose full fix costs one sentence in the row; P17-2 is a
+semantic the plan never specified and the code had to pick. Both should be closed before S9b builds
+on the same function, which is why this is *needs changes* rather than *approve with suggestions*.
+
+### Findings
+
+**P17-1 — major. Two concurrent posts from one participant do not merely start two runs; they
+leave the turn map asserting `idle` while a turn is still running, which is the exact state
+`_await_quiesce` exists to make impossible.** Reproduced (Appendix N §2). The `409` check is in the
+route (`storefront_api.py:1194`) and the booking is in `enqueue_turn` (`storefront.py:743`), with
+`services.post_message` — a FalkorDB round trip — between them, so the window is milliseconds
+wide, not nanoseconds. Both posts book, and `self._turns[participant_id] = …` is a **single-slot
+overwrite**: two turns, one entry. When the first worker's `finally: clear_turn` fires
+(`storefront.py:800`) it deletes the entry belonging to the *second*, still-running turn. Observed:
+`turn_in_flight("p-a") is False` and `_await_quiesce("p-a") is True` with a turn live on a worker —
+so reset-mine proceeds to delete the thread underneath it, which `_await_quiesce`'s own docstring
+(`storefront.py:998`, graph note §7.3) names as the failure the quiesce order exists to prevent.
+Two independent fixes, and the cheap one needs no plan change: **(a)** carry a per-booking token on
+the entry and have `_run_turn`'s `finally` clear only its own booking — the map can then never
+under-report; **(b)** to close the window itself, reserve the slot atomically before
+`services.post_message` and release it on a failed write. See *Ruling 1* for whether (b) is the
+row's business.
+
+**P17-2 — major. `queue_position = len(self._turns)` is a plausible integer under every
+condition, and on the delivered default (`turn_workers=4`) it is wrong.** Reproduced (Appendix N
+§3): with four turns *running* on four workers, the fifth arrival reports
+`{"state": "queued", "queuePosition": 4}` while it is **first** in the waiting line. The count is
+of all unfinished turns, running ones included, so it equals "how many are ahead of me" only at
+`turn_workers=1` — which `enqueue_turn`'s docstring states honestly and which is the only setting
+any test exercises, but is not the default and is not what §4.4 measure 1 promises the field for
+("so the UI can show a **queue position** rather than an indefinite spinner"). Two further edges of
+the same shape: the value is **never recomputed**, so a participant queued at 2 polls `2` until a
+worker picks them up and then jumps to `thinking`/0 (no countdown for S12a to render); and
+`presenter_reset_all`'s `clear_all_turns()` empties the map while workers are still running, so the
+next arrival books `0` with N turns in flight. Suggested: define the field's contract in §5.2
+(architect — one sentence: index among unfinished turns, or true waiting-line index) and then
+compute it to match; `max(0, len(self._turns) - self._turn_workers)` is the waiting-line reading.
+§5.2 currently specifies only the key's *presence* (`docs/plans/salesperson-ui.md:1137`), never its
+meaning, so the code was not free to be right here.
+
+**P17-3 — minor. A failed `executor.submit` leaves the booking behind, permanently.**
+`enqueue_turn` books under the lock and then submits with no guard (`storefront.py:739–747`).
+Reproduced (Appendix N §2, part 2): after `shutdown_turns()`, `submit` raises
+`RuntimeError: cannot schedule new futures after shutdown` and the entry survives as
+`TurnState(state='queued', queue_position=0)` — that participant is then `409`-refused forever and
+every reset-mine of theirs answers `503 quiesce_timeout`, until the process restarts. The
+reachable trigger is narrow (submit after shutdown; `RuntimeError: can't start new thread` under
+resource exhaustion) but the blast radius is disproportionate to the guard. Suggested:
+`try: return self._executor.submit(...)` / `except BaseException: self.clear_turn(participant_id); raise`.
+
+**P17-4 — minor. The one diagnostic a dead turn produces is pinned by nothing, and deleting it
+leaves the suite green.** Until S9c's `turn.lastTurn` lands, `_log.exception(...)`
+(`storefront.py:794`) is the *only* evidence that a turn died — the plan says so itself in the S9
+row ("the participant sees their message, no reply, and a composer that quietly re-enables"). I
+replaced that call with `pass` and ran the three suites: **280 passed** (Appendix N §1, mutation D).
+This mutant is not among the eleven the commit message lists, so it is a live gap rather than a
+re-report. Suggested: extend `test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate`
+with `caplog` — assert the record is at `ERROR`, carries `exc_info`, and names both the
+`participantId` and the `msgId`. There is no `caplog` anywhere in either storefront test file
+today (`grep -rn caplog tests/test_storefront*.py` → no matches).
+
+**P17-5 — minor. `shutdown(wait=True)` has no bound, and `app.py`'s comment states one that is too
+small by a factor of the queue depth.** `app.py:409–413` says "a blocking join of up to the agent
+timeout". `shutdown(wait=True)` with no `cancel_futures` drains the **whole** accepted queue, so the
+bound is `ceil(queued / turn_workers) × 180 s` — at the plan's own ~50-participant scale and the
+default 4 workers, ~37 minutes of uvicorn refusing to exit on SIGTERM. The *decision* to drain
+rather than cancel is right and well argued (`storefront.py:801`) and a done-condition pins it; the
+*claim about its cost* is the defect, and it is this chain's recurring shape — prose asserting a
+reach the mechanism does not have. Suggested: correct the comment to the real bound, and consider
+whether the drain should be time-boxed (an `architect` call, since bounding it edges toward the
+cancel semantics the row rules out).
+
+**P17-6 — minor. `FALKORCHAT_THREAD_LIMIT=0` now silently deadlocks every sync endpoint; before
+this commit it was inert.** Verified against the pinned venv (anyio **4.14.1**):
+`CapacityLimiter.total_tokens` rejects `-1` (`ValueError: total_tokens must be >= 0`) but **accepts
+`0`**, which leaves zero tokens for the threadpool FastAPI offloads every sync route onto — an app
+that starts cleanly and hangs on the first request, with nothing in the log. `config.py:222` parses
+the value with a bare `int(os.environ.get(...))` and nothing validates it. Contrast
+`STOREFRONT_TURN_WORKERS=0`, which is now *loudly* fatal (`ValueError: max_workers must be greater
+than 0` out of `Storefront.__init__`) and is fine as-is. Suggested: `max(1, config.THREAD_LIMIT)`
+at the assignment, or a bound at parse time in `config.py`; and a `SERVER.md` clause saying `0` is
+not "off".
+
+**P17-7 — minor. The `trigger is None` branch is documented in three places and asserted by
+nothing.** `storefront.py:783–784` returns early when no workflow engine is wired; `Storefront.__init__`'s
+docstring, `app.py:331–336` and `test_a_storefront_with_no_trigger_still_queues_and_clears_the_turn`
+all describe it as "a turn that does nothing but still occupies its queue slot". Deleting the two
+lines leaves **280 passed** (Appendix N §1, mutation E) — because without the guard
+`None.maybe_trigger` raises `AttributeError`, which the isolation block catches, logs and clears,
+satisfying every assertion that test makes (`future.exception() is None`, `turn_in_flight is False`).
+The behavioural difference is an `ERROR` traceback per post in the no-engine deployment. Suggested:
+have that test assert the trigger was *not* called and that nothing was logged — which is the claim.
+
+**P17-8 — nit. §4.4 measure 3 ("no `_safe_embed`") is now asserted in three prose locations and
+pinned by no test.** `storefront_api.py:1185`, the plan's S9 row and `SERVER.md` §1.4 all state it;
+`grep -rn _safe_embed falkorchat/ tests/test_storefront_api.py` finds it in `api.py`/`mcp.py` and in
+the storefront's *docstring* only. It is structurally true today (the router holds no `embed_worker`),
+so the risk is drift, not defect. The module already carries AST tripwires; a one-line source
+assertion in the same family would cost nothing.
+
+**P17-9 — nit. `enqueue_turn`'s returned `Future` has no production retainer, which is a gap S9b
+inherits.** The route discards it (`storefront_api.py:1203`) and `Storefront` keeps no handle, so
+"cancel the queued turn in front of `_await_quiesce`" has nothing to cancel. S9b will need a
+`participantId → Future` map — and it is the same map P17-1(a)'s booking token wants. Worth
+briefing as one change rather than two.
+
+**P17-10 — nit. `test_enqueue_books_the_turn_before_it_submits` discriminates, but by a thread race
+it does not control.** I re-ran the implementer's own reordering mutation (submit before book) 10×
+and got **10 failed / 10** (Appendix N §1, mutation A), so the fixed test is genuinely better than
+the one it replaced and the 5-of-5 claim in the commit message holds at 10 of 10 here. It survives
+because `Thread.start()` blocks until the worker has bootstrapped, giving the worker a head start
+the caller's dict write cannot win — a real mechanism, but not one the test states or pins.
+A deterministic spelling exists: wrap `shop._executor.submit` and assert the map already holds the
+entry at the moment submit is entered, which *is* the ordering claim.
+
+### Ruling 1 — the check-then-act `409`: severity, reachability, and whether the row is wrong
+
+**Severity: major, and the reason is not the double run.** The implementer framed the exposure as
+"two simultaneous posts both pass the check", i.e. two `WorkflowRun`s on one thread — which is what
+§4.4 measure 1a names. That undersells it. The second, reproduced consequence is that the turn map
+**cannot represent** two turns for one participant, so the first `finally` erases the second's
+entry and `turn_in_flight`/`_await_quiesce` report `idle`/`True` under a live turn (P17-1). That is
+a corrupted invariant, not a duplicated unit of work, and it reaches the reset path the whole
+quiesce design exists to protect.
+
+**Reachability: yes, and the plan already says so.** The window spans a graph write, so it is
+milliseconds, not nanoseconds — a double-tap on send, or a `localStorage` credential open in two
+tabs (§5.3's own cross-tab case), can hit it. More decisively, §4.4 measure 1a states the premise
+outright: *"A client-side disabled send button is **not** sufficient on its own — §6.4's load
+harness will not honour it, which is exactly how this defect would reach production."* §6.4's
+harness is a guaranteed trigger if it posts concurrently per participant, and it is in this plan.
+
+**Does the booking-under-lock narrow or widen the window?** Neither — it is orthogonal. The lock
+guards the dict, not the check-then-act; the window is fixed by *where* the check is (route,
+`storefront_api.py:1194`) versus where the book is (`enqueue_turn`, after `post_message`). What
+S9a changes relative to the pre-S9a code is far larger and entirely in the right direction: before
+this commit `set_turn_state` had no production caller, so `turn_in_flight` was `False` for
+everyone and the `409` was **unreachable** — there was no single-flight at all, and no storefront
+trigger to duplicate. S9a builds the enforcement; it just does not make it atomic.
+
+**Is the row wrong? Under-specified, not wrong — and I do not think it costs you a decision to
+fix.** The row spells the request thread's sequence as "the `409` single-flight check,
+`services.post_message`, the turn-map bookkeeping and `executor.submit(...)`", and P17-1(b) moves
+the bookkeeping ahead of the write. That is one clause. But **P17-1(a) — the per-booking token —
+closes the corrupted-invariant half with no plan change at all, no route-shape change, and no
+deviation from the sequence the row spells.** My recommendation: take (a) in S9b (which opens
+`enqueue_turn` anyway and needs the same handle map, P17-9), and amend the row's sequence clause to
+*reserve-then-write, release on a failed write* only if you want measure 1a's "enforced
+server-side" to be literally true before §6.4's harness runs. The implementer's judgement not to
+take (b) unilaterally was correct; its judgement that the exposure is bounded by the double run was
+not.
+
+### Ruling 2 — `STOREFRONT_QUIESCE_S`: is the correction bigger than two prose blocks?
+
+**The prose rewrite is bigger than two blocks, and there is one code-behaviour item — but it is
+S10's, already assigned, and nothing S9a delivered is wrong.**
+
+*Prose.* `config.py:202–209` and `SERVER.md`'s `FALKORCHAT_STOREFRONT_QUIESCE_S` row are the two
+blocks named, and both are now false in five separate clauses each (`set_turn_state` has no caller;
+the map is never populated; both drains pass on their first check; `409 turn_in_progress` is
+unreachable; "setting the value changes nothing observable"). Two further places carry the same
+staleness and were not in the brief: `storefront.py:1004`'s `_await_quiesce` docstring **was**
+updated by this commit and is correct, but `storefront_api.py:1440–1455`'s `presenter_reset_all`
+comments describe the reset-all drain, which is now live too — check them. So: three or four
+blocks, still prose.
+
+*Code.* I found nothing S9a made *wrong*. Two things it made *real* that were previously
+unreachable no-ops, both already owned elsewhere: **(i)** the reset-all sequence
+`drain-loop → repo.reset_all_participants → clear_all_turns` (`storefront_api.py:1455–1493`) has an
+intake window — a participant can post and book a fresh turn between the drain's last check and the
+delete — which is exactly what §5.1's **S10** stop-intake flag is for, and which was invisible
+while the map was always empty; **(ii)** `clear_all_turns()` now wipes entries whose workers are
+still running, so a running turn's `finally: clear_turn` becomes a no-op and the position accounting
+restarts from 0 (P17-2's third edge). Neither is a defect in S9a. **Conclusion for your follow-up
+unit: brief it as prose-only, but tell it to check `presenter_reset_all`'s comments as well, and
+note that S10 — not it — closes the intake window the honest version of that row will now describe.**
+
+### The S9 row, clause by clause (S9a's share only)
+
+| Row clause | Delivered | Evidence I re-derived |
+|---|---|---|
+| Bounded `ThreadPoolExecutor`, `max_workers` from config | ✅ | `storefront.py:401–403`; `turn_app` fixture drives `workers=1` and the 0/1/2 serialization depends on it |
+| Keyed by `participantId` | ⚠️ | the **map** is keyed; the executor is a single FIFO queue and the map is single-slot — see P17-1 |
+| `409 TurnInProgress` **before** the message write | ✅ (sequentially) | `test_two_posts_a_tenth_of_a_second_apart…`; `_counts` reads `(1 Message, 1 WorkflowRun)` from the graph. Concurrently: P17-1 |
+| Queue-position accounting on `GET /shop/api/state` | ⚠️ | present and correct at `turn_workers=1`; P17-2 at the default |
+| `enqueue_turn(ctx, participant, posted)` signature | ✅ | `storefront.py:694–699`, exact |
+| Post path: `post_message` + enqueue, `run_ctx={"language": …}` | ✅ | `test_the_turn_worker_carries_the_participants_language_in_the_run_ctx` asserts all seven kwargs |
+| **No** `_safe_embed` (measure 3) | ✅ unpinned | P17-8 |
+| Trigger on the worker, never the request thread | ✅ | three independent assertions; `executor.threads[0].startswith(TURN_THREAD_PREFIX)` |
+| Worker never resolves a `ParticipantRecord` | ✅ | spy on `repo.get_participant_record` **with a positive control** |
+| anyio limiter inside `_lifespan`, before `yield` | ✅ | `app.py:368`; the test asserts `77`, neither anyio's 40 nor config's 100 |
+| Graceful executor drain on shutdown | ✅ | `test_the_turn_executor_drains_on_shutdown`, asserted with no wait of its own; P17-5 is about its cost, not its correctness |
+| S8c's `services.` reach stays **green** | ✅ **and not vacuous** | verified independently — see below |
+| `run_ctx` carries only `language` | ✅ | asserted by equality, not membership |
+
+**Nothing in S9a's scope is silently dropped.** The four clauses the row carries that are absent
+here — cancellation, `turn.lastTurn`, the record-cache removal, the three reason strings — are
+S9b–S9e by the coordination's own split, and `HISTORY.md`'s "Not in this unit" paragraph names all
+four correctly.
+
+### What's solid
+
+- **The reach-guard claim is true, and I did not take it on report.** I injected
+  `self._services.start_workflow_run(ctx)` into `_run_turn` and
+  `test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume` went red
+  (Appendix N §1, mutation B). Worker code really is inside the guarded reach, so "green" here is a
+  guard that works rather than one that stopped looking — which, after six passes of exactly the
+  opposite finding, is the single most reassuring thing in this commit.
+- **The isolation block is not decorative.** Removing the `except` entirely turns
+  `test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate` red and nothing else
+  (mutation C) — tight, and the `finally` is separately pinned by two of the eleven mutations.
+- **The stub-swap is argued, not silently taken.** The row asks for "a stub 2 s LLM"; the tests use
+  a `threading.Event` gate and say why in a comment block — a sleep asserts in-flight-ness by
+  hoping, a gate asserts it, and three 2 s sleeps would be 6 s on a 7 s suite. That is the right
+  call and the right way to record it.
+- **`_GatedExecutor` is stubbed at the correct seam.** One layer above the model, so
+  `repository.start_run` still writes real `WorkflowRun` nodes and the measure-1a assertion can be a
+  graph count rather than a mock call count.
+- **The self-report on the two surviving mutants is accurate.** Both survivors are described
+  correctly, and the booking test's replacement genuinely discriminates (10/10, P17-10). Honest
+  reporting of a survived mutant is what let me spend my mutation budget on the five it did *not*
+  run rather than re-checking the eleven it did.
+- **`config.py` and `SERVER.md` were carried in the same change**, which is the U36 coupling
+  `teco` identified — and the one row left stale was left stale *on instruction* and flagged
+  in `HISTORY.md` rather than quietly.
+
+### Open questions
+
+1. **P17-2's contract is yours or the architect's, not the implementer's.** §5.2 specifies
+   `queuePosition`'s presence and never its meaning. Someone has to say whether it is an index
+   among unfinished turns (today's behaviour, correct only at `turn_workers=1`) or a waiting-line
+   position (what §4.4 measure 1 promises the UI). S12a renders whichever it is.
+2. **Does §6.4's load harness post concurrently per participant?** If yes, P17-1 is a
+   *before-the-harness* fix rather than a before-production one, and the reserve-then-write clause
+   should go into the row now. If the harness serialises per participant, P17-1(a) alone is enough
+   for a while.
+
+### Appendix N — Pass 17's measurements
+
+**N §1 — mutations run against `falkorchat/storefront.py` at `e6fa20c`'s tree state.** Byte-copy
+held at `<scratchpad>/storefront.orig.py`; `md5sum` re-verified as `d032d3ed3ae64f3fcc0ec4a88c675a72`
+after each restore, and `git status --porcelain falkor-chat/` empty at the end. Suite =
+`tests/test_storefront.py tests/test_storefront_api.py tests/test_app.py`, `-p no:randomly`.
+
+| # | Mutation | Result |
+|---|---|---|
+| A | `enqueue_turn`: submit **then** book (the implementer's own reordering) | `test_enqueue_books_the_turn_before_it_submits` **failed 10/10 runs** |
+| B | inject `self._services.start_workflow_run(ctx)` into `_run_turn` | `…service_layer_reach_is_exactly_what_the_exemptions_assume` **failed**; the raises guard passed |
+| C | delete the whole `except Exception` arm (no isolation) | 1 failed, 226 passed — only `…is_isolated_and_still_clears_the_gate` |
+| D | replace `_log.exception(...)` with `pass` (silent swallow) | **280 passed — survivor** (P17-4) |
+| E | delete the `if self._trigger is None: return` guard | **280 passed — survivor** (P17-7) |
+
+**N §2 — the duplicate-booking probe** (read-only, stub `Services`, no graph). Two `enqueue_turn`
+calls for `p-a` with the first turn held on a worker, then the first released:
+
+```
+after double-book, map entry: TurnState(state='thinking', queue_position=0)
+second turn running; turn_in_flight('p-a') = False
+           _await_quiesce returns          = True
+```
+
+and, for P17-3, after `shutdown_turns()`:
+
+```
+submit raised: cannot schedule new futures after shutdown
+leaked entry: TurnState(state='queued', queue_position=0)
+turn_in_flight('p-b') = True   quiesce = False
+```
+
+**N §3 — `queue_position` at the delivered default** (`turn_workers=4`, four turns *running*, a
+fifth arriving):
+
+```
+p5 reports -> {'state': 'queued', 'queuePosition': 4}   (true waiting-line index: 0)
+p1 reports -> {'state': 'thinking', 'queuePosition': 0}
+```
