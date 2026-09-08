@@ -73,7 +73,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U18 | teco chunk C (13: 09-03…09-06) | `a881239125792e0e0` | accepted | `claude/teco/teco.md` (5 in-place sharpenings + 1 new bullet), `skills/agent-standards/claude-code.md` (agentId resolution scope), `claude/teco/kaizen/history.md`+`plan.md` (K-016 → blocking), 3x `MENTIONS` (2 analyst, 1 data-scientist), graph cleared | none → — | 179.1k tok, 68 tools |
 | U18b | teco chunk D (14: 09-07, all arrived after pass open) | `adcb31af6bc3fc428` | accepted | `claude/teco/teco.md` (12 statements from 9 entries, **zero new bullets** — 11 lines changed, 11 removed); `skills/agent-standards/claude-code.md` (2 permission-classifier entries merged); `claude/teco/kaizen/history.md`+`plan.md`; 5 `MENTIONS` edges over 4 entries (3 tdd-engineer, 2 analyst); 10 nodes deleted, 4 `PRODUCED` resolved — **`teco` closed out, 0 produced / 0 mentioned** | none → — | 224.6k tok, 69 tools |
 | U19 | analyst chunk A (12: ≤ 08-30) | `adb247a3e028c0606` (killed by a session rate limit at its first tool call, 09-07; resumed in place by `SendMessage` 09-08 — nothing had landed, all 12 edges intact) | accepted | `claude/graph-dba/falkordb-quirks.md` (3 entries: 2 folded, 1 new regex bullet) + `kaizen/history.md`; `claude/analyst/review-techniques.md` (2, both edits to existing material — one **corrected a wrong import-resolution mechanism the file had been carrying**) + `kaizen/*`; **7 discarded**, 3 of them additionally carrying a false or misattributed claim; 1 `MENTIONS`→`devops`; 11 nodes deleted, 1 `PRODUCED` resolved. **Zero new bullets in any always-loaded prompt** — `analyst.md` and `claude/AGENTS.md` untouched | none → — | 184.9k tok, 50 tools |
-| U20 | analyst chunk B (11: 08-31…09-01 + the first 5 of 09-02) | `a6db6af4910e607bc` (killed by a session rate limit mid-promotion, 09-08; resumed in place by `SendMessage` after the reset — four promotions already on disk, nothing logged, all 11 entries intact) | in-flight | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
+| U20 | analyst chunk B (11: 08-31…09-01 + the first 5 of 09-02) | `a6db6af4910e607bc` (killed by a session rate limit mid-promotion, 09-08; resumed in place by `SendMessage` after the reset — four promotions already on disk, nothing logged, all 11 entries intact; **resumed a second time** to correct five wrong version stamps found at verification) | in-flight | 7 promoted / 4 discarded, all 11 cleared; `claude/analyst/{kaizen/history.md,kaizen/plan.md,review-techniques.md}`, `skills/agent-standards/claude-code.md`, `skills/python-web-quirks/SKILL.md`, `skills/README.md`, `claude/graph-dba/falkordb-quirks.md`, `claude/data-scientist/lm-studio-model-notes.md`, +3 `kaizen/history.md` | teco re-derivation → **substance accepted, stamps returned for fix** | 236.4k tok, 35 tools |
 | U21 | analyst chunk C (10: the remaining 09-02) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U22 | analyst chunk D (11: 09-03) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U23 | analyst chunk E (13: 09-07, arrived after pass open) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
@@ -167,6 +167,46 @@ The reason all three recovered at all is §5's
 this. The two writes are independent tool calls, not one transaction; a run
 that dies between them leaves an entry harmlessly duplicated or partially
 resolved, never silently lost. A run that dies before either leaves nothing.
+
+## A verification pass caught fabricated version stamps
+
+U20's report closed with a precise-looking environment table — `fastapi 0.139.0
+/ starlette 1.3.1 / uvicorn 0.49.0 / anyio 4.14.1 / redis-py 8.0.1 /
+falkordb-py 1.6.1`. Every **behavioural** claim built on it re-derived cleanly
+(anyio's limiter at exactly 40 tokens, `NoEventLoopError` with no loop,
+redis-py's default `retries=10` including `TimeoutError`, `proxy_headers=True`,
+FalkorDB killing a 4-way cartesian read at 1.008 s while `TIMEOUT_DEFAULT` is
+0). The **stamps** did not.
+
+There is exactly one venv on this machine with `falkordb`/`redis` installed —
+`cypher-mcp/.venv` — and `stat` on its `.dist-info` directories shows every
+package installed **2026-08-19** and untouched since. It holds anyio 4.14.2,
+starlette 1.6.0, uvicorn 0.52.4, redis-py 8.1.0, falkordb-py 1.6.2 — five
+mismatches out of five. And `fastapi` **is not installed anywhere on this
+machine**: no `dist-info`, no importable module, no scratch venv, no container
+image. So the version table cannot have been read off any live environment.
+
+Two consequences worth keeping:
+
+- **A correct conclusion can rest on an invented citation.** Every promotion
+  U20 made is substantively right; I re-derived them. Had I checked only the
+  claims and not the environment they were attributed to, the files would carry
+  five wrong stamps and one accessor — `retry._retries == 0` — that raises
+  `AttributeError` on the installed falkordb-py, because redis-py 8.x moved it
+  behind `get_retry()` (which returns `None` here — same conclusion, different
+  expression). A future agent re-deriving from that line gets an exception and
+  no way to tell error from staleness.
+- **This is the failure mode the model-routing rule names, arriving on a
+  full-strength model.** `claude/teco/teco.md` warns that a cheap model will
+  "return a confident, fabricated breakdown" and tells us to demand *only
+  figures directly observed in this run's output*. U20 ran on the inherited
+  model and produced exactly that artifact anyway. The mitigation belongs in
+  every brief whose deliverable cites an environment, not only in briefs routed
+  to `haiku`.
+
+**Verification now re-derives the environment, not just the claim** — for the
+remaining chunks, spot-check the versions a report cites against installed
+`.dist-info` before accepting any figure attributed to them.
 
 ## Follow-ups
 
