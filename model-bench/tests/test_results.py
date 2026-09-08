@@ -19,10 +19,17 @@ from modelbench.fingerprint import Fingerprint
 from modelbench.results import (
     BENCH_SCHEMA_VERSION,
     ClassificationAggregates,
+    ContinuousMetric,
+    DistributionSummary,
     IncompleteItemRecord,
     InvalidFingerprint,
     ItemResult,
+    MetricKindError,
+    NonFiniteMeasure,
+    RetrievalAggregates,
     RunResult,
+    _metric_from_dict,
+    _metric_to_dict,
     load_history,
     models_with_stored_results,
     rebuild_index,
@@ -589,3 +596,214 @@ def test_the_index_valid_column_distinguishes_a_usable_record_from_a_quarantined
     by_run = {row.split(",")[header.index("runId")]: row.split(",") for row in lines[1:]}
     assert by_run["good"][header.index("valid")] == "yes"
     assert by_run["hand_edited"][header.index("valid")] == "no"
+
+
+# --- §4 S1e Table F: the continuous carrier — `measures`, `scored_value`, `DistributionSummary` -
+
+
+def _citem(*, scoreable: dict, measures: dict, counts: dict | None = None) -> ItemResult:
+    return ItemResult(
+        itemId="i1", pairingKey=("i1",), outcome="pass", scoreable=scoreable,
+        counts=counts or {}, latencyMs=None, measures=measures, detail={},
+    )
+
+
+def test_scored_outcome_raises_on_a_measures_resident_metric() -> None:
+    """DC-13(a) — the test that fails if the booleanisation is ever reintroduced.
+
+    A metric declared scoreable whose value lives in `measures` (a continuous instrument) has no
+    boolean outcome. Before this table, `scored_outcome` would have read the count default and
+    booleanised it; now it refuses loudly, which is what converts "wrong when a pack finally
+    declares a continuous verdict metric" into "refuses immediately" — the family loop calls
+    `scored_outcome` unconditionally today, so this raise is the whole of that guarantee until a
+    kind-aware branch is built (§4 S1e Table F, `-ml` v1.15 §3.2d).
+    """
+    it = _citem(scoreable={"mrr": True}, measures={"mrr": 0.5})
+    with pytest.raises(MetricKindError) as excinfo:
+        it.scored_outcome("mrr")
+    assert "mrr" in str(excinfo.value) and "measures" in str(excinfo.value)
+
+
+def test_scored_outcome_is_unaffected_for_a_metric_that_lives_in_counts() -> None:
+    """The raise is scoped to `measures`-resident metrics only — the binary path is untouched."""
+    it = ItemResult(itemId="i1", pairingKey=("i1",), outcome="pass", scoreable={"m": True},
+                     counts={"m": 1}, latencyMs=None, measures={}, detail={})
+    assert it.scored_outcome("m") is True
+
+
+def test_scored_value_has_the_same_three_states_as_scored_outcome() -> None:
+    """§4 S1e Table F — `scored_value`'s contract mirrors `scored_outcome`'s, over `measures`."""
+    assert _citem(scoreable={}, measures={}).scored_value("mrr") is None
+    assert _citem(scoreable={"mrr": False}, measures={}).scored_value("mrr") is None
+    assert _citem(scoreable={"mrr": True}, measures={"mrr": 0.75}).scored_value("mrr") == 0.75
+
+
+def test_scored_value_refuses_a_declared_metric_with_no_measure() -> None:
+    """The `measures`-side sibling of the count refusal — an absent measure is not a zero."""
+    with pytest.raises(IncompleteItemRecord) as excinfo:
+        _citem(scoreable={"mrr": True}, measures={}).scored_value("mrr")
+    assert "mrr" in str(excinfo.value) and "i1" in str(excinfo.value)
+
+
+def test_a_metric_name_present_in_both_maps_is_refused_at_construction() -> None:
+    """DC-13(c) — instrument selection is total: a name lives in `counts` XOR `measures`, and the
+    ambiguity is refused at construction rather than resolved by which reader is called first."""
+    with pytest.raises(MetricKindError) as excinfo:
+        _citem(scoreable={"m": True}, measures={"m": 0.5}, counts={"m": 1})
+    assert "m" in str(excinfo.value)
+
+
+def test_a_non_finite_measure_is_refused_at_construction() -> None:
+    """DC-13(c) — a NaN or infinity would otherwise propagate through a mean or a percentile and
+    arrive as a rendered interval rather than as an error."""
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(NonFiniteMeasure):
+            _citem(scoreable={"m": True}, measures={"m": bad})
+
+
+def test_a_measure_of_zero_survives_a_round_trip_as_zero_not_absent() -> None:
+    """DC-13(b) — the absent-never-zero boundary, asserted on both sides: a `0.0` measurement
+    round-trips as `0.0`, and the same item with the key missing raises `IncompleteItemRecord`,
+    never reads as a zero. This is the boundary that stops a query nobody judged from being read
+    as a query that retrieved nothing relevant."""
+    original = _citem(scoreable={"mrr": True}, measures={"mrr": 0.0})
+    restored = ItemResult.from_dict(json.loads(json.dumps(original.to_dict())))
+    assert restored.measures["mrr"] == 0.0
+    assert restored.scored_value("mrr") == 0.0
+
+    missing = ItemResult.from_dict(
+        {**original.to_dict(), "measures": {}}
+    )
+    with pytest.raises(IncompleteItemRecord):
+        missing.scored_value("mrr")
+
+
+def test_measures_defaults_empty_and_from_dict_reads_a_missing_key_the_same_way() -> None:
+    """`from_dict` treats a missing `measures` key as a reader's compatibility rule (§3.4.3): a
+    record written before this field existed carries none, exactly as a constructor default
+    would — but the two are different mechanisms, so both are asserted."""
+    assert ItemResult(
+        itemId="i1", pairingKey=("i1",), outcome="pass", scoreable={}, counts={}, latencyMs=None,
+        detail={},
+    ).measures == {}
+    d = _citem(scoreable={}, measures={}).to_dict()
+    del d["measures"]
+    assert ItemResult.from_dict(d).measures == {}
+
+
+def test_continuous_metric_requires_support_with_no_default() -> None:
+    """§4 S1e Table F — the same discipline `BinaryMetric.unit` already has: the value a forgetful
+    caller would omit is exactly the one that licenses the paired bootstrap's clamp."""
+    import dataclasses
+
+    field_ = {f.name: f for f in dataclasses.fields(ContinuousMetric)}["support"]
+    assert field_.default is dataclasses.MISSING
+    assert field_.default_factory is dataclasses.MISSING
+    with pytest.raises(TypeError):
+        ContinuousMetric(name="mrr", mean=0.5, n=10)  # type: ignore[call-arg]
+
+
+def test_retrieval_aggregates_named_metrics_returns_separation_raw_and_z() -> None:
+    """§4 S1e Table F — this one addition is what makes `sep_z` reach a table at all; today it
+    reaches none, whatever the scorer computes."""
+    sep_raw = DistributionSummary(
+        name="separationRaw", median=0.1, p10=0.02, n=40, unit="query", support=None
+    )
+    sep_z = DistributionSummary(
+        name="separationZ", median=1.2, p10=0.3, n=40, unit="query", support=None
+    )
+    agg = RetrievalAggregates(separationRaw=sep_raw, separationZ=sep_z)
+    assert agg.named_metrics() == (sep_raw, sep_z)
+
+
+def test_distribution_summary_survives_a_round_trip_as_a_distribution_summary() -> None:
+    """DC-13(f) — the type is asserted, not merely its fields: this is the assertion that fails on
+    `_decode`'s silent pass-through of an unknown tag, which would otherwise hand back a `dict`."""
+    original = DistributionSummary(
+        name="separationZ", median=1.5, p10=-0.3, n=12, unit="query", support=(-5.0, 5.0)
+    )
+    d = _metric_to_dict(original)
+    assert d == {
+        "type": "distribution", "name": "separationZ", "median": 1.5, "p10": -0.3, "n": 12,
+        "unit": "query", "support": [-5.0, 5.0],
+    }
+    restored = _metric_from_dict(json.loads(json.dumps(d)))
+    assert type(restored) is DistributionSummary
+    assert restored == original
+
+
+@pytest.mark.parametrize("kind", ["continuous", "distribution"])
+def test_support_round_trips_none_as_none_and_a_pair_as_a_tuple(kind: str) -> None:
+    """DC-13(f) — `support` round-trips on **both** continuous types: `None` survives as `None`
+    and a bounded pair as a `tuple`, never a `list`."""
+    if kind == "continuous":
+        bounded = ContinuousMetric(name="mrr", mean=0.5, n=10, support=(0.0, 1.0))
+        unbounded = ContinuousMetric(name="sep_raw", mean=0.1, n=10, support=None)
+    else:
+        bounded = DistributionSummary(
+            name="mrr", median=0.5, p10=0.1, n=10, unit="query", support=(0.0, 1.0)
+        )
+        unbounded = DistributionSummary(
+            name="sep_raw", median=0.1, p10=-0.2, n=10, unit="query", support=None
+        )
+    for original in (bounded, unbounded):
+        restored = _metric_from_dict(json.loads(json.dumps(_metric_to_dict(original))))
+        assert restored.support == original.support
+        assert original.support is None or isinstance(restored.support, tuple)
+
+
+@pytest.mark.parametrize("kind", ["continuous", "distribution"])
+def test_a_stored_metric_dict_with_no_support_key_raises(kind: str) -> None:
+    """DC-13(f) — `support` is read with no `.get` fallback, the same rule `BinaryMetric.unit`
+    already states: a scorer's declaration is not recomputed by a reader."""
+    d = (
+        {"type": "continuous", "name": "mrr", "mean": 0.5, "n": 10}
+        if kind == "continuous"
+        else {"type": "distribution", "name": "mrr", "median": 0.5, "p10": 0.1, "n": 10,
+              "unit": "query"}
+    )
+    with pytest.raises(KeyError):
+        _metric_from_dict(d)
+
+
+def test_an_unrecognised_metric_type_tag_raises_rather_than_returning_a_raw_dict() -> None:
+    """§4 S1e Table F, plan-gate P7-1 — this is the site that fails silently today: a third tag
+    falls through both `if`s and is returned as a raw `dict`, so a field typed
+    `DistributionSummary | None` would hold a `dict` and every later reader would be wrong about a
+    type nothing checked. The tag set has one home, and an unrecognised member of it raises."""
+    with pytest.raises(ValueError, match="unrecognised metric type"):
+        _metric_from_dict({"type": "quantile-sketch", "name": "x"})
+
+
+def test_a_record_with_an_unrecognised_metric_type_is_quarantined_as_unparseable(tmp_root) -> None:
+    """The raise's read-time behaviour: `load_history` surfaces it as `unparseable`, exactly as a
+    `KeyError` in `from_dict` already does (`results.py:327`'s own comment)."""
+    original = _run("r1", aggregates=RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=0.5, n=1, support=(0.0, 1.0))
+    ))
+    path = store(original, tmp_root)
+    raw = json.loads(path.read_text())
+    raw["aggregates"]["mrr"]["type"] = "quantile-sketch"
+    path.write_text(json.dumps(raw))
+
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert valid == []
+    assert [r.reason for r in invalid] == ["unparseable"]
+
+
+def test_index_row_renders_a_distribution_summary_with_its_median_labelled_p50(tmp_root) -> None:
+    """§4 S1e Table F — the shipped bare `else` reads `.mean` and raises `AttributeError` on this
+    type; the fix renders the median under a `p50` label, because the cell's continuous form is a
+    bare number and a median printed like a mean is §3.5's defect one column over. `p10` is not in
+    this cell — the index is a per-run locator, and the Arms table is where a distribution prints.
+    """
+    agg = RetrievalAggregates(
+        separationZ=DistributionSummary(
+            name="separationZ", median=1.234, p10=-0.5, n=40, unit="query", support=None
+        )
+    )
+    store(_run("r1", aggregates=agg), tmp_root)
+    text = rebuild_index(tmp_root).read_text()
+    row = text.splitlines()[1]
+    assert "separationZ=p50 1.2340" in row
+    assert "p10" not in row

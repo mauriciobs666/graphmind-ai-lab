@@ -2,7 +2,110 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
-## 2026-09-08 — Impl-review Pass 10 fix round: the clamp stops laundering non-finite bounds
+## 2026-09-08 — §4 S1e Table F: the continuous carrier lands, scoped to its own proof surface
+
+**What:** `docs/plans/small-model-benchmarking.md` §4 S1e **Table F** (v1.23, plan-gate P6-1), the
+last of the eight S1e tables, against `e162ba9`. `modelbench/results.py`, `modelbench/report.py`,
+`tests/test_results.py`, `tests/test_report.py`. **577 → 600 tests**, `.venv/bin/ruff check .`
+clean, **6 mutations**, each `cp`-aside / mutate / run / `cp`-back / `diff -q` byte-identical.
+
+**Delivered — the carrier and its two report-side readers, all 11 site rows** except one row's
+continuous-verdict branch (below): `ItemResult.measures: Mapping[str, float]` beside `counts`, with
+`__post_init__` refusing a metric name present in both maps (`MetricKindError`) and a non-finite
+measure (`NonFiniteMeasure`); `scored_value(metric) -> float | None`, `scored_outcome`'s sibling
+over `measures` with the same three states; `scored_outcome` itself now **raising**
+`MetricKindError` on a `measures`-resident metric instead of booleanising it; `ContinuousMetric`
+gains `support: tuple[float, float] | None`, required with no default; the new
+`DistributionSummary(name, median, p10, n, unit, support)`, frozen; `RetrievalAggregates`'s
+`separationRaw`/`separationZ` retype `float | None` → `DistributionSummary | None` and
+`named_metrics()` returns both — `sep_z` reaches a table at all for the first time; the metric
+(de)serialisers gain a **module-level tag→decoder mapping** (`_METRIC_DECODERS`) that
+`_metric_from_dict` dispatches on and `_decode` gates on, so an unrecognised `"type"` **raises**
+where it used to fall through as a raw `dict`; `_index_row`'s metrics cell renders a
+`DistributionSummary` as `{name}=p50 {median:.4f}` rather than reading `.mean` (`AttributeError`
+before this table). On the `report.py` side: DC-10's selector (`_aggregate_item_mismatches`)
+widens past `isinstance(metric, BinaryMetric)` to a third arithmetic over `scored_value` for a
+continuous member, with **no unit filter** (neither `ContinuousMetric` nor `DistributionSummary`
+carries a denominator noun) — the same check is where a kind disagreement between an arm's
+aggregate and its own items surfaces, in either direction, and both `IncompleteItemRecord` and
+`MetricKindError` are caught there so neither escapes as a traceback; and the Arms table's bare
+`else` splits so a `DistributionSummary` renders its median and p10, never `.mean`.
+
+**Deliberately not delivered, per an explicit scope decision (Option A) put to the stakeholder and
+confirmed before implementation.** Table F's own two-file scope statement ("the continuous carrier:
+`modelbench/results.py` and `modelbench/report.py`") and its 8 enumerating commands / 3 residuals
+never touch `modelbench/stats.py` — but the `report.py:623-789` row's own text ("pass 1 resolves
+each member's kind and branches, per §4 S1's `compare_report` block") cites a spec that requires
+calling `-ml` §3.4 Rule 8's `continuous_verdict()` and rendering its `ContinuousVerdict` sibling
+type, neither of which exists anywhere in the tree (confirmed: only five docstring/comment
+citations in `stats.py`/`test_stats.py`, no implementation, no test). Building it means authoring a
+new statistical producer from a separate ~3,600-line note this unit was not scoped to implement, and
+DC-13(e) / §3.3(iv)'s mixed-kind-family refusal depends on it too. **That gap is not silently
+absorbed:** the still-binary family loop's `_paired_rows` calls `scored_outcome` on every family
+member unconditionally, and the moment a pack declares a continuous `verdictMetrics` member,
+`scored_outcome`'s new raise fires immediately and uncaught — converting "silently wrong when a
+pack finally arrives" into "refuses loudly right now", which is the property this table exists to
+guarantee ahead of that pack existing. `tests/test_report.py::test_a_continuous_verdict_member_refuses_loudly_rather_than_booleanising`
+pins exactly this and doubles as the seam description for the follow-up unit: replace that raise
+with a resolved-kind branch that calls `continuous_verdict()` instead of `_paired_rows` for a
+continuous member. **A separate, properly-sized unit builds `continuous_verdict()`/`ContinuousVerdict`
+from `-ml` §3.4 Rule 8, the family-loop continuous branch, and §3.3(iv)'s mixed-kind refusal, landing
+before S1 closes.**
+
+**Residuals — all three, before → after, re-run at `e162ba9` and again after the edit:**
+
+| # | Command | Before | After |
+|---|---|---|---|
+| 1 | `grep -nF 'separationRaw: float \| None' modelbench/results.py` | 1 | 0 |
+| 2 | `grep -nF 'separationZ: float \| None' modelbench/results.py` | 1 | 0 |
+| 3 | `grep -rFn '{"binary", "continuous"}' modelbench --include='*.py'` | 1 | 0 |
+
+**Whole-diff cross-check, done before declaring done: nothing found.** Walked every pair of edits
+across both files for interaction — `_decode`'s widened `"type" in value` gate against every
+`Aggregates` field's possible encoded shape (no field anywhere holds a bare dict with an unrelated
+`"type"` key; `TurnPositionRate`'s `{"turnIndex", "metric"}` shape carries no `"type"` at its own
+level, so the two branches stay mutually exclusive); `__post_init__`'s new refusal against all 14
+existing `ItemResult(` fixture sites (none pass `measures`, so the overlap check is vacuously
+satisfied everywhere unchanged — confirmed by the unchanged 577 continuing to pass unmodified); DC-10's
+widened `continuous` selector against `_arm_label`/pooled-count rendering (untouched, since neither
+reads the new flag); and `scored_outcome`'s ordering (`measures` check before the `counts` check) is
+safe only because `__post_init__` already guarantees the two maps are disjoint — checked explicitly
+rather than assumed. No self-created defect found.
+
+**Line-pin drift — reported, not fixed; re-pinning is the coordinator's to route.** My insertions
+in `results.py` and `report.py` are additive-only (no deletions), so every pin below moved by a
+constant positive offset within its file, confirmed by locating each pinned line's exact text
+rather than by arithmetic:
+
+| Owner (unaffected by this unit) | Pin (old, `e162ba9`) | New | What's there |
+|---|---|---|---|
+| Appendix A | `results.py:466` | `results.py:628` | `FieldProblem(field=f"items[{item.itemId}].counts.{metric}", …)` |
+| Table F's own prose (self-citation, now inside a landed table's body) | `results.py:327` | `results.py:427` | "A `KeyError` here surfaces as `unparseable`…" comment |
+| Table F's own prose (self-citation) | `results.py:365-366` | `results.py:487-488` | the `BinaryMetric.unit` no-`.get`-fallback comment, cited by analogy for `support` |
+| Table B (**landed**, `8fc2341`) | `test_results.py:62`, `:71`, `:239` | `:69`, `:78`, `:246` | the `Fingerprint(…)`/`_run(…)` construction sites the row names |
+| Table B (**landed**, `8fc2341`) | `test_report.py:471`, `:486` | `:479`, `:494` | the two `arm_kind="deterministic",` fixture sites the row names |
+
+No pin inside a table still describing an **instruction** (an un-landed row) was found stale by
+this edit — Table H's `report.py:338`/`:927`/`:1199` sites are in `stats.py`/`report.py`'s
+`_decided_by` region, which this table's `report.py` edits (`:211`, Arms table) do not overlap, per
+Table F's own "meets Table H on `report.py`, neither order constrained" note.
+
+**Mutation table** — each mutation `cp`-aside first, then a targeted disable (`if False and …` or a
+silent-fallthrough rewrite), the pinned test(s) re-run alone, then restored by `cp` from the
+untouched copy and `diff -q` confirmed byte-identical before the next mutation:
+
+| # | Mutation | Result |
+|---|---|---|
+| M1 | `scored_outcome`'s `measures` check disabled | killed both `test_scored_outcome_raises_on_a_measures_resident_metric` and `test_a_continuous_verdict_member_refuses_loudly_rather_than_booleanising` |
+| M2 | `__post_init__`'s both-maps overlap check disabled | killed `test_a_metric_name_present_in_both_maps_is_refused_at_construction` |
+| M3 | `__post_init__`'s `math.isfinite` check disabled | killed `test_a_non_finite_measure_is_refused_at_construction` |
+| M4 | `_metric_from_dict`'s unrecognised-tag raise replaced with a silent `return d` | killed `test_an_unrecognised_metric_type_tag_raises_rather_than_returning_a_raw_dict` and `test_a_record_with_an_unrecognised_metric_type_is_quarantined_as_unparseable` |
+| M5 | DC-10's `continuous` selector forced to `False` | killed `test_a_continuous_member_declaring_a_measure_it_does_not_carry_is_a_mismatch` and `test_a_kind_disagreement_continuous_aggregate_binary_items_is_the_same_mismatch_class`; correctly left `test_a_continuous_verdict_member_refuses_loudly_rather_than_booleanising` passing (a different site) |
+| M6 | Arms table's `DistributionSummary` branch disabled | killed `test_arms_table_renders_a_distribution_summary_without_reading_mean` (reproduces the exact `AttributeError` the site row describes) |
+
+**Verification:** `.venv/bin/pytest -q` from `model-bench/` → **600 passed** (577 baseline + 23 new:
+18 in `test_results.py`, 5 in `test_report.py`), 0 failed / 0 skipped / 0 deselected.
+`.venv/bin/ruff check modelbench tests` → `All checks passed!`.
 
 **What:** the last pass of `docs/reviews/small-model-benchmarking-impl.md` (gated as `## Pass 11`,
 being renumbered to `## Pass 10`) against `93b0e42` — **N4** (major) and **N5** (minor), both in

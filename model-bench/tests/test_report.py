@@ -16,6 +16,7 @@ from conftest import (
     ToolCallAggregates,
     classification_aggregates,
     deterministic_fields,
+    embeddings_fields,
     guard_pack,
     item,
     model_fields,
@@ -26,7 +27,14 @@ from modelbench import stats
 from modelbench.fingerprint import FieldProblem
 from modelbench.packs import PackConfigError, metrics_from_manifest
 from modelbench.report import compare_report, resolving_power_line
-from modelbench.results import InvalidRecord, ItemResult
+from modelbench.results import (
+    ContinuousMetric,
+    DistributionSummary,
+    InvalidRecord,
+    ItemResult,
+    MetricKindError,
+    RetrievalAggregates,
+)
 from modelbench.roles import unit_kind as unit_kind_for_role
 from modelbench.stats import DuplicateAnalysisUnit, PairedOutcomes
 
@@ -1350,6 +1358,142 @@ def test_a_mismatch_on_a_metric_outside_the_verdict_family_is_not_the_checks_bus
     md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
     assert "INVALID RESULTS EXCLUDED" not in md
     assert f"`{exploratory}` — exploratory — no significance claim" in md
+
+
+# --- §4 S1e Table F: the continuous carrier, on the `report.py` side -----------------------------
+
+
+def _embedder_pack(verdicts: tuple[str, ...] = ("mrr",), headline: str | None = "mrr") -> PackRef:
+    return PackRef(
+        packId="embedder-graphrag-retrieval", packVersion="1.0.0", contentHash="e" * 64,
+        role="embedder", metrics=PackMetrics(verdictMetrics=verdicts, headlineMetric=headline),
+        pairingKey=("queryId",), analysisUnit="queryId", seed=20260902,
+    )
+
+
+def _mrr_item(query_id: str, value: float) -> ItemResult:
+    return ItemResult(
+        itemId=query_id, pairingKey=(query_id,), outcome="pass", scoreable={"mrr": True},
+        counts={}, latencyMs=None, measures={"mrr": value}, detail={},
+    )
+
+
+def test_a_continuous_member_declaring_a_measure_it_does_not_carry_is_a_mismatch() -> None:
+    """§4 S1e Table F — DC-10's third arithmetic, for a continuous member: the same
+    exclude-and-name mechanism as the binary sibling (plan-gate G3-7), read through
+    `scored_value` instead of `scored_outcome`."""
+    pack = _embedder_pack()
+    good_items = [_mrr_item(f"q{i:02d}", 0.5) for i in range(10)]
+    broken_items = [_mrr_item(f"q{i:02d}", 0.5) for i in range(9)]
+    broken_items.append(
+        ItemResult(itemId="q09", pairingKey=("q09",), outcome="pass", scoreable={"mrr": True},
+                   counts={}, latencyMs=None, measures={}, detail={})
+    )
+    agg = RetrievalAggregates(mrr=ContinuousMetric(name="mrr", mean=0.5, n=10, support=(0.0, 1.0)))
+    a = run("cand", role="embedder", call_surface="embeddings", items=good_items, aggregates=agg,
+            fingerprint_fields=embeddings_fields(packId=pack.packId, modelKey="cand"))
+    b = run("halfscored", role="embedder", arm_kind="deterministic", items=broken_items,
+            aggregates=agg,
+            fingerprint_fields=deterministic_fields(packId=pack.packId, armId="halfscored"))
+
+    md = compare_report([a, b], pack=pack)
+    line = next(ln for ln in md.splitlines() if ln.startswith("> - `halfscored`"))
+    assert "`mrr` (item 'q09' declares it scoreable and records no measure)" in line
+    assert "1 arm was excluded above" in md
+
+
+def test_a_kind_disagreement_continuous_aggregate_binary_items_is_the_same_mismatch_class() -> None:
+    """§4 S1e Table F — "the same check is where a kind disagreement surfaces": an aggregate that
+    says continuous while the per-item values live in `counts` is DC-10's mismatch exactly,
+    because the arm's aggregate path and its per-item path disagree about what was measured."""
+    pack = _embedder_pack()
+    good_items = [_mrr_item(f"q{i:02d}", 0.5) for i in range(10)]
+    wrong_kind_items = [
+        ItemResult(itemId=f"q{i:02d}", pairingKey=(f"q{i:02d}",), outcome="pass",
+                   scoreable={"mrr": True}, counts={"mrr": 1}, latencyMs=None, measures={},
+                   detail={})
+        for i in range(10)
+    ]
+    agg = RetrievalAggregates(mrr=ContinuousMetric(name="mrr", mean=0.5, n=10, support=(0.0, 1.0)))
+    a = run("cand", role="embedder", call_surface="embeddings", items=good_items, aggregates=agg,
+            fingerprint_fields=embeddings_fields(packId=pack.packId, modelKey="cand"))
+    b = run("wrongkind", role="embedder", arm_kind="deterministic", items=wrong_kind_items,
+            aggregates=agg,
+            fingerprint_fields=deterministic_fields(packId=pack.packId, armId="wrongkind"))
+
+    md = compare_report([a, b], pack=pack)
+    assert "1 arm was excluded above" in md
+    line = next(ln for ln in md.splitlines() if ln.startswith("> - `wrongkind`"))
+    assert "`mrr`" in line
+
+
+def test_reverse_kind_disagreement_binary_aggregate_continuous_items_is_also_a_mismatch() -> None:
+    """The reverse direction: an aggregate declares `METRIC` binary while an item scored it
+    continuously — `scored_outcome` raises `MetricKindError`, caught by DC-10 on the same route
+    (§4 S1e Table F)."""
+    fields = model_fields(packId=PACK_ID)
+    good_items = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(10)]
+    wrong_kind_items = [
+        ItemResult(itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",), outcome="pass",
+                   scoreable={METRIC: True}, counts={}, latencyMs=1300.0,
+                   measures={METRIC: 1.0}, detail={})
+        for i in range(10)
+    ]
+    a = run("cand", items=good_items, aggregates=_agg_from(good_items),
+            fingerprint_fields={**fields, "modelKey": "cand"})
+    b = run("wrongkind", items=wrong_kind_items, aggregates=classification_aggregates(10, 10),
+            fingerprint_fields={**fields, "modelKey": "wrongkind"})
+
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "1 arm was excluded above" in md
+    assert f"`{METRIC}`" in md
+
+
+def test_arms_table_renders_a_distribution_summary_without_reading_mean() -> None:
+    """§4 S1e Table F — the shipped bare `else` reads `.mean` and would raise `AttributeError` on
+    this type; the fix renders the median and p10, labelled, and no interval."""
+    pack = _embedder_pack(verdicts=(), headline=None)
+    items = [_mrr_item(f"q{i:02d}", 0.5) for i in range(3)]
+    agg = RetrievalAggregates(
+        separationZ=DistributionSummary(
+            name="separationZ", median=1.5, p10=-0.3, n=40, unit="query", support=None
+        )
+    )
+    a = run("cand", role="embedder", call_surface="embeddings", items=items, aggregates=agg,
+            fingerprint_fields=embeddings_fields(packId=pack.packId, modelKey="cand"))
+    b = run("bm25", role="embedder", arm_kind="deterministic", items=items, aggregates=agg,
+            fingerprint_fields=deterministic_fields(packId=pack.packId))
+
+    md = compare_report([a, b], pack=pack)
+    assert "| cand | separationZ | n=40 | p50 1.5000, p10 -0.3000 | — |" in md
+
+
+def test_a_continuous_verdict_member_refuses_loudly_rather_than_booleanising() -> None:
+    """§4 S1e Table F ships the carrier and stops at its proof surface (plan-gate P6-1's scope
+    split, confirmed): a continuous verdict metric's family loop has no continuous branch yet —
+    building `-ml` §3.4 Rule 8's `continuous_verdict()` and the branch that calls it is a
+    separate, properly-sized unit that lands before S1 closes.
+
+    What Table F does ship is the refusal that makes the gap **loud rather than safe-by-absence**:
+    `ItemResult.scored_outcome` raises `MetricKindError` on a `measures`-resident metric, so the
+    still-binary family loop's `_paired_rows` call hits that raise the moment a pack declares a
+    continuous `verdictMetrics` member — the exact moment the shipped code would otherwise have
+    booleanised `mrr` into a silent, wrong McNemar verdict. This test is the seam for that future
+    unit: replace this raise with a resolved-kind branch that calls `continuous_verdict()` instead
+    of `_paired_rows` for a continuous member.
+    """
+    pack = _embedder_pack()
+    items_a = [_mrr_item("q1", 1.0)]
+    items_b = [_mrr_item("q1", 0.5)]
+    agg_a = RetrievalAggregates(mrr=ContinuousMetric(name="mrr", mean=1.0, n=1, support=(0.0, 1.0)))
+    agg_b = RetrievalAggregates(mrr=ContinuousMetric(name="mrr", mean=0.5, n=1, support=(0.0, 1.0)))
+    a = run("cand", role="embedder", call_surface="embeddings", items=items_a, aggregates=agg_a,
+            fingerprint_fields=embeddings_fields(packId=pack.packId, modelKey="cand"))
+    b = run("bm25", role="embedder", arm_kind="deterministic", items=items_b, aggregates=agg_b,
+            fingerprint_fields=deterministic_fields(packId=pack.packId))
+
+    with pytest.raises(MetricKindError):
+        compare_report([a, b], pack=pack)
 
 
 # --- M-6: fewer than two arms is its own reason, not the deterministic one ----------------------

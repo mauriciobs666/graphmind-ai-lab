@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, Mapping
+from typing import Any, Callable, Literal, Mapping
 
 from modelbench.fingerprint import FieldProblem, Fingerprint
 from modelbench.stats import LEVEL_P50, LEVEL_P95, percentile
@@ -44,6 +45,24 @@ class InvalidFingerprint(ValueError):
 
 class IncompleteItemRecord(ValueError):
     """An item declares a metric scoreable and records no count for it (review P3-1)."""
+
+
+class MetricKindError(ValueError):
+    """A metric whose instrument is ambiguous (§4 S1e Table F, `-ml` v1.15 §3.2d).
+
+    Raised when a name is present in **both** `ItemResult.counts` and `ItemResult.measures`, and
+    when `scored_outcome`/`scored_value` is asked for a metric that lives in the other map. The
+    map a name lives in *is* the declaration of which instrument decides it, so an ambiguity is
+    refused rather than resolved by code order.
+    """
+
+
+class NonFiniteMeasure(ValueError):
+    """A `measures` value that is not finite, refused at construction (`-ml` v1.15 §3.2d).
+
+    One NaN or infinity propagating through a mean and both percentiles would arrive as a
+    rendered interval rather than as an error.
+    """
 
 
 # --- metric values ---------------------------------------------------------------------------
@@ -81,9 +100,27 @@ class ContinuousMetric:
     name: str
     mean: float
     n: int
+    #: The metric's own support, required with no default — `BinaryMetric.unit`'s discipline for
+    #: the same reason: `report.py` is generic over packs and cannot know that `mrr` is `[0, 1]`
+    #: and `sep_z` unbounded, so the scorer that produced the figure states it (§4 S1e Table F).
+    support: tuple[float, float] | None
 
 
-MetricValue = BinaryMetric | ContinuousMetric
+@dataclass(frozen=True)
+class DistributionSummary:
+    """`-ml` §5.2's median-and-p10 publication for a per-item continuous figure — neither a mean,
+    so `ContinuousMetric` cannot carry them and a bare `float | None` carries neither (§4 S1e
+    Table F, plan-gate P6-1)."""
+
+    name: str
+    median: float
+    p10: float
+    n: int
+    unit: str
+    support: tuple[float, float] | None
+
+
+MetricValue = BinaryMetric | ContinuousMetric | DistributionSummary
 
 
 @dataclass(frozen=True)
@@ -119,7 +156,29 @@ class ItemResult:
     scoreable: Mapping[str, bool]
     counts: Mapping[str, int]
     latencyMs: float | None
+    #: The per-item **continuous** values (`mrr`, `separationRaw`, `separationZ`) — a second map,
+    #: never a widened `counts`: widening makes the booleanisation type-legal without making it
+    #: wrong, and puts a count that §4.2's denominators count into the same key space as a
+    #: measurement they must not (§4 S1e Table F, `-ml` v1.15 §3.2d). Finite floats; the carrier
+    #: constrains no domain. **Not** `float | None`: absence stays `scoreable`'s job, so a
+    #: measurement of `0.0` stays distinguishable from an unjudged query.
+    measures: Mapping[str, float] = field(default_factory=dict)
     detail: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Instrument selection is **total**: a metric name lives in `counts` or in `measures`,
+        never both, and every `measures` value is finite (§4 S1e Table F, `-ml` v1.15 §3.2d)."""
+        overlap = sorted(set(self.counts) & set(self.measures))
+        if overlap:
+            raise MetricKindError(
+                f"item {self.itemId!r} declares {overlap!r} in both `counts` and `measures`; "
+                "a metric's instrument has exactly one home"
+            )
+        for name, value in self.measures.items():
+            if not math.isfinite(value):
+                raise NonFiniteMeasure(
+                    f"item {self.itemId!r} metric {name!r} is not finite: {value!r}"
+                )
 
     def scored_outcome(self, metric: str) -> bool | None:
         """This item's outcome for `metric` — `None` when it carries none (review P3-1).
@@ -141,15 +200,44 @@ class ItemResult:
           the other way, and the shape of the two maps cannot distinguish it from a scorer that
           simply dropped the key. **S2's scorers must emit a `counts` entry for every metric they
           declare scoreable** — that is what makes this a contract rather than a default.
+
+        **A metric that lives in `measures` raises `MetricKindError` here instead of returning
+        `counts[metric] > 0`** (§4 S1e Table F, `-ml` v1.15 §3.2d): that metric's instrument is
+        continuous, so its outcome has no boolean to return — the caller wants `scored_value`.
+        This is what turns a `measures`-resident metric's booleanisation into a loud failure
+        instead of a silent `+100.0 pp` verdict for a metric nobody scored that way.
         """
         if not self.scoreable.get(metric, False):
             return None
+        if metric in self.measures:
+            raise MetricKindError(
+                f"item {self.itemId!r} metric {metric!r} lives in `measures` (a continuous "
+                "measurement) and has no boolean outcome; call `scored_value` instead"
+            )
         if metric not in self.counts:
             raise IncompleteItemRecord(
                 f"item {self.itemId!r} declares {metric!r} scoreable and records no count for it; "
                 "an absent count is not a zero, and a scored item must carry its score (-ml §4.3)"
             )
         return self.counts[metric] > 0
+
+    def scored_value(self, metric: str) -> float | None:
+        """`scored_outcome`'s sibling over `measures` — the **same three states** (§4 S1e Table F,
+        `-ml` v1.15 §3.2d): `metric` absent from `scoreable` is `None`; a declared precondition
+        failure (`scoreable[metric] is False`) is `None`, counted into `-ml` §4.3's asymmetry
+        tally; `scoreable[metric] is True` with no entry in `measures` is refused
+        (`IncompleteItemRecord`), never read as `0.0` — a query nobody judged must not become a
+        query that retrieved nothing.
+        """
+        if not self.scoreable.get(metric, False):
+            return None
+        if metric not in self.measures:
+            raise IncompleteItemRecord(
+                f"item {self.itemId!r} declares {metric!r} scoreable and records no measure for "
+                "it; an absent measure is not a zero, and a scored item must carry its score "
+                "(-ml §4.3)"
+            )
+        return self.measures[metric]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -159,6 +247,7 @@ class ItemResult:
             "scoreable": dict(self.scoreable),
             "counts": dict(self.counts),
             "latencyMs": self.latencyMs,
+            "measures": dict(self.measures),
             "detail": dict(self.detail),
         }
 
@@ -171,6 +260,9 @@ class ItemResult:
             scoreable=dict(d.get("scoreable", {})),
             counts=dict(d.get("counts", {})),
             latencyMs=d.get("latencyMs"),
+            # A reader's compatibility rule under §3.4.3, not a constructor default: a record
+            # written before `measures` existed reads as carrying none (§4 S1e Table F).
+            measures=dict(d.get("measures", {})),
             detail=dict(d.get("detail", {})),
         )
 
@@ -184,8 +276,10 @@ class RetrievalAggregates:
     recallAtK: tuple[BinaryMetric, ...] = ()
     mrr: ContinuousMetric | None = None
     precisionAt1: BinaryMetric | None = None
-    separationRaw: float | None = None
-    separationZ: float | None = None
+    #: `-ml` §5.2 publishes a median and a p10 for `sep_raw`/`sep_z`, neither a mean — a
+    #: `DistributionSummary`, not the bare `float | None` these carried before (§4 S1e Table F).
+    separationRaw: DistributionSummary | None = None
+    separationZ: DistributionSummary | None = None
 
     def named_metrics(self) -> tuple[MetricValue, ...]:
         found = [*self.recallAtK]
@@ -193,6 +287,12 @@ class RetrievalAggregates:
             found.append(self.precisionAt1)
         if self.mrr is not None:
             found.append(self.mrr)
+        # This one addition is what makes `sep_z` reach a table at all — today it reaches none,
+        # whatever the scorer computes (§4 S1e Table F).
+        if self.separationRaw is not None:
+            found.append(self.separationRaw)
+        if self.separationZ is not None:
+            found.append(self.separationZ)
         return tuple(found)
 
 
@@ -357,21 +457,82 @@ def _metric_to_dict(m: MetricValue) -> dict[str, Any]:
         return {
             "type": "binary", "name": m.name, "successes": m.successes, "n": m.n, "unit": m.unit,
         }
-    return {"type": "continuous", "name": m.name, "mean": m.mean, "n": m.n}
+    if isinstance(m, DistributionSummary):
+        # A third value of the same "type" discriminator "binary" and "continuous" already
+        # carry, never a "continuous" with extra keys — a reader that took one for the other
+        # would read a median as a mean (§4 S1e Table F, plan-gate P7-1).
+        return {
+            "type": "distribution",
+            "name": m.name,
+            "median": m.median,
+            "p10": m.p10,
+            "n": m.n,
+            "unit": m.unit,
+            "support": list(m.support) if m.support is not None else None,
+        }
+    return {
+        "type": "continuous",
+        "name": m.name,
+        "mean": m.mean,
+        "n": m.n,
+        "support": list(m.support) if m.support is not None else None,
+    }
+
+
+def _decode_support(value: Any) -> tuple[float, float] | None:
+    return tuple(value) if value is not None else None
+
+
+def _decode_binary(d: Mapping[str, Any]) -> BinaryMetric:
+    # No `.get` fallback: a stored count whose denominator unit is unknown is exactly the
+    # record §4.4 says must not be given an interval, and guessing one restores the defect.
+    return BinaryMetric(name=d["name"], successes=d["successes"], n=d["n"], unit=d["unit"])
+
+
+def _decode_continuous(d: Mapping[str, Any]) -> ContinuousMetric:
+    # `support` has no `.get` fallback either, for the same reason (§4 S1e Table F): it is not
+    # recomputed by a reader, so a stored metric dict with no `support` key raises rather than
+    # defaulting.
+    return ContinuousMetric(
+        name=d["name"], mean=d["mean"], n=d["n"], support=_decode_support(d["support"])
+    )
+
+
+def _decode_distribution(d: Mapping[str, Any]) -> DistributionSummary:
+    return DistributionSummary(
+        name=d["name"],
+        median=d["median"],
+        p10=d["p10"],
+        n=d["n"],
+        unit=d["unit"],
+        support=_decode_support(d["support"]),
+    )
+
+
+#: The tag set's **one home** (§4 S1e Table F, plan-gate P7-1): `_metric_from_dict` dispatches on
+#: it and `_decode` gates on it, so the two functions cannot disagree about how many metric types
+#: exist (§7 rule 4).
+_METRIC_DECODERS: Mapping[str, Callable[[Mapping[str, Any]], MetricValue]] = {
+    "binary": _decode_binary,
+    "continuous": _decode_continuous,
+    "distribution": _decode_distribution,
+}
 
 
 def _metric_from_dict(d: Mapping[str, Any]) -> MetricValue:
-    if d["type"] == "binary":
-        # No `.get` fallback: a stored count whose denominator unit is unknown is exactly the
-        # record §4.4 says must not be given an interval, and guessing one restores the defect.
-        return BinaryMetric(
-            name=d["name"], successes=d["successes"], n=d["n"], unit=d["unit"]
-        )
-    return ContinuousMetric(name=d["name"], mean=d["mean"], n=d["n"])
+    try:
+        decoder = _METRIC_DECODERS[d["type"]]
+    except KeyError:
+        # An unrecognised tag raises rather than falling through as a raw `dict` — a dict tagged
+        # with a `"type"` this build does not know is a record written by a build that knew a
+        # metric type this one does not (§4 S1e Table F, plan-gate P7-1). It surfaces as
+        # `unparseable` in `load_history`, exactly as a `KeyError` in `from_dict` does (`:327`).
+        raise ValueError(f"unrecognised metric type {d.get('type')!r}") from None
+    return decoder(d)
 
 
 def _encode(value: Any) -> Any:
-    if isinstance(value, (BinaryMetric, ContinuousMetric)):
+    if isinstance(value, (BinaryMetric, ContinuousMetric, DistributionSummary)):
         return _metric_to_dict(value)
     if isinstance(value, TurnPositionRate):
         return {"turnIndex": value.turnIndex, "metric": _metric_to_dict(value.metric)}
@@ -383,7 +544,7 @@ def _encode(value: Any) -> Any:
 def _decode(value: Any) -> Any:
     if isinstance(value, list):
         return tuple(_decode(v) for v in value)
-    if isinstance(value, dict) and value.get("type") in {"binary", "continuous"}:
+    if isinstance(value, dict) and "type" in value:
         return _metric_from_dict(value)
     if isinstance(value, dict) and "turnIndex" in value:
         return TurnPositionRate(
@@ -571,12 +732,21 @@ INDEX_COLUMNS = (
 )
 
 
+def _metric_cell(m: MetricValue) -> str:
+    if isinstance(m, BinaryMetric):
+        return f"{m.name}={m.successes}/{m.n}"
+    if isinstance(m, DistributionSummary):
+        # The `p50` label is not decoration: the cell's continuous form is otherwise a bare
+        # number, and a median printed like a mean is §3.5's defect one column over. `p10` is
+        # not in this cell — the index is a per-run locator and the Arms table is where a
+        # distribution prints (§4 S1e Table F).
+        return f"{m.name}=p50 {m.median:.4f}"
+    return f"{m.name}={m.mean:.4f}"
+
+
 def _index_row(run: RunResult, valid: bool) -> dict[str, Any]:
     latencies = [i.latencyMs for i in run.items if i.latencyMs is not None]
-    metrics = "; ".join(
-        f"{m.name}={m.successes}/{m.n}" if isinstance(m, BinaryMetric) else f"{m.name}={m.mean:.4f}"
-        for m in run.aggregates.named_metrics()
-    )
+    metrics = "; ".join(_metric_cell(m) for m in run.aggregates.named_metrics())
     return {
         "runId": run.runId,
         "date": str(run.fingerprint.get("startedAt", ""))[:10],

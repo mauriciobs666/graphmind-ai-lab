@@ -28,9 +28,12 @@ from modelbench import stats
 from modelbench.packs import PackConfigError, PackRef, check_sampling_contract
 from modelbench.results import (
     BinaryMetric,
+    ContinuousMetric,
+    DistributionSummary,
     IncompleteItemRecord,
     InvalidRecord,
     ItemResult,
+    MetricKindError,
     RunResult,
 )
 from modelbench.roles import unit_kind as unit_kind_for_role
@@ -204,11 +207,23 @@ def _aggregate_item_mismatches(run: RunResult, pack: PackRef) -> list[AggregateM
     side by side, so it needs nothing S2 produces. S2 owes only the *contract* — that a scorer
     derives its aggregates from the same items in one pass — which is what makes this failure
     unreachable rather than merely reported (plan v1.8 §4 S2).
+
+    **A third arithmetic, for a continuous member** (§4 S1e Table F, plan-gate P6-1). A
+    `ContinuousMetric` or `DistributionSummary` widens the same check: `metric.n` must equal the
+    number of the arm's items for which `scored_value(metric.name) is not None`, with no unit
+    filter — neither carries a denominator noun to compare. **The same check is where a kind
+    disagreement surfaces**: a member whose aggregate is continuous while its per-item values live
+    in `counts`, or the reverse, is a mismatch of exactly this class, because the arm's aggregate
+    path and its per-item path disagree about what was measured. Excluded and named, never
+    reconciled — `scored_value` raises `IncompleteItemRecord` on the sibling malformation for the
+    same reason `scored_outcome` does, and a `MetricKindError` from either reader is caught here
+    too, so neither escapes as a traceback.
     """
     unit = unit_kind_for_role(pack.role)
     found: list[AggregateMismatch] = []
     for metric in run.aggregates.named_metrics():
-        if not isinstance(metric, BinaryMetric) or metric.unit != unit:
+        continuous = isinstance(metric, (ContinuousMetric, DistributionSummary))
+        if not continuous and (not isinstance(metric, BinaryMetric) or metric.unit != unit):
             continue
         if metric.name not in pack.metrics.verdictMetrics:
             continue
@@ -216,19 +231,27 @@ def _aggregate_item_mismatches(run: RunResult, pack: PackRef) -> list[AggregateM
         unreadable: str | None = None
         for it in run.items:
             try:
-                if it.scored_outcome(metric.name) is not None:
+                seen = (
+                    it.scored_value(metric.name) is not None
+                    if continuous
+                    else it.scored_outcome(metric.name) is not None
+                )
+                if seen:
                     counted += 1
-            except IncompleteItemRecord:
-                # **A mismatch, never a raise** (plan-gate G3-7). `scored_outcome` refuses the
-                # sibling malformation — a metric declared scoreable with no entry in `counts` —
-                # and that refusal is right at its own seam, but letting it out of *this* function
-                # turns an inconsistent record into a traceback at exit 1, outside §3.6a's closed
-                # exit-code set: the exact response this check exists to avoid, arriving through
-                # the check's own implementation. The arm is excluded and named, like every other
-                # disagreement between an arm's two paths. (`load_history` also quarantines such a
-                # record on read — review P4-5 — so the two nets sit at different seams and this
-                # one is what makes `compare_report` total rather than trusting its caller.)
-                unreadable = f"item {it.itemId!r} declares it scoreable and records no count"
+            except (IncompleteItemRecord, MetricKindError):
+                # **A mismatch, never a raise** (plan-gate G3-7). `scored_outcome`/`scored_value`
+                # refuse the sibling malformation — a metric declared scoreable with no entry in
+                # the map its instrument owns, or an instrument disagreement between the aggregate
+                # and the item — and that refusal is right at its own seam, but letting it out of
+                # *this* function turns an inconsistent record into a traceback at exit 1, outside
+                # §3.6a's closed exit-code set: the exact response this check exists to avoid,
+                # arriving through the check's own implementation. The arm is excluded and named,
+                # like every other disagreement between an arm's two paths. (`load_history` also
+                # quarantines such a record on read — review P4-5 — so the two nets sit at
+                # different seams and this one is what makes `compare_report` total rather than
+                # trusting its caller.)
+                what = "measure" if continuous else "count"
+                unreadable = f"item {it.itemId!r} declares it scoreable and records no {what}"
                 break
         if unreadable is not None:
             found.append(AggregateMismatch(metric.name, unreadable))
@@ -593,6 +616,13 @@ def compare_report(
                     f"| {_arm_label(run, arm_names[run.runId])} | {metric.name} | "
                     f"{metric.successes}/{metric.n} | "
                     f"{metric.successes / metric.n:.3f} | {interval} |"
+                )
+            elif isinstance(metric, DistributionSummary):
+                # A `DistributionSummary` renders its median and p10 and no interval — never
+                # `.mean`, which it does not carry (§4 S1e Table F, plan-gate P6-1(a) item (f)).
+                lines.append(
+                    f"| {_arm_label(run, arm_names[run.runId])} | {metric.name} | n={metric.n} | "
+                    f"p50 {metric.median:.4f}, p10 {metric.p10:.4f} | — |"
                 )
             else:
                 lines.append(
