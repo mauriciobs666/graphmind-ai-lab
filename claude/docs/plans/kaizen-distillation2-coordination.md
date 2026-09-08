@@ -75,7 +75,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U19 | analyst chunk A (12: ≤ 08-30) | `adb247a3e028c0606` (killed by a session rate limit at its first tool call, 09-07; resumed in place by `SendMessage` 09-08 — nothing had landed, all 12 edges intact) | accepted | `claude/graph-dba/falkordb-quirks.md` (3 entries: 2 folded, 1 new regex bullet) + `kaizen/history.md`; `claude/analyst/review-techniques.md` (2, both edits to existing material — one **corrected a wrong import-resolution mechanism the file had been carrying**) + `kaizen/*`; **7 discarded**, 3 of them additionally carrying a false or misattributed claim; 1 `MENTIONS`→`devops`; 11 nodes deleted, 1 `PRODUCED` resolved. **Zero new bullets in any always-loaded prompt** — `analyst.md` and `claude/AGENTS.md` untouched | none → — | 184.9k tok, 50 tools |
 | U20 | analyst chunk B (11: 08-31…09-01 + the first 5 of 09-02) | `a6db6af4910e607bc` (killed by a session rate limit mid-promotion, 09-08; resumed in place by `SendMessage` after the reset — four promotions already on disk, nothing logged, all 11 entries intact; **resumed a second time**, which corrected a real accessor defect and refuted my stamp finding) | in-flight | 7 promoted / 4 discarded, all 11 cleared; `claude/analyst/{kaizen/history.md,kaizen/plan.md,review-techniques.md}`, `skills/agent-standards/claude-code.md`, `skills/python-web-quirks/SKILL.md`, `skills/README.md`, `claude/graph-dba/falkordb-quirks.md`, `claude/data-scientist/lm-studio-model-notes.md`, +3 `kaizen/history.md` | teco re-derivation → **accepted**; my "wrong stamps" finding was itself wrong (see below), the accessor defect it surfaced was real and is fixed | 236.4k tok, 35 tools |
 | U21 | analyst chunk C (10: all of 09-02) | `a9b3f7141f0403e35` (resumed twice) | accepted | 6 promoted / 4 discarded (2 **falsified**), all 10 cleared + curator-cleared my false `7c4e91a2…`; `claude/graph-dba/falkordb-quirks.md`, `claude/analyst/review-techniques.md`, `claude/analyst/kaizen/{history,plan}.md`, `claude/graph-dba/kaizen/history.md` | teco re-derivation → **accepted** (2 resumes: evidence recount, then provenance of an unattributed bullet) | 224.0k tok, 96 tools |
-| U22 | analyst chunk D (11: 09-03) | `a9a502324e0cf4ca5` | in-flight | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
+| U22 | analyst chunk D (11: 09-03) | `a9a502324e0cf4ca5` | accepted | 8 promoted / 3 discarded, all 11 cleared; `review-techniques.md`, `python-web-quirks/SKILL.md`, `agent-standards/claude-code.md`, `lm-studio-model-notes.md`, `skills/README.md`, +3 `kaizen/history.md`; `falkordb-quirks.md` **held** | teco re-derivation → **accepted**, paired-control reproduction of the pipe finding | 238.8k tok, 112 tools |
 | U23 | analyst chunk E (13: 09-07, arrived after pass open) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
@@ -286,6 +286,36 @@ committed its share and the worktree delta is wholly mine (this is why
 `claude/cobb/kaizen/history.md` was safe to commit at 811 words while
 `falkordb-quirks.md` was not). Run it per file before every integration
 commit, not per unit.
+
+## The tree hazard ran the other way: another session committed *our* work
+
+`375af25 fix(joern-cpg): close Pass 6 — the oracle, the replay wiring, the
+credential` contains U22's kaizen dispositions. The CPG session committed
+`claude/cobb/kaizen/history.md` (+153) and `plan.md` (+108) as part of its own
+six-file change, and those hunks include U22's chunk-D entry and its
+21-character-collision note. Nothing was lost — the content is intact in
+`HEAD`, verified — but this pass's work is now filed under a joern-cpg commit
+message, and `git log -- <kaizen path>` will attribute it to that coordination.
+
+**Why "commit by explicit path" did not prevent this, and what actually
+follows.** The earlier note in this document said path-scoped commits keep
+concurrent sessions from sweeping each other. That holds only while each
+*path* belongs to one coordination — and `claude/cobb/kaizen/{history,plan}.md`
+never can. **Every coordination that dispatches `cobb` writes there**, by
+construction: it is `cobb`'s own log, not a given unit's deliverable. So it is
+a structurally shared path, and no commit discipline on either side can
+separate two coordinations' entries inside it.
+
+That makes the three-way word count (`baseline` vs `HEAD` vs worktree) the
+load-bearing check rather than a convenience. It is what showed `NOW == HEAD`
+on both `cobb/kaizen` files — the tell that someone else had already committed
+our content — and it is the same instrument that, one unit earlier, showed the
+opposite condition on `falkordb-quirks.md` and stopped me sweeping *their*
+bullet. One check, both directions.
+
+**Not repaired, deliberately.** Rewriting history to re-attribute those hunks
+is a tree mutation and off-limits; the content is correct and present, and the
+cost of the mis-filing is a confusing `git log`, not a lost disposition.
 
 ## Follow-ups
 
