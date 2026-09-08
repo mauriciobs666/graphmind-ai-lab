@@ -1412,3 +1412,266 @@ its own next rebuild|until those keys are cleared|stops on purpose|clear the key
 to the list` — every hit is a tombstone, a dated history entry, or an unrelated component, except
 `claude/cobb/kaizen/plan.md:23,159` (**P5-4**). The `NOTE` (**P5-3**) is not reachable by grep; it
 lives in the graph.
+
+---
+
+## Pass 6 — 2026-09-08 · gating the Pass 5 fixes (`049f063`, `271c899`) and the rewritten live `NOTE`
+
+**Scope:** the two commits read with `git show` against their parents (the working tree was in fact
+clean for `skills/` this run — verified by `git status --porcelain -- skills/` and by md5 against
+`271c899` for all three scripts), plus the live `cpg_falkorchat` marker read read-only. Files
+judged: `skills/joern-cpg/scripts/{pipeline.sh,git-provenance.sh,test-stamp-wiring.sh}`,
+`skills/cpg-analysis/references/freshness.md`, `skills/joern-cpg/SKILL.md`,
+`claude/cobb/kaizen/{plan,history}.md`. **Method:** ran the shipped wiring test; then ran it against
+**nine byte-copy mutants** in the session scratchpad (repo never touched — the three scripts still
+md5-match `271c899`); probed the real `redis-cli`/FalkorDB reply shapes read-only via
+`GRAPH.RO_QUERY`; re-derived `keys(b)`, `size(b.NOTE)` and the P4-4 predicate on the live marker.
+`pipeline.sh` was not run. No graph write, no `GRAPH.DELETE`, no `GRAPH.QUERY` against a
+possibly-absent graph, no tree-mutating git, nothing staged or committed. **One disclosure:** to
+reproduce the `WRONGTYPE` row `pipeline.sh:268` claims, I created and immediately deleted a Redis
+**list** key `__probe_key_analyst_tmp` (`DEL` → 1, `EXISTS` → 0 confirmed). No graph key was created
+or removed; `GRAPH.LIST` is recorded as a listing in **A11.5**, not a count.
+
+**Verdict: needs changes** — no blocker; four majors. P5-1 is genuinely closed and the wiring test
+is a **real guard**, not theatre. But its oracle is soft in one specific way that let the arc's
+newest defect class through again, the stray assertion still cannot fail on a real error reply, the
+P3-1 fix landed in the three branches that don't need it and not in the two that do, and the third
+credential contains one sentence that is false.
+
+CPG: considered, not relevant — the artefacts are Bash and Markdown; the two loaded `cpg_*` graphs
+are the *subject* of the marker data, not graphs of this code, and no `cpg_skills` graph exists.
+
+### Ruling on the wiring test, as a guard
+
+**Anchors: robust.** Four mutation modes, all fail loudly, none passes vacuously (A11.1). START
+reworded → `BLOCK` empty → the `-z` gate at `:72-74` prints "anchors moved" and exits 1. END
+reworded (with and without a new trailing step in the `--load` branch) → extraction runs on to the
+file-final `fi` → `bash -c` syntax error → every case FAILs. END string duplicated earlier →
+truncated block → the `:75-78` `cpg_provenance_stray_query` gate catches it. The END-loss diagnosis
+is *accidental* — it works because `fi` is the next line — but it is structurally stable, since any
+loss of that anchor pulls in the block-closing `fi`.
+
+**The P5-1 mutation discriminates.** Confirmed both directions: the shipped suite refuses; with the
+call-site guard deleted the mutation case **FAILs** ("refused, but not with the wiring message"),
+and with the *whole rejected design* restored — `cpg_provenance_stamp` back to `printf`, call site
+back to `$(…)` — the suite FAILs on four cases. That is the mutant the chain's rule asks for, and it
+is caught.
+
+**The fake is faithful where it matters, and hides one thing.** I verified against the live
+instance that real `redis-cli` piped output is **bare** `STRAY_KEY=<NAME>` lines at column 0, so
+`pipeline.sh:361`'s `sed -n 's/^STRAY_KEY=/…/p'` really does name the offending keys — the fake
+models that correctly. Where it diverges is error shape: it emits only `errMsg: …`, and real
+FalkorDB does not always. See **P6-2**.
+
+### P6-1 — major · the oracle ignores the exit code, so deleting `replay_stamp` again passes green
+
+`test-stamp-wiring.sh:100-105` decides a case by `rc == 0 → PASS`, else by scraping stray key names
+out of `^pipeline:   NAME$`. It never checks *which* non-zero, and never checks that the failure
+branch finished. So: delete the `replay_stamp` definition from `pipeline.sh` — the exact defect
+`271c899` is titled for — and **all six cases still report PASS** (A11.2). Under the hood case 3 is
+now aborting at **rc 127** with `replay_stamp: command not found`, and the scrape still finds
+`MARKER_EVIDENCE` from the lines printed before the abort. The test built to close "verified in
+isolation, broken in the wiring" does not cover the wiring defect that produced it.
+
+**Fix:** assert the exit code exactly (`expect_rc`, 1 for every modelled failure), and add a
+positive assertion on the replay block — each failing case must print `--- begin stamp ---` and a
+line matching `^MERGE (b:CpgBuildInfo)$`. Both are one line each in `run_case`.
+
+### P6-2 — major · the stray assertion is not fail-closed against a real FalkorDB error reply
+
+`pipeline.sh:343` says the negative check is closed by "the explicit status checks". It is not:
+`rq`'s classifier (`:268`) tests `errMsg:*|ERR\ *|WRONGTYPE*|*"read only"*|*"read-only"*`, and real
+FalkorDB returns runtime errors **bare**, with `redis-cli` exiting 0 — verified live (A11.3):
+`Unknown function 'notafunc'`, `Type mismatch: expected Map, Node, Edge, or Null but was String`.
+Driving the shipped `rq` at one of those returns **rc 0**, and the reply carries no `STRAY_KEY=`, so
+the run prints "stamp verified by read-back" over a marker that was never checked. The file's own
+comment (`:255-256`) already concedes "pattern-matching that list is inherently incomplete" for the
+stamp — and then two branches later relies on the same list as load-bearing. The fake never
+surfaces it because its only error shape is `errMsg:`.
+
+**Fix:** make the stray read positive rather than prefix-blind — the reply of a successful
+`GRAPH.RO_QUERY` always opens with the column header `stray`; require it (`case "$STRAY_BACK" in
+stray*) ;; *) fail`), or require the `Query internal execution time:` trailer. Add the same as a
+seventh test case: fake reply `Type mismatch: …` must FAIL the block.
+
+### P6-3 — major · `replay_stamp` is wired into the three branches where the stamp landed, not the two where it didn't
+
+Pass 5's P5-7 named the branches that tell the operator "re-stamping by hand is enough". The fix
+went to the other set. `replay_stamp` is called at `:348`, `:357` and `:373` — all three *after* the
+read-back proved the stamp landed — and is **absent** from `:291-298` (FalkorDB rejected the stamp:
+"only the provenance marker is missing") and `:308-312` ("the freshness stamp did not land"), which
+are the only two branches where re-sending the Cypher is the fix. The result is a self-contradiction
+inside one branch: `:346-347` prints *"The stamp DID land (it was read back above)"* and then
+`replay_stamp` prints *"the load succeeded and does NOT need repeating — only the stamp does."*
+`SKILL.md:109-110`'s claim that **every** stamp failure branch now prints the Cypher verbatim is
+false — three of five do, and they are the wrong three.
+
+**Fix:** call `replay_stamp` from `:291-298` and `:308-312`; on the three stray branches either drop
+it or give it a second wording that does not claim the stamp needs re-sending.
+
+### P6-4 — major · the third credential's generalisation is false of mechanism one
+
+`freshness.md:228-231` (echoed in `claude/cobb/kaizen/history.md`'s U48 entry): *"since mechanisms
+one and two both carried **execution** credentials too. An execution credential is only worth the
+level it covers, and **both earlier ones covered the primitive and not the call path**."* Checked
+against the file three paragraphs up and against `29538d6`: mechanism one's credential is
+*"Re-checked there, not inferred"* (`freshness.md:203-204`) — a **re-reading** credential, not an
+execution one — and its defect was not a level gap at all but an incomplete enumeration (a sixth
+key, `MARKER_EVIDENCE`), which the second tombstone states in those words at `:206-210`. So a
+"both" is carrying one supporting instance. Everything the sentence says about **mechanism two** I
+confirmed independently: `0da3eb9` introduced `CPG_STAMPED_KEYS` while `pipeline.sh:225` still read
+`STAMP="$(cpg_provenance_stamp …)"`, so its shipped allow-list really was empty.
+
+**Fix:** narrow it, or generalise it correctly — the shared factor across all three is *the
+credential named a narrower level than the claim it licensed*: mechanism one's covered the code but
+not the space of keys it had to close; mechanism two's covered the query but not the call path.
+That version is true of both and stays checkable.
+
+### Minor
+
+- **P6-5** — two more neighbouring wrong implementations pass the suite clean (A11.2).
+  (a) Deleting `cpg_provenance_stray_query`'s empty-allow-list refusal (`git-provenance.sh:301-305`)
+  — one of the *"two mechanisms"* `:222-226` claims — is invisible, because the call-site guard
+  always fires first; a seventh case calling the function directly with `CPG_STAMPED_KEYS` unset and
+  requiring rc 1 closes it. (b) Changing the emitted Cypher from `SET b = {` to `SET b += {` is
+  invisible, because the fake's `MODE` is set by the harness rather than derived from the query, so
+  case 3 asserts "merge caught" without depending on the client emitting a *replacing* map — while
+  `pipeline.sh:365-366` tells the operator that a `+=` reversion is one of the two things to check.
+  Deriving `MODE` from the query text (`SET b = {` ⇒ replace, else merge) makes case 3 catch it and
+  costs two lines.
+- **P6-6** — the call-site guard's own diagnostic is wrong in the one case it uniquely handles.
+  `pipeline.sh:239` renders `${CPG_STAMP_CYPHER:+<set>}${CPG_STAMP_CYPHER:-<empty>}`, which for a
+  *set* variable prints `<set>` **followed by the entire multi-line map literal** — observed
+  verbatim when I broke the accumulator (A11.2, M10). The branch was never executed. Use
+  `${CPG_STAMP_CYPHER:+<set>}${CPG_STAMP_CYPHER:-<empty>}` → `$([ -n "${CPG_STAMP_CYPHER:-}" ] &&
+  echo '<set>' || echo '<empty>')`, or just report the length.
+- **P6-7** — *"closure is by construction and there is no list at any layer"* (`freshness.md:223-224`,
+  and the same words in the U47 history entry). `CPG_STAMPED_KEYS` **is** a list, at the assertion
+  layer — the point being made is that it is *derived* rather than hand-maintained, which is the
+  stronger claim and the one that survives a re-check. Same false-universal shape the tombstones
+  exist to retract, one clause wide.
+- **P6-8** — *(routes to `graph-dba`; a marker write is not mine)* the `NOTE` was rewritten
+  (2,245 → **2,267** chars) while `MARKER_WRITTEN_AT` stayed `2026-09-08T10:39:56Z`, the value Pass
+  5 read before the rewrite. The marker's own timestamp no longer dates its own content, on the one
+  node whose `NOTE` `freshness.md`'s check-0 gate treats as evidence. Advance it on the next write.
+
+### Nits
+
+- **n4** — *"it asserts a populated allow-list"* (`freshness.md:244-245`, `SKILL.md:117`) overstates
+  the mechanism: `ALLOWLIST=[…]` is `echo`ed and `grep`ed for display only (`:98`, `:111`), never
+  compared. The property *is* covered — transitively, since an empty list trips the call-site guard
+  and case 1 then FAILs (confirmed, A11.2 M10) — so this is wording, not a hole. "exercises" rather
+  than "asserts".
+- **n5** — `history.md`'s U48 lists "Six cases: allow-list populated, clean pass…, subsumption, and
+  a mutation case" — that is five `run_case`s plus the mutation, with "allow-list populated" counted
+  as a case it is not.
+- **n6** — losing the END anchor reports `syntax error near unexpected token 'fi'` rather than
+  "anchors moved". Correct outcome, misleading diagnosis; a `case "$BLOCK" in *"$END"*) ;; *) echo
+  "FAIL: END anchor not found"` before the run costs one line.
+
+### Dispositions
+
+- **P5-1 — fixed.** `git-provenance.sh:260` assigns `CPG_STAMP_CYPHER`; `pipeline.sh:235-236` calls
+  as a statement; the non-empty guard is at `:237-244`. Ran the suite: `CPG_STAMPED_KEYS` reaches
+  the parent with all 8 keys (4 under `provenance=none`). Guard deleted ⇒ mutation case FAILs.
+- **P5-2 — fixed.** Both prose sites carry the single narrow sentence plus DO-NOT-DELETE
+  (`git-provenance.sh:273-291`, `pipeline.sh:329-341`). Case 4's "passes by design" assertion is
+  **correct** and pinned at the right altitude — I re-derived it: a merge over a pipeline-clean
+  marker with a `parse-root` stamp yields exactly the eight stamped keys, zero strays.
+- **P5-3 — fixed** (wording, by `graph-dba`). The retracted universal is gone; the replacement
+  sentence is **correct about the shipped mechanism** — the rendered Cypher really is `MERGE
+  (b:CpgBuildInfo)\nSET b = {…}` (A11.4). The rest of the `NOTE` survives the last three commits: the
+  `MANIFEST.txt:19` chain still reads as cited, check 0's per-marker gate still exists
+  (`freshness.md:80`), and P4-4's new scripted advice agrees with it. See **P6-8** for the timestamp.
+- **P5-4 — fixed.** Both K-024 rows rewritten, leading with the do-not-do warning; (a)–(d) match
+  what §1.1 owes.
+- **P5-5 — fixed.** Second tombstone in the past tense and self-labelled as the cautionary one.
+- **P5-6 — fixed.** `git-provenance.sh:130-137` and the third tombstone both state the observation
+  (13 vs 5, 4 vs 0) and explicitly decline the mechanism.
+- **P5-7 / P3-1 — partially fixed, wrong branches.** See **P6-3**.
+- **P4-4 — fixed**, after three passes. I ran the prescribed predicate live against
+  `cpg_falkorchat`: `b.PROVENANCE IN ['parse-root','source-origin','none']` → `false`,
+  `b.MARKER_ORIGIN IS NULL` → `false`, and the recipe's aliases (`AS provenance`, `AS markerOrigin`)
+  match the names the advice uses.
+- **P3-2 — not fixed**; `tico`'s, untouched by these commits, carried by K-024.
+- **n1 — fixed** (count removed rather than incremented). **n2 — fixed**: both reads use
+  `GRAPH.RO_QUERY` (`:307`, `:351`), the stamp still `GRAPH.QUERY`, correct. **n3 — fixed**: the U47
+  entry now carries the behavioural reversal.
+
+### What's solid
+
+- **The extraction idea is the right one and it holds up.** Testing the shipped lines rather than a
+  retyped copy is what makes P6-1's fix cheap: the oracle is soft, the harness is not.
+- **The self-report in `271c899`'s message is accurate and complete about what it found** — the
+  `bash -n` non-evidence admission is exactly right, and `bash -n` on the pre-fix file does pass
+  (re-confirmed). That honesty is what made this pass tractable.
+- **P5-2's ruling is now empirical rather than argued.** Case 4 asserting a known blind spot passes
+  *by design* is the right shape for pinning a limit, and it is correct.
+- **The counter prohibition (P5-6) is now stated as observation.** It survives re-checking, which the
+  earlier mechanism claim did not.
+
+### Open questions
+
+1. **P6-8 needs a marker write** — `MARKER_WRITTEN_AT` on `cpg_falkorchat`. Route to `graph-dba`;
+   the `NOTE` text itself is correct and should not be re-derived.
+2. **P6-2's fix changes the shape of `rq`'s contract** (positive header match instead of an error
+   blacklist) and touches the branch every build takes. Worth deciding whether the same positive
+   form should replace the blacklist for the stamp write too, or only for the negative assertion.
+
+---
+
+## Appendix
+
+### A11 — Pass 6 verification
+
+**A11.1 — anchor mutations.** Nine byte-copy mutants under the session scratchpad; the repo copies
+still md5-match `271c899` (`bda6a6c…` / `808a114…` / `c8c5698…`).
+
+| # | Mutation | Result |
+|---|---|---|
+| M1 | START anchor reworded (`date -u "+…"`) | `FAIL: could not extract the stamp block … (anchors moved)`, exit 1 |
+| M2 | END anchor reworded | 3 cases FAIL — block runs to the file-closing `fi`, `syntax error near unexpected token 'fi'` |
+| M3 | END reworded **+** a new step appended to the `--load` branch | same; STAMP WIRING TEST FAILED |
+| M4 | END anchor string duplicated after `STAMP="$CPG_STAMP_CYPHER"` | `FAIL: extracted block does not contain the stray assertion` |
+
+**A11.2 — implementation mutations.**
+
+| # | Mutation | Suite |
+|---|---|---|
+| M6 | call-site non-empty guard deleted (`pipeline.sh:237-244`) | **FAILS** — "refused, but not with the wiring message (rc=1)" |
+| M8 | **full revert to the rejected design** — `printf` in `cpg_provenance_stamp` + `$(…)` at the call site | **FAILS** — 4 cases |
+| M10 | `_cpg_prop`'s `CPG_STAMPED_KEYS` accumulation removed | **FAILS** — case 1 `FAILED(rc=1)`; output shows P6-6 (`CPG_STAMP_CYPHER=<set>MERGE (b:CpgBuildInfo)\nSET b = {…`) |
+| M9 | **`replay_stamp` definition deleted** | **PASSES GREEN** — direct probe of case 3 shows `rc=127`, `bash: line 145: replay_stamp: command not found` (shipped copy: `rc=1`, stamp printed) → **P6-1** |
+| M7 | `cpg_provenance_stray_query`'s empty-list refusal deleted | **PASSES GREEN** → P6-5(a) |
+| M12 | emitted Cypher `SET b = {` → `SET b += {` | **PASSES GREEN** → P6-5(b) |
+
+**A11.3 — real `redis-cli`/FalkorDB reply shapes** (`GRAPH.RO_QUERY`, read-only, `redis-cli` exit 0
+in every row):
+
+| Query | Reply | `rq` verdict |
+|---|---|---|
+| `… RETURN nosuchfunc(b)` | `Unknown function 'nosuchfunc'` | **rc 0 — treated as success** |
+| `… RETURN keys(b.NOTE)` | `Type mismatch: expected Map, Node, Edge, or Null but was String` | **rc 0 — treated as success** |
+| `THIS IS NOT CYPHER` | `errMsg: Invalid input 'T': …` | rc 1 |
+| `… SET b.X = 1` via `GRAPH.RO_QUERY` | `graph.RO_QUERY is to be executed only on read-only queries` | rc 1 (`*"read-only"*`) |
+| `GRAPH.RO_QUERY <absent graph>` | `ERR Invalid graph operation on empty key` | rc 1 |
+| `GRAPH.RO_QUERY <list key>` | `WRONGTYPE Operation against a key holding the wrong kind of value` | rc 1 |
+
+Also confirmed here: a successful stray read prints bare `STRAY_KEY=<NAME>` lines at column 0 (plus
+a `stray` header and a `Query internal execution time:` trailer), so `pipeline.sh:361`'s anchored
+`sed` works against the real client — the fake is faithful on the shape that matters.
+
+**A11.4 — live `cpg_falkorchat` marker** (read-only): `size(keys(b))` = **10**, `size(b.NOTE)` =
+**2267**, `MARKER_WRITTEN_AT` = `2026-09-08T10:39:56Z` (unchanged from Pass 5's read at 2,245 chars
+— P6-8). Keys: `BUILT_AT, SOURCE_PATH, SOURCE_COMMIT, SOURCE_DIRTY, PROVENANCE, SOURCE_ORIGIN,
+SOURCE_TREE, MARKER_ORIGIN, MARKER_WRITTEN_AT, NOTE`. The `NOTE`'s replacement sentence reads
+*"Since 2026-09-08 the stamp is `SET b = {…}`, a map assignment, which replaces this node's whole
+property set — so everything the stamp did not write is gone after any rebuild, whatever it is
+called."* — which matches the rendered Cypher emitted by `git-provenance.sh:260`.
+
+**A11.5 — `GRAPH.LIST` listing** (a listing, never a count to reconcile — membership churns):
+`cpg_deprecated_salesperson, cpg_falkorchat, kaizen_team, probe_u8_rename_dst, reference, test,
+ws:acme, ws:eval, ws:nlq-eval, ws:probe-s0-reset, ws:probe-s0r2, ws:probe-s0r3, ws:probe-s4b,
+ws:qa-cart-totals, ws:qa-cart-totals2, ws:qa-catalog-lookup, ws:qa-catalog-lookup2,
+ws:qa-durable-profile, ws:qa-salesperson-demo, ws:qa-tico-workflows-manual, ws:qa028, ws:s1v6,
+ws:s1v7, ws:test`.
