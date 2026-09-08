@@ -47,7 +47,9 @@ exact-rational level); `results.py` imports that object rather than defining one
 is what let `index.csv` compute `latencyMsP95` at the 50th percentile and stay green.
 `exact_paired_quantiles` is not a second one — it is `-ml` §3.4 Rule 4's quantile of the *exact
 multinomial resample distribution*, the same operator on a known distribution rather than on a
-sample. `resolving_power`'s
+sample, and it shares `percentile`'s level refusals through `_check_level`. **Do not rename it to
+make §11.10(3)'s grep read 1**: plan v1.17 rules that residual's target to be two survivors named,
+because surviving a rename is the property it exists to have. `resolving_power`'s
 `design_effect`/`basis`/`unit_kind`/`alpha_family`/`alpha_mdd` are keyword-only **with no
 defaults**, `min_detectable_difference` takes `n_effective: float` so a raw observation count
 raises, and **Rule 7 is enforced inside `verdict()`** — no path returns `distinguishable` below
@@ -78,8 +80,10 @@ substitute one.
   for a difference of proportions and false for `sep_z`. **`PackRef.seed`'s consumer is `-ml`
   §3.2d's continuous bootstrap alone** — the paired *binary* interval is a closed form that takes
   no seed, so `report.py` neither passes nor prints one, and re-adding a seed parenthetical there
-  would name a resample that does not run. `resolving_power` refuses `design_effect < 1.0` at construction, not `<= 0` — below 1 it
-  *inflates* effective *n* and shrinks both printed bounds. The legacy fallbacks live in
+  would name a resample that does not run. `resolving_power` refuses `design_effect < 1.0` at
+  construction, not `<= 0` — below 1 it *inflates* effective *n* and shrinks both printed bounds;
+  `verdict()` and `envelope_arms` refuse it again at their own entry points, and only `verdict()`'s
+  message names itself, which is what keeps the two orderable. The legacy fallbacks live in
   `from_dict` only, where they are §3.4.3 reader rules.
 - **An item's outcome for a metric is *declared*, never inferred.** `ItemResult.scored_outcome`
   is the only place that decides, and it has three answers: `metric` absent from `scoreable`, or

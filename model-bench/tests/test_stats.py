@@ -1297,6 +1297,37 @@ def test_the_closed_form_agrees_with_the_resample_wherever_the_resample_is_stabl
     assert compared >= 10, f"only {compared} tables had a stable resample to compare against"
 
 
+@pytest.mark.parametrize(
+    "lo_level, hi_level, expected",
+    [
+        (Fraction(1, 4), Fraction(3, 4), (-1.0, 0.0)),   # both levels ON an atom boundary
+        (Fraction(1, 5), Fraction(4, 5), (-1.0, 1.0)),   # both just BELOW one
+        (Fraction(3, 10), Fraction(1), (0.0, 1.0)),      # just ABOVE one, and the top of (0, 1]
+    ],
+)
+def test_the_exact_quantile_takes_the_atom_the_level_lands_on(
+    lo_level, hi_level, expected
+) -> None:
+    """Review P8-4 — the estimator is `inf{ s/n : F(s) >= p }`, and `>=` is where that is written.
+
+    `(0, 1, 1, 0)` is the fixture that separates it: `n = 2`, three atoms at `s/n ∈ {-1, 0, 1}`
+    with CDF exactly `1/4, 3/4, 1`, so a level can be placed **on** an atom boundary rather than
+    between two. That is the only place `inf{ v : F(v) >= p }` and `inf{ v : F(v) > p }` differ,
+    and it is the property the docstring's *"the two agree by construction"* claim — that this is
+    `percentile`'s estimator over a known distribution rather than a second one — rests on.
+
+    Nothing reached it before. Mutating the selector's `>=` to `>` left the whole suite green, and
+    an exhaustive sweep of every `(b, c)` at n ∈ {10, 20, 30, 40} confirms why: at
+    `LEVEL_CI95_LO`/`LEVEL_CI95_HI` there is **no** tie, so the caller this module actually has
+    cannot exercise the operator. It is not an equivalent mutant, though — it is one the shipped
+    call sites happen not to reach, and `levels` is advertised as the caller's. The three rows
+    cover the operator's whole neighbourhood: on the boundary (where the two definitions split),
+    below it, above it, and `Fraction(1)`, which under `>` falls off the end of the atom loop and
+    raises `IndexError` instead of returning the largest atom.
+    """
+    assert exact_paired_quantiles((0, 1, 1, 0), levels=(lo_level, hi_level)) == expected
+
+
 def test_the_first_published_envelope_anchor_is_unmoved_by_the_closed_form() -> None:
     """`-ml` v1.11 §3.4 Rule 4 acceptance 3, first anchor, and §3.2e verdict 1's own string.
 
@@ -1340,6 +1371,14 @@ def test_the_verdict_records_which_arm_bound_each_printed_bound() -> None:
     bootstrap the upper, so a `bound_by` hard-coded to either name is wrong here. On the
     `mcnemar-exact` path one instrument produced the whole interval and there is nothing to
     attribute, so the field is `None` rather than a pair naming MOVER-D twice.
+
+    **The `None` is an iff, and this pins it** (review §2.1, folded into P8-2). `bound_by` is a
+    discriminated union over `decided_by`, not "a field that is `None` until it is not" — the
+    shape `-ml` §3.4's note refuses. Nothing held the two fields together, and `_decided_by_line`
+    transcribes the discriminator a second time by branching on `bound_by` where the field that
+    names the branch is `decided_by`: the two can only disagree silently, and the renderer would
+    follow the wrong one. Asserted on both constructed verdicts, so it is the invariant that is
+    pinned rather than one side of it.
     """
     v = verdict(_outcomes(4, 5, 3, 0), resolving=_rp(12, deff=1.0, basis="assumed"),
                 metric_name="m", family=["m"])
@@ -1349,6 +1388,9 @@ def test_the_verdict_records_which_arm_bound_each_printed_bound() -> None:
     exact_path = verdict(_outcomes(34, 6, 0, 0), resolving=_rp(40), metric_name="m", family=["m"])
     assert exact_path.decided_by == "mcnemar-exact"
     assert exact_path.bound_by is None
+
+    for outcome in (v, exact_path):
+        assert (outcome.bound_by is None) == (outcome.decided_by == "mcnemar-exact")
 
 
 def test_the_envelope_still_responds_to_a_declared_design_effect() -> None:
@@ -1382,6 +1424,94 @@ def test_both_arms_are_widened_about_the_same_point_by_the_same_factor(table) ->
     for base, widened in zip(at_one, at_four, strict=True):
         assert widened[0] == pytest.approx(max(-1.0, point - (point - base[0]) * 2.0))
         assert widened[1] == pytest.approx(min(1.0, point + (base[1] - point) * 2.0))
+
+
+@pytest.mark.parametrize("fn", [conservative_envelope, envelope_arms])
+@pytest.mark.parametrize("deff", [0.5, 0.25, 0.999999, 0.0, -1.0, float("nan")])
+def test_the_envelope_refuses_a_design_effect_below_one(fn, deff) -> None:
+    """Review P8-3 — Rule 4's **precondition 4** on the public envelope surface.
+
+    The refusal shipped at `c19f875` and retired by accident: it lived inside
+    `paired_cluster_bootstrap`, the call v1.11's closed form removed, while Table D retires only
+    the `n != len(diffs)` guard. Nothing that runs today is wrong — `verdict()` still guards its
+    own entry — but both of these are public, `envelope_arms` is new, and what gets through is not
+    an exception but a **narrower** interval: at `(34, 6, 0, 0)`, DEFF 0.5 returned
+    `[6.6, 25.0] pp` against `[3.2, 29.1]` at 1.00, anti-conservative in the direction that prints.
+
+    Parametrized over the domain rather than over one example, because a guard is only as good as
+    its predicate: `nan` is here because `< 1.0` is False for it, so the natural spelling admits a
+    NaN design effect, and `math.sqrt(nan)` then clamps **both** arms to the full `(-1, 1)`
+    support — a maximally wide interval conjured out of a missing number. `0.999999` is here
+    because a `<=`/`<` slip would let it through.
+    """
+    with pytest.raises(ValueError, match="precondition 4"):
+        fn((34, 6, 0, 0), design_effect=deff)
+
+
+def test_the_two_envelope_refusals_name_which_layer_raised(deff: float = 0.5) -> None:
+    """Review P8-3 — the ordering half of `test_verdict_refuses_a_design_effect_below_one`, back.
+
+    Restoring `envelope_arms`' refusal restores a **second** raise on the same precondition, which
+    is what that test's retired half existed to order against: `verdict()` must refuse before an
+    instrument is selected, not get one layer down and raise the same sentence from there
+    (review P3-11). The retired device was an omitted seed and there is no seed any more — but the
+    two messages were already distinguishable, so the ordering re-pins directly on them.
+    """
+    below = dataclasses.replace(_rp(40), design_effect=deff, n_effective=80.0)
+    with pytest.raises(ValueError) as from_verdict:
+        verdict(_outcomes(34, 6, 0, 0), resolving=below, metric_name="m", family=["m"])
+    with pytest.raises(ValueError) as from_arms:
+        envelope_arms((34, 6, 0, 0), design_effect=deff)
+    assert str(from_verdict.value).startswith("verdict() precondition 4:")
+    assert not str(from_arms.value).startswith("verdict()")
+    assert "precondition 4" in str(from_arms.value)
+
+
+@pytest.mark.parametrize("deff", [1.0, 1.2, 2.0, 4.0])
+def test_the_two_routes_to_the_envelope_compose_the_arms_identically(deff) -> None:
+    """Review P8-5 — one composition, asserted from both of its callers.
+
+    `conservative_envelope` and `verdict()` both need the composed pair and each spelled the
+    `min`/`max` out for itself. Both spellings were independently pinned, so this was never a live
+    bug — what was wrong is that two copies of a formula is one copy and one bug (plan §3.9), the
+    same rule that retired the two private percentiles, and that `envelope_arms`' docstring
+    asserted *"neither recomputes the other's arithmetic"* while `verdict()` did exactly that.
+    `_compose` is now the one home; this is the assertion that catches a second one growing back,
+    because a divergent copy shows up here as two different intervals over the same table.
+
+    Swept over the tables where the arms disagree about which is conservative, not only
+    `(34, 6, 0, 0)` where MOVER-D binds both bounds and a broken composition is invisible.
+    """
+    tables = [(34, 6, 0, 0), (4, 5, 3, 0), (1, 25, 12, 2), (2, 19, 7, 12), (0, 6, 0, 34)]
+    for table in tables:
+        a, b, c, d = table
+        n = a + b + c + d
+        v = verdict(_outcomes(a, b, c, d), resolving=_rp(n, deff=deff, basis="assumed"),
+                    metric_name="m", family=["m"])
+        assert v.decided_by == "conservative-envelope", table
+        assert v.ci == conservative_envelope(table, design_effect=deff), table
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda: envelope_arms((0, 0, 0, 0), design_effect=1.0),
+        lambda: conservative_envelope((0, 0, 0, 0), design_effect=1.0),
+        lambda: exact_paired_quantiles((0, 0, 0, 0), levels=(LEVEL_CI95_LO, LEVEL_CI95_HI)),
+    ],
+    ids=["envelope_arms", "conservative_envelope", "exact_paired_quantiles"],
+)
+def test_an_empty_paired_table_is_refused_by_every_function_that_takes_one(call) -> None:
+    """Pass 8's unnumbered nit — the `n <= 0` refusal is written in two places and no test reached
+    either, so `grep -rn 'describes no rows' tests/` returned nothing.
+
+    It is the surviving half of the intent behind the retired
+    `…refuses_a_table_that_does_not_describe_its_rows`, whose *own* guard (`n != len(diffs)`) was
+    correctly retired as unrepresentable once `diffs` went away. This one is still representable:
+    the table is the caller's, and a zero table divides by `n` two lines later.
+    """
+    with pytest.raises(ValueError, match="describes no rows"):
+        call()
 
 
 def test_the_envelope_takes_no_diffs_no_b_and_no_seed() -> None:
@@ -1533,15 +1663,41 @@ def test_the_bootstrap_levels_carry_the_familys_correction_and_move_both_bounds_
     assert at_k2[1] > at_k1[1]
 
 
-def test_paired_bootstrap_refuses_a_transposed_level_pair() -> None:
+#: Every estimator in the package that takes a **pair** of levels, reduced to a callable with
+#: only that pair left to vary (review P8-6). `paired_bootstrap`'s transposed-pair guard was
+#: tested and `exact_paired_quantiles`' identical twin was not — deleting the latter's six lines
+#: outright left the whole suite green — so the test parametrizes over the rule's callables
+#: instead of naming one of them, and a third estimator has to opt out rather than be forgotten.
+_LEVEL_PAIR_CALLERS = {
+    "paired_bootstrap": lambda levels: paired_bootstrap(
+        [1.0, 0.0, -1.0], B=100, seed=1, levels=levels
+    ),
+    "exact_paired_quantiles": lambda levels: exact_paired_quantiles(
+        (0, 1, 1, 0), levels=levels
+    ),
+}
+
+#: The same, for `-ml` §11.2.2's two refusals on a **single** level. `exact_paired_quantiles`
+#: carried neither: a `float` reached `.numerator` and died with `AttributeError`, and a level
+#: above 1 fell off the end of the atom loop and died with `IndexError` on `bounds[1]` — two
+#: accidents where the note publishes two named errors (review P8-6).
+_LEVEL_CALLERS = {
+    "percentile": lambda level: percentile(range(20), level=level),
+    "exact_paired_quantiles": lambda level: exact_paired_quantiles(
+        (0, 1, 1, 0), levels=(level, Fraction(1))
+    ),
+}
+
+
+@pytest.mark.parametrize("call", _LEVEL_PAIR_CALLERS.values(), ids=list(_LEVEL_PAIR_CALLERS))
+def test_every_level_pair_estimator_refuses_a_transposed_pair(call) -> None:
     """`-ml` §11.2.2 / §11.10(10) — the one error that otherwise returns a plausible **inverted**
-    interval that no other check sees."""
-    with pytest.raises(ValueError):
-        paired_bootstrap([1.0, 0.0, -1.0], B=100, seed=1,
-                         levels=(LEVEL_CI95_HI, LEVEL_CI95_LO))
-    with pytest.raises(ValueError):
-        paired_bootstrap([1.0, 0.0, -1.0], B=100, seed=1,
-                         levels=(LEVEL_CI95_LO, LEVEL_CI95_LO))
+    interval that no other check sees. Both orderings of the failure: strictly transposed, and
+    equal, which returns a degenerate point interval that reads as a real one."""
+    with pytest.raises(ValueError, match="ordered lower then upper"):
+        call((LEVEL_CI95_HI, LEVEL_CI95_LO))
+    with pytest.raises(ValueError, match="ordered lower then upper"):
+        call((LEVEL_CI95_LO, LEVEL_CI95_LO))
 
 
 @pytest.mark.parametrize("fn", [paired_bootstrap, paired_cluster_bootstrap])
@@ -1816,17 +1972,20 @@ def test_verdict_refuses_a_design_effect_below_one() -> None:
     """Review P3-11 — Rule 4's **precondition 4**. `-ml` §9 check 2(c) names the other three, all
     of which are tested; removing this one survived the suite.
 
-    **The *ordering* half of this test retires with the seed** (§4 S1e Table D). It asserted that
-    every precondition is checked *before* an instrument is selected, and its device was
-    the omitted seed: with the check present the design effect was refused, without it the
-    run got as far as choosing the bootstrap and complained about the missing seed instead, having
-    already accepted an anti-conservative design effect. There is no seed to omit any more, and
-    the envelope path no longer resamples, so no second raise exists to order this one against and
-    the trap the ordering pinned — a duplicate message one layer down — is unreachable. The
-    precondition itself still needs an assertion, and this is it.
+    **The *ordering* half came back with P8-3, on a new device.** It asserted that every
+    precondition is checked *before* an instrument is selected, and its original device was the
+    omitted seed: with the check present the design effect was refused, without it the run got as
+    far as choosing the bootstrap and complained about the missing seed instead, having already
+    accepted an anti-conservative design effect. There is no seed to omit any more — but
+    `envelope_arms` now carries the same precondition (review P8-3), so a second raise exists to
+    order against again and the trap is reachable once more. The device is the message: this
+    `match` is anchored on `verdict()`'s own prefix, not on the bare `precondition 4` that both
+    layers share, so a `verdict()` missing this check falls through to `envelope_arms` and **fails
+    here** rather than passing on the other layer's sentence. `test_the_two_envelope_refusals_name
+    _which_layer_raised` asserts the two are distinguishable in the first place.
     """
     below = dataclasses.replace(_rp(40), design_effect=0.5, n_effective=80.0)
-    with pytest.raises(ValueError, match="precondition 4"):
+    with pytest.raises(ValueError, match=r"verdict\(\) precondition 4"):
         verdict(_outcomes(34, 6, 0, 0), resolving=below, metric_name="m", family=["m"])
 
 
@@ -2008,15 +2167,35 @@ def test_percentile_refuses_an_empty_sample() -> None:
         percentile([], level=LEVEL_P95)
 
 
-def test_percentile_rejects_a_float_level() -> None:
-    """`-ml` §11.10(10) — a `float` level reopens the bin-edge hazard the integer rank closes."""
-    with pytest.raises(TypeError):
-        percentile(range(20), level=0.05)
+@pytest.mark.parametrize("call", _LEVEL_CALLERS.values(), ids=list(_LEVEL_CALLERS))
+def test_every_level_estimator_rejects_a_float_level(call) -> None:
+    """`-ml` §11.10(10) — a `float` level reopens the bin-edge hazard the integer rank closes.
+
+    Parametrized over both estimators because they are the same estimator (`-ml` §11.2 reason 2)
+    over a sample and over a known distribution, so they owe a caller the same refusal;
+    `exact_paired_quantiles` was giving an `AttributeError` from `.numerator` instead (P8-6).
+    """
+    with pytest.raises(TypeError, match="exact rational level"):
+        call(0.05)
 
 
+@pytest.mark.parametrize("call", _LEVEL_CALLERS.values(), ids=list(_LEVEL_CALLERS))
 @pytest.mark.parametrize("level", [Fraction(0), Fraction(-1, 20), Fraction(21, 20), Fraction(2)])
-def test_percentile_rejects_a_level_outside_the_unit_interval(level) -> None:
-    """`-ml` §11.10(10) — the level lies in `(0, 1]`; zero is excluded and 1 is not."""
-    with pytest.raises(ValueError):
-        percentile(range(20), level=level)
+def test_every_level_estimator_rejects_a_level_outside_the_unit_interval(level, call) -> None:
+    """`-ml` §11.10(10) — the level lies in `(0, 1]`; zero is excluded and 1 is not.
+
+    `exact_paired_quantiles` raised `IndexError` on the high side and nothing at all on the low
+    one, where the note publishes a `ValueError` (P8-6). That 1 **is** admitted is asserted
+    separately below, on both, because it is what makes the atom loop total: at `level <= 1` the
+    final cumulative always satisfies the selector, so `bounds[1]` always exists.
+    """
+    with pytest.raises(ValueError, match=r"level must lie in \(0, 1\]"):
+        call(level)
+
+
+def test_a_level_of_exactly_one_is_admitted_and_returns_the_largest_value() -> None:
+    """The open/closed halves of `(0, 1]`, on both estimators. `Fraction(1)` is the level the
+    range refusal must *not* catch, and on `exact_paired_quantiles` it is also the level whose
+    atom only exists if the selector is `>=` rather than `>` (review P8-4)."""
     assert percentile(range(20), level=Fraction(1)) == 19
+    assert exact_paired_quantiles((0, 1, 1, 0), levels=(Fraction(1, 2), Fraction(1)))[1] == 1.0

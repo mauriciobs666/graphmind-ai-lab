@@ -289,6 +289,12 @@ def exact_paired_quantiles(
     author's choice; `random.Random.choice` draws an *index*, so a permutation of the same multiset
     re-maps a fixed index sequence onto different values.
 
+    **The levels are refused on the same two grounds `percentile` refuses one** — a `float` and a
+    level outside `(0, 1]` — through the shared `_check_level`, plus the transposed-pair check
+    `paired_bootstrap` also carries. Being the same estimator over a known distribution, it owes a
+    caller the same errors, and it was giving an `AttributeError` and an `IndexError` instead
+    (review P8-6).
+
     The levels are the caller's, and on this path they are always `LEVEL_CI95_LO`/`LEVEL_CI95_HI`:
     the paired binary path takes its `k` correction in the Holm ladder and never in the interval
     (§3.3), so no family level reaches here. They are **never** the level a resample happened to
@@ -306,6 +312,8 @@ def exact_paired_quantiles(
     — its per-item values are discrete, so "it is not continuous" invites the wrong generalisation
     — and its `v` is far above 3. §3.2d's continuous metrics keep the seeded resample.
     """
+    for level in levels:
+        _check_level(level, caller="exact_paired_quantiles()")
     if levels[0] >= levels[1]:
         raise ValueError(
             f"levels must be ordered lower then upper, not {levels!r}: a transposed pair returns "
@@ -348,13 +356,25 @@ def envelope_arms(
     Returns `(mover_d, exact_paired_bootstrap)`. It exists because the report is required to name
     **which arm bound each bound** (`-ml` §3.4 Rule 4) — an audit that is cheap and deterministic
     once the resample is gone, and that makes Rule 4's mixture legible to a reader instead of
-    inferable only from the code. `conservative_envelope` composes it, and `verdict()` reads the
-    attribution off it, so neither recomputes the other's arithmetic.
+    inferable only from the code. Both `conservative_envelope` and `verdict()` take their arms
+    from here and compose them through `_compose`, and `verdict()` reads the attribution off the
+    same pair, so no caller recomputes another's arithmetic (review P8-5).
+
+    **Rule 4's precondition 4 is checked here** (`-ml` §3.4 Rule 4). It used to be, one layer
+    down, in the `paired_cluster_bootstrap` call that v1.11's closed form removed — so it retired
+    by accident rather than by Table D, which retires only the `n != len(diffs)` guard. Below 1 a
+    design effect *inflates* effective *n* and returns a **narrower** interval on both bounds:
+    at `(34, 6, 0, 0)`, DEFF 0.5 gave `[6.6, 25.0] pp` against `[3.2, 29.1]` at 1.00. `verdict()`
+    guards it at its own entry point too and names itself when it does, so the two refusals stay
+    distinguishable by message; this one is the defence on a public function a caller can reach
+    without going through `verdict()` (review P8-3).
     """
     a, b, c, d = table
     n = a + b + c + d
     if n <= 0:
         raise ValueError("the paired table describes no rows")
+    if not design_effect >= 1.0:  # NaN-safe: `< 1.0` admits a NaN, which clamps to full support
+        raise ValueError("design_effect must be >= 1.0 (-ml §3.4 Rule 4, precondition 4)")
     point = (b - c) / n
     scale = math.sqrt(design_effect)
     # Both arms keep the identical clamp: Rule 4 requires them widened the same way, and a clamp
@@ -367,6 +387,30 @@ def envelope_arms(
         clamp=(-1.0, 1.0),
     )
     return mover, exact
+
+
+def _compose(
+    mover: tuple[float, float], exact: tuple[float, float]
+) -> tuple[float, float]:
+    """The envelope of the two arms, taken **bound by bound** (`-ml` §3.4 Rule 4).
+
+    One home for one arithmetic. `conservative_envelope` and `verdict()` both need this pair —
+    `verdict()` because it also needs the arms themselves for the attribution and so cannot go
+    through `conservative_envelope` — and each spelled the `min`/`max` out for itself. Two copies
+    of a formula is one copy and one bug (plan §3.9); it is the same rule that retired the two
+    private percentiles, and the same rule applies at four lines as at forty (review P8-5).
+
+    Why bound by bound rather than the wider interval whole: see `conservative_envelope`, which
+    carries the `(4, 5, 3, 0)` measurement that decides it.
+
+    **This is where `-ml` v1.19 §3.4 Rule 4a's clamp goes**, and it is not applied here yet. Rule 4a
+    rules the `(-1, 1)` support bound a property of the *estimand*, so it belongs on the printed
+    interval and not on a composition's inputs: `envelope_arms` widens with `clamp=None` and this
+    function clamps its own result, returning `(interval, bound_by)` with Rule 4a's three-token
+    set. That edit is P8-1's unit, not P8-5's; the two placements commute exactly, so the printed
+    numbers do not move when it lands.
+    """
+    return min(exact[0], mover[0]), max(exact[1], mover[1])
 
 
 def conservative_envelope(
@@ -411,8 +455,7 @@ def conservative_envelope(
     `[3.3, 26.7] pp`, excluding zero against an exact p of 0.125, since with four non-zero rows
     `P(no +1 drawn) = (26/30)**30 = 1.4% < 2.5%` makes a 2.5th percentile of zero unreachable.
     """
-    mover, exact = envelope_arms(table, design_effect=design_effect)
-    return min(exact[0], mover[0]), max(exact[1], mover[1])
+    return _compose(*envelope_arms(table, design_effect=design_effect))
 
 
 def cluster_bootstrap(
@@ -461,6 +504,32 @@ LEVEL_CI95_LO: Fraction = Fraction(1, 40)
 LEVEL_CI95_HI: Fraction = Fraction(39, 40)
 
 
+def _check_level(level: Fraction, *, caller: str) -> None:
+    """`-ml` §11.2.2's two refusals on a **level**, in one home for every estimator that takes one.
+
+    `percentile` and `exact_paired_quantiles` are the same estimator — `inf{ v : F(v) >= p }` —
+    over an empirical sample and over the exact multinomial distribution respectively (`-ml` §11.2
+    reason 2), so they owe a caller the same two named errors. They did not: in
+    `exact_paired_quantiles` a `float` level reached `.numerator` and died with an
+    `AttributeError`, and a level above 1 fell off the end of the atom loop and raised
+    `IndexError` on `bounds[1]` — two accidents where the note publishes a `TypeError` and a
+    `ValueError` (review P8-6). Both are reachable from the signature, which advertises `levels`
+    as the caller's; neither is reachable from `envelope_arms`, which hard-codes the pair.
+
+    The `(0, 1]` bound is also what makes `exact_paired_quantiles`' atom loop **total**: at
+    `level <= 1` the final cumulative `total` satisfies `den * total >= num * total`, so the loop
+    always appends and `bounds[1]` always exists.
+    """
+    if isinstance(level, float):
+        raise TypeError(
+            f"{caller} needs an exact rational level, not the float {level!r}: a float level "
+            "reopens the bin-edge hazard the integer rank closes, and Fraction(0.05) is the "
+            "double's exact value rather than 1/20 (-ml §11.2.1, §11.2.2)"
+        )
+    if not 0 < level <= 1:
+        raise ValueError(f"level must lie in (0, 1], not {level!r} (-ml §11.2)")
+
+
 def percentile(values: Iterable[float], *, level: Fraction) -> float:
     """The empirical quantile function — Hyndman-Fan type 1 (`-ml` §11.2).
 
@@ -488,7 +557,8 @@ def percentile(values: Iterable[float], *, level: Fraction) -> float:
     first at `X = 25`, `level = 7/25`, where `float(Fraction(7, 25)) * 25 == 7.000000000000001`.
     Pin the expression below, never an equivalent-looking one.
 
-    Three refusals, and each is the note's:
+    Three refusals, and each is the note's — the first two through `_check_level`, which
+    `exact_paired_quantiles` shares because it is the same estimator over a known distribution:
 
     * a `float` level raises `TypeError` — it reopens the bin-edge hazard the integer rank exists
       to close, and `Fraction(0.05)` is *not* `Fraction(1, 20)` (that one is caught where the level
@@ -500,14 +570,7 @@ def percentile(values: Iterable[float], *, level: Fraction) -> float:
     The input is sorted **here**, on a copy. Requiring a sorted argument is a precondition a caller
     can silently violate, and of the two copies this replaced one sorted and the other did not.
     """
-    if isinstance(level, float):
-        raise TypeError(
-            f"percentile() needs an exact rational level, not the float {level!r}: a float level "
-            "reopens the bin-edge hazard the integer rank closes, and Fraction(0.05) is the "
-            "double's exact value rather than 1/20 (-ml §11.2.1, §11.2.2)"
-        )
-    if not 0 < level <= 1:
-        raise ValueError(f"level must lie in (0, 1], not {level!r} (-ml §11.2)")
+    _check_level(level, caller="percentile()")
     ordered = sorted(values)
     if not ordered:
         raise ValueError(
@@ -1113,9 +1176,11 @@ def verdict(
         # bootstrap arm is exact, so the interval is a function of the table alone: the arms are
         # taken once here rather than through `conservative_envelope`, because Rule 4 also
         # requires the report to name **which arm bound each bound** and recomputing them in the
-        # renderer would be a second home for one arithmetic.
+        # renderer would be a second home for one arithmetic. The *composition* is not a second
+        # home either: `_compose` is the one spelling, shared with `conservative_envelope`
+        # (review P8-5).
         mover_arm, exact_arm = envelope_arms((a, b, c, d), design_effect=resolving.design_effect)
-        ci = (min(exact_arm[0], mover_arm[0]), max(exact_arm[1], mover_arm[1]))
+        ci = _compose(mover_arm, exact_arm)
         bound_by = (
             "MOVER-D" if mover_arm[0] <= exact_arm[0] else "exact paired bootstrap",
             "MOVER-D" if mover_arm[1] >= exact_arm[1] else "exact paired bootstrap",

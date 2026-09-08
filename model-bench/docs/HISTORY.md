@@ -2,6 +2,125 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-08 — Implementation-review Pass 8 fix round: two restored refusals, one composition, five new assertions
+
+**What:** the `## Pass 8` findings of `docs/reviews/small-model-benchmarking-impl.md` against
+`cc28d48`, scope **P8-2 … P8-7** — **P8-1 is excluded and untouched**, being adjudicated by a
+`data-scientist` as a methodology question (whether the `(-1, 1)` support clamp belongs on the
+envelope's *arms* or on the *composed* interval — ruled mid-round by `-ml` v1.19's new §3.4
+Rule 4a, `a707d09`, and implemented in a separate unit). `modelbench/stats.py`,
+`tests/{test_stats,test_report}.py`, `AGENTS.md`; `report.py` is unchanged — P8-2's loss was an
+absent assertion, not a wrong renderer. **519 → 550 tests**, `.venv/bin/ruff check .` clean,
+**14 mutations run one at a time**, 13 killed and 1 surviving **by design** (the control below).
+
+**P8-2 (major) — the `mcnemar-exact` bullet was asserted nowhere.** `_decided_by_line` has exactly
+three renderings over its domain and only two were pinned; mutating the `bound_by is None` branch
+to a constant string left the whole suite green. The positive assertion had lived in
+`test_the_seed_is_not_printed_where_no_bootstrap_decided_anything` and moved to neither of the two
+tests that replaced it — the one genuine coverage loss in that round's seven-test churn, and on
+the branch **every** `by-construction` comparison at DEFF 1.00 takes. Closed by the third
+rendering's own named test rather than by a line appended to an unrelated one, plus the invariant
+nothing held: `(bound_by is None) == (decided_by == "mcnemar-exact")`, asserted on both constructed
+verdicts. `bound_by` is a discriminated union over `decided_by`, not a field that is `None` until
+it is not, and `_decided_by_line` transcribes that discriminator a second time by branching on the
+wrong one of the two — so they could only ever disagree silently.
+
+**P8-3 (major) — `envelope_arms`/`conservative_envelope` had stopped refusing `design_effect < 1.0`.**
+The refusal shipped at `c19f875` inside `paired_cluster_bootstrap`, the call v1.11's closed form
+deleted, so it **retired by accident**: Table D retires only the `n != len(diffs)` guard. What got
+through was not an exception but a narrower interval — `(34, 6, 0, 0)` at DEFF 0.5 returned
+`[6.6, 25.0] pp` against `[3.2, 29.1]` at 1.00, anti-conservative in the direction that prints.
+`verdict()` still guarded its own entry, so nothing that ran was wrong; both functions are public
+and `envelope_arms` is new, so this was a defence-in-depth loss on a surface the plan exposes.
+Restored with `paired_cluster_bootstrap`'s exact message and the **NaN-safe** predicate
+(`not design_effect >= 1.0`) that `resolving_power` already documents: `< 1.0` is False for a NaN,
+and `sqrt(nan)` then clamps both arms to full `(-1, 1)` support — a maximally wide interval
+conjured out of a missing number. **The ordering half of
+`test_verdict_refuses_a_design_effect_below_one` comes back with it**: a second raise on the same
+precondition exists again, so that test's `match` is re-anchored on `verdict()`'s own prefix rather
+than on the bare `precondition 4` both layers now share — mutation M13 confirms deleting
+`verdict()`'s check is caught rather than masked by the layer below.
+
+**P8-4 (minor) — the atom-boundary fixture.** The `>=` → `>` mutant on the exact quantile's
+selector was reported as equivalent; it is not, only unreachable at `LEVEL_CI95_LO`/`LEVEL_CI95_HI`
+(no tie exists there — swept). `(0, 1, 1, 0)` has CDF exactly `1/4, 3/4, 1` over `s/n ∈ {-1, 0, 1}`,
+so a level can land **on** an atom boundary — the one place `inf{ v : F(v) >= p }` and
+`inf{ v : F(v) > p }` differ, and the property the docstring's "the two agree by construction"
+claim rests on. Parametrized on the boundary, below it, above it, and at `Fraction(1)`, which under
+`>` raises `IndexError` instead of returning the largest atom.
+
+**P8-5 (minor) — one composition, not two.** `conservative_envelope` and `verdict()` each spelled
+`min(exact[0], mover[0]), max(exact[1], mover[1])` out for itself, while `envelope_arms`' docstring
+claimed "neither recomputes the other's arithmetic". Both copies were independently pinned, so this
+was never a live bug — it was plan §3.9's rule, the one that retired the two private percentiles,
+violated at four lines instead of forty. Extracted to `_compose(mover, exact)`, called from both;
+the docstring sentence is now true. The arithmetic is **unchanged** and the arms are still composed
+bound by bound at the same place.
+
+`-ml` v1.19's Rule 4a (`a707d09`) landed mid-round and closes P8-5 as collateral by the same
+reasoning, so `_compose` is the seam its clamp pass builds on rather than a second composer to
+reconcile. What that pass still has to add to it, and what this round deliberately did **not** do
+(P8-1 being out of scope): clamp `_compose`'s **result** to `(-1.0, 1.0)` once `envelope_arms`
+widens with `clamp=None`, widen its return to `(interval, bound_by)`, and move `verdict()`'s inline
+`bound_by` computation inside it as Rule 4a's three-token closed set. `conservative_envelope` then
+returns the first element. Rule 4a measures compose-and-clamp as exactly commuting over 173 472
+combinations, so nothing built here on the current arithmetic moves: the printed numbers are
+bit-identical under either placement.
+
+**P8-6 (minor) — `exact_paired_quantiles`' refusals were a weaker second copy.** Its transposed-pair
+guard was `paired_bootstrap`'s twin and untested — deleting the six lines was green. It was also
+*weaker* than `percentile` on two refusals it did not carry: a `float` level reached `.numerator`
+and died with `AttributeError` where `-ml` §11.2.2 publishes a `TypeError`, and a level above 1
+fell off the end of the atom loop and died with `IndexError` on `bounds[1]` where the note publishes
+a `ValueError`. Both are reachable from the signature, which advertises `levels` as the caller's.
+Closed with a shared `_check_level(level, *, caller)` — the two are the same estimator over a sample
+and over a known distribution (`-ml` §11.2 reason 2), so they owe a caller the same errors — and the
+three refusal tests now **parametrize over the estimators** rather than naming one, so a third has
+to opt out rather than be forgotten. The `(0, 1]` bound is also what makes the atom loop total:
+at `level <= 1` the final cumulative always satisfies the selector, so `bounds[1]` always exists.
+
+**P8-7 (nit) — `AGENTS.md`.** The F2 clause's disposition has since been **ruled on** by plan v1.17
+(`b6f578c`), which closes F2 by restating the residual's target as two survivors named and says
+explicitly that renaming is not the answer, the residual's stated virtue being that it survives a
+rename. So the clause is ratified rather than stale, and what it gains is the live constraint an
+editor would otherwise revert: *do not rename `exact_paired_quantiles` to make the grep read 1*.
+The 131-character line 81 is rewrapped and now carries the two-layer design-effect refusal.
+
+**Also closed, from Pass 8's unnumbered nit:** the `n <= 0` refusal was written in `envelope_arms`
+and `exact_paired_quantiles` and `grep -rn 'describes no rows' tests/` returned nothing — no test
+reached either. It is the surviving half of the intent behind the retired
+`…refuses_a_table_that_does_not_describe_its_rows`, whose own guard was correctly retired as
+unrepresentable; this one is still representable, the table being the caller's. Now pinned on all
+three functions that take one.
+
+**A visible figure moved at `cc28d48` and was not recorded there.** Table C's estimator swap changes
+`index.csv`, not only the code: over `1..100`, `latencyMsP50` goes **51 → 50**, because the retired
+`int(round(pct/100 · (X−1)))` and Hyndman-Fan type 1 disagree by one rank at even sample sizes.
+Anyone comparing runs across that commit sees the shift; `latencyMsP95` is unmoved at that size.
+
+**Mutation table** — each `cp` aside, mutated, run alone, `cp` back, `diff -q` byte-identical
+before the next.
+
+| # | Mutation | Result |
+|---|---|---|
+| M1 | `_decided_by_line`'s `bound_by is None` branch → a constant string | killed (**was surviving**) |
+| M2 | `envelope_arms`' restored precondition-4 refusal deleted | killed |
+| M3 | that refusal weakened to the NaN-admitting `< 1.0` spelling | killed (only the `nan` case) |
+| M4 | atom selector `>=` → `>` | killed (**was surviving**) |
+| M5 | `_compose`'s `min`/`max` swapped | killed |
+| M6 | `verdict` re-spells the composition and it drifts | killed |
+| M7 | `exact_paired_quantiles`' transposed-pair guard deleted | killed (**was surviving**) |
+| M8 | its `_check_level` calls deleted | killed |
+| M9 | `_check_level`'s `0 < level` opened to `0 <= level` | killed |
+| M10 | the `bound_by` iff broken — mcnemar path names MOVER-D twice | killed |
+| M11 | M10 again, scoped to the new stats invariant assertion | killed |
+| M12 | `envelope_arms`' `n <= 0` refusal deleted | killed |
+| M13 | `verdict()`'s **own** precondition-4 check deleted | killed — *not* masked by M2's layer |
+| M14 | **control** — P8-1's tie-break `<=,>=` → `<,>` | **SURVIVES, as intended** |
+
+M14 is the control, not a gap: P8-1 is out of this round's scope and its mutant surviving is the
+evidence that the tie-break and the clamp placement were left for the `data-scientist`'s ruling.
+
 ## 2026-09-08 — S1e Tables C, D, E and G: one percentile, the closed-form paired interval, and two required parameters
 
 **What:** `docs/plans/small-model-benchmarking.md` **§4 S1e Tables C, D, E and G** (plan v1.16),

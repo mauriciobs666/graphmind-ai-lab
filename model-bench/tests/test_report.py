@@ -1719,6 +1719,27 @@ def test_the_decided_by_bullet_names_the_bootstrap_arm_with_the_level_it_was_tak
     assert "[-27.1, 58.3] pp" in md
 
 
+def test_the_decided_by_bullet_names_mcnemar_exact_where_one_instrument_decided() -> None:
+    """Review P8-2 — the **third** rendering of the same bullet, and the one nothing asserted.
+
+    `_decided_by_line` has exactly three outputs over its domain, discriminated by
+    `Verdict.bound_by`: both arms MOVER-D, the two arms split, and `None` — the `mcnemar-exact`
+    path, where one instrument produced the whole interval and there is nothing to attribute. The
+    first two are pinned by the two tests above. The third's only positive assertion lived in
+    `test_the_seed_is_not_printed_where_no_bootstrap_decided_anything`, retired with the seed
+    parenthetical, and moved to neither replacement: mutating the branch to
+    `return "- decided by: MUTANT"` left the whole suite green.
+
+    It is not an edge case. This is the branch **every** `by-construction` comparison at DEFF 1.00
+    takes — the tool-caller pack's own path — so the untested rendering was the one most readers
+    would see. `_nested_arms()` is that fixture by default, and the assertion is exact rather than
+    a substring so a parenthetical growing back on this branch fails here too.
+    """
+    md = compare_report(_nested_arms(), pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert "- decided by: mcnemar-exact\n" in md
+    assert "conservative envelope" not in md
+
+
 def test_a_manifest_that_declares_no_resample_seed_is_refused(tmp_path) -> None:
     """The other half of P3-5: `PackRef.seed` has no default, so a manifest omitting
     `sampling.seed` must be a named refusal rather than a `KeyError` or a conjured number.
