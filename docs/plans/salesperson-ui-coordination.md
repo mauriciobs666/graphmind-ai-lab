@@ -155,8 +155,10 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U36** — `config.py`'s three future-as-present comments + the documentation `HISTORY.md` entry | `coder` | `aa9b68b68151bca8a` | **accepted** (`3fe3d8f`) | `falkorchat/config.py` (**5** comments, full-AST equal), `docs/HISTORY.md` | teco-verified → **accept** | 116k / 28 |
 | **U38** — `pipeline.sh`'s provenance stamp races `HEAD` and scopes `SOURCE_DIRTY` repo-wide | `cobb` | `a42739600c7b41e1d` | gated | `6012ddb` + `9124a1f` — all findings dispositioned | `analyst` Pass 1 **needs changes** → Pass 3 re-dispatched after rate-limit kill | 364k tok / 87 tools |
 | **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | **accepted** | `c92f35d` + `8779ee8` | `analyst` Pass 3 → **approve with suggestions** (`6c6e807`) | 156k tok / 15 tools |
-| **U41** — backfill `cpg_falkorchat`'s pre-fix marker honestly + remove 3 leaked scratch graphs | `graph-dba` | `a5825012b34ab9a9b` | in-flight (dispatched 2026-09-08) | live graph write, report only | self-verifying (runs `freshness.md`'s own checks) | — |
-| **U42** — P3-1/P3-2/P3-3: `SKILL.md` re-stamp line, manual overclaim, 4 statements the backfill falsifies | tbd | — | queued (behind U41) | `SKILL.md`, `freshness.md`, `graph-ontology.md` | `analyst` (Pass 4) | — |
+| **U41** — backfill `cpg_falkorchat`'s pre-fix marker honestly + remove 3 leaked scratch graphs | `graph-dba` | `a5825012b34ab9a9b` | **accepted** | marker now 10 keys, `PROVENANCE='hand-backfilled'`; 3 keys deleted | self-verified + re-verified here (`SOURCE_TREE` vs `git rev-parse`) | 115k tok / 22 tools |
+| **U42a** — 6 sites in `freshness.md` + the check-0 gate decision | `cobb` | `a1cfcb25341f0b0bb` | in-flight (dispatched 2026-09-08) | `skills/cpg-analysis/references/freshness.md` | `analyst` Pass 4 (pairwise) | — |
+| **U42b** — 3 sites in the manual; `cpg_falkorchat` is no longer a live pre-fix example | `tico` | `a4e2b1a2f544180d8` | in-flight (dispatched 2026-09-08) | `docs/manuals/graph-ontology.md` | `analyst` Pass 4 (pairwise) | — |
+| **U44** — route the `Properties removed` double-count quirk into `falkordb-quirks.md` | `graph-dba` | — | queued (blocked: concurrent session holds the file) | `claude/graph-dba/falkordb-quirks.md` | — | — |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | gated — fix blocked on U40 | `e6fa20c` — 9 files, +895/−44, 12 tests | `analyst` Pass 17 → **needs changes**, 2 majors (`20e138e`) | 305k tok / 111 tools |
@@ -3502,3 +3504,68 @@ two mutants the eleven missed, the tests that must be re-spelled rather than add
 held-inside-the-write concurrency harness the suite has no precedent for. The prompt edit in
 `de8b5ac` still owes an independent read; it is small and blocks nothing, so it queues rather
 than gates anything.
+
+## U41: the honest encoding was not the one the reviewer proposed
+
+`graph-dba` **rejected** the reviewer's suggestion — `PROVENANCE = 'source-origin'` plus a
+`MARKER_ORIGIN` accountability field — and its reason is mechanical rather than
+philosophical, which is what makes it right. **`freshness.md`'s documented query returns
+eight named fields, and `MARKER_ORIGIN` is not one of them.** A consumer following the
+recipe would read `provenance: "source-origin"`, land in dispatch bullet 1 — *a stamp from
+the current pipeline* — interpret `sourceCommit` as the repo's `HEAD` captured before the
+parse, and never reach the honesty at all. Its sentence: *honesty encoded in a field the
+documented read path does not visit is the fourth generation of this defect wearing better
+clothes.*
+
+So it wrote a **fourth literal**, `hand-backfilled`, into the one field the recipe both
+returns and dispatches on — and chose that spelling over `source-origin-backfill`
+specifically so a skimming or scripted `startswith("source-origin")` cannot silently
+re-admit the lie. It also rejected leaving `PROVENANCE` null, which is *literally* true
+("pre-fix stamp") and still wrong: null routes the reader to a bullet whose body says both
+git fields were derived after the load and are approximate, which is now false of this
+marker, and understates values that are in fact better-evidenced than a routine stamp's.
+
+That last point is the one I would have got wrong. **The values were never the dishonest
+part** — `MANIFEST.txt:19-21` records the staged copy verified byte-identical to the
+committed tree by `diff -rq`, exit 0, which a normal `source-origin` stamp only implies. Only
+the claim about *how and when* they were obtained was false. The fix was to relabel the
+acquisition, not to withhold the facts. My brief framed this as "encode it honestly or don't
+write it", which quietly assumed those were the only two options.
+
+I re-derived `85ddeed09479091a69b66d0301ed0d3399cc8387` from `git rev-parse` myself and it
+matches the marker. `ws:acme` 871 before and after; the graph's node count unchanged at
+339,973; the three leaked `scratch_cobb_*` keys gone.
+
+**A consumer now reaches the truth mechanically:** check 2 reports `cpg_falkorchat` **3
+commits stale** under `falkor-chat/server` (`e6fa20c`, `3fe3d8f`, `c708423`), which was *not
+reachable in-band before this write* — `sourceOrigin` was absent and the recipe forbids
+anchoring on `sourcePath`, so it required the manual workaround M3 documents. The backfill
+converted a documented workaround into a mechanical check. Note the graph really is stale;
+`MANIFEST.txt` knew only of `c708423`.
+
+**U42 split in two and grew from four sites to nine.** `cobb` takes `freshness.md`'s six,
+including a genuine decision I pushed down to it rather than settling: check 0's gate admits
+only `parse-root` and `source-origin`, so a literal reader **skips** it on the backfilled
+marker and the headline benefit goes unrealised — safe, but half-delivered. `graph-dba`
+recommends admitting `hand-backfilled` because this marker's content-identity evidence is
+*stronger* than a routine stamp's; `cobb` decides, and was told that declining is fine if it
+says what would have to be true to admit it. `tico` takes the manual's three. Both were told
+the pairwise same-set-of-shapes constraint that has now held twice, and that there is a new
+shape in play.
+
+**Two findings I am not acting on, and one I cannot.** The leak lesson generalises past its
+instance: the listing still holds nine probe-shaped keys of unknown ownership
+(`probe_u8_rename_dst`, `ws:probe-s0-*`, `ws:s1v6/7`, `ws:test`, `test`), untouched and
+unauthorised, and the sound completeness evidence for graph cleanup is a **`GRAPH.LIST`
+diff, never recall** — which is exactly how the earlier "zero survivors" claim went wrong.
+A periodic sweep is worth someone's unit. Separately, a fourth cobb-shaped key vanished
+mid-run without `graph-dba` deleting it, reported as an observation rather than claimed as
+an action — the right distinction to draw.
+
+**U44 is blocked, not forgotten.** A live-verified FalkorDB quirk belongs in
+`claude/graph-dba/falkordb-quirks.md`: **`Properties removed` double-counts an overwrite.**
+Setting an existing property reports `Properties set: 1, Properties removed: 1`; the backfill's
+`Properties removed: 1` was the `SOURCE_COMMIT` widening, *not* the `PARSED_AT = NULL`
+assignment, which was a genuine no-op. Anyone verifying a stamp from the counters is misled in
+both directions — independent confirmation that `pipeline.sh`'s B1 read-back is load-bearing
+rather than belt-and-braces. The file is held by the concurrent session, so it waits.
