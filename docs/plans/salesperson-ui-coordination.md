@@ -160,8 +160,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U42b** — 3 sites in the manual; `cpg_falkorchat` is no longer a live pre-fix example | `tico` | `a4e2b1a2f544180d8` | delivered — held for pairwise gate | `b47c84a` — **5** sites, shape set = **6** | `analyst` Pass 4 (pairwise) — **in flight** | 76k tok / 19 tools |
 | **Pass 4** — the pairwise shape-set gate: do `freshness.md` and `graph-ontology.md` teach the same set of marker shapes? | `analyst` (**resumed** — wrote m1–m5 and Passes 1–3; the only party holding both sides) | `a98a748e49a559ead` | **accepted — committed `d4214c3`**. `freshness.md` **needs changes** (1 major), `graph-ontology.md` **approve with suggestions**. **Shape sets are two partitions of one set, no omission either way** — proved by enumerating each document's *classification surface* and walking both orderings against the two live markers. **P4-1: the fifth-generation false mechanism, inside the fourth's own fix** | `docs/reviews/cpg-provenance-stamp.md` `## Pass 4` | — (is the gate) | 238k tok / 14 tools |
 | **U45** — P4-1 / K-023: the hybrid fork | `cobb` | `a1cfcb25341f0b0bb` (resumed) | **delivered — committed `29538d6`**. Chose **impossible** and **reverted its own discriminator hunks**; rejected a middle option I had not listed (partition by key) because *the real data crosses that boundary*. Property list stated **CLOSED**, invariant named, tombstone applied. Net **−1** line. P4-2 fixed in passing | `git-provenance.sh`, `SKILL.md`, `freshness.md`, K-023 closed / K-024 filed | `analyst` Pass 5 | 160k tok / 11 tools |
-| **U47a** — execute the mechanism the fix rests on: does `SET b.X = NULL` **remove** the key or store a null? | `graph-dba` | `a5825012b34ab9a9b` (resumed) | in-flight (dispatched 2026-09-08) | throwaway graph, 13 keys → new stamp → `keys(b)` read-back; `GRAPH.LIST` diff | — (is the check) | — |
-| **U47b** — P4-5: the marker's `NOTE` cites a superseded gate, and must now say it is **build-scoped** | `graph-dba` | `a5825012b34ab9a9b` (same) | in-flight | `cpg_falkorchat`'s `NOTE` | — | — |
+| **U47a** — execute the mechanism the fix rests on: does `SET b.X = NULL` **remove** the key or store a null? | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered — graph writes, no file to commit. Answer: it removes.** 13-key marker → stamp → `Properties set: 8` / `removed: 13`, `keys(b)` = exactly the eight pipeline fields; `none` case → `set: 4`, `keys(b)` = four; `count(b) = 1`. Ran the `RETURN b.NOTE, …` read alongside — five `(nil)`s either way, which is why `keys(b)` was the only discriminator worth asking for. **Found a residual (Case 3) → U55.** `GRAPH.LIST` 25 → 25, diff empty; scratch graph created and deleted by it | the executed evidence, recorded here | — (I re-derived the artefacts myself) | 139k tok / 11 tools |
+| **U47b** — P4-5: the marker's `NOTE` cites a superseded gate, and must now say it is **build-scoped** | `graph-dba` | `a5825012b34ab9a9b` (same) | **delivered.** `NOTE` replaced not appended, 1,561 → 2,245 chars; per-marker gate description, the derivation discharged, all five cleared keys named. **I re-derived `SOURCE_TREE` myself** — `git rev-parse b795f4c:falkor-chat/server` = `85ddeed…`, agreeing with the marker and with `MANIFEST.txt:19`'s independently hand-written anchor. Nine other fields byte-identical to U41 | `cpg_falkorchat`'s `NOTE` | — | (same run) |
 | **U48** — K-024: `docs/plans/cpg-agent-adoption-graph.md` §1.1's property table understates the stamp (executed against → header pointer or successor, not an in-place edit) | `architect` | — | queued | `docs/plans/cpg-agent-adoption-graph.md` | `analyst` | — |
 | **U49** — K-024 + gate P4-3: the manual's FAQ classifies on the `PROVENANCE` literal alone, so a hand-authored marker reads as a pipeline stamp | `tico` | — | queued | `docs/manuals/graph-ontology.md` | `analyst` + `qa-engineer` split by claim | — |
 | **U42c** — kaizen bookkeeping, retraction handled | `cobb` | `a1cfcb25341f0b0bb` | **accepted — committed `20b8770`**. The false learning **was never written** — zero graph writes when the retraction landed. Reached P4-1 **independently** from `git-provenance.sh:138` minutes earlier, and verified my quoted docstring instead of taking it | K-022 rewritten (4→5 instances), K-023 filed, 3 `:KaizenEntry` | — (raw capture) | 122k tok / 18 tools |
@@ -4263,3 +4263,64 @@ And the implementer caught an overstatement of its own before shipping — its f
 `get_state` is executed by every `/shop/api` route. `grep` finds one call site. It checked its own
 sentence, in the same run in which it was fixing someone else's, and said so. That is the habit this
 chain has been trying to install for nine generations, appearing unprompted.
+
+## U47: the unverified line is verified, and it found the residual I had not asked about
+
+`cobb` named one line in `29538d6` as carried on inference rather than execution — that
+`SET b.X = NULL` **removes** a property rather than storing one. It is the line the whole fix rests
+on, so U47a existed to run it. It runs: a 13-key marker takes a full stamp and comes back
+`Properties set: 8` / `Properties removed: 13`, with `keys(b)` reading exactly the eight pipeline
+fields. The `provenance = none` case — driven through the real capture-failure path rather than by
+unsetting the globals — comes back `set: 4` with four keys. `count(b) = 1`, so `MERGE` created no
+second marker.
+
+`graph-dba` ran the useless read alongside the useful one, which was the right instinct:
+`RETURN b.NOTE, b.STATUS, …` answers five `(nil)`s whether the properties were removed or stored as
+null. That is exactly why the brief asked for `keys(b)` and said the distinction *is* the claim.
+
+**It also corrected me.** I wrote that the `none` case emits eight NULL assignments; it emits
+**nine** — `${CPG_SOURCE_DIRTY:-NULL}` renders the bare literal when the capture failed, so
+`SOURCE_DIRTY` joins the three `SOURCE_*` fields and the five hand-authored ones. A small miscount,
+in the harder of the two cases, in a coordination whose entire recurring defect is confident wrong
+detail. Recording it rather than quietly fixing it.
+
+**Case 3 is the finding, and I did not ask for it.** The brief asked "does the mechanism work"; it
+answered that and then asked the better question — *is the guarantee closed?* It added a sixth
+hand-authored key outside the enumeration, ran a normal stamp over it, and watched `MARKER_EVIDENCE`
+survive while `NOTE` and `MARKER_ORIGIN` cleared correctly. That reproduces the defect the fix
+targets, one key over: a marker reading `PROVENANCE: parse-root` — a genuine pipeline stamp —
+carrying a hand-authored string from a predecessor build.
+
+The fix is a closed **list**, not a closed **set**. Not a defect as scoped: the enumeration covers
+all five keys that exist, and `cpg_falkorchat` uses exactly those. But the guarantee holds only while
+nobody invents a sixth without editing `cpg_provenance_stamp`, and **the discipline is invisible at
+the point where it would be broken** — a `graph-dba` hand-writing a marker is working in a different
+file from the one that would need the edit. It flagged rather than fixed, because where the invariant
+lives is a design call. That is the right instinct and the right place to stop.
+
+U55 goes to `cobb`, whose fix this is, with the two candidates named — a `SKILL.md` line, or a
+structural `keys(b)` check — and an explicit invitation to find a third: make the clear *derive* the
+key set rather than enumerate it, so a sixth key is covered by construction. It is asked to name the
+**failure mode of whatever it picks**, because all three have one.
+
+**Verified by me rather than accepted:** `cpg_falkorchat`'s marker reads 10 keys with no `STATUS` or
+`RENAMED_FROM`, `PROVENANCE: hand-backfilled`, `NOTE` at 2,245 chars. Its `SOURCE_TREE` is
+`85ddeed09479091a69b66d0301ed0d3399cc8387`, which is what `git rev-parse b795f4c:falkor-chat/server`
+returns on my own run and what `cpg/.cpg-artifacts/MANIFEST.txt:19` records from a hand-written
+anchor produced independently of any stamp. Three sources, one value. `GRAPH.LIST` is 25 keys, the
+same count as at unit start, with no `scratch_graphdba_*` left behind.
+
+**One judgement I made rather than routing.** `graph-dba` left `MARKER_WRITTEN_AT` at its backfill
+time rather than bumping it to the `NOTE` rewrite, and asked whether I wanted it moved. I do not.
+That field anchors the **backfill** — the act whose evidence chain `freshness.md`'s check 0 depends
+on — not every later edit to the marker's prose. Moving it for a prose revision would shift the
+anchor of a verification chain for a reason unrelated to that chain, and the note carries its own
+date for the revision. Left as-is, deliberately.
+
+**U44 stays blocked, but its evidence is no longer only in a transcript.** The `Properties removed`
+counter reports real removals **plus every overwrite**: seed 13 → `set: 13`; stamp → `set: 8`,
+`removed: 13` (8 overwrites + 5 real removals); reseed → `set: 13`, `removed: 8`; `none` stamp →
+`set: 4`, `removed: 13`. It is not evidence a property was deleted and cannot be reconciled without a
+`keys()` read-back — which is independent confirmation that the read-back is load-bearing rather than
+belt-and-braces. `claude/graph-dba/falkordb-quirks.md` is still held by the concurrent session, so
+this paragraph is its home until U44 can run.
