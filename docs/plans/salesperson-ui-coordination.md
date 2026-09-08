@@ -173,8 +173,11 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | gated — fix blocked on U40 | `e6fa20c` — 9 files, +895/−44, 12 tests | `analyst` Pass 17 → **needs changes**, 2 majors (`20e138e`) | 305k tok / 111 tools |
 | **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | **accepted** | `d1eaa7f`+`d01f22e`+`94c1578` — plan **v1.29** | `analyst` Pass 19 → **approve** (`8418a9f`) | 528k tok / 77 tools |
 | **U43** — retract the false CPython deadlock fact from `kaizen_team` before it is promoted | `cobb` | `a69330f81cf6048ae` | delivered | `de8b5ac` — 2 entries cleared, promoted split by audience | `analyst` (prompt edit) — queued | 118k tok / 28 tools |
-| **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7, P18-6 | `coder` | `a31456adeff4788ea` | **delivered — committed `699ef52`** (7 files, +1032/−136). Suite **2639** teco-verified solo (baseline 2629, +10 net); `ws:acme` 871 intact; `reference` re-seeded. **Tripwire re-measured by me, not taken on report** — injected reach → guard red, file restored to md5. 18 mutations, 1 survivor (M10) which was a **missing test**, now red against it | `storefront.py`, `storefront_api.py`, both test files, `config.py`, `SERVER.md`, `HISTORY.md` | `analyst` **Pass 20 (fresh)** — in flight; then `qa-engineer` | 286k tok / 114 tools |
-| **Pass 20** — gate S9a-fix. **Fresh by design**: Pass 17 *prescribed* reserve-then-write, so its author judging this diff is producer-self-review one seat over (the U24 precedent) | `analyst` (**fresh**) | `afc3c09ccd5b50340` | in-flight — **killed by a session rate limit seconds in, wrote nothing; resumed 12:29 with a state-recovery brief and a 5-item priority order** | `docs/reviews/salesperson-ui-impl.md` `## Pass 20` | — (is the gate) | — |
+| **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7, P18-6 | `coder` | `a31456adeff4788ea` | **delivered — committed `699ef52`** (7 files, +1032/−136). Suite **2639** teco-verified solo (baseline 2629, +10 net); `ws:acme` 871 intact; `reference` re-seeded. **Tripwire re-measured by me, not taken on report** — injected reach → guard red, file restored to md5. 18 mutations, 1 survivor (M10) which was a **missing test**, now red against it | `storefront.py`, `storefront_api.py`, both test files, `config.py`, `SERVER.md`, `HISTORY.md` | `analyst` **Pass 20 (fresh)** → **needs changes** (`ac28f2c`) — 3 majors, routed to U50/U51/U52; `qa-engineer` held behind them | 286k tok / 114 tools |
+| **Pass 20** — gate S9a-fix. **Fresh by design**: Pass 17 *prescribed* reserve-then-write, so its author judging this diff is producer-self-review one seat over (the U24 precedent) | `analyst` (**fresh**) | `afc3c09ccd5b50340` | **delivered — committed `ac28f2c`** (+284 lines). Survived **two** rate-limit kills, the second seconds in; resumed on its own transcript both times and lost nothing, because its predecessor artefact was already committed | `docs/reviews/salesperson-ui-impl.md` `## Pass 20` | **needs changes** — 0 blockers, **3 majors**, 2 minors, 3 nits. P17-1/P17-2 closed and closed at the right unit; my four questions all answered (see §Pass 20 below) | 150k tok / 10 tools |
+| **U50** — P20-1 is a **plan** defect: v1.29's S9 row prescribes the unconditional release the implementer faithfully wrote. Fix the release condition, tombstone the false mechanism | `architect` | `a5d8f1e2a1d897af0` | in-flight | `docs/plans/salesperson-ui.md` → **v1.30** | `analyst` (fold into Pass 21) | — |
+| **U51** — apply P20-1's corrected release + the P20-3/4/5/6 docstring corrections. **Fresh, not a resume**: S9a-fix's author is at 286k tok / 114 tools and every one of these fixes is self-contained | `coder` (fresh) | — | queued (behind U50 — needs the corrected rule; and behind U52 by file) | `storefront.py`, `test_storefront_api.py` | `analyst` Pass 21 | — |
+| **U52** — P20-2: three delivered documents state the inverse of measured behaviour about `turn_workers` and `queuePosition`. Prose-only; **measure before writing**, because this sentence position has now been wrong twice | `coder` | `a9d876aa92c41d005` | in-flight | `SERVER.md`, `config.py`, `HISTORY.md` | `analyst` Pass 21 | — |
 | **S9f** — `STOREFRONT_QUIESCE_S`'s docs describe a quiesce that S9a made live | `tico`/`coder` (tbd) | — | queued (held behind Pass 17) | `config.py` + `docs/SERVER.md` prose | `analyst` (fold into Pass 17 re-check) | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
 | **S9c** — the dead-turn latch `turn.lastTurn` and its lifecycle | `coder` | — | queued (behind S9b) | `storefront.py`, `storefront_api.py`, tests | `analyst` | — |
@@ -3933,3 +3936,56 @@ order on a reviewer, but the constraint that killed it is still live, and a Pass
 three items beats an all-or-nothing attempt that dies in the same place. First on that list is the
 `lastTurn` foreclosure question, because S9c is queued directly behind it and a late answer is the
 expensive one.
+
+## Pass 20: the class found its sixth generation, and this time the plan wrote it
+
+Pass 20 came back **needs changes** — 3 majors — and answered all four of my priority questions,
+in the order I asked them. The two majors S9a-fix was built to close (P17-1, P17-2) are genuinely
+closed, and closed at the right unit. `lastTurn` is **not** foreclosed: `turn_payload` is already
+the single lock-owning composition point and `get_state` its only production caller, so S9c drops
+in additively, and clear-on-accept actually got *easier* now that accept and refuse are one call
+with two return values. `clear_turn`'s removal is safe — a repo-wide grep finds no code caller at
+all, only prose. M10 was re-derived rather than taken from S9a-fix's report: 1 failed, 236 passed,
+file restored to its md5.
+
+The reviewer also carried back one instruction for a unit that has not been dispatched yet — clear
+the latch in `enqueue_turn`, not `reserve_turn`, or a reservation released by a failed write drops
+the notice on a post that itself failed. That belongs in S9c's brief, and it is the kind of detail
+that is free now and expensive in three weeks.
+
+**P20-1 is the sixth generation of this coordination's one recurring defect**, and its provenance
+is what makes it worth writing down. `enqueue_turn` releases the booking on any exception out of
+`submit`, justified by a docstring sentence claiming a thread-start failure would otherwise leave a
+booking no worker clears. On the pinned 3.12.3, `submit` queues the work item *before* it adjusts
+the thread count — so the item is already queued, a worker runs it, and `turn_in_flight` reads
+`False` while that turn is live. P17-1's invariant through a third door, and *worse than pre-fix on
+that path*: S9a's non-release was correct here by accident.
+
+The implementer did not invent that sentence. **v1.29's S9 row prescribes the unconditional
+release**, in the plan I gated and accepted at Pass 19. So the escalation is not "the coder wrote a
+false reason" but "the plan did, and the coder was faithful to it" — which is why U50 goes to
+`architect` before any code moves. Five of six generations have now been a *reason* rather than a
+*value*, and this one had passed a review gate on its way in: a plan sentence that reads as a
+design decision is not scrutinised the way a claimed measurement is.
+
+Two more of the same class in the same pass, both operator-facing. P20-2: three delivered documents
+say `turn_workers` "deliberately does not move `turn.queuePosition`" — measured, the fifth of five
+arrivals reads 3, 2, 0 at workers 1, 2, 4. It moves it, and P18-6's fix had already replaced one
+false claim with another *in the same sentence position*. P20-3: a docstring says S9a's number was
+"wrong at every `turn_workers` but 1", and the commit's own edits are the disproof — it rewrites
+two `workers=1` assertions, and a third docstring in the same commit states the truth, so the file
+contradicts itself.
+
+Both U50's and U52's briefs therefore carry the same instruction, close to verbatim: **measure it
+yourself before you write it**, and mark inference as inference. U52's is the sharper case — I am
+asking it to reproduce numbers I already have from a reviewer I trust, which looks like waste until
+you notice that the sentence it is fixing is *already the second wrong version*.
+
+**U51 goes to a fresh `coder`, not a resume.** S9a-fix's author sits at 286k tokens / 114 tools,
+over both halves of my threshold, and every one of P20-1/3/4/5/6 is self-contained — the corrected
+release rule arrives from U50, and the four docstring fixes carry their own replacement wording in
+the review. Continuing a delegate that large buys nothing here except cost and drift.
+
+Sequencing: U50 and U52 run in parallel (disjoint files, neither needs the suite), U51 waits on
+both — on U50 for the rule, on U52 by file adjacency in `falkorchat/`. The `qa-engineer` acceptance
+pass stays held: it would be certifying a diff with three known majors in it.
