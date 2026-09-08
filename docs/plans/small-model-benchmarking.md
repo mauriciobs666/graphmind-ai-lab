@@ -1,6 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.17 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.18 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+
+2026-09-08 — v1.18: **§7 rule 5 gains one clause — a residual must be portable.** These commands are re-run by different people in different shells, so a residual whose correctness turns on regex dialect is not a residual: prefer a fixed string, and verify any new *regex* residual under more than one `grep` before writing it down. The occasion is v1.17's `\bbootstrap_seed`, this plan's first word-boundary residual, checked under two implementations that agreed — nothing is owed retroactively. No table, target or count changes.
 
 2026-09-08 — v1.17: the `stats.py` unit (`cc28d48`, §4 S1e Tables C, D, E and G) landed correct and raised **three findings against the residual *statements*, none against the code**, all three closed here, none carried: **F1 — Table E's two residuals go blind on the very half-application they exist to catch**, because they match the **shipped** text (`max(-1.0, point …`) while a faithful edit *parameterises the clamp* and therefore rewrites the expression the literal was fused into, so a half-application in the new spelling (`clamp[0]` wired, upper bound left as the literal) matches **neither** — reproduced here on the three states side by side, the pair reading 1/1 before, 0/0 after, and **0/0 on the half-application, indistinguishable from faithful**; that is a shape §7 rule 5(b) did not cover — a residual over text the edit **destroys**, not over a token that survives it — so the rule gains the **third-form residual**, stated over the text the edit **creates**, with the trigger named (**a parameterising edit**, the one kind that changes an expression's shape rather than a name or a value) and Table G kept as the contrast that shows the trigger is real: its literals sit at a call site the edit does not restructure, and its half-application **is** caught, verified by simulation; Table E's pair is **replaced** rather than supplemented, since rule 5(b) already forbids keeping a check that reads clean on a defect; **the standing sweep was then re-run over all eighteen residuals for this shape specifically** — the discriminator being *does the matched span include text the table's own edit rewrites* — and it partitions **16 robust / 2 fragile (E's pair, now closed) / 1 near-miss examined and cleared with its cover named** (Table B's `frozenset(FORBIDDEN`, whose only blind spot is an unprescribed respelling of the coupling, killed loudly by `ARM_KINDS`'s by-value pin); **F2 — Table C's third residual moves 1 → 2** the moment Table D lands, `-ml` §3.4 Rule 4's mandated `exact_paired_quantiles` matching its own pattern — a round-level interaction between two tables in one unit, not a defect, and **not** to be answered by renaming the function, since that residual's stated virtue is surviving a rename — so the target is restated with **both survivors named**, the plan says plainly that the **count no longer discriminates and the named line set is the check**, and rule 5(b) gains that clause too, `exact_paired_quantiles` being the same operator on the exact multinomial resample distribution rather than a second sample-quantile estimator (`-ml` §11.2 reason 2); and **F3 — Table D's first residual could never reach 0**, its target having been unreachable from the moment it was written: `def test_cluster_bootstrap_seed_…`, a **substring collision** (`cluster_bootstrap` + `_seed`) on a test for the function Table D explicitly **keeps**, was among the 29 lines the table counted at `5878014` — re-derived here, the collision is **two** lines and not one — so the residual becomes the whole-identifier form, **27 → 0**, with the two `def`-name lines named as non-sites and the arithmetic written out. Also: Tables C, D, E and G gain their **`Landed:`** lines (`cc28d48`), and v1.16's narrowing of Table C's third residual is **vindicated by the landed tree** — the seven `def test_*percentile*` names `cc28d48` added would have put the unnarrowed command at 9 against a target of 1.
 
@@ -4829,9 +4831,9 @@ particular **§3.4, the binding rules that are `stats.py`'s contract** (their nu
 too — v1.7 stops restating it), and **§7.2's verbatim resolving-power string**, which is a test
 target.
 
-**Version pairing:** this plan **v1.17** is aligned to the note **v1.18** (`bbbf18e`) — re-checked
-in this revision, the note being unmoved since v1.15 paired to it; v1.16 and v1.17 each fold in no
-note delta and raise none. *(v1.17 does **cite** the note twice on facts it already publishes —
+**Version pairing:** this plan **v1.18** is aligned to the note **v1.18** (`bbbf18e`) — re-checked
+in this revision, the note being unmoved since v1.15 paired to it; v1.16, v1.17 and v1.18 each fold
+in no note delta and raise none. *(v1.17 does **cite** the note twice on facts it already publishes —
 §11.2 reason 2, for why `exact_paired_quantiles` is not a second sample-quantile estimator, and
 §3.4 Rule 4, for its being mandated at all. Neither is a new ask.)* *(v1.10 paired
 itself to v1.12 and was one revision stale by the time the gate read it — plan-gate P5-5. The pairing
@@ -5029,7 +5031,12 @@ trustworthy the senior document, the more efficiently it does so. So:
    commit; **(c)** a done-condition that re-runs them and asserts a stated residual. The counts are
    reproducible, which a prose number is not (`grep -rFc` gives `armKind` 50 matching
    lines where `grep -rFo` gives 57 occurrences; a table saying only "59" has already lost the
-   distinction).
+   distinction). **And reproducible means portable: these commands are re-run by different people
+   in different shells, so a residual whose correctness depends on regex dialect is not a residual —
+   state one as a fixed string (`-F`) wherever a fixed string will do, and verify any new *regex*
+   residual under more than one `grep` implementation before writing it down** *(v1.18. The occasion
+   is v1.17's `\bbootstrap_seed`, this plan's first word-boundary residual: checked under two
+   implementations, which agreed, so nothing is owed retroactively — the exposure is the next one.)*
 
    **What those three guarantee, stated exactly — because v1.10 claimed more and the claim is the
    dangerous part.** v1.10 wrote that the table is then *"complete by construction — a site the
