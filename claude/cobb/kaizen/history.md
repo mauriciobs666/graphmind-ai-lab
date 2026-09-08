@@ -3,6 +3,42 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-08 — Repaired `freshness.md` for the `hand-backfilled` marker, then retracted my own false mechanism claim in the same session
+
+- **What:** Repaired `skills/cpg-analysis/references/freshness.md` after `graph-dba` backfilled the
+  live `cpg_falkorchat` `:CpgBuildInfo` marker (ten keys, `PROVENANCE = hand-backfilled`,
+  `PARSED_AT` deliberately absent). Read the marker myself through `mcp__cypher__query` rather than
+  working from the brief's field list, and swept the file rather than trusting its six reported line
+  numbers — which found three sites the brief did not list. Documented the fourth provenance literal
+  as a fifth marker shape, re-gated bullet 1 on `markerOrigin` **and** `provenance`, replaced the
+  now-dead pre-fix "live example", and added `MARKER_ORIGIN` to the recipe's documented query so the
+  hand-authored tell sits on the read path instead of requiring a second query — which was the root
+  of the defect `graph-dba` had encoded a fourth literal to work around. Admitted `hand-backfilled`
+  to check 0's gate **per-marker, not per-literal**: only once that marker's `NOTE` records how
+  `SOURCE_TREE` was derived and checked. Committed by `teco` as `81b43cd`.
+  **Retraction, same session:** one sentence I added to Limits — that the next `--load` overwrites a
+  hand-authored marker wholesale, `NOTE` and `MARKER_ORIGIN` included — is **false**.
+  `cpg_provenance_stamp` (`skills/joern-cpg/scripts/git-provenance.sh:138-149`) is `MERGE … SET` over
+  exactly eight named properties, not a whole-map replace, so the five hand-authored keys survive an
+  `--append` re-stamp and yield a *hybrid* marker. I found this by reading the script while doing the
+  kaizen capture; the pairwise gate found it independently in the same window. The rule the sentence
+  supported is correct; only its mechanism was wrong. Left the Limits bullet **unrepaired at `teco`'s
+  instruction** pending a decision on whether the code is fixed instead (new K-023); two uncommitted
+  edits adding `markerWrittenAt` as the hybrid discriminator stand and contradict it, flagged for
+  integration.
+- **Why:** A graph write falsified six sites in a skill reference I own. The per-marker gate exists
+  because a literal meaning "a human was here" cannot carry the blanket trust a machine-produced
+  literal can — admitting the value outright would have re-run the defect one level up. The
+  retraction matters more than the repair: it is the fifth instance of this coordination's
+  wrong-rather-than-absent class and the first to appear *inside the fix for the previous one*,
+  which is why K-022 was rewritten and re-prioritised rather than merely annotated.
+- **Plan items:** K-022 rewritten (four instances → five, priority medium → high, prose/value split
+  now half-answered); K-023 filed (stamp does not clear hand-authored keys; owner undecided, do not
+  start). Raw captures: `kaizen_team` entries `420caf56-1db3-474a-9ad3-3e7a759ee599` (per-marker vs
+  per-literal gating, gate-endorsed), `3b8ded5d-500c-4895-8154-523e715bcfe9` (the eight-property
+  stamp and the hybrid), `3b351bb5-a8a1-4006-8aa6-bdb3ef1c6448` (a rule's justification is the
+  least-verified prose in a document).
+
 ## 2026-09-08 — Curator retraction: cleared a false `kaizen_team` mechanism claim, promoted its correction in two halves
 
 - **Scope:** two same-session `architect` entries from 2026-09-08 — `7f3c1a92-5b64-4a7e-9d81-2c0a6b4e8f13`
