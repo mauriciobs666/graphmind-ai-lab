@@ -1,6 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.20 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.21 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+
+2026-09-08 — v1.21: **a mechanical re-baseline, plus the two conventions it forced.** `93b0e42` (the Pass 9 fix round) landed under v1.20 while it was being written and touched `stats.py` and `tests/test_stats.py`, staling exactly three things: DC-12's *byte-identical from `7f865e2` through HEAD* clause, §4 S1e Table H's second enumerating command (`envelope_arms` **20 → 21**, `tests/test_stats.py` 15 → 16), and P10-5's prose decomposition of that count. All three corrected; **nothing else moved** — Table H's six residuals, its first enumerating command (`bound_by` 14) and all ten `stats.py` lines pinned by Tables E, G and H are byte-identical across `93b0e42`, confirmed. **Two conventions now written into §7 rule 5, because this will recur when Table F's unit moves `results.py` and `report.py`.** First: **a stated baseline moves only when the revision moving it re-runs the commands**, never because another unit landed — a named commit is a property of the measurement, so re-pointing without re-running asserts a count nobody took; a **landed** table's baseline never moves (re-pointing a record falsifies it), an **unlanded** one's moves in the revision that re-measures it, and the gap between a table's baseline and the tree is carried once, in DC-12. Table H accordingly re-points to `93b0e42`; the seven landed tables do not. Second: **a gloss beside a count names *sites* and does not restate a total** — the gloss is not forbidden and is what rule 5(a) asks for, but a restated total is a second copy of the command's own number (§7 rule 4's one-home rule, applied to a number), and Table H's `envelope_arms` gloss failed twice in one day by two different mechanisms while the command was right all three times. That gloss is rewritten to name its four call sites and state no total.
 
 2026-09-08 — v1.20: the plan gate's `## Pass 10` (`docs/reviews/small-model-benchmarking.md`, `913e159`) closed in full on §4 S1e **Table H** — 1 blocker, 2 majors, 1 minor, 1 nit, none carried, all five prose rather than arithmetic. **P10-1 (blocker):** the site list omitted the one **shipped test** the edit falsifies — `test_neither_printed_bound_is_ever_tighter_than_either_arm` compares the printed envelope against the arms **directly**, which is false once the arms come back unclamped (measured **0/38/78** failures at DEFF 1.0/1.2/2.0 against a 0/0/0 control) — so it gains a row, **pinned by test name and not by line** because a parallel unit is editing that file, moving the comparison to the **clamped** arms, which is Rule 4a's own restatement and not a weakening; command 2 already returned the line, so the enumeration was sound and only the hand-written row list was short. **P10-3:** the `stats.py:413` row claimed a prescribed post-edit spelling and never stated it — the only statement was inside residuals 2 and 3, which pinned two **locals the plan never fixed** while Rule 4a calls the same quantities `u_lo`/`u_hi`, so a faithful edit would have read 0 against a target of 1; the row now **writes the body out** and the residuals are restated over `SUPPORT_DIFF_PROPORTIONS[0]`/`[1]`, which depend on no introduced name. Generalised at **§7 rule 5(b): a third-form residual is only a residual if the table writes out the text it pins.** **P10-2:** a `support bound` token renders **with its boundary value** — `support bound (-1)`, the note's assertion 10 verbatim — not bare, and the renderer's source for that value is named as `SUPPORT_DIFF_PROPORTIONS` rather than left to become a second home for the support in `report.py`. **P10-4:** the docstring row extends from one paragraph to **three**, and v1.19's claim that the edit makes `envelope_arms`'s docstring sentence *true* is corrected — one clause becomes true and the other becomes false. **P10-5:** the fifteen-of-twenty sentence is re-derived — fifteen is the file's whole share and **four** are arm-value call sites. Table H is ten site rows; residuals stay six and DC-12 twenty-four.
 
@@ -2929,9 +2931,15 @@ stored-records half of `models --tested` (§3.6a). `attest`, `validate` and `run
    residual can read its target on all three)* *(v1.19: `7f865e2` landed the impl-gate Pass 8 fix
    round, so `stats.py` and `report.py` moved again. **All twenty-four were re-run at `7f865e2`** —
    the eighteen at their stated targets and Table H's six at their stated *before* values — and
-   `model-bench/` is byte-identical from `7f865e2` through HEAD, checked, so the commit named is the
-   one that last touched the component rather than the tip. Table H states `7f865e2` on itself and
-   nowhere inherits `5878014`.)* — and shown
+   `model-bench/` was byte-identical from `7f865e2` through HEAD when v1.19 was written. **It is not
+   any more** *(v1.21)*: `93b0e42`, the Pass 9 fix round, touched `stats.py` and `tests/test_stats.py`
+   while v1.20 was being written. So the component's current commit is **`93b0e42`**, Table H is
+   re-measured and **re-pointed** to it, and the other seven tables stay pinned where their authors
+   measured them — the rule that settles which of those two things happens is §7 rule 5's, stated
+   there rather than here. What moved under `93b0e42` is exactly one number, Table H's second
+   enumerating command; **all six of Table H's residuals, its first enumerating command, and all ten
+   `stats.py` lines pinned by Tables E, G and H are unchanged across it** — `stats.py` is 1 418 lines
+   before and after, a two-for-two in-place edit. Table H nowhere inherits `5878014`.)* — and shown
    both non-zero now **and** at its target after a faithful edit — the second half is the check v1.10 and
    v1.11 each shipped one residual without (plan-gate P5-2's rejected residual, then P6-2).
    **Table G's two are the exception, and the exception is stated on its own table**: their *before*
@@ -3114,8 +3122,8 @@ Every count and line number below was re-run against `5878014` at v1.11; two lin
 carried were wrong by two and are corrected in place — `ARM_KINDS` is `fingerprint.py:137`, the
 membership test is `:162`. **Table H is the exception and states its own baseline** *(v1.19)*: it
 was written after Tables A–E and G had landed, so `5878014` is not reachable for it in any useful
-sense and every count on it is stated against **`7f865e2`**, the commit that last touched
-`model-bench/`.)*
+sense and every count on it was stated against `7f865e2` — **re-pointed to `93b0e42` at v1.21, in the
+revision that re-ran them** (§7 rule 5).)*
 
 All eight are **S1-local**: they change `modelbench/` and `tests/` only, and
 all eight are free **only now**, because `results/runs/` does not exist so no stored record is
@@ -3963,23 +3971,29 @@ free at `7f865e2` — `grep -rFn SUPPORT_DIFF_PROPORTIONS modelbench tests --inc
 `grep -rFn BoundBy …` → **0**, re-run.
 
 **Enumerate — two commands, because the token the edit is *about* reaches none of the tests it
-breaks** *(both re-run at `7f865e2`)*:
+breaks** *(both re-run at **`93b0e42`** — re-pointed from `7f865e2` at v1.21 **because this revision
+re-ran them**, which is the only thing that licenses moving a stated baseline; §7 rule 5)*:
 
 | # | Command (under `model-bench/`) | Lines | Per file |
 |---|---|---|---|
 | 1 | `grep -rFn bound_by modelbench tests --include='*.py'` | **14** | `modelbench/stats.py` 5, `tests/test_stats.py` 6, `modelbench/report.py` 2, `tests/test_report.py` 1 |
-| 2 | `grep -rFn envelope_arms modelbench tests --include='*.py'` | **20** | `tests/test_stats.py` 15, `modelbench/stats.py` 5 |
+| 2 | `grep -rFn envelope_arms modelbench tests --include='*.py'` | **21** | `tests/test_stats.py` 16, `modelbench/stats.py` 5 |
 
 Command 2 is rule 5(a)'s token-free coverage and is not a flourish: the arm clamp lives at two
-`_widen` call sites that carry **no** `bound_by`, and `tests/test_stats.py` holds **fifteen** of
-that command's twenty lines — none of which command 1 reaches. **Of those fifteen, four are
-arm-value call sites** (`:1260`, `:1338`, `:1361`, `:1422-1423`), the rest being one import (`:38`),
-two `parametrize` ids (`:1429`, `:1502`), five lines of docstring prose (`:1437`, `:1454`, `:1477`,
-`:1980`, `:1983`) and two precondition-raise calls Rule 4a does not touch (`:1464`, `:1498`).
-*(v1.19 wrote "fifteen … are the arm-level assertions", which was wrong twice — fifteen is the
-file's whole share rather than a subset, and only four of them are call sites; the command's
-coverage claim was unaffected but the sentence was not reproducible. Plan-gate P10-5, and it is
-where P10-1 hid: `:1361` is one of the four.)*
+`_widen` call sites that carry **no** `bound_by`, and command 2's `tests/test_stats.py` lines are
+where the arm-level edits are — none of which command 1 reaches. **The four that are arm-value call
+sites are `:1260`, `:1338`, `:1361` and `:1422-1423`**; every other line the command returns in that
+file is an import, a `parametrize` id, docstring prose or a precondition-raise call that Rule 4a does
+not touch. *(Plan-gate P10-1 hid in this sentence: `:1361` is one of the four.)*
+
+*(**This gloss names the sites and deliberately states no total** — v1.21, and the reason is §7 rule
+5's new clause rather than fastidiousness. v1.19's version said "fifteen of twenty are the arm-level
+assertions", which was wrong twice; plan-gate P10-5 corrected it to "fifteen of the command's
+twenty, of which four are call sites", which was right and went stale **within the hour**, because
+`93b0e42` added one matching line and the pair became sixteen of twenty-one. The command was right
+on all three occasions. What kept breaking was the **count restated beside it**, which is §7 rule 4's
+one-home rule applied to a number. The four call sites did not move under `93b0e42` and are not
+expected to: a site list is stable against additions in a way a total never is.)*
 
 | Site | Edit | Found by |
 |---|---|---|
@@ -5366,6 +5380,37 @@ trustworthy the senior document, the more efficiently it does so. So:
      is rewritten for an unrelated reason, the residual is re-derived over the new spelling, never
      re-scoped.
 
+     **A stated baseline moves only when the revision moving it *re-runs the commands*, and never
+     because some other unit landed** *(v1.21)*. Clause (b) says a table carries its counts **at a
+     named commit**, and the named commit is a property of the **measurement**, not of the tree: to
+     re-point a baseline without re-running is to assert a count at a commit nobody ran it at, which
+     is the one thing this rule exists to stop. So the treadmill alternative — re-point every table
+     to the tip whenever any unit lands — is only available to someone willing to re-measure every
+     table every time, and this document is not, nor should the next author be. **A landed table's
+     baseline never moves at all**: its rows are a record of what a commit did (§4 S1e's `Landed:`
+     convention), and re-pointing a record falsifies it. **An unlanded table's baseline moves in the
+     revision that re-runs it, and states which commit that was.** Where the two diverge — the tree
+     has moved and no revision has re-measured — the gap is carried **once**, in DC-12, as *what has
+     changed since*, and not by silently editing a number nobody re-derived. *(v1.21's occasion:
+     `93b0e42` landed under v1.20 while it was being written; Table H is re-measured and re-points
+     to it, the seven landed tables do not move, and DC-12 names what changed. Table F's unit will
+     move `results.py` and `report.py` under exactly these tables next, so the rule is written down
+     before it is needed rather than after.)*
+
+     **A table states its command and its count; a gloss beside the count names *sites*, and does
+     not restate a total** *(v1.21)*. The gloss itself is not the problem and is not forbidden — it
+     is what rule 5(a) asks for in spirit, the step from *"a command's output is a superset of the
+     sites"* to a list a reader can act on, and §4 S1e Table E's naming of its four non-sites is the
+     model. What breaks is a gloss that **re-states the total** in order to partition it: that total
+     is a second copy of the command's own number, and §7 rule 4's one-home rule applies to a number
+     exactly as it does to a fact. §4 S1e Table H's `envelope_arms` gloss is the case, and it failed
+     **twice by two different mechanisms** in one day: v1.19 mis-partitioned the total, plan-gate
+     P10-5 re-derived it correctly, and an unrelated unit added one matching line within the hour and
+     staled it again. The command was right all three times. A **site list** — four call sites,
+     named — survived both events untouched, because sites are stable against additions and totals
+     are not. So: name the sites, cite the command for the count, and let the count live in one
+     place.
+
      **A third-form residual is only a residual if the table *writes out* the text it pins, in the
      row, and not only inside the residual command** *(v1.20, plan-gate P10-3)*. The two forms above
      are stated over text that already exists, so a reader can always go and look at it; the third
@@ -5804,7 +5849,7 @@ why it did not move.
 
 | Item | Closed by |
 |---|---|
-| **impl-gate P8-1** — the `- decided by:` audit names the arm that did not bind once the clamp binds both; the tie-break is unpinned | §4 S1e **Table H**, the implementation spec for `-ml` Rule 4a: `clamp=None` on both arms, the composer clamping its own result, `bound_by` as a **three**-token set on a **strict** comparison, and a renderer that attaches no `p=` clause to a `support bound` token. Two enumerating commands (**14** and **20** lines), **ten** site rows and **six** residuals *(nine at v1.19; plan-gate P10-1 added the tenth)*. The ruling deliberately disagrees with `P8-1`'s own suggested fix — attributing from the unclamped arms prints the same false sentence on the separating case — and the note carries the witness |
+| **impl-gate P8-1** — the `- decided by:` audit names the arm that did not bind once the clamp binds both; the tie-break is unpinned | §4 S1e **Table H**, the implementation spec for `-ml` Rule 4a: `clamp=None` on both arms, the composer clamping its own result, `bound_by` as a **three**-token set on a **strict** comparison, and a renderer that attaches no `p=` clause to a `support bound` token. Two enumerating commands, **ten** site rows and **six** residuals *(nine at v1.19; plan-gate P10-1 added the tenth)*. *(v1.21: the two commands' counts were restated here and are not any more — one of them moved under `93b0e42` within the day, which is the case §7 rule 5's new gloss clause is written from. They live on the table, once.)* The ruling deliberately disagrees with `P8-1`'s own suggested fix — attributing from the unclamped arms prints the same false sentence on the separating case — and the note carries the witness |
 | **impl-gate P8-5** — the composition rule is written twice and `envelope_arms`'s docstring says it is not | Closed as collateral. `7f865e2` already shipped the `_compose` helper with **three** deletions from Rule 4a's version recorded in its own docstring at the seam; all three are additive and Table H lands them, so nothing is reverted. Table H carries a row for that docstring paragraph, because a docstring asserting the opposite of its own body is P8-5's finding one revision later |
 | **The `Landed:` convention's first real test** | Table E's rows are a record of what `cc28d48` did, and one of them — *"both arms keep the identical clamp `(-1.0, 1.0)`"* — is now Table H's to change. The row is **kept, not rewritten**, with the supersession stated beside it; the current instruction lives on Table H's row for the same two call sites |
 
