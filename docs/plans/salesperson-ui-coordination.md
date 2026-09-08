@@ -174,7 +174,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | **accepted** | `d1eaa7f`+`d01f22e`+`94c1578` — plan **v1.29** | `analyst` Pass 19 → **approve** (`8418a9f`) | 528k tok / 77 tools |
 | **U43** — retract the false CPython deadlock fact from `kaizen_team` before it is promoted | `cobb` | `a69330f81cf6048ae` | delivered | `de8b5ac` — 2 entries cleared, promoted split by audience | `analyst` (prompt edit) — queued | 118k tok / 28 tools |
 | **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7, P18-6 | `coder` | `a31456adeff4788ea` | **delivered — committed `699ef52`** (7 files, +1032/−136). Suite **2639** teco-verified solo (baseline 2629, +10 net); `ws:acme` 871 intact; `reference` re-seeded. **Tripwire re-measured by me, not taken on report** — injected reach → guard red, file restored to md5. 18 mutations, 1 survivor (M10) which was a **missing test**, now red against it | `storefront.py`, `storefront_api.py`, both test files, `config.py`, `SERVER.md`, `HISTORY.md` | `analyst` **Pass 20 (fresh)** → **needs changes** (`ac28f2c`) — 3 majors, routed to U50/U51/U52; `qa-engineer` held behind them | 286k tok / 114 tools |
-| **U53** — P21-4 (§5.2's summary of the residue is false through two doors its own sibling derivation opens) and P21-5 (an unnamed cost of the chosen placement) | `architect` | `ad44540e7e1aa876e` | in-flight | `docs/plans/salesperson-ui.md` → **v1.31** | `analyst` Pass 22 | — |
+| **U53** — P21-4 (§5.2's summary of the residue is false through two doors its own sibling derivation opens) and P21-5 (an unnamed cost of the chosen placement) | `architect` | `ad44540e7e1aa876e` | **delivered — committed `069f6ae`** — plan **v1.31**. Fixed by **deletion, not rewording**: §5.2 cites the S9 row instead of summarising it, and `grep` now finds one statement of the residue in the whole plan. **Both doors re-verified by me** — cold pool `qsize=1 threads=0`, never ran, `shutdown(wait=True)` back in 0.0000s; warm pool ran the refused item | `docs/plans/salesperson-ui.md` **v1.31** | `analyst` Pass 22 | 99k tok / 53 tools |
 | **U54** — P21-1 (restore the guard's strength without giving up the raise), P21-2 (the false precedent, at two sites), P21-3 (the killing test), P21-6, P21-7. **Resumed, not fresh**: 157k tok / 67 tools is under both halves of the threshold and the guard sentence is its own | `coder` | `a7ebbee7e795fe497` | in-flight | `storefront.py`, both test files | `analyst` Pass 22 | — |
 | **Pass 21** — re-gate: v1.30's rule (`395266e`), its implementation (`d776ca8`), P20-2's three sites (inside `f9d23fb`). **Fresh again on the U24 precedent**: Pass 20 prescribed the discriminator that was implemented | `analyst` (**fresh**) | `a3ad2209fae9fb0e1` | **delivered — committed `d26fa36`**. Ran the suite (2640/14, matching my solo number) and restored every file it mutated; `git status falkor-chat/` empty, md5 back to `08daf2ea` |  `docs/reviews/salesperson-ui-impl.md` `## Pass 21` | — (is the gate) | — |
 | **Pass 20** — gate S9a-fix. **Fresh by design**: Pass 17 *prescribed* reserve-then-write, so its author judging this diff is producer-self-review one seat over (the U24 precedent) | `analyst` (**fresh**) | `afc3c09ccd5b50340` | **delivered — committed `ac28f2c`** (+284 lines). Survived **two** rate-limit kills, the second seconds in; resumed on its own transcript both times and lost nothing, because its predecessor artefact was already committed | `docs/reviews/salesperson-ui-impl.md` `## Pass 20` | **needs changes** — 0 blockers, **3 majors**, 2 minors, 3 nits. P17-1/P17-2 closed and closed at the right unit; my four questions all answered (see §Pass 20 below) | 150k tok / 10 tools |
@@ -4179,3 +4179,43 @@ my threshold, and the false-precedent sentence is its own to replace.
 guard-widening is not being tested after all: the outcome is a guard that is *stronger* than the one
 before this change, not weaker, and the raise that forced the question is independently justified.
 Nothing to escalate — I will report it, not ask about it.
+
+## U53 fixed a false summary by deleting it
+
+I asked `architect` to make §5.2 and the S9 row consistent *by construction rather than by both
+happening to be right*, and hinted that §5.2 might not need to state the claim at all. It took the
+stronger reading and removed the sentence outright: §5.2 keeps its rule and its direction verbatim
+and now **cites** the S9 row's derivation instead of précising it. `grep` for the residue returns
+exactly one line in the whole plan.
+
+That is the correct shape of fix for this defect class and it is worth stating as a rule, because
+the reflex is the other one. Six of the last nine generations were a *summary* of something stated
+correctly elsewhere — a docstring paraphrasing a plan, a `SERVER.md` row paraphrasing a docstring,
+§5.2 paraphrasing the S9 row. Fixing a false summary by writing a truer summary leaves the drift
+mechanism in place and buys one revision's worth of accuracy. **Deleting the copy removes the class
+of defect, not the instance.** A summary that must stay true to a derivation one section away has no
+copy left to fall out of step.
+
+**I re-ran both doors rather than reading the report.** Cold pool: `submit` raised, `qsize` 1,
+`len(_threads)` 0, the item never ran, and `shutdown(wait=True)` returned in **0.0000s** with it
+still queued. Warm pool: the same refusal **did** run the item. So the two claims that falsified
+v1.30's précis are real, and the S9 row's qualification — "not even a leak" becomes "*usually*",
+with the cold pool grounded as *the process's first turn* rather than a theoretical state — is
+earned.
+
+Two judgements it made that I did not ask for and would not have specified. It grounded P21-5's
+acceptance on **the asymmetry of what is lost rather than the width of the window**, deliberately,
+because the width rests on a uvicorn claim it had not verified — so the acceptance does not depend
+on an unverified fact. That is the defect class being designed around rather than merely avoided.
+And it ruled open question 2 as *documented, not coded around*, because the only discriminator
+available at the `except` is a private attribute and reading it would put the design back onto the
+implementation detail v1.30 had just moved off.
+
+**A hazard it surfaced that is mine to carry.** v1.30's `storefront.py` line-number citations were
+already stale when Pass 21 read them, and they shifted **again mid-run** as U54 edited the file
+underneath it. It converted every `storefront.py`/`storefront_api.py` citation to a **symbol**
+citation and recorded why in the row, keeping line numbers only for CPython's pinned `thread.py`.
+I dispatched U53 and U54 in parallel on the grounds that their file sets were disjoint — which was
+true of *writes* and false of *citations*. Disjoint files are not disjoint enough when one unit's
+deliverable points into the other's. One pre-existing citation elsewhere in the plan is off by the
+same three lines; it is out of U53's scope and stays on the follow-up list.
