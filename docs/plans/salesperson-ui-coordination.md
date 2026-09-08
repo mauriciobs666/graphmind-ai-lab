@@ -160,8 +160,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | gated — fix blocked on U40 | `e6fa20c` — 9 files, +895/−44, 12 tests | `analyst` Pass 17 → **needs changes**, 2 majors (`20e138e`) | 305k tok / 111 tools |
-| **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | in-flight (dispatched 2026-09-08) | `docs/plans/salesperson-ui.md` §5.1 S9 row + §5.2 | `analyst` (Pass 18) | — |
-| **S9a-fix** — per-booking token, `queuePosition` per U40, 2 missed mutants | tbd (fresh) | — | queued (behind U40) | `storefront.py`, `storefront_api.py`, tests | `analyst` re-gate | — |
+| **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | gated | `d1eaa7f` — plan v1.27, +58/−8 | `analyst` `acc1fdff560984907` Pass 18 → — | 152k tok / 56 tools |
+| **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7 | tbd (fresh) | — | queued (behind Pass 18) | `storefront.py`, `storefront_api.py`, both test files, `HISTORY.md` | `analyst` re-gate + `qa-engineer` | — |
 | **S9f** — `STOREFRONT_QUIESCE_S`'s docs describe a quiesce that S9a made live | `tico`/`coder` (tbd) | — | queued (held behind Pass 17) | `config.py` + `docs/SERVER.md` prose | `analyst` (fold into Pass 17 re-check) | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
 | **S9c** — the dead-turn latch `turn.lastTurn` and its lifecycle | `coder` | — | queued (behind S9b) | `storefront.py`, `storefront_api.py`, tests | `analyst` | — |
@@ -3241,3 +3241,62 @@ scoping the manual's unconditional "all eight rewritten on every stamp" to match
 reference's "since 2026-09-07".
 
 U39 is **accepted** and closed.
+
+## U40: both questions were the plan's, and one answer was read out of CPython
+
+`architect` amended rather than stopping, and justified the judgment rather than assuming
+it: §4.4 measure 1a already says *"at most one in-flight turn per participant, **enforced
+server-side**"*, and its rationale is a correctness argument — a second `WorkflowRun` on
+one thread — not a product preference. The requirements never mention single-flight at
+all; it is a plan-level measure, so making the mechanism satisfy the invariant the plan
+already asserts is a correction, not new scope. That is the reasoning I wanted and could
+not have produced from this chair, and it is why the question went out instead of being
+settled here. Plan is **v1.27** (`d1eaa7f`).
+
+**The clause I did not know we needed.** The row now forbids holding the turn lock across
+`executor.submit(...)` — because `submit` takes `concurrent.futures.thread._global_shutdown_lock`,
+which `_python_exit` holds while joining workers that may themselves be blocking on the
+turn lock: a deadlock at interpreter exit, read from the **pinned CPython 3.12.3** rather
+than from general knowledge. The architect's point is that holding the lock across submit
+is precisely the fix an implementer reaches for to make booking order equal submit order.
+So the amendment does not just specify the right mechanism, it names the attractive wrong
+one and forbids it. A plan that only says what to do would have let this land, and a hang
+at interpreter exit is the kind of defect that reproduces on one machine in five.
+
+**A consequence the review missed.** Releasing the reservation on a failed path is not
+merely tidy: without it, §5.3's `504 post_state_unknown` reconciliation cannot read
+`turn.state === 'idle'`, and that C-rule becomes **undecidable**. Pass 17 found the
+corrupted invariant; it did not find that a second, already-specified behaviour silently
+depends on the same release. Worth recording as evidence for gating a *plan* amendment and
+not only the code: the reviewer, the implementer and I had all looked at this route, and
+the coupling only surfaced when someone re-derived the mechanism from the document.
+
+**`queuePosition` is now defined, and defined negatively as well as positively.** The
+0-based index in the waiting line, **derived on every read, never stored** — a stored
+number being the wrong-rather-than-absent hazard itself. `0` on a `queued` turn is
+*ordinary and load-bearing*: first in line. A `thinking` turn holds a worker rather than a
+place in line, so it is not counted, which is why the derivation needs no `turn_workers` on
+the wire and is correct at every worker count — explicitly rejecting the reviewer's
+suggested `len(self._turns) - workers`. The block also states one honest bound instead of
+leaving it to be discovered: after `clear_all_turns()` a fresh arrival can read
+`queued`/`0` while workers are still busy, an under-count that self-corrects, with S10
+owning the intake window.
+
+**The elegant part is that it is one field.** The booking ordinal is the ownership token
+*and* the ordering key. Two defects, one data-structure change — which is also why
+`architect`'s answer to my "one unit or two" is **one**: splitting them would force the
+second unit to rebase on the first's `TurnState`.
+
+**The old done-condition was falsified, not extended.** `0/1/2` is simply wrong under this
+definition, and the replacement includes a concurrency test held **inside the write** —
+which the architect says is the only spelling that discriminates a reservation from
+check-then-act, since a sleep-timed pair passes on both. I sent that claim to the gate,
+because it is the difference between a test that proves the fix and one that merely passes,
+and this chain has now produced three tests that merely passed.
+
+Gated to Pass 18 before any implementation. Two handoff notes carried into the fix brief:
+tests that must be **re-spelled** rather than added (`set_turn_state(..., queue_position=N)`
+loses its parameter), and `HISTORY.md`'s existing `enqueue_turn(ctx, participant, posted)`
+mentions are a dated record of what S9a delivered — the fix unit writes a **new** entry and
+must not rewrite them. Follow-up noted, not actioned: §9 line 2016 still reads "(v1.19) —
+21 steps" against a v1.27 header.
