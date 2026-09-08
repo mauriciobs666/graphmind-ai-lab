@@ -6,13 +6,15 @@
 suggestions). **Pass 3** re-gated `95b4c88` (needs changes). **Pass 4** re-gated `d55f4d8` (needs
 changes). **Pass 5** gated `8fc2341`, the first of S1e's three implementation units (needs changes).
 **Pass 6** re-gated its fix round `c523a35` (needs changes). **Pass 7** re-gated `f409905` (needs
-changes). **Pass 8** gates `cc28d48`, S1e's second and largest unit — jump to
-[`## Pass 8`](#pass-8--2026-09-08) for the current verdict; the earlier passes are kept intact
-because they are meant to be read together. Passes 1–4 gate the S1 build; Passes 5–7 are S1e's first
-unit (§4 S1e Tables A and B, the `fingerprint.py` re-key); Pass 8 is its second (Tables C, D, E and
-G), leaving Table F undelivered. **Pass 7 §3 says which half of this document to trust** — the
-findings held, three suggested fixes did not; Pass 8 is written to that standard and names, for each
-suggested fix, the assertion that catches it being wrong.
+changes). **Pass 8** gated `cc28d48`, S1e's second and largest unit (needs changes). **Pass 9**
+re-gates its fix round `7f865e2` — jump to [`## Pass 9`](#pass-9--2026-09-08) for the current
+verdict; the earlier passes are kept intact because they are meant to be read together. Passes 1–4
+gate the S1 build; Passes 5–7 are S1e's first unit (§4 S1e Tables A and B, the `fingerprint.py`
+re-key); Passes 8–9 are its second (Tables C, D, E and G), leaving Table F undelivered and P8-1
+held for `-ml` v1.19 §3.4 Rule 4a. **Pass 7 §3 says which half of this document to trust** — the
+findings held, three suggested fixes did not; Passes 8 and 9 are written to that standard and name,
+for each suggested fix, the assertion that catches it being wrong. Two more of my fixes were
+rightly overruled at Pass 9, which is the fourth and fifth across the document.
 
 ## Pass 1 — 2026-09-03
 
@@ -2322,3 +2324,216 @@ arm the code names (clamped) against the arm that actually binds (unclamped):
 --porcelain` at close shows `docs/reviews/small-model-benchmarking-impl.md` as this review's only
 entry under my hand; the `claude/**` and `docs/plans/small-model-benchmarking.md` entries belong to
 the concurrent sessions the brief named. Nothing staged, nothing committed.
+
+## Pass 9 — 2026-09-08
+
+### 1. Scope & verdict
+
+**Reviewed:** commit `7f865e2` (`fix(model-bench): Pass 8 fix round — six findings closed, P8-1 held
+for Rule 4a`), the diff `cc28d48..7f865e2 -- model-bench/` — 5 files, +431/−43:
+`modelbench/stats.py`, `tests/{test_stats,test_report}.py`, `model-bench/AGENTS.md`,
+`model-bench/docs/HISTORY.md`. Six of Pass 8's seven findings were in scope; **P8-1 was excluded by
+the coordination** and is now blocked on unbuilt work, its root ruled in note v1.19
+`docs/plans/small-model-benchmarking-ml.md` §3.4 **Rule 4a**.
+
+**CPG:** considered, not relevant — none exists for `model-bench/`.
+
+**Verdict: needs changes** — 0 blockers, **2 majors** (**N1**, **N2**), 0 minors, 1 nit (**N3**).
+
+**All six in-scope Pass 8 findings are closed** (§2), and both deliberate deviations are correct —
+the first one reverses the question that was put to me, because the NaN-safe spelling was already
+the module's own before this round (§3.1), and the second overrules me on a plan revision written
+after my pass (§3.2). The six retired test ids cost nothing: resolved at **id** level by collecting
+both trees, every retired assertion survives in a strictly stronger form (§4). `_compose` is a good
+seam for Rule 4a and two of its three deltas were forced by the scope boundary rather than chosen
+(§5).
+
+The two majors are **one respelling at two sites**. P8-3 diagnosed the predicate correctly and fixed
+it at one of the three places that carried it: `verdict()` (`stats.py:1126`) and
+`paired_cluster_bootstrap` (`:228`) are still on `< 1.0`, and the second of them returns
+`(-1.0, 1.0)` for a NaN — verbatim the symptom that justified the deviation, on `-ml` §3.2d's
+continuous entry point. Both fixes are the edit this round already made once, and each needs one
+`parametrize` the neighbouring test already carries.
+
+Re-ran only what the coordinator could not: **2 mutations**, each applied to a `cp`-backed copy, run
+alone, restored and `diff -q`'d byte-identical — swapping `_compose`'s `min`/`max` (**9 failures**,
+the union of Pass 8's separately-pinned 5 and 4) and reordering `exact_paired_quantiles`' two level
+checks (**2 failures**, exactly the two rows §4 predicts). Plus the direct NaN probes behind N1/N2.
+I did not re-run the suite, the 14-mutation set, `ruff`, the word counts or F2's closure; those are
+the coordinator's and are taken as given.
+
+### 2. Disposition of Pass 8's findings — 6 of 6 in scope closed, 1 held
+
+| # | Sev. | Disposition | Evidence I rechecked |
+|---|---|---|---|
+| **P8-2** | major | **Fixed** | `test_the_decided_by_bullet_names_mcnemar_exact_where_one_instrument_decided` (`test_report.py:1722`) asserts `"- decided by: mcnemar-exact\n" in md` on `_nested_arms()`, plus `"conservative envelope" not in md`. The `bound_by`-iff assertion I asked to fold in **also landed**, at `test_stats.py:1393` |
+| **P8-3** | major | **Fixed, with a deviation I accept** — §3.1 | `envelope_arms` raises at `stats.py:376`; parametrized over `{0.5, 0.25, 0.999999, 0.0, -1.0, nan}` × `{conservative_envelope, envelope_arms}`, and the retired ordering property is back as `test_the_two_envelope_refusals_name_which_layer_raised`. **The fix is right and incomplete — §6 N1/N2** |
+| **P8-4** | minor | **Fixed, and better than I proposed** | `test_the_exact_quantile_takes_the_atom_the_level_lands_on` parametrizes three rows over `(0, 1, 1, 0)` — on the boundary, below, above — where I suggested one. The docstring states the reachability scope correctly rather than repeating my "not equivalent" phrasing as a slogan |
+| **P8-5** | minor | **Fixed** — `_compose` at `stats.py:392`, both callers through it. Judged as a seam in §5 | `conservative_envelope` is `return _compose(*envelope_arms(...))`; `verdict` is `ci = _compose(mover_arm, exact_arm)`. `test_the_two_routes_to_the_envelope_compose_the_arms_identically` asserts the two routes agree over four DEFFs |
+| **P8-6** | minor | **Fixed, and wider than I proposed** | `_check_level` is one home for both refusals; `exact_paired_quantiles` now raises the note's `TypeError`/`ValueError` where it gave `AttributeError`/`IndexError`. I asked for a parametrized transposed test; it parametrized **all three** level refusals over both estimators |
+| **P8-7** | nit | **Superseded — my suggestion was wrong** — §3.2 | Plan v1.17's F2 row rules against a rename and restates the target as two survivors named; a clause calling F2 open would be false. Separately, the 131-char line I nitted was rewrapped: `AGENTS.md`'s longest line is now 122, and that one predates this round |
+| unnumbered nit | — | **Fixed** | `test_an_empty_paired_table_is_refused_by_every_function_that_takes_one` with `match="describes no rows"`; `HISTORY.md` now records the `latencyMsP50` 51 → 50 figure move |
+| **P8-1** | major | **Held — blocked on unbuilt work, not deferred** | Its root is ruled in `-ml` v1.19 §3.4 Rule 4a and the implementation is a separate unit. The coordination's M14 control surviving at 550 passed is the right evidence that nothing was half-moved in the meantime; I did not re-run it |
+
+### 3. The two deliberate deviations — both correct, and the first one reverses the question
+
+**3.1 P8-3's spelling: `not design_effect >= 1.0` rather than my `< 1.0`. Accept — and the "two
+spellings now coexist" concern does not survive contact with the module.** The NaN-safe spelling was
+**already there before this round**: `resolving_power` has carried
+`if not design_effect >= 1.0:  # NaN-safe: '< 1.0' would admit a NaN design effect` since before
+`cc28d48` (`git show cc28d48:model-bench/modelbench/stats.py`, line 792). So the deviation did not
+introduce a second spelling — it moved one more site onto the spelling the module already used for
+this exact precondition, comment and all. My `< 1.0` would have been the divergent one.
+
+That reframes the coordinator's question. Coexistence is not the defect; **which sites are still on
+the unsafe spelling** is, and two are: `paired_cluster_bootstrap` (`stats.py:228`) and `verdict`
+(`stats.py:1126`). Both are live NaN holes, one of them reproducing the exact symptom that justified
+this deviation. Filed as **N1** and **N2**.
+
+**3.2 P8-7: it corrects me, and it is right. One line, because that is what a correction is worth.**
+I asked for "half a clause citing F2 as open." Plan v1.17 (`b6f578c`) closes F2 — its row at
+`docs/plans/small-model-benchmarking.md:5528` restates the residual's target as **"2 → 2 with both
+survivors named"**, says plainly that "the count is no longer the check — the named line set is",
+and rules against a rename *because surviving a rename is the property that residual exists to
+have*. A clause calling F2 open would be false, and false in the always-loaded file. What shipped
+instead — **"Do not rename it to make §11.10(3)'s grep read 1"**, with the ruling cited — is the
+live constraint the file is for. Verified against the plan, not taken on report.
+
+That is the **second** suggested fix of mine overruled this round, and the fourth across Passes 6–9.
+The split is the one Pass 7 §3 named: every *finding* has held; the *fixes* are one option costed by
+someone who did not have to make them work. Here the implementer had two things I did not — the
+module's existing spelling, and a plan revision written after my pass.
+
+### 4. The six retired test ids — nothing is asserted less than it was
+
+I resolved this at **id** level rather than by reading diffs, by collecting both trees: `git archive
+cc28d48 model-bench` into a scratch directory and `pytest --collect-only -q` against each. **519 →
+550, exactly 6 ids retired and 37 added**, matching the reported `+37/−6`. The six are three `def`s,
+one of them parametrized four ways:
+
+| Retired id | What it asserted at `cc28d48` | Successor | Delta |
+|---|---|---|---|
+| `test_paired_bootstrap_refuses_a_transposed_level_pair` | `raises(ValueError)` on `(HI, LO)` and on `(LO, LO)`, over `[1.0, 0.0, -1.0]`, `B=100`, `seed=1` | `test_every_level_pair_estimator_refuses_a_transposed_pair[paired_bootstrap]` — **identical call and fixture** | gains `match="ordered lower then upper"`; gains an `exact_paired_quantiles` instance |
+| `test_percentile_rejects_a_float_level` | `raises(TypeError)` on `percentile(range(20), level=0.05)` | `test_every_level_estimator_rejects_a_float_level[percentile]` — **identical call** | gains `match="exact rational level"`; gains the second estimator |
+| `test_percentile_rejects_a_level_outside_the_unit_interval[level0…3]` | `raises(ValueError)` on `{0, −1/20, 21/20, 2}`, **plus** a trailing `percentile(range(20), level=Fraction(1)) == 19` run inside all four | `…rejects_a_level_outside_the_unit_interval[level0…3-percentile]`, same four levels and call; the `Fraction(1)` assertion moves **verbatim** into `test_a_level_of_exactly_one_is_admitted_and_returns_the_largest_value` | gains `match=r"level must lie in \(0, 1\]"`; gains the second estimator; the `(0, 1]` closed end stops being an incidental tail executed four times and becomes a named test |
+
+**Nothing lost, and one thing genuinely gained.** Every retired assertion is present in a strictly
+stronger form, and the `match=` additions are not cosmetic here — I checked the case where they
+carry real weight. `_LEVEL_CALLERS["exact_paired_quantiles"]` calls
+`exact_paired_quantiles((0, 1, 1, 0), levels=(level, Fraction(1)))`, so at `level ∈ {21/20, 2}` the
+**transposed-pair** guard would also raise `ValueError` — a bare `pytest.raises(ValueError)` would
+pass on two of the four rows without `_check_level` existing at all. The `match=` is what makes
+those rows test the refusal they name, and it also pins the check *order* inside
+`exact_paired_quantiles` (levels validated before the transposed comparison), which nothing else
+states. That is the one place this refactor could have silently weakened a test, and it did not.
+
+### 5. `_compose` as a seam for Rule 4a — a good seam, and two of its three deltas were forced
+
+**Rule 4a's target** (`-ml` §3.4 Rule 4a, point 2 and point 4): `envelope_arms` widens both arms with
+`clamp=None`; one private composer takes the two **unclamped** arms, clamps its own result to
+`(-1.0, 1.0)`, computes `bound_by` from the composed unclamped value against the support on a
+**three**-token set with strict comparisons, and returns `(interval, bound_by)`.
+**What shipped:** `_compose(mover, exact) -> tuple[float, float]` — no clamp, interval only,
+`bound_by` still inline in `verdict()` on the two-token set. Three deltas, all self-recorded.
+
+**They are one decision with three faces, not three half-steps.** Clamping inside `_compose` is only
+correct if `envelope_arms` stops clamping in the same edit — otherwise the arms arrive already
+clamped and the composed clamp is a no-op that *reads* as applied, which is worse than absent. And
+moving the clamp out of `envelope_arms` changes the values `bound_by` is computed from, which **is**
+P8-1. So the alternative to "does not clamp" was never "clamps"; it was "does P8-1", which the
+coordination excluded. Delta 2 follows from delta 1 — `bound_by` cannot move in until `_compose`
+holds the unclamped values and the support, because Rule 4a's third token is computed from
+`u_lo < L` / `u_hi > U` — and delta 3 is delta 2 restated. Moving `bound_by` in *now*, on the
+two-token set, would have put the wrong computation in the right place: that is the half-step this
+avoided, not the one it took.
+
+**Nothing has to be undone.** The next unit's edit is: `clamp=(-1.0, 1.0)` → `clamp=None` in
+`envelope_arms`; `_compose` gains the support constant, the clamp and the `bound_by` computation and
+returns a pair; its two call sites adjust by one subscript and one unpack; `verdict()`'s four inline
+`bound_by` lines are deleted. The function's **name, location, privacy, both callers and the Rule 4a
+paragraph in its own docstring all survive** — the return type widens, which is an extension. And
+the seam is strictly better than not having it: Rule 4a itself says "compose-and-clamp gets exactly
+one home, **which closes `P8-5` as collateral**", so the note is already written on the assumption
+that one composer exists. Landing it early means Rule 4a's edit touches one function instead of
+hunting two spellings — which is exactly the work P8-5 asked to remove.
+
+**The docstring's forward claim is sourced, not asserted.** "The two placements commute exactly, so
+the printed numbers do not move when it lands" is Rule 4a's measurement — 173 472 combinations, zero
+differences — and Rule 4a is cited two sentences earlier, so a reader can reach it.
+
+**Recording the deltas at the seam rather than in a handoff note is right, with one obligation
+attached.** A handoff note is a document that has to be found; a docstring is read by whoever opens
+the function to change it, and the only readers of a module-private composer are its two callers and
+its next editor. The risk runs the other way: once Rule 4a lands, "it is not applied here yet"
+becomes false in the one place the next reader trusts most. **That paragraph must be rewritten in
+the same commit that applies Rule 4a** — worth naming now, because it is the kind of line that
+survives an edit by looking like context.
+
+**Verified, not read:** swapping `_compose`'s `min`/`max` costs **9 failures**, the union of Pass 8's
+separately-pinned 5 and 4. One home, one mutation, both routes.
+`test_the_two_routes_to_the_envelope_compose_the_arms_identically` is not a tautology — it asserts
+`verdict(...).ci == conservative_envelope(table, design_effect=deff)` exactly, over five tables × four
+design effects, including the tables where the arms disagree about which is conservative.
+
+### 6. New findings — P8-3's fix is right and lands at one of the three sites that had the defect
+
+**N1 (major) — `verdict()`'s own precondition 4 is still NaN-blind, so the layer-ordering property
+this round restored is false at exactly one value.** `stats.py:1126` spells
+`if resolving.design_effect < 1.0:`, which is `False` for a NaN. Ran it: with
+`dataclasses.replace(rp, design_effect=nan, n_effective=nan)` — the same constructor bypass the
+suite's own sub-1 fixtures use — `verdict()` raises `design_effect must be >= 1.0 (-ml §3.4 Rule 4,
+precondition 4)`, which is **`envelope_arms`' message, not its own**; at `deff=0.5` it correctly
+raises `verdict() precondition 4: …`. The value is caught, but by the inner layer, and Rule 4's
+"checked **here and before any instrument is selected**" is violated for NaN.
+`test_the_two_envelope_refusals_name_which_layer_raised` cannot see it: it takes `deff: float = 0.5`
+as a **default argument** and is not parametrized — twelve lines below a sibling that *is*
+parametrized over `nan` for precisely this reason. **Fix:** respell `:1126` as
+`if not resolving.design_effect >= 1.0:`, and give the ordering test the same `deff` list its
+sibling already carries. **The assertion that catches it:** that test at `deff=float("nan")`. It
+fails today.
+
+**N2 (major) — `paired_cluster_bootstrap` still returns a maximally wide interval for a NaN design
+effect, which is the exact symptom that justified the deviation.** `stats.py:228` is still
+`if design_effect < 1.0:`. Ran it:
+`paired_cluster_bootstrap([1.0, 0.0, -1.0, 1.0], design_effect=float("nan"), B=50, seed=1,
+clamp=(-1.0, 1.0), levels=(LEVEL_CI95_LO, LEVEL_CI95_HI))` returns **`(-1.0, 1.0)`** — the full
+support conjured out of a missing number, verbatim the failure the commit message reproduces at
+`envelope_arms` and cites as its reason for deviating. This one needs **no bypass at all**:
+`design_effect` is a bare float parameter here, with no `resolving_power` in the path, and this is
+`-ml` §3.2d's **continuous** entry point — the surface Rule 8's `continuous_verdict()` is specified
+to call, where the value arrives from a pack manifest. **Fix:** the same one-line respelling, and
+extend `test_paired_cluster_bootstrap_refuses_a_design_effect_below_one` with the `parametrize` its
+envelope sibling twenty lines away already has.
+
+*N1 and N2 together are one sentence: the round diagnosed the predicate correctly and fixed it at
+one of the three sites that carry it.* `resolving_power` was already safe; `envelope_arms` is now;
+`verdict()` and `paired_cluster_bootstrap` are not. Both fixes are the edit this round already made
+once.
+
+**N3 (nit) — `AGENTS.md` now describes the NaN-safe guard using the NaN-unsafe spelling.** The
+rewritten bullet reads "`resolving_power` refuses `design_effect < 1.0` at construction", while
+`resolving_power` (`stats.py:855`) deliberately spells it `not design_effect >= 1.0` under a
+`# NaN-safe` comment. In an always-loaded file, in the round whose whole finding is that `< 1.0` is
+the wrong predicate, that sentence invites exactly the simplification the code comment exists to
+prevent. **Fix:** three words — "refuses any `design_effect` not `>= 1.0`". The rest of both edits is
+right, and the ordering clause added beside it — *"only `verdict()`'s message names itself, which is
+what keeps the two orderable"* — is a genuine live constraint that N1 makes more load-bearing, not
+less.
+
+### 7. What's solid
+
+- **The retired-test refactor is a net strengthening, and I checked it at id level rather than by
+  reading diffs** (§4). Every one of the six retired assertions survives in a stronger form, and the
+  `match=` additions do real work: without them two of the four `exact_paired_quantiles` rows would
+  pass off the transposed-pair guard. Mutating the check order proves it — 2 failures, exactly those
+  two rows.
+- **Two of the three fixes went wider than I asked.** P8-4 got three parametrized rows covering the
+  operator's neighbourhood where I proposed one fixture; P8-6 parametrized all three level refusals
+  over both estimators where I asked only for the transposed one, and wrote down the totality
+  argument (`level <= 1` is what makes the atom loop always append) that the refusal now carries.
+- **Both deviations are argued from evidence the implementer gathered**, not from preference: a
+  reproduction against the baseline for the NaN spelling, and a plan revision written after my pass
+  for F2. Pass 7 §3's split holds for a fourth round — the findings held, the fixes did not.
+- **P8-1 was held cleanly rather than half-moved.** The M14 control surviving at 550 passed is the
+  right evidence for that, and `_compose`'s docstring makes the next unit's edit legible without a
+  handoff document.
