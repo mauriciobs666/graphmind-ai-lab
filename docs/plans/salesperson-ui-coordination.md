@@ -160,7 +160,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | gated — fix blocked on U40 | `e6fa20c` — 9 files, +895/−44, 12 tests | `analyst` Pass 17 → **needs changes**, 2 majors (`20e138e`) | 305k tok / 111 tools |
-| **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | gated | `d1eaa7f` — plan v1.27, +58/−8 | `analyst` `acc1fdff560984907` Pass 18 → — | 152k tok / 56 tools |
+| **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | in-flight (fix round) | `d1eaa7f` — plan v1.27 | `analyst` Pass 18 → **needs changes**, 2 majors (`ee9a024`) | 152k tok / 56 tools |
 | **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7 | tbd (fresh) | — | queued (behind Pass 18) | `storefront.py`, `storefront_api.py`, both test files, `HISTORY.md` | `analyst` re-gate + `qa-engineer` | — |
 | **S9f** — `STOREFRONT_QUIESCE_S`'s docs describe a quiesce that S9a made live | `tico`/`coder` (tbd) | — | queued (held behind Pass 17) | `config.py` + `docs/SERVER.md` prose | `analyst` (fold into Pass 17 re-check) | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
@@ -3300,3 +3300,60 @@ loses its parameter), and `HISTORY.md`'s existing `enqueue_turn(ctx, participant
 mentions are a dated record of what S9a delivered — the fix unit writes a **new** entry and
 must not rewrite them. Follow-up noted, not actioned: §9 line 2016 still reads "(v1.19) —
 21 steps" against a v1.27 header.
+
+## Pass 18: the rule is right, the reason is false, and that is the worst combination
+
+**Needs changes, two majors, no blockers**, with the reviewer explicit that it would not
+send the amendment back for redesign. Both majors are one sentence. But P18-1 is the
+sharpest finding of this coordination, and it lands on the party I had least reason to
+doubt.
+
+`_python_exit` does **not** hold `_global_shutdown_lock` while joining.
+`concurrent/futures/thread.py:24–31` takes the lock only to set `_shutdown = True`; the
+`q.put(None)` and `t.join()` loops sit **outside** that `with`, and `shutdown()`'s join
+loop is likewise outside `self._shutdown_lock`. Neither lock `submit` takes is ever held
+across a worker join, so the cycle cannot form. The reviewer then *staged the exact
+arrangement* — turn lock held across `submit`, worker blocked on it, interpreter exiting
+underneath — and it exits cleanly in **1.23 s**.
+
+The architect did the right thing and still got it wrong. It verified against the pinned
+interpreter rather than asserting from general knowledge — a higher standard than most of
+this chain has met — and produced a **plausible, checkable-looking mechanism that is
+false**. Fourth generation of the same shape, now in a *justification* rather than a value:
+the pattern has moved from data to prose without changing character.
+
+What makes it the worst combination rather than merely an error: **a prohibition carrying a
+false mechanism is more dangerous than one carrying no mechanism at all.** The rule is
+correct — holding the lock across `submit` buys nothing, and a worker blocked on that lock
+delays interpreter exit for as long as it is held, which is the *true* fact. But the next
+engineer to question the rule will check the stated reason, find it does not hold, and
+delete the rule. The repair I asked for is therefore not accuracy alone: the rule has to
+survive someone disproving its reason. I said so explicitly in the fix brief, because
+"replace the sentence" undersells what is being defended.
+
+**P18-2 is the same hazard closing a loop.** The arrival ordinal is the ordering key *and*
+the ownership token, and the row states neither invariant — both need a process-global,
+strictly monotonic, never-reset counter. The reviewer's argument is what makes it a major:
+`len(self._turns)` is a perfectly plausible reading of "arrival ordinal", it is *exactly
+what this implementer shipped for the same-shaped number six days ago*, and it restarts
+after `clear_all_turns()`. A colliding ordinal gives wrong positions **and** lets an
+ownership check pass against a foreign booking — reopening P17-1 in a new spelling. A
+specification that can be satisfied by the very bug it replaces is not yet a specification.
+
+**Three of my four questions came back clean**, and one correction ran the other way: the
+reviewer says it **over-read measure 1a in Pass 17** — "will not honour it" refers to the
+disabled button, not the `409` — so `architect`'s refusal to amend §6.4 stands. Reviewer
+and architect have now each disproved one of their own claims in this chain, which is
+roughly the evidence I would want that both gates are doing work rather than deferring.
+
+The `504` consequence is **stronger** than the architect stated: a surviving reservation
+does not make C6b undecidable, it makes it decide *wrongly* — "wait, as normal" forever.
+That strengthens the case for the release landing in the same change rather than weakening
+it.
+
+**P18-6 is the finding no plan sweep could have reached**, and it is U36's shape again:
+`config.py`'s `STOREFRONT_TURN_WORKERS` comment and `SERVER.md` §1.3's row still carry the
+**old** `queuePosition` definition verbatim, which v1.27 falsifies. Documentation invalidated
+by a *plan* amendment before a line of code moves — the drift beat the implementation to the
+punch. Both are briefed into the implementing unit and into the row's obligation, which also
+means S9f's scope now overlaps them; that gets resolved when the fix unit lands, not before.
