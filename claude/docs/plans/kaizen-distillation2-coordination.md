@@ -76,7 +76,8 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U20 | analyst chunk B (11: 08-31…09-01 + the first 5 of 09-02) | `a6db6af4910e607bc` (killed by a session rate limit mid-promotion, 09-08; resumed in place by `SendMessage` after the reset — four promotions already on disk, nothing logged, all 11 entries intact; **resumed a second time**, which corrected a real accessor defect and refuted my stamp finding) | in-flight | 7 promoted / 4 discarded, all 11 cleared; `claude/analyst/{kaizen/history.md,kaizen/plan.md,review-techniques.md}`, `skills/agent-standards/claude-code.md`, `skills/python-web-quirks/SKILL.md`, `skills/README.md`, `claude/graph-dba/falkordb-quirks.md`, `claude/data-scientist/lm-studio-model-notes.md`, +3 `kaizen/history.md` | teco re-derivation → **accepted**; my "wrong stamps" finding was itself wrong (see below), the accessor defect it surfaced was real and is fixed | 236.4k tok, 35 tools |
 | U21 | analyst chunk C (10: all of 09-02) | `a9b3f7141f0403e35` (resumed twice) | accepted | 6 promoted / 4 discarded (2 **falsified**), all 10 cleared + curator-cleared my false `7c4e91a2…`; `claude/graph-dba/falkordb-quirks.md`, `claude/analyst/review-techniques.md`, `claude/analyst/kaizen/{history,plan}.md`, `claude/graph-dba/kaizen/history.md` | teco re-derivation → **accepted** (2 resumes: evidence recount, then provenance of an unattributed bullet) | 224.0k tok, 96 tools |
 | U22 | analyst chunk D (11: 09-03) | `a9a502324e0cf4ca5` | accepted | 8 promoted / 3 discarded, all 11 cleared; `review-techniques.md`, `python-web-quirks/SKILL.md`, `agent-standards/claude-code.md`, `lm-studio-model-notes.md`, `skills/README.md`, +3 `kaizen/history.md`; `falkordb-quirks.md` **held** | teco re-derivation → **accepted**, paired-control reproduction of the pipe finding | 238.8k tok, 112 tools |
-| U23 | analyst chunk E (13: 09-07, arrived after pass open) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
+| U23 | analyst chunk E (13: 09-07, arrived after pass open) | `a096fa1ae04ee4cae` | in-flight | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
+| U24 | analyst chunk F (11 so far: 09-08, still growing) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
 agent's own kaizen files and the graph); each row is rewritten on delivery with
@@ -316,6 +317,26 @@ bullet. One check, both directions.
 **Not repaired, deliberately.** Rewriting history to re-attribute those hunks
 is a tree mutation and off-limits; the content is correct and present, and the
 cost of the mis-filing is a confusing `git log`, not a lost disposition.
+
+## `analyst`'s inbox refills faster than the pass drains it
+
+Re-queried at U23's dispatch: `analyst` holds **24** produced entries, not the
+13 the U23 row was drawn against — 09-07 (13) and **09-08 (11)**, a population
+that did not exist when this pass opened. U23 clears 09-07; **U24 is owed for
+09-08**, at whatever size it has reached by then.
+
+This is the live-graph property recorded earlier, but it now has a scheduling
+consequence worth stating plainly: **this pass cannot be closed against a
+snapshot taken at its open.** The team total has moved 93 → 89 → 86 → 87 across
+these units *while entries were being cleared*, because other agents keep
+writing — `teco` alone went 14 → 23 during the pass, mostly from this
+coordination's own verification findings. Before declaring the pass closed,
+re-query per agent and drain what is actually there, however many rounds that
+takes.
+
+The **`MENTIONS`-only backlog stands at 11**, and none of them hangs off a
+produced entry — so no unit clears them incidentally and they need a unit of
+their own.
 
 ## Follow-ups
 
