@@ -3732,6 +3732,26 @@ significance test, or is left unscoreable and renders **"No verdict: no paired d
 silent, and both happen on a green run. `RetrievalAggregates.named_metrics()` omits `separationZ`
 and `separationRaw`, so `sep_z` reaches no table either.
 
+> **Landed:** `b5dab1f` (2026-09-08) — this table's site rows and counts are a **record**,
+> not an instruction, **with one stated exception**. The `report.py:623-789` row's continuous
+> branch — resolving each member's kind and routing a continuous verdict metric through `-ml` §3.4
+> Rule 8's `continuous_verdict()` — is **not** this commit's: `continuous_verdict()` and its
+> `ContinuousVerdict` sibling exist nowhere in the tree (checked; only citations in comments and
+> docstrings), Table F's own two-file scope statement and its eight enumerating commands never
+> touch `modelbench/stats.py`, and building the producer means authoring it from `-ml` §3.4 Rule 8
+> — a ~3,600-line note this unit was not scoped against. **What lands here** is the carrier
+> (`ItemResult.measures`/`scored_value`, `ContinuousMetric.support`, `DistributionSummary` and its
+> stored form, `RetrievalAggregates.named_metrics()`, the Arms table and `_index_row` renderers)
+> plus DC-10's third arithmetic, and the refusal that keeps the gap **loud rather than
+> safe-by-absence**: `scored_outcome` raises `MetricKindError` on a `measures`-resident metric, so
+> the still-binary family loop fails immediately, uncaught, the moment a pack declares a continuous
+> `verdictMetrics` member — converting *silently wrong when that pack finally arrives* into
+> *refuses right now* — rather than booleanising it, which is the property this table exists to
+> guarantee ahead of that pack existing. `continuous_verdict()`/`ContinuousVerdict`, the branch that
+> calls it, and §3.3(iv)'s mixed-kind-family refusal are a separate, properly-sized unit landing
+> before S1 closes (this scope split was put to the stakeholder and confirmed before
+> implementation). Its residuals remain DC-12's and are re-run at the **end** of the round.
+
 **Enumerate — eight commands** *(six at v1.12; 7 and 8 are v1.14's and 6 is corrected there)*. All
 re-run against **`e162ba9`**, working directory `model-bench/` — **re-pointed from `5878014` at
 v1.23, in the revision that re-ran them** (§7 rule 5), which also ends this table's two-baselining:
