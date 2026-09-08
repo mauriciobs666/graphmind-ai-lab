@@ -162,7 +162,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U45** — P4-1 / K-023: the hybrid fork | `cobb` | `a1cfcb25341f0b0bb` (resumed) | **delivered — committed `29538d6`**. Chose **impossible** and **reverted its own discriminator hunks**; rejected a middle option I had not listed (partition by key) because *the real data crosses that boundary*. Property list stated **CLOSED**, invariant named, tombstone applied. Net **−1** line. P4-2 fixed in passing | `git-provenance.sh`, `SKILL.md`, `freshness.md`, K-023 closed / K-024 filed | `analyst` Pass 5 | 160k tok / 11 tools |
 | **U55** — U47a's Case 3: the fix is a closed **list**, not a closed **set**. Decide where the invariant lives | `cobb` | `aadea04e203b11c4f` | **delivered — committed `0da3eb9`.** Chose *derive the allow-list from the stamp's own assignments* + a stray-key assertion in `pipeline.sh`. **Both load-bearing claims re-run by me**: the refactored stamp emits **byte-identical** output to `HEAD`'s across both cases including quote/backslash escaping, and the stray query on the live marker returns exactly `MARKER_ORIGIN`/`MARKER_WRITTEN_AT`/`NOTE` | `git-provenance.sh`, `pipeline.sh`, `SKILL.md`, `freshness.md`, `skills/README.md`, cobb kaizen | `analyst` — queued | 137k tok / 47 tools |
 | **Pass 5** — gate the whole stamp-closure arc: `29538d6` + `0da3eb9` + `5417f0e` | `analyst` | `a139a9bc41ccb88ce` | **delivered — committed `9bbadf3`** | `docs/reviews/cpg-provenance-stamp.md` `## Pass 5` | **needs changes — 1 blocker, 3 majors.** P5-1 reproduced by me before I routed it: `CPG_STAMPED_KEYS` reads `<UNSET>` in the parent, query renders `NOT k IN []` | 175k tok / 48 tools |
-| **U58** — P5-1 (the allow-list is always empty: the stamp is built in a `$( )` subshell), P5-2, P5-4, P5-5, P3-1, P4-4 | `cobb` | `aadea04e203b11c4f` (resumed) | in-flight | `pipeline.sh`, `git-provenance.sh`, tombstones, K-024 | `analyst` Pass 6 | — |
+| **U58** — P5-1 (the allow-list is always empty), P5-2, P5-4, P5-5, P3-1, P4-4 | `cobb` | `aadea04e203b11c4f` (resumed) | **partial — blocker fixed and committed `049f063`; killed by a session rate limit, resumed.** **I verified the fix end to end in the shipped call-site shape**, not on the primitive: `CPG_STAMPED_KEYS` = all 8 keys in the parent, stray query renders a real list, `none` narrows to 4. Four items outstanding | `pipeline.sh`, `git-provenance.sh` done; `freshness.md`, `SKILL.md`, K-024 pending | `analyst` Pass 6 | — |
 | **U59** — P5-3: `cpg_falkorchat`'s live `NOTE` still carries mechanism 1's **retracted** false universal, inside the artifact check 0 treats as evidence | `graph-dba` | — | **held behind U58** deliberately — so the `NOTE` describes the final mechanism instead of being rewritten a third time | `cpg_falkorchat`'s `NOTE` | — | — |
 | **U57** — ship the map form now that it is executed rather than doc-sourced; the stray assertion stays and becomes its production regression test | `cobb` | `aadea04e203b11c4f` (resumed) | in-flight | `git-provenance.sh`, `freshness.md`/`SKILL.md` prose, kaizen disposition | `analyst` — queued with U55 | — |
 | **U56a** — delete the graph key `cobb` leaked by probing a nonexistent graph (`GRAPH.QUERY` **materializes**) | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered.** Empty on all three counts before deletion. `diff` against the **U47a-close 25-key listing** is empty — not a bare count, so the concurrent session's own churn is excluded. I re-verified: 25 keys, zero `scratch_graphdba`/`nonexistent` | `GRAPH.LIST` diff | — | 162k tok / 11 tools |
@@ -4523,3 +4523,44 @@ Not a leak: the second session cleaned up its own `cobb_u20_scratch`. I checked 
 rather than reconciling a number, and all five keys that matter were present. The same diff-not-count
 discipline I asked `graph-dba` for, applied to a discrepancy that would otherwise have looked like
 somebody's mistake.
+
+## The eighth kill, and the habit that made it free again
+
+A session rate limit took U58 mid-run — the third this session, the eighth across this coordination.
+It cost nothing, for the same reason it has cost nothing every previous time: **the work was on disk
+and I verify before I commit rather than after.** The blocker fix was complete, so I checked it,
+committed it as `049f063`, and resumed the same agent by id with a precise statement of what was
+banked and what remained. No re-explaining, no cold respawn, no redone work.
+
+The discipline is worth restating because it looks like bureaucracy right up until the moment it
+pays: **commit each verified deliverable immediately, and record what a delegate has banked before
+you resume it.** A resume message that says "you were killed, carry on" invites the agent to redo
+what it already did — and an agent's own memory of where it was is exactly what a kill destroys.
+The resume brief listed the three findings already closed, the four still open, and the specific
+file each lives in, so the agent starts from `git status` rather than from recollection.
+
+**I verified the fix in the shipped call-site shape, not on the primitive** — which is the whole
+lesson of P5-1 and the correction to my own habit. Sourcing the script and diffing the stamp's
+output would have passed against the broken version, because the stamp was never what was broken.
+So: `CPG_STAMPED_KEYS` comes back with all eight keys in the **parent** shell, the stray query
+renders a real list rather than `[]`, and the `provenance = none` case narrows to four — which is
+the subsumption `cobb` designed genuinely working, since a surviving `SOURCE_COMMIT` under `none`
+*is* a stray.
+
+**The fix does something better than fixing.** The call site now asserts that both
+`CPG_STAMP_CYPHER` and `CPG_STAMPED_KEYS` are non-empty and fails loudly naming which one was not
+populated. The previous version carried that same warning as a **comment one level below the caller
+that violated it** — which is precisely why it did not work. A rule written next to the mechanism
+protects the mechanism; a rule asserted at the boundary protects the system. `cobb` moved it from
+the first place to the second without being asked.
+
+**And P5-2 was closed honestly rather than quietly.** The empty allow-list is now documented as a
+failure mode that *"was the shipped state for two commits, not a hypothetical"* — the same sentence
+that convicts the previous version. That is the opposite of the reflex, which is to fix the code and
+soften the comment.
+
+Still open and resumed: `freshness.md`'s second tombstone (P5-5), the **third** tombstone's
+differentiator — which can now be made *true* rather than merely narrowed, since the call path has
+since been executed twice, by `cobb` and independently by me — the three-passes-open P4-4 nit, and
+K-024's reframing, which as written would have an `architect` add five never-written keys to a
+schema table. U59 stays held on `cobb`'s wording for the `NOTE`.
