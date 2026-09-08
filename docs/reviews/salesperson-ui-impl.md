@@ -5540,3 +5540,117 @@ def _python_exit():
     for t, q in items:
         t.join()
 ```
+
+## Pass 19 — 2026-09-08 (v1.28: re-check of the six Pass 18 dispositions)
+
+**Scope.** Commit **`d01f22e`** only — `docs/plans/salesperson-ui.md` v1.27 → v1.28, +28/−12, one
+file. A **re-check**, not a fresh review: the six Pass 18 findings, the four questions `teco` asked,
+and nothing else. Passes 17 and 18 stand.
+
+**CPG: considered, not relevant — the artifact is a markdown plan document, which no code-property
+graph models; `cpg_falkorchat` is additionally stale for `storefront.py` and under concurrent write
+by a `graph-dba` unit, and was not queried.**
+
+**Verdict: approve** — 0 blockers, 0 majors, 0 minors, 2 nits, both take-or-leave. **Dispatch the
+implementation unit.** Neither nit should hold it.
+
+### Dispositions
+
+| # | Disposition |
+|---|---|
+| P18-1 | **Fixed, and better than proposed.** See question 1. |
+| P18-2 | **Fixed.** Specified as a process-global, strictly monotonic `itertools.count()` under the turn lock, never reset, never reused, with `len(self._turns)` named as the wrong reading — and pinned by a done-condition. See question 2. |
+| P18-3 | **Fixed, and widened past what I asked.** The condition is now stated over **every** map write — "the reserve's test-and-set, the **release**, the `thinking` flip and the `finally` clear alike" — with the release's own reachability argument (`clear_all_turns()` + a second-tab post between reservation and failed write) carried inline rather than left as an assertion. |
+| P18-4 | **Fixed structurally, not verbally.** See question 4. |
+| P18-5 | **Fixed.** §5.2 now carries a second paragraph naming the `turn_in_flight` under-report explicitly, calling it P17-1's invariant reached through reset-all, and giving both reasons it is accepted (§7.3 makes the surviving writes silent no-ops against a graph reset-all has already deleted; S10 narrows the intake half). |
+| P18-6 | **Fixed.** The S9 row now obliges the implementing unit to carry `config.py`'s `STOREFRONT_TURN_WORKERS` comment and `SERVER.md` §1.3's row in the same change, quoting the false clause so it is findable. |
+| P18-7 | **Fixed.** The done-condition names the mechanism (two threads driving one `TestClient`), cites Appendix O §1 as the implementability evidence, and warns the suite has no precedent. |
+| P18-8 | **Open, as agreed** — §9's "(v1.19) — 21 steps" is untouched and remains a cosmetic follow-up, not this unit's. |
+
+### The four questions
+
+**1. Does the prohibition survive its own disproof? Yes — read as the skeptic, it holds.** The
+order is what does the work. The **load-bearing** reason comes first and depends on no interpreter
+internal at all: §5.2 defines the line by booking order, so forcing submit order to match booking
+order buys an ordering nobody reads. A skeptic who checks that reason checks §5.2 and it confirms.
+Only then does the row say *"It is deliberately not a deadlock claim"*, name the false mechanism,
+cite the source with line numbers and the staged measurement — so the skeptic's natural next move
+("this smells like deadlock cargo-cult, let me check") returns a check **already performed and
+recorded** rather than a discovery. The closing *"Do not delete this rule on finding a mechanism
+that does not hold — that check has been run"* covers the one deletion path that remains. The
+retained-but-true residue is correctly demoted: `_python_exit` joins every worker unlocked, so a
+held turn lock **delays exit** — labelled "a cost, not a hang", which is the honest strength. I
+checked the final prose verbatim rather than reconstructing it from the diff (the word-level
+aligner mis-splits this cell); the sentence is grammatical and the citation
+`/usr/lib/python3.12/concurrent/futures/thread.py:23–31` matches the pinned 3.12.3 source I read in
+Pass 18. **The shape you asked for is the right shape, not merely one that satisfies you** — a
+prohibition whose reason a reader can disprove is strictly worse than one with no reason, and
+naming the disproof inline is the only spelling I know that closes that.
+
+**2. Is the ordinal's invariant unsatisfiable by the wrong implementation? Yes — and by two
+independent done-conditions, which is better than the one I asked for.** Traced rather than
+assumed. *Size-derived counter* (`len(self._turns)`): with A's turn live, `clear_all_turns()`
+empties the map, so A's fresh reservation computes the **same** value the wiped booking held —
+`strictly greater` is `0 > 0`, **red**. The same mutation also reddens that done-condition's first
+half, because the old worker's ownership check then passes against the new booking and clears it,
+so `turn_in_flight` is `False` where the row requires `True`. Two assertions, one mutation, both
+catch it. *Global counter that is reset in `clear_all_turns()`*: identical failure — covered by
+"never reset". *Per-participant counter* — the one spelling that slips past the ordinal
+done-condition, since A's second booking is genuinely `1 > 0` — is caught by the **other**
+done-condition: three participants at `turn_workers=1` would all hold ordinal `0`, so the third
+reports `queued`/`0` where the row requires `queued`/`1`. The two jobs the ordinal does are pinned
+by one test each, which is exactly the structure P18-2 asked for.
+
+**3. The `504`/C6b correction is consistent across both homes.** §5.3 (`:1357–1361`): *"That
+release is a repair, not an improvement: the rule below decides correctly today, with no
+reservation at all, and a reservation that survived its failed write would not blur it but
+**invert** it — `turn.state !== 'idle'` sends this client into *wait, as normal* forever."* §5.1's
+S9 row: the release is *"first of all a **repair for a property the reservation would otherwise
+break**: without it §5.3's `504 post_state_unknown` reconciliation does not lose information, it
+decides **wrongly** — reading `turn.state !== 'idle'` and parking that client in *wait, as normal*
+forever for a turn nobody will run … C6b decides correctly today, with no reservation at all, which
+is why the two must land in one change."* Same verdict, same wrong branch named (`!== 'idle'`),
+same "correct today" premise, same consequence for sequencing. No drift between them.
+
+**4. P18-4 is resolved, not relocated.** The word "start" is gone from the definition ("how many
+*other* accepted turns **are ahead of theirs in that line**"), the line is now **defined** by
+booking order rather than tie-broken by it, and the reorder concession moved below the
+`0`-means-first-in-line rule so it no longer splits the definition from its most mis-readable
+consequence. With the line defined by booking, the executor starting two same-microsecond bookings
+in the other order is no longer a divergence from anything §5.2 claims — and the S9 row's matching
+sentence was swept to agree ("which §5.2's **definition accommodates by construction**", replacing
+"costs nothing §5.2's contract promises"). I checked the three other places that could have
+inherited the old claim — §4.4 measure 1, §5.2's *What it deliberately is not*, and S13's
+done-condition — and none of them asserts anything about start order or an ETA.
+
+### Nits — both take-or-leave, neither blocking
+
+**P19-1 — the prohibition has no reversal trigger, alone among this row's prohibitions.** *"Do not
+delete this rule on finding a mechanism that does not hold"* is unconditional, and the rule's one
+load-bearing reason is a **design choice** (§5.2 defining the line by booking order) that a later
+version could change — at which point the rule genuinely should be revisited. Every neighbouring
+decision in this row carries its condition: the record-cache removal has an explicit *Reversal
+trigger*, the reddens-at-S9 prohibition cites its evidence. One clause would match them — *reversible
+only if §5.2 stops defining the line by booking order*; the exit-time cost and the lock-ordering
+point are arguments for holding the lock briefly, not for the rule's existence, so neither is the
+condition.
+
+**P19-2 — "process-global" is the one word that could push an implementer into a spelling the class
+forbids.** There is one `Storefront` per process, so a per-instance `itertools.count()` satisfies
+every property the row needs — ordinals are only ever compared inside one instance's map. A
+*module-level* counter would also satisfy "process-global" and would contradict
+`Storefront.__init__`'s own stated rule that all mutable state is per-instance, never module-global
+("what makes the restart-survival test in `tests/test_storefront.py` mean anything"). Suggested:
+say *per-`Storefront`* and let "one instance per process" carry the rest.
+
+### The review heuristic worth keeping
+
+The architect's own diagnosis of P18-1 is the durable lesson and I would put it more generally: it
+read `submit()` from source and asserted `_python_exit`'s lock scope from memory **inside the same
+sentence**, under one citation. A citation's *scope* is the unit of verification, not the citation
+itself — a claim spanning two functions with one file reference reads exactly like a verified claim
+while being half of one, and the unverified half is invisible because the verified half supplies the
+credibility. The tell is a sentence that cites one location and asserts a relationship between two.
+This is the same defect family this chain has been tracking since Pass 10 (*a stated reach wider
+than the mechanism*), arriving through a new door: not a guard whose walk is narrower than its
+docstring, but a citation whose coverage is narrower than its sentence.
