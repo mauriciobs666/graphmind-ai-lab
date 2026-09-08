@@ -3408,3 +3408,47 @@ That entry is the fourth instance of this coordination's defect class, and the f
 in **prose** rather than in a value. A false fact in shared working memory is the worst
 substrate for it yet: unlike a stamp or a marker, kaizen entries are *designed* to be read
 out of context by agents who will not re-derive them.
+
+## Pass 19 approves, and the last nit is not a nit
+
+**Approve — zero blockers, majors or minors, two take-or-leave nits.** Two of the six
+Pass 18 fixes were judged *better* than proposed: P18-3 widened the ownership condition past
+worker writes to **every** map write and carried the release's reachability argument inline,
+and P18-5 gave both reasons the second consequence is accepted rather than the one asked
+for. The reviewer's instruction is to dispatch the implementation unit.
+
+**The ordinal is now unsatisfiable by the wrong implementation via two independent
+done-conditions**, which is one more than I asked for and the reason matters. `len(self._turns)`
+reddens *both* halves — after `clear_all_turns()` the fresh reservation recomputes the wiped
+value, so `strictly greater` becomes `0 > 0`, **and** the old worker's ownership check then
+passes against the new booking, so `turn_in_flight` is `False` where the row requires `True`.
+A counter reset inside `clear_all_turns()` fails identically. And the one spelling that would
+have slipped past both — a **per-participant** counter — is caught by the *other*
+done-condition: three participants at `turn_workers=1` all hold ordinal `0`, so the third
+reports `queued`/`0` where the row requires `queued`/`1`. One test per job, and between them
+no wrong counter survives.
+
+**I am taking one of the two nits, because it is not one.** The row says the ordinal is
+*process-global*, and the reviewer notes that will push an implementer toward a module-level
+counter — which contradicts `Storefront.__init__`'s own per-instance rule. **Per-`Storefront`**
+is what was meant. The whole P18-2 fix rests on naming the wrong implementation precisely
+enough that it cannot be reached by accident, so a phrase that closes one wrong answer while
+quietly opening a second is a defect in the fix rather than a wording preference. A
+specification that names one wrong answer and admits another is not finished.
+
+The second nit I handed back to `architect` rather than deciding: the prohibition is the only
+decision in that row with no reversal trigger, while its load-bearing reason is a design
+choice a later version could change. There is a real tension — a reversal trigger is the
+honest completion of a rule whose reason is contingent, and it is also a small door in a wall
+two rounds were spent building. That is the author's call, and I asked for the reasoning to
+be recorded if it declines, so the omission is never mistaken for an oversight.
+
+**The defect class has a name now, and it came from the reviewer generalising the
+architect's own failure:** *a citation's scope is the unit of verification, not the citation
+itself.* A sentence citing one location while asserting a relationship between two functions
+reads exactly like a verified claim, because the verified half lends its credibility to the
+remembered half. The reviewer classes it with what this chain has tracked since Pass 10 — *a
+stated reach wider than the mechanism* — arriving through a new door: not a guard whose walk
+is narrower than its docstring, but a citation whose coverage is narrower than its sentence.
+Fifteen instances of that family in the guard chain, and this is the sixteenth, in prose.
+It is in `kaizen_team` generalised, which is the right home.
