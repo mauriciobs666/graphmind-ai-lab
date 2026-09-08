@@ -3,6 +3,75 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-08 — U21: `analyst` chunk C distilled (10 entries), plus one curator clear of a false `teco` entry
+
+- **What (distillation):** ran `agent-maintenance` §5 over the ten `analyst`-produced `kaizen_team`
+  entries dated 2026-09-02 (`claude/docs/plans/kaizen-distillation2-coordination.md` U21). **6
+  promoted, 4 discarded, 0 kept open.** Promotions landed in two knowledge bases — three bullets
+  into `claude/graph-dba/falkordb-quirks.md`, four sections/folds into
+  `claude/analyst/review-techniques.md` — and **no always-loaded prompt was touched**
+  (`analyst.md`, `claude/AGENTS.md` unchanged). Per-entry reasoning:
+  `claude/analyst/kaizen/history.md`, 2026-09-08 (chunk C / U21); the graph-dba-side landing:
+  `claude/graph-dba/kaizen/history.md`, same date.
+- **All four discards were falsified or overtaken by later work**, not merely redundant — a tool the
+  entry said could not exist (`verify_salesperson.sh` check 6), a convention the entry called
+  unwritten (now in `falkor-chat/docs/HISTORY.md:780-782`), and two facts already published and
+  *corrected* in the very files they would have been promoted to. Six days is enough for a capture
+  to decay in this repo.
+- **Two entries were sharpened rather than transcribed**, which is the §5 re-derivation step
+  earning its cost: `28d78725` frames a `UNIQUE` constraint as exempting absent *and*
+  explicitly-null properties, but FalkorDB discards a null at write (`Properties set: 1`,
+  `keys(n)` → `[name]`), so those are one state, not two; and it calls `EXISTS { MATCH … }` and
+  `exists((pattern))` both parse failures, when only the first is (the second dies at plan time
+  with *"Unable to resolve filtered alias"*). `1d8276d8`'s method re-derived cleanly while its
+  *specific* stable-row list did not survive into a later revision window — promoted with that as
+  an explicit caveat.
+- **`suggestedHome` overridden once:** `1d8276d8` proposed `prompt`; routed to
+  `review-techniques.md` instead — a technique with a mechanism and a worked command is not a rule
+  that changes routing in most sessions, and `analyst`'s own `plan.md` K-003 already argues this
+  genre out of the always-loaded body.
+- **Curator clear of a false entry (not a chunk-C disposition).** `teco` produced
+  `7c4e91a2-6b3d-4f81-a5e2-9d0c7b1f4e83` while verifying U20 — *"a subagent on a full-strength
+  model can return correct, re-derivable technical claims attached to a fabricated environment/
+  version table"*. **The stated fact is false**: U20's version table was correct, read from
+  `falkor-chat/server/.venv`, and the finding came from `teco`'s own depth-limited `find` scans
+  missing that venv (nested one level deeper than the other four) and the `fastapi` dist-info. An
+  agent cannot clear its own entry, so `teco` asked me to; cleared with the curator full-node shape
+  at `teco`'s explicit request. Its corrected replacement,
+  `2d8f30b7-4c15-49ae-8e6a-b31f7d05c9a4` (a bounded scan cannot prove a negative), is **left
+  untouched** — not mine to disposition. Recorded here as a curator action, not as an `analyst`
+  disposition.
+- **Five venvs, and a version stamp must name the one it was read from.** This repo carries
+  `falkor-chat/server/.venv`, `cypher-mcp/.venv`, `mcp-monitor/.venv`, `model-bench/.venv` and
+  `deprecated/salesperson/.venv`, independently pinned and diverging — so a bare version number in
+  a promoted fact is ambiguous and unre-derivable. Every stamp written in this unit names its venv
+  or its FalkorDB module (`41811`) and its date. Corollary from the same incident: **a bounded scan
+  cannot prove a negative** — no `-maxdepth`, no `--include`, no glob filter when the conclusion is
+  "this does not exist", and a second bounded scan does not corroborate the first.
+- **Graph hygiene:** all 10 chunk-C entries and the `teco` entry were current-shape with
+  `producedEdges = 1`, `mentionEdges = 0` (`otherRemaining == 0`), so each was cleared with the
+  full-node curator shape after its disposition was on disk. **No `MENTIONS` edge was added** — the
+  two FalkorDB-subject entries were promoted directly into `graph-dba`'s own knowledge base, so
+  tagging them would only schedule a re-read of resolved material. A disposable probe graph
+  (`cobb_u21_probe`) was created for the constraint re-derivation and `GRAPH.DELETE`d, confirmed
+  absent from `GRAPH.LIST`; five pre-existing `ws:probe-*` graphs belonging to other sessions were
+  left alone.
+- **Corrected in-session after `teco`'s re-derivation (`1d8276d8`'s evidence line only; the other
+  nine dispositions stood).** I wrote the promoted section's evidence as "five committed revisions"
+  — the number I had **sampled**, silently restated as the size of the window I named. The window
+  `acb5a2a^..069f6ae` holds **16**, and the step table's membership is not even constant across it
+  (`S7c` enters at `732f5e0`/v1.19, so 3 revisions carry 20 rows and 13 carry 21). The standing rule
+  this cost me: **a subsample can only over-report stability**, because a row that changed in a
+  skipped revision reads as identical — so a stable-row count from part of a window is an upper
+  bound presented as a measurement. The full recount landed on the same 13 rows, which makes the
+  original number lucky rather than justified, and does not make the original claim honest. `teco`
+  asked me to check its instrument rather than take the finding; I re-derived independently and it
+  agreed on all three points. Fixed in `claude/analyst/review-techniques.md` and in the matching
+  `claude/analyst/kaizen/history.md` disposition.
+- **Why:** routine team-wide curation pass 2, unit U21.
+- **Plan items:** none opened. `claude/analyst/kaizen/plan.md`'s parking lot gained one
+  routed-outward note (the `falkor-chat/docs/SERVER.md` §1.7 gap on serial-only pytest runs).
+
 ## 2026-09-08 — U48: Pass 5 remediation — `replay_stamp` was never defined, and a wiring test now exists (K-023, K-024)
 
 - **Found and fixed a live defect in `049f063`, which is the half of P3-1 I had not reached when the

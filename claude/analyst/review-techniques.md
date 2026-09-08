@@ -452,5 +452,79 @@ captured at import into a module-level name, a default argument, or a local, wil
 the rebind. Where it does hold, this is the safe form of a mutation ablation under a shared or
 dirty working tree.
 
+**State the seam's reach when you report the result.** This ablation mutates *query text* only, so
+it can prove a Cypher-level guard load-bearing and says nothing about the Python-side behaviour
+around it — exception dispatch, row shaping, the branch that decides whether the query runs at
+all. Those are unreachable through this seam and need a different mutation. A report that says
+"the guards are ablation-proven" without that boundary overstates what was tested.
+
+**Run the battery serially — a concurrent suite run destroys the measurement.** Where the tests
+under ablation are integration tests against one shared database, the same fixture that isolates
+them makes two processes mutually destructive: `falkor-chat/server`'s `conn` fixture
+(`tests/conftest.py`) calls `MATCH (n) DETACH DELETE n` on the single `ws:test` graph at **setup**,
+once per test, and `repo`/`wf_repo` both depend on it — so a background full-suite run wipes the
+graph out from under the ablation run mid-test and vice versa. The failure is loud but useless:
+large, scattered, non-reproducible counts (43 failed / 2338 passed, with two dozen failures in
+areas the mutation never touched), which re-ran serially on the identical tree gave 2381 passed /
+14 deselected and 0 and 3 failures for the two ablations. **Before trusting any failure count,
+confirm nothing else is running against the same store** — an unexplained scatter of failures far
+from the mutation is the tell.
+
 Origin: 2026-09-02, `salesperson-ui` S4 — proving the two participant-reset guards were
 load-bearing while several other units' work sat uncommitted in the same tree.
+
+## An extract-and-execute loop over a doc's code blocks does not prove the doc is well-formed
+
+A design note whose queries an implementation step will copy verbatim often claims a "closed
+verification loop": extract every fenced block, run each one, all green. That loop is blind to the
+document's *markup*, and the blindness is systematic rather than incidental. A tolerant extractor
+— the natural non-greedy ` ```lang\n(.*?)``` ` — happily accepts a **closing fence glued to the
+last code line** (`… RETURN n AS x```), because the regex only needs the three backticks to appear.
+A CommonMark parser requires the closing fence to start its own line, so it reads that block as
+**unterminated** and swallows everything after it.
+
+Reproduced 2026-09-08 on `/usr/bin/python3` (markdown-it-py 3.0.0, `MarkdownIt("commonmark")` with
+tables enabled) on a minimal document with one glued fence: the regex reports **2** blocks, the
+parser reports **1** fence spanning 8 lines and **2** headings instead of 3 — the second code block
+and an entire section disappear into the first block. Inserting a newline before the glued fence
+restores 2 fences and 3 headings. In the real instance (`docs/plans/salesperson-ui-graph.md` v1.1,
+since fixed) the same two glued fences produced one 455-line block that swallowed three sections
+and left only 7 of 11 tables rendering — while all five runnable blocks executed clean.
+
+**So verify a doc's embedded code by re-parsing it with a real markdown parser, not only by running
+what you extracted.** Assert the expected block **count** and a plausible maximum block length; a
+single block hundreds of lines long in a document of short queries is the signature. The check
+costs one command and catches a class the execution loop cannot see — including in your own review
+file, where an unescaped inline ` ```cypher ` in a prose sentence does exactly the same thing.
+
+## Per-row hashing turns "is this plan stable enough to dispatch?" into evidence
+
+Asked to judge whether a long-revised implementation plan has converged, the reviewer's instinct is
+to read the latest version and form an impression. Hash instead: extract each step row from the
+plan's step table at every saved revision and compare the hashes. Rows byte-identical across all of
+them are safe to dispatch against; the rows that change at every revision **localise the churn
+surface**, which is the actual answer to the question asked.
+
+Re-derived 2026-09-08 over **all 16 committed revisions** of `docs/plans/salesperson-ui.md` in
+`acb5a2a^..069f6ae` (v1.16 → v1.31), matching `^\|\s*\*\*(S\d+[a-z]?)\*\*\s*\|` and md5-ing each
+matched line. **The step table's membership is not constant across the window**, which is the first
+thing the hash pass has to handle: 21 distinct step rows appear in total, but `S7c` only enters at
+`732f5e0` (v1.19, *"split the catalog fix into S7c"*) and persists — so 3 revisions carry 20 rows
+and 13 carry 21. Of the **20 rows present in all 16**, **13 are byte-identical across the whole
+window** (`S0 S1 S2 S3 S4 S5 S7 S11 S12b S12c S12d S14 S16`), while `S9` takes **13 distinct values
+across the 16**, `S8` and `S13` four each, and `S10` and `S12a` three each. That is the answer to
+"has it converged": everything except `S9` and its four neighbours.
+
+**Hash the whole window, never a sample of it.** A subsample can only *over*-report stability — a
+row that changed in a revision you skipped reads as identical — so a stable-row list from five of
+sixteen revisions is an upper bound presented as a measurement, whatever number it happens to land
+on. And **which rows are stable is a property of the window, not of the plan**: re-run over the
+window you are actually gating, and never carry a previous pass's stable-row list forward as a
+finding.
+
+**A companion trap in the same family of documents:** a *completeness table* added to a plan to
+prevent an over-generalisation can reintroduce it, when the table is keyed on
+`(response → rule)`. One row then spans several routes, and a second, unrelated meaning of the same
+status code on a different route is silently swallowed by it. Keying the table on
+`(route, response)` makes that collision unexpressible. When reviewing any table added as a
+completeness argument, check its **key** before checking its rows.

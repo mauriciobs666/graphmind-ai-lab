@@ -3,6 +3,155 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
+## 2026-09-08 — `kaizen_team` distillation pass 2, chunk C (unit U21): 10 entries, 6 promoted, 4 discarded
+
+`cobb` processed the ten `analyst`-produced `kaizen_team` entries dated 2026-09-02
+(`claude/docs/plans/kaizen-distillation2-coordination.md` U21, chunk C of five). Every entry pinned
+by **complete** `entryId` at read, count and resolve — two full-eight-character prefix collisions
+are now verified in this graph, so a short prefix is not a key here. Every claim was re-derived
+from primary sources: live FalkorDB probes on a disposable graph (`cobb_u21_probe`, created and
+`GRAPH.DELETE`d in this run) plus `GRAPH.INFO`/`GRAPH.CONFIG GET` against the shared dev instance
+(module `41811`), a synthetic markdown-it reproduction on `/usr/bin/python3`, per-row md5 hashing
+across all sixteen committed revisions of a plan document, and direct reads of
+`falkor-chat/server/tests/conftest.py`, `falkorchat/repository.py`, `docs/QUERIES.md`,
+`docs/SERVER.md` §1.7, `docs/HISTORY.md` and `scripts/verify_salesperson.sh` — never by confirming
+an entry's own citation. Zero kept open. **Zero new bullets in any always-loaded prompt**:
+`analyst.md` and `claude/AGENTS.md` untouched, as in chunks A and B.
+
+The chunk's shape matches B's — most of these are engine, tooling and project facts `analyst`
+discovered while reviewing rather than review doctrine, so each routed to the home that owns its
+subject. **All four discards were falsified or overtaken by work that landed after the entry was
+written**, which is what a six-day-old capture looks like in a repo moving this fast.
+
+**Promoted (6 entries → 2 files; three are edits to existing material, not new sections):**
+
+  - `28d78725-cff4-456b-8ad9-c637ac0b12de` → **`claude/graph-dba/falkordb-quirks.md`**, two new
+    bullets under *Indexing, constraints & DDL*. The entry's bottom line holds — a `UNIQUE` on a
+    nullable marker property is safe, not a re-join hazard — but re-derivation **sharpened its
+    mechanism**: the entry frames absent and explicitly-null as two states the constraint exempts;
+    they are **one state**. `CREATE (:Chan {name:'c', pid:null})` reports `Properties set: 1` and
+    `keys(n)` returns `[name]` — FalkorDB discards a null at write and never stores it, so the
+    constraint has nothing to compare rather than choosing to exempt anything. Confirmed alongside:
+    two same-string nodes correctly rejected (`unique constraint violation on node of type Chan`),
+    and `DETACH DELETE` → re-`CREATE` of the same value clean. The entry's second half was also
+    corrected: it says `EXISTS { MATCH … }` and `exists((pattern))` "both fail to PARSE", and they
+    fail at **different stages** — the first is a real parse error (*"Invalid input '(': expected
+    ':', ',' or '}'"*), the second parses and dies at plan time (*"Unable to resolve filtered
+    alias"*). Same practical verdict, different error to recognise. The working `OPTIONAL MATCH …
+    WITH x, t WHERE t IS NULL` anti-join re-ran clean.
+  - `94917906-3ae1-40c6-930d-14df73cfaa04` → **`claude/graph-dba/falkordb-quirks.md`**, new bullet
+    under *Ops, config & tooling*. Re-derived live: `GRAPH.INFO` returns `# Running queries` /
+    `# Waiting queries` / `Object Pool` sections and takes **no graph key** — it is instance-wide,
+    a detail the entry omits — and `GRAPH.CONFIG GET MAX_QUEUED_QUERIES` returns `25`. The promoted
+    form keeps the entry's actual point, which is about **done-conditions, not monitoring**: a
+    capacity assertion can be written against observed queue depth instead of degrading to "no
+    query was rejected", a condition that only reddens once the cap has already been hit.
+  - `e2bf2057-956a-421c-8b8a-f6086814f651` → **`claude/analyst/review-techniques.md`**, new section
+    *"An extract-and-execute loop over a doc's code blocks does not prove the doc is well-formed."*
+    Genuine review doctrine, and the mechanism reproduces exactly: on a minimal document with one
+    glued closing fence, a non-greedy ` ```lang(.*?)``` ` regex finds **2** blocks while
+    markdown-it-py 3.0.0 (`MarkdownIt("commonmark")`, tables enabled, `/usr/bin/python3`) finds
+    **1** fence spanning 8 lines and **2** headings instead of 3; inserting a newline before the
+    fence restores 2 and 3. The original instance is **closed** — `docs/plans/salesperson-ui-graph.md`
+    has no glued fence left (`grep -n '[^ ]```$'` → no matches) — so only the rule was promoted,
+    carrying the synthetic reproduction as its evidence rather than the entry's now-unreachable
+    455-line-block measurement.
+  - `941edc18-26af-411b-99cc-87c4eb39082f` → **`claude/analyst/review-techniques.md`**, folded into
+    the **existing** section *"Mutating a class-level constant via a pytest plugin proves a guard is
+    load-bearing without touching source"* (promoted in an earlier pass, from a different entry —
+    the technique was therefore already published). What was missing is the entry's **limit**, and
+    it is the half that keeps a report honest: the seam rewrites *query text only*, so it can prove
+    a Cypher-level guard load-bearing and says nothing about the Python-side behaviour around it —
+    exception dispatch, row shaping, the branch deciding whether the query runs at all. Promoted as
+    one paragraph telling the reviewer to state that boundary when reporting the result.
+  - `c3e2f0a4-7b19-4d52-9a6e-2f8c1d40b7e5` → **`claude/analyst/review-techniques.md`**, folded onto
+    that same section as its measurement-validity caveat, which is where it belongs: it is a
+    warning about running *that* battery, not a standalone technique. Verified at source —
+    `falkor-chat/server/tests/conftest.py:86-91`'s `conn` fixture calls `MATCH (n) DETACH DELETE n`
+    on the single `ws:test` graph at **setup**, once per test, and both `repo` and `wf_repo` depend
+    on it, so two concurrent pytest processes wipe each other mid-test. The promoted form keeps the
+    entry's numbers as the signature to recognise (43 failed / 2338 passed with two dozen failures
+    far from the mutation, versus 2381 passed / 14 deselected serially on the identical tree).
+    **The `falkor-chat`-side home was considered and not taken:** the hazard is absent from
+    `falkor-chat/docs/SERVER.md` §1.7, which is where that component's testing hazards live and
+    which does document the sibling `wf_repo` `reference`-graph wipe. Adding it there is
+    `falkor-chat`'s owner's call, not `cobb`'s or `analyst`'s — noted in `plan.md` rather than
+    written into another component's docs from here.
+  - `1d8276d8-1b4d-474f-8603-70814598a754` → **`claude/analyst/review-techniques.md`**, new section
+    *"Per-row hashing turns 'is this plan stable enough to dispatch?' into evidence."*
+    **`suggestedHome` was `prompt`; overridden to the on-demand knowledge base** — it is a technique
+    with a mechanism and a worked command, not a rule that changes routing in most sessions, and
+    `plan.md` K-003 already argues this genre belongs in `review-techniques.md` rather than the
+    always-loaded body. **The method re-derived cleanly and its specifics did not**, which became
+    the promoted caveat: run over **all 16** committed revisions of `docs/plans/salesperson-ui.md`
+    in `acb5a2a^..069f6ae` (v1.16 → v1.31), 21 distinct step rows appear in total but `S7c` only
+    enters at `732f5e0` (v1.19), so 3 revisions carry 20 rows and 13 carry 21; of the **20 present
+    in all 16, 13 are byte-identical across the window**, while `S9` takes 13 distinct values,
+    `S8`/`S13` four each and `S10`/`S12a` three each. (Corrected 2026-09-08 after `teco`'s
+    re-derivation: the first write-up of this entry said "five committed revisions" — the number I
+    had *sampled*, not the window — and a subsample can only over-report stability, so the figure
+    was an upper bound presented as a measurement. The full recount happened to land on the same 13
+    rows, which is luck, not justification.) The entry's own stable set (`S3`, `S6`) and churn set
+    (`S7`/`S8`/`S10`/`S12a`) only partly
+    survive into this later window — `S3` still stable, `S6` no longer, `S7` now stable — so *which*
+    rows are stable is a property of the revision window, and a previous pass's stable-row list must
+    never be carried forward as a finding. The entry's second half — a completeness table keyed on
+    `(response → rule)` reintroduces the over-generalisation it was added to prevent, while
+    `(route, response)` makes the collision unexpressible — was promoted with it as a companion
+    trap: check a completeness table's **key** before its rows.
+
+**Discarded (4), every one falsified or overtaken:**
+
+  - `1c900356-0c84-4086-b48d-bda14c9c6ce8` (the `n.prop > ''` "always-true" index-anchor conjunct)
+    — **already documented, in more depth than the entry.** `claude/graph-dba/falkordb-quirks.md`
+    carries it twice: the *Cypher dialect* bullet on cross-type comparison (`RETURN 42 > ''` →
+    `NULL`, verified 2026-09-07) and the *Query tuning* bullet that names the idiom, says **"Do not
+    use it"**, and gives both of the entry's reasons — the silent row-drop and the absence of any
+    selectivity win. That bullet's own header records that it "merges and **corrects** two raw
+    `kaizen_team` entries", so this material has already been through curation twice. The primitive
+    was re-confirmed anyway (`RETURN 42 > ''` → `null`, `'p-aaa' > ''` → `true`) and the entry's
+    timing figures point the same way as the file's. Nothing left to add.
+  - `74f8b159-fd5a-41a5-9b7b-cb34f29d5d54` (falkordb-py disables retry) — **already documented and
+    already corrected.** The entry's framing, that `falkordb-py` "builds its Redis connection with
+    `retry._retries == 0`", is true only of the pooled `Connection`; `FalkorDB(...).connection` is
+    the `redis.Redis` *client* and raises `AttributeError` on `.retry`. `falkordb-quirks.md` now
+    carries the corrected account under *Ops* — the split is **which object you hold**, identical
+    on falkordb-py 1.6.1 / redis-py 8.0.1 (`falkor-chat/server/.venv`) and 1.6.2 / 8.1.0
+    (`cypher-mcp/.venv`), so it is not a version fact — landed by U20 after `teco` re-derived it on
+    both venvs. The entry's second half (redis-py's `TimeoutError` and `ConnectionError` are
+    siblings under `RedisError`, so `except ConnectionError` cannot swallow a socket timeout) is
+    already published in `skills/python-web-quirks/SKILL.md`. Not re-promoted, per the U21 brief.
+  - `4422cd43-1a9d-4b73-9f27-cd0a4ef2c128` (a workspace `WorkflowDefSnapshot` can diverge from
+    `proof_defs.py` with **no tool able to detect it**) — **falsified: the tool now exists.**
+    `falkor-chat/scripts/verify_salesperson.sh` carries a **check 6** that diffs every stored step
+    `config`, on both sides, against the shipped `falkorchat.proof_defs` constant, and its header
+    comment states the blindness it closes in the entry's own terms ("Check 3 compares the two sides
+    against EACH OTHER, so it is blind to…"). The transferable rule had also already been promoted,
+    in an earlier pass, as `review-techniques.md`'s *"Live graph/database state has no git
+    provenance — and a two-sided diff cannot detect common-mode staleness."* Both halves closed.
+  - `1de41323-0401-481f-900f-b1c8a50c5752` (the `§N` section-header convention is "unwritten — it
+    lives only in the code") — **falsified on both clauses.** The convention is written down:
+    `falkor-chat/docs/HISTORY.md:780-782` states "the file convention is §N = QUERIES.md §N", and
+    `repository.py`'s module docstring carries its basis ("Each method maps 1:1 to a verified query
+    in `docs/QUERIES.md`"). The specific defect is fixed too: the offending header was relabelled to
+    `# ── Structured NL query generation (K-055 M6) — no QUERIES.md section ──`
+    (`repository.py:3784`, the number dropped entirely), `QUERIES.md` now has a real
+    `## 18. Storefront participants & resets`, and `repository.py:3141`'s header cites it
+    explicitly. A duplicate-header sweep over `repository.py` returns only `§3`, which is correct —
+    Channels and Threads are both QUERIES.md §3.
+
+**No `MENTIONS` edge was added.** Two entries (`28d78725`, `94917906`) are substantively about
+FalkorDB and belong to `graph-dba`'s subject, and both were promoted **into**
+`claude/graph-dba/falkordb-quirks.md` in this run, with the landing recorded in
+`claude/graph-dba/kaizen/history.md`. A `MENTIONS` edge exists to surface an entry in the mentioned
+agent's *future* pass; tagging one whose content has already been published into that agent's own
+knowledge base would only schedule a re-read of a resolved entry.
+
+**Graph:** all 10 entries were current-shape with exactly one `PRODUCED` edge and no `MENTIONS`
+(`producedEdges = 1`, `mentionEdges = 0`, so `otherRemaining == 0` on each), and each was cleared
+with the curator full-node shape **after** this entry was on disk. Post-clear census is in
+`claude/cobb/kaizen/history.md`.
+
 ## 2026-09-08 — `kaizen_team` distillation pass 2, chunk B (unit U20): 11 entries, 7 promoted, 4 discarded
 
 `cobb` processed the eleven `analyst`-produced `kaizen_team` entries dated 2026-08-31..2026-09-02

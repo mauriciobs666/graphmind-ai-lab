@@ -36,10 +36,19 @@
 - **Blocked on:** nothing, but it is the analyst-side analogue of `K-016` progressive disclosure and deliberately out of scope for the prompt-waste plan (its finding 6 routes floor-bound files here rather than to cutting rules to reach a number).
 
 ## Parking lot / ideas
-- **No backlog item opened by the 2026-09-08 distillation (U19 chunk A + U20 chunk B, 23 entries).**
-  Every entry in both chunks resolved to a promotion or a discard; none was left unverifiable, so
-  nothing here needs a `K-` number. Dedup check run as required for both — none of the 23
-  `entryId`s appears anywhere in this file. Dispositions: `kaizen/history.md`, 2026-09-08.
+- **No backlog item opened by the 2026-09-08 distillation (U19 chunk A + U20 chunk B + U21 chunk C,
+  33 entries).** Every entry in all three chunks resolved to a promotion or a discard; none was left
+  unverifiable, so nothing here needs a `K-` number. Dedup check run as required for each — none of
+  the 33 `entryId`s appears anywhere in this file. Dispositions: `kaizen/history.md`, 2026-09-08.
+- **A second finding routed outward, not tracked here (U21, 2026-09-08).** `falkor-chat/server`'s
+  pytest suite **cannot be parallelised across processes** — `tests/conftest.py:86-91`'s `conn`
+  fixture wipes the single shared `ws:test` graph (`MATCH (n) DETACH DELETE n`) at *setup*, once per
+  test, and `repo`/`wf_repo` both depend on it, so two concurrent runs destroy each other's fixtures
+  mid-test and produce large, scattered, non-reproducible failure counts. This hazard is **absent
+  from `falkor-chat/docs/SERVER.md` §1.7**, which is where that component's testing hazards live and
+  which already documents the sibling `wf_repo` `reference`-graph wipe. The reviewer-facing half is
+  published (`review-techniques.md`, folded onto the pytest-plugin ablation section); adding the
+  component-facing half to §1.7 is `falkor-chat`'s owner's call, not `analyst`'s or `cobb`'s.
 - **One finding routed outward, not tracked here:**
   `falkor-chat/docs/plans/oversized-indexed-property-guard-graph.md:205` (`Status: active`, owner
   `graph-dba`) still cites `grep -n RELATIONSHIP scripts/bootstrap_schema.sh` → "no matches" as

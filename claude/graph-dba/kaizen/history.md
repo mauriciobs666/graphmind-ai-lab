@@ -3,6 +3,39 @@
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
 
+## 2026-09-08 — `falkordb-quirks.md`: `UNIQUE`-vs-null, the `EXISTS` subquery gap, and observable queue depth (U21)
+
+- **What:** `cobb`, distilling `analyst`'s `kaizen_team` chunk C (unit U21, entries
+  `28d78725-cff4-456b-8ad9-c637ac0b12de` and `94917906-3ae1-40c6-930d-14df73cfaa04`), added three
+  bullets to `claude/graph-dba/falkordb-quirks.md` — two under *Indexing, constraints & DDL*, one
+  under *Ops, config & tooling*. No existing bullet was rewritten.
+- **`UNIQUE` node constraints and null.** A `UNIQUE` constraint does not constrain nodes lacking
+  the property, and **"absent" and "explicitly null" are the same state**: `CREATE (:Chan
+  {name:'c', pid:null})` reports `Properties set: 1` and `keys(n)` → `[name]`, so the null is
+  discarded at write and never stored. Two same-string nodes are correctly rejected (`unique
+  constraint violation on node of type Chan`); `DETACH DELETE` → re-`CREATE` of the same value is
+  clean, so a delete-then-recreate cycle is not a re-join hazard. Practical verdict: a `UNIQUE` on
+  a **nullable marker** property is safe, but it is emphatically not an existence constraint — the
+  bullet cross-references the existing `RETURN n.prop` → `null` entry for the projection side.
+  This **corrects** the raw entry, which framed absent and explicitly-null as two distinct exempted
+  states.
+- **`EXISTS { MATCH … }` / `exists((pattern))`.** Both unusable on this build, and they fail at
+  **different stages** — the first is a genuine parse error (*"Invalid input '(': expected ':', ','
+  or '}'"*), the second parses and dies at plan time (*"Unable to resolve filtered alias
+  '(c)-[]->()'"*). The raw entry called both parse failures. The working anti-join is
+  `OPTIONAL MATCH … WITH x, t WHERE t IS NULL`, re-run clean.
+- **`GRAPH.INFO` exposes live queue depth.** It returns `# Running queries` / `# Waiting queries` /
+  `Object Pool` sections and takes **no graph key** (instance-wide, a detail the raw entry omits);
+  `GRAPH.CONFIG GET MAX_QUEUED_QUERIES` → `25`. The point is about **done-conditions**: a capacity
+  or load-test assertion can be written against observed queue depth rather than degrading to "no
+  query was rejected", which only reddens after the cap has already been hit.
+- **Evidence:** all three re-derived live 2026-09-08 on module `41811` — the constraint and
+  subquery probes against a disposable graph `cobb_u21_probe` (`GRAPH.DELETE`d in the same run,
+  confirmed absent from `GRAPH.LIST`), the `GRAPH.INFO`/`GRAPH.CONFIG` reads against the shared dev
+  instance. Full disposition record for the chunk: `claude/analyst/kaizen/history.md`, 2026-09-08
+  (chunk C / U21).
+- **Plan items:** none.
+
 ## 2026-09-08 — `falkordb-quirks.md`'s `TIMEOUT` bullet gained the write-side consequences (U20)
 
 - **What:** `cobb`, distilling `analyst`'s `kaizen_team` chunk B (unit U20, entry
