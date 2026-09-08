@@ -1284,6 +1284,70 @@ def test_a_submit_that_raises_after_it_queued_the_item_leaves_the_booking_standi
     assert trigger.seen == ["m-a", "m-b"]
 
 
+def test_the_flag_alone_refuses_the_turn_while_the_executor_is_still_alive(
+    services,
+):
+    """**The case that separates the delivered placement from the one v1.30
+    rejected**, and the only one that does.
+
+    v1.30 spends a paragraph on why reading `_turns_shutdown` *inside* the
+    `except` around `submit` is strictly weaker than reading it before the
+    call, and `enqueue_turn`'s docstring repeats the argument — but neither of
+    the two cases beside this one can tell the placements apart.
+    `test_a_submit_refused_after_shutdown_releases_the_reservation` calls the
+    real `shutdown_turns()`, so `submit` refuses under either placement; the
+    exhaustion case runs with the flag `False`, so an `except` that consults it
+    releases nothing either way. Measured: with the flag read moved into the
+    `except`, both of them stayed green and the suite's only reaction was the
+    raises guard in `tests/test_storefront_api.py` — reddening because the
+    mutant deletes the literal `raise`, with a failure message that invites
+    dropping `"RuntimeError"` from an allowlist
+    (`docs/reviews/salesperson-ui-impl.md` `## Pass 21`, P21-3, Appendix Q §4).
+
+    **The window is the one `shutdown_turns()` opens between its own two
+    statements**: the flag is set and `executor.shutdown(wait=True)` has not
+    run yet, so `submit` would succeed. That is exactly where the two
+    placements differ — before the call, the post is refused having queued
+    nothing; inside the `except`, there is no exception to consult the flag
+    from, so the turn is submitted and the refusal never happens.
+
+    Setting `_turns_shutdown` directly is the point rather than a shortcut:
+    calling `shutdown_turns()` would close the executor too and collapse the
+    window back onto the case above. The `_executor` assertion below is this
+    test's **positive control** — it says the refusal came from the flag and
+    not from a stopped pool, which is what makes the case discriminating rather
+    than a second spelling of the shutdown test. Both private reads are
+    deliberate: `_work_queue.qsize()` is the only way to assert *nothing was
+    submitted* rather than *nothing was left over*.
+    """
+    shop = _storefront(services)
+    record = ParticipantRecord(
+        participant_id="p-ada", display_name="Ada", language="en",
+        channel_id="ch-ada", thread_id="th-ada", joined_at=1,
+    )
+    posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
+              "role": "member", "mentions": [AGENT]}
+
+    booking = shop.reserve_turn("p-ada")
+    shop._turns_shutdown = True  # noqa: SLF001 — the window, without closing the pool
+
+    # the positive control: the pool would have accepted this turn
+    assert shop._executor._shutdown is False, (  # noqa: SLF001
+        "the window this case pins needs a live executor; a stopped one makes "
+        "it a duplicate of the post-shutdown case"
+    )
+
+    with pytest.raises(RuntimeError):
+        shop.enqueue_turn(shop.context_for("p-ada"), record, posted, booking)
+
+    # nothing was submitted...
+    assert shop._executor._work_queue.qsize() == 0  # noqa: SLF001
+    # ...and the reservation went with the refusal, since nothing will clear it
+    assert shop.turn_in_flight("p-ada") is False
+    assert shop.turn_state("p-ada") == IDLE_TURN
+    assert shop.reserve_turn("p-ada") is not None
+
+
 def test_shutdown_turns_is_idempotent(services):
     """The lifespan calls it once; a second call must not raise, so a test (or
     a double shutdown) cannot turn an orderly stop into a traceback."""

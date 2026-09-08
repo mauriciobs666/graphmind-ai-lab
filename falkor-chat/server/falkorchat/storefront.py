@@ -332,10 +332,13 @@ class TurnState:
     rather than at some of them: at `turn_workers=1` three arrivals read
     `[0, 1, 2]` where the definition gives `[0, 0, 1]`, and at the delivered
     default of 4 — where it is loudest — a fifth arrival first in line was
-    told `4`. It never counted down either
-    (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-2, reproduced;
-    `## Pass 20`, P20-3 for the "right at `turn_workers=1`" claim this
-    replaces, which was never true past the first arrival).
+    told `4`. It never counted down either. The two numbers do coincide while
+    **nothing** is running — `turn_payload` then counts the same earlier
+    `TURN_QUEUED` entries `len(self._turns)` did — but that is a transient the
+    first worker ends, not a `turn_workers` at which the stored number was
+    right (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-2,
+    reproduced; `## Pass 20`, P20-3 for the "right at `turn_workers=1`" claim
+    this replaces; `## Pass 21`, P21-7 for the bound on *when* they diverge).
     """
 
     state: str = TURN_IDLE

@@ -3417,35 +3417,93 @@ def _raised_class_names(node) -> set[str]:
     tree defines it as a **function**; a class it defines is not one.
     """
     root = ast.parse(node) if isinstance(node, str) else node
-    factories = {
+    factories = _factories_in(root)
+    names: set[str] = set()
+    for child in ast.walk(root):
+        if isinstance(child, ast.Raise) and child.exc is not None:
+            names |= _resolve_raised(child.exc, factories)
+    return names
+
+
+def _factories_in(root) -> dict:
+    """Every function `root` defines, by name — the factory table both readers
+    resolve a `raise <name>(...)` through."""
+    return {
         child.name: child
         for child in ast.walk(root)
         if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
-    names: set[str] = set()
-    for child in ast.walk(root):
-        if not isinstance(child, ast.Raise) or child.exc is None:
-            continue
-        raised = _named_class(child.exc)
-        if raised in factories:
-            resolved = {
-                _named_class(returned.value)
-                for returned in ast.walk(factories[raised])
-                if isinstance(returned, ast.Return) and returned.value is not None
-            }
-            # the one shape that would otherwise resolve to nothing at all,
-            # where every other unresolvable shape is loud (P13-4): a factory
-            # whose `return`s carry no value contributes `set()` and the raise
-            # vanishes. It cannot actually raise anything, so this is a reader
-            # invariant rather than a source claim — stated as one.
-            assert resolved, (
-                f"`raise {raised}(...)` resolved to nothing: the factory has no "
-                "`return <expr>` this reader can name"
-            )
-            names |= resolved
-        else:
-            names.add(raised)
-    return names
+
+
+def _resolve_raised(exc, factories: dict) -> set[str]:
+    """The exception class(es) one `raise <exc>` names, factory resolved.
+
+    Split out of `_raised_class_names` when `_raise_sites` arrived (P21-1) so
+    that the two readers cannot drift into disagreeing about what a `raise`
+    names — the whole force of the site assertion is that it reads the same
+    raises the name assertion does, at a finer grain.
+    """
+    raised = _named_class(exc)
+    if raised not in factories:
+        return {raised}
+    resolved = {
+        _named_class(returned.value)
+        for returned in ast.walk(factories[raised])
+        if isinstance(returned, ast.Return) and returned.value is not None
+    }
+    # the one shape that would otherwise resolve to nothing at all, where every
+    # other unresolvable shape is loud (P13-4): a factory whose `return`s carry
+    # no value contributes `set()` and the raise vanishes. It cannot actually
+    # raise anything, so this is a reader invariant rather than a source claim
+    # — stated as one.
+    assert resolved, (
+        f"`raise {raised}(...)` resolved to nothing: the factory has no "
+        "`return <expr>` this reader can name"
+    )
+    return resolved
+
+
+def _raise_sites(node) -> set[tuple[str, str]]:
+    """`(enclosing function, exception class)` for every `raise` under `node`.
+
+    The same raises `_raised_class_names` reads, resolved by the same helper,
+    but **not collapsed to a set of names** — which is the distinction P21-1
+    turns on. Both set assertions in the guard below compare class *names*, so
+    once a name is on an allowlist a **second, unrelated** raise of it anywhere
+    in the same module moves no set and reddens nothing. Measured on this file:
+    with `RuntimeError` allowlisted, adding
+    `raise RuntimeError("no actor on the state read")` to `Storefront.get_state`
+    left the guard **green** (`docs/reviews/salesperson-ui-impl.md`
+    `## Pass 21`, P21-1 and Appendix Q §1-2). That is the class a defensive
+    `raise` reflexively reaches for, in a module this guard reads **whole**
+    for the reason stated above — it exists only to serve `/shop/api`, so a
+    `raise` anywhere in it is one the next edit can put on a request path —
+    and its answer there is an unmapped bare `500`.
+
+    `enclosing` is the **nearest** enclosing function, which is why this walks
+    by child rather than with `ast.walk`: a raise inside a nested helper is
+    that helper's, not its outer function's. Module-level raises report
+    `"<module>"`; `storefront.py` has none today and a new one would show up as
+    a site rather than disappear into the name set.
+    """
+    root = ast.parse(node) if isinstance(node, str) else node
+    factories = _factories_in(root)
+    sites: set[tuple[str, str]] = set()
+
+    def descend(scope, enclosing: str) -> None:
+        for child in ast.iter_child_nodes(scope):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                descend(child, child.name)
+                continue
+            if isinstance(child, ast.Raise) and child.exc is not None:
+                sites.update(
+                    (enclosing, name)
+                    for name in _resolve_raised(child.exc, factories)
+                )
+            descend(child, enclosing)
+
+    descend(root, "<module>")
+    return sites
 
 
 # Every `Services` method a `/shop/api` route can reach **today**, spelled out
@@ -3848,14 +3906,18 @@ def test_the_alias_reader_covers_every_binding_form_the_grammar_has():
 # classified handler, so none of them can arrive at a handler this table
 # excuses — and none of them is a bare `HTTPException`.
 #
-# The eighth, `RuntimeError`, is outside that family and so carries its own
-# written reason in `NON_FAMILY_RAISES` — which the subset assertion below is
-# written to *require* rather than to tolerate, exactly as the `Services` leg
-# has required since `RuntimeError` entered `SERVICE_RAISES_TODAY`. It is
+# The eighth, `RuntimeError`, is the **one** class admitted to this file from
+# outside that family, and the guard below says so as an equality rather than
+# as a tolerance: it carries a written reason in `NON_FAMILY_RAISES`, and it is
+# pinned to `enqueue_turn` by site, because the name alone would leave a second
+# `raise RuntimeError` anywhere in this module invisible
+# (`docs/reviews/salesperson-ui-impl.md` `## Pass 21`, P21-1). It is
 # `Storefront.enqueue_turn`'s refusal on a set `_turns_shutdown`
 # (`docs/plans/salesperson-ui.md` v1.30 §5.1's S9 row), and it is **not a new
 # response**: the identical class reached the identical place out of
-# `concurrent.futures`' own `submit` before that flag existed.
+# `concurrent.futures`' own `submit` before that flag existed. **This file is
+# not held to the same standard as the `Services` leg and that is deliberate**
+# — the history is in the comment on the assertion itself; do not level them.
 #
 # `ResetStateUnknownError` is here because the reader resolves the factory:
 # `reset_participant` writes `raise self._reset_state_unknown(...)`, and the
@@ -3918,8 +3980,12 @@ REPOSITORY_RAISES_TODAY = frozenset({"MemberIdCollisionError"})
 # "instead of silently shadowing it (DEF-1)".
 NON_FAMILY_RAISES: dict[str, str] = {
     "RuntimeError": (
-        "Raised in two of the four scopes, for two different reasons, and "
-        "neither is a participant-facing outcome. (1) "
+        "Raised in two of the three legs this dict governs, for two "
+        "different reasons, and neither is a participant-facing outcome — "
+        "`storefront_api.py`'s own wiring-time `RuntimeError` "
+        "(`register_storefront_error_handlers`, `:778`) is a third site, "
+        "fenced separately by the module-wide assertion above rather than "
+        "here. (1) "
         "`services._dispatch_write`'s two invariant alarms — an unrecognised "
         "write-status row, and a retry loop that did not converge. Neither is "
         "a state a request can put the write path into: both mean the "
@@ -4126,14 +4192,44 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
         klass.__name__ for klass in _subclasses(storefront.StorefrontError)
     }
     service_family = {klass.__name__ for klass in _subclasses(ServiceError)}
-    # ...the family half for `storefront.py`, minus whatever carries its own
-    # written reason instead. Subtracting `NON_FAMILY_RAISES` is not a hole:
-    # the equality below is what makes a reason mandatory *and* non-stale, so
-    # a name leaves this assertion only by entering that one — the same
-    # two-way door the `Services` leg has had since `RuntimeError` entered it.
-    assert (
-        set(STOREFRONT_RAISES_TODAY) - set(NON_FAMILY_RAISES)
-    ) <= storefront_family
+    # ...the family half for `storefront.py`, which is an **equality on the
+    # exemption** rather than a subtraction: this file is held to family-only
+    # *plus one named class*, so admitting a second non-family class is a
+    # stop-and-decide here and not a reason string borrowed from another leg
+    # (`docs/reviews/salesperson-ui-impl.md` `## Pass 21`, P21-1).
+    #
+    # **`Services` is not a precedent for relaxing this, and the check has been
+    # run** — the earlier version of this comment claimed it was, and that was
+    # false. `git log -S'<= service_family' -- tests/test_storefront_api.py`
+    # returns **no commit at all**: the `Services` leg has never carried a
+    # family-subset assertion. `service_family` enters in exactly one commit,
+    # `00827c2`, used only in the four-scope equality below — and that same
+    # commit introduced `NON_FAMILY_RAISES`, moved `RuntimeError` into
+    # `SERVICE_RAISES_TODAY` (which before it held `UnknownOrderTransitionError`
+    # alone), and still wrote *this* assertion bare. So the asymmetry was
+    # authored deliberately, with the counter-example in the same diff. What is
+    # true instead: `Services` and `Repository` are read through a **reach**
+    # seed and carry non-family names under a written reason; `storefront.py` is
+    # read **whole** and is held tighter, and `RuntimeError` is the one name
+    # admitted to it. Do not level the two legs on rediscovering the history.
+    assert set(STOREFRONT_RAISES_TODAY) - storefront_family == frozenset({
+        "RuntimeError",
+    })
+    # ...and that one name is pinned to the one function that may raise it.
+    # Both assertions above compare class **names**, so with `RuntimeError`
+    # allowlisted a second, unrelated `raise RuntimeError` elsewhere in this
+    # module moves no set and reddens nothing — measured on `get_state`, the
+    # sole handler body of `GET /shop/api/state` (`storefront_api.py:1103`,
+    # its only call site) and so request-reachable on the storefront's poll,
+    # whose answer would be an unmapped bare `500` (`## Pass 21`, P21-1,
+    # Appendix Q §1-3). Deliberately **not**
+    # generalised to the `Services` and `Repository` legs: those are read
+    # through a reach seed rather than whole-file, so the same blindness has a
+    # much smaller surface (`## Pass 21`, open question 1).
+    assert {
+        fn for fn, name in _raise_sites(_storefront_source())
+        if name == "RuntimeError"
+    } == {"enqueue_turn"}
     # ...and an **equality**, not a subset, over all four scopes at once: a
     # raise outside both families has to carry its own reason, and a reason
     # left behind by a raise that is gone reddens the same assertion.
@@ -4263,6 +4359,42 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
         "        return HTTPException(status_code=410)\n",
         "Services", {"save_profile"},
     ) == {"HTTPException"}
+
+    # P21-1's reader, controlled on the three shapes its assertion has to
+    # survive — because the whole point of a *site* read is that a second
+    # raise of an allowlisted class must not be able to hide. Two functions
+    # raising the same class are two sites, not one name...
+    assert _raise_sites(
+        "class Storefront:\n"
+        "    def enqueue_turn(self):\n"
+        "        raise RuntimeError('shutdown')\n"
+        "    def get_state(self):\n"
+        "        raise RuntimeError('no actor')\n"
+    ) == {("enqueue_turn", "RuntimeError"), ("get_state", "RuntimeError")}
+    # ...a factory-resolved raise is attributed to the function that *raises*,
+    # not to the one that builds, so the class still lands on a real site...
+    assert _raise_sites(
+        "class Storefront:\n"
+        "    def get_state(self):\n"
+        "        raise self._boom()\n"
+        "    def _boom(self):\n"
+        "        return RuntimeError('no actor')\n"
+    ) == {("get_state", "RuntimeError")}
+    # ...and a raise inside a nested or module-level helper is that helper's
+    # site: it does not vanish, and it does not get charged to the one
+    # function the assertion permits — either way the equality reddens
+    assert _raise_sites(
+        "def _refuse(name):\n"
+        "    raise RuntimeError('no actor')\n"
+        "class Storefront:\n"
+        "    def get_state(self):\n"
+        "        return _refuse(self)\n"
+    ) == {("_refuse", "RuntimeError")}
+    # the two readers cannot drift: they share `_resolve_raised`, and the site
+    # read collapses to the name read on the real module
+    assert {name for _, name in _raise_sites(_storefront_source())} == (
+        storefront_raises
+    )
 
     # P14-M2's shape — the same raise in a `Repository` method reached from a
     # `Storefront` method rather than from the router, which is the leg
@@ -4770,17 +4902,21 @@ def test_a_fifth_arrival_behind_four_running_turns_is_first_in_line(turn_app):
     This is the case S9a got wrong in production configuration and *least
     visibly* wrong in the tests it ran, every one of which drove
     `turn_workers=1`. The two readings — "how many accepted turns were
-    unfinished when this one arrived" and "how many are ahead of me" — never
-    agree past the first arrival, at **any** `turn_workers`: the stored number
-    counted the **running** turn as a place in the line and §5.2 excludes it,
-    so three arrivals at `turn_workers=1` read `[0, 1, 2]` where the delivered
-    definition reads `[0, 0, 1]` (which is why
+    unfinished when this one arrived" and "how many are ahead of me" — part
+    company **once a turn is running**, at any `turn_workers`: the stored
+    number counted the running turn as a place in the line and §5.2 excludes
+    it, so three arrivals at `turn_workers=1` read `[0, 1, 2]` where the
+    delivered definition reads `[0, 0, 1]` (which is why
     `test_three_participants_queue_behind_one_worker_and_complete_in_order`
-    changed with the fix). What `workers=1` hid was the *size* of the error,
+    changed with the fix). While **nothing** has flipped to `thinking` the two
+    do agree — `turn_payload` counts the `TURN_QUEUED` entries booked earlier,
+    which is what `len(self._turns)` counted when none of them was running —
+    but that is a transient the first worker ends, not a setting at which the
+    old number was right. What `workers=1` hid was the *size* of the error,
     not its presence; `workers=4` is where it is loudest, and that is this
     test (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-2,
     reproduced at `{"state": "queued", "queuePosition": 4}`; `## Pass 20`,
-    P20-3).
+    P20-3; `## Pass 21`, P21-7 for the overstatement this replaces).
 
     It is also the argument for `turn_workers` not appearing on the wire: a
     running turn occupies a worker rather than a place in the line, so the
