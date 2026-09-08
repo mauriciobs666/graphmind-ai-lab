@@ -430,6 +430,191 @@ that was never parsed at all."*
 
 ---
 
+## Pass 3 — 2026-09-08 · closing the fix round (`9124a1f` scripts+reference, `8779ee8` manual)
+
+**Scope:** both fix commits, read directly (`git show`) — all four files confirmed unchanged between
+their fix commit and current `HEAD`, so the working tree is what I reviewed. Re-ran the Pass 1 shape
+matrix against the new helper in throwaway repos, exercised the new stamp gate and read-back through
+a fake `redis-cli` across six failure scenarios, probed the live FalkorDB's three error-reply shapes
+read-only, and re-read both documents end to end for the cross-document check. I did **not** re-run
+`cobb`'s two suites — the coordinator did (31/31, 40/40) — and did not run the pipeline.
+
+**Verdicts.** `skills/cpg-analysis/references/freshness.md`: **approve.**
+`docs/manuals/graph-ontology.md`: **approve with suggestions** (P3-2).
+`git-provenance.sh` / `pipeline.sh`: **approve with suggestions** (P3-1).
+
+**Dispositions.** All verified against the code/docs, not the report. **B1** fixed (six-scenario
+harness, A8) · **M1** fixed after a second-generation defect, see below · **M2** fixed (`mkdir` moved
+below the capture block, plus an unasked-for NOTE when a *surviving* workdir is what made the source
+dirty — the case reordering cannot fix) · **M3** fixed (`freshness.md:177-185`; its stated keys for
+`cpg_falkorchat` match the live node exactly) · **m1** fixed, adopting the manual's wording and
+splitting build fidelity out to `SKILL.md` · **m2** fixed both sides (`:31`, `:115-120`; producer now
+emits a genuine `NULL`, verified) · **m3** fixed (`:37-42` gated on a real timestamp) · **m4** fixed
+(full 40-char OIDs, verified `len=40` on every shape) · **m5** fixed · **n1**, **n2**, **n3** fixed
+(`:(literal).` verified to match, 733 files) · **P2-1 … P2-5** fixed in the manual; no copied
+procedure remains. **n4 declined** — correct call, `claude/teco/teco.md` is outside `cobb`'s write
+scope; no objection to routing it separately.
+
+### Question 2 — is the corrected M1 form right? Yes, and I satisfied myself independently
+
+The new form is `top="$(git -C "$dir" rev-parse --show-toplevel)"` then
+`git -C "$top" rev-parse --verify --quiet "HEAD:./$CPG_SOURCE_ORIGIN"`. Both halves are load-bearing
+and I confirmed each in isolation:
+
+- `--show-toplevel` is what makes the CWD-relative `./` safe. I re-ran the Pass 1 matrix from three
+  different working directories — repo root, a subdirectory of the repo, and `/tmp` (outside it
+  entirely) — and every shape resolved to the same correct OID (A8). The old form's failure was
+  invisible precisely because it depended on CWD; this one does not.
+- `--verify --quiet` is what stops the echo-back. Confirmed both directions:
+  `git rev-parse 'HEAD:./nope'` captures the literal string `HEAD:./nope`, while
+  `git rev-parse --verify --quiet 'HEAD:./nope'` captures the empty string. That is the third
+  generation of this defect class closed at the source rather than filtered downstream.
+- **`HEAD:./.` resolves** at the repo root and equals `HEAD^{tree}` — I tested this specifically,
+  since a fourth generation would have been the `.` case silently returning empty instead of wrong.
+- **The m2 null case is now genuinely null**: a source tracked in the index but absent from `HEAD`
+  gives `tree=[]` → `b.SOURCE_TREE = NULL` in the rendered stamp. `cobb`'s account of why that case
+  "never produced a NULL" is accurate and scoped to the interim M1 fix, not to the original.
+
+Eleven shapes, all correct, all full 40-char OIDs, each cross-checked against what a consumer running
+the documented command would compute (A8). The consumer's form differs by one flag — `--verify`
+without `--quiet` — which is right: a human wants the error message, and I verified it still prints
+nothing to stdout, so the echo-back trap does not reach the recipe's reader either.
+
+### Question 3 — B1's read-back discriminates; the pattern gate is diagnostics, not detection
+
+Six scenarios through a fake `redis-cli` (A8). The two that matter: a stamp that "succeeds" while a
+**stale marker survives** — the exact `--append` failure B1 named — is caught by the read-back, and
+so is an **error shape no pattern covers**. That is the proof the read-back is load-bearing.
+
+`PARSED_AT` is an adequate discriminator. It is set once (`pipeline.sh:96`) and never re-derived, and
+it cannot be empty: `set -e` aborts the run if `date` fails, so the `*"$PARSED_AT"*` match can never
+degrade to a vacuous `**`. Its granularity is one second, so the theoretical collision is *two builds
+of the same graph starting in the same UTC second* — and a collision only matters if the write also
+failed. Adequate; no change wanted.
+
+**The pattern gate adds no detection power** — scenario E shows the read-back catches what the
+patterns miss, and scenario F's connection failure is caught by `rq`'s nonzero-exit branch, not by
+the `case`. It earns its place on **diagnostics**: it turns "the stamp did not land" into the actual
+rejection text at the point of failure, which for the likeliest failure is
+`errMsg: Invalid input at end of input: … column: 33`. Keep it, and the code comment already
+characterizes it exactly right ("only the first gate; the READ-BACK below is the load-bearing one").
+
+`cobb` is right and I was wrong: my Pass 1 `grep -qiE '^\(?error|^ERR |wrong number|read only'`
+**misses** a FalkorDB Cypher rejection. I ran both patterns against the live reply — mine misses,
+`cobb`'s matches (A8).
+
+### Question 1 — the cross-document check: the two documents describe the same set of shapes, with one gap
+
+I enumerated every marker shape each document teaches and matched them pairwise:
+
+| Shape | `freshness.md` | `graph-ontology.md` |
+|---|---|---|
+| `provenance` present, full stamp | bullet 1 + field table | question-to-field table |
+| `provenance: 'none'` | bullet 1 + Limits `:149-164` | FAQ bullet 1 |
+| `provenance` present, `sourceTree` absent | table `:31` + check 2 `:115-120` | FAQ bullet 3 |
+| `provenance` null, real `builtAt` (pre-fix) | bullet 2 `:37-42` + Limits `:165-185` | FAQ bullet 2 |
+| zero rows | bullet 3 `:43-47` + Limits `:203-205` | FAQ bullet 4 |
+| hand-written, `builtAt: unknown` | bullet 4 `:48-60` + Limits `:186-202` | FAQ bullet 5 |
+| `sourceDirty = true` | check 0 gate + check 2 caveat | `SOURCE_DIRTY` row + `SOURCE_TREE` caveat |
+
+**Six shapes each, no omission in either direction, and no contradiction** — including the two that
+were the point of the exercise: the `sourceTree`-absent shape (m2/P2-3) is now taught by both, and
+the pre-fix/hand-written disambiguation (m3/P2-2) is gated on a real `BUILT_AT` timestamp in both,
+in the same direction. The one shape where the two could have drifted apart on *substance* rather
+than wording — "is `SOURCE_DIRTY` will be true" for the tree-absent case — is correct in both, and I
+verified it holds by construction: a path in the index but not in `HEAD` always shows as added in
+`git status`, so that shape cannot occur with a clean flag.
+
+Phrasing differences are all within the altitude split and none of them changes a reader's decision:
+the reference gives the command and says "skip check 0" when dirty, the manual gives the decision and
+says equality "only covers the committed part". That is the intended division, not drift.
+
+**The one gap — P3-2 below.** The reference gained a *seventh* shape the manual does not carry.
+
+### P3-1 — minor · the failure path tells the operator to re-stamp by hand but withholds the stamp
+
+`SKILL.md` (Provenance, new bullet) correctly says the fix for a rejected stamp is "re-stamping by
+hand … not re-parsing". But neither failure branch in `pipeline.sh` prints `$STAMP`, and every OID
+the pipeline logs is truncated to 12 chars (`:117-119`, and the final line is never reached on
+failure). The operator can recover — a 12-char tree OID expands via `git rev-parse` (verified) — but
+must then hand-write the Cypher, and **a hand re-stamp that writes only the fields it has silently
+breaks the "absent one is removed, not left stale" guarantee** that both documents now rest on: the
+`= NULL` assignments are exactly what a human reconstructing the query would drop.
+
+**Fix:** on both failure branches, emit the query verbatim so it can be replayed —
+`printf 'pipeline: replay this stamp verbatim:\n%s\n' "$STAMP" >&2`. One line, and it removes the
+only step of the recovery path that can silently reintroduce a stale field.
+
+### P3-2 — minor · the reference's seventh shape, and an unconditional guarantee in the manual
+
+`freshness.md:133-142` now teaches a shape the manual does not: **a marker that survived a silently
+failed stamp** on the pre-2026-09-07 pipeline, whose tell is "a marker whose `builtAt` predates
+content you can see in the graph". Meanwhile the manual's `§1` cell states the guarantee
+unconditionally — *"all eight rewritten on every stamp (an absent one is removed, not left stale)"* —
+while the reference now scopes it (*"since 2026-09-07 the pipeline reads the marker back… so a marker
+you find is one that actually landed"*). The manual says elsewhere that pre-2026-09-07 markers exist
+and that `cpg_falkorchat` is one, so as written it asserts a guarantee about markers that predate the
+mechanism providing it.
+
+My read: the shape itself is a historical diagnostic, not a reader-facing state, and omitting it from
+a manual that defers procedure is defensible — **the fix is the overclaim, not the missing shape.**
+
+**Fix (routes to `tico`):** one clause in the `§1` cell — *"…an absent one is removed, not left
+stale (guaranteed for stamps from 2026-09-07 on, when the pipeline began verifying its own write)"*.
+
+### P3-3 — minor · the pending `cpg_falkorchat` backfill touches four statements, not one line
+
+The coordinator asked whether the document depends on "no backfill was done" beyond that line. It
+does, and so does the manual. Dispatching the backfill invalidates:
+
+1. `freshness.md:43-47` — the "no backfill was done" clause itself.
+2. `freshness.md:182-185` — *"`cpg_falkorchat` carries exactly this marker — keys `BUILT_AT`,
+   `SOURCE_PATH`, `SOURCE_COMMIT`, `SOURCE_DIRTY` and nothing else"*. Becomes false, and it is the
+   pre-fix shape's only live example.
+3. `graph-ontology.md` FAQ bullet 2 — *"The live `cpg_falkorchat` is one of these today, so you will
+   meet one."*
+4. `graph-ontology.md` Overview — *"Both are absent on a marker stamped before 2026-09-07 —
+   including `cpg_falkorchat`'s, the graph most readers of this manual open."*
+
+After the backfill **no loaded graph exemplifies the pre-fix shape**, so both documents would teach it
+with a dead example. Worth folding into the backfill unit's done-condition.
+
+**And a design question for that unit, not a defect here:** a hand-backfilled marker carrying
+`PROVENANCE` would be an eighth shape — pipeline-shaped fields with a hand-supplied origin — and
+`PROVENANCE: source-origin` would assert a capture that never happened, which is the plausible-but-
+wrong failure this whole chain exists to prevent. `graph-dba` writing an explicit marker property
+(the `MARKER_ORIGIN` convention `cpg_deprecated_salesperson` already uses) would keep it honest. I'd
+want that decided before the write, not after.
+
+### Nits
+
+- **`rq`'s last two patterns are unanchored** (`*"read only"*`, `*"read-only"*`) and match anywhere
+  in a reply, unlike the three anchored ones. Harmless for the two fixed queries it serves; a comment
+  saying so would stop a future reuse from inheriting a false-failure mode.
+- **`count()` was left as-is** and still swallows error replies. The direction is safe (an error
+  yields an empty `PCOUNT`, which `--verify-prefix` already treats as failure); only the
+  `nodes=/edges=` log line can silently print blank. Reusing `rq` would make it uniform.
+- **`pipeline.sh` has no trailing newline** (`\ No newline at end of file`).
+- The workdir NOTE's `case "$_wd/" in "$_sr"/*)` prints a spurious note if `realpath -m "$SRC"`
+  returns empty (pattern degrades to `/*`). `realpath -m` effectively cannot fail on a syntactically
+  valid path, so this is theoretical; a `[ -n "$_sr" ]` guard would close it.
+
+### What's solid
+
+- **Every fix was verified at the level the finding was made at**, and three went further than asked:
+  the M2 fix added the surviving-workdir NOTE (the half reordering cannot solve), the m1 fix split
+  build fidelity from staleness rather than just softening a sentence, and the B1 fix chose a
+  read-back over the enumeration I suggested — which is the better design and which my own suggested
+  pattern would have failed at.
+- **The M1 regression was caught by its own regression test**, which is the outcome the test suite
+  exists for; a fix round that surfaces a defect in the previous fix round is working as intended.
+- **The manual's decision to cite rather than copy** (P2-1) has already paid: `9124a1f` changed the
+  check-0 command materially — `--short` → full OIDs, `HEAD:<origin>` → `--verify "HEAD:./<origin>"`
+  — and the manual needed no edit to stay correct. That is the drift this pass was held open to catch,
+  caught structurally instead.
+
+---
+
 ## Appendix
 
 ### A1 — `redis-cli` exits 0 on an error reply, and prints it to stdout
@@ -605,3 +790,87 @@ fatal: Needed a single revision                   # exit 128
 $ git rev-parse --short HEAD:./
 1e4fb8f                                           # == git rev-parse --short "HEAD^{tree}"
 ```
+
+### A8 — Pass 3 verification
+
+**Corrected tree resolution, 11 shapes × 3 working directories** (throwaway repos; every value
+cross-checked against what the consumer's documented command computes):
+
+```
+repo root, cwd=root            origin=[.]          tree=8bc2ab58…799e0c len=40  MATCHES HEAD^{tree}
+repo root, cwd=SUBDIR          origin=[.]          tree=8bc2ab58…799e0c len=40  MATCHES HEAD^{tree}
+subdir rel, cwd=root           origin=[src]        tree=379c8bdb…f1d3f6 len=40  MATCHES HEAD:src
+subdir abs, cwd=/tmp           origin=[src]        tree=379c8bdb…f1d3f6 len=40  MATCHES HEAD:src
+nested subdir, cwd=root        origin=[src/deep]   tree=bd269627…17a26e len=40  MATCHES HEAD:src/deep
+nested, cwd=INSIDE src         origin=[src/deep]   tree=bd269627…17a26e len=40  MATCHES HEAD:src/deep
+single file                    origin=[src/a.py]   tree=bafc5d9a…cd997a len=40  MATCHES HEAD:src/a.py  (blob)
+trailing slash                 origin=[src]        tree=379c8bdb…f1d3f6 len=40  MATCHES HEAD:src
+quotes+backslash in name       origin=[we"ird\dir] tree=2e3a786d…da8fe2 len=40  MATCHES HEAD:we"ird\dir
+gitignored staged copy         rc=1 (no provenance)
+nonexistent                    rc=1 (no provenance)
+added-not-committed (m2)       origin=[brandnew]   tree=[] dirty=true  ->  b.SOURCE_TREE = NULL
+```
+
+The two mechanics the fix rests on, isolated:
+
+```
+$ git rev-parse --verify --quiet 'HEAD:./.'      # the "." case, at the repo root
+db7ac6c5fd07aa062c30fcdbe5392c74fc476b2c
+$ git rev-parse 'HEAD^{tree}'
+db7ac6c5fd07aa062c30fcdbe5392c74fc476b2c         # identical
+
+$ out=$(git rev-parse --verify --quiet 'HEAD:./nope' || true); echo "[$out]"
+[]                                               # echo-back suppressed
+$ out=$(git rev-parse 'HEAD:./nope' 2>/dev/null || true); echo "[$out]"
+[HEAD:./nope]                                    # the generation-2 defect, reproduced
+
+$ out=$(git rev-parse --verify "HEAD:./no-such-path" 2>/dev/null || true); echo "[$out]"
+[]                                               # the CONSUMER's documented form is safe too
+                                                 # (stderr: "fatal: Needed a single revision")
+
+$ git ls-files -- ':(literal).' | wc -l
+733                                              # n3's literal pathspec still matches a directory
+```
+
+**Live FalkorDB error-reply shapes, and the two patterns against them** (read-only):
+
+```
+$ redis-cli … GRAPH.RO_QUERY cpg_falkorchat 'MATCH (b:CpgBuildInfo) SET b.X = '
+errMsg: Invalid input at end of input: expected NOT, '+', … line: 1, column: 33, offset: 32
+  errCtx: MATCH (b:CpgBuildInfo) SET b.X =  errCtxOffset: 32
+  first12 = "errMsg: Inva"
+  Pass-1 pattern /^\(?error|^ERR |wrong number|read only/i  -> *** MISSED ***
+  cobb's case  errMsg:*|ERR\ *|WRONGTYPE*|*read only*|…     -> matched
+
+$ redis-cli … GRAPH.RO_QUERY                     -> ERR wrong number of arguments for 'graph.RO_QUERY' command
+$ redis-cli … GRAPH.RO_QUERY <g> '<a write>'     -> graph.RO_QUERY is to be executed only on read-only queries
+                                                    (matched via the unanchored *"read-only"* arm)
+```
+
+**Stamp gate + read-back, six scenarios through a fake `redis-cli`** (the real `rq` body, verbatim):
+
+```
+A  stamp ok, read-back carries this run's PARSED_AT   -> PASS (read-back matched)
+B  Cypher rejection "errMsg: …"                       -> caught by pattern gate  [errMsg: Invalid input…]
+C  stamp no-ops, STALE marker survives (--append)     -> caught by read-back     [2026-09-01T08:00:00Z]
+D  stamp "succeeds", graph has NO marker              -> caught by read-back     [b.PARSED_AT]
+E  unenumerated error shape, stale marker survives    -> caught by read-back     <- read-back is load-bearing
+F  redis-cli unreachable (nonzero exit)               -> caught by rq's exit branch
+```
+
+C and E are the two that settle the question: the read-back catches the exact `--append` failure B1
+named, and catches it even when no pattern matches the reply.
+
+**Recoverability of a truncated OID** (P3-1):
+
+```
+$ T=$(git rev-parse 'HEAD^{tree}'); git rev-parse "${T:0:12}"
+8c2a1384af9dea0948d34f6144392a92a58e7cc1        # 12 chars expands, so recovery is possible…
+```
+
+…but the operator must then hand-write the Cypher, including the `= NULL` assignments — which is the
+step P3-1 asks the pipeline to remove by printing `$STAMP` on the failure path.
+
+**File drift check** — all four reviewed files are unchanged between their fix commit and current
+`HEAD` (`git diff --quiet 9124a1f HEAD -- <path>`, and `8779ee8` for the manual), so this pass
+reviewed the live text.
