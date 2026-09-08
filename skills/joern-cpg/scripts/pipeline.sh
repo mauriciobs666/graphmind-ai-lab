@@ -235,8 +235,15 @@ if [ -n "$LOAD" ]; then
   cpg_provenance_stamp "$BUILT_AT" "$PARSED_AT" "$SRC" "$PROVENANCE"
   STAMP="$CPG_STAMP_CYPHER"
   if [ -z "${STAMP:-}" ] || [ -z "${CPG_STAMPED_KEYS:-}" ]; then
+    # Report the Cypher's SHAPE, never its text. This line used to read
+    # `${CPG_STAMP_CYPHER:+<set>}${CPG_STAMP_CYPHER:-<empty>}`, which for a set
+    # variable prints `<set>` and then the entire multi-line map literal —
+    # burying the two words that matter under the thing the operator already
+    # has. The branch had never been executed when it was written; it is now
+    # covered by test-stamp-wiring.sh's P6-6 mutation case.
+    if [ -n "${CPG_STAMP_CYPHER:-}" ]; then _cy="<set, ${#CPG_STAMP_CYPHER} chars>"; else _cy="<empty>"; fi
     echo "pipeline: FAILED — internal: cpg_provenance_stamp did not populate this shell" >&2
-    echo "pipeline:   CPG_STAMP_CYPHER=${CPG_STAMP_CYPHER:+<set>}${CPG_STAMP_CYPHER:-<empty>} CPG_STAMPED_KEYS=${CPG_STAMPED_KEYS:-<empty>}" >&2
+    echo "pipeline:   CPG_STAMP_CYPHER=$_cy CPG_STAMPED_KEYS=${CPG_STAMPED_KEYS:-<empty>}" >&2
     echo "pipeline: this is a bug in the pipeline, not a finding about '$GRAPH' — the graph has" >&2
     echo "pipeline: NOT been stamped and is otherwise untouched. Check that the call above is a" >&2
     echo "pipeline: statement and not a \$(…) substitution (skills/joern-cpg/scripts/git-provenance.sh)." >&2
@@ -252,14 +259,43 @@ if [ -n "$LOAD" ]; then
   #   ERR unknown command '…'      <- Redis layer
   #   ERR wrong number of arguments for 'graph.QUERY' command
   #   WRONGTYPE Operation against a key holding the wrong kind of value
-  # Pattern-matching that list is inherently incomplete, so it is only the first
-  # gate; the READ-BACK below is the load-bearing one.
-  # <cypher> [redis-command] — the command defaults to GRAPH.QUERY (needed for
-  # the stamp, which writes). The two READS below pass GRAPH.RO_QUERY instead:
-  # a GRAPH.QUERY against a graph that does not exist MATERIALIZES it, and while
-  # this graph certainly exists by now, the failure messages tell the operator to
-  # use GRAPH.RO_QUERY for the identical read — so the pipeline should not be
-  # doing the thing it warns against.
+  # Pattern-matching that list is inherently incomplete, and it is WORSE than
+  # incomplete in one measured way: FalkorDB returns RUNTIME errors BARE, with
+  # none of those prefixes and with redis-cli exiting 0. Verified read-only
+  # against this instance 2026-09-08 via GRAPH.RO_QUERY on cpg_falkorchat:
+  #   Unknown function 'nosuchfunc'                                    <- rc 0
+  #   Type mismatch: expected Map, Node, Edge, or Null but was String  <- rc 0
+  # A blacklist is therefore only ever the first gate. What closes it is a
+  # POSITIVE one, and the same probes measured what to require: every reply to a
+  # query that actually COMPLETED ends with the statistics trailer —
+  #   stray                                <- the projection's column header
+  #   STRAY_KEY=…                          <- rows (none, on a pass)
+  #   Cached execution: 0
+  #   Query internal execution time: 0.525177 milliseconds
+  # — while every error reply above is a single bare line with no trailer at
+  # all. So `Query internal execution time:` is a checkable proof that the
+  # server ran the query to completion, and, being the LAST element, it also
+  # excludes a reply that was cut off part-way. The column header (`stray*`)
+  # would prove less: it is emitted before the rows, and it couples this file to
+  # an alias owned by git-provenance.sh.
+  #
+  # <cypher> [redis-command] [must-contain] — the command defaults to
+  # GRAPH.QUERY (needed for the stamp, which writes). The two READS below pass
+  # GRAPH.RO_QUERY instead: a GRAPH.QUERY against a graph that does not exist
+  # MATERIALIZES it, and while this graph certainly exists by now, the failure
+  # messages tell the operator to use GRAPH.RO_QUERY for the identical read — so
+  # the pipeline should not be doing the thing it warns against.
+  #
+  # [must-contain] IS PER CALL SITE, DELIBERATELY, AND IS NOT APPLIED TO THE
+  # STAMP WRITE. Two reasons, and neither is style. (1) The trailer was measured
+  # on GRAPH.RO_QUERY replies only; asserting it on a GRAPH.QUERY *write* reply
+  # would be this arc's own recurring defect — a credential covering a narrower
+  # level than the claim it licenses — and no write is available to check
+  # without writing. (2) The stamp write does not need it: its closure is the
+  # PARSED_AT read-back below, which is already a positive assertion on the
+  # graph's actual contents and strictly stronger than any reply-shape test.
+  # The stray check is the one assertion with no positive backstop, because a
+  # pass there is "no rows" — hence the requirement goes exactly there.
   rq() {
     local out
     out="$(redis-cli -h "$HOST" -p "$PORT" "${2:-GRAPH.QUERY}" "$GRAPH" "$1" 2>&1)" || { printf '%s' "$out"; return 1; }
@@ -267,25 +303,53 @@ if [ -n "$LOAD" ]; then
     case "$out" in
       errMsg:*|ERR\ *|WRONGTYPE*|*"read only"*|*"read-only"*) return 1 ;;
     esac
+    if [ -n "${3:-}" ]; then
+      case "$out" in
+        *"$3"*) ;;
+        *) return 1 ;;
+      esac
+    fi
     return 0
   }
 
   # Every failure below this point leaves a graph that is fully loaded and needs
-  # NO re-parse — only the stamp has to be re-sent. Three branches used to say
-  # "re-stamping by hand is enough" without ever showing what to send, and the
-  # stamp is now a multi-line map literal with escaped quotes, strictly harder to
-  # reconstruct than the flat SET clause that advice was written for. So print it
-  # verbatim. (Called from three branches; defined here, before all of them —
-  # under `set -e` an undefined function aborts with 127 and swallows the
-  # message it was supposed to print.)
-  replay_stamp() {
-    echo "pipeline: the load succeeded and does NOT need repeating — only the stamp does." >&2
-    echo "pipeline: copy the Cypher below verbatim; do not retype it." >&2
+  # NO re-parse. The five branches split in two, and the split is the whole
+  # point of printing anything:
+  #   * THE STAMP DID NOT LAND (rejected, or read back absent) — re-sending the
+  #     Cypher IS the fix.                                     -> replay_stamp
+  #   * THE STAMP DID LAND and a LATER assertion failed — re-sending it changes
+  #     nothing the message is complaining about, and saying otherwise
+  #     contradicts the branch's own first line.               -> show_stamp
+  # Both print the same delimited block, because the reason for printing at all
+  # is shared: the stamp is a multi-line map literal with escaped quotes,
+  # strictly harder to reconstruct than the flat SET clause the old "re-stamp by
+  # hand" advice was written for. Only the advice around it differs.
+  #
+  # Defined here, before every caller — under `set -e` an undefined function
+  # aborts with 127 and swallows the message it was supposed to print. That is
+  # not hypothetical: deleting this definition was invisible to the wiring test
+  # until the oracle started asserting the exit code and the block's presence
+  # (test-stamp-wiring.sh, expect_rc + the `--- begin stamp ---` assertion).
+  print_stamp() {   # print_stamp <lead-in line>… — renders $STAMP verbatim
+    local line
+    for line in "$@"; do echo "pipeline: $line" >&2; done
     echo "pipeline: --- begin stamp ---" >&2
     printf '%s\n' "$STAMP" >&2
     echo "pipeline: --- end stamp ---" >&2
+  }
+  replay_stamp() {  # the stamp did NOT land: this is the fix
+    print_stamp \
+      "the load succeeded and does NOT need repeating — only the stamp does." \
+      "copy the Cypher below verbatim; do not retype it."
     echo "pipeline: save it to a file and send it with:" >&2
     echo "pipeline:   redis-cli -h $HOST -p $PORT GRAPH.QUERY $GRAPH \"\$(cat <file>)\"" >&2
+  }
+  show_stamp() {    # the stamp DID land: this is evidence, not a fix
+    print_stamp \
+      "the load AND the stamp both succeeded — the stamp is NOT what needs" \
+      "repeating. This build's rendered Cypher is below so you can compare it" \
+      "against the marker as it now stands; re-sending it verbatim would" \
+      "reproduce exactly the state being complained about."
   }
 
   if ! STAMP_OUT="$(rq "$STAMP")"; then
@@ -294,6 +358,7 @@ if [ -n "$LOAD" ]; then
     echo "pipeline: the load itself succeeded; only the provenance marker is missing. Do NOT" >&2
     echo "pipeline: treat this graph as stamped — on an --append build the PREVIOUS build's" >&2
     echo "pipeline: marker is still standing over the new content." >&2
+    replay_stamp
     exit 1
   fi
 
@@ -309,6 +374,7 @@ if [ -n "$LOAD" ]; then
        echo "pipeline: read back: ${STAMP_BACK:-<no reply>}" >&2
        echo "pipeline: expected a CpgBuildInfo marker with PARSED_AT=$PARSED_AT. The marker now" >&2
        echo "pipeline: in the graph, if any, describes a DIFFERENT build — do not trust it." >&2
+       replay_stamp
        exit 1 ;;
   esac
 
@@ -340,21 +406,25 @@ if [ -n "$LOAD" ]; then
   #
   # This check is NEGATIVE — "no rows" is the pass — so unlike the read-back
   # above it does not fail closed for free: an error reply contains no
-  # STRAY_KEY= and would sail through. Hence the explicit status checks.
+  # STRAY_KEY= and would sail through. The status check alone did NOT close
+  # that, because rq's blacklist cannot see a bare runtime error (see rq).
+  # What closes it is the third argument below: the reply must carry the
+  # statistics trailer a completed query always ends with, so "no rows" can
+  # only be reached from a query the server actually ran.
   if ! STRAY_Q="$(cpg_provenance_stray_query)"; then
     echo "pipeline: FAILED — internal: could not build the marker property check for '$GRAPH'." >&2
     echo "pipeline: this is a bug in the pipeline, not a finding about the graph. The stamp DID" >&2
     echo "pipeline: land (it was read back above); only this last assertion could not run." >&2
-    replay_stamp
+    show_stamp
     exit 1
   fi
-  if ! STRAY_BACK="$(rq "$STRAY_Q" GRAPH.RO_QUERY)"; then
+  if ! STRAY_BACK="$(rq "$STRAY_Q" GRAPH.RO_QUERY 'Query internal execution time:')"; then
     echo "pipeline: FAILED — could not verify the marker's property list in '$GRAPH':" >&2
     echo "pipeline:   ${STRAY_BACK:-<no reply>}" >&2
     echo "pipeline: the load and the stamp both succeeded, but the marker is unverified — it may" >&2
     echo "pipeline: carry properties from an earlier build. Do not trust it until checked by hand:" >&2
     echo "pipeline:   redis-cli -h $HOST -p $PORT GRAPH.RO_QUERY $GRAPH \"MATCH (b:CpgBuildInfo) RETURN keys(b)\"" >&2
-    replay_stamp
+    show_stamp
     exit 1
   fi
   case "$STRAY_BACK" in
@@ -371,7 +441,7 @@ if [ -n "$LOAD" ]; then
       echo "pipeline: (skills/cpg-analysis/references/freshness.md)." >&2
       echo "pipeline: To inspect the marker as it stands:" >&2
       echo "pipeline:   redis-cli -h $HOST -p $PORT GRAPH.RO_QUERY $GRAPH \"MATCH (b:CpgBuildInfo) RETURN keys(b)\"" >&2
-      replay_stamp
+      show_stamp
       exit 1 ;;
   esac
 

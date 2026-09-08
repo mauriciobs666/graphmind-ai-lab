@@ -97,31 +97,63 @@ run a build:
   and a sixth key (`MARKER_EVIDENCE`) invented the same day sailed straight
   through it. The map form was checked by execution before being relied on.
   After every stamp the pipeline re-checks that the marker carries nothing but
-  that build's own fields, and **fails the run** if anything else is there —
-  which under a correct map assignment can only happen if the replace itself
-  stopped working. Leave
-  that check in place; it is not redundant with the stamp.
+  that build's own fields, and **fails the run** if anything else is there.
+  **State what that catches narrowly, because the wide version was wrong:** it
+  catches *the stamp failing to erase a foreign key that was already on the
+  marker*. It does **not** detect "the replace semantics changed" — a `+=`, a
+  reversion to `b.X = …`, or a FalkorDB treating `=` as a merge all leave
+  exactly the eight stamped keys on a marker whose previous stamp was
+  pipeline-clean, so none of them fires there. Leave the check in place on the
+  reason that is checkable: two loaded graphs carry hand-authored markers today,
+  so on each one's next rebuild it fires on exactly the defect this arc was
+  about, and after that it is a cheap standing guard against a foreign key
+  reintroduced by any writer other than the stamp. It is not redundant with the
+  stamp, and it is not a regression test for the replace semantics.
 - **A rejected stamp now fails the run.** `redis-cli` exits 0 on an error reply
   and prints it to stdout, so the stamp is checked for an error reply *and* read
   back — the run fails unless the marker in the graph carries this build's
   `PARSED_AT`. Worth knowing because the failure is late and specific: the load
-  succeeded and only the marker is missing, so re-stamping is the fix, not
-  re-parsing — and every stamp failure branch now **prints the stamp Cypher
-  verbatim** between `--- begin stamp ---` markers, because it is a multi-line
-  map literal with escaped quotes and retyping it is how you get a subtly wrong
-  marker. Left unchecked on an `--append` build, the previous build's marker
-  would stay standing over the new content.
-- **If you change the stamp, run `scripts/test-stamp-wiring.sh` — it takes a
-  second and needs no FalkorDB.** It lifts the real stamp block out of
-  `pipeline.sh` between two anchors and drives it against a fake `redis-cli`,
-  covering the wiring rather than the Cypher: allow-list populated, clean pass
-  over a hand-authored marker, the `provenance=none` narrowing, a planted
-  foreign key caught, and a mutation that reverts the call site to the `$(…)`
-  form and must be refused. That last case exists because the `$(…)` form
-  *shipped*: the stamp is called as a statement precisely so it can populate the
-  caller's shell, a subshell silently discarded the allow-list, and every build
-  would have failed after a multi-hour parse. The Cypher was executed and
-  correct the whole time — it was the call path nobody ran.
+  succeeded, so **nothing here ever needs a re-parse**. What it needs depends on
+  which of the five failure branches you hit, and they split in two. **Two say
+  the stamp did not land** (FalkorDB rejected it; the read-back did not find
+  this build's `PARSED_AT`) — there, **re-sending the Cypher is the fix**, and
+  the branch prints it verbatim between `--- begin stamp ---` markers, because
+  it is a multi-line map literal with escaped quotes and retyping it is how you
+  get a subtly wrong marker. **Three say the stamp DID land** and a later
+  assertion failed (the property check could not be built, could not be run, or
+  found a stray key) — there the same Cypher is printed as **evidence to
+  compare against the marker, explicitly not as a fix**: re-sending it would
+  reproduce exactly the state being complained about. Until 2026-09-08 the
+  replay was wired into the second set only, so the branches that told you to
+  re-stamp were the ones that showed you nothing, and the ones that showed you
+  the Cypher told you to re-send it directly under a line saying the stamp had
+  already landed. Left unchecked on an `--append` build, the previous build's
+  marker would stay standing over the new content.
+- **If you change the stamp — or `pipeline.sh`'s stamp block, or
+  `git-provenance.sh` — run `scripts/test-stamp-wiring.sh`. It takes a second
+  and needs no FalkorDB.** It lifts the real stamp block out of `pipeline.sh`
+  between two anchors and drives it against a fake `redis-cli` whose reply
+  shapes were measured against a live instance, covering the wiring rather than
+  the Cypher. The cases: a clean pass over a hand-authored marker, the
+  `provenance=none` narrowing, a planted foreign key caught under merge
+  semantics, the `provenance=none` subsumption, the two did-not-land branches
+  (asserting the re-send wording, not merely that *something* was printed), a
+  stray read that returns a **bare** runtime error, the stray query called
+  directly with an unusable allow-list, and mutations that revert the call site
+  to the `$(…)` form or drop the allow-list after a populated stamp.
+  **Every case asserts an exact exit code, and every case expected to fail must
+  also be shown to have printed its branch's stamp block** — that pair is not
+  decoration. Under the previous `rc != 0` oracle, deleting `replay_stamp`'s
+  definition left the whole suite green while the run was aborting at rc 127 on
+  `replay_stamp: command not found`: the test written to close "verified in
+  isolation, broken in the wiring" was itself blind to a wiring defect of
+  exactly that shape. The allow-list, by contrast, is **exercised** and not
+  asserted — each case prints the list it built, and an empty one fails the case
+  by tripping the call-site guard rather than by being compared. The `$(…)`
+  case exists for the original version of the same lesson: that form *shipped*,
+  a subshell silently discarded the allow-list, and every build would have
+  failed after a multi-hour parse. The Cypher was executed and correct the whole
+  time — it was the call path nobody ran.
 
 Or run the stages individually:
 

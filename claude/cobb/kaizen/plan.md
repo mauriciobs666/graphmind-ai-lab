@@ -19,7 +19,7 @@
 | K-017 | 2026-08-20 | low | 🔵 | Item 4 of the "Broader team-verbosity reduction" diagnosis (surfaced 2026-08-19; items 1-3 delivered, see `history.md`): prune hedge-stacking once a rule has structural backup (a hook, a routing table) instead of three defensive clauses. No specific instances identified yet — start with a scan across the agent prompts for hedge-stacked clauses backed by real harness enforcement (a `PreToolUse` hook, a routing table) and trim each to one clean statement. |
 | K-020 | 2026-09-06 | medium | 🔵 | `cypher-mcp/server.py:881`'s FalkorDB-unreachable message advises `docker start falkordb-dev`, which cannot work — no launch path in this repo leaves a stopped container by that name. Out of cobb's write remit (component code); route to an implementer via `teco`. |
 | K-021 | 2026-09-07 | medium | 🔵 | Validate `entryId` **shape** in the `cypher-mcp` producer-write authorizer — a malformed or colliding id is load-bearing for the curator-clear path. Content validation deliberately **not** proposed. |
-| K-022 | 2026-09-08 | high | 🔵 | The **wrong-rather-than-absent** defect class now has **five** instances in one coordination, and **two** of them are prose. The fifth appeared *inside the fix for the fourth* and isolates the mechanism: a **false justification attached to a correct rule**, which the author (`cobb`), the committer (`teco`) and a hand-back framing it as durable all passed. Decide at the next certification pass whether it earns a team-wide statement, and where — the candidate is now specific rather than open: a named check in the `agent-maintenance` §7 lint, *verify the reason, not just the rule*. |
+| K-022 | 2026-09-08 | high | 🔵 | The **wrong-rather-than-absent** defect class now has **eight** instances — three values, **four prose**, and one **executable** (a test oracle that certified the wiring while structurally unable to see a wiring defect). The 2026-09-08 tombstone sequence isolates the mechanism: three certifications written in the same act as the fix they certify, **all three since corrected** — a retraction launders credibility onto whatever sits next to it. Decide at the next certification pass whether this is one rule or three; the candidates are now specific — an `agent-maintenance` §7 lint check (*verify the reason, not just the rule*; *a tombstone certifies nothing*) and a mutation standard (*the mutant worth running is the design that was rejected*). |
 | K-024 | 2026-09-08 | medium | 🔵 | Two documents outside cobb's remit still describe the `:CpgBuildInfo` marker as it was before K-023. **The debt changed kind, not size** — do NOT add the five hand-authored keys to any schema table: the stamp never writes them, and after the map form they are not even named in the code. `docs/plans/cpg-agent-adoption-graph.md` §1.1 owes (a) the **eight** properties the stamp writes, (b) full 40-char OIDs rather than "short SHA", (c) the correction that its code block documents the superseded `SET b.X = …` write semantics, and (d) the schema-level fact this arc established — **the marker's property set is closed by construction**, so `:CpgBuildInfo` cannot be extended by any writer other than the stamp (**`architect`**; per the doc convention an executed-against plan takes a successor or a header pointer, not an edit). `docs/manuals/graph-ontology.md` needs the same shape update plus gate finding **P4-3** — its FAQ classifies on the `PROVENANCE` literal alone and never on `MARKER_ORIGIN`, so a hand-authored marker reads as a pipeline stamp to a manual-only reader (**`tico`**). Both route via `teco`; neither is cobb's to write. |
 | K-019 | 2026-08-21 | **high — filed upstream** | 🔵 | **Systemic, now confirmed matcher-agnostic too. `PreToolUse` "ask" hooks do not reliably pause execution in this session under Auto Mode, on either `Bash` or `Write`/`Edit`, regardless of hook source or execution context.** Four independent, isolated live tests, 2026-08-21, Claude Code 2.1.238, all under Auto Mode: (1) `graph-dba`'s own frontmatter `Bash` hook, Task-dispatched with `subagent_type` explicitly correct — didn't fire. (2) The identical guard mirrored as a session-wide `.claude/settings.local.json` `Bash` hook, run from `cobb`'s own **main session** — didn't fire. (3) Same test repeated after the user explicitly reloaded hook config via `/hooks` (visibly listed as registered, `[Local] Bash — 1 hook`) — still didn't fire. (4) **`cobb`'s own frontmatter `Write`/`Edit` hook** (`guard-cobb-topic-writes.sh`) — a `Write` to a path plainly outside cobb's allowlist (`docs/_hook_test_k019_scratch.md`) went through with zero interruption; re-fed the exact real payload to the script directly afterward and confirmed it correctly returns `ask` for that path. **Every test used a real, disposable payload (scratch graph or scratch file, immediately cleaned up) and independently pipe-test-confirmed correct hook logic** — ruling out `subagent_type` omission, stale config, hook-not-registered, and matcher-specific quirks as explanations. **Working hypothesis:** Auto Mode's classifier layer silently resolves/overrides a correctly-emitted `ask` decision before a human ever sees it, across both tool matchers tested. **Filed upstream 2026-08-21** via `/feedback` (user-submitted, confirmed "Feedback / bug report submitted") with the 3-test Bash repro; the 4th (Write/Edit) test landed after filing, not yet included in a follow-up report. **Practical consequence, effective immediately: every "harness-enforced" Guardrails claim across every guarded agent in this team — all three destructive-ops guards, all eight doc-write allow-list guards, the one broad-write deny-list guard — is currently unverified, and actively disconfirmed on the two mechanisms tested, under Auto Mode, in every execution context tried.** Not yet tested: the Write/Edit + Task-dispatched-subagent combination specifically (all 4 tests covered 3 of the 4 matcher×context cells) — very likely shares the gap given the pattern, not confirmed. **Next steps:** (1) monitor for an Anthropic response to the filed report; (2) treat this as the standing state of the team's enforcement model — Auto Mode being off is the only known workaround, untested/not decided; (3) fill the last untested cell (Write/Edit, subagent-dispatched) if a clean answer is ever needed before Anthropic responds. |
 
@@ -97,8 +97,21 @@
     ids are hand-shaped rather than `uuid4()` output, and U17's own twelve-entry scope contained
     `b7e41c92-3f8a-…` alongside a chunk-C entry `b7e41c92-3d5a-…` sharing the full first **eight**
     characters. Seven units of the 2026-09 pass hit false-positive dedup matches on 8-char
-    prefixes. A `^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$` check at
+    prefixes. **U22 (2026-09-08) then found a third collision that ends the "eight characters is
+    probably enough" reading outright:** `b7f3a1c2-5d84-4e19-9a6f-2c8e71d40b93` (`analyst`,
+    2026-09-03, mutation-kill counts) and `b7f3a1c2-5d84-4e19-9a06-3c2e8f14d7b0` (`architect`,
+    2026-09-07, grep-based done-conditions) share their **first 21 characters** —
+    `b7f3a1c2-5d84-4e19-9a` — diverging only at index 21 (`6f` vs `06`). Both were live in the
+    graph at the same time, produced by different agents on different dates about different
+    subjects, and U22 had to clear one while leaving the other intact. No prefix length short of
+    the whole id is a key in this dataset, which is the argument for shaping the id at write time
+    rather than lengthening the prefix at read time. A
+    `^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$` check at
     the authorizer is a few lines and closes it at the one chokepoint every agent passes through.
+    Note what it does **not** close: both of these ids *pass* that regex. Shape validation stops
+    malformed ids and raises the cost of an accidental near-duplicate; only real `uuid4()` entropy
+    at the producer makes a 21-character collision implausible, so the check is a floor, not a
+    fix.
   - **Content — no.** Rejecting `PLACEHOLDER`/empty `fact` automates a judgment the curator
     already performs, and its whole cost is one discard line in a history entry. A sentinel
     blocklist would also be trivially routed around by any agent writing a differently-useless
@@ -113,42 +126,63 @@
 ### K-022 — The "wrong rather than absent" defect class may have outgrown per-agent guardrails
 - **Status:** 🔵 proposed
 - **Priority:** high
-- **Rationale:** The same defect shape has now surfaced **five** times across different agents and
-  artifact kinds: a CPG marker naming a commit whose tree was never parsed; a stamp that could fail
-  and still announce success; `git rev-parse` echoing its argument back on stdout so a marker took
-  the literal string `HEAD:./src` as a tree OID; `architect`'s `kaizen_team` entry `7f3c1a92`
-  asserting a CPython deadlock mechanism that does not exist; and — the fifth, 2026-09-08 — a
-  sentence `cobb` wrote into `skills/cpg-analysis/references/freshness.md` Limits (commit
-  `81b43cd`) claiming a `--load` overwrites a hand-authored marker wholesale, `NOTE` and
-  `MARKER_ORIGIN` included, which `git-provenance.sh:138-149` disproves. The invariant across all
-  five: **a slot that should have been empty or loud instead held a plausible, checkable-looking
-  value that was wrong**, and every downstream reader accepted it because it had the shape of a
-  verified one. **Three are values; two are now prose**, and the fifth sharpens what the prose
-  cases share. It appeared *inside the fix for the fourth*, and its rule was **correct** — a
-  hand-authored marker's honesty really is provisional — while only the *mechanism offered for it*
-  was false. Author, committer and a hand-back explicitly framing it as "a durable property of the
-  mechanism" all passed it; the pairwise gate caught it. That isolates the failure: **a rule's
-  stated justification is the least-verified prose in a document, because agreement with the
-  conclusion suppresses scrutiny of the premise.** Nobody re-opens the script behind a rule they
-  already think is right.
+- **Rationale:** The same defect shape has now surfaced **eight** times across different agents and
+  artifact kinds. **Three are values:** a CPG marker naming a commit whose tree was never parsed; a
+  stamp that could fail and still announce success; `git rev-parse` echoing its argument back on
+  stdout so a marker took the literal string `HEAD:./src` as a tree OID. **Four are prose:**
+  `architect`'s `kaizen_team` entry `7f3c1a92` asserting a CPython deadlock mechanism that does not
+  exist; a `cobb` sentence in `freshness.md` (`81b43cd`) giving a false mechanism for a correct
+  rule; and — 2026-09-08, gate Pass 6 — two more in the *same passage as that repair*: *"there is no
+  list at any layer"* (false one clause wide: `CPG_STAMPED_KEYS` is a list, at the assertion layer)
+  and *"both earlier ones covered the primitive and not the call path"* (untrue of mechanism one,
+  whose credential was a re-reading one). **The eighth is executable**, which is what makes the
+  class bigger than prose: `test-stamp-wiring.sh`'s first oracle certified the *wiring* while being
+  structurally unable to see a wiring defect — deleting `replay_stamp` left all six cases green at
+  rc 127. The invariant across all eight: **a slot that should have been empty or loud instead held
+  a plausible, checkable-looking value that was wrong**, and every downstream reader accepted it
+  because it had the shape of a verified one. A green suite is that slot too.
+  <br>**What the 2026-09-08 instances isolate, and it is sharper than the earlier diagnosis.** The
+  three `freshness.md` tombstones are a controlled experiment: each was written in the same sitting
+  as the fix it certifies, by whoever had just made it, and **each has since had its own certifying
+  sentence corrected on review** — a 3-for-3 failure rate on one document. The earlier reading was
+  *a rule's stated justification is the least-verified prose in a document, because agreement with
+  the conclusion suppresses scrutiny of the premise*. That still holds, and this adds the stronger
+  half: **a retraction launders credibility onto whatever sits next to it.** The retraction half is
+  trustworthy — it reports a failure that already happened, against evidence. The certification half
+  attached to it is a fresh, unreviewed claim, and it is read at the confidence of its neighbour.
+  "The first two were wrong and here is why this one is different" is the highest-risk sentence
+  shape found so far, and nobody re-opens the script behind a rule they already think is right.
 - **Proposed change:** at the next certification pass (§4), decide whether this is one rule or
-  several. The question the earlier draft posed first — **do the value cases and the prose cases
-  share a fix, or only a symptom?** — is now half-answered by having two prose instances: the value
-  fix is "make the failure loud", and no amount of loudness helps prose, which has no schema to
-  validate against, only a reader. So they are at least two rules. The prose half has a concrete
-  home: a named check in the `agent-maintenance` §7 lint — *verify the reason, not just the rule*,
-  with the corollary that the repair for a correct rule with a false mechanism is a **tombstone on
-  the mechanism, not deletion of the rule** (the treatment already applied at v1.27). Candidate
-  homes for the value half, in ascending cost, are unchanged: a shared on-demand knowledge base;
-  one bullet in each affected agent's Guardrails (`architect` already has its half as of
-  2026-09-08 — *"a mechanism claim is only as verified as its least-verified clause"*); or a
-  root-`AGENTS.md`-level statement, still probably wrong for a class this abstract.
-- **Notes:** two of the five instances have now been in evidence in a `cobb` run (the fourth via
-  the retraction pass, the fifth self-inflicted and self-found), which retires the earlier reason
-  for not acting — that writing a team-wide rule from a single instance is the same error the rule
-  would be about. The remaining three live in `analyst`'s and `graph-dba`'s files. Full trail:
-  `docs/reviews/cpg-provenance-stamp.md`, `docs/reviews/salesperson-ui-impl.md` Passes 17-18, and
-  `kaizen_team` entry `3b351bb5-a8a1-4006-8aa6-bdb3ef1c6448`.
+  several. The value cases and the prose cases do **not** share a fix — the value fix is "make the
+  failure loud", and no amount of loudness helps prose, which has no schema to validate against,
+  only a reader — so they are at least two rules, and the executable instance argues for a third.
+  Each half now has a concrete candidate home:
+  - **Prose** — a named check in the `agent-maintenance` §7 lint: *verify the reason, not just the
+    rule*, with two corollaries now earned rather than proposed. (1) The repair for a correct rule
+    with a false mechanism is a **tombstone on the mechanism, not deletion of the rule** (applied at
+    v1.27). (2) **A tombstone certifies nothing.** A claim about the current mechanism gets no
+    credit from the retraction it is attached to; state the mechanism and the level its evidence
+    covers, and stop. Do not write a further tombstone certifying the last one — record a revision
+    as one dated line. Both corollaries are now written into `freshness.md`'s third tombstone as a
+    worked instance the lint can point at.
+  - **Executable** — the mutation standard this arc converged on, which is stricter than "the test
+    fails when the code is deleted": **the mutant worth running is the design that was rejected.**
+    Deleting a mechanism only proves the test reaches the code; substituting the alternative the
+    plan turned down proves the decision was load-bearing. Candidate home is the same §7 lint or
+    `analyst`'s `review-techniques.md`; it is a review technique, not an agent rule.
+  - **Values** — unchanged, in ascending cost: a shared on-demand knowledge base; one bullet in each
+    affected agent's Guardrails (`architect` already has its half as of 2026-09-08 — *"a mechanism
+    claim is only as verified as its least-verified clause"*); or a root-`AGENTS.md`-level
+    statement, still probably wrong for a class this abstract.
+- **Notes:** four of the eight instances have now been in evidence in a `cobb` run (the fourth via
+  the retraction pass, the fifth self-inflicted and self-found, the sixth and seventh self-inflicted
+  and caught by the gate), which retires the earlier reason for not acting — that writing a
+  team-wide rule from a single instance is the same error the rule would be about. Three of the four
+  `cobb` instances were **self-inflicted inside a repair**, which is the argument for a lint check
+  rather than a Guardrails bullet: the author was already being careful. The remaining instances
+  live in `analyst`'s and `graph-dba`'s files. Full trail: `docs/reviews/cpg-provenance-stamp.md`
+  (Passes 5-6), `docs/reviews/salesperson-ui-impl.md` Passes 17-18, and `kaizen_team` entry
+  `3b351bb5-a8a1-4006-8aa6-bdb3ef1c6448`.
 
 ### K-024 — Two out-of-remit documents still describe the pre-K-023 marker
 - **Status:** 🔵 proposed

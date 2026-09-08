@@ -2,6 +2,146 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-08 — U60: Pass 6 remediation — the wiring test's oracle was the next level of the same defect (K-023, K-024)
+
+- **The headline, and it is about this log as much as about the code.** U48 below shipped
+  `test-stamp-wiring.sh` to close *"verified in isolation, broken in the wiring"*. Its oracle
+  decided a case by `rc == 0 → PASS`, else by scraping stray key names out of the output — it never
+  asked **which** non-zero, and never asked whether the failure branch had **finished**. So deleting
+  `replay_stamp`'s definition, the exact defect U48 is titled for, left **all six cases green**
+  while the run aborted at rc 127 and the scrape still found its expected key among the lines
+  printed before the abort. Reproduced here from a `271c899` byte-copy: suite exit **0**. The
+  harness was sound and the oracle was soft, which is the previous failure one level up.
+- **P6-1 (fixed).** Every case now pins an **exact exit code**, and every case expected to fail must
+  also be shown to have reached the end of its branch — `--- begin stamp ---` present and a line
+  matching `^MERGE (b:CpgBuildInfo)$`. Same mutant against the fixed pair: two cases FAIL naming
+  `rc: expected 1, got 127`. Deleting `print_stamp` instead kills five.
+- **P6-2 (fixed, and I did not adopt the prescription).** Verified the reply shapes myself,
+  read-only, before writing anything: `GRAPH.RO_QUERY cpg_falkorchat` returns runtime errors **bare**
+  (`Unknown function 'nosuchfunc'`, `Type mismatch: expected Map, Node, Edge, or Null but was
+  String`) with `redis-cli` exiting 0 and none of `rq`'s blacklisted prefixes, while a completed
+  query always ends `Cached execution: 0` / `Query internal execution time: N milliseconds`. The
+  gate's prescription was to require the `stray` column header; I required the **trailer** instead —
+  it is the LAST element, so it also excludes a reply cut off part-way, and it does not couple
+  `pipeline.sh` to an alias owned by `git-provenance.sh`. And I made it **per call site rather than
+  global**: the trailer was measured on `GRAPH.RO_QUERY` replies only, and asserting it on the
+  **write** reply would be this arc's own recurring defect — a credential covering a narrower level
+  than the claim it licenses — with no way to check it without writing. That is also the answer to
+  the gate's open question 2: the stamp write keeps the blacklist because its real closure is the
+  `PARSED_AT` read-back, which is a positive assertion on the graph's contents and strictly stronger
+  than any reply-shape test. The stray check is the one assertion with no positive backstop.
+- **P6-3 (fixed).** `replay_stamp` was wired into the three branches that had already read the stamp
+  back and absent from the two where re-sending is the fix — producing a self-contradiction inside
+  one branch. Split it: `replay_stamp` (the stamp did **not** land → re-send this) on the two, and a
+  new `show_stamp` (the stamp **did** land → this is evidence, explicitly not a fix) on the three.
+  Both print the same delimited block through a shared `print_stamp`, so the new positive assertion
+  is uniform. `SKILL.md`'s claim that **every** stamp failure branch prints the Cypher was false as
+  shipped; it now describes the two-way split instead.
+- **P6-5(a) (fixed), and the gate's own test shape was not enough.** A direct-call case on
+  `cpg_provenance_stray_query` — but with **both** shapes, `unset` and set-but-empty. `unset` alone
+  proves nothing: `set -u` kills it whether the guard exists or not (observed: rc 127). Set-but-empty
+  is what a caller actually produces, and with the guard deleted it emits `NOT k IN []` and returns
+  **0** — every property a stray, reported as a finding about the graph.
+- **P6-5(b) (fixed).** The fake now derives merge-vs-replace **from the query text** (`SET b = {` ⇒
+  replace) as well as from `MODE`. The gate expected this to make case 3 catch an emitted `SET b += {`;
+  it is actually caught by cases 1 and 2 — the hand-authored-marker cases — which is a stronger
+  result and worth recording, since case 3 is already in merge mode and cannot discriminate.
+- **P6-6 (fixed).** The call-site guard's diagnostic printed `<set>` followed by the entire map
+  literal. It now reports the shape (`<set, N chars>`), and a **new mutation case** drops the
+  allow-list *after* a populated stamp — the one state that branch uniquely handles and had never
+  been executed — asserting rc 1, the shape, and that no `^MERGE (b:CpgBuildInfo)$` line appears.
+- **n6 (fixed).** Losing the END anchor was diagnosed as `syntax error near unexpected token 'fi'`.
+  An explicit check now says the block never reaches the END anchor.
+- **Mutation battery, all against byte-copies in the session scratchpad; the repo copies were never
+  the subject.** Every strengthening above was re-run against a mutant that removes or reverses it,
+  and each mutant fails the suite. The ones that matter are **the designs that were rejected**, not
+  merely the absence of the ones chosen: the `$(…)` call site; an `rq` keeping only its error
+  blacklist; an emitted `SET b += {`; and the replay wired into the three post-read-back branches
+  (i.e. the shipped `271c899` wiring), which fails on all three branches it got wrong. A separate
+  wording mutant — branches 1 and 2 printing `show_stamp`'s text — fails on the wording alone, so
+  that assertion is load-bearing independently of the block's presence.
+- **P6-4 and P6-7 (fixed) — and the pattern is the finding, not the sentence.** The third tombstone
+  said *"both earlier ones covered the primitive and not the call path"*; mechanism one's credential
+  was *"Re-checked there, not inferred"*, a **re-reading** credential, and its defect was an
+  incomplete enumeration, not a level gap. Replaced with the generalisation that is true of both:
+  **the credential named a narrower level than the claim it licensed.** It also said *"there is no
+  list at any layer"* — false one clause wide, since `CPG_STAMPED_KEYS` is a list at the assertion
+  layer; the true and stronger claim is that it is **derived** from the stamp's own map. Beyond both
+  fixes I wrote the pattern in: **all three tombstones were authored in the same sitting as the fix
+  they certify, and all three have since had their certifying sentence corrected on review.** The
+  retraction half is trustworthy; the certification half inherits credibility it has not earned. The
+  passage now says so, and says not to write a fourth tombstone certifying the third.
+- **n4 (fixed)** — "asserts a populated allow-list" → **exercises**: the list is printed, never
+  compared; an empty one fails a case by tripping the call-site guard.
+- **`MARKER_WRITTEN_AT` now has a written definition** (asked mid-run by `teco` after `graph-dba`
+  advanced the value on `cpg_falkorchat` and found the field had **no gloss anywhere in the repo**).
+  I agree with its reading — *last written or re-affirmed by a human, not first authored* — and
+  sharpened the defence: `graph-dba` conceded the value "overstates the `NOTE`'s age by up to
+  3h44m", but under the semantics it chose there is no overstatement at all; the value is exactly
+  true, because it is set in the same act as a re-read. What that reading rests on is an
+  **obligation**, so I wrote that in as the load-bearing half: advancing the timestamp without
+  actually re-reading the `NOTE` converts it into the false-freshness signal it exists to prevent.
+  If you cannot honestly re-affirm, leave it alone — a stale-looking annotation is a working signal,
+  a falsely fresh one is not.
+- **Also corrected while in the file:** `SKILL.md` still carried the retracted **wide** framing of
+  the stray check ("can only happen if the replace itself stopped working"), which both scripts had
+  already narrowed. Same false-universal shape as P6-7, one bullet up; narrowed to what it actually
+  catches, on the reason that is checkable.
+- **Constraints honoured:** `pipeline.sh` never run; no graph write, no `GRAPH.DELETE`, no
+  `GRAPH.QUERY`; every probe `GRAPH.RO_QUERY`. No tree-mutating git — the `271c899` baselines came
+  from `git show`. Nothing staged or committed.
+- **Plan items:** K-023 (Pass 6 majors closed). K-024 unchanged, still routing out of cobb's remit.
+
+
+## 2026-09-08 — U22: `analyst` chunk D distilled (11 entries), and a dangling cross-reference U21 left behind
+
+- **What:** ran `agent-maintenance` §5 over the eleven `analyst`-produced `kaizen_team` entries
+  dated 2026-09-03 (`claude/docs/plans/kaizen-distillation2-coordination.md` U22). **8 promoted, 3
+  discarded, 0 kept open, 0 `MENTIONS`.** Promotions landed in two knowledge bases and two skills —
+  `claude/analyst/review-techniques.md` (2 new sections, one merging two entries),
+  `skills/python-web-quirks/SKILL.md` (2 new sections + frontmatter `description` + the
+  `skills/README.md` catalog row), `skills/agent-standards/claude-code.md` (1 bullet),
+  `claude/graph-dba/falkordb-quirks.md` (1 bullet), `claude/data-scientist/lm-studio-model-notes.md`
+  (1 clause + 2 stale counts corrected). **No always-loaded prompt was touched.**
+- **I found a defect in my own previous unit.** U21's `28d78725` promotion closes with a pointer to
+  *"the `RETURN n.prop` → `null` entry under Cypher dialect"* of `falkordb-quirks.md`, and that entry
+  did not exist — a forward reference to content never written. U22's `df03e2c1` is exactly that
+  content, so the promotion repairs it. The lesson generalises past this file: a cross-reference
+  added in the same edit as the material it points *from* is not checked by anything, and a
+  distillation pass that promotes into a file it also cross-references should grep its own pointer
+  targets before finishing.
+- **The pass's standing "verify the citation, not the claim" check paid, in both directions.** For
+  `b7f3c1d2` I predicted the entry's `230 passed` should have been `231` and was **wrong** — the
+  deleted schema field also feeds a *derived* frozenset, so one deletion removed three cases. Testing
+  the instrument before writing the finding is what kept a false refutation out of the report, and it
+  is the same discipline whose absence produced the retraction recorded in the coordination ledger.
+  For `b7f3a1c2` the check went the other way and **refuted half the entry's remedy**: "pin
+  `PYTHONHASHSEED`" fixes nothing when the set's members are minted per run
+  (`secrets.token_urlsafe(32)`), which is the exact case the entry cites.
+- **Two verification patterns worth keeping.** (1) A negative about streaming needs a **paired
+  control** — "the piped background run wrote 0 bytes" means nothing until the identical unpiped run
+  is shown streaming at the same elapsed time; both were measured before the bullet was written.
+  (2) Where a claim's environment could not be reconstructed (falkor-chat's live seeded workspace —
+  the sandbox returned 89-90 errors), the promoted text carries only the per-test results actually
+  observed and drops the entry's file-level count, rather than repeating a number nobody re-ran.
+- **Shared-tree discipline held.** `claude/graph-dba/falkordb-quirks.md` still carries the
+  concurrent CPG session's 111 uncommitted words; the file was re-read immediately before editing
+  and the new bullet inserted *after* that block, leaving lines 190-199 byte-identical and unmoved.
+  Every edit in this unit was targeted; no file was rewritten from an in-context copy. **No probe
+  graph was created** — the FalkorDB verification was done read-only against the existing
+  `kaizen_team` and `reference` graphs, so this unit leaves no scratch key behind.
+- **A third `entryId` collision, and it ends the "eight characters is probably enough" reading.**
+  `b7f3a1c2-5d84-4e19-9a6f-2c8e71d40b93` (`analyst`, 2026-09-03) and
+  `b7f3a1c2-5d84-4e19-9a06-3c2e8f14d7b0` (`architect`, 2026-09-07) share their **first 21
+  characters**, diverging only at index 21 (`6f` vs `06`) — different producers, dates and
+  subjects, both live in the graph at once. The pass's two earlier collisions were 8-character
+  pairs; this one means no prefix short of the whole id is a key here. Caught only because the
+  brief pinned complete ids: a 21-character match would have cleared `architect`'s live entry.
+  Also worth stating plainly — **both ids pass the uuid4 regex K-021 proposes**, so shape
+  validation is a floor, not a fix; only real `uuid4()` entropy at the producer makes this
+  implausible.
+- **Plan items:** K-021 amended with that evidence (and with the limit of its own proposal). K-020
+  unchanged; no new item opened.
 
 ## 2026-09-08 — U21: `analyst` chunk C distilled (10 entries), plus one curator clear of a false `teco` entry
 
@@ -90,7 +230,9 @@
   case** that reverts the call site to `STAMP="$(cpg_provenance_stamp …)"` and requires it refused.
   All six pass. One case — merge semantics over a pipeline-clean marker — passes *by design*,
   empirically confirming the gate's P5-2 ruling that the check cannot detect a semantics change on
-  such a graph.
+  such a graph. *(Corrected 2026-09-08, U60/n5: five `run_case`s plus the mutation, not six —
+  "allow-list populated" is exercised by every case, not a case of its own. And the oracle those six
+  ran under was soft; see U60.)*
 - **P5-5 (fixed)** — second tombstone to past tense, and it now says *why* it is a cautionary
   example: it was written under a "verified by execution in both directions" credential that was
   true of the query and untrue of the wiring that called it.
@@ -98,7 +240,10 @@
   credential is only worth the level it covers*. It no longer claims "executed" as the
   differentiator, since mechanisms one and two both carried execution credentials. It names **two**
   levels — the construct (`graph-dba`'s `keys(b)` probes) and the call path (this run's wiring test)
-  — and says the credential is worth nothing without both.
+  — and says the credential is worth nothing without both. *(Corrected 2026-09-08, U60/P6-4:
+  mechanism one carried a **re-reading** credential, not an execution one, and its defect was an
+  incomplete enumeration rather than a level gap. The generalisation true of both is that the
+  credential named a narrower level than the claim it licensed.)*
 - **P4-4 (closed, open three passes)** — the `provenance` row now states the safe scripted form:
   exact equality against the closed set, never a prefix/substring test, never a default-to-trusted
   `else`; and `markerOrigin IS NULL` for "pipeline wrote this", since `provenance` is only a label
@@ -123,7 +268,9 @@
   `MERGE (b:CpgBuildInfo) SET b = { …the eight pipeline fields… }` — map assignment with `=`, which
   replaces the node's whole property set. The five `MARKER_ORIGIN` / `MARKER_WRITTEN_AT` / `NOTE` /
   `STATUS` / `RENAMED_FROM` `= NULL` lines are **deleted**, not moved: closure is now by construction
-  and there is no list at any layer. `_cpg_prop` emits `NAME: value` map entries instead of
+  and there is no list at any layer. *(Corrected 2026-09-08, U60/P6-7: false one clause wide —
+  `CPG_STAMPED_KEYS` is a list, at the assertion layer. The true and stronger claim is that it is
+  derived from the stamp's own map rather than hand-maintained.)* `_cpg_prop` emits `NAME: value` map entries instead of
   `b.NAME = value` assignments; its `CPG_STAMPED_KEYS` side effect is unchanged and still correct.
   Rewrote the affected prose in `pipeline.sh`, `SKILL.md`, `freshness.md` and `skills/README.md` — all
   of it mine from `0da3eb9`, all of it describing the enumeration.
