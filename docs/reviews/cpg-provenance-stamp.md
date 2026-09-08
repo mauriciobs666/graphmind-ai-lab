@@ -615,6 +615,179 @@ want that decided before the write, not after.
 
 ---
 
+## Pass 4 — 2026-09-08 · the pairwise cross-document gate (`81b43cd` reference, `b47c84a` manual)
+
+**Scope:** the two documents as committed, read with `git show` (both confirmed identical to `HEAD`);
+the live backfilled `cpg_falkorchat` marker and its `NOTE`; `cpg/.cpg-artifacts/MANIFEST.txt`; and
+the stamp body in `git-provenance.sh` (unchanged since `9124a1f`). No suite run, no graph write, no
+tree-mutating git. The working tree's `falkor-chat/server/` and `model-bench/` changes were ignored.
+
+**Verdicts.** `skills/cpg-analysis/references/freshness.md`: **needs changes** — one major (**P4-1**),
+a false statement about system behaviour in the direction that produces a misleading marker;
+everything else in the sweep is right. `docs/manuals/graph-ontology.md`: **approve with suggestions**
+(**P4-3**).
+
+**Dispositions.** **P3-3 fixed** — all four backfill-dependent statements updated, and the design
+question I flagged was answered exactly as recommended: the marker carries `PROVENANCE =
+hand-backfilled` plus `MARKER_ORIGIN`, rather than a `source-origin` that would have asserted a
+capture that never happened. **P3-2 not fixed** — the manual's `§1` cell still states "all rewritten
+on every stamp (an absent one is removed, not left stale)" unconditionally; now entangled with P4-1,
+so settle P4-1 first and let both files state the same true thing. **P3-1 and the Pass 3 nits not
+fixed** — `git-provenance.sh`, `pipeline.sh` and `SKILL.md` are untouched since `9124a1f`; correctly
+out of scope for two docs-only units, still open.
+
+**Coordinator's facts, re-derived independently and all confirmed:**
+`git rev-parse --verify "HEAD:./falkor-chat/server"` → `515ee7e9…`, marker `sourceTree` → `85ddeed0…`
+(different — check 0 says *stale*); check 2 → exactly 3 commits (`e6fa20c`, `3fe3d8f`, `c708423`),
+still 3 at today's `HEAD`; `MANIFEST.txt:19-21` records `diff -rq`, exit 0. Nothing to challenge.
+
+### The central question — two partitions of one set, not an omission
+
+I enumerated each document's **classification surface** — the list a reader actually walks to decide
+what they are holding — and matched them:
+
+| Marker state | `freshness.md` | `graph-ontology.md` |
+|---|---|---|
+| pipeline stamp, full | bullet 1 (gated on a pipeline `provenance` **and** null `markerOrigin`) | question-to-field table |
+| … sub-state `provenance: 'none'` | `provenance` row + dedicated Limits bullet | FAQ bullet 1 |
+| … sub-state `sourceTree` absent | `sourceTree` row (`:31`) + check 2's caveat | FAQ bullet 4 |
+| pre-2026-09-07 stamp | bullet 2 | FAQ bullet 2 |
+| hand-backfilled | bullet 5 | FAQ bullet 3 |
+| zero rows | bullet 3 | FAQ bullet 5 |
+| hand-written, `builtAt: unknown` | bullet 4 | FAQ bullet 6 |
+
+**Five and six are the same set.** The whole difference is that `cobb` treats `none` and
+`sourceTree`-absent as *sub-states of a pipeline stamp* — correctly, since both are things the
+pipeline itself writes — while `tico` promotes them to top-level reader-facing states. Neither is
+omitted anywhere: a reader of `freshness.md` alone can classify and act on a `none` marker (field
+table plus a dedicated Limits bullet with the full workaround) and on a tree-absent one (`:31`,
+check 0's gate, check 2's two-cases caveat); a reader of `graph-ontology.md` alone can classify a
+full pipeline stamp (the question-to-field table, whose `PROVENANCE` row now enumerates all four
+literals). I also walked both orderings against the two live markers: `cpg_falkorchat` lands on
+hand-backfilled in both, `cpg_deprecated_salesperson` on `builtAt: unknown` in both, and no earlier
+bullet in either list captures either of them first.
+
+**What does differ is the gates, not the sets** — see P4-3. That is the honest residue of the two
+authors not seeing each other's file, and it is one sentence wide.
+
+### The three specific weights
+
+**1. `cobb`'s per-marker check-0 gate — endorsed, and operable.** The reasoning is right and it is
+this chain's own discipline applied one level up: `source-origin` can carry a blanket guarantee
+because a machine produced it under fixed rules; `hand-backfilled` only asserts a human was present,
+so the guarantee has to be re-earned per marker. It is operable by the recipe's actual consumer —
+`teco`, an agent that can run `MATCH (b:CpgBuildInfo) RETURN b` and judge a note — and
+`cpg_falkorchat`'s note does establish the derivation (I read it and checked its `MANIFEST.txt`
+citation resolves). Two things worth saying: a **scripted** consumer's safe default exists but is
+implicit (**P4-4**), and the gate's first real use produces *stale*, so nobody is currently trusting
+a graph on hand-derived evidence — the admission's practical effect today is that check 0 runs and
+says no.
+
+**2. The `markerOrigin` re-gating — complete on `provenance`, one residual on a word.** I swept every
+`provenance`-keyed statement in the file (23 sites). Bullets 2, 3 and 4 are keyed on null
+`provenance`, zero rows and an unparseable `builtAt` respectively, so the fourth literal cannot reach
+any of them; checks 0 and 1 were both updated; the Limits bullets are keyed on literals or on the
+field's absence. Nothing is still keyed on `provenance` alone. The one residual is lexical, not
+logical: **P4-2**.
+
+**3. The dead-example claim — both files now point the same graph at the same shape.** Verified
+against the live node (ten keys, `PROVENANCE = hand-backfilled`, `SOURCE_ORIGIN = falkor-chat/server`,
+`SOURCE_TREE = 85ddeed0…`, no `PARSED_AT`): `freshness.md`'s pre-fix bullet says no loaded graph
+carries that shape and explicitly redirects `cpg_falkorchat` to the fifth bullet; its fifth bullet
+names it as the live hand-backfilled example. The manual says the same in both places, and its
+Overview, `§1` cell and "how current" row all now describe the backfilled marker accurately. **Neither
+file teaches `cpg_falkorchat` as an example of the old shape anywhere.** `cobb`'s choice to keep the
+pre-fix shape documented without a live example is right — reloading a pre-fix export re-creates it.
+
+### P4-1 — major · "the next `--load` overwrites it wholesale" is false without `--reset`
+
+`freshness.md` (one-marker-per-graph limit, new text): *"**A hand-authored marker is subject to the
+same rule**, and nothing exempts it: the next successful `--load` overwrites it wholesale, `NOTE` and
+`MARKER_ORIGIN` included."*
+
+The stamp is `MERGE (b:CpgBuildInfo) SET` **eight named properties** (`git-provenance.sh`,
+`cpg_provenance_stamp`). Nothing in `pipeline.sh`, `git-provenance.sh` or `cpg-to-falkordb.py`
+references `MARKER_ORIGIN`, `MARKER_WRITTEN_AT`, `NOTE`, `STATUS` or `RENAMED_FROM` (grepped). So the
+claim holds only for a `--reset` load, which `GRAPH.DELETE`s the graph first — and `--reset` is
+optional (`pipeline.sh:161` gates on it). On an **`--append`** load the `MERGE` matches the existing
+hand-authored node, rewrites the eight, and **leaves the three hand-authored properties standing.**
+
+That is this chain's defect class one level up again — a stale value that looks authoritative. The
+resulting marker carries freshly captured `source*` fields *plus* a `MARKER_ORIGIN` saying
+"hand-backfilled by graph-dba, NOT a pipeline stamp" and a `NOTE` describing a build that no longer
+exists. Under `cobb`'s own new bullet 1 (which requires `markerOrigin` null) it is classified as *not*
+a pipeline stamp, and check 0's per-marker gate then sends the reader to that stale note as evidence.
+Traced statically, not executed — writing to a graph was out of scope.
+
+**Fix — prefer (b).** (a) Scope the sentence: *"a `--reset` load deletes the node outright; an
+`--append` load rewrites the eight pipeline fields and leaves `MARKER_ORIGIN`/`MARKER_WRITTEN_AT`/
+`NOTE` standing, so a rebuilt graph can carry a stale hand-authored note — check `MARKER_WRITTEN_AT`
+against `BUILT_AT`."* (b) Make the sentence true: add
+`b.MARKER_ORIGIN = NULL, b.MARKER_WRITTEN_AT = NULL, b.NOTE = NULL, b.STATUS = NULL,
+b.RENAMED_FROM = NULL` to the stamp. That is exactly the existing write-every-field-as-`NULL`
+discipline extended to the hand-authored keys, it restores the "wholesale" guarantee both documents
+want to rest on, and it is correct on the merits: a note describing the previous build has no
+business surviving the rebuild. Routes to `cobb` (code + the sentence).
+
+### P4-2 — minor · check 2 still says "hand-written" where the document now means one specific shape
+
+`81b43cd` disambiguated the term everywhere else — the Limits bullet is now *"A hand-written marker —
+the `builtAt = unknown` shape, not the hand-backfilled one"* — but check 2's closing line was not
+updated: *"skip this check entirely for a hand-written marker."*
+
+A reader holding `cpg_falkorchat` has just been told by bullet 5 that "checks 0 and 2 are both
+available", and is looking at a marker whose own `MARKER_ORIGIN` reads *"hand-backfilled by graph-dba,
+NOT a pipeline stamp"*. Reading "hand-written" in its plain sense, they skip the one check that
+returns an actionable answer today (3 commits — the *only* check currently telling them the graph is
+behind). **Fix:** *"skip this check entirely for a hand-written marker (the `builtAt = unknown`
+shape — a hand-backfilled marker has a real `sourceCommit` and check 2 does apply)."*
+
+### P4-3 — minor · the manual states `MARKER_ORIGIN` as a fact but never as a classification rule
+
+This is the one place the two authors' gates diverge. `cobb` made `markerOrigin` a documented query
+field and a **rule**: bullet 1 requires it null, and the field table says non-null means "a human
+wrote this marker … read the whole node before acting on any other field" — global, not bullet-scoped.
+`tico`'s manual carries the *fact* (the `§1` cell: "one written or repaired by hand adds
+`MARKER_ORIGIN`, `MARKER_WRITTEN_AT` and a `NOTE`") but its FAQ decision list — the surface a reader
+actually classifies on — keys entirely on the `PROVENANCE` literal and never mentions it.
+
+So a hand-authored marker carrying a *pipeline* `provenance` literal reads as a pipeline stamp to a
+manual-only reader. By convention that marker should not exist — which is why this is minor, not
+major — but it is precisely the case `cobb` added the field to bullet 1 to catch, and P4-1 shows a
+routine `--append` rebuild can manufacture something close to it. **Fix (routes to `tico`):** one
+sentence at the head of the FAQ absent-cases list — *"whatever `PROVENANCE` says, a marker with a
+`MARKER_ORIGIN` property was written or repaired by a human: read the whole node before trusting any
+other field."*
+
+### Nits
+
+- **P4-4** — check 0's per-marker gate has no stated fallback for a consumer that cannot read and
+  judge a note. The safe default does exist (implement the gate as the literal pair `parse-root` /
+  `source-origin` and fall through to checks 1-2), and the `provenance` row already warns against a
+  scripted `startswith`. One clause would make it explicit rather than inferable.
+- **P4-5** — the live marker's own `NOTE` says check 0 is safe to run against it *"even though its
+  literal gate names only `parse-root` and `source-origin`"*. `81b43cd` changed that gate, so the
+  note now describes a superseded version of the document that admits it. Harmless today, but the
+  note is load-bearing evidence under the per-marker gate, so it should not contradict the recipe.
+  Routes to `graph-dba` with the next marker touch, not urgently.
+
+### What's solid
+
+- **Neither author's independent sweep missed a site the other's brief named**, and each found sites
+  outside it: `cobb` found three (the hand-written bullet's blanket "has no date", the newly
+  load-bearing one-marker limit, check 1's fallback), `tico` found two (the `PROVENANCE` row's
+  three-literal enumeration — the most-read place a fourth literal would have looked like corruption
+  — and the "how current" row pointing at a `PARSED_AT` that no longer exists on the graph readers
+  open). Both are the sweep-don't-patch instinct that Pass 2 credited `tico` with.
+- **`hand-backfilled` as a distinct literal, in `PROVENANCE` rather than hidden in a side field, is
+  the right call** and both files give the same reason: a caveat parked in a field the read path
+  skips would let a reader see `source-origin` and trust a capture that never happened.
+- **The manual keeps deferring procedure** and gained no copied command in this round; the reference
+  keeps owning the checks. Two rounds of upstream change have now landed without the manual needing
+  a correction to stay true — the structural fix from Pass 2 continuing to pay.
+
+---
+
 ## Appendix
 
 ### A1 — `redis-cli` exits 0 on an error reply, and prints it to stdout
@@ -874,3 +1047,65 @@ step P3-1 asks the pipeline to remove by printing `$STAMP` on the failure path.
 **File drift check** — all four reviewed files are unchanged between their fix commit and current
 `HEAD` (`git diff --quiet 9124a1f HEAD -- <path>`, and `8779ee8` for the manual), so this pass
 reviewed the live text.
+
+### A9 — Pass 4 verification
+
+**The live `cpg_falkorchat` marker after the backfill** (read-only, `keys(b)` + field read):
+
+```
+keys = ['BUILT_AT','SOURCE_PATH','SOURCE_COMMIT','SOURCE_DIRTY','PROVENANCE',
+        'SOURCE_ORIGIN','SOURCE_TREE','MARKER_ORIGIN','MARKER_WRITTEN_AT','NOTE']   # ten
+PROVENANCE    = hand-backfilled          SOURCE_ORIGIN = falkor-chat/server
+SOURCE_TREE   = 85ddeed09479091a69b66d0301ed0d3399cc8387
+SOURCE_COMMIT = b795f4c23e066278ba8582d8cdd213d03b73e9df     SOURCE_DIRTY = false
+PARSED_AT     = null                     MARKER_ORIGIN = "hand-backfilled by graph-dba,
+                                                          NOT a pipeline stamp"
+```
+
+Matches every claim both files make about it, including "`PARSED_AT` is the one it does *not* have".
+
+**Coordinator's three facts, re-derived:**
+
+```
+$ git rev-parse --verify "HEAD:./falkor-chat/server"
+515ee7e99cf884bd053ea6564cbf28fe1989375d      # vs sourceTree 85ddeed0… -> DIFFERENT (stale)
+$ git log --oneline b795f4c23e…..HEAD -- falkor-chat/server
+e6fa20c  3fe3d8f  c708423                     # exactly 3, still 3 at HEAD de0257d
+$ sed -n '19,21p' cpg/.cpg-artifacts/MANIFEST.txt
+  Source commit : b795f4c — falkor-chat/server tree 85ddeed, working tree CLEAN
+                  under falkor-chat/server/ at staging time. The staged copy was
+                  verified byte-identical to the committed tree (`diff -rq`, exit 0).
+```
+
+**P4-1 — what the stamp actually writes** (`git-provenance.sh`, `cpg_provenance_stamp`):
+
+```
+MERGE (b:CpgBuildInfo)
+SET b.BUILT_AT = …, b.PARSED_AT = …, b.SOURCE_PATH = …, b.PROVENANCE = …,
+    b.SOURCE_ORIGIN = …, b.SOURCE_COMMIT = …, b.SOURCE_TREE = …, b.SOURCE_DIRTY = …
+```
+
+Eight named properties. `grep -n 'MARKER_ORIGIN\|NOTE\|STATUS\|RENAMED_FROM'` over
+`skills/joern-cpg/scripts/*.sh` and `*.py` returns only unrelated shell comments — nothing clears the
+hand-authored keys. `--reset` is optional (`pipeline.sh:161` gates the `GRAPH.DELETE` on it), so the
+`--append` path leaves `MARKER_ORIGIN`, `MARKER_WRITTEN_AT` and `NOTE` standing over a fresh stamp.
+Traced statically; not executed, since verifying it live would mean writing to a graph.
+
+**P4-2 — the un-updated line** (`freshness.md`, check 2, closing):
+
+```
+**Use `sourceOrigin`, not `sourcePath`** … **Both forms need a real `parsedAt`/`sourceCommit`**;
+skip this check entirely for a hand-written marker.
+```
+
+while the Limits bullet in the same commit now reads *"A hand-written marker — the
+`builtAt = unknown` shape, not the hand-backfilled one — …"*.
+
+**Re-gating sweep** — 23 `provenance`/`markerOrigin`/`hand-*` sites in `freshness.md` read; bullets
+2/3/4 are keyed on null `provenance`, zero rows and an unparseable `builtAt`, none of which the
+fourth literal can satisfy; checks 0 and 1 updated; Limits bullets keyed on literals or absence.
+No site still keyed on `provenance` alone.
+
+**File drift** — `freshness.md` identical to `81b43cd`, `graph-ontology.md` identical to `b47c84a`,
+and `git-provenance.sh`/`pipeline.sh`/`SKILL.md` identical to `9124a1f` (so P3-1 and the Pass 3
+script nits are untouched, as expected for two docs-only units).
