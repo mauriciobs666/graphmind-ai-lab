@@ -160,9 +160,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | gated — fix blocked on U40 | `e6fa20c` — 9 files, +895/−44, 12 tests | `analyst` Pass 17 → **needs changes**, 2 majors (`20e138e`) | 305k tok / 111 tools |
-| **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | gated | `d1eaa7f` + `d01f22e` — plan **v1.28** | `analyst` Pass 18 **needs changes** → Pass 19 re-check out | 334k tok / 71 tools |
-| **U43** — retract the false CPython deadlock fact from `kaizen_team` before it is promoted | `cobb` | `a69330f81cf6048ae` | in-flight (dispatched 2026-09-08) | curator clear + judgment on the method lesson | self-verifying (reads `thread.py`) | — |
-| **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7 | tbd (fresh) | — | queued (behind Pass 18) | `storefront.py`, `storefront_api.py`, both test files, `HISTORY.md` | `analyst` re-gate + `qa-engineer` | — |
+| **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | **accepted** | `d1eaa7f`+`d01f22e`+`94c1578` — plan **v1.29** | `analyst` Pass 19 → **approve** (`8418a9f`) | 528k tok / 77 tools |
+| **U43** — retract the false CPython deadlock fact from `kaizen_team` before it is promoted | `cobb` | `a69330f81cf6048ae` | delivered | `de8b5ac` — 2 entries cleared, promoted split by audience | `analyst` (prompt edit) — queued | 118k tok / 28 tools |
+| **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7, P18-6 | `coder` | `a31456adeff4788ea` | in-flight (dispatched 2026-09-08) | `storefront.py`, `storefront_api.py`, both test files, `config.py`, `SERVER.md`, `HISTORY.md` | `analyst` Pass 20 + `qa-engineer` | — |
 | **S9f** — `STOREFRONT_QUIESCE_S`'s docs describe a quiesce that S9a made live | `tico`/`coder` (tbd) | — | queued (held behind Pass 17) | `config.py` + `docs/SERVER.md` prose | `analyst` (fold into Pass 17 re-check) | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
 | **S9c** — the dead-turn latch `turn.lastTurn` and its lifecycle | `coder` | — | queued (behind S9b) | `storefront.py`, `storefront_api.py`, tests | `analyst` | — |
@@ -3452,3 +3452,53 @@ stated reach wider than the mechanism* — arriving through a new door: not a gu
 is narrower than its docstring, but a citation whose coverage is narrower than its sentence.
 Fifteen instances of that family in the guard chain, and this is the sixteenth, in prose.
 It is in `kaizen_team` generalised, which is the right home.
+
+## U43: the retraction was verified by staging it, not by reading about it
+
+`cobb` did the thing I asked and one thing I did not. It re-derived the CPython lock scopes
+from source — `_python_exit` enters `_global_shutdown_lock` for a single statement, both the
+`q.put(None)` and `t.join()` loops outside it, `shutdown()` the same shape — and then
+**staged the arrangement twice and measured it**: `submit()` under an application lock
+returns in 0.2 ms and never blocks; the process exits `rc 0` after *exactly* the hold time,
+**0.52 s for a 0.5 s hold and 3.03 s for a 3.0 s hold**, and never exits at all if the lock
+is never released. Exit is bounded below by the hold duration. That is a cleaner statement of
+the true mechanism than either the architect's correction or the reviewer's disproof, and it
+came from someone whose brief only asked them to check whether a deletion was safe.
+
+Its reason for not trusting the paperwork is the sharpest sentence in the report: *the
+retracted entry cited real line numbers and still misdescribed them.* A citation that
+resolves is not a claim that holds — which is the same lesson the reviewer generalised from
+the architect's failure, arrived at independently from the other end. Three agents have now
+reached the same conclusion by three routes.
+
+**It cleared both entries, not the one I named**, and told me rather than letting me notice:
+the correction is cleared too once verified, promoted and logged, because leaving a reviewed
+entry live is what the procedure forbids. Correct, and the flag is what makes it safe — a
+delegate exceeding a brief silently is a problem; one that exceeds it and says which line of
+its own procedure required it is doing the job.
+
+**The promotion was split by audience rather than filed whole**, which I would not have
+specified and is better than what I would have got. The CPython fact went to
+`skills/python-web-quirks/SKILL.md` — general threading, not falkor-chat's, and an on-demand
+skill already carrying this class, so the always-loaded cost is zero. The method lesson went
+into `architect.md`, **folded into the existing "Honesty about uncertainty" bullet rather
+than added as a ninth**, on the grounds that a new bullet would restate its neighbour. The
+gap it actually closes is the inverse of the existing rule: the prompt's verification rules
+cover the detail you *know* you are unsure of, and this failure felt like no uncertainty at
+all. *"A mechanism claim is only as verified as its least-verified clause."*
+
+**And it declined to write the team-wide rule I was fishing for.** I offered the fourth
+instance as evidence of a class; it filed `cobb` K-022 instead, with the question *do the
+value cases and the prose case share a fix, or only a symptom?* — because if the fix for a
+value is "make the failure loud" and the fix for prose is "verify every clause, not the
+first one", those are two rules wearing one name. Writing a team rule from the single
+instance actually in evidence would have been the same error the rule is about. That is the
+correct answer and it is a refusal, which is worth recording: the coordinator asking for a
+generalisation is not evidence that one exists.
+
+**S9a-fix is dispatched** against a settled clause — the first implementation unit in this
+chain to start from a specification that survived three review passes. Its brief carries the
+two mutants the eleven missed, the tests that must be re-spelled rather than added, and the
+held-inside-the-write concurrency harness the suite has no precedent for. The prompt edit in
+`de8b5ac` still owes an independent read; it is small and blocks nothing, so it queues rather
+than gates anything.
