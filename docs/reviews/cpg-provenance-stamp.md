@@ -1109,3 +1109,306 @@ No site still keyed on `provenance` alone.
 **File drift** — `freshness.md` identical to `81b43cd`, `graph-ontology.md` identical to `b47c84a`,
 and `git-provenance.sh`/`pipeline.sh`/`SKILL.md` identical to `9124a1f` (so P3-1 and the Pass 3
 script nits are untouched, as expected for two docs-only units).
+
+---
+
+## Pass 5 — 2026-09-08 · gating the arc that closed the stamp's property set (`29538d6`, `0da3eb9`, `5417f0e`)
+
+**Scope:** the three commits as an arc, read with `git show` against their parents — never the
+working tree, which carries a second session's unrelated changes under `claude/`, `model-bench/`,
+`skills/agent-standards/`, `skills/python-web-quirks/`. Files judged at `HEAD`:
+`skills/joern-cpg/scripts/git-provenance.sh`, `skills/joern-cpg/scripts/pipeline.sh`,
+`skills/joern-cpg/SKILL.md`, `skills/cpg-analysis/references/freshness.md`, `skills/README.md`,
+`claude/cobb/kaizen/{plan,history}.md`. Plus the live `cpg_falkorchat` marker (read-only) and
+`docs/plans/cpg-agent-adoption-graph.md` §1.1. Nothing under `falkor-chat/` was opened. No graph
+write, no `GRAPH.DELETE`, no `GRAPH.QUERY` against a possibly-absent graph, no tree-mutating git,
+nothing staged or committed. `pipeline.sh` was not run; its stamp block was extracted and executed
+against a fake `redis-cli` that models a *correct* map replace (A10).
+
+**Verdict: needs changes** — one blocker, three majors. The design decision is right and the map
+form is the right mechanism; the wiring that carries it is broken.
+
+CPG: considered, not relevant — the arc is Bash and Markdown, and the two loaded `cpg_*` graphs are
+the *subject* of the marker data, not graphs of this code; no `cpg_skills` graph exists.
+
+### P5-1 — blocker · the stray assertion's allow-list is always empty, so every `--load` build fails
+
+`pipeline.sh:228` builds the stamp in a command substitution:
+`STAMP="$(cpg_provenance_stamp …)"`. That subshell is the only place `CPG_STAMPED_KEYS` is ever
+assigned (`git-provenance.sh:214,221` — the only setters in the repo). In the parent shell the
+variable is **unset**, so `cpg_provenance_stray_query` renders `NOT k IN []` and every property on
+the marker is a stray. `_cpg_prop`'s own comment (`git-provenance.sh:204-210`) names this exact
+trap — *"CALL IT AS A STATEMENT, NEVER INSIDE `$(…)`"* — one level below the call site that
+commits it, and dismisses the consequence as *"at least the safe direction"*. It is not a
+direction; it is the shipped state.
+
+Verified three ways (A10): the repro prints `CPG_STAMPED_KEYS=<UNSET>`; the empty-allow-list query
+run read-only against `cpg_falkorchat` returns all 10 keys; and the stamp block executed verbatim
+against a *correctly replaced* 8-key marker exits 1 listing all eight of its own fields as strays.
+Impact: the marker has already been replaced when this fires, so a rebuild destroys the annotation
+**and** reports `FAILED … THIS SHOULD BE IMPOSSIBLE`, sending the operator to hunt a FalkorDB
+semantics change after a multi-hour parse. It also falsifies `freshness.md`'s "with no warning
+either way" and every "fails the run only if the replace stopped working" sentence in the arc.
+
+**Fix:** call the stamp as a statement and read the rendered Cypher from a variable —
+`cpg_provenance_stamp … >/dev/null` then `printf` into `STAMP`, or have the function assign
+`CPG_STAMP_CYPHER` instead of echoing. Then assert the wiring, not just the query: `[ -n
+"${CPG_STAMPED_KEYS:-}" ] || { echo "pipeline: internal — allow-list empty"; exit 1; }`. An empty
+allow-list is a bug in the pipeline, not a finding about the graph, and must not render as one.
+
+### P5-2 — major · the stray check's three named triggers are one wrong and two conditional
+
+`git-provenance.sh:244-256` and `pipeline.sh:283-296` (same wording, echoed at `SKILL.md:96-103`)
+justify keeping the check with three triggers: a FalkorDB treating `=` as a merge, a reversion to
+`b.X = …`/`+=`, and *"an edit that drops a property out of the map"*. The third cannot fire: a key
+is added to the map and to `CPG_STAMPED_KEYS` by the same `_cpg_prop` call, so deleting the line
+removes it from both and the node simply lacks it — zero rows. The first two fire **only over a
+marker that already carries a foreign key**: on a graph whose previous marker is pipeline-clean,
+`+=`, `b.X = …` and a merge-semantics `=` all leave exactly the eight stamped keys. So the claim
+"each is caught here, on every build" is false, and with it the "standing regression test for the
+property the whole design rests on" framing that the DO-NOT-DELETE argument rests on.
+
+**Ruling on the check:** keep it — it is not dead code and not theatre — but it detects *the stamp
+failed to erase a pre-existing foreign key*, not *the replace semantics changed*. Today that makes
+it a real, firing check on exactly two graphs (`cpg_falkorchat`, `cpg_deprecated_salesperson`);
+after each rebuilds once it can no longer fire under any named trigger. **Fix:** replace the
+three-trigger list with that one sentence, and keep the DO-NOT-DELETE line — the honest reason is
+stronger than the overclaimed one, because it is checkable.
+
+### P5-3 — major · the sweep missed the fifth carrier: the live marker's own `NOTE`
+
+`0da3eb9` "corrects a false universal in all three places that carried it"; `5417f0e` swept those
+plus `skills/README.md`. A fifth copy sits in the graph. `cpg_falkorchat`'s `NOTE`
+(`MARKER_WRITTEN_AT` `2026-09-08T10:39:56Z`, 2,245 chars, read read-only) says: *"Since 2026-09-08
+the stamp writes every property on this node, so MARKER_ORIGIN, MARKER_WRITTEN_AT, NOTE, STATUS and
+RENAMED_FROM are all cleared to NULL on any rebuild."* That is mechanism 1's false universal
+verbatim — the sentence the second tombstone exists to retract — attached to a conclusion that
+happens to be true under mechanism 3. Correct conclusion, retracted reason: the arc's own defect
+class, in the artifact `freshness.md`'s check-0 per-marker gate treats as evidence.
+
+**Fix (routes to `graph-dba`; a marker write is not mine):** replace that sentence with the
+mechanism that is actually there — *"the stamp is `SET b = {…}`, a map assignment, which replaces
+this node's whole property set, so everything the stamp did not write is gone after any rebuild."*
+Same conclusion, one fewer false universal, and it survives the next re-check.
+
+### P5-4 — major · `K-024` still routes the superseded shape to `architect`
+
+`claude/cobb/kaizen/plan.md:23,155-162` is untouched since `29538d6` and still frames the debt in
+mechanism 2's terms: *"§1.1's property table … never listed the five hand-authored keys and now
+understates what a stamp writes."* Under the map form the stamp writes **eight** properties and
+never writes those five at all — they were `= NULL` assignments for one commit and are now deleted.
+An `architect` executing K-024 as written would add five never-written keys to the schema table of
+the document that this arc cited as the ownership argument for erasing them.
+
+**Fix:** rewrite K-024's rationale to the current mechanism — §1.1 owes (a) the eight properties
+the stamp writes, (b) full 40-char OIDs rather than "short SHA", and (c) the new schema-level fact,
+that the property set is closed by construction because the stamp is a map assignment. Add the
+same erasure consequence to the `tico` half; the manual's `§1` cell (`graph-ontology.md:125`) tells
+a reader a marker "can carry more than eight" and never says a rebuild takes them.
+
+### Minor
+
+- **P5-5** — `freshness.md:206-217`, the **second** tombstone, still says in the present tense
+  *"What makes the rule hold **is now** the post-stamp assertion described above"*, and closes with
+  *"Verified by execution … not inferred."* The third tombstone immediately below contradicts it.
+  A tombstone is a record; write it in the past tense — *"What made the rule hold at that point
+  was…"* — so a reader who stops after two isn't handed the superseded mechanism under an
+  executed-not-inferred credential.
+- **P5-6** — the counter prohibition's *reason* is itself unverified. `freshness.md:229-231` and
+  `git-provenance.sh:127` say counters *"conflate properties set with properties removed"*. The two
+  observations behind it (13 reported against 5 actual; 4 reported against 0) establish only that
+  `Properties removed` does not track actual removals. State the observation, not the internals —
+  in the paragraph whose subject is stating mechanisms you have not checked.
+- **P5-7** — **P3-1 is not fixed and this arc widened it.** No failure branch in `pipeline.sh`
+  prints `$STAMP`, and there is now a *third* branch (`:311-326`) telling the operator
+  "re-stamping by hand is enough" — for a multi-line map literal with escaped quotes, which is
+  strictly harder to reconstruct than the old flat SET clause, and (per P5-1) is the branch every
+  build now takes. One line on all three: `printf 'pipeline: replay this stamp verbatim:\n%s\n'
+  "$STAMP" >&2`.
+
+### Nits
+
+- **n1** — `SKILL.md:58` still says *"**Two** properties of the *mechanism* matter when you run a
+  build"* over what is now a **four**-bullet list. Wrong since `6012ddb`; this arc added the fourth.
+- **n2** — the stray read goes through `rq`, i.e. `GRAPH.QUERY`, while its own failure message
+  (`pipeline.sh:325`) tells the operator to use `GRAPH.RO_QUERY` for the identical read, for the
+  reason `5417f0e` gives (a `GRAPH.QUERY` against an absent graph materializes it). Use
+  `GRAPH.RO_QUERY` for the two read-only calls, or say why the pipeline is exempt.
+- **n3** — `claude/cobb/kaizen/history.md`'s U47 entry does not record the reversal its own commit
+  message leads with. The durable copy lives only in the commit message and in
+  `docs/plans/salesperson-ui-coordination.md`, which will be archived.
+
+### Pass 4 dispositions
+
+- **P4-1 — fixed**, twice. Rechecked at `HEAD`: `cpg_provenance_stamp` emits `MERGE
+  (b:CpgBuildInfo) SET b = {` over exactly eight entries (`git-provenance.sh:219-234`); no
+  hand-authored key is named anywhere in the stamp. The hybrid marker is unrepresentable. I did not
+  re-execute the replace — a graph write is not mine — but `graph-dba`'s four probes are recorded
+  with `keys(b)` read-backs and re-derived by the coordinator
+  (`docs/plans/salesperson-ui-coordination.md:167`, `4380-4404`).
+- **P4-2 — fixed** at `29538d6`, in the suggested wording (`freshness.md:150-153`).
+- **P4-3 — not fixed**, correctly out of `cobb`'s remit; filed as K-024 → `tico`. See **P5-4** for
+  what that ticket now says wrongly.
+- **P4-4 — not fixed.** `freshness.md:34` still warns against a scripted `startswith` without
+  stating the safe fallback. Three passes over that file have left it.
+- **P4-5 — fixed**, though not by this arc: `graph-dba`'s rewritten `NOTE` now argues the per-marker
+  gate explicitly instead of contradicting it. It introduced **P5-3** in the same write.
+- **P3-1 — not fixed and widened** (P5-7). **P3-2 — not fixed**; `tico`'s, and unchanged by this arc.
+
+### On the three things the brief asked me to weigh
+
+**The third tombstone, sentence by sentence.** Its empirical claims hold as far as I can check them
+without writing to a graph: 8+3 keys → `keys(b)` of 8 with `MARKER_EVIDENCE` gone, `count(b)` 1,
+`labels(b)` `[CpgBuildInfo]` — corroborated in `graph-dba`'s U56b report and the coordinator's
+re-derivation, and consistent across the three places the arc restates them. Its **differentiator**
+is what fails. *"What separates the third is not that it is more plausible; it is that it was
+executed before it was written down"* is true of the **Cypher construct** and false of the
+**shipped mechanism**: the map literal, the `CPG_STAMPED_KEYS` accumulator and the pipeline gate
+were never run together, and P5-1 is what that gap was hiding. The second tombstone made the same
+kind of claim — *"Verified by execution in both directions against this instance"* — about a
+mechanism that was also executed in isolation and also broken in its wiring. An execution
+credential that covers the construct and not the call path does not distinguish mechanism 3 from
+mechanism 2, and is exactly the sentence a re-checker will not re-check.
+
+**The reversal sweep — complete in the shipped artifacts, incomplete outside them.** I swept the
+repo for both the mechanism ("stops the rebuild by name", "closed list", "clear the key and add it
+to the list") and the consequence ("fail its own next rebuild", "stops on purpose until those keys
+are cleared"). `skills/README.md`, `freshness.md`, `SKILL.md`, `git-provenance.sh` and
+`pipeline.sh` are clean; every surviving mention is inside a tombstone or a dated history entry
+where it belongs. Two carriers were missed, both outside the four files `cobb` swept: the live
+`NOTE` (**P5-3**) and `K-024` (**P5-4**) — and one present-tense mechanism sentence inside the
+sweep, in the second tombstone (**P5-5**).
+
+**The `keys(m)` vs `keys(b)` nuance — right, and adequately placed.** I reproduced the map half
+read-only: the exact literal the stamp emits for `provenance=none` returns all eight keys from
+`keys(m)`, four of them `NULL` (A10). The explanation in `git-provenance.sh:139-149` is correct,
+and it sits in the docstring of the function that emits the literal — where the only reader who can
+meet the trap is standing. `freshness.md:229` tells a consumer-side re-checker "`keys(b)` is the
+discriminator" without the map-literal reason, which is fine: a consumer never sees the map.
+
+**Operational consequence, and whether it is warned.** Adequately, in three of four places and by
+accident in the fourth. `SKILL.md:82-92` tells a builder plainly that a rebuild erases the
+annotation "completely and silently" and to read the marker first; `freshness.md:181-198` names
+`cpg_falkorchat`'s ten keys and says they become eight; and the marker's own `NOTE` carries "THIS
+NOTE IS BUILD-SCOPED AND DIES ON THE NEXT REBUILD", which is the one a rebuilder is actually
+standing in front of. What is missing is the runtime: `pipeline.sh` reads no marker before
+stamping and prints nothing about what it replaced, so the whole warning is documentation the
+operator has to have read. Worth one pre-stamp read that echoes any non-stamped key it is about to
+destroy — which, unlike the post-stamp assertion, fires *before* the annotation is gone.
+
+**What §1.1 owes, given this arc** (not mine to fix; K-024 → `architect`): the debt changed kind,
+not just size. Before, `docs/plans/cpg-agent-adoption-graph.md` §1.1 understated a stamp by four
+properties. Now it also documents the wrong *write semantics* — its code block is the original
+`SET b.X = …` concatenation, and its "omitted, not set to null/empty-string" rationale describes an
+omission that is now achieved by a `NULL` entry inside a replacing map. The one genuinely new thing
+it owes is the schema-level fact this arc established: the marker's property set is **closed by
+construction**, so `:CpgBuildInfo` cannot be extended by any writer other than the stamp.
+
+### What's solid
+
+- **The design call is right, and the refusal that produced it is the best thing in the arc.**
+  `0da3eb9` declining to ship `SET b = {map}` on a documentation sentence, routing it for execution,
+  and shipping it at `5417f0e` on `graph-dba`'s executed evidence is the correct handling of a
+  doc-sourced mechanism in a chain with this history. Deleting the five `= NULL` lines rather than
+  relocating them is also right: a list that no longer protects anything teaches the wrong lesson.
+- **The evidence is written as evidence, not as a citation.** `git-provenance.sh:126-158` carries
+  four probes with their `keys(b)` read-backs inline. That is the form that survives a re-check.
+- **The counter prohibition is a real finding, honestly propagated** — three independent
+  observations that `Properties removed` cannot be cited, and `keys(b)` named as the discriminator
+  at every site. Only the stated reason for it needs softening (P5-6).
+- **`0da3eb9`'s byte-identity check on the refactor** was the right gate for a pure restructure, and
+  the `_cpg_prop` accumulator is the right shape — a derived allow-list rather than a second list.
+  P5-1 is a wiring defect in how it is called, not a defect in the idea.
+
+### Open questions
+
+1. **P5-1's fix touches `pipeline.sh` and `git-provenance.sh` — `cobb`'s files, and the fix is a
+   behaviour change to a script nobody can run end-to-end here** (a real build is a multi-hour
+   parse). I would gate the fix on the fake-`redis-cli` harness in A10 rather than on reading:
+   assert that a correct replace yields **zero** stray rows and that a planted foreign key yields
+   exactly one. That harness is the missing regression test for the whole arc, and it is cheap.
+2. **P5-3 needs a marker write.** Route to `graph-dba` with the replacement sentence; the rest of
+   the 2,245-char `NOTE` is accurate and should not be re-derived.
+
+---
+
+## Appendix
+
+### A10 — Pass 5 verification
+
+**The empty allow-list, at the shipped call site** (`git-provenance.sh` sourced; `pipeline.sh:228`'s
+call reproduced verbatim):
+
+```
+$ STAMP="$(cpg_provenance_stamp 2026-09-08T00:00:00Z … /src parse-root)"
+$ echo "CPG_STAMPED_KEYS in parent: [${CPG_STAMPED_KEYS:-<UNSET>}]"
+CPG_STAMPED_KEYS in parent: [<UNSET>]
+$ cpg_provenance_stray_query
+MATCH (b:CpgBuildInfo)
+UNWIND keys(b) AS k
+WITH k WHERE NOT k IN []                      <- allow-list empty
+RETURN 'STRAY_KEY=' + k AS stray
+```
+
+Called as a **statement** it is correct — `[BUILT_AT PARSED_AT SOURCE_PATH PROVENANCE
+SOURCE_ORIGIN SOURCE_COMMIT SOURCE_TREE SOURCE_DIRTY]`, and `[BUILT_AT PARSED_AT SOURCE_PATH
+PROVENANCE]` under `provenance=none`. The defect is the call site, not the accumulator.
+
+**That query against the live marker** (read-only, `mcp__cypher__query`, `cpg_falkorchat`):
+
+```
+rows=10 — STRAY_KEY=BUILT_AT / SOURCE_PATH / SOURCE_COMMIT / SOURCE_DIRTY / PROVENANCE /
+          SOURCE_ORIGIN / SOURCE_TREE / MARKER_ORIGIN / MARKER_WRITTEN_AT / NOTE
+```
+
+**End-to-end, stamp block extracted verbatim, fake `redis-cli` modelling a CORRECT map replace**
+(marker = exactly the eight pipeline keys afterwards):
+
+```
+read-back: PASS
+pipeline: FAILED — the marker in "cpg_sim" carries properties this build did not write:
+pipeline:   BUILT_AT
+pipeline:   PARSED_AT
+pipeline:   SOURCE_PATH
+pipeline:   PROVENANCE
+pipeline:   SOURCE_ORIGIN
+pipeline:   SOURCE_COMMIT
+pipeline:   SOURCE_TREE
+pipeline:   SOURCE_DIRTY
+EXIT=1
+```
+
+A build that did everything right fails, naming its own eight fields, under a message that says the
+condition is impossible.
+
+**`keys()` on the map literal** (read-only, the exact `provenance=none` literal the stamp emits):
+
+```
+k = ['BUILT_AT','PARSED_AT','SOURCE_PATH','PROVENANCE','SOURCE_ORIGIN','SOURCE_COMMIT',
+     'SOURCE_TREE','SOURCE_DIRTY']        n = 8
+```
+
+Eight, four of them `NULL` — confirming the docstring's assignment-vs-literal nuance from the map
+side. The node side (`keys(b)` = 4) is `graph-dba`'s probe 2b; not re-executed here.
+
+**Live marker, undisturbed** (read-only): 10 keys, `PROVENANCE = hand-backfilled`, `SOURCE_TREE =
+85ddeed09479091a69b66d0301ed0d3399cc8387`, `MARKER_WRITTEN_AT = 2026-09-08T10:39:56Z`, `NOTE`
+2,245 chars. `GRAPH.LIST` was **24** keys at review time (the brief expected 25); I created none —
+every read went through `mcp__cypher__query` or `GRAPH.RO_QUERY` against an existing key.
+
+**Syntax and sweep:**
+
+```
+$ bash -n skills/joern-cpg/scripts/pipeline.sh        -> OK
+$ bash -n skills/joern-cpg/scripts/git-provenance.sh  -> OK
+$ git grep -n 'CPG_STAMPED_KEYS' -- skills/
+  git-provenance.sh:214  (set, inside _cpg_prop)   :221 (reset)   :271 (read)
+  pipeline.sh:297        (a comment only)
+  -> the only assignments are inside cpg_provenance_stamp, which pipeline.sh calls in a subshell
+```
+
+Reversal sweep, whole repo minus `.git/`, `falkor-chat/` and this review: `stops the rebuild|fail
+its own next rebuild|until those keys are cleared|stops on purpose|clear the key|closed list|add it
+to the list` — every hit is a tombstone, a dated history entry, or an unrelated component, except
+`claude/cobb/kaizen/plan.md:23,159` (**P5-4**). The `NOTE` (**P5-3**) is not reachable by grep; it
+lives in the graph.
