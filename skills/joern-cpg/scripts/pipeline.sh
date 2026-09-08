@@ -269,6 +269,54 @@ if [ -n "$LOAD" ]; then
        exit 1 ;;
   esac
 
+  # Stray-property assertion. The read-back above proves THIS build's marker
+  # landed; it cannot see a property the stamp failed to CLEAR. ORDERING IS
+  # LOAD-BEARING, in that one direction only: a graph with NO marker returns
+  # zero rows here too, i.e. a pass, so this check has to follow the read-back
+  # that already excludes that case (verified 2026-09-08 by running this block
+  # standalone against a graph with no CpgBuildInfo node: "PASSED").
+  #
+  # The stamp clears a closed list of hand-authored keys, and a key outside that
+  # list (MARKER_EVIDENCE) survived a full `parse-root` stamp — the same defect
+  # the list had just been closed against, one key over. A closed list cannot
+  # enforce its own completeness, and the discipline is invisible where it
+  # breaks: whoever hand-writes a marker is editing a different file entirely.
+  #
+  # So assert the invariant rather than trusting the list: every property on the
+  # marker must be one THIS stamp wrote. The allow-list is generated from the
+  # stamp's own assignments (CPG_STAMPED_KEYS — see git-provenance.sh), so a
+  # hand-authored key nobody has invented yet is caught by construction, because
+  # the pipeline did not write it. It also catches the original hole directly:
+  # under `provenance=none` the stamp writes no SOURCE_* keys, so a previous
+  # build's SOURCE_COMMIT surviving is itself a stray.
+  #
+  # This check is NEGATIVE — "no rows" is the pass — so unlike the read-back
+  # above it does not fail closed for free: an error reply contains no
+  # STRAY_KEY= and would sail through. Hence the explicit `rq` status check.
+  if ! STRAY_BACK="$(rq "$(cpg_provenance_stray_query)")"; then
+    echo "pipeline: FAILED — could not verify the marker's property list in '$GRAPH':" >&2
+    echo "pipeline:   ${STRAY_BACK:-<no reply>}" >&2
+    echo "pipeline: the load and the stamp both succeeded, but the marker is unverified — it may" >&2
+    echo "pipeline: carry properties from an earlier build. Do not trust it until checked by hand:" >&2
+    echo "pipeline:   redis-cli -h $HOST -p $PORT GRAPH.QUERY $GRAPH \"MATCH (b:CpgBuildInfo) RETURN keys(b)\"" >&2
+    exit 1
+  fi
+  case "$STRAY_BACK" in
+    *STRAY_KEY=*)
+      echo "pipeline: FAILED — the marker in '$GRAPH' carries properties this build did not write:" >&2
+      printf '%s\n' "$STRAY_BACK" | sed -n 's/^STRAY_KEY=/pipeline:   /p' >&2
+      echo "pipeline: they are left over from an earlier build or from a hand-written marker. The" >&2
+      echo "pipeline: freshness recipe reads the whole node, so this marker now describes two" >&2
+      echo "pipeline: different things at once (skills/cpg-analysis/references/freshness.md)." >&2
+      echo "pipeline: The load and the stamp both succeeded — only the clearing is incomplete, so" >&2
+      echo "pipeline: the fix is in place and needs no re-parse. For each key above:" >&2
+      echo "pipeline:   redis-cli -h $HOST -p $PORT GRAPH.QUERY $GRAPH \"MATCH (b:CpgBuildInfo) SET b.<KEY> = NULL\"" >&2
+      echo "pipeline: then add <KEY> to the cleared list in cpg_provenance_stamp" >&2
+      echo "pipeline: (skills/joern-cpg/scripts/git-provenance.sh) so the next rebuild clears it" >&2
+      echo "pipeline: without stopping here." >&2
+      exit 1 ;;
+  esac
+
   echo "pipeline: stamped '$GRAPH' — BUILT_AT=$BUILT_AT PARSED_AT=$PARSED_AT SOURCE_PATH=$SRC" >&2
   echo "pipeline: provenance=$PROVENANCE origin=${CPG_SOURCE_ORIGIN:-—} commit=${CPG_SOURCE_COMMIT:0:12}${CPG_SOURCE_COMMIT:+…} tree=${CPG_SOURCE_TREE:0:12}${CPG_SOURCE_TREE:+…} dirty=${CPG_SOURCE_DIRTY:-—} (full OIDs are in the marker)" >&2
   echo "pipeline: stamp verified by read-back." >&2

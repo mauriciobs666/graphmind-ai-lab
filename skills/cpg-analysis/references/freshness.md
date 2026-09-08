@@ -179,12 +179,22 @@ signal, not the threshold.
   rejected stamp was silent and an `--append` build could leave the *previous*
   marker standing over new content. A marker whose `builtAt` predates content
   you can see in the graph is that shape.) **A hand-authored marker is subject
-  to the same rule**, and nothing exempts it: the stamp writes *every* property
-  on the node — the five hand-authored keys (`MARKER_ORIGIN`,
-  `MARKER_WRITTEN_AT`, `NOTE`, `STATUS`, `RENAMED_FROM`) included, each absent
-  one explicitly to `NULL`. A hand-authored marker is therefore provisional: it
+  to the same rule**, and nothing exempts it — but the mechanism is two parts,
+  and only the second is a guarantee. The stamp clears a **named list** of
+  hand-authored keys (`MARKER_ORIGIN`, `MARKER_WRITTEN_AT`, `NOTE`, `STATUS`,
+  `RENAMED_FROM`) to `NULL`, which removes them; then, since 2026-09-08, the
+  pipeline asserts that every property left on the marker is one that stamp
+  wrote and **fails the build**, naming any that isn't. So a key outside the
+  list does not survive into a marker you might read — it stops the rebuild
+  instead. A hand-authored marker is therefore provisional: it
   stands exactly until the graph is rebuilt, and whoever rebuilds inherits none
-  of its reasoning. **If you rebuild a hand-authored graph, re-write whatever
+  of its reasoning. **Two consequences for you as a reader.** A marker stamped
+  on or after 2026-09-08 has been *checked* to carry nothing but that build's
+  own fields, so a stray hand-authored key on one is not a shape you need to
+  consider; markers older than that were never checked. And a graph whose
+  current marker is hand-authored — `cpg_falkorchat`'s ten keys today — will
+  **fail its own next rebuild** until those keys are cleared, which is the
+  design working, not a defect to report. **If you rebuild a hand-authored graph, re-write whatever
   annotation still applies** — the stamp will have cleared it, and the marker
   is build-scoped by design, so anything durable about the graph or its
   component belongs in `docs/` rather than on this node.
@@ -196,6 +206,17 @@ signal, not the threshold.
   was made true rather than the rule weakened, by closing the stamp's property
   list in `skills/joern-cpg/scripts/git-provenance.sh`. Re-checked there, not
   inferred. Don't delete the rule on rediscovering the history.)*
+  *(Second tombstone, same day: closing the list did not close the hole. A sixth
+  hand-authored key, `MARKER_EVIDENCE`, was written onto a marker and survived a
+  full `parse-root` stamp — the same defect one key over, because a closed list
+  cannot enforce its own completeness and whoever hand-writes a marker is
+  editing a different file from the one that would need updating. So the rule
+  survived a **second** wrong mechanism: "the stamp writes every property on the
+  node" was never true, only "the stamp writes the properties it names". What
+  makes the rule hold is now the post-stamp assertion described above, whose
+  allow-list is generated from the stamp's own assignments rather than
+  hand-copied. Verified by execution in both directions against this instance,
+  not inferred.)*
 - **`sourcePath` is a parse root, not a git path.** It is what Joern was
   pointed at — frequently a pruned scratch copy staged to keep `.venv` and
   friends out of the parse. Running it straight through `git log` doesn't

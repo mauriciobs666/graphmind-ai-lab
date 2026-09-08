@@ -3,6 +3,51 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-08 — U46: made the stamp's closed list enforceable — post-stamp stray-property assertion (K-023)
+
+- **What:** Follow-up to U45, resumed on `graph-dba`'s finding that the U45 fix is a closed **list**,
+  not a closed **set**: a sixth hand-authored key (`MARKER_EVIDENCE`) written outside the enumeration
+  survived a full `parse-root` stamp, reproducing the defect one key over. **Chose enforcement over
+  documentation, and derivation over a second enumeration.** In
+  `skills/joern-cpg/scripts/git-provenance.sh`: added `_cpg_prop`, which accumulates the SET clause
+  *and* records each non-NULL property in `CPG_STAMPED_KEYS`, so the stamp's own assignments are the
+  single source of truth; added `cpg_provenance_stray_query`, which turns that list into a read that
+  returns one `STRAY_KEY=<NAME>` row per property the stamp did not write. In `pipeline.sh`: run it
+  after the existing `PARSED_AT` read-back and **fail the build**, naming the offending keys and the
+  in-place fix (no re-parse). Rewrote the stamp docstring, the `SKILL.md` builder bullet and
+  `freshness.md`'s Limits bullet, all three of which asserted the same false universal — *"the stamp
+  writes every property on the node"* — which was never true, only *"the stamp writes the properties
+  it names"*. Added a **second tombstone** to `freshness.md` recording that the rule survived a second
+  wrong mechanism.
+- **Why:** A closed list cannot enforce its own completeness, and the discipline is invisible where it
+  breaks — whoever hand-writes a marker is editing a different file from the one that would need
+  updating. The assertion covers hand-authored keys nobody has invented yet, by construction: the
+  pipeline did not write them. It also subsumes the original U45 hole directly, since under
+  `provenance=none` the stamp writes no `SOURCE_*` keys at all, so a previous build's `SOURCE_COMMIT`
+  surviving is itself a stray.
+- **Verified by execution, not inference** (the standing constraint on this chain, now nine
+  generations of *plausible-but-wrong stated mechanism*): multi-statement `GRAPH.QUERY` is rejected by
+  FalkorDB (`query with more than one statement is not supported`) — which rules out the delete-and-
+  recreate design; the stray-key query returns exactly the three extra keys of `cpg_falkorchat`'s live
+  10-key marker under an 8-key allow-list and zero rows under an 11-key one; an **empty** allow-list
+  matches all 10 keys, i.e. the subshell-mistake failure direction is safe; `redis-cli`'s default
+  rendering emits bare `STRAY_KEY=<NAME>` lines, so the pipeline greps rather than parses; the
+  refactored `cpg_provenance_stamp` is **byte-identical** to the pre-refactor one across three cases
+  incl. quote/backslash escaping; and the inserted `pipeline.sh` block, extracted verbatim and run
+  against the live instance, failed with the three key names and exit 1.
+- **Marked as inference, not executed:** that `SET b = {map}` would be the strictly better fix. The
+  FalkorDB docs say `=` "Replaces **all** existing properties with the map properties" (read
+  2026-09-08 at `docs.falkordb.com/cypher/set.html`) — which would close the set by construction and
+  delete the NULL enumeration entirely. **I did not ship it**, because I cannot execute a graph write
+  and shipping a doc-sourced mechanism *as the sole protection*, having removed the currently-verified
+  one, is exactly generation ten of this defect class. Left as a `graph-dba` round trip; the assertion
+  is wanted either way, since it is what would prove the replace happened in production.
+- **Side effect to clean up:** probing the no-marker case created an empty graph key,
+  `cpg_nonexistent_graph_xyz` — a `MATCH`-only query sent via `GRAPH.QUERY` (not `GRAPH.RO_QUERY`)
+  **materializes the graph**. `GRAPH.DELETE` is not mine; routed to `graph-dba`.
+- **Plan items:** K-023.
+
+
 ## 2026-09-08 — U45: closed the freshness stamp's property list, killing the hybrid marker (K-023)
 
 - **What:** Decided the fork `teco` left open — **fix the code, not the prose**. Added
