@@ -3337,3 +3337,234 @@ third-form paragraph, the point-(iv) summary sweep, DC-12's re-baseline paragrap
 three new clauses (the write-out clause at v1.20, and v1.21's baseline and gloss conventions), the
 v1.19 closure block's de-duplicated row, and the *Plan gate Pass 10* closure block with its
 five-finding table.
+
+## Pass 12 — 2026-09-08
+
+**Scope, as commissioned:** plan **v1.22** (`9b3c3fe`), the delta `68b0d14..9b3c3fe` (+92/−17) read in
+full, plus the sections it lands in read whole — §4 S1e **Tables C, F and H**, §7 **rule 5** entire,
+and DC-12's residual sweep. A **fresh** gate on this document by the coordinator's choice; Pass 11's
+three findings were read for disposition only and none of its reasoning is carried. Measured against
+the worktree at **`e162ba9`** (the N4 fix's two `math.isfinite` guards; 577 green, ruff clean, per the
+coordinator). Findings carry the prefix **plan-gate `P12-*`** — the impl gate numbers its own passes
+and findings, contiguously 1–10 at `5343ac6`, and a mis-prefixed number names nothing.
+
+**Given, not re-run:** the nine re-scoped residuals' *before* values (Table H **2 / 0 / 0 / 1 / 1 /
+2**, Table F **1 / 1 / 1**), the uniqueness of Table H's four gloss names and its tenth row's test
+name, and residual 5's `report.py` scope. The coordinator re-took all nine after the N4 fix inserted
+31 lines above every `stats.py` pin. **Deliberately not a finding:** the resulting line-pin drift and
+Table F's un-re-pointed baseline — routed to a queued re-baseline unit, which is what convention 1
+assigns it to.
+
+**Verdict: needs changes.** 0 blockers, **3 majors**, 2 minors, 1 nit. All six are **closeable today**
+— none is blocked on unbuilt work and none is deferred by choice. The one genuinely blocked item is
+unchanged and is not mine: the `-ml` note's Rule 4a citation, **blocked on `data-scientist`**.
+
+**CPG:** considered, not relevant — no `model-bench` CPG exists on this instance.
+
+### Disposition of Pass 11's three — all three closed
+
+| # | Disposition | Rechecked |
+|---|---|---|
+| **P11-1** (major; residuals 2 and 3's package scope collides with the renderer the same revision mandates) | **Closed** | Both are `modelbench/stats.py`-scoped, the `report.py:338` row is untouched so the renderer's spelling stays unprescribed, and the table carries the two-file-probe reasoning and the third-consecutive-restatement sentence the finding asked for. Generalised at §7 rule 5(b) — which is this pass's subject, `P12-1` through `P12-4` |
+| **P11-2** (minor; Table H states two baselines) | **Closed** | The residual block re-points to **`93b0e42`** with the reason stated in the block itself, and cites DC-12's contradicting claim as what settled it. The table is single-baselined. *(Table F is now two-baselined by the same mechanism; routed, not raised — see the scope note above)* |
+| **P11-3** (minor; the gloss pins four sites by line in the file its own table inserts into) | **Closed, and the rationale corrected with it** | The four are named by test function; all four unique (given). The correction — *a site list is stable in a site's **identity**, not in its **line number*** — is made in convention 2's own text rather than bolted on, and `e162ba9` has since proved it: 31 inserted lines broke every line pin in that file and moved no name |
+
+### Findings
+
+**P12-1 (major) — Table F's residual 3 is the one of the nine where the narrowing's stated benefit is
+inverted: package-wide reach *was* the check, and `modelbench/results.py` scope removes it. Table F
+executes next and consumes this residual directly.**
+*Evidence.* Residual 3 becomes `grep -nF '{"binary", "continuous"}' modelbench/results.py` → **1 → 0**,
+justified by "*what it buys is immunity to a later `report.py` or `stats.py` line that happens to
+spell one of these three strings*". For residuals 1 and 2 (`separationRaw: float | None`) such a line
+would indeed be noise. For residual 3 it is **the defect**: the table's own `DistributionSummary`
+decision rules that "*the tag set therefore gets **one home** — a module-level mapping … so the two
+functions cannot disagree about how many metric types exist (§7 rule 4)*", and `report.py:211`'s row
+("*widens past `isinstance(metric, BinaryMetric)` to DC-10's third arithmetic and **its kind
+cross-check***") is exactly where a second transcription of the tag set would plausibly appear. Package-scoped,
+`→ 0` was a statement that the tag set has one home; `results.py`-scoped, it reads 0 with a second
+home standing in `report.py`. Verified at `e162ba9`: the literal occurs **exactly once** in
+`modelbench` and `tests` (`modelbench/results.py:386`), so the wide form costs nothing today and buys
+the one-home check. The table's own limits sentence — "*it is also zero for a third transcribed tag in
+place of the mapping*" — was not swept when the reach changed and now understates the gap.
+*Fix.* Keep 1 and 2 file-scoped; state **residual 3 package-wide** as the exception the new rule
+provides for — `grep -rFn '{"binary", "continuous"}' modelbench --include='*.py'` → **1 → 0** — with
+the one-home decision as the table's stated justification, and extend the limits sentence to say the
+wide scope is what makes the one-home claim checkable. (Keeping all three narrow and adding a fourth,
+package-wide residual works too and costs a row for the same result.)
+
+**P12-2 (major) — the default is right and its stated boundary is the wrong one. It generalises the
+*narrowness* of Table C's discipline and drops the *partition*, and it hands the next author no test
+for a residual whose purpose is wider than its edit.**
+*Evidence.* The clause's stated test is pattern specificity against scope breadth, plus "the files its
+own site rows name". The precedent it cites is stronger and different: Table C's stated virtue is that
+"*the two file-scoped residuals **partition** the six production sites, so a half-application is
+non-zero on the half it skipped and the number says which half*". Partition implies narrow, not
+conversely — Table H's six do not partition its ten site rows (nothing reaches the two `tests/` rows),
+which is fine, but it means the property that made Table C's narrowness safe is absent and unremarked.
+The exceptions are then listed by one-off reason ("`-ml` §11.10(3)'s check is about the package"), so a
+future author with a short pattern and a package-wide *purpose* has only the specificity argument, and
+it points the wrong way — which is `P12-1`.
+*Second half, and it is structural rather than hypothetical.* The scope now **inherits the site list's
+completeness**. `P10-1` was an incomplete site list in this very table, and the plan's own diagnosis
+assigns completeness to the enumerating commands and landing to the residuals: "*command 2 **does**
+return the line … the enumeration was sound and only the site list was short*". That division of
+labour is what actually licenses narrowing, and it is not what the clause says — so the mitigation
+(wide enumerating commands plus DC-12's per-residual sweep) is now load-bearing and unnamed.
+*Fix.* One clause, at the end of the new paragraph: *the enumerating commands remain the completeness
+instrument and a residual's scope is its **edit's**; where a residual's job is instead to prove a text
+exists nowhere wider than the edit — a one-home or identity check — the scope is that purpose's and
+the table says so.* Name Table C's third and (per `P12-1`) Table F's third as the two instances, and
+keep Table C's partition as the property to aim for where a table's residuals can supply it.
+
+**P12-3 (major) — the prospective-only binding's stated premise is falsified by this document's own
+v1.17 record. The binding survives; the reason has to be replaced.**
+*Evidence.* The clause reads: "*A table whose edit has landed has something stronger than a scoping
+heuristic — **its residuals have been run against the actual faithful implementation and hit their
+targets***". Two landed residuals did not. **Impl-gate F3**, recorded on Table D in this same file:
+`grep -rFn bootstrap_seed …` → 29 → 0 "*was unreachable on a correct edit **from the moment it was
+written**, which is worse than the traps rule 5(b) already names*" — repaired at v1.17 to the
+whole-identifier form, 27 → 0. **Impl-gate F2**: Table C's third residual's target "*moves 1 → 2 the
+moment Table D lands*" and was **restated** rather than met. So "landed" certifies that a residual's
+*statement* was repaired after being run — the opposite of the premise's direction.
+*Why it matters.* As written it invites a later reader to treat any landed residual as validated and
+skip re-checking it, in a document holding two counter-examples. The conclusion is independently sound
+and already stated one clause above, in convention 1: a landed table's rows are a **record**, and
+re-scoping a record falsifies what it says was checked.
+*Fix.* Make convention 1's argument the premise — landed tables are not re-scoped because their rows
+are a record, not because their residuals passed — and if the run-based argument is kept at all,
+qualify it with F2 and F3 as the exceptions the record itself shows.
+
+**P12-4 (minor) — "the narrowing costs no evidence" is supported by *before*-count equality, which is
+silent about the after assertion and **vacuous for the two residuals the clause was written for**.
+This is `P11-3`'s shape exactly.**
+*Evidence.* Three sites say it: Table F ("*All three read **1** under either scope … so the narrowing
+costs no evidence*"), Table H ("*all six read the same *before* values file-scoped as package-scoped …
+so the narrowing costs no evidence*"), §7 rule 5(b) ("*Every one of the six and the three reads the
+same *before* value … so nothing was traded for the compliance*"). A residual's claim is its **after**
+value; equal *befores* establish only that no stated number moved. And Table H residuals 2 and 3 are
+third-form with a *before* of **0** — which is 0 under any scope, including an empty one — so the
+sentence offers **no evidence at all** about precisely the pair `P11-1` was about. True of one
+component, asserted of the whole.
+*What actually backs it, and it is good.* The synthetic two-file probe, stated on Table H; and now the
+nine surviving a **31-line insertion** in `stats.py` at `e162ba9` while every line pin in that file
+broke.
+*Fix.* Point the sentence at the probe and the insertion survival, and say plainly what the narrowing
+**does** trade — the after assertion now ranges over one file — with the reason that is not a loss for
+these eight and (per `P12-1`) is for the ninth.
+
+**P12-5 (minor) — v1.22 changed the residual scopes and did not sweep the two places that restate
+them.** Table H's name-pinned test row still reads "**No residual can see this** — all six are scoped
+to `modelbench`", and DC-12's v1.19 sweep parenthetical reads "**all six are scoped to `modelbench`
+alone**, so no assertion can raise one". Both are false after v1.22 — four are `modelbench/stats.py`,
+one is `modelbench/report.py`. Both **conclusions** survive *a fortiori*, a narrower scope seeing
+strictly less, so this is statement drift and not a wrong inference; DC-12's 16/8 `tests/`-reach census
+is likewise unaffected. It is §7 rule 4's one-home rule applied to a **scope**, and it sits in the row
+a blocker produced because a scope claim was wrong. *Fix.* In Table H's row, cite the residual block
+instead of restating it ("no residual reaches `tests/`"); same in DC-12's parenthetical, or one dated
+corrective line.
+
+**P12-6 (nit) — "never re-scoped" is stated three times with no qualifier, and one instance sits
+twenty-five lines below the block in which v1.22 re-scoped its subject.** The three are Table E's cost
+paragraph, Table H's third-form paragraph — "*if the expression is later rewritten for an unrelated
+reason they are **re-derived over the new spelling, never re-scoped***", said of residuals 2 and 3 —
+and §7 rule 5(b)'s round property. All three are reconcilable with the new default (the clause governs
+the stale-spelling trigger and forbids **re-widening**, not narrowing), but nothing on the page says
+so, and a reader arriving at rule 5(b) fresh meets both. *Fix.* "never re-**widened**", or
+"re-derived rather than re-scoped **for that reason**", in all three.
+
+### The judgements the gate was asked for
+
+**(1) Is the new default correct, and is it correctly bounded?** **Correct; not correctly bounded.**
+Correct, tested residual by residual rather than in principle: of the nine, eight lose nothing
+measurable — no faithful edit of either table puts any of those eight patterns in a package file other
+than the one named, and the package-scoped *befores* already prove no other file holds them today. One
+is **strictly improved rather than traded**, and this is worth stating because the commission asked
+whether the default was a wash: for Table H's third-form pair the package scope was worse *in both
+directions*. It **failed on the good spelling** — `report.py` reaching `stats.SUPPORT_DIFF_PROPORTIONS[0]`,
+which the `report.py:338` row requires, reads 2 against a target of 1 — and it **passed on the
+forbidden one**, a bare `-1` literal in `report.py`, which neither scope matches. Narrowing fixes the
+first and costs nothing on the second.
+Not correctly bounded, in the two ways the commission suspected. The *"should be wide and is now
+obliged to be narrow"* failure mode is **live, not hypothetical** — one of the nine, `P12-1`, and it is
+in the table that executes next. The *"site rows incomplete, so the scope inherits it"* failure mode
+is **structural**: `P10-1` was an incomplete site list in Table H, caught by an enumerating command and
+by no residual, and after v1.22 no residual could have caught it under either scope — so the coupling
+is real, the mitigation already exists, and the rule does not name it (`P12-2`). On the coordinator's
+new datum I agree with the coordinator's own framing: nine file-scoped exact-text residuals surviving a
+31-line insertion that broke every line pin in the same file is strong evidence about the **form's
+robustness** and no evidence at all about its **bounding**.
+
+**(2) Are the two disclosed extras safe?** **Eight of nine, and the ninth is in the unit that executes
+next.** Table H's six: safe, checked one at a time — residual 1's `clamp=` keyword reaches only
+`_widen`'s two private call sites; 4 and 6 have package-scoped *befores* of 1 and 2 that already
+account for every occurrence; 5 is in `report.py` where its site is; 2 and 3 are judgement (1)'s
+improvement. Table F's: 1 and 2 are annotations that can exist nowhere but `results.py`, and 3 is
+`P12-1`. On the process question the commission raised — whether applying a new default beyond the
+finding is itself the risk — my answer is that the practice is right and the audit is what was thin:
+each of the nine needed the question *what did the wide scope see that the narrow one will not*, and
+eight answers are "nothing", which the revision asserts collectively rather than establishing
+individually (`P12-4`). One answer is "the one-home check".
+
+**(3) Do the three P11 dispositions close?** All three, on the evidence in the table above. `P11-1`'s
+closure is the only one that did more than asked, and its extra is judgement (2).
+
+**(4) Does the rationale over-claim anywhere?** **Twice, both the `P11-3` shape** — a claim true of one
+component asserted of the whole. `P12-3` (landed residuals "hit their targets"; two demonstrably did
+not) and `P12-4` ("costs no evidence"; established of the *before* only, and vacuously for the pair at
+issue). `P12-5` and `P12-6` are the drift half of the same discipline. What I checked and found sound:
+"Table C's first two residuals … **partition** that table's six production sites" — Table C says
+exactly that, in those words; "Table C's third is **package-wide by design**" — true, it is `-ml`
+§11.10(3)'s check and the table states it; "Tables B and D reach `tests/` because their site rows do" —
+true of Table D, whose `bootstrap_seed` sites are 22 + 3 in `tests/`. The seventh-failure count is
+consistent with this file's own record and I did not re-derive it independently.
+
+### What's solid
+
+- **The default itself.** The substitution it names — pattern specificity and scope breadth as
+  substitutes, so shortening a pattern obliges narrowing its scope — is the correct diagnosis of
+  `P11-1`, and *default rather than caution* is the right register for the reason given: a caution does
+  not fire, and the checkable form ("read the row list, read the scope, they agree or the table says
+  why not") is a real check a reader can run in seconds.
+- **The `report.py` restraint.** Fixing the scope rather than prescribing the renderer's expression
+  keeps Table H out of Table F's file and leaves the implementer a choice that does not matter — the
+  cheaper of the two repairs `P11-1` offered, and the right one.
+- **`P11-3`'s closure is the best work in the delta.** The rationale is not patched, it is corrected in
+  its own text (identity vs. line number), and `e162ba9` validated it within the day: 31 inserted lines
+  broke every `stats.py` line pin and moved no test name.
+- **The DC-12 addition is honest about its own staleness** and names the mechanism (the round-end
+  re-run) that makes a dated paragraph safe there where it was not safe in a gloss. That is the
+  distinction `P10-5` was really about, stated once and in the right place.
+
+### Open questions
+
+**None for the caller.** One item remains open against another document and is **blocked on its
+owner, not deferred**: note `-ml` v1.19 Rule 4a attributes itself to *plan-gate* Pass 8's `P8-1` where
+it means *impl-gate* `P8-1`. It routes to `data-scientist`, blocks nothing, and this pass adds no
+second instance. Table F's two-baselined residual block and the `stats.py` line-pin drift under
+`e162ba9` are **routed to the queued re-baseline unit** at the coordinator's direction and are
+deliberately not findings here.
+
+## Appendix L — Pass 12: what was read and run
+
+**L.1 — read.** The v1.22 delta in full (+92/−17); §4 S1e **Table H** entire (both enumerating
+commands, the rewritten gloss, all ten site rows, the six-residual block and the four paragraphs
+after it); §4 S1e **Table F** entire (eight enumerating commands, the `DistributionSummary` storage
+decision, fourteen site rows, the three-residual block and its limits paragraph); §4 S1e **Table C**
+entire, as the precedent the new clause cites; §4 S1e **Table D**'s residual block and its F3 repair;
+§7 **rule 5** entire, all clauses; DC-12's residual census and its v1.22 paragraph; the v1.17, v1.19,
+v1.20, v1.21 and v1.22 header notes; and `## Pass 11` of this file, for disposition only.
+
+**L.2 — run, at the worktree (`e162ba9`).** `grep -rnF '{"binary", "continuous"}' modelbench tests
+--include='*.py'` → **1** (`modelbench/results.py:386`), and file-scoped → **1** — the measurement
+behind `P12-1`: the wide form is free today. `grep -rn '"continuous"' modelbench --include='*.py'` →
+**2** (`results.py:360`, `:386`); `grep -n 'continuous' modelbench/report.py` → **0**, so no second
+home exists yet and none of this is retrospective. `grep -rn 'separation' modelbench --include='*.py'`
+→ **2** (`results.py:187`, `:188`), confirming residuals 1 and 2 can match nowhere else.
+`grep -n 'all six are scoped to' docs/plans/…` → **2** sites (`P12-5`); `grep -n 'never re-scoped'` →
+**3** sites (`P12-6`).
+
+**L.3 — not re-run, by instruction.** The nine re-scoped residuals' *before* values, Table H's four
+gloss-name and tenth-row-name uniqueness checks, residual 5's `report.py` scope, and the `bound_by`
+14 → 15 / `envelope_arms` 21 → 22 movement under `e162ba9`. All supplied by the coordinator, taken as
+given, and used only where the argument does not turn on my having taken them.
