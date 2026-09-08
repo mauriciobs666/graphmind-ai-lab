@@ -157,7 +157,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | **accepted** | `c92f35d` + `8779ee8` | `analyst` Pass 3 → **approve with suggestions** (`6c6e807`) | 156k tok / 15 tools |
 | **U41** — backfill `cpg_falkorchat`'s pre-fix marker honestly + remove 3 leaked scratch graphs | `graph-dba` | `a5825012b34ab9a9b` | **accepted** | marker now 10 keys, `PROVENANCE='hand-backfilled'`; 3 keys deleted | self-verified + re-verified here (`SOURCE_TREE` vs `git rev-parse`) | 115k tok / 22 tools |
 | **U42a** — 6 sites in `freshness.md` + the check-0 gate decision | `cobb` | `a1cfcb25341f0b0bb` | in-flight (dispatched 2026-09-08) | `skills/cpg-analysis/references/freshness.md` | `analyst` Pass 4 (pairwise) | — |
-| **U42b** — 3 sites in the manual; `cpg_falkorchat` is no longer a live pre-fix example | `tico` | `a4e2b1a2f544180d8` | in-flight (dispatched 2026-09-08) | `docs/manuals/graph-ontology.md` | `analyst` Pass 4 (pairwise) | — |
+| **U42b** — 3 sites in the manual; `cpg_falkorchat` is no longer a live pre-fix example | `tico` | `a4e2b1a2f544180d8` | delivered — held for pairwise gate | `b47c84a` — **5** sites, shape set = 6 | `analyst` Pass 4 (pairwise, after U42a) | 76k tok / 19 tools |
 | **U44** — route the `Properties removed` double-count quirk into `falkordb-quirks.md` | `graph-dba` | — | queued (blocked: concurrent session holds the file) | `claude/graph-dba/falkordb-quirks.md` | — | — |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
@@ -3569,3 +3569,45 @@ Setting an existing property reports `Properties set: 1, Properties removed: 1`;
 assignment, which was a genuine no-op. Anyone verifying a stamp from the counters is misled in
 both directions — independent confirmation that `pipeline.sh`'s B1 read-back is load-bearing
 rather than belt-and-braces. The file is held by the concurrent session, so it waits.
+
+## U42b: five sites, and the one nobody had reported was the most-read
+
+`tico` swept rather than trusting my three line numbers — the second time that instruction
+has paid, and the second time the delegate found more than the reviewer who filed the
+finding. Two sites beyond the brief:
+
+- **The field table's `PROVENANCE` row.** It enumerated the three producer literals, which
+  made it *the most-read place in the document where `hand-backfilled` would have looked
+  like corruption* — and it was covered by none of the three reports feeding this unit
+  (`graph-dba`'s nine, Pass 3's four, my brief's three). A reader meeting the new value
+  would have gone to the one table that told them it could not exist.
+- **The *"How current is the content?"* row**, which told readers to use `PARSED_AT` and
+  explicitly *not* `BUILT_AT`. On the graph they will actually open, `PARSED_AT` no longer
+  exists — deliberately, since it was unrecoverable — so that row now sends them to a null.
+  A consequence of an *absence* that was itself the honest choice: the refusal to invent a
+  timestamp propagated into a document that had been written assuming one.
+
+**The distinction it drew that I had not:** *"a human derived this"* and *"you can trust
+this"* are different questions, and a reader needs both answers. Because the staged copy was
+verified `diff -rq` byte-identical to the committed tree, `SOURCE_TREE` is a **true content
+identity despite being reconstructed** — so the manual says the values are real and the
+acquisition was manual, rather than letting the second fact discredit the first. That is the
+same insight `graph-dba` reached from the producer side, arrived at independently from the
+reader's.
+
+It added exactly one shape and merged none, refusing both available merges with reasons: the
+new shape is not the pre-fix one (it has origin, tree and a scoped dirty flag) and not the
+`BUILT_AT: unknown` one (it has a parseable date and real git fields). **Shape set is now
+six**, and `cobb`'s file must land on the same six.
+
+**It confirmed the dead example independently rather than inheriting it** — only two CPGs are
+loaded, and neither is in the pre-fix shape any more. It also caught that `freshness.md`
+carries the same dead example in a *stronger* form than the manual did ("**Live example:**
+`cpg_falkorchat` carries exactly this marker — keys … and nothing else"), false now in both
+the key list and the "live example" claim. That is inside `cobb`'s six, so the two units
+converge rather than collide — but it was flagged precisely because it could have fallen
+between them, which is the failure mode of splitting one fallout across two owners.
+
+**And the citation split paid a third time.** Whichever way `cobb` rules on check 0's
+admissibility, the manual needs no edit — it describes what fields mean and defers procedure.
+Held for the pairwise gate rather than accepted, same as U39 was.
