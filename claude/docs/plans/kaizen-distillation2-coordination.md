@@ -74,7 +74,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U18b | teco chunk D (14: 09-07, all arrived after pass open) | `adcb31af6bc3fc428` | accepted | `claude/teco/teco.md` (12 statements from 9 entries, **zero new bullets** — 11 lines changed, 11 removed); `skills/agent-standards/claude-code.md` (2 permission-classifier entries merged); `claude/teco/kaizen/history.md`+`plan.md`; 5 `MENTIONS` edges over 4 entries (3 tdd-engineer, 2 analyst); 10 nodes deleted, 4 `PRODUCED` resolved — **`teco` closed out, 0 produced / 0 mentioned** | none → — | 224.6k tok, 69 tools |
 | U19 | analyst chunk A (12: ≤ 08-30) | `adb247a3e028c0606` (killed by a session rate limit at its first tool call, 09-07; resumed in place by `SendMessage` 09-08 — nothing had landed, all 12 edges intact) | accepted | `claude/graph-dba/falkordb-quirks.md` (3 entries: 2 folded, 1 new regex bullet) + `kaizen/history.md`; `claude/analyst/review-techniques.md` (2, both edits to existing material — one **corrected a wrong import-resolution mechanism the file had been carrying**) + `kaizen/*`; **7 discarded**, 3 of them additionally carrying a false or misattributed claim; 1 `MENTIONS`→`devops`; 11 nodes deleted, 1 `PRODUCED` resolved. **Zero new bullets in any always-loaded prompt** — `analyst.md` and `claude/AGENTS.md` untouched | none → — | 184.9k tok, 50 tools |
 | U20 | analyst chunk B (11: 08-31…09-01 + the first 5 of 09-02) | `a6db6af4910e607bc` (killed by a session rate limit mid-promotion, 09-08; resumed in place by `SendMessage` after the reset — four promotions already on disk, nothing logged, all 11 entries intact; **resumed a second time**, which corrected a real accessor defect and refuted my stamp finding) | in-flight | 7 promoted / 4 discarded, all 11 cleared; `claude/analyst/{kaizen/history.md,kaizen/plan.md,review-techniques.md}`, `skills/agent-standards/claude-code.md`, `skills/python-web-quirks/SKILL.md`, `skills/README.md`, `claude/graph-dba/falkordb-quirks.md`, `claude/data-scientist/lm-studio-model-notes.md`, +3 `kaizen/history.md` | teco re-derivation → **accepted**; my "wrong stamps" finding was itself wrong (see below), the accessor defect it surfaced was real and is fixed | 236.4k tok, 35 tools |
-| U21 | analyst chunk C (10: all of 09-02) | `a9b3f7141f0403e35` | in-flight | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
+| U21 | analyst chunk C (10: all of 09-02) | `a9b3f7141f0403e35` (resumed once — plan-hashing evidence line returned for recount) | in-flight | 6 promoted / 4 discarded (2 **falsified**), all 10 cleared + curator-cleared my false `7c4e91a2…`; `claude/graph-dba/falkordb-quirks.md`, `claude/analyst/review-techniques.md`, `claude/analyst/kaizen/{history,plan}.md`, `claude/graph-dba/kaizen/history.md` | teco re-derivation → 9/10 accepted, 1 evidence line returned | 202.8k tok, 81 tools |
 | U22 | analyst chunk D (11: 09-03) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U23 | analyst chunk E (13: 09-07, arrived after pass open) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 
@@ -225,6 +225,34 @@ re-derives a claim and finds a discrepancy has two candidate explanations —
 the delegate is wrong, or the probe is — and the second deserves the same
 scrutiny as the first *before* the finding is written down. I committed mine
 (`a74735d`) before testing my own instrument.
+
+## The same defect shape, twice running: right method, wrong evidence line
+
+U20 and U21 failed in exactly the same way, and neither failure was in the
+thinking. U20's retry-safety promotion was correct in substance and cited an
+accessor (`conn.retry._retries`) that raises `AttributeError` on the object it
+names. U21's plan-hashing promotion is a genuinely useful technique whose
+evidence line says "five committed revisions … 20 step rows present in all
+five" of a window that actually holds **16** revisions and in which the row
+count changes — `S7c` enters at `732f5e0` (v1.19) and persists, so 3 revisions
+carry 20 rows and 13 carry 21. In both cases the delegate had the correct fact
+in hand: U21's own report quotes the v1.19 note announcing `S7c`.
+
+So the thing that needs verifying is **not** the claim a delegate is making —
+that is the part it reasoned about and usually gets right. It is the
+**citation attached to the claim**: the version stamp, the accessor
+expression, the revision count, the sha. Those are summary artifacts, produced
+at the end of a long run, and they are where a confident, well-formed, wrong
+number appears. `claude/teco/teco.md` already demands "state only figures you
+directly observed" for units routed to a cheap model; both of these ran on the
+inherited model and produced it anyway.
+
+**Standing check for the remaining chunks:** for every promoted section, re-run
+the *evidence*, not the assertion — count the things it says it counted, on an
+instrument you have tested against known data first. Two of the three defects
+this pass turned up were found this way, and the one time I skipped testing my
+own instrument I filed a false finding against a correct delegate
+(see the retraction above).
 
 ## Follow-ups
 
