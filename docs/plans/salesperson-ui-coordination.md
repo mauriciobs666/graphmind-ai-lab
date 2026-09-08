@@ -174,7 +174,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | **accepted** | `d1eaa7f`+`d01f22e`+`94c1578` — plan **v1.29** | `analyst` Pass 19 → **approve** (`8418a9f`) | 528k tok / 77 tools |
 | **U43** — retract the false CPython deadlock fact from `kaizen_team` before it is promoted | `cobb` | `a69330f81cf6048ae` | delivered | `de8b5ac` — 2 entries cleared, promoted split by audience | `analyst` (prompt edit) — queued | 118k tok / 28 tools |
 | **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7, P18-6 | `coder` | `a31456adeff4788ea` | **delivered — committed `699ef52`** (7 files, +1032/−136). Suite **2639** teco-verified solo (baseline 2629, +10 net); `ws:acme` 871 intact; `reference` re-seeded. **Tripwire re-measured by me, not taken on report** — injected reach → guard red, file restored to md5. 18 mutations, 1 survivor (M10) which was a **missing test**, now red against it | `storefront.py`, `storefront_api.py`, both test files, `config.py`, `SERVER.md`, `HISTORY.md` | `analyst` **Pass 20 (fresh)** → **needs changes** (`ac28f2c`) — 3 majors, routed to U50/U51/U52; `qa-engineer` held behind them | 286k tok / 114 tools |
-| **Pass 21** — re-gate: v1.30's rule (`395266e`), its implementation (`d776ca8`), P20-2's three sites (inside `f9d23fb`). **Fresh again on the U24 precedent**: Pass 20 prescribed the discriminator that was implemented | `analyst` (**fresh**) | `a3ad2209fae9fb0e1` | in-flight — priority 1 is the widened raises guard, priority 2 is hunting justifications rather than values | `docs/reviews/salesperson-ui-impl.md` `## Pass 21` | — (is the gate) | — |
+| **U53** — P21-4 (§5.2's summary of the residue is false through two doors its own sibling derivation opens) and P21-5 (an unnamed cost of the chosen placement) | `architect` | `ad44540e7e1aa876e` | in-flight | `docs/plans/salesperson-ui.md` → **v1.31** | `analyst` Pass 22 | — |
+| **U54** — P21-1 (restore the guard's strength without giving up the raise), P21-2 (the false precedent, at two sites), P21-3 (the killing test), P21-6, P21-7. **Resumed, not fresh**: 157k tok / 67 tools is under both halves of the threshold and the guard sentence is its own | `coder` | `a7ebbee7e795fe497` | in-flight | `storefront.py`, both test files | `analyst` Pass 22 | — |
+| **Pass 21** — re-gate: v1.30's rule (`395266e`), its implementation (`d776ca8`), P20-2's three sites (inside `f9d23fb`). **Fresh again on the U24 precedent**: Pass 20 prescribed the discriminator that was implemented | `analyst` (**fresh**) | `a3ad2209fae9fb0e1` | **delivered — committed `d26fa36`**. Ran the suite (2640/14, matching my solo number) and restored every file it mutated; `git status falkor-chat/` empty, md5 back to `08daf2ea` |  `docs/reviews/salesperson-ui-impl.md` `## Pass 21` | — (is the gate) | — |
 | **Pass 20** — gate S9a-fix. **Fresh by design**: Pass 17 *prescribed* reserve-then-write, so its author judging this diff is producer-self-review one seat over (the U24 precedent) | `analyst` (**fresh**) | `afc3c09ccd5b50340` | **delivered — committed `ac28f2c`** (+284 lines). Survived **two** rate-limit kills, the second seconds in; resumed on its own transcript both times and lost nothing, because its predecessor artefact was already committed | `docs/reviews/salesperson-ui-impl.md` `## Pass 20` | **needs changes** — 0 blockers, **3 majors**, 2 minors, 3 nits. P17-1/P17-2 closed and closed at the right unit; my four questions all answered (see §Pass 20 below) | 150k tok / 10 tools |
 | **U50** — P20-1 is a **plan** defect: v1.29's S9 row prescribes the unconditional release the implementer faithfully wrote. Fix the release condition, tombstone the false mechanism | `architect` | `a5d8f1e2a1d897af0` | **delivered — committed `395266e`** — plan **v1.30**. Took the reviewer's asymmetry and **rejected its placement**: the flag is read *before* `submit`, not inside its `except`. **CPython mechanism re-verified by me** (`:178` put precedes `:179` adjust; `t.start()` at `:202`; venv 3.12.3; executor built with `max_workers`/`thread_name_prefix` only, so `BrokenThreadPool` is unreachable) | `docs/plans/salesperson-ui.md` **v1.30** | `analyst` Pass 21 | 112k tok / 32 tools |
 | **U51** — apply P20-1's corrected release + the P20-3/4/5/6 docstring corrections. **Fresh, not a resume**: S9a-fix's author is at 286k tok / 114 tools and every one of these fixes is self-contained | `coder` (fresh) | `a7ebbee7e795fe497` | **delivered — committed `d776ca8`**. Suite **2640/14 teco-verified solo** (baseline 2639, +1 = the new test); `storefront.py` md5 `08daf2ea` matches its reported restore exactly; `ws:acme` 871; `reference` re-seeded twice. Mutation-tested: release moved back into the `except` → new test red on `turn_in_flight is True`, shutdown test **stays green**, which is the discrimination | `storefront.py`, `test_storefront.py`, `test_storefront_api.py` | `analyst` **Pass 21 (fresh again)** — in flight, guard ruling first | 157k tok / 67 tools |
@@ -4127,3 +4129,53 @@ engineering before spending stakeholder attention, because "is the weakened guar
 is an analyst's question and the answer changes what I would even be asking them. If Pass 21 says
 the guard still holds, this is a footnote; if it says otherwise, it is their call and I will put it
 to them.
+
+## Pass 21 ran the guard instead of arguing about it, and found the better question
+
+I sent Pass 21 the guard as priority 1 with my own half-finding attached: the cited precedent looked
+wrong. It came back with the precedent falsified at **two** sites and — far more useful — with the
+guard's sufficiency settled by **execution rather than reasoning**.
+
+The measurement is the thing. Both assertions read class *names*, not raise sites. So the reviewer
+allowlisted nothing further, added a second unrelated `raise RuntimeError` to `Storefront.get_state`,
+changed nothing else, and **the guard passed**. Under the old pair that same mutation was red and
+could not be silenced by extending the allowlist. `get_state` is on every `/shop/api` route's path
+and the answer is an unmapped bare `500`, so what was lost is the fence for exactly the class a
+defensive `raise` reflexively reaches for.
+
+I had reasoned my way to "the door is two-way, but the precedent is bogus." That was right and
+insufficient. The static argument — *the equality still makes a reason mandatory, so a name leaves
+one assertion only by entering the other* — is **true** and still misses the hole, because the
+equality constrains the set of names and neither assertion constrains the set of **sites**. Two
+careful readers agreeing on a static trace is precisely the situation my own standing rule says to
+distrust: a mechanism has to be *run* before it is believed. I flagged it for the gate rather than
+accepting it, which was the right call; but the thing that settled it was a mutation anyone could
+have run in five minutes, including me.
+
+The implementer's rejection of a `StorefrontError` subclass was **upheld** — verified against the
+subclass-mapping test, since a family member would be forced into a mapped response and change the
+wire. So the raise stays and the guard edit changes: an equality on the exemption plus a
+**site-qualified** read, whose reader the reviewer wrote and ran before proposing it.
+
+**P21-3 is the finding I will carry furthest.** The new test does not discriminate against the
+implementation v1.30 explicitly rejects. The implementer mutation-tested against the *absence* of
+the pre-submit check; the reviewer tested the mutant that actually matters — the flag read **moved
+into the `except`**, which is Pass 20's own original suggestion and the thing v1.30 argued down —
+and both delivered cases passed it.
+
+I asked for mutation-testing in the brief, the implementer did it honestly, and it still proved the
+wrong thing. The rule I had been carrying — *break the implementation and confirm the test fails* —
+is too weak, because deleting a mechanism is not the same as substituting the alternative that was
+considered and rejected. **The mutant to choose is the design the plan rejected, not the absence of
+the design it chose.** The first proves the decision was load-bearing; the second only proves the
+code runs. Every brief I write from here says that, and it is going into the shared learnings.
+
+Both units go back to their owners: P21-4/P21-5 to `architect` (its own v1.30 §5.2 paragraph, whose
+careful S9-row derivation it then over-summarised one section later), P21-1/2/3/6/7 to the same
+`coder` by resume rather than a fresh spawn — 157k tokens and 67 tool uses is under both halves of
+my threshold, and the false-precedent sentence is its own to replace.
+
+**The stakeholder question I said I would hold has resolved itself.** The fence around
+guard-widening is not being tested after all: the outcome is a guard that is *stronger* than the one
+before this change, not weaker, and the raise that forced the question is independently justified.
+Nothing to escalate — I will report it, not ask about it.
