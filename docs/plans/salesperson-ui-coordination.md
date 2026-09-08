@@ -162,8 +162,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U45** — P4-1 / K-023: the hybrid fork | `cobb` | `a1cfcb25341f0b0bb` (resumed) | **delivered — committed `29538d6`**. Chose **impossible** and **reverted its own discriminator hunks**; rejected a middle option I had not listed (partition by key) because *the real data crosses that boundary*. Property list stated **CLOSED**, invariant named, tombstone applied. Net **−1** line. P4-2 fixed in passing | `git-provenance.sh`, `SKILL.md`, `freshness.md`, K-023 closed / K-024 filed | `analyst` Pass 5 | 160k tok / 11 tools |
 | **U55** — U47a's Case 3: the fix is a closed **list**, not a closed **set**. Decide where the invariant lives | `cobb` | `aadea04e203b11c4f` | **delivered — committed `0da3eb9`.** Chose *derive the allow-list from the stamp's own assignments* + a stray-key assertion in `pipeline.sh`. **Both load-bearing claims re-run by me**: the refactored stamp emits **byte-identical** output to `HEAD`'s across both cases including quote/backslash escaping, and the stray query on the live marker returns exactly `MARKER_ORIGIN`/`MARKER_WRITTEN_AT`/`NOTE` | `git-provenance.sh`, `pipeline.sh`, `SKILL.md`, `freshness.md`, `skills/README.md`, cobb kaizen | `analyst` — queued | 137k tok / 47 tools |
 | **Pass 5** — gate the whole stamp-closure arc: `29538d6` + `0da3eb9` + `5417f0e` | `analyst` | `a139a9bc41ccb88ce` | **delivered — committed `9bbadf3`** | `docs/reviews/cpg-provenance-stamp.md` `## Pass 5` | **needs changes — 1 blocker, 3 majors.** P5-1 reproduced by me before I routed it: `CPG_STAMPED_KEYS` reads `<UNSET>` in the parent, query renders `NOT k IN []` | 175k tok / 48 tools |
-| **U58** — P5-1 (the allow-list is always empty), P5-2, P5-4, P5-5, P3-1, P4-4 | `cobb` | `aadea04e203b11c4f` (resumed) | **partial — blocker fixed and committed `049f063`; killed by a session rate limit, resumed.** **I verified the fix end to end in the shipped call-site shape**, not on the primitive: `CPG_STAMPED_KEYS` = all 8 keys in the parent, stray query renders a real list, `none` narrows to 4. Four items outstanding | `pipeline.sh`, `git-provenance.sh` done; `freshness.md`, `SKILL.md`, K-024 pending | `analyst` Pass 6 | — |
-| **U59** — P5-3: `cpg_falkorchat`'s live `NOTE` still carries mechanism 1's **retracted** false universal, inside the artifact check 0 treats as evidence | `graph-dba` | — | **held behind U58** deliberately — so the `NOTE` describes the final mechanism instead of being rewritten a third time | `cpg_falkorchat`'s `NOTE` | — | — |
+| **U58** — P5-1 blocker, P5-2, P5-4, P5-5, P3-1, P4-4 | `cobb` | `aadea04e203b11c4f` (resumed twice) | **delivered — `049f063` + `271c899`.** Survived a rate-limit kill. **Found a defect in my own commit**: `replay_stamp` called from three branches, defined nowhere. New `test-stamp-wiring.sh` **extracts the real block from `pipeline.sh`** and drives it against a fake `redis-cli` — 6 cases, all passing on **my** run, including a P5-1 mutation that must be refused | `pipeline.sh`, `git-provenance.sh`, `test-stamp-wiring.sh`, `SKILL.md`, `freshness.md`, K-024 | `analyst` Pass 6 | 247k tok / 24 tools |
+| **U59** — P5-3: the live `NOTE` still carries mechanism 1's **retracted** false universal, inside the artifact check 0 treats as evidence | `graph-dba` | `a5825012b34ab9a9b` (resumed) | in-flight — dispatched with **`cobb`'s exact wording**, not my paraphrase | `cpg_falkorchat`'s `NOTE` | `analyst` Pass 6 | — |
 | **U57** — ship the map form now that it is executed rather than doc-sourced; the stray assertion stays and becomes its production regression test | `cobb` | `aadea04e203b11c4f` (resumed) | in-flight | `git-provenance.sh`, `freshness.md`/`SKILL.md` prose, kaizen disposition | `analyst` — queued with U55 | — |
 | **U56a** — delete the graph key `cobb` leaked by probing a nonexistent graph (`GRAPH.QUERY` **materializes**) | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered.** Empty on all three counts before deletion. `diff` against the **U47a-close 25-key listing** is empty — not a bare count, so the concurrent session's own churn is excluded. I re-verified: 25 keys, zero `scratch_graphdba`/`nonexistent` | `GRAPH.LIST` diff | — | 162k tok / 11 tools |
 | **U56b** — execute the `SET b = {map}` claim `cobb` refused to ship on doc evidence alone | `graph-dba` | `a5825012b34ab9a9b` (same) | **delivered — it holds, four ways.** Probe 1: `MARKER_EVIDENCE` (the Case 3 survivor) **gone**, label and singleton intact. Probe 2b: a `NULL` **inside** the map omits the property — so the map mirrors `_cpg_prop`'s structure with five lines deleted. Probe 2a and Probe 3 (`--reset` create path) both correct. Routed **back to `cobb`** → U57, never applied by the validator | executed evidence, `keys(b)` throughout | — | (same run) |
@@ -4564,3 +4564,53 @@ differentiator — which can now be made *true* rather than merely narrowed, sin
 since been executed twice, by `cobb` and independently by me — the three-passes-open P4-4 nit, and
 K-024's reframing, which as written would have an `architect` add five never-written keys to a
 schema table. U59 stays held on `cobb`'s wording for the `NOTE`.
+
+## I shipped the defect I had just finished describing
+
+`049f063` is my commit, and it contained `replay_stamp` — called from three failure branches and
+**defined nowhere**. Under `set -euo pipefail` an undefined function aborts at 127 and swallows the
+message it exists to print, so all three stamp-failure paths were broken. `cobb` found it by
+grepping for the *definition* instead of accepting that the function existed.
+
+This is P5-1's failure shape one layer out, and it is mine. Checking whether P3-1 was addressed, I
+grepped `replay_stamp`, saw it appear, and wrote *"there's a `replay_stamp` function — so it appears
+P3-1 was addressed via a replay mechanism."* **I saw a call site and inferred a definition.** That is
+the defect class exactly — a plausible, checkable-looking claim, wrong rather than absent — produced
+by the coordinator who had spent the afternoon cataloguing it, in the same hour he wrote that the
+generation had a name.
+
+Worse in a way that is worth keeping: my commit message cited *"both scripts pass `bash -n`"*. That
+was **true and worthless**. `bash -n` is a syntax check; it cannot see an undefined function. I
+verified this afterwards — the pre-fix file still passes it. So I offered a real check as evidence
+for a property it does not test, which is the same move as an execution credential that covers the
+primitive and not the call path. I did not borrow someone else's bad justification; I minted one.
+
+The lesson I will actually carry: **a grep that finds a name has found a reference, not a
+definition.** For a function, `grep 'name()'`. For a variable, check where it is assigned, not where
+it is read. And when citing a tool as evidence, say what that tool can rule out — `bash -n` proves
+the file parses and nothing else.
+
+**`cobb`'s answer to the level problem is the best artefact in this arc.** `test-stamp-wiring.sh`
+**extracts the real stamp block out of `pipeline.sh` between two anchors** and drives it against a
+fake `redis-cli` — no FalkorDB, no graph write, sub-second. It cannot drift from the shipped code
+because it is not a copy of it. Six cases, all passing on my own run:
+
+* correct replace over a hand-authored marker, and under `provenance = none`
+* two merge-semantics regressions — one caught, and one that **passes by design**, asserting P5-2's
+  ruling empirically instead of arguing it. A test that pins what a check *cannot* catch is rarer
+  and more honest than one that only pins what it can.
+* the subsumption: stale `SOURCE_*` under `none`, all four reported
+* **a P5-1 mutation** — the call site reverted to `STAMP="$(cpg_provenance_stamp …)"`, required to
+  be refused. That is the rejected-design mutation rule from P21-3, applied by a different agent in
+  a different chain, unprompted.
+
+The third tombstone stops claiming *executed* as its differentiator, because that did not
+distinguish it from mechanism two. It states the finding instead — an execution credential is only
+worth the level it covers — and then names both levels with the run that backs each. Closing line:
+*both levels, or the credential is worth nothing.*
+
+**U59 goes out with `cobb`'s exact wording rather than my paraphrase**, which is why it was held.
+The replacement sentence carries the same conclusion without the false universal and adds something
+neither doc could: *"This note included: it will disappear silently, with the build reporting
+success."* The warning about the marker's mortality now lives **on the marker**, where the person
+about to rebuild is actually standing.
