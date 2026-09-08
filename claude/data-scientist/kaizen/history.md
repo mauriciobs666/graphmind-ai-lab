@@ -2,6 +2,30 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-08 — `lm-studio-model-notes.md`: `/api/v0/embeddings` carries no measurement fields, and the catalog size is not stable (U22)
+
+- **What:** `cobb`, distilling `analyst`'s `kaizen_team` chunk D (unit U22, entry
+  `b7f2c1d4-9e63-4a58-8c21-5f0a7d3e9b16`), made two edits inside the existing `/api/v0/` section —
+  no new section, no prompt change.
+- **The new clause.** Most of the entry was already published here: the ten catalog keys,
+  `/v1/models`' three, `runtime`/`stats`/`model_info` living only on
+  `POST /api/v0/chat/completions`, `loaded_context_length`'s absence while not-loaded, and
+  `lms.exe`-only reachability from WSL. What was missing is the negative on the third route:
+  `POST /api/v0/embeddings` carries **none** of the three. Verified live 2026-09-08 against
+  `localhost:1234` with `text-embedding-qwen3-embedding-0.6b` — the response holds exactly
+  `data`/`model`/`object`/`usage`, and `usage` itself came back
+  `{prompt_tokens: 0, total_tokens: 0}`. That turns "an embeddings-only arm can never populate a
+  runtime field" from an inference into a measured constraint on any fingerprint design.
+- **The counts were stale, and correcting them strengthened the finding.** The `capabilities` bullet
+  was written against a 19-model catalog; today's `curl -s :1234/api/v0/models` returns **16** (10
+  `vlm`, 4 `llm`, 2 `embeddings`), so the census reads 12 of 16, not 15 of 19. The bullet's
+  *conclusion* is unaffected and now demonstrably robust: the **same four** named entries are still
+  the ones without a `capabilities` key, and every entry that has it still holds only
+  `["tool_use"]`. The bullet now says to recount rather than quote a denominator.
+  `loaded_context_length` also gained its first positive confirmation — 15 of 16 entries were
+  `not-loaded` and keyless while the one model a probe had just JIT-loaded carried the key.
+- **Plan items:** none.
+
 ## 2026-09-08 — `lm-studio-model-notes.md`: `capabilities` is not a tool-calling gate (from `analyst`'s capture, U20)
 
 - **What:** `cobb`, distilling `analyst`'s `kaizen_team` chunk B (unit U20, entry

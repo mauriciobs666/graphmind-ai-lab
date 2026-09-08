@@ -528,3 +528,77 @@ prevent an over-generalisation can reintroduce it, when the table is keyed on
 status code on a different route is silently swallowed by it. Keying the table on
 `(route, response)` makes that collision unexpressible. When reviewing any table added as a
 completeness argument, check its **key** before checking its rows.
+
+## A guard derived from the artifact it guards is blind along the derivation axis — mutate the source, not the subject
+
+A test parametrized over the very collection it validates, or an AST assertion scoped to the alias
+the code happens to use, cannot see a change made *along the axis it derives from*. Both fail
+**green**, and both are common shapes for a gate written to pin a decision.
+
+**Deletion, not modification, is the mutation.** A parametrized test loses a *case* when its source
+collection shrinks — the suite reports fewer-passed-and-green, never a failure. So compare the
+**collected count**, not pass/fail. Verified 2026-09-08 on a synthetic pair (`falkor-chat/server/.venv`
+pytest 9.1.1: 4 collected → 3 collected, zero failures) and re-derived against the citing case —
+`model-bench` at `ab91419`, `git archive`d to a sandbox and run with `model-bench/.venv`:
+
+- baseline `233 passed`;
+- deleting `loadedContextLength` from `REQUIRED_BY_SCHEMA[1]["model"]` → `230 passed`, **zero
+  failures**. The −3 *is* the lesson: that constant feeds two parametrized tests, and
+  `FORBIDDEN_BY_ARM_KIND["deterministic"]` is *derived* from it
+  (`frozenset(_MODEL_SCHEMA_1) - frozenset(_DETERMINISTIC_SCHEMA_1)`), so one deletion silently
+  removed three cases across two collections;
+- shrinking `FORBIDDEN_BY_ARM_KIND["deterministic"]` by three **at the parametrize site**
+  (`sorted(...)[:-3]`) → `230 passed`, green;
+- shrinking the same set by three **at the constant** → `1 failed, 229 passed` — but only because a
+  non-parametrized sibling, `test_deterministic_arm_forbids_every_model_field`, spot-checks two
+  named fields and one of the three I removed was `quantization`. It is a spot-check, not a
+  set-level pin. **Mutate at both places and say which one you mutated**: they answer different
+  questions, and only the parametrize-site form isolates the parametrized test.
+
+**Same blindness, AST flavour.** A guard that walks one function for `services.<name>` sees only
+calls spelled through the alias it reads. Verified 2026-09-08 by mutating
+`falkor-chat/server/falkorchat/storefront_api.py` at `2e27835` in a `git archive` sandbox and
+re-running `test_the_router_reaches_exactly_the_service_calls_the_exemptions_assume`:
+
+| inserted into the router body | guard |
+|---|---|
+| `services.start_workflow_run(1)` (the alias) | **1 failed** |
+| `shop._services.start_workflow_run(1)` (same layer, direct spelling) | 1 passed |
+| `shop.enqueue_turn(1)` (same layer, one hop out via a collaborator) | 1 passed |
+
+The guard carries a control assertion — `_router_bindings(source)["services"] == "shop._services"` —
+which covers the alias being *renamed*, and not a call that never uses it at all. Two of the three
+shapes above are how the next planned step was actually specified.
+
+**The move:** where a gate is generated from the artifact it gates — a parametrize source, an AST
+walk, a derived `frozenset` — the mutation that tests it is applied to the **source**, in the shape
+the next change is *decided* to take, never a synthetic call written to be seen. Read the step's
+plan row first and mutate that; a guard sequenced ahead of its consumer is worth exactly the
+mutation that proves it will redden when the consumer lands.
+
+## A mutation-testing kill count is a draw from a distribution, not a fact — and pinning `PYTHONHASHSEED` does not always fix it
+
+Whenever the code a mutant sits in iterates a Python `set` of `str`, iteration order is
+hash-randomised, so *which* test reaches the mutant first — or at all — changes run to run. Report a
+kill count as a swept range, never as a number.
+
+Mechanism re-verified 2026-09-08 (`falkor-chat/server/.venv`, CPython 3.12.3, no `pytest-randomly`
+installed): `list({'alpha','beta','gamma','delta','epsilon'})` yields **7 distinct orders across
+`PYTHONHASHSEED=0..7`**. Original observation (`falkor-chat/server`, mutant
+`_PresenterSessions.verify -> compare_digest(candidates[0], token)` at `2e27835^`): kill counts
+`1,2,1,2,0,1,1,3` over seeds 0..7 — **at seed 4 the mutant survived** a fully green run. Two review
+passes that reported 2 and 1 were each faithful observations of one draw.
+
+**The half of the usual remedy that does not hold.** "Pin `PYTHONHASHSEED`" works only when the
+set's *members* are fixed. Where they are generated per run, the seed is one of two entropy sources
+and pinning it fixes nothing. Measured 2026-09-08 on that same class in a `2e27835^` sandbox:
+`_PresenterSessions` mints `secrets.token_urlsafe(32)` values, and at a **pinned**
+`PYTHONHASHSEED=0`, eight independent runs put the 1st, 2nd and 3rd-minted token at index 0
+(**three distinct answers**: #3, #1, #1, #1, #1, #2, #1, #1). A set of fixed string literals under
+the same eight seeds does behave — one stable answer per seed. So: pin the seed for a set of
+literals; for a set whose contents are minted, tokens, uuids or temp paths, only a **repeated-run
+range** is honest.
+
+**Consequence when adjudicating.** A disagreement between two mutation ledgers over the same mutant
+is not a defect in either until you know whether either pinned anything. A single-seed *survived*
+is not a coverage gap; a single-seed *killed by three tests* is not redundancy.

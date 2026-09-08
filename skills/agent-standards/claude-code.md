@@ -627,6 +627,20 @@ the always-loaded project memory (`CLAUDE.md`).
   immediately before reporting the work done**, and treat a disclosed concurrent session as a reason
   to verify, not merely to be careful.
 
+- **A backgrounded Bash command whose stdout is piped through `tail`/`head` writes NOTHING to its task
+  output file until the whole pipeline exits — the run looks hung, and `flush=True` does not help**
+  (verified 2026-09-08 in graphmind-ai-lab, paired control). `tail -n N` cannot emit its first byte
+  before EOF, since it does not know which lines are the last N; `head -n N` blocks the same way
+  whenever the producer emits fewer than N lines. Measured on one 60 s script printing a flushed line
+  every 5 s, launched three times with `run_in_background: true`: piped through `tail -20`, the task
+  output file was **0 bytes at ~30 s** and held all 12 lines only after exit; the identical script
+  with **no pipe** had **7 lines in its task output file at ~35 s**, streaming. So the task output
+  file streams fine — the pipe is the buffer. Redirect to a file with `>` and `cat` it, or drop the
+  pipe and let the tool's own file collect the output; reserve `| tail` for a command you are willing
+  to see nothing from until it finishes. This matters most for exactly the runs you would background:
+  a multi-minute mutation or test campaign monitored from another session, where "0 bytes" is
+  indistinguishable from a stall.
+
 - **A command manually backgrounded inside a Bash call (`cmd &`) is not the same as the tool's own
   `run_in_background` parameter, and the difference bites twice.** (1) A compound command ending in
   `&` can still stall the Bash tool call for its full timeout even after the backgrounded process

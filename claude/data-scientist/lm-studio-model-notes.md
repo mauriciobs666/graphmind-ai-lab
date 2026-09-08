@@ -97,7 +97,13 @@ JIT clause added 2026-09-07 from a 2026-09-03 observation).
   `/v1/chat/completions` route omits:** `stats{time_to_first_token, tokens_per_second,
   generation_time, stop_reason}`, `model_info{arch, quant, format, context_length}` and
   `runtime{name, version}` (LM Studio REST docs, `lmstudio.ai/docs/developer/rest/endpoints`).
-  Anything that needs latency or a runtime fingerprint per call must use the `v0` route.
+  Anything that needs latency or a runtime fingerprint per call must use the `v0` route —
+  and **only** that route: `POST /api/v0/embeddings` carries none of the three (verified
+  2026-09-08 against `localhost:1234`, `text-embedding-qwen3-embedding-0.6b`; the response
+  holds exactly `data`/`model`/`object`/`usage`, with `usage` itself
+  `{prompt_tokens: 0, total_tokens: 0}`). So an **embeddings-only arm can never populate a
+  `runtime`, `stats` or `model_info` field**, by any call it makes. "The v0 API" is not one
+  uniform fingerprint source; the catalog route and the chat route are, and nothing else is.
 - **`GET /api/v0/models` fingerprints the catalog; `GET /v1/models` cannot.** Live response on this
   box returns, per model, `id`, `object`, `type`, `publisher`, `arch`, `compatibility_type`,
   `quantization`, `state` (`loaded`/`not-loaded`), `max_context_length` and `capabilities`. The
@@ -105,8 +111,8 @@ JIT clause added 2026-09-07 from a 2026-09-03 observation).
   came back in 1.6-6.5 ms over six calls, `/v1/` no faster than `/api/v0/` — so the choice between
   them is about content, never cost; poll either as often as you like.
 - **Of those fields, `capabilities` is not a tool-calling gate — it carries no discriminating
-  information at all.** Re-derived 2026-09-08 on this box (`curl -s :1234/api/v0/models`, 19
-  models; originally observed 2026-09-02): every entry that has the key holds exactly
+  information at all.** Re-derived 2026-09-08 on this box (`curl -s :1234/api/v0/models`;
+  originally observed 2026-09-02): every entry that has the key holds exactly
   `["tool_use"]` and **no entry holds anything else**, so the field never says *no*. It says
   `["tool_use"]` for the **embeddings** model `text-embedding-qwen3-embedding-0.6b`, and it is
   **absent entirely** from four entries spanning both kinds — two `vlm` and one `llm` chat model
@@ -116,8 +122,15 @@ JIT clause added 2026-09-07 from a 2026-09-03 observation).
   a non-blocking hint — a harness that refuses a tool-caller run "because the catalog lacks
   `tool_use`" will refuse four working models on this box today and admit an embedder.
   `loaded_context_length` is the same trap one field over: absent from **every** entry while
-  `state == not-loaded` (all 19 were, at both measurements) — read `max_context_length` instead,
-  or load the model first.
+  `state == not-loaded` — read `max_context_length` instead, or load the model first. Confirmed
+  from both sides on a third measurement (2026-09-08, later the same day): 15 of 16 entries
+  `not-loaded` and keyless, while the one model a probe had just JIT-loaded carried the key.
+  **The catalog's size is not stable and must never be hardcoded** — 19 models at the two earlier
+  measurements, **16** at this one (10 `vlm`, 4 `llm`, 2 `embeddings`), so the `capabilities`
+  census reads 12 of 16 rather than 15 of 19. What *is* stable across that turnover is the shape
+  of the finding: the **same four** entries named above are still the ones with no `capabilities`
+  key, and every entry that has it still holds only `["tool_use"]`. Recount before quoting a
+  denominator; the conclusion survives without one.
 - **The `lms` CLI is not on the WSL `PATH`** (`command -v lms` exits 1), but the Windows binary is
   reachable and works from WSL at `/mnt/c/Users/<user>/.lmstudio/bin/lms.exe`. Confirmed working
   this way: `lms server status --json` (→ `{"running":true,"port":1234}`), `lms ps --json` (→ `[]`

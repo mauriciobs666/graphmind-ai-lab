@@ -3,6 +3,31 @@
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
 
+## 2026-09-08 — `falkordb-quirks.md`: the projection half of the `UNIQUE`-vs-existence gap (U22), resolving a dangling cross-reference U21 left
+
+- **What:** `cobb`, distilling `analyst`'s `kaizen_team` chunk D (unit U22, entry
+  `df03e2c1-86b7-4d9a-8b24-7710785226d4`), added one bullet under *Cypher dialect & query
+  behavior*: a property a node does not carry projects as `null`, never an error, so a `UNIQUE`
+  constraint is no guarantee a projection's key is present. No existing bullet was rewritten, and
+  the concurrent CPG session's uncommitted `Properties removed` bullet (lines 190-199) was left
+  byte-identical and unmoved — the new bullet was inserted after it.
+- **Why it was not the expected discard.** The entry overlaps U21's already-promoted `28d78725`, and
+  the brief expected a discard-a-fortiori. Reading the file as it stands instead found that U21's
+  promotion ends with *"see the `RETURN n.prop` → `null` entry under Cypher dialect for the
+  projection side of the same gap"* (`falkordb-quirks.md:59`) and **no such entry existed** — a
+  pointer written to content that was never added. This entry is that content, so promoting it
+  repairs my own prior unit's defect rather than duplicating it.
+- **Re-derived read-only, no probe graph created** (module `41811`, 2026-09-08):
+  `MATCH (a:Agent {agentId:'cobb'}) RETURN a.noSuchProperty` on `kaizen_team` returns one row
+  holding `null`, `IS NULL` is `true`, `keys(a)` is `['agentId']`, nothing raises; and
+  `CALL db.constraints()` on the `reference` graph returns four rows, all `UNIQUE`
+  (`Product[productId]`, `Step[stepUid]`, `Entity[entityId]`, `WorkflowDef[key,version]`), with **no
+  `MANDATORY` row at all** — which is the entry's constraint-side claim, confirmed. The entry's
+  downstream observation (`filter_products` → `list_catalog` carrying `productId: null` to the
+  caller) is carried attributed and dated to `analyst`, 2026-09-03: it is no longer reproducible,
+  since all 15 current `Product` nodes carry the key.
+- **Plan items:** none.
+
 ## 2026-09-08 — `falkordb-quirks.md`: `UNIQUE`-vs-null, the `EXISTS` subquery gap, and observable queue depth (U21)
 
 - **What:** `cobb`, distilling `analyst`'s `kaizen_team` chunk C (unit U21, entries

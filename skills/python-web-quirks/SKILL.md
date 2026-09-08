@@ -10,7 +10,9 @@ description: >-
   dropping defaulted nested-model fields; FastAPI's four built-in doc routes (and which
   constructor kwargs suppress them) falsifying any "registers only these routes" claim, while an
   included router's own routes are absent from app.routes entirely and its include_router(prefix=)
-  never reaches the inner path; responses={...}
+  never reaches the inner path, and a GET route not matching HEAD at all (starlette Route adds
+  HEAD, fastapi APIRoute does not) so HEAD falls through to any path-matching Mount and reads as
+  a 404 while every other method reads as an indistinguishable 405; responses={...}
   being keyed by status code alone, so two error bodies at one status collapse — though an x-
   extension inside a status entry does survive verbatim onto route.responses and into app.openapi();
   FastAPI/Starlette's exception-handler registry resolving by the raised class's MRO, keyed on
@@ -28,12 +30,16 @@ description: >-
   def-time-bound default arg; a one-way circular import between two modules that fails in every
   load order unless the deferred import is inside a function body (not a class body); and
   starlette TestClient's teardown cancelling every still-running task regardless of whether the
-  app's own lifespan cancels it; and an application lock held across ThreadPoolExecutor.submit()
+  app's own lifespan cancels it; bounding a call whose deadline the code under test computes with a
+  daemon thread plus join(timeout) rather than an elapsed-time assert that a hang never reaches —
+  stamping the start instant inside the thread body, since one taken before Thread.start()
+  absorbs the scheduling gap and passes on a call that did nothing; and an application lock held across ThreadPoolExecutor.submit()
   delaying interpreter exit by the lock's hold time rather than deadlocking it (nothing holds
   _global_shutdown_lock across a join). Use for asyncio.create_task scheduling, threading/executor
   lock-ordering questions, background-task dispatch, a
   FastAPI response model using exclude_unset, an assertion over an app's route table or its
-  responses={...} declarations, an HTTP client against urllib/OpenAI-compatible
+  responses={...} declarations, a method-matching or static-mount-shadowing question, a test that
+  must bound a possibly-hanging call, an HTTP client against urllib/OpenAI-compatible
   endpoints, an LLM-judge parser, a pytest monkeypatch touching an env var or deferred import, a
   circular-import fix, or a TestClient-driven lifespan/background-task test — coder, tdd-engineer,
   architect, analyst in a Python codebase.
@@ -185,6 +191,35 @@ route you know exists, then use it to assert one doesn't. Every failure above is
 the assertion still passes while proving nothing. Verified against fastapi 0.139.0 /
 starlette 1.3.1; `create_app(mount_mcp=True)` yields 4 starlette `Route` (docs) + 1
 `_IncludedRouter` (35 inner routes) + 2 `Mount`.
+
+## FastAPI's `APIRoute` does not add `HEAD` to a `GET` route — Starlette's `Route` does, and the difference is only visible when something else matches the path
+
+Verified 2026-09-08 against fastapi 0.139.0 / starlette 1.3.1 (`falkor-chat/server/.venv`).
+`starlette.routing.Route('/x', h, methods=['GET'])` reports `methods == {'GET', 'HEAD'}`; the
+`APIRoute` FastAPI builds for `@app.get('/x')` reports `{'GET'}`. So a `HEAD` request is only ever a
+**partial** match on a FastAPI `GET` endpoint — it never reaches the handler.
+
+**`HEAD` is not special; the *symptom* is.** On a bare app the partial match answers `405`, exactly
+like `DELETE` or `PUT`. But a partial match loses to any later route or mount that matches the path
+in full, and `starlette.routing.Mount` matches on path alone, ignoring the method — so on an app
+whose API routes live under a prefix that also carries a `StaticFiles` mount, *every* non-`GET`
+method falls through into the mount. Confirmed by replacing the mount with a permissive ASGI app,
+which answered `MOUNT:OPTIONS` / `MOUNT:DELETE` / `MOUNT:PUT` while `GET` still reached the route.
+`StaticFiles` then splits the outcomes and hides that: it *serves* `GET`/`HEAD`, so `HEAD` becomes a
+**404** for a file that does not exist, while every other method gets `StaticFiles`' own **405** —
+byte-identical to the `405` a real partial match produces.
+
+```
+FastAPI(); include_router(api, prefix="/shop/api"); mount("/shop", StaticFiles(...))
+GET /shop/api/state -> 200 (the route)   HEAD -> 404 (the mount)   OPTIONS/DELETE/PUT -> 405 (the mount)
+```
+
+**Consequence for review.** A `405` on such an app is *not* evidence that the request reached the
+route and was rejected on method — it may never have touched the route at all. And any handler
+keyed on `(request.method, request.url.path)` against a `GET`-only route table cannot `KeyError` on
+a `HEAD`, for a stronger reason than "HEAD is unhandled": the request is not routed there in the
+first place. To restore `HEAD`, declare it (`methods=["GET", "HEAD"]`), or mount the static app on a
+path that does not shadow the API prefix.
 
 ## FastAPI's `responses={...}` is keyed by status code only — two error bodies at one status collapse into one declaration
 
@@ -512,3 +547,31 @@ and must not gate a design. The real cost is a **non-daemon worker that cannot f
 the application lock stays held — a latency cost that becomes unbounded only if the lock is never
 released. Surfaced as a retraction: a `salesperson-ui` S9 plan amendment asserted the deadlock,
 `analyst` Pass 18 disproved it from source and by staging it (`architect`, 2026-09-08).
+
+## Bounding a call whose deadline the code under test computes: a daemon thread, not an elapsed-time assert — and stamp the start instant *inside* the thread body
+
+Where a venv has no `pytest-timeout` (confirmed absent from `falkor-chat/server/.venv`, 2026-09-08),
+the reflex fix for "prove this call returns within its own deadline" is to time it and assert
+afterwards. **That assertion is unreachable on the failure it exists to catch**: if the call hangs,
+control never returns to the assert, and the test dies on the runner's own kill instead — an
+observed exit 143 at 30 s, with no test name attributed. Run the call on a `daemon=True` thread,
+`join(timeout=…)`, and assert `not worker.is_alive()`. Measured 2026-09-08: `join(timeout=1.0)`
+around a 30 s sleep returns after **1.00 s** with `is_alive()` `True`, so the bound is the
+assertion, and a failure names the test. The daemon flag is what stops the abandoned worker from
+holding interpreter exit open.
+
+**The trap inside the fix.** If the test also asserts an *ordering* (`started_at < finished_at`), a
+start instant stamped on the calling thread — before `Thread.start()` — silently absorbs every
+scheduling gap and any setup between the stamp and the call, so the assertion is satisfied by the
+gap rather than by the work. With a realistic ms-resolution timestamp, a stubbed no-op call and a
+300 ms gap injected before the start:
+
+```
+stamp OUTSIDE, before Thread.start()   started=…903964 finished=…904264  started<finished -> PASS
+stamp INSIDE the thread body           started=…904565 finished=…904565  started<finished -> FAIL
+```
+
+The outside-stamped form passes on a call that did nothing. Re-stamp as the **first line of the
+thread body** and the ordering assertion measures the call again. (A `perf_counter`-resolution clock
+hides this — the delta comes back at ~1 µs and still passes; it is the coarse timestamp the code
+under test actually records that makes the difference visible.)

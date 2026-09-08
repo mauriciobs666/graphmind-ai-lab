@@ -3,6 +3,129 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
+## 2026-09-08 — `kaizen_team` distillation pass 2, chunk D (unit U22): 11 entries, 8 promoted, 3 discarded
+
+`cobb` processed the eleven `analyst`-produced `kaizen_team` entries dated 2026-09-03
+(`claude/docs/plans/kaizen-distillation2-coordination.md` U22, chunk D of five). Every entry pinned
+by **complete** `entryId` at read, count and clear, and this chunk is where that stopped being a
+precaution. Three of its ids share `b7f` (`b7f3c1d2…`, `b7f2c1d4…`, `b7f3a1c2…`), and the last of
+them turned out to be **a third verified collision in this graph, far worse than the two 8-character
+pairs already on record**: `b7f3a1c2-5d84-4e19-9a6f-2c8e71d40b93` (this entry — `analyst`,
+2026-09-03, mutation-kill counts) and `b7f3a1c2-5d84-4e19-9a06-3c2e8f14d7b0` (`architect`,
+2026-09-07, grep-based done-conditions) share their **first 21 characters**, diverging only at index
+21 (`6f` vs `06`). Both were live simultaneously; a match on any prefix up to 21 characters would
+have cleared `architect`'s entry instead of this one. Verified after the clear: the `architect`
+entry is intact. Evidence folded into `claude/cobb/kaizen/plan.md` K-021. Zero kept open, zero
+`MENTIONS` tags. **No always-loaded prompt was touched**: `analyst.md` and `claude/AGENTS.md`
+untouched, as in chunks A, B and C.
+
+Every promoted claim was re-derived from primary sources, and in four cases the **citation** — not
+the claim — was the thing that had to be re-run: a live `TestClient` probe on
+`falkor-chat/server/.venv` (fastapi 0.139.0 / starlette 1.3.1), two `git archive` sandboxes
+(`model-bench` at `ab91419` run against `model-bench/.venv`; `falkor-chat/server` at `2e27835` and
+`2e27835^` run against `falkor-chat/server/.venv`), a paired background-Bash probe with a
+no-pipe control, read-only Cypher against the live `reference` and `kaizen_team` graphs
+(module `41811`), and live `curl` against LM Studio on `localhost:1234`.
+
+**Promoted (8 entries → 5 files; three are edits to existing material):**
+
+  - `b7f3c1d2-9a44-4e6f-8c21-5d0e7a9b3f18` + `4e21d9f7-8a03-4c6b-b512-9fd0a3e77c15` → **one merged
+    section** in `claude/analyst/review-techniques.md` ("A guard derived from the artifact it guards
+    is blind along the derivation axis"). Merged because the review action is identical: a
+    parametrized test and an AST guard are both generated *from* the thing they check, and both fail
+    green along the derivation axis. Both re-derived by mutation. **`b7f3c1d2`'s figures were right
+    and my arithmetic was wrong** — I predicted 231 for a one-field deletion (two parametrized tests
+    × one field) and the sandbox returned the entry's `230`, because
+    `FORBIDDEN_BY_ARM_KIND["deterministic"]` is *derived* from `_MODEL_SCHEMA_1`, so one deletion
+    removed three cases across two collections. Testing the instrument before filing the finding is
+    what kept that out of the report. The section gained a distinction the entry did not have:
+    shrinking the forbidden set **at the constant** gave `1 failed, 229 passed`, but only because a
+    non-parametrized sibling spot-checks two named fields and I happened to remove one of them;
+    shrinking it **at the parametrize site** gave `230 passed`, green. For `4e21d9f7` the three-way
+    mutation reproduced exactly: alias spelling reddens, `shop._services.…` direct spelling and
+    `shop.enqueue_turn(…)` one-hop-out both stay green. **What I could not reproduce is the entry's
+    file-level `183 passed`** — the sandbox needs a live seeded workspace and returned 89-90 errors —
+    so the promoted section cites the per-test results I did observe and no file-level count.
+  - `b7f3a1c2-5d84-4e19-9a6f-2c8e71d40b93` → `claude/analyst/review-techniques.md`, new section on
+    mutation-kill counts as draws from a distribution. The mechanism re-verified (7 distinct orders
+    of a 5-element `str` set across `PYTHONHASHSEED=0..7`, CPython 3.12.3, no `pytest-randomly`),
+    and **half the entry's remedy refuted**: "pin `PYTHONHASHSEED`" does not work for the very case
+    it cites. `_PresenterSessions` mints `secrets.token_urlsafe(32)` values, so at a *pinned*
+    `PYTHONHASHSEED=0` eight independent runs put three different tokens at index 0. A set of fixed
+    literals under the same eight seeds is stable per seed. Promoted with that split stated. The
+    entry's own `1,2,1,2,0,1,1,3` sweep is carried as its original observation, attributed and
+    dated — I could not re-run it without falkor-chat's live environment.
+  - `6b1f0d2e-9a4c-4f77-8c3d-1e5b7a02c941` → `skills/python-web-quirks/SKILL.md`, new section,
+    **corrected in a way that makes it more useful**. The claim is true — `starlette.routing.Route`
+    with `methods=['GET']` reports `{'GET','HEAD'}`, FastAPI's `APIRoute` reports `{'GET'}` — but the
+    entry frames `HEAD` as special, and it is not: *every* non-`GET` method loses the partial match
+    and falls through to a path-matching `Mount` (proved by swapping `StaticFiles` for a permissive
+    ASGI app, which answered `MOUNT:OPTIONS`/`MOUNT:DELETE`/`MOUNT:PUT`). What is special is the
+    *symptom*: `StaticFiles` serves `GET`/`HEAD`, so `HEAD` reads as **404** while the others get
+    `StaticFiles`' own **405**, byte-identical to a real method rejection. A bare app with no mount
+    answers `HEAD` with 405. The entry's own conclusion (a `(method, path)` handler table cannot
+    `KeyError` on `HEAD`) holds, for the stronger reason.
+  - `e77cd2a5-fed3-4fba-876c-27327d9df724` → `skills/python-web-quirks/SKILL.md`, new section.
+    Routed to the shared skill rather than to `review-techniques.md` because it is a general
+    Python/pytest mechanic that `coder`/`tdd-engineer`/`qa-engineer` need as much as a reviewer.
+    Both halves reproduced: `pytest-timeout` absent from `falkor-chat/server/.venv`; a
+    `daemon=True` thread with `join(timeout=1.0)` around a 30 s sleep returns at 1.00 s with
+    `is_alive()` true; and with a ms-resolution clock and a no-op body, an outside stamp taken
+    before `Thread.start()` **passes** the `started < finished` ordering assertion off a 300 ms gap
+    while an inside stamp **fails** it. Added a caveat the entry lacks — a `perf_counter`-resolution
+    clock hides the trap (the delta comes back ~1 µs and still passes).
+  - `7c1e4b62-3a91-4d18-9f2c-5b0ad7e61c44` → `skills/agent-standards/claude-code.md`, new bullet
+    under *Bash tool environment*. Verified **with a control**, which is what makes it a finding
+    rather than an anecdote: the same 60 s flushed-line script backgrounded three times — piped
+    through `tail -20` the task output file was **0 bytes at ~30 s**; with **no pipe** it held
+    **7 lines at ~35 s**. So the task file streams and the pipe is the buffer. Mechanism stated
+    (`tail -n N` cannot emit before EOF; `head -n N` blocks the same way below N lines).
+  - `df03e2c1-86b7-4d9a-8b24-7710785226d4` → `claude/graph-dba/falkordb-quirks.md`, new bullet under
+    *Cypher dialect & query behavior*. Expected to be a discard-a-fortiori against U21's already
+    promoted `28d78725` — instead the read found that **U21's promotion left a dangling
+    cross-reference**: `falkordb-quirks.md:59` points at "the `RETURN n.prop` → `null` entry under
+    *Cypher dialect*", and no such entry existed. This entry is exactly that content, so promoting
+    it resolves my own prior unit's defect. Re-derived read-only (no probe graph created): a missing
+    property projects as `null` with `keys(n)` unchanged and nothing raised, and `CALL
+    db.constraints()` on `reference` returns four `UNIQUE` rows and **no `MANDATORY` row**. The
+    entry's downstream `productId: null` observation is attributed to it and dated — all 15 current
+    `Product` nodes carry the key, so that row is gone.
+  - `b7f2c1d4-9e63-4a58-8c21-5f0a7d3e9b16` → `claude/data-scientist/lm-studio-model-notes.md`.
+    **Mostly already published** — the 10 catalog keys, `/v1/models`' three, `runtime`/`stats`/
+    `model_info` living only on `POST /api/v0/chat/completions`, `loaded_context_length` absent while
+    not-loaded, and `lms.exe`-only reachability are all in that file already. One clause was not:
+    `POST /api/v0/embeddings` carries **none** of the three, verified live (response holds exactly
+    `data`/`model`/`object`/`usage`), which is what makes "an embeddings-only arm can never populate
+    a runtime field" a design constraint rather than an inference. Promoted as that clause. The
+    re-measurement also refreshed two counts in the neighbouring bullet — the catalog is **16**
+    models today, not 19 — while confirming the finding's shape is stable across the turnover (the
+    same four named entries still lack `capabilities`), and gave `loaded_context_length` its first
+    positive confirmation: the one model a probe had JIT-loaded carried the key.
+
+**Discarded (3 entries, all already published — none falsified):**
+
+  - `a3f1c9e2-7b4d-4a18-9c62-5e0d8f3b1a77` (FastAPI 0.139 does not flatten `include_router`) —
+    `skills/python-web-quirks/SKILL.md` already carries this in more depth than the entry, including
+    `route.original_router`, the `include_context.prefix` trap, the `Mount`/`Host` unclassified-entry
+    trap, and the positive-control advice. Nothing to add.
+  - `c47a83b0-52d1-4e6a-9f18-3d0c6b9e7a52` (per-route `responses={}` accepts `x-` extension keys) —
+    same file, the *"escape hatch"* paragraph of the `responses={...}` section, which already states
+    both reads (off `route.responses` and out of `app.openapi()`), the `include_router` case, and two
+    caveats the entry does not carry.
+  - `a7f3c1e2-9b04-4d5a-8e61-2c7f0d3b9a15` (the scratchpad path is not isolated between parallel
+    sessions) — `skills/agent-standards/claude-code.md` already carries it, and **cites this exact
+    incident** (`docs/reviews/small-model-benchmarking-impl.md` Appendix C.5, 2026-09-03) alongside
+    a second, sequential-reuse observation that generalises it further. Published at the point of
+    use, by an earlier unit of this same pass.
+
+**No `MENTIONS` tags.** Each entry was dispositioned to completion in this run and every promotion
+landed in the home that owns its subject — tagging would only ask another agent's pass to re-decide
+a settled disposition. The two cross-agent promotions (`graph-dba`, `data-scientist`) are logged in
+those agents' own `history.md` instead, per the precedent set in U19 and U21.
+
+**Plan items:** none. Nothing was kept open, and no analyst-agent improvement surfaced —
+`claude/analyst/kaizen/plan.md` untouched.
+
 ## 2026-09-08 — `kaizen_team` distillation pass 2, chunk C (unit U21): 10 entries, 6 promoted, 4 discarded
 
 `cobb` processed the ten `analyst`-produced `kaizen_team` entries dated 2026-09-02
