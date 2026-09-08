@@ -77,7 +77,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U21 | analyst chunk C (10: all of 09-02) | `a9b3f7141f0403e35` (resumed twice) | accepted | 6 promoted / 4 discarded (2 **falsified**), all 10 cleared + curator-cleared my false `7c4e91a2…`; `claude/graph-dba/falkordb-quirks.md`, `claude/analyst/review-techniques.md`, `claude/analyst/kaizen/{history,plan}.md`, `claude/graph-dba/kaizen/history.md` | teco re-derivation → **accepted** (2 resumes: evidence recount, then provenance of an unattributed bullet) | 224.0k tok, 96 tools |
 | U22 | analyst chunk D (11: 09-03) | `a9a502324e0cf4ca5` | accepted | 8 promoted / 3 discarded, all 11 cleared; `review-techniques.md`, `python-web-quirks/SKILL.md`, `agent-standards/claude-code.md`, `lm-studio-model-notes.md`, `skills/README.md`, +3 `kaizen/history.md`; `falkordb-quirks.md` **held** | teco re-derivation → **accepted**, paired-control reproduction of the pipe finding | 238.8k tok, 112 tools |
 | U23 | analyst chunk E (13: 09-07, arrived after pass open) | `a096fa1ae04ee4cae` (resumed once, for the AST correction) | accepted | 12 promoted / 1 discarded, all 13 cleared, **13 entries → 4 edits** (six became one six-part section, three a fold); `claude/analyst/{review-techniques.md,analyst.md,kaizen/history.md}`, `claude/graph-dba/{falkordb-quirks.md,kaizen/history.md}`, `claude/cobb/kaizen/{history,plan}.md` | teco re-derivation → **accepted after one correction**: 68→65, 42→40, per-file 3/3/14; re-derived at both revisions under 5 definitions. `rq()` defect confirmed by executing the helper | 190.6k + 210.5k tok, 71 tools |
-| U24 | analyst chunk F (12 of the 14 held at dispatch: all 09-08) | `a554b6fb7d89af6f0` | in-flight | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
+| U24 | analyst chunk F (12 of the 14 held at dispatch: all 09-08) | `a554b6fb7d89af6f0` (**killed by a host reboot, 2026-09-08; had written nothing — re-dispatch, do not resume**) | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U25 | analyst chunk G (2 deferred + whatever has arrived) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
@@ -387,6 +387,43 @@ was checking the work of the unit that had just drained that agent's inbox. So
 U24's size is not merely unknown until dispatch — it is unknown *at* dispatch,
 and the only sound close condition is a re-query that comes back empty, not a
 count planned in advance.
+
+## Stopped here — how to resume
+
+The pass was **paused by the stakeholder at U23's close**, ahead of a host
+reboot. It is **not finished**, which is why this document is still
+`Status: active`: archiving it would freeze the ledger that is the resume
+point.
+
+**State at the stop, verified rather than assumed:**
+
+- Everything through **U23 is accepted and committed** (`cfed0a0`, `bd924b1`,
+  ledger `b388cdb`). `git status claude/` is clean.
+- **U24 was in flight and died having done nothing.** All 12 of its pinned
+  entries were still in the graph and it had written no file. This is the one
+  platform failure of the pass with *nothing* to recover — unlike U10/U15/U19/U20,
+  there is no half-written promotion and no unlogged disposition.
+- Its `agentId` is recorded above but is **dead after the reboot**. Re-dispatch
+  from the brief; do not try to `SendMessage` it.
+
+**What remains, in order:**
+
+1. **U24** — re-dispatch the 12 pinned ids. Re-query first: `analyst` may have
+   grown again, and two entries (`7c1d4a92…`, `8d2b47f0…`) were deliberately
+   deferred. Two of the 12 (`b7f3c2a1…`, `4f9c21ae…`) must be routed
+   **kept-open**, not cleared — their code fix is unclaimed.
+2. **U25** — the deferred two plus whatever has arrived since.
+3. **The `MENTIONS`-only unit** — 11 nodes carrying 12 edges, dated 08-30 to
+   09-07, the oldest population in the graph. None hangs off a produced entry,
+   so no producer-organised unit will ever reach them. This needs a unit shaped
+   by *edge*, not by producer, and it is the one piece of the backlog that has
+   never been attempted.
+4. **Route the `rq()` fix** to `graph-dba` (see Follow-ups).
+5. Only then: re-query every agent, drain what is actually there, and flip this
+   document to `archived`.
+
+**The close condition is a re-query that comes back empty — never a planned
+count.** Two entries arrived while U23's own verification was running.
 
 ## Follow-ups
 
