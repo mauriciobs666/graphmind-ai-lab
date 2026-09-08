@@ -158,8 +158,10 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U41** — backfill `cpg_falkorchat`'s pre-fix marker honestly + remove 3 leaked scratch graphs | `graph-dba` | `a5825012b34ab9a9b` | **accepted** | marker now 10 keys, `PROVENANCE='hand-backfilled'`; 3 keys deleted | self-verified + re-verified here (`SOURCE_TREE` vs `git rev-parse`) | 115k tok / 22 tools |
 | **U42a** — 6 sites in `freshness.md` + the check-0 gate decision | `cobb` | `a1cfcb25341f0b0bb` | **delivered — committed `81b43cd`** (+66/−19) | **9** sites, not 6; `MARKER_ORIGIN` added to the documented query; shape set = **5** | `analyst` Pass 4 (pairwise) — **in flight** | 80k tok / 28 tools |
 | **U42b** — 3 sites in the manual; `cpg_falkorchat` is no longer a live pre-fix example | `tico` | `a4e2b1a2f544180d8` | delivered — held for pairwise gate | `b47c84a` — **5** sites, shape set = **6** | `analyst` Pass 4 (pairwise) — **in flight** | 76k tok / 19 tools |
-| **Pass 4** — the pairwise shape-set gate: do `freshness.md` and `graph-ontology.md` teach the same set of marker shapes? | `analyst` (**resumed** — wrote m1–m5 and Passes 1–3; the only party holding both sides) | `a98a748e49a559ead` | in-flight (dispatched 2026-09-08) | `docs/reviews/cpg-provenance-stamp.md` `## Pass 4` | — (is the gate) | 193k tok / 52 tools at resume |
-| **U42c** — the kaizen bookkeeping my own brief fenced off: `:KaizenEntry` + `claude/cobb/kaizen/history.md` | `cobb` | `a1cfcb25341f0b0bb` (resumed) | in-flight (dispatched 2026-09-08) | `kaizen_team` + `claude/cobb/kaizen/history.md` | — (raw capture; `cobb` distills) | — |
+| **Pass 4** — the pairwise shape-set gate: do `freshness.md` and `graph-ontology.md` teach the same set of marker shapes? | `analyst` (**resumed** — wrote m1–m5 and Passes 1–3; the only party holding both sides) | `a98a748e49a559ead` | **accepted — committed `d4214c3`**. `freshness.md` **needs changes** (1 major), `graph-ontology.md` **approve with suggestions**. **Shape sets are two partitions of one set, no omission either way** — proved by enumerating each document's *classification surface* and walking both orderings against the two live markers. **P4-1: the fifth-generation false mechanism, inside the fourth's own fix** | `docs/reviews/cpg-provenance-stamp.md` `## Pass 4` | — (is the gate) | 238k tok / 14 tools |
+| **U45** — P4-1: extend the stamp's `= NULL` list to the five hand-authored keys, so the docstring's own discipline covers properties that postdate it | `cobb` | `a1cfcb25341f0b0bb` (same thread) | **queued — explicitly told not to start**; P4-1's doc disposition depends on whether the code changes | `skills/joern-cpg/scripts/git-provenance.sh`, then `freshness.md`'s Limits bullet | `analyst` Pass 5 | — |
+| **U46** — P4-5: `cpg_falkorchat`'s own `NOTE` cites a superseded version of the check-0 gate | `graph-dba` | — | queued (fold into the next marker touch — not worth a graph write of its own) | the live marker's `NOTE` | — | — |
+| **U42c** — the kaizen bookkeeping my own brief fenced off: `:KaizenEntry` + `claude/cobb/kaizen/history.md` | `cobb` | `a1cfcb25341f0b0bb` (resumed) | in-flight — **retraction sent mid-run**: one of the two learnings I suggested is false (P4-1), asked to clear/correct it if already written | `kaizen_team` + `claude/cobb/kaizen/history.md` | — (raw capture; `cobb` distills) | — |
 | **U44** — route the `Properties removed` double-count quirk into `falkordb-quirks.md` | `graph-dba` | — | queued (blocked: concurrent session holds the file) | `claude/graph-dba/falkordb-quirks.md` | — | — |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
@@ -3707,3 +3709,70 @@ the concurrent session is real and I have kept its files out of every commit thi
 a fence drawn by **directory** rather than by **file** silently captures whatever else lives under
 it, and the delegate who hits it cannot tell an intentional bar from an over-broad one. It correctly
 did neither and reported both, which is the right behaviour and the reason I found out at all.
+
+## Pass 4: the discrepancy was benign, and the fix carried the defect
+
+Two results, and the one I was watching for is not the one that mattered.
+
+**The 5-vs-6 shape-set difference is two partitions of one set.** No shape is omitted either way.
+The whole of the difference is that `cobb` treats `none` and `SOURCE_TREE`-absent as **sub-states of
+a pipeline stamp** — correctly, since the pipeline writes both — where `tico` promotes them to
+top-level reader-facing states. The gate did not settle this by comparing the two lists, which is
+what I would have done and would have got wrong: it enumerated each document's **classification
+surface** — the list a reader actually walks to decide what they are holding — and matched those
+pairwise, then walked **both orderings against both live markers** to confirm no earlier bullet
+captures either one first. A `freshness.md`-only reader can classify and act on a `none` marker and
+on a tree-absent one; a `graph-ontology.md`-only reader can classify a full pipeline stamp. That is
+the right test, and it is a different test from the one I named in the brief.
+
+I was right not to adjudicate it, but not for the reason I thought. I had framed it as *which count
+is correct*. The answer is that the count was never the question — the reader's decision procedure
+was, and two documents can partition one set differently without either reader being stranded.
+
+**P4-1 is the fifth generation of this chain's defect class, and the first to appear inside the fix
+for the fourth.** `cobb`'s new Limits sentence — *"the next successful `--load` overwrites it
+wholesale, `NOTE` and `MARKER_ORIGIN` included"* — is **false without `--reset`**, which is optional
+and destructive-guard-gated. I verified it myself rather than taking the finding: `cpg_provenance_stamp`
+(`git-provenance.sh:138-149`) is a `MERGE … SET` over exactly **eight named properties**, and nothing
+in the repo clears the five hand-authored ones. Both live markers carry keys outside those eight —
+`cpg_deprecated_salesperson` has four.
+
+The real consequence is **worse than the one documented, not milder**. An `--append` rebuild does not
+erase the hand-authored marker; it manufactures a **hybrid** — freshly captured `source*` fields
+sitting under a `MARKER_ORIGIN` that says *not a pipeline stamp* and a `NOTE` describing a build that
+no longer exists. And under `cobb`'s **own bullet 1** that hybrid classifies as not-a-pipeline-stamp,
+routing the reader to a stale note as evidence about fresh content. A rule written to protect a
+reader, whose stated mechanism produces the trap it was warning about.
+
+## I amplified it, and that is the part worth writing down
+
+`cobb` wrote the sentence. I read it, called it *"a durable property of the mechanism, not a fact
+about this marker"*, committed it in `81b43cd`, put that framing into the commit message, wrote it
+into this document, **and then handed it back to `cobb` as a candidate `kaizen_team` learning with my
+endorsement attached**. It was minutes from being the second false fact to reach shared memory in one
+session, and this time the coordinator would have been the one who pushed it there.
+
+My verification stopped at the sentence being *plausible and general*. I had read `git-provenance.sh`
+twice in this chain and did not open it — because the claim agreed with something I already believed
+(hand-authored state is fragile) and because it read as a *limit*, and limits sound conservative.
+That is the architect's half-verification exactly, one seat over: **the least-verified prose in any
+document is the justification attached to a rule everyone agrees with.** Nobody re-checks the reason
+for a conclusion they accept. Four of this chain's five generations have now been a *reason* rather
+than a *value*, and the pattern is not that people invent facts — it is that a correct conclusion
+lends its credibility to whatever sentence is standing next to it.
+
+The retraction went to `cobb` mid-run, before it finished writing, because a finding that invalidates
+a sibling's premise is cheap to send and expensive to withhold. I told it what I had verified, took
+my share explicitly, and asked it to clear the entry by `entryId` if it had already landed — it holds
+curator authority for exactly that, which is the second time this session that authority has been the
+thing standing between a false fact and promotion.
+
+**The fix is the code, not the sentence**, and the gate is right about why: the script's own docstring
+already states the discipline — *"EVERY property is written on EVERY stamp — an absent one explicitly
+to `NULL`"* — and gives the exact rationale (an `--append` re-stamp must not leave a value describing
+a build that no longer exists). The five hand-authored keys simply postdate the docstring. Extending
+the `= NULL` list is not a new rule; it is the existing one reaching properties that did not exist
+when it was written, and it makes **both** documents' guarantee true rather than making one of them
+hedge. I have queued it as U45 and told `cobb` explicitly **not** to start it, and not to touch the
+Limits bullet either: P4-1's documentation disposition depends on whether the code changes, and I am
+not having it write a second sentence for the fix to falsify.
