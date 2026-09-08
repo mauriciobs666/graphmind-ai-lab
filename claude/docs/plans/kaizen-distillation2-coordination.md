@@ -73,7 +73,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U18 | teco chunk C (13: 09-03…09-06) | `a881239125792e0e0` | accepted | `claude/teco/teco.md` (5 in-place sharpenings + 1 new bullet), `skills/agent-standards/claude-code.md` (agentId resolution scope), `claude/teco/kaizen/history.md`+`plan.md` (K-016 → blocking), 3x `MENTIONS` (2 analyst, 1 data-scientist), graph cleared | none → — | 179.1k tok, 68 tools |
 | U18b | teco chunk D (14: 09-07, all arrived after pass open) | `adcb31af6bc3fc428` | accepted | `claude/teco/teco.md` (12 statements from 9 entries, **zero new bullets** — 11 lines changed, 11 removed); `skills/agent-standards/claude-code.md` (2 permission-classifier entries merged); `claude/teco/kaizen/history.md`+`plan.md`; 5 `MENTIONS` edges over 4 entries (3 tdd-engineer, 2 analyst); 10 nodes deleted, 4 `PRODUCED` resolved — **`teco` closed out, 0 produced / 0 mentioned** | none → — | 224.6k tok, 69 tools |
 | U19 | analyst chunk A (12: ≤ 08-30) | `adb247a3e028c0606` (killed by a session rate limit at its first tool call, 09-07; resumed in place by `SendMessage` 09-08 — nothing had landed, all 12 edges intact) | accepted | `claude/graph-dba/falkordb-quirks.md` (3 entries: 2 folded, 1 new regex bullet) + `kaizen/history.md`; `claude/analyst/review-techniques.md` (2, both edits to existing material — one **corrected a wrong import-resolution mechanism the file had been carrying**) + `kaizen/*`; **7 discarded**, 3 of them additionally carrying a false or misattributed claim; 1 `MENTIONS`→`devops`; 11 nodes deleted, 1 `PRODUCED` resolved. **Zero new bullets in any always-loaded prompt** — `analyst.md` and `claude/AGENTS.md` untouched | none → — | 184.9k tok, 50 tools |
-| U20 | analyst chunk B (11: 08-31…09-01 + the first 5 of 09-02) | `a6db6af4910e607bc` | in-flight | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
+| U20 | analyst chunk B (11: 08-31…09-01 + the first 5 of 09-02) | `a6db6af4910e607bc` (killed by a session rate limit mid-promotion, 09-08; resumed in place by `SendMessage` after the reset — four promotions already on disk, nothing logged, all 11 entries intact) | in-flight | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U21 | analyst chunk C (10: the remaining 09-02) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U22 | analyst chunk D (11: 09-03) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U23 | analyst chunk E (13: 09-07, arrived after pass open) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
@@ -130,10 +130,10 @@ units of measured rate beat the estimate it was drawn from. The remaining
 chunk boundaries in the table were sized under the same estimate and should be
 re-checked against this rate as each agent comes up.
 
-## Three platform failures, all cleanly recovered
+## Four platform failures, all cleanly recovered
 
-Three units were killed mid-run by session rate limits (HTTP 429) — U10, U15
-and U19 — and **not one lost a disposition.** The three landed at different
+Four units were killed mid-run by session rate limits (HTTP 429) — U10, U15,
+U19 and U20 — and **not one lost a disposition.** They landed at four different
 points, which is what makes them useful together:
 
 | Unit | Died at | Actual state found | Recovery |
@@ -141,6 +141,7 @@ points, which is what makes them useful together:
 | U10 (`a695c632adfd6d91d`) | starting verification | nothing written; all 27 `coder` edges intact | plain re-dispatch |
 | U15 (`ae7d55eeefd996462`) | after every file write, before the clear | complete `history.md` entry on disk, `plan.md` K-004 missing, all 10 nodes intact | narrow **state-recovery** unit for the two remaining steps only |
 | U19 (`adb247a3e028c0606`) | first tool call | nothing written; all 12 edges intact | **resumed in place** by `SendMessage` |
+| U20 (`a6db6af4910e607bc`) | mid-promotion (`<result>`: *"Now the promotions. Starting with `review-techniques.md`"*) | **four** promotions fully written to disk (`review-techniques.md` +21, `falkordb-quirks.md` +19/-1, `claude-code.md` +40/-5, `python-web-quirks/SKILL.md` +50/-4); `analyst/kaizen/history.md` untouched, zero dispositions logged; all 11 entries intact | **resumed in place** with a written state report |
 
 Two rules come out of it, and both are now load-bearing for this pass:
 
@@ -387,3 +388,27 @@ resolved, never silently lost. A run that dies before either leaves nothing.
   `npm`-only branch applies. Harmless today (only `npm` leaks in from
   Windows). Parked in `claude/devops/kaizen/plan.md`; `salesperson/` is not
   `cobb`'s to edit.
+
+- **The working tree is shared with a live concurrent coordination.**
+  Discovered while recovering U20 on 2026-09-08: between `05a60ce` (this
+  pass's last commit) and the recovery, **19 commits** landed from another
+  session — a model-bench/CPG coordination — moving `HEAD` to `29538d6`, and
+  two `git status` runs three minutes apart disagreed because that session
+  committed in between. It writes into files this pass also writes:
+  `claude/cobb/kaizen/{history,plan}.md`, `skills/cpg-analysis/references/freshness.md`,
+  `skills/joern-cpg/*`. Three consequences, all live for the remaining units:
+  - **Commit by explicit path, never `git add -A`.** The other session did
+    exactly this at `29538d6` and so left U20's four uncommitted promotions
+    untouched. Had either side swept, it would have committed the other's
+    half-finished work under a misleading message. This is the guardrail
+    earning its keep, not a theoretical one.
+  - **Re-read immediately before editing.** A delegate resumed after an
+    interruption may hold an in-context copy of a file that a *different*
+    coordination has since rewritten and committed; writing it back wholesale
+    destroys that work with no error on either side. Targeted edits against
+    freshly-read content only.
+  - **`HEAD` is not a stable baseline** — it moved 19 commits under this pass
+    without any action of mine. This is the same hazard U18 promoted into
+    `claude/teco/teco.md` ("`git show <sha>:<path>` with an explicit commit
+    sha, never `HEAD`"), now confirmed live from the opposite direction: there
+    the mover was my own integration commits, here it is another session's.
