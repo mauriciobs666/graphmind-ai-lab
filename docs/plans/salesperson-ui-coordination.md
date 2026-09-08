@@ -164,7 +164,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **Pass 5** — gate the whole stamp-closure arc: `29538d6` + `0da3eb9` + `5417f0e` | `analyst` | `a139a9bc41ccb88ce` | **delivered — committed `9bbadf3`** | `docs/reviews/cpg-provenance-stamp.md` `## Pass 5` | **needs changes — 1 blocker, 3 majors.** P5-1 reproduced by me before I routed it: `CPG_STAMPED_KEYS` reads `<UNSET>` in the parent, query renders `NOT k IN []` | 175k tok / 48 tools |
 | **U58** — P5-1 blocker, P5-2, P5-4, P5-5, P3-1, P4-4 | `cobb` | `aadea04e203b11c4f` (resumed twice) | **delivered — `049f063` + `271c899`.** Survived a rate-limit kill. **Found a defect in my own commit**: `replay_stamp` called from three branches, defined nowhere. New `test-stamp-wiring.sh` **extracts the real block from `pipeline.sh`** and drives it against a fake `redis-cli` — 6 cases, all passing on **my** run, including a P5-1 mutation that must be refused | `pipeline.sh`, `git-provenance.sh`, `test-stamp-wiring.sh`, `SKILL.md`, `freshness.md`, K-024 | `analyst` Pass 6 | 247k tok / 24 tools |
 | **U59** — P5-3: the live `NOTE` carried mechanism 1's **retracted** false universal, inside the artifact check 0 treats as evidence | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered.** Replaced in place with `cobb`'s wording verbatim; **round-trip proved by reverse-substitution and `sha256`, not by eye**. 2245 → 2267 chars, 10 keys, other nine fields byte-identical (`diff` empty). **I verified independently**: false universal `false`, new sentence `true`, `MANIFEST.txt:19` chain `true` | `cpg_falkorchat`'s `NOTE` | `analyst` Pass 6 | 176k tok / 7 tools |
-| **Pass 6** — gate `049f063` + `271c899` + the rewritten `NOTE`. **Fresh again**: Pass 5 both found P5-1 and prescribed the wiring test that answers it | `analyst` (**fresh**) | `aa000d6e1e597fca5` | in-flight — priority 1 *is the wiring test a real guard or only a passing test*; priority 2 the third credential; and an explicit ask to find what **I** accepted on non-evidence | `docs/reviews/cpg-provenance-stamp.md` `## Pass 6` | — (is the gate) | — |
+| **Pass 6** — gate `049f063` + `271c899` + the rewritten `NOTE`. **Fresh again**: Pass 5 both found P5-1 and prescribed the wiring test that answers it | `analyst` (**fresh**) | `aa000d6e1e597fca5` | **delivered — NEEDS CHANGES** (0 blockers, 4 major, 4 minor). Ruled the wiring test a **real guard** — anchors robust under 4 mutation modes, and the *rejected design* restored fails 4 cases. But **P6-1: the oracle reads only `rc != 0`, so deleting `replay_stamp` — the defect `271c899` is named for — passes all six cases green** (case 3 aborts at 127 after printing the lines the oracle scrapes). **teco reproduced P6-1 independently.** P6-3: the `replay_stamp` fix went to the three branches that already proved the stamp landed and skipped the two where re-sending *is* the fix — one of which sits nine lines below its definition | `docs/reviews/cpg-provenance-stamp.md` `## Pass 6` — committed `eb3a167` | — (is the gate) | 152k tok / 52 tools |
+| **U60** — close Pass 6: P6-1/2/3, P6-5, P6-6, then P6-4/P6-7/n4. **Ordered, not batched** — the credentials are written last, from what the strengthened suite's runs actually showed | `cobb` | `abeeb0ea31b20e7cc` | in-flight — briefed to **judge** the analyst's prescriptions rather than transcribe them (this chain has shipped a prescribed fix that was wrong three times), and to verify FalkorDB's real error-reply shape itself before adopting the P6-2 closure | `pipeline.sh`, `git-provenance.sh`, `test-stamp-wiring.sh`, `SKILL.md`, `freshness.md`, `cobb/kaizen/history.md` | `analyst` Pass 7 → — | — |
+| **U61** — P6-8: the `NOTE` was rewritten while `MARKER_WRITTEN_AT` stood still, so the marker no longer dates its own content | `graph-dba` | `ae44d6daf1ab9e7f9` | in-flight — **which** timestamp is honest is left to the owner, with the reasoning asked for explicitly; targeted `SET`, never the full-map stamp form | `cpg_falkorchat`'s `MARKER_WRITTEN_AT` | — | — |
 | **U57** — ship the map form now that it is executed rather than doc-sourced; the stray assertion stays and becomes its production regression test | `cobb` | `aadea04e203b11c4f` (resumed) | in-flight | `git-provenance.sh`, `freshness.md`/`SKILL.md` prose, kaizen disposition | `analyst` — queued with U55 | — |
 | **U56a** — delete the graph key `cobb` leaked by probing a nonexistent graph (`GRAPH.QUERY` **materializes**) | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered.** Empty on all three counts before deletion. `diff` against the **U47a-close 25-key listing** is empty — not a bare count, so the concurrent session's own churn is excluded. I re-verified: 25 keys, zero `scratch_graphdba`/`nonexistent` | `GRAPH.LIST` diff | — | 162k tok / 11 tools |
 | **U56b** — execute the `SET b = {map}` claim `cobb` refused to ship on doc evidence alone | `graph-dba` | `a5825012b34ab9a9b` (same) | **delivered — it holds, four ways.** Probe 1: `MARKER_EVIDENCE` (the Case 3 survivor) **gone**, label and singleton intact. Probe 2b: a `NULL` **inside** the map omits the property — so the map mirrors `_cpg_prop`'s structure with five lines deleted. Probe 2a and Probe 3 (`--reset` create path) both correct. Routed **back to `cobb`** → U57, never applied by the validator | executed evidence, `keys(b)` throughout | — | (same run) |
@@ -4658,3 +4660,64 @@ I also asked it, explicitly, to assume my integration checks were weaker than th
 anything else I accepted on non-evidence. Having minted a bad justification myself today, the
 useful response is not to be more careful in the same way — it is to have someone check the specific
 thing I am now demonstrably bad at.
+
+## Pass 6 found the guard sound and the scoreboard broken
+
+The question I gave Pass 6 was *is the wiring test a real guard, or a passing test that looks like
+one?* The answer came back **both**, split along a seam I had not thought to separate: the
+**extraction** is a real guard, and the **oracle** is not.
+
+The extraction survived four mutation modes without a vacuous pass — reword the START anchor and it
+exits 1 naming the anchors; reword or duplicate END and the block runs into the file-closing `fi`
+and every case dies on a syntax error. And the mutant this chain actually asks for — not the absence
+of the chosen design but **the rejected design restored** (`printf` in the function, `$(…)` at the
+call site) — fails four cases. That is the standard P21-3 set, and `271c899` meets it.
+
+Then P6-1. The oracle decides a case by `rc == 0 → PASS`, else by scraping stray key names out of
+the output. It never asks *which* non-zero, or whether the branch finished. So delete the
+`replay_stamp` **definition** — the exact defect the commit is titled for, the one `cobb` found in
+its own work last round — and all six cases report PASS. Case 3 is aborting at **127**, and the
+scrape still finds `MARKER_EVIDENCE` in the lines printed before the abort.
+
+**I reproduced it before routing it**, because it is the sort of claim that decides whether a unit
+exists at all: byte-copy, `sed -i '281,289d'`, run. `all stamp-wiring cases passed`, exit 0. Repo
+copies still md5-matching `271c899`.
+
+The pattern underneath is worth naming, because it is *not* the nine-generation class this chain has
+been chasing. Nothing here is a false justification. The test really does extract the real block, the
+fake really is faithful, the mutation really does discriminate. What fails is one level down:
+**the test observes the right system through an instrument too coarse to see the failure it was
+built for.** A guard is two things — a probe and an oracle — and this chain has been reviewing
+probes. The credential "I ran it and it refused" is only worth the resolution of the thing that
+decided *refused*.
+
+P6-3 is the sharper embarrassment, and it is mine as much as `cobb`'s. `replay_stamp` is defined at
+`pipeline.sh:281`. Nine lines below it sits the branch that tells the operator *"the load itself
+succeeded; only the provenance marker is missing"* — the single branch in the file where re-sending
+the Cypher by hand is exactly the fix — and it exits without calling it. The three call sites that
+exist are all downstream of a read-back that already proved the stamp landed, so one of them now
+prints *"The stamp DID land"* and then *"only the stamp does [need repeating]"*. I verified the
+`:291-298` branch myself by reading it. `SKILL.md:109`'s "every stamp failure branch" is false: three
+of five, and the wrong three.
+
+**U60 is ordered rather than split.** The sizing rule says six files and eight findings is a
+decomposition boundary, and normally I would cut it. I did not, because Phase 2 — the credential
+corrections in `freshness.md` — must be *written from Phase 1's runs*. Split it and the second agent
+either re-runs everything to earn the credential or writes one it did not earn, which is the defect
+this arc exists to close. The ordering is stated in the brief as load-bearing: fix, run, then write
+what the run showed, never the reverse.
+
+**P6-4 makes three.** The third tombstone's generalisation — *"both earlier ones covered the
+primitive and not the call path"* — is true of mechanism two and false of mechanism one, whose
+credential was a re-reading credential and whose defect was an incomplete enumeration, as the
+tombstone three paragraphs above it says in those words. A "both" carrying one instance. Three
+consecutive tombstones have now made a claim that did not survive being checked, which means the
+tombstone *form* is not doing the work I adopted it for; I briefed `cobb` to treat that pattern as
+the finding rather than repair the sentence and move on.
+
+**Pass 22 is deliberately not dispatched alongside these.** It is genuinely independent — different
+files, different component — and on file-disjointness alone it should go now. Against that: eight
+rate-limit kills across this coordination, and Pass 6 alone cost 152k tokens. Two heavy reviewers
+concurrently is the shape that produced those kills, and the recovery from each is cheap only
+because everything verified is already committed. Serializing costs latency; concurrency costs
+resumptions. Taking the latency.
