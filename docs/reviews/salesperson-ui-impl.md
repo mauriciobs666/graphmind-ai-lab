@@ -5285,3 +5285,258 @@ fifth arriving):
 p5 reports -> {'state': 'queued', 'queuePosition': 4}   (true waiting-line index: 0)
 p1 reports -> {'state': 'thinking', 'queuePosition': 0}
 ```
+
+## Pass 18 — 2026-09-08 (v1.27: the reserve/release protocol and the derived queue position)
+
+**Scope.** Commit **`d1eaa7f`** only — `docs/plans/salesperson-ui.md` v1.26 → v1.27, +58/−8, one
+file. This is a **plan** gate, not a code gate: no implementation of the amendment exists yet, and
+`e6fa20c` is not re-adjudicated (Pass 17 stands; P17-1, P17-2, P17-3 and P17-9 are what this
+amendment answers). Read as a word-level diff of the S9 row against `d1eaa7f^` plus the seven other
+hunks, and judged against §4.4, §5.2, §5.3 C6a/C6b, §6.1, §6.4, S13 and the pinned interpreter.
+**Not reviewed:** everything Passes 10–17 closed; P17-4…P17-8 and P17-10, which are code findings
+this amendment correctly does not touch.
+
+**CPG: considered, not relevant — the artifact under review is a markdown plan document, which no
+code-property graph models; `cpg_falkorchat` is additionally stale for `storefront.py` and is being
+written to by a `graph-dba` unit, and was not queried.**
+
+**What I ran.** `/usr/lib/python3.12/concurrent/futures/thread.py` on the pinned interpreter
+(`.venv/bin/python` → **3.12.3**) read in full for the deadlock claim, plus two executable probes:
+the alleged three-party deadlock staged exactly as the row describes it, and a two-thread
+`TestClient` concurrency probe for the new linchpin done-condition (Appendix O). No graph touched,
+no seed script, nothing written outside this document.
+
+**Verdict: needs changes** — 0 blockers, **2 majors**, 4 minors, 2 nits.
+
+**The amendment's substance is right and I would not send it back for redesign.** The reservation
+closes the admission window, the token closes the ownership window, the two are correctly called
+independent, the derived position is a better answer than the one I suggested, and the sweep is
+complete. Both majors are **one sentence each** — a false justification attached to a rule that
+should survive, and an invariant the row relies on but never states. This should be a fast round
+trip.
+
+### Findings
+
+**P18-1 — major. The deadlock prohibition's cited mechanism does not exist on the pinned
+interpreter. The rule should survive; its justification must not.** The row states: *"`submit`
+acquires `concurrent.futures.thread`'s `_global_shutdown_lock`, which `_python_exit` holds while
+joining worker threads that are themselves blocking on the turn lock — a three-party deadlock at
+interpreter exit, read from the pinned venv (CPython 3.12.3 `concurrent/futures/thread.py`)."`
+`_python_exit` does **not** hold that lock while joining. The pinned source (`thread.py:24–31`) is
+four statements: `with _global_shutdown_lock: _shutdown = True`, then — **outside** that `with` —
+`q.put(None)` and `t.join()` for each worker. The same is true of `shutdown()` (`:217–240`): the
+`t.join()` loop is outside `self._shutdown_lock`. Neither of the two locks `submit` takes
+(`:164–165`) is ever held by anyone across a worker join, so the cycle cannot form. I then staged
+the arrangement — turn lock held across `submit`, a worker blocked on that same lock, the
+interpreter exiting underneath both — and it **exits cleanly in 1.23 s**, with the submit-under-lock
+returning in 0.6 ms (Appendix O §2). Suggested: keep the prohibition, replace the reason with the
+two that are true — (i) there is nothing to buy, since booking order need not equal submit order
+(the row already says this, and it is sufficient on its own); (ii) `_python_exit` **does** join
+every `ThreadPoolExecutor` worker, outside any lock, so a worker blocked on the turn lock delays
+process exit for as long as the lock is held — which is an argument for holding the turn lock
+*briefly*, not for a deadlock. Optionally note that putting an application lock underneath two
+`concurrent.futures` internals is a lock-ordering hazard whose current benignity is an
+implementation detail rather than a contract.
+
+**P18-2 — major. The arrival ordinal now does two jobs and the row never states the invariant
+either one needs.** It is the ordering key ("the count of entries that are still `queued` and were
+accepted **earlier** than this one") *and* the ownership token ("a worker only ever writes the slot
+it still owns"), which the commit message celebrates as "one field, two defects". Both jobs require
+a **process-global, strictly monotonic counter that is never reset and never reused**, and the row
+says only "the booking's arrival ordinal". That is precisely the wrong-rather-than-absent shape this
+amendment exists to eliminate: `len(self._turns)` is a plausible "arrival ordinal", it is what the
+same implementer shipped for the same-shaped number six days ago (P17-2), and it **collides** —
+after `clear_all_turns()` it restarts, and two live bookings can share a value. A colliding ordinal
+gives wrong positions *and* lets a worker's ownership check pass against a booking that is not its
+own, which re-opens P17-1 in a new spelling. Suggested: one clause in the S9 row — *the ordinal is a
+process-global counter incremented under the turn lock, never reset and never reused
+(`itertools.count()`); two bookings never share one, including across `clear_all_turns()`* — and a
+done-condition that a booking cleared by a foreign worker reddens.
+
+**P18-3 — minor. The ownership condition is stated for worker writes only; the release path has the
+same exposure.** The row's prose scopes it to the worker ("the `thinking` flip and the `finally`
+clear alike"), while the interface cell's `Storefront.release_turn(participant_id, booking)` takes
+the booking and so *can* be conditional. Between a reservation and a failed `post_message`, a
+`clear_all_turns()` plus a second-tab post can install a different booking in that slot, and an
+unconditional release then deletes it — the identical defect the token exists to prevent, on the
+one path the prose does not cover. Suggested: state the condition once over **every** map write
+(reserve, release, `thinking`, `finally`) rather than over worker writes.
+
+**P18-4 — minor. §5.2's definition and the row's own concession disagree.** §5.2 says the number
+means "how many *other* accepted turns must **start** before theirs"; the row concedes that "two
+turns booked microseconds apart may then reach workers in the other order". The derivation counts
+earlier-*booked* queued turns, so under a reorder the number is not what §5.2 promises — a small
+divergence (bounded by one place, and only inside the booking window), but the plan is the artifact
+and its two sentences contradict each other. This is the chain's signature defect in miniature: a
+stated rule slightly wider than the mechanism. Suggested: define it as *how many other accepted
+turns are ahead of theirs in the line* and let the row's reorder concession stand, or state the
+booking-order tie-break as the definition.
+
+**P18-5 — minor. The one stated bound understates itself.** §5.2's *One bound* paragraph says the
+post-`clear_all_turns()` window produces "an under-count, never an over-count, and it self-corrects".
+It also produces an under-report of `turn_in_flight` — a running worker's booking has been wiped, so
+`_await_quiesce` can return `True` under a live turn. That is P17-1's invariant, reachable through
+reset-all rather than through a double post. It is **accepted rather than defective** (reset-all has
+just deleted the graph those turns would write into; §7.3's ordering makes their writes silent
+no-ops) and S10's stop-intake narrows the intake half — but the paragraph currently reads as though
+only a display number is at stake. Suggested: say both consequences and why the second is accepted.
+
+**P18-6 — minor. The redefinition falsifies two prose blocks S9a shipped six days ago, and nothing
+in the sweep can reach them.** `config.py`'s `STOREFRONT_TURN_WORKERS` comment and `SERVER.md`
+§1.3's matching row both say *"setting it changes … the `turn.queuePosition` … since a position is
+how many accepted turns were unfinished when this one arrived"* — which is the **old** definition,
+verbatim, and is false under v1.27 (`turn_workers` deliberately does not appear in the derivation,
+and running turns are excluded). This is the U36 coupling shape exactly: a document true when
+written and false the moment the next unit lands. It is outside a plan sweep's reach by
+construction. Suggested: brief the implementing unit to carry both, in the same change — the same
+rule that made S9a a `config.py` unit.
+
+**P18-7 — nit. The linchpin test's mechanism is unnamed, and it is worth naming because it is the
+one test the whole correction rests on.** "The concurrent pair held inside the write" needs two
+threads driving one `TestClient` with the first blocked inside the handler, and the suite has no
+precedent for it. I verified it works: a second request is served and returns `200` while the first
+is still inside its handler (Appendix O §1). One clause naming the shape saves the implementer
+discovering a portal-concurrency question at build time.
+
+**P18-8 — nit. §9's stale version token, confirmed and cosmetic.** `docs/plans/salesperson-ui.md:2016`
+still reads "(v1.19) — **21 steps**". The version token is stale; the count is not the issue (no
+step rows moved in v1.27). Agreed with the architect that this is a follow-up, and it is
+cosmetic — recorded so it is not re-discovered.
+
+### The four questions, answered
+
+**1. The deadlock prohibition — wrong as justified, right as a rule.** See P18-1. Verified two ways
+against the pinned 3.12.3, not against general knowledge: source read (`_python_exit`'s joins are
+outside the `with`) and execution (the staged arrangement exits in 1.23 s). The instinct to verify
+this one rather than assert it was correct; the verification landed on the wrong two lines.
+
+**2. Does reserve/release close P17-1, both halves? Yes, and the release is more load-bearing than
+the row claims.** *Reserve*: `reserve_turn` as a test-and-set under the turn lock, with `None` **as**
+the `409` raised before the write, closes the admission window completely — there is no longer a
+read on one thread and a write on another with a FalkorDB round trip between them. *Token*: making
+the `thinking` flip conditional as well as the `finally` is the half that matters and the architect
+got the subtle case — a booking wiped by `clear_all_turns()` while still `queued` would otherwise
+flip a *later* booking's slot to `thinking` when its work item finally ran. With both, the
+single-slot overwrite I reproduced cannot occur; the residual is P18-2's collision and P18-3's
+release path. *Completeness of "released on any path that never reaches a worker"*: the row states
+it generically and names two instances, which is the right structure — I could not construct a third
+path (the request thread is not cancellable mid-handler, nothing cancels futures until S9b, and
+`shutdown(wait=True)` runs everything it accepted). *The `504` consequence*: **confirmed, and
+stronger than stated.** §5.3's rule (`:1353–1355`) is *message present and `turn.state === 'idle'`
+⇒ the turn was lost* / *`!== 'idle'` ⇒ wait, as normal*. A reservation that survived a failed write
+does not make that rule undecidable — it makes it decide **wrongly**, sending the client into "wait,
+as normal" forever. Note what that implies: the release is not an improvement the reservation
+enables, it is a repair for a property the reservation would otherwise **break** (today, with no
+reservation, C6b already decides correctly). That is why it must land in the same change, and the
+row is right to bind them.
+
+**3. `queuePosition` — implementable, and the rejection of my suggestion was correct.** Counting
+earlier-booked entries that are still `queued` is strictly better than my `len(self._turns) -
+turn_workers`, which assumed running turns fill workers evenly and breaks whenever the map holds a
+mix of `queued` and `thinking`. Deriving on read is the right call and cannot go stale by
+construction; the cost is one scan of a ≤50-entry map per 2 s poll. The arithmetic in both new
+done-conditions checks out (`thinking`/0, `queued`/0, `queued`/1, the third falling to 0; and
+`queued`/**0** for a fifth arrival behind four running turns at `turn_workers=4`). Excluding
+`thinking` turns is what makes `turn_workers` genuinely unnecessary on the wire — that argument is
+sound. **The stated bound is not the only one**: P18-4 (booking order ≠ start order) and P18-5 (the
+same window under-reports `turn_in_flight`, not only the position) are two more, and P18-2 is a
+third if the ordinal is implemented as anything resettable. None is disqualifying; all three are
+sentences.
+
+**4. The falsified done-condition and the concurrent-inside-the-write test — the claim holds.**
+Replacing `0/1/2` was required, not optional: under the new definition the old expectation is
+arithmetically false (three participants at `turn_workers=1` give 0/0/1, not 0/1/2), so leaving it
+would have been an unmeetable done-condition. And the discrimination claim is right on both halves.
+A sleep-timed pair passes under check-then-act **and** under reservation, because the first booking
+exists by the time the second post is issued either way. A pair held inside the write separates
+them exactly: under check-then-act the second request reads an empty map (the booking is behind the
+write) and is answered `200`; under reservation it is answered `409` with no `Message`. The row even
+names the failing observation (`the check-then-act answers that second post 200`), which is what
+makes it a test rather than an assertion. Mechanism verified as implementable (P18-7, Appendix O §1).
+
+**On §6.4 — I agree with the architect, and I over-read measure 1a in Pass 17.** §6.4 already binds
+the harness: *"It must honour the `409 TurnInProgress` contract rather than firing blind — a harness
+that ignores it is the only client that would ever hit §4.4 measure 1a's defect"* (`:1932–1934`).
+Measure 1a's "§6.4's load harness will not honour it" refers to a **disabled send button**, not to
+the `409` response; Pass 17 read it as making the harness a concurrent-post trigger, and that was an
+over-read on my part. Declining to change §6.4 is correct. The amendment therefore rests on the
+double-tap / second-tab case plus P17-3's leak plus the `504` decidability — three independent
+motivations, none of which needs a race to be likely, which is a stronger footing than the one my
+own finding offered.
+
+### Sweep — complete, checked rather than assumed
+
+I grepped every occurrence of `queuePosition`, `queue position`, `TurnInProgress`, `turn map`,
+`set_turn_state`, `turn_in_flight` and `enqueue_turn` in the amended file and accounted for each.
+§4.4 measure 1 (`:521`), measure 1a (`:533`), §5.1's S9 row and S13 row (`:1076`), §5.2's `/state`
+shape row (`:1145`) and the new *The queue position* section (`:1184`), §5.3 C6b's `504`
+reconciliation (`:1343`) and §6.1's test list (`:1834`) all moved. The sites that did **not** move
+are correct not to have: C6a (`:1383`) and the response tables (`:1677`, `:1800`) key on
+`turn.state`, which is unchanged; the `lastTurn` paragraph (`:1222`) names `queuePosition` only as a
+sibling field; §6.4 is P18's *On §6.4* above. `set_turn_state`'s `queue_position=` parameter appears
+only inside the S9 row, so removing it strands nothing in the plan. **The one thing a plan sweep
+could not reach is P18-6** — two blocks in `config.py` and `SERVER.md`, outside the file.
+
+### What's solid
+
+- **"The two halves are independent and neither subsumes the other."** That sentence is the review's
+  own conclusion stated better than the review stated it, and it is the thing an implementer is most
+  likely to get wrong (taking the reservation and calling the token redundant).
+- **Making the `thinking` flip conditional, not just the `finally`.** Pass 17 reproduced the
+  `finally` case only; the flip case is subtler, real, and was found by the architect rather than
+  copied from the finding.
+- **Deriving rather than storing, with the reason named as the hazard class.** "A stored number
+  being the wrong-rather-than-absent hazard itself" is the correct generalisation, and it is applied
+  rather than merely quoted — the field it deletes (`set_turn_state`'s `queue_position=`) goes with
+  the number.
+- **Both P17 findings were answered inside the architect's authority and the judgment holds.**
+  Measure 1a already said "enforced server-side" and argued it as correctness; making the mechanism
+  satisfy an invariant the plan already asserts is a correction, not new scope. I would have
+  escalated and I would have been wrong to.
+- **`0` on a `queued` turn is called out as load-bearing and S13's done-condition was swept to
+  render it as *first in line*.** That is the exact place a derived-from-zero contract gets
+  mis-rendered as "no queue", caught before the client existed.
+- **The falsified done-condition was replaced rather than quietly dropped**, and the replacement
+  names the observation that fails.
+
+### Open questions
+
+None blocking. P18-2 and P18-3 are the two the implementer must not be left to infer; the rest can
+travel as suggestions.
+
+### Appendix O — Pass 18's measurements
+
+**O §1 — two threads on one `TestClient`, first held inside the handler** (the linchpin
+done-condition's mechanism; FastAPI + `starlette.testclient`, pinned venv):
+
+```
+b returned while a is still inside handler: 200 (b alive? False )
+order at that instant: [('enter', 'a'), ('enter', 'b'), ('leave', 'b')]
+final: {'b': 200, 'a': 200} [('enter','a'), ('enter','b'), ('leave','b'), ('leave','a')]
+```
+
+**O §2 — the alleged three-party deadlock, staged as the row describes it** (turn lock held across
+`executor.submit`, a worker blocked on that same turn lock, the interpreter exiting underneath both;
+`timeout 25` wrapper, CPython 3.12.3):
+
+```
+submit-under-lock returned in 0.0006s
+main returning -> threading._shutdown() runs _python_exit now
+exit=0
+wall=1.226928486s
+```
+
+The 1.23 s is the probe's own 1.0 s hold plus interpreter start-up. No hang. The source it is read
+from, `/usr/lib/python3.12/concurrent/futures/thread.py:24–31`:
+
+```python
+def _python_exit():
+    global _shutdown
+    with _global_shutdown_lock:
+        _shutdown = True
+    items = list(_threads_queues.items())
+    for t, q in items:
+        q.put(None)
+    for t, q in items:
+        t.join()
+```
