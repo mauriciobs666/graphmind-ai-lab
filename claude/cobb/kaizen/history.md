@@ -45,6 +45,45 @@
   `cpg_nonexistent_graph_xyz` cleanup item (`graph-dba` deleted it; `GRAPH.LIST` back to 25).
 
 
+## 2026-09-08 — Two skills gained live-verified entries (distillation pass 2, U20 — `analyst` chunk B)
+
+- **What:** Four of the seven promotions in `analyst`'s chunk-B distillation landed in skills
+  rather than in an agent file. Full dispositions for all eleven entries:
+  `claude/analyst/kaizen/history.md` (2026-09-08, U20).
+  - **`skills/agent-standards/claude-code.md`** — three edits, one new bullet and two sharpenings.
+    (1) **New:** settings files combine **per key**, never per file, and list keys union — the five
+    -level stack, the omitted-key fall-through, the four model-list exceptions (`fallbackModel`,
+    `modelPicker`, `availableModels`, `modelSettings`), and the correction that makes it usable:
+    *merging is not winning*, because the unioned rules are then evaluated deny → ask → allow with
+    specificity irrelevant, so a local `allow` cannot beat a shared-project `ask`. Placed
+    immediately before the existing "Placement" bullet so the run reads how-files-combine →
+    where-to-put-your-rule. Verified 2026-09-08 against `/docs/en/settings` and `/docs/en/permissions`.
+    (2) The `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` quote was **truncated** — it ends "…and whether
+    or not fork mode is on"; completed, plus the still-live docs inconsistency (the env-vars
+    reference documents only the opposite lever, `CLAUDE_AUTO_BACKGROUND_TASKS`). (3) § "Bash tool
+    environment": `rg` folded into the shell-shadowed-`find`/`grep` bullet as a third instance with
+    a *different* hazard — `find`/`grep` wrap other tools (behavioural), `rg` wraps the `claude`
+    binary under `ARGV0=rg` and is invisible to `which` (detection): `which rg` exits 1 while
+    `rg …` works, so any gate on `which <tool>` reports ripgrep as absent here.
+    Header stamp block updated for all three.
+  - **`skills/python-web-quirks/SKILL.md`** — one sharpening, one new section, description updated.
+    The `BackgroundTasks` section's hedged "roughly 40 concurrent worker threads" became the
+    measured `total_tokens == 40` plus the constraint the hedge hid: the limiter is
+    **event-loop-scoped** (`anyio.NoEventLoopError` outside a running loop), so a bump written at
+    import or in a `main()` preamble dies rather than applying. New section on uvicorn defaulting
+    `proxy_headers=True`, which makes `scope["client"]` attacker-influenced and kills a
+    "request came from localhost" gate — written with the two directions **separated**, because
+    only one reproduced (a loopback peer sending any `X-Forwarded-For` is unconditionally rewritten
+    away from loopback; a remote peer claiming loopback is *not* believed, since
+    `get_trusted_client_address` walks the header right-to-left for the first untrusted host).
+- **Why the split:** neither fact is falkor-chat-specific despite the source entry's title, and
+  both are framework behaviour a `coder`/`tdd-engineer`/`architect`/`analyst` meets in any Python
+  web codebase — the skill is the home, not a project doc or an always-loaded prompt.
+- **Also touched this unit:** `claude/analyst/review-techniques.md` (one new review-technique
+  section), `claude/graph-dba/falkordb-quirks.md` and `claude/data-scientist/lm-studio-model-notes.md`
+  (both logged in their own agents' histories), and `skills/README.md` (two catalog rows re-synced).
+  **Zero new bullets in any always-loaded prompt**; `analyst.md` and `claude/AGENTS.md` untouched.
+
 ## 2026-09-08 — U46: made the stamp's closed list enforceable — post-stamp stray-property assertion (K-023)
 
 - **What:** Follow-up to U45, resumed on `graph-dba`'s finding that the U45 fix is a closed **list**,

@@ -225,7 +225,23 @@ if [ -n "$LOAD" ]; then
   # except what that stamp wrote. See git-provenance.sh for the executed
   # evidence.
   BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  STAMP="$(cpg_provenance_stamp "$BUILT_AT" "$PARSED_AT" "$SRC" "$PROVENANCE")"
+  # CALLED AS A STATEMENT, NOT IN `$(…)`. cpg_provenance_stamp renders the
+  # Cypher into CPG_STAMP_CYPHER *and* records the properties it wrote into
+  # CPG_STAMPED_KEYS, which the stray assertion below needs; a command
+  # substitution runs it in a subshell and throws the second one away. This line
+  # was `STAMP="$(cpg_provenance_stamp …)"` for two commits and every --load
+  # build would have failed on an empty allow-list, after the parse, with the
+  # marker already replaced.
+  cpg_provenance_stamp "$BUILT_AT" "$PARSED_AT" "$SRC" "$PROVENANCE"
+  STAMP="$CPG_STAMP_CYPHER"
+  if [ -z "${STAMP:-}" ] || [ -z "${CPG_STAMPED_KEYS:-}" ]; then
+    echo "pipeline: FAILED — internal: cpg_provenance_stamp did not populate this shell" >&2
+    echo "pipeline:   CPG_STAMP_CYPHER=${CPG_STAMP_CYPHER:+<set>}${CPG_STAMP_CYPHER:-<empty>} CPG_STAMPED_KEYS=${CPG_STAMPED_KEYS:-<empty>}" >&2
+    echo "pipeline: this is a bug in the pipeline, not a finding about '$GRAPH' — the graph has" >&2
+    echo "pipeline: NOT been stamped and is otherwise untouched. Check that the call above is a" >&2
+    echo "pipeline: statement and not a \$(…) substitution (skills/joern-cpg/scripts/git-provenance.sh)." >&2
+    exit 1
+  fi
 
   # `redis-cli` EXITS 0 ON AN ERROR REPLY and prints the error to stdout, so the
   # old `… >/dev/null` discarded every failure and `set -e` saw success. Probed
@@ -238,9 +254,15 @@ if [ -n "$LOAD" ]; then
   #   WRONGTYPE Operation against a key holding the wrong kind of value
   # Pattern-matching that list is inherently incomplete, so it is only the first
   # gate; the READ-BACK below is the load-bearing one.
+  # <cypher> [redis-command] — the command defaults to GRAPH.QUERY (needed for
+  # the stamp, which writes). The two READS below pass GRAPH.RO_QUERY instead:
+  # a GRAPH.QUERY against a graph that does not exist MATERIALIZES it, and while
+  # this graph certainly exists by now, the failure messages tell the operator to
+  # use GRAPH.RO_QUERY for the identical read — so the pipeline should not be
+  # doing the thing it warns against.
   rq() {
     local out
-    out="$(redis-cli -h "$HOST" -p "$PORT" GRAPH.QUERY "$GRAPH" "$1" 2>&1)" || { printf '%s' "$out"; return 1; }
+    out="$(redis-cli -h "$HOST" -p "$PORT" "${2:-GRAPH.QUERY}" "$GRAPH" "$1" 2>&1)" || { printf '%s' "$out"; return 1; }
     printf '%s' "$out"
     case "$out" in
       errMsg:*|ERR\ *|WRONGTYPE*|*"read only"*|*"read-only"*) return 1 ;;
@@ -262,7 +284,7 @@ if [ -n "$LOAD" ]; then
   # rewritten on every stamp, an absent one removed rather than left stale" —
   # holds only if the write actually landed. PARSED_AT is the discriminator: it
   # is unique to this run, so a surviving older marker cannot match it.
-  STAMP_BACK="$(rq 'MATCH (b:CpgBuildInfo) RETURN b.PARSED_AT' || true)"
+  STAMP_BACK="$(rq 'MATCH (b:CpgBuildInfo) RETURN b.PARSED_AT' GRAPH.RO_QUERY || true)"
   case "$STAMP_BACK" in
     *"$PARSED_AT"*) ;;
     *) echo "pipeline: FAILED — the freshness stamp did not land in '$GRAPH'." >&2
@@ -279,50 +301,59 @@ if [ -n "$LOAD" ]; then
   # that already excludes that case (verified 2026-09-08 by running this block
   # standalone against a graph with no CpgBuildInfo node: "PASSED").
   #
-  # WHAT THIS CATCHES IS NARROW, AND THAT IS THE POINT. The stamp's map
-  # assignment already removes every property it does not write, so under a
-  # correct `SET b = {…}` this query cannot return a row. The only way it fires
-  # is IF THE REPLACE ITSELF DID NOT HAPPEN — a FalkorDB version treating `=` as
-  # a merge, someone "simplifying" the stamp back to `b.X = …` assignments or to
-  # `+=`, an edit that drops a property out of the map. Each of those is silent
-  # at the Cypher level; each is caught here, on every build, with the offending
-  # key named.
-  #
-  # So this is the standing regression test for the property the whole design
-  # rests on: the replace semantics were checked by execution before being
-  # relied on (see git-provenance.sh), and this is what keeps them checked in
-  # production rather than asserted from a document. It is not redundant with
-  # the stamp — DO NOT REMOVE IT as such.
+  # WHAT THIS CATCHES IS NARROW: THE STAMP FAILED TO ERASE A FOREIGN KEY THAT
+  # WAS ALREADY ON THE MARKER. It does not detect "the replace semantics
+  # changed" — that framing was here and it overclaimed. A `+=`, a reversion to
+  # `b.X = …`, or a FalkorDB treating `=` as a merge all leave exactly the eight
+  # stamped keys on a graph whose previous marker was pipeline-clean, so none of
+  # them fires there; and an edit that drops a property out of the map cannot
+  # fire this at all, since _cpg_prop drops it from the allow-list in the same
+  # call. Two graphs carry hand-authored markers today (cpg_falkorchat,
+  # cpg_deprecated_salesperson) and on each one's next rebuild this fires on
+  # exactly the defect the arc was about; after that it is a cheap standing
+  # guard against a foreign key reintroduced by any writer other than the stamp.
+  # DO NOT REMOVE IT — on that reason, which is checkable, rather than the
+  # bigger one, which was not.
   #
   # The allow-list is generated from the stamp's own map (CPG_STAMPED_KEYS — see
-  # _cpg_prop), so it cannot drift from what was written.
+  # _cpg_prop), so it cannot drift from what was written. It is also asserted
+  # non-empty at the call site above, because an empty one makes every property
+  # a stray — that was the shipped state for two commits, not a hypothetical.
   #
   # This check is NEGATIVE — "no rows" is the pass — so unlike the read-back
   # above it does not fail closed for free: an error reply contains no
-  # STRAY_KEY= and would sail through. Hence the explicit `rq` status check.
-  if ! STRAY_BACK="$(rq "$(cpg_provenance_stray_query)")"; then
+  # STRAY_KEY= and would sail through. Hence the explicit status checks.
+  if ! STRAY_Q="$(cpg_provenance_stray_query)"; then
+    echo "pipeline: FAILED — internal: could not build the marker property check for '$GRAPH'." >&2
+    echo "pipeline: this is a bug in the pipeline, not a finding about the graph. The stamp DID" >&2
+    echo "pipeline: land (it was read back above); only this last assertion could not run." >&2
+    replay_stamp
+    exit 1
+  fi
+  if ! STRAY_BACK="$(rq "$STRAY_Q" GRAPH.RO_QUERY)"; then
     echo "pipeline: FAILED — could not verify the marker's property list in '$GRAPH':" >&2
     echo "pipeline:   ${STRAY_BACK:-<no reply>}" >&2
     echo "pipeline: the load and the stamp both succeeded, but the marker is unverified — it may" >&2
     echo "pipeline: carry properties from an earlier build. Do not trust it until checked by hand:" >&2
     echo "pipeline:   redis-cli -h $HOST -p $PORT GRAPH.RO_QUERY $GRAPH \"MATCH (b:CpgBuildInfo) RETURN keys(b)\"" >&2
+    replay_stamp
     exit 1
   fi
   case "$STRAY_BACK" in
     *STRAY_KEY=*)
       echo "pipeline: FAILED — the marker in '$GRAPH' carries properties this build did not write:" >&2
       printf '%s\n' "$STRAY_BACK" | sed -n 's/^STRAY_KEY=/pipeline:   /p' >&2
-      echo "pipeline: THIS SHOULD BE IMPOSSIBLE, AND THAT IS THE FINDING. The stamp is a map" >&2
-      echo "pipeline: assignment (SET b = {…}), which replaces the marker's ENTIRE property set —" >&2
-      echo "pipeline: so a leftover key means the replace did not happen. Do not just clear the" >&2
-      echo "pipeline: keys and re-run: something about the write semantics has changed, and every" >&2
-      echo "pipeline: other guarantee resting on them (skills/cpg-analysis/references/freshness.md)" >&2
-      echo "pipeline: is now suspect too. Check, in order: that cpg_provenance_stamp still emits" >&2
-      echo "pipeline: 'SET b = {' and not 'b.X =' or '+=' (skills/joern-cpg/scripts/git-provenance.sh)," >&2
-      echo "pipeline: and that this FalkorDB still treats '=' as a replace rather than a merge." >&2
-      echo "pipeline: The load itself succeeded, so no re-parse is needed once the stamp is fixed —" >&2
-      echo "pipeline: re-stamping by hand is enough. To inspect the marker as it stands:" >&2
+      echo "pipeline: The stamp is a map assignment (SET b = {…}), which replaces the marker's" >&2
+      echo "pipeline: ENTIRE property set — so a key above that the stamp did not write means the" >&2
+      echo "pipeline: replace did not erase it. Do not just clear those keys and re-run: check" >&2
+      echo "pipeline: first that cpg_provenance_stamp still emits 'SET b = {' and not 'b.X =' or" >&2
+      echo "pipeline: '+=' (skills/joern-cpg/scripts/git-provenance.sh), and that this FalkorDB" >&2
+      echo "pipeline: still treats '=' as a replace rather than a merge. If either has changed," >&2
+      echo "pipeline: every guarantee resting on it is suspect too" >&2
+      echo "pipeline: (skills/cpg-analysis/references/freshness.md)." >&2
+      echo "pipeline: To inspect the marker as it stands:" >&2
       echo "pipeline:   redis-cli -h $HOST -p $PORT GRAPH.RO_QUERY $GRAPH \"MATCH (b:CpgBuildInfo) RETURN keys(b)\"" >&2
+      replay_stamp
       exit 1 ;;
   esac
 

@@ -24,6 +24,8 @@
 # Functions (all safe under `set -euo pipefail`):
 #   cpg_provenance_capture <path>
 #   cpg_provenance_stamp <built_at> <parsed_at> <source_path> <provenance>
+#         -> assigns CPG_STAMP_CYPHER and CPG_STAMPED_KEYS. Does NOT echo, and
+#            must NOT be called in `$(…)`: the subshell discards both.
 #   cpg_provenance_stray_query          (call after the stamp; see its comment)
 
 # cpg_provenance_capture <path>
@@ -108,8 +110,10 @@ cpg_provenance_capture() {
   return 0
 }
 # cpg_provenance_stamp <built_at> <parsed_at> <source_path> <provenance>
-#   Echo the Cypher that writes the singleton CpgBuildInfo marker, using
-#   whatever cpg_provenance_capture left in CPG_SOURCE_*.
+#   Render the Cypher that writes the singleton CpgBuildInfo marker, using
+#   whatever cpg_provenance_capture left in CPG_SOURCE_*, into CPG_STAMP_CYPHER.
+#   It ASSIGNS rather than echoing, and the reason is a defect this shipped with
+#   for two commits — see the note at the assignment itself.
 #
 #   THE INVARIANT: THE MARKER DESCRIBES EXACTLY ONE BUILD AND NOTHING ELSE. A
 #   human annotation on it is build-scoped and dies with the build; anything
@@ -124,8 +128,11 @@ cpg_provenance_capture() {
 #   nothing to keep in sync and nothing to remember.
 #
 #   EXECUTED, on throwaway graphs, 2026-09-08 — read back with `keys(b)` every
-#   time, never from the reply's counters (those conflate set-with-removed and
-#   are not evidence; see graph-dba's U47a finding):
+#   time, never from the reply's counters. What was OBSERVED about the counters,
+#   which is all anyone here has checked: `Properties removed` does not track
+#   actual removals — one probe reported 13 against 5 real ones, another 4
+#   against none. Why it diverges is not known and is not asserted (see
+#   graph-dba's U47a finding); that it cannot be cited as evidence is enough.
 #     * A marker seeded with the 8 pipeline keys plus 3 hand-authored ones —
 #       including MARKER_EVIDENCE, the out-of-list key that had just survived
 #       the old clearing enumeration — put through `SET b = {…8 pipeline keys…}`
@@ -201,13 +208,26 @@ _cpg_str() {
 # cpg_provenance_stray_query's allow-list cannot drift from it the way a
 # hand-copied second list would.
 #
-# CALL IT AS A STATEMENT, NEVER INSIDE `$(…)`. A command substitution runs in a
-# subshell, so both assignments would be discarded while the printed Cypher
-# looked perfectly correct — leaving CPG_STAMPED_KEYS empty, which makes *every*
-# property on the marker read as stray. (That is at least the safe direction:
-# an empty allow-list fails the build loudly rather than passing everything.
-# Verified 2026-09-08 against the live instance: `NOT k IN []` matched all 10
-# keys of `cpg_falkorchat`'s marker.)
+# CALL IT AS A STATEMENT, NEVER INSIDE `$(…)` — and the same goes for
+# cpg_provenance_stamp, which calls it. A command substitution runs in a
+# subshell, so both assignments are discarded there while the rendered Cypher
+# looks perfectly correct.
+#
+# THIS WARNING DID NOT WORK. It was written here, one level below the call site,
+# while `pipeline.sh` did exactly the forbidden thing — `STAMP="$(cpg_provenance
+# _stamp …)"` — and shipped that way for two commits: CPG_STAMPED_KEYS unset in
+# the parent, the stray query rendered `NOT k IN []`, and every property on the
+# marker read as a stray, so every `--load` build would have failed after a
+# multi-hour parse with the annotation already replaced. An earlier version of
+# this comment filed that outcome as "at least the safe direction"; it was not a
+# direction, it was the shipped state.
+#
+# So the warning is no longer what protects it. cpg_provenance_stamp does not
+# echo — it assigns CPG_STAMP_CYPHER — which makes the subshell misuse render an
+# EMPTY stamp and fail at the stamp step instead of silently; and
+# cpg_provenance_stray_query refuses to emit a query at all when the allow-list
+# is empty. Two mechanisms, because a comment next to the trap did not reach a
+# caller two lines away.
 #
 # At file scope for the same reason as _cpg_str.
 _cpg_prop() {
@@ -231,7 +251,16 @@ cpg_provenance_stamp() {
   _cpg_prop SOURCE_COMMIT "$(_cpg_str "${CPG_SOURCE_COMMIT:-}")"
   _cpg_prop SOURCE_TREE   "$(_cpg_str "${CPG_SOURCE_TREE:-}")"
   _cpg_prop SOURCE_DIRTY  "${CPG_SOURCE_DIRTY:-NULL}"
-  printf 'MERGE (b:CpgBuildInfo)\nSET b = {\n    %s\n}' "$_CPG_MAP"
+  # ASSIGNS, does not echo. Deliberate: the rendered Cypher and the allow-list
+  # are produced together and must be read from the same shell, so echoing would
+  # invite `STAMP="$(cpg_provenance_stamp …)"` — which discards the allow-list in
+  # a subshell and is precisely the defect that shipped in 0da3eb9/5417f0e. This
+  # way that misuse yields an EMPTY stamp and dies at the stamp step, loudly,
+  # instead of surfacing later as a false finding about the graph.
+  CPG_STAMP_CYPHER="MERGE (b:CpgBuildInfo)
+SET b = {
+    $_CPG_MAP
+}"
 }
 
 # cpg_provenance_stray_query
@@ -241,25 +270,25 @@ cpg_provenance_stamp() {
 #   renders as `STRAY_KEY=<NAME>` in redis-cli's default output, greppable
 #   without parsing the reply, and names the offending key.
 #
-#   DO NOT DELETE THIS AS REDUNDANT. It looks redundant — the stamp's map
-#   assignment already removes everything it does not write, so under a correct
-#   `SET b = {…}` this query cannot return a row. That is exactly its value: the
-#   ONLY way it fires now is if THE REPLACE ITSELF DID NOT HAPPEN. A FalkorDB
-#   version that treats `=` as a merge, someone "simplifying" the stamp back to
-#   `b.X = …` assignments or to `+=`, an edit that drops a property out of the
-#   map — each of those is silent at the Cypher level and each one is caught
-#   here, on every build, with the offending key named.
+#   WHAT IT ACTUALLY DETECTS, stated narrowly because the wider claim was wrong:
+#   THE STAMP FAILED TO ERASE A FOREIGN KEY THAT WAS ALREADY ON THE MARKER. Not
+#   "the replace semantics changed" — that was the previous framing here and it
+#   overclaimed. A `+=`, a reversion to `b.X = …` assignments, or a FalkorDB
+#   treating `=` as a merge all leave exactly the eight stamped keys on a marker
+#   whose previous stamp was pipeline-clean, so none of them is caught on such a
+#   graph. And an edit that drops a property out of the map cannot fire this at
+#   all: _cpg_prop removes it from the map and the allow-list in the same call.
 #
-#   So this is the standing regression test for the property that the whole
-#   design rests on, run in production rather than asserted from a document.
-#   That distinction is the point: the map form's replace semantics were checked
-#   by execution before being relied on, and this check is what keeps them
-#   checked. (It earned its keep once already, under the previous design: it was
-#   added 2026-09-08 to enforce a hand-maintained clearing list that could drift,
-#   and its live verification — an 8-key allow-list against `cpg_falkorchat`'s
-#   10-key marker returning exactly STRAY_KEY=MARKER_ORIGIN /
-#   MARKER_WRITTEN_AT / NOTE, an 11-key allow-list returning none — is the same
-#   query this still emits.)
+#   DO NOT DELETE IT, on the honest reason rather than the overclaimed one. Two
+#   loaded graphs carry hand-authored markers today — cpg_falkorchat and
+#   cpg_deprecated_salesperson — and on each one's next rebuild this is a real,
+#   firing check on the exact defect this whole arc was about. After both have
+#   rebuilt once it can no longer fire under any trigger named above; at that
+#   point it costs one read per build and still catches a foreign key
+#   reintroduced by any writer other than the stamp. That is a cheap standing
+#   guard on a closed-by-construction invariant, not a regression test for the
+#   replace semantics, and the distinction is checkable — which the previous
+#   claim was not.
 #
 #   It does NOT check that the stamped keys are PRESENT — absence is legitimate
 #   (`provenance=none` deliberately omits SOURCE_COMMIT/TREE/DIRTY, and an
@@ -268,7 +297,13 @@ cpg_provenance_stamp() {
 #   properties are the defect; missing ones are not.
 cpg_provenance_stray_query() {
   local k list=""
-  for k in ${CPG_STAMPED_KEYS:-}; do list="${list}${list:+,}'$k'"; done
+  # An empty allow-list would make every property a stray — a bug in the caller
+  # (see _cpg_prop), never a finding about the graph. Refuse rather than emit it.
+  if [ -z "${CPG_STAMPED_KEYS:-}" ]; then
+    echo "cpg_provenance_stray_query: CPG_STAMPED_KEYS is empty — cpg_provenance_stamp was not run in this shell (a \$(…) subshell discards it). Refusing to emit a query that would report every property as stray." >&2
+    return 1
+  fi
+  for k in $CPG_STAMPED_KEYS; do list="${list}${list:+,}'$k'"; done
   printf '%s' "MATCH (b:CpgBuildInfo)
 UNWIND keys(b) AS k
 WITH k WHERE NOT k IN [$list]
