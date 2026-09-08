@@ -163,7 +163,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U55** — U47a's Case 3: the fix is a closed **list**, not a closed **set**. Decide where the invariant lives | `cobb` | `aadea04e203b11c4f` | **delivered — committed `0da3eb9`.** Chose *derive the allow-list from the stamp's own assignments* + a stray-key assertion in `pipeline.sh`. **Both load-bearing claims re-run by me**: the refactored stamp emits **byte-identical** output to `HEAD`'s across both cases including quote/backslash escaping, and the stray query on the live marker returns exactly `MARKER_ORIGIN`/`MARKER_WRITTEN_AT`/`NOTE` | `git-provenance.sh`, `pipeline.sh`, `SKILL.md`, `freshness.md`, `skills/README.md`, cobb kaizen | `analyst` — queued | 137k tok / 47 tools |
 | **Pass 5** — gate the whole stamp-closure arc: `29538d6` + `0da3eb9` + `5417f0e` | `analyst` | `a139a9bc41ccb88ce` | **delivered — committed `9bbadf3`** | `docs/reviews/cpg-provenance-stamp.md` `## Pass 5` | **needs changes — 1 blocker, 3 majors.** P5-1 reproduced by me before I routed it: `CPG_STAMPED_KEYS` reads `<UNSET>` in the parent, query renders `NOT k IN []` | 175k tok / 48 tools |
 | **U58** — P5-1 blocker, P5-2, P5-4, P5-5, P3-1, P4-4 | `cobb` | `aadea04e203b11c4f` (resumed twice) | **delivered — `049f063` + `271c899`.** Survived a rate-limit kill. **Found a defect in my own commit**: `replay_stamp` called from three branches, defined nowhere. New `test-stamp-wiring.sh` **extracts the real block from `pipeline.sh`** and drives it against a fake `redis-cli` — 6 cases, all passing on **my** run, including a P5-1 mutation that must be refused | `pipeline.sh`, `git-provenance.sh`, `test-stamp-wiring.sh`, `SKILL.md`, `freshness.md`, K-024 | `analyst` Pass 6 | 247k tok / 24 tools |
-| **U59** — P5-3: the live `NOTE` still carries mechanism 1's **retracted** false universal, inside the artifact check 0 treats as evidence | `graph-dba` | `a5825012b34ab9a9b` (resumed) | in-flight — dispatched with **`cobb`'s exact wording**, not my paraphrase | `cpg_falkorchat`'s `NOTE` | `analyst` Pass 6 | — |
+| **U59** — P5-3: the live `NOTE` carried mechanism 1's **retracted** false universal, inside the artifact check 0 treats as evidence | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered.** Replaced in place with `cobb`'s wording verbatim; **round-trip proved by reverse-substitution and `sha256`, not by eye**. 2245 → 2267 chars, 10 keys, other nine fields byte-identical (`diff` empty). **I verified independently**: false universal `false`, new sentence `true`, `MANIFEST.txt:19` chain `true` | `cpg_falkorchat`'s `NOTE` | `analyst` Pass 6 | 176k tok / 7 tools |
+| **Pass 6** — gate `049f063` + `271c899` + the rewritten `NOTE`. **Fresh again**: Pass 5 both found P5-1 and prescribed the wiring test that answers it | `analyst` (**fresh**) | `aa000d6e1e597fca5` | in-flight — priority 1 *is the wiring test a real guard or only a passing test*; priority 2 the third credential; and an explicit ask to find what **I** accepted on non-evidence | `docs/reviews/cpg-provenance-stamp.md` `## Pass 6` | — (is the gate) | — |
 | **U57** — ship the map form now that it is executed rather than doc-sourced; the stray assertion stays and becomes its production regression test | `cobb` | `aadea04e203b11c4f` (resumed) | in-flight | `git-provenance.sh`, `freshness.md`/`SKILL.md` prose, kaizen disposition | `analyst` — queued with U55 | — |
 | **U56a** — delete the graph key `cobb` leaked by probing a nonexistent graph (`GRAPH.QUERY` **materializes**) | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered.** Empty on all three counts before deletion. `diff` against the **U47a-close 25-key listing** is empty — not a bare count, so the concurrent session's own churn is excluded. I re-verified: 25 keys, zero `scratch_graphdba`/`nonexistent` | `GRAPH.LIST` diff | — | 162k tok / 11 tools |
 | **U56b** — execute the `SET b = {map}` claim `cobb` refused to ship on doc evidence alone | `graph-dba` | `a5825012b34ab9a9b` (same) | **delivered — it holds, four ways.** Probe 1: `MARKER_EVIDENCE` (the Case 3 survivor) **gone**, label and singleton intact. Probe 2b: a `NULL` **inside** the map omits the property — so the map mirrors `_cpg_prop`'s structure with five lines deleted. Probe 2a and Probe 3 (`--reset` create path) both correct. Routed **back to `cobb`** → U57, never applied by the validator | executed evidence, `keys(b)` throughout | — | (same run) |
@@ -4614,3 +4615,46 @@ The replacement sentence carries the same conclusion without the false universal
 neither doc could: *"This note included: it will disappear silently, with the build reporting
 success."* The warning about the marker's mortality now lives **on the marker**, where the person
 about to rebuild is actually standing.
+
+## U59 landed, and corrected my arithmetic on the way
+
+The `NOTE` is fixed. `cobb`'s sentence went in verbatim, the retracted universal is gone, and
+`graph-dba` proved the edit was *only* that sentence in the way I would want but had not asked for:
+it pulled the live text out of the graph rather than retyping it, asserted the target occurred
+exactly once, applied the substitution, and then asserted that the **reverse** substitution
+reproduced the original byte for byte — so an unintended second edit could not have hidden inside
+the first. Round-trip settled by `sha256`, not by eye, after a `diff` exited 1 on nothing but
+trailing-newline handling in its own comparison. It said so rather than quietly using the checksum.
+
+I verified the outcome independently: false universal `false`, `cobb`'s sentence `true`,
+`MANIFEST.txt:19` evidence chain `true`, ten keys, 2,267 characters, `SOURCE_TREE` and
+`MARKER_WRITTEN_AT` unchanged.
+
+**And it corrected my brief.** I told it `GRAPH.LIST` was 24. It read **25**, and rather than
+reconcile the number it diffed against its own U56-close listing — the difference is a
+*substitution*, not a removal: `cobb_u20_scratch` gone, `cobb_u21_probe` arrived. The second session
+did clean up its key, which is what I concluded; it then created another, which I did not see. My
+"24" was a **reading taken in the gap between two events**, and I propagated it into two subsequent
+briefs as a standing fact.
+
+That is a smaller cousin of the day's main defect and worth its own line: **in a concurrently
+mutating system, a count is a reading, not a state.** I had already told `graph-dba` to diff rather
+than count, twice, and then quoted a count at it. The delegate applied my own rule back to me and
+found the discrepancy in ninety seconds. Nothing was at risk — no key of ours leaked, all five
+protected keys present, `scratch_graphdba_*` zero — but the correction is the useful part, not the
+outcome.
+
+**Pass 6 goes fresh, and for a sharper reason than before.** Pass 5 did not merely find P5-1; it
+**prescribed the wiring test that answers it**, as its own open question 1. So Pass 5's author
+judging `test-stamp-wiring.sh` would be producer-self-review one seat over — the U24 pattern, which
+this coordination has now paid for twice. Its brief leads with the question I cannot answer myself:
+**is the wiring test a real guard, or a passing test that looks like one?** Are the extraction
+anchors robust against someone moving or duplicating them — does it fail loudly, or silently extract
+the wrong block and pass vacuously? Is the fake `redis-cli` faithful where it matters? And the
+standard this chain adopted at P21-3, turned on the test itself: **what neighbouring wrong
+implementation would this suite still pass?**
+
+I also asked it, explicitly, to assume my integration checks were weaker than they read and to find
+anything else I accepted on non-evidence. Having minted a bad justification myself today, the
+useful response is not to be more careful in the same way — it is to have someone check the specific
+thing I am now demonstrably bad at.
