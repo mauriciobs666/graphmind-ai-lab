@@ -2,10 +2,11 @@
 verification and the per-participant turn-state map.
 
 `docs/plans/salesperson-ui.md` S6 (§4.3 identity & isolation, §4.10 the join-time
-profile write) and S7 (§4.7 the product-image manifest, §4.8 the two resets and
-their quiesce, §5.2's `GET /shop/api/state` and `GET /shop/api/catalog`). The
-`/shop/api` router that fronts this lives in `storefront_api.py` (S8); the turn
-executor (S9) and the presenter surface (S10) extend this module further.
+profile write), S7 (§4.7 the product-image manifest, §4.8 the two resets and
+their quiesce, §5.2's `GET /shop/api/state` and `GET /shop/api/catalog`) and S9
+(§4.4 measure 1's bounded turn executor and its queue-position accounting). The
+`/shop/api` router that fronts this lives in `storefront_api.py` (S8); the
+presenter surface (S10) extends this module further.
 
 **No Cypher lives here** (`falkor-chat/AGENTS.md` rule 1, `docs/SERVER.md` §1.2):
 every graph touch goes through a `Repository`/`Services` method delivered by S4.
@@ -35,11 +36,13 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import secrets
 import threading
 import time
 import uuid
 from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -48,6 +51,8 @@ from redis import exceptions as redis_exceptions
 
 from . import config
 from .config import CallContext
+
+_log = logging.getLogger(__name__)
 
 # `secrets.token_urlsafe(32)` — 32 bytes of entropy rendered as 43 url-safe
 # base64 characters (§4.3). The alphabet is `[A-Za-z0-9_-]`, so it contains no
@@ -94,6 +99,13 @@ IMAGE_URL_PREFIX = "/shop/products/"
 # How often the reset waits on the turn map while quiescing. Small enough that
 # a test can drive the whole wait, irrelevant to the 30 s production bound.
 QUIESCE_POLL_S = 0.02
+
+# The thread-name prefix every turn-executor worker carries (§4.4 measure 1).
+# Named rather than left as `ThreadPoolExecutor-N` because telling a turn thread
+# apart from anyio's request threadpool in a stack dump *is* the measure: the
+# whole point of the split is that agent turns are not on the limiter the poll
+# reads share.
+TURN_THREAD_PREFIX = "storefront-turn"
 
 
 class StorefrontError(RuntimeError):
@@ -310,10 +322,10 @@ class Storefront:
     One instance per process, built by `create_app` (S8) and shared by every
     `/shop/api` route. All of its mutable state — the record cache and the turn
     map — is per-instance and lock-guarded, never module-global: FastAPI runs
-    sync endpoints on a threadpool and S9 adds a `ThreadPoolExecutor` on top, so
-    both maps are touched concurrently. Keeping them per-instance is also what
-    makes the restart-survival test in `tests/test_storefront.py` mean anything
-    — a second `Storefront` shares nothing with the first but the graph.
+    sync endpoints on a threadpool and the turn executor below runs on top of
+    that, so both maps are touched concurrently. Keeping them per-instance is
+    also what makes the restart-survival test in `tests/test_storefront.py` mean
+    anything — a second `Storefront` shares nothing with the first but the graph.
     """
 
     def __init__(
@@ -327,6 +339,7 @@ class Storefront:
         agent_id: str | None = None,
         locales: tuple[str, ...] | None = None,
         storefront_dir: str | Path | None = None,
+        trigger: Any | None = None,
         clock: Callable[[], int] = _default_clock,
         id_gen: Callable[[], str] = _default_participant_id,
     ) -> None:
@@ -346,6 +359,15 @@ class Storefront:
         default when `FALKORCHAT_STOREFRONT_DIR` is unset) yields an empty
         manifest and therefore `imageUrl: null` on every catalog row, which is
         the correct answer for a deployment that serves no assets.
+
+        `trigger` is the app's `WorkflowTrigger` (§4.4 measure 1), and it is
+        **the turn worker's only collaborator** — the storefront reaches the
+        workflow layer through `trigger.maybe_trigger` and never through its own
+        `self._services`. `None` — the default, and what an app built without
+        `FALKORCHAT_WORKFLOW_ENABLED` gets — makes a turn a no-op that still
+        occupies its queue slot: the `409` gate, the queue accounting and the
+        quiesce wait are properties of the *post*, not of the engine, so they
+        must not switch off with it.
         """
         self._services = services
         # The repository is reached through `Services`, which owns it. S4 put the
@@ -372,6 +394,14 @@ class Storefront:
         # The turn-state map (§4.4 measure 1). Absent key == idle.
         self._turns: dict[str, TurnState] = {}
         self._turns_lock = threading.Lock()
+        # §4.4 measure 1's bounded turn executor, and the trigger its workers
+        # drive. Constructed eagerly rather than on first use because
+        # `ThreadPoolExecutor` starts no thread until the first `submit`, so a
+        # `Storefront` that never runs a turn costs one object and no thread.
+        self._trigger = trigger
+        self._executor = ThreadPoolExecutor(
+            max_workers=turn_workers, thread_name_prefix=TURN_THREAD_PREFIX
+        )
         # The product-image manifest (§4.7), built from the served directory
         # **once** — `None` until then. See `build_image_manifest`.
         self._image_manifest: dict[str, str] | None = None
@@ -634,8 +664,9 @@ class Storefront:
     ) -> TurnState:
         """Record a participant's turn state; `idle` clears the entry.
 
-        S9 drives this from `enqueue_turn` and the worker; S8 reads it for
-        `GET /shop/api/state` and for the `409 TurnInProgress` gate.
+        Driven by `enqueue_turn` (the request thread, `queued` with its
+        position) and by `_run_turn` (the worker, `thinking`); read by S8's
+        `GET /shop/api/state` and by its `409 TurnInProgress` gate.
         """
         if state == TURN_IDLE:
             self.clear_turn(participant_id)
@@ -657,6 +688,127 @@ class Storefront:
     def turn_in_flight(self, participant_id: str) -> bool:
         """Whether this participant already has a turn queued or running."""
         return self.turn_state(participant_id).in_flight
+
+    # ── the turn queue (§4.4 measure 1) ─────────────────────────────────────
+
+    def enqueue_turn(
+        self,
+        ctx: CallContext,
+        participant: ParticipantRecord,
+        posted: dict[str, Any],
+    ) -> Future[None]:
+        """Book a turn for `participant` and hand it to the executor.
+
+        **This method submits; it does not run the turn.** The request thread
+        does four things and then answers — the `409` single-flight check (S8's,
+        in the route, *before* the message write), `services.post_message`, the
+        turn-map bookkeeping below, and `executor.submit(...)`. Everything after
+        that is `_run_turn`, on a worker. `docs/plans/salesperson-ui.md` §5.1's
+        S9 row decides that placement rather than leaving it open, for three
+        reasons that are not preferences:
+
+        1. `services.start_workflow_run` is **synchronous and drives the whole
+           run** — up to eight chat completions against a 180 s agent timeout.
+           On the request thread that *is* the turn, and `POST
+           /shop/api/messages` becomes the slowest route in the system, which is
+           the exact outcome §4.4 measure 1 exists to prevent: measure 1 swaps
+           *which scheduler* runs the turn, not whether it is scheduled.
+        2. It is the platform's delivered posture on both existing transports —
+           `background._safe_run_workflow` is failure-isolated and off-band, on
+           `BackgroundTasks` in `api.py` and on a thread in `mcp.py`. The
+           storefront replaces `BackgroundTasks` with this bounded executor and
+           inherits the rest.
+        3. `participant` is **handed in** precisely so the worker never resolves
+           a `ParticipantRecord` of its own: the request thread has already
+           re-read it from the graph in `resolve_token`, and it is where
+           `run_ctx`'s `language` comes from (§4.5).
+
+        **The queue position is taken here, once, and is not recomputed.** It is
+        `len(self._turns)` under the lock — how many turns were accepted and
+        unfinished when this one arrived, which with `turn_workers=1` is exactly
+        how many are ahead of it. The entry goes in **before** the submit, so a
+        turn is never running while the map says idle (the ordering
+        `_await_quiesce` depends on, §4.8), and it is `queued` rather than
+        `thinking` because at this instant nothing has picked it up.
+        `_run_turn` flips it to `thinking` when a worker does, and `thinking`
+        carries position 0 like `idle` does.
+
+        Returns the `Future` so a caller can wait on the turn. Nothing in the
+        request path does — the response is sent without it, which is the
+        point — and the map entry, not the future, is what the `409` gate and
+        both quiesce drains read.
+        """
+        participant_id = participant.participant_id
+        with self._turns_lock:
+            position = len(self._turns)
+            self._turns[participant_id] = TurnState(
+                state=TURN_QUEUED, queue_position=position
+            )
+        return self._executor.submit(self._run_turn, ctx, participant, posted)
+
+    def _run_turn(
+        self,
+        ctx: CallContext,
+        participant: ParticipantRecord,
+        posted: dict[str, Any],
+    ) -> None:
+        """One agent turn, on a turn-executor worker.
+
+        **Failure-isolated, exactly like `background._safe_run_workflow`**: an
+        LLM outage, the 180 s agent timeout, a `WorkflowEngineDisabledError`
+        from an unwired executor — all of it is logged here and none of it
+        propagates, because there is no longer a response to propagate into.
+        The `200` was sent on the request thread.
+
+        The workflow layer is reached **through the trigger**, never through
+        `self._services`: `trigger.maybe_trigger` applies the §6 ordered rule
+        (resume a waiting run / start one / fall through), so the storefront
+        does not re-implement a policy the platform owns and its own service
+        surface stays exactly what S8 measured.
+
+        `run_ctx={"language": …}` is §4.5's carrier — the participant's chosen
+        language rides in the run ctx, which `executor._assemble_messages`
+        replays as the `CONTEXT:` block on every LLM iteration, so it survives
+        the whole conversation rather than only its first turn.
+
+        The `finally` clears the map entry whatever happened, which is what
+        re-opens the composer and releases the `409` gate. A turn that died
+        without a reply is indistinguishable here from one that completed; the
+        dead-turn signal §5.2 specifies (`turn.lastTurn`) is not built yet.
+        """
+        participant_id = participant.participant_id
+        try:
+            self.set_turn_state(participant_id, TURN_THINKING)
+            if self._trigger is None:
+                return
+            self._trigger.maybe_trigger(
+                ctx,
+                thread_id=posted["threadId"],
+                msg_id=posted["msgId"],
+                text=posted["text"],
+                role=posted["role"],
+                mentions=posted.get("mentions", []),
+                run_ctx={"language": participant.language},
+            )
+        except Exception:  # noqa: BLE001 — turn isolation: log, never propagate
+            _log.exception(
+                "storefront turn failed (participantId=%s, msgId=%s)",
+                participant_id, posted.get("msgId"),
+            )
+        finally:
+            self.clear_turn(participant_id)
+
+    def shutdown_turns(self) -> None:
+        """Stop accepting turns and **drain** the ones already accepted.
+
+        Called from `create_app`'s lifespan after `yield`. `wait=True` with no
+        `cancel_futures` is the whole contract: a queued turn has a message
+        written for it in the transcript, so dropping it at shutdown is the
+        "message with no reply" §4.4 measure 1a refuses to create, one layer
+        down. Idempotent — a second call on an already-shut-down executor
+        returns immediately.
+        """
+        self._executor.shutdown(wait=True)
 
     # ── participant state (§5.2 `GET /shop/api/state`) ──────────────────────
 
@@ -851,15 +1003,22 @@ class Storefront:
         nodes and silently no-op.
 
         §4.8 also has this path *cancel* the participant's queued turn to
-        shorten the wait. **S7 does not cancel, and the wait is not weakened by
-        that**: the queue lives in S9's executor, which does not exist yet, and
-        a queued turn still reaches a worker, completes, and clears its entry
-        here — so waiting subsumes cancelling for correctness and differs only
-        in latency. Dropping the turn-map entry as a stand-in would be actively
+        shorten the wait. **Nothing cancels yet, and the wait is not weakened by
+        that**: a queued turn reaches a worker, completes, and clears its entry
+        here, so waiting subsumes cancelling for correctness and differs only in
+        latency. Dropping the turn-map entry as a stand-in would be actively
         wrong: it would report idle while the job was still queued, and the
-        delete would then race exactly the turn this waits for. When S9 lands
-        the queue, cancellation belongs *there*, in front of this wait, never in
-        place of it.
+        delete would then race exactly the turn this waits for. Cancellation
+        belongs in front of this wait, never in place of it — `enqueue_turn`
+        returns the `Future` it would have to cancel, and the map entry has to
+        be cleared *after* that cancel succeeds, since a future already running
+        cannot be cancelled and must fall through to this wait (§4.8;
+        `docs/reviews/salesperson-ui-impl.md` `## Pass 7`, Ruling 3).
+
+        **What this wait now has to wait for.** Until the turn executor landed,
+        nothing populated the turn map, so every drain passed on its first
+        check; a turn is real work on a worker now, and this deadline is what
+        bounds it.
         """
         deadline = time.monotonic() + self._quiesce_s
         while self.turn_in_flight(participant_id):

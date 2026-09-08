@@ -653,6 +653,222 @@ def test_turn_state_is_per_participant(seeded):
     assert seeded.turn_in_flight("p-b") is False
 
 
+# ── the turn queue (§4.4 measure 1) ──────────────────────────────────────────
+#
+# The queue's *behaviour* — positions 0/1/2, completion order, the `409`
+# ordering, the poll budget and the shutdown drain — is asserted over HTTP in
+# `tests/test_storefront_api.py`, where the participants and the graph writes
+# are real. What is left here is what only this layer can say: what the worker
+# is handed, and what it does when the trigger fails.
+
+
+class _RecordingTrigger:
+    """The `WorkflowTrigger` seam: records the one call `_run_turn` makes."""
+
+    def __init__(self, explode: bool = False) -> None:
+        self.calls: list[dict] = []
+        self.done = threading.Event()
+        self._explode = explode
+
+    def maybe_trigger(self, ctx, **kwargs):  # noqa: ANN001, ANN003
+        self.calls.append({"ctx": ctx, **kwargs})
+        try:
+            if self._explode:
+                raise RuntimeError("the LLM endpoint is down")
+        finally:
+            self.done.set()
+
+
+def _drain(shop, future, trigger=None) -> None:
+    """Wait for one enqueued turn, failing rather than hanging."""
+    if trigger is not None:
+        assert trigger.done.wait(timeout=IMMEDIATE_S), "the turn never ran"
+    future.result(timeout=IMMEDIATE_S)
+
+
+def test_the_turn_worker_carries_the_participants_language_in_the_run_ctx(services):
+    """§4.5's carrier, and §5.1's reason for handing the record in.
+
+    `run_ctx={"language": …}` comes off the `ParticipantRecord` the *request
+    thread* resolved, which is the whole argument for `enqueue_turn` taking one:
+    the worker never has to answer "who is `p-…`" for itself. Everything else
+    the trigger receives is the posted row, unchanged.
+    """
+    trigger = _RecordingTrigger()
+    shop = _storefront(services, trigger=trigger)
+    record = ParticipantRecord(
+        participant_id="p-ada", display_name="Ada", language="pt-BR",
+        channel_id="ch-ada", thread_id="th-ada", joined_at=1,
+    )
+    posted = {
+        "msgId": "m-1", "threadId": "th-ada", "text": "olá",
+        "role": "member", "mentions": [AGENT],
+    }
+    ctx = shop.context_for("p-ada")
+
+    _drain(shop, shop.enqueue_turn(ctx, record, posted), trigger)
+
+    assert len(trigger.calls) == 1
+    call = trigger.calls[0]
+    assert call["ctx"] is ctx
+    assert call["run_ctx"] == {"language": "pt-BR"}
+    assert call["thread_id"] == "th-ada"
+    assert call["msg_id"] == "m-1"
+    assert call["text"] == "olá"
+    assert call["role"] == "member"
+    assert call["mentions"] == [AGENT]
+
+
+def test_the_turn_worker_never_resolves_a_participant_record(services, monkeypatch):
+    """The other half of "the request thread hands the record in": the worker
+    issues **no** participant read of its own.
+
+    Pinned at the repository call rather than by reading `_run_turn`, so a
+    worker that reached for a cache or re-queried the registry reddens here
+    whichever way it spelled it.
+    """
+    trigger = _RecordingTrigger()
+    shop = _storefront(services, trigger=trigger)
+    reads: list[str] = []
+    original = shop._repo.get_participant_record
+
+    def counting(*args, **kwargs):
+        reads.append(kwargs.get("participant_id"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(shop._repo, "get_participant_record", counting)
+    record = ParticipantRecord(
+        participant_id="p-ada", display_name="Ada", language="en",
+        channel_id="ch-ada", thread_id="th-ada", joined_at=1,
+    )
+    posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
+              "role": "member", "mentions": [AGENT]}
+
+    _drain(shop, shop.enqueue_turn(shop.context_for("p-ada"), record, posted), trigger)
+
+    assert reads == []
+    # the positive control: the spy really is on the seam a resolution uses
+    shop.resolve_token("Bearer p-ada.whatever")
+    assert reads == ["p-ada"]
+
+
+def test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate(services):
+    """The turn runs after the `200` has been sent, so nothing it raises has a
+    response to reach — it is logged and swallowed, exactly as
+    `background._safe_run_workflow` does on both existing transports.
+
+    What must **not** be swallowed with it is the map entry: a turn that died
+    without clearing would leave that participant permanently `409`-refused,
+    unable to retry the thing that failed. The dominant cause is ordinary — an
+    LLM endpoint that is down, or the 180 s agent timeout.
+    """
+    trigger = _RecordingTrigger(explode=True)
+    shop = _storefront(services, trigger=trigger)
+    record = ParticipantRecord(
+        participant_id="p-ada", display_name="Ada", language="en",
+        channel_id="ch-ada", thread_id="th-ada", joined_at=1,
+    )
+    posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
+              "role": "member", "mentions": [AGENT]}
+
+    future = shop.enqueue_turn(shop.context_for("p-ada"), record, posted)
+    _drain(shop, future, trigger)
+
+    assert future.exception(timeout=IMMEDIATE_S) is None
+    assert shop.turn_in_flight("p-ada") is False
+    assert shop.turn_state("p-ada") == IDLE_TURN
+
+
+def test_a_storefront_with_no_trigger_still_queues_and_clears_the_turn(services):
+    """`trigger=None` — an app built without the workflow engine — makes the
+    turn a no-op, and deliberately not a *skipped* one.
+
+    The `409` gate, the queue accounting and both quiesce drains are properties
+    of the post, not of the engine: switching them off with the engine would
+    make the storefront behave differently in the one configuration nobody
+    tests it in.
+    """
+    shop = _storefront(services)
+    record = ParticipantRecord(
+        participant_id="p-ada", display_name="Ada", language="en",
+        channel_id="ch-ada", thread_id="th-ada", joined_at=1,
+    )
+    posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
+              "role": "member", "mentions": [AGENT]}
+
+    future = shop.enqueue_turn(shop.context_for("p-ada"), record, posted)
+    future.result(timeout=IMMEDIATE_S)
+    assert future.exception(timeout=IMMEDIATE_S) is None
+    assert shop.turn_in_flight("p-ada") is False
+
+
+def test_enqueue_books_the_turn_before_it_submits(services):
+    """The ordering the whole map depends on: the request thread books the
+    entry, **then** hands the turn to a worker — never the other way round.
+
+    The harm the other order does is not "an idle-looking window" but a
+    **clobber**: the worker's own `set_turn_state(thinking)` would land first
+    and the late booking would overwrite it back to `queued`, at a position
+    nothing ever corrects, because `_run_turn` sets `thinking` exactly once. A
+    participant whose turn is running then polls `queued` forever, and
+    `_await_quiesce` waits on an entry that describes the wrong thing.
+
+    Driven with a **saturated** executor — `turn_workers=1`, its one worker held
+    inside the trigger — and synchronised on the worker having entered, so the
+    two entries below are read at the one instant that separates the orderings:
+    the running participant must read `thinking`, and the queued one must carry
+    the position it was given.
+
+    Measured against the reordering itself, not a widened caricature of it:
+    submitting first and booking after — no sleep, nothing else changed — leaves
+    `p-a` reading `{"state": "queued", "queuePosition": 1}` here on **5 of 5**
+    runs, because `Executor.submit` takes its own lock and the worker reliably
+    reaches `set_turn_state` before the caller's next statement does.
+    """
+    entered = threading.Event()
+    gate = threading.Event()
+
+    class _Blocking:
+        def maybe_trigger(self, ctx, **kwargs):  # noqa: ANN001, ANN003, ARG002
+            entered.set()
+            gate.wait(timeout=IMMEDIATE_S)
+
+    shop = _storefront(services, trigger=_Blocking(), turn_workers=1)
+    posted = {"msgId": "m-1", "threadId": "th-x", "text": "hi",
+              "role": "member", "mentions": [AGENT]}
+
+    def record(pid):
+        return ParticipantRecord(
+            participant_id=pid, display_name=pid, language="en",
+            channel_id=f"ch-{pid}", thread_id=f"th-{pid}", joined_at=1,
+        )
+
+    first = shop.enqueue_turn(shop.context_for("p-a"), record("p-a"), posted)
+    assert entered.wait(timeout=IMMEDIATE_S), "the first turn never reached a worker"
+    second = shop.enqueue_turn(shop.context_for("p-b"), record("p-b"), posted)
+
+    assert shop.turn_state("p-a").as_payload() == {
+        "state": TURN_THINKING, "queuePosition": 0,
+    }
+    assert shop.turn_state("p-b").as_payload() == {
+        "state": TURN_QUEUED, "queuePosition": 1,
+    }
+
+    gate.set()
+    first.result(timeout=IMMEDIATE_S)
+    second.result(timeout=IMMEDIATE_S)
+    assert shop.turn_in_flight("p-a") is False
+    assert shop.turn_in_flight("p-b") is False
+
+
+def test_shutdown_turns_is_idempotent(services):
+    """The lifespan calls it once; a second call must not raise, so a test (or
+    a double shutdown) cannot turn an orderly stop into a traceback."""
+    shop = _storefront(services)
+    shop.shutdown_turns()
+    shop.shutdown_turns()
+
+
 # ── configuration (§4.9's one-workspace-variable rule) ───────────────────────
 
 

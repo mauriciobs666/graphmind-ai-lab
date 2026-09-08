@@ -51,9 +51,12 @@ even that, but only for a response some test happens to provoke.
 from __future__ import annotations
 
 import ast
+import contextlib
 import hmac
 import inspect
 import sys
+import threading
+import time
 from pathlib import Path
 from typing import get_args
 
@@ -88,6 +91,7 @@ from falkorchat.storefront_api import (
     cross_cutting_response,
     service_error_response,
 )
+from falkorchat.trigger import WorkflowTrigger
 
 WS = "test"
 AGENT = "assistant"
@@ -4458,6 +4462,322 @@ def test_no_route_can_raise_a_refusal_it_does_not_declare():
             "it does not declare — an unruled response reaching the client "
             "from the server side, which neither half of the gate sees"
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# The turn queue (§4.4 measure 1) — placement, accounting, and the drain
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# `docs/plans/salesperson-ui.md` §5.1's S9 row decides **where** the turn runs
+# rather than leaving it open: `Storefront.enqueue_turn` *submits*, and
+# `trigger.maybe_trigger` → `services.start_workflow_run` runs on a
+# turn-executor worker. Everything below asserts that placement by what it
+# produces — a `200` that arrives while the turn has not run, a queue position
+# the poll reports, and a `WorkflowRun` written from a thread whose name is not
+# the request thread's.
+#
+# **The LLM is stubbed at the executor seam, one layer above the model.** What
+# costs up to eight chat completions against a 180 s timeout is
+# `WorkflowExecutor.run`, and `services.start_workflow_run` writes the
+# `WorkflowRun` node through `repository.start_run` **before** calling it — so a
+# stub `run` gives real, countable runs in `ws:test` with no provider anywhere.
+#
+# **§5.1 says "a stub 2 s LLM"; this is a gate, not a sleep, and the swap is
+# deliberate.** A sleep asserts "the turn was still in flight when I looked" by
+# hoping the machine was not slower than the test author guessed; a
+# `threading.Event` the test releases asserts it exactly, and three 2 s sleeps
+# would be 6 s on a suite that runs in 7. The gate carries its own timeout so a
+# turn driven on the *request thread* — the mutation this section exists to
+# catch — fails these tests instead of hanging them.
+
+# How long a gated turn waits before releasing itself, and the bound every
+# `wait_for` below takes. Generous: nothing asserts a duration against it.
+TURN_GATE_S = 5.0
+
+# What a poll may cost while the turn queue is saturated (§4.4 measure 1's
+# whole point). Two orders of magnitude under `TURN_GATE_S`, so a poll that
+# waited on a turn fails this rather than passing slowly.
+POLL_BUDGET_S = 1.0
+
+
+class _GatedExecutor:
+    """The `WorkflowExecutor` seam, stubbed: `run` blocks on a gate and records
+    which participant drove it, on which thread.
+
+    `step_budget` and `run(ctx, *, run_id)` are the entire surface
+    `services.start_workflow_run` uses, so this is a stand-in for the drive and
+    for nothing else — the `WorkflowRun` node, its `TRIGGERED_BY` edge and its
+    `ctx` are all written by the real repository before `run` is entered.
+
+    `work_s` is real work *after* the gate opens, used only by the shutdown
+    test, where the question is whether the lifespan waited for turns that had
+    not finished yet.
+    """
+
+    step_budget = 8
+
+    def __init__(self, work_s: float = 0.0) -> None:
+        self.gate = threading.Event()
+        self.work_s = work_s
+        self.started: list[str] = []
+        self.finished: list[str] = []
+        self.threads: list[str] = []
+        self._cond = threading.Condition()
+
+    def run(self, ctx, *, run_id):  # noqa: ANN001, ARG002 — the executor's shape
+        with self._cond:
+            self.started.append(ctx.actor)
+            self.threads.append(threading.current_thread().name)
+            self._cond.notify_all()
+        self.gate.wait(timeout=TURN_GATE_S)
+        time.sleep(self.work_s)
+        with self._cond:
+            self.finished.append(ctx.actor)
+            self._cond.notify_all()
+        return "waiting"
+
+    def wait_for(self, which: str, count: int) -> None:
+        """Block until `started`/`finished` holds `count` entries, or fail."""
+        deadline = time.monotonic() + TURN_GATE_S
+        with self._cond:
+            while len(getattr(self, which)) < count:
+                remaining = deadline - time.monotonic()
+                assert remaining > 0, (
+                    f"only {len(getattr(self, which))} of {count} turns had "
+                    f"{which} within {TURN_GATE_S}s"
+                )
+                self._cond.wait(remaining)
+
+
+def _build_turn_app(repo, executor):
+    """The storefront app with a **real** `WorkflowTrigger` over a stubbed
+    executor — the same object `create_app` hands the legacy transports."""
+    services = Services(repo, clock=_ticking_clock())
+    services.set_executor(executor)
+    trigger = WorkflowTrigger(
+        services, agent_id=AGENT,
+        def_key=config.TRIGGER_DEF_KEY, def_version=config.TRIGGER_DEF_VERSION,
+        # §4.3 part 4: the storefront's trigger holds no responder, so a message
+        # matching no workflow reaches nothing.
+        responder=None,
+    )
+    return create_app(
+        services, context_provider=CTX, mount_mcp=False, dev_surface=False,
+        storefront=True, trigger=trigger,
+    )
+
+
+@pytest.fixture()
+def turn_app(seeded, monkeypatch):
+    """`turn_app(workers=n)` → `(client, executor)`, lifespan entered.
+
+    The gate is released and the lifespan closed in teardown whatever the test
+    did, because the shutdown drain waits for every accepted turn — a test that
+    left one gated would otherwise pay `TURN_GATE_S` for it on the way out.
+    """
+    stack = contextlib.ExitStack()
+    made: list[_GatedExecutor] = []
+
+    def make(workers: int = 1, work_s: float = 0.0):
+        monkeypatch.setattr(config, "STOREFRONT_TURN_WORKERS", workers)
+        executor = _GatedExecutor(work_s)
+        made.append(executor)
+        client = stack.enter_context(TestClient(_build_turn_app(seeded, executor)))
+        return client, executor
+
+    yield make
+    for executor in made:
+        executor.gate.set()
+    stack.close()
+
+
+def _thread_of(conn, participant_id: str) -> str:
+    row = db.workspace_graph(conn, WS).ro_query(
+        "MATCH (u:User {userId: $pid}) RETURN u.threadId",
+        {"pid": participant_id},
+    ).result_set
+    return row[0][0]
+
+
+def _counts(conn, thread_id: str) -> tuple[int, int]:
+    """`(messages, workflow runs)` on one participant's thread."""
+    graph = db.workspace_graph(conn, WS)
+    messages = graph.ro_query(
+        "MATCH (m:Message {threadId: $tid}) RETURN count(m)", {"tid": thread_id}
+    ).result_set[0][0]
+    runs = graph.ro_query(
+        "MATCH (r:WorkflowRun)-[:TRIGGERED_BY]->(m:Message {threadId: $tid}) "
+        "RETURN count(r)",
+        {"tid": thread_id},
+    ).result_set[0][0]
+    return messages, runs
+
+
+def _post(client, session, text="hello"):
+    return client.post(
+        f"{API_PREFIX}/messages", headers=_bearer(session), json={"text": text}
+    )
+
+
+def _turn(client, session) -> dict:
+    return client.get(f"{API_PREFIX}/state", headers=_bearer(session)).json()["turn"]
+
+
+def test_three_participants_queue_behind_one_worker_and_complete_in_order(turn_app):
+    """§5.1's first done-condition: `turn_workers=1`, three *different*
+    participants, queue positions **0/1/2**, completion **in order**.
+
+    The positions are the accounting `enqueue_turn` does under the turn lock —
+    how many turns were accepted and unfinished when this one arrived — and the
+    states are what separates the one on the worker from the two behind it:
+    `thinking` carries position 0 like `idle` does, `queued` carries its own.
+
+    `finished == []` after all three posts is the **placement** half, and it is
+    the assertion that goes red if the trigger is called on the request thread:
+    the gate would have released each post's turn on the way through, so the
+    three `200`s would arrive with three finished turns behind them.
+    """
+    client, executor = turn_app(workers=1)
+    sessions = [_join(client, name) for name in ("Ada", "Bo", "Cy")]
+
+    for session in sessions:
+        assert _post(client, session).status_code == 200
+
+    executor.wait_for("started", 1)
+    assert executor.finished == []
+
+    turns = [_turn(client, session) for session in sessions]
+    assert [turn["queuePosition"] for turn in turns] == [0, 1, 2]
+    assert [turn["state"] for turn in turns] == [
+        storefront.TURN_THINKING, storefront.TURN_QUEUED, storefront.TURN_QUEUED,
+    ]
+
+    executor.gate.set()
+    executor.wait_for("finished", 3)
+    assert executor.finished == [s["participantId"] for s in sessions]
+    assert executor.started == executor.finished
+    # ...and the map is empty again, which is what re-opens all three composers
+    assert [_turn(client, s)["state"] for s in sessions] == [storefront.TURN_IDLE] * 3
+
+
+def test_the_turn_runs_on_a_turn_worker_never_on_the_request_thread(turn_app):
+    """The placement decision, asserted at the thread it produces.
+
+    Two independent readings of the same fact: the `200` is back while the turn
+    has not finished, and the thread that entered the executor is one of
+    `Storefront`'s own turn workers rather than the one this test is on.
+    """
+    client, executor = turn_app(workers=1)
+    session = _join(client)
+
+    assert _post(client, session).status_code == 200
+    assert executor.finished == []
+
+    executor.wait_for("started", 1)
+    assert executor.threads[0].startswith(storefront.TURN_THREAD_PREFIX)
+    assert executor.threads[0] != threading.current_thread().name
+
+    executor.gate.set()
+    executor.wait_for("finished", 1)
+
+
+def test_two_posts_a_tenth_of_a_second_apart_write_one_message_and_start_one_run(
+    turn_app, conn
+):
+    """§4.4 measure 1a, and **the ordering is the point**: the second post is
+    refused *before* the write.
+
+    `trigger.maybe_trigger` step 2 resumes only a run in status `waiting`, so a
+    message posted while the first turn is still `running` falls through to step
+    3 and starts a **second `WorkflowRun` on the same thread** — two runs
+    driving the same `assistant` step against the resource §4.4 calls the
+    ceiling. The graph is where that is visible, so both counts are read from
+    it: **one** `Message`, **one** `WorkflowRun`.
+
+    The `Message` count is the half that fails if the refusal moves behind the
+    write — the participant would then be looking at a message that can never
+    be answered, which is precisely why §4.4 puts the check first.
+    """
+    client, executor = turn_app(workers=1)
+    session = _join(client)
+    thread_id = _thread_of(conn, session["participantId"])
+
+    assert _post(client, session, "first").status_code == 200
+    executor.wait_for("started", 1)
+
+    time.sleep(0.1)
+    refused = _post(client, session, "second")
+    assert refused.status_code == 409
+    assert refused.json()["error"] == "turn_in_progress"
+
+    assert _counts(conn, thread_id) == (1, 1)
+
+    executor.gate.set()
+    executor.wait_for("finished", 1)
+    # the refusal is not a lock-out: the gate re-opens when the turn ends
+    assert _turn(client, session)["state"] == storefront.TURN_IDLE
+
+
+def test_a_poll_answers_immediately_while_the_turn_queue_is_full(turn_app):
+    """§4.4 measure 1's reason for existing: agent turns never touch the
+    threadpool the 2 s poll is served from, so a deep queue costs the poll
+    nothing.
+
+    `POLL_BUDGET_S` is two orders of magnitude under the gate's own timeout, so
+    a poll that ended up waiting on a turn fails here rather than passing
+    slowly — and the body is asserted too, since a fast wrong answer is not the
+    property.
+    """
+    client, executor = turn_app(workers=1)
+    sessions = [_join(client, name) for name in ("Ada", "Bo", "Cy")]
+    for session in sessions:
+        assert _post(client, session).status_code == 200
+    executor.wait_for("started", 1)
+
+    began = time.monotonic()
+    response = client.get(f"{API_PREFIX}/state", headers=_bearer(sessions[2]))
+    elapsed = time.monotonic() - began
+
+    assert response.status_code == 200
+    assert elapsed < POLL_BUDGET_S, f"the poll took {elapsed:.3f}s behind a full queue"
+    assert response.json()["turn"] == {
+        "state": storefront.TURN_QUEUED, "queuePosition": 2,
+    }
+    executor.gate.set()
+
+
+def test_the_turn_executor_drains_on_shutdown(seeded, monkeypatch, conn):
+    """§5.1: *the executor drains on shutdown*.
+
+    The gate is open from the start and each turn does 50 ms of real work, so
+    at the moment the lifespan begins to shut down the first turn is running
+    and the second has not started. Both must have finished by the time the
+    `with` block returns — which is a claim about the drain and nothing else: a
+    `shutdown(cancel_futures=True)`, or no shutdown at all, leaves this
+    assertion looking at an empty or half-full list, because it is made with no
+    wait of its own.
+
+    Draining rather than cancelling is the contract: an accepted turn already
+    has its participant's message written, so dropping it at shutdown creates
+    exactly the message-with-no-reply §4.4 measure 1a refuses to create.
+    """
+    monkeypatch.setattr(config, "STOREFRONT_TURN_WORKERS", 1)
+    executor = _GatedExecutor(work_s=0.05)
+    executor.gate.set()
+    app = _build_turn_app(seeded, executor)
+
+    with TestClient(app) as client:
+        sessions = [_join(client, name) for name in ("Ada", "Bo")]
+        for session in sessions:
+            assert _post(client, session).status_code == 200
+
+    assert executor.finished == [s["participantId"] for s in sessions]
+    for session in sessions:
+        assert app.state.storefront.turn_state(
+            session["participantId"]
+        ) == storefront.IDLE_TURN
+    for session in sessions:
+        assert _counts(conn, _thread_of(conn, session["participantId"])) == (1, 1)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

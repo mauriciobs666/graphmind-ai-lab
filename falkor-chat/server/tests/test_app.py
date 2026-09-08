@@ -1138,6 +1138,37 @@ def test_create_app_never_pins_the_participant_id_generator(tmp_path):
     assert seen[0]["ws"] == "test"
 
 
+def test_the_lifespan_raises_the_anyio_thread_limiter_before_it_yields(
+    conn, monkeypatch
+):
+    """salesperson-ui §4.4 measure 2, and **where** it runs is the whole test.
+
+    `to_thread.current_default_thread_limiter()` is event-loop scoped and
+    raises `anyio.NoEventLoopError` outside a running loop, so this cannot be
+    done at import or in `create_app`'s body — only inside `_lifespan`, before
+    `yield`. anyio's own default is 40; the probe route below reads the live
+    limiter from inside a request, which is the only place the claim means
+    anything.
+
+    Asserted against a value that is neither anyio's default nor `config.py`'s
+    own, so a limiter left untouched and a limiter hard-coded to `100` both
+    fail.
+    """
+    monkeypatch.setattr(config, "THREAD_LIMIT", 77)
+    # `dev_surface=False` so there is no `/` static catch-all to shadow the
+    # probe route registered after `create_app` returns.
+    app = create_app(context_provider=CTX, mount_mcp=False, dev_surface=False)
+
+    @app.get("/_limiter")
+    async def _limiter():  # noqa: ANN202
+        from anyio import to_thread
+
+        return {"total": to_thread.current_default_thread_limiter().total_tokens}
+
+    with TestClient(app) as client:
+        assert client.get("/_limiter").json()["total"] == 77
+
+
 def test_the_default_deployment_is_untouched_by_the_storefront_parameters():
     """§4.9: "Consequence for the non-storefront deployment: none."
 

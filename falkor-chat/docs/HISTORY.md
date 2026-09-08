@@ -5,6 +5,81 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-07 — salesperson-ui S9a: the storefront turn queue — bounded executor, queue positions, and the turn off the request thread
+
+**What:** The concurrency core of §4.4, the first of five units splitting plan §5.1's S9 row.
+`Storefront` gains a bounded `ThreadPoolExecutor` keyed by `participantId`
+(`enqueue_turn` / `_run_turn` / `shutdown_turns`), `POST /shop/api/messages` submits the agent turn
+behind its write, `create_app` hands the storefront the same `WorkflowTrigger` the legacy transports
+schedule, and `_lifespan` raises the anyio thread limiter before `yield` and drains the executor
+after it. Four files in `falkorchat/` (`storefront.py`, `storefront_api.py`, `app.py`, `config.py`),
+three test files, plus `docs/SERVER.md` §1.3/§1.4.
+
+**The row decides the placement, and the placement is the whole unit.** The trigger call runs
+**inside the turn-queue worker, never on the request thread**: `enqueue_turn` *submits*, and the
+request thread does the `409` check, `services.post_message`, the turn-map booking and
+`executor.submit(...)` before answering. `services.start_workflow_run` is synchronous and drives the
+whole run — up to eight chat completions against a 180 s agent timeout — so on the request thread it
+*is* the turn, and `POST /shop/api/messages` becomes the slowest route in the system, which is the
+outcome §4.4 measure 1 exists to prevent. It is also the platform's delivered posture on both
+existing transports (`background._safe_run_workflow`, failure-isolated and off-band), and it is why
+`enqueue_turn` **receives** the `ParticipantRecord`: the worker never resolves one, and the record is
+where §4.5's `run_ctx={"language": …}` comes from.
+
+**The consequence for the S8 guards, which is a done-condition rather than a formality:
+`SERVICE_LAYER_REACH_TODAY` did not move, and
+`test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume` stayed green.** The
+worker reaches the workflow layer through `trigger.maybe_trigger`, whose own `start_workflow_run`
+call site (`trigger.py:82`) is outside all four scopes either AST guard walks. Green here is not a
+guard that stopped working: injecting `self._services.start_workflow_run(...)` into the new
+`_run_turn` fails it (`1 failed`), because the reach walk follows `self.<method>` from
+`enqueue_turn` into the worker. What the assertion pins is the storefront's **service surface** —
+red would mean a `Services` call acquired through `self._services` instead of through the trigger,
+which is a stop-and-re-decide. No "reddens at S9" claim was written anywhere; the reach genuinely
+does not move.
+
+**Queue positions are taken once, at enqueue, and are not recomputed.** A position is
+`len(self._turns)` under the turn lock — how many turns were accepted and unfinished when this one
+arrived — and the entry is booked **before** the submit. That order is load-bearing rather than
+tidy: reversing it lets the worker's own `set_turn_state(thinking)` land first and the late booking
+clobber it back to `queued` at a position nothing ever corrects. Measured, not argued — the plain
+reordering, with no sleep added, leaves the running participant reading
+`{"state": "queued", "queuePosition": 1}` on 5 of 5 runs.
+
+**Every test added was mutation-tested, and two of the first pass survived.** Eleven mutations were
+run from a byte-copy held outside the repo and restored by `md5sum`: dropping the `409` check
+(2 red), moving the refusal behind the write (2 red, on the `Message` count — measure 1a's ordering
+is exactly what that assertion is), running the turn on the request thread (5 red), cancelling
+instead of draining at shutdown (1 red), deleting and hard-coding the limiter assignment (1 red
+each), pinning the queue position to 0 (3 red), dropping `run_ctx` (1 red), never clearing the turn
+entry (6 red), clearing it only on the success path (1 red), booking after the submit (1 red), and
+removing the enqueue call from the route (5 red). **The two survivors were test defects and were
+fixed**: the first "failure isolation" mutation was semantically null (the `except` already
+swallowed, so moving `clear_turn` out of the `finally` changed nothing), and the
+booked-before-submit test asserted only that *some* entry existed, which both orderings satisfy —
+it now reads the running participant's `state`, which is what the two orderings actually disagree
+about.
+
+**Documentation was part of done, and one row was deliberately left false.**
+`config.py`'s `STOREFRONT_TURN_WORKERS` and `THREAD_LIMIT` comments and `SERVER.md` §1.3's matching
+rows said "not built yet — S9 … setting it changes nothing today"; both now say what setting the
+value does, keeping the rationale for each default. §1.4's `POST /shop/api/messages` row names the
+enqueue and says the turn's own §12.1 write happens off the request thread. **`STOREFRONT_QUIESCE_S`
+was left exactly as it was, on instruction, and is now stale**: its comment and row both say nothing
+populates the turn map, and S9a is what populates it — `set_turn_state` has a production caller,
+`409 turn_in_progress` is reachable, `GET /state`'s `turn` block reports real states, and both
+drains now genuinely wait. What is still missing there is *cancellation* of a queued turn, which is
+a later unit; the row needs rewriting when that lands, or sooner.
+
+**Suite:** `2629 passed, 14 deselected` full (from `2617/14`), `191` for
+`tests/test_storefront_api.py` + `tests/test_app.py` (from `185`) — +12: five HTTP-level turn-queue
+tests, six `Storefront` unit tests, one lifespan limiter test. `ruff check` clean on all seven
+touched files.
+
+**Not in this unit** (the other four splitting S9): cancellation of a queued turn in front of
+`_await_quiesce`, the dead-turn latch `turn.lastTurn`, removal of the per-participant record cache,
+and the three `INHERITED_HANDLERS` reason strings with their armed-fault measurements.
+
 ## 2026-09-07 — the storefront documentation gate (Pass 16): `SERVER.md` §1.3/§1.4 stops describing the plan as the code, and `config.py`'s comments follow
 
 **What:** A gate-and-fix cycle on the component *documentation* rather than on code —

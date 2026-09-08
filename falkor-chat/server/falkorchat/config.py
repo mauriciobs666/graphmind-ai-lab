@@ -186,14 +186,15 @@ STOREFRONT_DIR: str | None = os.environ.get("FALKORCHAT_STOREFRONT_DIR") or None
 # an empty key first.
 STOREFRONT_PRESENTER_KEY: str = os.environ.get("FALKORCHAT_STOREFRONT_PRESENTER_KEY", "")
 
-# §4.4 measure 1 — **not built yet, S9.** The value is read into `Storefront` and
-# exposed as its `turn_workers` property, but **nothing consumes it**: there is no
-# executor, so setting this changes nothing today. When S9 builds it, this is the
-# size of the storefront's own bounded turn executor, sized to LM Studio's
-# configured parallelism — agent turns will run there instead of on
-# `BackgroundTasks`, so a deep turn queue never touches anyio's default thread
-# limiter and poll reads stay instant. That is the reason for the default: it
-# tracks LM Studio's parallelism, not anything about the web tier.
+# §4.4 measure 1 — **delivered.** `max_workers` of the storefront's own bounded
+# turn executor (`Storefront.__init__`), which is where every agent turn runs:
+# `POST /shop/api/messages` writes the message, submits the turn and answers, so
+# a deep turn queue never touches anyio's default thread limiter and poll reads
+# stay instant. **Setting it changes two observable things** — how many turns run
+# at once, and therefore the `turn.queuePosition` `GET /shop/api/state` reports,
+# since a position is how many accepted turns were unfinished when this one
+# arrived. Sized to LM Studio's configured parallelism: that is the reason for
+# the default, which tracks the model server, not anything about the web tier.
 STOREFRONT_TURN_WORKERS: int = int(os.environ.get("FALKORCHAT_STOREFRONT_TURN_WORKERS", "4"))
 
 # §4.8/§7 of the graph note: how long either reset waits for in-flight turns to
@@ -214,13 +215,15 @@ STOREFRONT_LOCALES: tuple[str, ...] = _env_csv(
     "FALKORCHAT_STOREFRONT_LOCALES", ("en", "pt-BR", "es")
 )
 
-# §4.4 measure 2 — **not built yet, S9.** Nothing in `falkorchat/` reads this and
-# no `to_thread.current_default_thread_limiter()` call exists, so setting it
-# changes nothing today. When S9 raises the anyio thread limiter it must do so
-# **inside `_lifespan`, before `yield`** (the limiter is event-loop scoped and
-# raises outside a running loop). Headroom for the poll path, explicitly **not**
-# load-bearing — measure 1 is what keeps turns off this limiter in the first
-# place, which is why this value is generous rather than tuned.
+# §4.4 measure 2 — **delivered.** `create_app`'s `_lifespan` assigns this to
+# `anyio.to_thread.current_default_thread_limiter().total_tokens` **before
+# `yield`**, which is the only place it can be done: the limiter is event-loop
+# scoped and raises `anyio.NoEventLoopError` outside a running loop. So setting
+# it changes how many sync endpoints FastAPI will offload concurrently — anyio's
+# own default is 40 — on **every** deployment this app builds, not only the
+# storefront one. Headroom for the poll path, explicitly **not** load-bearing:
+# measure 1's turn executor is what keeps agent turns off this limiter in the
+# first place, which is why the value is generous rather than tuned.
 THREAD_LIMIT: int = int(os.environ.get("FALKORCHAT_THREAD_LIMIT", "100"))
 
 

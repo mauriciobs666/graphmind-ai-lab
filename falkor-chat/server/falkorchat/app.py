@@ -23,6 +23,7 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from anyio import to_thread
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -257,7 +258,10 @@ def create_app(
 
     `storefront=True` (salesperson-ui S8) mounts the authenticated `/shop/api`
     router, the storefront's typed error map and the SPA build at `/shop`, and
-    runs §4.9's readiness preflight in the lifespan. It is **mutually exclusive
+    runs §4.9's readiness preflight in the lifespan. It also gives the
+    `Storefront` the same `trigger` the legacy transports schedule (§4.4
+    measure 1): storefront turns run on that object's own bounded executor, and
+    the lifespan drains it after `yield`. It is **mutually exclusive
     with `dev_surface`** and says so by raising, not by preferring one: the two
     surfaces must not coexist however the app was constructed, and the guard is
     keyed on this **parameter** rather than on `config.STOREFRONT_ENABLED`
@@ -324,6 +328,12 @@ def create_app(
             ws=provider().ws,
             agent_id=config.AGENT_ID,
             storefront_dir=served_dir,
+            # §4.4 measure 1: the storefront's turn worker reaches the workflow
+            # layer through the **same** trigger the legacy transports schedule
+            # on `BackgroundTasks`, never through its own `services`. `None`
+            # here (no workflow engine wired) leaves the queue, the `409` gate
+            # and the quiesce wait working with a turn that does nothing.
+            trigger=trigger,
             # `id_gen` is deliberately **not** passed: S6's participant-id
             # collision argument rests on no caller ever pinning it, and this is
             # the first caller.
@@ -348,6 +358,15 @@ def create_app(
 
     @asynccontextmanager
     async def _lifespan(app_: FastAPI):
+        # salesperson-ui §4.4 measure 2. **Here, before `yield`, and nowhere
+        # else**: `current_default_thread_limiter()` is event-loop scoped and
+        # raises `anyio.NoEventLoopError` outside a running loop, so this cannot
+        # be done at import or in `create_app`'s body. anyio's own default is
+        # 40 threads, shared by every sync endpoint FastAPI offloads; raising it
+        # is headroom for the 2 s poll path and explicitly **not** load-bearing
+        # — measure 1's turn executor is what keeps agent turns off this
+        # limiter in the first place.
+        to_thread.current_default_thread_limiter().total_tokens = config.THREAD_LIMIT
         # The §4 write paths anchor on the author node — ensure the configured
         # actor exists before the first write. This is also the first real
         # FalkorDB round-trip (the default services hold a deferred handle):
@@ -387,6 +406,13 @@ def create_app(
             sweep_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await sweep_task
+        if shop is not None:
+            # §4.4 measure 1's graceful drain: every turn already accepted has a
+            # message written for it, so shutdown waits for them rather than
+            # cancelling them. Offloaded rather than called inline because
+            # `shutdown(wait=True)` is a blocking join of up to the agent
+            # timeout, and blocking the loop here stalls uvicorn's own shutdown.
+            await run_in_threadpool(shop.shutdown_turns)
 
     app = FastAPI(lifespan=_lifespan)
 

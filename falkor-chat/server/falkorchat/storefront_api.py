@@ -52,7 +52,10 @@ removes that cache outright, at which point the rule holds structurally.
 
 Steps that extend this module
 -----------------------------
-* **S9** — `POST /shop/api/messages` gains the turn enqueue behind its write.
+* **S9** — `POST /shop/api/messages` carries the turn enqueue behind its write
+  (delivered); the trigger runs on `Storefront`'s own turn worker, so this
+  module's service-layer reach is unchanged by it and the guard below stays
+  green rather than being bumped.
 * **S10** — the three presenter operations move onto `Storefront` itself
   (`presenter_login`, `list_participants`, `reset_all`), together with the
   login rate-limiter and reset-everyone's stop-intake-then-drain quiesce. They
@@ -1168,18 +1171,36 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
         running starts a *second* `WorkflowRun` on the same thread — and a
         written message with no reply sits in the transcript forever.
 
-        S9 adds the turn enqueue behind this write; the `409` gate and the
-        `mentions` are here because both are properties of the *post*, not of
-        the queue.
+        **The turn is enqueued behind the write, and does not run here**
+        (§4.4 measure 1, §5.1's S9 row). `Storefront.enqueue_turn` books the
+        map entry and submits to the storefront's own bounded executor; the
+        trigger — and therefore `services.start_workflow_run`, up to eight chat
+        completions against a 180 s agent timeout — runs on that worker. This
+        route answers as soon as the message is written, which is why the
+        response never carries a workflow failure: by the time one can happen
+        the `200` has been sent, and the participant's evidence is
+        `GET /shop/api/state`'s `turn` block.
+
+        The `409` gate and the `mentions` are here because both are properties
+        of the *post*, not of the queue. **No `_safe_embed`** (§4.4 measure 3):
+        the `salesperson` def has no `graphrag_retrieve`, so embedding a
+        storefront message is pure GPU contention for zero benefit — and it is
+        the second structural barrier under §4.3 part 4.
+
+        The participant's `ParticipantRecord` is handed to `enqueue_turn`
+        rather than re-resolved on the worker: this thread has already read it
+        from the graph, and it carries the `language` §4.5's `run_ctx` needs.
         """
         if shop.turn_in_flight(who.participant_id):
             raise StorefrontHTTPError(
                 409, "turn_in_progress", "a turn is already in flight"
             )
-        return services.post_message(
-            shop.context_for(who.participant_id),
-            thread_id=who.thread_id, text=body.text, mentions=[agent_id],
+        ctx = shop.context_for(who.participant_id)
+        posted = services.post_message(
+            ctx, thread_id=who.thread_id, text=body.text, mentions=[agent_id],
         )
+        shop.enqueue_turn(ctx, who, posted)
+        return posted
 
     @router.get(
         "/catalog",
