@@ -297,19 +297,3 @@
   capabilities", unaware of v5/v6/v7). The context-file sweep fixed the AGENTS.md side by
   deleting it; **the `proof_defs.py` comment block is still stale and is `coder`/`teco`
   territory, not mine** — flag it rather than edit it.
-
-- **`SET b = {map}` may close the marker's property set by construction — unverified, needs a
-  `graph-dba` write-probe (opened 2026-09-08, U46).** FalkorDB's docs say map assignment with `=`
-  "Replaces **all** existing properties with the map properties" (`docs.falkordb.com/cypher/set.html`,
-  read 2026-09-08, **not executed** — writes are not cobb's). If true on this instance, the stamp
-  could drop its `= NULL` enumeration of hand-authored keys entirely and a sixth/seventh key would be
-  removed by construction. Deliberately **not** shipped in U46: replacing a live, executed mechanism
-  with a doc-sourced one would be the tenth generation of this chain's defect class. The probe is
-  small — on a throwaway graph, write a marker with keys outside the pipeline set, apply
-  `MERGE (b:CpgBuildInfo) SET b = {BUILT_AT:…, …}`, read back `keys(b)`. The post-stamp stray
-  assertion added in U46 is wanted either way: it is what would prove the replace happened in
-  production rather than being asserted from a doc.
-- **`cpg_nonexistent_graph_xyz` is an empty graph key I created and cannot delete (2026-09-08,
-  U46).** A `MATCH`-only query sent through `redis-cli GRAPH.QUERY` (not `GRAPH.RO_QUERY`)
-  **materializes** the graph. `GRAPH.DELETE` is `graph-dba`'s; routed there. Drop this item once it
-  is gone.

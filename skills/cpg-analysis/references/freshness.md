@@ -179,22 +179,19 @@ signal, not the threshold.
   rejected stamp was silent and an `--append` build could leave the *previous*
   marker standing over new content. A marker whose `builtAt` predates content
   you can see in the graph is that shape.) **A hand-authored marker is subject
-  to the same rule**, and nothing exempts it — but the mechanism is two parts,
-  and only the second is a guarantee. The stamp clears a **named list** of
-  hand-authored keys (`MARKER_ORIGIN`, `MARKER_WRITTEN_AT`, `NOTE`, `STATUS`,
-  `RENAMED_FROM`) to `NULL`, which removes them; then, since 2026-09-08, the
-  pipeline asserts that every property left on the marker is one that stamp
-  wrote and **fails the build**, naming any that isn't. So a key outside the
-  list does not survive into a marker you might read — it stops the rebuild
-  instead. A hand-authored marker is therefore provisional: it
-  stands exactly until the graph is rebuilt, and whoever rebuilds inherits none
-  of its reasoning. **Two consequences for you as a reader.** A marker stamped
-  on or after 2026-09-08 has been *checked* to carry nothing but that build's
-  own fields, so a stray hand-authored key on one is not a shape you need to
-  consider; markers older than that were never checked. And a graph whose
-  current marker is hand-authored — `cpg_falkorchat`'s ten keys today — will
-  **fail its own next rebuild** until those keys are cleared, which is the
-  design working, not a defect to report. **If you rebuild a hand-authored graph, re-write whatever
+  to the same rule**, and nothing exempts it: since 2026-09-08 the stamp is a
+  **map assignment** (`SET b = {…}`), and `=` replaces the node's whole property
+  set, so every property that stamp did not write is gone afterwards —
+  `markerOrigin`, `NOTE`, `STATUS`, a key invented next year, all of it. There
+  is no list of keys involved and nothing to keep in sync. **What this buys you
+  as a reader: a marker is the product of exactly one act** — one build's stamp,
+  or one hand-authoring — and never a mixture of both, which was a real shape
+  found in the wild the day before. A hand-authored marker is therefore
+  provisional: it stands exactly until the graph is rebuilt, it dies **silently**
+  when that happens (the rebuild reports success and says nothing about what it
+  erased), and whoever rebuilds inherits none of its reasoning. So
+  `cpg_falkorchat`'s ten keys today are ten keys until someone rebuilds it and
+  then they are eight, with no warning either way. **If you rebuild a hand-authored graph, re-write whatever
   annotation still applies** — the stamp will have cleared it, and the marker
   is build-scoped by design, so anything durable about the graph or its
   component belongs in `docs/` rather than on this node.
@@ -217,6 +214,23 @@ signal, not the threshold.
   allow-list is generated from the stamp's own assignments rather than
   hand-copied. Verified by execution in both directions against this instance,
   not inferred.)*
+  *(Third tombstone, same day, and this one is the mechanism that is actually
+  here. The clearing enumeration above is gone: the stamp now replaces the
+  marker's whole property set with `SET b = {…}`, so closure is by construction
+  and there is no list at any layer. **Read the sequence rather than only the
+  answer** — the rule "a rebuild erases a hand-authored marker" was stated three
+  times with three different mechanisms, and the first two were both wrong while
+  sounding checkable. What separates the third is not that it is more plausible;
+  it is that it was **executed before it was written down**, on throwaway
+  graphs, with `keys(b)` read back every time: a marker carrying the eight
+  pipeline keys plus three hand-authored ones — `MARKER_EVIDENCE` among them,
+  the key that had just defeated mechanism two — came back with `keys(b)` of
+  size 8 and all three gone, while `count(b)` stayed 1 and `labels(b)` stayed
+  `[CpgBuildInfo]`, so `MATCH (b:CpgBuildInfo)` still finds it. Reply *counters*
+  were not used as evidence anywhere in that: they conflate properties set with
+  properties removed, and one probe reported four removals against zero actual
+  ones. If you are re-checking this, `keys(b)` is the discriminator. Don't
+  delete the rule on rediscovering the history.)*
 - **`sourcePath` is a parse root, not a git path.** It is what Joern was
   pointed at — frequently a pruned scratch copy staged to keep `.venv` and
   friends out of the parse. Running it straight through `git log` doesn't

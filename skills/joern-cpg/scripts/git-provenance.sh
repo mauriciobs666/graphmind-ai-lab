@@ -107,7 +107,6 @@ cpg_provenance_capture() {
   fi
   return 0
 }
-
 # cpg_provenance_stamp <built_at> <parsed_at> <source_path> <provenance>
 #   Echo the Cypher that writes the singleton CpgBuildInfo marker, using
 #   whatever cpg_provenance_capture left in CPG_SOURCE_*.
@@ -116,33 +115,61 @@ cpg_provenance_capture() {
 #   human annotation on it is build-scoped and dies with the build; anything
 #   durable about the graph or its component belongs in docs/, not here.
 #
-#   Every property this stamp names is written on every stamp — an absent one
-#   explicitly to NULL, which REMOVES the property in FalkorDB rather than
-#   storing one (verified 2026-09-08 by execution on a throwaway graph: a 13-key
-#   marker put through a full `parse-root` stamp reported `Properties removed:
-#   13` and `keys(b)` read back exactly the eight pipeline fields). Without
-#   that, an `--append` re-stamp of a graph whose earlier build had a commit
-#   would leave the old SOURCE_COMMIT in place, describing a build that no
-#   longer exists.
+#   HOW THE INVARIANT IS HELD: `SET b = {…}` — MAP ASSIGNMENT WITH `=`, WHICH
+#   REPLACES THE NODE'S ENTIRE PROPERTY SET. Not `+=`, which merges, and not a
+#   list of `b.X = NULL` clearing statements, which is what this used to be. A
+#   property that is not in the map is gone afterwards whatever it is called,
+#   whenever it was invented, and whether or not anyone remembered to name it
+#   here. That is the whole point: the closure is by construction, so there is
+#   nothing to keep in sync and nothing to remember.
 #
-#   BUT THE LIST BELOW IS A LIST, NOT THE INVARIANT — and a list cannot enforce
-#   its own completeness. Naming a property here is what makes it *cleared
-#   quietly*; it is no longer what makes the invariant hold. That distinction
-#   was bought twice in two days: the five hand-authored keys graph-dba writes
-#   on a hand-written or hand-backfilled marker (MARKER_ORIGIN,
-#   MARKER_WRITTEN_AT, NOTE, STATUS, RENAMED_FROM) postdate the original eight
-#   and were missing here until 2026-09-08, so an `--append` rebuild left them
-#   standing over freshly captured pipeline fields — a marker announcing itself
-#   as "NOT a pipeline stamp" while carrying one. Adding them closed the list
-#   and did not close the hole: a SIXTH hand-authored key (MARKER_EVIDENCE),
-#   invented the same day, survived a full stamp untouched, reproducing the
-#   defect one key over.
+#   EXECUTED, on throwaway graphs, 2026-09-08 — read back with `keys(b)` every
+#   time, never from the reply's counters (those conflate set-with-removed and
+#   are not evidence; see graph-dba's U47a finding):
+#     * A marker seeded with the 8 pipeline keys plus 3 hand-authored ones —
+#       including MARKER_EVIDENCE, the out-of-list key that had just survived
+#       the old clearing enumeration — put through `SET b = {…8 pipeline keys…}`
+#       read back `keys(b)` of size 8: all three hand-authored keys gone,
+#       MARKER_EVIDENCE included. `count(b) = 1` and `labels(b) =
+#       [CpgBuildInfo]` both survived the replace, which was the one way this
+#       could have been quietly catastrophic — `MATCH (b:CpgBuildInfo)` still
+#       finds it.
+#     * An explicit NULL *inside the map* OMITS that property from THE NODE; it
+#       does not store a null. An 8-entry map with 4 NULL values read back
+#       `keys(b)` of size 4, the four real keys. THIS IS WHY the eight lines
+#       below are emitted unconditionally: an absent SOURCE_COMMIT can be
+#       written as NULL and simply will not exist on the node.
+#       Careful reading the map itself, though — the omission happens at
+#       ASSIGNMENT, not in the literal. `WITH {…8 entries, 4 of them NULL…} AS m
+#       RETURN keys(m)` returns all EIGHT (checked 2026-09-08 with the literal
+#       this function actually emits, which also confirmed the quote/backslash
+#       escaping survives: `p"q` and `a"b\c` round-tripped, SOURCE_DIRTY came
+#       back as a real boolean). So `keys(b)` on the node is the discriminator
+#       here, exactly as it is for the counters.
+#     * `provenance=none` (SOURCE_ORIGIN/COMMIT/TREE/DIRTY all absent) read back
+#       exactly the four unconditional keys.
+#     * Against a graph with NO marker — the `--reset` path — the MERGE created
+#       one: `count(b) = 1`, `labels(b) = [CpgBuildInfo]`, PARSED_AT correct. The
+#       create path is unaffected, so pipeline.sh's PARSED_AT read-back still
+#       discriminates.
 #
-#   The enforcement is cpg_provenance_stray_query below, which the pipeline runs
-#   after every stamp: any property on the marker that this stamp did not write
-#   FAILS THE BUILD, whatever it is called and whenever it was invented. So a
-#   seventh hand-authored key does not silently corrupt a marker — it stops a
-#   rebuild with its own name in the error, and the fix is to add it here.
+#   THE RULE HERE HAS NOW OUTLIVED TWO WRONG MECHANISMS, which is why the
+#   evidence above is written out rather than cited. (1) The stamp originally
+#   wrote only its own eight fields, so an `--append` rebuild left a
+#   hand-authored marker's keys standing over freshly captured pipeline values —
+#   a marker announcing itself as "NOT a pipeline stamp" while carrying one.
+#   (2) The fix enumerated the five hand-authored keys as `= NULL`, which closed
+#   a list rather than a set: a sixth key invented the same day
+#   (MARKER_EVIDENCE) survived a full stamp untouched, reproducing the defect
+#   one key over, because a closed list cannot enforce its own completeness and
+#   whoever hand-writes a marker is editing a different file from this one.
+#   (3) The map form above, which was checked before it was written down. Don't
+#   reintroduce a `b.X = NULL` line for a hand-authored key — it would be
+#   harmless but it would also re-teach the next reader that the list is what
+#   matters.
+#
+#   cpg_provenance_stray_query below is the standing check that (3) actually
+#   happened. See its comment before deciding it is redundant.
 #
 #   <provenance> records HOW the values were obtained, because the consumer's
 #   trust in them differs: `parse-root` (derived from a tracked parse root) ·
@@ -162,12 +189,17 @@ _cpg_str() {
   fi
 }
 
-# _cpg_prop <NAME> <cypher-value> — append one `b.NAME = <value>` assignment to
-# the SET clause under construction and, unless <value> is the literal NULL,
-# record NAME in CPG_STAMPED_KEYS. That side effect is the point: it makes the
-# stamp's own SET clause the single source of truth for which properties a
-# pipeline-stamped marker may carry, so cpg_provenance_stray_query's allow-list
-# cannot drift from it the way a hand-copied second list would.
+# _cpg_prop <NAME> <cypher-value> — append one `NAME: <value>` entry to the map
+# literal under construction and, unless <value> is the literal NULL, record
+# NAME in CPG_STAMPED_KEYS. A NULL entry is emitted into the map anyway and
+# omits the property (executed — see the stamp's comment above), so the map
+# always carries all eight names and CPG_STAMPED_KEYS carries only the ones that
+# will actually exist on the node.
+#
+# That side effect is the point: it makes the stamp's own map the single source
+# of truth for which properties a pipeline-stamped marker may carry, so
+# cpg_provenance_stray_query's allow-list cannot drift from it the way a
+# hand-copied second list would.
 #
 # CALL IT AS A STATEMENT, NEVER INSIDE `$(…)`. A command substitution runs in a
 # subshell, so both assignments would be discarded while the printed Cypher
@@ -180,57 +212,59 @@ _cpg_str() {
 # At file scope for the same reason as _cpg_str.
 _cpg_prop() {
   [ "$2" = NULL ] || CPG_STAMPED_KEYS="${CPG_STAMPED_KEYS}${CPG_STAMPED_KEYS:+ }$1"
-  _CPG_SET_CLAUSE="${_CPG_SET_CLAUSE}${_CPG_SET_CLAUSE:+,
-    }b.$1 = $2"
+  _CPG_MAP="${_CPG_MAP}${_CPG_MAP:+,
+    }$1: $2"
 }
 
 cpg_provenance_stamp() {
   local built_at="$1" parsed_at="$2" source_path="$3" provenance="$4"
-  CPG_STAMPED_KEYS=""; _CPG_SET_CLAUSE=""
-  _cpg_prop BUILT_AT          "$(_cpg_str "$built_at")"
-  _cpg_prop PARSED_AT         "$(_cpg_str "$parsed_at")"
-  _cpg_prop SOURCE_PATH       "$(_cpg_str "$source_path")"
-  _cpg_prop PROVENANCE        "$(_cpg_str "$provenance")"
-  _cpg_prop SOURCE_ORIGIN     "$(_cpg_str "${CPG_SOURCE_ORIGIN:-}")"
-  _cpg_prop SOURCE_COMMIT     "$(_cpg_str "${CPG_SOURCE_COMMIT:-}")"
-  _cpg_prop SOURCE_TREE       "$(_cpg_str "${CPG_SOURCE_TREE:-}")"
-  _cpg_prop SOURCE_DIRTY      "${CPG_SOURCE_DIRTY:-NULL}"
-  _cpg_prop MARKER_ORIGIN     NULL
-  _cpg_prop MARKER_WRITTEN_AT NULL
-  _cpg_prop NOTE              NULL
-  _cpg_prop STATUS            NULL
-  _cpg_prop RENAMED_FROM      NULL
-  printf 'MERGE (b:CpgBuildInfo)\nSET %s' "$_CPG_SET_CLAUSE"
+  CPG_STAMPED_KEYS=""; _CPG_MAP=""
+  # These eight are the marker, in full. There is deliberately no entry here for
+  # MARKER_ORIGIN / MARKER_WRITTEN_AT / NOTE / STATUS / RENAMED_FROM or any
+  # other hand-authored key: `SET b = {…}` removes them by replacing the whole
+  # property set, so naming them would add nothing but a list to maintain.
+  _cpg_prop BUILT_AT      "$(_cpg_str "$built_at")"
+  _cpg_prop PARSED_AT     "$(_cpg_str "$parsed_at")"
+  _cpg_prop SOURCE_PATH   "$(_cpg_str "$source_path")"
+  _cpg_prop PROVENANCE    "$(_cpg_str "$provenance")"
+  _cpg_prop SOURCE_ORIGIN "$(_cpg_str "${CPG_SOURCE_ORIGIN:-}")"
+  _cpg_prop SOURCE_COMMIT "$(_cpg_str "${CPG_SOURCE_COMMIT:-}")"
+  _cpg_prop SOURCE_TREE   "$(_cpg_str "${CPG_SOURCE_TREE:-}")"
+  _cpg_prop SOURCE_DIRTY  "${CPG_SOURCE_DIRTY:-NULL}"
+  printf 'MERGE (b:CpgBuildInfo)\nSET b = {\n    %s\n}' "$_CPG_MAP"
 }
 
 # cpg_provenance_stray_query
 #   Echo the READ that lists every property on the marker which the preceding
 #   cpg_provenance_stamp did NOT write. Call it after the stamp; it uses the
-#   CPG_STAMPED_KEYS that call left behind.
+#   CPG_STAMPED_KEYS that call left behind. Zero rows is the pass; each failure
+#   renders as `STRAY_KEY=<NAME>` in redis-cli's default output, greppable
+#   without parsing the reply, and names the offending key.
 #
-#   WHY IT EXISTS. The NULLs above clear a CLOSED LIST of hand-authored keys,
-#   and a closed list is only as good as whoever last edited it. On 2026-09-08 a
-#   sixth hand-authored key (MARKER_EVIDENCE) was written onto a marker and
-#   survived a full `parse-root` stamp untouched — reproducing the exact defect
-#   the list had just been closed against, one key over. The list cannot enforce
-#   its own completeness, and the discipline is invisible where it breaks: the
-#   author of a hand-written marker is working in a different file entirely.
+#   DO NOT DELETE THIS AS REDUNDANT. It looks redundant — the stamp's map
+#   assignment already removes everything it does not write, so under a correct
+#   `SET b = {…}` this query cannot return a row. That is exactly its value: the
+#   ONLY way it fires now is if THE REPLACE ITSELF DID NOT HAPPEN. A FalkorDB
+#   version that treats `=` as a merge, someone "simplifying" the stamp back to
+#   `b.X = …` assignments or to `+=`, an edit that drops a property out of the
+#   map — each of those is silent at the Cypher level and each one is caught
+#   here, on every build, with the offending key named.
 #
-#   This query enforces the invariant instead of asking for it. The allow-list is
-#   generated from the stamp's own assignments (see _cpg_prop), so it covers
-#   every hand-authored key that will ever exist — including ones not yet
-#   invented — by the simple fact that the pipeline did not write them.
-#
-#   Zero rows is the pass. Each failure renders as `STRAY_KEY=<NAME>` in
-#   redis-cli's default output, greppable without parsing the reply, and names
-#   the offending key so the fix is mechanical (verified 2026-09-08 against
-#   `cpg_falkorchat`'s live 10-key marker: the 8-key allow-list returned exactly
-#   STRAY_KEY=MARKER_ORIGIN / MARKER_WRITTEN_AT / NOTE, and the 11-key one
-#   returned no rows).
+#   So this is the standing regression test for the property that the whole
+#   design rests on, run in production rather than asserted from a document.
+#   That distinction is the point: the map form's replace semantics were checked
+#   by execution before being relied on, and this check is what keeps them
+#   checked. (It earned its keep once already, under the previous design: it was
+#   added 2026-09-08 to enforce a hand-maintained clearing list that could drift,
+#   and its live verification — an 8-key allow-list against `cpg_falkorchat`'s
+#   10-key marker returning exactly STRAY_KEY=MARKER_ORIGIN /
+#   MARKER_WRITTEN_AT / NOTE, an 11-key allow-list returning none — is the same
+#   query this still emits.)
 #
 #   It does NOT check that the stamped keys are PRESENT — absence is legitimate
-#   (`provenance=none` deliberately omits SOURCE_COMMIT/TREE/DIRTY), and the
-#   pipeline's PARSED_AT read-back already proves the write landed. Extra
+#   (`provenance=none` deliberately omits SOURCE_COMMIT/TREE/DIRTY, and an
+#   allow-listed key that is not on the node matches nothing here anyway), and
+#   the pipeline's PARSED_AT read-back already proves the write landed. Extra
 #   properties are the defect; missing ones are not.
 cpg_provenance_stray_query() {
   local k list=""

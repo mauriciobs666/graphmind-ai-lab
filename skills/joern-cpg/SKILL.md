@@ -79,27 +79,28 @@ when you run a build:
   immediately before invoking the pipeline, since capture happens at start, and
   confirm the copy matches its origin (`diff -rq`, modulo the paths you pruned)
   if the build is one others will lean on.
-- **A rebuild erases a hand-authored marker, deliberately.** The marker
-  describes one build and nothing else. So **read the marker before rebuilding
-  a graph that has one** (`MATCH (b:CpgBuildInfo) RETURN b`) and re-write
-  whatever annotation still applies afterwards; anything durable about the
-  graph or its component belongs in `docs/`, not on this node.
-- **A marker key the stamp does not know about now stops the rebuild, by name.**
-  Erasure works in two parts, and only the second one is a guarantee. The stamp
-  clears a **named list** of hand-authored keys — `MARKER_ORIGIN`,
-  `MARKER_WRITTEN_AT`, `NOTE`, `STATUS`, `RENAMED_FROM` — to `NULL`, which
-  removes them; then the pipeline asserts that **every** property left on the
-  marker is one that stamp wrote, and fails the run naming any that isn't. The
-  list is what makes a known key disappear quietly; the assertion is what makes
-  the invariant true for keys nobody has invented yet. Both were bought the
-  hard way on 2026-09-08 — the five keys survived an `--append` until the list
-  was closed, and a sixth (`MARKER_EVIDENCE`) then survived a full stamp
-  anyway, reproducing the defect one key over. **So if you hand-write a marker
-  with a new key, the next rebuild of that graph stops** with
-  `pipeline: FAILED — the marker … carries properties this build did not write`
-  and the key's name. That is the design, not a bug: clear the key by hand
-  (`SET b.<KEY> = NULL`) to get past it, and add it to `cpg_provenance_stamp`
-  in `scripts/git-provenance.sh` so the next rebuild clears it silently.
+- **A rebuild erases a hand-authored marker, completely and silently.** The
+  stamp is a **map assignment** — `SET b = {…the build's own fields…}` — and `=`
+  replaces the node's entire property set, so *every* property the stamp did not
+  write is gone afterwards: `NOTE`, `STATUS`, `MARKER_ORIGIN`, a key someone
+  invents next year, all of it. There is no list of keys to keep up to date and
+  no warning: a rebuild takes the annotation with it and the run reports
+  success. That is deliberate — the marker describes one build and nothing else.
+  So **read the marker before rebuilding a graph that has one**
+  (`MATCH (b:CpgBuildInfo) RETURN b`) and re-write whatever annotation still
+  applies afterwards; anything durable about the graph or its component belongs
+  in `docs/`, not on this node.
+  <br>Getting here took three tries, all on 2026-09-08, which is worth knowing
+  if you are tempted to simplify the stamp: writing only the build's own fields
+  left a hand-authored marker's keys standing over fresh values; enumerating the
+  five known hand-authored keys as `= NULL` closed a *list* rather than a *set*,
+  and a sixth key (`MARKER_EVIDENCE`) invented the same day sailed straight
+  through it. The map form was checked by execution before being relied on.
+  After every stamp the pipeline re-checks that the marker carries nothing but
+  that build's own fields, and **fails the run** if anything else is there —
+  which under a correct map assignment can only happen if the replace itself
+  stopped working. Leave
+  that check in place; it is not redundant with the stamp.
 - **A rejected stamp now fails the run.** `redis-cli` exits 0 on an error reply
   and prints it to stdout, so the stamp is checked for an error reply *and* read
   back — the run fails unless the marker in the graph carries this build's

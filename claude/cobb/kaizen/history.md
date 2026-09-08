@@ -3,6 +3,48 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-08 — U47: replaced the stamp's clearing enumeration with a map assignment — closure by construction (K-023)
+
+- **What:** `graph-dba` executed the probe I declined to ship on documentation alone, and it held, so
+  the map form went in. `cpg_provenance_stamp` now emits
+  `MERGE (b:CpgBuildInfo) SET b = { …the eight pipeline fields… }` — map assignment with `=`, which
+  replaces the node's whole property set. The five `MARKER_ORIGIN` / `MARKER_WRITTEN_AT` / `NOTE` /
+  `STATUS` / `RENAMED_FROM` `= NULL` lines are **deleted**, not moved: closure is now by construction
+  and there is no list at any layer. `_cpg_prop` emits `NAME: value` map entries instead of
+  `b.NAME = value` assignments; its `CPG_STAMPED_KEYS` side effect is unchanged and still correct.
+  Rewrote the affected prose in `pipeline.sh`, `SKILL.md`, `freshness.md` and `skills/README.md` — all
+  of it mine from `0da3eb9`, all of it describing the enumeration.
+- **Why:** The enumeration was a closed *list*, not a closed *set*, and a list cannot enforce its own
+  completeness. The map form removes the failure mode rather than detecting it.
+- **The stray assertion from `0da3eb9` stays, and its role improved.** Under the enumeration it
+  guarded a list that could drift; under the map it can only fire **if the replace itself did not
+  happen** — a FalkorDB version treating `=` as a merge, someone simplifying the stamp back to
+  `b.X =` or `+=`, an edit dropping a key from the map. That is precisely the *prove it in production
+  rather than assert it from a doc* property I named when declining to ship. Said so at all three
+  sites, in those words, because the next reader will otherwise see a redundant-looking check and
+  delete it. Its failure message no longer says "clear the key and add it to the list" — it now says
+  **this should be impossible, and that is the finding**, and routes to the two things that could
+  have broken.
+- **Evidence written in as evidence, not as a doc citation.** The docstring carries the four executed
+  probes with their `keys(b)` read-backs (11→8 with `MARKER_EVIDENCE` gone, `count(b)=1`,
+  `labels(b)=[CpgBuildInfo]` — the singleton and label surviving the replace being the one way this
+  could have been quietly catastrophic; NULL-in-map omitting the property; `provenance=none` → 4 keys;
+  the fresh-graph create path unaffected). **No reply counters are cited anywhere**, per `graph-dba`'s
+  U47a finding that they conflate set-with-removed — one probe reported four removals against zero
+  actual ones. `keys(b)` is named as the discriminator at every site.
+- **What I executed myself this pass** (reads only; no graph writes, no `GRAPH.QUERY` against a
+  possibly-absent graph): the exact map literal the stamp emits **parses** on this FalkorDB and its
+  escaping round-trips (`p"q`, `a"b\c` intact, `SOURCE_DIRTY` a real boolean) — run via
+  `GRAPH.RO_QUERY`; the three rendered stamp cases; the allow-lists still generate correctly (8 keys /
+  4 keys); and the edited `pipeline.sh` block, extracted verbatim, still fails with the three key
+  names and exit 1. **One nuance I found and recorded:** the NULL-omission happens at *assignment*,
+  not in the literal — `WITH {…4 NULLs…} AS m RETURN keys(m)` returns all **eight**, where `keys(b)`
+  on the node returns four. A reader checking the map literal instead of the node would conclude the
+  docstring was wrong; it now says so explicitly.
+- **Plan items:** closed both — the `SET b = {map}` probe item (delivered) and the
+  `cpg_nonexistent_graph_xyz` cleanup item (`graph-dba` deleted it; `GRAPH.LIST` back to 25).
+
+
 ## 2026-09-08 — U46: made the stamp's closed list enforceable — post-stamp stray-property assertion (K-023)
 
 - **What:** Follow-up to U45, resumed on `graph-dba`'s finding that the U45 fix is a closed **list**,
