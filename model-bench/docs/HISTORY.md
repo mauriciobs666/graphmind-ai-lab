@@ -2,6 +2,108 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-08 — Impl-review Pass 10 fix round: the clamp stops laundering non-finite bounds
+
+**What:** the last pass of `docs/reviews/small-model-benchmarking-impl.md` (gated as `## Pass 11`,
+being renumbered to `## Pass 10`) against `93b0e42` — **N4** (major) and **N5** (minor), both in
+scope and both closed. `modelbench/stats.py`, `tests/test_stats.py`. **560 → 577 tests**,
+`.venv/bin/ruff check .` clean, **6 mutations plus one forward-compatibility probe**, run one at a
+time. P8-1 remains held, blocked on `-ml` §3.4 Rule 4a's own unit.
+
+**N4 (major) — `+inf`, or a non-finite difference, passed every guard and printed as a real
+interval.** Rule 4's four precondition-4 guards close the *below* side of `>= 1.0` by construction.
+Nothing closed the *above* side or the data. `not inf >= 1.0` is `False`, so `+inf` satisfies the
+rule the note states; `sqrt(inf)` is `inf`; `_widen` returns `(-inf, +inf)`; and the clamp returns
+the support bounds. All reproduced against the untouched tree before any fix:
+`envelope_arms((4,5,3,0), design_effect=inf)` → `((-1.0, 1.0), (-1.0, 1.0))`;
+`verdict(...)` at `deff=inf` → **`ci = (-1.0, 1.0)`, `bound_by = ('MOVER-D', 'MOVER-D')`**, a
+full-support interval attributed to a named instrument; and one `nan` among `diffs` →
+`paired_cluster_bootstrap(...)` → `(-1.0, 1.0)`, on a surface with **no guard on its data at all**.
+
+**The mechanism is the clamp, not the predicate.** Every comparison with a NaN is `False`, so
+`max(-1.0, nan)` is `-1.0` and `min(1.0, nan)` is `1.0`: the clamp converts *no number* into *the
+widest honest number*, silently and in the direction that prints. Unclamped, the same input returns
+`(nan, nan)` — visibly wrong. That contrast is what identifies the launderer, and both clamp
+settings are swept in the test for exactly that reason.
+
+**Fixed with a result guard in `_widen`, and this was the round's design call.** The alternative was
+an input guard: extend the four precondition-4 predicates to reject `+inf`. Rejected, for two
+reasons. **(1) Completeness.** The harm is one transformation — a non-number becoming a plausible
+bound — and it happens at one place. A guard there closes every upstream cause, including ones
+nobody has enumerated; an input guard closes the causes we happened to think of, and the whole
+finding is that the previous round enumerated three sites and missed the fourth path entirely.
+The module's stated shape is *"written so the anti-conservative version does not typecheck"*, and
+the bad **state** is a laundered bound, not a particular bad input. **(2) Cost.** Extending four
+predicates means also rewriting four messages — each says "must be >= 1.0", which is false for
+`inf` — at four sites, for strictly less coverage: it would not catch a non-finite *difference* at
+all. The guard is on the **result** rather than on `_widen`'s inputs for the same completeness
+reason; it also catches overflow, which no input check does.
+
+**But one guard was not enough, and this is where the fix goes past the reviewed candidate.**
+`paired_bootstrap` does **not** go through `_widen` — it is public, is `-ml` §3.2d's own quantile
+surface, and returns before any widening — so the result guard cannot protect it. Measured, it was
+the worst-looking of them: `paired_bootstrap([nan, 1.0, 0.0, -1.0], ...)` returned **`(-0.6, nan)`**,
+not a pair of `nan`s but a plausible lower bound beside a `nan` upper, which is the shape most
+likely to be read as a rendering glitch over a real interval. The data precondition therefore sits
+on the function that reads the data, where it names itself. Two guards, each owning the precondition
+it actually has.
+
+**It survives Rule 4a — verified, not argued.** Under Rule 4a `envelope_arms` widens with
+`clamp=None` and the clamp moves into the composer. A guard placed *on the clamp* would move with it
+or vanish; this one is on `_widen`'s **result, before the clamp branch**, so it fires on the
+unclamped path too. Simulated the edit — both `clamp=(-1.0, 1.0)` in `envelope_arms` set to
+`clamp=None` — and re-ran the N4 tests: **17 passed**, guard still firing, source restored
+byte-identical. Guarding before the branch is also why the unclamped `sep_z` path is covered, which
+it was not before.
+
+**N5 (minor) — the rejection domain was written out three times.** `[0.5, 0.25, 0.999999, 0.0,
+-1.0, nan]` appeared at three `parametrize` marks; a seventh failure class meant three edits and
+missing one is silent — the sweep still passes, one surface just stops being swept. Now one
+module constant, `_SUB_ONE_DESIGN_EFFECTS`, whose docstring records *why* each of the six is there
+(they partition the rejection domain by predicate-failure mode) and why `-inf` is deliberately
+absent (`not -inf >= 1.0` is `True`, so it is behaviourally the `-1.0` row). Plan §3.9's rule on the
+test side, third application this arc after `_percentile` and `_compose`. Verified by collecting:
+the three sweeps now produce identical id lists.
+
+**The accepting side is under test now.** Both existing sweeps looked only at the rejection side,
+which is precisely where N4 hid — no sweep of *refused* values could ever have reached a value that
+is **accepted**. `test_no_design_effect_ever_yields_a_bound_that_is_not_a_number` asserts the
+invariant across both sides over a mixed domain: for any design effect, a surface either refuses it
+or returns bounds that are numbers. Nothing in between — and "in between" is exactly where the
+laundered `(-1.0, 1.0)` sat, accepted and not a number.
+
+**Line pins — these moved, and there was no line-count-neutral option.** A new refusal is new lines.
+Both guards sit **before** every pinned line, so all ten shift by the same **+31** (31 insertions,
+0 deletions; `stats.py` 1418 → 1449 lines):
+
+| Table | Pin (old) | New | Table | Pin (old) | New |
+|---|---|---|---|---|---|
+| E | `:261` | `:292` | — | `:896` | `:927` |
+| E | `:382` | `:413` | H | `:1168` | `:1199` |
+| E | `:387` | `:418` | H | `:1184-1187` | `:1215-1218` |
+| G | `:413` | `:444` | | | |
+
+Verified by locating each pinned line's exact text in the new file, not by adding 31 by hand; the
+`:1184-1187` block was confirmed intact as a unit. **Re-pinning is the coordinator's to route.**
+
+**Mutation table** — each `cp` aside, mutated, run alone, `cp` back, `diff -q` byte-identical before
+the next. Both guards were verified test-first: 13 of the 17 new ids fail on the shipped source
+before `stats.py` is touched.
+
+| # | Mutation | Result |
+|---|---|---|
+| N4-M1 | `_widen`'s finiteness guard deleted | killed |
+| N4-M2 | that guard moved **after** the clamp | killed — placement is load-bearing, not just presence |
+| N4-M3 | `paired_bootstrap`'s data guard deleted | killed — the path `_widen` cannot see |
+| N4-M4 | `isfinite` weakened to a NaN-only test (`b == b`) | killed — the `inf` half survives a half-fix |
+| N5-M1 | one row dropped from `_SUB_ONE_DESIGN_EFFECTS` | survives by design — collection falls 28 → 24, i.e. **one edit reached all three sweeps**, which is the property N5 asked for and which no assertion can carry |
+| N-M6 | **control** — P8-1's tie-break `<=,>=` → `<,>` | **SURVIVES, as intended** (577 passed) |
+| probe | Rule 4a simulated (`clamp=None` in `envelope_arms`) | 17 N4 ids still pass — the guard survives the in-flight edit |
+
+N4-M2 is the one worth keeping: it proves the guard's **placement** carries the fix. Moved one line
+later, after the clamp, it inspects the laundered value and is blind — green on the defect it exists
+to catch, which is the exact failure mode this arc has been finding all week.
+
 ## 2026-09-08 — Implementation-review Pass 9 fix round: the same respelling at the two remaining sites
 
 **What:** the `## Pass 9` findings of `docs/reviews/small-model-benchmarking-impl.md` against

@@ -181,6 +181,18 @@ def paired_bootstrap(
         )
     if not diffs:
         raise ValueError("paired_bootstrap needs at least one difference")
+    if not all(math.isfinite(d) for d in diffs):
+        # Review N4. The data precondition belongs on the function that reads the data, and this
+        # one is not covered by `_widen`'s result guard: `paired_bootstrap` is public, is `-ml`
+        # §3.2d's own quantile surface, and returns before any widening. One `nan` among the
+        # differences makes every resample mean `nan`, and `sorted()` does not order a NaN, so it
+        # returned `(-0.6, nan)` on a four-element input — not a pair of `nan`s but a plausible
+        # lower bound beside a `nan` upper, the shape most likely to be read as a rendering glitch
+        # over a real interval.
+        raise ValueError(
+            "paired_bootstrap needs finite differences; a non-finite difference makes every "
+            "resample mean non-finite and sorted() does not order a NaN (-ml §3.2d)"
+        )
     rng = random.Random(seed)
     n = len(diffs)
     means = sorted(sum(rng.choice(diffs) for _ in range(n)) / n for _ in range(B))
@@ -253,9 +265,28 @@ def _widen(
     decided by the lower bound. A default of `(-1.0, 1.0)` would fail exactly that way, silently
     and in the direction that prints, which is why this plan refuses one here as it does for
     `designEffect`, `BinaryMetric.unit` and `sampling.seed`.
+
+    **A non-finite bound is refused here, before the clamp, because the clamp is what launders it**
+    (review N4). Every comparison with a NaN is `False`, so `max(-1.0, nan)` is `-1.0` and
+    `min(1.0, nan)` is `1.0`: the clamp converts *no number* into *the widest honest number*,
+    silently and in the direction that prints — and `verdict()` then attributes that full-support
+    interval to a named instrument. The guard is on the **result** rather than on the inputs
+    deliberately. Rule 4's four precondition-4 guards close `design_effect < 1.0` and cannot close
+    this: `not inf >= 1.0` is `False`, so `+inf` satisfies the rule the note states, and `sqrt(inf)`
+    then widens both bounds to infinity. What is violated is not Rule 4's bound but the premise
+    every printed interval rests on — that its bounds are numbers — and that premise is a property
+    of the output, so this is the one place it can be stated once for all three routes in
+    (`design_effect`, the interval, the data behind it) rather than enumerated at each.
     """
     lo, hi = interval
     widened = (point - (point - lo) * scale, point + (hi - point) * scale)
+    if not all(map(math.isfinite, widened)):
+        raise ValueError(
+            f"widening produced a non-finite bound {widened!r} (point={point!r}, "
+            f"scale={scale!r}): a non-finite design effect or difference reached here, and the "
+            "clamp below would have returned the support bounds instead of raising — "
+            "max(-1.0, nan) is -1.0 (-ml §3.4 Rule 4)"
+        )
     if clamp is None:
         return widened
     return (max(clamp[0], widened[0]), min(clamp[1], widened[1]))

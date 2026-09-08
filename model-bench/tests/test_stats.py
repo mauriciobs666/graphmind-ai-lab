@@ -1426,8 +1426,22 @@ def test_both_arms_are_widened_about_the_same_point_by_the_same_factor(table) ->
         assert widened[1] == pytest.approx(min(1.0, point + (base[1] - point) * 2.0))
 
 
+#: Rule 4's precondition-4 **rejection domain**, partitioned by predicate-failure mode rather than
+#: listed: two ordinary sub-1 values, one boundary-adjacent (`0.999999`, which a `<`/`<=` slip
+#: admits), zero (the division hazard), negative (the `sqrt` domain hazard) and `nan` (the
+#: predicate hazard — `< 1.0` is `False` for it). `-inf` is deliberately absent: `not -inf >= 1.0`
+#: is `True`, so it is behaviourally the `-1.0` row.
+#:
+#: **One home, because three copies is one copy and two silent gaps** (review N5, plan §3.9). Every
+#: surface carrying precondition 4 sweeps this same list, so adding a seventh failure class reaches
+#: all of them at once; with the literal written out three times, missing one left that surface
+#: quietly unswept while its sweep still passed. The accepting side of the predicate is not here —
+#: it is `test_no_design_effect_ever_yields_a_bound_that_is_not_a_number`, which is where N4 was.
+_SUB_ONE_DESIGN_EFFECTS = [0.5, 0.25, 0.999999, 0.0, -1.0, float("nan")]
+
+
 @pytest.mark.parametrize("fn", [conservative_envelope, envelope_arms])
-@pytest.mark.parametrize("deff", [0.5, 0.25, 0.999999, 0.0, -1.0, float("nan")])
+@pytest.mark.parametrize("deff", _SUB_ONE_DESIGN_EFFECTS)
 def test_the_envelope_refuses_a_design_effect_below_one(fn, deff) -> None:
     """Review P8-3 — Rule 4's **precondition 4** on the public envelope surface.
 
@@ -1448,7 +1462,7 @@ def test_the_envelope_refuses_a_design_effect_below_one(fn, deff) -> None:
         fn((34, 6, 0, 0), design_effect=deff)
 
 
-@pytest.mark.parametrize("deff", [0.5, 0.25, 0.999999, 0.0, -1.0, float("nan")])
+@pytest.mark.parametrize("deff", _SUB_ONE_DESIGN_EFFECTS)
 def test_the_two_envelope_refusals_name_which_layer_raised(deff) -> None:
     """Reviews P8-3 and N1 — the ordering half of `test_verdict_refuses_a_design_effect_below_one`.
 
@@ -1522,6 +1536,109 @@ def test_an_empty_paired_table_is_refused_by_every_function_that_takes_one(call)
     """
     with pytest.raises(ValueError, match="describes no rows"):
         call()
+
+
+#: `-ml` §3.2d's continuous entry point, reduced to the two arguments N4 is about. `B` is small
+#: because none of these calls is meant to reach the resample.
+def _pcb(diffs, deff, *, clamp=(-1.0, 1.0)):
+    return paired_cluster_bootstrap(
+        diffs, design_effect=deff, B=20, seed=1, clamp=clamp,
+        levels=(LEVEL_CI95_LO, LEVEL_CI95_HI),
+    )
+
+
+def _verdict_at(deff):
+    below = dataclasses.replace(_rp(40), design_effect=deff, n_effective=1.0)
+    return verdict(_outcomes(34, 6, 0, 0), resolving=below, metric_name="m", family=["m"])
+
+
+#: Every public surface that widens. `_widen` is where all three converge, so one guard there
+#: closes the lot — these are the routes a caller actually has to it (review N4).
+_WIDENING_SURFACES = {
+    "envelope_arms": lambda deff: envelope_arms((4, 5, 3, 0), design_effect=deff),
+    "conservative_envelope": lambda deff: conservative_envelope((4, 5, 3, 0), design_effect=deff),
+    "paired_cluster_bootstrap": lambda deff: _pcb([1.0, 0.0, -1.0, 1.0], deff),
+    "verdict": _verdict_at,
+}
+
+
+@pytest.mark.parametrize("call", _WIDENING_SURFACES.values(), ids=list(_WIDENING_SURFACES))
+def test_a_non_finite_design_effect_is_refused_by_every_widening_surface(call) -> None:
+    """Review N4 — the **accepting** side of `>= 1.0`, which no refusal sweep could ever reach.
+
+    `not inf >= 1.0` is `False`, so `+inf` passes all four of Rule 4's precondition-4 guards. Then
+    `sqrt(inf)` is `inf`, `_widen` returns `(-inf, +inf)`, and the clamp's `max(-1.0, -inf)` /
+    `min(1.0, inf)` return the support bounds — so an unbounded design effect printed as
+    `[-100.0, 100.0] pp` and `verdict()` attributed it to a named instrument, returning
+    `bound_by = ('MOVER-D', 'MOVER-D')` on a full-support interval. Measured on all four surfaces
+    before the guard existed.
+
+    The four precondition-4 guards cannot close this and should not try: `>= 1.0` is the rule the
+    note states, and `inf` satisfies it. What is violated is not Rule 4's bound but the premise
+    every printed interval rests on — that its bounds are numbers.
+    """
+    with pytest.raises(ValueError, match="non-finite"):
+        call(float("inf"))
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize("clamp", [(-1.0, 1.0), None], ids=["clamped", "unclamped"])
+def test_a_non_finite_difference_is_refused_rather_than_clamped_into_the_support(
+    bad, clamp
+) -> None:
+    """Review N4 — the same defect entering through the **data**, which has no guard at all.
+
+    `paired_cluster_bootstrap` reads `diffs` from real model output at S2/S3 and checked nothing
+    about it. One `nan` among them made every resample mean `nan`, and the clamp returned
+    `(-1.0, 1.0)`. **Both clamp settings are swept deliberately**: unclamped it returned
+    `(nan, nan)`, which is visibly wrong, and clamped it returned the widest honest-looking
+    interval in the package. That contrast is what identifies the clamp as the launderer, and it
+    is why the guard sits before the clamp rather than after it — an unclamped `nan` is still not
+    an interval, it is just an obvious one.
+    """
+    with pytest.raises(ValueError, match="non-finite"):
+        _pcb([bad, 1.0, 0.0, -1.0], 1.0, clamp=clamp)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_the_bare_paired_bootstrap_refuses_a_non_finite_difference(bad) -> None:
+    """Review N4, the path `_widen`'s guard cannot see — and it was the worst-looking of them.
+
+    `paired_bootstrap` is public, is `-ml` §3.2d's own quantile surface, and does **not** go
+    through `_widen`, so the result guard below does not protect it. It returned `(-0.6, nan)` on
+    a NaN-bearing input: not a pair of `nan`s but a **plausible lower bound beside a `nan` upper**,
+    which is the shape most likely to be read as a real interval with a rendering glitch. The data
+    precondition belongs on the function that reads the data, where it can also name itself.
+    """
+    with pytest.raises(ValueError, match="non-finite"):
+        paired_bootstrap([bad, 1.0, 0.0, -1.0], B=20, seed=1,
+                         levels=(LEVEL_CI95_LO, LEVEL_CI95_HI))
+
+
+@pytest.mark.parametrize("call", _WIDENING_SURFACES.values(), ids=list(_WIDENING_SURFACES))
+def test_no_design_effect_ever_yields_a_bound_that_is_not_a_number(call) -> None:
+    """Review N4 / Pass 10 §3 — the invariant, closed under the predicate rather than enumerated.
+
+    Both design-effect sweeps in this file look only at the **rejection** side, and N4 was hiding
+    on the accepting side, where no list of refused values could reach it. This asserts the
+    property that actually matters and spans both sides: for *any* design effect, a surface either
+    refuses it or returns bounds that are numbers. Nothing in between — and "in between" is
+    exactly where a laundered `(-1.0, 1.0)` sat, accepted and not a number.
+
+    The domain deliberately mixes the accepted, the refused and the specials, so a future guard
+    that changes which side a value falls on cannot silently move it into the gap.
+    """
+    domain = [1.0, 1.0000001, 1.2, 2.0, 4.0, 7.0, 1e6, 1e300,
+              0.5, 0.0, -1.0, 0.999999,
+              float("inf"), float("-inf"), float("nan")]
+    for deff in domain:
+        try:
+            result = call(deff)
+        except ValueError:
+            continue                      # refused is always an acceptable answer
+        bounds = result.ci if hasattr(result, "ci") else result
+        flat = [b for pair in bounds for b in pair] if isinstance(bounds[0], tuple) else bounds
+        assert all(math.isfinite(b) for b in flat), (deff, result)
 
 
 def test_the_envelope_takes_no_diffs_no_b_and_no_seed() -> None:
@@ -1721,7 +1838,7 @@ def test_the_bootstrap_levels_are_keyword_only_with_no_default(fn) -> None:
     assert params["levels"].default is inspect.Parameter.empty
 
 
-@pytest.mark.parametrize("deff", [0.5, 0.25, 0.999999, 0.0, -1.0, float("nan")])
+@pytest.mark.parametrize("deff", _SUB_ONE_DESIGN_EFFECTS)
 def test_paired_cluster_bootstrap_refuses_a_design_effect_below_one(deff) -> None:
     """Rule 4's precondition 4 on `-ml` §3.2d's **continuous** entry point (review N2).
 
