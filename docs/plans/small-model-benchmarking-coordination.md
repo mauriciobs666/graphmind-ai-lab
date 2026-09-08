@@ -1973,6 +1973,16 @@ document that must absorb it and when.
   "arms."** Then `architect` does all four in one pass — the residual pair, Table E's three-state
   scoring table, and DC-12's Table E row — briefed with the note's conclusion. It has agreed to
   this and is standing by.
+- **Pending plan edit, not yet written: a third reason to prefer an exact-text residual over a
+  line pin.** Derived by `architect` from the P8-3 near-miss and worth §7 rule 5's ink — *a
+  residual stated as exact source text is robust to unrelated edits elsewhere in the same file in
+  a way a line pin never is.* Evidence is on the record: P8-3's guard landed at `stats.py:228`,
+  thirty-three lines above the expression Table E pins at `:261`, and moved neither count, where a
+  line pin would have broken outright — and this plan has been bitten by line pins twice already
+  (`test_results.py:507`, and the two v1.10 pinned wrong). **Deliberately not dispatched on its
+  own:** `architect` is at 290k tokens, and this folds into the next plan revision at no extra
+  cost. **Trigger: whichever comes first** — the clamp ruling's four-edit pass, or Table F landing
+  and DC-12's sign-off.
 - **DC-12's end-of-round re-run of all eighteen residuals cannot be signed off until Table F
   lands** — Table F's three read **1** each today, correctly, being the one unstarted S1e table.
   *Blocked on unbuilt work*, the acceptable kind under the stakeholder's rule; not deferred.
