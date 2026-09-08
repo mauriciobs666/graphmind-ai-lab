@@ -157,7 +157,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U39** — M4 fallout: `CpgBuildInfo`'s eight fields are undocumented in the reader-facing manual | `tico` | `a03c8ab6ca4781788` | delivered — held for cross-document check | `c92f35d` + fix round | `analyst` Pass 2 → **approve with suggestions**, all 5 taken as written (`131229d`) | 156k tok / 15 tools |
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
-| **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | gated | `e6fa20c` — 9 files, +895/−44, 12 tests | `analyst` `acc1fdff560984907` Pass 17 → — ; `qa-engineer` pending | 305k tok / 111 tools |
+| **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | gated — fix blocked on U40 | `e6fa20c` — 9 files, +895/−44, 12 tests | `analyst` Pass 17 → **needs changes**, 2 majors (`20e138e`) | 305k tok / 111 tools |
+| **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | in-flight (dispatched 2026-09-08) | `docs/plans/salesperson-ui.md` §5.1 S9 row + §5.2 | `analyst` (Pass 18) | — |
+| **S9a-fix** — per-booking token, `queuePosition` per U40, 2 missed mutants | tbd (fresh) | — | queued (behind U40) | `storefront.py`, `storefront_api.py`, tests | `analyst` re-gate | — |
 | **S9f** — `STOREFRONT_QUIESCE_S`'s docs describe a quiesce that S9a made live | `tico`/`coder` (tbd) | — | queued (held behind Pass 17) | `config.py` + `docs/SERVER.md` prose | `analyst` (fold into Pass 17 re-check) | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
 | **S9c** — the dead-turn latch `turn.lastTurn` and its lifecycle | `coder` | — | queued (behind S9b) | `storefront.py`, `storefront_api.py`, tests | `analyst` | — |
@@ -3127,3 +3129,60 @@ instance from earlier probing. `cobb` reported zero survivors, and it was right 
 two keys it named — but not about the three it had created earlier under different names.
 A completeness claim scoped to what the author remembered creating. `GRAPH.DELETE` is never
 mine, so cleanup is folded into the queued `graph-dba` unit rather than dispatched on its own.
+
+## Pass 17: the window was never about running the turn twice
+
+**Needs changes, two majors, no blockers** — and the reviewer is explicit that neither
+major is the implementer failing the row. Every done-condition S9a owns is met and the
+mutation discipline is the best this chain has produced. Both defects trace to sentences
+that were never written in the plan.
+
+**P17-1 is the finding I would have missed.** I asked whether the check-then-act `409`
+was reachable, framing the exposure as a doubled turn. That framing was wrong.
+`self._turns[pid]` is a **single-slot overwrite**: when two concurrent posts both book,
+the first worker to finish runs `finally: clear_turn` and erases the *second, still
+running* turn's entry. The reviewer reproduced `turn_in_flight("p-a") is False` and
+`_await_quiesce("p-a") is True` **with a turn live on a worker** — so reset-mine goes on
+to delete the thread underneath a running turn, which is exactly the failure
+`_await_quiesce`'s own docstring says the quiesce ordering exists to prevent. The window
+spans a FalkorDB write, so it is milliseconds.
+
+The implementer's judgment splits cleanly in two, and both halves are worth recording. Its
+refusal to re-architect a route the plan specifies was **right**, and I would want it made
+again. Its estimate that the exposure was bounded by a double run was **wrong**, and the
+lesson is that a note offered as "not a defect, just flagging" still earns a reproduction
+before anyone accepts the bound. I had the report, asked the right question, and would
+have accepted the wrong answer without the gate.
+
+**P17-2 landed precisely on the hazard class I forwarded from the provenance chain** —
+a value that is wrong rather than absent. `queue_position = len(self._turns)` is a
+plausible integer under every condition and correct under almost none: at the *delivered
+default* of four workers, a fifth arrival reports `queuePosition: 4` while first in line,
+and it is never recomputed as the queue drains. Passing that shape into the brief cost one
+paragraph and it found a live defect in a different codebase, which is the strongest
+argument yet for treating a defect class as portable rather than local.
+
+**Two live mutants the eleven missed**, both surviving with 280 tests passing: replacing
+`_log.exception(...)` with `pass` — and that log is the *only* evidence a turn died until
+S9c exists — and deleting the `if self._trigger is None: return` guard. Eleven mutations
+is thorough by any standard I have applied in this chain; it was still not a proof of
+coverage, only of the coverage someone thought to test.
+
+**U40 opened, and the fix is blocked behind it.** Both majors are plan defects — §5.2
+specifies `queuePosition`'s *presence* and never its *meaning*, so the code was not free
+to be right, and the reviewer's read is that the S9 row is under-specified rather than
+wrong. A per-booking token checked in `finally` closes the corrupted-invariant half with
+no plan change at all; only making §4.4 measure 1a's "enforced server-side" literally true
+touches the row, by one clause. I sent both to `architect` rather than deciding them here:
+`queuePosition` is a product-visible number that a shopper reads, and picking its
+semantics from the coordinator's chair to unblock an implementer is how a UI ends up
+lying politely. `architect` was told that if either turns out to be genuine scope rather
+than a plan defect, it should stop and hand the question back rather than write a clause
+it does not believe.
+
+**S9f grew and stayed held.** The reviewer confirms `STOREFRONT_QUIESCE_S` is prose-only —
+no S9a code behaviour is wrong — but it is three to four blocks rather than two, including
+`storefront_api.py`'s `presenter_reset_all` comments, which were not in my scan. It also
+names two things S9a made real that belong to *later* steps: reset-all's intake window
+(S10's stop-intake flag, already assigned) and `clear_all_turns()` now wiping entries whose
+workers still run. S9f stays behind the fix unit, since both touch `storefront_api.py`.
