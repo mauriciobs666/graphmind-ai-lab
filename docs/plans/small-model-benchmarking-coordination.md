@@ -1562,6 +1562,18 @@ implementation. It was replaced with two that hold, and the lesson generalised i
 refused with evidence is the independent-review contract working in the direction people forget it
 runs.
 
+**Sixth instance, 2026-09-08, and it sharpens the rule rather than repeating it** *(plan-gate
+P10-3)*. Table H's residuals 2 and 3 are the first **forward** application of §7 rule 5(b)'s third
+form — the rule written to stop exactly this — and they are a trap anyway: they pin the locals
+`lo`/`hi` while `-ml` Rule 4a, which the table explicitly declines to restate, names those
+quantities `u_lo`/`u_hi`, so an implementer doing precisely what the table says reads **0** against
+a stated target of **1**. **The forward application did not fail; an unstated precondition did.** A
+third-form residual is only a check if the table **writes out the text it pins** — otherwise the
+residual is the sole statement of a spelling nobody was told to use. Table C's `:159` row, which
+Table H cites as its own precedent, does write it out; that is the difference. Routed to the
+architect as U57, with the question of whether rule 5(b) should state the condition rather than
+leave it implicit.
+
 **v1.10's own count claims did not reproduce, and v1.11 caught it unprompted:** `ARM_KINDS` was pinned
 at `fingerprint.py:135` and the membership test at `:161`; both are off by two (`:137`, `:162`) —
 confirmed here. A *counts-at-a-named-commit* claim that does not reproduce, **in the very revision
