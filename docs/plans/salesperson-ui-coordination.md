@@ -160,7 +160,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U35** — gate U33's documentation against the delivered code | `analyst` | `ade3c0a46e7781e14` | **accepted** (`a310581`, `9200f1e`) | `docs/reviews/salesperson-ui-impl.md` `## Pass 16` + second look → **approve with suggestions** | — (is the gate) | 263k / 74 |
 | **U37** — close Pass 16's 2 minors + nit, and `salesperson/`'s three `start_demo.sh` references | `coder` (**fresh** — U33 ended at 264k/100) | `a38711140b2ecc8ec` | in-flight (**re-dispatched** — first attempt `a86a189fb8d722846` killed by a rate limit, wrote nothing) | `SERVER.md`, `salesperson/AGENTS.md`, `salesperson/README.md` | teco-verified | — |
 | **S9a** — concurrency core (queue, `409`, queue positions, limiter, shutdown, post path) | `coder` | `a78d8132b59f62b32` | gated — fix blocked on U40 | `e6fa20c` — 9 files, +895/−44, 12 tests | `analyst` Pass 17 → **needs changes**, 2 majors (`20e138e`) | 305k tok / 111 tools |
-| **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | in-flight (fix round) | `d1eaa7f` — plan v1.27 | `analyst` Pass 18 → **needs changes**, 2 majors (`ee9a024`) | 152k tok / 56 tools |
+| **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | gated | `d1eaa7f` + `d01f22e` — plan **v1.28** | `analyst` Pass 18 **needs changes** → Pass 19 re-check out | 334k tok / 71 tools |
+| **U43** — retract the false CPython deadlock fact from `kaizen_team` before it is promoted | `cobb` | `a69330f81cf6048ae` | in-flight (dispatched 2026-09-08) | curator clear + judgment on the method lesson | self-verifying (reads `thread.py`) | — |
 | **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7 | tbd (fresh) | — | queued (behind Pass 18) | `storefront.py`, `storefront_api.py`, both test files, `HISTORY.md` | `analyst` re-gate + `qa-engineer` | — |
 | **S9f** — `STOREFRONT_QUIESCE_S`'s docs describe a quiesce that S9a made live | `tico`/`coder` (tbd) | — | queued (held behind Pass 17) | `config.py` + `docs/SERVER.md` prose | `analyst` (fold into Pass 17 re-check) | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
@@ -3357,3 +3358,53 @@ it.
 by a *plan* amendment before a line of code moves — the drift beat the implementation to the
 punch. Both are briefed into the implementing unit and into the row's obligation, which also
 means S9f's scope now overlaps them; that gets resolved when the fix unit lands, not before.
+
+## v1.28 carries its own tombstone
+
+All six Pass 18 findings taken, none disputed, and the architect confirmed P18-1 from the
+source itself before editing rather than on the reviewer's word. Plan is **v1.28**
+(`d01f22e`): version, prohibition count, tombstone clause and 217 table lines all verified
+here before the commit.
+
+**The self-diagnosis is worth more than the fix.** The architect's own account of how it
+produced a false mechanism: it read `submit()` from source, then asserted `_python_exit`'s
+lock scope **from memory in the same sentence** — *"a half-verified mechanism that reads
+exactly like a verified one."* That is a better description of the failure than anything in
+my brief or the review. Half-verification is not a weaker form of verification; it is
+indistinguishable from the real thing at read time, which is exactly what makes it
+dangerous. The method lesson it recorded — print every function named in a mechanism claim,
+not only the entry point — is the actionable form.
+
+**The rule now defends itself.** Two clauses were added beyond the correction: *"It is
+deliberately not a deadlock claim"*, naming the false mechanism and the measurement that
+killed it, and *"Do not delete this rule on finding a mechanism that does not hold — that
+check has been run."* This is the shape I asked for and I want to be honest that I asked
+for it, so Pass 19 is checking whether it satisfies anyone other than me: the test is
+whether a skeptical engineer who checks the mechanism, finds no deadlock, and reaches for
+the delete key ends up **keeping** the rule. A prohibition's survival is a property of the
+document, not of the author's confidence.
+
+**P18-2's fix names the wrong answer explicitly**, which is the part I would not have
+thought to require. The ordinal is specified as process-global, strictly monotonic, never
+reset, never reused — *and* `len(self._turns)` is named as the plausible-but-wrong reading
+it must not be, because that is what shipped six days ago for the same-shaped number. The
+done-condition pins it rather than trusting the prose: a fresh booking's ordinal must be
+**strictly greater** than a wiped one's, which a size-derived counter fails. A
+specification that merely discourages the wrong implementation is not one; a
+done-condition that fails it is.
+
+**U43 opened — the false fact reached team memory.** The architect had already written the
+deadlock claim into `kaizen_team` as a `:KaizenEntry`, could not delete its own node (a
+curator-only shape), and did the right thing: wrote a correcting entry naming the retracted
+`entryId`, with source lines and the reviewer's measurement, then flagged the original so it
+would not be promoted in the meantime. I dispatched `cobb` to verify the retraction **from
+the source itself** before clearing anything — a deletion should not run on my say-so or the
+architect's — and to judge whether the method lesson deserves promotion beyond raw capture.
+I also told it that if the permission classifier blocks the curator clear, it must stop and
+report the exact refused command rather than work around it; that escalation is the user's
+call, not mine and not cobb's.
+
+That entry is the fourth instance of this coordination's defect class, and the first to live
+in **prose** rather than in a value. A false fact in shared working memory is the worst
+substrate for it yet: unlike a stamp or a marker, kaizen entries are *designed* to be read
+out of context by agents who will not re-derive them.
