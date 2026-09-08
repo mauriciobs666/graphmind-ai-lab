@@ -3,6 +3,33 @@
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
 
+## 2026-09-08 — `falkordb-quirks.md`'s `TIMEOUT` bullet gained the write-side consequences (U20)
+
+- **What:** `cobb`, distilling `analyst`'s `kaizen_team` chunk B (unit U20, entry
+  `d8039ade-c9ae-4be0-83eb-681dc2f0b5d5`), extended the existing "Default `TIMEOUT` is 1000ms —
+  and writes ignore it entirely" bullet rather than adding a new one: the headline was already
+  there, the write-side consequences were not.
+- **Added, all measured 2026-09-08 on module `41811` against a disposable graph
+  (`cobb_u20_scratch`, deleted after):** the re-measured pair that pins the asymmetry (a
+  `CREATE`-ing `UNWIND range(1,20000000)` ran **1.75 s** untouched; a 4-way cartesian `MATCH` over
+  400 nodes was killed at **exactly 1.00 s**); that the only bound on a write is the client's
+  `socket_timeout` and **it does not roll back** (a `retry`-disabled `redis.Redis(socket_timeout=
+  0.5)` raised `TimeoutError` at 0.50 s and all 4 nodes were committed); and — not in the source
+  entry, surfaced by the test — that **a retrying client re-applies the write**: the identical
+  call through a stock `redis.Redis(...)` left **36 nodes** where the query creates 4, because
+  redis-py 8.0.1's default connection carries `Retry(ExponentialWithJitterBackoff(), retries=10)`
+  with `TimeoutError` in its supported set. Closed with why this lab is not exposed by default —
+  `falkordb-py` disables retry — pooled `Connection.retry._retries == 0`, while the
+  `FalkorDB(...).connection` client has no `.retry` and `get_retry()` → `None` (same on 1.6.1 and
+  1.6.2: an object difference, not a version one) — so `falkor-chat`
+  (`db.py:44`) and `cypher-mcp` (`server.py:903`) get one attempt; a helper script reaching for
+  bare redis-py does not.
+- **Why:** the entry's own evidence proved only the first half (that a write outruns the server
+  timeout) and never demonstrated the no-rollback claim it asserted, so it was tested rather than
+  believed — and the test found the sharper hazard.
+- **Files:** `claude/graph-dba/falkordb-quirks.md`. Source disposition:
+  `claude/analyst/kaizen/history.md` (2026-09-08, U20).
+
 ## 2026-09-08 — `falkordb-quirks.md` gained three dialect facts from `analyst`'s raw capture (U19)
 
 - **What:** `cobb`, distilling `analyst`'s `kaizen_team` entries (unit U19,

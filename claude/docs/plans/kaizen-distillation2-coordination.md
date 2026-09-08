@@ -73,7 +73,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U18 | teco chunk C (13: 09-03…09-06) | `a881239125792e0e0` | accepted | `claude/teco/teco.md` (5 in-place sharpenings + 1 new bullet), `skills/agent-standards/claude-code.md` (agentId resolution scope), `claude/teco/kaizen/history.md`+`plan.md` (K-016 → blocking), 3x `MENTIONS` (2 analyst, 1 data-scientist), graph cleared | none → — | 179.1k tok, 68 tools |
 | U18b | teco chunk D (14: 09-07, all arrived after pass open) | `adcb31af6bc3fc428` | accepted | `claude/teco/teco.md` (12 statements from 9 entries, **zero new bullets** — 11 lines changed, 11 removed); `skills/agent-standards/claude-code.md` (2 permission-classifier entries merged); `claude/teco/kaizen/history.md`+`plan.md`; 5 `MENTIONS` edges over 4 entries (3 tdd-engineer, 2 analyst); 10 nodes deleted, 4 `PRODUCED` resolved — **`teco` closed out, 0 produced / 0 mentioned** | none → — | 224.6k tok, 69 tools |
 | U19 | analyst chunk A (12: ≤ 08-30) | `adb247a3e028c0606` (killed by a session rate limit at its first tool call, 09-07; resumed in place by `SendMessage` 09-08 — nothing had landed, all 12 edges intact) | accepted | `claude/graph-dba/falkordb-quirks.md` (3 entries: 2 folded, 1 new regex bullet) + `kaizen/history.md`; `claude/analyst/review-techniques.md` (2, both edits to existing material — one **corrected a wrong import-resolution mechanism the file had been carrying**) + `kaizen/*`; **7 discarded**, 3 of them additionally carrying a false or misattributed claim; 1 `MENTIONS`→`devops`; 11 nodes deleted, 1 `PRODUCED` resolved. **Zero new bullets in any always-loaded prompt** — `analyst.md` and `claude/AGENTS.md` untouched | none → — | 184.9k tok, 50 tools |
-| U20 | analyst chunk B (11: 08-31…09-01 + the first 5 of 09-02) | `a6db6af4910e607bc` (killed by a session rate limit mid-promotion, 09-08; resumed in place by `SendMessage` after the reset — four promotions already on disk, nothing logged, all 11 entries intact; **resumed a second time** to correct five wrong version stamps found at verification) | in-flight | 7 promoted / 4 discarded, all 11 cleared; `claude/analyst/{kaizen/history.md,kaizen/plan.md,review-techniques.md}`, `skills/agent-standards/claude-code.md`, `skills/python-web-quirks/SKILL.md`, `skills/README.md`, `claude/graph-dba/falkordb-quirks.md`, `claude/data-scientist/lm-studio-model-notes.md`, +3 `kaizen/history.md` | teco re-derivation → **substance accepted, stamps returned for fix** | 236.4k tok, 35 tools |
+| U20 | analyst chunk B (11: 08-31…09-01 + the first 5 of 09-02) | `a6db6af4910e607bc` (killed by a session rate limit mid-promotion, 09-08; resumed in place by `SendMessage` after the reset — four promotions already on disk, nothing logged, all 11 entries intact; **resumed a second time**, which corrected a real accessor defect and refuted my stamp finding) | in-flight | 7 promoted / 4 discarded, all 11 cleared; `claude/analyst/{kaizen/history.md,kaizen/plan.md,review-techniques.md}`, `skills/agent-standards/claude-code.md`, `skills/python-web-quirks/SKILL.md`, `skills/README.md`, `claude/graph-dba/falkordb-quirks.md`, `claude/data-scientist/lm-studio-model-notes.md`, +3 `kaizen/history.md` | teco re-derivation → **accepted**; my "wrong stamps" finding was itself wrong (see below), the accessor defect it surfaced was real and is fixed | 236.4k tok, 35 tools |
 | U21 | analyst chunk C (10: the remaining 09-02) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U22 | analyst chunk D (11: 09-03) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 | U23 | analyst chunk E (13: 09-07, arrived after pass open) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
@@ -168,45 +168,63 @@ this. The two writes are independent tool calls, not one transaction; a run
 that dies between them leaves an entry harmlessly duplicated or partially
 resolved, never silently lost. A run that dies before either leaves nothing.
 
-## A verification pass caught fabricated version stamps
+## I proved a negative with a depth-limited scan, and was wrong
 
-U20's report closed with a precise-looking environment table — `fastapi 0.139.0
-/ starlette 1.3.1 / uvicorn 0.49.0 / anyio 4.14.1 / redis-py 8.0.1 /
-falkordb-py 1.6.1`. Every **behavioural** claim built on it re-derived cleanly
-(anyio's limiter at exactly 40 tokens, `NoEventLoopError` with no loop,
-redis-py's default `retries=10` including `TimeoutError`, `proxy_headers=True`,
-FalkorDB killing a 4-way cartesian read at 1.008 s while `TIMEOUT_DEFAULT` is
-0). The **stamps** did not.
+Verifying U20 I reported that its environment table — `fastapi 0.139.0 /
+starlette 1.3.1 / uvicorn 0.49.0 / anyio 4.14.1 / redis-py 8.0.1 /
+falkordb-py 1.6.1` — matched nothing on this machine, and that `fastapi` was
+not installed anywhere at all. **Both claims were false.** All six versions are
+exactly right, in `falkor-chat/server/.venv`, which is the venv U20 actually
+used (every command in its run was prefixed
+`cd falkor-chat/server && ./.venv/bin/python`) and the correct one for
+`python-web-quirks`, whose subject is a FastAPI app.
 
-There is exactly one venv on this machine with `falkordb`/`redis` installed —
-`cypher-mcp/.venv` — and `stat` on its `.dist-info` directories shows every
-package installed **2026-08-19** and untouched since. It holds anyio 4.14.2,
-starlette 1.6.0, uvicorn 0.52.4, redis-py 8.1.0, falkordb-py 1.6.2 — five
-mismatches out of five. And `fastapi` **is not installed anywhere on this
-machine**: no `dist-info`, no importable module, no scratch venv, no container
-image. So the version table cannot have been read off any live environment.
+The cause was entirely in my probes. There are **five** venvs in this repo:
 
-Two consequences worth keeping:
+```
+model-bench/.venv   falkor-chat/server/.venv   deprecated/salesperson/.venv
+mcp-monitor/.venv   cypher-mcp/.venv
+```
 
-- **A correct conclusion can rest on an invented citation.** Every promotion
-  U20 made is substantively right; I re-derived them. Had I checked only the
-  claims and not the environment they were attributed to, the files would carry
-  five wrong stamps and one accessor — `retry._retries == 0` — that raises
-  `AttributeError` on the installed falkordb-py, because redis-py 8.x moved it
-  behind `get_retry()` (which returns `None` here — same conclusion, different
-  expression). A future agent re-deriving from that line gets an exception and
-  no way to tell error from staleness.
-- **This is the failure mode the model-routing rule names, arriving on a
-  full-strength model.** `claude/teco/teco.md` warns that a cheap model will
-  "return a confident, fabricated breakdown" and tells us to demand *only
-  figures directly observed in this run's output*. U20 ran on the inherited
-  model and produced exactly that artifact anyway. The mitigation belongs in
-  every brief whose deliverable cites an environment, not only in briefs routed
-  to `haiku`.
+I searched with `find . -maxdepth 3 -name pyvenv.cfg`, and
+`falkor-chat/server/.venv/pyvenv.cfg` sits at depth **4** — one level past the
+cut, because that venv is nested under `server/` rather than at the component
+root like the other four. I then "confirmed" `fastapi`'s absence machine-wide
+with `find / -maxdepth 8 -name 'fastapi-*.dist-info'`; the real path is at
+depth **11**. Two scans, both truncated just short of the answer, agreeing with
+each other — which is what made the false finding feel corroborated.
 
-**Verification now re-derives the environment, not just the claim** — for the
-remaining chunks, spot-check the versions a report cites against installed
-`.dist-info` before accepting any figure attributed to them.
+Root `AGENTS.md` already states the rule I broke, in the curation section: a
+scan whose purpose is **proving a negative** must be unfiltered. I read that as
+being about `--include` globs and file extensions and did not carry it to
+`-maxdepth`, which is the same filter wearing different clothes. **Any bound on
+a search — depth, glob, path prefix — invalidates a negative result, and a
+second bounded scan does not corroborate the first.**
+
+**What the pass got right, and should keep doing.** The verification was not
+wasted: re-deriving U20's claims *did* surface a real defect the report had not
+flagged — `conn.retry._retries == 0`, written as the check proving the lab is
+safe from retry write-amplification, raises `AttributeError`. My explanation of
+it (a version move in redis-py 8.x) was wrong; the true cause is better, and
+`falkordb-quirks.md` now carries it:
+
+| read off | falkor-chat (1.6.1 / 8.0.1) | cypher-mcp (1.6.2 / 8.1.0) |
+|---|---|---|
+| `FalkorDB(...).connection.retry` | `AttributeError` | `AttributeError` |
+| `...connection.get_retry()` | `None` | `None` |
+| pooled `Connection.retry._retries` | `0` | `0` |
+| plain `redis.Redis` pooled conn | `10` | `10` |
+
+Verified by me on both venvs. The split is **which object you hold** — client
+versus its pooled `Connection` — and is identical across both version pairs, so
+it is not a version fact at all. An `AttributeError` there means you are
+holding the client, not that the driver changed.
+
+**The transferable lesson is about the finding, not the fact.** A verifier who
+re-derives a claim and finds a discrepancy has two candidate explanations —
+the delegate is wrong, or the probe is — and the second deserves the same
+scrutiny as the first *before* the finding is written down. I committed mine
+(`a74735d`) before testing my own instrument.
 
 ## Follow-ups
 

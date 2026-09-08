@@ -36,15 +36,16 @@
 - **Blocked on:** nothing, but it is the analyst-side analogue of `K-016` progressive disclosure and deliberately out of scope for the prompt-waste plan (its finding 6 routes floor-bound files here rather than to cutting rules to reach a number).
 
 ## Parking lot / ideas
-- **No backlog item opened by the 2026-09-08 distillation (U19, chunk A).** All twelve entries in
-  that chunk resolved to a promotion or a discard; none was left unverifiable, so nothing here
-  needs a `K-` number. Dedup check run as required — none of the twelve `entryId`s appears
-  anywhere in this file. Dispositions: `kaizen/history.md`, 2026-09-08.
+- **No backlog item opened by the 2026-09-08 distillation (U19 chunk A + U20 chunk B, 23 entries).**
+  Every entry in both chunks resolved to a promotion or a discard; none was left unverifiable, so
+  nothing here needs a `K-` number. Dedup check run as required for both — none of the 23
+  `entryId`s appears anywhere in this file. Dispositions: `kaizen/history.md`, 2026-09-08.
 - **One finding routed outward, not tracked here:**
   `falkor-chat/docs/plans/oversized-indexed-property-guard-graph.md:205` (`Status: active`, owner
   `graph-dba`) still cites `grep -n RELATIONSHIP scripts/bootstrap_schema.sh` → "no matches" as
   evidence, which `8d7dcfb` falsified on 2026-08-24 (`bootstrap_schema.sh:265`). The document's
-  owner, not `analyst`, decides whether the surrounding conclusion survives.
+  owner, not `analyst`, decides whether the surrounding conclusion survives. Chunk B added nothing
+  to it — no entry in that chunk touches `RELATIONSHIP` constraints or that document.
 - **Re-review vs. `## Pass N` (noted 2026-07-27).** The doc convention (`docs/plans/doc-reference-convention.md` §9.5 rule 5) now rules that a second review of the *same* artifact is a dated `## Pass N` section appended to the existing review, not a new file — which is exactly the "re-review mode" idea below, now with a house rule behind it. If that mode is ever written into the prompt, it must produce `## Pass N`, and the ordinal-on-the-role escape (`x-impl2.md`) is explicitly withdrawn.
 - A severity rubric calibrated on real reviews (examples of blocker vs major from this repo) once a few reviews exist — only if verdicts prove inconsistent.
 - Re-review mode: given a prior review doc + a revised artifact, verify each finding was addressed and append a dated re-review section instead of writing a fresh doc.

@@ -312,6 +312,27 @@ later by commit `8d7dcfb` (K-050 fusion), which added `gconstraint … UNIQUE RE
 PROPERTIES 1 matchId`; the doc, written 2026-08-26, repeated it verbatim and **still carries it**
 (`:205`, re-checked 2026-09-08 against `scripts/bootstrap_schema.sh:265`).
 
+## A document that adds a member to its own taxonomy is swept table-by-table, not changelog-by-changelog
+
+When the artifact under review adds a new member to a taxonomy the document itself defines — a
+new document `<kind>`, a new status token, a new role, a new agent in a routing table — the
+amendment is complete only if **every** table keyed by that taxonomy carries it. Enumerate those
+tables yourself (`grep -n '^|' <doc>`, then read each header row for the taxonomy's key) rather
+than reviewing the sections the amendment's own changelog names: a changelog lists what the
+author thought about, so the tables it omits are precisely the ones that go stale.
+
+Rank the tables before reading them. The highest-value one is any table the document **declares
+another document copies from** — staleness there does not merely leave one table wrong, it
+*inverts the claimed provenance*: the copy becomes the correct version and the declared source
+the stale one, so a later reader reconciling the two edits the wrong file.
+
+Origin: 2026-09-01, a targeted spot-check (not a full re-review) of an uncommitted v1.5 amendment
+to `docs/plans/doc-reference-convention.md`. It added `manuals/` as a recognized `<kind>` in
+§9.2/§9.4/§9.5 but left §9.6's "who performs the `archived` flip, by kind" table without a
+`manuals/` row — while §9.6 itself states that root `AGENTS.md` copies from it, and root
+`AGENTS.md` already carried the `manuals/` → `tico` pairing. Fixed in v1.5.1; that row now reads
+`requirements/*`, `manuals/*`.
+
 ## An untracked plan/review doc has no re-verification baseline
 
 A plan/review doc that was never `git`-committed leaves zero recoverable "before" state for a

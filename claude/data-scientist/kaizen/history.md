@@ -2,6 +2,30 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-08 — `lm-studio-model-notes.md`: `capabilities` is not a tool-calling gate (from `analyst`'s capture, U20)
+
+- **What:** `cobb`, distilling `analyst`'s `kaizen_team` chunk B (unit U20, entry
+  `3f7c1a92-5d64-4b0e-9c31-8ae2f0d47b15`), added one bullet inside the existing `/api/v0/` section
+  — which already listed `capabilities` among the fields `GET /api/v0/models` returns but said
+  nothing about whether to trust it.
+- **The re-derivation strengthened the claim.** Re-ran `curl -s :1234/api/v0/models` on this box
+  2026-09-08 (19 models, six days after the original observation). The entry says the field is
+  unreliable; the measurement says it carries **no discriminating information at all** — every
+  entry that has the key holds exactly `["tool_use"]` and none holds anything else, so it never
+  says *no*. It reports `["tool_use"]` for the embeddings model
+  `text-embedding-qwen3-embedding-0.6b`, and is absent from **four** entries (the entry named two)
+  spanning both kinds: `google/gemma-3-4b` and `google/gemma-3-12b` (`vlm`), `gemma-3-4b-vl-it-…`
+  (`llm`), and a second embeddings model `text-embedding-nomic-embed-text-v1.5`. Presence does not
+  imply a chat model; absence implies nothing. Gate on `type` ∈ {`llm`,`vlm`}. The entry's
+  `loaded_context_length` aside reproduced too (absent from all 19 while `state == not-loaded`)
+  and went in beside it.
+- **Why here rather than in the plan it was about:** the entry was raised against
+  `docs/plans/small-model-benchmarking.md` §3.6, which a concurrent session held for the duration
+  of this unit. The fact now lives where `data-scientist` reads it; whether §3.6's tool-caller
+  refusal changes is that document owner's call.
+- **Files:** `claude/data-scientist/lm-studio-model-notes.md`. Source disposition:
+  `claude/analyst/kaizen/history.md` (2026-09-08, U20).
+
 ## 2026-09-07 — Learnings-graph distillation, chunk C of 3 (U15): 10 entries — 5 promoted, 4 discarded, 1 kept open; the agent is now at zero
 
 - **What:** `cobb` processed the final 10 `data-scientist` `:KaizenEntry` nodes in `kaizen_team`

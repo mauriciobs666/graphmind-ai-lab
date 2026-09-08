@@ -3,6 +3,216 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
+## 2026-09-08 — `kaizen_team` distillation pass 2, chunk B (unit U20): 11 entries, 7 promoted, 4 discarded
+
+`cobb` processed the eleven `analyst`-produced `kaizen_team` entries dated 2026-08-31..2026-09-02
+(`claude/docs/plans/kaizen-distillation2-coordination.md` U20, chunk B of five). Every entry pinned
+by **complete** `entryId` at read, tag, count and resolve. A second verified full-eight-character
+prefix collision sits inside this chunk — `b3f2a6d4-9e1c-4a2b-8f7d-2c6e1a9b5d40` (09-01, settings
+merge) vs. `b3f2a6d4-8c1e-4a7f-9d2b-1e6f5a0c3d7a` (08-29, `conftest.py` fixtures, discarded and
+deleted in chunk A) — different facts, dates and subjects; a `STARTS WITH 'b3f2a6d4'` probe
+returned the 09-01 row only, confirming the 08-29 node is gone. **Eight characters is not a key.**
+Full untruncated text read via `redis-cli --no-raw GRAPH.RO_QUERY`. Every claim was re-derived from
+primary sources — live FalkorDB probes on a disposable graph (`cobb_u20_scratch`, deleted after),
+in-venv construction of a real FastAPI app and uvicorn middleware, a live `curl` of the LM Studio
+catalog, a marker-package import experiment, and fresh `WebFetch` of three Claude Code doc pages —
+never by confirming an entry's own citation. Zero kept open; **zero new bullets in any
+always-loaded prompt** (`analyst.md` and `claude/AGENTS.md` both untouched; `claude/AGENTS.md`
+sits at 2,434 w against its own ~2,500 bar and nothing here needed the headroom).
+
+As in chunk A, most of these were not review doctrine — they were harness mechanics, framework
+behaviour and box facts that `analyst` merely *discovered* while reviewing, so each routed to the
+home that owns its subject rather than the one that produced the note. Only one entry was genuine
+`analyst` doctrine, and it went to the on-demand `review-techniques.md`, not the prompt.
+
+**Promoted (7 entries → 5 files; four are edits to existing material, not new sections):**
+
+  - `e1a2c3d4-5b6f-4a7c-8d9e-0f1a2b3c4d5e` → **`claude/analyst/review-techniques.md`**, new
+    section *"A document that adds a member to its own taxonomy is swept table-by-table, not
+    changelog-by-changelog."* The only entry in the chunk that is review technique. Two halves:
+    enumerate the taxonomy-keyed tables yourself (`grep -n '^|' <doc>`) instead of reviewing the
+    sections the amendment's changelog names; and rank them, because a table the document declares
+    another document **copies from** does not merely go stale — it **inverts the claimed
+    provenance**, so a later reader reconciling the two edits the wrong file. The instance is
+    closed, which is why only the rule was promoted: `docs/plans/doc-reference-convention.md` is
+    now **v1.5.1** and its own changelog credits this finding ("Major (§24), fixed"); §9.6's row
+    reads `requirements/*`, `manuals/*` (`:1590`), matching root `AGENTS.md`.
+  - `b3f2a6d4-9e1c-4a2b-8f7d-2c6e1a9b5d40` → **`skills/agent-standards/claude-code.md`**, new
+    bullet placed **immediately before** the existing "Placement" bullet in `## Hooks`, so the run
+    reads *how files combine* → *where to put your rule*. Re-verified against
+    `code.claude.com/docs/en/settings` (fetched 2026-09-08), which carries the entry's quote
+    verbatim, plus the five-level stack and a whole `### Lists merge instead of overriding`
+    subsection. **The promotion added three things the entry lacked.** (1) The four exception keys
+    that do *not* merge (`fallbackModel`, `modelPicker`, `availableModels`, `modelSettings`).
+    (2) The explicit fall-through consequence the entry only implied — a key a higher file *omits*
+    resolves to the next file that sets it, which is exactly the question the entry was written to
+    answer. (3) **The correction that matters: merging is not winning.** `code.claude.com/docs/en/
+    permissions` states *"Rules are evaluated in order: deny, then ask, then allow. The first match
+    in that order determines the outcome, and rule specificity doesn't change the order"* — so the
+    unioned list is then evaluated by **rule type**, and an `allow` in `settings.local.json` cannot
+    beat an `ask` in the shared project file despite the local file's higher precedence. Read
+    alone, "list keys merge across files" invites exactly the wrong inference, and it bears
+    directly on the adjacent U18b classifier entry and the Placement bullet it now precedes.
+  - `e1f8a2c4-3b6d-4a2e-9c1f-7d5e8a0b3f42` → **`skills/agent-standards/claude-code.md`**, sharpened
+    in place. Mostly already promoted (the file has carried the toggle since the 2026-09-01 Gen 4
+    work, at two places, with a richer account of the failed live test). Two residuals were worth
+    the edit, both re-verified 2026-09-08: the file's quote was **truncated** at *"in every kind of
+    session,"* and the real sentence ends *"…and whether or not fork mode is on"*; and the
+    docs inconsistency the entry flagged **still holds** — `/docs/en/env-vars` does not list
+    `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` at all, while it *does* document the opposite lever
+    `CLAUDE_AUTO_BACKGROUND_TASKS`, so a reader who searches only the reference page concludes no
+    disable toggle exists. Dropped from the entry: its closing clause blaming a prior `cobb`
+    investigation for overlooking the lever — provenance, not rule.
+  - `d78fbe9e-b7fa-40dc-886a-d0694ccd631b` → **`skills/agent-standards/claude-code.md`** §
+    "Bash tool environment", folded into the existing shell-shadowed-`find`/`grep` bullet as a
+    third instance. Re-derived: `type rg` → a function that `exec -a rg`s
+    `${CLAUDE_CODE_EXECPATH:-…/claude}` with a `command rg` fallback; `which rg` prints nothing and
+    exits 1 while `rg …` works. The promoted framing separates it from its two siblings — `find`
+    and `grep` wrap *different tools* (`bfs`, `ugrep`) so their hazard is **behavioural**, whereas
+    `rg`'s is **detection**: any check or plan done-condition gating on `which <tool>` reports
+    ripgrep as not installed here (`type` and `command -v` both see it; `which` is the one that
+    can't). **The entry's second half was discarded, not promoted** — `--glob '!docs/**'` being
+    root-anchored is documented ripgrep/gitignore glob semantics (a pattern containing a slash
+    anchors to the root), and the review lesson it drove is already carried a fortiori by
+    `analyst.md`:84 ("a plan's prescribed acceptance-check command is a claim too — run it verbatim
+    before approving"), which needs no second illustration in an always-loaded prompt. The
+    mechanism reproduces; **the entry's counts do not, and are stale rather than wrong** — its
+    36/21/15 was measured 2026-09-02, and today `rg -n 'salesperson/' --glob '!docs/**'` returns
+    66 lines of which 28 are under a `*/docs/` path, against 40 for `--glob '!**/docs/**'`
+    (the `salesperson-ui` work landed in between). `rg --files --glob '!docs/**' | grep -c /docs/`
+    = **246**; the same with `'!**/docs/**'` = **0**.
+  - `19690317-a178-48fc-bbbd-a4dead3ee564` → **`skills/python-web-quirks/SKILL.md`**, split in two
+    because the entry bundles a framework fact with a framework fact, neither of them
+    falkor-chat-specific despite the entry's title. Both re-derived in `falkor-chat/server/.venv`
+    (fastapi 0.139.0, starlette 1.3.1, uvicorn 0.49.0, anyio 4.14.1, redis-py 8.0.1, py 3.12.3).
+    (a) **The anyio half sharpened an existing sentence in place** — the `BackgroundTasks` section
+    already said "roughly 40 concurrent worker threads by default"; it now states the measured
+    `total_tokens == 40`, that it is settable, and the operative constraint the hedge was hiding:
+    `current_default_thread_limiter()` is **event-loop-scoped** and raises
+    `anyio.NoEventLoopError` outside a running loop, so a bump written at import or in a `main()`
+    preamble dies rather than applying — "raise the limiter at startup" has not yet said *which*
+    startup. (b) **The uvicorn half is a new section, and the verified half is not the half the
+    entry leads with.** Confirmed: `Config` defaults `proxy_headers=True` and resolves
+    `forwarded_allow_ips` to `os.environ.get("FORWARDED_ALLOW_IPS", "127.0.0.1")`; `::1` is not in
+    that trust list. Driving `ProxyHeadersMiddleware` directly, a **loopback peer that sends any
+    `X-Forwarded-For` is rewritten away from loopback** — peer `("127.0.0.1",1234)` + XFF
+    `203.0.113.9` → the app sees `("203.0.113.9", 0)` — unconditionally, with no proxy in the
+    picture. That kills a `client == "127.0.0.1"` gate on its own. **What I dropped is the entry's
+    word "fully invertible":** the other direction did *not* reproduce — a remote peer claiming
+    `X-Forwarded-For: 127.0.0.1` stays remote, because `_TrustedHosts.get_trusted_client_address`
+    walks the header **right-to-left and returns the first untrusted host**, so an appending proxy
+    defeats an attacker-supplied left-hand entry. The spoof needs `forwarded_allow_ips="*"` or a
+    proxy that passes client-supplied XFF through. Both directions are in the section, labelled.
+  - `3f7c1a92-5d64-4b0e-9c31-8ae2f0d47b15` → **`claude/data-scientist/lm-studio-model-notes.md`**,
+    new bullet inside the existing `/api/v0/` section (which already listed `capabilities` among
+    the returned fields but said nothing about trusting it). Re-derived six days on, same box,
+    `curl -s :1234/api/v0/models`, 19 models — and the re-derivation **strengthened** the claim.
+    The entry says the field is unreliable; the measurement says it carries **no discriminating
+    information at all**: every entry that has the key holds exactly `["tool_use"]` and none holds
+    anything else, so the field never says *no*. It says `["tool_use"]` for the embeddings model
+    `text-embedding-qwen3-embedding-0.6b`, and it is absent from **four** entries (the entry named
+    two), spanning both kinds — `google/gemma-3-4b` and `google/gemma-3-12b` (`vlm`),
+    `gemma-3-4b-vl-it-…` (`llm`), and a second embeddings model
+    `text-embedding-nomic-embed-text-v1.5`. So presence does not imply a chat model and absence
+    implies nothing; gate on `type` ∈ {`llm`,`vlm`}. The entry's `loaded_context_length` aside also
+    reproduced (absent from all 19 while `state == not-loaded`) and went in beside it. **Routed to
+    the notes file, not to the plan it was about** — `docs/plans/small-model-benchmarking.md` §3.6
+    is held by a concurrent session and was out of bounds for this unit; the fact is now where
+    `data-scientist` reads it, and the plan-side change is someone else's call.
+  - `d8039ade-c9ae-4be0-83eb-681dc2f0b5d5` → **`claude/graph-dba/falkordb-quirks.md`**, sharpened
+    in place. **The entry's headline was already documented** — the existing bullet has said
+    "Default `TIMEOUT` is 1000ms — and writes ignore it entirely" since before this entry was
+    written. Re-measured anyway on module `41811` (`TIMEOUT 1000`, `TIMEOUT_DEFAULT 0`,
+    `TIMEOUT_MAX 0`): the entry's own write query ran **1.75 s** untouched, and a 4-way cartesian
+    `MATCH` over 400 nodes was killed with `Query timed out` at **exactly 1.00 s**. What was **not**
+    documented is the entry's second clause — and the entry's own evidence never demonstrated it
+    either, so it had to be tested rather than believed. It holds: a
+    `redis.Redis(socket_timeout=0.5, retry=Retry(NoBackoff(),0), retry_on_timeout=False)` client
+    raised `redis.exceptions.TimeoutError` at 0.50 s on that write and **all 4 nodes were
+    committed** — there is no cancel path. **The test also surfaced something neither the entry
+    nor the file had:** the *same* call through a stock `redis.Redis(...)` left **36 nodes** where
+    the query creates 4, because redis-py 8.0.1's default connection carries
+    `Retry(ExponentialWithJitterBackoff(), retries=10)` whose supported set includes
+    `TimeoutError` — a non-idempotent write over a short client timeout multiplies silently. The
+    lab is not exposed by default and the reason is worth recording: `falkordb-py` disables retry
+    — its pooled `Connection` reports `retry._retries == 0` while the `FalkorDB(...).connection`
+    client has no `.retry` at all and `get_retry()` → `None` (verified on falkordb-py 1.6.1 and
+    1.6.2 alike, so an object difference, not a version one) — so `falkor-chat`
+    (`db.py:44`, `FALKORDB_SOCKET_TIMEOUT` default 10 s) and `cypher-mcp` (`server.py:903`) both
+    get one attempt; a helper script reaching for bare redis-py does not inherit that.
+
+**Discarded (4 — each already covered, at least a fortiori, by something that also covers a case
+the entry misses; two additionally lead with a mechanism that is wrong):**
+
+  - `a3f1c2b4-6e8a-4b2f-9d7c-1e5f8a0b2c3d` (editable install maps `falkorchat`) — **its lead clause
+    states the mechanism chunk A refuted.** "…whose finder maps `falkorchat` straight to the live
+    source dir **regardless of PYTHONPATH**" is the finder-beats-`sys.path` model that
+    `review-techniques.md` was carrying wrongly until chunk A corrected it; only the entry's
+    subordinate clause ("a PYTHONPATH override only wins if cwd is NOT `server/` itself") and its
+    evidence are right. Re-derived today with a marker package under `env -i`: `sys.meta_path` is
+    `[BuiltinImporter, FrozenImporter, PathFinder, _EditableFinder]`, and `import falkorchat`
+    resolved to the **real** source from cwd `falkor-chat/server` with `PYTHONPATH=<shadow>`, to the
+    **shadow copy** from the repo root and from `/tmp` with the same `PYTHONPATH`, and to the real
+    source from the repo root with `PYTHONPATH` unset — i.e. cwd → `PYTHONPATH` → the finder's
+    hardcoded absolute `MAPPING`, exactly as the corrected file states. **A methodology note worth
+    keeping:** the first run of this check appeared to *refute* the correction, and the refutation
+    was a bug in my own harness — `cd` persists across commands inside one Bash call, so the
+    "repo root" arm silently ran from `server/` too. Isolating each invocation in its own subshell
+    reproduced the corrected order first try. Discarded because `review-techniques.md`
+    § "Verifying an uncommitted diff without mutating the working tree" (a) already carries the
+    full three-step order **and** both consequences, including the operational rule this entry
+    exists for.
+  - `a3f0c8e2-2b1d-4e6a-9c7f-1d8b6a5e4c3f` (repo-root `.mcp.json` is git-tracked) — true
+    (`git ls-files .mcp.json` → tracked; `git check-ignore` → exit 1; last touched by `59a03c4`),
+    and already covered a fortiori by `skills/agent-standards/claude-code.md` § "Scopes,
+    precedence, and the approval gate", whose scope table labels `project` scope
+    "**`.mcp.json` at the repo root** … the team, version-controlled". The table also supplies the
+    **answer** the entry only asks for: `local` scope (`~/.claude.json`, "you, this project —
+    **untracked**") is the per-session, non-committed place for exactly the sandbox-provisioning
+    entries the reviewed plan proposed adding to the tracked file. Spelling out the inference in a
+    900-line reference the reviewer already loads is restatement, not coverage.
+  - `f3a1c2e4-9b7d-4e2a-8c6f-1d5e7a9b3c02` (prefer file-scoped `pytest -q tests/test_llm.py`) —
+    **its mechanism is wrong in the same way chunk A's `wf_repo` entry was.** The wipe does not run
+    "at teardown": `tests/conftest.py`'s `wf_repo` is a plain return fixture whose body runs
+    `db.reference_graph(conn).query("MATCH (n) DETACH DELETE n")` **before returning**, i.e. at
+    setup, exactly as `falkor-chat/docs/SERVER.md` §1.7 already documents ("at fixture **setup**
+    … the wipe never runs at teardown, [so] a finished pytest session leaves the *last* workflow
+    test's own published defs sitting in `reference`"). The consequence and the re-seed obligation
+    are documented twice over — SERVER.md §1.7 plus `falkor-chat/AGENTS.md`:108-111 — and SERVER.md
+    additionally gives the strictly safer form the entry never reaches for
+    (`pytest --collect-only -q`, no connection and no writes). The residual advice ("run only the
+    file you changed") follows directly from the documented mechanism; `tests/test_llm.py` requests
+    no `wf_repo`/`conn` and collects 55 tests, matching the entry. Verified by reading, **not** by
+    running the suite — running it is the hazard.
+  - `7e3b1c4a-9f52-4d18-b0a6-2c5d8e114f37` (FastAPI 0.139 `_IncludedRouter`) — already promoted, and
+    `skills/python-web-quirks/SKILL.md` § "Asserting over a FastAPI app's route table" carries it
+    **richer** than the entry: the opaque wrapper and the zero-paths reading, the prefix living on
+    `route.include_context.prefix` while the inner `.path` stays pre-prefix, nested composition,
+    plus three things the entry has not — the false-green framing (the naive assertion is
+    *unfalsifiable*, not merely wrong), the `Mount`/`Host` entries that break a flatten, and the
+    positive-control rule. Re-derived from a synthetic app rather than `create_app` (whose module
+    is dirty in another session's tree): `app.routes` = 4 `Route` + 1 `_IncludedRouter`,
+    `getattr(inc, "path", "<none>")` → `<none>`, `include_context.prefix` → `/shop/api`, inner
+    `.path` → `/join`, `app.openapi()["paths"]` → `/shop/api/join`.
+
+**`MENTIONS` tags added: none.** Every one of the eleven resolved to its home this pass — the
+seven promotions landed in the owning agent's or skill's file directly, and the four discards are
+covered where they already sit — so a tag would have created empty work in another agent's queue
+rather than cross-agent visibility, the same judgement chunk A applied. The pre-existing
+`MENTIONS`-only `analyst` entries from earlier units were out of scope and untouched.
+
+**Clearing:** count-and-decide per `agent-maintenance` skill §5 on each of the eleven. This history
+entry landed on disk and was confirmed **before** any graph mutation — which mattered: this unit
+was interrupted twice by platform limits, and both times the invariant meant nothing was lost.
+
+**One finding routed outward, not fixed here (unchanged from chunk A):** nothing in chunk B bears
+on `falkor-chat/docs/plans/oversized-indexed-property-guard-graph.md` or on `RELATIONSHIP`-type
+constraints — checked by grepping that document for every subject in this chunk (timeout, socket,
+rollback, uvicorn, editable, `include_router`, capabilities, settings.json): zero hits. The stale
+grep-evidence finding chunk A reported there stands exactly as reported, no more and no less
+urgent.
+
+
 ## 2026-09-08 — `kaizen_team` distillation pass 2, chunk A (unit U19): 12 entries, 5 promoted, 7 discarded
 
 `cobb` processed the twelve `analyst`-produced `kaizen_team` entries dated 2026-08-25..2026-08-30

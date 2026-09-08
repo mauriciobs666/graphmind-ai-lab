@@ -10,8 +10,15 @@
 > **`model` frontmatter field re-verified 2026-07-27** against
 > `code.claude.com/docs/en/sub-agents` (accepts `fable` and full model IDs; **defaults to
 > `inherit`**).
-> **Bash tool environment** (shell-shadowed `find`/`grep`) — **observed 2026-07-26/2026-08-08**,
-> not doc-sourced (no official page documents this; see that section for the evidence).
+> **Bash tool environment** (shell-shadowed `find`/`grep`) — **observed 2026-07-26/2026-08-08**;
+> **`rg` added 2026-09-08** — not doc-sourced (no official page documents this; see that section
+> for the evidence).
+> **Settings precedence + list-key merge verified 2026-09-08** against
+> `code.claude.com/docs/en/settings` (§ "Settings precedence", § "Lists merge instead of
+> overriding") and `code.claude.com/docs/en/permissions` (§ "Manage permissions" — deny→ask→allow
+> rule ordering); **`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` re-verified 2026-09-08** against
+> `/docs/en/sub-agents` and `/docs/en/env-vars` (still absent from the latter) — both in the
+> `## Hooks` section.
 > **`initialPrompt` language gotcha** — **observed 2026-08-09**, not doc-sourced (see the
 > main-session section below).
 > **Subagent tool-set/definition-load/AutoMem-index facts** — **observed 2026-08-10**, not
@@ -459,8 +466,13 @@ the always-loaded project memory (`CLAUDE.md`).
      spawns in interactive sessions now run in the background by default"; v2.1.251: "background
      subagents, the default, still show status only"). There is no caller-facing toggle on the
      `Agent`/`Task` tool itself to opt out — only the session-level env var
-     `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, which forces foreground dispatch "in every kind of
-     session," per the same page.
+     `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`: *"Claude Code runs the subagent in the foreground,
+     in every kind of session and whether or not fork mode is on"* (`/docs/en/sub-agents`
+     § "Run subagents in foreground or background", quote re-verified 2026-09-08). **Don't look
+     for it in the env-vars reference — it isn't there** (re-checked 2026-09-08): `/docs/en/env-vars`
+     documents the *opposite* lever, `CLAUDE_AUTO_BACKGROUND_TASKS=1` (force-enable backgrounding
+     after ~2 min), and never names the disable one, so a reader who searches only the reference
+     page concludes no such toggle exists.
   2. **The "Background Subagents" doc section describes *where* a needed prompt surfaces, not
      whether one is needed** ("Claude Code surfaces the prompt in your main session and names the
      subagent that is asking") — and sits immediately adjacent to the parent-mode-inheritance
@@ -535,6 +547,23 @@ the always-loaded project memory (`CLAUDE.md`).
   exact-rule lever as untested rather than as a working fix. **Corollary for anyone re-testing the
   `acceptEdits`-vs-`auto` question (above):** one denial/success pair cannot distinguish a mode
   change from classifier noise — such a test needs repetition, not one trial.
+- **Settings files combine per *key*, never per file — and for a list key they union.** Verified
+  2026-09-08 against `code.claude.com/docs/en/settings` § "Settings precedence" / "Lists merge
+  instead of overriding" and `.../permissions` § "Manage permissions". Five levels, highest
+  first: managed settings → `claude --settings` → `.claude/settings.local.json` → `.claude/
+  settings.json` → `~/.claude/settings.json`. *"When the same key appears in more than one place,
+  Claude Code uses the value from the highest level that sets it"* — a key a higher file **omits**
+  falls through to the next one down, so removing a key (e.g. `permissions.defaultMode` from a
+  project file) resolves to the next file that sets it, not to a built-in default. A **list** key
+  such as `permissions.allow`/`ask`/`deny` is *combined* across files instead of one file's
+  winning, so a local file adds entries without removing a shared file's; four model-list keys are
+  the exceptions and take the whole value from one file (`fallbackModel`, `modelPicker`,
+  `availableModels`, `modelSettings`). **The corollary that bites: merging is not winning.** Once
+  the lists are unioned, rules are evaluated *"in order: deny, then ask, then allow. The first
+  match in that order determines the outcome, and rule specificity doesn't change the order"* — so
+  an `allow` you add in `settings.local.json` cannot beat an `ask` in the shared project file, no
+  matter that your file has higher precedence. Rule-type order decides; file level decides only
+  which value a **non-list** key takes.
 - **Placement, which does hold independently of all that:** a personal permission grant belongs in
   `.claude/settings.local.json`, never in the tracked `.claude/settings.json`, which silently widens
   permissions for everyone using the repo. **Verify the ignore actually covers it** — in this repo
@@ -557,7 +586,13 @@ the always-loaded project memory (`CLAUDE.md`).
   script the shell invokes (`bfs`'s breadth-first traversal order vs. GNU
   `find`'s; `ugrep -G`'s basic-regex flavor vs. POSIX ERE `grep -E` — one
   boundary-heavy alternation pattern produced a different match verdict between
-  the two). When auditing a script's own `find`/`grep`/`sed` logic by running
+  the two). **`rg` is shadowed the same way** (observed 2026-09-08): `type rg` reports a function
+  that `exec -a rg`s `${CLAUDE_CODE_EXECPATH:-$HOME/.local/bin/claude}`, falling back to `command
+  rg` when that binary is missing. Its detection consequence differs from `find`/`grep`'s
+  behavioural one — **`which rg` prints nothing and exits 1** while `rg …` works, so any check,
+  script or plan done-condition that gates on `which <tool>` reports ripgrep as *not installed*
+  here. `type rg` and `command -v rg` both see it; `which` is the one that can't. When
+  auditing a script's own `find`/`grep`/`sed` logic by running
   it, exercise it **through the real invocation** (`bash script.sh`, the actual
   hook entry point) rather than trusting a bare command typed at this shell's
   prompt — the two are not guaranteed equivalent here. (Observed

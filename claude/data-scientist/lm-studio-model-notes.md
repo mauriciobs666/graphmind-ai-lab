@@ -104,6 +104,20 @@ JIT clause added 2026-09-07 from a 2026-09-03 observation).
   `/v1/` route returns only `id`/`object`/`owned_by`. Both routes are effectively free — 19 models
   came back in 1.6-6.5 ms over six calls, `/v1/` no faster than `/api/v0/` — so the choice between
   them is about content, never cost; poll either as often as you like.
+- **Of those fields, `capabilities` is not a tool-calling gate — it carries no discriminating
+  information at all.** Re-derived 2026-09-08 on this box (`curl -s :1234/api/v0/models`, 19
+  models; originally observed 2026-09-02): every entry that has the key holds exactly
+  `["tool_use"]` and **no entry holds anything else**, so the field never says *no*. It says
+  `["tool_use"]` for the **embeddings** model `text-embedding-qwen3-embedding-0.6b`, and it is
+  **absent entirely** from four entries spanning both kinds — two `vlm` and one `llm` chat model
+  (`google/gemma-3-4b`, `google/gemma-3-12b`, `gemma-3-4b-vl-it-…`) plus a second embeddings model
+  (`text-embedding-nomic-embed-text-v1.5`). So presence does not imply a chat model, and absence
+  implies nothing at all. **Gate on `type` ∈ {`llm`, `vlm`}**, and treat `capabilities` as at best
+  a non-blocking hint — a harness that refuses a tool-caller run "because the catalog lacks
+  `tool_use`" will refuse four working models on this box today and admit an embedder.
+  `loaded_context_length` is the same trap one field over: absent from **every** entry while
+  `state == not-loaded` (all 19 were, at both measurements) — read `max_context_length` instead,
+  or load the model first.
 - **The `lms` CLI is not on the WSL `PATH`** (`command -v lms` exits 1), but the Windows binary is
   reachable and works from WSL at `/mnt/c/Users/<user>/.lmstudio/bin/lms.exe`. Confirmed working
   this way: `lms server status --json` (→ `{"running":true,"port":1234}`), `lms ps --json` (→ `[]`

@@ -703,7 +703,39 @@ to the general fact here.
   completion regardless of clause or default. Reads enforce it batch-granularly
   (slightly-over queries can slip through). The client `timeout=` pass-through
   (`g.ro_query(q, params=…, timeout=…)`) works and is **uncapped while
-  `TIMEOUT_MAX=0`**.
+  `TIMEOUT_MAX=0`**. Re-measured 2026-09-08 on module `41811`
+  (`TIMEOUT 1000`, `TIMEOUT_DEFAULT 0`, `TIMEOUT_MAX 0`): `UNWIND range(1,20000000) AS i WITH i
+  WHERE i%5000000=0 CREATE (:Blob {i:i})` ran **1.75 s** untouched, while a 4-way cartesian
+  `MATCH` over 400 nodes was killed with `Query timed out` at **exactly 1.00 s**.
+  - **So the only bound on a write is the client's `socket_timeout` — and it does not roll back.**
+    Measured: a `redis.Redis(socket_timeout=0.5)` client with retries disabled raised
+    `redis.exceptions.TimeoutError` at 0.50 s on that same write, and **all four nodes were
+    committed** — the server had never stopped. There is no cancel path; a client-side timeout
+    abandons the *answer*, not the *work*.
+  - **Worse, a retrying client re-applies the write.** A plain `redis.Redis(...)`'s pooled
+    connection carries `Retry(ExponentialWithJitterBackoff(), retries=10)` whose supported set
+    **includes `TimeoutError`** — so the identical call through one re-issued the non-idempotent
+    write repeatedly and left **36 nodes** where the query creates 4. Non-idempotent Cypher over a
+    short client timeout multiplies silently.
+  - **This lab is not exposed by default: `falkordb-py` disables retry, so a FalkorDB call gets
+    one attempt.** Verified 2026-09-08 on **both** venvs in this repo that carry the driver —
+    `falkor-chat/server/.venv` (falkordb-py 1.6.1 / redis-py 8.0.1) and `cypher-mcp/.venv`
+    (falkordb-py 1.6.2 / redis-py 8.1.0) — with identical results, so this is **not** a version
+    difference. It is an *object* difference, and knowing which object you hold is the whole
+    trick, because the two accessors disagree by design:
+    - `FalkorDB(...).connection` is the **`redis.Redis` client**. It has no `.retry` attribute at
+      all — reading one raises `AttributeError: 'Redis' object has no attribute 'retry'` on both
+      versions above — and `client.get_retry()` returns **`None`**.
+    - That client's **pooled `Connection`**
+      (`client.connection_pool.get_connection()`) is where the policy lives:
+      `conn.retry._retries == 0`. The same accessor on a plain `redis.Redis`'s pooled connection
+      returns **10**, which is the contrast that matters.
+
+    Either reading confirms it; neither is the canonical one. `AttributeError` here means you are
+    holding the client, not that the driver changed. Consequence: `falkor-chat` (`db.py:44`,
+    `FALKORDB_SOCKET_TIMEOUT` default 10 s) and `cypher-mcp` (`server.py:903`) both get one
+    attempt. A helper script or test harness that reaches for bare `redis-py` instead does **not**
+    inherit that, and is the shape to watch for.
 - **`GRAPH.MEMORY USAGE` under-reports vector-index memory** (reports
   `indices_sz_mb: 0` with a live HNSW index holding real vectors) — size
   vector-heavy workspaces from `INFO memory` deltas instead, until fixed upstream.

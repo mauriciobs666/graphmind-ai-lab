@@ -3,7 +3,10 @@ name: python-web-quirks
 description: >-
   Live-verified Python gotchas beyond a quick docs read — mostly web/async, plus several
   pytest/import-timing traps: asyncio fire-and-forget GC-safety; FastAPI/Starlette
-  BackgroundTasks' bounded thread pool vs. unbounded threading.Thread; response_model_exclude_unset
+  BackgroundTasks' bounded thread pool (anyio's default limiter, total_tokens 40, raisable only
+  from inside a running event loop) vs. unbounded threading.Thread; uvicorn defaulting
+  proxy_headers=True so ProxyHeadersMiddleware rewrites scope["client"] from X-Forwarded-For,
+  falsifying any "request came from localhost" gate; response_model_exclude_unset
   dropping defaulted nested-model fields; FastAPI's four built-in doc routes (and which
   constructor kwargs suppress them) falsifying any "registers only these routes" claim, while an
   included router's own routes are absent from app.routes entirely and its include_router(prefix=)
@@ -80,9 +83,22 @@ Verified by reading source: `starlette.background.BackgroundTask.__call__` (Star
 installed alongside FastAPI 0.139.0) routes a **sync** callable through
 `starlette.concurrency.run_in_threadpool` → `anyio.to_thread.run_sync` (anyio 4.14.1). That
 function accepts an optional `limiter: CapacityLimiter | None = None` and, when omitted, falls
-back to anyio's **default limiter** — a bounded pool (roughly 40 concurrent worker threads by
-default). So FastAPI/Starlette's `BackgroundTasks` **throttles** concurrent sync background work
-out of the box.
+back to anyio's **default limiter** — a bounded pool of exactly **40** worker threads
+(`anyio.to_thread.current_default_thread_limiter().total_tokens == 40`, measured 2026-09-08 in
+`falkor-chat/server/.venv`, anyio 4.14.1 — **name the venv when you re-check**: this repo carries
+five, and `cypher-mcp/.venv` and `mcp-monitor/.venv` hold a newer set, anyio 4.14.2 /
+starlette 1.6.0 / uvicorn 0.52.x, with no FastAPI at all).
+So FastAPI/Starlette's `BackgroundTasks` **throttles** concurrent sync background work out of the
+box.
+
+**Raising that ceiling only works from inside a running event loop.** `total_tokens` is settable
+(`limiter.total_tokens = 100` takes effect), but `current_default_thread_limiter()` is
+**event-loop-scoped**: called with no loop running it raises `anyio.NoEventLoopError` (*"Not
+currently running on any asynchronous event loop"*), so a bump written at module import, in a
+plain `if __name__ == "__main__"` preamble, or anywhere else before the server starts, dies rather
+than applying. Put it inside the async lifespan (or any async startup hook). A plan that says
+"raise the limiter at startup" has not yet said *which* startup, and that ambiguity is the whole
+defect.
 
 A bare `threading.Thread(target=fn, ...).start()` has no such bound — every call spawns a new OS
 thread unconditionally, with no ceiling.
@@ -238,6 +254,41 @@ test proving nothing.
   them, so a reader's memory of the hierarchy is exactly the wrong thing to trust. Each such class
   needs its own `add_exception_handler` registration, or the uncovered one escapes as a bare 500
   through the framework's catch-all.
+
+## uvicorn rewrites `scope["client"]` from `X-Forwarded-For` by default — so "is this request from localhost?" is not an authorization check
+
+Verified 2026-09-08 in `falkor-chat/server/.venv` (uvicorn 0.49.0 / starlette 1.3.1; the newer
+`cypher-mcp/.venv` carries uvicorn 0.52.4 / starlette 1.6.0 and was not exercised here).
+`uvicorn.config.Config` defaults
+**`proxy_headers=True`**, and `forwarded_allow_ips` defaults to `None` in the signature but
+resolves in `__init__` to `os.environ.get("FORWARDED_ALLOW_IPS", "127.0.0.1")`. So a stock uvicorn
+runs `ProxyHeadersMiddleware` trusting exactly one peer, `127.0.0.1` — **`::1` is not in it**
+(`"::1" in _TrustedHosts("127.0.0.1")` → `False`).
+
+Driving the middleware directly with a stub app (`trusted_hosts="127.0.0.1"`):
+
+| peer | `X-Forwarded-For` | what the app sees as `scope["client"]` |
+|---|---|---|
+| `("127.0.0.1", 1234)` | *(none)* | `("127.0.0.1", 1234)` |
+| `("127.0.0.1", 1234)` | `203.0.113.9` | **`("203.0.113.9", 0)`** |
+| `("203.0.113.9", 1234)` | `127.0.0.1` | `("203.0.113.9", 1234)` |
+| `("::1", 1234)` | `203.0.113.9` | `("::1", 1234)` |
+
+**The unconditional half — a genuine loopback client is rewritten *away* from loopback the moment
+it sends the header** (row 2), with no proxy in the picture at all. A route gated on
+`scope["client"][0] == "127.0.0.1"` therefore denies a legitimate local caller that happens to
+carry an `X-Forwarded-For`, and the check is a peer-address heuristic rather than an authorization
+boundary. Note the rewritten port is `0`, so a gate keyed on the port breaks too.
+
+**What does *not* follow, and is worth stating because it is the intuitive fear:** a remote client
+cannot simply claim `X-Forwarded-For: 127.0.0.1` and be believed (row 3) — the peer must already
+be trusted. `_TrustedHosts.get_trusted_client_address` walks the header **right-to-left and
+returns the first untrusted host**, so a proxy that *appends* the real peer keeps an
+attacker-supplied left-hand entry from winning. The spoof direction needs a real
+misconfiguration — `forwarded_allow_ips="*"`, or a proxy that passes client-supplied
+`X-Forwarded-For` through instead of appending to it — at which point every entry is trusted and
+the function falls back to `x_forwarded_for_hosts[0]`, the attacker's value. Design against the
+first row of this paragraph, but don't claim the second without checking the deployment.
 
 ## pydantic `Field(min_length=1)` does not reject whitespace-only strings
 
