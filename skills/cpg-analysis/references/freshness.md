@@ -148,7 +148,9 @@ strongest first — the threshold is yours to set given the task at hand:
    commits — to establish an M2-era CPG was stale before its M3 rebuild.)
    **Use `sourceOrigin`, not `sourcePath`** — see Limits. **Both forms need a
    real `parsedAt`/`sourceCommit`**; skip this check entirely for a
-   hand-written marker.
+   hand-written marker — the `builtAt = unknown` shape, *not* a
+   **hand-backfilled** one, which carries a real `sourceCommit` and to which
+   check 2 does apply.
    **A zero result means nothing in two cases**: when `sourceDirty = true`, and
    when `sourceTree` is null while `sourceCommit` is present. The second is a
    source tracked in the index but never committed at capture — `git log
@@ -177,10 +179,23 @@ signal, not the threshold.
   rejected stamp was silent and an `--append` build could leave the *previous*
   marker standing over new content. A marker whose `builtAt` predates content
   you can see in the graph is that shape.) **A hand-authored marker is subject
-  to the same rule**, and nothing exempts it: the next successful `--load`
-  overwrites it wholesale, `NOTE` and `MARKER_ORIGIN` included. A backfilled
-  marker is therefore provisional — it stands exactly until the graph is
-  rebuilt, and whoever rebuilds inherits none of its reasoning.
+  to the same rule**, and nothing exempts it: the stamp writes *every* property
+  on the node — the five hand-authored keys (`MARKER_ORIGIN`,
+  `MARKER_WRITTEN_AT`, `NOTE`, `STATUS`, `RENAMED_FROM`) included, each absent
+  one explicitly to `NULL`. A hand-authored marker is therefore provisional: it
+  stands exactly until the graph is rebuilt, and whoever rebuilds inherits none
+  of its reasoning. **If you rebuild a hand-authored graph, re-write whatever
+  annotation still applies** — the stamp will have cleared it, and the marker
+  is build-scoped by design, so anything durable about the graph or its
+  component belongs in `docs/` rather than on this node.
+  *(Tombstone, 2026-09-08: this rule was documented one commit before it was
+  true. The stamp then wrote only its own eight fields, so an `--append`
+  rebuild left the hand-authored keys standing over freshly captured pipeline
+  values — a marker announcing itself as "NOT a pipeline stamp" while carrying
+  one. The rule was right and the mechanism given for it was not; the mechanism
+  was made true rather than the rule weakened, by closing the stamp's property
+  list in `skills/joern-cpg/scripts/git-provenance.sh`. Re-checked there, not
+  inferred. Don't delete the rule on rediscovering the history.)*
 - **`sourcePath` is a parse root, not a git path.** It is what Joern was
   pointed at — frequently a pruned scratch copy staged to keep `.venv` and
   friends out of the parse. Running it straight through `git log` doesn't

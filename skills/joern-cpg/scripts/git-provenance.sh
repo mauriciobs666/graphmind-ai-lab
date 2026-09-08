@@ -111,11 +111,24 @@ cpg_provenance_capture() {
 #   Echo the Cypher that writes the singleton CpgBuildInfo marker, using
 #   whatever cpg_provenance_capture left in CPG_SOURCE_*.
 #
-#   EVERY property is written on EVERY stamp — an absent one explicitly to
-#   NULL, which REMOVES the property in FalkorDB (verified 2026-09-07 against
-#   the live instance). Without that, an `--append` re-stamp of a graph whose
-#   earlier build had a commit would leave the old SOURCE_COMMIT in place,
-#   now describing a build that no longer exists.
+#   EVERY property ON THE NODE is written on EVERY stamp — an absent one
+#   explicitly to NULL, which REMOVES the property in FalkorDB (verified
+#   2026-09-07 against the live instance). Without that, an `--append` re-stamp
+#   of a graph whose earlier build had a commit would leave the old
+#   SOURCE_COMMIT in place, now describing a build that no longer exists.
+#
+#   That list is CLOSED. Adding a property to this node without adding it here
+#   re-opens exactly the hole above, and that is not hypothetical: the five
+#   hand-authored keys graph-dba writes on a hand-written or hand-backfilled
+#   marker (MARKER_ORIGIN, MARKER_WRITTEN_AT, NOTE, STATUS, RENAMED_FROM)
+#   postdate the original eight and were missing from this list until
+#   2026-09-08. An `--append` rebuild left them standing over freshly captured
+#   pipeline fields, producing a marker that announced itself as "NOT a
+#   pipeline stamp" while carrying one. They are now cleared like the rest.
+#
+#   The invariant: THE MARKER DESCRIBES EXACTLY ONE BUILD AND NOTHING ELSE. A
+#   human annotation on it is build-scoped and dies with the build; anything
+#   durable about the graph or its component belongs in docs/, not here.
 #
 #   <provenance> records HOW the values were obtained, because the consumer's
 #   trust in them differs: `parse-root` (derived from a tracked parse root) ·
@@ -145,5 +158,10 @@ SET b.BUILT_AT = $(_cpg_str "$built_at"),
     b.SOURCE_ORIGIN = $(_cpg_str "${CPG_SOURCE_ORIGIN:-}"),
     b.SOURCE_COMMIT = $(_cpg_str "${CPG_SOURCE_COMMIT:-}"),
     b.SOURCE_TREE = $(_cpg_str "${CPG_SOURCE_TREE:-}"),
-    b.SOURCE_DIRTY = ${CPG_SOURCE_DIRTY:-NULL}"
+    b.SOURCE_DIRTY = ${CPG_SOURCE_DIRTY:-NULL},
+    b.MARKER_ORIGIN = NULL,
+    b.MARKER_WRITTEN_AT = NULL,
+    b.NOTE = NULL,
+    b.STATUS = NULL,
+    b.RENAMED_FROM = NULL"
 }

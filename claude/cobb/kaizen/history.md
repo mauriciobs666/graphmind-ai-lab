@@ -3,6 +3,44 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-08 — U45: closed the freshness stamp's property list, killing the hybrid marker (K-023)
+
+- **What:** Decided the fork `teco` left open — **fix the code, not the prose**. Added
+  `MARKER_ORIGIN`, `MARKER_WRITTEN_AT`, `NOTE`, `STATUS`, `RENAMED_FROM` to `cpg_provenance_stamp`'s
+  `= NULL` list (`skills/joern-cpg/scripts/git-provenance.sh`), making the hybrid marker
+  unrepresentable, and rewrote the docstring: the property list is now stated as **closed**, with the
+  2026-09-08 drift recorded as the reason and the invariant named — *the marker describes exactly one
+  build and nothing else*. Rendered the stamp both ways (populated and all-empty) to confirm the
+  Cypher is well-formed. In `freshness.md`: **reverted my own two `markerWrittenAt` hunks**, which the
+  code fix turns into dead weight — a discriminator for a state that can no longer exist; applied the
+  **tombstone** to the Limits bullet (rule kept, mechanism replaced with the true one, plus a clause
+  recording that the fix was checked at the source so a later reader doesn't delete a correct rule on
+  rediscovering the history); and fixed gate finding **P4-2**, where check 2 still said "hand-written"
+  in its plain sense and so told a `cpg_falkorchat` reader to skip the one check that currently
+  returns an actionable answer. Revisited my previous "`joern-cpg/SKILL.md` needs nothing" judgment
+  and **reversed it** — the stamp's property set changed and the consequence lands on whoever runs a
+  build, which is that section's audience — adding a bullet telling the builder to read a marker
+  before rebuilding and re-annotate after.
+- **Why:** The two options were alternatives, not a sequence: documenting a hybrid that the code fix
+  makes impossible would add prose to a document that has been the site of two false sentences in two
+  weeks. I considered and **rejected** a middle option — clear only the three marker-accountability
+  keys and preserve `STATUS`/`RENAMED_FROM` as graph-scoped facts that survive a rebuild — for a
+  reason worth recording: the real data crosses that boundary. `cpg_deprecated_salesperson`'s `NOTE`
+  contains graph-identity content as well as marker-accountability content, so a partition by *key*
+  would be a partition the *content* violates, and it would trade one clean invariant for a
+  two-bucket rule a future annotator has to classify into correctly and silently loses data on
+  getting wrong. That is the clause-stacked shape K-022 is about. On `teco`'s open question — does a
+  rebuild rightly drop a deliberate human `NOTE` — yes, but not because the note is obsolete:
+  because the node is **build-scoped by design** (`docs/plans/cpg-agent-adoption-graph.md` §1.1
+  defines it as the build stamp; the five hand-authored keys were introduced ad hoc and were never in
+  its schema), and the durable facts have a real home in `docs/` and the manual. The graph copy is a
+  convenience, not the record. On the reverse case — a human annotating a *pipeline* marker — the
+  answer is the same invariant, now stated loudly in both the docstring and `freshness.md` so an
+  annotator knows the annotation is build-scoped and dies with the build.
+- **Plan items:** K-023 ✅ delivered (closed, moved here). K-024 filed for the two out-of-remit
+  documents that still describe the pre-fix shape — `docs/plans/cpg-agent-adoption-graph.md` §1.1
+  (`architect`) and `docs/manuals/graph-ontology.md` field list + gate finding P4-3 (`tico`).
+
 ## 2026-09-08 — Repaired `freshness.md` for the `hand-backfilled` marker, then retracted my own false mechanism claim in the same session
 
 - **What:** Repaired `skills/cpg-analysis/references/freshness.md` after `graph-dba` backfilled the

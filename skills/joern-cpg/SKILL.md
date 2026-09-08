@@ -79,6 +79,16 @@ when you run a build:
   immediately before invoking the pipeline, since capture happens at start, and
   confirm the copy matches its origin (`diff -rq`, modulo the paths you pruned)
   if the build is one others will lean on.
+- **A rebuild erases a hand-authored marker, deliberately.** The stamp writes
+  *every* property on the node, so the five keys `graph-dba` writes on a
+  hand-written or hand-backfilled marker — `MARKER_ORIGIN`,
+  `MARKER_WRITTEN_AT`, `NOTE`, `STATUS`, `RENAMED_FROM` — are cleared to `NULL`
+  with the rest (closed 2026-09-08; before that they survived an `--append` and
+  left a stale note standing over freshly captured fields). The marker
+  describes one build and nothing else. So **read the marker before rebuilding
+  a graph that has one** (`MATCH (b:CpgBuildInfo) RETURN b`) and re-write
+  whatever annotation still applies afterwards; anything durable about the
+  graph or its component belongs in `docs/`, not on this node.
 - **A rejected stamp now fails the run.** `redis-cli` exits 0 on an error reply
   and prints it to stdout, so the stamp is checked for an error reply *and* read
   back — the run fails unless the marker in the graph carries this build's
