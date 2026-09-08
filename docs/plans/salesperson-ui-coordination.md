@@ -161,6 +161,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **Pass 4** — the pairwise shape-set gate: do `freshness.md` and `graph-ontology.md` teach the same set of marker shapes? | `analyst` (**resumed** — wrote m1–m5 and Passes 1–3; the only party holding both sides) | `a98a748e49a559ead` | **accepted — committed `d4214c3`**. `freshness.md` **needs changes** (1 major), `graph-ontology.md` **approve with suggestions**. **Shape sets are two partitions of one set, no omission either way** — proved by enumerating each document's *classification surface* and walking both orderings against the two live markers. **P4-1: the fifth-generation false mechanism, inside the fourth's own fix** | `docs/reviews/cpg-provenance-stamp.md` `## Pass 4` | — (is the gate) | 238k tok / 14 tools |
 | **U45** — P4-1 / K-023: the hybrid fork | `cobb` | `a1cfcb25341f0b0bb` (resumed) | **delivered — committed `29538d6`**. Chose **impossible** and **reverted its own discriminator hunks**; rejected a middle option I had not listed (partition by key) because *the real data crosses that boundary*. Property list stated **CLOSED**, invariant named, tombstone applied. Net **−1** line. P4-2 fixed in passing | `git-provenance.sh`, `SKILL.md`, `freshness.md`, K-023 closed / K-024 filed | `analyst` Pass 5 | 160k tok / 11 tools |
 | **U55** — U47a's Case 3: the fix is a closed **list**, not a closed **set**. Decide where the invariant lives | `cobb` | `aadea04e203b11c4f` | **delivered — committed `0da3eb9`.** Chose *derive the allow-list from the stamp's own assignments* + a stray-key assertion in `pipeline.sh`. **Both load-bearing claims re-run by me**: the refactored stamp emits **byte-identical** output to `HEAD`'s across both cases including quote/backslash escaping, and the stray query on the live marker returns exactly `MARKER_ORIGIN`/`MARKER_WRITTEN_AT`/`NOTE` | `git-provenance.sh`, `pipeline.sh`, `SKILL.md`, `freshness.md`, `skills/README.md`, cobb kaizen | `analyst` — queued | 137k tok / 47 tools |
+| **Pass 5** — gate the whole stamp-closure arc: `29538d6` + `0da3eb9` + `5417f0e`. Priority 1 justifications-not-values; priority 2 *is the stray assertion a regression test or theatre*; priority 3 the silent-erasure warning | `analyst` | `a139a9bc41ccb88ce` | in-flight | `docs/reviews/cpg-provenance-stamp.md` `## Pass 5` | — (is the gate) | — |
 | **U57** — ship the map form now that it is executed rather than doc-sourced; the stray assertion stays and becomes its production regression test | `cobb` | `aadea04e203b11c4f` (resumed) | in-flight | `git-provenance.sh`, `freshness.md`/`SKILL.md` prose, kaizen disposition | `analyst` — queued with U55 | — |
 | **U56a** — delete the graph key `cobb` leaked by probing a nonexistent graph (`GRAPH.QUERY` **materializes**) | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered.** Empty on all three counts before deletion. `diff` against the **U47a-close 25-key listing** is empty — not a bare count, so the concurrent session's own churn is excluded. I re-verified: 25 keys, zero `scratch_graphdba`/`nonexistent` | `GRAPH.LIST` diff | — | 162k tok / 11 tools |
 | **U56b** — execute the `SET b = {map}` claim `cobb` refused to ship on doc evidence alone | `graph-dba` | `a5825012b34ab9a9b` (same) | **delivered — it holds, four ways.** Probe 1: `MARKER_EVIDENCE` (the Case 3 survivor) **gone**, label and singleton intact. Probe 2b: a `NULL` **inside** the map omits the property — so the map mirrors `_cpg_prop`'s structure with five lines deleted. Probe 2a and Probe 3 (`--reset` create path) both correct. Routed **back to `cobb`** → U57, never applied by the validator | executed evidence, `keys(b)` throughout | — | (same run) |
@@ -4424,3 +4425,44 @@ delete it.
 `SOURCE_TREE` `85ddeed…`, `NOTE` 2,245 chars. `graph-dba` diffed against the **U47a-close listing**
 rather than reporting a count, which is what I asked for and the only form that survives a
 concurrent session churning its own scratch keys in the same window.
+
+## U57 shipped, and reversed one of its own claims from twenty minutes earlier
+
+The map form is in. The five `= NULL` lines are **deleted, not relocated** — there is no list at any
+layer now, so a sixth hand-authored key is covered by construction rather than by anyone
+remembering. That is the third mechanism this one rule has had, and the first that was executed
+before it was written down.
+
+**Re-verified by me rather than accepted:** the emitted map literal parses; the adversarial path
+`/tmp/p"q and a"b\c` round-trips intact through FalkorDB; `SOURCE_DIRTY` renders as a real boolean;
+and the assignment-vs-literal nuance reproduces exactly — `keys()` on the **map** returns all eight
+including the NULLs, `keys(b)` on the **node** returns four. That nuance is the kind of thing that
+turns a correct docstring into an apparently-false one for the next person who checks it in the
+wrong place, and `cobb` found it rather than assuming it.
+
+**It reversed a claim it had made twenty minutes earlier, in `0da3eb9`, and said so.** That commit
+recorded that a hand-authored key **stops the next rebuild by name**. Under the map form it does
+not: erasure is silent and total, which is the original rule finally being true. So
+`cpg_falkorchat` will *not* fail its next rebuild — its ten keys become eight with no warning,
+including the 2,245-character `NOTE` `graph-dba` wrote today and the evidence chain
+`freshness.md`'s check 0 leans on. That is the build-scoped design working as designed, and it is
+also the single most likely thing to surprise somebody. `freshness.md` now says it outright instead
+of the opposite.
+
+I am not treating the self-reversal as a defect. A fix that changes behaviour makes its own
+predecessor's prose wrong; catching that within the same arc, in your own commit from twenty minutes
+ago, and sweeping four documents for it, is the process working. The thing I want independently
+checked is whether the **sweep is complete** — a reversal is exactly the shape that leaves a
+consequence-describing sentence standing somewhere the mechanism-describing ones were all found.
+
+**Pass 5 gates the whole arc rather than the last commit**, because the interesting failure here
+would be a claim that was true of `29538d6`, survived `0da3eb9`, and became false at `5417f0e`
+without anyone re-reading it. Its brief leads with justifications-not-values, then asks the question
+I could not settle myself: **is the stray assertion now a standing regression test or theatre?**
+Under a correct replace the allow-list is exactly the set of keys written, so it cannot return a
+row. `cobb`'s argument is that this is precisely its value — it can only fire if the replace itself
+did not happen, which is the *prove-it-in-production-rather-than-assert-it-from-a-doc* property it
+named when it declined to ship on documentation. That argument is good enough that I want somebody
+who did not write it to say whether it survives. A check that can only fire when something
+impossible happens is either the best kind of assertion or dead weight, and the difference is
+whether the impossible thing is reachable.
