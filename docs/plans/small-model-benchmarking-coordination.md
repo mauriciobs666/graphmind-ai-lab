@@ -2042,6 +2042,14 @@ the single point where they get confused — no convention inside either documen
 because each is locally consistent. So: **read the target document's own last heading before
 naming the next one.** One `grep -n '^## Pass' <doc> | tail -1`, every time.
 
+Landed at `5343ac6` — four edits, zero `Pass 11` references left, the anchor matched to the block's
+existing convention, contiguous 1–10. **And the same agent volunteered the thing that mattered more
+than the renumber**: `model-bench/` had gone from clean to carrying the coder's in-flight N4 work
+while it was editing, so it told me to commit **only** the review document and warned that a broad
+`git add` would sweep ungated source into a review-doc commit. It was right, and it is the second
+time on this coordination that a delegate has protected a commit boundary I own rather than assuming
+I would notice.
+
 ## Carried triggers
 
 Not defects and not deferred work — conditions that change a decision if they occur. Each names the
