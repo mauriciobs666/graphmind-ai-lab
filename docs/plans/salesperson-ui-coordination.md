@@ -188,7 +188,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7, P18-6 | `coder` | `a31456adeff4788ea` | **delivered — committed `699ef52`** (7 files, +1032/−136). Suite **2639** teco-verified solo (baseline 2629, +10 net); `ws:acme` 871 intact; `reference` re-seeded. **Tripwire re-measured by me, not taken on report** — injected reach → guard red, file restored to md5. 18 mutations, 1 survivor (M10) which was a **missing test**, now red against it | `storefront.py`, `storefront_api.py`, both test files, `config.py`, `SERVER.md`, `HISTORY.md` | `analyst` **Pass 20 (fresh)** → **needs changes** (`ac28f2c`) — 3 majors, routed to U50/U51/U52; `qa-engineer` held behind them | 286k tok / 114 tools |
 | **U53** — P21-4 (§5.2's summary of the residue is false through two doors its own sibling derivation opens) and P21-5 (an unnamed cost of the chosen placement) | `architect` | `ad44540e7e1aa876e` | **delivered — committed `069f6ae`** — plan **v1.31**. Fixed by **deletion, not rewording**: §5.2 cites the S9 row instead of summarising it, and `grep` now finds one statement of the residue in the whole plan. **Both doors re-verified by me** — cold pool `qsize=1 threads=0`, never ran, `shutdown(wait=True)` back in 0.0000s; warm pool ran the refused item | `docs/plans/salesperson-ui.md` **v1.31** | `analyst` Pass 22 | 99k tok / 53 tools |
 | **U54** — P21-1 (restore the guard's strength without giving up the raise), P21-2 (the false precedent, at two sites), P21-3 (the killing test), P21-6, P21-7. **Resumed, not fresh**: 157k tok / 67 tools is under both halves of the threshold and the guard sentence is its own | `coder` | `a7ebbee7e795fe497` | **delivered — committed `0db9fb3`**. **Guard mutation re-run by me**: injecting a second `RuntimeError` into `get_state` reddens the shipped guard (`Extra items in the left set: 'get_state'`) and passed `d776ca8`'s. Suite **2641/14 teco-verified solo**; `storefront.py` restored by byte-copy to md5 `64be8aca` | `storefront.py`, `test_storefront.py`, `test_storefront_api.py` | `analyst` Pass 22 | 222k tok / 50 tools |
-| **U55** — Pass 22's four findings: P22-1 (the killing test's oracle measures nothing), P22-2 (`set`→`list` site oracle), P22-3 (a self-falsifying `git log -S` instruction), P22-4 (`get_state`'s second call site breaks `_reset_state_unknown`'s documented `504`). **Fresh, not a resume**: U54 sits at 222k tok and every fix is fully specified by the review — and the docstring under P22-1 is one U54 wrote, so resuming it is producer-self-defence | `coder` (fresh) | `a07de4a1e90c2b72e` | in-flight — briefed to mutate against **the design v1.30 rejected** (flag read after `submit`) and to ship a failing-first test for P22-4 | `storefront.py`, `test_storefront.py`, `test_storefront_api.py`, `HISTORY.md` | `analyst` Pass 23 | — |
+| **U55** — Pass 22's four findings: P22-1 (the killing test's oracle measures nothing), P22-2 (`set`→`list` site oracle), P22-3 (a self-falsifying `git log -S` instruction), P22-4 (`get_state`'s second call site breaks `_reset_state_unknown`'s documented `504`). **Fresh, not a resume**: U54 sits at 222k tok and every fix is fully specified by the review — and the docstring under P22-1 is one U54 wrote, so resuming it is producer-self-defence | `coder` (fresh) | `a07de4a1e90c2b72e` | **delivered — committed `fc2b43b`**. Suite **2642/14 teco-verified solo** (baseline 2641, +1 = P22-4's test); `storefront.py` md5 `cb735227` matches its reported value; `reference` re-seeded. **Both mutations re-run by me, not taken on report** — mutant D (flag read moved after `submit`) fails on the **new** `len(_threads)==0` line with the `qsize()` line above it still passing, which is the exact discrimination; reverting the widened `except` reddens P22-4's new test with the `RuntimeError` propagating uncaught. Declined to widen to bare `except Exception`, with its reasoning in the docstring | `storefront.py`, `test_storefront.py`, `test_storefront_api.py`, `HISTORY.md` | `analyst` Pass 23 | — |
 | **Pass 21** — re-gate: v1.30's rule (`395266e`), its implementation (`d776ca8`), P20-2's three sites (inside `f9d23fb`). **Fresh again on the U24 precedent**: Pass 20 prescribed the discriminator that was implemented | `analyst` (**fresh**) | `a3ad2209fae9fb0e1` | **delivered — committed `d26fa36`**. Ran the suite (2640/14, matching my solo number) and restored every file it mutated; `git status falkor-chat/` empty, md5 back to `08daf2ea` |  `docs/reviews/salesperson-ui-impl.md` `## Pass 21` | — (is the gate) | — |
 | **Pass 20** — gate S9a-fix. **Fresh by design**: Pass 17 *prescribed* reserve-then-write, so its author judging this diff is producer-self-review one seat over (the U24 precedent) | `analyst` (**fresh**) | `afc3c09ccd5b50340` | **delivered — committed `ac28f2c`** (+284 lines). Survived **two** rate-limit kills, the second seconds in; resumed on its own transcript both times and lost nothing, because its predecessor artefact was already committed | `docs/reviews/salesperson-ui-impl.md` `## Pass 20` | **needs changes** — 0 blockers, **3 majors**, 2 minors, 3 nits. P17-1/P17-2 closed and closed at the right unit; my four questions all answered (see §Pass 20 below) | 150k tok / 10 tools |
 | **U50** — P20-1 is a **plan** defect: v1.29's S9 row prescribes the unconditional release the implementer faithfully wrote. Fix the release condition, tombstone the false mechanism | `architect` | `a5d8f1e2a1d897af0` | **delivered — committed `395266e`** — plan **v1.30**. Took the reviewer's asymmetry and **rejected its placement**: the flag is read *before* `submit`, not inside its `except`. **CPython mechanism re-verified by me** (`:178` put precedes `:179` adjust; `t.start()` at `:202`; venv 3.12.3; executor built with `max_workers`/`thread_name_prefix` only, so `BrokenThreadPool` is unreachable) | `docs/plans/salesperson-ui.md` **v1.30** | `analyst` Pass 21 | 112k tok / 32 tools |
@@ -4866,4 +4866,33 @@ read that function before routing it, and the promise is there in the source, in
 the docstring P22-1 falsifies is one U54 wrote, and asking an author to re-judge its own
 "this is the only way" sentence is producer-self-review one seat over. That precedent has cost this
 coordination once already (Pass 20).
+
+## The acceptance pass finally runs, after six static ones (2026-09-08)
+
+S9 has been read by four `analyst` passes (17, 20, 21, 22) and repaired by three implementation
+units. **Not one of them ran the system at acceptance altitude.** Every judgement about the
+concurrency core so far has been a static trace — careful, independently repeated, and still
+structurally incapable of catching a mechanism that reads correctly and does not function.
+
+`qa-engineer` (`ad5db7019ebeedac5`) is dispatched against the plan's §5.1 S9 row rather than the
+diff, and briefed explicitly **not** to re-review the code. Its highest-value target is the newest
+and least-exercised surface: `_reset_state_unknown`'s widened `except`, hours old, carrying exactly
+one unit test. One scripted case passing says the scripted scenario holds, not that the state space
+is covered.
+
+I told it the CPG is stale (`85ddeed0…` vs the current `4838e03f…`) rather than let it discover
+that mid-pass, and gave it permission to **stop** rather than reason from a graph I already know
+lies. That is cheaper than a rebuild I do not think a behavioural pass needs.
+
+## U55's two mutations were re-run here, not accepted on report
+
+Mutant D — the flag read moved to *after* `submit`, which is precisely the design v1.30 rejected —
+fails on the **new** `len(_threads) == 0` line while the `qsize()` line immediately above it still
+passes. That is the whole of P22-1 in one measurement: the old oracle cannot see the mutant, the new
+one can. Reverting the widened `except` reddens P22-4's new test with the `RuntimeError` propagating
+uncaught out of `reset_participant`.
+
+`coder` also declined a widening I had not asked about and would not have caught: it refused to make
+the `except` a bare `except Exception`, on the ground that doing so would hide genuine bugs behind
+F8's "unknown", and wrote that reasoning into the docstring rather than only into its report.
 
