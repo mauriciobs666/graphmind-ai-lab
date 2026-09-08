@@ -88,10 +88,14 @@ class PackRef(NamedTuple):
     #: `sampling.seed` (§3.3) — the pack's declared resample seed, and the **only** home for it.
     #: `report.py` carried it as the literal `20260902`, duplicating a manifest field this type
     #: had no room for, so the pack's own declaration could not reach the decision it governs
-    #: (review P3-5). `-ml` §3.2d requires the seed recorded "so a report is reproducible", and on
-    #: the fail-safe path — every comparison, until S2's determinism probe lands — the seeded
-    #: bootstrap is what decides. **No default:** a seed conjured by omission reproduces nothing,
-    #: and it is the same defaulting shape `-ml` §3.4 Rule 2 refuses for the design effect.
+    #: (review P3-5). **Its object is `-ml` §3.2d's continuous-metric bootstrap** — MRR and
+    #: `sep_z`, which have no closed form at any tolerable cost — and no longer the paired binary
+    #: table, whose interval became exact and takes no seed at all (`-ml` v1.11 §3.4 Rule 4, §4
+    #: S1e Table D). P3-5's finding is satisfied rather than reversed: the same predicate, that a
+    #: seed is named only where a resample actually decided, now selects the continuous verdicts.
+    #: **No default:** a seed conjured by omission reproduces nothing, and it is the same
+    #: defaulting shape `-ml` §3.4 Rule 2 refuses for the design effect. **Discriminator:** the
+    #: field stays only while the embedder pack's MRR verdict is a committed deliverable.
     seed: int
 
     @property

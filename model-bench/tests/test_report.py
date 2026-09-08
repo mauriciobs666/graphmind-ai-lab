@@ -876,7 +876,7 @@ def test_a_weaker_basis_in_either_arm_moves_the_report_off_mcnemar() -> None:
     b = run("incumbent", items=list(b.items), aggregates=b.aggregates, basis="assumed",
             fingerprint_fields=model_fields(modelKey="incumbent", packId=PACK_ID))
     md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
-    assert "decided by: cluster-bootstrap" in md
+    assert "decided by: conservative envelope" in md
     assert "design effect 1.00, assumed" in md
     # The label says what the two instruments each did: the interval decides, McNemar vetoes
     # (review B-ML-2). At DEFF = 1.00 the widening is a no-op and the veto is the whole of the
@@ -918,7 +918,7 @@ def test_two_measured_bases_at_deff_one_still_do_not_let_mcnemar_decide() -> Non
             fingerprint_fields=model_fields(modelKey="incumbent", packId=PACK_ID))
     md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
     assert "design effect 1.00, measured" in md
-    assert "decided by: cluster-bootstrap" in md
+    assert "decided by: conservative envelope" in md
     assert "decided by: mcnemar-exact" not in md
 
 
@@ -936,7 +936,7 @@ def test_two_measured_bases_print_measured_not_assumed() -> None:
     assert "design effect 2.00, measured" in md
     assert "assumed" not in md
     # the decision is unchanged: `measured` is still not `by-construction`
-    assert "decided by: cluster-bootstrap" in md
+    assert "decided by: conservative envelope" in md
 
 
 # --- M-5 / M-ML-4: the paired-n intersection, and the trace it must leave -----------------------
@@ -1675,65 +1675,48 @@ def _seed_arms(a_ok: list[bool], b_ok: list[bool]):
     return [arm("cand", a_ok, sum(a_ok)), arm("incumbent", b_ok, sum(b_ok))]
 
 
-def test_the_bootstrap_seed_comes_from_the_pack_and_is_printed_beside_the_instrument() -> None:
-    """Review P3-5 (major) — `report.py` passed `bootstrap_seed=20260902`, a magic literal
-    duplicating the manifest's `sampling.seed` (plan §3.3) that `PackRef` had no field for, so the
-    pack's own declaration could not reach the decision. `-ml` §3.2d requires the seed recorded
-    "so a report is reproducible"; it was in neither the fingerprint nor the report, and on the
-    fail-safe path — which *every* comparison takes until S2's determinism probe lands — the
-    bootstrap is what decides. A reader handed a bootstrap-decided verdict could not reproduce it.
+def test_the_decided_by_bullet_names_which_arm_bound_each_bound_and_quotes_no_seed() -> None:
+    """§4 S1e Table D / `-ml` v1.11 §3.4 Rule 4 — what replaces the seed parenthetical.
 
-    The fingerprint half stays S2's (that is the runner's record, not the reporter's).
+    P3-5's three tests here pinned the retired instrument token, its `(seed N, from the pack's
+    `sampling.seed`)` parenthetical, and the binding of that seed to the number it explained.
+    Nothing on the paired binary path resamples now, so the seed is provenance for nothing on it and
+    the parenthetical is false rather than merely redundant; what the bullet owes instead is the
+    audit Rule 4 publishes — **which arm bound each bound**, deterministic once the resample is
+    gone. `PackRef.seed` itself stays, its consumer moved to `-ml` §3.2d's continuous bootstrap.
+
+    Both halves are asserted. Naming one arm of a two-arm interval was the defect the token rename
+    closes, so the bullet must name *both* arms and say which bound each took; and the seed must
+    be absent from the whole rendered page, not merely from this line — a residual over the
+    retired parameter counts source lines and cannot see a seed that reaches the reader.
     """
     pack = guard_pack(headline=METRIC, verdicts=(METRIC,))._replace(seed=4242)
     a_ok = [True] * 40
     b_ok = [i >= 6 for i in range(40)]
     md = compare_report(_seed_arms(a_ok, b_ok), pack=pack)
-    assert "- decided by: cluster-bootstrap (seed 4242, from the pack's `sampling.seed`)" in md
-    assert "20260902" not in md
+
+    assert "- decided by: conservative envelope (lower bound: MOVER-D; upper bound: MOVER-D)" in md
+    assert "4242" not in md
+    assert "seed" not in md
 
 
-def test_the_printed_seed_is_the_seed_the_interval_was_resampled_at() -> None:
-    """The half the rendered line alone cannot prove, and the one P3-5 is actually about.
+def test_the_decided_by_bullet_names_the_bootstrap_arm_with_the_level_it_was_taken_at() -> None:
+    """The other rendering of the same bullet — the exact arm carries its level.
 
-    Asserting only *"seed 4242"* appears left `bootstrap_seed=20260902` — the literal this finding
-    removes — alive: the report printed the pack's seed over an interval resampled at a different
-    one, which is precisely the unreproducible verdict. So the seed has to be bound to the number
-    it explains.
-
-    Most binary fixtures cannot show it: the percentile bootstrap over ±1/0 unit differences lands
-    on a coarse lattice, and at n=40 the displayed bounds are identical at every seed tried
-    (measured: one distinct rendered interval across seeds 1–39). At **n=12 with b=5, c=3** the
-    lattice is coarse enough for the percentile to move — which is what makes this assertion
-    possible at all.
-
-    **The lower bound moved at note v1.8** (review M-ML-8): the printed interval is the
-    conservative envelope of the resample and MOVER-D, and MOVER-D's −27.1 pp is the more
-    conservative of the two wherever the resample returns −25.0. Measured this session over seeds
-    1–19, the rendered interval is `[-27.1, 58.3]` on 11 of them and `[-33.3, 58.3]` on 8 — so the
-    seed still moves the printed bound on this table, which is precisely the residue M-ML-8(3)
-    describes and which only the closed-form percentile removes.
+    `(a=4, b=5, c=3, d=0)` is the table where the two arms disagree about which is conservative:
+    MOVER-D binds the lower bound at -27.1 pp and the exact paired bootstrap the upper at 58.3 pp,
+    so this fixture renders both arms in one line and is the one that would catch a bullet
+    hard-coding either name.
     """
     a_ok = [True] * 5 + [False] * 3 + [True] * 4
     b_ok = [False] * 5 + [True] * 3 + [True] * 4
-    arms = _seed_arms(a_ok, b_ok)
-    pack = guard_pack(headline=METRIC, verdicts=(METRIC,))
-
-    one = compare_report(arms, pack=pack._replace(seed=1))
-    five = compare_report(arms, pack=pack._replace(seed=5))
-
-    assert "(seed 1, from the pack's `sampling.seed`)" in one
-    assert "(seed 5, from the pack's `sampling.seed`)" in five
-    assert "[-27.1, 58.3] pp" in one
-    assert "[-33.3, 58.3] pp" in five
-
-
-def test_the_seed_is_not_printed_where_no_bootstrap_decided_anything() -> None:
-    """The seed is provenance for an instrument that ran. On the `mcnemar-exact` path no resample
-    happened, so naming a seed there would claim a reproducibility that is not at issue."""
-    md = compare_report(_nested_arms(), pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
-    assert "- decided by: mcnemar-exact" in md
-    assert "seed" not in md
+    md = compare_report(_seed_arms(a_ok, b_ok),
+                        pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert (
+        "- decided by: conservative envelope "
+        "(lower bound: MOVER-D; upper bound: exact paired bootstrap, p=0.975)"
+    ) in md
+    assert "[-27.1, 58.3] pp" in md
 
 
 def test_a_manifest_that_declares_no_resample_seed_is_refused(tmp_path) -> None:

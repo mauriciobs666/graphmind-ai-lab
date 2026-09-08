@@ -324,6 +324,23 @@ _NO_PAIRED_DATA = (
 _NO_PAIRED_DATA_TALLY = " The tally below says where the rows went."
 
 
+def _decided_by_line(v: stats.Verdict) -> str:
+    """The `- decided by:` bullet (`-ml` v1.11 §3.4 Rule 4, §4 S1e Table D).
+
+    On the envelope path it names **which arm bound each bound**, with the exact bootstrap arm
+    carrying the level it was taken at. That audit is what the retired seed parenthetical's place
+    is owed: naming one arm of a two-arm interval, as the retired token did, is M-ML-8's error
+    one layer over, and it was wrong on the 12.6-16.5% of tables where MOVER-D binds both bounds.
+    """
+    if v.bound_by is None:
+        return f"- decided by: {v.decided_by}"
+    lower, upper = (
+        arm if arm == "MOVER-D" else f"{arm}, p={float(level):g}"
+        for arm, level in zip(v.bound_by, (stats.LEVEL_CI95_LO, stats.LEVEL_CI95_HI), strict=True)
+    )
+    return f"- decided by: conservative envelope (lower bound: {lower}; upper bound: {upper})"
+
+
 def _decision(v: stats.Verdict | None, step: stats.HolmStep) -> str:
     """What the family table says happened, so no reader has to re-derive it from a threshold."""
     if v is None:
@@ -681,10 +698,6 @@ def compare_report(
             b_label=arm_names[b.runId],
             alpha_step=step.threshold,
             holm_tested=step.tested,
-            # The pack's declaration, never a literal here: `sampling.seed` is a manifest field
-            # (§3.3) and a second copy in the renderer is a second home for the one number that
-            # makes a bootstrap-decided verdict reproducible (review P3-5).
-            bootstrap_seed=pack.seed,
         )
         computed.append((metric, v, step))
         lines += [
@@ -694,15 +707,14 @@ def compare_report(
             "",
             tally,
             f"- marginal Wilson intervals overlap: {'yes' if v.marginal_overlap else 'no'}",
-            # The seed is named only where a resample actually decided: on `mcnemar-exact` no
-            # bootstrap ran, and quoting a seed there would claim a reproducibility that is not at
-            # issue (review P3-5).
-            (
-                f"- decided by: {v.decided_by} (seed {pack.seed}, from the pack's "
-                "`sampling.seed`)"
-                if v.decided_by == "cluster-bootstrap"
-                else f"- decided by: {v.decided_by}"
-            ),
+            # **No seed parenthetical, and the audit that replaces it** (`-ml` v1.11 §3.4 Rule
+            # 4, §4 S1e Table D). Nothing on the paired binary path resamples any more, so there
+            # is no seed to quote; what the bullet owes instead is *which arm bound each bound*,
+            # which is cheap and deterministic once the resample is gone and makes Rule 4's
+            # mixture legible to a reader instead of inferable only from the code. Naming one arm
+            # of a two-arm interval was M-ML-8's error one layer over, and it was wrong on the
+            # 12.6-16.5% of tables where MOVER-D binds both bounds.
+            _decided_by_line(v),
             "",
             resolving_power_line(rp, pack),
             "",

@@ -41,7 +41,13 @@ green.
 **`stats.py` implements `docs/plans/small-model-benchmarking-ml.md` and no other source.** Every
 formula, constant, threshold, tolerance and verdict string is that note's, cited by section; the
 plan deliberately does not restate them, and neither should this file. Its shape is §3.4's **seven**
-binding rules, written so the anti-conservative version does not typecheck: `resolving_power`'s
+binding rules, written so the anti-conservative version does not typecheck. **`stats.percentile`
+is the only percentile or quantile *estimator* in the package** (`-ml` §11.2, Hyndman-Fan type 1,
+exact-rational level); `results.py` imports that object rather than defining one, since two copies
+is what let `index.csv` compute `latencyMsP95` at the 50th percentile and stay green.
+`exact_paired_quantiles` is not a second one — it is `-ml` §3.4 Rule 4's quantile of the *exact
+multinomial resample distribution*, the same operator on a known distribution rather than on a
+sample. `resolving_power`'s
 `design_effect`/`basis`/`unit_kind`/`alpha_family`/`alpha_mdd` are keyword-only **with no
 defaults**, `min_detectable_difference` takes `n_effective: float` so a raw observation count
 raises, and **Rule 7 is enforced inside `verdict()`** — no path returns `distinguishable` below
@@ -63,10 +69,16 @@ substitute one.
   (nothing the note prints needs it), kept because `b_min` is a function of α; pin it with the
   code's own `floor(x/precision)`, never `floor(x*1000)`, which has no hazard to find.
 - **Nothing that shapes a decision carries a default.** `RunResult.designEffect`/`basis`,
-  `BinaryMetric.unit`, `PackRef.seed` (the pack's `sampling.seed`, which the report both uses and
-  prints) and `holm_steps`' `alpha` are all required: in each case the value a forgetful caller
-  wants is the anti-conservative or unreproducible one, so a default rebuilds gate B-1 at that
-  seam. `resolving_power` refuses `design_effect < 1.0` at construction, not `<= 0` — below 1 it
+  `BinaryMetric.unit`, `PackRef.seed`, `holm_steps`' `alpha`, and both bootstraps' `levels` and
+  `clamp` are all required: in each case the value a forgetful caller wants is the
+  anti-conservative or unreproducible one, so a default rebuilds gate B-1 at that seam. `levels`
+  is `(Fraction, Fraction)` because a `k`-member continuous family's level is `alpha/(2k)`, which
+  no decimal unit expresses, and the conventional `2.5/97.5` is exactly the value that prints a
+  plausible interval beside a family that was never corrected; `clamp`'s `(-1.0, 1.0)` is right
+  for a difference of proportions and false for `sep_z`. **`PackRef.seed`'s consumer is `-ml`
+  §3.2d's continuous bootstrap alone** — the paired *binary* interval is a closed form that takes
+  no seed, so `report.py` neither passes nor prints one, and re-adding a seed parenthetical there
+  would name a resample that does not run. `resolving_power` refuses `design_effect < 1.0` at construction, not `<= 0` — below 1 it
   *inflates* effective *n* and shrinks both printed bounds. The legacy fallbacks live in
   `from_dict` only, where they are §3.4.3 reader rules.
 - **An item's outcome for a metric is *declared*, never inferred.** `ItemResult.scored_outcome`

@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Literal, Mapping
 
 from modelbench.fingerprint import FieldProblem, Fingerprint
+from modelbench.stats import LEVEL_P50, LEVEL_P95, percentile
 
 #: Plan §3.4.3 — a separate integer, never derived from `benchVersion` and never bumped by a
 #: release. It increments only when the required-field set or the on-disk record shape changes in a
@@ -570,14 +571,6 @@ INDEX_COLUMNS = (
 )
 
 
-def _percentile(values: list[float], pct: float) -> float | None:
-    if not values:
-        return None
-    ordered = sorted(values)
-    idx = min(len(ordered) - 1, int(round((pct / 100.0) * (len(ordered) - 1))))
-    return ordered[idx]
-
-
 def _index_row(run: RunResult, valid: bool) -> dict[str, Any]:
     latencies = [i.latencyMs for i in run.items if i.latencyMs is not None]
     metrics = "; ".join(
@@ -596,8 +589,16 @@ def _index_row(run: RunResult, valid: bool) -> dict[str, Any]:
         "armKind": run.armKind,
         "n": len(run.items),
         "headlineMetrics": metrics,
-        "latencyMsP50": _percentile(latencies, 50),
-        "latencyMsP95": _percentile(latencies, 95),
+        # `-ml` §11.10(3): `stats.percentile` is the ONLY percentile in the package and this
+        # module imports *that object* — a second private copy is what let this very row report
+        # `latencyMsP95` at the 50th percentile and stay green (review M27). The emptiness test
+        # stays here rather than inside `percentile`, which raises: whether a latency figure
+        # exists at all is a decision about the run, and on a deterministic arm there are no
+        # timings to take a percentile of. **Both cells still bypass `-ml` §11's two floors**, and
+        # closing that is §4 S2's — every latency cell is copied from the run's own `LatencyBlock`
+        # (§3.5), which does not exist until the runner builds it.
+        "latencyMsP50": percentile(latencies, level=LEVEL_P50) if latencies else None,
+        "latencyMsP95": percentile(latencies, level=LEVEL_P95) if latencies else None,
         "valid": "yes" if valid else "no",
     }
 

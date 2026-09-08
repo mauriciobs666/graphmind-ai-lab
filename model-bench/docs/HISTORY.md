@@ -2,6 +2,64 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-08 — S1e Tables C, D, E and G: one percentile, the closed-form paired interval, and two required parameters
+
+**What:** `docs/plans/small-model-benchmarking.md` **§4 S1e Tables C, D, E and G** (plan v1.16),
+against `-ml` v1.18. `modelbench/{stats,results,report,packs}.py` and
+`tests/{test_stats,test_results,test_report}.py`. **487 → 519 tests**, `.venv/bin/ruff check .`
+clean, **13 mutations run, 11 killed, 2 surviving and both reported**. Tables C and G were applied
+in the mandated order — C first, because Table G's `Fraction` level handed to the shipped
+`_percentile(ordered, pct: float)` reads `Fraction(1, 40)` as `0.025` where that signature means
+`2.5`, a unit error one substitution away from a plausible number.
+
+**Table C — one percentile.** `stats.percentile(values, *, level: Fraction)` replaces both shipped
+`int(round(pct/100 · (X−1)))` copies: Hyndman-Fan type 1, the rank taken as one integer expression
+over the level's numerator and denominator, sorting a copy of its input, refusing an empty sample,
+a `float` level and a level outside `(0, 1]`. Four `LEVEL_*` constants are the whole literal level
+space. `results.py` imports *that object* — asserted as identity, not as equal behaviour, which is
+what kills a second copy that happens to agree. `_index_row` keeps its own emptiness test, because
+whether a latency figure exists at all is a decision about the run; **both index cells still bypass
+`-ml` §11's two floors and closing that is S2's**, when the runner builds the `LatencyBlock` §3.5
+requires every latency cell to be copied from.
+
+**Table G — the bootstrap's levels.** `levels: tuple[Fraction, Fraction]`, keyword-only and
+required, on `paired_bootstrap` and `paired_cluster_bootstrap`, with a transposed pair raising —
+the one error that otherwise returns a plausible *inverted* interval. An all-continuous family with
+`k > 1` takes its Bonferroni correction in the interval and had nowhere to put it.
+
+**Table E — the clamp.** `_widen` and `paired_cluster_bootstrap` take `clamp`, required with no
+default, `None` meaning do not clamp. `[-1, 1]` is correct for a difference of proportions and
+false for `sep_z`; left as literals it printed an upper bound of 1.0 beside a point estimate of
+1.48, the point estimate outside its own interval.
+
+**Table D — the seed retires from the paired binary path.** `conservative_envelope(table, *,
+design_effect)`: no `diffs`, no `B`, no seed, and the `n != len(diffs)` guard retires by being made
+unrepresentable. Its bootstrap arm is now `exact_paired_quantiles`, the exact multinomial resample
+quantile in integer arithmetic — no float tie-break, no Monte-Carlo estimate of an atomic quantile.
+Both published anchors reproduce: `(0, 6, 0, 34)` at DEFF 1.00 renders `[3.2, 29.1] pp` and
+`(4, 5, 3, 0)` renders `[−27.1, 58.3] pp`. `DecidedBy`'s `cluster-bootstrap` becomes
+`conservative-envelope` and every string that named one arm of a two-arm interval is swept; the
+`- decided by:` bullet loses its seed parenthetical and gains the audit that replaces it — which
+arm bound each bound, carried on `Verdict.bound_by`. `PackRef.seed` stays, its consumer moved to
+`-ml` §3.2d's continuous bootstrap.
+
+**Three residual findings, all handed to `architect` and none fixed here.** (1) Table E's two
+residuals go **blind** after a faithful edit: they match the shipped text `max(-1.0, point …)` /
+`min(1.0, point …)`, which the edit necessarily rewrites, so a `clamp[1]` left as the literal `1.0`
+is caught by neither — measured, that half-application passed the whole suite. A test asserting
+both clamp components against an arbitrary `(0.9, 1.5)` stands in its place. (2) Table C's third
+residual is at **2, not its stated 1**, because Table D's mandated closed form is a second `def
+…quantiles`; renaming it to reach 1 would defeat the very property that residual exists to have,
+so the name stands. (3) Table D's first residual is at **1, not 0**: the surviving line is
+`def test_cluster_bootstrap_seed_is_keyword_only_with_no_default`, a substring collision on a test
+for `cluster_bootstrap` — a function Table D explicitly *keeps*.
+
+**Two surviving mutations, both reported rather than papered over.** `>=` → `>` in the atom
+selector is an equivalent mutant on the reachable domain (an exact tie needs `40·cum == n**n`).
+Not widening the exact arm by `sqrt(DEFF)` survived the suite as delivered, because the envelope's
+own widening test sits on `(34, 6, 0, 0)` where MOVER-D binds both bounds; a new test asserts each
+arm's widening separately on the table where the exact arm binds, and kills it.
+
 ## 2026-09-07 — P6-1: the stored `callSurface` shape, made total over invalid records
 
 **What:** `docs/reviews/small-model-benchmarking-impl.md` **`## Pass 6`** finding **P6-1** (minor,

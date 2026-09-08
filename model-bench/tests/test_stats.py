@@ -19,16 +19,24 @@ import pytest
 
 from modelbench.stats import (
     _Z_95,
+    ALPHA_FAMILY,
+    LEVEL_CI95_HI,
+    LEVEL_CI95_LO,
+    LEVEL_P50,
+    LEVEL_P95,
     BootstrapResult,
     DuplicateAnalysisUnit,
     PairedOutcomes,
     Rule7Violation,
     UnattainablePower,
+    _widen,
     b_min,
     cluster_bootstrap,
     conservative_envelope,
     design_effect,
     effective_n,
+    envelope_arms,
+    exact_paired_quantiles,
     floor_clause,
     format_floor_pp,
     holm_steps,
@@ -39,6 +47,7 @@ from modelbench.stats import (
     observable_floor,
     paired_bootstrap,
     paired_cluster_bootstrap,
+    percentile,
     resolving_power,
     unattainable_clause,
     verdict,
@@ -718,25 +727,24 @@ def test_a_design_effect_above_one_moves_the_decision_to_the_bootstrap() -> None
         resolving=_rp(40, deff=2.0, basis="measured"),
         metric_name="m",
         family=["m"],
-        bootstrap_seed=20260902,
     )
-    assert v.decided_by == "cluster-bootstrap"
-    assert "Decided by the cluster-bootstrap CI on the paired difference, widened by " \
+    assert v.decided_by == "conservative-envelope"
+    assert "Decided by the conservative envelope on the paired difference — MOVER-D and the "\
+        "exact paired bootstrap, the wider of the two at each bound — widened by " \
         "sqrt(DEFF)=1.41 for the declared clustering, in conjunction with McNemar's exact test" \
         in v.text
 
 
 def test_an_assumed_basis_also_moves_the_decision_off_mcnemar() -> None:
     """Plan §5 test 12b's fail-safe: a probe that did not run yields `assumed`, and `assumed` must
-    move the decision onto the cluster-bootstrap CI even at a design effect of exactly 1.0."""
+    move the decision onto the conservative envelope even at a design effect of exactly 1.0."""
     v = verdict(
         _outcomes(34, 6, 0, 0),
         resolving=_rp(40, deff=1.0, basis="assumed"),
         metric_name="m",
         family=["m"],
-        bootstrap_seed=20260902,
     )
-    assert v.decided_by == "cluster-bootstrap"
+    assert v.decided_by == "conservative-envelope"
 
 
 @pytest.mark.parametrize("basis", ["assumed", "measured"])
@@ -751,7 +759,6 @@ def test_the_fail_safe_path_names_the_basis_and_not_a_widening_that_did_not_happ
         resolving=_rp(40, deff=1.0, basis=basis),
         metric_name="m",
         family=["m"],
-        bootstrap_seed=20260902,
     )
     assert "for the declared clustering" not in v.text
     # `-ml` v1.8 §3.2e(f) variant 2, published verbatim (review m-ML-10). The shipped wording was
@@ -760,7 +767,8 @@ def test_the_fail_safe_path_names_the_basis_and_not_a_widening_that_did_not_happ
     # the half P3-3 did not touch. The published variant gives the reason that is true here and
     # re-attaches the `because` clause to the instrument choice rather than to the widening.
     assert (
-        "Decided by the cluster-bootstrap CI on the paired difference — the instrument here "
+        "Decided by the conservative envelope on the paired difference — MOVER-D and the exact "
+        "paired bootstrap, the wider of the two at each bound — the instrument here "
         f"because this comparison's design effect is {basis} rather than established by "
         "construction — with no widening applied (sqrt(DEFF)=1.00), in conjunction with "
         "McNemar's exact test (p=0.031) as a necessary condition: a design effect that was never "
@@ -778,11 +786,11 @@ def test_a_real_widening_still_names_the_clustering_it_corrected_for() -> None:
         resolving=_rp(40, deff=2.0, basis="measured"),
         metric_name="m",
         family=["m"],
-        bootstrap_seed=20260902,
     )
     # `-ml` v1.8 §3.2e(f) variant 1, published verbatim — the clustering rationale is true here.
     assert (
-        "Decided by the cluster-bootstrap CI on the paired difference, widened by "
+        "Decided by the conservative envelope on the paired difference — MOVER-D and the exact "
+        "paired bootstrap, the wider of the two at each bound — widened by "
         "sqrt(DEFF)=1.41 for the declared clustering, in conjunction with McNemar's exact test "
         "(p=0.031) as a necessary condition: under clustering McNemar rejects too readily, so it "
         "may withhold a verdict but never carries one on its own."
@@ -807,20 +815,8 @@ def test_a_measured_basis_at_deff_one_also_moves_the_decision_off_mcnemar() -> N
         resolving=_rp(40, deff=1.0, basis="measured"),
         metric_name="m",
         family=["m"],
-        bootstrap_seed=20260902,
     )
-    assert v.decided_by == "cluster-bootstrap"
-
-
-def test_the_bootstrap_path_refuses_without_a_seed() -> None:
-    """The seed goes into the fingerprint so a report is reproducible (`-ml` §3.2d)."""
-    with pytest.raises(ValueError):
-        verdict(
-            _outcomes(34, 6, 0, 0),
-            resolving=_rp(40, deff=2.0, basis="measured"),
-            metric_name="m",
-            family=["m"],
-        )
+    assert v.decided_by == "conservative-envelope"
 
 
 def test_mcnemar_decides_only_at_deff_one_and_by_construction() -> None:
@@ -887,8 +883,9 @@ def test_cluster_bootstrap_seed_is_keyword_only_with_no_default() -> None:
 
 def test_paired_bootstrap_is_seeded_and_reproducible() -> None:
     diffs = [1.0, 0.0, -1.0, 1.0, 1.0, 0.0, 1.0, -1.0, 0.0, 1.0]
-    first = paired_bootstrap(diffs, B=500, seed=3)
-    assert paired_bootstrap(diffs, B=500, seed=3) == first
+    levels = (LEVEL_CI95_LO, LEVEL_CI95_HI)
+    first = paired_bootstrap(diffs, B=500, seed=3, levels=levels)
+    assert paired_bootstrap(diffs, B=500, seed=3, levels=levels) == first
 
 
 # --- Rule 7: no verdict path returns `distinguishable` below the observable floor -----------------
@@ -906,7 +903,6 @@ def test_no_clustered_verdict_is_distinguishable_below_the_observable_floor(deff
     rp = _rp(40, deff=deff, basis="measured")
     v = verdict(
         _outcomes(34, 6, 0, 0), resolving=rp, metric_name="m", family=["m"],
-        bootstrap_seed=20260902,
     )
     assert abs(v.diff) < rp.observable_floor
     assert v.distinguishable is False
@@ -931,7 +927,6 @@ def test_rule_7_is_what_catches_the_case_the_widened_interval_still_misses() -> 
     rp = _rp(40, deff=2.0, basis="measured")
     v = verdict(
         _outcomes(32, 8, 0, 0), resolving=rp, metric_name="m", family=["m"],
-        bootstrap_seed=20260902,
     )
     assert v.ci[0] > 0  # the interval on its own excludes zero
     assert v.floor_demoted is True
@@ -962,7 +957,6 @@ def test_rule_7_compares_against_the_exact_floor_not_the_printed_one() -> None:
     assert format_floor_pp(clustered.observable_floor) == "20.0"
     v = verdict(
         _outcomes(32, 8, 0, 0), resolving=clustered, metric_name="m", family=["m"],
-        bootstrap_seed=20260902,
     )
     assert v.diff * 100 == pytest.approx(20.0)
     assert v.ci[0] > 0  # the interval alone would rank it
@@ -1019,9 +1013,8 @@ def test_rule_7_raises_on_the_mcnemar_path_where_it_is_a_theorem() -> None:
     substitute = dataclasses.replace(corrupted, design_effect=1.0, basis="assumed")
     v = verdict(
         _outcomes(34, 6, 0, 0), resolving=substitute, metric_name="m", family=["m"],
-        bootstrap_seed=20260902,
     )
-    assert v.decided_by == "cluster-bootstrap"
+    assert v.decided_by == "conservative-envelope"
     assert v.floor_demoted is True
     assert v.distinguishable is False
 
@@ -1061,7 +1054,7 @@ def test_a_metric_past_the_holm_stop_is_not_relabelled_as_below_the_floor() -> N
     )
     v = verdict(
         _outcomes(34, 6, 0, 0), resolving=substitute, metric_name="m", family=["m"],
-        bootstrap_seed=20260902, holm_tested=False,
+        holm_tested=False,
     )
     assert v.floor_demoted is False
     assert v.distinguishable is False
@@ -1118,7 +1111,7 @@ def test_the_clustered_interval_widens_with_the_declared_design_effect() -> None
     for deff in (1.0, 2.0, 4.0, 7.0):
         v = verdict(
             _outcomes(34, 6, 0, 0), resolving=_rp(40, deff=deff, basis="assumed"),
-            metric_name="m", family=["m"], bootstrap_seed=20260902,
+            metric_name="m", family=["m"],
         )
         widths.append(v.ci[1] - v.ci[0])
     assert widths == sorted(widths)
@@ -1147,14 +1140,13 @@ def test_the_substitute_path_never_declares_what_the_exact_test_refuses(b: int, 
     rp = _rp(40, deff=1.0, basis="assumed")
     v = verdict(
         _outcomes(40 - b - c, b, c, 0), resolving=rp, metric_name="m", family=["m"],
-        bootstrap_seed=20260902,
     )
     assert 0.05 < mcnemar_exact(b, c) < 0.08  # the exact test refuses, and not by a wide margin
     assert v.ci[0] > 0  # the interval on its own would have ranked it
     assert abs(v.diff) >= rp.observable_floor  # so Rule 7 is not what saves it
     assert v.floor_demoted is False
     assert v.distinguishable is False
-    assert "The cluster-bootstrap interval" in v.text
+    assert "The conservative envelope interval" in v.text
     assert "the exact paired test does not reach alpha=0.05" in v.text
     assert "on this path the exact test is a necessary condition, and it is not met" in v.text
 
@@ -1170,9 +1162,8 @@ def test_the_conjunction_still_ranks_a_table_both_instruments_accept(deff, basis
     rp = _rp(40, deff=deff, basis=basis)
     v = verdict(
         _outcomes(34, 6, 0, 0), resolving=rp, metric_name="m", family=["m"],
-        bootstrap_seed=20260902,
     )
-    assert v.decided_by == "cluster-bootstrap"
+    assert v.decided_by == "conservative-envelope"
     assert v.distinguishable is (deff == 1.0)  # at DEFF 2 the floor has moved to 30.0 pp
     if deff == 1.0:
         assert "is better than" in v.text
@@ -1192,10 +1183,10 @@ def test_the_veto_is_tested_at_the_holm_step_and_not_at_the_family_alpha() -> No
     """
     rp = _rp(40, deff=1.0, basis="assumed", alpha_mdd=0.025)
     assert mcnemar_exact(6, 0) == pytest.approx(1 / 32)
-    common = dict(resolving=rp, metric_name="m", family=["m", "other"], bootstrap_seed=20260902)
+    common = dict(resolving=rp, metric_name="m", family=["m", "other"])
     at_step = verdict(_outcomes(34, 6, 0, 0), alpha_step=0.025, **common)
     at_family = verdict(_outcomes(34, 6, 0, 0), alpha_step=0.05, **common)
-    assert at_step.decided_by == "cluster-bootstrap"
+    assert at_step.decided_by == "conservative-envelope"
     assert at_step.alpha_used == 0.025
     assert at_step.distinguishable is False
     assert at_family.distinguishable is True
@@ -1223,7 +1214,7 @@ def test_at_deff_one_the_printed_interval_is_never_narrower_than_the_mover_d_it_
     lo, hi = mover_d_interval(34, 6, 0, 0)
     v = verdict(
         _outcomes(34, 6, 0, 0), resolving=_rp(40, deff=1.0, basis="assumed"),
-        metric_name="m", family=["m"], bootstrap_seed=20260902,
+        metric_name="m", family=["m"],
     )
     assert v.ci[0] <= lo and v.ci[1] >= hi          # it contains MOVER-D, bound by bound
     assert (v.ci[1] - v.ci[0]) >= (hi - lo)
@@ -1245,7 +1236,7 @@ def test_the_envelope_covers_zero_where_the_counts_are_too_thin_to_exclude_it() 
     """
     v = verdict(
         _outcomes(26, 4, 0, 0), resolving=_rp(30, deff=1.0, basis="assumed"),
-        metric_name="m", family=["m"], bootstrap_seed=20260902,
+        metric_name="m", family=["m"],
     )
     assert mcnemar_exact(4, 0) == pytest.approx(0.125)
     assert mover_d_interval(26, 4, 0, 0)[0] < 0 < mover_d_interval(26, 4, 0, 0)[1]
@@ -1266,15 +1257,98 @@ def test_the_envelope_takes_each_bound_from_whichever_arm_is_more_conservative()
     choosing one interval whole would print a lower bound *tighter* than an instrument it is
     supposed to dominate.
     """
-    diffs = [1.0] * 5 + [-1.0] * 3 + [0.0] * 4
-    boot = paired_cluster_bootstrap(diffs, design_effect=1.0, B=10_000, seed=20260902)
-    mover = mover_d_interval(4, 5, 3, 0)
-    env = conservative_envelope(diffs, (4, 5, 3, 0), design_effect=1.0, B=10_000, seed=20260902)
+    mover, boot = envelope_arms((4, 5, 3, 0), design_effect=1.0)
+    env = conservative_envelope((4, 5, 3, 0), design_effect=1.0)
 
     assert mover[0] < boot[0] and boot[1] > mover[1]     # neither arm contains the other
     assert (boot[1] - boot[0]) > (mover[1] - mover[0])   # the bootstrap is the wider interval...
     assert env == (mover[0], boot[1])                    # ...and the envelope still takes both
     assert env[0] <= min(boot[0], mover[0]) and env[1] >= max(boot[1], mover[1])
+    # `-ml` v1.11 Rule 4's second published anchor, re-derived under the closed form rather than
+    # adjusted: `(4, 5, 3, 0)` at DEFF 1.00 renders [-27.1, 58.3] pp, and it is the anchor that
+    # pins the bound-by-bound reading because the two arms disagree about which is conservative.
+    assert (round(env[0] * 100, 1), round(env[1] * 100, 1)) == (-27.1, 58.3)
+
+
+def test_the_closed_form_agrees_with_the_resample_wherever_the_resample_is_stable() -> None:
+    """`-ml` v1.11 §3.4 Rule 4 acceptance 2 — the substitution check: same definition, better
+    arithmetic.
+
+    "Where the resample is stable" is decided **operationally**, by running the resample at
+    several seeds and keeping only the tables where it does not move: that needs no second copy of
+    the exact CDF in the test, so the two routes stay genuinely independent. Where the resample
+    *does* move with the seed it is estimating an atomic quantile within Monte-Carlo error of an
+    atom boundary, and there is no single number for the closed form to agree with — which is the
+    defect, not a disagreement.
+    """
+    levels = (LEVEL_CI95_LO, LEVEL_CI95_HI)
+    compared = 0
+    for b in range(0, 11, 2):
+        for c in range(0, min(b, 12 - b) + 1, 2):
+            table = (12 - b - c, b, c, 0)
+            diffs = [1.0] * b + [-1.0] * c + [0.0] * (12 - b - c)
+            drawn = [paired_bootstrap(diffs, B=10_000, seed=s, levels=levels) for s in range(3)]
+            if len(set(drawn)) != 1:
+                continue                      # the resample is unstable here; nothing to compare
+            compared += 1
+            assert exact_paired_quantiles(table, levels=levels) == pytest.approx(
+                drawn[0], abs=0.001
+            ), table
+    assert compared >= 10, f"only {compared} tables had a stable resample to compare against"
+
+
+def test_the_first_published_envelope_anchor_is_unmoved_by_the_closed_form() -> None:
+    """`-ml` v1.11 §3.4 Rule 4 acceptance 3, first anchor, and §3.2e verdict 1's own string.
+
+    `(0, 6, 0, 34)` at DEFF 1.00 renders `[3.2, 29.1] pp` — MOVER-D's own interval. The note
+    checks it because it is the one string a reader would notice moving, and the closed form does
+    not move it: here the exact arm is `[5.0, 27.5]` and MOVER-D binds both bounds.
+    """
+    mover, exact = envelope_arms((0, 6, 0, 34), design_effect=1.0)
+    env = conservative_envelope((0, 6, 0, 34), design_effect=1.0)
+    assert (round(exact[0] * 100, 1), round(exact[1] * 100, 1)) == (5.0, 27.5)
+    assert env == mover
+    assert (round(env[0] * 100, 1), round(env[1] * 100, 1)) == (3.2, 29.1)
+
+
+@pytest.mark.parametrize("deff", [1.0, 1.2, 2.0])
+def test_neither_printed_bound_is_ever_tighter_than_either_arm(deff) -> None:
+    """`-ml` v1.11 §3.4 Rule 4 acceptance 4 — the conservatism property **asserted**, not
+    asserted about.
+
+    It is the property whose whole-interval reading is false, so this is what stops a future
+    implementer taking *"the wider of"* to mean "whichever interval is wider". Exhaustive over
+    every table at n=12 — 455 of them, the tool-caller pack's own n — and over a stride through
+    n=40, where the exhaustive sweep would cost 12 341 enumerations per design effect.
+    """
+    tables = [(a, b, c, 12 - a - b - c)
+              for a in range(13) for b in range(13 - a) for c in range(13 - a - b)]
+    tables += [(a, b, c, 40 - a - b - c)
+               for a in range(0, 41, 7) for b in range(0, 41 - a, 7)
+               for c in range(0, 41 - a - b, 7)]
+    for table in tables:
+        mover, exact = envelope_arms(table, design_effect=deff)
+        lo, hi = conservative_envelope(table, design_effect=deff)
+        assert lo <= mover[0] and hi >= mover[1], table
+        assert lo <= exact[0] and hi >= exact[1], table
+
+
+def test_the_verdict_records_which_arm_bound_each_printed_bound() -> None:
+    """`-ml` v1.11 §3.4 Rule 4 — the audit that replaces the retired seed parenthetical.
+
+    `(4, 5, 3, 0)` is the separating table: MOVER-D binds the lower bound and the exact paired
+    bootstrap the upper, so a `bound_by` hard-coded to either name is wrong here. On the
+    `mcnemar-exact` path one instrument produced the whole interval and there is nothing to
+    attribute, so the field is `None` rather than a pair naming MOVER-D twice.
+    """
+    v = verdict(_outcomes(4, 5, 3, 0), resolving=_rp(12, deff=1.0, basis="assumed"),
+                metric_name="m", family=["m"])
+    assert v.decided_by == "conservative-envelope"
+    assert v.bound_by == ("MOVER-D", "exact paired bootstrap")
+
+    exact_path = verdict(_outcomes(34, 6, 0, 0), resolving=_rp(40), metric_name="m", family=["m"])
+    assert exact_path.decided_by == "mcnemar-exact"
+    assert exact_path.bound_by is None
 
 
 def test_the_envelope_still_responds_to_a_declared_design_effect() -> None:
@@ -1283,19 +1357,64 @@ def test_the_envelope_still_responds_to_a_declared_design_effect() -> None:
     Both arms are scaled about the same point estimate by the same `sqrt(DEFF)`, so the envelope
     of the two is scaled with them.
     """
-    diffs = [1.0] * 6 + [0.0] * 34
-    at_one = conservative_envelope(diffs, (34, 6, 0, 0), design_effect=1.0, B=10_000, seed=7)
-    at_four = conservative_envelope(diffs, (34, 6, 0, 0), design_effect=4.0, B=10_000, seed=7)
+    at_one = conservative_envelope((34, 6, 0, 0), design_effect=1.0)
+    at_four = conservative_envelope((34, 6, 0, 0), design_effect=4.0)
     point = 6 / 40
     assert at_four[0] < at_one[0] and at_four[1] > at_one[1]
     assert at_four[0] == pytest.approx(point - (point - at_one[0]) * 2.0)
     assert at_four[1] == pytest.approx(point + (at_one[1] - point) * 2.0)
 
 
-def test_the_envelope_refuses_a_table_that_does_not_describe_its_rows() -> None:
-    """The two arms must be two instruments on **one** table, or the envelope is meaningless."""
-    with pytest.raises(ValueError):
-        conservative_envelope([1.0, 0.0], (34, 6, 0, 0), design_effect=1.0, B=10, seed=1)
+@pytest.mark.parametrize("table", [(34, 6, 0, 0), (4, 5, 3, 0), (1, 25, 12, 2)])
+def test_both_arms_are_widened_about_the_same_point_by_the_same_factor(table) -> None:
+    """`-ml` §3.4 Rule 4 — *"half-widths scaled about the same point estimate the same way"*.
+
+    The envelope-level widening test cannot see this: it is written on `(34, 6, 0, 0)`, where
+    MOVER-D binds **both** bounds, so an exact arm that is never widened at all is invisible
+    there — measured, that mutation passes the whole suite. `(4, 5, 3, 0)` is the table where the
+    exact arm binds the upper bound, so the two arms are asserted separately here and each one's
+    `sqrt(DEFF)` is checked against its own unwidened self.
+    """
+    a, b, c, d = table
+    point = (b - c) / (a + b + c + d)
+    at_one = envelope_arms(table, design_effect=1.0)
+    at_four = envelope_arms(table, design_effect=4.0)
+    for base, widened in zip(at_one, at_four, strict=True):
+        assert widened[0] == pytest.approx(max(-1.0, point - (point - base[0]) * 2.0))
+        assert widened[1] == pytest.approx(min(1.0, point + (base[1] - point) * 2.0))
+
+
+def test_the_envelope_takes_no_diffs_no_b_and_no_seed() -> None:
+    """§4 S1e Table D — the `n != len(diffs)` guard retires by being made unrepresentable.
+
+    The exact bootstrap arm is a function of `(b, c, n)` and MOVER-D of `(a, b, c, d)`, so there
+    is no second argument left to disagree with the first. Asserting the *absence* of the three
+    parameters is the check: a guard that has been deleted while its argument stayed would look
+    identical from the outside until the day two inconsistent inputs arrive.
+    """
+    params = inspect.signature(conservative_envelope).parameters
+    assert set(params) == {"table", "design_effect"}
+    assert params["design_effect"].kind is inspect.Parameter.KEYWORD_ONLY
+
+
+def test_the_envelope_is_deterministic_under_row_permutation() -> None:
+    """`-ml` v1.11 Rule 4 acceptance 1 — the property is structural, and asserted anyway.
+
+    It is the test that would have **failed before** this change rather than one that describes
+    the fix: the shipped resample drew an *index*, so a permutation of the same multiset re-mapped
+    a fixed seed's index sequence onto different values, and at `(1, 25, 12, 2)` DEFF 1.2 the
+    verdict itself moved on 85/65 of 150 permutations at one fixed seed. Row order is result-file
+    iteration order, not a pack author's choice, so `sampling.seed` never made it reproducible.
+    """
+    import random as _random
+
+    for table, deff in (((1, 25, 12, 2), 1.2), ((2, 19, 7, 12), 1.5)):
+        first = conservative_envelope(table, design_effect=deff)
+        rng = _random.Random(11)
+        for _ in range(20):
+            rows = [1] * table[1] + [-1] * table[2] + [0] * (table[0] + table[3])
+            rng.shuffle(rows)
+            assert conservative_envelope(table, design_effect=deff) == first
 
 
 def test_the_clustered_interval_is_not_narrower_than_the_mover_d_it_replaces() -> None:
@@ -1309,7 +1428,7 @@ def test_the_clustered_interval_is_not_narrower_than_the_mover_d_it_replaces() -
     for deff in (2.0, 4.0, 7.0):
         v = verdict(
             _outcomes(34, 6, 0, 0), resolving=_rp(40, deff=deff, basis="measured"),
-            metric_name="m", family=["m"], bootstrap_seed=20260902,
+            metric_name="m", family=["m"],
         )
         assert (v.ci[1] - v.ci[0]) > mover_width
 
@@ -1318,16 +1437,130 @@ def test_paired_cluster_bootstrap_scales_the_half_widths_by_sqrt_deff() -> None:
     """`-ml` §3.4 Rule 5: the Kish design effect is the variance ratio, so `sqrt(DEFF)` is exactly
     the quantity that converts it to a half-width."""
     diffs = [1.0] * 6 + [0.0] * 34
-    base_lo, base_hi = paired_bootstrap(diffs, B=2000, seed=7)
+    # The unwidened baseline must be taken at the SAME levels as the widened interval below, or
+    # the comparison is between two different quantiles rather than between two widths.
+    base_lo, base_hi = paired_bootstrap(
+        diffs, B=2000, seed=7, levels=(LEVEL_CI95_LO, LEVEL_CI95_HI)
+    )
     point = sum(diffs) / len(diffs)
-    lo, hi = paired_cluster_bootstrap(diffs, design_effect=4.0, B=2000, seed=7)
+    lo, hi = paired_cluster_bootstrap(
+        diffs, design_effect=4.0, B=2000, seed=7,
+        clamp=(-1.0, 1.0), levels=(LEVEL_CI95_LO, LEVEL_CI95_HI),
+    )
     assert lo == pytest.approx(point - (point - base_lo) * 2.0)
     assert hi == pytest.approx(point + (base_hi - point) * 2.0)
 
 
+def test_the_clustered_interval_leaves_an_unbounded_metrics_upper_bound_unclamped() -> None:
+    """§4 S1e Table E / `-ml` §3.4 Rule 4's condition — `[-1, 1]` is false for `sep_z`.
+
+    `_widen` clamped both bounds to `[-1.0, 1.0]`: correct for the difference of proportions the
+    envelope was written for, and wrong for a difference of **z-scores**, which is not bounded by
+    1 (`-ml` §5.2). This is written at `paired_cluster_bootstrap` and not at `_widen` because
+    `_widen` is private and the defect is one a *caller* reaches: §3.8.1 wires the exploratory
+    `sep_z` comparison through exactly this entry point, with `clamp=None`.
+
+    It reproduces the **defect** rather than the fix. The clamped call below is the shipped
+    behaviour on these same inputs, and it prints an upper bound of 1.0 beside a point estimate of
+    1.48 — the point estimate outside its own interval, which is this project's signature defect
+    shape: a true decision (the lower bound still excludes zero) beside a false number.
+    """
+    diffs = [1.9, 0.4, 2.6, 1.1, -0.3, 2.2, 0.8, 3.1, 1.4, 0.2,
+             2.9, 1.6, -0.7, 2.4, 0.9, 1.8, 3.4, 0.5, 2.1, 1.3]
+    point = sum(diffs) / len(diffs)
+    assert point > 1.0
+    kw = dict(design_effect=2.0, B=10_000, seed=20260907,
+              levels=(LEVEL_CI95_LO, LEVEL_CI95_HI))
+
+    lo, hi = paired_cluster_bootstrap(diffs, clamp=None, **kw)
+    assert hi > 1.0
+    assert lo < point < hi
+
+    clamped_lo, clamped_hi = paired_cluster_bootstrap(diffs, clamp=(-1.0, 1.0), **kw)
+    assert clamped_hi == 1.0
+    assert clamped_hi < point                      # the point estimate outside its own interval
+    assert clamped_lo == lo                        # and the verdict-bearing bound is untouched
+
+    # **Both components of `clamp` are used, and neither is a literal.** This is what stands in
+    # place of §4 S1e Table E's two residuals for a half-application written in *this* spelling
+    # (§7 rule 5(b)'s last option): those residuals match the shipped text `max(-1.0, point …)` /
+    # `min(1.0, point …)`, so they go to zero on any faithful edit and cannot then distinguish a
+    # `clamp[1]` left as `1.0`. A clamp whose bounds are neither -1 nor 1 can: with the arbitrary
+    # `(0.9, 1.5)` both bounds bind, and either literal surviving prints a different number here.
+    assert paired_cluster_bootstrap(diffs, clamp=(0.9, 1.5), **kw) == (0.9, 1.5)
+
+
+def test_the_clustered_intervals_clamp_is_keyword_only_with_no_default() -> None:
+    """§4 S1e Table E — required with no default on both the entry point and `_widen`.
+
+    A default of `(-1.0, 1.0)` is right for proportions and wrong for z-scores, and it fails
+    **silently, in the direction that prints**. Requiring it makes wiring `sep_z` a decision the
+    call site states rather than one it inherits.
+    """
+    for fn in (paired_cluster_bootstrap, _widen):
+        params = inspect.signature(fn).parameters
+        assert params["clamp"].kind is inspect.Parameter.KEYWORD_ONLY
+        assert params["clamp"].default is inspect.Parameter.empty
+
+
+def test_the_bootstrap_levels_carry_the_familys_correction_and_move_both_bounds_outward() -> None:
+    """§4 S1e Table G / `-ml` §3.3 — an all-continuous `k > 1` family takes its Bonferroni
+    correction **in the interval**, because it has nowhere else to put it.
+
+    The levels are computed from the note's rule here and never transcribed: `alpha/(2k)` and its
+    complement, with the conversion `Fraction(str(alpha_family))` that `-ml` §11.2.2 fixes — a
+    bare `Fraction(alpha_family)` is the double's exact value and fails this equality at the level
+    rather than three functions later at a bound nobody can hand-check (§11.10(2b)).
+
+    **Two assertions and never one about the width** (`-ml` §11.9 item 6(c), plan-gate P7-2). A
+    width assertion passes on the half-applied edit that wires `levels[0]` into the lower quantile
+    and leaves the upper one on the fixed `LEVEL_CI95_HI`: that interval is genuinely wider, while
+    its upper bound takes no family correction at all — and the upper bound is the printing
+    direction. Both strict inequalities were checked against this fixed `diffs`, `B` and seed
+    before the test was written, so they hold by construction rather than in hope.
+    """
+    k = 2
+    alpha = Fraction(str(ALPHA_FAMILY))
+    levels = (alpha / (2 * k), 1 - alpha / (2 * k))
+    assert levels == (Fraction(1, 80), Fraction(79, 80))
+
+    diffs = [0.31, -0.12, 0.44, 0.07, -0.28, 0.19, 0.53, -0.05, 0.22, 0.38,
+             -0.41, 0.16, 0.09, 0.27, -0.33, 0.48, 0.02, 0.35, -0.17, 0.11]
+    at_k1 = paired_bootstrap(diffs, B=10_000, seed=20260907,
+                             levels=(LEVEL_CI95_LO, LEVEL_CI95_HI))
+    at_k2 = paired_bootstrap(diffs, B=10_000, seed=20260907, levels=levels)
+    assert at_k2[0] < at_k1[0]
+    assert at_k2[1] > at_k1[1]
+
+
+def test_paired_bootstrap_refuses_a_transposed_level_pair() -> None:
+    """`-ml` §11.2.2 / §11.10(10) — the one error that otherwise returns a plausible **inverted**
+    interval that no other check sees."""
+    with pytest.raises(ValueError):
+        paired_bootstrap([1.0, 0.0, -1.0], B=100, seed=1,
+                         levels=(LEVEL_CI95_HI, LEVEL_CI95_LO))
+    with pytest.raises(ValueError):
+        paired_bootstrap([1.0, 0.0, -1.0], B=100, seed=1,
+                         levels=(LEVEL_CI95_LO, LEVEL_CI95_LO))
+
+
+@pytest.mark.parametrize("fn", [paired_bootstrap, paired_cluster_bootstrap])
+def test_the_bootstrap_levels_are_keyword_only_with_no_default(fn) -> None:
+    """§4 S1e Table G — required with no default, for the reason `designEffect`,
+    `BinaryMetric.unit` and `sampling.seed` are: a default that is right at `k = 1` and silently
+    wrong above it is the conventional value, and it prints a plausible interval beside a family
+    that was never corrected."""
+    params = inspect.signature(fn).parameters
+    assert params["levels"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert params["levels"].default is inspect.Parameter.empty
+
+
 def test_paired_cluster_bootstrap_refuses_a_design_effect_below_one() -> None:
     with pytest.raises(ValueError):
-        paired_cluster_bootstrap([1.0, 0.0], design_effect=0.5, B=10, seed=1)
+        paired_cluster_bootstrap(
+            [1.0, 0.0], design_effect=0.5, B=10, seed=1,
+            clamp=(-1.0, 1.0), levels=(LEVEL_CI95_LO, LEVEL_CI95_HI),
+        )
 
 
 def test_the_floor_sentence_names_its_denominator_where_it_differs_from_the_p_beside_it() -> None:
@@ -1365,7 +1598,7 @@ def test_the_qualifier_appears_beside_the_p_it_reconciles() -> None:
     line says which denominator each is on."""
     v = verdict(
         _outcomes(32, 8, 0, 0), resolving=_rp(40, deff=2.0, basis="measured"),
-        metric_name="m", family=["m"], bootstrap_seed=20260902,
+        metric_name="m", family=["m"],
     )
     assert v.floor_demoted is True
     assert (
@@ -1579,26 +1812,22 @@ def test_resolving_power_accepts_a_design_effect_of_exactly_one() -> None:
     assert rp.n_effective == 40.0
 
 
-def test_verdict_refuses_a_design_effect_below_one_before_choosing_an_instrument() -> None:
+def test_verdict_refuses_a_design_effect_below_one() -> None:
     """Review P3-11 — Rule 4's **precondition 4**. `-ml` §9 check 2(c) names the other three, all
     of which are tested; removing this one survived the suite.
 
-    **Removing it also survives the obvious test**, and that is the trap worth pinning: at
-    `DEFF = 0.5` the McNemar branch is not taken, so the decision falls through to
-    `paired_cluster_bootstrap`, which raises the *same sentence* one layer down. A test that only
-    reads the message cannot tell the precondition from its echo.
-
-    So the property asserted is the **ordering** Rule 4 states — every precondition is checked
-    before any instrument is selected. `bootstrap_seed=None` makes the two orders visibly
-    different: with the check present the design effect is refused; without it, the run gets as far
-    as choosing the bootstrap and complains about the missing seed instead, having already accepted
-    an anti-conservative design effect.
+    **The *ordering* half of this test retires with the seed** (§4 S1e Table D). It asserted that
+    every precondition is checked *before* an instrument is selected, and its device was
+    the omitted seed: with the check present the design effect was refused, without it the
+    run got as far as choosing the bootstrap and complained about the missing seed instead, having
+    already accepted an anti-conservative design effect. There is no seed to omit any more, and
+    the envelope path no longer resamples, so no second raise exists to order this one against and
+    the trap the ordering pinned — a duplicate message one layer down — is unreachable. The
+    precondition itself still needs an assertion, and this is it.
     """
     below = dataclasses.replace(_rp(40), design_effect=0.5, n_effective=80.0)
-    with pytest.raises(ValueError, match="precondition 4") as excinfo:
-        verdict(_outcomes(34, 6, 0, 0), resolving=below, metric_name="m", family=["m"],
-                bootstrap_seed=None)
-    assert "bootstrap seed" not in str(excinfo.value)
+    with pytest.raises(ValueError, match="precondition 4"):
+        verdict(_outcomes(34, 6, 0, 0), resolving=below, metric_name="m", family=["m"])
 
 
 def test_holm_steps_has_no_alpha_default_to_drift_from_alpha_family() -> None:
@@ -1681,9 +1910,113 @@ def test_the_equality_wording_is_true_at_this_components_own_sample_size() -> No
     assert rp.mdd80 == 0.2
     v = verdict(
         _outcomes(44, 29, 12, 0), resolving=rp, metric_name="m", family=["m", "other"],
-        alpha_step=0.025, bootstrap_seed=20260902,
+        alpha_step=0.025,
     )
     assert abs(v.diff) == pytest.approx(0.2) and abs(v.diff) == rp.mdd80
     assert v.distinguishable is False
     assert "the observed 20.0 pp is at or above that" in v.text
     assert "is above that" not in v.text.replace("is at or above that", "")
+
+
+# --- `-ml` §11.2 / §11.10 — the one percentile in the package (§4 S1e Table C) ------------------
+
+
+@pytest.mark.parametrize(
+    ("x", "p95_rank", "p50_rank"),
+    [(1, 1, 1), (12, 12, 6), (19, 19, 10), (20, 19, 10),
+     (38, 37, 19), (40, 38, 20), (85, 81, 43), (100, 95, 50)],
+)
+def test_the_percentile_rank_fixtures(x, p95_rank, p50_rank) -> None:
+    """`-ml` §11.10(1) — §11.3's table, and the one test that pins the estimator itself.
+
+    Integer equality, no tolerance: the sample is `0..X-1`, so the value at rank `r` is `r - 1` and
+    asserting the value asserts the rank. Both rows were re-measured at the rational level form in
+    note v1.18 and neither moved.
+    """
+    sample = list(range(x))
+    assert percentile(sample, level=LEVEL_P95) == p95_rank - 1
+    assert percentile(sample, level=LEVEL_P50) == p50_rank - 1
+
+
+def test_the_percentile_is_the_inverse_empirical_cdf_over_its_whole_domain() -> None:
+    """The estimator is `inf{ v : F(v) >= level }` (`-ml` §11.2), asserted as that.
+
+    The fixture table above pins eight `(level, X)` points; this pins the **rule** over the domain
+    the tool actually reaches — the four literal levels plus the family lattice `alpha/(2k)` and
+    its complement, which is the only level space §11.2.2 leaves open — at every `X` from 1 to 60.
+    The expectation is written as the *definition* and never as the rank expression, so a rank off
+    by one, a `round` in place of a `ceil`, a float spelling of the rank, or a clamp at the wrong
+    end is a disagreement here rather than a mistake the test shares with the code.
+
+    The sample is shuffled and its values are not their own indices, so an implementation that
+    trusts its caller to sort — the precondition one of the two retired copies carried — fails
+    here rather than at whichever call site first hands it raw input.
+    """
+    levels = (
+        [LEVEL_P50, LEVEL_P95, LEVEL_CI95_LO, LEVEL_CI95_HI, Fraction(1), Fraction(1, 1000)]
+        + [Fraction(1, 40 * k) for k in range(1, 8)]
+        + [1 - Fraction(1, 40 * k) for k in range(1, 8)]
+    )
+    disagreements = []
+    for x in range(1, 61):
+        values = [(i * 37) % 101 + 0.5 for i in range(x)]
+        ordered = sorted(values)
+        for level in levels:
+            expected = next(v for i, v in enumerate(ordered) if Fraction(i + 1, x) >= level)
+            got = percentile(list(reversed(values)), level=level)
+            if got != expected:
+                disagreements.append((x, level, got, expected))
+    assert not disagreements, f"{len(disagreements)} of {60 * len(levels)}: {disagreements[:5]}"
+
+
+def test_the_percentile_rank_is_taken_in_integers_and_not_over_the_levels_float() -> None:
+    """`-ml` §11.10(2a) — the bin-edge guard, with its scope stated.
+
+    `float(Fraction(7, 25)) * 25 == 7.000000000000001`, so `math.ceil(float(level) * X)` returns
+    the 8th value where the integer rank returns the 7th. **This fixture guards against a
+    level-first simplification and against nothing else**: the numerator-first spelling returns 7
+    here too and diverges nowhere over any level this tool reaches (§11.2.1), and saying so is the
+    difference between a guard and a guard believed to be wider than it is.
+    """
+    assert float(Fraction(7, 25)) * 25 != 7.0
+    assert percentile(range(25), level=Fraction(7, 25)) == 6
+    assert math.ceil(float(Fraction(7, 25)) * 25) == 8
+
+
+def test_the_level_is_the_exact_rational_and_not_the_doubles_own_value() -> None:
+    """`-ml` §11.10(2b) — `Fraction(0.05)` is legal, is **not** `1/20`, and selects another rank.
+
+    It is the double's exact value, `3602879701896397/72057594037927936`, and the note measures the
+    two levels disagreeing on 1000 of `X <= 20 000`, first at `X = 20`. Both are `Fraction`s, so
+    `percentile`'s own `TypeError` cannot catch this one: the refusal that does is the equality on
+    the constructed level, which is why `-ml` §11.2.2 fixes the conversion as
+    `Fraction(str(alpha_family))` and not `Fraction(alpha_family)`.
+    """
+    assert Fraction(0.05) != Fraction(1, 20)
+    assert Fraction(str(0.05)) == Fraction(1, 20)
+    assert percentile(range(20), level=Fraction(1, 20)) == 0
+    assert percentile(range(20), level=Fraction(0.05)) == 1
+
+
+def test_percentile_refuses_an_empty_sample() -> None:
+    """`-ml` §11.10(10) — whether a figure exists at all is `latency_summary`'s decision (§11.6).
+
+    Returning `None` from here is what the retired `results.py` copy did, and it put the
+    absent-or-present decision in two places.
+    """
+    with pytest.raises(ValueError):
+        percentile([], level=LEVEL_P95)
+
+
+def test_percentile_rejects_a_float_level() -> None:
+    """`-ml` §11.10(10) — a `float` level reopens the bin-edge hazard the integer rank closes."""
+    with pytest.raises(TypeError):
+        percentile(range(20), level=0.05)
+
+
+@pytest.mark.parametrize("level", [Fraction(0), Fraction(-1, 20), Fraction(21, 20), Fraction(2)])
+def test_percentile_rejects_a_level_outside_the_unit_interval(level) -> None:
+    """`-ml` §11.10(10) — the level lies in `(0, 1]`; zero is excluded and 1 is not."""
+    with pytest.raises(ValueError):
+        percentile(range(20), level=level)
+    assert percentile(range(20), level=Fraction(1)) == 19

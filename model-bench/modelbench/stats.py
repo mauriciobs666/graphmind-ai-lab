@@ -30,7 +30,7 @@ anti-conservative version does not typecheck, and the honest one is the only one
    quantities computed by completely independent routes, which is what makes a substituted
    instrument surface as a contradiction rather than as a plausible number. **The response splits
    by path**: on `mcnemar-exact` the invariant is a theorem, so a fire raises; on
-   `cluster-bootstrap` it is a guard, so a fire demotes and names the floor (review m-ML-6).
+   `conservative-envelope` it is a guard, so a fire demotes and names the floor (m-ML-6).
 
 Two of the three αs the note distinguishes are fields of `ResolvingPower` — `alpha_family` (the
 floor's) and `alpha_mdd` (the MDD's). The third, `alpha_step`, is Holm's data-dependent threshold
@@ -43,6 +43,7 @@ from __future__ import annotations
 import math
 import random
 from dataclasses import dataclass
+from fractions import Fraction
 from functools import lru_cache
 from math import comb
 from typing import Iterable, Literal, Sequence
@@ -59,7 +60,7 @@ _Z_95: float = 1.959963984540054
 ALPHA_FAMILY: float = 0.05
 
 Basis = Literal["by-construction", "measured", "assumed"]
-DecidedBy = Literal["mcnemar-exact", "cluster-bootstrap"]
+DecidedBy = Literal["mcnemar-exact", "conservative-envelope"]
 
 
 class DuplicateAnalysisUnit(ValueError):
@@ -145,22 +146,55 @@ class BootstrapResult:
     seed: int
 
 
-def paired_bootstrap(diffs: Sequence[float], *, B: int, seed: int) -> tuple[float, float]:
+def paired_bootstrap(
+    diffs: Sequence[float], *, B: int, seed: int, levels: tuple[Fraction, Fraction]
+) -> tuple[float, float]:
     """Seeded paired percentile bootstrap on per-item differences (`-ml` §3.2d).
 
     For continuous metrics the CI **is** the test: the decision is that it excludes zero, and no
     separate significance test is run.
+
+    **This is the engine, not an entry point** (`-ml` §3.4 Rule 4). Wiring a continuous verdict
+    straight here yields a correct interval that silently ignores the pack's declared design
+    effect; `paired_cluster_bootstrap` is §3.2d's entry point.
+
+    **`levels` is required with no default** (§4 S1e Table G). The two quantiles were fixed at
+    2.5/97.5 here, and `-ml` §3.3 rules that an all-continuous family with `k > 1` takes its
+    Bonferroni correction **in the interval** — it has nowhere else to put it — so a `k = 3` family
+    rendered at the fixed pair is a correction that silently did not happen. At `k = 1` the rule
+    returns exactly the pair the code used to hard-code, which is what made this invisible rather
+    than urgent. A default that is right at `k = 1` and silently wrong above it is the shape this
+    plan already refuses for `designEffect`, `BinaryMetric.unit` and `sampling.seed`, and here the
+    wrong value is also the *conventional* one, printing a plausible interval beside a family that
+    was never corrected. The levels are exact rationals because `alpha/(2k)` is not a decimal
+    (`-ml` §11.2.2); who computes them is `-ml` §3.4 Rule 8's `continuous_verdict()`, from
+    `alpha_family` and the family size, and nothing else derives a level.
+
+    A **transposed pair raises**: it is the one error that otherwise returns a plausible
+    *inverted* interval that no other check sees (`-ml` §11.2.2), and it is a refusal this
+    signature could not carry while the pair was two literals.
     """
+    if levels[0] >= levels[1]:
+        raise ValueError(
+            f"levels must be ordered lower then upper, not {levels!r}: a transposed pair returns "
+            "an inverted interval that no other check sees (-ml §11.2.2)"
+        )
     if not diffs:
         raise ValueError("paired_bootstrap needs at least one difference")
     rng = random.Random(seed)
     n = len(diffs)
     means = sorted(sum(rng.choice(diffs) for _ in range(n)) / n for _ in range(B))
-    return _percentile(means, 2.5), _percentile(means, 97.5)
+    return percentile(means, level=levels[0]), percentile(means, level=levels[1])
 
 
 def paired_cluster_bootstrap(
-    diffs: Sequence[float], *, design_effect: float, B: int, seed: int
+    diffs: Sequence[float],
+    *,
+    design_effect: float,
+    B: int,
+    seed: int,
+    clamp: tuple[float, float] | None,
+    levels: tuple[Fraction, Fraction],
 ) -> tuple[float, float]:
     """The paired-difference interval for a clustered design (`-ml` §3.4 Rule 4's second branch).
 
@@ -181,36 +215,164 @@ def paired_cluster_bootstrap(
 
     The structurally right version, when a pack that needs it exists: give `PairedOutcomes` an
     optional cluster grouping and resample clusters of paired differences.
+
+    **`clamp` and `levels` are both required with no default** (§4 S1e Tables E and G) and are
+    forwarded. This is `-ml` §3.2d's **entry point** for every continuous verdict — MRR, `sep_z` —
+    called with the pack's declared `design_effect`, the identity widening at 1.00. Two callers
+    state the clamp, on two surfaces that must not be collapsed (`-ml` v1.17 §3.4 Rule 8): on the
+    **verdict** path `continuous_verdict()` derives it from the metric's own `support` inside
+    itself, so no verdict caller states one; the caller that does is §3.8.1's **exploratory**
+    `sep_z` comparison, which reaches this entry point directly, has no metric aggregate to ask,
+    and states `clamp=None`.
     """
     if design_effect < 1.0:
         raise ValueError("design_effect must be >= 1.0 (-ml §3.4 Rule 4, precondition 4)")
-    lo, hi = paired_bootstrap(diffs, B=B, seed=seed)
-    return _widen((lo, hi), sum(diffs) / len(diffs), math.sqrt(design_effect))
+    lo, hi = paired_bootstrap(diffs, B=B, seed=seed, levels=levels)
+    return _widen((lo, hi), sum(diffs) / len(diffs), math.sqrt(design_effect), clamp=clamp)
 
 
-def _widen(interval: tuple[float, float], point: float, scale: float) -> tuple[float, float]:
-    """Scale an interval's two half-widths about `point`, clamped to a difference of proportions.
+def _widen(
+    interval: tuple[float, float],
+    point: float,
+    scale: float,
+    *,
+    clamp: tuple[float, float] | None,
+) -> tuple[float, float]:
+    """Scale an interval's two half-widths about `point`, then clamp to `clamp` or not at all.
 
     Shared by both arms of `conservative_envelope`, because Rule 4 requires them widened "the same
     way": an envelope of two intervals scaled about two different centres, or by two different
-    factors, is not an envelope of the same quantity.
+    factors, is not an envelope of the same quantity — and a clamp is part of "the same way".
+
+    **`clamp` is required with no default, and `None` means do not clamp** (§4 S1e Table E). The
+    two bounds were the literals `-1.0` and `1.0`: correct for the difference of proportions the
+    envelope was written for, and **wrong for `sep_z`** (`-ml` §5.2), whose per-query differences
+    are differences of z-scores and are not bounded by 1. Left as literals, a `sep_z` interval
+    whose upper bound exceeds 1 is silently clamped to it and the point estimate can land
+    **outside its own interval** — a true decision beside a false number, since the verdict is
+    decided by the lower bound. A default of `(-1.0, 1.0)` would fail exactly that way, silently
+    and in the direction that prints, which is why this plan refuses one here as it does for
+    `designEffect`, `BinaryMetric.unit` and `sampling.seed`.
     """
     lo, hi = interval
-    return (
-        max(-1.0, point - (point - lo) * scale),
-        min(1.0, point + (hi - point) * scale),
+    widened = (point - (point - lo) * scale, point + (hi - point) * scale)
+    if clamp is None:
+        return widened
+    return (max(clamp[0], widened[0]), min(clamp[1], widened[1]))
+
+
+def exact_paired_quantiles(
+    table: tuple[int, int, int, int], *, levels: tuple[Fraction, Fraction]
+) -> tuple[float, float]:
+    """The paired **binary** bootstrap's quantiles in closed form (`-ml` v1.11 §3.4 Rule 4).
+
+    For a paired binary table the per-unit differences take exactly three values, so a resample of
+    `n` rows with replacement gives `(N+, N0, N-) ~ Multinomial(n, (b/n, (a+d)/n, c/n))` and the
+    resample mean is `S/n` with `S = N+ - N-` on the integer support `[-n, n]`. Every atom's
+    probability is a rational with denominator `n**n`, so the whole computation is exact integer
+    arithmetic and **the atom is never chosen by a float tie-break** — §11.2.1's bin-edge hazard
+    *removed* rather than guarded.
+
+    The estimator is `percentile`'s, applied to the exact distribution where that one applies it
+    to an empirical sample: `Q(p) = inf{ s/n : F(s) >= p }`, Hyndman-Fan type 1. That is what
+    `-ml` §11.2 reason 2 already claims, so the two agree by construction rather than by
+    coincidence, and the selector is one exact integer comparison over the level's numerator and
+    denominator (`-ml` v1.18 §11.2.2's closing paragraph).
+
+    **Why this replaces the resample rather than merely speeding it up.** The resampled version is
+    a Monte-Carlo estimate of an *atomic* quantile, so wherever the target level lands within
+    Monte-Carlo error of an atom boundary the printed bound flips by a whole atom, `1/n_units` —
+    and the note measures that reaching the **verdict**, not only the digits: at `(1, 25, 12, 2)`,
+    n=40, DEFF 1.2 the shipped code returned *distinguishable* on 80 of 150 seeds and *not* on the
+    other 70, and moved on 85/65 of 150 row permutations **at one fixed seed**, so the pack's own
+    `sampling.seed` did not make it reproducible. Row order is result-file iteration order and no
+    author's choice; `random.Random.choice` draws an *index*, so a permutation of the same multiset
+    re-maps a fixed index sequence onto different values.
+
+    The levels are the caller's, and on this path they are always `LEVEL_CI95_LO`/`LEVEL_CI95_HI`:
+    the paired binary path takes its `k` correction in the Holm ladder and never in the interval
+    (§3.3), so no family level reaches here. They are **never** the level a resample happened to
+    estimate — the shipped `ordered[int(round(pct/100 * (B - 1)))]` picked the 251st and 9750th of
+    10000, i.e. levels `251/10001` and `9750/10001`, and the atom selected differs from the exact
+    pair's on 2 `(b, c)` pairs at n=30, 12 at n=40 and 113 at n=85.
+
+    Degenerate input needs no special case: `b = c = 0` gives the single atom `0` and both
+    quantiles are `0`. The `O(n**2)` enumeration is 3741 terms at n=85 — measured at 3.2 ms
+    against 216 ms for the shipped `B = 10 000` resample.
+
+    **The boundary of applicability is three distinct per-unit values, not "binary versus
+    continuous".** The exact enumeration costs `C(n + v - 1, v - 1)` terms for `v` values: `v = 3`
+    at n=85 is trivial and `v = 10` at n=38 is 1.6e9 and infeasible. MRR is the trap worth naming
+    — its per-item values are discrete, so "it is not continuous" invites the wrong generalisation
+    — and its `v` is far above 3. §3.2d's continuous metrics keep the seeded resample.
+    """
+    if levels[0] >= levels[1]:
+        raise ValueError(
+            f"levels must be ordered lower then upper, not {levels!r}: a transposed pair returns "
+            "an inverted interval that no other check sees (-ml §11.2.2)"
+        )
+    a, b, c, d = table
+    n = a + b + c + d
+    if n <= 0:
+        raise ValueError("the paired table describes no rows")
+    zero = a + d
+    n_factorial = math.factorial(n)
+    atoms: dict[int, int] = {}
+    for n_plus in range(n + 1):
+        for n_minus in range(n - n_plus + 1):
+            n_zero = n - n_plus - n_minus
+            weight = n_factorial // (
+                math.factorial(n_plus) * math.factorial(n_zero) * math.factorial(n_minus)
+            )
+            weight *= b**n_plus * zero**n_zero * c**n_minus
+            if weight:
+                atoms[n_plus - n_minus] = atoms.get(n_plus - n_minus, 0) + weight
+
+    total = n**n
+    bounds: list[float] = []
+    for level in levels:
+        cumulative = 0
+        for s in sorted(atoms):
+            cumulative += atoms[s]
+            if level.denominator * cumulative >= level.numerator * total:
+                bounds.append(s / n)
+                break
+    return bounds[0], bounds[1]
+
+
+def envelope_arms(
+    table: tuple[int, int, int, int], *, design_effect: float
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """The envelope's two arms, `sqrt(DEFF)`-widened about the same point estimate.
+
+    Returns `(mover_d, exact_paired_bootstrap)`. It exists because the report is required to name
+    **which arm bound each bound** (`-ml` §3.4 Rule 4) — an audit that is cheap and deterministic
+    once the resample is gone, and that makes Rule 4's mixture legible to a reader instead of
+    inferable only from the code. `conservative_envelope` composes it, and `verdict()` reads the
+    attribution off it, so neither recomputes the other's arithmetic.
+    """
+    a, b, c, d = table
+    n = a + b + c + d
+    if n <= 0:
+        raise ValueError("the paired table describes no rows")
+    point = (b - c) / n
+    scale = math.sqrt(design_effect)
+    # Both arms keep the identical clamp: Rule 4 requires them widened the same way, and a clamp
+    # is part of "the same way" (§4 S1e Table E).
+    mover = _widen(mover_d_interval(a, b, c, d), point, scale, clamp=(-1.0, 1.0))
+    exact = _widen(
+        exact_paired_quantiles(table, levels=(LEVEL_CI95_LO, LEVEL_CI95_HI)),
+        point,
+        scale,
+        clamp=(-1.0, 1.0),
     )
+    return mover, exact
 
 
 def conservative_envelope(
-    diffs: Sequence[float],
-    table: tuple[int, int, int, int],
-    *,
-    design_effect: float,
-    B: int,
-    seed: int,
+    table: tuple[int, int, int, int], *, design_effect: float
 ) -> tuple[float, float]:
-    """The interval printed on any non-`by-construction` path (`-ml` **v1.8** §3.4 Rule 4).
+    """The interval printed on any non-`by-construction` path (`-ml` v1.11 §3.4 Rule 4).
 
     **This replaces the bare percentile interval, and the correction is about *width*, not about
     the decision** (review M-ML-8). B-ML-2's veto fixed what this path *decides* with; what it
@@ -222,7 +384,7 @@ def conservative_envelope(
     determinism probe runs — `sqrt(1.0)` widens nothing, so a path taken **because less is known**
     was printing a tighter effect size than the instrument §3.2c mandates.
 
-    The rule: the **wider** of the `sqrt(DEFF)`-widened percentile bootstrap (Rule 6) and the
+    The rule: the **wider** of the `sqrt(DEFF)`-widened exact paired bootstrap and the
     `sqrt(DEFF)`-widened MOVER-D, half-widths scaled about the same point estimate the same way.
 
     **"Wider" is taken bound by bound, and Rule 4's own stated property is what fixes that
@@ -233,36 +395,24 @@ def conservative_envelope(
     an instrument it is supposed to dominate. Bound by bound it also can only ever *remove*
     rejections, which is what leaves the veto and Rule 7 undisturbed.
 
-    Three consequences Rule 4 claims, and each is a test here rather than a docstring promise: it
-    reduces to MOVER-D at DEFF 1.00 wherever MOVER-D contains the resample (restoring §3.2c's
-    effect-size instrument on a path where nothing about clustering was ever declared); it stays
-    responsive to a declared design effect; and it removes the sparse-count degeneracy, because
-    MOVER-D covers zero exactly when the counts are too thin to support excluding it — at n=30
-    with `b=4, c=0` the resample returns `[3.3, 26.7] pp`, excluding zero against an exact
-    p of 0.125, since with four non-zero rows `P(no +1 drawn) = (26/30)**30 = 1.4% < 2.5%` makes a
-    2.5th percentile of zero unreachable.
+    **It takes no `diffs`, no `B` and no seed** *(v1.11, §4 S1e Table D)*. The bootstrap arm is
+    now `exact_paired_quantiles`, a function of `(b, c, n)` alone, and MOVER-D of `(a, b, c, d)`
+    — so there is no second argument left to disagree with the first, and the `n != len(diffs)`
+    guard retires with it: the error it caught is **unrepresentable** rather than checked, which
+    is the outcome the note prefers to a guard every time.
 
-    **What this does not fix, and the note says so:** the resample arm remains a Monte-Carlo
-    estimate of an *atomic* quantile, so where the target percentile lands within Monte-Carlo error
-    of an atom boundary its bound flips by `1/n_units` with the seed and with the row order. The
-    envelope hides that wherever MOVER-D is the binding arm, which is the overwhelming majority of
-    tables measured — but not where the resample escapes MOVER-D. v1.8's second half is to compute
-    the percentile in closed form (the resample distribution of a paired **binary** table is
-    exactly multinomial), which is not done here: it retires `-ml` §3.2d's seed from this decision
-    and with it review P3-5's contract, and that is a scope call rather than a formula.
+    What is claimed and what is not: **neither printed bound is ever tighter than MOVER-D's**, so
+    §3.2c's instrument is a *floor on conservatism* rather than the interval itself. The stronger
+    v1.8 claim that the envelope "reduces to MOVER-D exactly at DEFF 1.00" is **withdrawn as
+    false** — measured, the exact arm binds at least one bound on 83.5% of the 455 tables at n=12,
+    87.3% at n=30 and 87.4% at n=40. It is a genuine mixture at every design effect. It also
+    removes the sparse-count degeneracy, because MOVER-D covers zero exactly when the counts are
+    too thin to support excluding it — at n=30 with `b=4, c=0` the *resample* returned
+    `[3.3, 26.7] pp`, excluding zero against an exact p of 0.125, since with four non-zero rows
+    `P(no +1 drawn) = (26/30)**30 = 1.4% < 2.5%` makes a 2.5th percentile of zero unreachable.
     """
-    a, b, c, d = table
-    n = a + b + c + d
-    if n != len(diffs):
-        raise ValueError(
-            f"the table describes {n} rows and {len(diffs)} paired differences were given; the "
-            "envelope is two instruments on one table, not on two"
-        )
-    point = (b - c) / n
-    scale = math.sqrt(design_effect)
-    resample = paired_cluster_bootstrap(diffs, design_effect=design_effect, B=B, seed=seed)
-    newcombe = _widen(mover_d_interval(a, b, c, d), point, scale)
-    return min(resample[0], newcombe[0]), max(resample[1], newcombe[1])
+    mover, exact = envelope_arms(table, design_effect=design_effect)
+    return min(exact[0], mover[0]), max(exact[1], mover[1])
 
 
 def cluster_bootstrap(
@@ -289,15 +439,84 @@ def cluster_bootstrap(
     rates.sort()
     point = sum(1 for o in flat if o) / len(flat)
     return BootstrapResult(
-        point=point, lo=_percentile(rates, 2.5), hi=_percentile(rates, 97.5), B=B, seed=seed
+        point=point,
+        lo=percentile(rates, level=LEVEL_CI95_LO),
+        hi=percentile(rates, level=LEVEL_CI95_HI),
+        B=B,
+        seed=seed,
     )
 
 
-def _percentile(ordered: Sequence[float], pct: float) -> float:
+# --- `-ml` §11.2: the one percentile in the package -----------------------------------------------
+
+#: `-ml` §11.2.2 — the **whole literal level space**. Four names, so a level is never spelled at a
+#: call site and a constant can never be built from a float by accident. The only level that is
+#: *computed* rather than named is `-ml` §3.4 Rule 8's family pair `alpha/(2k)`, derived inside
+#: `continuous_verdict()` from declared quantities and reaching `paired_bootstrap` as its `levels`.
+#: The names are the plan's (§4 S1e Table C), adopted from the note's recommendation; the values,
+#: the type and the estimator below are the note's.
+LEVEL_P50: Fraction = Fraction(1, 2)
+LEVEL_P95: Fraction = Fraction(19, 20)
+LEVEL_CI95_LO: Fraction = Fraction(1, 40)
+LEVEL_CI95_HI: Fraction = Fraction(39, 40)
+
+
+def percentile(values: Iterable[float], *, level: Fraction) -> float:
+    """The empirical quantile function — Hyndman-Fan type 1 (`-ml` §11.2).
+
+    `P = x(r)`, `r = ceil(level * X)` clamped to `[1, X]` over the ascending sample: the inverse
+    of the empirical CDF, `inf{ v : F(v) >= level }`. It is a named, externally documented
+    definition — R's `quantile(type = 1)`, NumPy's `method = "inverted_cdf"` — so the
+    implementation is checkable against a published rule rather than against a docstring.
+
+    **This is the only percentile or quantile in `modelbench`** (`-ml` §11.10(3), §4 S1e Table C).
+    `results.py` imports *this object*; both bootstrap call sites in this module call it. The two
+    private copies it replaced computed `int(round(pct/100 * (X - 1)))`, whose `round` is
+    half-to-even — so the tie-break direction alternated with the sample size — and having two of
+    them is what let `index.csv` report `latencyMsP95` at the 50th percentile and stay green
+    (review M27). Two copies of a formula is one copy and one bug (plan §3.9).
+
+    **The level is an exact rational, not a decimal** (`-ml` §11.2.2). A `k`-member continuous
+    family's level is `alpha/(2k)` — 12.5 permille at `k = 2`, 8.33... at `k = 3` — and no fixed
+    decimal unit expresses that, because the denominator is `40k` and 3 divides one of them. The
+    four `LEVEL_*` constants above are the whole literal space.
+
+    **The rank is one integer expression** (`-ml` §11.2.1), over the level's numerator and
+    denominator rather than over its float value. Measured in the note over levels `n/1000`,
+    `n = 1..999`, at `X <= 3000`: `math.ceil(pct / 100 * X)` — the retired copies' spelling —
+    diverges from the integer form on **1626** ranks, and `math.ceil(float(level) * X)` on **755**,
+    first at `X = 25`, `level = 7/25`, where `float(Fraction(7, 25)) * 25 == 7.000000000000001`.
+    Pin the expression below, never an equivalent-looking one.
+
+    Three refusals, and each is the note's:
+
+    * a `float` level raises `TypeError` — it reopens the bin-edge hazard the integer rank exists
+      to close, and `Fraction(0.05)` is *not* `Fraction(1, 20)` (that one is caught where the level
+      is built, `-ml` §11.10(2b), because it is a `Fraction` and arrives here legitimately typed);
+    * a level outside `(0, 1]` raises `ValueError`;
+    * an empty sample raises `ValueError` — whether a figure exists at all is `latency_summary`'s
+      decision (`-ml` §11.6), never a `None` returned from here.
+
+    The input is sorted **here**, on a copy. Requiring a sorted argument is a precondition a caller
+    can silently violate, and of the two copies this replaced one sorted and the other did not.
+    """
+    if isinstance(level, float):
+        raise TypeError(
+            f"percentile() needs an exact rational level, not the float {level!r}: a float level "
+            "reopens the bin-edge hazard the integer rank closes, and Fraction(0.05) is the "
+            "double's exact value rather than 1/20 (-ml §11.2.1, §11.2.2)"
+        )
+    if not 0 < level <= 1:
+        raise ValueError(f"level must lie in (0, 1], not {level!r} (-ml §11.2)")
+    ordered = sorted(values)
     if not ordered:
-        raise ValueError("no values")
-    idx = min(len(ordered) - 1, max(0, int(round(pct / 100.0 * (len(ordered) - 1)))))
-    return ordered[idx]
+        raise ValueError(
+            "percentile() has no values; whether a figure exists at all is latency_summary's "
+            "decision, never a None returned from here (-ml §11.2, §11.6)"
+        )
+    x = len(ordered)
+    rank = max(1, min(x, -(-level.numerator * x // level.denominator)))
+    return ordered[rank - 1]
 
 
 # --- Rule 5: the design effect is a variance ratio ------------------------------------------------
@@ -608,6 +827,10 @@ class Verdict:
     b: int
     c: int
     decided_by: DecidedBy
+    #: Which arm of the conservative envelope bound the (lower, upper) printed bound — the audit
+    #: `-ml` §3.4 Rule 4 puts in the `- decided by:` bullet's place once the seed parenthetical is
+    #: gone. `None` on `mcnemar-exact`, where one instrument produced the whole interval.
+    bound_by: tuple[str, str] | None
     marginal_overlap: bool
     alpha_used: float
     floor_demoted: bool = False
@@ -797,7 +1020,6 @@ def verdict(
     b_label: str = "B",
     alpha_step: float | None = None,
     holm_tested: bool = True,
-    bootstrap_seed: int | None = None,
 ) -> Verdict:
     """Decide one pre-registered metric, or refuse (`-ml` §3.4 Rule 4).
 
@@ -805,7 +1027,7 @@ def verdict(
     hold, and unless `alpha_step` lies in `[alpha_mdd, alpha_family]` (Rule 7's premise). McNemar
     exact decides and MOVER-D quantifies **only** at `design_effect == 1.0` and
     `basis == "by-construction"`; otherwise McNemar is anti-conservative, must not decide, and the
-    cluster-bootstrap CI on the paired difference takes its place.
+    conservative envelope on the paired difference takes its place.
 
     `alpha_step` carries §3.3's Holm–Bonferroni step for this metric when the caller is testing a
     family; it defaults to `resolving.alpha_mdd`, the tightest step. `holm_tested` is
@@ -880,24 +1102,25 @@ def verdict(
     if mcnemar_may_decide:
         ci = mover_d_interval(a, b, c, d)
         decided_by: DecidedBy = "mcnemar-exact"
+        bound_by: tuple[str, str] | None = None
         raw_significant = p <= alpha
     else:
-        if bootstrap_seed is None:
-            raise ValueError(
-                "the clustered decision path needs a bootstrap seed; it goes into the environment "
-                "fingerprint so the report is reproducible (-ml §3.2d)"
-            )
         # **The envelope, not the resample alone** (`-ml` v1.8 §3.4 Rule 4, review M-ML-8). The
         # veto below fixed what this path *decides* with; the interval it *quantifies* with was
         # the narrower of the two available instruments, on a path taken because less is known.
-        ci = conservative_envelope(
-            outcomes.unit_diffs(),
-            (a, b, c, d),
-            design_effect=resolving.design_effect,
-            B=10_000,
-            seed=bootstrap_seed,
+        #
+        # **And no seed reaches here any more** (`-ml` v1.11 Rule 4, §4 S1e Table D). The
+        # bootstrap arm is exact, so the interval is a function of the table alone: the arms are
+        # taken once here rather than through `conservative_envelope`, because Rule 4 also
+        # requires the report to name **which arm bound each bound** and recomputing them in the
+        # renderer would be a second home for one arithmetic.
+        mover_arm, exact_arm = envelope_arms((a, b, c, d), design_effect=resolving.design_effect)
+        ci = (min(exact_arm[0], mover_arm[0]), max(exact_arm[1], mover_arm[1]))
+        bound_by = (
+            "MOVER-D" if mover_arm[0] <= exact_arm[0] else "exact paired bootstrap",
+            "MOVER-D" if mover_arm[1] >= exact_arm[1] else "exact paired bootstrap",
         )
-        decided_by = "cluster-bootstrap"
+        decided_by = "conservative-envelope"
         # **A conjunction, not the interval alone** (review B-ML-2). At `design_effect == 1.0` with
         # a non-`by-construction` basis — the fail-safe every comparison carries until the
         # determinism probe runs, i.e. the *default* path — `sqrt(1.0)` widens nothing and a bare
@@ -925,7 +1148,7 @@ def verdict(
     #   any Holm step implies `|b - c| >= b_min(alpha_family)`, exhaustively over every `(b, c)`
     #   with `b + c <= 400` — so a fire is a defect in this module and must raise. Demoting it
     #   silently would discard exactly the detector property this rule exists for.
-    # * on `cluster-bootstrap` it is a **guard** — a widened interval and a shrunken effective *n*
+    # * on `conservative-envelope` it is a **guard** — a widened interval and a shrunken
     #   can legitimately disagree (at DEFF=2 on `(34, 6, 0, 0)` the interval still excludes zero
     #   at 15.0 pp while the floor has moved to 30.0 pp) — so a fire demotes and names the floor as
     #   the reason. Raising there would abort on ordinary clustered data.
@@ -980,7 +1203,7 @@ def verdict(
         # Only the substitute path reaches here: on `mcnemar-exact` a fire raises (m-ML-6), so
         # there is no branch for an instrument name that cannot occur.
         text = (
-            f"Not distinguishable at this sample size. The cluster-bootstrap interval "
+            f"Not distinguishable at this sample size. The conservative envelope interval "
             f"[{_pp(ci[0])}, {_pp(ci[1])}] pp excludes zero, but the observed "
             f"{_pp(abs(diff))} pp is below this pack's observable floor: "
             f"{floor_clause(resolving)}. An interval alone cannot support a claim the "
@@ -990,7 +1213,7 @@ def verdict(
     elif ci_excludes_zero:
         # `-ml` §3.2e verdict 3, "real and not rare" — and on the substitute path it is also where
         # the veto lands, so the closing clause has to say which of the two roles the exact test is
-        # playing. On `mcnemar-exact` it is the decision rule; on `cluster-bootstrap` it is a
+        # playing. On `mcnemar-exact` it is the decision rule; on `conservative-envelope` it is a
         # necessary condition and the interval is the decision rule, which the trailing label then
         # states in full. One sentence for both would contradict one of them.
         role = (
@@ -1001,7 +1224,7 @@ def verdict(
         # `-ml` §3.2e's wording names the MOVER-D interval by its job; the substitute path names
         # the instrument, as the floor-demotion string beside it already does.
         named = (
-            "effect-size" if decided_by == "mcnemar-exact" else "cluster-bootstrap"
+            "effect-size" if decided_by == "mcnemar-exact" else "conservative envelope"
         )
         text = (
             f"Not distinguishable at this sample size. The {named} interval "
@@ -1017,7 +1240,7 @@ def verdict(
             "Neither model is ranked above the other."
         )
 
-    if decided_by == "cluster-bootstrap":
+    if decided_by == "conservative-envelope":
         # Every string on this path carries the label, not two of the five: a reader who sees only
         # one verdict must still be told which instrument produced it (`-ml` §3.4 Rule 4).
         #
@@ -1033,7 +1256,8 @@ def verdict(
         # reader has no reason to read it as the reason the instrument changed).
         if resolving.design_effect > 1.0:
             text += (
-                " Decided by the cluster-bootstrap CI on the paired difference, widened by "
+                " Decided by the conservative envelope on the paired difference — MOVER-D and "
+                "the exact paired bootstrap, the wider of the two at each bound — widened by "
                 f"sqrt(DEFF)={math.sqrt(resolving.design_effect):.2f} for the declared "
                 f"clustering, in conjunction with McNemar's exact test (p={p:.3f}) as a necessary "
                 "condition: under clustering McNemar rejects too readily, so it may withhold a "
@@ -1049,7 +1273,8 @@ def verdict(
             # left sqrt(DEFF) at 1.00 is the **design effect**. Two different causes, so the
             # published variant states each where it belongs.
             text += (
-                " Decided by the cluster-bootstrap CI on the paired difference — the instrument "
+                " Decided by the conservative envelope on the paired difference — MOVER-D and "
+                "the exact paired bootstrap, the wider of the two at each bound — the instrument "
                 f"here because this comparison's design effect is {resolving.basis} rather than "
                 "established by construction — with no widening applied (sqrt(DEFF)=1.00), in "
                 f"conjunction with McNemar's exact test (p={p:.3f}) as a necessary condition: a "
@@ -1067,6 +1292,7 @@ def verdict(
         b=b,
         c=c,
         decided_by=decided_by,
+        bound_by=bound_by,
         marginal_overlap=overlap,
         alpha_used=alpha,
         floor_demoted=floor_demoted,

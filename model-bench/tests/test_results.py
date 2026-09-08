@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 
 import pytest
 from conftest import deterministic_fields, embeddings_fields, model_fields, run
 
+from modelbench import results as results_module
+from modelbench import stats
 from modelbench.fingerprint import Fingerprint
 from modelbench.results import (
     BENCH_SCHEMA_VERSION,
@@ -539,12 +542,27 @@ def test_the_index_latency_columns_are_p50_and_p95(tmp_root) -> None:
     header, row = text.splitlines()[0].split(","), text.splitlines()[1].split(",")
     p50 = float(row[header.index("latencyMsP50")])
     p95 = float(row[header.index("latencyMsP95")])
-    # The *definition* is deliberately not pinned here — nearest-rank vs interpolation is plan
-    # v1.5 §6's open R-13, and `_percentile` has two copies. What is pinned is that the two columns
-    # are different percentiles of the same sample, which is what the surviving mutation denied.
-    assert 45.0 <= p50 <= 55.0
-    assert 90.0 <= p95 <= 100.0
-    assert p95 > p50
+    # R-13 is closed and the definition IS pinned now (§4 S1e Table C): there is one percentile
+    # in the package, `stats.percentile`, and it is Hyndman-Fan type 1 (`-ml` §11.2). Over
+    # `1..100` the ranks are `ceil(1/2 * 100) = 50` and `ceil(19/20 * 100) = 95`, so the two cells
+    # are exact observations of the sample and no longer need a tolerance band. The band was there
+    # because two copies of the estimator disagreed; what it protected against — the two columns
+    # being the same percentile — is now pinned by the values themselves.
+    assert p50 == 50.0
+    assert p95 == 95.0
+
+
+def test_the_index_percentile_is_the_one_in_stats_and_not_a_second_copy() -> None:
+    """`-ml` §11.10(3) — asserted as **identity**, not as equal behaviour (§4 S1e Table C).
+
+    Two copies of this formula is what let `latencyMsP95` be computed at the 50th percentile and
+    stay green (review M27), so the check that closes it has to deny the second copy rather than
+    compare two implementations' output on a sample that happens to agree.
+    """
+    assert results_module.percentile is stats.percentile
+    assert not re.search(
+        r"def [A-Za-z_]*(percentile|quantile)", inspect.getsource(results_module)
+    ), "`results.py` may define no percentile or quantile helper of its own"
 
 
 def test_the_index_valid_column_distinguishes_a_usable_record_from_a_quarantined_one(
