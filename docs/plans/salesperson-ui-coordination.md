@@ -174,9 +174,10 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U40** — the two Pass 17 majors are plan defects: the `409` clause and `queuePosition`'s meaning | `architect` | `a6a3c80fcf98021f3` | **accepted** | `d1eaa7f`+`d01f22e`+`94c1578` — plan **v1.29** | `analyst` Pass 19 → **approve** (`8418a9f`) | 528k tok / 77 tools |
 | **U43** — retract the false CPython deadlock fact from `kaizen_team` before it is promoted | `cobb` | `a69330f81cf6048ae` | delivered | `de8b5ac` — 2 entries cleared, promoted split by audience | `analyst` (prompt edit) — queued | 118k tok / 28 tools |
 | **S9a-fix** — reserve/release, booking ordinal, derived `queuePosition`, P17-3/4/7, P18-6 | `coder` | `a31456adeff4788ea` | **delivered — committed `699ef52`** (7 files, +1032/−136). Suite **2639** teco-verified solo (baseline 2629, +10 net); `ws:acme` 871 intact; `reference` re-seeded. **Tripwire re-measured by me, not taken on report** — injected reach → guard red, file restored to md5. 18 mutations, 1 survivor (M10) which was a **missing test**, now red against it | `storefront.py`, `storefront_api.py`, both test files, `config.py`, `SERVER.md`, `HISTORY.md` | `analyst` **Pass 20 (fresh)** → **needs changes** (`ac28f2c`) — 3 majors, routed to U50/U51/U52; `qa-engineer` held behind them | 286k tok / 114 tools |
+| **Pass 21** — re-gate: v1.30's rule (`395266e`), its implementation (`d776ca8`), P20-2's three sites (inside `f9d23fb`). **Fresh again on the U24 precedent**: Pass 20 prescribed the discriminator that was implemented | `analyst` (**fresh**) | `a3ad2209fae9fb0e1` | in-flight — priority 1 is the widened raises guard, priority 2 is hunting justifications rather than values | `docs/reviews/salesperson-ui-impl.md` `## Pass 21` | — (is the gate) | — |
 | **Pass 20** — gate S9a-fix. **Fresh by design**: Pass 17 *prescribed* reserve-then-write, so its author judging this diff is producer-self-review one seat over (the U24 precedent) | `analyst` (**fresh**) | `afc3c09ccd5b50340` | **delivered — committed `ac28f2c`** (+284 lines). Survived **two** rate-limit kills, the second seconds in; resumed on its own transcript both times and lost nothing, because its predecessor artefact was already committed | `docs/reviews/salesperson-ui-impl.md` `## Pass 20` | **needs changes** — 0 blockers, **3 majors**, 2 minors, 3 nits. P17-1/P17-2 closed and closed at the right unit; my four questions all answered (see §Pass 20 below) | 150k tok / 10 tools |
 | **U50** — P20-1 is a **plan** defect: v1.29's S9 row prescribes the unconditional release the implementer faithfully wrote. Fix the release condition, tombstone the false mechanism | `architect` | `a5d8f1e2a1d897af0` | **delivered — committed `395266e`** — plan **v1.30**. Took the reviewer's asymmetry and **rejected its placement**: the flag is read *before* `submit`, not inside its `except`. **CPython mechanism re-verified by me** (`:178` put precedes `:179` adjust; `t.start()` at `:202`; venv 3.12.3; executor built with `max_workers`/`thread_name_prefix` only, so `BrokenThreadPool` is unreachable) | `docs/plans/salesperson-ui.md` **v1.30** | `analyst` Pass 21 | 112k tok / 32 tools |
-| **U51** — apply P20-1's corrected release + the P20-3/4/5/6 docstring corrections. **Fresh, not a resume**: S9a-fix's author is at 286k tok / 114 tools and every one of these fixes is self-contained | `coder` (fresh) | `a7ebbee7e795fe497` | in-flight — U50 and U52 both cleared | `storefront.py`, `test_storefront_api.py` | `analyst` Pass 21 | — |
+| **U51** — apply P20-1's corrected release + the P20-3/4/5/6 docstring corrections. **Fresh, not a resume**: S9a-fix's author is at 286k tok / 114 tools and every one of these fixes is self-contained | `coder` (fresh) | `a7ebbee7e795fe497` | **delivered — committed `d776ca8`**. Suite **2640/14 teco-verified solo** (baseline 2639, +1 = the new test); `storefront.py` md5 `08daf2ea` matches its reported restore exactly; `ws:acme` 871; `reference` re-seeded twice. Mutation-tested: release moved back into the `except` → new test red on `turn_in_flight is True`, shutdown test **stays green**, which is the discrimination | `storefront.py`, `test_storefront.py`, `test_storefront_api.py` | `analyst` **Pass 21 (fresh again)** — in flight, guard ruling first | 157k tok / 67 tools |
 | **U52** — P20-2: three delivered documents state the inverse of measured behaviour about `turn_workers` and `queuePosition`. Prose-only; **measure before writing**, because this sentence position has now been wrong twice | `coder` | `a9d876aa92c41d005` | **delivered — content committed, attribution lost.** Landed inside the concurrent session's `f9d23fb`, which swept my staged index; my own commit found nothing to make. Content verified byte-identical to what I reviewed (`git diff HEAD` clean). **Numbers re-measured by me, not taken on report** — 3 / 2 / 0 at `turn_workers` 1 / 2 / 4, real-executor arm agreeing with the staged-map arm; `config.py` verified comment-only | `SERVER.md`, `config.py`, `HISTORY.md` | `analyst` Pass 21 | 98k tok / 34 tools |
 | **S9f** — `STOREFRONT_QUIESCE_S`'s docs describe a quiesce that S9a made live | `tico`/`coder` (tbd) | — | queued (held behind Pass 17) | `config.py` + `docs/SERVER.md` prose | `analyst` (fold into Pass 17 re-check) | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
@@ -4073,3 +4074,56 @@ merged with S10's stop-intake flag: one is set-once executor lifecycle, the othe
 down, and a single attribute doing both would make reset-all refuse turns forever. S10 is unstarted
 and unassigned; that clause is a message to an implementer who does not exist yet, written at the
 only moment when the reason for it is obvious.
+
+## U51 landed all five, and widened a guard on the way
+
+The implementation is good and I checked the parts that carry weight rather than the parts that
+were easy to check. The suite is **2640 / 14** on my own solo run, matching its report; `storefront.py`
+comes back at md5 `08daf2ea08a66524b274d406d6a6336c`, exactly the value it said it restored to after
+mutation-testing; `ws:acme` is still 871. The new test is the shape I asked for and its mutation
+result is the one that matters: reverting the release into the `except` reddens the **new** test
+while `test_a_submit_refused_after_shutdown_releases_the_reservation` **stays green**. That green is
+the point — it is what proves the new case is not a duplicate of the old one but the half a
+shutdown-shaped test structurally cannot reach.
+
+**Then there is the guard.** `storefront.py` had never raised outside the `StorefrontError` family;
+`enqueue_turn`'s new `RuntimeError` is the first, and it reddened
+`test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume`. The implementer relaxed
+that test's family-subset assertion to subtract `NON_FAMILY_RAISES`, argued that the equality below
+it still makes a written reason mandatory and non-stale, and cited a precedent: *"the same two-way
+door the `Services` leg has had since `RuntimeError` entered it."*
+
+I checked the precedent. **It does not exist.** `git log -S'SERVICE_RAISES_TODAY) <= service_family'`
+returns nothing — the `Services` leg has never had a family-subset assertion at all; `service_family`
+is computed and used only in the equality. So nothing comparable was relaxed when `RuntimeError`
+entered `SERVICE_RAISES_TODAY`. The `storefront.py` leg was the only one that ever carried two
+protections, and it now carries one for this name.
+
+Read charitably, the sentence is ambiguous rather than false — *"the two-way door the Services leg
+has"* is true of the equality, and only the implied *"…which it got by the same relaxation"* is not.
+I am not scoring it as generation seven on that ambiguity. But it is precisely the shape that
+misleads: a reader who goes to verify the precedent finds no matching structure, and the appeal is
+doing real persuasive work in a comment justifying a weakened test.
+
+**I committed it and did not accept it.** Those are different acts, and the distinction is the whole
+reason the ledger has both a `Status` and a `Gate → verdict` column. The work is verified, the tree
+is shared with a session that has already swept my staged files into its own commit once today, and
+leaving a verified deliverable uncommitted to signal disapproval would be using version control as
+a mood. The commit message says plainly that a guard was widened to admit the change that tripped
+it and that Pass 21 adjudicates it first.
+
+**Pass 21 goes fresh again**, on the same U24 precedent that sent Pass 20 fresh: Pass 20 prescribed
+the shutdown-flag discriminator, so its author judging an implementation of a flag is
+producer-self-review one seat over. Its brief leads with the guard — asking both whether the
+weakened pair is still sufficient (*construct a mutation the old pair caught and the new one does
+not, or fail to*) and whether widening was the right call at all — and then asks it to hunt
+**justifications rather than values** across all three commits, because five of six generations of
+this defect have been a reason and not a number.
+
+**A note for the stakeholder, not for the gate.** This project has a standing fence: no
+guard-widening unit may be opened without a fresh decision from them. This was not opened as one —
+it arose as a side effect of a raise that had to exist. I am letting the gate rule on the
+engineering before spending stakeholder attention, because "is the weakened guard still sufficient"
+is an analyst's question and the answer changes what I would even be asking them. If Pass 21 says
+the guard still holds, this is a footnote; if it says otherwise, it is their call and I will put it
+to them.
