@@ -6265,3 +6265,289 @@ tree: **`2640 passed, 14 deselected`** in 24.3 s. `ruff check` clean on `falkorc
 `tests/test_storefront.py` and `tests/test_storefront_api.py`. `git show d776ca8 --numstat` shows
 **0 deletions** in `tests/test_storefront.py`, so the `+1` over the `2639` baseline is the one new
 case with nothing removed or skipped.
+
+## Pass 22 — 2026-09-08 (the rebuilt raises guard and the killing test, commits `069f6ae` + `0db9fb3`)
+
+**Reviewed:** two commits, read with `git show` and re-run against a **byte-copy of
+`falkor-chat/server/` held in the session scratchpad** (never in place) — **`069f6ae`**
+(`docs/plans/salesperson-ui.md` **v1.31**) and **`0db9fb3`** (`falkorchat/storefront.py`,
+`tests/test_storefront.py`, `tests/test_storefront_api.py`). **Against:** `## Pass 20`'s and
+`## Pass 21`'s open findings, and the three priorities the coordinator set — is the rebuilt guard
+*sound* or only *stronger*; does the killing test discriminate against the **rejected** design
+rather than only against the mechanism's absence; and does v1.31 state the accepted residue exactly
+once. **Out of scope by the coordinator's boundary:** `S9f` (`STOREFRONT_QUIESCE_S` prose,
+overlapping P18-6), `turn.lastTurn` (S9c), queued-turn cancellation (S9b), the per-participant
+record cache (S9d), and the pre-existing `storefront.py:364` citation drift. I am a **fresh
+reviewer by design**: Pass 21 both found the defect and prescribed the rebuild, so it is not the
+seat to judge it.
+
+**Verdict: approve with suggestions** — 0 blockers, **1 major**, 3 minors, 0 nits. Everything
+Pass 21 asked for is delivered and I confirmed it by execution rather than by report: the guard
+reddens on the mutation that defeated it (`get_state`), the killing test kills the design v1.30
+rejected **and nothing else in the file kills it**, and the plan now states the residue in one
+place with both of P21-4's doors named. The one major is the *oracle* the coordinator warned about:
+the killing test's "nothing was submitted" assertion measures the wrong thing and its docstring says
+so in the opposite direction, and a neighbouring wrong implementation survives it 8/8.
+
+**CPG: considered, not relevant — `cpg_falkorchat` is stamped `SOURCE_TREE 85ddeed0…` against a
+current `falkor-chat/server` tree of `cf62a1cd…`, four commits back, and its `storefront.py`
+predates every S9 change; I did not query it and I agree with the coordinator that a rebuild is not
+worth a unit for a diff-scoped review that leans on execution rather than on structure. Every claim
+below is established from the tree, from CPython 3.12.3, or by running mutants.**
+
+**Environment note for the coordinator: I ran the full suite once, so the `reference` graph is
+wiped** (`tests/conftest.py:109`). `cd falkor-chat/server && .venv/bin/python -m pytest -q` →
+**`2641 passed, 14 deselected`** in 25.2 s, matching `0db9fb3`'s claim exactly; `ruff check` clean on
+all three touched files. **Nothing in the repo tree was mutated**: all 12 mutants were applied to
+and restored inside a scratchpad copy of `falkor-chat/server/` (importable ahead of the editable
+install because setuptools' `_EditableFinder` is *appended* to `sys.meta_path`, so `PYTHONPATH`
+wins). `git status --porcelain` shows only the concurrent session's three files
+(`claude/graph-dba/`, `model-bench/`); nothing staged, nothing committed, no tree-mutating git.
+
+### Priority 1 — is the rebuilt guard sound, or only stronger? **Sound for the class it names, with one measured residual.**
+
+**The attribution holds everywhere the coordinator asked about, and drops nothing.** I ran
+`_raise_sites` over twelve synthetic shapes (Appendix R §1): a raise inside a nested `with`, inside
+`try`/`except`/`else`/`finally`, inside `async def`, inside `async with`/`async for`, under
+`if`/`for`/`while`, behind a decorator, and reached through a comprehension all attribute to the
+**nearest enclosing function** and redden; a raise in a nested closure attributes to the closure, a
+module-level or class-body raise to `"<module>"`. **No shape is silently dropped** — the concern
+that motivated the question does not reproduce, and the `iter_child_nodes` choice is doing exactly
+what its docstring claims.
+
+**The guard also survives being mutated itself.** Five mutations of the *reader* — drop the
+`continue` so a nested function's raise also charges its parent, never update `enclosing`, skip
+`_resolve_raised` in the site reader, return `set()`, hardcode `enclosing` to `"enqueue_turn"` — all
+five redden (Appendix R §2). The hardcoding mutant is the interesting one: it slips past the
+real-module assertion and is caught by the **synthetic control** at `:4360-4370`, which is what
+those controls exist for. The drift assertion (`{name for _, name in _raise_sites(...)} ==
+storefront_raises`) has real force too — it is what kills the empty-return mutant.
+
+**What it still cannot see.** The assertion is a **set of function names**, so multiplicity within
+one function collapses: see P22-2.
+
+### Priority 2 — does the killing test discriminate against the rejected design? **Against that one, yes and uniquely. Against its nearest neighbour, no.**
+
+I ran five neighbouring implementations of `enqueue_turn` against the three placement tests
+(Appendix R §3). The headline result is the one the coordinator's standard asks for: **mutant A —
+the design v1.30 explicitly rejected, flag read moved into the `except` — fails
+`test_the_flag_alone_refuses_the_turn_while_the_executor_is_still_alive` with `Failed: DID NOT RAISE
+RuntimeError` while both pre-existing cases stay green.** Deleting the mechanism outright (mutant C)
+reddens two tests, so reach is proved; substituting the rejected alternative reddens exactly one,
+and it is the new one. That is the discrimination P21-3 asked for, delivered.
+
+The positive control earns its place: it is asserted *before* the call and it is what stops the case
+degrading into a second spelling of the post-shutdown test. Mutants E (refuse without releasing) and
+F (refuse by returning `None`) both die on it too.
+
+### Findings
+
+**P22-1 — major. The killing test's "nothing was submitted" assertion measures nothing of the kind,
+and its docstring asserts the opposite of what I measured.**
+`tests/test_storefront.py`, `test_the_flag_alone_refuses_the_turn_while_the_executor_is_still_alive`
+— *"`_work_queue.qsize()` is the only way to assert **nothing was submitted** rather than **nothing
+was left over**."* On the live executor this case deliberately requires, a submitted item is pulled
+off that queue by the worker `submit` itself starts, so `qsize()` reads `0` on **both** sides.
+Measured: mutant D — the flag checked *after* `submit` instead of before, the nearest neighbour to
+the very ordering this test exists to pin — passes it **8 runs out of 8**, with
+`qsize=0, len(_threads)=1` where the delivered code reads `qsize=0, len(_threads)=0`
+(Appendix R §3-4). The suite still kills mutant D, but on the *other* test, by a different
+mechanism; the discriminator itself does not see it. **Suggested**, and measured before writing it:
+add `assert len(shop._executor._threads) == 0` beside the `qsize` line. It is deterministic rather
+than lucky — a `ThreadPoolExecutor` starts its first worker inside `submit`'s
+`_adjust_thread_count()` (`thread.py:179`) and `_threads` never shrinks before shutdown — so it is
+`0` iff no submit happened. Then correct the docstring sentence: `qsize()` is *not* the
+submit-detector, `_threads` is.
+
+**P22-2 — minor. The site guard's oracle is a set of function *names*, so a second raise inside the
+one allowlisted function is invisible.** `tests/test_storefront_api.py:4228-4232`. Measured on the
+whole guard, not just the reader: adding `raise RuntimeError("enqueue_turn called with no booking")`
+to the top of `enqueue_turn` leaves the guard **green** (Appendix R §1-2) — and `enqueue_turn` is
+itself request-reachable from `POST /shop/api/messages`, so that is the same unmapped bare `500` the
+guard's own comment says it exists to prevent, one function further in. The same collapse hides a
+`RuntimeError` raised from a method named `enqueue_turn` on a *different* class in the module. This
+is a much smaller hole than the module-wide one P21-1 closed and I am not asking for a redesign.
+**Suggested:** make `_raise_sites` return a `list` of pairs and assert the multiset —
+`[fn for fn, name in _raise_sites(...) if name == "RuntimeError"] == ["enqueue_turn"]` — which
+keeps the drift assertion working unchanged (it already projects to a set) and makes a second site
+in the same function a stop-and-decide.
+
+**P22-3 — minor. The comment's own verification instruction is now self-falsifying.**
+`tests/test_storefront_api.py:4203-4205`: *"`git log -S'<= service_family' --
+tests/test_storefront_api.py` returns **no commit at all**."* Run verbatim today it returns
+**`0db9fb3`** — because that commit introduces the literal string `<= service_family` *in this very
+comment*, which the pickaxe counts. The substantive history claim is **true and I re-derived it**
+(`service_family` enters only in `00827c2`, used only in the four-scope equality; that same commit
+moved `RuntimeError` into `SERVICE_RAISES_TODAY`, which held `UnknownOrderTransitionError` alone
+before it, and still wrote this assertion bare) — but the reader who checks it as instructed sees a
+hit and has to open a commit to learn it is the sentence itself. **Suggested**, and run before
+writing it: `git log -G'assert.*<= service_family' -- tests/test_storefront_api.py`, which returns
+**0 rows** on the delivered tree and cannot match a comment line.
+
+**P22-4 — minor. "its only call site" is false, and the missed one is the worse of the two.**
+`tests/test_storefront_api.py:4221-4223` cites `get_state` as *"the sole handler body of
+`GET /shop/api/state` (`storefront_api.py:1103`, its only call site)"*. `grep -rn '\.get_state('
+falkorchat/` returns **two**: that handler, and `storefront.py:1426` inside
+`_reset_state_unknown` — the factory behind `raise self._reset_state_unknown(...)` on
+`POST /shop/api/reset-mine` (`storefront.py:1397`, route body `storefront_api.py:1356`), whose
+`except` catches **only `redis_exceptions.TimeoutError`**. A `RuntimeError` from `get_state` there
+does not just produce a bare `500`; it replaces the deliberate `504` that same docstring promises
+(*"still a `504`, never a `500`"*). This is the second narrowing of one claim in a row — the
+implementer corrected "every `/shop/api` route" to "its only call site" and the replacement is also
+wrong. **Suggested:** *"one of its two call sites; the other is `_reset_state_unknown`
+(`storefront.py:1426`), whose `except` catches only `redis_exceptions.TimeoutError`, so a
+`RuntimeError` there turns reset-mine's deliberate `504` into the same bare `500`"* — which
+strengthens the guard's rationale instead of weakening it.
+
+### Priority 3 — v1.31's deletion. **Clean, and the surviving statement is the derivation, not the copy.**
+
+`grep` counts on the current plan against `395266e` (v1.30): *"all mean the pool is stopped"* 1→**0**,
+*"the queued item runs"* 2→**1**, *"genuinely queue nothing"* **1**, *"costs nothing"* **1** — the
+last two both inside the S9 row and the v1.31 tombstone respectively, so the live statement of the
+residue exists in exactly one place and it is §5.1's S9 row derivation. The §5.2 précis is gone,
+replaced by a direction-only sentence plus a citation and a tombstone that *describes* the false
+sentence rather than re-quoting it. **The citation resolves:** the *cite, don't re-list* rule is at
+`docs/plans/salesperson-ui.md:11` (adopted v1.7) and §5.1 is the table at `:1069` holding the S9
+row. **The surviving derivation is the correct one, checked line for line on the pinned 3.12.3**
+(Appendix R §5): `:167`/`:170`/`:172-173` are the three guarded raises, `:175-176` are the two
+allocations, `:178`/`:179` the put and the adjust, and `shutdown`'s wait really is
+`if wait: for t in self._threads: t.join()` at `:236-238` as the row now cites. The row's two new
+qualifications are both true: the `MemoryError` pair is correctly separated out as leaking on a
+*healthy* pool, and the `__init__` comment it grounds the cold-pool case on
+(*"`ThreadPoolExecutor` starts no thread until the first `submit`"*) is at `storefront.py:455`. The
+P21-5 cost paragraph's mechanism also checks out: `storefront_api.py:1213-1226` calls
+`services.post_message` then `shop.enqueue_turn` with nothing between them catching the
+`RuntimeError`, so the refused post really does leave a message with no reply.
+
+### Dispositions
+
+| Finding | Disposition | Evidence I rechecked |
+|---|---|---|
+| **P21-1** (exemption open where it should be closed; per-site blindness) | **fixed** | both halves shipped at `:4192-4232`: the exemption is an equality on `frozenset({"RuntimeError"})`, and the site read pins it to `enqueue_turn`. Re-measured: Pass 21's `get_state` mutant now **reddens** with `Extra items in the left set: 'get_state'` where it was green on `d776ca8`. Residual, narrower → **P22-2** |
+| **P21-2** (a `Services` precedent that does not exist, two sites) | **fixed** | both clauses gone; replaced by the asymmetry, which I re-derived independently — `00827c2` is the sole introducer of `service_family`, used only in the four-scope equality, and it wrote the storefront leg bare in the same diff. The *instruction* for checking it is now self-falsifying → **P22-3** |
+| **P21-3** (the rejected placement is pinned by no test) | **fixed**, and it is the right test | mutant A (flag read inside the `except`) → `Failed: DID NOT RAISE RuntimeError` on the new case, both pre-existing cases green; mutant C (deletion) reddens two. Uniqueness confirmed against a 5-mutant set. The oracle inside it is weaker than its docstring claims → **P22-1** |
+| **P21-4** (§5.2's résumé contradicted by its own derivation, two doors) | **fixed** structurally | the précis is deleted, not rewritten; `grep` counts above; the `MemoryError` pair and the cold pool are both named and measured in the S9 row, and the *"usually"* qualification is now load-bearing and bounded |
+| **P21-5** (the chosen placement's own cost named nowhere) | **fixed** | the S9 row carries *"What the early read costs…"* with the route-ordering mechanism verified here (`storefront_api.py:1213-1226`), and grounds the acceptance on the asymmetry of what is lost rather than on the unverified uvicorn width — which it flags as taken from the review |
+| **P21-6** (`NON_FAMILY_RAISES` miscounts its own scopes) | **fixed**, third site named and it resolves | `:3983-3988` now reads "two of the three legs this dict governs"; `storefront_api.py:778` is exactly `register_storefront_error_handlers`' missing-incumbent `raise RuntimeError(` |
+| **P21-7** (a bound that its own reason contradicts) | **fixed**, at both sites | `tests/test_storefront_api.py:4905-4919` and `storefront.py:332-341` both now say the two readings part company *once a turn is running*, and both name the transient. Re-derived: with nothing `thinking`, `turn_payload`'s lower-ordinal `TURN_QUEUED` count equals what `len(self._turns)` counted, so the agreement claim is true |
+| **P20-1 … P20-6** | **fixed**, unchanged since Pass 21 | spot-rechecked the two this pass could disturb: the release still sits only ahead of `submit` and the `except` still releases nothing (`storefront.py:1011-1026`); `TurnState`'s docstring keeps P20-3's correction, now with P21-7's bound folded in rather than appended |
+| P20-7, P20-8 | **not fixed**, correctly — nits, never dispatched | still open, still not worth a unit |
+| P17-9 (no production retainer for the `Future`) | **not fixed**, deferred to S9b as Pass 20 recorded | `storefront_api.py:1226` still discards it |
+| `S9f` (`STOREFRONT_QUIESCE_S` prose) | **not fixed** — out of scope by the coordinator's boundary, overlaps P18-6 | not examined |
+| `storefront.py:364` citation (plan §5.1's S8 row) | **not fixed** — pre-existing, out of scope, **and worse than the brief states** | the construct it names (`config.STOREFRONT_DIR` fallback) is at **`:435`**, not `:364`; `:364` is a blank line. Drift is **~71 lines**, not three — the citation has been stale since `039cae3` (v1.18) and `0db9fb3` contributed only 3 of it. Whoever fixes it should re-point, not nudge |
+
+### What's solid
+
+* **The rebuild is genuinely stronger, and it is stronger in the direction that was open.** The
+  mutation that defeated `d776ca8`'s guard now reddens, and the reader survives five mutations of
+  itself. The synthetic controls are not decoration — one of them is the only thing that catches the
+  hardcoded-`enclosing` mutant.
+* **`_resolve_raised` shared between the two readers, plus the collapse assertion, is the right
+  construction.** It makes "the site read sees the same raises the name read does" a checked
+  property rather than a hope, and it is what turns the empty-return mutant red.
+* **The killing test does the job it was asked for, and its setup comment explains why each private
+  read is deliberate.** Setting the flag directly rather than calling `shutdown_turns()` is the
+  whole point of the case and is argued as such; the positive control is asserted before the call,
+  where it can still prevent the degradation it names.
+* **v1.31 fixed P21-4 by removing the copy rather than by writing a better copy.** That is the
+  structural repair — a summary one section away from its derivation has no way to stay true, and
+  the tombstone says so instead of re-quoting the sentence it retired.
+* **Both commits disclose their own mutation testing in the message, with the mutant, the failure
+  string and the restored md5.** That is what let this pass go straight at the oracle instead of
+  re-establishing the probe.
+
+### Open questions
+
+1. **Does P22-1's `_threads` assertion want to be generalised into a submit-counting double?**
+   `tests/test_storefront_api.py:4690` already has a `_GatedExecutor`; a counting `submit` would
+   make "nothing was submitted" observable without any private read, in this case and in the two
+   beside it. My recommendation is the one-line `_threads` assertion now (it is deterministic and
+   matches the file's existing idiom) and the double only if a third case needs it — but it is a
+   scope call for the coordinator, not a finding.
+2. **Is P22-2 worth closing at all before S9a closes?** The residual is one function wide and the
+   fix is a `set`→`list` change. I would take it, because the cost is three characters and the class
+   of defect is the one this guard was rebuilt for — but a deliberate "no, one function is a small
+   enough fence" is a defensible ruling and should be recorded as one rather than left silent.
+
+### Appendix R — Pass 22's measurements
+
+All mutants were applied to a **scratchpad byte-copy** of `falkor-chat/server/`, never to the repo
+tree; the repo tree's `falkor-chat/` files are byte-identical to `0db9fb3` throughout
+(`git status --porcelain` shows only the concurrent session's `claude/graph-dba/` and
+`model-bench/` files).
+
+**R §1 — `_raise_sites` attribution, twelve shapes.** `-> guard red` means the delivered assertion
+`{fn for fn, name in sites if name == "RuntimeError"} == {"enqueue_turn"}` would fail.
+
+```
+nested with                                  sites=[('get_state','RuntimeError')]   -> guard red
+nested try/except/else/finally               sites=[('get_state','RuntimeError')]   -> guard red
+async def method                             sites=[('get_state','RuntimeError')]   -> guard red
+async with / async for                       sites=[('get_state','RuntimeError')]   -> guard red
+if/for/while nesting                         sites=[('get_state','RuntimeError')]   -> guard red
+decorated method                             sites=[('get_state','RuntimeError')]   -> guard red
+reached through a comprehension              sites=[('_f','RuntimeError')]          -> guard red
+closure inside a method                      sites=[('_inner','RuntimeError')]      -> guard red
+module-level raise                           sites=[('<module>','RuntimeError')]    -> guard red
+class-body raise                             sites=[('<module>','RuntimeError')]    -> guard red
+SECOND raise in the SAME allowed function     sites=[('enqueue_turn','RuntimeError')] -> GUARD GREEN
+same method name on a different class        sites=[('enqueue_turn','RuntimeError')] -> GUARD GREEN
+```
+
+**R §2 — mutants run through the real guard test** (`pytest -k raises_a_route_can_reach`), five of
+the reader and two of `storefront.py`:
+
+```
+baseline                                                         -> 1 passed
+storefront.py + raise RuntimeError in get_state (Pass 21's)      -> 1 failed  ("Extra items in the left set: 'get_state'")
+storefront.py + second raise RuntimeError inside enqueue_turn    -> 1 passed  <- P22-2
+reader: drop the `continue` after descending a nested function   -> 1 failed  ({'<module>','enqueue_turn'} == {'enqueue_turn'})
+reader: never update `enclosing`                                 -> 1 failed  ({'<module>'} == {'enqueue_turn'})
+reader: skip `_resolve_raised` in the site read                  -> 1 failed  (caught by synthetic control 2)
+reader: `_raise_sites` returns set()                             -> 1 failed  (set() == {'enqueue_turn'})
+reader: hardcode `enclosing` to "enqueue_turn"                   -> 1 failed  (caught by synthetic control 1)
+```
+
+**R §3 — the five `enqueue_turn` mutants against the three placement tests**
+(`test_a_submit_refused_after_shutdown_releases_the_reservation` = **S**,
+`test_a_submit_that_raises_after_it_queued_the_item_leaves_the_booking_standing` = **Q**,
+`test_the_flag_alone_refuses_the_turn_while_the_executor_is_still_alive` = **F**):
+
+```
+P  delivered                                          -> 3 passed
+A  flag read moved into the `except` (v1.30 REJECTED)  -> F fails  ("Failed: DID NOT RAISE RuntimeError"); S, Q green
+C  pre-submit block deleted outright                   -> S and F fail; Q green
+D  flag checked AFTER submit instead of before         -> S fails only; **F PASSES** (8/8 reruns)
+E  refuse before submit, do NOT release the booking     -> S and F fail
+F' refuse before submit, release, return None not raise -> S and F fail
+```
+
+**R §4 — why mutant D survives, instrumented.** Same setup as the killing test, printing the
+executor's internals immediately after the refusal:
+
+```
+delivered code : qsize=0  threads=0     <- nothing submitted, no worker ever started
+mutant D       : qsize=0  threads=1     <- the item WAS submitted; the worker submit started drained it
+```
+
+`qsize()` therefore reads `0` on both sides. `len(_threads)` separates them deterministically,
+because `_adjust_thread_count()` (`thread.py:179`) starts the first worker inside `submit` and
+`_threads` never shrinks before shutdown.
+
+**R §5 — v1.31's CPython citations, line for line, on `.venv/bin/python -V` → `Python 3.12.3`.**
+`/usr/lib/python3.12/concurrent/futures/thread.py`: `submit` `:164-180`; `BrokenThreadPool` `:167`;
+executor `_shutdown` `:170`; interpreter `_shutdown` `:172-173`; the two allocations
+(`f = _base.Future()`, `w = _WorkItem(...)`) `:175-176`; `_work_queue.put(w)` `:178`;
+`_adjust_thread_count()` `:179`; and `shutdown`'s wait — `if wait:` / `for t in self._threads:` /
+`t.join()` — at `:236-238`, exactly as the S9 row now cites it.
+
+**R §6 — the plan's residue, counted.** `docs/plans/salesperson-ui.md`, current vs `395266e`
+(v1.30): `"all mean the pool is stopped"` 1→**0**, `"the queued item runs"` 2→**1**,
+`"genuinely queue nothing"` **1** (S9 row), `"costs nothing"` **1** (inside the v1.31 tombstone,
+describing what it retired). Only one line-numbered citation into `storefront.py` survives anywhere
+in the plan — `:364`, the pre-existing one.
+
+**R §7 — the suite.** `cd falkor-chat/server && .venv/bin/python -m pytest -q -p no:cacheprovider`
+on the delivered tree: **`2641 passed, 14 deselected`** in 25.24 s — `0db9fb3`'s claimed count
+exactly, and `+1` over Pass 21's `2640`. `ruff check` on `falkorchat/storefront.py`,
+`tests/test_storefront.py` and `tests/test_storefront_api.py`: **All checks passed**.
