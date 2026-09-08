@@ -160,6 +160,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U42b** — 3 sites in the manual; `cpg_falkorchat` is no longer a live pre-fix example | `tico` | `a4e2b1a2f544180d8` | delivered — held for pairwise gate | `b47c84a` — **5** sites, shape set = **6** | `analyst` Pass 4 (pairwise) — **in flight** | 76k tok / 19 tools |
 | **Pass 4** — the pairwise shape-set gate: do `freshness.md` and `graph-ontology.md` teach the same set of marker shapes? | `analyst` (**resumed** — wrote m1–m5 and Passes 1–3; the only party holding both sides) | `a98a748e49a559ead` | **accepted — committed `d4214c3`**. `freshness.md` **needs changes** (1 major), `graph-ontology.md` **approve with suggestions**. **Shape sets are two partitions of one set, no omission either way** — proved by enumerating each document's *classification surface* and walking both orderings against the two live markers. **P4-1: the fifth-generation false mechanism, inside the fourth's own fix** | `docs/reviews/cpg-provenance-stamp.md` `## Pass 4` | — (is the gate) | 238k tok / 14 tools |
 | **U45** — P4-1 / K-023: the hybrid fork | `cobb` | `a1cfcb25341f0b0bb` (resumed) | **delivered — committed `29538d6`**. Chose **impossible** and **reverted its own discriminator hunks**; rejected a middle option I had not listed (partition by key) because *the real data crosses that boundary*. Property list stated **CLOSED**, invariant named, tombstone applied. Net **−1** line. P4-2 fixed in passing | `git-provenance.sh`, `SKILL.md`, `freshness.md`, K-023 closed / K-024 filed | `analyst` Pass 5 | 160k tok / 11 tools |
+| **U55** — U47a's Case 3: the fix is a closed **list**, not a closed **set**. Decide where the invariant lives | `cobb` | `aadea04e203b11c4f` | **delivered — committed `0da3eb9`.** Chose *derive the allow-list from the stamp's own assignments* + a stray-key assertion in `pipeline.sh`. **Both load-bearing claims re-run by me**: the refactored stamp emits **byte-identical** output to `HEAD`'s across both cases including quote/backslash escaping, and the stray query on the live marker returns exactly `MARKER_ORIGIN`/`MARKER_WRITTEN_AT`/`NOTE` | `git-provenance.sh`, `pipeline.sh`, `SKILL.md`, `freshness.md`, `skills/README.md`, cobb kaizen | `analyst` — queued | 137k tok / 47 tools |
+| **U56a** — delete the graph key `cobb` leaked by probing a nonexistent graph (`GRAPH.QUERY` **materializes**); `GRAPH.LIST` 26 → 25 | `graph-dba` | `a5825012b34ab9a9b` (resumed) | in-flight | `GRAPH.LIST` before/after diff | — | — |
+| **U56b** — execute the `SET b = {map}` claim `cobb` refused to ship on doc evidence alone. If it holds, the simplification routes **back to `cobb`** with the evidence, never applied by the validator | `graph-dba` | `a5825012b34ab9a9b` (same) | in-flight | `keys(b)` before/after on a throwaway | — | — |
 | **U47a** — execute the mechanism the fix rests on: does `SET b.X = NULL` **remove** the key or store a null? | `graph-dba` | `a5825012b34ab9a9b` (resumed) | **delivered — graph writes, no file to commit. Answer: it removes.** 13-key marker → stamp → `Properties set: 8` / `removed: 13`, `keys(b)` = exactly the eight pipeline fields; `none` case → `set: 4`, `keys(b)` = four; `count(b) = 1`. Ran the `RETURN b.NOTE, …` read alongside — five `(nil)`s either way, which is why `keys(b)` was the only discriminator worth asking for. **Found a residual (Case 3) → U55.** `GRAPH.LIST` 25 → 25, diff empty; scratch graph created and deleted by it | the executed evidence, recorded here | — (I re-derived the artefacts myself) | 139k tok / 11 tools |
 | **U47b** — P4-5: the marker's `NOTE` cites a superseded gate, and must now say it is **build-scoped** | `graph-dba` | `a5825012b34ab9a9b` (same) | **delivered.** `NOTE` replaced not appended, 1,561 → 2,245 chars; per-marker gate description, the derivation discharged, all five cleared keys named. **I re-derived `SOURCE_TREE` myself** — `git rev-parse b795f4c:falkor-chat/server` = `85ddeed…`, agreeing with the marker and with `MANIFEST.txt:19`'s independently hand-written anchor. Nine other fields byte-identical to U41 | `cpg_falkorchat`'s `NOTE` | — | (same run) |
 | **U48** — K-024: `docs/plans/cpg-agent-adoption-graph.md` §1.1's property table understates the stamp (executed against → header pointer or successor, not an in-place edit) | `architect` | — | queued | `docs/plans/cpg-agent-adoption-graph.md` | `analyst` | — |
@@ -4324,3 +4327,56 @@ counter reports real removals **plus every overwrite**: seed 13 → `set: 13`; s
 `keys()` read-back — which is independent confirmation that the read-back is load-bearing rather than
 belt-and-braces. `claude/graph-dba/falkordb-quirks.md` is still held by the concurrent session, so
 this paragraph is its home until U44 can run.
+
+## U55 refused to ship the better fix, and that was the right call
+
+`cobb` picked neither of the options I named. Not documentation — it said plainly that a `SKILL.md`
+line is "documentation asking a human to remember, which is the same class of protection that just
+failed." And not the closed list alone. It made the stamp's **own assignments** the allow-list:
+`_cpg_prop` accumulates each non-`NULL` property into `CPG_STAMPED_KEYS` as it builds the SET
+clause, and a stray-key query returns one row per property the stamp did not write, asserted in
+`pipeline.sh` after the existing read-back. There is no second list to keep in sync, so a sixth
+hand-authored key is covered **by construction** — the pipeline did not write it. It also subsumes
+the original U45 hole directly: under `provenance = none` the stamp writes no `SOURCE_*` keys at
+all, so a previous build's `SOURCE_COMMIT` surviving is itself a stray.
+
+**The part worth recording is what it declined to do.** It found a strictly better fix —
+`SET b = {map}`, which would close the *set* by construction and delete the `NULL` enumeration
+entirely — sourced from FalkorDB's documentation, which says `=` "Replaces all existing properties
+with the map properties." It did not ship it. Its reason, in its own framing: it cannot execute a
+graph write to check, and *replacing a live verified mechanism with a doc-sourced one, having
+removed the verified one, is precisely generation ten of this chain's defect class.* It logged the
+exact probe instead and routed the validation to the agent that has the guard.
+
+That is the discipline this coordination has spent nine generations installing, arriving as a
+refusal rather than as a caution. The tempting move was available, better on the merits, and
+supported by a citation — and it was declined *because* the citation was the only support. I have
+been asking delegates to mark inference as inference; this went further and let the marking change
+the decision.
+
+It also named its choice's failure mode without being able to hide it: the assertion **detects, it
+does not prevent**, and it charges for the detection after a multi-hour parse, on a run whose real
+work succeeded. Accepted because `pipeline.sh` already takes that stance for the `PARSED_AT`
+read-back, and because the alternative failure is one a *consumer* pays for, silently, later. Two
+smaller ones are documented at the code: the check is **negative**, so an error reply carries no
+`STRAY_KEY=` and would sail through — hence an explicit status check — and a marker-less graph also
+returns zero rows, which makes the ordering after the read-back load-bearing rather than cosmetic.
+
+**Verified by me, both load-bearing claims.** The refactored `cpg_provenance_stamp` emits
+**byte-identical** output to `HEAD`'s across the full-capture and `none` cases, including quote and
+backslash escaping — I sourced both versions and diffed. And the stray query against
+`cpg_falkorchat`'s live 10-key marker returns exactly `MARKER_ORIGIN`, `MARKER_WRITTEN_AT` and
+`NOTE`. A refactor claiming no behaviour change is the cheapest possible thing to check and one of
+the easiest to be wrong about.
+
+**And it corrected a false universal I had read past repeatedly.** All three sites said the stamp
+*"writes every property on the node"*. It never did — it writes the properties it **names**, which
+is the whole reason Case 3 exists. That sentence has been sitting in the docstring since before
+`29538d6`, was quoted approvingly in my own commit messages, and survived a gate. `freshness.md`
+gains a second tombstone recording that the rule survived a **second** wrong mechanism.
+
+**One leak, and the mechanism behind it is worth more than the cleanup.** Probing the marker-less
+case created `cpg_nonexistent_graph_xyz`: a `MATCH`-only query sent through `GRAPH.QUERY` rather
+than `GRAPH.RO_QUERY` **materializes** the graph. `GRAPH.LIST` is 26 where U47a closed it at 25.
+Deletion is not mine and not `cobb`'s, so U56a routes it to `graph-dba` with a before/after diff
+rather than a bare count — the concurrent session is still churning its own scratch keys.
