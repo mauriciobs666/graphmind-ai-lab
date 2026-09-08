@@ -3,6 +3,30 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-08 — Curator retraction: cleared a false `kaizen_team` mechanism claim, promoted its correction in two halves
+
+- **Scope:** two same-session `architect` entries from 2026-09-08 — `7f3c1a92-5b64-4a7e-9d81-2c0a6b4e8f13`
+  (a false CPython deadlock mechanism) and `2b8d40f1-6c17-4f52-8a3e-91d7c5b0ae44` (the correction
+  `architect` wrote after `analyst` disproved it, which `architect` could not clear itself).
+- **What:** re-derived the disputed mechanism from source before deleting anything — CPython 3.12.3
+  `concurrent/futures/thread.py:23-31` puts both the `q.put(None)` and `t.join()` loops *outside*
+  `_python_exit`'s `with _global_shutdown_lock:` block, and `shutdown()` joins outside
+  `self._shutdown_lock` likewise — then staged the arrangement twice myself rather than accepting
+  either `architect`'s or the requester's account. `submit()` under an application lock returned in
+  0.2 ms; the process exited rc 0 after exactly the hold time (0.52 s / 3.03 s for 0.5 s / 3.0 s
+  holds); held forever it never exits. Retraction confirmed on my own evidence. Cleared both nodes
+  (each current-shape, one `PRODUCED` edge, `otherRemaining == 0` → full-node `DETACH DELETE`).
+  Promoted the correction in two halves: the CPython fact to `skills/python-web-quirks/SKILL.md`
+  (new section + frontmatter `description` clause + `skills/README.md` catalog clause), the method
+  lesson into `architect.md`'s existing "Honesty about uncertainty" Guardrails bullet.
+- **Why:** a false entry flagged for clearing must not sit in the graph where a later pass could
+  promote it, and a deletion is curator-only. Verifying it myself is the §5 step-2 rule
+  ("re-derive the fact yourself") applied to its sharpest case: the entry being retracted *cited
+  real source lines* and still misdescribed them.
+- **Notes:** filed **K-022** — the "wrong rather than absent" defect class, four instances in one
+  coordination, first one in prose — for judgment at the next certification pass rather than acting
+  on it from a single instance.
+
 ## 2026-09-07 — Distillation pass 2, U9: `tdd-engineer` chunk B (8 entries) — 2 merged promotions, 3 discarded, 1 kept open; agent closed out
 
 - **Scope:** the eight current-shape entries `PRODUCED` by `tdd-engineer` dated 2026-08-31 → 09-03,

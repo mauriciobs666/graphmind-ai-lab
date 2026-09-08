@@ -2,6 +2,59 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-09-08 — `kaizen_team` retraction pass: false CPython deadlock entry `7f3c1a92` cleared, its correction `2b8d40f1` promoted (1 discarded/retracted, 1 promoted, 0 kept open, 0 `MENTIONS`-tagged)
+
+- **What:** `cobb` processed the two same-session `kaizen_team` entries `architect` wrote on
+  2026-09-08 while amending `docs/plans/salesperson-ui.md` S9 (atomic per-participant turn
+  reservation) — a false mechanism claim and the correcting entry `architect` wrote after `analyst`
+  disproved it, which `architect` could not clear itself (curator-only shape).
+
+  **Retracted and cleared (`7f3c1a92-5b64-4a7e-9d81-2c0a6b4e8f13`).** The entry claimed that
+  holding an application lock across `ThreadPoolExecutor.submit()` "can deadlock at interpreter
+  exit", because `submit()` takes `_global_shutdown_lock` "which `_python_exit` holds while joining
+  worker threads" — a three-party cycle. **The mechanism does not exist.** Re-derived from source
+  rather than taken on the correction's word: CPython 3.12.3
+  `/usr/lib/python3.12/concurrent/futures/thread.py:23-31` shows `_python_exit` entering
+  `with _global_shutdown_lock:` for the single statement `_shutdown = True` (line 26); the
+  `q.put(None)` loop (28-29) and the `t.join()` loop (30-31) are both *outside* it. `shutdown()` is
+  the same shape — `self._shutdown_lock` closes at line 235, its join loop runs at 236-238.
+  Independently staged twice: with the application lock held across `submit()`, a worker blocking on
+  that lock, and the main thread falling off the end, `submit()` returned in **0.2 ms** and the
+  process exited **rc 0** after exactly the hold time (0.52 s wall for a 0.5 s hold; 3.03 s for a
+  3.0 s hold). Held forever it never exits — the same delay at its limit, not a cycle. The entry was
+  not merely imprecise: acted on, it would have banned a sound design (`submit()` under a
+  reservation lock) on a hazard that is not there. Discarded, not narrowed — the true fact it
+  gestured at is the correcting entry's, promoted below.
+
+  **Promoted (`2b8d40f1-6c17-4f52-8a3e-91d7c5b0ae44`), split by audience — both halves verified
+  before promotion, neither taken from the entry's prose.**
+  - **The corrected CPython fact → `skills/python-web-quirks/SKILL.md`, new section** (+1 clause in
+    the frontmatter `description`, which is the routing signal and enumerates every entry). The
+    right home: a general Python/threading fact, not a `falkor-chat` one, and the on-demand skill
+    already carries this class. Section states the lock scopes with line numbers, the two staged
+    measurements above, and the honest residual — `_python_exit` joins workers *unlocked*, so
+    interpreter exit is bounded below by the lock's hold time. A latency cost, unbounded only if the
+    lock is never released.
+  - **The method lesson → `architect.md` Guardrails, folded into the existing "Honesty about
+    uncertainty" bullet** rather than filed as a ninth bullet — that bullet already said
+    *"distinguish what you verified from what you're inferring"*, and the lesson is the operational
+    form of exactly that rule, so a new bullet would have restated a neighbour (§7 cognitive-load
+    and prompt-waste both favour the fold). The gap it closes is real: the prompt's existing rules
+    cover the detail you *know* you are unsure of (line 35, "verify external specifics"), and this
+    failure is the opposite — `submit()` was read from source while `_python_exit`'s lock scope was
+    asserted from memory **in the same sentence**, producing prose that reads uniformly verified with
+    no seam a reviewer can see. Bullet now carries *"a mechanism claim is only as verified as its
+    least-verified clause"* and the operational test: open every function a justification names, not
+    just the entry point. Judged "most sessions" — writing multi-mechanism justifications is routine
+    for this agent. **+80 words.**
+
+- **Why:** the false entry was flagged for clearing so it could not be promoted in the interim, and
+  a deletion is curator-only. The correction was judged on its merits, not accepted on `architect`'s
+  or the requester's say-so.
+- **Notes:** both entries were current-shape (one `PRODUCED` edge each, no `MENTIONS`); each
+  `otherRemaining == 0`, so each was cleared as a full-node `DETACH DELETE` per `agent-maintenance`
+  §5 step 4. Neither is about another agent, so no `MENTIONS` tagging applied.
+
 ## 2026-09-07 — `kaizen_team` distillation pass 2, chunk B: the remaining 6 current-shape entries (2026-09-03, plus one written 2026-09-07 during chunk A's run) — 6 promoted, 0 discarded, 0 kept open, 0 MENTIONS-tagged
 
 - **What:** `cobb` processed `architect`'s six remaining `kaizen_team` entries

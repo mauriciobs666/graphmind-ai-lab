@@ -19,6 +19,7 @@
 | K-017 | 2026-08-20 | low | 🔵 | Item 4 of the "Broader team-verbosity reduction" diagnosis (surfaced 2026-08-19; items 1-3 delivered, see `history.md`): prune hedge-stacking once a rule has structural backup (a hook, a routing table) instead of three defensive clauses. No specific instances identified yet — start with a scan across the agent prompts for hedge-stacked clauses backed by real harness enforcement (a `PreToolUse` hook, a routing table) and trim each to one clean statement. |
 | K-020 | 2026-09-06 | medium | 🔵 | `cypher-mcp/server.py:881`'s FalkorDB-unreachable message advises `docker start falkordb-dev`, which cannot work — no launch path in this repo leaves a stopped container by that name. Out of cobb's write remit (component code); route to an implementer via `teco`. |
 | K-021 | 2026-09-07 | medium | 🔵 | Validate `entryId` **shape** in the `cypher-mcp` producer-write authorizer — a malformed or colliding id is load-bearing for the curator-clear path. Content validation deliberately **not** proposed. |
+| K-022 | 2026-09-08 | medium | 🔵 | The **wrong-rather-than-absent** defect class now has four instances in one coordination and its first in *prose*. Decide at the next certification pass whether it earns a team-wide statement, and where. |
 | K-019 | 2026-08-21 | **high — filed upstream** | 🔵 | **Systemic, now confirmed matcher-agnostic too. `PreToolUse` "ask" hooks do not reliably pause execution in this session under Auto Mode, on either `Bash` or `Write`/`Edit`, regardless of hook source or execution context.** Four independent, isolated live tests, 2026-08-21, Claude Code 2.1.238, all under Auto Mode: (1) `graph-dba`'s own frontmatter `Bash` hook, Task-dispatched with `subagent_type` explicitly correct — didn't fire. (2) The identical guard mirrored as a session-wide `.claude/settings.local.json` `Bash` hook, run from `cobb`'s own **main session** — didn't fire. (3) Same test repeated after the user explicitly reloaded hook config via `/hooks` (visibly listed as registered, `[Local] Bash — 1 hook`) — still didn't fire. (4) **`cobb`'s own frontmatter `Write`/`Edit` hook** (`guard-cobb-topic-writes.sh`) — a `Write` to a path plainly outside cobb's allowlist (`docs/_hook_test_k019_scratch.md`) went through with zero interruption; re-fed the exact real payload to the script directly afterward and confirmed it correctly returns `ask` for that path. **Every test used a real, disposable payload (scratch graph or scratch file, immediately cleaned up) and independently pipe-test-confirmed correct hook logic** — ruling out `subagent_type` omission, stale config, hook-not-registered, and matcher-specific quirks as explanations. **Working hypothesis:** Auto Mode's classifier layer silently resolves/overrides a correctly-emitted `ask` decision before a human ever sees it, across both tool matchers tested. **Filed upstream 2026-08-21** via `/feedback` (user-submitted, confirmed "Feedback / bug report submitted") with the 3-test Bash repro; the 4th (Write/Edit) test landed after filing, not yet included in a follow-up report. **Practical consequence, effective immediately: every "harness-enforced" Guardrails claim across every guarded agent in this team — all three destructive-ops guards, all eight doc-write allow-list guards, the one broad-write deny-list guard — is currently unverified, and actively disconfirmed on the two mechanisms tested, under Auto Mode, in every execution context tried.** Not yet tested: the Write/Edit + Task-dispatched-subagent combination specifically (all 4 tests covered 3 of the 4 matcher×context cells) — very likely shares the gap given the pattern, not confirmed. **Next steps:** (1) monitor for an Anthropic response to the filed report; (2) treat this as the standing state of the team's enforcement model — Auto Mode being off is the only known workaround, untested/not decided; (3) fill the last untested cell (Write/Edit, subagent-dispatched) if a clean answer is ever needed before Anthropic responds. |
 
 ### K-001 — Re-verify standards against live docs
@@ -107,6 +108,36 @@
   enforcement, which is exactly the case for a harness-side check.
 - **Out of cobb's write remit** (component code, same shape as K-020) — route to an implementer via
   `teco`. Filed, not implemented; U17 was scoped to distillation only.
+
+### K-022 — The "wrong rather than absent" defect class may have outgrown per-agent guardrails
+- **Status:** 🔵 proposed
+- **Priority:** medium
+- **Rationale:** During the salesperson-ui / model-bench coordination the same defect shape
+  surfaced four times across different agents and artifact kinds: a CPG marker naming a commit
+  whose tree was never parsed; a stamp that could fail and still announce success; `git rev-parse`
+  echoing its argument back on stdout so a marker took the literal string `HEAD:./src` as a tree
+  OID; and — the fourth, 2026-09-08 — `architect`'s `kaizen_team` entry `7f3c1a92` asserting a
+  CPython deadlock mechanism that does not exist. The invariant across all four: **a slot that
+  should have been empty or loud instead held a plausible, checkable-looking value that was
+  wrong**, and every downstream reader accepted it because it had the shape of a verified one.
+  Three of the four are *values*; the fourth is *prose* — a justification — which is what makes it
+  interesting: the class is not confined to machine-written fields, and prose has no schema to
+  validate against, only a reader.
+- **Proposed change:** at the next certification pass (§4), decide whether this is one rule or
+  several. Candidate homes, in ascending cost: a section in a shared on-demand knowledge base;
+  one bullet in each affected agent's Guardrails (`architect` already has its half as of
+  2026-09-08 — *"a mechanism claim is only as verified as its least-verified clause"*); or a
+  root-`AGENTS.md`-level statement, which is the highest bar and probably wrong for a defect
+  class this abstract. The specific question to answer first: **do the value cases and the prose
+  case share a fix, or only a symptom?** If the fix for a value is "make the failure loud" and the
+  fix for prose is "verify every clause, not the first one", they are two rules wearing one name
+  and should not be merged.
+- **Notes:** deliberately **not** acted on in the 2026-09-08 retraction pass that surfaced it.
+  Only one of the four instances was in evidence in that run; the other three live in `analyst`'s
+  and `graph-dba`'s files, which a concurrent session was holding at the time, and writing a
+  team-wide rule from a single instance is the same error the rule would be about. The full trail
+  is in `docs/reviews/cpg-provenance-stamp.md` and `docs/reviews/salesperson-ui-impl.md`
+  Passes 17-18.
 
 ## Parking lot / ideas
 - **`bypassPermissions` revert landed (U3, 2026-09-01)** — `.claude/settings.json`'s

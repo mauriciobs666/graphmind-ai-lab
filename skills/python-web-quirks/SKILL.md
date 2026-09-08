@@ -25,7 +25,10 @@ description: >-
   def-time-bound default arg; a one-way circular import between two modules that fails in every
   load order unless the deferred import is inside a function body (not a class body); and
   starlette TestClient's teardown cancelling every still-running task regardless of whether the
-  app's own lifespan cancels it. Use for asyncio.create_task scheduling, background-task dispatch, a
+  app's own lifespan cancels it; and an application lock held across ThreadPoolExecutor.submit()
+  delaying interpreter exit by the lock's hold time rather than deadlocking it (nothing holds
+  _global_shutdown_lock across a join). Use for asyncio.create_task scheduling, threading/executor
+  lock-ordering questions, background-task dispatch, a
   FastAPI response model using exclude_unset, an assertion over an app's route table or its
   responses={...} declarations, an HTTP client against urllib/OpenAI-compatible
   endpoints, an LLM-judge parser, a pytest monkeypatch touching an env var or deferred import, a
@@ -434,3 +437,27 @@ app-level shutdown-cancellation code, assert on something only the app code itse
 (e.g. that it stored the task reference on `app.state` at all — an `AttributeError` if that line
 is dropped), not the task's final `cancelled()` state. Surfaced writing the lifespan smoke test for
 falkor-chat's periodic sweep task (K-028 U3b, `coder`).
+
+## Holding an application lock across `ThreadPoolExecutor.submit()` does **not** deadlock at interpreter exit — it delays exit for exactly as long as the lock is held
+
+Verified against CPython 3.12.3. `_python_exit` (`concurrent/futures/thread.py:23-31`) takes
+`_global_shutdown_lock` **only** to set `_shutdown = True`; both the `q.put(None)` loop and the
+`t.join()` loop sit *outside* that `with` block. `ThreadPoolExecutor.shutdown()` has the same shape
+— `self._shutdown_lock` is released before its own join loop (`thread.py:220-238`). `submit()` does
+take `self._shutdown_lock` and `_global_shutdown_lock` together (`thread.py:165`), but nothing ever
+holds either lock *across* a join, so no cycle can form between an application lock and the
+executor's shutdown machinery.
+
+Staged the exact arrangement that a deadlock claim requires — an application lock acquired, then
+`executor.submit(fn)` called while holding it, the submitted worker blocking on that same lock, and
+the main thread falling off the end without releasing it. `submit()` returned in **0.2 ms** (it
+never blocked), and the process exited cleanly (rc 0) after **exactly** the lock hold time: 0.52 s
+wall for a 0.5 s hold, 3.03 s for a 3.0 s hold. With the lock never released the process does not
+exit at all (killed at 30 s) — the same mechanism at its limit, not a deadlock.
+
+**Consequence for review:** "holding a lock across `submit()` risks a shutdown deadlock" is false
+and must not gate a design. The real cost is a **non-daemon worker that cannot finish**:
+`_python_exit` joins every worker *unlocked*, so interpreter exit is bounded below by however long
+the application lock stays held — a latency cost that becomes unbounded only if the lock is never
+released. Surfaced as a retraction: a `salesperson-ui` S9 plan amendment asserted the deadlock,
+`analyst` Pass 18 disproved it from source and by staging it (`architect`, 2026-09-08).
