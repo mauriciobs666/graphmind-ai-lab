@@ -3,6 +3,76 @@
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
 
+## 2026-09-09 — the two entries held open for K-009, cleared after independent re-execution (U30)
+
+- **What:** `cobb`, running a curator **clearing step** (not a distillation) under
+  `claude/docs/plans/kaizen-distillation2-coordination.md`, cleared the two `kaizen_team` entries
+  U24 deliberately held open against the then-live K-009 defect. Both were orphans — `PRODUCED`
+  already resolved by U24, alive only on a `MENTIONS`→`graph-dba` edge. **Both cleared; neither
+  held a second time.** No prompt, knowledge-base or skill file was edited: the content was already
+  promoted by U24/U28 and re-scoped by `682fbed`, so this unit's whole job was to check that and
+  decide.
+  - **`b7f3c2a1-9d4e-4c11-8a52-6e0f1d3b7c94` (bare-error prefix taxonomy) — CLEARED.** Its fact is
+    carried in full by `falkordb-quirks.md`'s "error replies carry no uniform prefix" paragraph
+    (both bare runtime shapes quoted verbatim, the `errMsg:`/`ERR ` catches, exit 0 throughout, and
+    the paired control that makes the miss visible), and its `rq()` observation by the closing
+    paragraph of the same bullet, which now records the defect as **closed 2026-09-09**.
+  - **`4f9c21ae-7b30-4d62-9c18-6ea5d0b73c41` (mid-stream abort) — CLEARED.** Its sound half is the
+    "that discriminator is sound rather than merely observed" paragraph; its **over-broad closing
+    clause is not inherited anywhere.** `falkordb-quirks.md` scopes the claim to *aborts* and marks
+    the generalisation *"there is no partial reply to worry about"* explicitly **false**, pointing
+    at the `RESULTSET_SIZE` bullet; `pipeline.sh`'s gate comment does the same, listing the
+    silently-capped reply as case 3 of what the gate does **not** cover. The `RESULTSET_SIZE`
+    measurement was folded onto the **pre-existing** bullet (verified 2026-07-30) rather than
+    duplicated — one bullet, one cross-reference, no second copy.
+- **Why the judgment was re-derived by execution, not read off the review.** Every generation of
+  the K-009 defect had a plausible reading of the code under which it was fine. Driven this run
+  against `localhost:6379`, module `41811`, `rq()` extracted verbatim from
+  `skills/joern-cpg/scripts/pipeline.sh:368-384` at `682fbed`, **with two passing controls beside
+  the failing probes** so a uniform result could not be misread:
+
+  | probe | reply | `rq()` |
+  |---|---|---|
+  | `RETURN 1` (control) | header + `Cached execution` + trailer, 3 lines | **0** |
+  | `MATCH (n:NoSuchLabelXyz) RETURN n` (zero-row control) | header + blank + trailer, 3 lines | **0** |
+  | `RETURN nosuchfunc(1)` | `Unknown function 'nosuchfunc'`, one bare line | **1** |
+  | `MATCH (n:KaizenEntry) RETURN keys(n.fact)` | `Type mismatch: expected Map, Node, Edge, or Null but was String` | **1** |
+  | `UNWIND [1,0] AS x RETURN 1/x AS stray` | `Division by zero` | **1** |
+  | `THIS IS NOT CYPHER` | `errMsg: Invalid input 'T': …` | **1** |
+
+  The three shapes that used to return 0 now return 1 and the controls still return 0, so the
+  entries' defect is dead rather than merely reported fixed.
+- **The abort claim reproduced under a harder shape than the entry used.**
+  `GRAPH.RO_QUERY kaizen_team "UNWIND range(1,5000) AS x RETURN 1/(x-5000) AS v"` — 4,999 rows
+  producible before the error — comes back as **one line, `Division by zero`**, rc 0, no `v`
+  header, no `Cached execution`, no trailer. Rows already produced really are discarded.
+- **And the counter-case that bounds it, re-measured here:** `GRAPH.CONFIG GET RESULTSET_SIZE` →
+  `10000`; `UNWIND range(1,200000) AS x RETURN x` → rc 0, **10003 lines**, last data row `10000`,
+  last line `Query internal execution time: 8.734283 milliseconds` (`Cached execution: 1` — the
+  query was warm this run; the 2026-09-09 measurement in `falkordb-quirks.md` recorded a cold
+  `Cached execution: 0` and its own timing, which is per-run noise). Line count and last data row
+  match the file digit for digit. So the trailer proves the server ran to completion and nothing
+  about completeness — which is exactly why the entry's general clause had to be scoped rather
+  than promoted.
+- **One evidence item was not promoted, and is recorded here instead of being lost.**
+  `b7f3c2a1`'s evidence listed five probes; `falkordb-quirks.md` carries four verbatim. The fifth —
+  `GRAPH.RO_QUERY` against a **non-graph Redis key** answering `WRONGTYPE` — belongs to the
+  *caught-by-the-blacklist* half, and the blacklist was deleted outright by `48882d8`, so it is no
+  longer operative anywhere. Re-observed read-only this run for the record, against the existing
+  stream key `telemetry{ws:test}` (nothing created, key type unchanged afterwards):
+  `WRONGTYPE Operation against a key holding the wrong kind of value`, and an absent graph
+  (`no_such_graph_u30`) → `ERR Invalid graph operation on empty key`, **`EXISTS` 0 afterwards** —
+  `RO_QUERY` materialises nothing, as the existing bullet says. Stock Redis wrong-type behaviour,
+  not a FalkorDB quirk worth an always-available bullet.
+- **Graph, count-and-decide.** Both entries recounted at clearing time rather than trusted from the
+  brief: `PRODUCED` **0**, `MENTIONS` **1** each, so `otherRemaining = 0 + 1 - 1 = 0` for both and
+  each took a **full-node clear** (`MATCH (e:KaizenEntry {entryId:'…'}) DETACH DELETE e`), not an
+  edge resolve. Complete 36-character ids used throughout — four prefix collisions are confirmed in
+  this graph, one diverging only at index 21. `graph-dba`'s `MENTIONS`-edge count: **2 before, 0
+  after**; a post-clear read on both ids returns 0 rows. **`graph-dba`'s inbox is now 0 produced /
+  0 mentioned.**
+- **Plan items:** — (K-009 was closed by U28 at `48882d8`; nothing reopened.)
+
 ## 2026-09-09 — K-009 fixed and K-008 closed: `rq()` now recognises success positively (U28)
 
 - **What:** both remaining `pipeline.sh` items closed in one unit, because they touch one file.
