@@ -1491,7 +1491,8 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
             # F8, both orderings: the sweep may have committed, so this is
             # *unknown*, never the quiesce `503`. The re-read is another query
             # against the same graph and is the *likelier* second fault — a
-            # second timeout still answers `504`, simply with no roster.
+            # second timeout still answers `504`, with `participants` present
+            # and `null` (§5.2 *Absent versus null on the wire*), never absent.
             shop.forget_all()
             shop.clear_all_turns()
             try:

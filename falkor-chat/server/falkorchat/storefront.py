@@ -164,8 +164,10 @@ class ResetStateUnknownError(StorefrontError):
     re-read is another query against the same graph, and the stalled write that
     produced the first timeout is precisely what stalls it for a second
     `FALKORDB_SOCKET_TIMEOUT`. **A second timeout must not escape as a `500`**:
-    the response is still `504`, simply with no state body. The state block is
-    a courtesy the response carries when it can, not the contract.
+    the response is still `504`, with `state` present and `null` — the key is
+    never dropped, only its value, matching `participants` on the reset-all
+    route's own second-timeout case. The state block is a courtesy the
+    response carries when it can, not the contract.
     """
 
     code = "reset_state_unknown"

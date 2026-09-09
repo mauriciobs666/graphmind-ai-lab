@@ -41,10 +41,28 @@ reads "as `SERVER.md` §1.3 still claims" and "S9f open", both now stale now tha
 is fixed; that document is `qa-engineer`'s and already executed against, so the correction is left
 to its owner rather than made here.
 
-**Prose/comments only** — `docs/SERVER.md`, `falkorchat/config.py` (comment text only; no
-behaviour, default, or name changed — `python -m py_compile` on the one touched `.py` file is
-clean), and this file. No suite run either pass, per the unit's instruction, to avoid contending
-for the live database with a concurrent session.
+A third pass corrects a related but distinct defect Pass 23 also found while reviewing this arc:
+prose asserting a `504` response body **omits** a key it in fact ships **present with `null`**.
+Pass 23's own **P23-5** named `storefront_api.py:1494` — the comment above `presenter_reset_all`'s
+second-timeout `504` — which read *"simply with no roster"*; `_handle_storefront_http_error`
+splices `**exc.extra` into the body verbatim, and `participants=unresolved` is `None` on a second
+timeout, so the key is present and `null`, never absent, as Pass 23's own execution of both
+orderings (its Appendix S §2) confirmed. Fixed in place. The unfiltered sweep this called for
+(`storefront_api.py` + `storefront.py`, grepping for "no body"/"no roster"/"carries no"/"absent"/
+"dropped" and related phrasing) found one further genuine instance no citation had named:
+`storefront.py:157-169`'s `ResetStateUnknownError` docstring said reset-mine's own second-timeout
+`504` comes back *"simply with no state body"* — the identical false-absence claim for `state`
+that finding D-3 had already reported for §4.8 of the plan, surviving here in the *code* docstring
+after the plan text was corrected. Fixed the same way. Nothing else in either file matched: the
+remaining "with no"/"absent"/"dropped"/"carries no" hits are unrelated — `TurnState`'s deliberate
+lack of a `queuePosition` field, dropped ids/log entries, and other guarantees with no bearing on
+whether a response key is absent or null.
+
+**Prose/comments only** — `docs/SERVER.md`, `falkorchat/config.py`, `falkorchat/storefront_api.py`,
+`falkorchat/storefront.py` (comment/docstring text only across all three touched `.py` files; no
+behaviour, default, or name changed — `python -m py_compile` clean on all three), and this file.
+No suite run in any pass, per the unit's instruction, to avoid contending for the live database
+with a concurrent session.
 
 ## 2026-09-08 — salesperson-ui S9a: `## Pass 22`'s four findings — the killing test's oracle, a raise-guard blind spot, a self-falsifying comment, and `get_state`'s missed second call site
 
