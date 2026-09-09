@@ -79,6 +79,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U23 | analyst chunk E (13: 09-07, arrived after pass open) | `a096fa1ae04ee4cae` (resumed once, for the AST correction) | accepted | 12 promoted / 1 discarded, all 13 cleared, **13 entries → 4 edits** (six became one six-part section, three a fold); `claude/analyst/{review-techniques.md,analyst.md,kaizen/history.md}`, `claude/graph-dba/{falkordb-quirks.md,kaizen/history.md}`, `claude/cobb/kaizen/{history,plan}.md` | teco re-derivation → **accepted after one correction**: 68→65, 42→40, per-file 3/3/14; re-derived at both revisions under 5 definitions. `rq()` defect confirmed by executing the helper | 190.6k + 210.5k tok, 71 tools |
 | U24 | analyst chunk F (12 of the 14 held at dispatch: all 09-08) | `a554b6fb7d89af6f0` | accepted | 10 promoted / 1 discarded / **1 kept open** (`graph-dba` K-009), **12 entries → 7 edits**; `claude/analyst/{analyst.md,review-techniques.md,kaizen/history.md,kaizen/plan.md}`, `claude/graph-dba/{falkordb-quirks.md,kaizen/history.md,kaizen/plan.md}`, `claude/cobb/kaizen/history.md`, `skills/python-web-quirks/SKILL.md`, `skills/README.md`; 2x `MENTIONS`→`graph-dba` | teco re-derivation → **accepted, no correction needed** — the dataclass narrowing reproduced across three annotation shapes, both stdlib line refs exact, NaN asymmetry and all counts exact | 248.5k tok, 94 tools |
 | U25 | analyst chunk G (the 2 deferred; re-queried at dispatch 09-09 — `analyst` held exactly these 2, nothing new arrived) | `a271cfb21a2dbe1af` | accepted | 2 promoted / 0 discarded, both `DETACH DELETE`d, **2 entries → 1 file, 2 sections**; `claude/analyst/{review-techniques.md,kaizen/history.md}`, `claude/cobb/kaizen/history.md`. **`analyst` produced inbox now 0.** | teco re-derivation → **accepted, no correction needed** — second consecutive clean unit; tombstone byte-identity reproduced under an independent anchor pair to the entry's own cited digest, growth figures digit for digit | 147.6k tok, 39 tools |
+| U26 | `graph-dba` (its 1 produced entry; its 2 `MENTIONS`-only nodes are U24's kept-opens and are **out of scope**) | `afe9fd679115a7900` (resumed once, to fold the K-008 note into the item body) | accepted | 0 promoted / **1 discarded** / 0 kept open, `DETACH DELETE`d; the entry was accurate when written and **dead 40 minutes later** (`6012ddb`). Collateral find: `6012ddb` overtook **both** K-008 facts. `claude/graph-dba/kaizen/{history.md,plan.md}` | teco re-derivation → **accepted after one correction** (K-008 asserted "both facts verified true" above a note refuting it; rewritten present-tense, 2266→2075 words) | 145.3k + 155.8k tok, 33 tools |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
 agent's own kaizen files and the graph); each row is rewritten on delivery with
@@ -462,6 +463,20 @@ is working; a stale one plus an empty worktree means it died before promoting.
 count.** Two entries arrived while U23's own verification was running.
 
 ## Follow-ups
+
+- **`graph-dba` owns one code unit on `skills/joern-cpg/scripts/pipeline.sh`, not two.**
+  U25 and U26 between them settled what belongs in it: **K-009** (the `rq()`
+  helper returns 0 on a bare FalkorDB runtime-error reply — the live defect) and
+  **K-008's disposition** (confirm Fact 2 delivered and Fact 1 superseded, then
+  close or re-scope). Two entries that *looked* like they belonged — U25's `$(…)`
+  subshell defect and U26's stamp race — are both **dead**, fixed by `271c899`
+  and `6012ddb` respectively. Dispatch as one unit on that file; do not let a
+  distillation unit and a fix unit run against it concurrently.
+- **A distillation unit's collateral findings can outweigh its dispositions.**
+  U26 discarded its only entry — 0 promoted — and was still worth running: it
+  established that a **parked backlog item's premise had gone false**, which no
+  producer-organised query would have asked. An inbox of 1 is not a low-value
+  unit, and "nothing promoted" is not "nothing found".
 
 - **Three stray `:Agent` nodes in `kaizen_team` carry no edges at all** —
   `_qa_selftest_producer_4e24af1e`, `_qa_selftest_producer2_4e24af1e`,
