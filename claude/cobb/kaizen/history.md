@@ -3,6 +3,44 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-09 — U40: `architect` chunk 1 of 2 (the seven 09-07 entries) — 4 promoted, 3 discarded, 0 kept open; **one entry falsified by its own control**, and one derived promotion withdrawn
+
+- **What:** unit U40 of `claude/docs/plans/kaizen-distillation2-coordination.md`, split on the date
+  boundary; the eight `architect` entries dated 09-08/09-09 are U41's and were not touched. All
+  four promotions folded into `claude/analyst/review-techniques.md` — **zero new items, zero new
+  sections**, so no catalog line was earned. Per-entry argument in
+  `claude/architect/kaizen/history.md`; receiving-side summary in `claude/analyst/kaizen/history.md`.
+- **The unit's stated failure mode was a seventh residual item.** Six of the seven entries were one
+  theme, and the section that owns it is a closed numbered list of six. Reading all six whole
+  before dispositioning was what made three of the four promotions **folds into named items**
+  rather than a new one, and it is what produced the discard of `b7f3a1c2` (its rule is the
+  section's first derived check, in the same words) and the half-verdict on `b1f2c7a4` (item 6
+  carries the diagnosis; the plan-author's remedy was genuinely absent).
+- **My grep instrument was nearly the wrong party again, and the control is what caught it.**
+  `f6119439` claims GNU grep's `--include` does not suppress an explicitly named file. My first
+  re-derivation **reproduced the entry** — and was worthless twice over: it ran under the harness's
+  `ugrep` shim rather than GNU grep, and its glob was `*.py` against a file named `conftest.py`, so
+  the filter could not have bitten whatever the answer was. Adding the arm where the glob **cannot**
+  match (`--include='*.txt'`) inverted the result immediately: rc 1, no output, with `-r` and
+  without, on GNU grep 3.11 and on the shim alike. **A confirming arm whose filter cannot fire is
+  not evidence** — the same shape as this pass's depth-limited-scan retraction, one level down: the
+  bound was in the glob, not in the tool.
+- **A derived promotion drafted, then withdrawn on its own premise.** Verifying the discarded
+  `falkor-chat` entry (`73df8a0d`) I found both *class* docstrings in `repository.py` narrower than
+  their raise sites (1 of 3; and the start case omitted outright) and drafted a reviewer's check
+  from it. It does not survive: the docstring a reader actually consults is the **function's**, and
+  `start_workflow_run`'s is complete and correct — which is also why the entry itself is a discard.
+  The premise that motivated the check was the thing that was false. Worth keeping as the pattern:
+  a finding surfaced *while* verifying a discard inherits none of that discard's evidence.
+- **`suggestedHome` predicted 0 of 7**, taking the running total to **0 of 24** across U38–U40.
+- **Graph:** seven current-shape entries, `1 PRODUCED / 0 MENTIONS` each ⇒ `otherRemaining = 0` ⇒
+  full-node `DETACH DELETE` on all seven. No `MENTIONS` tag added — nothing was left for another
+  agent's pass.
+- **Docs touched:** `claude/analyst/review-techniques.md`, `claude/analyst/kaizen/history.md`,
+  `claude/architect/kaizen/history.md`, `claude/cobb/kaizen/history.md`. Deliberately **not**
+  touched: `claude/README.md`, `skills/README.md`, `claude/AGENTS.md` (2,491 w), `architect.md`.
+
+
 ## 2026-09-09 — U39: `coder`'s 9-entry inbox — 6 promoted (2 halves), 3 discarded, 0 kept open; `skills/python-web-quirks/SKILL.md` +2 sections/folds and `skills/README.md` +1 clause
 
 - **What:** unit U39 of `claude/docs/plans/kaizen-distillation2-coordination.md`. Two of `coder`'s

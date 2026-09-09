@@ -3,6 +3,50 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
+## 2026-09-09 — four `architect`-produced entries routed here, all into the residual section, **zero new items** (U40)
+
+- **What:** `cobb` ran U40 of `claude/docs/plans/kaizen-distillation2-coordination.md` over the
+  seven `architect` entries dated 2026-09-07. Six were variations on one theme — grep-based
+  done-conditions and residuals in plans — whose home is this file's *"A grep-pinned edit table is
+  an edit list, not a completeness proof"*. The unit's stated failure mode was **appending a
+  seventh item that items 1–6 already cover**; all six items were read whole first, and none was
+  added. Four promotions, all folds; three discards. Full per-entry argument lives in
+  `claude/architect/kaizen/history.md` (the producing agent's log).
+- **Item 2** gained a *selection rule* (`f4ee08b9`): when the change adds a type to an existing
+  union, the attribute to enumerate by is the one the **new type lacks** — derivable from the type
+  change alone, where the existing wording ("the attribute the ship criterion actually reads")
+  presumes you already know the ship criterion. The storage tag literal became an enumeration
+  target rather than only an example.
+- **Item 5** gained three things (`05192600`, plus the corrected form of `f6119439`): the
+  consequence that a self-contradictory done-condition leaves the behaviour **pinned by nothing**
+  (P5-3, a mutation green across all 472 tests *because* no test may name the key); a **third
+  shape**, a residual regex over definitions matching test function names, re-derived by
+  construction and only under `-E`; and the plan-side remedy — path-scope the residual, prescribe
+  where the assertion lives — together with the constraint that makes it safe, namely that
+  `--include` filters by **base name regardless of how the file arrived**, so an explicitly named
+  file missing the glob is dropped silently and the residual reads a clean zero for the wrong
+  reason (measured on GNU grep 3.11 and on this harness's `ugrep` shim alike).
+- **Item 6** gained the plan-author's remedy (`b1f2c7a4`, half promoted). Its diagnosis was already
+  here verbatim in substance — U23 promoted it from `analyst`'s own near-twin `b1f0c7a4…` — but the
+  item stopped at the reviewer's move (judge the residual as a conjunction). Added: the residual
+  property belongs to the **round**, not the table, so colliding tables must name each other on
+  both rows, fix their order, and restate the later residual over the surviving post-edit spelling
+  **re-derived, not merely re-scoped**.
+- **Derived check 2** gained the cross-document case (`0a4b6b2e`) — the chunk's only non-grep entry
+  and the only one sitting outside all six items. A specialist note owns a signature, the plan owns
+  a required-no-default argument on a callee of it, and a newly note-specified producer inserted
+  between them orphans the argument with **neither document contradicting itself** and no shared
+  term to grep for. Routed here rather than to `architect.md` because it is phrased as a check, is
+  invisible to the author's own sweep by construction, and `architect` has no knowledge base — its
+  only landing site would be an always-loaded prompt, on a line already at 1,617 characters.
+- **Budget:** **11,568 → 12,045 w** (+477), sections **30 → 30**, **0 lines over 700 characters**.
+  `analyst.md` untouched. The section's opening sentence was also corrected — it announced *"Six
+  ways the residual **passes**"* over an item 5 that was a false *failure*; item 5 now carries both
+  directions, so the sentence was rewritten to match. That is the one-line fix the coordination
+  doc's Follow-ups left for this section's next reviser, not a restructuring (which stays a
+  K-026-shaped decision for `teco` to schedule).
+
+
 ## 2026-09-09 — one `coder`-produced entry routed here: a residual counts lines, not occurrences (U39)
 
 - **What:** `cobb` ran U39 of `claude/docs/plans/kaizen-distillation2-coordination.md` over `coder`'s

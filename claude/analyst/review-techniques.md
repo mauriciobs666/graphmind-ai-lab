@@ -710,8 +710,9 @@ is not a coverage gap; a single-seed *killed by three tests* is not redundancy.
 
 When a plan prescribes a change across already-shipped code by pinning each site with a `grep`
 command and a count, and closes with a **residual** (`grep -rFc <token> … → 0`), the table looks
-self-verifying and is not. Six ways the residual passes on an incomplete edit, all met in one
-plan-gate chain (`docs/plans/small-model-benchmarking.md`, Passes 5–9):
+self-verifying and is not. Six ways the residual misreports the edit — five of them by passing an
+incomplete one, and item 5 by doing that *and* failing a correct one — all met in one plan-gate
+chain (`docs/plans/small-model-benchmarking.md`, Passes 5–9):
 
 1. **Sites carrying no token are invisible to the command** — a snake_case alias of a camelCase
    field, a dict-literal body under a named mapping, a callee whose name differs from the renamed
@@ -724,7 +725,10 @@ plan-gate chain (`docs/plans/small-model-benchmarking.md`, Passes 5–9):
    (`:211 :553 :564`); the same construct at `results.py:355` and `:584` spells the variable `m`,
    and `results.py:359`/`:385` spell the type as the string literal `"continuous"`. **Enumerate by
    the attribute the ship criterion actually reads**, not by the type name: `git grep -Fn .mean`
-   returns `report.py:583`, `results.py:359`, `:584` — exactly the three bare-`else` readers.
+   returns `report.py:583`, `results.py:359`, `:584` — exactly the three bare-`else` readers. When
+   the change **adds a type to an existing union**, that attribute is the one the *new* type
+   **lacks** — a selection rule you can apply from the type change alone, without first knowing the
+   ship criterion — together with the string literal that tags its siblings in storage.
 3. **A private helper's name matches test *function names* far more often than call sites.**
    Re-run at `5878014`, `8fc2341` and `c523a35`, byte-identical at all three:
    `git grep -Fn _widen -- model-bench/modelbench model-bench/tests` → **7** lines, and the 4 in
@@ -735,30 +739,69 @@ plan-gate chain (`docs/plans/small-model-benchmarking.md`, Passes 5–9):
 4. **A rename that keeps its token alive has no zero-residual to assert**, so the done-condition
    passes regardless of what was missed.
 5. **A residual counts *lines in files*, not occurrences in code — so any legitimate non-code
-   mention of the token puts it back above zero, and reads as an incomplete edit.** Two shapes. A
+   mention of the token puts it back above zero, and reads as an incomplete edit.** Three shapes. A
    done-condition that names the retired token is self-contradictory: the natural test asserting
-   the refusal must spell it, which puts the residual back at 1. And prose inside the file does the
-   same — an explanatory comment or docstring repeating a literal that the corrected code now uses
-   only once. Measured 2026-09-09: `grep -c` over a file carrying `X[0]` once on one line and twice
+   the refusal must spell it, which puts the residual back at 1. **That one does not stop at a
+   false failure** — the cheap way to resolve the contradiction is to not write the test, and then
+   the behaviour is pinned by nothing and a counter-implementation ships green
+   (`docs/reviews/small-model-benchmarking-impl.md:1545`, P5-3: a mutation carrying a one-name
+   tolerance list passes all **472** tests precisely because no test may name the key). And prose
+   inside the file does the same — an explanatory comment or docstring repeating a literal that the
+   corrected code now uses only once. Third, a residual written as a **regex over definitions**
+   matches test *function names*: re-derived by construction 2026-09-09,
+   `grep -rEn 'def [A-Za-z_]*(percentile|quantile)'` matches `def test_percentile_rejects_a_float_level`
+   — and only under `-E`; the identical pattern as BRE matches nothing and exits 1, item 3's trap
+   arriving through the dialect paragraph below. Measured 2026-09-09: `grep -c` over a file
+   carrying `X[0]` once on one line and twice
    on the next returns **2** where `grep -o | wc -l` returns **3**; and at `e79fb61`,
    `git grep -cF 'SUPPORT_DIFF_PROPORTIONS[0]' -- model-bench/` reads `stats.py:1` beside
    `tests/test_stats.py:2`. The fix is never a cleverer grep: plan-side, restate the behaviour by
    key-set or complement ("any key outside `{id, state}`"); code-side, restructure so the literal
    is written once and derived thereafter (a strict support comparison as
    `clamped_value != unclamped_value`, off an already-computed clamp) and rephrase the comment to
-   name the property in words.
+   name the property in words. Where the token genuinely retires in only *some* files, the
+   remaining move is to **path-scope the residual and prescribe in the plan which file the
+   assertion lives in** (`docs/plans/small-model-benchmarking.md:3444` ships exactly that). Mixed
+   directory-plus-file scoping does work — but `--include` filters by **base name regardless of how
+   the file arrived**, recursion or explicit argument alike, so an explicitly named file whose base
+   name misses the glob is dropped silently and the command returns a clean zero for the wrong
+   reason. Measured 2026-09-09, identically on GNU grep 3.11 and on this harness's `ugrep` shim:
+   `grep -rFn <tok> modelbench tests/conftest.py --include='*.py'` returns the `conftest.py` hit,
+   while `--include='*.txt'` exits **1** with no output — with or without `-r`.
 6. **Cross-table collisions survive per-table discipline.** Where several tables land as one fix
    round, sweep every line appearing in more than one: a residual can be driven to zero by a
    *different* table's edit on the same line, and two tables can prescribe incompatible forms for
    one line while each reads correct alone. Worse, a residual whose baseline is an **intermediate**
    state — after edit-set A, before edit-set B on the same line — can never be observed non-zero,
    so it is passed both by a faithful implementation and by one that skipped **both** edits. Judge
-   such a residual as a conjunction with the first edit-set's own residual, never per-command.
+   such a residual as a conjunction with the first edit-set's own residual, never per-command. The
+   residual property belongs to the **round**, not to a table, so the plan-side remedy is
+   structural: require colliding tables to name each other on both rows, fix their order, and
+   restate the later table's residual over the **surviving post-edit spelling — re-derived, not
+   merely re-scoped**. Narrowing the path is the tempting fix and the wrong one: it leaves the
+   stale pattern in place and only hides the collision.
 
 **Two derived checks.** A residual command must be re-asked against *every* implementation the same
 table authorises — an authorised literal branch can re-add the very string the residual asserts to
 zero. And a required, no-default parameter added to a public function breaks that function's **call
-sites**, which the defining token never reaches.
+sites**, which the defining token never reaches — a break that can also be **cross-document and
+invisible to every grep**: where a specialist note (`-ml.md`/`-graph.md`) owns a signature and the
+plan owns a required-no-default argument on one of that signature's callees, a newly
+note-specified producer inserted between them takes no parameter to carry the argument, and
+neither document contradicts itself — there is no shared term to sweep for. So check every
+plan-mandated required argument against the **callees of any newly specified producer**. **Worked
+instance — found by this check, and closed two revisions later; cite it as evidence the check pays,
+never as a claim about a current signature.** At plan v1.13
+(`docs/plans/small-model-benchmarking.md`, the §7 rule 3 raise) `continuous_verdict()`'s parameter
+list carried no `support`, leaving it nothing to forward as Table E's required `clamp`. The raise
+was **non-blocking** — at `designEffect == 1.00`, `clamp=None` and `(-1.0, 1.0)` return the same
+interval — which is exactly why nothing but a deliberate check would have surfaced it. Re-derive it
+today and you find the opposite, by design: the `-ml` note absorbed the argument at **v1.17**
+(`support` keyword-only, required, no default, and still no `clamp`), plan **v1.14**'s changelog
+records the raise closed, and both halves are pinned by `model-bench/tests/test_stats.py:2380`
+and `:2390`. That closure is also the **general remedy**: when a producer cannot forward an
+argument, move the derivation *into* the producer rather than widening the seam between the two
+documents.
 
 **One caution about re-deriving this class of finding.** A plan gate reads the *working tree*, so
 its per-command counts are often taken against a state that was never committed. Of the six
