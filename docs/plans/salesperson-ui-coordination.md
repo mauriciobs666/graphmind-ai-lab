@@ -170,6 +170,30 @@ itself last changed. I verified both, plus that `d776ca8` is an ancestor of the 
 to the test author's judgement. It wrote that into the corrected paragraph rather than leaving it
 for someone else to find.
 
+## The sweep found the site the whole review chain had walked past (teco, 2026-09-09)
+
+U68 was dispatched to fix **one** comment that Pass 23 had located. Its sweep found a **second**,
+and the second is the more interesting one: `ResetStateUnknownError`'s own docstring
+(`storefront.py:164`) still read *"the response is still `504`, simply with no state body"* — which
+is **D-3's exact claim, word for word**, surviving in the code after the plan text that copied it
+had been corrected.
+
+So the false-absence statement lived in at least four places: plan §4.8 (fixed in v1.32), the
+reset-all comment (P23-5, fixed here), the exception class's own docstring (found here), and — per
+U67 — `config.py`'s neighbour of the same class. **The acceptance pass found one, a static gate
+found one, and a sweep found one.** Nobody found all of them, and the docstring is the one that sat
+closest to the code it lied about.
+
+The reusable part is not "sweep more". It is that **P23-5 was reported as a site and I briefed it as
+a class** — the brief asked for the fix *and* for an unfiltered sweep of both files for any comment
+asserting a key is absent where the code splices it in present-and-null, with an explicit warning
+not to blanket-match because the two routes name different keys. A brief that had simply relayed the
+finding would have closed one of two, correctly, and left the sharper instance in place with the
+review chain's approval on it.
+
+This is the same shape my own guardrails name: *"checked, not guessed" names the method, not the
+scope — the identical escape can sit one file over.* It did, and it was the exception class itself.
+
 ## Follow-up 17 — the S9 test plan's R-g row is stale, and it belongs to `qa-engineer`
 
 `falkor-chat/docs/test-plans/salesperson-ui-s9.md:75` still reads *"`QUIESCE_S` does nothing
@@ -450,7 +474,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U63** — D-2 (§5.3 has no `5xx` row for `/messages`), D-3 (`504` carries `state: null` against §5.2's present-vs-absent precedent), and **my untestable S9 done-condition** → plan v1.32 | `architect` (**fresh** — every prior architect instance is from a dead session) | `a0cfb47caac4a8c3e` | delivered — **committed `e06c92e`**, +83/−15, one file. **Ruled D-2 a *code* defect, not a missing table row**, and rejected the report's stated reason while accepting its substance; **ruled D-3 the document's defect, not the code's**. Created an obligation on **S9e** and an ordering hazard on S8's gate. Three of its four side-findings **teco-verified against source** before the gate — including a delivered docstring asserting a route `except` that does not exist | `docs/plans/salesperson-ui.md` v1.32 | `analyst` Pass 23 (U65) → — | 193k tok / 75 tools |
 | **U65** — Pass 23: gate U62 + U63 together. **Does C14 create the next instance of the class?** | `analyst` (**fresh** — every prior reviewer is from a dead session) | `a3d38bc7a7a12de74` | **accepted — committed `eedde26`. NEEDS CHANGES** (1 blocker, 3 major, 3 minor). **Answered the central question with a yes, by execution**: C14 creates instance N+1 once. Built a harness to break the new done-condition and did (P23-1). **Refuted a claim of mine I had already published** (P23-3). Upgraded my source-read claim 3 to executed. Gave the falsifiable stopping rule I asked for | `docs/reviews/salesperson-ui-impl.md` `## Pass 23` | — | 192k tok / 71 tools |
 | **U66** — close Pass 23 on the plan: P23-1 blocker, P23-2, P23-3's consequence, P23-5/6/7 → **v1.33, the last static plan touch** | `architect` | `a0cfb47caac4a8c3e` (resumed — its own review findings, same file, 193k tok) | **accepted — committed `6da8ec0`**, +64/−25. **Refused to narrow into a hole**: the assertion Pass 23 said already owned the request-thread design *did not exist*, so v1.33 adds it before narrowing onto it. **Rejected half of the blocker's proposed fix** with a number (a relative tail clause reddens on GC noise at a 3-4 ms idle median). **Rejected a third option neither the gate nor I raised**, verified at CPython source. **Resolved the provenance discrepancy I flagged** — both commits right, different questions. All four load-bearing claims teco-verified | `docs/plans/salesperson-ui.md` **v1.33** | **none — plan lane closes here** (see the stopping rule) | 256k tok / 29 tools |
-| **U68** — P23-5: `storefront_api.py` ~`:1494` says the `504` comes back "simply with no roster"; it ships `participants` present-and-null. **Third and last known site of the false-absence class** | `coder` | `a07aa43f407bafdab` (resumed — holds the false-absence context from U62/U67) | in-flight | `falkorchat/storefront_api.py` (comments only), `falkor-chat/docs/HISTORY.md` | folded into S9e's review → — | — |
+| **U68** — P23-5: `storefront_api.py` ~`:1494` says the `504` comes back "simply with no roster"; it ships `participants` present-and-null | `coder` | `a07aa43f407bafdab` (resumed — holds the false-absence context from U62/U67) | **accepted — committed `1918ac6`**. **The sweep found a second site nobody had cited**: `ResetStateUnknownError`'s own docstring (`storefront.py:164`) still said *"simply with no state body"* — D-3's exact claim, surviving in code after the plan text was fixed. Both mechanisms teco-verified at their construction sites. Docstrings only, 4/2 and 2/1 lines | `falkorchat/storefront_api.py`, `falkorchat/storefront.py`, `falkor-chat/docs/HISTORY.md` | folded into S9e's review → — | 166k tok / 16 tools |
 | **U67** — P23-4: S9f was **three sites, not one**; `config.py:216-224` still states the pre-S9 world | `coder` | `a07aa43f407bafdab` (resumed — its own S9f unit, holds D-1's readings) | **accepted — committed `3c23992`**. Site count **confirmed three** from Pass 19/22 directly, not from my brief. Fixed `config.py` (comments only, `30` untouched — teco-verified by diff); **read the third site and found it already true**, so no edit — I spot-checked `presenter_reset_all`'s docstring and its drain description is live and correct. Unfiltered sweep found no fourth. **Corrected its own HISTORY entry in place** to say its earlier closure claim was wrong | `falkorchat/config.py`, `falkor-chat/docs/HISTORY.md` | folded into S9e's review → — | 137k tok / 19 tools |
 | **U64** — close the CPG provenance arc: P7-1, P7-2, P7-4, delete P7-3's tombstone block. **No Pass 8** (stakeholder, 2026-09-09) | `cobb` (**fresh** — `abeeb0ea31b20e7cc` is from a dead session) | — | **queued — blocked on another session's in-flight unit**, see below | `skills/joern-cpg/**`, `skills/cpg-analysis/references/freshness.md`, `claude/cobb/kaizen/{history,plan}.md` | **none — stakeholder stopped the gates** | — |
 
