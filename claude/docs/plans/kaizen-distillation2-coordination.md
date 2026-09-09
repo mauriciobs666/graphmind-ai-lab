@@ -466,6 +466,26 @@ count.** Two entries arrived while U23's own verification was running.
 
 ## Follow-ups
 
+- **One defect shape, three generations, each produced by the previous fix.**
+  K-009's error **blacklist** overclaimed its reach → replaced by a positive
+  trailer test plus an **`rc 2`** refusal, which overclaimed (no call site could
+  read it) → replaced by a **static check**, which overclaims in turn (its anchor
+  requires `$(rq `, its token match is uppercase-only, so a bare-statement call
+  site and a lowercase `graph.delete` both pass). Every generation was caught,
+  and every one was caught **only by execution** — each had a plausible reading
+  of the code under which it was fine. The stopping rule applied at generation
+  three: when the marginal finding is produced **by** the fixes rather than found
+  **in** the original artifact, stop narrowing prose and give the implementer a
+  **falsifiable done-condition** (here: four named mutation shapes that must
+  redden, with narrowing the stated bound an equally acceptable closure).
+- **A gate's own recommendation is the least reliable thing it produces.**
+  Pass 1 recommended capturing `rc=$?` at the three call sites. Pass 2 refuted it
+  **by execution**: inside `if ! V="$(f)"`, `$?` is **0** for a function
+  returning 1 *and* one returning 2 — the `if` consumed it, so the recommended
+  branch could never fire. The implementer's chosen closure (delete the guard)
+  was better than the reviewer's proposal, which is why a finding is routed as
+  *judge this*, never *apply this*.
+
 - **The pass's own promoted lesson predicted a defect in the pass's own work,
   three units later.** U25 promoted `analyst` entry `7c1d4a92` into
   `review-techniques.md`: a helper whose contract is a **side-effect variable**
