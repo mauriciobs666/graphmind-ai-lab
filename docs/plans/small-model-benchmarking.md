@@ -4055,6 +4055,10 @@ because "which arm bound this bound" is a statement about an estimand, and the n
 note's and are **not restated here**; what is this plan's is where the edit lands, what it retires,
 and the six commands that prove it landed.)*
 
+> **Landed:** `f17efa2` (2026-09-09) — this table's site rows and counts are a **record**,
+> not an instruction. Its residuals remain DC-12's and are re-run at the **end** of the round,
+> against the tree as it then stands.
+
 **What the note ruled, in the four lines this table exists to enumerate** — cited, not re-derived
 (`-ml` §3.4 Rule 4a points 1–4): a support is the parameter space of the **estimand**, so it is
 applied **once, to the printed interval**, never to an input of a composition. Hence
