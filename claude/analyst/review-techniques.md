@@ -327,6 +327,17 @@ directly rather than accepting the narration, even when the claim reads as plaus
 One grep settles it: `grep -rn -i '<the cited event/term>' <the claimed location>` either finds the
 citation or it doesn't.
 
+**One bound on that, and it is the reason to keep the cited term short: a line-based grep cannot see
+a phrase a hard wrap has split.** This repo's `docs/` are hard-wrapped near 100 columns, so any
+*multi-word* citation has some chance of straddling a break and matching nothing while sitting in the
+file twice — which turns the weakest kind of evidence, a negative result, into a confident false
+finding. Verify a prose invariant with a whitespace-normalised scan (`tr '\n' ' ' < f | grep -o …`,
+or a whole-file read in python) and reserve `grep -c` for single tokens. Measured 2026-09-08: Pass 12
+of `docs/plans/small-model-benchmarking.md` reported `grep -n 'never re-scoped'` → **3** sites
+(finding P12-6); there were **4**, the fourth wrapping as `never re-` / `scoped`. It was caught by
+reading the region and confirmed by a whole-file count. The failure runs in both directions — it
+undercounts a completeness sweep, and it *inverts* an existence check.
+
 **A pasted grep result is the same kind of claim, and unlike a fabricated one it decays**: it was
 honestly run, it was true when it was run, and the document lands days later against a codebase
 that moved. Re-run every cited grep at review time — above all a *negative* one ("→ no matches"),
@@ -819,6 +830,19 @@ with `fatal: … Unmatched ( or \(` at **exit 128**, while the identical pattern
 returns the plan's stated count (`report.py:3`, `results.py:3` — six lines), as does `-E` with the
 paren escaped. A caller that reads the output and not the status sees no matches and reports the
 enumeration clean.
+
+**Keep the measurement as a re-runnable script, not as numbers in your context or markers in the
+document.** A residual sweep is dozens of commands whose whole value is being re-derivable, and a
+number carried in your head to the end of a long run is a summary artifact — the object this file's
+other sections keep catching wrong. A script in the scratchpad survives a session kill, re-derives in
+one command if the tree moved, and can carry its own control: run every command under both
+`/usr/bin/grep` and this harness's shim and flag disagreement (see `skills/agent-standards/claude-code.md`,
+`## Bash tool environment`, for why those can differ and when). It also catches its own bugs, which a
+hand-copied number cannot — built 2026-09-08 after a mid-measurement kill, one such script immediately
+reported **0** where the answer was **2** for `def [A-Za-z_]*(percentile|quantile)`, because its
+helper used `grep -rn` where the residuals are `-rEn`. And do not park pending markers in the
+authoritative document while you re-measure: a coordinator committing by explicit path commits the
+placeholder.
 
 ## What a change silently stopped enforcing: execute the pre-image, diff the collected test IDs
 

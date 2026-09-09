@@ -598,6 +598,38 @@ the always-loaded project memory (`CLAUDE.md`).
   prompt — the two are not guaranteed equivalent here. (Observed
   graphmind-ai-lab, 2026-07-26 and 2026-08-08.)
 
+- **The real GNU `grep` is reachable inline at `/usr/bin/grep`, and the shim's `--ignore-files` is a
+  property of *recursion*, not of the file.** The subprocess escape above (`bash script.sh`) is the
+  heavy route and is easy to skip; the absolute path makes a paired GNU-vs-ugrep control a one-liner,
+  which is the only reason such a control actually gets run. Use it whenever a count is going into a
+  document as a reproducible claim — the human or CI re-running that command in a normal shell gets
+  GNU grep 3.11 while you measured with ugrep 7.8.4. `which -a grep` prints only `/usr/bin/grep` and
+  `/bin/grep`, never the function (the same detection gap recorded for `rg` above); `type -a grep` is
+  what sees it. **What actually diverges is narrower than it looks:** `--ignore-files` applies
+  `.gitignore` **during a directory walk only**, so a gitignored file *named explicitly* on the
+  command line is searched by both binaries, while a recursive sweep that would reach it finds it
+  under GNU and not under the shim. Measured 2026-09-09 in graphmind-ai-lab — named path,
+  `grep -cF include-system-site-packages model-bench/.venv/pyvenv.cfg` → **1** under both; recursive
+  from `model-bench/`, controlled for the shim's own flags, `/usr/bin/grep -rlFI --exclude-dir=.git`
+  → **2** files against the shim's **0**. Not hidden-file suppression (`.venv` is hidden and the shim
+  passes `--hidden`; a non-hidden `tests/__pycache__` is suppressed identically) and not the `-I`
+  binary skip (`pyvenv.cfg` is ASCII): passing **`--no-ignore-files`** to the shim returns both files,
+  which is the third escape route and the lightest of the three. That asymmetry is why two agents can
+  test "does `.gitignore` apply here?" and get opposite answers with neither being careless.
+  Divergence is nonetheless the exception — 18 grep-pinned residual commands from
+  `docs/plans/small-model-benchmarking.md` re-run under both binaries agreed on every one
+  (2026-09-08) — but agreement has to be measured, not assumed.
+
+- **A single line in a markdown document can be tens of kilobytes, and every line-oriented tool
+  degrades to useless on it.** `docs/plans/salesperson-ui.md`'s §5.1 step table stores each step as
+  one line up to **~35 KB**: `grep -n` prints the whole row (an 85 KB result that had to be persisted
+  to disk before it could be read), `sed -n <N>p` floods the context the same way, and `Read` bills
+  tens of thousands of tokens for one line. Extract the row to the scratchpad (`awk 'NR==<n>'`), read
+  it with `fold -s -w 110` (~400 wrapped lines for that 34,838-byte row, 2026-09-09), and edit it
+  with an **exact-substring replace** — `Edit`, or python — never a line-based `sed`. Detect the
+  shape before measuring or editing any generated or table-heavy document:
+  `awk '{print length}' <file> | sort -rn | head -1`.
+
 - **The scratchpad directory is keyed by the *parent* session, so every subagent that session spawns
   shares one directory — same-named files silently clobber each other.** The path handed to a
   subagent is `/tmp/claude-<uid>/<slugified-cwd>/<session-id>/scratchpad`, and

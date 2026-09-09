@@ -3,6 +3,12 @@
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
 
+## 2026-09-09 — one `architect`-produced entry routed here (U41), folded into `guard-testing-techniques.md`; **zero new sections**
+
+- **What:** U41 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `architect` chunk 2 of 2. Full disposition and edge arithmetic in `claude/architect/kaizen/history.md` (same date). `tdd-engineer.md` was **not** opened.
+- **`9b2e4d70…` → §*"When the docstring states SEMANTIC reach and the body does a SYNTACTIC match"*, half promoted.** The section already carries the mechanical half (a name-keyed allowlist is blind to a second use of that name; site-qualify; write the exemption as an equality, not a subtraction), so that was discarded as published. Promoted: **the equality protects the keys, and nothing protects the prose inside one.** Where one name is admitted for two raise sites, changing one leaves the key alive on the other, so every assertion stays green while the half of the reason describing the changed site is false — verified at `fc2b43b` against the section's own reference implementation, `NON_FAMILY_RAISES["RuntimeError"]` (`falkor-chat/server/tests/test_storefront_api.py:3995`) explaining the name over `services._dispatch_write` and `Storefront.enqueue_turn` while `STOREFRONT_RAISES_TODAY` (`:3939`) carries the bare name. Rule promoted, instance kept as its worked case: write per-site reasons and pin each site the way the key set is pinned; a reason a guard cannot check is documentation and needs a reviewer, not a test.
+- **Budget:** `guard-testing-techniques.md` **2,545 → 2,794 w** (+249), sections **3 → 3**, **0 lines over 700 characters**. Measured on the shipped file, not on the draft.
+
 ## 2026-09-09 — four `coder`-produced entries routed here (U39): two into `tdd-engineer.md`, two into `guard-testing-techniques.md`
 
 - **What:** `cobb` ran U39 of `claude/docs/plans/kaizen-distillation2-coordination.md` over `coder`'s

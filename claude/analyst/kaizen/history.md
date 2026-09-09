@@ -3,6 +3,13 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
+## 2026-09-09 — two more `architect`-produced entries routed here, **zero new sections**, both into grep-measurement discipline (U41)
+
+- **What:** U41 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `architect` chunk 2 of 2, the unit that closed that inbox. Two of its eight entries landed in `review-techniques.md`; full dispositions and edge arithmetic are in `claude/architect/kaizen/history.md` (same date). `analyst.md` was **not** opened.
+- **`c1f7a6b2…` → §*"A 'this already exists' claim is a grep away from confirmation"*.** A line-based grep cannot see a multi-word phrase that a hard wrap has split, so over this repo's ~100-column `docs/` a cited-term grep undercounts a sweep and **inverts** an existence check — the failure mode of that section's own load-bearing sentence, *"One grep settles it"*, and worst on the negative result it already flags as least re-checked. Remedy folded in: whitespace-normalised scan (`tr '\n' ' ' | grep -o`, or a whole-file python count), `grep -c` reserved for single tokens.
+- **`00c5498f…` → §*"A grep-pinned edit table is an edit list, not a completeness proof"*, closing paragraph.** Hold a residual measurement as a re-runnable scratchpad script rather than as numbers in context or markers in the document: it survives a session kill, re-derives in one command against a moved tree, carries a paired `/usr/bin/grep`-vs-shim control, and catches its own bugs — the cited script immediately caught its helper using `grep -rn` where the residuals are `-rEn`. Sits with the section's two existing conduct paragraphs (re-derive at a sha; re-run the command as written, not as ported) and cross-references `skills/agent-standards/claude-code.md` rather than restating why the two binaries can differ.
+- **Budget:** `review-techniques.md` **12,156 → 12,489 w** (+333), sections **30 → 30**, **0 lines over 700 characters**. Measured on the shipped file, not on the draft — a first pass of this line carried +340/12,496 from an estimate, which is the exact defect shape (`## The same defect shape, four times running: right method, wrong evidence line`) this coordination has now logged five times.
+
 ## 2026-09-09 — four `architect`-produced entries routed here, all into the residual section, **zero new items** (U40)
 
 - **What:** `cobb` ran U40 of `claude/docs/plans/kaizen-distillation2-coordination.md` over the

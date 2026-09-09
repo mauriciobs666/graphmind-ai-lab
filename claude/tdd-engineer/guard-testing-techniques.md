@@ -221,3 +221,21 @@ that is gone. Read whole 2026-09-09 in the reference implementation
 name pinned further by a **list** of `(function, class)` sites (`== ["enqueue_turn"]`) — a list
 rather than a set, so a second raise of it inside the *same* function cannot collapse onto the
 first either.
+
+**The equality protects the keys; nothing protects the prose inside one.** A name-set assertion is
+self-enforcing under a rename — change the exception and the frozenset reddens — but the *reason*
+written beside an allowlist entry is an enumeration in prose, and it rots the same silent way a
+table does. The shape to watch for is one name admitted for **two** raise sites: retire or subclass
+one of them and the key stays alive on the other, so every mechanical assertion stays green while the
+half of the reason describing the changed site is simply false. Read whole 2026-09-09 at `fc2b43b`
+in the same reference implementation: `NON_FAMILY_RAISES["RuntimeError"]`
+(`falkor-chat/server/tests/test_storefront_api.py:3995`) explains the name across two legs —
+`services._dispatch_write`'s invariant alarms, and `Storefront.enqueue_turn`'s refusal on a set
+`_turns_shutdown`, the second **explicitly conceded request-reachable** — while
+`STOREFRONT_RAISES_TODAY` (`:3939`) carries the bare name. A subclass introduced on the
+`enqueue_turn` leg reddens the frozenset and leaves the dict entry keyed, green and wrong; the
+entry's own comment even asserts the equality *"so a reason with no raise behind it reddens too"*,
+which is true of the key and not of the sentence under it. So when you admit a name for more than
+one site, write the reason **per-site** and pin each site the way the key set is pinned — that file
+already does exactly this for the site list. A reason a guard cannot check is documentation: it needs
+a reviewer on every change to the sites it names, not a test.

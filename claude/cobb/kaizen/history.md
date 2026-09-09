@@ -3,6 +3,15 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-09 — U41: `architect` chunk 2 of 2 (the eight 09-08/09-09 entries) **plus one `cobb` entry folded in** — 6 promoted (2 halves), 2 discarded, 0 kept open; `architect` closed out at 0/0
+
+- **What:** unit U41 of `claude/docs/plans/kaizen-distillation2-coordination.md`. The full disposition record for the eight `architect` entries lives in `claude/architect/kaizen/history.md` (same date); recorded here is `cobb`'s **own** entry, folded into this unit on my U40 recommendation because it lands on the same `claude-code.md` paragraph as two of `architect`'s. One edit, one unit — the standing *one agent at a time* rule was not relaxed, only the producer boundary inside a single edit target.
+
+**`2746ee65-a4f9-40bc-955b-32d8042020d9` — promoted (`skills/agent-standards/claude-code.md`, `## Bash tool environment`, merged with `architect`'s `0acf4d71…` and `b3c301c6…` into one bullet).** Written by me during U40, when my first re-derivation of a GNU-grep claim silently ran under the ugrep shim and was worthless twice. The claim is that the real GNU grep is reachable **inline** at `/usr/bin/grep`, so a paired GNU-vs-ugrep control costs one line — against the section's existing prescription, which offered only the subprocess escape (`bash script.sh` / `bash -c`). Re-derived 2026-09-09 with each measurement naming its binary: `type -a grep` prints the function exec-ing `${CLAUDE_CODE_EXECPATH}`; `grep --version` → `ugrep 7.8.4`; `/usr/bin/grep --version` → `grep (GNU grep) 3.11`; `which -a grep` lists `/usr/bin/grep` and `/bin/grep` and never the function, the same detection gap the section already records for `rg`. **Self-gating caveat, stated because it applies:** producer and distiller are the same agent here, so the usual independent check on the producer's framing is absent — the same asymmetry recorded for U38. What limits it is that the entry's claim is a one-command re-derivation, and that its promoted form was decided against `architect`'s two independent captures of the same paragraph rather than on my framing alone.
+
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node `DETACH DELETE`. **`cobb`'s inbox goes 2 → 1** (`2e14550b…` remains, scheduled for its own top-up unit).
+- **Docs touched:** `skills/agent-standards/claude-code.md`, `claude/cobb/kaizen/history.md`.
+
 ## 2026-09-09 — U40: `architect` chunk 1 of 2 (the seven 09-07 entries) — 4 promoted, 3 discarded, 0 kept open; **one entry falsified by its own control**, and one derived promotion withdrawn
 
 - **What:** unit U40 of `claude/docs/plans/kaizen-distillation2-coordination.md`, split on the date

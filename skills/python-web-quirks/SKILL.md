@@ -682,6 +682,23 @@ per-call counter. And `qsize()` is not stably `0` either: `shutdown()` puts a `N
 sentinel on the queue, so a post-shutdown `qsize()==0` assertion fails for a reason that has
 nothing to do with submits.
 
+**And `wait=True` is not a drain — on a pool that never started a thread it waits for nothing.**
+`shutdown()`'s wait is `for t in self._threads: t.join()` (`thread.py:236-238`), and `_threads` is
+still **empty** if every `submit` so far raised inside `_adjust_thread_count`. The table above
+measures a pool that *did* start a worker; the cold pool is a different mechanism with the same
+reading. So the item `submit()` queued at `:178` before raising is not merely delayed — it is
+abandoned. Measured 2026-09-09, CPython 3.12.3, `threading.Thread.start` patched to raise on a fresh
+`max_workers=2` pool: `submit` raised `RuntimeError("can't start new thread")`, `qsize()` **1** /
+`len(_threads)` **0**, and `shutdown(wait=True)` **returned in 0.0000 s** with the job still unrun
+after a settle. **The tell is queue depth, and it is one unit apart from the warm case:** a
+post-shutdown `qsize()` of **1** is the `None` sentinel alone (the table's last row), **2** is the
+sentinel *plus* real undone work. Nothing recovers it once the executor is shut down; *before*
+shutdown, the next **successful** `submit` starts a worker that drains the abandoned item — verified,
+and it ran ahead of the item that revived the pool. The consequence for the compensation rule above:
+"any worker already running picks it up" holds only where a worker exists, so the identical refusal
+is a delayed execution on a warm pool and a silent drop on a cold one, and the exception discriminates
+neither.
+
 ## Bounding a call whose deadline the code under test computes: a daemon thread, not an elapsed-time assert — and stamp the start instant *inside* the thread body
 
 Where a venv has no `pytest-timeout` (confirmed absent from `falkor-chat/server/.venv`, 2026-09-08),
