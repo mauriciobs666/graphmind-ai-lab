@@ -77,7 +77,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U21 | analyst chunk C (10: all of 09-02) | `a9b3f7141f0403e35` (resumed twice) | accepted | 6 promoted / 4 discarded (2 **falsified**), all 10 cleared + curator-cleared my false `7c4e91a2…`; `claude/graph-dba/falkordb-quirks.md`, `claude/analyst/review-techniques.md`, `claude/analyst/kaizen/{history,plan}.md`, `claude/graph-dba/kaizen/history.md` | teco re-derivation → **accepted** (2 resumes: evidence recount, then provenance of an unattributed bullet) | 224.0k tok, 96 tools |
 | U22 | analyst chunk D (11: 09-03) | `a9a502324e0cf4ca5` | accepted | 8 promoted / 3 discarded, all 11 cleared; `review-techniques.md`, `python-web-quirks/SKILL.md`, `agent-standards/claude-code.md`, `lm-studio-model-notes.md`, `skills/README.md`, +3 `kaizen/history.md`; `falkordb-quirks.md` **held** | teco re-derivation → **accepted**, paired-control reproduction of the pipe finding | 238.8k tok, 112 tools |
 | U23 | analyst chunk E (13: 09-07, arrived after pass open) | `a096fa1ae04ee4cae` (resumed once, for the AST correction) | accepted | 12 promoted / 1 discarded, all 13 cleared, **13 entries → 4 edits** (six became one six-part section, three a fold); `claude/analyst/{review-techniques.md,analyst.md,kaizen/history.md}`, `claude/graph-dba/{falkordb-quirks.md,kaizen/history.md}`, `claude/cobb/kaizen/{history,plan}.md` | teco re-derivation → **accepted after one correction**: 68→65, 42→40, per-file 3/3/14; re-derived at both revisions under 5 definitions. `rq()` defect confirmed by executing the helper | 190.6k + 210.5k tok, 71 tools |
-| U24 | analyst chunk F (12 of the 14 held at dispatch: all 09-08) | `a554b6fb7d89af6f0` | in-flight | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
+| U24 | analyst chunk F (12 of the 14 held at dispatch: all 09-08) | `a554b6fb7d89af6f0` | accepted | 10 promoted / 1 discarded / **1 kept open** (`graph-dba` K-009), **12 entries → 7 edits**; `claude/analyst/{analyst.md,review-techniques.md,kaizen/history.md,kaizen/plan.md}`, `claude/graph-dba/{falkordb-quirks.md,kaizen/history.md,kaizen/plan.md}`, `claude/cobb/kaizen/history.md`, `skills/python-web-quirks/SKILL.md`, `skills/README.md`; 2x `MENTIONS`→`graph-dba` | teco re-derivation → **accepted, no correction needed** — the dataclass narrowing reproduced across three annotation shapes, both stdlib line refs exact, NaN asymmetry and all counts exact | 248.5k tok, 94 tools |
 | U25 | analyst chunk G (2 deferred + whatever has arrived) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
@@ -396,13 +396,16 @@ archiving it would freeze the ledger that is the resume point.
 
 **State, verified rather than assumed:**
 
-- Everything through **U23 is accepted and committed** (`cfed0a0`, `bd924b1`,
-  ledger `b388cdb`). `git status claude/` is clean.
-- **U24 is running.** It has written nothing to disk and cleared nothing — all
-  12 pinned entries are still in the graph. That is the expected shape of §5
-  mid-run, not a stall: the procedure verifies the whole chunk before it
-  promotes anything, so a long silent stretch with an empty `git status` is
-  normal and is **not** evidence of a dead unit.
+- Everything through **U24 is accepted and committed** (`cfed0a0`, `bd924b1`,
+  `468822b`). `git status claude/` is clean; nothing is held back.
+- **U24 was the first unit of this pass to need no correction.** It was also
+  the first briefed with the full accumulated lesson set, and the first to
+  report instruments tested under *two* definitions before use — counts taken
+  both as collected node IDs and as unique def names, the AST blindness
+  reproduced with both a name-set and a site-qualified reader, the `rq()` probe
+  run with a passing control alongside the failing ones so a uniform `0` could
+  not be misread as a working helper. The briefing cost is now visibly cheaper
+  than the correction round-trips it replaces.
 
 **A correction worth keeping, because it is this pass's own recurring defect
 turned on its author.** An earlier revision of this section recorded U24 as
@@ -421,17 +424,28 @@ is working; a stale one plus an empty worktree means it died before promoting.
 
 **What remains, in order:**
 
-1. **U24** — re-dispatch the 12 pinned ids. Re-query first: `analyst` may have
-   grown again, and two entries (`7c1d4a92…`, `8d2b47f0…`) were deliberately
-   deferred. Two of the 12 (`b7f3c2a1…`, `4f9c21ae…`) must be routed
-   **kept-open**, not cleared — their code fix is unclaimed.
-2. **U25** — the deferred two plus whatever has arrived since.
-3. **The `MENTIONS`-only unit** — 11 nodes carrying 12 edges, dated 08-30 to
-   09-07, the oldest population in the graph. None hangs off a produced entry,
-   so no producer-organised unit will ever reach them. This needs a unit shaped
-   by *edge*, not by producer, and it is the one piece of the backlog that has
-   never been attempted.
-4. **Route the `rq()` fix** to `graph-dba` (see Follow-ups).
+1. **U25** — `analyst`'s two deferred entries (`7c1d4a92-3f6b-4e58-9a01-2d8f5b0c6e77`,
+   `8d2b47f0-13ca-4e59-b6d7-51c0a9e2f8b4`) plus whatever has arrived since.
+   Re-query at dispatch, never from a figure in this document.
+2. **The other producers.** `teco` **29**, `architect` **13**, `coder` **8**,
+   `cobb` **7**, `data-scientist` 1, `graph-dba` 1. `teco` is now the largest
+   inbox in the graph — this coordination's own verification findings are the
+   bulk of it, so it is partly self-inflicted and partly the most direct record
+   of what the pass learned. `architect`'s 13 include
+   `b1f2c7a4-3d59-4e18-9f60-7a2c5d8e41bb`, whose subject was already promoted
+   from `analyst`'s near-twin `b1f0c7a4…` in U23: **read that section before
+   re-promoting it.**
+3. **The `MENTIONS`-only unit** — now **13 nodes carrying 14 edges** (it grew:
+   U24 added two by design). Dated 08-30 to 09-07, the oldest population in the
+   graph. None hangs off a produced entry, so **no producer-organised unit will
+   ever reach them** — every pass so far has walked past them for a structural
+   reason, not by oversight. This needs a unit shaped by *edge*, not by
+   producer, and it has never been attempted. Two of the 13 are U24's
+   deliberate kept-opens and must **not** be cleared until `graph-dba` K-009 is
+   fixed.
+4. **Route the `rq()` fix** to `graph-dba` — now tracked as its **K-009**
+   (high), so the routing is recorded on the owner's backlog rather than living
+   only in this ledger.
 5. Only then: re-query every agent, drain what is actually there, and flip this
    document to `archived`.
 
