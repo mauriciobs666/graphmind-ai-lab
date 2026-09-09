@@ -113,3 +113,38 @@ fetched for the `vitest` spec was 3.2.7). **Workaround:** split the install into
 the crashing pair is isolated, then pin both siblings to the same major. Verified 2026-09-02 on npm
 11.19.0 / Node v24.20.0; the npm bug will be fixed upstream, but the *diagnostic* pattern — an
 internal `TypeError` standing in for a peer conflict — outlives the fix.
+
+## A `git worktree` does not isolate an editable (`pip -e`) install — the editable finder is a `sys.meta_path` **fallback**, so isolation depends entirely on cwd
+
+`pip install -e` drops two files in `site-packages`: a `.pth` that calls
+`__editable___<pkg>_<ver>_finder.install()`, and a finder module whose `MAPPING` hardcodes an
+**absolute path into the tree the install ran from**. Checking out a worktree copies the source;
+it does not touch that mapping, so a worktree that shares the venv still imports the **main
+tree's** package unless something on `sys.path` resolves the name first.
+
+The mechanism decides the rule, and it is not "a local package shadows the finder". `install()`
+does `sys.meta_path.append(_EditableFinder)` — **append**, so the finder sits *after* the stdlib
+`PathFinder`. `PathFinder` consults `sys.path` (which for `python -c`, `python script.py` and
+pytest's rootdir insertion includes the invocation directory), and whatever it resolves wins;
+the editable finder only ever answers what `sys.path` could not. So:
+
+> **A worktree is isolated exactly when the package's own parent directory is on `sys.path`** —
+> normally that means invoking with cwd inside the worktree's package-parent (`server/`), not at
+> the worktree repo root.
+
+Verified 2026-09-09 against `falkor-chat/server/.venv` (the `falkorchat` editable install), with
+a synthetic worktree carrying its own marker package, run in both directions:
+
+| cwd | `falkorchat.__file__` resolves to |
+|---|---|
+| `<worktree>/server/` | the **worktree's** package (isolated) |
+| `<worktree>/` (repo root) | `<main-tree>/falkor-chat/server/falkorchat` (**leaks**) |
+
+Both legs are the same command; only cwd differs. The failure is silent — imports succeed, tests
+pass — and the observed cost was a seed script run from a worktree root that republished the
+**main tree's uncommitted** content into a shared reference graph. `pytest` run from the
+worktree's `server/` was correctly isolated in the same incident, which is what makes the trap
+convincing: one of the two habitual invocation points works.
+
+**Check, don't assume:** `python -c "import <pkg>; print(<pkg>.__file__)"` from the exact
+directory the real command will use. A `git status` in the worktree cannot see this.

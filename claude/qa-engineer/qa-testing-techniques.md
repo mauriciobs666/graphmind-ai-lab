@@ -180,3 +180,31 @@ copy from it. Whenever a document's blocks are meant to be used verbatim, assert
 named canonical block is individually reachable — before asserting anything about what the
 extracted text does. Same family as the static/diff-gate entry above: the green check and the
 acceptance criterion are about different things.
+
+## A "every label still has a survivor" done-condition cannot catch an over-broad delete — assert a *named* seeded non-target row instead
+
+When a destructive operation must spare pre-existing data that **shares labels/tables with its
+targets**, the natural-looking done-condition — walk the labels, assert each still has rows — is
+structurally incapable of failing. The delete removes the rows it should have spared, the labels
+still have the *target-adjacent* rows the operation legitimately created or left, and the
+checklist passes unchanged. It is a negative assertion dressed as a positive one.
+
+**The replacement is a positive identity assertion:** seed a specific, named non-target row
+before the run and assert **that row** is still there afterwards, by id — not that its label is
+non-empty. One row per shared label is enough, and it must be a row the operation has no reason
+to touch.
+
+The instance this came from: `falkor-chat`'s `config.WS_ID` defaults to `"acme"`, and `ws:acme`
+is **not** an empty scratch workspace — any script or design that reads `$FALKORCHAT_WS_ID`
+without pinning it operates on the populated demo tenant. Re-verified live 2026-09-09, and the
+census is unchanged from the 2026-09-02 observation: 544 `Entity`, 87 `Chunk`, 78 `StepRun`,
+52 `Message`, 29 `Document`, 29 `Step`, 21 `WorkflowRun`, 13 `TraceEvent`,
+11 `WorkflowDefSnapshot`, 2 `Channel`, 2 `Thread`, 1 `Agent`, 1 `ReadCursor`, 1 `User`. A
+per-participant reset there deletes `Channel`/`Thread`/`Message` rows — exactly the labels the
+seeded demo transcript also occupies. (Getting that warning into `falkor-chat`'s own context file
+is tracked separately as `architect` K-005; it is not published there yet, so **pin the workspace
+explicitly** rather than trusting the default.)
+
+**Generalises past graphs.** Any shared-namespace teardown has this shape — a tenant-scoped SQL
+`DELETE`, an S3 prefix wipe, a Redis key pattern. Ask what the check would report if the delete
+took *everything*: if the answer is still "pass", the check is measuring the wrong thing.

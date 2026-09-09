@@ -2,6 +2,14 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-09-09 — `architect.md`: a step row's SCOPE column is a build instruction, swept separately from its done-condition (inbound `MENTIONS` promotion, U31)
+
+- **What:** U31 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the **orphan-backlog** unit, the first shaped by *edge* rather than by producer. The 11 nodes it covers carry **0 `PRODUCED` edges** and are alive only on `MENTIONS`; every earlier unit was organised by producer, so none of them could ever have been reached. `architect` carried one of the 12 edges — `teco`'s U17 tagged it, having promoted the coordinator-facing half into `teco.md`.
+- **`b28c5e43-1f76-4d92-a305-7c6e1b9f4a82` (2026-09-02) — promoted, folded into the existing "Compress by pointer" bullet; zero new bullets.** The nearest existing coverage (same bullet's closing sentences) prescribes sweeping *downstream references* after a revision note and enumerates whole sections — delegation table, stage file lists, AC test table, risks. It does **not** say that a single step row has two independently binding columns, which is the entry's point: the SCOPE column is the *build instruction*, so a trim that sweeps only DONE-CONDITIONS leaves the removed contract still commissioned, frequently a few lines above a done-condition that now contradicts it. Added with the method that catches it — **grep every removed or renamed term across the whole plan and rule on each hit**, rather than editing the sites you reasoned about.
+- **Verified by re-deriving the shape, and its bound stated.** The entry's own instance (`salesperson-ui` plan v1.10, `messageCount`/`cartTotal`/`orderStatus` left in an S12d SCOPE cell) is not reproducible from a plan revision no longer at `HEAD`, so what was promoted is the **rule**, which follows from the structure of a step table and from the entry's uncontested framing as the same class as the repo-wide-rename rule already in this file. No figure from the entry was restated as fact.
+- **Graph:** 0 `PRODUCED` / 1 `MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+- **Budget:** `architect.md` **1,902 → 1,978 w**. The host line is now **1,617 characters** (was 1,150) — the file's longest, and worth a compaction pass; noted rather than fixed here, since splitting that bullet is an editorial change, not a distillation one.
+- **Docs touched:** `claude/architect/{architect.md,kaizen/history.md}`.
 ## 2026-09-08 — `kaizen_team` retraction pass: false CPython deadlock entry `7f3c1a92` cleared, its correction `2b8d40f1` promoted (1 discarded/retracted, 1 promoted, 0 kept open, 0 `MENTIONS`-tagged)
 
 - **What:** `cobb` processed the two same-session `kaizen_team` entries `architect` wrote on

@@ -2,6 +2,13 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-09 — orphan-backlog entry `b7e41c92` cleared: already promoted, accurately, by this agent's own U15 (U31)
+
+- **What:** U31 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the **orphan-backlog** unit, the first shaped by *edge* rather than by producer. The 11 nodes it covers carry **0 `PRODUCED` edges** and are alive only on `MENTIONS`; every earlier unit was organised by producer, so none of them could ever have been reached. `data-scientist` carried one of the 12 edges, tagged by `teco`'s U18.
+- **`b7e41c92-3d5a-4f18-9c60-2a8e17d34f5b` (2026-09-03) — already promoted; cleared without re-promoting.** Its content is carried, accurately and in full, by `claude/data-scientist/data-scientist.md`'s bullet *"A seeded percentile bootstrap over a discrete outcome is not a function of the data alone"* — written by **U15** (commit `42d80d7`, this agent's own chunk C) from a sibling entry on the same subject, three days before the `MENTIONS` tag was placed. That bullet states all three of the entry's parts: the bound moves with **row order** at a fixed seed because `random.Random.choice` draws an **index**; the effect is conditional on the target landing within Monte-Carlo error of an atom boundary at `k/n`; and a **smaller `B` makes the flip more common, not less**. Nothing was narrowed, garbled, or over-broadened in the promotion, so re-promoting would have produced a duplicate — the worse of the two outcomes.
+- **Verified by re-deriving, not by re-reading either the entry or the bullet.** Executed 2026-09-09 (system `python3` 3.12.3): `random.Random.choice`'s source is an index draw; twenty resamples of one 12-row multiset at a **fixed seed 0** differ between the vector and its reversal (equality test returned `False`); and sweeping 60 row permutations at one fixed seed gives **2** distinct 2.5th-percentile lower bounds at `B=400` but **1** at both `B=2000` and `B=10000` — the counterintuitive half confirmed, with the two higher-`B` runs serving as the passing control that a naive stable check is exactly what the entry warns about.
+- **Graph:** 0 `PRODUCED` / 1 `MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+- **Docs touched:** `claude/data-scientist/kaizen/history.md` only — no prompt or knowledge-base change was warranted.
 ## 2026-09-09 — `data-scientist.md`: a provenance audit is computed before any value-modifying post-transform (U27)
 
 - **What:** `cobb`, distilling `data-scientist`'s single `kaizen_team` entry (unit U27, entry

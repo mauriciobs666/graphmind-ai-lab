@@ -2,6 +2,48 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-09 — U31: the orphan backlog — 11 `MENTIONS`-only entries, 9 promoted, 1 already-promoted, 1 kept open
+
+- **What:** U31 of `claude/docs/plans/kaizen-distillation2-coordination.md`, the first unit in either pass shaped by **edge** rather than by producer. Scope: the 11 `:KaizenEntry` nodes with **0 `PRODUCED` edges**, alive only on `MENTIONS`, dated 2026-08-30 → 09-07 — the oldest population in the graph. Complete 36-character `entryId`s used in every read and every write; four prefix collisions are on record in this graph and this population alone held four ids beginning `b7`.
+
+- **Verdict on the dispatch hypothesis: it is wrong, and the true structure is more useful.** The brief proposed these might be *"already promoted, with only the node left uncleared."* They are not residue. Every one is a **deliberate forward routing** created by a producer-organised unit: the producing agent's half was promoted into that agent's home, `cobb` tagged the entry `MENTIONS → <other agent>` for the half belonging to a *second* agent, and the `PRODUCED` edge was resolved — leaving the node alive **on purpose**, as the carrier of unfinished work. `teco`'s U18b names the mechanism in its own words: *"Routed out of `teco.md` via `MENTIONS` … each survives with its `MENTIONS` edge after its `PRODUCED` edge is resolved, and surfaces in the tagged agent's own distillation pass."* Confirmed per entry by grepping every id: **10 of 11** are logged as a `MENTIONS` tag in some agent's `kaizen/history.md` (7 by `teco`, 1 each by `architect`, `analyst`, `data-scientist`), and the eleventh (`b7e41c92`) is logged by `teco` too.
+- **So this is a queue with no consumer, and that is the finding worth keeping.** The tag says *"surfaces in the tagged agent's own distillation pass"* — but a tagged agent's pass is scoped by `MATCH (a:Agent {agentId})-[:PRODUCED]->(e)`, which cannot see a node whose only edge is `MENTIONS`. Six of these agents were declared **"closed out, 0/0"** by their own units while holding an unrouted edge. The routing convention was sound and its drain step never existed. Two of the coordination doc's own follow-ups had noticed two instances (*"a `qa-engineer` top-up unit is now owed"*, *"a second `MENTIONS` node is now owed"*) without generalising: it was never two deferrals, it was a structural gap that produced eleven.
+- **One entry did fit the hypothesis, and it fit for a different reason.** `b7e41c92` → `data-scientist` was already promoted — not by the tagging unit, but by `data-scientist`'s **own** U15 from a *sibling* entry on the same subject, three days before the tag was placed. Accurate and complete, so it was cleared without re-promoting. That is a duplicate-in-the-graph, not a promoted-then-abandoned node, and it is the only one of the eleven.
+
+- **Dispositions.** 9 promoted · 1 already-promoted-and-cleared · 1 kept open. **10 nodes cleared; 11 of the 12 edges resolved, 1 deliberately left standing** (`e1a6c4d2` → `tico`).
+
+| entryId | → | disposition | landed in |
+|---|---|---|---|
+| `a2f1c8e4-3b7d-4e1a-9c2f-6d8b5a7e0f11` | devops | promoted, mechanism corrected | `claude/devops/ops-quirks.md` (new §) |
+| `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` | tico | **kept open** | `claude/tico/kaizen/plan.md` K-016 |
+| `b7d5e214-0a93-4c68-9f37-1e4c8a06b2d9` | qa-engineer | promoted | `claude/qa-engineer/qa-testing-techniques.md` (new §) |
+| `b28c5e43-1f76-4d92-a305-7c6e1b9f4a82` | architect | promoted, folded | `claude/architect/architect.md` (existing bullet) |
+| `b7e41c92-3d5a-4f18-9c60-2a8e17d34f5b` | data-scientist | **already promoted** | `claude/data-scientist/data-scientist.md` (U15) |
+| `b7b3bc96-21fa-4d4c-a2ba-82619bb5d3ad` | analyst | promoted, folded | `claude/analyst/analyst.md` (Findings bullet) |
+| `3f8b17d2-6c40-4e93-b1a7-5d29e08c6a44` | analyst | promoted, folded | `review-techniques.md` §"names a level" |
+| `f3a91c47-2b60-4d8e-9a15-7c0e4bb2d581` | analyst | promoted, folded | `review-techniques.md` §"Byte-identity" |
+| `b2d64f19-7e35-4a80-93c6-1af7c25b0e88` | analyst **+** tdd-engineer | promoted **twice** | `review-techniques.md` §"derived from the artifact" · new tdd KB |
+| `f6b820ae-9d47-4c15-83e0-72a1de5b9013` | tdd-engineer | promoted | `claude/tdd-engineer/guard-testing-techniques.md` (**new file**) |
+| `a8f3c521-6d09-4b7e-95a2-30fe14b7c8d6` | tdd-engineer | promoted | same new file |
+
+- **`tdd-engineer` gains its first knowledge base.** Three of the eleven route there and all three are guard-testing technique — narrow, binding only when the deliverable *is* a guard. `tdd-engineer.md` is always-loaded and was the wrong price; `guard-testing-techniques.md` (1,225 w) plus a four-line pointer is the right mechanism, and matches the five agents that already carry one. Catalogued in `claude/README.md` and the `claude/AGENTS.md` roster in the same change.
+- **Count-and-decide, including the two-edge case.** All eleven read **0 `PRODUCED`**, so `otherRemaining = mentionEdges − 1`. Ten had one edge (`otherRemaining = 0` ⇒ full-node clear). `b2d64f19` had **two**: the `analyst` edge was resolved alone (`otherRemaining = 1`, node deliberately left alive), and the node was cleared with the full-node shape only after the `tdd-engineer` promotion landed. Ordering invariant held throughout — every disposition was on disk in the target agent's `history.md` before its edge or node was touched.
+
+- **A live finding against the just-shipped static check, confirmed by execution.** The brief asked whether `f6b820ae` / `b2d64f19` / `a8f3c521` describe a defect `skills/joern-cpg/scripts/test-stamp-wiring.sh` still has. **They do, and it is the fourth generation of the K-009 defect shape.** The check's comment claims it covers *"a LITERAL command token at any rq call site, in ANY CASE … whether the site is written as a command substitution or as a BARE STATEMENT"*, and names exactly one bound (a command reaching `rq` through a variable). A `GRAPH.DELETE` literal at an existing call site, written across a **backslash line continuation**, is inside the stated reach and outside the mechanism — the anchor is a line-based `grep` and tokens are extracted from the anchor line only, so the count guard still reads 3 and the token is never inspected. Measured in scratch against the extracted block, with a passing control:
+
+| tree | result |
+|---|---|
+| clean (**control**) | rc 0 — `PASS all 3` |
+| literal bad command at an existing site | rc 1 — FAIL |
+| lowercase `graph.delete` | rc 1 — FAIL |
+| new bare-statement site | rc 1 — FAIL |
+| **literal `GRAPH.DELETE` after a `\` continuation** | **rc 0 — `PASS all 3`** |
+
+  The three documented mutation shapes all redden; the undocumented one does not. This is `f6b820ae`'s rule demonstrating itself — the check was verified against four *mutation* shapes and never against a *coverage probe* over the syntactic forms a shell call site can take. Reported to the coordination, **not** folded into a promotion and **not** edited: `skills/joern-cpg/**` is `graph-dba`'s and was just committed.
+- **Instruments tested before use.** The AST census was run under **two** definitions of the same count (CPython 3.12.3): 8-name binding-field set → **27** classes, the 5-name set the entry states → **22**, differing by `Global`/`Import`/`ImportFrom`/`MatchMapping`/`Nonlocal`. The 27 matches the figure `review-techniques.md` already carried. The disagreement is itself promoted, into the new tdd knowledge base: a derived enumeration still has a parameter, so *"the grammar has N binding forms"* is not a fact without its field set. The `ws:acme` census was re-read live and reproduced the entry's eight cited figures exactly, seven days on. The bootstrap claim was re-derived with a **passing control** beside the failing probe (`B=400` unstable at 2 distinct bounds, `B=2000` and `B=10000` both stable at 1). The editable-install claim was re-derived by **executing both legs**, which is what surfaced the correction: the finder is `sys.meta_path.append`ed, i.e. a fallback *after* `PathFinder`, so the predictive rule is about `sys.path`, not about shadowing.
+- **Budgets:** `ops-quirks.md` 1,378 → 1,707 w · `qa-testing-techniques.md` 2,156 → 2,468 w · `review-techniques.md` 9,284 → 9,867 w with **27 → 27** sections · `analyst.md` 2,580 → 2,656 w · `architect.md` 1,902 → 1,978 w · `guard-testing-techniques.md` 1,225 w (new) · `claude/AGENTS.md` → 2,465 w, no line past the 700-char smell. **Zero new bullets in any always-loaded prompt** — the two prompt promotions both folded into existing bullets. One carry-forward: `architect.md`'s host bullet is now 1,617 characters, the file's longest, and wants a compaction pass of its own.
+- **Docs touched:** `claude/devops/{ops-quirks.md,kaizen/history.md}` · `claude/qa-engineer/{qa-testing-techniques.md,kaizen/history.md}` · `claude/architect/{architect.md,kaizen/history.md}` · `claude/analyst/{analyst.md,review-techniques.md,kaizen/history.md}` · `claude/tdd-engineer/{guard-testing-techniques.md,tdd-engineer.md,kaizen/history.md}` · `claude/data-scientist/kaizen/history.md` · `claude/tico/kaizen/{history.md,plan.md}` · `claude/cobb/kaizen/{history.md,plan.md}` · `claude/README.md` · `claude/AGENTS.md`.
+- **Plan items:** K-025 opened — the `MENTIONS` queue needs a drain step, or the tag needs to stop implying one.
 ## 2026-09-09 — U25: `kaizen_team` distillation pass 2, chunk G — `analyst`'s 2 deferred entries, both promoted
 
 - **Deliverable.** `claude/analyst/review-techniques.md` (two new sections), plus

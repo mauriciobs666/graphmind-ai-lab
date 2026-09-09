@@ -2,6 +2,15 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-09-09 — `qa-testing-techniques.md`: a survivor-by-label done-condition cannot catch an over-broad delete (inbound `MENTIONS` promotion, U31)
+
+- **What:** U31 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the **orphan-backlog** unit, the first shaped by *edge* rather than by producer. The 11 nodes it covers carry **0 `PRODUCED` edges** and are alive only on `MENTIONS`; every earlier unit was organised by producer, so none of them could ever have been reached. This closes the `qa-engineer` deferral the coordination doc has carried since U7 (*"the pass should not be declared closed while it is outstanding"*).
+- **`b7d5e214-0a93-4c68-9f37-1e4c8a06b2d9` (2026-09-02) — promoted to `claude/qa-engineer/qa-testing-techniques.md`.** `architect`'s U7 promoted the `ws:acme`-census half to its own `plan.md` K-005 (routing to `falkor-chat/AGENTS.md`, still open) and tagged this **test-design corollary** to `qa-engineer`; nothing had reached this file — `grep -rniE 'acme|survivor|WS_ID' claude/qa-engineer/` returned only an unrelated 2026-09-07 history line.
+- **Re-derived, not re-read.** Live label census on `ws:acme` (read-only, 2026-09-09) reproduces the entry's figures **exactly, all eight, seven days on**: 544 `Entity`, 87 `Chunk`, 52 `Message`, 29 `Document`, 2 `Channel`, 2 `Thread`, 1 `User`, 1 `ReadCursor` — plus 78 `StepRun`, 29 `Step`, 21 `WorkflowRun`, 13 `TraceEvent`, 11 `WorkflowDefSnapshot`, 1 `Agent`, which the entry did not list. The rule itself is structural and needs no probe: a check that asserts each label is non-empty cannot distinguish "spared the right rows" from "deleted them and left the target-adjacent ones", so it passes under a total over-delete.
+- **Promoted with its bound stated:** the `ws:acme` warning is **not** in `falkor-chat/AGENTS.md` yet (K-005 open), so the section says to pin the workspace explicitly rather than implying the context file will warn you. Generalised past graphs — tenant-scoped SQL `DELETE`, S3 prefix wipe, Redis key pattern — with the operative test written as *what would this check report if the delete took everything?*
+- **Graph:** 0 `PRODUCED` / 1 `MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+- **Budget:** `qa-testing-techniques.md` **2,156 → 2,468 w**, one new section.
+- **Docs touched:** `claude/qa-engineer/{qa-testing-techniques.md,kaizen/history.md}`.
 ## 2026-09-07 — `qa-testing-techniques.md` gains the markdown extract-and-execute shape-assertion rule (inbound promotion from `graph-dba`'s distillation, U6)
 
 - **What:** one new section at the end of the knowledge base — an extract-and-execute check over a

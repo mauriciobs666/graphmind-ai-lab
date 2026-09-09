@@ -151,6 +151,31 @@
   `cobb`: `docs/manuals/*` is `tico`'s doc kind. `Last updated:` on the manual reads 2026-09-02 —
   a same-day pass touched it without correcting this.
 
+### K-016 — Publish the eager-provider-resolution trap into `llm-provider-config.md`
+- **Status:** 🔵 proposed
+- **Priority:** low
+- **Origin:** `kaizen_team` entry `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` (2026-08-31), tagged
+  `MENTIONS → tico` by `data-scientist`'s U14 and re-homed here by U31 (see `history.md`,
+  2026-09-09). Also tracked as `data-scientist` K-003, which is the origin record; this is the
+  actionable copy, on the agent that owns the target document.
+- **Rationale:** `falkor-chat`'s `ModelGateway.from_env()` resolves the `{env:}`/`{file:}`
+  substitution for **every** declared provider, not the one a caller actually dispatches to. A
+  live-harness script pointed at `config/opencode.example.json` therefore dies with
+  `ModelConfigError` on that file's unused `openai` provider unless `OPENAI_API_KEY` is set to a
+  placeholder first (`os.environ.setdefault`). Four independent scripts have hit and worked around
+  it, so it is no longer a one-off. Confirmed 2026-09-09 that no manual section carries it:
+  Walkthrough 1 tells the operator to copy the example file and edit it, and §8 covers a
+  missing/malformed config at startup, but neither says the failure fires for a provider nothing
+  ever resolves to.
+- **Proposed change:** one clause in `falkor-chat/docs/manuals/llm-provider-config.md` §2
+  (declaring a provider) or §8 (what happens when something's wrong). Deliberately **not**
+  `falkor-chat/AGENTS.md`: an always-loaded context file is the wrong price for a fact that binds
+  only when someone writes a new live-harness driver, and the workaround is already commented at
+  the point of use in `server/tests/eval/test_guard_calibration_live.py`.
+- **Notes:** the `kaizen_team` node is deliberately **still alive** on its `MENTIONS → tico` edge —
+  it is the routing signal, and clearing is irreversible. Resolve the edge (and the node, if
+  `otherRemaining` reaches 0) only once the clause is published.
+
 ## Parking lot / ideas
 - **`tico.md`'s two `git add <path>` then `git commit` parentheticals now trail the team rule.**
   `claude/AGENTS.md`'s concurrent-write paragraph was rewritten 2026-09-07 to lead with the

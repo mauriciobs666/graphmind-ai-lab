@@ -2,6 +2,15 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-09-09 — `ops-quirks.md`: a `git worktree` does not isolate an editable install (inbound `MENTIONS` promotion, U31)
+
+- **What:** U31 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the **orphan-backlog** unit, the first shaped by *edge* rather than by producer. The 11 nodes it covers carry **0 `PRODUCED` edges** and are alive only on `MENTIONS`; every earlier unit was organised by producer, so none of them could ever have been reached. `devops` carried one of the 12 edges.
+- **`a2f1c8e4-3b7d-4e1a-9c2f-6d8b5a7e0f11` (2026-08-30) — promoted to `claude/devops/ops-quirks.md`, mechanism corrected.** Re-derived by **execution**, not by reading, using `falkor-chat/server/.venv`'s live `falkorchat` editable install and a synthetic worktree carrying its own marker package. Both legs of the entry reproduce: cwd inside the worktree's `server/` resolves the **worktree's** package; cwd at the worktree repo root resolves the **main tree's**. Same command, only cwd differs.
+- **The correction is the value.** The entry explains the working case as *"the local package shadows the finder"*, which is true but not predictive. The finder module's `install()` does `sys.meta_path.append(_EditableFinder)` — **append**, so it sits *after* the stdlib `PathFinder`; the editable finder is a **fallback** that only ever answers what `sys.path` could not. The operative rule is therefore *a worktree is isolated exactly when the package's own parent directory is on `sys.path`*, which tells a reader what to check instead of giving them a two-case table to memorise. Absolute paths genericized in the promoted text.
+- **Not previously published.** `grep -rniE 'worktree|editable|\.pth|pip -e' claude/devops/` was empty before this edit.
+- **Graph:** counted before mutating — 0 `PRODUCED` / 1 `MENTIONS`, so `otherRemaining = 0 + 1 − 1 = 0` ⇒ full-node curator `DETACH DELETE`.
+- **Budget:** `ops-quirks.md` **1,378 → 1,707 w**, one new section, no line past the 700-char smell.
+- **Docs touched:** `claude/devops/{ops-quirks.md,kaizen/history.md}`.
 ## 2026-09-07 — Distillation pass, unit U3: devops's three raw entries (teco-coordinated, kaizen-distillation2-coordination.md)
 
 - **What:** ran the `agent-maintenance` §5 procedure against `kaizen_team` scoped to `devops` — 2 current-shape entries `PRODUCED` by `devops`, plus 1 reachable only through the `MENTIONS→devops` edge pass 1 left behind. All three verified by **re-deriving the fact**, not by re-checking the cited evidence; two promoted to `ops-quirks.md`, one discarded. No legacy (`author`-property) entries exist anywhere in the graph.

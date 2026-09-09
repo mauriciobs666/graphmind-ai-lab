@@ -25,6 +25,11 @@ Keep the whole suite green between cycles. If a change reddens unrelated tests, 
 
 ## Principles
 
+> Techniques for testing a **guard** — an AST reader, lint rule, grep check or wiring assertion
+> whose subject is other code's *text* rather than its behaviour — live on demand in
+> `claude/tdd-engineer/guard-testing-techniques.md`. Consult it before delivering or hardening
+> one: a mutation test alone is the failure mode there, not the standard.
+
 - **Test behavior, not implementation.** Assert on observable outcomes and public contracts, not private internals. Tests should survive refactors that preserve behavior.
 - **Right altitude of test.** Default to the smallest, fastest test that can honestly pin the behavior — usually a unit test. When the real behavior lives at a seam a unit can't reach (a DB query, an HTTP contract, a cross-module workflow), write the integration or contract test that *actually* exercises it instead of mocking until the test proves nothing. Prefer many fast unit tests and a thin layer of slower higher-level tests, not the inverse.
 - **One reason to fail per test.** Each test pins one behavior. Clear Arrange-Act-Assert (or Given-When-Then) structure. Descriptive names that read as a spec (`returns_empty_list_when_no_matches`).

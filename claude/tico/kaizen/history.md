@@ -2,6 +2,15 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-09-09 — orphan-backlog entry `e1a6c4d2` **kept open** and re-homed onto this agent's plan as K-016 (U31)
+
+- **What:** U31 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the **orphan-backlog** unit, the first shaped by *edge* rather than by producer. The 11 nodes it covers carry **0 `PRODUCED` edges** and are alive only on `MENTIONS`; every earlier unit was organised by producer, so none of them could ever have been reached. `tico` carried one of the 12 edges, tagged by `data-scientist`'s U14 because the fact's proposed home is a **`tico`-owned document**.
+- **`e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` (2026-08-31) — kept open, not cleared.** `falkor-chat`'s `ModelGateway.from_env()` resolves the `{env:}` substitution for **every** declared provider, not just the one a caller dispatches to, so a live-harness script pointed at `config/opencode.example.json` dies on that file's unused `openai` provider unless `OPENAI_API_KEY` is set to a placeholder first. Four independent scripts have hit it.
+- **Confirmed not published.** `falkor-chat/docs/manuals/llm-provider-config.md` Walkthrough 1 tells an operator to copy `config/opencode.example.json` and edit it, and §8 covers a missing/malformed config file at startup — but nothing anywhere in that manual says the failure fires for a provider **nothing ever resolves to**. No mention in `falkor-chat/AGENTS.md` either.
+- **Why it stays open.** The target document is `manuals/`, which is `tico`-owned and outside `cobb`'s write remit, so this unit could not land it. Clearing the node would have destroyed the only live routing signal for an unpublished fact — clearing is irreversible, and a second hold is the correct outcome here.
+- **What changed instead:** the item is now tracked on **this agent's** plan (K-016). It was already tracked as `data-scientist` K-003, which is the wrong owner — that agent cannot write a `tico` manual either, which is precisely why the `MENTIONS` edge points here. `data-scientist` K-003 stays as the origin record; K-016 is the actionable copy on the owner's backlog.
+- **Graph:** **no mutation.** 0 `PRODUCED` / 1 `MENTIONS`, both intact; re-verify before any future clear.
+- **Docs touched:** `claude/tico/kaizen/{history.md,plan.md}`.
 ## 2026-09-07 — `kaizen_team` distillation: 8 entries — 4 promoted (3 into `tico.md`, 1 team-wide), 3 discarded, 1 kept open
 
 Pass 2, unit U5 of `claude/docs/plans/kaizen-distillation2-coordination.md` (curator: `cobb`). All

@@ -229,6 +229,33 @@
   pairwise-consistency constraint that has held through this chain applies: `freshness.md` and the
   manual must end up describing the same set of marker shapes.
 
+### K-025 — A `MENTIONS` tag creates an obligation no pass is shaped to drain
+- **Status:** 🔵 proposed
+- **Priority:** high
+- **Origin:** U31 (`claude/docs/plans/kaizen-distillation2-coordination.md`), 2026-09-09 — see
+  `history.md`. The unit's whole population, 11 nodes, was produced by this gap.
+- **The defect, precisely.** When `cobb` tags an entry `MENTIONS → <other agent>` and resolves its
+  `PRODUCED` edge, the node survives **by design**, carrying the half of the fact that belongs to
+  the second agent. `teco`'s U18b states the intent: *"each survives with its `MENTIONS` edge …
+  and surfaces in the tagged agent's own distillation pass."* **It does not.** A distillation unit
+  is scoped `MATCH (a:Agent {agentId})-[:PRODUCED]->(e)`, which by construction cannot see a node
+  whose only edge is `MENTIONS`. So the tag writes an obligation into a queue with no consumer.
+- **Evidence it is structural, not incidental.** 11 nodes accumulated between 2026-08-30 and
+  2026-09-07, spanning 7 agents and 2 coordination passes — the oldest population in the graph.
+  **Six** of those agents were recorded "closed out, 0/0" by their own units while still holding an
+  unrouted edge. The coordination doc noticed **two** instances as one-off deferrals owed at pass
+  close and did not generalise; there were eleven.
+- **Proposed change, two candidates — the choice is the work:**
+  1. **Give the queue a consumer.** Add to `skills/agent-maintenance/SKILL.md` §5 that an agent's
+     unit is scoped by **both** edge kinds — `PRODUCED` *or* `MENTIONS` — and that "closed out"
+     means both read zero. Cheapest, and it makes every future unit self-draining.
+  2. **Stop the tag implying a promotion.** Make `MENTIONS` purely an attribution marker and
+     require the tagging unit to either promote the second agent's half itself, or open a plan item
+     on the **mentioned** agent's backlog. This trades a queue for a synchronous cost at tag time.
+- **Note either way:** the count-and-decide arithmetic already handles the multi-edge case
+  correctly (`otherRemaining = producedEdges + mentionEdges − 1`); U31 exercised it on a two-edge
+  node. The gap is in **scoping**, not in the clear.
+
 ## Parking lot / ideas
 - **`bypassPermissions` revert landed (U3, 2026-09-01)** — `.claude/settings.json`'s
   `defaultMode: "bypassPermissions"` pin removed (left unset, resolving to the global `auto`

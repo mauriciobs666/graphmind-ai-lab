@@ -24,6 +24,21 @@ Origin: proved `executor._drive_loop` identical (same hash, same byte length) ac
 revisions despite its line offset moving by 14 lines, which a naive `git diff` line-range check
 would have mis-read as "moved, can't tell."
 
+**Scaled to a whole file, this is the right done-condition for a prose-only unit over code** —
+a docstring/comment rewrite, a renamed-in-prose-only pass, a licence header sweep. Parse `HEAD`
+and the delivered file, replace every docstring body with a sentinel, and compare **both**
+`ast.dump()` **and the set of nodes that own a docstring**. It is strictly stronger than asking
+the delegate to re-measure behaviour: if the executable code is byte-equivalent then every
+behavioural claim about the untouched mechanism *inherits its prior evidence*, so the earlier
+measurements become proofs rather than things to repeat. Comparing the **owner set** is what
+stops a docstring being silently added or removed under cover of the strip — without it, `ast.dump()`
+on sentinel-substituted trees cannot tell an inserted docstring from an inserted string statement.
+
+**Its bound, and it is easy to overstep:** the proof covers *code left alone*. Any figure the
+delegate READ from other source while writing that prose — a count of raise sites, a census of
+annotated assignments — is outside it and still needs independent re-derivation. An AST-equality
+pass is evidence about the diff, never about the document's claims.
+
 ## Verifying an uncommitted diff without mutating the working tree
 
 Two techniques for gathering *executed* evidence about a change that is still uncommitted (no
@@ -625,6 +640,24 @@ admit the change that tripped it, price the widening against the *next* change, 
 set-of-names allowlist pays the whole guard for every subsequent use of that name, and the fix is
 ~12 lines of site-qualification, not a narrower allowlist.
 
+**The gate question, when the guard is a hand-written reader.** A docstring that states
+**semantic** reach (*"every method a route can reach, by any path"*) over a body that does a
+**syntactic** match (hardcoded prefix strings) regenerates its defect after every fix — three
+consecutive passes in one chain each found the next instance *inside the artifact that closed the
+previous one*. Do not ask *"does the guard fire on my reproduction?"*; it will, because the
+reproduction was written to match the body. Ask:
+
+> **What is the smallest edit to production code that satisfies the docstring and survives the
+> body?**
+
+It is one probe, and the answer is ordinary rather than exotic — a local alias assignment
+(`svc = self._services`), or a call one module out. **And an over-claiming docstring admits two
+correct closures** — extend the mechanism to the claim, or narrow the claim to the mechanism —
+with the defect being only ever the gap between them. Put **both** to the implementer explicitly:
+a team that has widened several times running will not spontaneously propose retreating the
+claim, so a review that only ever recommends widening has pre-decided the cheaper half of the
+question and called it a finding.
+
 **The move:** where a gate is generated from the artifact it gates — a parametrize source, an AST
 walk, a derived `frozenset` — the mutation that tests it is applied to the **source**, in the shape
 the next change is *decided* to take, never a synthetic call written to be seen. Read the step's
@@ -786,6 +819,20 @@ call path that uses it; the code was re-read but not the space of inputs it had 
 review question is not *did they run it* but **run what, and is the assertion about that same
 thing.** Do not narrow this to "primitive vs. call path" — that is one instance of the shape, not
 its definition.
+
+**Turn it on your own review before you file it.** *"Checked, not guessed"* — and every phrasing
+like it — asserts the **method**, not the **scope**, and scope is where this defect lives.
+Reproduce a case, fix the spelling it exhibited, verify the fix kills that case, and you have
+checked something true and insufficient: the identical escape can sit one file over, reached by
+an ordinary delegation call. The question that catches it, whether you are writing the exemption
+or judging one: **is the rule the exemption STATES broader than the reach the mechanism
+IMPLEMENTS?** A reason string of the form *"no X reaches Y"* is the tell — it is a semantic claim
+sitting on top of whatever the walk actually visits. Verified 2026-09-09 in the case that
+produced this: a module-wide walk with a three-name allowlist was declared sufficient
+*"checked not guessed"*, and two mutations survived it at 183 passed — a bare `HTTPException(410)`
+raised from the method a route calls, and the same raise in a module-level helper that method
+calls. Both answered `410 {"detail":"gone"}` on the wire, byte-identical to the answer the
+sufficiency argument was built on.
 
 **The shell instance, re-derived 2026-09-09 by executing the helper both ways.** A helper whose
 contract is a **side-effect variable** is silently defeated when a caller invokes it in `$(…)`:
