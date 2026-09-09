@@ -61,6 +61,11 @@
   is verification technique; that file, not a new mutation-testing knowledge base, is where this
   lesson should land. U11 did not move it, to stay inside its own eight-entry scope. The homes ruled
   out at U10 still are: `skills/python-web-quirks/` (web/async + pytest import-timing) and
-  `claude/qa-engineer/qa-testing-techniques.md` (black-box QA mechanics).
+  `claude/qa-engineer/qa-testing-techniques.md` (black-box QA mechanics). **What actually remains
+  is smaller than this item says (U39, 2026-09-09):** the *general* rule — a surviving mutant is
+  not evidence of a coverage gap until the mutant is shown to change behaviour — has stood in
+  `claude/tdd-engineer/tdd-engineer.md`'s mutation bullet all along, as the equivalent-by-construction
+  case, and U39 extended that same bullet again. Only the `re.fullmatch`/anchor **instance** is
+  unhomed, and it is an instance, not a rule.
 - A "definition of done" checklist (suite green, behavior covered, no scope creep, honest run report) the coder self-checks before reporting completion.
 - Consider whether the coder should delegate the test-writing step to `tdd-engineer` when strict TDD is required, rather than doing it itself.

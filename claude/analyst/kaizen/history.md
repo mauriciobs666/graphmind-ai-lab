@@ -3,6 +3,37 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
+## 2026-09-09 — one `coder`-produced entry routed here: a residual counts lines, not occurrences (U39)
+
+- **What:** `cobb` ran U39 of `claude/docs/plans/kaizen-distillation2-coordination.md` over `coder`'s
+  9-entry produced inbox. One entry routed to `analyst` on the receiving artifact's scope line:
+  `f3e2a1c4-7b6d-4e2a-9c1f-8a5d6e2b7c91` (2026-09-09, `suggestedHome: prompt`) — **PROMOTED** into
+  `claude/analyst/review-techniques.md`, § *"A grep-pinned edit table is an edit list, not a
+  completeness proof"*, by **rewriting numbered item 5 in place**. Item 5 was already that section's
+  one false-*failure* case (a done-condition that must spell the retired token, putting the residual
+  back at 1); this entry is the same mechanism one step more general — a residual counts **lines in
+  files**, so an explanatory comment or docstring that repeats the literal does it too, and the
+  result reads exactly like an incomplete edit.
+- **Verified by execution, not by citation.** `grep -c` returns **2** where `grep -o | wc -l`
+  returns **3** on a file carrying the token once on one line and twice on the next. At `e79fb61`,
+  `git grep -cF 'SUPPORT_DIFF_PROPORTIONS[0]' -- model-bench/` reads `stats.py:1` beside
+  `tests/test_stats.py:2` — the repaired state the entry describes, with the single legitimate use
+  at `stats.py:466`. (`model-bench/tests/test_stats.py` is another session's uncommitted area; every
+  reading here is at an explicit sha.) The entry's durable half was kept: the fix is code-side —
+  write the literal once and derive thereafter (`clamped_value != unclamped_value` off an
+  already-computed clamp) — never a cleverer grep.
+- **Not a new section, deliberately.** The dispatch flagged that a third consecutive unit extending
+  this section would be the trigger shape `cobb` K-026 exists for. It is not: this is an in-place
+  rewrite of an existing item, no bullet added, and no restructuring was done as a side effect.
+  One pre-existing inaccuracy left for whoever next revises the section: its opening line still says
+  *"Six ways the residual **passes** on an incomplete edit"*, and item 5 was already a
+  false-failure, not a false pass, before this edit.
+- **Why:** `agent-maintenance` §5 routing — `review-techniques.md` holds this repo's whole
+  grep-residual body of knowledge, and the rule fires wherever a residual command is written or
+  gated. No catalog change (no new section; the `claude/README.md` row's description still holds).
+- **Plan items:** none.
+
+
 ## 2026-09-09 — one `cobb`-produced entry routed here: the justification attached to a rule (U38)
 
 - **What:** `cobb` ran U38 of `claude/docs/plans/kaizen-distillation2-coordination.md` over its own

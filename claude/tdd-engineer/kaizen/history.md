@@ -3,6 +3,48 @@
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
 
+## 2026-09-09 — four `coder`-produced entries routed here (U39): two into `tdd-engineer.md`, two into `guard-testing-techniques.md`
+
+- **What:** `cobb` ran U39 of `claude/docs/plans/kaizen-distillation2-coordination.md` over `coder`'s
+  9-entry produced inbox. Four entries routed to `tdd-engineer` on the receiving artifact's scope
+  line rather than on the producer's framing (`coder` has no knowledge base; none was created).
+- `4e9b1c07-3a52-4d68-b1f0-9c7d24ae5b83` (2026-09-08, `suggestedHome: prompt`) — **PROMOTED** into
+  `tdd-engineer.md` as a new Principles bullet: *when a plan explicitly rejected an alternative, the
+  mutant is that alternative.* Deleting the chosen mechanism only proves the code runs; a test
+  written against the deletion can be fully green against the rejected design. Ruled here over
+  `coder.md` (no mutation doctrine to anchor to) and `teco.md:93` (a coordinator's ask, not a
+  selection method — and the capture's own evidence is that the ask was fine and the mutant was not).
+- `12c5ab37-b418-44b5-8aaa-3db5742009f6` (2026-09-07, `suggestedHome: knowledge base`) — **PROMOTED**
+  into `tdd-engineer.md`, folded as one sentence onto the existing mutation bullet rather than as a
+  new one: an **identity** assertion is invariant under any change *both* halves share, so
+  `from_dict(to_dict(x)) == x` cannot pin a serialization decision — omit-vs-null, key name,
+  ordering — however many records it round-trips; assert the serialized form. It is the mirror of
+  that bullet's existing *"a surviving mutant is not always a weak test"*, the case where the
+  survival **is** the test's fault. Verified at `e79fb61` in `model-bench/modelbench/fingerprint.py`
+  (`to_dict:359-360`, `from_dict`'s per-record-kind sentinel) and
+  `tests/test_fingerprint.py:398`, which carries the assertion that killed the mutant.
+- `3f6c1a52-9d24-4b7e-8a10-5c2e77b4d901` (2026-09-07, `suggestedHome: project docs`) — **PROMOTED**
+  into `guard-testing-techniques.md`, § *"A hand-written 'which object is this' resolver has two
+  axes"*, as the **opposite polarity** on the same reader: where the value axis under-approximates,
+  the *frontier* over-approximates. An `ast.Attribute`-collecting frontier takes every `self.<name>`,
+  call position or not, so a method passed as a **value** (`executor.submit(self._run_turn, …)`)
+  enters it exactly as a called one does. Judged distinct from that section's existing VALUE-axis
+  escape list (which ends *"then a call argument"*) because that list enumerates blindness and this
+  is over-reach. Re-derived by execution on CPython 3.12.3, not from the entry's cited test run.
+- `b2d6f480-71ae-4c93-8e15-5a3f0d92c6e1` (2026-09-08, `suggestedHome: knowledge base`) — **half
+  promoted** into `guard-testing-techniques.md`. Its headline (a name-keyed allowlist is blind to a
+  second raise of an allowlisted name; site-qualify instead) was already the closing paragraph of
+  § *"When the docstring states SEMANTIC reach…"*, read whole, and is documented again in the
+  guard's own `_raise_sites` docstring. The unpublished half — **assert the exemption by equality,
+  not by subtraction**, so an additional member is a stop-and-decide and a stale exemption reddens
+  too — is now a paragraph beside it, with the delivered assertion shape cited.
+- **Why:** `agent-maintenance` §5 routing — the fact's home is the artifact whose scope covers it,
+  not the agent that captured it. No catalog change: both KBs keep their `claude/README.md` and
+  `claude/AGENTS.md` descriptions (no new section in either — one new paragraph per existing
+  section, one folded sentence, one new prompt bullet).
+- **Plan items:** none.
+
+
 ## 2026-09-09 — one `cobb`-produced mutant-design rule added to `guard-testing-techniques.md` (U38)
 
 - **What:** `cobb` ran U38 of `claude/docs/plans/kaizen-distillation2-coordination.md` over its own

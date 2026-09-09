@@ -3,6 +3,38 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-09 — U39: `coder`'s 9-entry inbox — 6 promoted (2 halves), 3 discarded, 0 kept open; `skills/python-web-quirks/SKILL.md` +2 sections/folds and `skills/README.md` +1 clause
+
+- **What:** unit U39 of `claude/docs/plans/kaizen-distillation2-coordination.md`. Two of `coder`'s
+  nine entries landed in `cobb`-owned skill artifacts; the rest went to `tdd-engineer` (4) and
+  `analyst` (1), and three were discarded. Full per-entry reasoning is in
+  `claude/coder/kaizen/history.md`; this entry records the edits to my own files.
+- **`skills/python-web-quirks/SKILL.md`** — one **new section** (*"Anything the lifespan puts on
+  `app.state` does not exist until the `with TestClient(app)` block is entered"*, from
+  `307487c5-f4f6-4a3e-8dad-58a85c587bf2`), reproduced live at starlette 1.3.1 / fastapi 0.139.0
+  against a minimal app; and two additions folded into the existing
+  § *"Holding an application lock across `ThreadPoolExecutor.submit()`…"* — the `qsize()`-is-not-a-detector
+  paragraph with a five-arm measured table (`906d4b08-6c19-47ec-8ef3-6f31ea0c266e`), and one clause
+  completing that section's enumeration of the raises ahead of the `put` (`BrokenThreadPool` at
+  `thread.py:167`, a `RuntimeError` subclass, from `c7f1a3d2-5b84-4e19-9a0c-2f6d8b31e740`, whose
+  headline was otherwise already published there).
+- **The skill's frontmatter `description` is untouched** — byte-identical, still 4,584 chars, frozen
+  pending K-028's stakeholder decision. Only the body changed.
+- **`skills/README.md`** — one clause added to the `python-web-quirks` row, for the **new section**
+  only. The rule applied: a fold into an existing section earns no catalog line, a new section does,
+  because that row reads as an exhaustive index of the skill's sections and a silently unlisted one
+  is drift. The row is ~5.2k chars and its size stays a standing follow-up, not something to fix
+  under a distillation unit — the same call as U38.
+- **Nothing else in the catalogs.** No knowledge base was created, renamed or re-scoped, so
+  `claude/README.md` and `claude/AGENTS.md` are untouched; `claude/AGENTS.md` stays at **2,491
+  words**, against its own ~2,500 smell.
+- **`coder` has no knowledge base and still does not.** The dispatch flagged creating one as a
+  stop-and-ask fork. It never triggered: every promotion had an existing home whose scope line
+  covered it. Recorded because the question will recur — an agent that captures well and owns no KB
+  is not evidence it needs one; it is evidence its facts belong to the artifacts it reads.
+- **Plan items:** none opened.
+
+
 ## 2026-09-09 — U38: my own 8-entry inbox, gated by me — 4 promoted (one of them half), 4 discarded, 0 kept open
 
 - **What:** U38 of `claude/docs/plans/kaizen-distillation2-coordination.md`, the `cobb` produced

@@ -160,6 +160,20 @@ evidence to a **behavioural** test. A tripwire needs a rule that is narrow and t
 that is broad and complete. Measure and record the residual (*"zero receiver-alias bindings
 across the package today"*) so the narrow claim is a decision, not an omission.
 
+**The opposite polarity, on the same reader: where the value axis under-approximates, the
+*frontier* over-approximates.** A reach guard that expands its frontier by collecting
+`ast.Attribute` nodes under a prefix collects every `self.<name>` — not only the ones in call
+position. So a method handed somewhere as a **value** — `executor.submit(self._run_turn, …)`, a
+callback registered, a method stored on an attribute — enters the frontier exactly as a called one
+does, and its body is then walked for the guarded prefix. Verified 2026-09-09 on CPython 3.12.3:
+`{c.attr for c in ast.walk(tree) if isinstance(c, ast.Attribute) and ast.unparse(c.value) in
+{'self'}}` over `self._ex.submit(self._run_turn, 1)` returns `_ex` **and** `_run_turn`. Two
+consequences, neither of them predictable from the word *reach*: work deferred to a thread pool is
+**inside** the guarded reach — you cannot escape the tripwire by moving the call into a worker
+method — and a method only ever *referenced*, never called, is walked anyway. For a tripwire that
+is the right failure direction, but it belongs in the docstring: a reader who takes "reach" to mean
+the call graph mispredicts this reader in **both** directions at once.
+
 ## When the docstring states SEMANTIC reach and the body does a SYNTACTIC match, the gap regenerates the defect after every fix
 
 This is the signature failure of hand-written guards. The docstring says *"every method a route
@@ -196,3 +210,14 @@ widening again. Where you narrow, the bound is the load-bearing half of the comm
 than **sites** is blind to a second use of a name already in the list — so admitting one name to
 let a change through silently retires the guard for every later use of that name in that file,
 with no test edit needed. Site-qualify (`(enclosing_function, name)` pairs) instead.
+
+**And write the exemption as an equality, not a subtraction.** `residual - allowed == ∅` (or an
+`issubset`) admits every *further* member silently — that is the shape that lets an allowlist grow
+without anyone deciding to grow it. `residual == {allowed}` makes the next unlisted member a
+stop-and-decide, and it reddens in the other direction too, on an exemption left behind by a raise
+that is gone. Read whole 2026-09-09 in the reference implementation
+(`falkor-chat/server/tests/test_storefront_api.py`, `test_the_raises_a_route_can_reach_…`):
+`set(STOREFRONT_RAISES_TODAY) - storefront_family == frozenset({"RuntimeError"})`, with that one
+name pinned further by a **list** of `(function, class)` sites (`== ["enqueue_turn"]`) — a list
+rather than a set, so a second raise of it inside the *same* function cannot collapse onto the
+first either.

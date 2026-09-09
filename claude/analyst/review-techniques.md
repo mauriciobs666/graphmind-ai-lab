@@ -734,10 +734,19 @@ plan-gate chain (`docs/plans/small-model-benchmarking.md`, Passes 5–9):
    carry the token nowhere.
 4. **A rename that keeps its token alive has no zero-residual to assert**, so the done-condition
    passes regardless of what was missed.
-5. **A retired-token residual paired with a done-condition that names that token is
-   self-contradictory** — the natural test asserting the refusal must spell the token, which puts
-   the residual back at 1. The fix is always plan-side: restate the behaviour by key-set or
-   complement ("any key outside `{id, state}`"), never by a cleverer test.
+5. **A residual counts *lines in files*, not occurrences in code — so any legitimate non-code
+   mention of the token puts it back above zero, and reads as an incomplete edit.** Two shapes. A
+   done-condition that names the retired token is self-contradictory: the natural test asserting
+   the refusal must spell it, which puts the residual back at 1. And prose inside the file does the
+   same — an explanatory comment or docstring repeating a literal that the corrected code now uses
+   only once. Measured 2026-09-09: `grep -c` over a file carrying `X[0]` once on one line and twice
+   on the next returns **2** where `grep -o | wc -l` returns **3**; and at `e79fb61`,
+   `git grep -cF 'SUPPORT_DIFF_PROPORTIONS[0]' -- model-bench/` reads `stats.py:1` beside
+   `tests/test_stats.py:2`. The fix is never a cleverer grep: plan-side, restate the behaviour by
+   key-set or complement ("any key outside `{id, state}`"); code-side, restructure so the literal
+   is written once and derived thereafter (a strict support comparison as
+   `clamped_value != unclamped_value`, off an already-computed clamp) and rephrase the comment to
+   name the property in words.
 6. **Cross-table collisions survive per-table discipline.** Where several tables land as one fix
    round, sweep every line appearing in more than one: a residual can be driven to zero by a
    *different* table's edit on the same line, and two tables can prescribe incompatible forms for

@@ -600,6 +600,27 @@ rather than the app's, and response synthesis plus constructor surface are preci
 httpx→httpx2 swap can move. So re-derive both sections against the starlette actually installed
 before citing them; do not read their version pins as "current".
 
+## Anything the lifespan puts on `app.state` does not exist until the `with TestClient(app)` block is entered — so a patch on it must go *inside*
+
+`create_app()`-style factories routinely build a collaborator and hand it to the app, but assign it
+to `app.state` **inside the lifespan**, not in the factory body — it is the only place that can do
+work needing a running event loop. The consequence for a test is not a stale value but an
+`AttributeError`: `starlette.datastructures.State.__getattr__` raises
+`'State' object has no attribute '<name>'` (`starlette/datastructures.py:686`), and it raises on the
+*attribute lookup*, so `monkeypatch.setattr(app.state.shop._services, "post_message", fake)` written
+above the `with` fails before `setattr` is ever reached. Verified 2026-09-09, starlette 1.3.1 /
+fastapi 0.139.0, on a minimal app whose lifespan does `app.state.thing = obj`: `app.state.thing`
+before the block → `AttributeError`; inside the block → the identical object.
+
+**Whether the patch then reaches the route is a separate question, decided by the router's closure
+shape.** A router built as `def build_router(shop): services = shop._services; ...` closes over the
+**object** and resolves `services.post_message` per call, so patching an attribute *on* that object
+is seen by every subsequent request. Patching the owning attribute instead (`shop._services = fake`)
+is not — the closure still holds the original. Same trap in reverse for a router that binds the
+bound method at build time (`post = shop._services.post_message`): nothing patched later is visible.
+Read which of the three the router does before choosing where to patch; reproduced end to end in the
+probe above (`app.state.thing.hit = …` inside the block changed the response body).
+
 ## Holding an application lock across `ThreadPoolExecutor.submit()` does **not** deadlock at interpreter exit — it delays exit for exactly as long as the lock is held
 
 Verified against CPython 3.12.3. `_python_exit` (`concurrent/futures/thread.py:23-31`) takes
@@ -632,10 +653,34 @@ job already enqueued*, and any worker already running picks it up. Reproduced 20
 3.12.3 by patching `threading.Thread.start` to raise while one worker was busy: `submit` raised, and
 the "refused" job still ran. The trap is that the **other** `RuntimeError` `submit()` raises —
 `cannot schedule new futures after shutdown`, from the checks at `:169-173`, which run *before* the
-`put` — is a clean refusal and the same exception type. **So a compensating action in the caller's
+`put` — is a clean refusal and the same exception type. Those are two of the **three** raises ahead
+of the `put`; the third is `BrokenThreadPool` at `:167`, which subclasses `RuntimeError`
+(`BrokenThreadPool → BrokenExecutor → RuntimeError`, checked 3.12.3) and so is caught by the same
+`except` while remaining separable *by type* — the shutdown pair is not. **So a compensating action in the caller's
 `except RuntimeError:` — releasing a reservation, decrementing an in-flight counter, marking a turn
 free — is right for one shape and corrupts state for the other**, orphaning a job that is about to
 run. Discriminate on the message, or make the compensation idempotent against a job that runs anyway.
+
+**The same ordering makes `_work_queue.qsize()` useless as a "nothing was submitted" assertion.**
+`:179` starts a worker inside the same `submit()` call that queued the item, and that worker drains
+the queue — so `qsize()` reads `0` whether or not a submit happened, which is exactly the assertion
+a test reaches for to prove a pre-submit guard refused. Use `len(executor._threads)`. Measured
+2026-09-09, CPython 3.12.3, `max_workers` 2–4:
+
+| arm | `qsize()` | `len(_threads)` |
+|---|---|---|
+| fresh executor, no submit | 0 | **0** |
+| immediately after one `submit` | 0 | **1** |
+| after that job finished | 0 | **1** |
+| after `shutdown(wait=True)` | **1** | 1 |
+
+Two bounds on the replacement. `_threads` grows only when `_adjust_thread_count` cannot reuse an
+**idle** worker (`_idle_semaphore.acquire(timeout=0)`, `thread.py:185`): two *sequential* submits
+leave it at 1, two *overlapping* ones take it to 2. So it answers *"has this executor ever run
+work?"*, not *"did this call submit?"* — sound for a guard test on a fresh executor, unsound as a
+per-call counter. And `qsize()` is not stably `0` either: `shutdown()` puts a `None` wake-up
+sentinel on the queue, so a post-shutdown `qsize()==0` assertion fails for a reason that has
+nothing to do with submits.
 
 ## Bounding a call whose deadline the code under test computes: a daemon thread, not an elapsed-time assert — and stamp the start instant *inside* the thread body
 

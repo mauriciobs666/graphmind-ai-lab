@@ -2,6 +2,154 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-09-09 — `kaizen_team` distillation pass 2, unit U39 (`coder` top-up, 9 raw entries): 6 promoted (2 of them halves), 3 discarded, 0 kept open — all 9 cleared, **none of them into a `coder` artifact**
+
+- **What:** `cobb` ran `agent-maintenance` §5 over the nine `coder`-produced `kaizen_team` entries
+  dated **2026-09-07 … 2026-09-09** — unit U39 of
+  `claude/docs/plans/kaizen-distillation2-coordination.md`, a top-up after U10/U11/U12 closed
+  `coder` out at 0 on 2026-09-07. All nine were current-shape
+  (`(:Agent {agentId:'coder'})-[:PRODUCED]->`); no legacy `author`-property entry exists anywhere in
+  the graph, so §5's legacy read was skipped.
+- **Every cell was paged before dispositioning**, per the step-1 recipe added after U38 found the
+  `cypher` tool truncates at `CYPHER_MCP_MAX_CELL` (300). Four of the nine `fact` cells and five of
+  the nine `evidence` cells exceed 300 chars; the longest `fact` is 620 (`c7f1a3d2`) and the longest
+  `evidence` 577 (`4e9b1c07`). Read via `substring(k.fact, 0|240|480, 240)` projections checked
+  against `size()`. Two dispositions turn on the tail: `c7f1a3d2`'s enumeration of the three
+  pre-`put` raise sites lives past char 480, and `12c5ab37`'s per-record-kind sentinel clause past
+  char 480.
+- **`suggestedHome` was again not a routing signal** (U38's follow-up, reconfirmed). Three entries
+  said `project docs` and **none** landed in project docs; the two `prompt` entries split, one to a
+  prompt and one to a knowledge base. Every home was decided from the receiving artifact's own scope
+  line.
+- **`coder` has no knowledge base, and this unit did not create one.** The scope fork the brief
+  flagged never triggered: all six promotions had an existing home — `skills/python-web-quirks/SKILL.md`
+  (2), `claude/tdd-engineer/guard-testing-techniques.md` (2), `claude/tdd-engineer/tdd-engineer.md` (2)
+  and `claude/analyst/review-techniques.md` (1, counting the `b2d6f480`/`c7f1a3d2` halves once each).
+  A first KB for `coder` would have been a file, a `README.md` row, a `claude/AGENTS.md` clause and a
+  permanent maintenance surface bought to hold nothing.
+- **No `falkor-chat` file was touched.** Three entries were falkor-chat-specific; each split into a
+  live constraint on that system (already published there) and a portable technique (promoted into an
+  agent artifact). `falkor-chat/AGENTS.md` and `falkor-chat/docs/` are unchanged.
+
+### The nine dispositions
+
+1. `c7f1a3d2-5b84-4e19-9a0c-2f6d8b31e740` (09-08, `knowledge base`) — **discarded, less one clause.**
+   `ThreadPoolExecutor.submit` enqueues the work item at `thread.py:178` before `_adjust_thread_count()`
+   at `:179` may fail. Already published in full: `skills/python-web-quirks/SKILL.md`
+   § *"Holding an application lock across `ThreadPoolExecutor.submit()`…"* — read whole, the section
+   plus its second-ordering-fact paragraph — carries the same two line numbers, the same
+   `threading.Thread.start` reproduction, the same-exception-type trap and the same
+   discriminate-on-the-message consequence; the skill's own frozen description states it too. The one
+   thing the section lacked was the entry's enumeration of the raises *ahead* of the `put`: it named
+   only `:169-173`. Added as a clause — the third is `BrokenThreadPool` at `:167`, which subclasses
+   `RuntimeError` (`BrokenThreadPool → BrokenExecutor → RuntimeError`, checked on 3.12.3) and so is
+   the one pre-`put` raise that type-discrimination *can* separate.
+2. `906d4b08-6c19-47ec-8ef3-6f31ea0c266e` (09-08, `knowledge base`) — **PROMOTED** into that same
+   section of `skills/python-web-quirks/SKILL.md`. The surviving half of the pair: `_work_queue.qsize()`
+   cannot prove *"nothing was submitted"*. **Merged with entry 1 rather than sectioned separately,
+   on U36's criterion** — this is not the same topic, it is the same *mechanism*: `:179` starting a
+   worker inside the same `submit()` call is simultaneously why an exhaustion refusal leaves the job
+   running and why the queue is empty when the test looks. Re-derived, not confirmed: five arms on
+   CPython 3.12.3, `max_workers` 2–4 — fresh/no submit `qsize 0, threads 0`; after one submit
+   `0, 1`; after the job finished `0, 1`; after `shutdown(wait=True)` **`1`**`, 1`. **Two bounds the
+   entry did not state, both promoted with it:** `_threads` grows only when no **idle** worker can be
+   reused (`_idle_semaphore.acquire(timeout=0)`, `:185`), so two sequential submits leave it at 1 and
+   only overlapping ones take it to 2 — it answers *"has this executor ever run work?"*, not *"did
+   this call submit?"*; and `qsize()` is not stably 0 either, because `shutdown()` puts a `None`
+   wake-up sentinel on the queue.
+3. `307487c5-f4f6-4a3e-8dad-58a85c587bf2` (09-08, `project docs`) — **PROMOTED** into
+   `skills/python-web-quirks/SKILL.md` as a new section, *"Anything the lifespan puts on `app.state`
+   does not exist until the `with TestClient(app)` block is entered"*. Routed to the skill rather
+   than to `falkor-chat/docs/`: the falkor-chat half (`app.state.storefront` is set in `_lifespan`,
+   `app.py:382`, not in `create_app`'s body) is a fact any reader of that function has, while the
+   portable half is a FastAPI/Starlette lifecycle trap the skill's three existing `TestClient`
+   sections do not cover. Reproduced on a minimal app at the pinned venv (starlette **1.3.1**,
+   fastapi **0.139.0**): `app.state.thing` before the block raises `AttributeError: 'State' object
+   has no attribute 'thing'` from `starlette/datastructures.py:686` — the entry's exact cited line —
+   and the identical object is there inside it. The entry's second half was kept and sharpened into
+   a three-way rule: whether a patch reaches the route depends on the router's closure shape, and
+   `build_storefront_router` closing over the **object** (`storefront_api.py:878`,
+   `services = shop._services`) and resolving `.post_message` per call (`:1220`) is the patchable
+   one; rebinding the owning attribute is not, and a router that binds the bound method at build
+   time is not either.
+4. `3f6c1a52-9d24-4b7e-8a10-5c2e77b4d901` (09-07, `project docs`) — **PROMOTED** into
+   `claude/tdd-engineer/guard-testing-techniques.md`, § *"A hand-written 'which object is this'
+   resolver has two axes"*. **Judged a distinct fact from the VALUE-axis escape list already there,
+   and opposite in polarity** — that list (`x = self`, tuple unpacking, a conditional expression, a
+   container round-trip, *"then a call argument"*) enumerates ways the reader is **blind**; this is
+   a way its *frontier* over-approximates. Re-derived by execution rather than from the entry's test
+   run: `{c.attr for c in ast.walk(tree) if isinstance(c, ast.Attribute) and ast.unparse(c.value) in
+   {'self'}}` over `self._ex.submit(self._run_turn, 1)` returns `_ex` **and** `_run_turn`, and
+   `_storefront_reach` (`tests/test_storefront_api.py:3237-3248`) expands its frontier with exactly
+   that comprehension. Promoted as the general property with its two non-obvious consequences —
+   work deferred to a thread pool is *inside* the guarded reach, and a method only referenced is
+   walked anyway — not as the falkor-chat instance.
+5. `b2d6f480-71ae-4c93-8e15-5a3f0d92c6e1` (09-08, `knowledge base`) — **half promoted, half
+   discarded.** The headline (an allowlist keyed on class **names** loses all force for the second
+   raise of an allowlisted name; site-qualify instead) is already published verbatim as the closing
+   paragraph of `guard-testing-techniques.md` § *"When the docstring states SEMANTIC reach…"* — read
+   whole — and is documented again in the guard's own source (`_raise_sites` docstring,
+   `tests/test_storefront_api.py:3466-3500`, including the measured `get_state` counter-example).
+   The **unpublished** half is the entry's second clause: assert the exemption by **equality**, not
+   by subtraction. Promoted as a paragraph there, with the delivered shape read whole and cited
+   (`set(STOREFRONT_RAISES_TODAY) - storefront_family == frozenset({"RuntimeError"})`, plus the
+   list-of-sites pin `== ["enqueue_turn"]`).
+6. `12c5ab37-b418-44b5-8aaa-3db5742009f6` (09-07, `knowledge base`) — **PROMOTED** into
+   `claude/tdd-engineer/tdd-engineer.md`, folded onto the existing mutation bullet as one sentence.
+   The general form is what shipped: an **identity** assertion is invariant under any change *both*
+   halves share, so `from_dict(to_dict(x)) == x` cannot pin a serialization decision (omit-vs-null,
+   key name, ordering) however many records it round-trips — assert the serialized form. That bullet
+   already says *"a surviving mutant is not always a weak test"*; this is its mirror, where the
+   survival **is** the test's fault. Verified at `e79fb61`: `fingerprint.py`'s `to_dict` omits the
+   key for exactly one record kind (`:359-360`), `from_dict` uses a per-record-kind sentinel
+   (`missing: str | None = None if arm_kind == "deterministic" else ""`), and
+   `tests/test_fingerprint.py:398` carries the assertion that killed the mutant
+   (`assert "callSurface" not in reference_arm.to_dict()`).
+7. `4e9b1c07-3a52-4d68-b1f0-9c7d24ae5b83` (09-08, `prompt`) — **PROMOTED** into
+   `claude/tdd-engineer/tdd-engineer.md` as a new Principles bullet: when a plan explicitly rejected
+   an alternative, the mutant that validates the suite is *that alternative*, not the absence of the
+   chosen mechanism. **Home ruled from artifact scope, not from the captor.** `coder.md` carries no
+   mutation-testing doctrine at all (its only `mutat` hits are about mutating the *environment*), so
+   landing a mutant-selection rule there would open a topic with no anchor; `teco.md:93` is a
+   coordinator's *ask* (*"break the implementation deliberately"*) rather than a selection method,
+   and the entry's own evidence shows the coordinator's ask was fine — the implementer's mutant was
+   not. `tdd-engineer.md` is the one prompt that already owns "which mutant, and why".
+8. `c3f7a1b2-9d64-4e58-8a30-71b0c2e4d9aa` (09-08, `project docs`) — **discarded: both premises are
+   already published, in the two artifacts a reader consults, and the entry is one step from them.**
+   Read whole: `Storefront.__init__`'s docstring (`falkor-chat/server/falkorchat/storefront.py:382-430`)
+   already states that `services` is read once at construction for `_repo` (`:430`, with the
+   reason) and that `trigger` is *"the turn worker's only collaborator … never through its own
+   `self._services`"*; `falkor-chat/docs/SERVER.md`'s `FALKORCHAT_STOREFRONT_TURN_WORKERS` row
+   (line 135, read whole) already carries the measurement this entry was captured while producing,
+   figure for figure (*"five simultaneous arrivals, the fifth one's reported position:
+   `turn_workers=1` → `3`, `=2` → `2`, `=4` → `0`"*); and `falkor-chat/AGENTS.md:108` already warns
+   that a default `pytest` run wipes the shared `reference` graph, which is the hazard the entry's
+   method avoids. What is unpublished is only the assembly of those three into *"so a stub plus a
+   parking trigger drives it"* — a corollary, and not worth a line in a context file at its density
+   bar.
+9. `f3e2a1c4-7b6d-4e2a-9c1f-8a5d6e2b7c91` (09-09, `prompt`) — **PROMOTED** into
+   `claude/analyst/review-techniques.md`, § *"A grep-pinned edit table is an edit list, not a
+   completeness proof"*, by **rewriting numbered item 5 in place** rather than adding a seventh. Item
+   5 was already the section's one false-*failure* case (a done-condition that must spell the retired
+   token); this entry is the same mechanism one step more general — the residual counts **lines in
+   files**, so a comment or docstring does it too. Verified by execution rather than by citation:
+   `grep -c` returns **2** where `grep -o | wc -l` returns **3** on a file with the token once on one
+   line and twice on the next; and at `e79fb61`,
+   `git grep -cF 'SUPPORT_DIFF_PROPORTIONS[0]' -- model-bench/` reads `stats.py:1` beside
+   `tests/test_stats.py:2`, the repaired state the entry describes.
+
+- **The K-026 trigger shape was checked and does not fire.** The brief flagged that landing here
+  would make three consecutive units extending one section of `review-techniques.md`. It does not:
+  this is an **in-place rewrite of an existing numbered item**, not an added bullet, and the section
+  is unchanged in length by one line. No parent heading or split is proposed. One pre-existing
+  inaccuracy noted and deliberately left: that section opens *"Six ways the residual **passes** on
+  an incomplete edit"*, and item 5 was already a false-failure case before this edit — a one-word
+  header fix belonging to whoever next revises the section, not a side effect of this unit.
+- **Plan items:** none opened. `coder/kaizen/plan.md`'s parking-lot item *"A mutant must be proven
+  to change behavior before its survival is read as a coverage gap"* was annotated, not closed —
+  the general rule it wanted stated *is* already in `tdd-engineer.md`'s mutation bullet, which this
+  unit extended twice; only its `re.fullmatch` instance is still unhomed.
+
 ## 2026-09-07 — `kaizen_team` distillation pass 2, unit U12 (chunk C of three, closing `coder` out): 7 raw entries processed — 5 promoted into `skills/python-web-quirks/SKILL.md` (2 folded, 3 merged into one new section, 1 new section), 2 kept open as K-006 rows — all 7 cleared
 
 - **What:** `cobb` ran `agent-maintenance` §5 over the seven `coder`-produced `kaizen_team` entries
