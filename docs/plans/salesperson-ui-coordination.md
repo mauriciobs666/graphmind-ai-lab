@@ -14,6 +14,59 @@ standalone `salesperson/` Streamlit app.
 (root `AGENTS.md`, component READMEs, `HISTORY.md`, a `tico` user manual) reflects the delivered
 surface.
 
+## RESUME HERE — state as of 2026-09-09, two decisions open
+
+**Read this section first. It is the entry point; the ledger below is the state of record.**
+Reconcile it against `git log` and `git status` before acting — if they disagree, they win.
+
+**Nothing is in flight.** No agent is running. The working tree holds no uncommitted work of this
+coordination's; anything modified belongs to a concurrently-running session (`claude/**`,
+`model-bench/**`) and must not be staged or committed.
+
+**Last delivered:** the S9 acceptance pass — **PASS, 31/31 executed** (`7499dbc`, ledger `370f42a`).
+Report at `falkor-chat/docs/test-reports/salesperson-ui-s9-report.md`.
+
+### Decision 1 — four S9 findings, logged and deliberately unrouted
+
+None is a functional failure; all four are documentation or plan defects. Owners are identified,
+briefs are not written:
+
+| # | Finding | Goes to |
+|---|---|---|
+| D-1 (major) | `SERVER.md` §1.3's `QUIESCE_S` row is false in every clause — **this closes open item S9f** | `coder`, prose only |
+| D-2 | `POST /shop/api/messages` answers a bare `500 text/plain` in the shutdown window; §5.3's completeness table has no `5xx` row, and S8's gate is structurally blind to that shape | `architect` (plan) |
+| D-3 | F8's `504` carries `"state": null` where §4.8 says "with no state body", against §5.2's own present-vs-absent precedent | `architect` (plan) |
+| D-4 | rationale only — the `RuntimeError` catch is correct and correctly narrow, but `enqueue_turn` is not in `get_state`'s call graph, so the scenario is unreachable. **Already recorded; needs no code change** | — |
+| — | S9's done-condition *"poll latency unaffected"* is **untestable as written** (no threshold, cannot fail) | `architect` (plan) |
+
+### Decision 2 — the CPG provenance arc is stopped, not finished
+
+The stakeholder asked *"who asked for cpg provenance?"*. Answer from the record: the root is
+legitimate (`docs/requirements/cpg-agent-adoption.md`, FR-5…FR-8, **archived**), but the current arc
+is `U38` of *this* coordination, and **U38 is marked `gated` — finished — at Pass 3.** Everything
+after it (Passes 4-7, U47/U48/U59/U60/U61) is review-of-review growth on a closed unit, in a
+different component from the one the stakeholder asked for.
+
+Pass 7 (`fdff28d`, `docs/reviews/cpg-provenance-stamp.md` § Pass 7) returned **needs changes**, four
+majors. **No unit is dispatched and none should be until the stakeholder chooses a shape:**
+
+- **P7-1** and **P7-4** affect behaviour — a guard gap that fires on `cpg_falkorchat`'s *next*
+  rebuild, and a failure path telling the operator to re-send Cypher that will fail identically with
+  the server's message nowhere.
+- **P7-2** is prose but matters outside the file: the false **"3-for-3"** propagated into K-022's
+  rationale, where it is the argument for escalating. A false premise driving a decision.
+- **P7-3** is prose only — the tombstone block is 99 lines, 27% of a recipe file. Recommended
+  treatment is **deletion, not correction**; the arc's history belongs in the review.
+
+`teco`'s recommendation on record: close P7-1, P7-2, P7-4 in one small unit, delete P7-3's block,
+**no Pass 8**, then S10.
+
+### If both decisions go "proceed", the sequence is
+
+S9b–S9e (all touch `storefront.py`, so **serialize**; S9c owns `turn.lastTurn` and must clear the
+latch in `enqueue_turn`, not `reserve_turn`), S9f (**now answered by D-1's measurement**), then
+**S10–S16 are entirely unstarted**, including the whole UI (S12a-d, S13, S14 → `frontend-engineer`).
+
 ## Standing decision — the deprecated CPG is ignored (stakeholder, 2026-09-02)
 
 **`cpg_deprecated_salesperson` is not maintained, not documented, and not rebuilt. No unit of this
