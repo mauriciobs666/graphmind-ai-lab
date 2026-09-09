@@ -189,7 +189,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U53** — P21-4 (§5.2's summary of the residue is false through two doors its own sibling derivation opens) and P21-5 (an unnamed cost of the chosen placement) | `architect` | `ad44540e7e1aa876e` | **delivered — committed `069f6ae`** — plan **v1.31**. Fixed by **deletion, not rewording**: §5.2 cites the S9 row instead of summarising it, and `grep` now finds one statement of the residue in the whole plan. **Both doors re-verified by me** — cold pool `qsize=1 threads=0`, never ran, `shutdown(wait=True)` back in 0.0000s; warm pool ran the refused item | `docs/plans/salesperson-ui.md` **v1.31** | `analyst` Pass 22 | 99k tok / 53 tools |
 | **U54** — P21-1 (restore the guard's strength without giving up the raise), P21-2 (the false precedent, at two sites), P21-3 (the killing test), P21-6, P21-7. **Resumed, not fresh**: 157k tok / 67 tools is under both halves of the threshold and the guard sentence is its own | `coder` | `a7ebbee7e795fe497` | **delivered — committed `0db9fb3`**. **Guard mutation re-run by me**: injecting a second `RuntimeError` into `get_state` reddens the shipped guard (`Extra items in the left set: 'get_state'`) and passed `d776ca8`'s. Suite **2641/14 teco-verified solo**; `storefront.py` restored by byte-copy to md5 `64be8aca` | `storefront.py`, `test_storefront.py`, `test_storefront_api.py` | `analyst` Pass 22 | 222k tok / 50 tools |
 | **U55** — Pass 22's four findings: P22-1 (the killing test's oracle measures nothing), P22-2 (`set`→`list` site oracle), P22-3 (a self-falsifying `git log -S` instruction), P22-4 (`get_state`'s second call site breaks `_reset_state_unknown`'s documented `504`). **Fresh, not a resume**: U54 sits at 222k tok and every fix is fully specified by the review — and the docstring under P22-1 is one U54 wrote, so resuming it is producer-self-defence | `coder` (fresh) | `a07de4a1e90c2b72e` | **delivered — committed `fc2b43b`**. Suite **2642/14 teco-verified solo** (baseline 2641, +1 = P22-4's test); `storefront.py` md5 `cb735227` matches its reported value; `reference` re-seeded. **Both mutations re-run by me, not taken on report** — mutant D (flag read moved after `submit`) fails on the **new** `len(_threads)==0` line with the `qsize()` line above it still passing, which is the exact discrimination; reverting the widened `except` reddens P22-4's new test with the `RuntimeError` propagating uncaught. Declined to widen to bare `except Exception`, with its reasoning in the docstring | `storefront.py`, `test_storefront.py`, `test_storefront_api.py`, `HISTORY.md` | `analyst` Pass 23 | — |
-| **S9-QA** — acceptance pass on S9: drive the running system against §5.1's S9 row and the F-numbered ACs. Six static passes had judged S9 by reading; none had run it | `qa-engineer` | `ad5db7019ebeedac5` | **in-flight, third attempt** — killed twice by platform attrition (session rate limit at TP-022; then the session itself ended). Test plan **committed as `54ba5dd`** (30 test points) so a further kill cannot lose it. Reports **28/30 executed and passing**, but **evidence in context only, scratchpad wiped** — resumed with disk-first persistence made a hard requirement and instructed to re-run rather than transcribe. Authorized one scoped delete (its own `widget-qa` fixtures in `reference`) on stakeholder decision | `falkor-chat/docs/test-plans/salesperson-ui-s9.md` · `docs/test-reports/salesperson-ui-s9-report.md` | — (is the gate) | 213k tok |
+| **S9-QA** — acceptance pass on S9: drive the running system against §5.1's S9 row and the F-numbered ACs. Six static passes had judged S9 by reading; none had run it | `qa-engineer` | `ad5db7019ebeedac5` | **delivered — committed `7499dbc`**, on the third attempt after two platform kills. **PASS, 31/31 executed and observed — 0 not reached, 0 inferred**, everything re-run from scratch with stdout redirected to disk. Housekeeping **verified by me, not taken on report**: `reference` back to **15** with **zero** `widget-qa` strays (the authorized delete ran as a confirming no-op — the suite wipe had already removed them), `ws:acme` **871 / 52 / 544 / 21**, headers well-formed, 32 TP tokens reconciling to 31 points plus the TP-000 baseline | `docs/test-plans/salesperson-ui-s9.md` **v1.1** · `docs/test-reports/salesperson-ui-s9-report.md` | — (is the gate) → **PASS**, 1 major (docs) + 3 minors, none a functional failure | 284k tok / 125 tools |
 | **Pass 21** — re-gate: v1.30's rule (`395266e`), its implementation (`d776ca8`), P20-2's three sites (inside `f9d23fb`). **Fresh again on the U24 precedent**: Pass 20 prescribed the discriminator that was implemented | `analyst` (**fresh**) | `a3ad2209fae9fb0e1` | **delivered — committed `d26fa36`**. Ran the suite (2640/14, matching my solo number) and restored every file it mutated; `git status falkor-chat/` empty, md5 back to `08daf2ea` |  `docs/reviews/salesperson-ui-impl.md` `## Pass 21` | — (is the gate) | — |
 | **Pass 20** — gate S9a-fix. **Fresh by design**: Pass 17 *prescribed* reserve-then-write, so its author judging this diff is producer-self-review one seat over (the U24 precedent) | `analyst` (**fresh**) | `afc3c09ccd5b50340` | **delivered — committed `ac28f2c`** (+284 lines). Survived **two** rate-limit kills, the second seconds in; resumed on its own transcript both times and lost nothing, because its predecessor artefact was already committed | `docs/reviews/salesperson-ui-impl.md` `## Pass 20` | **needs changes** — 0 blockers, **3 majors**, 2 minors, 3 nits. P17-1/P17-2 closed and closed at the right unit; my four questions all answered (see §Pass 20 below) | 150k tok / 10 tools |
 | **U50** — P20-1 is a **plan** defect: v1.29's S9 row prescribes the unconditional release the implementer faithfully wrote. Fix the release condition, tombstone the false mechanism | `architect` | `a5d8f1e2a1d897af0` | **delivered — committed `395266e`** — plan **v1.30**. Took the reviewer's asymmetry and **rejected its placement**: the flag is read *before* `submit`, not inside its `except`. **CPython mechanism re-verified by me** (`:178` put precedes `:179` adjust; `t.start()` at `:202`; venv 3.12.3; executor built with `max_workers`/`thread_name_prefix` only, so `BrokenThreadPool` is unreachable) | `docs/plans/salesperson-ui.md` **v1.30** | `analyst` Pass 21 | 112k tok / 32 tools |
@@ -4934,4 +4934,36 @@ first, every run redirected to a file, and the report created **early, as a skel
 by row as results land**. A half-written report on disk beats a complete one that never gets
 written. This is the same lesson the ledger itself encodes — state lives in the artefact, not in the
 agent — applied one level down, to a delegate's own working evidence.
+
+## What the acceptance pass settled, and what it opened (2026-09-09)
+
+**PASS, 31/31, nothing inferred.** S9's concurrency core functions under execution, which six static
+passes could assert but not establish. The load-bearing case is **TP-002**: the second post arrives
+*while the first is still blocked inside* `services.post_message`, and takes `409` with zero
+`Message` and zero `WorkflowRun` written. That is the only shape that distinguishes a reservation
+from check-then-act — a sleep-timed pair of posts passes against **both** designs, so every earlier
+timing-based argument about this was incapable of settling it either way.
+
+**TP-022 finally ran** — the test point both kills landed on. Real `SIGTERM` 2.00 s into a 6 s turn:
+health refused within 1 s, the turn completed 4.0 s after the signal, the process exited only then.
+
+**S9f is closed by measurement.** D-1 shows `SERVER.md` §1.3's `QUIESCE_S` row false in every
+clause, and the neighbouring `TURN_WORKERS` row correct — its published `{1:3, 2:2, 4:0}` reproduced
+exactly. One row of that table was true and its neighbour was stale, which is why reading the table
+was never going to be enough.
+
+**Two self-corrections it volunteered rather than buried**, and both are worth more than a clean
+report: **TP-014 as originally written was vacuous** — a single shared gate let both turns finish
+before the assertion, so it could not have failed; and **S9's own done-condition "poll latency
+unaffected" is untestable as written** — no threshold, no way to fail it. It substituted a
+falsifiable bound (3.3 ms idle vs 3.3 ms saturated). A done-condition that cannot fail is a defect
+in this coordination's plan, not in the code, and it is mine.
+
+**D-4 stands as the correction to my own framing** recorded above: the catch is right and correctly
+narrow (`ValueError`/`KeyError`/`TypeError` still surface as `500`), but no production `RuntimeError`
+producer reaches `get_state` — every raise site is a write or outside the path.
+
+**Open, routed nowhere yet:** D-1 → `SERVER.md` §1.3 (closes S9f), D-2 → §5.3's completeness table
+plus S8's gate being structurally blind to that shape, D-3 → §4.8 vs the `incomplete` precedent, and
+the untestable S9 done-condition → the plan. Held pending the stakeholder's call on sequencing.
 
