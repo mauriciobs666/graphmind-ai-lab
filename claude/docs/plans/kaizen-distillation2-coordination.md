@@ -85,6 +85,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U30 | curator clear of the 2 entries held pending K-009 (`b7f3c2a1…`, `4f9c21ae…`) — orphans on `MENTIONS`→`graph-dba`. Fresh `cobb`, not U24's (248.5k ctx) | `a714ad00b16e9eccf` | accepted | **both cleared** after re-executing `rq()` at `682fbed` with two passing controls; abort reproduced under a harder shape (4,999 producible rows → one bare line). `graph-dba` now **0 produced / 0 mentioned**, absent from the census. `claude/graph-dba/kaizen/history.md` | teco re-derivation → **accepted, no correction** — 83/11/72 reconciled exactly | 130.0k tok, 34 tools |
 | U31 | **the orphan backlog** — 11 `MENTIONS`-only nodes, 08-30→09-07, the oldest population in the graph; item 3 of the resume plan, **never before attempted** because every prior unit was producer-organised | `ab74825681a290ac9` | accepted | **9 promoted / 1 already-promoted / 1 kept open**; 10 nodes cleared, 11 of 12 edges resolved; **19 files**, incl. a new `tdd-engineer` knowledge base. Orphans **11 → 1**. The dispatch hypothesis was **refuted** — see below | teco re-derivation → **accepted, no correction** — 73/1 census, bullet counts 10/8/19 unchanged, `HEAD == BASE` on all 18 tracked | 214.6k tok, 69 tools |
 | U32 | **generation four** of the `rq` guard defect: a literal command after a **backslash line continuation** is inside the check's stated reach and outside its line-based mechanism. Fresh `graph-dba` (U28's carries 217k) | `aa1435d89cf1f9eb5` | accepted (`4df5e45`) | **closed against a coverage probe, not a shape list**: 35 call-site forms on 3 axes, each adjudicated twice (bash vs the *extracted* delivered reader); 30 covered, **5 blind and stated as the bound**. **Generation five caught in flight** by the probe (bash joins continuations with *nothing*, not a space). Suite 15→16 PASS | teco re-derivation → **accepted, no correction** — my own bypass now FAILs at `pipeline.sh:432` in an isolated copy | 141.8k tok, 26 tools |
+| U33 | one bound stated **two ways**: `test-stamp-wiring.sh:340` scopes it to a `GRAPH.<word>` run, `pipeline.sh:361` does not — so `rq "$Q" PING` sits inside the latter's stated reach and outside the mechanism. Consistency defect, not a mechanism gap | `aa1435d89cf1f9eb5` | in-flight | `skills/joern-cpg/**`, `claude/graph-dba/kaizen/*` | teco re-derivation → — | — |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
 agent's own kaizen files and the graph); each row is rewritten on delivery with
@@ -468,6 +469,25 @@ is working; a stale one plus an empty worktree means it died before promoting.
 count.** Two entries arrived while U23's own verification was running.
 
 ## Follow-ups
+
+- **A retraction can be correct about one file and wrong about another.** While
+  writing up the arc, `cobb` probed the check's stated bound adversarially, found
+  `PING`/`INFO`/`keys` pass unflagged, and had "generation six" half-drafted
+  before withdrawing it — the finding had been drawn from the bound's
+  **examples** rather than its **claim**. That retraction is right for
+  `test-stamp-wiring.sh`, whose claim is scoped to a `GRAPH.<word>` run. It is
+  **wrong for `pipeline.sh`**, whose copy of the same sentence drops the
+  scoping — and `cobb` had not read that file. So the near-finding was half
+  right, about the file nobody checked. **One bound stated in two files is one
+  claim and two chances to be stale**; the pass's other recurring defect
+  (corrected here, inherited there) in its purest form.
+- **`cobb` contributed the stopping rule this arc had been missing**, and it was
+  in nobody's brief: *you may stop widening a static guard when a miss is bounded
+  to a **false failure** rather than a false pass* — because the check is a lint
+  over a property the runtime already enforces, not the safety boundary itself.
+  Establish that cost asymmetry **before** accepting a narrow claim; without it,
+  narrowing is just conceding. That is what licenses this check to stop at a
+  stated bound instead of chasing a shell parser.
 
 - **What finally stopped the regress: pinning the claim to the mechanism.** Four
   generations of this defect were closed by fixing the *mechanism* and rewriting
