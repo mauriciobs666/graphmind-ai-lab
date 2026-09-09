@@ -99,7 +99,8 @@ the actual promotion targets — agent prompts, knowledge bases, project docs.
 
 | U39 | **`coder` inbox — 9 entries**, re-queried at dispatch. **`coder` is the only agent this pass has drained that owns no knowledge base** — `claude/coder/` holds just `coder.md`, `hooks/` and `kaizen/` — so every promotion must land in another agent's artifact, a skill, or a component's docs tree, or force the decision to create one. **That decision is a stop-and-ask fork**, briefed as such. Three entries are falkor-chat-specific `project docs`; two visible pairs (`ThreadPoolExecutor` ×2, AST-guard reach ×2). Lead: `c7f1a3d2` looks published at `python-web-quirks/SKILL.md:603–629` **and in that skill's description** | `a28c977672e764a6d` | **accepted** (`88d13db`) | **6 promoted (2 halves), 3 discarded** — **neither fork fired**: no `coder` KB created, no `falkor-chat` file touched. The homes were `python-web-quirks` (the two `ThreadPoolExecutor` entries **merged on U36's criterion — one mechanism, not one topic** — plus a new `app.state` lifespan section), `tdd-engineer`'s guard KB and prompt, and `analyst`'s residual item 5 **rewritten in place**. The three `project docs` entries landed **nowhere near** `falkor-chat/docs/`: their premises are already in `storefront.py`'s docstring and `SERVER.md`'s own row, figure-for-figure. `suggestedHome` again predicted **zero** of nine homes. **10 files** | teco re-derivation → **accepted, no correction** — the 5 executor arms re-run: `qsize/threads` `0/0 → 0/1 → 0/1 → 0/1`, and **`shutdown(wait=True)` leaves `qsize=1`** (the `None` sentinel), so the entry's own oracle is unsound in both directions; `BrokenThreadPool → BrokenExecutor → RuntimeError` confirmed; the AST frontier comprehension returns **`_ex` *and* `_run_turn`**; `git grep -cF` at `e79fb61` reads `stats.py:1` beside `test_stats.py:2`, and the constructed 2-vs-3 case reproduces. **My own near-miss:** I read the section's two demonstrations as one and thought the 2-vs-3 figure was false against `test_stats.py` — the delivered text says *a file carrying `X[0]` once on one line and twice on the next*, and does so plainly. Budgets match to the word on all six live files; `claude/AGENTS.md` **2,491 w**; `python-web-quirks` description **byte-identical at 4,584** | 237.0k tok, 80 tools |
 
-| U40 | **`architect` inbox — chunk 1 of 2**, split on the date boundary: the **seven 2026-09-07 entries** (15 total is over the ~12 chunk bar). **Six of the seven are one theme** — grep-based done-conditions and residuals — whose home is `review-techniques.md`'s *closed six-item* list, a section **three consecutive units have now touched**. The failure mode briefed against is a seventh item that items 1–6 already cover. Near-certain discard flagged for disproof: `b1f2c7a4` reads like **item 6 itself**, which U23 promoted from `analyst`'s near-twin `b1f0c7a4…` | `a5f6321e6acf3612d` | in-flight | `claude/analyst/*` likely; homes unknown until routed | teco re-derivation → — | — |
+| U40 | **`architect` inbox — chunk 1 of 2**, split on the date boundary: the **seven 2026-09-07 entries** (15 total is over the ~12 chunk bar). **Six of the seven are one theme** — grep-based done-conditions and residuals — whose home is `review-techniques.md`'s *closed six-item* list, a section **three consecutive units have now touched**. The failure mode briefed against is a seventh item that items 1–6 already cover. Near-certain discard flagged for disproof: `b1f2c7a4` reads like **item 6 itself**, which U23 promoted from `analyst`'s near-twin `b1f0c7a4…` | `a5f6321e6acf3612d` | **accepted** (`a1e2234`) | **4 promoted, 3 discarded, all 7 cleared; zero new items, zero new sections** — every promotion a **fold** into existing prose, and all four into `claude/analyst/review-techniques.md`. The six-item list was read whole before any disposition and stayed six. `f4ee08b9` → **item 2**, supplying the selection rule item 2 presumed you already had (*the attribute the new union member **lacks***, derivable from the type change alone). `05192600` → **item 5** with a third shape and, crucially, the *consequence*: the cheap way to resolve a self-contradictory done-condition is to skip the test, so a mutation ships green. `b1f2c7a4` → **half**: my near-certain discard was right on the diagnosis (item 6 already carries both halves in its own words) and wrong on the entry — the remedy **from the plan author's chair** was absent, and *narrowing the path is the tempting wrong fix*. `0a4b6b2e` → **derived check 2**, routed to `analyst` not `architect` on whose decision it changes: the check is structurally invisible to the author's own sweep, `architect` owns no KB, and its only fold target `architect.md:51` is **1,617 chars**. `f6119439` **discarded as false** — cobb's own first re-derivation reproduced it and was worthless twice (ran under the ugrep shim; glob `*.py` against `conftest.py`, a filter that could not bite); the arm where the glob **cannot** match inverted it. **3 files** | teco re-derivation → **one correction sent** — six of seven hold. `--include` filters by base name regardless of how the file arrived: `--include='*.txt'` on an explicitly named `.py` file → **no output, rc 1**, with and without `-r`, GNU grep 3.11. ERE/BRE split reproduces (rc 0 vs rc 1; the constructed name is labelled *by construction* and correctly does not exist in the file). `stats.py:159` at `5878014` is one line carrying both `_percentile` calls. `start_workflow_run`'s **own** docstring (`services.py:2028`) states the raise — discard sound, and cobb's withdrawal of the `repository.py` class-docstring promotion was right. Budgets exact: **11,568 → 12,045 w**, 30 → **30** §§, **0** lines >700; `claude/AGENTS.md` **2,491 w** untouched; `python-web-quirks` description byte-identical to `88d13db`. Census **53** = cobb's 52 + its own post-count capture; `architect` **8**. **The correction:** derived check 2's *rule* is sound and kept, but its **live instance is stale in the present tense** — `continuous_verdict()` was given a required keyword-only `support` at `-ml` v1.17 *in answer to* the very v1.13 raise cobb cites (`plan:25` records the closure; `-ml:1615`, `:1555–1566`; pinned by `test_stats.py:2380` and `:2390`). An analyst applying the section's own re-derive caution would find `support` present and discount the rule with the instance. **Correction accepted:** the rule is byte-identical, the instance is re-tensed as a *worked, closed* finding, version-anchored (v1.13 raise → v1.17 absorption → v1.14 closure) and **pinned to executable tests** rather than to documents — so re-deriving it now confirms the paragraph. cobb also extracted the general remedy my correction only implied: *when a producer cannot forward an argument, move the derivation **into** the producer rather than widening the seam between the two documents.* Its own diagnosis of the error is the one worth keeping: *it cited a changelog faithfully and inherited its tense along with its content* — the citation was accurate **at** v1.13, and the question never asked was whether the document had moved since. Final: **12,156 w** (base 11,568, +588), 30 §§, 0 lines >700 | 199.0k tok, 68 tools |
+| U41 | **`architect` chunk 2 of 2 — the eight 09-08/09-09 entries — plus one `cobb` entry folded in deliberately** (`2746ee65`). The fold is a considered deviation from *one agent at a time*: three of the nine land on **the same paragraph** of `skills/agent-standards/claude-code.md`, and splitting them across two units a day apart is precisely the concurrent-edit hazard this coordination keeps logging. Still one agent running. Two grounded leads pointing **opposite ways**: `c3f7a1e2` is a likely full discard (published at `python-web-quirks/SKILL.md:648-662` in that text's own words, landed by U39 from `coder`'s near-twin), while `3f5b1c02` is briefed as a **predicted half — I told cobb in advance where I expect my own steer to fail.** The published table measures a pool that *did* start a thread; the entry's claim is the **empty-`_threads`** case, a different mechanism with the same reading. Five straight failures of the same shape (U34, U38 `c4f1a2be`, U40 `b1f2c7a4`) say the missing piece is the **generalization, not the fact** | `a74ea49194ca86329` | in-flight | `skills/agent-standards/claude-code.md` (one edit, three entries) + homes unknown until routed | teco re-derivation → — | — |
 
 ## The graph is live during this pass
 
@@ -439,8 +440,8 @@ transcript mtime (4 seconds old, 815 KB) settled it in one command.
 not:** the task transcript's mtime is the cheap tell. A recent mtime means it
 is working; a stale one plus an empty worktree means it died before promoting.
 
-**What remains, in order** — rewritten 2026-09-09 after U37; the earlier list
-was written at the U24 pause and every one of its five items has since moved.
+**What remains, in order** — rewritten 2026-09-09 after **U40**; the previous
+list was written after U37 and its item 2 has since moved twice.
 
 1. ~~`analyst`'s inbox~~, ~~the `MENTIONS`-only backlog~~, ~~routing the `rq()`
    fix~~ — **all done.** U25 and U37 drained `analyst` (empty, and its `:Agent`
@@ -448,24 +449,21 @@ was written at the U24 pause and every one of its five items has since moved.
    deliberate survivor**; the `rq()` fix landed as `graph-dba` K-009 and closed
    in U33. U32/U34/U35/U36 drained `devops`, `data-scientist`, `graph-dba`,
    `qa-engineer` and `tdd-engineer`.
-2. **The producers still holding entries.** Re-queried live at U40's dispatch,
-   **2026-09-09**: `architect` **15**, `teco` **38**, plus `analyst` **2** and
-   `cobb` **1** that arrived *after* their own inboxes were drained — 56 produced
-   plus the 1 orphan, **57** in the graph. `coder` was drained by U39, `cobb` by
-   U38. `architect` is over the ~12 chunk bar and splits on the date boundary:
-   **U40 = the seven 09-07 entries, U41 = the eight from 09-08/09-09.** Then
-   `teco`. **The refill is the reason the close condition is a re-query, not a
-   countdown** — two agents this pass has already drained are non-empty again. Chunk anything past ~12
-   date-ordered, per the standing decision. **Re-query at each dispatch; never
-   dispatch against a figure recorded here.** `architect`'s include
-   `b1f2c7a4-3d59-4e18-9f60-7a2c5d8e41bb`, whose subject was already promoted
-   from `analyst`'s near-twin `b1f0c7a4…` in U23: **read that section before
-   re-promoting it.**
+2. **The producers still holding entries.** Re-queried live after U40 cleared,
+   **2026-09-09**: `teco` **38**, `architect` **8**, `coder` **2**, `analyst`
+   **2**, `cobb` **2**, plus the 1 orphan — **53** in the graph. U40 took
+   `architect` 15 → 8; **U41 is in flight on the remaining eight**, and carries
+   `cobb`'s `2746ee65…` with it because three of the nine land on one paragraph
+   of `skills/agent-standards/claude-code.md`. After U41: `cobb`'s last entry
+   (`2e14550b…`), `coder`'s two, `analyst`'s two, then **`teco`**. Chunk anything
+   past ~12 date-ordered, per the standing decision. **Re-query at each dispatch;
+   never dispatch against a figure recorded here** — this list has been wrong at
+   every single dispatch it has been read at.
 3. **The one orphan is not a residue and must not be swept.**
    `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` is alive on its `tico` edge on
    purpose — it is the routing signal for `tico` K-016. A close pass that
    deletes it to reach zero destroys the signal.
-4. **`teco`'s 37 is the pass auditing itself.** It is the largest inbox in the
+4. **`teco`'s 38 is the pass auditing itself.** It is the largest inbox in the
    graph and most of it is this coordination's own verification findings, so it
    is the one unit whose entries were written by the agent that will gate them.
    Brief that asymmetry explicitly when it is dispatched.
@@ -478,8 +476,35 @@ verification saw the total move 69 → 70 between `cobb`'s post-clear census and
 mine, from a **concurrent `teco` session's** capture, not from anything this
 unit did.
 
+**And after U40 that condition is known not to be reachable unilaterally.** I
+read the four refilled entries' content directly: all four carry `sessionId`
+**null** and all four are **model-bench subject matter** — a `urllib` exception
+ladder that misses the body phase, an editable install's `.pth` meta-path
+finder, `IncompleteRead` not subclassing `OSError`, a CLI guard mutation turning
+an assertion failure into a pytest `OSError` on `input()`. They are the
+**concurrent model-bench coordination's `analyst` and `coder`** writing into the
+shared graph while this pass drains it. So the refill is neither noise nor
+stragglers: it is a **second writer**, and it stops when that coordination stops,
+not when this one does. The honest close is *empty of everything this pass was
+scoped to*, with whatever the other coordination has since written handed on as
+a fresh inbox — **a stakeholder call, not mine to take**, and the last thing this
+pass needs a decision on before it can be archived.
+
 ## Follow-ups
 
+- **`docs/plans/small-model-benchmarking.md:3272` ships a false mechanism as a justification —
+  needs routing to that plan's owner, and this pass must not touch it.** The parenthetical reads
+  *"`--include` does not suppress a file named explicitly on the command line — **checked**, because
+  this command depends on it"*. It is false, and I re-derived the falsification independently of
+  U40's: `grep -Fn <tok> tests/conftest.py --include='*.txt'` returns **no output, rc 1**, with and
+  without `-r`, on `/usr/bin/grep` 3.11 — `--include` filters by **base name regardless of how the
+  file arrived**. The command it justifies is **safe today** (`conftest.py` does match `*.py`), so
+  nothing is broken; the hazard is that a correct command is resting on a false mechanism, which
+  would license an unsafe re-scoping later. Two reasons it is not ours to fix: the plan is
+  `architect`-owned, and **another session is executing against that tree right now** — U40 read it
+  read-only and staged nothing. Note the tell for the KB: *"checked, because this command depends
+  on it"* is a **stated method with a false conclusion**, the same shape as the four
+  right-method/wrong-evidence-line failures above.
 - **`suggestedHome` has now predicted the home for 0 of 17 entries across U38–U39.** All eight of
   U38's said *knowledge base* or *project docs*; all nine of U39's likewise, and **three marked
   `project docs` landed nowhere near a component docs tree**. The producer knows the fact, not the
@@ -496,7 +521,41 @@ unit did.
 - **`claude/analyst/review-techniques.md`'s residual section opens "Six ways the residual
   *passes* on an incomplete edit" while item 5 is a false *failure*** — a pre-existing inaccuracy
   U39 found and left for the section's next reviser rather than widening its own scope to fix.
-  One-line fix whenever that section is next touched.
+  One-line fix whenever that section is next touched. **Closed in U40** — the opening now reads
+  *"Six ways the residual **misreports** the edit — five of them by passing an incomplete one, and
+  item 5 by doing that *and* failing a correct one"*. Kept here as the record that the follow-up
+  was carried, not dropped.
+- **`claude/architect/architect.md:51` is 1,617 characters — the file's longest line**, and it is
+  now the *second* recorded instance of the same shape as `tdd-engineer.md:40` above. It matters
+  more than a style nit: `architect` owns **no knowledge base**, so its always-loaded prompt is the
+  only landing site any future `architect` promotion has, and that line being over budget is what
+  pushed U40's `0a4b6b2e` to `analyst` instead. Already flagged in `architect/kaizen/history.md` at
+  U31; recorded twice now. Owner: `cobb`, as its own unit.
+- **`coder` refilled 0 → 2 and `cobb` sits at 2** — `coder` was drained to zero by U39 and has two
+  new entries (`e3f1c2a4…`, `c1e8f4b2…`, both `sessionId` **null**); `cobb` holds `2e14550b…`
+  (written by U39's own cobb) and `2746ee65…` (U40's). Neither is in any brief yet. Both need a
+  top-up unit before the pass closes — which is the standing reason the close condition is **a
+  re-query that comes back empty**, never a planned count.
+- **The refill has a cause, and it means the close condition as stated can never be met while
+  another coordination is live.** I read the four refilled entries' content and edges directly.
+  All four `null`-`sessionId` ones are **model-bench subject matter** — a `urllib` exception ladder
+  that misses the body phase, an editable install's `.pth` meta-path finder, `IncompleteRead` not
+  being an `OSError`, a CLI guard mutation turning an assertion failure into a pytest `OSError` on
+  `input()`. These are the **concurrent model-bench session's delegates** capturing into the same
+  shared graph while this pass drains it. `analyst` and `coder` are exactly the agents that
+  coordination is running. So the refill is not noise and not slow stragglers: it is a second
+  writer, and it stops when *that* coordination stops, not when this one does.
+  **Consequence for the close:** "re-query comes back empty" is the right shape but is not
+  reachable unilaterally — the honest close is *empty of everything this pass was scoped to*, with
+  whatever the other coordination has since written handed on as a fresh inbox. A stakeholder call,
+  not mine to take.
+- **`$CLAUDE_CODE_SESSION_ID` resolves to the *parent* session inside a subagent — confirmed from
+  the graph, and it retro-explains U38's mis-attribution.** Both `cobb` entries
+  (`2e14550b…`, `2746ee65…`) carry **this session's** id `1501c506-…` although neither was written
+  by this session — they were written by U39's and U40's `cobb`. `2e14550b`'s own subject *is* that
+  fact, so the entry is self-demonstrating. This is why U38 named the right extra node and then
+  attributed it to the wrong session: **`sessionId` names the coordination, never the agent**, and
+  reading it as the latter is what produced that error.
 
 - **The §5 truncation defect predates this pass and silently bounds its own record.** U38 found
   that `skills/agent-maintenance/SKILL.md` §5 step 1 tells a distiller to read `k.fact`/`k.evidence`
