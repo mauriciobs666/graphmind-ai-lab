@@ -78,7 +78,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U22 | analyst chunk D (11: 09-03) | `a9a502324e0cf4ca5` | accepted | 8 promoted / 3 discarded, all 11 cleared; `review-techniques.md`, `python-web-quirks/SKILL.md`, `agent-standards/claude-code.md`, `lm-studio-model-notes.md`, `skills/README.md`, +3 `kaizen/history.md`; `falkordb-quirks.md` **held** | teco re-derivation → **accepted**, paired-control reproduction of the pipe finding | 238.8k tok, 112 tools |
 | U23 | analyst chunk E (13: 09-07, arrived after pass open) | `a096fa1ae04ee4cae` (resumed once, for the AST correction) | accepted | 12 promoted / 1 discarded, all 13 cleared, **13 entries → 4 edits** (six became one six-part section, three a fold); `claude/analyst/{review-techniques.md,analyst.md,kaizen/history.md}`, `claude/graph-dba/{falkordb-quirks.md,kaizen/history.md}`, `claude/cobb/kaizen/{history,plan}.md` | teco re-derivation → **accepted after one correction**: 68→65, 42→40, per-file 3/3/14; re-derived at both revisions under 5 definitions. `rq()` defect confirmed by executing the helper | 190.6k + 210.5k tok, 71 tools |
 | U24 | analyst chunk F (12 of the 14 held at dispatch: all 09-08) | `a554b6fb7d89af6f0` | accepted | 10 promoted / 1 discarded / **1 kept open** (`graph-dba` K-009), **12 entries → 7 edits**; `claude/analyst/{analyst.md,review-techniques.md,kaizen/history.md,kaizen/plan.md}`, `claude/graph-dba/{falkordb-quirks.md,kaizen/history.md,kaizen/plan.md}`, `claude/cobb/kaizen/history.md`, `skills/python-web-quirks/SKILL.md`, `skills/README.md`; 2x `MENTIONS`→`graph-dba` | teco re-derivation → **accepted, no correction needed** — the dataclass narrowing reproduced across three annotation shapes, both stdlib line refs exact, NaN asymmetry and all counts exact | 248.5k tok, 94 tools |
-| U25 | analyst chunk G (2 deferred + whatever has arrived) | — | queued | `claude/analyst/kaizen/*`, graph cleared | none → — | — |
+| U25 | analyst chunk G (the 2 deferred; re-queried at dispatch 09-09 — `analyst` holds exactly these 2, nothing new arrived) | `a271cfb21a2dbe1af` | in-flight | `claude/analyst/kaizen/*`, graph cleared | teco re-derivation → — | — |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
 agent's own kaizen files and the graph); each row is rewritten on delivery with
@@ -427,8 +427,13 @@ is working; a stale one plus an empty worktree means it died before promoting.
 1. **U25** — `analyst`'s two deferred entries (`7c1d4a92-3f6b-4e58-9a01-2d8f5b0c6e77`,
    `8d2b47f0-13ca-4e59-b6d7-51c0a9e2f8b4`) plus whatever has arrived since.
    Re-query at dispatch, never from a figure in this document.
-2. **The other producers.** `teco` **29**, `architect` **13**, `coder` **8**,
-   `cobb` **7**, `data-scientist` 1, `graph-dba` 1. `teco` is now the largest
+2. **The other producers.** Re-queried on **2026-09-09**, at U25's dispatch:
+   `teco` **32**, `architect` **13**, `coder` **8**, `cobb` **7**,
+   `data-scientist` 1, `graph-dba` 1 — 13 orphan (`MENTIONS`-only) nodes on top,
+   77 in the graph altogether. `teco` gained **3 while the pass was paused**,
+   from concurrent coordinations, and nothing else moved: the inbox that grows
+   is the one whose agent is working, which is why the close condition is a
+   re-query and not a countdown. `teco` is now the largest
    inbox in the graph — this coordination's own verification findings are the
    bulk of it, so it is partly self-inflicted and partly the most direct record
    of what the pass learned. `architect`'s 13 include
