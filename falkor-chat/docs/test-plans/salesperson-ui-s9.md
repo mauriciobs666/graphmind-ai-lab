@@ -1,6 +1,19 @@
 # S9 storefront concurrency core — acceptance test plan
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** salesperson-ui S9 (S9a + S9a-fix), F8 (M<n> TBD)
+> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** salesperson-ui S9 (S9a + S9a-fix), F8 (M<n> TBD) · **Version:** 1.1
+
+*2026-09-09 — v1.1: revised in place after execution (`docs/test-reports/salesperson-ui-s9-report.md`).
+Three items gained sub-variants that the run showed were needed to discriminate anything: **TP-011**
+splits into `generic` / `redis-timeout` / `TP-011c` (the last reading the status a **real** client
+gets, since `TestClient` re-raises server exceptions by default and hides it); **TP-012** gains
+**TP-012b** for the same reason; **TP-019** becomes five probes around the branch — `ValueError`,
+`KeyError`, `TypeError`, a `redis ConnectionError` from the reset, and a `RuntimeError` from the
+reset *itself* — because one negative case does not establish that a catch is narrow. **TP-014 as
+first written was not decidable**: it used a single shared gate, so both turns completed before the
+assertion and the case passed vacuously; it now releases exactly one turn, which is what makes
+"cleared only by its own worker" observable. And **TP-028's criterion was untestable as written** —
+S9's done-condition says "poll latency unaffected", which has no threshold and therefore cannot
+fail; it is measured here against a falsifiable bound instead (see the report §5).*
 
 ## 1. Scope & objective
 
