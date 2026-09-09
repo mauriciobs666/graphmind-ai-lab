@@ -6551,3 +6551,298 @@ in the plan — `:364`, the pre-existing one.
 on the delivered tree: **`2641 passed, 14 deselected`** in 25.24 s — `0db9fb3`'s claimed count
 exactly, and `+1` over Pass 21's `2640`. `ruff check` on `falkorchat/storefront.py`,
 `tests/test_storefront.py` and `tests/test_storefront_api.py`: **All checks passed**.
+
+## Pass 23 — 2026-09-09 (U62 `404c409` + U63 `e06c92e`: the three S9-acceptance rulings, and whether C14 is instance N+1)
+
+**Reviewed:** two commits, read with `git show` against their parents rather than from the working
+tree — **`404c409`** (`falkor-chat/docs/SERVER.md` §1.3's `FALKORCHAT_STOREFRONT_QUIESCE_S` row +
+`falkor-chat/docs/HISTORY.md`, closing S9f) and **`e06c92e`** (`docs/plans/salesperson-ui.md`
+v1.31 → **v1.32**, +83/−15). **Against:** `falkor-chat/docs/test-reports/salesperson-ui-s9-report.md`
+(PASS, 31/31) findings D-1…D-4 and its untestable-criterion note; the delivered
+`falkor-chat/server` tree at `HEAD`; and the coordinator's three questions — does **C14** create the
+next instance of this coordination's one defect class, does **Ruling B**'s discriminator hold
+against fields it does not name, and can **Ruling C**'s new bound actually fail. **Out of scope:**
+S9b/S9c/S9d (not built), the S10–S16 lane, and everything under `skills/**`, `claude/**`,
+`model-bench/**`, which a concurrent session owns.
+
+**Verdict: needs changes** — **1 blocker**, 3 majors, 3 minors, 0 nits. Rulings A and B are right in
+substance and I would ship both; the blocker is **Ruling C**, whose replacement bound is falsifiable
+in form and, measured, cannot be failed by either of the two designs its own sentence names as its
+targets. The answer to the central question is **yes, once**: C14's typed refusal covers a strictly
+narrower window than the sentence that introduces it, and the S9 row already contains the argument
+that proves it — it is used against the *rejected* alternative and not applied to the chosen one.
+
+**CPG: considered, not relevant — `cpg_falkorchat` is stale (built at `b795f4c`, eight commits
+behind `HEAD` on `falkor-chat/server`, the whole S9a arc these findings concern included), the
+coordinator briefed that staleness in advance, and this pass is a document-and-behaviour review that
+leans on execution rather than on structure. I did not query it and no claim below rests on it.**
+
+**Environment note.** **I did not run the falkor-chat suite** — it wipes the shared `reference`
+graph at teardown and the live database is contended, so the suite's greenness is not re-established
+by this pass and I make no claim about it. What I ran instead, both self-contained and touching no
+graph: (1) a 6-configuration FastAPI/uvicorn harness for Ruling C's bound (Appendix S §1), and (2) a
+`TestClient` probe of `POST /shop/api/presenter/reset-all`'s F8 `504`, both orderings, against fake
+`Repository`/`Storefront` collaborators (Appendix S §2) — which closes the coordinator's question
+about claim 3 by executing the half QA never drove. Both live in the session scratchpad. Nothing in
+the repo tree was written, staged or committed; `git status --porcelain` shows only the concurrent
+session's files plus this review.
+
+### The central question — does C14 create instance N+1? **Yes, once.**
+
+Everything C14 is checkable about, I checked, and it holds: `Storefront.enqueue_turn` has **exactly
+one** caller in `falkorchat/` (`storefront_api.py:1226`; the other three hits in that file are
+docstring prose), so "its enumeration is exactly one `(route, response)` pair" is true rather than
+asserted. C9's carve-out is keyed on a token the client can actually see, and the untokened-`503`
+half is grounded — §3 does put TLS behind a reverse proxy, and C4 already relies on that same
+proxy's bare `504`. I enumerated every `503` the two storefront modules can produce
+(`quiesce_timeout` ×2, `demo_not_seeded`, `graph_unavailable`, `graph_read_timeout`, plus the proxy's
+untokened one): `turn_not_scheduled` is the only one for which *nothing changed* is false, so the
+carve-out is one exception and not the first of a family.
+
+The instance is not in the rule's shape; it is in its **reach**. See **P23-2**.
+
+### Ruling C — can the bound fail? **No, on measurement: it passes on both designs its own clause names.** See **P23-1**.
+
+### Ruling B — the discriminator, tested against fields it does not name
+
+I enumerated every conditionally-built response key in both storefront modules rather than working
+from the four the paragraph lists. There is exactly one field outside that list —
+reset-all's **`unresolved`** (`storefront_api.py:1521-1524`) — and it is the co-key of the rule's own
+canonical first case. See **P23-6**. The rule's *outcome* for F8 is right, and I verified the second
+half of it by execution rather than by source read (Appendix S §2): reset-all's `504` carries
+`participants`, never `state`, present-with-null on the second timeout. The `§5.3 C6a` cross-reference
+in the new paragraph looked wrong and is **correct** — C6a's `lastTurn` argument is where
+`incomplete`'s absence is argued (plan §5.3, C6a's last paragraph).
+
+### The four found-while-in-there claims
+
+**Claims 1, 2 and 3 are confirmed independently**, so the coordinator's pre-checks stand: the
+`pytest.raises(RuntimeError)` is at `tests/test_storefront.py:1167` and a subclass keeps it green;
+its docstring's *"the route's own `except` is what turns it into a response"* names an `except` that
+does not exist — `shop.enqueue_turn(...)` is at `storefront_api.py:1226`, outside the `try` that
+wraps only `services.post_message` (`:1218-1225`); and reset-all's `504` carries `participants`,
+`None` on a second timeout, spliced by `_handle_storefront_http_error` (`:340-345`) as `**exc.extra`.
+**The source-read marking on claim 3 was sufficient in substance** — the read was right in every
+particular — but it no longer needs to be trusted, because I executed both orderings (Appendix S §2)
+before S9e is briefed. **Claim 4's narrowing is the honest move and its stated reason is false**;
+see **P23-3**.
+
+### Findings
+
+**P23-1 — blocker. S9's replacement poll-latency bound cannot be failed by either design its own
+sentence names as its target.** The clause (§5.1 S9) prescribes: pool saturated at `turn_workers`
+running + `≥2 × turn_workers` queued, median `GET /shop/api/state` over ≥20 samples ≤ 3× the idle
+median from the same run **and** < 50 ms. It then claims *"what both fail on is the design this
+measure exists to forbid — a turn running on the request thread, or a poll contending on the turn
+lock."* Measured on a self-contained FastAPI/uvicorn harness that mirrors the delivered shape (sync
+`def` routes, limiter raised to 100 in the lifespan, stub turns), **both designs pass** (Appendix S §1):
+turn-on-the-request-thread reads **ratio 1.00×, 4.16 ms** at the prescribed saturation, and even at
+120 concurrent turns; poll-holding-the-turn-lock reads **ratio 1.01×, 4.23 ms median with a 11 994 ms
+maximum**. The mechanism is the median: the request-thread design does not touch the poll until
+concurrent turns exceed `THREAD_LIMIT` (100), which `3 × turn_workers` never reaches; and lock
+contention lands on one or two samples that a median discards. **Suggested fix, three clauses:**
+(i) add a tail statistic — *no single sample above 3× the idle median or above 100 ms* — which is
+what actually reddens the lock case; (ii) require the saturation to still hold when the last sample
+is taken (assert every posted turn is unfinished), so a burst shorter than the sample run cannot
+launder the median; (iii) **drop the request-thread half of the claim** — that design is forbidden
+by the S9 row's own delivered assertion (`200` in 5 ms against a 2.0 s turn, TP-026), not by this
+bound, and leaving it in re-creates precisely the reach-exceeds-mechanism shape this revision
+narrowed S8's assertion to avoid. Neither existing clause is dead weight — they are complementary in
+principle (ratio catches a fast box that coupled, absolute catches a uniformly slow one) — but both
+read the same blind statistic, so they fail together or, as here, not at all.
+
+**P23-2 — major. C14's typed refusal covers a strictly narrower window than §5.2's row states, and
+the S9 row already contains the argument that proves it.** `enqueue_turn` reads `_turns_shutdown`
+and raises (`storefront.py:1011-1015`), then calls `submit` inside a `try` whose `except
+BaseException` re-raises unchanged (`:1016-1026`); the route catches nothing there. So a post that
+reads the flag *before* `shutdown_turns()` sets it and reaches `submit` *after*
+`executor.shutdown(wait=True)` raises a **plain** `RuntimeError("cannot schedule new futures after
+shutdown")` (executed: Appendix S §3) — the same bare `500 text/plain` D-2 reports, on a narrower
+window, and untyped because S9e types a *subclass*. §5.2's new row states the condition unqualified
+(*"when the post lands inside the shutdown window"*), as does C14. The plan makes exactly this
+argument one paragraph earlier, against the rejected alternative: *"the flag can still flip between
+that check and `enqueue_turn`, leaving the identical undeclared response on a narrower window"* —
+and does not apply it to the mechanism it chose. **Suggested fix — qualify, do not widen.** Widening
+the map to any `RuntimeError` out of `enqueue_turn` would make the token a lie in the thread-exhaustion
+shape, which queues the work item *before* it fails (`storefront.py:955-960`), so the turn does run.
+Say instead: the refusal is typed where the flag was already set at the pre-`submit` read; a
+`shutdown_turns()` landing inside the read→submit window leaves an unmapped `5xx` that C13 renders,
+and record it in C13's residual paragraph where the other accepted residues live.
+
+**P23-3 — major. "Invisible to every static pass and to S8's gate alike" is false, and the place it
+was actually visible is an obligation S9e has not been given.** §5.3's new C13 paragraph, and the S8
+row's narrowing rationale, both rest on the eighth residue having been reachable only by execution.
+It was measured through the route and written into the delivered suite **one day before the
+acceptance pass**: `tests/test_storefront_api.py:4017` (introduced at `d776ca8`, 2026-09-08; present
+at `fc2b43b`, the commit QA tested) reads *"Measured through `POST /shop/api/messages` with a
+`RuntimeError` out of `enqueue_turn`: a bare `500 text/plain 'Internal Server Error'`"*, inside
+`NON_FAMILY_RAISES` (`:3995`) — whose own text concedes *"That one **is** request-reachable"* — and
+the reader that surfaced it was built by a **static** pass (P21-1). The residue was not unseen; it
+was seen, measured and **excused by a written reason**, which is this section's *mis-ruled* bucket,
+not its *unruled* one. Two consequences. **(a)** The narrowing of S8's done-condition is right on its
+own terms — the `{handlers} × {routes}` cross-product genuinely cannot see a response with no
+handler, and widening *that* mechanism to cover a turn-layer raise would be a different guard, so
+closing it at the producer is the correct call — but the sentence explaining *why nobody saw it*
+should say "excused by an allowlist", not "invisible". **(b)** S9e's obligation list names the route
+map, the `responses={…}` declaration and §5.3's table row, and omits the three places the suite
+encodes this response: `TABLE` (`:131`), `STOREFRONT_RAISES_TODAY` (`:3939`) and
+`NON_FAMILY_RAISES["RuntimeError"]` (`:3995`). The first two are self-enforcing — the guard asserts
+a **name-set equality**, so a renamed raise reddens — but the *reason string* is prose keyed on a
+name the `services` leg keeps alive, so its now-false `enqueue_turn` paragraph survives green. Name
+all three in the S9e obligation.
+
+**P23-4 — major. U62 closes S9f on one of the three sites this review file already assigned to it;
+the source comment on the constant is still the pre-S9 world, in the present tense.**
+`falkorchat/config.py:216-224`, the docstring on `STOREFRONT_QUIESCE_S` itself, still reads *"The
+wait is delivered but has nothing to wait for — S9: `set_turn_state` has no caller anywhere in
+`falkorchat/`, so the turn map is never populated and both drains … pass on their first check."*
+Every clause is false: `set_turn_state` is called at `storefront.py:1072`, and D-1 measured the
+`503` and the `409`. This is not a new discovery — `## Pass 19`'s Ruling 2 (`:5169-5176`) names
+*"`config.py:202-209` and `SERVER.md`'s `FALKORCHAT_STOREFRONT_QUIESCE_S` row"* as the two blocks
+plus `presenter_reset_all`'s comments, and Pass 22's dispositions row records them as *"untouched
+and still stale, correctly — the prose-only unit owns them"*. U62 **was** that unit and fixed one of
+three, while its `HISTORY.md` entry scopes the sweep to §1.3 and the coordination marks S9f closed.
+The neighbouring `STOREFRONT_TURN_WORKERS` comment above it was updated in the S9a-fix arc, so the
+file is maintained in these arcs; this block was missed, not deferred. **Suggested fix:** one prose
+unit rewriting `config.py:216-224` against D-1's four readings, and S9f reopened (or a successor item
+opened) until all three named sites are done. What U62 did deliver is right — see *What's solid*.
+
+**P23-5 — minor. The false-absence sentence Ruling B corrected in §4.8 is still in the code, on the
+second route.** `storefront_api.py:1494` reads *"a second timeout still answers `504`, simply with no
+roster"*, four lines above the `participants=unresolved` that makes the key **present with `null`**
+(`:1508`) — the identical construction §4.8 was just corrected for, one route over, and the copy an
+S10 implementer reads while moving this body onto `Storefront`. Measured, not read: Appendix S §2.
+**Suggested fix:** fold the comment into S9e or the same prose unit as P23-4 — *"…still answers
+`504`, with `participants` present and `null` (§5.2 *Absent versus null on the wire*)"*.
+
+**P23-6 — minor, and it is the fifth field the brief asked me to look for. §5.2's discriminator is
+stated per key, and its justification sentence is false as delivered.** *"Absence is the only thing
+separating a clean `200` from a partial one"* — two keys separate them: `body["incomplete"] = True`
+**and** `body["unresolved"] = list(...)` are written together under one `if`
+(`storefront_api.py:1521-1524`), and §5.2's own reset-all row states both. `unresolved` is the one
+optional key on this surface the new paragraph does not name, and the rule read per key with that
+gloss ("the *only* thing") rules it `null`, against delivered behaviour — while the looser reading
+(each key's absence is *sufficient* to distinguish) rules it absent and agrees. The paragraph also
+instructs the reader to *"apply the test, do not consult that list"*, so S12a — which owes the typing
+of exactly this response — is pointed at the ambiguous rule rather than at the unambiguous row.
+**Suggested fix, one clause:** keys that co-vary as a single shape difference are omitted together,
+with `incomplete`/`unresolved` named as the pair, and the "only thing" gloss corrected to "the only
+difference".
+
+**P23-7 — minor. The ordering hazard is real, and it is written in one of the two places that need
+it.** Confirmed: the gate's completeness table is hand-transcribed into the suite as `TABLE`
+(`tests/test_storefront_api.py:131`) and its symmetric half is
+`test_the_gate_fails_when_a_table_row_has_no_producer` (`:985`), so the hazard fires exactly when
+someone transcribes §5.3's new row ahead of S9e's producer — not on every suite run, which is why
+the tree is green today. The warning is in the failing row itself (§5.3's completeness table), which
+is the right place for whoever debugs the red. It is **not** in S8's row, in S10's row (which is the
+one that says the gate *"is evaluated over all eleven routes and cannot be run on a partial
+surface"*), or in the coordination's RESUME HERE — and S10 is the next step that re-runs it.
+**Suggested fix:** one clause in S10's row and one line in RESUME HERE's sequence paragraph.
+
+### Dispositions
+
+| Item | Disposition | Evidence I rechecked |
+|---|---|---|
+| **D-1** (`QUIESCE_S` row false in every clause) | **fixed for §1.3, incomplete overall** → P23-4 | the new row matches D-1's four readings clause for clause; `set_turn_state` is wired at `storefront.py:1072`; `TURN_WORKERS` byte-identical (one-line diff) |
+| **D-2** (bare `500` with no table row) | **ruled, correctly, and the ruling under-reaches** → P23-2, P23-3 | `storefront.py:1011-1026`; route body `storefront_api.py:1218-1226`; CPython `submit` after shutdown (Appendix S §3) |
+| **D-3** (`state: null` vs absent) | **fixed, and the delivered half is now executed** | Appendix S §2 — reset-mine's key is `state`, reset-all's is `participants`, both present-with-null on a second timeout |
+| **D-4** (rationale only) | **correctly left as delivered** | not re-derived; QA's three-way verification stands and nothing in v1.32 changes the catch |
+| *"poll latency unaffected"* untestable | **replaced by a bound that still cannot fail on its named targets** → P23-1 | Appendix S §1, six configurations |
+| S8's *no bare `500`* assertion | **narrowed honestly; its stated reason is wrong** → P23-3 | `tests/test_storefront_api.py:3995-4022` at `d776ca8` and `fc2b43b` |
+| Ordering hazard (row with a pending producer) | **real, partially placed** → P23-7 | `tests/test_storefront_api.py:131`, `:985` |
+| P20-7, P20-8, P17-9 | **still open**, correctly — nits and an S9b deferral | unchanged; `storefront_api.py:1226` still discards the `Future` |
+
+### What's solid
+
+* **U62's row is measured, not argued, and it is accurate.** Every clause maps to a reading in D-1,
+  the mechanism it names (`set_turn_state` wired into the executor) is real — `storefront.py:1072`
+  calls it — and leaving `TURN_WORKERS` byte-identical because TP-009 reproduced it exactly is the
+  right instinct: the diff is one line, so "verified rather than asserted" is checkable and checks out.
+* **Ruling A's rejection of the report's *reason* is right, and it matters.** C9's action is a retry
+  that is safe *because* nothing changed; here the message is written, so routing this token through
+  C9 would have shipped a client that duplicates a transcript line. Accepting a recommendation's
+  substance while refusing its rationale is the harder call and it was made correctly.
+* **Ruling B derived a rule instead of settling one field.** The discriminator is a test rather than
+  a list, it is stated once where the shapes live, and it is right about F8 — including the part
+  nobody had run, which now holds under execution.
+* **The per-route sweep found the thing a global fix would have missed.** "The key is named per route
+  and it is not `state` on both" is the sort of detail that turns a correct ruling into a wrong
+  implementation, and v1.32 names it before S9e can get it wrong.
+* **C14's one enumeration claim is checkable and true**, and it says so — one caller, verified.
+
+### Open questions
+
+1. **Does the residual window in P23-2 want a `503` of its own, or is C13 the right home?** My
+   recommendation is C13: naming it would need a second token for a case that is neither *nothing
+   changed* nor reliably *no reply coming* (the exhaustion shape queues the work first), and the
+   plan's own licence forbids one row spanning two meanings. But it is a scope call.
+2. **Is the S8-narrowing sentence worth a v1.33 on its own?** P23-3(a) is a prose correction to a
+   rationale, not to a ruling. If the coordinator would rather batch it with P23-1's replacement
+   bound and P23-6's clause — one revision, three edits — that is the cheaper shape and I would
+   take it.
+
+### Recommendation on further passes, and the stopping condition
+
+**This pass had positive value and the next static one will not.** Every finding above that changes
+anything came from *running* something — the latency harness, the reset-all probe, `submit` after
+shutdown, and `git log -S` over the test file. Nothing came from re-reading the prose, which is now
+its twenty-third reading. **Recommendation: close the plan lane here.** Fix P23-1 through P23-6 in
+one v1.33, then stop reviewing the document and let S9e's implementation gate be the next reader.
+
+**The falsifiable stopping condition**, offered so this stops on a rule rather than on patience:
+
+> Pass 24 is warranted only if it is **triggered by an execution** — a failing gate, an acceptance
+> pass, or a probe — or by S9e landing. A pass whose findings could all have been produced by
+> reading v1.33 is a pass this rule says not to write.
+>
+> **The rule is wrong, and I want to be told so, if:** S9e lands and its implementation review
+> (`-impl`, this file) finds a *plan-level* defect in §5.2/§5.3/C14 that was statically visible in
+> v1.33 — i.e. one I could have found in a Pass 24 without running anything. One such finding
+> falsifies the rule; zero across S9e and S10 confirms it.
+
+### Appendix S — Pass 23's measurements
+
+**§1 — Ruling C's bound, six configurations.** Harness: `<scratchpad>/poll_bound.py`, run under
+`falkor-chat/server/.venv` (FastAPI 0.139.0, uvicorn 0.49.0, anyio 4.14.1). One `uvicorn` process per
+run on loopback; sync `def` routes so they land on anyio's default thread limiter, set to **100** in
+the lifespan exactly as `create_app` does; `GET /state` sleeps 3 ms (TP-028 measured 3.3 ms); the
+poller is one client taking 25 sequential samples, matching the clause's *"the same run from the same
+client"*. `worker` = delivered design (bounded executor); `request` = the turn on the request thread;
+`lockedpoll` = the poll contending on the lock a turn holds.
+
+| mode | turns (workers+queued) | turn | idle median | saturated median | max | ratio ≤ 3× | < 50 ms |
+|---|---|---|---|---|---|---|---|
+| `worker` | 6 (2+4) | 0.4 s | 4.19 ms | 4.16 ms | 6.6 ms | PASS 0.99× | PASS |
+| `request` | 6 (2+4) | 0.4 s | 4.15 ms | 4.16 ms | 4.9 ms | **PASS 1.00×** | **PASS** |
+| `request` | 12 (4+8) | 0.4 s | 4.14 ms | 4.20 ms | 6.1 ms | **PASS 1.01×** | **PASS** |
+| `request` | 12 (4+8) | 2.0 s | 4.13 ms | 4.07 ms | 5.8 ms | **PASS 0.98×** | **PASS** |
+| `request` | 120 (40+80) | 0.4 s | 4.13 ms | 4.25 ms | 139 ms | **PASS 1.03×** | **PASS** |
+| `lockedpoll` | 15 (5+10) | 1.0 s | 4.14 ms | 4.18 ms | **14 900 ms** | **PASS 1.01×** | **PASS** |
+
+`lockedpoll` at 6 turns × 2.0 s reads the same way: median 4.23 ms, max **11 994 ms**. Post latency
+tells the true story in both broken modes — 402 ms (`request`, 0.4 s turn) and 7 922 ms
+(`lockedpoll`) against 4.8 ms for `worker` — but the clause measures the poll, and the poll's median
+is blind. A max/p95 clause reddens `lockedpoll` immediately; nothing measured on the poll reddens
+`request` below `THREAD_LIMIT` concurrent turns.
+
+**§2 — reset-all's F8 `504`, both orderings, executed.** `<scratchpad>/resetall_504.py`: the real
+`build_storefront_router` + `register_storefront_error_handlers` over a fake `Repository`/`Storefront`
+(no FalkorDB, no conftest, no pytest), driven through `TestClient` with a real presenter token.
+
+```
+re-read succeeds : HTTP 504 application/json
+  {"error":"reset_state_unknown","detail":"…may have committed","participants":[{…}]}
+re-read also times out : HTTP 504 application/json
+  {"error":"reset_state_unknown","detail":"…may have committed","participants":null}
+  keys: ['detail','error','participants']   'state' present: False   participants null: True
+```
+
+So the `504`'s evidence key on this route is `participants`, never `state`, and it is **present with
+`null`** — v1.32's per-route naming is correct, and the half QA did not drive is now driven.
+
+**§3 — the residual window's exception class.** `.venv/bin/python -c "…"`: a
+`ThreadPoolExecutor` that has been `shutdown(wait=True)` answers `submit` with
+`RuntimeError: cannot schedule new futures after shutdown`, `type(x) is RuntimeError` → `True`. A
+subclass-only mapping in the route therefore does not catch it, and `enqueue_turn`'s `except
+BaseException` re-raises it unchanged (`storefront.py:1020-1026`).
