@@ -2945,3 +2945,356 @@ re-read of its reasoning).
 
 None that block S1's closure on DC-12's own terms. M11-1 is a plan-text fix `architect` can make
 without further input; I did not attempt it myself (out of scope for `analyst`, per the guardrails).
+
+## Pass 12 — 2026-09-09
+
+### 1. Scope & verdict
+
+**Reviewed:** the three S2 wave-1 commits as immutable git objects, never the working tree — `721e8c9`
+(U71, the pack loader), `186d30b` (U72, the LM Studio adapter), `3924f3a` (U73, the row-count
+exemption fix + all three `HISTORY.md` entries). **Baseline:** `docs/plans/small-model-benchmarking.md`
+§3.3, §3.4.4a, §3.6 and §4 S2; `docs/plans/small-model-benchmarking-ml.md` §3.4 Rule 6 and §11.5.1.
+**Out of scope and untouched:** `runner`/`hostinfo`/`convo`/`tooling`, the `attest`/`validate`/`run`
+CLI, and every S1 surface except where these three commits changed it.
+
+**Method.** Because a concurrent unit may be mutation-testing the same component, every execution in
+this pass ran against `git archive 3924f3a`, extracted to a scratch tree, with the editable-install
+meta-path finder stripped so `import modelbench` resolves to the snapshot (Appendix L.0). All three
+mutations and all seven probes below were run there; the working tree was never read, written or
+moved. `tests/test_packs.py` + `tests/test_lmstudio.py` at the snapshot: **61 passed, 1 deselected**.
+
+**Verdict: needs changes.** One blocker, six majors, five minors, two nits. The blocker is not a
+green-suite miss of the two known classes — it is a third: **an exception taxonomy that is total over
+the connect phase and empty over the body-read phase**, which no fake response in the suite can reach.
+
+**CPG: considered, not relevant — no Code Property Graph is loaded for `model-bench` (only
+`cpg_falkorchat` and `cpg_deprecated_salesperson` exist on this instance), so call-graph and
+data-flow questions in this pass were answered by reading and by execution against the snapshot.**
+
+**On the brief's premises.** Two are wrong and both are findings, not quibbles. (a) The brief frames
+U73 as having closed the exemption-versus-docstring gap; it closed one of three branches and its
+own fix predicate opened a fourth (P12-6). (b) The brief asks whether `ChatResult`'s boundary is
+total and whether any payload shape yields a wrong number rather than a `None`; the answer is yes,
+but the wrong number is `wallClockMs`, which is not a `stats`-derived field at all (P12-4).
+
+### 2. Findings
+
+#### Blocker
+
+**P12-1 — every failure raised while *reading* the response body escapes the adapter's exception
+taxonomy, on all six operations.** `_raw_post`'s try/except ladder wraps only `self._opener(...)`
+(`modelbench/lmstudio.py:371-388`); `raw = resp.read()` sits at `:391`, outside it. `_raw_get` has
+the same shape (`:296-303` guarded, `:305` not). Executed against the snapshot with a response whose
+`read()` raises (Appendix L.1): `http.client.IncompleteRead`, `ConnectionResetError` and a read-phase
+`TimeoutError` all escape `chat()`, `catalog()` **and `probe()`** untyped — 9 of 9 cells. Why it
+matters: §3.6's fourth disposition names "a dropped connection" as the `no_response` case the runner
+must score `fail` and **continue** on, and `-ml` §11.5.1 needs a read-phase timeout to arrive as
+`timeout` rather than as `no_response`; here both abort the run instead. Worse, `probe()` is
+contractually three-valued — `run` exits `3` on `v1-only`/`unreachable` — and it now has a fourth
+outcome that is an exception. `IncompleteRead` is not even an `OSError`, so a blanket socket catch
+would not cover it. **Suggested fix (judge it, don't take it):** move the body read inside the same
+ladder in both `_raw_get` and `_raw_post`, adding `http.client.HTTPException` as a rung. The
+assertion that catches me being wrong is the coverage probe in §4B — it fails today at 9 cells and
+must reach 0. Not pinned by any test because `_FakeResponse.read()` (`tests/test_lmstudio.py:60-61`)
+cannot fail.
+
+#### Majors
+
+**P12-2 — `tools.module` may point outside the pack root, so a pack executes code its own
+`contentHash` does not cover.** `Pack.load_tool_module` builds `self.root / module_rel`
+(`packs.py:259`) with no containment check, and `content_hash` walks `root.rglob("*")` only
+(`:281`). Executed (Appendix L.2): a manifest declaring `"module": "../outside.py"` validates
+**CLEAN**, `load_tool_module()` executes the outside file, and editing that file leaves
+`content_hash(root)` **unchanged**. That falsifies §3.3's own sentence — "Pack code is part of the
+content hash, so a behavior change to a simulated tool is a version change like any other" — and with
+it AC-3, the component's core identity claim. **Suggested fix:** resolve `module_rel` and refuse
+anything not under `root` (`Path.resolve().is_relative_to(root.resolve())`), in `validate_pack` so it
+is reported rather than raised. Cheap and self-contained; not blocked on anything.
+
+**P12-3 — the AST allowlist's declared reach exceeds its mechanism, and one hole is in the
+mechanism's own terms.** Three, all executed (Appendix L.3). (i) `tools.module` may be a `.pyc`: the
+walk globs `*.py` (`packs.py:510`), so a pack shipping `tools/sim.pyc` validates CLEAN and
+`load_tool_module` **executes the unscanned bytecode** — proven by the executed bytecode's own
+forbidden import raising from inside it. This is a file-selection gap, not a syntactic-versus-semantic
+one, and it defeats the check even under its narrow hygiene reading. (ii) `__import__('modelbench.results')`
+and `importlib.import_module('modelbench.report')` both validate CLEAN and both actually reach the
+module — expected, since stdlib is allowed wholesale, but it means the check is a *coupling* rule and
+never containment. (iii) `packs.py:253` therefore overclaims: "what `validate_pack`'s AST check exists
+to make safe before this ever runs against **an untrusted pack**". It makes nothing safe against an
+untrusted pack. **Suggested fix:** constrain `tools.module` to a `.py` suffix in `validate_pack`
+(closing (i)); rewrite `:253` to say the check is a coupling constraint over syntactic imports, not a
+sandbox. Note the direct route is correctly refused — `import modelbench.stats` is caught — so the
+mechanism works where it looks.
+
+**P12-4 — `ChatResult.wallClockMs` stops at the response headers, not at the last byte of the body.**
+`_raw_post` computes the clock at `:389`, before `resp.read()` at `:391`. §3.6's FR-11 table defines
+it as "measured around the HTTP call from just before the request **to the last byte of the body**".
+Executed (Appendix L.4): a response that spends 250 ms in `read()` yields
+`ChatResult.wallClockMs = 0.001 ms`. This is the brief's "wrong number rather than a `None`", and it
+is systematic and always short. Two consequences: `-ml` §11.5.1's gap is `latencyMs − (ttftMs +
+generationMs)`, so the in-call-reload detector under-fires; and §3.6's stated *reason* for making the
+client wall clock the headline rather than `stats.generation_time` — "it includes request assembly,
+transport and the server's own queueing" — is exactly the term the code drops on the response side.
+**Suggested fix:** move the `time.monotonic()` stop below `resp.read()`. No test pins the window
+(every stub's `read()` is instantaneous), so a test asserting a slow-body stub's `wallClockMs >= 200`
+is the assertion that would catch this being wrong.
+
+**P12-5 — `warm_up`'s justification for not using `residentModelsAtStart` is inverted, and it
+contradicts the plan.** `lmstudio.py:485-488` says `residentModelsAtStart` "is `[]` by construction on
+a cold run and would misreport every cold warm-up as 'already resident' if used here instead."
+`model in set()` is `False`, i.e. **not resident** — the correct answer. §3.6 names that source
+explicitly: `coldLoadSeconds` is "recorded only when the model was not resident at start
+(`residentModelsAtStart`, §3.4.4a)". The reasoning appears to be §3.6 clause (a) transplanted from a
+different consumer — the *contamination guard's baseline for item 1*, where `[]` genuinely does
+misfire. The substituted behaviour may well be an improvement (it sees a model loaded between
+capture-order steps 3 and 4), but it is undeclared, costs an unlisted extra catalog GET inside step 4,
+and its recorded reason is false — which is what will propagate into the runner unit. **Suggested
+fix:** decide the substitution on its merits and rewrite the docstring to the true reason; or accept
+`wasResidentBefore` as a parameter so the runner can pass step 3's snapshot. This is a decision I am
+handing over, not one I would make for you.
+
+**P12-6 — the row-count identity's exemption is *again* wider than its docstring, and two sibling
+branches still no-op silently. This is round three of the same shape.** `packs.py:392` states the
+exemption as "**Skips (returns `[]`) only when `scripts` itself is absent**". The mechanism is
+`isinstance(scripts, int) and not isinstance(scripts, bool)` (`:409-411`), so it also skips on
+`"scripts": "12"` and `"scripts": true`. Separately, `:420-425` returns `[]` whenever
+`replicatesPerScript` is absent or non-int. Executed against packs built from the plan's **own §3.3
+manifest literal** (Appendix L.5): the literal validates clean (good); a copy with 48 rows against
+`12 × 1` is correctly rejected; but the same 48-row pack with `replicatesPerScript` **deleted**, or
+with `replicatesPerScript: "1"`, or with `scripts: "12"`, returns **0 problems** in all three cases.
+One deleted key turns off the check §3.3 built to catch the N-1 shortcut. The `HISTORY.md` entry
+states the exemption correctly ("absent **or not a plain int**"); the code docstring does not.
+Because this is the third round of the same defect and my last finding was generated by the previous
+fix's own predicate, **§4A gives a stopping condition instead of a fourth round** — read it before
+acting on this finding.
+
+**P12-7 — the "fully valid pack" positive control is a pack §3.3 rules out for its declared role.**
+`tests/fixtures/packs/valid/pack.json` declares `"role": "tool-caller"` with
+`"pairingKey": ["conversationId", "turnIndex"], "analysisUnit": "conversationId"`. §3.3: "the analysis
+unit is the *outermost* component of `pairingKey` … **For the tool-caller that is `scriptId`, never a
+conversation id**", and the plan's own manifest literal declares
+`["scriptId", "replicate", "turnIndex"]`. The fixture satisfies the mechanised half of the rule
+(`analysisUnit == pairingKey[0]`) and violates the stated half, and it is the anchor for
+`test_validate_pack_accepts_a_fully_valid_pack` (`test_packs.py:182-184`) plus three further "accepts"
+assertions, `data_path`, `load_tool_module`, `content_hash` and the totality boundary. Every sibling
+tool-caller fixture uses `scriptId`; this one does not, and its 12-conversation rows file is what
+makes the identity arithmetic come out clean. That is the brief's "fixtures written against the
+implementation rather than against the plan's manifest shape", in the positive control.
+**Suggested fix:** re-key the fixture to the plan's shape. Whether §3.3's *role*-specific half
+("never a conversation id") should become a checkable rule in `validate_pack` is `architect`'s
+call, not something I would have the implementer invent — it is listed as an open question in §6.
+
+#### Minors
+
+**P12-8 — the test that hid P12-1 names a class its assertion does not pin.**
+`test_chat_call_with_dropped_connection_raises_lmstudio_call_failed_not_timeout`
+(`tests/test_lmstudio.py:383-394`) stubs `urlopen` itself to raise, i.e. a drop during connect. A
+connection dropped mid-body — the likelier event over a twenty-minute run on a 16 GB box, and the one
+§3.6 was written for — is not covered and escapes. Fifth instance on this coordination of the
+name-outruns-assertions class; **§4B's probe is the fix that closes it as a class rather than as an
+instance.**
+
+**P12-9 — `test_load_tool_module_imports_the_pack_module_via_importlib` does not pin "via importlib".**
+Mutation run (Appendix L.6): replacing `spec_from_file_location` with a `sys.path.insert` +
+`import_module` route leaves **29/29 `test_packs.py` green**. `packs.py:249` claims the distinction
+("via `importlib`, not `sys.path`") and the plan §3.3 requires it; the `sys.path` route is the one
+that leaks the pack directory into the global import path and can shadow a stdlib name. Pin it by
+asserting the loaded module's `__spec__.origin` is the pack file and that `sys.path` is unchanged
+across the call.
+
+**P12-10 — `catalog()` parses the body before checking the status, so an HTTP error reports the wrong
+cause.** `lmstudio.py:335-337`: `_parse_json` runs first, `if status != 200` second. Executed: an
+HTTP 500 with an HTML body yields `GET /api/v0/models: response body is not valid JSON: Expecting
+value…`, and the `HTTP {status}` branch is unreachable for exactly the bodies error responses carry.
+§3.4.4a turns on the operator getting a distinguishing message. Swap the two.
+
+**P12-11 — the unit boundary is not uniform, and `ChatResult`'s "never raises" is narrower than
+stated.** `ttftMs`/`generationMs` coerce through `float()`; `tokensPerSecond` is
+`stats.get("tokens_per_second")` verbatim (`:149`), so a string source survives as a `str` in a field
+typed `float | None` and fails later, at aggregation, far from the boundary whose job is to settle the
+unit. Separately, the class docstring says construction "**never raises** on a missing or partial
+`stats`" unconditionally, but `ChatResult(stats=[1])` raises `AttributeError` — `chat()`'s
+`isinstance(..., Mapping)` guard (`:439`) is what actually holds the rule, not the type. Both
+executed (Appendix L.7).
+
+**P12-12 — the AST walk permits a relative import the loader cannot execute.** `_tool_import_problems`
+skips `node.level > 0` by design (`packs.py:526-527`, documented as "names the pack's own code"), but
+`spec_from_file_location` gives the module no package, so `from . import helper` validates CLEAN and
+then raises `ImportError: attempted relative import with no known parent package` at
+`load_tool_module`. Either give the spec `submodule_search_locations` or report relative imports;
+today validate says yes and the loader says no.
+
+#### Nits
+
+**P12-13** — this document's H1 and `Reviews:` field still say "S1 implementation review" / "§4 S1"
+while Passes 12 onward gate S2. One-clause header fix, owner's call.
+
+**P12-14** — `content_hash` on a non-existent or empty directory returns the empty-input SHA-256
+rather than refusing, and both exclusion tests use `path.parts` on the **absolute** path
+(`packs.py:284`, `:510`), so a pack root that itself lives under a `__pycache__` component would hash
+to nothing. Neither is reachable today.
+
+### 3. What's solid
+
+- **Both defect classes the brief named are genuinely closed where they were found.** Mutation-run
+  against the snapshot: deleting `check_tool_calling_eligibility`'s `if role != "tool-caller"` guard
+  reddens exactly `test_gate_does_not_run_on_an_embedder_pack_so_the_run_proceeds` — **the §3.6 scope
+  is pinned by something that would redden if removed** (the brief's question 5: yes). Restoring
+  U73's pre-fix exemption reddens exactly its new test. Dropping the `__pycache__` exclusion reddens
+  exactly `test_content_hash_excludes_pycache`.
+- **The `__pycache__` exclusion is correct and its stated reason is true, not assumed.** Executed:
+  `load_tool_module()` does write `tools/__pycache__/sim.cpython-312.pyc` into the pack directory, and
+  the hash is unchanged across it. I looked for other loader-produced artifacts and found none — the
+  import machinery's only in-pack side effect for a source module is the bytecode cache, a sourceless
+  `.pyc` produces none, and `__pycache__/` is ignored repo-wide so no working-tree noise results.
+  The exclusion is complete for loader artifacts; P12-2/P12-3 are about code the hash never covered in
+  the first place, which is a different failure.
+- **`validate_pack` runs all three advertised axes on the plan's own manifest literal, not just on the
+  fixtures'** — built from the §3.3 literal verbatim it validates clean, and the two cases §3.3 names
+  as the identity's reason to exist are both caught with the right message. The `check_sampling_contract`
+  reuse, the §3.3 totality boundary on both halves, and the `derive_call_surface` factoring are all as
+  the done-condition asks.
+- **The 7-entry catalog fixture supports every assertion built on it.** I checked each: no test
+  depends on a property only a 19-entry payload has — the count assertion is a fixture-shape assertion,
+  `residency() == []` holds identically at 7, and all three eligibility cases have a real entry. The
+  per-entry `_provenance` citations check out against `docs/reviews/small-model-benchmarking.md:889`,
+  `:995`, `:1002-1008` and `:1436`, and the one inferred field (`qwen/qwen3-4b-2507`'s `tool_use`) is
+  labelled as inferred in the fixture, in the test module docstring **and** in `HISTORY.md`.
+- **`HISTORY.md`'s three entries are unusually honest** — U72's self-caught name-outruns-assertions
+  test is recorded with the mechanism that hid it, and U73's entry states the exemption *more*
+  accurately than the code docstring it describes.
+
+### 4. Two stopping conditions, offered in place of a fourth round
+
+The brief asks me to say when findings are being generated **by** the fixes rather than found **in**
+the artifact. The answer splits, and the split matters:
+
+- **The `validate_pack` exemption thread is converging by generation.** P12-6 exists because U73's
+  own `declares_scripts` predicate created the branch it reports. That is round three of one shape and
+  a fourth round is predictable. **Promote §4A above P12-6.**
+- **The adapter thread is not.** P12-1, P12-3, P12-4, P12-5 are first-pass findings on code that has
+  never been through a fix round. Treat them as ordinary findings.
+
+**A — the pack-validation stopping condition (falsifiable).** The wave is done on this thread when a
+**coverage probe** exists over the axes `_row_count_identity_problems` actually varies on, not over a
+list of shapes: the four manifest keys the route reads — `sampling.scripts`,
+`sampling.replicatesPerScript`, `sampling.analysisUnit`, `data.conversations` — crossed with three
+value-kinds — *plan-valid*, *absent*, *present but not the declared type* — over a rows file that
+**violates** the identity (48 rows against a `12 × 1` declaration), plus the all-valid control. Each
+of the 13 cells must either report at least one problem, or appear in a module-level exemption
+constant carrying a one-line reason, and **the probe asserts that the set of silent cells equals that
+constant exactly** — so a stale exemption fails as loudly as a missing one. The axis list is
+generated from a constant the route itself consults, so adding a fifth key without extending the
+probe fails rather than passing.
+**If it fails:** it names the cell, and the response is a *decision* — narrow the predicate, or list
+the cell with a reason — never a discovery, so it terminates in one round instead of producing round
+N+1. **If it cannot be made to fail on today's code** (i.e. it passes as first written), that is
+itself the signal that it was written against the implementation rather than the plan, and it should
+be rejected: it must go red on at least the three cells P12-6 names before the fix.
+*This is a design I am recommending, not one I ran; the implementer should overrule it if the
+exemption-constant mechanism reads worse than an explicit narrowing.*
+
+**B — the adapter stopping condition (falsifiable, and it fails today).** A probe over
+(operation) × (failure phase) × (failure kind): the six public operations
+{`catalog`, `residency`, `probe`, `chat`, `embed`, `warm_up`} × {connect/headers, body-read} ×
+{timeout, non-2xx, connection drop, unparseable body}. Every cell must land in exactly one of
+`LMStudioCallTimeout` / `LMStudioCallFailed` / `LMStudioUnreachable`, or — for `probe()` — one of its
+three literal values; **no cell may raise anything outside `LMStudioError`.** I ran the body-read row
+today: **9 of 9 cells escape** (Appendix L.1). Done when it reads 0.
+**If it fails:** the failing cell names both the operation and the phase, so the fix is local and the
+probe is the regression net. This one I did run, so it is evidence rather than a proposal.
+
+### 5. Residuals, classified per the standing rule (nothing rides as a follow-up)
+
+- **Blocked on work that does not exist yet — acceptable:** (a) the real `GET /api/v0/models` capture.
+  §4 S2's done-condition cites "§2.5's captured 19-model response" and no such payload exists in this
+  repo; the third eligibility case's `capabilities: ["tool_use"]` is likewise inferred from
+  `tests/conftest.py` rather than captured. Blocked on a **human-run live LM Studio session**, which
+  is also what unblocks re-pointing `test_catalog_parses_every_fixture_entry_into_model_info`'s
+  7-entry assertions. (b) §4 S2's **R-1 probe** — the loaded-model catalog re-read and the
+  `loadedContextLength`-on-embeddings question — blocked on the same session, since an agent may not
+  load a model. Neither is this wave's.
+- **Deferred by choice — not acceptable, hence findings above:** the `replicatesPerScript`/`scripts`
+  silent skips (`packs.py:400-401` explicitly scopes them out) are P12-6; the read-phase taxonomy gap
+  is P12-1; the wall-clock window is P12-4. None of these is blocked on anything unbuilt.
+
+### 6. Open questions
+
+1. **Should §3.3's role-specific half be mechanised?** The rule "for the tool-caller the analysis unit
+   is `scriptId`, never a conversation id" is checkable only against a role→pairingKey table the plan
+   does not currently define. P12-7 fixes the fixture; whether `validate_pack` should also refuse a
+   `tool-caller` whose `pairingKey[0]` is not `scriptId` is `architect`'s, not the implementer's.
+2. **Is `warm_up`'s residency substitution (P12-5) intended?** If yes, §3.6's `coldLoadSeconds`
+   sentence names a source the adapter no longer offers, and the plan should say so; if no, the
+   adapter should take the snapshot as a parameter.
+
+### Appendix L — Pass 12 evidence
+
+**L.0 — isolation.** `git archive 3924f3a model-bench | tar -x -C <scratch>`; a `sitecustomize.py` on
+`PYTHONPATH` strips the setuptools editable meta-path finder so `modelbench.__file__` resolves inside
+the snapshot (verified by printing it). Every result below was produced there. The working tree was
+never read, written, added, committed or checked out.
+
+**L.1 — read-phase escapes (P12-1).** A fake opener returning a response whose `read()` raises, for
+three exception kinds × three operations:
+
+```
+IncompleteRead (body cut short)    chat  -> ESCAPED IncompleteRead: IncompleteRead(7 bytes read)
+IncompleteRead (body cut short)    catalog -> ESCAPED IncompleteRead
+IncompleteRead (body cut short)    probe -> ESCAPED IncompleteRead
+ConnectionResetError mid-body      chat/catalog/probe -> ESCAPED ConnectionResetError [Errno 104]
+socket timeout during read         chat/catalog/probe -> ESCAPED TimeoutError: timed out
+```
+
+**L.2 — `tools.module` traversal (P12-2).** Manifest `"tools": {"module": "../outside.py"}`:
+
+```
+validate_pack -> CLEAN
+contentHash unchanged after editing the executed module: True
+load_tool_module -> 'outside CHANGED'
+```
+
+**L.3 — allowlist probes (P12-3).**
+
+```
+1 __import__('modelbench.results')      validate CLEAN;  import reached modelbench.results
+2 importlib.import_module('...report')  validate CLEAN;  import reached modelbench.report
+3 import modelbench.stats               validate REFUSED  (the mechanism works where it looks)
+4 tools/sim.pyc as tools.module         validate CLEAN;  bytecode EXECUTED unscanned
+5 from . import helper                  validate CLEAN;  load_tool_module -> ImportError
+```
+
+**L.4 — wall-clock window (P12-4).** Stub whose `read()` sleeps 250 ms:
+`ChatResult.wallClockMs = 0.001 ms`.
+
+**L.5 — `validate_pack` against the plan's own §3.3 manifest literal (P12-6).**
+
+| Pack built from the plan's literal | problems |
+|---|---|
+| as written, 12 rows keyed on `scriptId` | **0** (correct) |
+| 48 rows against `12 × 1` | 2 — row count and per-unit count |
+| `analysisUnit: conversationId`, `replicatesPerScript: 4`, 48 rows | 2 — Rule 6 and 48-distinct |
+| 48 rows, `replicatesPerScript` **deleted** | **0** ← silent |
+| 48 rows, `replicatesPerScript: "1"` | **0** ← silent |
+| 48 rows, `scripts: "12"` | **0** ← silent |
+| rows carrying no `analysisUnit` key at all | 1 |
+
+**L.6 — mutations (all against a copy of the snapshot, never the working tree).**
+
+| Mutation | Result |
+|---|---|
+| delete `if role != "tool-caller": return` | 1 failed — the embedder negative test. Scope **is** pinned |
+| restore U73's pre-fix exemption | 1 failed — `..._missing_data_conversations`. Fix **is** pinned |
+| drop the `__pycache__` exclusion | 1 failed — `test_content_hash_excludes_pycache` |
+| `spec_from_file_location` → `sys.path` + `import_module` | **29/29 still green** (P12-9) |
+
+**L.7 — `ChatResult` boundary shapes (P12-11).** `tokens_per_second: "51.4"` → `tps='51.4'` (`str`);
+`time_to_first_token: "0.111"` → `111.0`; `: True` → `1000.0`; `stats` as a list via `chat()` → all
+`None` (guarded); `ChatResult(stats=[1])` directly → `AttributeError`.
+
+**L.8 — disposition of Pass 11's two findings.** **M11-1: fixed** — plan v1.24 rewrites §4 S1e Table
+H's `stats.py:444` row to name `lo`/`hi` from the clamp and derive `bound_by` from `lo != u_lo` /
+`hi != u_hi`; residuals 20/21 unchanged at 1 (plan changelog line 5, row at `:4133`). **M11-2: fixed**
+— `modelbench/stats.py:468-472` now reads "`lo != u_lo` iff the composed lower bound ran strictly
+below the support", with the `max`/`min` identity spelled out. No Pass 1–10 finding is re-raised here;
+all were dispositioned in their own passes and none of them touches S2 surface.
