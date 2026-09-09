@@ -2,6 +2,50 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-09 — U25: `kaizen_team` distillation pass 2, chunk G — `analyst`'s 2 deferred entries, both promoted
+
+- **Deliverable.** `claude/analyst/review-techniques.md` (two new sections), plus
+  `claude/analyst/kaizen/history.md` and this file. **Two entries → two edits, one file of
+  content.** Zero new bullets in any always-loaded prompt; `analyst.md` untouched. Both nodes
+  cleared by `DETACH DELETE` (each `producedEdges=1, mentionEdges=0`, so `otherRemaining == 0`),
+  verified by a post-clear read returning `survivors 0`. `analyst` now holds **0 produced / 4
+  `MENTIONS`-only** — the latter belong to the edge-shaped unit the pass still owes, not to U25.
+- **A dead instance is not a dead entry, and a true observation is not its stated rule.**
+  `7c1d4a92…`'s cited defect (`pipeline.sh` calling a side-effect-variable helper inside `$(…)`)
+  was **fixed** at `271c899` and is documented for that pipeline in `skills/joern-cpg/SKILL.md`.
+  What was still unpublished was the reviewer-facing half, and it needed narrowing before it could
+  ship: the entry's headline test — *did the execution cover the call path or only the primitive?*
+  — is the form that `skills/cpg-analysis/references/freshness.md`'s third tombstone already
+  records as untrue of one of the two mechanisms it was drawn from. The surviving rule is the
+  level-mismatch one (a credential names a level; check it against the level of the claim it
+  licenses), and that is what shipped, with the call-path/primitive case demoted to an instance.
+  This is U24's dataclass narrowing in a different discipline: the observation was real, the
+  generalisation was not.
+- **Re-derived, never read.** The helper was **executed both ways** — statement form leaves
+  `CPG_STAMPED_KEYS` populated (4 of the map's 8 names, no `CPG_SOURCE_*` in the environment) and
+  the stray query emits its allow-list; `$(…)` form leaves it unset, `STAMP` empty, and the stray
+  query refusing with rc 1. The failing probe ran beside a **passing control**, so "defeated" could
+  not be confused with "never wired". The review-trap claim was re-derived from git rather than
+  from the file's own later self-account: at `0da3eb9` and `5417f0e` the *"NEVER INSIDE `$(…)`"*
+  warning sat on `_cpg_prop` (lines 172→181, then 204→213) and named only `_cpg_prop`, while the
+  caller that committed the defect called `cpg_provenance_stamp` — and that same comment carried an
+  execution credential for the **query** while calling the shipped failure "at least the safe
+  direction". The trap and its diagnosis are the same artifact.
+- **The instrument's anchor is the instrument.** Verifying `8d2b47f0…` I built the
+  block-extraction myself rather than reusing the entry's, and my first three-tombstone range used
+  an end marker that exists only in later revisions: the range silently ran to EOF and produced a
+  growth curve (77 → 88 → 105 → 127 → **65**) that was not merely wrong but non-monotonic — the
+  tell. Re-anchored on markers present in every revision, the entry's figures reproduced digit for
+  digit (**8 → 19 → 36 → 58 → 99 lines, 90 → 1,206 words**), and tombstone one is byte-identical
+  across all five committed revisions and `HEAD`. That caveat — anchor on text present in every
+  revision, and assert the marker matched exactly once — is now part of the promoted section,
+  because the entry did not state it and the failure is silent.
+- **A digest that differs is not a method that fails.** My md5 of tombstone one differs from the
+  entry's cited digest (a trailing line in the awk range). What the technique asserts is
+  *invariance across the arc*, and that reproduced exactly. Logged rather than filed as a
+  discrepancy: comparing hash values across two independently written extractors was never the
+  claim.
+
 ## 2026-09-08 — U24: `kaizen_team` distillation pass 2, chunk F — 12 `analyst` entries, 10 promoted, 1 discarded, 1 kept open
 
 - **Deliverable.** `claude/analyst/review-techniques.md` (two new sections, three folds into

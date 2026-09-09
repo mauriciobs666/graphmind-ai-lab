@@ -3,6 +3,59 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
+## 2026-09-09 — `kaizen_team` distillation pass 2, chunk G (unit U25): the 2 deferred entries, both promoted
+
+`cobb` processed the two `analyst`-produced `kaizen_team` entries deliberately deferred from U24
+(`claude/docs/plans/kaizen-distillation2-coordination.md` U25) — the final chunk of the analyst
+inbox for this pass. Both read, counted and cleared on the **complete 36-character** `entryId`;
+`analyst` produced exactly these two at dispatch. **Two entries → one file, two new sections**;
+no always-loaded prompt gained anything, and `analyst.md` was untouched.
+
+**Promoted (2):** both into `claude/analyst/review-techniques.md`, the on-demand knowledge base —
+not `skills/agent-standards/claude-code.md` (neither is a harness fact) and not the prompt (a
+reviewer needs them on a review, not in every session).
+
+- `7c1d4a92-3f6b-4e58-9a01-2d8f5b0c6e77` → new section *"'Verified by execution' names a level —
+  check it against the level of the claim it licenses"*. **The entry's instance is dead and its
+  generalisation was narrowed.** Re-derived by execution, not by reading: sourcing
+  `skills/joern-cpg/scripts/git-provenance.sh` and calling `cpg_provenance_stamp` as a statement
+  leaves `CPG_STAMPED_KEYS` populated (4 of the map's 8 names, with no `CPG_SOURCE_*` in the
+  environment) and `cpg_provenance_stray_query` emits its allow-list; the same call as
+  `STAMP="$(cpg_provenance_stamp …)"` leaves the variable unset, `STAMP` empty, and the stray query
+  refusing with rc 1 — a failing probe run beside a passing control. The `$(…)` call site the entry
+  cites is **gone from the current tree**: it stood at `pipeline.sh:225` (`29538d6`, `0da3eb9`),
+  `:228` (`5417f0e`), and became a statement at `:235` in `271c899`, backed by a populate-check that
+  exits 1 and a regression case that reverts the call site. The entry's own review-trap claim was
+  re-derived independently of the file's later self-account: at `0da3eb9` and `5417f0e` the
+  *"NEVER INSIDE `$(…)`"* warning sat on `_cpg_prop` (lines 172→181, then 204→213), named only
+  `_cpg_prop`, and called the shipped failure "at least the safe direction" — while the caller that
+  committed the defect called `cpg_provenance_stamp`, one level up. The entry's headline test
+  ("did the execution cover the call path or only the primitive?") was **deliberately not promoted
+  in that form**: `skills/cpg-analysis/references/freshness.md`'s third tombstone already records
+  that this generalisation is untrue of one of the two mechanisms it was drawn from, and the form
+  that survives is the level-mismatch one. The pipeline-specific half is already published in
+  `skills/joern-cpg/SKILL.md`; only the reviewer-facing rule was unpublished.
+- `8d2b47f0-13ca-4e59-b6d7-51c0a9e2f8b4` → new section *"A document's claim about its own revision
+  history is falsified by hashing the cited block at every revision"*. **Method and instance both
+  reproduced**, with my own marker-anchored extraction rather than the entry's. Tombstone one of
+  `skills/cpg-analysis/references/freshness.md` is byte-identical across `29538d6`, `0da3eb9`,
+  `5417f0e`, `271c899`, `375af25` **and `HEAD`** (one md5, 8 lines / 90 words); tombstones two and
+  three both changed (11→15 lines; 17→35→76 lines), so the passage's *"each has since had its own
+  certifying sentence corrected"* is false for exactly one of the three. The three-tombstone block
+  grew **8 → 19 → 36 → 58 → 99 lines (90 → 1,206 words)** across the arc. My md5 of tombstone one
+  differs from the entry's cited digest because the awk range differs by a trailing line; what the
+  technique asserts — invariance across the arc — reproduces exactly, and the entry's line-growth
+  figures reproduce digit for digit. One caveat the entry did not state was added to the promoted
+  section: anchor the range on text present in **every** revision and assert it matched once, or a
+  later-only anchor runs to EOF and turns the growth measurement into noise.
+
+**Discarded (0). Kept open (0).** Both graph nodes cleared — each held one `PRODUCED` edge and no
+`MENTIONS`, so `otherRemaining == 0` and each went by `DETACH DELETE`.
+
+**`analyst`'s inbox is empty as of this unit** — a statement about the moment U25 ran, not a claim
+the agent is finished; the graph is live and other sessions keep writing.
+
+
 ## 2026-09-08 — `kaizen_team` distillation pass 2, chunk F (unit U24): 12 entries, 10 promoted, 1 discarded, 1 kept open
 
 `cobb` processed twelve of the fourteen `analyst`-produced `kaizen_team` entries dated 2026-09-08

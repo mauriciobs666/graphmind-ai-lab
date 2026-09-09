@@ -776,3 +776,74 @@ interval reported with `bound_by=(MOVER-D, MOVER-D)`, a non-answer wearing an in
 NaN anywhere in the unguarded input sequence lands in the same place. **Guard the clamp's input or
 its pre-clamp result**, and read every `max`/`min` clamp in numeric output code as a site where a
 NaN or an infinity becomes indistinguishable from a measurement.
+
+## "Verified by execution" names a level — check it against the level of the claim it licenses
+
+A credential attached to a claim (*"re-checked there, not inferred"*, *"verified by execution in
+both directions"*) is almost never fake. The recurring defect is that **the credential covers one
+level and the claim it licenses sits a level above it**: the primitive was executed but not the
+call path that uses it; the code was re-read but not the space of inputs it had to close. So the
+review question is not *did they run it* but **run what, and is the assertion about that same
+thing.** Do not narrow this to "primitive vs. call path" — that is one instance of the shape, not
+its definition.
+
+**The shell instance, re-derived 2026-09-09 by executing the helper both ways.** A helper whose
+contract is a **side-effect variable** is silently defeated when a caller invokes it in `$(…)`:
+command substitution runs in a subshell, the assignment dies there, and the rendered output looks
+perfectly correct. Sourcing `skills/joern-cpg/scripts/git-provenance.sh` and calling
+`cpg_provenance_stamp` as a statement leaves `CPG_STAMPED_KEYS` populated (the four non-NULL of the
+map's eight names, in a shell with no `CPG_SOURCE_*` set) and `cpg_provenance_stray_query` emits a
+real allow-list; calling it as `STAMP="$(cpg_provenance_stamp …)"` leaves `CPG_STAMPED_KEYS` unset
+and `STAMP` empty. **Run the failing and the passing shape side by side** — a single failing probe
+cannot distinguish "the mechanism is defeated" from "the mechanism was never wired".
+
+**And a warning sited in the callee does not protect the caller.** At the two revisions where this
+defect actually shipped (`0da3eb9`, `5417f0e`) the warning *"CALL IT AS A STATEMENT, NEVER INSIDE
+`$(…)`"* was already in the file — attached to `_cpg_prop`'s comment block, naming only
+`_cpg_prop`, while the call site that committed the defect (`pipeline.sh:225`, then `:228`) called
+`cpg_provenance_stamp`, one level up. A reviewer who greps for the hazard finds the warning, reads
+it as satisfied, and never checks the caller. That same comment carried its own execution
+credential — *"Verified … against the live instance: `NOT k IN []` matched all 10 keys"* — for the
+**query**, and called the empty-allow-list outcome "at least the safe direction" when it was the
+shipped state. **When a hazard is documented at the definition, verify at every call site
+separately**; and treat a comment that describes the live failure as a hypothetical direction as a
+sign nobody ran the path.
+
+Origin: `analyst` kaizen `7c1d4a92…` (2026-09-08), gating the CPG provenance-stamp arc. The
+instance is fixed (`271c899` moved the call to a statement, added a populate-check that exits 1,
+made the stray query refuse an empty allow-list, and added a regression case that reverts the call
+site to `$(…)`) and is documented for that pipeline in `skills/joern-cpg/SKILL.md`; only the
+reviewer-facing rule was unpublished.
+
+## A document's claim about its own revision history is falsified by hashing the cited block at every revision
+
+When a document certifies itself — *"each of these has since been corrected"*, *"this section was
+rewritten after review"*, *"the earlier version said X and no longer does"* — do not read diffs.
+Extract the cited block from **every** revision in the arc with `git show <ref>:<path>` piped
+through an `awk`/`python` range anchored on stable text markers, and hash each. Byte-identity
+across the whole arc refutes the claim in one line, and the same extraction dates the block's
+growth (lines and words per revision), which supports a proportionality finding in the same pass.
+
+Two things make it work where a diff read does not: the range is anchored on **content markers,
+not line numbers**, so it survives the block moving; and the answer is a hash comparison, so
+"unchanged" is proved rather than eyeballed across five revisions of a passage that is being
+appended to each time.
+
+Anchor the range on text that exists in *every* revision under comparison, and assert the marker
+matched exactly once per revision — an anchor that appears only in later revisions silently runs
+the range to EOF and turns a growth measurement into noise.
+
+Measured 2026-09-09 over the five committed revisions of
+`skills/cpg-analysis/references/freshness.md` (`29538d6 → 0da3eb9 → 5417f0e → 271c899 → 375af25`,
+plus `HEAD`). Its three-tombstone passage claims *"each has since had its own certifying sentence
+corrected on review, this one included"*. Tombstone one's block is **byte-identical at all six
+revisions** (one md5, 8 lines / 90 words); tombstones two and three both changed (11→15 lines and
+17→35→76 lines respectively). The self-certification is false for exactly one of the three. The
+same extraction gives the whole passage **8 → 19 → 36 → 58 → 99 lines (90 → 1,206 words)** across
+the arc — a growth curve that is itself a finding about a document read at dispatch time.
+
+Compare the AST line-range hash technique at the top of this file: same instrument, different axis
+— that one hashes a code construct across revisions, this one a prose block, and the claim under
+test is the document's account of its own history rather than a locked-artifact guarantee.
+
+Origin: `analyst` kaizen `8d2b47f0…` (2026-09-08), Pass 7 of `docs/reviews/cpg-provenance-stamp.md`.
