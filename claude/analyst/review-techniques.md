@@ -758,6 +758,16 @@ from a gate against an uncommitted `S1e` tree, could not be re-derived at any sh
 `FORBIDDEN_BY_ARM_KIND` appears in the plan and review documents at every commit in the window and
 in no source file. Re-derive at a sha, or say that you could not.
 
+**And re-run the command as written, not as ported.** `git grep -c <rev> -- <pathspec>` is the
+read-only way to ask a plan's own grep at its stated baseline — no checkout, no stash, nothing to
+restore — but the pattern dialect changes with `-E`: default `git grep` is BRE, where `(` is a
+literal; `-E` makes it a group. Re-derived 2026-09-09 at `c523a35`:
+`git grep -E 'isinstance(.*BinaryMetric' c523a35 -- model-bench/modelbench model-bench/tests` dies
+with `fatal: … Unmatched ( or \(` at **exit 128**, while the identical pattern *without* `-E`
+returns the plan's stated count (`report.py:3`, `results.py:3` — six lines), as does `-E` with the
+paren escaped. A caller that reads the output and not the status sees no matches and reports the
+enumeration clean.
+
 ## What a change silently stopped enforcing: execute the pre-image, diff the collected test IDs
 
 A plan's residual table and a green suite both answer "did the edit land?". Neither answers "does
@@ -894,3 +904,93 @@ Compare the AST line-range hash technique at the top of this file: same instrume
 test is the document's account of its own history rather than a locked-artifact guarantee.
 
 Origin: `analyst` kaizen `8d2b47f0…` (2026-09-08), Pass 7 of `docs/reviews/cpg-provenance-stamp.md`.
+
+## The remedy a finding hands over is the least-verified thing in the review
+
+Findings get the scrutiny; the **suggested improvement** attached to each one is written last, from
+memory, and ships unrun. `analyst.md` already says a suggested fix is a claim to run rather than a
+nit. Two shapes make that concrete, both from one four-pass gate
+(`docs/reviews/rq-execution-gate.md`, 2026-09-09), and in both the implementer's own closure beat
+the reviewer's proposal.
+
+**A remedy that cannot execute at the call-site shape it targets.** Pass 1 recommended capturing
+`rc=$?` at three `if ! VAR="$(rq …)"` sites so a helper's tri-state return (1 vs 2) could be
+routed. `$?` read inside that `if`'s body is **always 0**: the branch sees the status of the
+*negated condition*, not of the command. Re-derived here 2026-09-09 on `bash 5.2.21`, three arms:
+
+| shape | `$?` read in the branch |
+|---|---|
+| `if ! V="$(f)"; then rc=$?` — `f` returning 1, and `f` returning 2 | `0`, `0` |
+| `if ! f; then rc=$?` — no command substitution at all | `0` |
+| `V="$(f)"; echo $?` — plain assignment, `f` returning 2 | `2` |
+
+The `else` branch reads `1`, symmetrically. So command substitution is not the culprit and removing
+it does not help — the `if !` is — and a tri-state return has **no reader** at that call-site shape,
+whatever the callee does. From the same probe: `exit N` inside `$(…)` kills only the substitution's
+subshell (the script runs on and exits 0) while the substitution's own status is `N`.
+
+**A remedy gated on an enumeration is an author's-imagination oracle.** A finding that closes on
+*"these N shapes must be handled"* can be beaten by shape N+1 within the hour, and was, repeatedly.
+One static guard was closed three times against a fixed list of forms — the third time on my own
+finding, gated on **four named mutation shapes plus a clean-tree control** — and every closure was
+beaten by a form nobody had listed: a bare-statement call site and a lowercase command got past
+one, a literal after a backslash line continuation got past the next, and a further form — the
+command token split *by* that continuation — was caught only because the replacement was a probe
+rather than another list. Ask
+instead for a **coverage probe**: enumerate forms along the axes the artifact actually varies on,
+adjudicate every row **twice** — once by the real runtime, once by the *delivered* checker,
+extracted rather than re-typed — and assert the observed pair against a written expectation per
+row. The stated bound is then mechanically pinned: widening the checker without rewriting the bound
+turns a `blind` row red, so the gap cannot reopen silently. The closing generation of that guard
+ships **36 rows on three axes** with **6** stated blind
+(`skills/joern-cpg/scripts/test-stamp-wiring.sh`, counted there 2026-09-09: A1–A15 invocation
+syntax, B1–B15 how the command argument is spelled, C1–C6 text that only looks like a call site).
+Constructing such a probe is the implementer's work — `claude/tdd-engineer/guard-testing-techniques.md`
+§1 — but requiring one instead of a list is yours, and a stated bound with a hand-check instruction
+is an acceptable closure where widening is not.
+
+Origin: `analyst` kaizen `a7e42b90…` and `e2b95c47…` (both 2026-09-09), Passes 2 and 3 of the
+`rq()` execution gate.
+
+## A done-condition stated as a MEDIAN cannot fail on a burst, and the tail is where the defect lives
+
+Replacing an untestable performance clause (*"poll latency is unaffected"*) with a measurable one
+(*"median poll latency within 2× baseline"*) looks like the fix and is not. Over sequential samples
+the median measures the **uncontended majority**, so a run in which a request waited seconds passes
+— and, measured below, passes while reading *better* than the baseline it is bounded against. Only
+a `max`/p95 clause reddens it.
+
+Measured here 2026-09-09, a purpose-built harness in the session scratchpad on
+`falkor-chat/server/.venv` (fastapi 0.139.0, starlette 1.3.1, uvicorn 0.49.0, anyio 4.14.1): a
+uvicorn app whose thread limiter is set to **4** in its lifespan, a 1-second blocking `def`
+handler, and 21 sequential poll samples taken 50 ms apart while a burst of blockers is in flight.
+Two runs, agreeing:
+
+| poll endpoint | concurrent blockers | poll median | poll max |
+|---|---|---|---|
+| `async def` | 0 (baseline) | 1.75 ms | 2.33 ms |
+| `async def` | 12 (3× the limiter) | 1.81 ms (1.03×) | 2.57 ms |
+| `def` (offloaded) | 0 (baseline) | 2.01 ms | 2.52 ms |
+| `def` (offloaded) | 3 (below the limiter) | 2.00 ms (0.99×) | 2.64 ms |
+| `def` (offloaded) | 12 (3× the limiter) | **1.81 ms (0.90×)** | **2851.81 ms** |
+
+The last row is the whole point: the median moves the *wrong way* — better than baseline — while
+the tail is three orders of magnitude out, so a two-sided median bound passes a run containing a
+2.9-second request. The second thing the table shows is a **condition the mechanism has and the
+usual framing omits**: the contention exists only where the poll path is itself offloaded. A
+blocked sync handler holds an anyio limiter token, not the event loop, so an `async def` poll is
+flat at any blocker count, and a `def` poll is flat until concurrent offloaded handlers exceed the
+limiter. In `falkor-chat` that threshold is **100** —
+`to_thread.current_default_thread_limiter().total_tokens = config.THREAD_LIMIT` at
+`falkor-chat/server/falkorchat/app.py:369`, `THREAD_LIMIT` defaulting to 100 at `config.py:247`
+(read 2026-09-09) — so a saturation level prescribed below that threshold leaves the poll path
+uncontended for tokens, and a latency bound written against it has nothing to detect, whichever
+statistic it uses. Check the prescribed load against the limiter before judging the statistic.
+
+**The review question**, then, is not *is this done-condition measurable* but **what would have to
+happen for it to go red, and is that the failure the plan is worried about.** A statistic chosen
+for stability is chosen against the failure mode.
+
+Origin: `analyst` kaizen `8fe1fcc5…` (2026-09-09), gating v1.32 of `docs/plans/salesperson-ui.md`,
+whose S9 row had replaced an untestable "poll latency unaffected" clause with a two-sided median
+bound.

@@ -3,6 +3,120 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
+## 2026-09-09 — `kaizen_team` distillation pass 2, unit U37: the 5-entry `analyst` inbox — 4 promoted, 1 discarded
+
+- **What:** unit U37 of `claude/docs/plans/kaizen-distillation2-coordination.md`. `analyst`'s
+  produced inbox was re-queried at dispatch and held exactly **5** entries, all dated 2026-09-09,
+  all read in full on the complete 36-character `entryId` (each `fact`/`evidence` field paged past
+  the tool's ~300-char cell truncation with `substring(…, 250)`). Three of the five are about work
+  this same pass gated (the `rq()` execution gate, U28–U33), so the **discard bar** was the unit's
+  real subject. **5 entries → 4 edits** across 2 files: one clause on an existing `analyst.md`
+  bullet, one paragraph folded into an existing `review-techniques.md` section, and two new
+  sections there. Dedup check run on all five ids: none appears anywhere under `claude/`,
+  `skills/` or `docs/`.
+- **`a7e42b90-6c31-4d58-b0f2-93ad5e716c88` + `e2b95c47-8f13-4a06-bd71-2c4f80a9e153` → one merged
+  `review-techniques.md` section**, *"The remedy a finding hands over is the least-verified thing
+  in the review"*. They are two shapes of one defect, from adjacent passes of one gate: a remedy
+  that **cannot execute** at the call-site shape it targets (`rc=$?` inside `if ! V="$(f)"`), and a
+  remedy **gated on an enumeration** the reviewer thought of. Re-derived rather than quoted, three
+  arms on `bash 5.2.21`: `if ! V="$(f)"; then rc=$?` reads `0` for a callee returning 1 **and** for
+  one returning 2; `if ! f; then rc=$?` — no substitution at all — also reads `0`; plain
+  `V="$(f)"; echo $?` reads `2`. So the entry's attribution is right and sharper than it looks —
+  the `if !` consumes the status, the substitution is innocent, and dropping the substitution does
+  not repair the call site. The `else` branch reads `1`. Also confirmed: `exit N` inside `$(…)`
+  kills only the substitution subshell (script continues, outer exit 0) while the substitution's
+  own status is `N`. The enumeration half's closing figures were counted in the delivered probe,
+  not carried from the entry: `skills/joern-cpg/scripts/test-stamp-wiring.sh`'s `FORMS` heredoc
+  holds **36** rows on **three** axes (A1–A15, B1–B15, C1–C6) with **6** marked `blind` (A14, B6,
+  B8, B9, B12, B15) — the entry said 35, which was true when it was written and was raised to 36 by
+  U33's `B15`.
+- **`e2b95c47…` additionally → `analyst.md`, one clause on the existing Findings bullet.** That
+  bullet already governs *authoring a recommendation* ("when the improvement you suggest is a new
+  guard or assertion, say where it goes"); the new clause is the supply side of a demand `teco.md`
+  already makes on this agent — its §"A repeated gate has a decidable stopping signal" tells the
+  coordinator to **ask the reviewer for a falsifiable stopping condition**, and nothing told the
+  reviewer what disqualifies one. Handoff symmetry, not a new duty: *where the remedy is a set of
+  cases to close, require a coverage probe over the axes the artifact varies on — never hand over a
+  list of shapes.* Rule plus one clause of why; the mechanism, the probe's construction and the
+  cross-reference to `claude/tdd-engineer/guard-testing-techniques.md` §1 stay in the knowledge
+  base. `analyst.md` gained **no new bullet**.
+- **`8fe1fcc5-fbc1-418e-ab6b-0fb6f0d8fe20` → `review-techniques.md`, new section** *"A
+  done-condition stated as a MEDIAN cannot fail on a burst"*. **Routing call, argued rather than
+  inherited:** the nearest sibling rule in the team is `qa-engineer`'s
+  `qa-testing-techniques.md` §"A 'every label still has a survivor' done-condition cannot catch an
+  over-broad delete", so `qa-engineer` was the live alternative. Ruled to `analyst` on the
+  catalogs' own words — `claude/AGENTS.md` describes `review-techniques.md` as *review-methodology
+  techniques* and `qa-testing-techniques.md` as *environment/tooling techniques* — and on the
+  activity: this fires when a plan's done-condition is **written or gated**, which is where the
+  instance was caught, not when a test is executed.
+- **Re-derived, not inherited.** The entry's harness was gone with its scratchpad, so a scaled-down
+  one was built and run twice on `falkor-chat/server/.venv` (fastapi 0.139.0, starlette 1.3.1,
+  uvicorn 0.49.0, anyio 4.14.1): uvicorn app, thread limiter **4**, a 1 s blocking `def` handler,
+  21 sequential poll samples 50 ms apart under a burst. With the poll path offloaded and 12
+  blockers, poll median **1.81 ms — 0.90× baseline** — while max reached **2851.81 ms**; both runs
+  agreed (first run 1.47 ms / 2855.58 ms against its own 1.91 ms baseline). The median does not
+  merely fail to redden, it moves the **wrong way**. The probe also added a condition the entry's
+  one-line claim omits: an `async def` poll is flat at 3× the limiter (max 2.57 ms), because a
+  blocked sync handler holds a limiter token and not the event loop — the threshold effect needs
+  the poll path itself offloaded. `falkor-chat`'s limiter figure was read, not recalled:
+  `app.py:369` assigns `config.THREAD_LIMIT`, default **100** at `config.py:247`.
+- **`b7e2f6c1-9a3e-4c2a-8f1d-3e5b6a7c9d10` → `review-techniques.md`, folded into the existing
+  §"A grep-pinned edit table is an edit list, not a completeness proof", caution paragraph. Half
+  promoted, half discarded.** Its first half — *re-run a plan's grep at its stated baseline with
+  `git grep <rev>`, read-only* — is **already** that paragraph's rule (*"Re-derive at a sha, or say
+  that you could not"*), and three of that section's six citations are already `git grep` at a
+  pinned sha; nothing to add. What was unrecorded is the dialect trap, and it is the half that
+  bites: default `git grep` is BRE, where `(` is literal, so porting a plain pattern into `-E`
+  errors instead of matching. Re-derived at `c523a35` (an explicit sha —
+  `model-bench/` is under another session's live work): `git grep -E 'isinstance(.*BinaryMetric'`
+  → `fatal: … Unmatched ( or \(`, **exit 128**; the same pattern without `-E`, and with the paren
+  escaped under `-E`, both return `report.py:3` + `results.py:3` = the plan's stated 6. **Its own
+  `suggestedHome` ("`skills/cpg-analysis` or a general grep tips note; low priority") was
+  declined** — the repo has no general shell-tips knowledge base, `cpg-analysis` is about querying
+  a CPG rather than grepping a worktree, and a new top-level skill for one sentence is exactly the
+  fragmentation the catalog exists to prevent. It belongs to the section that already tells a
+  reviewer to re-run an enumerating command.
+- **Discarded (1): `c3d81f7a-2b45-4e69-9a0d-51f7c8b2e604`** — FalkorDB's `RESULTSET_SIZE` truncating
+  silently while still emitting a full statistics trailer at rc 0. **Already published, including
+  the narrow sub-claim.** The place a reader looks is
+  `claude/graph-dba/falkordb-quirks.md`, and its `RESULTSET_SIZE` bullet — **read in full, lines
+  710–724, not grepped** — carries both halves: the cap itself (2026-07-30) and, added 2026-09-09,
+  *"A capped reply is structurally indistinguishable from a complete one … The trailer therefore
+  proves the server **ran the query to completion**; it does **not** prove the reply carries every
+  matched row"*, with the row count named as the caller's only completeness check. The
+  distinction the entry draws against a mid-stream runtime error is stated in the neighbouring
+  trailer-discriminator bullet (lines 793–800), which cites the `RESULTSET_SIZE` bullet by name to
+  bound itself. The same fact is stated a third time at the point of use, in
+  `skills/joern-cpg/scripts/pipeline.sh`'s gate comment, and a fourth in `cypher-mcp/README.md`.
+  `claude/graph-dba/kaizen/history.md:338` records that this bullet **answered `analyst`'s own open
+  question in the negative** — it predated the question. Re-derived anyway, since the discard is
+  only sound if the published text is true: `GRAPH.CONFIG GET RESULTSET_SIZE` → `10000`;
+  `UNWIND range(1,200000) AS x RETURN x` → exit 0, **10003** lines, last data row `10000`, last
+  line `Query internal execution time: 8.257538 milliseconds`; `UNWIND [1,0] AS x RETURN 1/x` →
+  the single bare line `Division by zero`, exit 0, no trailer.
+- **Graph:** every entry read, then its history disposition written, then counted, then cleared —
+  in that order. All five: `producedEdges = 1`, `mentionEdges = 0` ⇒
+  `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node `DETACH DELETE` on the complete `entryId`. No
+  `MENTIONS` tag was added by this unit (the `8fe1fcc5` routing question was **decided** here, so
+  tagging `qa-engineer` would have queued a resolved entry — U31's finding that the tag has no
+  consumer applies).
+- **Budget:** `review-techniques.md` **9,867 → 11,003 w** (+1,136), **27 → 29** sections, no line
+  over 700 characters; `analyst.md` **2,656 → 2,699 w** (+43), bullet count unchanged, its host
+  bullet 1,057 → **1,276** characters — that line was already one of this prompt's seven over the
+  ~700-char density smell before this edit, and the smell is written for `*AGENTS.md`, not agent
+  prompts; a compaction pass over `analyst.md` is a separate piece of work, not this unit's.
+  `claude/AGENTS.md`, `skills/README.md` and root `AGENTS.md` **unchanged** — no knowledge base was created, renamed or
+  re-scoped, no skill touched, and `claude/AGENTS.md`'s description of `review-techniques.md`
+  (*"review-methodology techniques consulted on demand"*) already covers what landed. It stands at
+  **2,491 words** against its own ~2,500 smell and this unit did not add to it.
+- **One catalog gap fixed, found by checking rather than assumed:** `claude/README.md`'s `analyst`
+  row was the **only** KB-carrying agent's row that never named its knowledge base — `tdd-engineer`
+  (two), `qa-engineer`, `data-scientist`, `devops` and `graph-dba` all do. One clause added, in the
+  house phrasing. That is the per-edit duty (the catalog entry for the artifact this unit edited),
+  not a reconcile pass.
+- **Docs touched:** `claude/analyst/{analyst.md,review-techniques.md,kaizen/history.md,kaizen/plan.md}`,
+  `claude/README.md`.
+
 ## 2026-09-09 — `review-techniques.md` + `analyst.md`: 4 inbound `MENTIONS` promotions from the orphan backlog (U31)
 
 - **What:** U31 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the **orphan-backlog** unit, the first shaped by *edge* rather than by producer. The 11 nodes it covers carry **0 `PRODUCED` edges** and are alive only on `MENTIONS`; every earlier unit was organised by producer, so none of them could ever have been reached. `analyst` carried **4** of the 12 edges, all tagged by `teco`'s U17/U18/U18b after that agent promoted each entry's coordinator-facing half into `teco.md`. All four promoted; **zero new sections** in `review-techniques.md` (27 before, 27 after) and **zero new bullets** in `analyst.md`.

@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `analyst` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-09-08 (kaizen_team distillation pass 2, chunks A-F / U19-U24)
+> Last reviewed: 2026-09-09 (kaizen_team distillation pass 2, unit U37)
 
 ## Active
 
@@ -36,6 +36,18 @@
 - **Blocked on:** nothing, but it is the analyst-side analogue of `K-016` progressive disclosure and deliberately out of scope for the prompt-waste plan (its finding 6 routes floor-bound files here rather than to cutting rules to reach a number).
 
 ## Parking lot / ideas
+- **No `analyst` backlog item opened by U37 (2026-09-09, 5 entries).** Four promoted, one
+  discarded as already published; nothing unresolved, so nothing needs a `K-`number. Dedup check
+  run on all five `entryId`s — none appears in this file. Dispositions: `kaizen/history.md`,
+  2026-09-09.
+- **Idea, not a defect: "a done-condition that cannot fail" rules now sit in two agents' knowledge
+  bases with no stated criterion for which.** `review-techniques.md` holds the median-latency rule
+  (U37) and the grep-residual rules; `qa-engineer`'s `qa-testing-techniques.md` holds the
+  survivor-label rule, under a catalog line that calls that file *environment/tooling techniques*.
+  U37 ruled its own entry by activity — the rule fires where a done-condition is **written or
+  gated**, not where a test is executed — which is a usable criterion but is currently recorded
+  only in a history entry. Worth stating in whichever file is touched next, or in `claude/AGENTS.md`
+  if the two catalog lines are ever revised together.
 - **No `analyst` backlog item opened by the 2026-09-08 distillation (U19-U24, six chunks, 69
   entries).** Every entry resolved to a promotion, a discard, or — once, in U24 — a kept-open item
   filed against **another** agent's plan, so nothing here needs a `K-` number. Dedup check run as
