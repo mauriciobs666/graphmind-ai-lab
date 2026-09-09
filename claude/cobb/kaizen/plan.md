@@ -21,9 +21,9 @@
 | K-021 | 2026-09-07 | medium | 🔵 | Validate `entryId` **shape** in the `cypher-mcp` producer-write authorizer — a malformed or colliding id is load-bearing for the curator-clear path. Content validation deliberately **not** proposed. |
 | K-022 | 2026-09-08 | high | 🔵 | The **wrong-rather-than-absent** defect class now has **eight** instances — three values, **four prose**, and one **executable** (a test oracle that certified the wiring while structurally unable to see a wiring defect). The 2026-09-08 tombstone sequence isolates the mechanism: three certifications written in the same act as the fix they certify, **all three since corrected** — a retraction launders credibility onto whatever sits next to it. Decide at the next certification pass whether this is one rule or three; the candidates are now specific — an `agent-maintenance` §7 lint check (*verify the reason, not just the rule*; *a tombstone certifies nothing*) and a mutation standard (*the mutant worth running is the design that was rejected*). |
 | K-024 | 2026-09-08 | medium | 🔵 | Two documents outside cobb's remit still describe the `:CpgBuildInfo` marker as it was before K-023. **The debt changed kind, not size** — do NOT add the five hand-authored keys to any schema table: the stamp never writes them, and after the map form they are not even named in the code. `docs/plans/cpg-agent-adoption-graph.md` §1.1 owes (a) the **eight** properties the stamp writes, (b) full 40-char OIDs rather than "short SHA", (c) the correction that its code block documents the superseded `SET b.X = …` write semantics, and (d) the schema-level fact this arc established — **the marker's property set is closed by construction**, so `:CpgBuildInfo` cannot be extended by any writer other than the stamp (**`architect`**; per the doc convention an executed-against plan takes a successor or a header pointer, not an edit). `docs/manuals/graph-ontology.md` needs the same shape update plus gate finding **P4-3** — its FAQ classifies on the `PROVENANCE` literal alone and never on `MARKER_ORIGIN`, so a hand-authored marker reads as a pipeline stamp to a manual-only reader (**`tico`**). Both route via `teco`; neither is cobb's to write. |
+| K-025 | 2026-09-09 | high | 🔵 | A `MENTIONS` tag writes an obligation into a queue with no consumer: a distillation unit is scoped `MATCH (a:Agent {agentId})-[:PRODUCED]->(e)`, which by construction cannot see a `MENTIONS`-only node. 11 such nodes accumulated across 7 agents and 2 passes; **six** of those agents were recorded "closed out, 0/0" while still holding an unrouted edge. Two candidate fixes — scope a unit by *either* edge kind, or stop letting the tag imply a promotion. |
 | K-026 | 2026-09-09 | medium | 🔵 | `python-web-quirks` now carries **two** `TestClient` sections (teardown task-cancellation; the default `raise_server_exceptions=True` re-raising into the caller), deliberately unmerged because the mechanisms, consequences and fixes differ. They are bound by a shared opening line naming the class. **On the third such entry, promote that line to a parent heading with sub-sections — do not add a third flat sibling.** |
-| K-027 | 2026-09-09 | medium | 🔵 | `6b0a401` removed the reciprocal skill-routing clause from all four `python-web-quirks` consumer prompts, so a skill's own `description` is now the **only** routing surface — and that one had gone stale, omitting `qa-engineer` while `qa-engineer` produced entries on its subject. Nothing in `audit-team.sh` or §§3/4 audits a skill's audience list. Add it to the §4 pass. |
-| K-028 | 2026-09-09 | high | 🔵 | `python-web-quirks`' `description` is **4,584 chars** against the **1,536-char** skill-listing budget (verified against `code.claude.com/docs/en/skills`; this session's own listing cuts it at 1,534). Two thirds of it — including the audience clause at the end and every fact clause appended by U7b/U8/U9/U12/U22/U35 — never reaches a router. Body promotions are unaffected. Reorder, compress, or split; and make budget-checking part of §5. |
+| K-029 | 2026-09-09 | high | 🔵 | **Nothing audits a skill's frontmatter — that it parses, fits the 1,536-char listing budget, and names the right audience. One missing check, not three** (consolidates K-027 + K-028 + U36's parse finding; no content dropped). The three are the same gap seen three ways, and the budget is what makes the other two moot: `python-web-quirks`' description is **4,584 chars**, so U35's audience fix sits ~3,000 chars past the cut and reaches no router. Carries a remediation (that description) and a check (`audit-team.sh`), plus the instrument caveat that strict YAML is the **wrong** parser to audit with. |
 | K-019 | 2026-08-21 | **high — filed upstream** | 🔵 | **Systemic, now confirmed matcher-agnostic too. `PreToolUse` "ask" hooks do not reliably pause execution in this session under Auto Mode, on either `Bash` or `Write`/`Edit`, regardless of hook source or execution context.** Four independent, isolated live tests, 2026-08-21, Claude Code 2.1.238, all under Auto Mode: (1) `graph-dba`'s own frontmatter `Bash` hook, Task-dispatched with `subagent_type` explicitly correct — didn't fire. (2) The identical guard mirrored as a session-wide `.claude/settings.local.json` `Bash` hook, run from `cobb`'s own **main session** — didn't fire. (3) Same test repeated after the user explicitly reloaded hook config via `/hooks` (visibly listed as registered, `[Local] Bash — 1 hook`) — still didn't fire. (4) **`cobb`'s own frontmatter `Write`/`Edit` hook** (`guard-cobb-topic-writes.sh`) — a `Write` to a path plainly outside cobb's allowlist (`docs/_hook_test_k019_scratch.md`) went through with zero interruption; re-fed the exact real payload to the script directly afterward and confirmed it correctly returns `ask` for that path. **Every test used a real, disposable payload (scratch graph or scratch file, immediately cleaned up) and independently pipe-test-confirmed correct hook logic** — ruling out `subagent_type` omission, stale config, hook-not-registered, and matcher-specific quirks as explanations. **Working hypothesis:** Auto Mode's classifier layer silently resolves/overrides a correctly-emitted `ask` decision before a human ever sees it, across both tool matchers tested. **Filed upstream 2026-08-21** via `/feedback` (user-submitted, confirmed "Feedback / bug report submitted") with the 3-test Bash repro; the 4th (Write/Edit) test landed after filing, not yet included in a follow-up report. **Practical consequence, effective immediately: every "harness-enforced" Guardrails claim across every guarded agent in this team — all three destructive-ops guards, all eight doc-write allow-list guards, the one broad-write deny-list guard — is currently unverified, and actively disconfirmed on the two mechanisms tested, under Auto Mode, in every execution context tried.** Not yet tested: the Write/Edit + Task-dispatched-subagent combination specifically (all 4 tests covered 3 of the 4 matcher×context cells) — very likely shares the gap given the pattern, not confirmed. **Next steps:** (1) monitor for an Anthropic response to the filed report; (2) treat this as the standing state of the team's enforcement model — Auto Mode being off is the only known workaround, untested/not decided; (3) fill the last untested cell (Write/Edit, subagent-dispatched) if a clean answer is ever needed before Anthropic responds. |
 
 ### K-001 — Re-verify standards against live docs
@@ -277,190 +277,89 @@
   generator (every `TestClient` convenience is a divergence from a real client).
 - **Cheap check:** `grep -c '^## .*TestClient' skills/python-web-quirks/SKILL.md` — currently 2.
 
-### K-027 — A skill's own `description` is the only routing surface left, and nothing audits its audience list
-- **Status:** 🔵 proposed
-- **Priority:** medium
-- **Origin:** U35, 2026-09-09 — surfaced ruling on `python-web-quirks`' audience line.
-- **The finding.** `6b0a401 chore(claude): trim agent frontmatter descriptions` removed the
-  reciprocal `python-web-quirks` routing clause from all four consumer prompts; `grep -rn
-  'python-web-quirks' claude/*/*.md` now returns nothing. The trim is defensible on its own terms
-  (skills are discovered by their own description, so the clause was redundant), but it makes the
-  **skill's `description` the sole signal any router sees** — and that description had gone stale:
-  it named `coder, tdd-engineer, architect, analyst` while `qa-engineer` was producing kaizen
-  entries about the skill's own subject matter and had no route to the file. U35 fixed this one
-  instance in all four places the list is stated.
-- **Why it recurs.** An audience list is a *cross-artifact* claim (which agents should load this)
-  living inside a *single* artifact's frontmatter, restated in three catalogs. Nothing in
-  `audit-team.sh` or §3/§4 checks it: §3 audits catalogs against disk, §4 audits agent-to-agent
-  interfaces — a skill's audience list is neither.
-- **Proposed change.** Add a check to the §4 certification pass: for each skill in `skills/`, read
-  its `description` audience clause and ask whether any agent *outside* the list has produced a
-  kaizen entry, prompt clause, or knowledge-base section in that skill's subject area. Consider
-  also asserting the list is stated identically in `SKILL.md`, `skills/README.md` and root
-  `AGENTS.md` — that triple is greppable and drifted here.
-
-### K-028 — `python-web-quirks`' description is 4,584 chars against a 1,536-char listing budget, so two thirds of it never reaches a router
+### K-029 — Nothing audits a skill's frontmatter: that it parses, fits the listing budget, and names the right audience
 - **Status:** 🔵 proposed
 - **Priority:** high
-- **Origin:** U35, 2026-09-09 — found while verifying that U35's own audience-line fix would work.
-  It does not, in the frontmatter half.
-- **The mechanism, verified 2026-09-09 against `code.claude.com/docs/en/skills`:** *"the combined
-  `description` and `when_to_use` text is truncated at 1,536 characters in the skill listing to
-  reduce context usage."* No error is raised, the skill still loads, and the **body** is unaffected
-  — only the listing, which is the text a router reads to decide whether to invoke the skill at all.
-- **Measured, not inferred.** `python-web-quirks`' description is **4,584 characters**. This
-  session's own available-skills listing cuts it mid-clause after **1,534** — matching the
-  documented budget. Sibling skills sit inside it: `cpg-analysis` 1,003, `agent-maintenance` 947,
-  `joern-cpg` 555. This one skill is the outlier, at 3x the budget.
-- **What that means for work already done.** Everything appended past char ~1,536 is invisible to
-  routing — which includes the audience clause at the very end (the `coder, tdd-engineer, architect,
-  analyst, qa-engineer` list), and the fact clauses added by U7b, U8, U9, U12, U22 and U35. Those
-  units' **body** promotions are fine; their description extensions are not. U35's audience fix
-  survives in the three prose catalogs (`skills/README.md`, root `AGENTS.md`, `claude/README.md`),
-  which are read as documentation and are not truncated.
-- **Why it is not fixed here.** Compressing 4,584 → 1,536 means deleting roughly two thirds of an
-  enumerated fact list that six prior accepted distillation units deliberately built, in an artifact
-  five agents load. That is a scope and restructuring decision for a coordinated unit, not a rider
-  on a one-entry distillation.
-- **Three candidates, in increasing cost:**
+- **Origin:** U35 (the audience list, the budget) and U36 (the parse, the consolidation),
+  2026-09-09. **Consolidates and closes K-027 and K-028** — no content was dropped; those two IDs
+  are retired and never reused (`history.md`, 2026-09-09).
+- **Why one item and not three.** All three are the same missing check on the same six lines of
+  YAML, and they are not independent: the budget is what makes the other two moot. U35 corrected
+  `python-web-quirks`' audience clause in all four places it is stated — and that clause sits at
+  the very **end** of a 4,584-character description, roughly 3,000 characters past the cut, so no
+  router has ever read it. Auditing the audience list without auditing the budget certifies a
+  string nothing reads.
+
+**(a) The budget — the instance, and it is real.** Verified 2026-09-09 against
+`code.claude.com/docs/en/skills`: *"the combined `description` and `when_to_use` text is truncated
+at 1,536 characters in the skill listing to reduce context usage."* No error is raised, the skill
+still loads, and the **body** is unaffected — only the listing, which is the text a router reads to
+decide whether to invoke at all. Measured with `yaml.safe_load`, not raw text (see (d)):
+`python-web-quirks` **4,584**; siblings all inside budget — `cpg-analysis` 1,003,
+`agent-maintenance` 947, `joern-cpg` 555, `agent-standards` 475. This session's own listing cuts
+`python-web-quirks` mid-clause at **1,534**. Everything past ~1,536 is invisible to routing: the
+audience clause, and the fact clauses added by U7b, U8, U9, U12, U22 and U35. Those units' **body**
+promotions are unaffected; their description extensions are not, and U35's audience fix survives
+only in the three prose catalogs (`skills/README.md`, root `AGENTS.md`, `claude/README.md`), which
+are documentation and are not truncated.
+
+- **Not fixed as a rider, deliberately.** Compressing 4,584 → 1,536 means deleting roughly two
+  thirds of an enumerated fact list six accepted distillation units deliberately built, in an
+  artifact five agents load. Three candidates, increasing cost:
   1. **Reorder, delete nothing** — move the audience clause and the highest-value triggers into the
-     first 1,536 chars. Cheapest, non-destructive, and matches the doc's own advice to *"put the key
-     use case first"*; but it silently concedes that the rest is decoration.
+     first 1,536 chars. Cheapest, non-destructive, matches the doc's own *"put the key use case
+     first"*; concedes the rest is decoration.
   2. **Compress to a routing description** — the description's job is *when to invoke*, not *what is
-     inside*. Replace the fact enumeration with a short trigger list plus categories, and let the
-     body carry the facts (it already does, in full). Most correct; largest single edit.
-  3. **Split the skill** — e.g. web/async framework quirks vs. pytest/test-harness traps, two
-     packages each with a description inside budget. Also fixes the growing-forever problem that
-     produced this, and would give the test-harness half a natural home for K-026's `TestClient`
-     family.
-- **Standing rule to add either way:** a distillation unit that promotes into a skill must check the
-  description against the budget rather than appending to it by reflex. Fold into
-  `skills/agent-maintenance/SKILL.md` §5's routing step, and consider a `audit-team.sh` check
-  (`description` length per `skills/*/SKILL.md` ≤ 1,536) — that one is trivially greppable.
+     inside*. Replace the fact enumeration with a trigger list plus categories; the body already
+     carries every fact in full. Most correct, largest single edit.
+  3. **Split the skill** — web/async framework quirks vs. pytest/test-harness traps, two packages
+     each inside budget. Also fixes the grows-forever property that produced this, and gives
+     K-026's `TestClient` family a natural home.
 
-## Parking lot / ideas
-- **`bypassPermissions` revert landed (U3, 2026-09-01)** — `.claude/settings.json`'s
-  `defaultMode: "bypassPermissions"` pin removed (left unset, resolving to the global `auto`
-  default), the three `allow`/`ask` rules kept unchanged, the KB entry actually written into
-  `skills/agent-standards/claude-code.md`'s `## Hooks` section (the header stamp had been
-  forward-referencing it since the Gen 4 design session, but the entry body didn't exist until
-  now), and the strengthened upstream-feedback text drafted (not submitted) to
-  `claude/cobb/kaizen/upstream-feedback-draft-bypass-permissions-subagent-gap.md`. **U4
-  (`analyst`'s implementation review) is still queued** per the coordination ledger — that's
-  the remaining open step in this family, not anything of cobb's own. Left as an untracked
-  reminder rather than a formal K-item since U4 belongs to `analyst`/`teco`, not to cobb's own
-  backlog.
-- **Extend the independent-review-gate practice to `cobb.md` self-edits specifically (surfaced
-  2026-08-20, `Q2`'s D-1 finding + its own fix).** `Q2`'s closing acceptance pass
-  (`docs/test-reports/generic-cypher-mcp2-report.md`) found `cobb.md` had shipped a self-edit
-  (the M7 `C-cobb` "Learning capture" retarget) that only touched one of two affected sections,
-  leaving lines 65/71 stale and self-contradictory — undetected because no independent reviewer
-  ever read that diff (the self-edit carve-out, §3.7 of `docs/plans/generic-cypher-mcp2.md`, makes
-  `cobb` both author and sole editor of that one file). The fix for D-1 (this same 2026-08-20,
-  `history.md` above) is **itself** another unreviewed `cobb.md` self-edit — the exact shape most
-  likely to repeat the miss. Cheap mitigation the report proposes: whenever a self-edit unit
-  closes, route a one-line "did every section I was supposed to touch actually change?" grep-diff
-  check to a second agent. Not actionable unilaterally (no reviewer in a direct, non-`teco`
-  dispatch) — raise with `teco` next time a `cobb.md` touch is coordinated, or self-apply the
-  grep-diff check as a matter of discipline even without a formal second reviewer.
-- **`kaizen/inbox.md` headers are enforced-frozen in practice, not just by written convention
-  (surfaced 2026-08-20, M7 `C-<agent>` header-retarget attempt).** `docs/plans/generic-cypher-mcp2.md`
-  §4.2/P3-M3 reasoned that a header note's *prescriptive* clause (the copy-pasteable
-  `mcp__cypher__query(graph='kaizen_<agent>', ...)` pointer) was safely editable because each
-  header's own immutability promise is scoped to "Content below," not the header itself — a
-  textually sound argument, gated through 3 plan-review passes. Live execution disagreed: the
-  permission system denied 3 of 4 attempted edits outright ("this is frozen"), and the stakeholder,
-  relayed through `teco`, then directed dropping the header-retarget half entirely and reverting the
-  one edit that had already landed (`teco`'s). **Don't plan future work that treats the "Content
-  below" scoping argument as actionable without re-confirming live first** — a textual carve-out in
-  a doc is not the same thing as a carve-out the actual permission gate (or the stakeholder) will
-  honor at execution time. If a future delivery genuinely needs a frozen `inbox.md` header touched,
-  raise it as its own small, explicitly-flagged ask rather than folding it into a larger unit's
-  done-condition.
-- **Redirected from `teco`'s 2026-08-12 inbox entry (distilled 2026-08-15):** a directly-invoked
-  (non-`teco`-coordinated) large sweep I ran — the 39-file full-team kaizen-inbox distillation,
-  gated "needs changes" by `analyst` — had no coordination ledger, and the session that ran it hit
-  a mid-run credit exhaustion before the fix pass was dispatched. Recovery only worked because the
-  review (`docs/reviews/kaizen-inbox-distillation2.md`) was self-sufficient: explicit baseline
-  commit + explicit file scope, `analyst`'s standing review-header practice. **Not filed as a
-  prompt change** — one data point, no repeat, and the safety net that saved it is already
-  standard practice, not a gap. Parking here as a reminder: if I (`cobb`) ever run another large,
-  review-gated, directly-invoked (not `teco`-routed) sweep, keep that same discipline (explicit
-  baseline + scope in whatever review/report anchors the work) rather than assuming it'll survive
-  on vibes — and if this pattern repeats, it graduates from parking lot to an actual guardrail.
-- From the 2026-08-09 self-review during the C-308/C-312/C-319 skill-review pass
-  (`docs/reviews/cpg-followups-skills-impl.md`): the C-319 promotion compressed two independently
-  true, parallel "cwd-independent" facts (`.mcp.json` discovery walk-up; `${CLAUDE_PROJECT_DIR}`
-  expansion) into one causal clause ("stays uniform via ...") that the source evidence never
-  established. General lesson for future inbox distillations (§5): when promoting a fact that
-  echoes or sits next to another fact in the doc, keep them stated as separate claims unless the
-  *mechanism link* between them was itself verified — don't add connective "via"/"because" prose
-  as free editorial polish. Consider adding a line to §5's procedure about this specific failure
-  mode (causal-compression during promotion) if it recurs.
-- From the 2026-08-09 independent review of `analyst`'s inbox-distillation pass
-  (`docs/reviews/analyst-inbox-distillation.md`): consider a sub-list format for `analyst.md`'s
-  "Evidence over vibes" Guardrails bullet (now 5 sub-rules in one run-on sentence after four clause
-  extensions) to restore scannability without adding to the bullet count. Also: `claude-code.md`'s
-  top-of-file `Verified:` stamp block could gain a one-line pointer to the new "Bash tool
-  environment" section (observed-not-doc-sourced, so it doesn't fit the existing dated-doc-citation
-  pattern, but a reader skimming only the header wouldn't know the section exists).
+**(b) The audience list — a cross-artifact claim with no cross-artifact check.** `6b0a401 chore(claude):
+trim agent frontmatter descriptions` removed the reciprocal `python-web-quirks` routing clause from
+all four consumer prompts (`grep -rn 'python-web-quirks' claude/*/*.md` now returns nothing). The
+trim is defensible — skills are discovered by their own description — but it leaves that
+description the **sole** routing signal, and it had gone stale, naming `coder, tdd-engineer,
+architect, analyst` while `qa-engineer` was producing kaizen entries on the skill's own subject.
+Nothing checks this: §3 audits catalogs against disk, §4 audits agent-to-agent interfaces; a
+skill's audience list is neither. The list is also stated in `SKILL.md`, `skills/README.md` and
+root `AGENTS.md` — a greppable triple that drifted here.
 
-- **All 13 agents' `permissionMode: acceptEdits` frontmatter is confirmed dead configuration for
-  controlling their own top-level starting mode (surfaced 2026-08-24,
-  `claude/docs/plans/permission-default-mode.md`).** The documented session-start decision order has
-  no frontmatter step; `~/.claude/settings.json`'s explicit `"defaultMode": "auto"` is what actually
-  decides it, every time. Decide: remove the misleading line team-wide (13-file edit, its own
-  blast-radius question — a stakeholder call, not unilateral), or leave it as declared intent for a
-  future dispatch-time inheritance case (parent in `default`/`plan`/`dontAsk`, currently never
-  arising since every parent starts in `auto`). Not urgent — the field being inert doesn't currently
-  cause a behavior regression, just misleading configuration.
-- **The graph-shaped Learning-capture template is the floor now (noted 2026-08-20).** The
-  2026-08-19 verbosity pass had cut the near-identical "Learning capture" section (~1,500 w across
-  13 files) by pointing each agent's paragraph at its own `kaizen/inbox.md` header. That option no
-  longer exists: capture is graph-shaped, and the inline `mcp__cypher__query` template is verbosier
-  than either prior state — a deliberate trade of prompt leanness for mechanism consistency.
-  Recorded so the next verbosity pass over this section doesn't rediscover the file-pointer fix and
-  find it unavailable. The one unexecuted slice of that pass is **K-017** (Active table).
-- From the 2026-08-12 corrective pass fixing `analyst`'s gate on the 2026-08-11 distillation
-  (`docs/reviews/kaizen-distillation-2026-08.md`): a raw inbox entry can leak the maintainer's
-  home path/username into a tracked file the moment an agent *appends* it — before any
-  distillation ever runs, since `kaizen/inbox.md` is itself a tracked file and an entry's
-  `**Evidence:**` line often quotes a live shell command's literal output (`ls -la ~/.claude/
-  agents` prints the real symlink target). Caught here only because `audit-team.sh` check 7 was
-  re-run incidentally, not because anything in the distillation-review workflow prompts for it.
-  Worth deciding whether check 7 (or a lighter version of it) should run as part of *any* agent's
-  closing protocol when it appends an inbox entry that quotes command output, not just at
-  distillation time — candidate for `agent-maintenance` §5 or the "Learning capture" boilerplate
-  itself.
-- **A `fork` subagent can drift into narrating the parent's own already-completed work instead of
-  its assigned directive (observed 2026-08-21, team certification's §7 lint fold-in).** One of
-  three forks, each given an explicit, narrow directive (§7 lint on 4 named files), came back
-  reporting a status summary of *my own* preceding work instead of any finding about its assigned
-  files — plausible mechanism: a fork inherits the full parent transcript, and this one launched
-  right after a transcript stretch dense with the parent's own narrated fixes, which may have
-  pulled its generation toward continuing that narration. Handled by treating the result as
-  unverified and doing the bounded piece directly rather than re-forking blind. One data point —
-  not promoted to a `kaizen_team` entry yet (see `claude/cobb/kaizen/history.md`, 2026-08-21
-  certificate entry, for the full reasoning). If this recurs, it's worth: (a) a `kaizen_team`
-  entry, and (b) a prompting mitigation — e.g. explicitly telling a fork mid-directive "ignore
-  what the parent session already did; your only output is findings on these N files."
-- Maintain a small catalog of agents/skills Cobb has authored, cross-linking their kaizen files.
-- The §7 prompt-lint is judgment-only by design; if a *deterministic* pre-check for a single artifact ever proves cheap (frontmatter valid, description non-empty, no personal identifiers), consider a small script assist — but keep the seven semantic dimensions in the skill, not a grep. *(Noted 2026-07-16 during the §7 build; the composition load-set enumerator the design floated was skipped as not-cheap-enough.)*
-- **Root `AGENTS.md` is 2,729w, over the ~2,500w budget its own new Context-file convention sets
-  (2026-09-02).** The cause is not the new rule (257w) but the **Module documentation
-  convention** bullet: **1,539w, 56% of the whole file**. Compacting it is a real judgment call
-  — it encodes the doc-family grammar, the closed `Status:` set and the by-kind owner table that
-  several agents depend on — so it needs its own scoped pass with the user, likely splitting the
-  reference tables (owner routing, status tokens, filename grammar) into a progressively-loaded
-  doc that the context file cites, keeping only the rules an agent must hold resident.
-- **Enforcement for the context-file convention was explicitly declined (2026-09-02).** User
-  chose rule-only over the offered `claude/scripts/audit-context-files.sh` + `PostToolUse` hook.
-  The rule ships with a one-line `awk` bar instead. This is the class of rule that already
-  failed seven consecutive times unenforced — if the bar is breached again, re-offer the script
-  (cheap: line-length + word budget + append-tell patterns over `git ls-files '*AGENTS.md'`).
-- **A duplicated narrative drifts in the copy nobody re-reads (2026-09-02).** `falkor-chat/
-  AGENTS.md`'s salesperson row and `proof_defs.py:170-250` held the same version history; the
-  *code* copy is the authoritative one and was the one that went stale (`v1→v4`, "FOUR sibling
-  capabilities", unaware of v5/v6/v7). The context-file sweep fixed the AGENTS.md side by
-  deleting it; **the `proof_defs.py` comment block is still stale and is `coder`/`teco`
-  territory, not mine** — flag it rather than edit it.
+**(c) The parse — found by U36, and its answer is the opposite of what it looked like.**
+`skills/agent-standards/SKILL.md`'s frontmatter did not parse under `yaml.safe_load` (*mapping
+values are not allowed here*, line 2 col 404) because a plain YAML scalar may not contain `: `, and
+the description read *"Perishable: every fact is dated"*. **Claude Code loads it anyway** — see (d).
+Fixed in U36 by converting the description to a folded block scalar (`>-`), the idiom
+`cpg-analysis` and `python-web-quirks` already use, with the value byte-identical to `HEAD`. Done
+for cross-tool portability, not because anything was broken: `skills/` is the cross-tool home and
+another harness's parser may well be strict.
+
+**(d) The instrument caveat — load-bearing, and the reason this must not be written with
+`yaml.safe_load`.** Strict YAML is the **wrong** parser for auditing Claude Code frontmatter. A
+repo-wide scan of all 24 frontmatter files, 2026-09-09, found **four** strict-parse failures, all
+the same `: `-in-a-plain-scalar cause: `skills/agent-standards/SKILL.md` plus the agent definitions
+`claude/tdd-engineer/tdd-engineer.md`, `claude/frontend-engineer/frontend-engineer.md` and
+`claude/security-expert/security-expert.md`. **All four load correctly** — the three agents appear
+in this session's agent-type listing and the skill in its skill listing, each with the complete
+description *including the text after the offending colon*, and invoking `agent-standards` rendered
+its body end to end. So the harness runs a real YAML parser (it folds `>-` block scalars correctly,
+observed live) that is **more permissive than PyYAML on plain scalars containing `: `**. An audit
+built on `yaml.safe_load` would fail three live agent definitions on day one — this pass's own
+recurring lesson (*test the instrument before filing the finding*) aimed at the check itself. The
+three agent files are therefore **left alone**: the defect is inert in the only harness that loads
+them, and rewriting a routing `description` has a behavioural surface for no benefit.
+
+- **Proposed change — one check, three assertions, in `claude/scripts/audit-team.sh`** (not §4's
+  judgment checklist, and not §5's routing step): all three are mechanical and drift silently,
+  which is exactly what checks 7 and 8 already are. For each `skills/*/SKILL.md` and each
+  `claude/*/*.md`: (1) frontmatter yields `name` + `description` under a **lenient** read — accept
+  a plain scalar containing `: `, and if a strict parser is used, fall back rather than fail;
+  (2) `len(description) <= 1536`, reported as a number so a near-miss is visible before it becomes
+  a cut; (3) for a skill, the audience list is stated identically in `SKILL.md`,
+  `skills/README.md` and root `AGENTS.md`. Sub-check (3)'s harder half — *is any agent outside the
+  list working in this skill's subject area* — is judgment and belongs in §4, referencing this
+  check's output. Add to `skills/agent-maintenance/SKILL.md` §5's routing step the standing rule a
+  script cannot enforce: **a unit promoting into a skill checks the description against the budget
+  instead of appending to it by reflex.**
+

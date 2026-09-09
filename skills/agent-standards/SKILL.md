@@ -1,6 +1,12 @@
 ---
 name: agent-standards
-description: Reference specifics for authoring agent artifacts across Claude Code, Kiro, and OpenCode — exact frontmatter fields, directory paths, inclusion modes, config keys, and "what-loads-where" tables. Load when producing, porting, or debugging a concrete subagent, skill, steering doc, hook, slash command, or config file and you need exact field names/paths rather than mental models. Perishable: every fact is dated; re-verify against the cited official doc before relying on it.
+description: >-
+  Reference specifics for authoring agent artifacts across Claude Code, Kiro, and OpenCode — exact
+  frontmatter fields, directory paths, inclusion modes, config keys, and "what-loads-where"
+  tables. Load when producing, porting, or debugging a concrete subagent, skill, steering doc,
+  hook, slash command, or config file and you need exact field names/paths rather than mental
+  models. Perishable: every fact is dated; re-verify against the cited official doc before relying
+  on it.
 allowed-tools: Read, WebFetch, WebSearch
 ---
 

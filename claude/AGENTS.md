@@ -34,9 +34,11 @@ fast-track Q&A, across `architect`/`analyst`/`graph-dba`/`data-scientist`/`qa-en
 ledger-tracked like `teco`'s), handing the whole chain to `teco` the instant a unit needs an
 implementer; see `tico/tico.md`) ·
 `architect` · `coder` ·
-`tdd-engineer` (carries an on-demand knowledge base: `guard-testing-techniques.md` — testing a
+`tdd-engineer` (carries two on-demand knowledge bases: `guard-testing-techniques.md` — testing a
 guard whose subject is other code's text: coverage probe vs. mutation test, the two axes of a
-hand-written resolver, the docstring-states-more-than-the-body defect) ·
+hand-written resolver, the docstring-states-more-than-the-body defect — and
+`estimator-test-fixtures.md` — fixture design for a test over a computed value: a degenerate
+sample as boundary tool and as blindfold, pinning a `len()`-derived constant) ·
 `frontend-engineer` ·
 `qa-engineer` (carries an on-demand knowledge base: `qa-testing-techniques.md` — environment/
 tooling techniques such as the WSL2 browser-automation fallback, driving an interactive TUI, and

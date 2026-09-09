@@ -3,6 +3,82 @@
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
 
+## 2026-09-09 — three model-bench S1 entries distilled: a new knowledge base, two prompt folds, zero new bullets (U36)
+
+- **Scope.** `tdd-engineer`'s whole produced inbox at dispatch — three entries, all dated
+  2026-09-09, all from the `model-bench` S1 coordination (U65/U67):
+  `9449505a-eda4-40d1-b266-1037d35464a1` (pin a `len()`-derived constant by varying the length at
+  one seed), `f3d1a6e2-9c4b-4a1e-8b7d-2e6a5c1f9a03` (a degenerate sample makes an exact-zero CI
+  boundary deterministic), `c5dbafda-b689-4262-b4f1-5a256af3ab5b` (a zero-variance fixture makes a
+  clamp a no-op, so the test passes with the clamp deleted). **All three promoted; none discarded,
+  none kept open.**
+- **Two entries merged into one section, deliberately.** `f3d1a6e2` and `c5dbafda` are not two
+  facts: they are **one mechanism with two opposite consequences.** A resampling estimator over an
+  all-identical sample collapses to a single atom, so the interval is a deterministic zero-width
+  point — which *constructs* an exact boundary with no Monte-Carlo luck (entry 2's use) and
+  *disables* any transform that scales the interval (entry 3's failure). Split, a reader meets one
+  half and not the other; and the capture's own history is the argument against splitting — the
+  same implementer, in the same unit, used a degenerate sample as the clamp's worked case (blind)
+  **and** declined one for the boundary test as unconstructible (the tool, unused). One person,
+  both errors, one paragraph.
+- **The `suggestedHome` disagreement resolved against the entry.** `f3d1a6e2` proposed `prompt`;
+  §5's bar for an always-loaded prompt is *changes behavior or routing in most sessions*, and
+  bootstrap-CI fixture construction does not. What *does* clear it is the portable half — **never
+  defer a mutation as needing a lucky input** — which is a general TDD-loop judgement and is now a
+  clause on an existing bullet, not a new one.
+- **Owner ruled `tdd-engineer`, not `data-scientist`.** None of the three is about whether the
+  statistic is *correct* (the correction, the estimator, the design effect); all three are about
+  whether a **test can observe** the thing it claims to test, and every remedy is "add a fixture of
+  shape X". `data-scientist` is advisory and never writes tests, and its knowledge base
+  (`lm-studio-model-notes.md`) has a different subject.
+- **Where they landed.**
+  - **New knowledge base — `claude/tdd-engineer/estimator-test-fixtures.md`** (89 lines). A third
+    file rather than an extension of `guard-testing-techniques.md`: that file's scope sentence
+    (*"whose subject is other code's text rather than its behaviour"*) is load-bearing for its
+    findability, and these entries are about behaviour. Two sections — the degenerate-fixture
+    mechanism with both consequences, and the vary-the-length-at-one-seed technique.
+  - **`tdd-engineer.md` — two folds onto existing bullets, zero new bullets.** *Cover the edges*
+    already said *"a corpus uniform on the anchored dimension proves nothing about the rule as
+    documented"* — stated only for a **positional** anchor. Generalized to name the other two
+    dimensions these entries found (a collection's length; a sample's spread), which is what
+    carries all three entries' portable content without new prose. *Prove a new assertion against
+    the mutant* gained the deferred-mutation clause above. The knowledge-base blockquote gained a
+    second paragraph pointing at the new file.
+  - **Catalogs:** `claude/AGENTS.md` roster line and `claude/README.md` row both said "an on-demand
+    knowledge base" (singular) — now two, with the new file described.
+- **Re-derivation — standalone, not against the live tree.** `model-bench/` is under another
+  session's active edit, so no suite was run and nothing there was staged, committed or restored.
+  Evidence came from a stdlib-only reproduction (percentile bootstrap of the mean, `random` +
+  `statistics`, no project import) plus reads pinned to explicit shas:
+  - `[0.0]*8` → `ci == (0.0, 0.0)` **exactly**, on all 12 combinations of `B ∈ {200, 2000, 20000}`
+    × `seed ∈ {0, 1, 42, 12345}`; strict `>` → `False`, mutated `>=` → `True`. Control: a
+    continuous 8-sample straddling zero produced an exact `0.0` bound in **0 of 2000** seeds — so
+    "needs luck" is true off the degenerate case and false on it.
+  - `[1.0]*10` → half-width `0.0`; widening at `DEFF ∈ {1, 4, 9, 100, 10⁶}` returns `(1.0, 1.0)`
+    every time and clamped ≡ unclamped at all five. With real spread at `DEFF=9`, unclamped upper
+    `1.28` vs clamped `1.0` — the mutation dies.
+  - `k=1` vs `k=2` at one seed on 40 paired diffs: widths `0.078465` / `0.090482` under correct
+    wiring, `0.078465` / `0.078465` under the collapsed-family mutant; the generated explanation
+    string is byte-identical across `k` in **both** arms.
+  - Source reads pinned to **`bb6f9a0`** and **`cf54f5b`** (never `HEAD`, never the worktree):
+    `family=family` is at `model-bench/modelbench/report.py:901` at `bb6f9a0` — the entry's
+    citation, exact. `stats.py`'s `_family_ci_levels(alpha_family, k)` derives `alpha/(2k)` from
+    `k = len(family)`, and `distinguishable = ci[0] > 0 or ci[1] < 0` is the strict comparison
+    entry 2 names. `cf54f5b`'s own message corroborates entry 2's figures (`627 → 628`, mutation
+    "previously survived all 627 tests") and `bb6f9a0`'s corroborates entry 1's (`634 → 635`,
+    "previously passed all 634 tests"). `test_continuous_verdict_clamp_actually_binds_when_diffs_have_variance`
+    carries `design_effect=9.0` and the `1.08`-vs-`1.0` divergence entry 3 cites, verbatim.
+- **One narrowing the captures did not state, now in the knowledge base.** The clamp-is-a-no-op
+  half needs **two** conditions, not one: zero width **and** the point inside the support. Verified
+  by control — a constant sample at `1.5` (or `-0.2`) against support `(0, 1)` is zero-width and
+  the clamp still fires. Promoting "zero variance hides the clamp" unqualified would have shipped a
+  claim that is false for exactly the fixture a reader would reach for next.
+- **Graph:** all three cleared. Each read `producedEdges=1, mentionEdges=0` →
+  `otherRemaining = 1 + 0 − 1 = 0`, so each was a full-node `DETACH DELETE` rather than an edge
+  resolve. No `MENTIONS` tag was added by this unit — all three subjects are `tdd-engineer`'s own.
+  `tdd-engineer`'s produced inbox is 0 at the close of this unit.
+- **Plan items:** none opened — nothing was left unresolved.
+
 ## 2026-09-09 — `guard-testing-techniques.md`: the retraction paragraph was right about one file and wrong about the other (U34)
 
 - **What:** `cobb` corrected the `### The worked example` subsection of

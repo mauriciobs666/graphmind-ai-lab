@@ -3,6 +3,84 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-09 — U36: `tdd-engineer`'s 3-entry inbox, a new knowledge base, and the skill-frontmatter finding that inverted its own premise
+
+- **What:** U36 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the `tdd-engineer`
+  inbox, three entries, all 2026-09-09, all from `model-bench` S1 (`9449505a…`, `f3d1a6e2…`,
+  `c5dbafda…`). **3 promoted, 0 discarded, 0 kept open.** Full per-entry disposition, evidence and
+  edge arithmetic: `claude/tdd-engineer/kaizen/history.md`, 2026-09-09 (U36).
+- **Two editorial calls the brief left to me, both made against the captures.** The last two
+  entries were **merged into one section**: they are one mechanism (a resampling estimator over an
+  all-identical sample collapses to a deterministic zero-width point) with two opposite
+  consequences — it *constructs* an exact boundary without luck, and it *disables* anything that
+  scales the interval. The capture history is the argument: one implementer, one session, made both
+  errors. And the `prompt` `suggestedHome` on `f3d1a6e2` was **overruled to knowledge base**, with
+  only its portable half — *never defer a mutation as needing a lucky input* — folded onto an
+  existing prompt bullet. Owner stayed `tdd-engineer` rather than `data-scientist`: none of the
+  three is about whether the statistic is correct, all three are about whether a test can observe
+  what it names.
+- **New file, and why not the existing one.** `claude/tdd-engineer/estimator-test-fixtures.md`
+  rather than an extension of `guard-testing-techniques.md` — that file's scope sentence
+  (*"subject is other code's text rather than its behaviour"*) is what makes it findable, and these
+  entries are about behaviour. `tdd-engineer` now carries two knowledge bases; `claude/AGENTS.md`
+  and `claude/README.md` updated from the singular.
+- **Zero new prompt bullets.** `tdd-engineer.md` already carried the general rule — *"a corpus
+  uniform on the anchored dimension proves nothing about the rule as documented"* — stated only for
+  a **positional** anchor. Generalizing it to name the two dimensions these entries found (a
+  collection's length; a sample's spread) carried all three entries' portable content as a fold.
+- **A narrowing the captures did not state.** "Zero variance hides the clamp" needs **two**
+  conditions: zero width **and** the point inside the support. Control: a constant sample at `1.5`
+  against support `(0, 1)` is zero-width and the clamp fires. Promoting it unqualified would have
+  shipped a claim false for the next fixture a reader reaches for.
+
+### The rider: `agent-standards`' frontmatter, and why the finding inverted
+
+- **The reported defect was real and the conclusion drawn from it was backwards.**
+  `skills/agent-standards/SKILL.md` did not parse under `yaml.safe_load` — *mapping values are not
+  allowed here*, line 2 col 404 — because a YAML plain scalar may not contain `: ` and the
+  description read *"Perishable: every fact is dated"*. The open question was whether Claude Code's
+  loader is strict, in which case cobb's own standards skill would not load at all.
+- **Established, first-hand, in this session: the loader is lenient, and it is not one file.** A
+  repo-wide scan of all **24** frontmatter files found **four** strict-parse failures with the
+  identical cause — this skill plus three *agent definitions*:
+  `claude/tdd-engineer/tdd-engineer.md`, `claude/frontend-engineer/frontend-engineer.md`,
+  `claude/security-expert/security-expert.md`. **All four load.** The three agents appear in this
+  session's agent-type listing and the skill in its skill listing, each with the **complete**
+  description including the text after the offending colon; invoking `agent-standards` rendered its
+  body end to end from the deployed path (a symlink to the repo, sha256 identical). The harness
+  also folds `>-` block scalars correctly — observed live when the listing refreshed mid-edit — so
+  it runs a real YAML parser that is simply more permissive than PyYAML on plain scalars.
+- **So the useful output was not a fix.** It is that **strict YAML is the wrong instrument to audit
+  Claude Code frontmatter with**: an audit built on `yaml.safe_load` would fail three live agent
+  definitions on day one. This pass's own recurring lesson — test the instrument before filing the
+  finding — turned on the check that was about to be proposed. The three agent files are left
+  alone: the defect is inert in the only harness that loads them, and rewriting a routing
+  `description` has a behavioural surface for no benefit.
+- **Fixed anyway, on portability grounds only.** `skills/` is the cross-tool home and another
+  harness's parser may be strict, so the description is now a folded block scalar (`>-`) — the
+  idiom `cpg-analysis` and `python-web-quirks` already use. The **value is byte-identical to
+  `HEAD`**, verified by parsing both; the body is untouched; all 10 `SKILL.md` files in the repo
+  now parse strictly.
+- **K-027 and K-028 consolidated into K-029** (`plan.md`), on the brief's invitation. They are one
+  missing check on the same six lines of YAML, and they are not independent: the **budget** makes
+  the other two moot. U35 corrected `python-web-quirks`' audience clause in all four places it is
+  stated, and that clause sits ~3,000 characters past the 1,536-char listing cut — auditing an
+  audience list without auditing the budget certifies a string nothing reads. K-029 carries all of
+  both items' content plus the parse finding and the instrument caveat, and routes the check to
+  `claude/scripts/audit-team.sh` (mechanical, drifts silently — the same shape as checks 7 and 8)
+  rather than to §4's judgment checklist. **K-027 and K-028 are retired; their IDs are not reused.**
+- **`K-025` gained the summary row it never had** — U31 added only the detail block. One line, as
+  flagged in U35 and deferred there as out of scope.
+- **Files touched:** `claude/tdd-engineer/{estimator-test-fixtures.md (new), tdd-engineer.md,
+  kaizen/history.md}`, `claude/AGENTS.md`, `claude/README.md`,
+  `skills/agent-standards/SKILL.md`, `claude/cobb/kaizen/{plan.md, history.md}`.
+  `skills/README.md` **not** touched — it describes `agent-standards` in its own prose and does not
+  quote the frontmatter, so a structural frontmatter change does not change what it describes.
+  Root `AGENTS.md` not touched: no structural or convention change. **Nothing under `model-bench/`
+  was staged, committed, restored or executed** — all re-derivation was a stdlib-only standalone
+  reproduction plus reads pinned to `bb6f9a0` and `cf54f5b`.
+- **Plan items:** K-025 row added; K-027 + K-028 → **K-029** (consolidated, no content dropped).
+
 ## 2026-09-09 — U35: `qa-engineer`'s 1-entry inbox; a `TestClient` fact promoted, and a stale skill audience line corrected in all four places it is stated
 
 - **What:** U35 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the `qa-engineer`
