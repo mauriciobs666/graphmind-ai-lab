@@ -2,6 +2,72 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-09 — S2 U77: `ChatResult`'s "never raises" promise closed for any `stats` shape, not just the caller-guarded one
+
+**What:** `docs/reviews/small-model-benchmarking-impl.md` Pass 12's P12-11, the one finding U76 left
+open on `packs.py`'s sibling thread and flagged rather than fixing unilaterally. Changed:
+`modelbench/lmstudio.py`, `tests/test_lmstudio.py`.
+
+**The finding.** `ChatResult`'s class docstring states construction "never raises" on a missing or
+partial `stats` object, unconditionally in its wording. The mechanism that actually held that
+promise lived one level up, in `chat()`'s own `isinstance(..., Mapping)` guard before it ever
+constructs a `ChatResult` — `__post_init__` itself did `stats = self.stats or {}`, so a direct
+construction with a malformed, non-`Mapping` `stats` (e.g. `ChatResult(stats=[1], ...)`) raised
+`AttributeError` from `stats.get(...)`, bypassing the guard entirely. Separately,
+`tokensPerSecond = stats.get("tokens_per_second")` was read verbatim with no coercion, so a
+string-valued source survived into a field declared `float | None` as a `str`.
+
+**Closure chosen: (a), make the mechanism total** — over the two closures the brief offered, and
+against its own steer of (a) only in the sense that (a) was also the steer taken. Reasoning: (1)
+`docs/plans/small-model-benchmarking.md` §3.6's own unit-boundary text says the same thing the class
+docstring does — "construction never raises on a missing or partial `stats` object" — with no
+caller-side qualifier anywhere in that section, so narrowing the docstring to name `chat()`'s guard
+as load-bearing would contradict the plan, not just the docstring, and the plan is the more
+authoritative of the two. (2) `ChatResult` is a public, directly-constructible frozen dataclass —
+nothing about its `__init__` signature suggests "only ever construct this through `chat()`" — and
+the brief's own framing (the class's whole job is to be where malformed payloads are made safe) is
+consistent with §3.6. (3) Widening costs nothing observable on the real call path: `chat()`'s guard
+still runs first and nothing changes for it; the only behavior added is tolerance for a construction
+route the guard was never protecting anyway. No genuine programming error is swallowed by this
+widening — a caller handing `ChatResult` a list where `stats` belongs is exactly the malformed-input
+case the class's stated job is to absorb, not a caller's own logic bug being hidden from it.
+
+**Fix.** `__post_init__` now derives the timing trio from `self.stats if isinstance(self.stats,
+Mapping) else {}` rather than `self.stats or {}` — a non-`Mapping` `stats` degrades the same way an
+absent one does, and `stats` itself is still kept verbatim, unmodified, for auditability regardless
+of its shape. `tokensPerSecond`'s source now goes through a new `_as_float` helper — `None` when
+absent, `float(value)` when coercible, `None` on `TypeError`/`ValueError` otherwise — the same
+tolerance `_seconds_to_ms` already applies to `ttftMs`/`generationMs`, minus the ×1000 conversion
+`tokensPerSecond` does not need (it is already a per-second rate). Both the module docstring and
+`ChatResult`'s class docstring were rewritten to state the widened, exact contract — including that
+`tokensPerSecond` is now type-coerced even though it is not unit-converted — rather than the
+narrower claim the old mechanism actually kept.
+
+**Test-first.** Three new tests, all written and confirmed red before the production change, each
+for the stated reason: `test_chat_result_construction_never_raises_when_stats_is_not_a_mapping`
+(`ChatResult(stats=[1], ...)`) red with `AttributeError: 'list' object has no attribute 'get'`;
+`test_chat_result_tokens_per_second_coerces_a_numeric_string_source_to_float`
+(`stats={"tokens_per_second": "51.4"}`) red on `AssertionError: assert '51.4' == 51.4`;
+`test_chat_result_tokens_per_second_is_none_when_source_is_not_numeric`
+(`stats={"tokens_per_second": "fast"}`) red on `AssertionError: assert 'fast' is None`. Checked
+against the existing suite for duplication first: no prior test constructs a non-`Mapping` `stats`
+or a string-valued `tokens_per_second` — the closest, `test_chat_result_construction_never_raises_
+on_a_partial_stats_object`, only ever passes a `Mapping` missing keys, never a wrong-typed `stats`.
+
+**Mutation-tested, `cp`-aside / mutate / run `tests/test_lmstudio.py` / `cp`-back restore,
+`diff -q` byte-identical after each restore, two mutations, both caught for the stated reason:**
+(1) `isinstance(self.stats, Mapping)` reverted to `self.stats or {}` — reddened exactly
+`test_chat_result_construction_never_raises_when_stats_is_not_a_mapping`, on the same
+`AttributeError` the finding names; (2) `_as_float(stats.get("tokens_per_second"))` reverted to
+`stats.get("tokens_per_second")` verbatim — reddened both `tokensPerSecond` coercion tests, on the
+`str` value surviving uncoerced in each.
+
+**Observed, this run.** `model-bench/` as working directory. Baseline before this unit: **812
+passed, 3 deselected**. After: **815 passed, 3 deselected** (the three new tests; no other test's
+outcome changed). `.venv/bin/ruff check .`: `All checks passed!`.
+
+**Files:** `modelbench/lmstudio.py`, `tests/test_lmstudio.py`. Left uncommitted for review.
+
 ## 2026-09-09 — S2 U75: the LM Studio adapter's read-phase exception taxonomy, closed
 
 **What:** `docs/reviews/small-model-benchmarking-impl.md` Pass 12's adapter thread (P12-1, the

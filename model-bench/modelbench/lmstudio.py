@@ -16,11 +16,15 @@ object reports `time_to_first_token` and `generation_time` in **seconds**; every
 this plan names is **milliseconds**. `ChatResult` converts once, on construction, so no caller
 ever sees a raw seconds value. Three rules, all load-bearing (plan-gate P5-8): each of
 `ttftMs`/`generationMs`/`tokensPerSecond` is `None` when its source key is absent, **never `0`**;
-`tokensPerSecond` is the one figure *not* converted, because a per-second rate already is what its
-name says; and construction **never raises** on a missing or partial `stats` object — a chat
-response without `stats` is an expected state (`-ml` §11.5.1 governs it), not an error. The raw
-`stats` mapping is kept beside the derived fields for auditability only; nothing downstream may
-read a timing figure out of it.
+`tokensPerSecond` is the one figure *not unit-converted* (no ×1000 — a per-second rate already is
+what its name says) but it **is** type-coerced, same as the other two; and construction **never
+raises**, full stop, regardless of what `stats` holds — not just on a missing or partial `stats`
+object, but on one of the wrong type entirely (a list, a string, anything not `Mapping`-shaped).
+A chat response without usable `stats` is an expected state (`-ml` §11.5.1 governs it), not an
+error, and nothing about that guarantee should depend on `chat()`'s own `isinstance` check one
+level up — a caller that constructs `ChatResult` directly gets the same promise (review Pass 12,
+P12-11). The raw `stats` value is kept beside the derived fields verbatim, exactly as given, for
+auditability only; nothing downstream may read a timing figure out of it.
 
 `timeout_s` is **required, with no default**, on `chat`/`embed`/`warm_up` — §3.6's two budgets
 (`firstCallTimeoutSeconds` for the warm-up, `requestTimeoutSeconds` for every scored call) are the
@@ -129,6 +133,18 @@ class ChatResult:
     text rather than expressed through the API's own mechanism. Whether that prose *looks like* an
     attempted call is a scoring judgement against pack-labelled examples (`scoring/toolcalls.py`,
     a later unit) and is deliberately not decided here — this field only ever states the mechanism.
+
+    Construction **never raises**, on any `stats` this class is handed — absent, partial, or the
+    wrong type entirely (not `Mapping`-shaped at all). That is a property of `__post_init__`
+    itself, not of any caller's guard: `chat()` happens to only ever pass `None` or a `Mapping`,
+    but a direct construction with a malformed `stats` (a list, a string, ...) degrades the same
+    way rather than raising `AttributeError` (review Pass 12, P12-11). `ttftMs`/`generationMs`/
+    `tokensPerSecond` are each `None` when there is nothing usable to derive them from, never `0`
+    and never the raw un-coerced value; `tokensPerSecond` skips the ×1000 the other two apply (a
+    per-second rate needs no unit conversion) but is coerced to `float` the same way they are, so a
+    string- or otherwise wrong-typed source lands `None` rather than surviving untyped into a field
+    declared `float | None`. `stats` itself is kept exactly as given, whatever its shape, purely for
+    auditability — nothing downstream may read a timing figure out of it.
     """
 
     message: Mapping[str, Any]
@@ -144,10 +160,10 @@ class ChatResult:
     tokensPerSecond: float | None = field(init=False)
 
     def __post_init__(self) -> None:
-        stats = self.stats or {}
+        stats = self.stats if isinstance(self.stats, Mapping) else {}
         object.__setattr__(self, "ttftMs", _seconds_to_ms(stats.get("time_to_first_token")))
         object.__setattr__(self, "generationMs", _seconds_to_ms(stats.get("generation_time")))
-        object.__setattr__(self, "tokensPerSecond", stats.get("tokens_per_second"))
+        object.__setattr__(self, "tokensPerSecond", _as_float(stats.get("tokens_per_second")))
 
 
 @dataclass(frozen=True)
@@ -182,6 +198,19 @@ def _seconds_to_ms(value: Any) -> float | None:
         return None
     try:
         return 1000.0 * float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_float(value: Any) -> float | None:
+    """`tokensPerSecond`'s half of §3.6's unit boundary: no ×1000 (already a per-second rate), but
+    the same type tolerance `_seconds_to_ms` applies — `None` when absent or not coercible to
+    `float` (review Pass 12, P12-11), never the raw value surviving untyped into a `float | None`
+    field."""
+    if value is None:
+        return None
+    try:
+        return float(value)
     except (TypeError, ValueError):
         return None
 

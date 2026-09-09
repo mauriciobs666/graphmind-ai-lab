@@ -381,6 +381,67 @@ def test_chat_result_construction_never_raises_on_a_partial_stats_object():
     assert result.stats == {"stop_reason": "eosFound"}  # kept verbatim
 
 
+def test_chat_result_construction_never_raises_when_stats_is_not_a_mapping():
+    """P12-11: the class docstring's "never raises" promise is unconditional, but the only thing
+    that held it was `chat()`'s own `isinstance(..., Mapping)` guard one level up — a direct
+    construction with a malformed `stats` (here, a list) bypasses that guard entirely and raised
+    `AttributeError` from `stats.get(...)`. Closure (a): the mechanism is widened so the promise is
+    true of the class itself, not just of its one caller. `stats` itself is kept verbatim (the raw
+    payload is retained for auditability regardless of shape); only the three fields *derived from*
+    it degrade to `None` when there is nothing `Mapping`-shaped to derive them from."""
+    result = ChatResult(
+        message={"role": "assistant", "content": "x"},
+        tool_calls=(),
+        toolCallForm="prose",
+        stats=[1],  # malformed: not a Mapping
+        model_info=None,
+        runtime=None,
+        usage=None,
+        wallClockMs=12.0,
+    )
+    assert result.ttftMs is None
+    assert result.generationMs is None
+    assert result.tokensPerSecond is None
+    assert result.stats == [1]  # kept verbatim, not coerced
+
+
+def test_chat_result_tokens_per_second_coerces_a_numeric_string_source_to_float():
+    """P12-11's other half: `tokensPerSecond` used to be `stats.get("tokens_per_second")`
+    verbatim, so a string-valued source (e.g. from a hand-built or malformed payload) survived
+    into a field typed `float | None` as a `str`. Closure decision: coerce, the same tolerance
+    `ttftMs`/`generationMs` already apply via `_seconds_to_ms`'s own `float(...)` conversion — not
+    reject and not pass through untyped."""
+    result = ChatResult(
+        message={"role": "assistant", "content": "x"},
+        tool_calls=(),
+        toolCallForm="prose",
+        stats={"tokens_per_second": "51.4"},
+        model_info=None,
+        runtime=None,
+        usage=None,
+        wallClockMs=12.0,
+    )
+    assert result.tokensPerSecond == 51.4
+    assert isinstance(result.tokensPerSecond, float)
+
+
+def test_chat_result_tokens_per_second_is_none_when_source_is_not_numeric():
+    """The other side of the same coercion: a source that cannot be read as a number at all (not
+    just a numeric string) yields `None`, mirroring `_seconds_to_ms`'s own bad-type tolerance,
+    rather than raising or passing the un-coercible value through."""
+    result = ChatResult(
+        message={"role": "assistant", "content": "x"},
+        tool_calls=(),
+        toolCallForm="prose",
+        stats={"tokens_per_second": "fast"},
+        model_info=None,
+        runtime=None,
+        usage=None,
+        wallClockMs=12.0,
+    )
+    assert result.tokensPerSecond is None
+
+
 def test_chat_result_tool_call_form_is_native_when_tool_calls_present():
     result = _chat("chat_response_native_tool_call.json")
     assert result.toolCallForm == "native"
