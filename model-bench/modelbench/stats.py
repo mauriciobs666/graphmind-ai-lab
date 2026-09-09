@@ -5,7 +5,7 @@ Every formula, constant, threshold, tolerance, bootstrap parameter and verdict s
 note's, cited by section. The plan deliberately does not restate them: two copies of a formula is
 one copy and one bug (plan §3.9).
 
-The shape of this module is `-ml` §3.4's **seven** binding rules, written so that "the
+The shape of this module is `-ml` §3.4's **eight** binding rules, written so that "the
 anti-conservative version does not typecheck, and the honest one is the only one that runs":
 
 1. `PairedOutcomes.from_units` is the constructor, and a repeated analysis-unit id raises.
@@ -31,6 +31,11 @@ anti-conservative version does not typecheck, and the honest one is the only one
    instrument surface as a contradiction rather than as a plausible number. **The response splits
    by path**: on `mcnemar-exact` the invariant is a theorem, so a fire raises; on
    `conservative-envelope` it is a guard, so a fire demotes and names the floor (m-ML-6).
+8. `continuous_verdict()` is a **sibling producer** for continuous metrics, not `verdict()` with
+   six fields left `None` (`-ml` v1.16-v1.19 §3.4 Rule 8). It derives its own family-corrected
+   quantile levels from `alpha_family`/`family` and its own support clamp from the metric's
+   declared `support`, taking neither as a parameter — both are unrepresentable at the call site
+   rather than guarded.
 
 Two of the three αs the note distinguishes are fields of `ResolvingPower` — `alpha_family` (the
 floor's) and `alpha_mdd` (the MDD's). The third, `alpha_step`, is Holm's data-dependent threshold
@@ -1447,3 +1452,204 @@ def holm_steps(p_values: Sequence[float], *, alpha: float) -> list["HolmStep"]:
         if not stopped and not rejected:
             stopped = True
     return [by_index[i] for i in range(k)]
+
+
+# --- Rule 8: the continuous verdict, a sibling producer ---------------------------------------
+
+
+def _family_ci_levels(alpha_family: float, k: int) -> tuple[Fraction, Fraction]:
+    """The family-corrected quantile levels `alpha/(2k)` and `1 - alpha/(2k)` (`-ml` §3.3,
+    §3.4 Rule 8, §11.2.2).
+
+    **`alpha_family` is recovered as `Fraction(str(alpha_family))`, never `Fraction(alpha_family)`
+    — the second is the double's own binary value, not the declared decimal** (`-ml` §11.2.2).
+    `Fraction(0.05)` is `3602879701896397/72057594037927936`, not `1/20`, and the two disagree on
+    1000 of `X <= 20000` ranks. `str()` on a float is its shortest round-tripping decimal, so
+    `Fraction(str(0.05)) == Fraction(1, 20)` exactly — which is what recovers the decimal a pack
+    author actually declared. Its precondition is that `alpha_family` is **declared, never
+    computed**: `Fraction(str(0.1 + 0.2))` recovers `0.30000000000000004` faithfully and
+    uselessly.
+
+    An all-continuous `verdictMetrics` family with `k > 1` takes its Bonferroni correction **in
+    the interval**, because Holm orders by p-value and a continuous verdict has none — the
+    interval *is* the test (§3.2d) — so there is nowhere else to put the correction. At `k = 1`
+    this returns exactly `(LEVEL_CI95_LO, LEVEL_CI95_HI)`.
+    """
+    alpha = Fraction(str(alpha_family))
+    lo = alpha / (2 * k)
+    return lo, 1 - lo
+
+
+def _support_clamp(support: tuple[float, float] | None) -> tuple[float, float] | None:
+    """The clamp `continuous_verdict()` derives from a metric's declared `support` (`-ml` §3.4
+    Rule 8).
+
+    `None` when `support is None` — an unbounded metric such as `sep_z` is never clamped.
+    Otherwise the clamp is `(lo - hi, hi - lo)`, **the support of the difference, not of the
+    metric** — a conversion worth writing once rather than at each call site where its sign and
+    order can be transposed. `mrr`'s `(0.0, 1.0)` clamps to `(-1.0, 1.0)`.
+
+    **Raises when `lo >= hi`** — the fifth of Rule 8's refusals: a degenerate support derives a
+    clamp of `(0, 0)` and would pin every bound to zero silently.
+    """
+    if support is None:
+        return None
+    lo, hi = support
+    if not lo < hi:
+        raise ValueError(
+            f"support must be ordered lower then upper, not {support!r}: a degenerate support "
+            "derives a clamp of (0, 0) and would pin every bound to zero silently "
+            "(-ml §3.4 Rule 8)"
+        )
+    return lo - hi, hi - lo
+
+
+@dataclass(frozen=True)
+class ContinuousVerdict:
+    """The verdict for a continuous metric — MRR, score separation — decided by a bootstrap
+    interval rather than by McNemar's exact test (`-ml` §3.4 Rule 8).
+
+    **A sibling type, not a `Verdict` with six fields left `None`.** `Verdict` carries `mcnemar_p`,
+    `b`, `c`, `marginal_overlap`, `floor_demoted` and `holm_tested`, and none of the six exists on
+    this path: there is no paired binary table, so there are no discordant counts and no McNemar
+    p-value to test the veto against, and there is no observable floor because `resolving_power`
+    is never built here. Filling them with `None` is the *"a field that is `None` until it is
+    not"* shape this module already refuses for `alpha_step`.
+    """
+
+    metric_name: str
+    distinguishable: bool
+    text: str
+    diff: float
+    ci: tuple[float, float]
+    n_units: int
+    unit_kind: str
+    design_effect: float
+    basis: Basis
+    B: int
+    seed: int
+    #: The two-sided alpha the printed interval was actually taken at — `alpha_family / k`,
+    #: derived from the same exact rational as the levels (`-ml` §3.3, §3.4 Rule 8).
+    alpha_used: float
+    decided_by: Literal["paired-bootstrap"]
+
+
+def continuous_verdict(
+    diffs: Sequence[float],
+    *,
+    metric_name: str,
+    family: Sequence[str],
+    alpha_family: float,
+    unit_kind: str,
+    design_effect: float,
+    basis: Basis,
+    B: int,
+    seed: int,
+    support: tuple[float, float] | None,
+    a_label: str = "A",
+    b_label: str = "B",
+) -> ContinuousVerdict:
+    """Decide one continuous metric — MRR, score separation — from its per-unit differences
+    (`-ml` §3.4 Rule 8).
+
+    `diffs` is one difference per **analysis unit** (§3.2d), never per observation. For a
+    continuous metric the bootstrap interval **is** the test (§3.2d): there is no separate
+    significance test and no McNemar p to veto with, so `distinguishable` is exactly
+    `ci[0] > 0 or ci[1] < 0`.
+
+    **Four parameters this function deliberately does not take, each of which an implementer
+    would otherwise pass.** (i) `resolving: ResolvingPower` — it exists to make the observable
+    floor's and the MDD's sentences true, and a continuous metric has neither; the four
+    provenance fields it would have supplied (`unit_kind`, `design_effect`, `basis`, and the
+    unit count read off `diffs`) are passed directly instead. (ii) `alpha_step` — Holm's
+    data-dependent threshold, and there is no ladder here (§3.3 rules an all-continuous family
+    takes its correction in the interval, never in a ladder). (iii) a McNemar *p* — §3.2d rules
+    the interval *is* the test. (iv) percentile levels — see below.
+
+    **The multiplicity correction is made unrepresentable rather than guarded.** The function
+    computes its own quantile levels as the exact rationals `alpha_family/(2k)` and
+    `1 - alpha_family/(2k)`, `k = len(family)`, via `_family_ci_levels`. It exposes **no
+    percentile parameter**, so a caller cannot render a `k = 3` family at `1/40`/`39/40` by
+    omission.
+
+    **`support` is required with no default, and its `None` is a stated value** — *this metric is
+    unbounded, and I am telling you so* — never an absent one. It cannot be recovered from
+    `diffs`: a sample of MRR differences lying in `[-0.3, 0.3]` is indistinguishable from a
+    sample of z-differences lying there. The clamp derived from it (`_support_clamp`) is exposed
+    nowhere; `sep_z` passes `support=None` and is never clamped, `mrr` passes `(0.0, 1.0)` and is
+    clamped to `(-1.0, 1.0)`.
+
+    **Five refusals, all cheap and all silent failures otherwise.**
+    1. `diffs` empty — already `paired_bootstrap`'s behaviour, inherited here rather than
+       re-implemented.
+    2. any element non-finite — likewise inherited: a single NaN propagates through the mean and
+       both quantiles and arrives as a rendered interval rather than an error (§3.2d).
+    3. `design_effect < 1.0` — `paired_cluster_bootstrap`'s own precondition 4, inherited rather
+       than duplicated.
+    4. `len(diffs) == 1` — a one-unit interval is a point, and the string would report a CI of
+       zero width as though it were a measurement.
+    5. `support` with `lo >= hi` — see `_support_clamp`.
+    """
+    if metric_name not in family:
+        raise ValueError(
+            f"{metric_name!r} is not in the pre-registered family {list(family)}"
+        )
+    clamp = _support_clamp(support)
+    if len(diffs) == 1:
+        raise ValueError(
+            "continuous_verdict needs at least two analysis units: a one-unit interval is a "
+            "point, and the string would report a CI of zero width as though it were a "
+            "measurement (-ml §3.4 Rule 8)"
+        )
+
+    k = len(family)
+    levels = _family_ci_levels(alpha_family, k)
+    alpha_used = alpha_family / k
+
+    # `paired_cluster_bootstrap` is §3.2d's entry point for every continuous verdict — it is what
+    # inherits refusals 1-3 above (empty `diffs`, a non-finite difference, `design_effect < 1.0`)
+    # rather than re-implementing them, and it is what applies the declared design effect and the
+    # support clamp to the one interval that is printed (`-ml` §3.4 Rule 8, Rule 4a).
+    ci = paired_cluster_bootstrap(
+        diffs, design_effect=design_effect, B=B, seed=seed, clamp=clamp, levels=levels
+    )
+    diff = sum(diffs) / len(diffs)
+    n_units = len(diffs)
+    unit_plural = _plural(unit_kind)
+    distinguishable = ci[0] > 0 or ci[1] < 0
+
+    if distinguishable:
+        # Oriented A-minus-B, exactly as `verdict()`'s significant branch: a positive effect
+        # printed beside a wholly negative interval is an internally contradictory line.
+        winner, loser = (a_label, b_label) if diff >= 0 else (b_label, a_label)
+        shown_ci = ci if diff >= 0 else (-ci[1], -ci[0])
+        text = (
+            f"{winner} is better than {loser} on {metric_name}: {diff:+.3f} "
+            f"(95% CI [{shown_ci[0]:+.3f}, {shown_ci[1]:+.3f}]), n={n_units} paired "
+            f"{unit_plural} (unit: {unit_kind}, design effect {design_effect:.2f}, {basis}), "
+            f"decided by paired bootstrap on per-{unit_kind} differences (B={B}, seed={seed})."
+        )
+    else:
+        text = (
+            f"Not distinguishable at this sample size. Observed difference {diff:+.3f}, 95% CI "
+            f"[{ci[0]:+.3f}, {ci[1]:+.3f}] covers zero, n={n_units} paired {unit_plural} (unit: "
+            f"{unit_kind}, design effect {design_effect:.2f}, {basis}), decided by paired "
+            f"bootstrap on per-{unit_kind} differences (B={B}, seed={seed}). Neither model is "
+            "ranked above the other."
+        )
+
+    return ContinuousVerdict(
+        metric_name=metric_name,
+        distinguishable=distinguishable,
+        text=text,
+        diff=diff,
+        ci=ci,
+        n_units=n_units,
+        unit_kind=unit_kind,
+        design_effect=design_effect,
+        basis=basis,
+        B=B,
+        seed=seed,
+        alpha_used=alpha_used,
+        decided_by="paired-bootstrap",
+    )

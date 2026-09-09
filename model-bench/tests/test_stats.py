@@ -13,6 +13,7 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import math
+import re
 from fractions import Fraction
 
 import pytest
@@ -25,14 +26,18 @@ from modelbench.stats import (
     LEVEL_P50,
     LEVEL_P95,
     BootstrapResult,
+    ContinuousVerdict,
     DuplicateAnalysisUnit,
     PairedOutcomes,
     Rule7Violation,
     UnattainablePower,
+    _family_ci_levels,
+    _support_clamp,
     _widen,
     b_min,
     cluster_bootstrap,
     conservative_envelope,
+    continuous_verdict,
     design_effect,
     effective_n,
     envelope_arms,
@@ -2215,6 +2220,376 @@ def test_the_equality_wording_is_true_at_this_components_own_sample_size() -> No
     assert v.distinguishable is False
     assert "the observed 20.0 pp is at or above that" in v.text
     assert "is above that" not in v.text.replace("is at or above that", "")
+
+
+# --- Rule 8: `continuous_verdict()`, the continuous producer ------------------------------------
+
+
+def test_continuous_verdict_signature_is_keyword_only_after_diffs() -> None:
+    """`-ml` §3.4 Rule 8's signature, verbatim: `diffs` is the only positional-capable parameter,
+    every other name is keyword-only."""
+    params = inspect.signature(continuous_verdict).parameters
+    names = list(params)
+    assert names[0] == "diffs"
+    assert params["diffs"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    for name in names[1:]:
+        assert params[name].kind is inspect.Parameter.KEYWORD_ONLY, name
+
+
+def test_continuous_verdict_exposes_no_percentile_or_clamp_parameter() -> None:
+    """Rule 8's negative parameters: no `resolving`, no `alpha_step`, no percentile levels and no
+    `clamp` — both are derived inside from `alpha_family`/`family` and `support`. Adding either
+    back as a convenience defeats the rule (`-ml` §3.4 Rule 8, "the four parameters it deliberately
+    does not take")."""
+    params = inspect.signature(continuous_verdict).parameters
+    for forbidden in ("resolving", "alpha_step", "levels", "clamp", "percentile"):
+        assert forbidden not in params
+
+
+def test_continuous_verdict_support_is_required_with_no_default() -> None:
+    """`support` is keyword-only and required — its `None` is a stated value, never an absent one
+    (`-ml` §3.4 Rule 8, v1.17)."""
+    params = inspect.signature(continuous_verdict).parameters
+    assert params["support"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert params["support"].default is inspect.Parameter.empty
+
+
+def test_continuous_verdict_refuses_a_metric_not_in_its_family() -> None:
+    """`-ml` §3.4 Rule 8 — raises for the same reason `verdict()` does."""
+    with pytest.raises(ValueError, match="not in the pre-registered family"):
+        continuous_verdict(
+            [0.1, -0.2, 0.3],
+            metric_name="mrr",
+            family=["sep_z"],
+            alpha_family=0.05,
+            unit_kind="query",
+            design_effect=1.0,
+            basis="by-construction",
+            B=100,
+            seed=1,
+            support=(0.0, 1.0),
+        )
+
+
+@pytest.mark.parametrize("support", [(1.0, 1.0), (1.0, 0.0), (0.5, -0.5)])
+def test_continuous_verdict_refuses_a_degenerate_support(support) -> None:
+    """The fifth refusal: `support` with `lo >= hi` raises — a degenerate support derives a clamp
+    of `(0, 0)` and would pin every bound to zero silently (`-ml` §3.4 Rule 8)."""
+    with pytest.raises(ValueError, match="ordered lower then upper"):
+        continuous_verdict(
+            [0.1, -0.2, 0.3],
+            metric_name="mrr",
+            family=["mrr"],
+            alpha_family=0.05,
+            unit_kind="query",
+            design_effect=1.0,
+            basis="by-construction",
+            B=100,
+            seed=1,
+            support=support,
+        )
+
+
+def test_continuous_verdict_refuses_a_single_analysis_unit() -> None:
+    """Refusal 4 — a one-unit interval is a point, and the string would report a CI of zero width
+    as though it were a measurement (`-ml` §3.4 Rule 8)."""
+    with pytest.raises(ValueError, match="at least two analysis units"):
+        continuous_verdict(
+            [0.1],
+            metric_name="mrr",
+            family=["mrr"],
+            alpha_family=0.05,
+            unit_kind="query",
+            design_effect=1.0,
+            basis="by-construction",
+            B=100,
+            seed=1,
+            support=(0.0, 1.0),
+        )
+
+
+def test_continuous_verdict_inherits_the_empty_diffs_refusal() -> None:
+    """Refusal 1 — already `paired_bootstrap`'s behaviour and inherited here, not re-implemented
+    (`-ml` §3.4 Rule 8)."""
+    with pytest.raises(ValueError, match="at least one difference"):
+        continuous_verdict(
+            [],
+            metric_name="mrr",
+            family=["mrr"],
+            alpha_family=0.05,
+            unit_kind="query",
+            design_effect=1.0,
+            basis="by-construction",
+            B=100,
+            seed=1,
+            support=(0.0, 1.0),
+        )
+
+
+def test_continuous_verdict_inherits_the_non_finite_refusal() -> None:
+    """Refusal 2 — a single NaN propagates through the mean and both quantiles and arrives as a
+    rendered interval rather than an error; `paired_bootstrap` already refuses it and this path
+    reaches the same check (`-ml` §3.4 Rule 8, §3.2d)."""
+    with pytest.raises(ValueError, match="finite differences"):
+        continuous_verdict(
+            [0.1, float("nan"), 0.3],
+            metric_name="mrr",
+            family=["mrr"],
+            alpha_family=0.05,
+            unit_kind="query",
+            design_effect=1.0,
+            basis="measured",
+            B=100,
+            seed=1,
+            support=(0.0, 1.0),
+        )
+
+
+def test_continuous_verdict_inherits_the_design_effect_refusal() -> None:
+    """Refusal 3 — `design_effect < 1.0` is `paired_cluster_bootstrap`'s own precondition 4, and
+    this entry point inherits it rather than duplicating the check (`-ml` §3.4 Rule 8)."""
+    with pytest.raises(ValueError, match="precondition 4"):
+        continuous_verdict(
+            [0.1, -0.2, 0.3],
+            metric_name="mrr",
+            family=["mrr"],
+            alpha_family=0.05,
+            unit_kind="query",
+            design_effect=0.5,
+            basis="measured",
+            B=100,
+            seed=1,
+            support=(0.0, 1.0),
+        )
+
+
+# --- Rule 8's derived quantile levels: `_family_ci_levels` --------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("k", "lo", "hi"),
+    [
+        (1, Fraction(1, 40), Fraction(39, 40)),
+        (2, Fraction(1, 80), Fraction(79, 80)),
+        (3, Fraction(1, 120), Fraction(119, 120)),
+    ],
+)
+def test_family_ci_levels_are_the_notes_exact_fractions(k, lo, hi) -> None:
+    """`-ml` §3.3 / §11.2.2 — `alpha/(2k)` and `1 - alpha/(2k)` at `alpha_family = 0.05`, exact
+    rationals: `1/40, 39/40` at `k=1`, `1/80, 79/80` at `k=2`, `1/120, 119/120` at `k=3` — the last
+    of which is expressible in no decimal unit at all."""
+    assert _family_ci_levels(0.05, k) == (lo, hi)
+
+
+def test_family_ci_levels_recovers_the_declared_decimal_not_the_doubles_value() -> None:
+    """The trap Rule 8 states explicitly: alpha is recovered as `Fraction(str(alpha_family))`,
+    never `Fraction(alpha_family)` — the second is the double's own binary value.
+    `Fraction(0.05) != Fraction(1, 20)`, so a `Fraction(alpha_family)` implementation would fail
+    this exact-equality assertion (`-ml` §11.2.2)."""
+    assert Fraction(0.05) != Fraction(1, 20)
+    assert _family_ci_levels(0.05, 1) == (Fraction(1, 40), Fraction(39, 40))
+    assert _family_ci_levels(0.05, 2) == (Fraction(1, 80), Fraction(79, 80))
+
+
+# --- Rule 8's derived clamp: `_support_clamp` ----------------------------------------------------
+
+
+def test_support_clamp_is_none_for_an_unbounded_metric() -> None:
+    """`sep_z` passes `support=None` and is never clamped (`-ml` §3.4 Rule 8)."""
+    assert _support_clamp(None) is None
+
+
+def test_support_clamp_is_the_supports_difference_not_the_metrics_own_support() -> None:
+    """`mrr` passes `(0.0, 1.0)` and is clamped to `(-1.0, 1.0)` — the support of the
+    **difference**, not of the metric (`-ml` §3.4 Rule 8)."""
+    assert _support_clamp((0.0, 1.0)) == (-1.0, 1.0)
+
+
+def test_support_clamp_refuses_a_degenerate_support() -> None:
+    with pytest.raises(ValueError, match="ordered lower then upper"):
+        _support_clamp((1.0, 1.0))
+
+
+# --- Rule 8's return shape and rendering ---------------------------------------------------------
+
+
+def test_continuous_verdict_returns_the_notes_thirteen_fields() -> None:
+    """`-ml` §3.4 Rule 8 — `ContinuousVerdict` is a sibling type, not a `Verdict` with six fields
+    left `None`; it carries exactly these thirteen names."""
+    names = {f.name for f in dataclasses.fields(ContinuousVerdict)}
+    assert names == {
+        "metric_name", "distinguishable", "text", "diff", "ci", "n_units", "unit_kind",
+        "design_effect", "basis", "B", "seed", "alpha_used", "decided_by",
+    }
+
+
+def test_continuous_verdict_decided_by_is_always_paired_bootstrap() -> None:
+    v = continuous_verdict(
+        [0.1, -0.2, 0.3, 0.15],
+        metric_name="mrr",
+        family=["mrr"],
+        alpha_family=0.05,
+        unit_kind="query",
+        design_effect=1.0,
+        basis="by-construction",
+        B=1000,
+        seed=1,
+        support=(0.0, 1.0),
+    )
+    assert v.decided_by == "paired-bootstrap"
+    assert v.B == 1000 and v.seed == 1
+    assert v.n_units == 4
+    assert v.unit_kind == "query"
+    assert v.design_effect == 1.0
+    assert v.basis == "by-construction"
+    assert v.metric_name == "mrr"
+
+
+def test_continuous_verdict_distinguishable_when_the_interval_excludes_zero() -> None:
+    """A strongly-separated sample, `sep_z`-shaped (unbounded support)."""
+    diffs = [1.2, 1.5, 0.9, 1.1, 1.4, 1.3, 1.0, 1.6]
+    v = continuous_verdict(
+        diffs,
+        metric_name="sep_z",
+        family=["sep_z"],
+        alpha_family=0.05,
+        unit_kind="query",
+        design_effect=1.0,
+        basis="by-construction",
+        B=2000,
+        seed=7,
+        support=None,
+    )
+    assert v.distinguishable is True
+    assert v.ci[0] > 0
+    assert "is better than" in v.text
+    assert "pp" not in v.text
+    assert "McNemar" not in v.text
+
+
+def test_continuous_verdict_not_distinguishable_when_the_interval_covers_zero() -> None:
+    diffs = [0.01, -0.02, 0.015, -0.01, 0.005, -0.005]
+    v = continuous_verdict(
+        diffs,
+        metric_name="mrr",
+        family=["mrr"],
+        alpha_family=0.05,
+        unit_kind="query",
+        design_effect=1.0,
+        basis="by-construction",
+        B=2000,
+        seed=3,
+        support=(0.0, 1.0),
+    )
+    assert v.distinguishable is False
+    assert v.ci[0] <= 0 <= v.ci[1]
+    assert "Not distinguishable" in v.text
+    assert "Neither model is ranked above the other" in v.text
+    assert "pp" not in v.text
+    assert "McNemar" not in v.text
+
+
+def test_continuous_verdict_prints_three_decimal_places() -> None:
+    """`-ml` §3.4 Rule 8 — `diff` and both bounds print at three decimal places, rounded to
+    nearest."""
+    diffs = [1.2, 1.5, 0.9, 1.1, 1.4, 1.3, 1.0, 1.6]
+    v = continuous_verdict(
+        diffs,
+        metric_name="sep_z",
+        family=["sep_z"],
+        alpha_family=0.05,
+        unit_kind="query",
+        design_effect=1.0,
+        basis="by-construction",
+        B=2000,
+        seed=7,
+        support=None,
+    )
+    assert re.search(r"[+-]\d+\.\d{3}\b", v.text)
+    assert re.search(r"\[[+-]?\d+\.\d{3}, [+-]?\d+\.\d{3}\]", v.text)
+
+
+def test_continuous_verdict_alpha_used_is_alpha_family_over_k() -> None:
+    """`alpha_used` is the two-sided alpha the printed interval was actually taken at —
+    `alpha_family / k`, derived from the same exact rational as the levels (`-ml` §3.3, §3.4
+    Rule 8)."""
+    diffs = [0.1, -0.2, 0.3, 0.15, -0.1]
+    v1 = continuous_verdict(
+        diffs, metric_name="mrr", family=["mrr"], alpha_family=0.05, unit_kind="query",
+        design_effect=1.0, basis="by-construction", B=100, seed=1, support=(0.0, 1.0),
+    )
+    assert v1.alpha_used == pytest.approx(0.05)
+    v2 = continuous_verdict(
+        diffs, metric_name="mrr", family=["mrr", "sep_z"], alpha_family=0.05, unit_kind="query",
+        design_effect=1.0, basis="by-construction", B=100, seed=1, support=(0.0, 1.0),
+    )
+    assert v2.alpha_used == pytest.approx(0.025)
+
+
+def test_continuous_verdict_mrr_worked_case_from_the_note() -> None:
+    """`-ml` §3.4 Rule 8's own worked pair: `mrr` passes `(0.0, 1.0)` and is clamped to
+    `(-1.0, 1.0)`. Constructed so the clamp binds: every per-item difference at the support's own
+    edge, so the unclamped widened interval would run off `[-1, 1]`."""
+    diffs = [1.0] * 10
+    v = continuous_verdict(
+        diffs,
+        metric_name="mrr",
+        family=["mrr"],
+        alpha_family=0.05,
+        unit_kind="query",
+        design_effect=4.0,
+        basis="measured",
+        B=500,
+        seed=2,
+        support=(0.0, 1.0),
+    )
+    assert v.ci == (1.0, 1.0)
+
+
+def test_continuous_verdict_sep_z_worked_case_is_never_clamped() -> None:
+    """`sep_z` passes `support=None` and is never clamped (`-ml` §3.4 Rule 8) — a per-unit
+    difference sample entirely above 1.0 stays there under widening, where an `mrr`-shaped clamp
+    would have pinned it to 1.0."""
+    diffs = [1.5] * 10
+    v = continuous_verdict(
+        diffs,
+        metric_name="sep_z",
+        family=["sep_z"],
+        alpha_family=0.05,
+        unit_kind="query",
+        design_effect=4.0,
+        basis="measured",
+        B=500,
+        seed=2,
+        support=None,
+    )
+    assert v.ci[1] > 1.0
+
+
+def test_continuous_verdict_clamp_actually_binds_when_diffs_have_variance() -> None:
+    """The note's own `mrr` worked case (`test_continuous_verdict_mrr_worked_case_from_the_note`)
+    uses `diffs = [1.0] * 10`, whose bootstrap interval is a **degenerate point** — every resample
+    mean is exactly 1.0, so widening scales a zero half-width to a zero half-width and the printed
+    `(1.0, 1.0)` would be identical with or without the derived clamp. That test does not exercise
+    the clamp at all; it is a coincidence of a zero-variance construction, not evidence the clamp
+    ran. This test uses diffs with real spread, so the unclamped `sqrt(DEFF)`-widened upper bound
+    genuinely runs past `1.0` (confirmed at `design_effect=1.0/2.0/4.0` the unclamped and clamped
+    bounds agree, and only at `9.0` do they diverge — `1.08` unclamped against `1.0` clamped) —
+    which is what a dropped clamp actually changes (`-ml` §3.4 Rule 8)."""
+    diffs = [0.6, 0.9, 0.75, 0.95, 0.65, 0.99, 0.7, 0.98, 0.55, 0.97]
+    v = continuous_verdict(
+        diffs,
+        metric_name="mrr",
+        family=["mrr"],
+        alpha_family=0.05,
+        unit_kind="query",
+        design_effect=9.0,
+        basis="measured",
+        B=2000,
+        seed=2,
+        support=(0.0, 1.0),
+    )
+    assert v.ci[1] == 1.0
 
 
 # --- `-ml` §11.2 / §11.10 — the one percentile in the package (§4 S1e Table C) ------------------

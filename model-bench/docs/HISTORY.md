@@ -2,6 +2,82 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-09 — `-ml` §3.4 Rule 8: `continuous_verdict()`, the continuous producer
+
+**What:** `docs/plans/small-model-benchmarking-ml.md` §3.4 Rule 8 (v1.16-v1.19), against `2d23482`.
+`modelbench/stats.py`, `tests/test_stats.py`. **600 → 627 tests**, `.venv/bin/ruff check modelbench
+tests` clean, **13 mutations** (2 caught real gaps — see below), each `cp`-aside / mutate / run /
+`cp`-back / `diff -q` byte-identical.
+
+**Delivered:** `ContinuousVerdict` (13 fields — a sibling type to `Verdict`, never one with six
+fields left `None`) and `continuous_verdict()`, the entry point for every continuous metric
+(MRR, score separation). Two new module-private helpers it composes: `_family_ci_levels(alpha,
+k)`, the exact-rational quantile pair `alpha/(2k)`, `1 - alpha/(2k)` recovered as
+`Fraction(str(alpha_family))` (never `Fraction(alpha_family)` — the double's own binary value);
+and `_support_clamp(support)`, the clamp of the *difference's* support `(lo - hi, hi - lo)`,
+`None` for an unbounded metric. `continuous_verdict()` takes no `resolving`, `alpha_step`,
+percentile levels or `clamp` — all four are derived internally or unrepresentable at the call
+site — and refuses on five conditions: an empty or non-finite `diffs` and `design_effect < 1.0`
+are inherited unchanged from `paired_bootstrap`/`paired_cluster_bootstrap` rather than
+re-checked; a metric not in its own `family` and a degenerate `support` (`lo >= hi`) are this
+function's own. It calls `paired_cluster_bootstrap` — Rule 8's stated entry point — with the
+derived levels and clamp, so the pack's declared `design_effect` and the metric's `support` both
+reach the one interval that is printed. `diff`, both CI bounds and the half-width print at three
+decimal places (never "pp" — this path has no percentage-point convention to inherit from
+`verdict()`), and `alpha_used` is `alpha_family / k`, the two-sided alpha the printed interval
+was actually taken at.
+
+**State recovered, not started over.** `tests/test_stats.py`'s 348-line red phase (22 test
+definitions, 26 test instances with parametrization) predated this unit, landed by an agent
+killed twice by platform failures; this unit added the green phase plus one test the mutation
+pass found the red phase had missed (below), and one unrelated one-line fix (`import re`, used
+by two of the inherited tests but never added — a `NameError` waiting under the first `re.search`
+call, not an assertion).
+
+**A gap the red phase's own mutation table did not close, found and closed in this unit.**
+`test_continuous_verdict_mrr_worked_case_from_the_note` (`diffs = [1.0] * 10`) survived a mutation
+that dropped the derived clamp entirely (`clamp=None` unconditionally): with every difference
+identical, the bootstrap interval is a zero-width point at 1.0, and widening a zero half-width by
+any `sqrt(DEFF)` is still zero — so the clamp never has anything to clamp in that construction,
+and `v.ci == (1.0, 1.0)` holds with or without it. The test's own docstring claim ("the unclamped
+widened interval would run off `[-1, 1]`") is false of the construction it describes. Not a wrong
+assertion — it passes, correctly — just not evidence the clamp ran. Added
+`test_continuous_verdict_clamp_actually_binds_when_diffs_have_variance` (diffs with real spread,
+`design_effect=9.0`, where the unclamped widened upper bound is measured at `1.08` against a
+clamped `1.0`) as a second, load-bearing witness; confirmed it kills the mutation the worked case
+did not.
+
+**Mutations, and what each targeted:** the metric-not-in-family refusal · the degenerate-support
+refusal (both `_support_clamp` and `continuous_verdict`'s own path to it) · the single-analysis-
+unit refusal, plus a variant merging it with the empty-`diffs` check (`len(diffs) < 2` instead of
+`== 1`) to confirm the two refusals' messages would otherwise collide — the empty case must reach
+`paired_bootstrap`'s own "at least one difference" text, not the single-unit refusal's — the
+inherited empty-`diffs`, non-finite-`diffs` and `design_effect < 1.0` refusals (each disabled at
+its source in `paired_bootstrap`/`paired_cluster_bootstrap`) · `_family_ci_levels`'s
+`Fraction(str(...))` recovery and its `2 * k` factor · `_support_clamp`'s difference conversion ·
+`alpha_used`'s `/ k` (against `/ (2 * k)`) · the family size `k` itself (off-by-one) · the clamp
+call-through (the gap above) · `distinguishable`'s strict `>`/`<` (against `>=`/`<=`) — this one
+**survived**: both existing worked tests place the CI bounds strictly away from zero, so the
+mutation is unwitnessed at the boundary. Consistent with `verdict()`'s own identical
+`ci[0] > 0 or ci[1] < 0` convention, which carries no boundary-exact test either; a bootstrap
+interval landing exactly on `0.0` could not be constructed cheaply in the time available for this
+pass and is left as a known gap rather than papered over.
+
+**Whole-diff cross-check, done before declaring done: nothing found beyond the one gap above.**
+Walked `stats.py` and `test_stats.py` together as one change — the ordering of
+`continuous_verdict`'s own checks (family membership, then `_support_clamp`, then the
+single-unit refusal, then the call into `paired_cluster_bootstrap`) against every refusal test's
+combination of valid/invalid arguments (no two refusal conditions are ever true in the same test,
+so ordering never changes which message a test sees); the module docstring's rule count against
+the new `continuous_verdict()` addition (updated "seven" to "eight", added item 8); `_plural`,
+`Basis` and `Literal` reuse against their existing single definitions (no duplicate homes).
+
+**Line-pin drift — reported, not fixed (routes to `architect`).** The module docstring's 5-line
+Rule 8 addition sits above every function in the file, so every `stats.py:<line>` citation in
+`docs/plans/small-model-benchmarking-ml.md` shifts by **+5**: `paired_bootstrap` `149` → `154`,
+`paired_cluster_bootstrap` `202` → `207`, `_widen` `246` → `251`, and §11.2.2's `stats.py:159` →
+`164`. New code was appended at the file's end, so nothing else moves.
+
 ## 2026-09-08 — §4 S1e Table F: the continuous carrier lands, scoped to its own proof surface
 
 **What:** `docs/plans/small-model-benchmarking.md` §4 S1e **Table F** (v1.23, plan-gate P6-1), the
