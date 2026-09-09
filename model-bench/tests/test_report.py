@@ -2210,6 +2210,36 @@ def test_the_decided_by_bullet_names_mcnemar_exact_where_one_instrument_decided(
     assert "conservative envelope" not in md
 
 
+def test_the_decided_by_bullet_names_a_support_bound_with_its_boundary_value_and_no_level() -> None:
+    """`-ml` §3.4 Rule 4a, assertion 10 — the **fourth** rendering of the bullet, and the one
+    that closes impl-gate P8-5's finding as collateral.
+
+    `(a=0, b=0, c=38, d=2)` at n=40, DEFF 1.5 is the note's separating case: the composed
+    unclamped lower bound is `-1.01124`, outside the support, so the printed `-1.0` is a boundary
+    the `√DEFF` widening pushed past the parameter space — not either arm's own bound, and not the
+    exact paired bootstrap either, though it is the more negative of the two unclamped arms and
+    `P8-1`'s own suggested fix would have named it. A `support bound` token carries no `p=`
+    clause, because no level produced it, and renders instead with the support's own boundary
+    value: `support bound (-1)`.
+    """
+    a_ok = [False] * 40
+    b_ok = [True] * 38 + [False] * 2
+    a, b = _seed_arms(a_ok, b_ok)
+    a = run("cand", items=list(a.items), aggregates=a.aggregates, design_effect=1.5,
+            basis="measured", fingerprint_fields=model_fields(modelKey="cand", packId=PACK_ID))
+    b = run("incumbent", items=list(b.items), aggregates=b.aggregates, design_effect=1.5,
+            basis="measured",
+            fingerprint_fields=model_fields(modelKey="incumbent", packId=PACK_ID))
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert (
+        "- decided by: conservative envelope "
+        "(lower bound: support bound (-1); upper bound: MOVER-D)"
+    ) in md
+    # The false sentence is not confined to the not-distinguishable path (`-ml` §3.4 Rule 4a) —
+    # this is a *published, positive* verdict, which is the fact that makes the defect urgent.
+    assert "incumbent is better than cand" in md
+
+
 def test_a_manifest_that_declares_no_resample_seed_is_refused(tmp_path) -> None:
     """The other half of P3-5: `PackRef.seed` has no default, so a manifest omitting
     `sampling.seed` must be a named refusal rather than a `KeyError` or a conjured number.

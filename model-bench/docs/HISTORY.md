@@ -2,6 +2,53 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-09 — the support clamp moves off the envelope's arms, onto the printed interval
+
+**What:** `docs/plans/small-model-benchmarking.md` §4 S1e Table H, implementing `-ml` v1.19 §3.4
+Rule 4a — S1's last table. `modelbench/stats.py`, `modelbench/report.py`, `tests/test_stats.py`,
+`tests/test_report.py`. **635 → 648 tests** (13 added: 12 in `test_stats.py`, 1 in
+`test_report.py`), `.venv/bin/ruff check modelbench tests` clean, **9 mutations, all caught**,
+each `cp`-aside / mutate / run / `cp`-back / `diff -q` byte-identical restore.
+
+**Delivered.** A support is a property of the *estimand*, so it is applied once, to the printed
+interval, never to a composition's input. `envelope_arms` now widens both arms with `clamp=None`
+and returns them unclamped; the private composer `_compose` clamps its own composed result to the
+new `SUPPORT_DIFF_PROPORTIONS` constant and returns `(interval, bound_by)`; `bound_by` is now the
+three-token `BoundBy` alias (`"MOVER-D"`, `"exact paired bootstrap"`, `"support bound"`), computed
+from the composed *unclamped* value against the support on a strict comparison — expressed as
+`lo != u_lo` against the already-clamped bound rather than re-spelling the support subscript a
+second time, which is what keeps the plan's residuals 2 and 3 at their stated count of one each.
+`conservative_envelope` returns `_compose(...)`'s first element; `verdict()` takes both halves of
+`_compose`'s return rather than recomputing the attribution inline, closing impl-gate P8-5's
+finding as collateral. `report.py`'s `- decided by:` renderer gives a `support bound` token the
+support's own boundary value and no `p=` clause: `support bound (-1)`, pinned verbatim by the
+note's assertion 10. Confirmed bit-identical against the note's ten assertions and its two
+exhaustive sweeps (commutation and verdict-invariance, both at n=12) before writing any test.
+
+**The table's own line pins were stale** (`stats.py` +5, `report.py` +~155, against the table's
+`e162ba9` baseline) from three units landed since — verified by content-match, not by line number,
+per this coordination's standing discipline. All six residuals reached their stated target
+(2→0, 0→1, 0→1, 1→0, 1→0, 2→0); `test_neither_printed_bound_is_ever_tighter_than_either_arm` was
+the one shipped test the edit falsifies, and its comparison moved to the support-clamped arms per
+the table's own row. `report.py`'s edit landed in the same `_decided_by_line` renderer region as
+`c926308`'s continuous-verdict branch but does not touch it — confirmed by reading `c926308`'s
+diff, which never reaches `_decided_by_line`.
+
+**Mutation table (9, all caught):** `envelope_arms` reinstating `clamp=(-1.0, 1.0)` on both arms
+(3 tests); `_compose`'s strict comparison weakened to `<=`/`>=` (2 tests); the tie-break's own
+`<=`/`>=` narrowed to `<`/`>` (1 test, Pass 8's mutation 6 restored); `_compose` dropping its own
+clamp on return (2 tests); `conservative_envelope` returning `_compose(...)`'s second element
+instead of the first (8 tests); `verdict()` passing `_compose(exact_arm, mover_arm)` — arguments
+swapped — instead of `(mover_arm, exact_arm)` (3 tests, the data-plumbing shape the coordination
+flagged); `_decided_by_line` dropping its `support bound` branch so it falls into the `p=` clause
+(1 test); `_decided_by_line`'s `zip` over `SUPPORT_DIFF_PROPORTIONS` reversed (1 test); `_compose`'s
+two support subscripts transposed (12 tests). No equivalent mutants.
+
+**Not delivered, and not owed.** No number in any §3.8 pack moves — the note's headline is that
+arms-versus-composed is immaterial to the statistics, verified over 173,472 combinations, and
+nothing in this change disturbs that; `bound_by` is computed at report time and was never stored,
+so no `migrate` step is owed (`grep -rFn bound_by modelbench/results.py` stayed at 0 throughout).
+
 ## 2026-09-09 — the report-side seam: `compare_report` routes a continuous verdict metric
 
 **What:** `docs/plans/small-model-benchmarking.md` §4 S1's `compare_report` block and §3.3 (iv),

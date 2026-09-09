@@ -66,6 +66,10 @@ ALPHA_FAMILY: float = 0.05
 
 Basis = Literal["by-construction", "measured", "assumed"]
 DecidedBy = Literal["mcnemar-exact", "conservative-envelope"]
+#: A `Verdict.bound_by` element — which instrument the printed bound came from, or that the
+#: support truncated it (`-ml` §3.4 Rule 4a). A named alias beside `DecidedBy` rather than a bare
+#: `tuple[str, str]`, so the closed set is checked rather than merely conventional.
+BoundBy = Literal["MOVER-D", "exact paired bootstrap", "support bound"]
 
 
 class DuplicateAnalysisUnit(ValueError):
@@ -384,17 +388,26 @@ def exact_paired_quantiles(
     return bounds[0], bounds[1]
 
 
+#: The support of a difference of two proportions read off one paired table — `[-1, 1]` by
+#: construction, so it is `-ml` §3.4 Rule 4a's *derivable-from-what-the-function-already-holds*
+#: category, not a new parameter (contrast `sep_z`'s support, which stays declared). One constant
+#: in one place, exactly as the percentile levels are: `_compose` clamps its composed result to
+#: this, once, and never an arm (§4 S1e Table H).
+SUPPORT_DIFF_PROPORTIONS: tuple[float, float] = (-1.0, 1.0)
+
+
 def envelope_arms(
     table: tuple[int, int, int, int], *, design_effect: float
 ) -> tuple[tuple[float, float], tuple[float, float]]:
     """The envelope's two arms, `sqrt(DEFF)`-widened about the same point estimate.
 
-    Returns `(mover_d, exact_paired_bootstrap)`. It exists because the report is required to name
-    **which arm bound each bound** (`-ml` §3.4 Rule 4) — an audit that is cheap and deterministic
-    once the resample is gone, and that makes Rule 4's mixture legible to a reader instead of
-    inferable only from the code. Both `conservative_envelope` and `verdict()` take their arms
-    from here and compose them through `_compose`, and `verdict()` reads the attribution off the
-    same pair, so no caller recomputes another's arithmetic (review P8-5).
+    Returns `(mover_d, exact_paired_bootstrap)`, **unclamped** (`-ml` §3.4 Rule 4a). It exists
+    because the report is required to name **which arm bound each bound** (`-ml` §3.4 Rule 4) — an
+    audit that is cheap and deterministic once the resample is gone, and that makes Rule 4's
+    mixture legible to a reader instead of inferable only from the code. Both
+    `conservative_envelope` and `verdict()` take their arms from here and compose them through
+    `_compose`, and `verdict()` receives the attribution from `_compose`'s return rather than
+    reading it off this pair, so no caller recomputes another's arithmetic (review P8-5).
 
     **Rule 4's precondition 4 is checked here** (`-ml` §3.4 Rule 4). It used to be, one layer
     down, in the `paired_cluster_bootstrap` call that v1.11's closed form removed — so it retired
@@ -413,40 +426,59 @@ def envelope_arms(
         raise ValueError("design_effect must be >= 1.0 (-ml §3.4 Rule 4, precondition 4)")
     point = (b - c) / n
     scale = math.sqrt(design_effect)
-    # Both arms keep the identical clamp: Rule 4 requires them widened the same way, and a clamp
-    # is part of "the same way" (§4 S1e Table E).
-    mover = _widen(mover_d_interval(a, b, c, d), point, scale, clamp=(-1.0, 1.0))
+    # Neither arm is clamped: a support is a property of the estimand, applied once to the
+    # printed interval, never to an input of a composition (`-ml` §3.4 Rule 4a). Both arms are
+    # still widened "the same way" per Rule 4 — `clamp=None` on both is the same way.
+    mover = _widen(mover_d_interval(a, b, c, d), point, scale, clamp=None)
     exact = _widen(
         exact_paired_quantiles(table, levels=(LEVEL_CI95_LO, LEVEL_CI95_HI)),
         point,
         scale,
-        clamp=(-1.0, 1.0),
+        clamp=None,
     )
     return mover, exact
 
 
 def _compose(
     mover: tuple[float, float], exact: tuple[float, float]
-) -> tuple[float, float]:
-    """The envelope of the two arms, taken **bound by bound** (`-ml` §3.4 Rule 4).
+) -> tuple[tuple[float, float], tuple[BoundBy, BoundBy]]:
+    """The envelope of the two arms, taken **bound by bound** (`-ml` §3.4 Rule 4), clamped to the
+    support **once, here** and returned with the attribution (`-ml` §3.4 Rule 4a).
 
-    One home for one arithmetic. `conservative_envelope` and `verdict()` both need this pair —
-    `verdict()` because it also needs the arms themselves for the attribution and so cannot go
-    through `conservative_envelope` — and each spelled the `min`/`max` out for itself. Two copies
-    of a formula is one copy and one bug (plan §3.9); it is the same rule that retired the two
-    private percentiles, and the same rule applies at four lines as at forty (review P8-5).
+    One home for one arithmetic. `conservative_envelope` and `verdict()` both need this
+    composition — `verdict()` because it needs `_compose`'s second return value too, the
+    attribution, and `conservative_envelope` returns only the first, so `verdict()` cannot go
+    through it — and each spelled the `min`/`max` out for itself. Two copies of a formula is one
+    copy and one bug (plan §3.9); it is the same rule that retired the two private percentiles,
+    and the same rule applies at four lines as at forty (review P8-5).
 
     Why bound by bound rather than the wider interval whole: see `conservative_envelope`, which
     carries the `(4, 5, 3, 0)` measurement that decides it.
 
-    **This is where `-ml` v1.19 §3.4 Rule 4a's clamp goes**, and it is not applied here yet. Rule 4a
-    rules the `(-1, 1)` support bound a property of the *estimand*, so it belongs on the printed
-    interval and not on a composition's inputs: `envelope_arms` widens with `clamp=None` and this
-    function clamps its own result, returning `(interval, bound_by)` with Rule 4a's three-token
-    set. That edit is P8-1's unit, not P8-5's; the two placements commute exactly, so the printed
-    numbers do not move when it lands.
+    **The clamp lives here and nowhere upstream** (`-ml` §3.4 Rule 4a). A support is a property of
+    the *estimand*, so it applies once, to the printed interval, never to a composition's input:
+    `envelope_arms` widens both arms with `clamp=None` and this function clamps its own composed
+    result to `SUPPORT_DIFF_PROPORTIONS`. `bound_by` is computed from the composed **unclamped**
+    value against the support, on a **strict** comparison — a bound sitting *at* the support
+    because both arms genuinely produced it is an arm's bound, not the support's.
     """
-    return min(exact[0], mover[0]), max(exact[1], mover[1])
+    u_lo, u_hi = min(mover[0], exact[0]), max(mover[1], exact[1])
+    lo = max(SUPPORT_DIFF_PROPORTIONS[0], u_lo)
+    hi = min(SUPPORT_DIFF_PROPORTIONS[1], u_hi)
+    # `lo != u_lo` iff the support was strictly below the composed lower bound — `max` only ever
+    # moves its first argument's value onto its result when the second argument is strictly
+    # smaller — so this is Rule 4a's strict support comparison, not a shortcut around it
+    # (assertion 5: a bound sitting *at* the support because both arms genuinely produced it
+    # leaves `lo == u_lo` and is an arm's).
+    bound_by: tuple[BoundBy, BoundBy] = (
+        "support bound"
+        if lo != u_lo
+        else ("MOVER-D" if mover[0] <= exact[0] else "exact paired bootstrap"),
+        "support bound"
+        if hi != u_hi
+        else ("MOVER-D" if mover[1] >= exact[1] else "exact paired bootstrap"),
+    )
+    return (lo, hi), bound_by
 
 
 def conservative_envelope(
@@ -491,7 +523,7 @@ def conservative_envelope(
     `[3.3, 26.7] pp`, excluding zero against an exact p of 0.125, since with four non-zero rows
     `P(no +1 drawn) = (26/30)**30 = 1.4% < 2.5%` makes a 2.5th percentile of zero unreachable.
     """
-    return _compose(*envelope_arms(table, design_effect=design_effect))
+    return _compose(*envelope_arms(table, design_effect=design_effect))[0]
 
 
 def cluster_bootstrap(
@@ -926,10 +958,12 @@ class Verdict:
     b: int
     c: int
     decided_by: DecidedBy
-    #: Which arm of the conservative envelope bound the (lower, upper) printed bound — the audit
-    #: `-ml` §3.4 Rule 4 puts in the `- decided by:` bullet's place once the seed parenthetical is
-    #: gone. `None` on `mcnemar-exact`, where one instrument produced the whole interval.
-    bound_by: tuple[str, str] | None
+    #: Which arm of the conservative envelope bound the (lower, upper) printed bound, or that the
+    #: `√DEFF` widening ran off the parameter space so the interval carries no information in
+    #: that direction (`"support bound"`, `-ml` §3.4 Rule 4a) — the audit `-ml` §3.4 Rule 4 puts
+    #: in the `- decided by:` bullet's place once the seed parenthetical is gone. `None` on
+    #: `mcnemar-exact`, where one instrument produced the whole interval.
+    bound_by: tuple[BoundBy, BoundBy] | None
     marginal_overlap: bool
     alpha_used: float
     floor_demoted: bool = False
@@ -1201,7 +1235,7 @@ def verdict(
     if mcnemar_may_decide:
         ci = mover_d_interval(a, b, c, d)
         decided_by: DecidedBy = "mcnemar-exact"
-        bound_by: tuple[str, str] | None = None
+        bound_by: tuple[BoundBy, BoundBy] | None = None
         raw_significant = p <= alpha
     else:
         # **The envelope, not the resample alone** (`-ml` v1.8 §3.4 Rule 4, review M-ML-8). The
@@ -1214,13 +1248,11 @@ def verdict(
         # requires the report to name **which arm bound each bound** and recomputing them in the
         # renderer would be a second home for one arithmetic. The *composition* is not a second
         # home either: `_compose` is the one spelling, shared with `conservative_envelope`
-        # (review P8-5).
+        # (review P8-5). `_compose` returns both halves — the clamped interval and the
+        # attribution — and `verdict()` takes both rather than recomputing either
+        # (`-ml` §3.4 Rule 4a).
         mover_arm, exact_arm = envelope_arms((a, b, c, d), design_effect=resolving.design_effect)
-        ci = _compose(mover_arm, exact_arm)
-        bound_by = (
-            "MOVER-D" if mover_arm[0] <= exact_arm[0] else "exact paired bootstrap",
-            "MOVER-D" if mover_arm[1] >= exact_arm[1] else "exact paired bootstrap",
-        )
+        ci, bound_by = _compose(mover_arm, exact_arm)
         decided_by = "conservative-envelope"
         # **A conjunction, not the interval alone** (review B-ML-2). At `design_effect == 1.0` with
         # a non-`by-construction` basis — the fail-safe every comparison carries until the

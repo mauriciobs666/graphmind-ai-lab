@@ -25,6 +25,7 @@ from modelbench.stats import (
     LEVEL_CI95_LO,
     LEVEL_P50,
     LEVEL_P95,
+    SUPPORT_DIFF_PROPORTIONS,
     BootstrapResult,
     ContinuousVerdict,
     DuplicateAnalysisUnit,
@@ -1356,6 +1357,13 @@ def test_neither_printed_bound_is_ever_tighter_than_either_arm(deff) -> None:
     implementer taking *"the wider of"* to mean "whichever interval is wider". Exhaustive over
     every table at n=12 — 455 of them, the tool-caller pack's own n — and over a stride through
     n=40, where the exhaustive sweep would cost 12 341 enumerations per design effect.
+
+    **The comparison moves to the *clamped* arms** (`-ml` §3.4 Rule 4a, §4 S1e Table H).
+    `envelope_arms` now returns its arms **unclamped**, so an arm that itself escapes the support
+    (`-1.0 <= -1.5` is False) would fail this test against the raw arm even though the printed
+    interval is still never tighter than the support-clamped one — which is Rule 4's own
+    conservatism property, restated rather than weakened: the envelope is never tighter than the
+    *clamped* MOVER-D or exact-bootstrap arm.
     """
     tables = [(a, b, c, 12 - a - b - c)
               for a in range(13) for b in range(13 - a) for c in range(13 - a - b)]
@@ -1365,8 +1373,141 @@ def test_neither_printed_bound_is_ever_tighter_than_either_arm(deff) -> None:
     for table in tables:
         mover, exact = envelope_arms(table, design_effect=deff)
         lo, hi = conservative_envelope(table, design_effect=deff)
-        assert lo <= mover[0] and hi >= mover[1], table
-        assert lo <= exact[0] and hi >= exact[1], table
+        assert lo <= max(SUPPORT_DIFF_PROPORTIONS[0], mover[0]), table
+        assert hi >= min(SUPPORT_DIFF_PROPORTIONS[1], mover[1]), table
+        assert lo <= max(SUPPORT_DIFF_PROPORTIONS[0], exact[0]), table
+        assert hi >= min(SUPPORT_DIFF_PROPORTIONS[1], exact[1]), table
+
+
+# --- `-ml` §3.4 Rule 4a: the support clamp moves off the arms and onto the printed interval -------
+# The ten assertions below are the note's own (§4 S1e Table H); values, tolerances and witnesses
+# are not re-derived here. The two witness tables are `(5, 0, 7, 0)` (`P8-1`'s own) and
+# `(0, 0, 38, 2)` (the separating case).
+
+
+def test_the_envelope_arms_are_not_clamped_to_the_support() -> None:
+    """`-ml` §3.4 Rule 4a assertion 1 — kills a reinstated `clamp=(-1.0, 1.0)` inside
+    `envelope_arms`, the mutation this whole ruling is about.
+    """
+    mover, exact = envelope_arms((5, 0, 7, 0), design_effect=4.0)
+    assert mover[0] < -1.0
+    assert exact[0] < -1.0
+
+
+def test_the_printed_interval_is_unchanged_by_where_the_clamp_lives() -> None:
+    """`-ml` §3.4 Rule 4a assertion 2 — kills dropping the clamp from the composer (the note's
+    rejected alternative 3), and is the assertion that makes "the number is unchanged" evidence
+    rather than a claim.
+    """
+    assert conservative_envelope((5, 0, 7, 0), design_effect=4.0) == (
+        -1.0, 0.13334065646719284,
+    )
+    assert conservative_envelope((0, 0, 38, 2), design_effect=1.5) == (
+        -1.0, -0.7728921326614777,
+    )
+
+
+@pytest.mark.parametrize(
+    "deff, expected",
+    [(4.0, ("support bound", "MOVER-D")), (1.0, ("exact paired bootstrap", "MOVER-D"))],
+    ids=["clamp-binds", "clamp-does-not-bind"],
+)
+def test_bound_by_is_about_the_clamp_not_the_table(deff, expected) -> None:
+    """`-ml` §3.4 Rule 4a assertions 3 and 7, deliberately adjacent — the *same* table,
+    `(5, 0, 7, 0)`, one design effect apart.
+
+    At DEFF 4.0 (assertion 3) `P8-1` asks only that `bound_by[0]` stop being `"MOVER-D"`; it
+    must **not** become `"exact paired bootstrap"` either, because the composed unclamped lower
+    bound is itself outside the support — neither arm produced the printed bound. At DEFF 1.0
+    (assertion 7), the same table with no clamp binding, the token reverts to naming the arm
+    that actually produced the bound: the token is about the clamp, not about the table.
+    """
+    v = verdict(_outcomes(5, 0, 7, 0), resolving=_rp(12, deff=deff, basis="measured"),
+                metric_name="m", family=["m"])
+    assert v.bound_by == expected
+
+
+def test_the_cell_p8_1s_suggested_fix_gets_wrong() -> None:
+    """`-ml` §3.4 Rule 4a assertion 4 — the separating case, where the false sentence sits
+    beside a *positive* verdict rather than a withheld one.
+
+    `(0, 0, 38, 2)` at n=40, DEFF 1.5: unclamped MOVER-D is inside the support and the
+    unclamped exact paired bootstrap is outside it, so `P8-1`'s suggested fix — attribute from
+    the unclamped arms — would print `"exact paired bootstrap"`, which is still false: the exact
+    arm produced `-1.0112`, not the printed `-1.0`. Only the third token removes the error.
+    """
+    v = verdict(_outcomes(0, 0, 38, 2), resolving=_rp(40, deff=1.5, basis="measured"),
+                metric_name="m", family=["m"])
+    assert v.bound_by[0] == "support bound"
+    assert v.distinguishable is True
+    assert v.ci[0] == -1.0
+
+
+def test_the_support_comparison_is_strict() -> None:
+    """`-ml` §3.4 Rule 4a assertion 5 — kills `<=` substituted for `<` in the support test.
+
+    `(0, 0, 12, 0)` at DEFF 1.0: both arms return exactly `-1.0` with no widening applied at
+    all, so the bound sits *at* the support without the clamp having moved anything — an arm's
+    bound, not the support's.
+    """
+    v = verdict(_outcomes(0, 0, 12, 0), resolving=_rp(12, deff=1.0, basis="measured"),
+                metric_name="m", family=["m"])
+    assert v.ci[0] == -1.0
+    assert v.bound_by == ("MOVER-D", "MOVER-D")
+
+
+def test_the_tie_break_stays_pinned_at_a_genuine_unclamped_tie() -> None:
+    """`-ml` §3.4 Rule 4a assertion 6 — kills Pass 8's surviving mutation 6 (`<=,>=` -> `<,>`).
+
+    `(0, 12, 0, 0)` at DEFF 1.0: the upper bound is a genuine unclamped tie, both arms
+    returning exactly `1.0`, so naming either is a true sentence and no fourth token is owed.
+    """
+    v = verdict(_outcomes(0, 12, 0, 0), resolving=_rp(12, deff=1.0, basis="measured"),
+                metric_name="m", family=["m"])
+    assert v.bound_by == ("MOVER-D", "MOVER-D")
+
+
+@pytest.mark.parametrize("deff", [1.0, 1.5, 4.0])
+def test_composing_then_clamping_matches_clamping_then_composing(deff) -> None:
+    """`-ml` §3.4 Rule 4a assertion 8 — the commutation property, asserted rather than
+    asserted-about; the shape of Rule 4's acceptance item 4. Exhaustive over every table at
+    n=12 — 455 of them — and what stops a future reader "restoring" the arm clamp in the belief
+    that it changes the printed number.
+    """
+    lo_support, hi_support = SUPPORT_DIFF_PROPORTIONS
+    for a in range(13):
+        for b in range(13 - a):
+            for c in range(13 - a - b):
+                d = 12 - a - b - c
+                mover, exact = envelope_arms((a, b, c, d), design_effect=deff)
+                composed_then_clamped = (
+                    max(lo_support, min(mover[0], exact[0])),
+                    min(hi_support, max(mover[1], exact[1])),
+                )
+                clamped_then_composed = (
+                    min(max(lo_support, mover[0]), max(lo_support, exact[0])),
+                    max(min(hi_support, mover[1]), min(hi_support, exact[1])),
+                )
+                assert composed_then_clamped == clamped_then_composed, (a, b, c, d)
+
+
+@pytest.mark.parametrize("deff", [1.5, 4.0])
+def test_the_clamp_never_changes_a_verdict(deff) -> None:
+    """`-ml` §3.4 Rule 4a assertion 9 — the assertion that catches a support that is **not**
+    the parameter space: a clamp inside the data's own range would change verdicts, and nothing
+    else in the suite would notice. Exhaustive over every table at n=12.
+    """
+    for a in range(13):
+        for b in range(13 - a):
+            for c in range(13 - a - b):
+                d = 12 - a - b - c
+                v = verdict(_outcomes(a, b, c, d), resolving=_rp(12, deff=deff, basis="measured"),
+                            metric_name="m", family=["m"])
+                mover, exact = envelope_arms((a, b, c, d), design_effect=deff)
+                u_lo, u_hi = min(mover[0], exact[0]), max(mover[1], exact[1])
+                unclamped_excludes_zero = u_lo > 0 or u_hi < 0
+                clamped_excludes_zero = v.ci[0] > 0 or v.ci[1] < 0
+                assert unclamped_excludes_zero == clamped_excludes_zero, (a, b, c, d)
 
 
 def test_the_verdict_records_which_arm_bound_each_printed_bound() -> None:

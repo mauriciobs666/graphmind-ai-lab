@@ -466,19 +466,34 @@ _NO_PAIRED_DATA_TALLY = " The tally below says where the rows went."
 
 
 def _decided_by_line(v: stats.Verdict) -> str:
-    """The `- decided by:` bullet (`-ml` v1.11 §3.4 Rule 4, §4 S1e Table D).
+    """The `- decided by:` bullet (`-ml` v1.11 §3.4 Rule 4, §4 S1e Tables D and H).
 
     On the envelope path it names **which arm bound each bound**, with the exact bootstrap arm
     carrying the level it was taken at. That audit is what the retired seed parenthetical's place
     is owed: naming one arm of a two-arm interval, as the retired token did, is M-ML-8's error
     one layer over, and it was wrong on the 12.6-16.5% of tables where MOVER-D binds both bounds.
+
+    A third token, `"support bound"`, names a bound the `√DEFF` widening pushed past the
+    parameter space — no arm produced it, so it carries no `p=` clause, and it renders instead
+    with the support's own boundary value: `support bound (-1)` on the lower bound, `(1)` on the
+    upper (`-ml` §3.4 Rule 4a).
     """
     if v.bound_by is None:
         return f"- decided by: {v.decided_by}"
-    lower, upper = (
-        arm if arm == "MOVER-D" else f"{arm}, p={float(level):g}"
-        for arm, level in zip(v.bound_by, (stats.LEVEL_CI95_LO, stats.LEVEL_CI95_HI), strict=True)
-    )
+    bounds = []
+    for arm, level, boundary in zip(
+        v.bound_by,
+        (stats.LEVEL_CI95_LO, stats.LEVEL_CI95_HI),
+        stats.SUPPORT_DIFF_PROPORTIONS,
+        strict=True,
+    ):
+        if arm == "MOVER-D":
+            bounds.append(arm)
+        elif arm == "support bound":
+            bounds.append(f"{arm} ({boundary:g})")
+        else:
+            bounds.append(f"{arm}, p={float(level):g}")
+    lower, upper = bounds
     return f"- decided by: conservative envelope (lower bound: {lower}; upper bound: {upper})"
 
 
