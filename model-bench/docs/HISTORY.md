@@ -2,6 +2,70 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-09 — S2 U71: the real pack loader (`load_pack`, `content_hash`, `validate_pack`)
+
+**What:** `docs/plans/small-model-benchmarking.md` §4 S2's pack-loader portion — the first S2
+unit, landing beside a concurrent unit building `modelbench/lmstudio.py` (not touched here).
+`modelbench/packs.py`, `tests/test_packs.py` (new), `tests/conftest.py` (`pack_fixture()` +
+`PACKS_DIR`), nine fixture packs under `tests/fixtures/packs/`. **648 → 708 tests** (this unit
+added 28, all in `test_packs.py`; the remainder of the combined 708 is the concurrent `lmstudio`
+unit's, filed separately), `.venv/bin/ruff check .` clean, **13 mutations, all caught**, each
+`cp`-aside / mutate / run / `cp`-back restore, diffed byte-identical against the pre-mutation file
+after every single one.
+
+**Delivered.** `Pack` (frozen dataclass: `packId`, `packVersion`, `role`, `contentHash: str`
+total, `manifest`, `root`) with `data_path`, `load_tool_module` (`importlib.util.spec_from_file_
+location`, never `sys.path`) and `ref()`; `load_pack(root)`; `content_hash(root)` (SHA-256 over
+sorted, NUL-delimited relative paths and bytes, excluding `PROVENANCE.md` **and** any
+`__pycache__` a prior `load_tool_module` call left behind — not named by the plan, added because a
+bytecode cache is a loader side effect, never pack content, and would otherwise make identity
+depend on whether some earlier process happened to import the pack); `validate_pack(pack) ->
+list[str]` (`[]` means valid, `Fingerprint.validate()`'s own shape), covering three independent
+axes: the `sampling` contract — structural, by calling `Pack.ref()` (which runs the existing
+`check_sampling_contract` rather than re-implementing it, per impl review Pass 1 §4 item 6), the
+row-count identity (reading `data.conversations` — the plan's own manifest key, see the correction
+below), and `-ml` §3.4 Rule 6's `replicatesPerScript > 1` rejection; `callSurface` derivation from
+`environment.requires` (factored into a standalone `derive_call_surface` for direct unit testing),
+rejecting a pack declaring neither or both of `lmstudio-chat` / `lmstudio-embeddings`; and an AST
+import allowlist (stdlib, via `sys.stdlib_module_names`, plus `modelbench.tooling` by name only —
+that module does not exist yet, and the check is a syntactic `ast.parse`/`ast.walk`, never an
+import, so it needs no dependency on it). `pack_ref_from_manifest` and `Pack.ref()` now share one
+manifest-parsing routine (`_ref_from_manifest_fields`) so the two routes cannot silently diverge on
+what a valid `sampling` block is; `pack_ref_from_manifest`'s externally observed messages are
+unchanged. The §3.3 totality boundary is asserted directly: `load_pack(...).ref().contentHash` is
+not `None` and equals `content_hash(root)`, while `pack_ref_from_manifest(...).contentHash` is
+`None` — both halves mutation-tested independently.
+
+**Correction (coordinator finding, same day, before acceptance): the row-count identity was dead
+on every plan-conformant manifest.** The first pass keyed the check off `sampling.dataFile`, a key
+this module invented — no manifest the plan specifies carries it (the check's own docstring claim
+that "the structural route already covers a pack that omits it" was false for that specific key,
+since nothing but this module's own code knew it existed), so the route silently returned `[]` on
+every real pack shape, including the `row_count_violation` fixture built to exercise it. The
+plan's tool-caller manifest literal (`docs/plans/small-model-benchmarking.md` line 435) already
+names the key: `"data": {"conversations": "conversations.jsonl", ...}`, beside the matching
+`sampling` block. Fixed to read `data.conversations` instead; `sampling.dataFile` is gone from
+every fixture. Added `tests/fixtures/packs/undeclared_replication/` and a test for §3.3's own
+worked example of why this route exists — `replicatesPerScript: 1` declared, four conversations
+per script shipped, "the case that slips past Rule 6's declaration check and past Rule 1 at once"
+— which Rule 6 does not catch (declared value is 1, not `> 1`) and the structural route does not
+catch (`analysisUnit == pairingKey[0]` holds); only the fixed row-count route does. Mutation:
+disabling the row-count call site entirely (`_sampling_problems` returning before
+`_row_count_identity_problems`) now fails two tests built on plan-conformant manifests (no invented
+key) — `test_validate_pack_rejects_the_row_count_identity_specifically` and
+`test_validate_pack_rejects_undeclared_replication_row_count_only` — where under the pre-fix code
+that same mutation was survivable, which was the whole finding.
+
+**Not this unit's:** `run` cross-checking a pack's derived `callSurface` against a model's catalog
+`type`, and `run` calling `validate_pack`'s AST check and failing closed, are the runner/CLI unit's
+(§3.3, §3.4.4a) — `packs.py` only builds the check and makes it callable.
+`modelbench/lmstudio.py` / `tests/test_lmstudio.py` (a concurrent S2 unit) and
+`modelbench/tooling.py` (not yet built by anyone) were neither read nor depended on.
+
+**Verification:** `.venv/bin/python -m pytest -q` from `model-bench/` → **708 passed, 1
+deselected** (the concurrent unit's one `-m live` test), exit 0. `.venv/bin/ruff check .` → `All
+checks passed!`.
+
 ## 2026-09-09 — the support clamp moves off the envelope's arms, onto the printed interval
 
 **What:** `docs/plans/small-model-benchmarking.md` §4 S1e Table H, implementing `-ml` v1.19 §3.4

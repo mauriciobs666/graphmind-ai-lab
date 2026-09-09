@@ -1,0 +1,15 @@
+{
+  "packId": "fixture-call-surface-both",
+  "packVersion": "1.0.0",
+  "role": "guard-judge",
+  "environment": {"requires": ["lmstudio-chat", "lmstudio-embeddings"]},
+  "sampling": {
+    "seed": 20260909,
+    "pairingKey": ["itemId"],
+    "analysisUnit": "itemId"
+  },
+  "metrics": {
+    "verdictMetrics": ["falseAdvanceRate"],
+    "headlineMetric": "falseAdvanceRate"
+  }
+}

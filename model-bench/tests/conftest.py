@@ -1,12 +1,14 @@
-"""Shared hand-built fixtures for the S1 suite.
+"""Shared hand-built fixtures for the suite.
 
 S1 has no pack loader and makes no model calls (`docs/plans/small-model-benchmarking.md` §4 S1),
-so every fixture here is an in-memory record built by hand. Nothing in this file touches the
-network, LM Studio, or any path outside `model-bench/`.
+so every in-memory fixture here is built by hand. S2 adds `pack_fixture()`, resolving the real
+on-disk packs under `tests/fixtures/packs/` that `load_pack`/`validate_pack` read (§4 S2) — those
+still touch no network and nothing outside `model-bench/`.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -210,6 +212,17 @@ def tmp_root(tmp_path):
     return tmp_path
 
 
+#: S2's on-disk fixture packs (`model-bench/tests/fixtures/packs/<name>/`), each a real pack
+#: directory `load_pack`/`validate_pack` read — never in-memory `PackRef`s, because the row-count
+#: identity and the AST import allowlist both need real files (plan §3.3, §4 S2).
+PACKS_DIR = Path(__file__).parent / "fixtures" / "packs"
+
+
+def pack_fixture(name: str) -> Path:
+    """The root directory of the named fixture pack under `tests/fixtures/packs/`."""
+    return PACKS_DIR / name
+
+
 __all__ = [
     "BinaryMetric",
     "ClassificationAggregates",
@@ -224,6 +237,7 @@ __all__ = [
     "guard_pack",
     "item",
     "model_fields",
+    "pack_fixture",
     "run",
     "tmp_root",
 ]

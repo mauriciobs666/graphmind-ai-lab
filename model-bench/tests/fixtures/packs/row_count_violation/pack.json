@@ -1,0 +1,18 @@
+{
+  "packId": "fixture-row-count-violation",
+  "packVersion": "1.0.0",
+  "role": "tool-caller",
+  "environment": {"requires": ["lmstudio-chat"]},
+  "data": {"conversations": "conversations.jsonl"},
+  "sampling": {
+    "scripts": 12,
+    "replicatesPerScript": 4,
+    "seed": 20260909,
+    "pairingKey": ["conversationId", "turnIndex"],
+    "analysisUnit": "conversationId"
+  },
+  "metrics": {
+    "verdictMetrics": ["cleanThroughTurnH"],
+    "headlineMetric": "cleanThroughTurnH"
+  }
+}

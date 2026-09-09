@@ -1,0 +1,16 @@
+{
+  "packId": "fixture-tooling-import-allowed",
+  "packVersion": "1.0.0",
+  "role": "guard-judge",
+  "environment": {"requires": ["lmstudio-chat"]},
+  "tools": {"module": "tools/sim.py", "entrypoint": "build_environment"},
+  "sampling": {
+    "seed": 20260909,
+    "pairingKey": ["itemId"],
+    "analysisUnit": "itemId"
+  },
+  "metrics": {
+    "verdictMetrics": ["falseAdvanceRate"],
+    "headlineMetric": "falseAdvanceRate"
+  }
+}

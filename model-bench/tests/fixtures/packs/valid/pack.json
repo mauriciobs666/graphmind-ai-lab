@@ -1,0 +1,33 @@
+{
+  "packId": "fixture-tool-caller",
+  "packVersion": "1.0.0",
+  "role": "tool-caller",
+  "schemaVersion": 1,
+  "description": "S2 fixture pack for packs.py: a minimal, fully valid tool-caller-shaped pack.",
+  "scorer": "toolcalls",
+  "environment": {"requires": ["lmstudio-chat"]},
+  "prompt": {
+    "systemPrompt": "prompts/system.md",
+    "toolSchemas": "tools/schemas.json",
+    "historyReplay": "structured",
+    "representToolSchemasEachTurn": true,
+    "historyTurns": 0,
+    "temperature": 0.0,
+    "maxTokens": 1024
+  },
+  "data": {"conversations": "conversations.jsonl", "catalog": "catalog.json"},
+  "tools": {"module": "tools/sim.py", "entrypoint": "build_environment"},
+  "sampling": {
+    "scripts": 12,
+    "replicatesPerScript": 1,
+    "seed": 20260909,
+    "pairingKey": ["conversationId", "turnIndex"],
+    "analysisUnit": "conversationId"
+  },
+  "metrics": {
+    "verdictMetrics": ["cleanThroughTurnH"],
+    "headlineMetric": "cleanThroughTurnH",
+    "cleanThroughTurnH": {"H": 4}
+  },
+  "provenance": "PROVENANCE.md"
+}
