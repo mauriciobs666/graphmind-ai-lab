@@ -25,7 +25,14 @@ one closing unit, **no Pass 8** (**U64** — *queued, not dispatched*: it collid
 session's in-flight unit; see "U64 is blocked on another session's U28" below). The two decision
 write-ups are kept verbatim for the record.
 
-**Nothing was in flight at the resume.** No agent was running. The working tree holds no uncommitted work of this
+**Nothing was in flight at the resume.** No agent was running.
+
+**⚠ ORDERING HAZARD — read before dispatching S8's gate or any S9 unit.** Since plan v1.32, §5.3
+carries one row whose producer **does not exist yet**: `POST /shop/api/messages` → `503
+turn_not_scheduled`, which **S9e** builds. Re-running S8's `{handlers} × {routes}` gate ahead of
+S9e therefore fails its symmetric half on exactly that row — correctly, and not because anything
+regressed. Do not "fix" it by deleting the row. `architect` put the same clause in S10's row
+(P23-7); this is the copy for whoever arrives through this section instead. The working tree holds no uncommitted work of this
 coordination's; anything modified belongs to a concurrently-running session (`claude/**`,
 `model-bench/**`) and must not be staged or committed.
 
@@ -127,6 +134,41 @@ abstract: **my summary of a delegate's finding is a secondary source**, and it i
 reads. The brief is what saved it. It named the report by path and said *"read D-1 in full — do not
 work from my summary"*, so the delegate never had occasion to trust the wrong number. That clause
 is not ceremony; this is the second time in this coordination it has caught something.
+
+## U66 refused to narrow into a hole, and that is the whole lesson (teco, 2026-09-09)
+
+Pass 23's blocker said: drop the plan's request-thread claim, because the statistic cannot detect
+that design and TP-026 is what forbids it. `architect` checked instead of complying, and **TP-026 is
+QA's test id — not a plan done-condition.** The plan asserted the request-thread decision nowhere.
+
+So the prescribed fix would have removed a claim and pointed at an assertion that does not exist,
+leaving the S9 row's *central* decision — the turn runs off the request thread — unasserted by the
+document that decides it. **That is the defect class this coordination has chased twenty-three times,
+arriving inside the fix for it.** v1.33 adds the assertion first, then narrows the bound onto it.
+
+Three more refusals in the same unit, all of them argued rather than asserted:
+
+- **Half the tail clause, rejected with a number.** Pass 23 wanted *no sample above 3× idle or above
+  100 ms*. At a 3-4 ms idle median the relative half caps a single sample near 12 ms, which ordinary
+  GC reaches — and a gate that reddens on healthy runs is a gate somebody switches off. Absolute
+  only. Nothing is lost: 100 ms is ~15× the healthy max and ~1/150 of the broken one.
+- **A third option nobody raised, rejected at CPython source.** Reading the flag inside the `except`
+  would type one more shape, and `concurrent/futures/thread.py` confirms the raise precedes the
+  queue put, so it is semantically sound. Rejected anyway: it stands a counter-example next to the
+  plan's most-repeated prohibition to buy a two-statement-wide window.
+- **A count, refused in favour of a derivation.** I relayed Pass 23's "three omitted sites". Writing
+  a number would have been drift — `grep -n enqueue_turn` on that file returns **39** hits. S9e gets
+  the two commands instead, with today's results marked as a starting point rather than the answer.
+
+**And it corrected my provenance note.** I flagged a discrepancy between the reviewer's `d776ca8`
+and my `0db9fb3` and told it to check rather than inherit either. Both are right and they answer
+different questions: `d776ca8` is where the *sentence* entered, `0db9fb3` where `NON_FAMILY_RAISES`
+itself last changed. I verified both, plus that `d776ca8` is an ancestor of the commit QA tested.
+
+**The uncomfortable part it volunteered:** the allowlist reason that excused the bare `500` cites
+*this plan's own S9 row* as its licence. The mis-ruling traces to the architect's own wording, not
+to the test author's judgement. It wrote that into the corrected paragraph rather than leaving it
+for someone else to find.
 
 ## Follow-up 17 — the S9 test plan's R-g row is stale, and it belongs to `qa-engineer`
 
@@ -407,7 +449,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U62** — D-1: rewrite `SERVER.md` §1.3's `QUIESCE_S` row against the acceptance measurements. **Closes S9f**, which had been held on argument | `coder` (**fresh** — the S7 `coder` is from a dead session; the brief is fully self-contained and the evidence is a published report) | `a07aa43f407bafdab` | delivered — **committed `404c409`**. All four readings teco-verified against D-1's own table; the SERVER.md diff is **1 line added, 1 removed**, so `TURN_WORKERS` being byte-identical is *verified*, not asserted. Its extra §1.3 sweep checked out too — I re-read TP-028/TP-029 and the `THREAD_LIMIT` row genuinely needed no change | `falkor-chat/docs/SERVER.md`, `falkor-chat/docs/HISTORY.md` | `analyst` (combined with U63) → — | 82k tok / 8 tools |
 | **U63** — D-2 (§5.3 has no `5xx` row for `/messages`), D-3 (`504` carries `state: null` against §5.2's present-vs-absent precedent), and **my untestable S9 done-condition** → plan v1.32 | `architect` (**fresh** — every prior architect instance is from a dead session) | `a0cfb47caac4a8c3e` | delivered — **committed `e06c92e`**, +83/−15, one file. **Ruled D-2 a *code* defect, not a missing table row**, and rejected the report's stated reason while accepting its substance; **ruled D-3 the document's defect, not the code's**. Created an obligation on **S9e** and an ordering hazard on S8's gate. Three of its four side-findings **teco-verified against source** before the gate — including a delivered docstring asserting a route `except` that does not exist | `docs/plans/salesperson-ui.md` v1.32 | `analyst` Pass 23 (U65) → — | 193k tok / 75 tools |
 | **U65** — Pass 23: gate U62 + U63 together. **Does C14 create the next instance of the class?** | `analyst` (**fresh** — every prior reviewer is from a dead session) | `a3d38bc7a7a12de74` | **accepted — committed `eedde26`. NEEDS CHANGES** (1 blocker, 3 major, 3 minor). **Answered the central question with a yes, by execution**: C14 creates instance N+1 once. Built a harness to break the new done-condition and did (P23-1). **Refuted a claim of mine I had already published** (P23-3). Upgraded my source-read claim 3 to executed. Gave the falsifiable stopping rule I asked for | `docs/reviews/salesperson-ui-impl.md` `## Pass 23` | — | 192k tok / 71 tools |
-| **U66** — close Pass 23 on the plan: P23-1 blocker, P23-2, P23-3's consequence, P23-5/6/7 → **v1.33, the last static plan touch** | `architect` | `a0cfb47caac4a8c3e` (resumed — its own review findings, same file, 193k tok) | in-flight | `docs/plans/salesperson-ui.md` v1.33 | **none — plan lane closes here** (see the stopping rule) | — |
+| **U66** — close Pass 23 on the plan: P23-1 blocker, P23-2, P23-3's consequence, P23-5/6/7 → **v1.33, the last static plan touch** | `architect` | `a0cfb47caac4a8c3e` (resumed — its own review findings, same file, 193k tok) | **accepted — committed `6da8ec0`**, +64/−25. **Refused to narrow into a hole**: the assertion Pass 23 said already owned the request-thread design *did not exist*, so v1.33 adds it before narrowing onto it. **Rejected half of the blocker's proposed fix** with a number (a relative tail clause reddens on GC noise at a 3-4 ms idle median). **Rejected a third option neither the gate nor I raised**, verified at CPython source. **Resolved the provenance discrepancy I flagged** — both commits right, different questions. All four load-bearing claims teco-verified | `docs/plans/salesperson-ui.md` **v1.33** | **none — plan lane closes here** (see the stopping rule) | 256k tok / 29 tools |
+| **U68** — P23-5: `storefront_api.py` ~`:1494` says the `504` comes back "simply with no roster"; it ships `participants` present-and-null. **Third and last known site of the false-absence class** | `coder` | `a07aa43f407bafdab` (resumed — holds the false-absence context from U62/U67) | in-flight | `falkorchat/storefront_api.py` (comments only), `falkor-chat/docs/HISTORY.md` | folded into S9e's review → — | — |
 | **U67** — P23-4: S9f was **three sites, not one**; `config.py:216-224` still states the pre-S9 world | `coder` | `a07aa43f407bafdab` (resumed — its own S9f unit, holds D-1's readings) | **accepted — committed `3c23992`**. Site count **confirmed three** from Pass 19/22 directly, not from my brief. Fixed `config.py` (comments only, `30` untouched — teco-verified by diff); **read the third site and found it already true**, so no edit — I spot-checked `presenter_reset_all`'s docstring and its drain description is live and correct. Unfiltered sweep found no fourth. **Corrected its own HISTORY entry in place** to say its earlier closure claim was wrong | `falkorchat/config.py`, `falkor-chat/docs/HISTORY.md` | folded into S9e's review → — | 137k tok / 19 tools |
 | **U64** — close the CPG provenance arc: P7-1, P7-2, P7-4, delete P7-3's tombstone block. **No Pass 8** (stakeholder, 2026-09-09) | `cobb` (**fresh** — `abeeb0ea31b20e7cc` is from a dead session) | — | **queued — blocked on another session's in-flight unit**, see below | `skills/joern-cpg/**`, `skills/cpg-analysis/references/freshness.md`, `claude/cobb/kaizen/{history,plan}.md` | **none — stakeholder stopped the gates** | — |
 
