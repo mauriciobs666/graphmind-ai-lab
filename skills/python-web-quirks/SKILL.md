@@ -31,7 +31,10 @@ description: >-
   def-time-bound default arg; a one-way circular import between two modules that fails in every
   load order unless the deferred import is inside a function body (not a class body); and
   starlette TestClient's teardown cancelling every still-running task regardless of whether the
-  app's own lifespan cancels it; bounding a call whose deadline the code under test computes with a
+  app's own lifespan cancels it, and its default raise_server_exceptions=True re-raising an unhandled
+  server exception into the calling test so the plain-text 500 a real client receives cannot be
+  asserted at all (and the parity the False setting buys comes from ServerErrorMiddleware, not from
+  the flag: outside that middleware TestClient synthesizes a headerless, empty-bodied 500); bounding a call whose deadline the code under test computes with a
   daemon thread plus join(timeout) rather than an elapsed-time assert that a hang never reaches —
   stamping the start instant inside the thread body, since one taken before Thread.start()
   absorbs the scheduling gap and passes on a call that did nothing; and an application lock held across ThreadPoolExecutor.submit()
@@ -44,8 +47,9 @@ description: >-
   responses={...} declarations, a method-matching or static-mount-shadowing question, a test that
   must bound a possibly-hanging call, an HTTP client against urllib/OpenAI-compatible
   endpoints, an LLM-judge parser, a pytest monkeypatch touching an env var or deferred import, a
-  circular-import fix, or a TestClient-driven lifespan/background-task test — coder, tdd-engineer,
-  architect, analyst in a Python codebase.
+  circular-import fix, a TestClient-driven lifespan/background-task test, or an acceptance assertion
+  on what a client actually receives from an unhandled server error — coder, tdd-engineer, architect,
+  analyst, qa-engineer in a Python codebase.
 allowed-tools: Read, WebFetch, WebSearch
 ---
 
@@ -539,6 +543,45 @@ app-level shutdown-cancellation code, assert on something only the app code itse
 (e.g. that it stored the task reference on `app.state` at all — an `AttributeError` if that line
 is dropped), not the task's final `cancelled()` state. Surfaced writing the lifespan smoke test for
 falkor-chat's periodic sweep task (K-028 U3b, `coder`).
+
+## `TestClient` re-raises an unhandled server exception into the calling test by default — so a test written on the default can never observe the 500 a real client receives
+
+Second face of the class the section above belongs to: `TestClient` is not a real HTTP client, and
+each convenience it adds is separately opt-outable. Verified against starlette 1.6.0 / httpx 0.28.1 /
+uvicorn 0.52.1 / CPython 3.12.3; `fastapi.testclient.TestClient` is this same class re-exported
+verbatim (`fastapi/testclient.py` is the single line `from starlette.testclient import TestClient`,
+read out of the fastapi 0.141.1 wheel), so everything here applies identically under either import.
+
+One Starlette app, one route raising an unhandled `RuntimeError`, driven three ways — a `/ok` route
+returning 200 as a control in each arm:
+
+| driver | what the caller gets |
+|---|---|
+| `TestClient(app)` — default `raise_server_exceptions=True` | `RuntimeError` raised **into the calling test**; no response object at all |
+| `TestClient(app, raise_server_exceptions=False)` | `500`, `text/plain; charset=utf-8`, body `Internal Server Error` |
+| real uvicorn server + real `httpx.Client` | `500`, `text/plain; charset=utf-8`, body `Internal Server Error` |
+
+Mechanism (`starlette/testclient.py:348-363`): the portal call sits inside an
+`except BaseException:` that re-raises when the flag is set. The flag does **not** construct the
+500 — `ServerErrorMiddleware` has already sent that response before re-raising, so `response_started`
+is true and the default simply *discards* the captured response in favour of the exception.
+
+**The client-parity is the middleware's, not the flag's.** Against a bare ASGI callable with no
+`ServerErrorMiddleware`, nothing ever sent a response, so `raise_server_exceptions=False` falls
+through to the transport's synthesized fallback — `status_code` 500 with **no headers and an empty
+body** — while a real client over the wire still gets uvicorn's own `text/plain; charset=utf-8` /
+`Internal Server Error`. Verified with the same probe against a bare ASGI app: `content-type` `None`
+and body `''` under `TestClient`, against `text/plain; charset=utf-8` / `Internal Server Error` from
+the live server.
+
+**Consequence for testing:** when the question is *what does a client receive?* rather than *did it
+raise?*, construct the client with `raise_server_exceptions=False`. On the default, an acceptance
+assertion about the status or body of an unhandled server failure is not merely failing — it is
+unwritable, because the call never returns a response to assert on. Assert on the **body** only for a
+real `Starlette`/`FastAPI` app, whose `ServerErrorMiddleware` is what makes the test's 500 and the
+wire's 500 the same bytes; for anything outside that middleware's reach, assert the status alone.
+Surfaced deciding which HTTP status a plan contract was actually violated by, in falkor-chat's S9
+storefront concurrency acceptance pass (`qa-engineer`).
 
 ## Holding an application lock across `ThreadPoolExecutor.submit()` does **not** deadlock at interpreter exit — it delays exit for exactly as long as the lock is held
 

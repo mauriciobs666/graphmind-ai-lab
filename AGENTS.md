@@ -61,7 +61,8 @@ and OpenCode artifacts).
   for the repo's cross-tool / Claude-Code-oriented capabilities: `agent-maintenance` +
   `agent-standards` (cobb's machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern
   CPG→FalkorDB pipeline), `cpg-analysis` (the consumer side), `python-web-quirks` (live-verified
-  asyncio/Starlette/FastAPI/pydantic gotchas for `coder`/`tdd-engineer`/`architect`/`analyst`).
+  asyncio/Starlette/FastAPI/pydantic gotchas — including test-harness ones — for
+  `coder`/`tdd-engineer`/`architect`/`analyst`/`qa-engineer`).
   OpenCode-authored skills used only
   by OpenCode agents live separately, in `opencode/skills/`. See `skills/README.md`. Format
   ports across Claude Code/OpenCode/Kiro; tool-gating & activation behavior do not — verify per

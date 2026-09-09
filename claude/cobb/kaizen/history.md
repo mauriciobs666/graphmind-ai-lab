@@ -3,6 +3,52 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-09 — U35: `qa-engineer`'s 1-entry inbox; a `TestClient` fact promoted, and a stale skill audience line corrected in all four places it is stated
+
+- **What:** U35 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the `qa-engineer`
+  inbox, one entry (`7f3c9a21-5e84-4b1d-9c62-0a8f16d4b3e7`). **1 promoted, 0 discarded, 0 kept
+  open.** Full per-entry disposition: `claude/qa-engineer/kaizen/history.md`, 2026-09-09.
+- **Re-derivation overruled the entry's own framing, in the direction of a narrower true claim.**
+  A standalone Starlette app (no falkor-chat code, no server, no FalkorDB) reproduced all three
+  arms — default `TestClient` raising `RuntimeError` into the caller, `raise_server_exceptions=False`
+  returning `500`/`text/plain; charset=utf-8`/`Internal Server Error`, and a real `httpx.Client`
+  against a live uvicorn server receiving byte-identical bytes. Reading `starlette/testclient.py:348-363`
+  then showed the flag never *builds* the 500: `ServerErrorMiddleware` sent it before re-raising,
+  and the default discards it. Probing that boundary against a bare ASGI callable gave
+  `content-type = None`, `body = ''` under `TestClient` where the wire still carried
+  `Internal Server Error` — so *"pass the flag and you see what a client sees"* is true for a real
+  Starlette/FastAPI app and false in general. Promoted with the bound stated.
+- **The steer to place it in `python-web-quirks` was right; the steer's own worry was answered by
+  splitting, not merging.** Two `TestClient` sections now sit adjacent, bound by a shared opening
+  line naming the class rather than fused into one. The accretion risk that motivated the worry is
+  now a stated trigger (**K-026**) instead of a judgment call for whoever writes the third one.
+- **The audience line was the real finding.** `qa-engineer` was absent from a skill whose subject
+  it had just produced an entry about, from its own documented core mode. `git log -S` showed why
+  that matters more than it looks: `6b0a401` had removed the reciprocal routing clause from all
+  four consumer prompts, so no agent prompt names the skill at all any more and the skill's own
+  `description` is the sole routing surface. The list turned out to be stated in **four** places —
+  `SKILL.md`, `skills/README.md`, root `AGENTS.md`, and per-agent sentences in `claude/README.md`;
+  all four updated, per U33/U34's lesson that checking a bound means checking every place it is
+  stated. That nothing audits such a list is filed as **K-027**.
+- **`claude/AGENTS.md` deliberately needed no change** — it routes the skill catalog to
+  `skills/README.md` (lines 18-19, 224) rather than enumerating skills, so the absence is the
+  convention working, not drift.
+- **Checking that my own fix worked turned up a bigger defect — `K-028`.** The skill's
+  `description` is **4,584 characters**; Claude Code truncates the skill listing at **1,536**
+  (verified 2026-09-09 against `code.claude.com/docs/en/skills`: *"the combined `description` and
+  `when_to_use` text is truncated at 1,536 characters in the skill listing"*), and this session's own
+  available-skills listing cuts it mid-clause at **1,534**. So the audience clause at the end of the
+  description — and every fact clause appended by U7b, U8, U9, U12, U22 and this unit — is invisible
+  to routing. The **body** promotions are unaffected, and U35's audience fix stands in the three
+  prose catalogs, which are not truncated. Not fixed here: compressing 4,584 → 1,536 deletes two
+  thirds of a list six accepted units built, in an artifact five agents load. Returned to `teco` as
+  the unit's open question.
+- **Graph:** 1 `PRODUCED` (`qa-engineer`) / 0 `MENTIONS` ⇒ `otherRemaining = 1 + 0 - 1 = 0` ⇒
+  full-node `DETACH DELETE`, run only after the `qa-engineer` history entry had landed.
+- **Files:** `skills/python-web-quirks/SKILL.md`, `skills/README.md`, `AGENTS.md`,
+  `claude/README.md`, `claude/qa-engineer/kaizen/history.md`, `claude/cobb/kaizen/{history.md,plan.md}`.
+- **Plan items:** K-026, K-027, K-028 opened.
+
 ## 2026-09-09 — U34: `graph-dba`'s 1-entry inbox, plus the correction of `cobb`'s own retraction write-up
 
 - **What:** U34 of `claude/docs/plans/kaizen-distillation2-coordination.md`, a two-part unit —
