@@ -56,10 +56,11 @@ copying:
 
 1. **It took *both* closures, each where it belonged.** It **widened** where the miss was a wrong
    *unit of analysis* — joining continuations, anchoring on `rq[[:space:]]` — which closed four
-   forms in nine lines. And it **narrowed the claim** to exactly what remains: five forms stay
+   forms in nine lines. And it **narrowed the claim** to exactly what remains: six forms stay
    blind (wrapper forwarding `"$@"`, `GRAPH".DELETE"`, `GRAPH\.DELETE`, `"$CMD"`,
-   `"${CMDS[0]}"`), written as a bound with a check-it-by-hand instruction rather than implied.
-2. **The mechanism is a coverage probe, not a mutation suite** — 35 forms on three axes
+   `"${CMDS[0]}"`, and a command not spelled `GRAPH.…` at all — `rq "$Q" PING`), written as a
+   bound with a check-it-by-hand instruction rather than implied.
+2. **The mechanism is a coverage probe, not a mutation suite** — 36 forms on three axes
    (invocation syntax; how the command argument is spelled; text that only *looks* like a call
    site), and each row is adjudicated **twice**: bash says whether `rq` really receives a
    non-query command, the delivered reader says whether it flags it. A mis-written row therefore
@@ -73,11 +74,14 @@ copying:
    continuation-joiner joined with a space; bash joins with **nothing**, so `rq "$Q" GRAPH\` +
    `.DELETE` is one word to bash (executed) and reads as `GRAPH .DELETE` to the reader (no token,
    silent pass). The probe caught it *while its author was writing the claim*, and form A15 now
-   pins it. That is this section's own thesis closing on itself.
+   pins it. **The portable rule, not just the anecdote:** any reader that reconstructs logical
+   lines from a shell source must join continuations with *nothing* — a space manufactures a
+   token boundary bash never creates, and it does so precisely at the place the reader is being
+   hardened.
 
 **Verified here by execution, 2026-09-09**, against the delivered reader extracted verbatim: the
 continuation form that previously scored `PASS all 3` is now flagged (`GRAPH.DELETE@451`) with the
-clean tree still at `SITES=3` and no tokens; three of the five stated-blind forms reproduce as
+clean tree still at `SITES=3` and no tokens; three of the six stated-blind forms reproduce as
 blind with bash confirming `rq` really receives `GRAPH.DELETE`; and two widenings (tab-separated
 call, single-quoted literal) flag correctly.
 
@@ -91,14 +95,22 @@ control: `PING` → rc 1 (`ERR wrong number of arguments`), `INFO` → rc 1 (emp
 precisely what licenses it to stop at a stated bound instead of chasing a shell parser. Establish
 that cost asymmetry before you accept a narrow claim; without it, narrowing is just conceding.
 
-**One retraction, recorded because it is the same lesson.** Probing that bound, I found `PING`,
-`INFO` and `keys` — each one contiguous literal at the call site, each genuinely passed to `rq` by
-bash, none flagged — and drafted it as generation six. It is not: the check's stated mechanism is
-scoped to runs matching `/GRAPH\.[A-Za-z_.]*/`, and its bound's first clause reads *"a command
-that is not one contiguous `GRAPH.<word>` run of characters at the call site"*, which covers them
-literally. My probe re-derived the bound's own category from a direction its examples did not
-illustrate. **Read the stated bound before filing against it** — a finding drawn from the examples
-rather than the claim is a finding about the documentation's illustrations.
+**One retraction — right about one file, wrong about the other.** Probing that bound, I found
+`PING`, `INFO` and `keys` — each one contiguous literal at the call site, each genuinely passed to
+`rq` by bash, none flagged — drafted it as generation six, then withdrew it: the mechanism is
+scoped to runs matching `/GRAPH\.[A-Za-z_.]*/`, and the bound's first clause reads *"a command that
+is not one contiguous `GRAPH.<word>` run of characters at the call site"*, which covers them
+literally. That is true of `test-stamp-wiring.sh` — the file I read. It was **false of
+`pipeline.sh`**, whose copy of the same sentence said only *"not one contiguous literal"*, the
+`GRAPH.<word>` scoping dropped, putting `rq "$Q" PING` inside its stated reach and outside its
+mechanism. So the finding I withdrew was a real defect, in the file I had not opened; `graph-dba`
+closed it 2026-09-09 (`00bebdc`) by converging both files on the scoped claim, tightening a
+*second* sentence in `test-stamp-wiring.sh` that had drifted the same way, and pinning the scoping
+with probe form `B15` (`rq "$Q" PING`, `blind`). Two rules, and the second is the stronger:
+**read the stated bound before filing against it** — a finding drawn from the examples rather than
+the claim is a finding about the documentation's illustrations; and **checking a bound means
+checking every place it is stated**, because one bound written in two files is one claim with two
+chances to go stale.
 
 ## A hand-written "which object is this" resolver has two axes, and only one of them is finishable
 

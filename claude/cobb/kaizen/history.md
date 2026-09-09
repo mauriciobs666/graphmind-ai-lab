@@ -2,6 +2,34 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+
+## 2026-09-09 — U34: `graph-dba`'s 1-entry inbox, plus the correction of `cobb`'s own retraction write-up
+
+- **What:** U34 of `claude/docs/plans/kaizen-distillation2-coordination.md`, a two-part unit —
+  a one-entry distillation over `graph-dba`, and a rider correcting a paragraph `cobb` itself wrote
+  in `09270f2`.
+- **Part 1 — `b7d3f0a2-6c41-4e58-9a03-2f8e1d5c7b96`: promoted, not discarded.** The fact (bash joins
+  a backslash continuation with nothing) was already recorded in three places, and the brief's steer
+  was that a considered discard would be acceptable. It is not the better call: all three recordings
+  state it as *what happened here*, and the marginal cost of turning the episode into a rule was one
+  clause in a section that was being edited anyway. The reasoning, the re-derivation on bash 5.2.21,
+  and the rejected fourth home (`claude/devops/ops-quirks.md`) are in
+  `claude/graph-dba/kaizen/history.md`.
+- **Part 2 — the retraction paragraph in `claude/tdd-engineer/guard-testing-techniques.md` concluded
+  flatly that a finding "is not" a generation, and that was false for one of the two files it
+  covered.** Rewritten to record both halves and to end on the stronger rule — *checking a bound
+  means checking every place it is stated* — alongside the one it already taught. Two figures the
+  same paragraph's arc had made stale (35 → 36 probe forms, five → six blind forms) were corrected
+  in the same pass, both re-counted in the shipped script rather than recalled. Details in
+  `claude/tdd-engineer/kaizen/history.md`.
+- **The lesson `cobb` takes from being the subject of it.** The retraction was written from the
+  bound as stated in the one file open in context, and its conclusion was generalised to "the check"
+  as though a check has one statement of its reach. It had two. This is the pass's own recurring
+  defect — corrected here, inherited there — arriving in `cobb`'s own prose, and the guard against it
+  is not more care but a different question: *where else is this claim written down?*
+- **Not reopened.** U33 closed the `rq` guard arc; no widening was proposed and no script was
+  touched. This unit is documentation correctness only.
+
 ## 2026-09-09 — U31: the orphan backlog — 11 `MENTIONS`-only entries, 9 promoted, 1 already-promoted, 1 kept open
 
 - **What:** U31 of `claude/docs/plans/kaizen-distillation2-coordination.md`, the first unit in either pass shaped by **edge** rather than by producer. Scope: the 11 `:KaizenEntry` nodes with **0 `PRODUCED` edges**, alive only on `MENTIONS`, dated 2026-08-30 → 09-07 — the oldest population in the graph. Complete 36-character `entryId`s used in every read and every write; four prefix collisions are on record in this graph and this population alone held four ids beginning `b7`.

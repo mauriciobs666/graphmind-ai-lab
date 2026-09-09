@@ -3,6 +3,41 @@
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
 
+## 2026-09-09 — distillation: 1 entry, promoted into `tdd-engineer`'s knowledge base as a rule rather than an episode (U34)
+
+- **What:** `cobb` ran U34 of `claude/docs/plans/kaizen-distillation2-coordination.md` over
+  `graph-dba`'s produced inbox — **exactly one entry**, complete 36-character id used throughout.
+- **`b7d3f0a2-6c41-4e58-9a03-2f8e1d5c7b96` (2026-09-09, `suggestedHome: knowledge base`) —
+  PROMOTED** into `claude/tdd-engineer/guard-testing-techniques.md`, § *The worked example*, point 4.
+  Fact: bash joins a backslash line continuation with **nothing**, so a static reader that
+  reconstructs logical lines by joining with a **space** manufactures a fresh blind spot —
+  `rq "$Q" GRAPH\` + `.DELETE` is the single word `GRAPH.DELETE` to bash and reads as
+  `GRAPH .DELETE` to a space-joining reader, matching no token.
+  - **Re-derived, not confirmed by citation.** Directly observed in this run on GNU bash 5.2.21(1):
+    a sourced two-line file calling `rq "$Q" GRAPH\` / `.DELETE` gave `argc=2`, `arg2=[GRAPH.DELETE]`;
+    an awk reader joining with `" "` emitted `rq "$Q" GRAPH .DELETE`, the same reader joining with
+    `""` emitted `rq "$Q" GRAPH.DELETE`.
+  - **Where it already stood, and why that did not settle the routing.** The fact was recorded in
+    three places: this file's U32 entry (the *blind spot created by the fix* bullet and mutation row
+    `M7`), `test-stamp-wiring.sh`'s `rq_logical_lines` comment (*"joined WITH NOTHING BETWEEN THEM,
+    which is what bash does"* — the closest possible point of use), and
+    `guard-testing-techniques.md` point 4. But all three state it as **what happened here**, not as
+    a rule; a `history.md` is read by lookup and organised by *when work happened*, so someone
+    writing a static shell-source reader tomorrow would not find it there.
+  - **Judged against a fourth copy and rejected.** `claude/devops/ops-quirks.md` is the repo's
+    designated home for Bash-scripting traps and would have taken the bash half cleanly — but the
+    reader who needs this consults `guard-testing-techniques.md` (its whole subject is a guard whose
+    subject is other code's text), and a fourth statement of one fact recreates exactly the defect
+    U33 spent a unit removing: one claim, several files, one of them going stale unnoticed. So the
+    promotion is a **generalising clause in the existing home**, replacing a closing sentence that
+    carried no information — not a new section and not a second file.
+  - **Cleared.** `producedEdges` 1, `mentionEdges` 0, `otherRemaining = 1 + 0 - 1 = 0`, so the node
+    itself went: curator `DETACH DELETE` by full `entryId`. No `MENTIONS` tag was added — the entry
+    was fully dispositioned in this pass, so forward-routing it would have created an orphan of the
+    kind U31 had to clean up.
+- **`graph-dba`'s produced inbox is 0 after this unit** — a statement about this unit's pinned
+  scope at the moment it ran, not a claim the agent is finished.
+
 ## 2026-09-09 — K-009 generation four: the rq call-site check re-closed by a COVERAGE PROBE, not a fifth shape list (U32)
 
 - **The finding, reproduced against the delivered reader before deciding.** U28 closed generation

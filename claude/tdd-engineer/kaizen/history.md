@@ -2,6 +2,41 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+
+## 2026-09-09 — `guard-testing-techniques.md`: the retraction paragraph was right about one file and wrong about the other (U34)
+
+- **What:** `cobb` corrected the `### The worked example` subsection of
+  `claude/tdd-engineer/guard-testing-techniques.md` — five edits, +25/-13 lines, no new section.
+  The file is `cobb`'s to maintain as the author of that subsection (U31/U32 follow-up); this is a
+  documentation-correctness pass, **not** a reopening of the `rq` guard arc, which U33 closed.
+- **The defect, and it is this file's own thesis turned on the file.** The closing paragraph,
+  *"One retraction, recorded because it is the same lesson"*, recorded `cobb` probing the check's
+  stated bound adversarially, finding `PING`/`INFO`/`keys` unflagged, drafting it as generation six
+  and withdrawing it — because the bound is scoped to runs matching `/GRAPH\.[A-Za-z_.]*/` and its
+  first clause covers a non-`GRAPH.` command literally. **That reasoning held for
+  `test-stamp-wiring.sh`, the file `cobb` had read. It was false for `pipeline.sh`,** whose copy of
+  the same sentence said only *"not one contiguous literal"* — the `GRAPH.<word>` scoping dropped —
+  so `rq "$Q" PING` sat inside its stated reach and outside its mechanism. The withdrawn finding was
+  a **real defect in the file nobody opened**, fixed by `graph-dba` in `00bebdc` (U33): both files
+  converged on the scoped claim, a *second* sentence in `test-stamp-wiring.sh` that had drifted the
+  same way was tightened, and the scoping was pinned by probe form `B15` (`rq "$Q" PING`,
+  disposition `blind`), controlled by widening the token regex so the blind rows redden.
+- **What the paragraph now ends on**, and it is stronger than what it taught: it keeps *read the
+  stated bound before filing against it*, and adds **checking a bound means checking every place it
+  is stated** — one bound written in two files is one claim with two chances to go stale.
+- **Two stale figures in the same subsection, both created by U33 and both corrected here** — they
+  are stale precisely because `B15` is the form the loose wording hid: **35 → 36 probe forms**, and
+  **five → six blind forms**, with the sixth now named in the list (`rq "$Q" PING`, a command not
+  spelled `GRAPH.…` at all). Directly observed in this run against
+  `skills/joern-cpg/scripts/test-stamp-wiring.sh` at `HEAD`: `grep -cE '^[ABC][0-9]+ '` → **36**
+  (A 15, B 15, C 6), `grep -cE '^[ABC][0-9]+ +blind'` → **6**. The 2026-09-09 entry below records
+  five/35 and stays as written — it was correct at its date.
+- **One promotion folded in, not a new section** — see `claude/graph-dba/kaizen/history.md` for the
+  entry (`b7d3f0a2-6c41-4e58-9a03-2f8e1d5c7b96`). Point 4 narrated the continuation-joining trap as
+  an episode; it now closes on the portable rule — *any reader that reconstructs logical lines from
+  a shell source must join continuations with nothing, because a space manufactures a token boundary
+  bash never creates* — replacing a closing sentence that carried no information.
+
 ## 2026-09-09 — `guard-testing-techniques.md`: the open live instance became the file's worked example (U32 follow-up)
 
 - **What:** U31 shipped this knowledge base citing `skills/joern-cpg/scripts/test-stamp-wiring.sh`'s `rq` call-site check as an **open** fourth-generation instance — *"do not treat that check as a model."* U32 closed it (`4df5e45`, `graph-dba`). Those five lines are replaced by a `### The worked example` subsection under the coverage-probe section: **1,225 → 1,867 w**.
