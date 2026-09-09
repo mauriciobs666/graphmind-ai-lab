@@ -3298,3 +3298,363 @@ H's `stats.py:444` row to name `lo`/`hi` from the clamp and derive `bound_by` fr
 — `modelbench/stats.py:468-472` now reads "`lo != u_lo` iff the composed lower bound ran strictly
 below the support", with the `max`/`min` identity spelled out. No Pass 1–10 finding is re-raised here;
 all were dispositioned in their own passes and none of them touches S2 surface.
+
+---
+
+## Pass 13 — 2026-09-09
+
+### 1. Scope & verdict
+
+**Reviewed:** four commits as immutable git objects — `dd40ede` (U74, `hostinfo.py` + the `attest`
+CLI command; a **first** gate, never reviewed), `fed4e21` (U76, the `packs.py` fix round),
+`17c6eb0` (U75, the `lmstudio.py` fix round) and `7f0006b` (U77, `ChatResult`). Everything was run
+at the tip, `7f0006b`. **Baseline:** Pass 12's fourteen findings; plan §3.3, §3.4.4, §3.4.4a, §3.5,
+§3.6, §3.6a and §4 S2; `-ml` §3.4 Rule 6 and §11.5.1. **Out of scope and untouched:**
+`runner`/`convo`/`tooling`, the `validate`/`run` CLI, every S1 surface.
+
+**Method.** `git archive 7f0006b model-bench | tar -x` into a scratch tree, with a
+`sitecustomize.py` on `PYTHONPATH` stripping the setuptools editable meta-path finder so
+`import modelbench` resolves inside the snapshot (verified by printing `modelbench.__file__`). All
+17 mutations and all 6 probes below ran there; the working tree was never read, written or moved.
+At the tip: **815 passed, 3 deselected**, `ruff check .` clean.
+
+**Verdict: needs changes.** — **1 blocker, 3 majors, 5 minors, 4 nits.** The three fix rounds are
+real: **17 of 17 mutations against their new mechanisms are killed** (§3), including every one of
+U74's, which is a strong first gate. Every finding below sits at the **edge of a guard the fix round
+itself installed**, which is the brief's question answered: the mechanisms are right and three of the
+four *declared reaches* are not.
+
+**CPG: considered, not relevant — no Code Property Graph is loaded for `model-bench` (only
+`cpg_falkorchat` and `cpg_deprecated_salesperson` exist on this instance), so every claim below
+comes from reading the four commits and executing against the snapshot.**
+
+**On the brief's five pre-verified premises — three hold, two are incomplete, and the two are
+findings.** (a) The §4A trap does fire on the mutation you ran, but the probe's silence criterion is
+`validate_pack(pack) == []`, not the route's own output, so it does **not** hold the exemption in
+place in general (P13-2, proven both ways). (b) The §4B probe does read 0 **on the cells its grid
+spans**; the error-body read is a cell the grid cannot express and 21 of 21 escape there (P13-1).
+(c) `tools.module` containment/suffix, (d) U74's four trip-wire outcomes and (e) U77's totality all
+reproduce exactly as you found them — but U74's 13 structural mutations are structural only, and the
+gap is a **tier** gap they cannot reach (P13-4).
+
+### 2. Findings
+
+#### Blocker
+
+**P13-1 — the P12-1 fix moved the *success* body read into the ladder and left the *error* body read
+outside it; 21 of 21 cells escape, and `_EXEMPT_CELLS` declares the cell unreachable.**
+`_raw_get:336-340` and `_raw_post:391-397` read the error body **inside an `except` clause**
+(`exc.read()`), where no later rung of the same `try` can catch it. Executed against the snapshot
+(Appendix M.1): an `HTTPError` whose `read()` raises `IncompleteRead`, `ConnectionResetError` or a
+read-phase `TimeoutError` escapes `catalog`, `residency`, `probe`, `chat`, `embed` and both
+`warm_up` surfaces untyped — **21 of 21**, and it reaches the **shipped `attest` command** as a
+traceback (M.4/D). This is not exotic traffic: `probe()`'s own `v1-only` diagnosis — §3.4.4a's second
+distinguishing message — runs `exc.read()` on a 404 from `/api/v0/models` on **every** non-LM-Studio
+server, so the error arm is normal-path code. `_raw_get`'s new docstring claims "`None` on **any**
+connect- or read-phase failure"; `_EXEMPT_CELLS`'s comment claims `("read", "non_2xx")` is
+structurally unreachable because "`urlopen()` raises `HTTPError` … *before* ever handing back a
+response object". `HTTPError` **is** a response object, with a status and a `.read()`.
+*Suggested fix (judge it):* wrap both `exc.read()` bodies in their own `try`, degrading to `None`
+(GET) / `LMStudioCallFailed` (POST) — the status is already in hand, so the message survives the
+lost body. *The assertion that catches me being wrong* goes in the §4B grid, **not** in the fixed
+code: add a third phase value `error-body` to the `(phase, kind)` axis with `non_2xx` as its only
+kind, delete `("read", "non_2xx")` from `_EXEMPT_CELLS`, and let the existing per-operation
+parametrization cover it. Pass 12 said "done when it reads 0"; it reads 0 because the grid stops one
+axis short.
+
+#### Majors
+
+**P13-2 — the §4A coverage probe measures `validate_pack`'s silence, not the row-count route's, so a
+fourth round of P12-6's exact shape passes green.** `tests/test_packs.py:340` is
+`if validate_pack(pack) == []`, while `ROW_COUNT_IDENTITY_EXEMPT_CELLS` is documented as "the one
+case **this route** is sanctioned to skip silently" (`packs.py:412`). The two quantities differ on
+two of the twelve cells today — `sampling.analysisUnit` absent and wrong-type report 1 problem from
+the route and 2 from the validator, the extra one coming from `check_sampling_contract` (Appendix
+M.2). Executed: re-inserting a P12-6-shaped silent branch (`if "analysisUnit" not in sampling:
+return []` at the head of `_row_count_identity_problems`) leaves **`test_packs.py` at 35 passed** —
+the probe stays green because a sibling axis catches the same manifest. The constant itself is
+currently honest: computed against the route directly, the silent set **is** exactly
+`{("sampling.scripts", "absent")}`. It is the guard holding it that is too wide. Part of this is my
+own §4A wording, which said "must either report at least one problem" without naming *which
+function* reports.
+*Suggested fix, run both ways:* change line 340 to
+`_row_count_identity_problems(pack, pack.manifest.get("sampling") or {}) == []`. Applied to the tip
+it is **35 passed**; applied to the mutated tree it is **1 failed, 34 passed** — so it is green where
+it should be and red where it must be.
+
+**P13-3 — U77's coercion is wider than its claim: a non-finite or boolean `stats` value lands a
+*number*, and the docstring promises `None`.** `ChatResult`'s docstring says a "string- or otherwise
+wrong-typed source lands `None` rather than surviving untyped"; `_as_float`/`_seconds_to_ms`
+(`lmstudio.py:203-224`) accept anything `float()` accepts. Executed end to end through `chat()`
+(Appendix M.3), against a body carrying bare `NaN`/`Infinity` — which **Python's `json.loads`
+parses by default**, so this needs no malformed transport, only a server that serialises a 0/0 rate:
+`ttftMs=nan`, `generationMs=inf`, `tokensPerSecond=nan`. Consequences are all silent: those items
+are counted in `statsCoveredCount`; `statistics.median` over a list containing `nan` returns an
+arbitrary element with no error; `unexplainedMsMax` becomes `inf`; and §11.5.1's gap
+`latencyMs − (ttftMs + generationMs)` becomes `-inf`, so **the in-call reload detector can never
+fire on that item**. Separately `True` → `ttftMs=1000.0`, `tokensPerSecond=1.0`, while this same
+component excludes `bool` from `int` deliberately in two other places
+(`packs._row_count_identity_field_valid:437`, and `results`' bool guard added at Pass 2 P2-2).
+*Suggested fix:* in both helpers, `return None` unless `math.isfinite(v)`, and reject `bool` before
+coercing. *The assertion:* `ChatResult(stats={"tokens_per_second": float("nan")}).tokensPerSecond is
+None`, plus one through `chat()` over a body containing a literal `NaN`.
+
+**P13-4 — `validate_host_info` accepts three attested values the fingerprint's own tier will refuse,
+so `attest` can write a `host.json` that kills a run twenty minutes later.** `lmStudioAppVersion`,
+`kvCacheSetting` and `hostRamGb` are `_NONEMPTY` in `fingerprint.py:110-112`; `validate_host_info`
+checks only presence and non-`null` (`hostinfo.py:113-121`). Executed: an `attested` block of
+`{"lmStudioAppVersion": "", "kvCacheSetting": "", "hostRamGb": 0, "otherResidentWorkloads": []}`
+returns **`[]`** — clean (M.4/A). `model-bench attest --set kvCacheSetting=` therefore writes a file
+that passes capture-order step 1 and is refused by `store()` at step 10 (§3.4.5 point 1), after the
+whole run. §3.4.4a's capture order exists precisely to make refusals cheap; this one is as
+expensive as refusals get, and the cheap end is one tier lookup away. `otherResidentWorkloads` is
+correctly exempt — it is `_PRESENT`, and `test_attest_other_resident_workloads_empty_string_is_an_
+empty_list` pins `""` → `[]` deliberately.
+*Suggested fix:* require the three to be non-empty (and `hostRamGb > 0`) in `validate_host_info`,
+i.e. at attest time, **not** in `store()`, which is the step it is meant to catch.
+*The assertion:* a test asserting the two tables agree —
+`{n for n in ATTESTED_FIELD_NAMES if _NONEMPTY-tier in REQUIRED_BY_SCHEMA[1]["model"]}` is exactly
+the set `validate_host_info` refuses empty — so a tier change on either side reddens rather than
+drifting.
+
+#### Minors
+
+**P13-5 — `_cmd_attest` catches one of the two exceptions `hostinfo.attest` documents.**
+`cli.py:_cmd_attest` handles `AttestProbeFailed` only; `attest()` also raises `HostInfoError` on its
+own defensive re-validation. Executed: `model-bench attest --api-base-url ""` (with everything else
+supplied) → uncaught `HostInfoError` traceback, exit `1` — outside §3.6a's closed set (M.4/B).
+*Fix:* catch `HostInfoError` and return `EXIT_USAGE`.
+
+**P13-6 — `attest` raises `EOFError` when a field is unset and stdin is not a terminal.**
+`_gather_attested_fields` calls `input()` unguarded. Executed: `attest --set lmStudioAppVersion=…`
+with empty stdin → `EOFError` traceback (M.4/C). §3.6a offers `--set` *as* the non-interactive
+route, so a partly-specified non-interactive invocation is normal usage, not abuse. *Fix:* catch
+`EOFError` and exit `2` naming the fields still unset.
+
+**P13-7 — `residency_source` is a required parameter `check_attestation_staleness` reads on one of
+its three paths, and the plan names it on two.** On `call_surface == "embeddings"` the function
+returns `"unavailable"` unconditionally without comparing anything, while §3.4.5 says "On a
+`model:embeddings` arm the check **degenerates to `residencySource` alone**"; on
+`"first-observation"` the attested `residencySource` **is** present (`attest` always writes it) and
+is comparable, but is not compared. Both are inert today because `_residency_source_for_probe`
+returns a constant — and §3.4.4a names `residencySource` as the field that earns its keep "once
+there is more than one answer", which is exactly when the hole opens. *Fix:* compare
+`residencySource` on both paths (stored outcome unchanged); or drop the parameter from the
+embeddings path. **Which the plan intends is a genuine ambiguity — see §5 OQ-1.**
+
+**P13-8 — the one write `run` makes outside `results/` has no validation on either side.**
+`write_host_info` "never validates" by contract, and `check_attestation_staleness` does not validate
+the `updated_host` it hands back. Executed: a `host` with no `observedAtAttestation` yields a
+back-fill whose `validate_host_info` returns
+`['observedAtAttestation.residencySource: absent or empty']` (M.4/E) — a file that, once written,
+makes every later run exit `5` until the operator re-attests. Unreachable through `read_host_info`,
+reachable by any caller that skips it. *Fix:* have `check_attestation_staleness` raise
+`HostInfoError` when `host` carries no `observedAtAttestation` — a precondition on its **caller's**
+step 1, not a guard inside the step it protects.
+
+**P13-9 — the plan's §4 S2 `warm_up` signature was not swept, and U75's "No plan correction needed"
+is falsified by it.** On the substance the change is right: `runner.py` does not exist, nothing
+outside `tests/test_lmstudio.py` calls `warm_up` (grepped repo-wide, all hits are docs or that file),
+Appendix A already declares `LoadResult.wasResidentBefore`, and §3.6 already names
+`residentModelsAtStart` as `coldLoadSeconds`' source — so the required no-default parameter serves
+§3.4.4a step 3's snapshot at the call site the runner will become. But plan §4 S2's own code block
+(`docs/plans/small-model-benchmarking.md:4264-4265`) still spells
+`warm_up(self, model, *, call_surface, system_prompt, timeout_s)`, with no
+`was_resident_before`. *Fix (→ `architect`, one line):* add the parameter to that block. Note the
+adapter cannot check the value — `warm_up` returns the caller's own input verbatim — so the
+assertion that it comes from **step 3** and not step 7 is owed by the runner unit's tests, and
+belongs in that unit's brief.
+
+#### Nits
+
+**P13-10** — `_residency_source_for_probe(probe_result)` (`hostinfo.py:170`) ignores its only
+parameter and returns a constant. Either drop the parameter or make the mapping real; as written the
+signature promises a decision the body does not make.
+
+**P13-11** — `"tools": {"module": ""}` validates CLEAN (`_tool_module_problems` returns `[]` on
+falsy) and then `load_tool_module` raises `"tools.module is absent from the manifest"` — present-and-
+empty reported as absent, in the one component whose thesis is that the two are different.
+
+**P13-12** — `validate_host_info` accepts unknown keys inside `attested`, while §3.4.4 says the block
+"is exactly the four FR-7 fields". `_parse_set_flags` already closes the CLI route, so this is only
+reachable by hand-editing.
+
+**P13-13** — P12-13 is unfixed and has grown: the H1 still says "S1 implementation review", the
+`Reviews:` field still says "§4 S1", and the preamble's "jump to `## Pass 11` for the current
+verdict" pointer is now two passes stale. Left alone deliberately — this pass's brief scopes my write
+to the Pass 13 section. Owner's call, one edit for all three.
+
+### 3. Disposition of Pass 12's fourteen findings
+
+Seventeen mutations, **17 killed, 0 survived** — nine against the fix round's new mechanisms and
+eight against U74's. Full table in Appendix M.5.
+
+| # | Disposition | Evidence I rechecked |
+|---|---|---|
+| **P12-1** read-phase escapes | **Fixed on the success path; open on the error path** → **P13-1** | Moving `resp.read()` back outside the POST ladder reddens **25 tests**. §4B reads 0 over its grid. The `exc.read()` arm escapes 21/21. |
+| **P12-2** `tools.module` traversal | **Fixed** | Containment check removed → 1 failed. Refused for `../`, absolute and dot-segment paths; in-root control silent. |
+| **P12-3(i)** `.pyc` loads unscanned | **Fixed** | `.py`-suffix check removed → 1 failed. |
+| **P12-3(ii)** coupling, not containment | **Accepted as by-design** | `load_tool_module`'s docstring now states it outright. |
+| **P12-3(iii)** docstring overclaims safety | **Fixed** | "a coupling rule … never one whose code is safe to run untrusted" (`packs.py:249-256`). |
+| **P12-4** wall clock stops at headers | **Fixed** | Clock now below `resp.read()`; reverting it → 1 failed (`_SlowReadResponse` pins ≥ the delay). |
+| **P12-5** inverted `warm_up` justification | **Fixed, against the plan** | Docstring now states the true reason; `test_warm_up_never_probes_residency_itself` stubs no catalog route, so a re-probe reddens. Residue: **P13-9**. |
+| **P12-6** exemption wider than its docstring | **Fixed in the route; the guard holding it is not** → **P13-2** | Route-level silent set computed by execution **is** exactly the constant. The probe measuring it is not the route. |
+| **P12-7** positive control violates §3.3 | **Fixed** | `fixtures/packs/valid/pack.json` is now `pairingKey: ["scriptId","turnIndex"]`, `analysisUnit: "scriptId"`, `scripts: 12 × 1`, 12 rows. |
+| **P12-8** test names a class it does not pin | **Fixed** | Subsumed by §4B's grid — 48 parametrized cells across six operations. |
+| **P12-9** `importlib`-not-`sys.path` unpinned | **Not fixed** | No `__spec__`/`sys.path` assertion anywhere in `tests/test_packs.py` (grepped). Out of this round's declared scope; still stands. |
+| **P12-10** parse before status | **Fixed** | Order swapped; reverting → 1 failed. |
+| **P12-11** `ChatResult` boundary | **Fixed as to totality and type; the coercion's *reach* is not** → **P13-3** | `_as_float` → raw passthrough reddens 2; dropping the `Mapping` guard reddens 1. `stats` as list/str/int/`None` all construct. |
+| **P12-12** relative import validates then fails | **Not fixed** | Still skipped at `packs.py:645`, now with a rationale at `:624`. The validate-yes/load-no divergence remains. |
+| **P12-13** header says S1 | **Not fixed** → **P13-13** | Line 1 unchanged. |
+| **P12-14** `content_hash` on an empty dir / abs `parts` | **Not fixed** | `packs.py:289,292` unchanged. Still unreachable. |
+
+**Both Pass 12 residuals classified as blocked remain blocked and are not re-litigated here:** the
+real `GET /api/v0/models` capture and §4 S2's R-1 probe both wait on a human-run live LM Studio
+session, and no work in these four commits could have moved either.
+
+### 4. What's solid
+
+- **U74 is the best-gated unit in this wave, and it is a first gate.** All eight mutations I aimed at
+  its mechanisms are killed, including the two that matter most: `attest` writing `runtimeName` into
+  `observedAtAttestation` (plan-gate P4-6's exact breach) reddens 2, and the back-fill touching
+  `attestedAt` reddens 1. `check_attestation_staleness` is **correct and complete against §3.4.5's
+  four behavioural outcomes** — first-observation back-fills exactly the three runtime keys and
+  leaves `attested`/`attestedAt` byte-identical, compared-equal proceeds, compared-mismatch carries
+  `STALE_MESSAGE`, embeddings reports `"unavailable"` — and it does not mutate its input. Shipping it
+  unwired is the right call and carries **no risk to the runner unit**: it is a pure function with a
+  frozen return type, its `updated_host` back-fill contract is documented at the type, and the one
+  hazard is P13-8's unvalidated write, which is a one-line precondition.
+- **`_raw_post`'s ladder is genuinely well-built where it reaches.** Naming `TimeoutError` as its own
+  rung (not a `URLError`), unwrapping `URLError.reason` for a wrapped timeout, and giving
+  `http.client.HTTPException` a rung above `OSError` because `IncompleteRead` is not an `OSError` are
+  each the right call for the right stated reason. §3.6's two dispositions — censored vs missing —
+  are decided at the one layer that can tell them apart.
+- **The three exemption mechanisms are each honest about their *contents*.** Widening
+  `_EXEMPT_CELLS` by one cell reddens; widening `ROW_COUNT_IDENTITY_EXEMPT_CELLS` by one reddens;
+  `test_row_count_identity_exempt_cells_each_carry_a_reason` refuses an entry with an empty reason.
+  Every problem I found is about a guard's *reach*, never about a stale constant nobody would notice.
+- **`ROW_COUNT_IDENTITY_KEYS` is the right shape and the round-three response is proportionate.**
+  One constant consulted by both the route and its probe, a table-driven route replacing four
+  hand-written clauses, and exactly one sanctioned silent cell with its reason at the constant. Fix
+  P13-2's measurement and this thread is closed by construction rather than by vigilance.
+- **`fed4e21`'s and `7f0006b`'s `HISTORY.md` entries record their own mutation runs**, including
+  U76's honest note that its red-before-fix was an `ImportError` and would not have satisfied the
+  reviewer's criterion, and U75's note that a first version of
+  `test_warm_up_passes_was_resident_before_through_verbatim` covered only the chat branch and was
+  caught by mutation before review. That is the class being caught upstream of me, which is the point.
+
+### 5. Open questions
+
+1. **(→ `architect`) Does "the check degenerates to `residencySource` alone" (§3.4.5) mean *compare
+   it* or *give up*?** The code reads it as give-up. Both readings fit the prose, they differ only
+   once a second provider exists, and the stored outcome is `"unavailable"` either way. One clause
+   settles P13-7.
+2. **Is `LoadResult.wasResidentBefore` worth its parameter?** It is a verbatim echo of the caller's
+   own input, so it adds no fact to the record and the adapter cannot check it. Keeping it is
+   defensible (it makes the `coldLoadSeconds` precondition explicit at the type); dropping it and
+   letting the runner derive `coldLoadSeconds` from its own step-3 snapshot is simpler. Not a finding
+   either way — a shape call for whoever briefs the runner unit.
+
+### 6. The wave: which findings are generated *by* the fix round, and a stopping condition
+
+**The honest split.** P13-4 is found *in* U74, a first gate — an ordinary finding. P13-1's escaping
+code **predates** U75 (the `exc.read()` arm is unchanged in `17c6eb0`'s diff), but its *false
+all-clear* is U75's. P13-2 and P13-3 are generated **by** the fix round outright, and P13-2 is partly
+generated by **my own §4A wording**, which never said whose silence to measure. Two and a half of
+four. So yes — this pass is now finding defects in the instruments rather than in the system, and
+that is the signal to stop discovering and start auditing.
+
+**What recurs is one thing, and it is not the guards.** Six instances now (P12-6, P12-11, P13-1's
+`_EXEMPT_CELLS`, P13-2, P13-3, P13-4): **a guard's reach is stated in prose and its mechanism in
+code, and nothing executable compares the two.** Narrowing predicates one at a time has cost four
+rounds. A seventh probe would be the same move again.
+
+**C — the reach audit (falsifiable, one round, closed inventory).** Enumerate every module-level
+*set-shaped* guard constant in `modelbench/` plus the two in `tests/` — the inventory is closed and I
+sized it: `grep -nE '^_?[A-Z][A-Z0-9_]* *(:[^=]*)?= *[({[]' modelbench/*.py` returns **35**, of which
+**~22 are set-shaped** (the rest are report message strings) and the S1 half is already pinned by
+literals from Pass 2's M-4 fix, leaving **~7 in S2**. For each, either **(i)** name the one test that
+computes that set **by executing the specific function that consults it** — not a superset
+validator — and asserts equality, or **(ii)** file it. Done when every entry has an (i) or an (ii).
+
+**If it fails** — if **five or more** entries come back needing (ii) — the response is **not** five
+fixes. At that count the recurrence belongs to the convention, not to any author, and the ruling is a
+convention change stated once in `model-bench/AGENTS.md`: *a reach claim about a guard lives in an
+asserted constant or it does not get written.* Prose reach claims already in the tree are then
+deleted rather than defended, and the seventh instance cannot be authored.
+
+**If it passes** — four or fewer (ii)s — they are ordinary findings, fixed in one round, and this
+thread closes without a Pass 14 dedicated to it. Either way the audit terminates in one round,
+because it is an enumeration over a list that already exists rather than a search.
+
+---
+
+### Appendix M — Pass 13 evidence
+
+**M.0 — isolation.** `git archive 7f0006b model-bench | tar -x -C <scratch>/p13/tip`; a fresh
+`sitecustomize.py` on `PYTHONPATH` filters any meta-path finder whose type name or module contains
+`editable`. Confirmed by
+`modelbench.__file__ == <scratch>/p13/tip/model-bench/modelbench/__init__.py`. A pre-existing scratch
+snapshot from Pass 12 was discarded rather than reused (it carried an untracked `sitecustomize.py`
+and `__pycache__`, neither of which is in `git ls-tree 7f0006b`). Suite at the tip: 815 passed, 3
+deselected; ruff clean.
+
+**M.1 — P13-1, the error-body read.** A fake opener raising an `HTTPError` subclass whose `read()`
+raises, over 3 exception kinds × 7 operation/surface cells:
+
+```
+IncompleteRead   catalog residency probe chat embed warm_up(chat) warm_up(emb)  -> 7/7 ESCAPED
+ConnectionReset  (same seven)                                                   -> 7/7 ESCAPED
+ReadTimeout      (same seven)                                                   -> 7/7 ESCAPED
+escaped 21 of 21
+```
+
+**M.2 — P13-2, route silence vs validator silence.** `_row_count_identity_problems` driven directly
+against the same 12 cells the probe builds, beside `validate_pack`:
+
+| cell | route problems | validate_pack problems |
+|---|---|---|
+| `sampling.scripts` valid / absent / wrong-type | 2 / **0** / 1 | 2 / **0** / 1 |
+| `sampling.replicatesPerScript` valid / absent / wrong-type | 2 / 1 / 1 | 2 / 1 / 1 |
+| `sampling.analysisUnit` valid / absent / wrong-type | 2 / **1** / **1** | 2 / **2** / **2** |
+| `data.conversations` valid / absent / wrong-type | 2 / 1 / 1 | 2 / 1 / 1 |
+
+Route-level silent set = validator-level silent set = `ROW_COUNT_IDENTITY_EXEMPT_CELLS` =
+`{("sampling.scripts","absent")}` **today**; the `analysisUnit` rows are where the slack lives.
+Mutation `if "analysisUnit" not in sampling: return []` at the head of the route →
+`test_packs.py` **35 passed**. Same mutation with line 340 pointed at the route → **1 failed, 34
+passed**; the unmutated tip with the same change → **35 passed**.
+
+**M.3 — P13-3, non-finite through `chat()`.** Body
+`{"stats":{"time_to_first_token": NaN, "generation_time": Infinity, "tokens_per_second": NaN}, …}`
+— parsed by `json.loads` with no error:
+
+```
+through chat():  ttftMs=nan  generationMs=inf  tokensPerSecond=nan
+statistics.median([nan,10,20,30,40] sorted) -> 20.0   (silent, arbitrary)
+direct construction, stats={"...": True}    -> ttftMs=1000.0  generationMs=1000.0  tps=1.0
+```
+
+**M.4 — U74 probes.**
+
+```
+A  attested {"lmStudioAppVersion":"", "kvCacheSetting":"", "hostRamGb":0, ...}
+                                       -> validate_host_info() == []   (P13-4)
+B  attest --api-base-url ""            -> UNCAUGHT HostInfoError, exit 1      (P13-5)
+C  attest with a field unset, no stdin -> UNCAUGHT EOFError                   (P13-6)
+D  probe() raising IncompleteRead      -> UNCAUGHT IncompleteRead at the CLI  (P13-1)
+E  host without observedAtAttestation  -> updated_host fails validate_host_info (P13-8)
+F  four outcomes: first-observation / compared+equal / compared+stale / unavailable — all correct;
+   back-fill writes exactly runtimeName, runtimeVersion, runtimeObservedAt; `attested` is the same
+   object and `attestedAt` is unchanged; the input `host` is not mutated.
+```
+
+**M.5 — 17 mutations, 17 killed** (all against copies of the snapshot; the working tree was never
+touched). Fix-round mechanisms (9): `_EXEMPT_CELLS` widened → 1 failed · `ROW_COUNT_IDENTITY_
+EXEMPT_CELLS` widened → 1 · `tools.module` containment removed → 1 · `.py` suffix removed → 1 ·
+wall clock back before `read()` → 1 · `catalog` parse-before-status → 1 · `_as_float` raw
+passthrough → 2 · `__post_init__` `Mapping` guard removed → 1 · POST body read moved outside the
+ladder → **25**. U74 (8): `residencySource` non-empty check dropped → 2 · `attest` writes
+`runtimeName` → 2 · embeddings returns `"compared"` → 1 · `residencySource` dropped from the stale
+comparison → 1 · back-fill rewrites `attestedAt` → 1 · `attest` exits `0` when unreachable → 2 ·
+`hostRamGb` bool accepted → 1 · `read_host_info` skips validation → 1.
