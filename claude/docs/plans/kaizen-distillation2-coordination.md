@@ -95,7 +95,9 @@ Deliverable paths above are the guaranteed minimum (every pass touches the
 agent's own kaizen files and the graph); each row is rewritten on delivery with
 the actual promotion targets — agent prompts, knowledge bases, project docs.
 
-| U38 | **`cobb`'s own inbox — 8 entries**, re-queried at dispatch. **`cobb` gates its own captures** — the first unit in this pass whose producer and distiller are the same agent, so the usual independent check on the producer's framing is absent. And **almost none of these belong in `cobb`'s own artifacts**: the homes are `graph-dba`'s FalkorDB KB, `tdd-engineer`'s guard KB and `python-web-quirks`. **Routing is the subject, not promotion.** Two strong leads handed over: `2f944aa9` looks published at `falkordb-quirks.md:736`, and `3b8ded5d` **contradicts three shipping documents** plus a `pipeline.sh` comment dated a day after it | `aa35aec2cab8c5750` | in-flight | `claude/*` · `skills/*` — homes unknown until routed | teco re-derivation → — | — |
+| U38 | **`cobb`'s own inbox — 8 entries**, re-queried at dispatch. **`cobb` gates its own captures** — the first unit in this pass whose producer and distiller are the same agent, so the usual independent check on the producer's framing is absent. And **almost none of these belong in `cobb`'s own artifacts**: the homes are `graph-dba`'s FalkorDB KB, `tdd-engineer`'s guard KB and `python-web-quirks`. **Routing is the subject, not promotion.** Two strong leads handed over: `2f944aa9` looks published at `falkordb-quirks.md:736`, and `3b8ded5d` **contradicts three shipping documents** plus a `pipeline.sh` comment dated a day after it | `aa35aec2cab8c5750` | **accepted** (`e79fb61`) | **4 promoted (one a half), 4 discarded** — routing-first was right: **not one entry landed in `cobb`'s own artifacts**; they went to `analyst`, `graph-dba`, `tdd-engineer` and `python-web-quirks`. Both my leads resolved, in opposite directions: `2f944aa9` was a **full** discard, not the half I predicted (the sub-claim I thought was new is at `cypher-mcp/README.md:118–127` in the entry's own words), and `3b8ded5d` was **superseded**, as hypothesised — but my discard steer on `c4f1a2be` **failed again**, U34's lesson repeating: four sites state *an undefined function aborts at 127*, none states that **`set -u` aborts at 127 too**, which is what breaks the exact-rc oracle those four prescribe. **The half-promotion is a defect in the procedure this pass runs on**: §5 step 1 reads `k.fact`/`k.evidence` through a tool that truncates at 300 chars and never said so. **10 files** | teco re-derivation → **accepted, no correction** — bash arms re-run: unbound at top level, in a function, and command-not-found all **127**, set-but-empty **0**; `CYPHER_MCP_MAX_CELL` default **300** confirmed at `README.md:383` and the paging mechanism re-derived live (`size(evidence)=1032` → `size(substring(…,250))=782`); the `81b43cd` worked example holds — `freshness.md:181` claimed the load *"overwrites it wholesale, `NOTE` and `MARKER_ORIGIN` included"* while the stamp at that same commit was `SET b.BUILT_AT = …` over named properties touching **neither** key; supersession confirmed against the **emitted Cypher** (`git-provenance.sh` → `SET b = {$_CPG_MAP}`) and `5417f0e`'s timestamp, hours after the capture; `python-web-quirks`' description **byte-identical at 4,584**; `claude/AGENTS.md` untouched at **2,491 w**; `review-techniques.md` 11,445 w / 30 §§ / 0 lines >700 | 211.2k tok, 78 tools |
+
+| U39 | **`coder` inbox — 9 entries**, re-queried at dispatch. **`coder` is the only agent this pass has drained that owns no knowledge base** — `claude/coder/` holds just `coder.md`, `hooks/` and `kaizen/` — so every promotion must land in another agent's artifact, a skill, or a component's docs tree, or force the decision to create one. **That decision is a stop-and-ask fork**, briefed as such. Three entries are falkor-chat-specific `project docs`; two visible pairs (`ThreadPoolExecutor` ×2, AST-guard reach ×2). Lead: `c7f1a3d2` looks published at `python-web-quirks/SKILL.md:603–629` **and in that skill's description** | `a28c977672e764a6d` | in-flight | homes unknown until routed | teco re-derivation → — | — |
 
 ## The graph is live during this pass
 
@@ -444,10 +446,10 @@ was written at the U24 pause and every one of its five items has since moved.
    deliberate survivor**; the `rq()` fix landed as `graph-dba` K-009 and closed
    in U33. U32/U34/U35/U36 drained `devops`, `data-scientist`, `graph-dba`,
    `qa-engineer` and `tdd-engineer`.
-2. **The four producers still holding entries.** Re-queried live at U37's
-   acceptance, **2026-09-09**: `teco` **37**, `architect` **15**, `coder` **9**,
-   `cobb` **8** — 69 produced plus the 1 orphan, **70** in the graph. Continue
-   smallest-first: `cobb`, `coder`, `architect`, `teco`. Chunk anything past ~12
+2. **The producers still holding entries.** Re-queried live at U39's dispatch,
+   **2026-09-09**: `coder` **9**, `architect` **15**, `teco` **38** — 62 produced
+   plus the 1 orphan, **63** in the graph. `cobb` was drained by U38. Remaining
+   order, smallest-first: `coder` (U39, in flight), `architect`, `teco`. Chunk anything past ~12
    date-ordered, per the standing decision. **Re-query at each dispatch; never
    dispatch against a figure recorded here.** `architect`'s include
    `b1f2c7a4-3d59-4e18-9f60-7a2c5d8e41bb`, whose subject was already promoted
@@ -471,6 +473,26 @@ mine, from a **concurrent `teco` session's** capture, not from anything this
 unit did.
 
 ## Follow-ups
+
+- **The §5 truncation defect predates this pass and silently bounds its own record.** U38 found
+  that `skills/agent-maintenance/SKILL.md` §5 step 1 tells a distiller to read `k.fact`/`k.evidence`
+  through a tool that cuts every cell at `CYPHER_MCP_MAX_CELL` (default **300**) and appends
+  `…(+N chars)` — and never said so. Any disposition in pass 1, or in pass 2 before U38, argued
+  from a long cell **without** paging was argued from the half of the entry that states the claim,
+  missing the half that bounds it. Nothing is re-openable — those nodes are cleared and their
+  dispositions logged — so this is a **standing caveat on this pass's own record**, not a defect
+  to fix retroactively. The recipe is now in §5 step 1.
+- **`suggestedHome` is not a routing signal.** All eight U38 entries said *knowledge base* or
+  *project docs*; every actual home was decided by the **receiving artifact's scope line**, and
+  twice landed somewhere the capture had not contemplated. Not filed as a `K-` item — no change to
+  the write shape follows — but it is why a routing-first brief beat a promotion-first one, and it
+  generalises: the producer knows the fact, not the shelf.
+- **Naming the extra census node is the right practice, and it still needs the attribution
+  checked.** U38 correctly identified the one node separating its census from mine
+  (`7c4a1e93-5b28-4d06-9f31-2ae80c6b5d47`) but attributed it to *"the concurrent `teco` session"* —
+  it was written by **this** session, during U37's acceptance. The node identification is what
+  mattered and it was right; the attribution was asserted rather than checked, which is the pass's
+  own recurring defect in miniature.
 
 - **A post-clear census is a snapshot of a graph other sessions are writing to, and the
   delta is not evidence of a miscount.** U35 caught `cobb` reporting a figure taken before
