@@ -2,6 +2,127 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-09 — S2 U74: `host.json`, the attestation trip-wire, and the `attest` CLI command
+
+**What:** `docs/plans/small-model-benchmarking.md` §3.4.4 (`host.json`'s schema), §3.4.4a
+(capture order, the source-of-truth table), §3.4.5 point 3 (the attestation staleness trip-wire)
+and §3.6a's `attest` row, landing beside a concurrent unit mid-edit on `modelbench/packs.py` and
+`modelbench/lmstudio.py` (not touched here). New: `modelbench/hostinfo.py`,
+`tests/test_hostinfo.py`. Changed: `modelbench/cli.py` (the `attest` subcommand and its wiring
+only), `tests/test_cli.py` (the S2-boundary test narrowed to name only `validate`/`run`, plus new
+`attest` tests).
+
+**Delivered.** `hostinfo.py` owns three things. (1) `validate_host_info(d) -> list[str]`
+(`Fingerprint.validate()`/`validate_pack`'s own `[]`-means-valid shape), `write_host_info` and
+`read_host_info` — the latter raises `HostInfoError` on an absent or schema-invalid file, which is
+`run`'s (a later unit's) cue to exit `5` at capture-order step 1; not wired into `run` here, since
+`run` is out of this unit's fences. (2) `attest(root, *, api_base_url, attested, client, now=None)`
+— the `attest` command's actual work: probes an injected `LMStudio`-like `client`, and on a
+successful `"api-v0"` probe writes `host.json` with `observedAtAttestation` carrying
+**`residencySource` only** (`"lmstudio-api-v0"`, this repo's own established literal, reused from
+`tests/conftest.py`'s `MODEL_FIELDS` rather than invented) — never `runtimeName`/`runtimeVersion`,
+since neither probed endpoint exposes a `runtime` object and `attest` has no model to call one
+against (plan-gate P4-6). A `"v1-only"` or `"unreachable"` probe raises `AttestProbeFailed` with
+§3.4.4a's two distinguishing messages and writes nothing. (3)
+`check_attestation_staleness(host, *, call_surface, residency_source, runtime_name,
+runtime_version, now=None) -> AttestationCheck` — the trip-wire's pure decision function (plan
+§3.4.5 point 3), covering its three named outcomes plus the mismatch case that lives inside
+`"compared"` as `stale=True` rather than as a fourth outcome string (a `RunResult` is never built
+on a mismatch, so that case is never stored at all): `"unavailable"` unconditionally on
+`call_surface == "embeddings"` (no comparison is attempted, whatever `host` holds); a first chat
+run with no `runtimeName` key yet observed backfills `runtimeName`/`runtimeVersion`/
+`runtimeObservedAt` into a copy of `host` (`attested` and `attestedAt` untouched) and returns
+`"first-observation"`, `stale=False`; every later chat run returns `"compared"`, comparing
+`runtimeName`, `runtimeVersion` **and** `residencySource` against what was last observed — a
+difference in any one of the three sets `stale=True` and `message` to the plan's verbatim string.
+**Not wired into a `run` command** — `run`'s own capture-order sequence (the warm-up call that
+would supply `runtime_name`/`runtime_version`) is a later unit's; this ships the mechanism, tested
+directly against hand-built `host.json` states, one test per outcome (four: unavailable,
+first-observation, compared-and-clean, compared-and-stale — the last parametrized over each of the
+three comparands independently).
+
+`cli.py` gains the `attest` subcommand (`--api-base-url`, default `http://localhost:1234`;
+repeatable `--set key=value` for the four attested fields, with interactive `input()` prompting
+for whatever `--set` leaves unset) and `EXIT_LMSTUDIO_UNREACHABLE = 3`. `hostRamGb` is parsed as
+an integer and `otherResidentWorkloads` split on commas (both CLI-encoding choices this unit made,
+not named by the plan beyond "`--set k=v`" — reversible by construction, since no stored record
+depends on the encoding, only on the JSON `host.json` ends up holding). An unrecognized `--set`
+key, a malformed `key=value` pair, or a non-integer `hostRamGb` all exit `2` before any network
+call. `test_s2_commands_are_not_shipped_yet` is renamed
+`test_s2s_remaining_commands_are_not_shipped_yet` and narrowed to `("validate", "run")` — `attest`
+now legitimately exits `0`/`3`, and the boundary test still reddens if either of the two remaining
+commands silently starts working.
+
+**Guard built from the plan's own literal, per this coordination's standing requirement.**
+`tests/test_hostinfo.py`'s `PLAN_LITERAL_HOST_JSON` is §3.4.4's example JSON block transcribed
+verbatim (not a fixture this implementation wrote for itself);
+`test_the_plans_own_literal_host_json_validates` asserts `validate_host_info(...) == []` against
+it, and every rejection test in the file mutates one field off a copy of that same literal.
+
+**Mutations, nine, all caught, each `cp`-aside / mutate / run / `cp`-back, `diff -q`
+byte-identical against the pre-mutation file after every single one:** in `hostinfo.py` —
+(1) the embeddings branch of `check_attestation_staleness` changed to fire on `"chat"` instead
+(7 tests reddened, including the round-trip test, since the derived `"unavailable"` case is what
+the second half of that test depends on); (2) the `"runtimeName" not in observed` guard forced to
+always take the first-observation branch (5 tests reddened, every `"compared"` case); (3) the
+`residencySource` comparand dropped from the staleness predicate (exactly the one parametrized
+case that changes only `residency_source` reddened — the other two comparands' cases stayed
+green, confirming they exercise different code); (4) `attest`'s two `AttestProbeFailed` message
+branches swapped (4 tests reddened, 2 in each file); (5) `validate_host_info`'s
+`observedAtAttestation.residencySource` check deleted (exactly the two tests that exist to pin it
+reddened, nothing else — confirming the guard's reach matches its declared one, not less). In
+`cli.py` — (6) `hostRamGb`'s int-coercion branch disabled by renaming its guard condition (6 tests
+reddened via an uncaught `HostInfoError` from `attest`'s own defensive
+`validate_host_info` check — red for the right reason, not a silent pass); (7) the unrecognized-
+`--set`-key check deleted (the one test written for it reddened, via a stdin-read `OSError` once
+the bad key fell through to interactive prompting rather than by coincidence); (8) `.strip()`
+dropped from the `otherResidentWorkloads` comma-split (the one test asserting the split's exact
+output reddened on a stray leading space, nothing else); (9) the malformed-`key=value` check
+deleted (the one test for it reddened, again via the stdin-read `OSError`, confirming the
+fallback-to-prompting path is what the check exists to prevent).
+
+**Observed, this run.** `model-bench/` as working directory. This unit's own attributable delta:
+`tests/test_hostinfo.py` is new and collects **42 tests (40 selected, 2 deselected — see below)**;
+`tests/test_cli.py` gained **11 new test functions** (10 new `attest` tests plus the renamed
+boundary test) per `git diff -- tests/test_cli.py | grep -c '^+def test_'`. Scoped run,
+`.venv/bin/python -m pytest -q tests/test_hostinfo.py tests/test_cli.py`: **75 passed, 2
+deselected**. `.venv/bin/ruff check modelbench/hostinfo.py modelbench/cli.py
+tests/test_hostinfo.py tests/test_cli.py`: **All checks passed!**
+
+**A full-suite run was not a stable baseline while this unit worked** — `git status` and
+`git diff --stat` at the time showed a concurrent session with `modelbench/packs.py`,
+`modelbench/lmstudio.py`, `tests/test_packs.py` and `tests/test_lmstudio.py` all mid-edit
+(uncommitted, outside this unit's fences and never touched by it), and a full-suite count taken at
+one moment (`807 passed, 3 deselected, 4 failed`, all four failures inside `tests/test_packs.py`)
+had already moved by the next run (`764 passed`, then `801 passed`, then `807 passed`, the failure
+set itself changing between runs, at one point including two `test_lmstudio.py` cases). None of
+those failures are in this unit's files or attributable to this change — the scoped run above,
+which exercises exactly what this unit shipped, is the number this entry stands behind.
+
+**Done-conditions in this unit's scope that could not be executed — blocked on a live LM Studio
+session, per this task's constraint that agents are not authorised to load a model.** Both are
+R-1's (plan §4 S2, §6 R-1): (1) *"with a model actually loaded ... re-read `GET /api/v0/models`
+and record ... whether the loaded entry exposes the KV-cache or load configuration"* — the
+2026-09-03 probe saw only `not-loaded` catalog entries, and only a live session can re-probe a
+loaded one; (2) *"does `loadedContextLength` appear on a loaded embeddings model"* — §2.3's
+evidence is from a chat model only. Both are written as `@pytest.mark.live` tests in
+`tests/test_hostinfo.py` (`test_live_loaded_catalog_entry_reveals_kv_cache_or_load_configuration`,
+`test_live_loaded_context_length_on_a_loaded_embeddings_model`), deselected by default exactly
+like `tests/test_lmstudio.py`'s existing live test, and never run by this unit. Per the plan,
+"either outcome satisfies the condition; silence does not" — neither outcome is recorded here, and
+whichever future live session runs them should record the finding in this file; a positive KV-
+cache-on-load finding is a `fingerprint.py`/`AGENTS.md` change and a positive/negative
+`loadedContextLength` finding is a `fingerprint.py` change, both out of this unit's fences either
+way. **Not blocked, and not attempted for a different reason:** R-1's third question — whether
+LM-Studio-reported `time_to_first_token` includes the JIT load — belongs to the runner's own
+timing-budget instrumentation (`modelbench/runner.py`), a different not-yet-built unit, and is not
+named anywhere in this unit's fenced files.
+
+**Files:** `modelbench/hostinfo.py` (new), `tests/test_hostinfo.py` (new), `modelbench/cli.py`,
+`tests/test_cli.py`. Left uncommitted for review; a concurrent session is editing
+`modelbench/packs.py`/`modelbench/lmstudio.py` and their tests and may append its own entry to
+this same `HISTORY.md`.
+
 ## 2026-09-09 — S2 U73: the row-count identity's own exemption widened to match its stated reach
 
 **What:** `_row_count_identity_problems` (`modelbench/packs.py`) skipped silently — returned `[]`

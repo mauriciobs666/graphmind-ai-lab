@@ -1,12 +1,13 @@
 """The command surface. Plan §3.6a is the table this implements.
 
-S1 ships `compare` (including `--negative-control`), `index rebuild`, and the stored-records half
-of `models --tested`. `attest`, `validate` and `run` are S2's and are deliberately absent.
+S1 shipped `compare` (including `--negative-control`), `index rebuild`, and the stored-records
+half of `models --tested`. S2 adds `attest`; `validate` and `run` are a later S2 unit's and are
+deliberately still absent.
 
 **Exit codes are a closed set** (§3.6a): `0` whenever the tool ran and reported, *whatever the
 scores* — the requirements rule out pass/fail gating, so a comparison that finds every stored
 record invalid still exits `0` and prints the exclusion block. Non-zero is operational only:
-`2` bad arguments · `3` LM Studio unreachable (S2) · `4` invalid pack · `5` fingerprint incomplete
+`2` bad arguments · `3` LM Studio unreachable · `4` invalid pack · `5` fingerprint incomplete
 or `host.json` stale.
 """
 
@@ -16,8 +17,10 @@ import argparse
 import sys
 from datetime import date
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
+from modelbench import hostinfo
+from modelbench.lmstudio import LMStudio
 from modelbench.packs import PackConfigError, pack_ref_from_manifest
 from modelbench.report import compare_report
 from modelbench.results import RunResult, load_history, models_with_stored_results, rebuild_index
@@ -27,8 +30,15 @@ class UnknownModelKey(ValueError):
     """`--models` named a key with no stored run for this pack (§3.6a's exit 2)."""
 
 
+class AttestUsageError(ValueError):
+    """Bad `--set key=value` arguments to `attest` (§3.6a's exit 2) — an unrecognized key, a
+    malformed `key=value` pair, or a value that fails the field's own type (`hostRamGb` not an
+    integer)."""
+
+
 EXIT_OK = 0
 EXIT_USAGE = 2
+EXIT_LMSTUDIO_UNREACHABLE = 3
 EXIT_BAD_PACK = 4
 EXIT_FINGERPRINT = 5
 
@@ -70,6 +80,19 @@ def _build_parser() -> argparse.ArgumentParser:
     models.add_argument("--tested", action="store_true", required=True)
     models.add_argument("--pack")
     models.add_argument("--role")
+
+    attest = with_root(sub.add_parser("attest", help="write host.json, the operator-attested "
+                                       "fingerprint half"))
+    attest.add_argument("--api-base-url", default="http://localhost:1234")
+    attest.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        metavar="key=value",
+        dest="set_",
+        help=f"one of {', '.join(hostinfo.ATTESTED_FIELD_NAMES)}, repeatable; unset fields are "
+        "prompted for interactively",
+    )
 
     return parser
 
@@ -173,6 +196,68 @@ def _cmd_models(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _parse_set_flags(pairs: Sequence[str]) -> dict[str, str]:
+    """`--set key=value`, repeated. Raises `AttestUsageError` on a malformed pair or an
+    unrecognized key — `attested`'s four names are closed, not a place for a typo to silently add
+    a fifth field `host.json`'s schema does not expect."""
+    out: dict[str, str] = {}
+    for raw in pairs:
+        if "=" not in raw:
+            raise AttestUsageError(f"--set expects key=value, got {raw!r}")
+        key, _, value = raw.partition("=")
+        if key not in hostinfo.ATTESTED_FIELD_NAMES:
+            raise AttestUsageError(
+                f"--set {key!r} is not one of {', '.join(hostinfo.ATTESTED_FIELD_NAMES)}"
+            )
+        out[key] = value
+    return out
+
+
+def _coerce_attested_value(name: str, raw: str) -> Any:
+    """`hostRamGb` is a number and `otherResidentWorkloads` a list (plan §3.4.4's schema); the
+    other two are free-form strings, taken verbatim."""
+    if name == "hostRamGb":
+        try:
+            return int(raw)
+        except ValueError as exc:
+            raise AttestUsageError(f"--set hostRamGb: {raw!r} is not an integer") from exc
+    if name == "otherResidentWorkloads":
+        return [item.strip() for item in raw.split(",") if item.strip()]
+    return raw
+
+
+def _gather_attested_fields(args: argparse.Namespace) -> dict[str, Any]:
+    """The four operator-attested fields: from `--set`, or prompted for interactively when a
+    field is not named there (§3.6a: "Prompts for the four operator-attested fields, ...
+    non-interactive `--set k=v`")."""
+    set_values = _parse_set_flags(args.set_)
+    fields: dict[str, Any] = {}
+    for name in hostinfo.ATTESTED_FIELD_NAMES:
+        raw = set_values[name] if name in set_values else input(f"{name}: ")
+        fields[name] = _coerce_attested_value(name, raw)
+    return fields
+
+
+def _cmd_attest(args: argparse.Namespace) -> int:
+    root = Path(args.root)
+    try:
+        attested = _gather_attested_fields(args)
+    except AttestUsageError as exc:
+        print(f"model-bench: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    client = LMStudio(args.api_base_url)
+    try:
+        path = hostinfo.attest(
+            root, api_base_url=args.api_base_url, attested=attested, client=client
+        )
+    except hostinfo.AttestProbeFailed as exc:
+        print(f"model-bench: {exc}", file=sys.stderr)
+        return EXIT_LMSTUDIO_UNREACHABLE
+    print(f"wrote {path}")
+    return EXIT_OK
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     try:
@@ -186,4 +271,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_index(args)
     if args.command == "models":
         return _cmd_models(args)
+    if args.command == "attest":
+        return _cmd_attest(args)
     return EXIT_USAGE  # pragma: no cover - argparse rejects unknown commands first

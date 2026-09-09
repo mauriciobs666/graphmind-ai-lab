@@ -1,7 +1,6 @@
-"""The three commands S1 ships: `compare`, `index rebuild`, `models --tested` (plan §3.6a).
-
-`attest`, `validate` and `run` are S2's and must not exist yet — asserted, so the stage boundary is
-a test rather than a promise. Exit codes are §3.6a's closed set.
+"""S1's three commands (`compare`, `index rebuild`, `models --tested`) plus S2's `attest`
+(plan §3.6a). `validate` and `run` are a later S2 unit's and must not exist yet — asserted, so the
+stage boundary is a test rather than a promise. Exit codes are §3.6a's closed set.
 """
 
 from __future__ import annotations
@@ -11,6 +10,7 @@ import json
 import pytest
 from conftest import classification_aggregates, item, model_fields, run
 
+from modelbench import cli, hostinfo
 from modelbench.cli import main
 from modelbench.results import ItemResult, store
 
@@ -241,9 +241,11 @@ def test_models_tested_filters_by_pack(workspace, capsys) -> None:
     assert "cand" not in capsys.readouterr().out
 
 
-def test_s2_commands_are_not_shipped_yet(capsys) -> None:
-    """Plan §3.6a assigns `attest`, `validate` and `run` to S2. The boundary is a test."""
-    for command in ("attest", "validate", "run"):
+def test_s2s_remaining_commands_are_not_shipped_yet(capsys) -> None:
+    """Plan §3.6a assigns `attest`, `validate` and `run` to S2. `attest` has since shipped (this
+    unit); `validate` and `run` are a later S2 unit's and the boundary stays a test rather than a
+    promise — asserted here so either one silently starting to work reddens this."""
+    for command in ("validate", "run"):
         assert main([command]) == 2
 
 
@@ -423,3 +425,185 @@ def test_the_report_filename_is_the_manifests_pack_id_not_the_directory_name(
     assert "| cand | falseAdvanceRate | 40/40 |" in body
     assert "| incumbent | falseAdvanceRate | 34/40 |" in body
     assert "fewer than two arms were selected" not in body
+
+
+# --- attest (plan §3.6a) -------------------------------------------------------------------------
+#
+# `_cmd_attest` constructs its own `LMStudio(args.api_base_url)`, which would otherwise open a real
+# socket; every test below monkeypatches `cli.LMStudio` with `_FakeLMStudio`, the same
+# injected-network seam `tests/test_lmstudio.py` uses at the `LMStudio(opener=...)` layer, one
+# level up.
+
+ATTESTED_SET_FLAGS = [
+    "--set", "lmStudioAppVersion=0.3.31",
+    "--set", "kvCacheSetting=f16",
+    "--set", "hostRamGb=16",
+    "--set", "otherResidentWorkloads=docker: falkordb-dev, windows desktop session",
+]
+
+
+class _FakeLMStudio:
+    """Stands in for `modelbench.lmstudio.LMStudio` — records the `base_url` it was built with
+    and returns a canned `probe()` outcome, never opening a socket."""
+
+    last_base_url: str | None = None
+
+    def __init__(self, base_url: str, probe_result: str = "api-v0") -> None:
+        self.base_url = base_url
+        self._probe_result = probe_result
+        type(self).last_base_url = base_url
+
+    def probe(self) -> str:
+        return self._probe_result
+
+
+def _patch_lmstudio(monkeypatch, probe_result: str = "api-v0") -> None:
+    monkeypatch.setattr(
+        cli, "LMStudio", lambda base_url: _FakeLMStudio(base_url, probe_result)
+    )
+
+
+def test_attest_writes_a_host_json_matching_the_schema_and_exits_zero(
+    workspace, capsys, monkeypatch
+) -> None:
+    _patch_lmstudio(monkeypatch)
+    code = main(
+        ["attest", "--root", str(workspace), "--api-base-url", "http://localhost:1234"]
+        + ATTESTED_SET_FLAGS
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    path = workspace / "host.json"
+    assert f"wrote {path}" in out
+    assert hostinfo.validate_host_info(json.loads(path.read_text())) == []
+
+
+def test_attest_writes_exactly_the_four_attested_fields_and_residency_source_only(
+    workspace, monkeypatch
+) -> None:
+    """Plan §3.4.4's schema, checked field by field — including that `observedAtAttestation`
+    carries `residencySource` and **omits** `runtimeName`/`runtimeVersion` (plan-gate P4-6:
+    neither probed endpoint exposes a `runtime`, and `attest` has no model to call one against)."""
+    _patch_lmstudio(monkeypatch)
+    main(["attest", "--root", str(workspace)] + ATTESTED_SET_FLAGS)
+    data = json.loads((workspace / "host.json").read_text())
+
+    assert data["schemaVersion"] == 1
+    assert data["apiBaseUrl"] == "http://localhost:1234"  # the CLI's own default
+    assert data["attested"] == {
+        "lmStudioAppVersion": "0.3.31",
+        "kvCacheSetting": "f16",
+        "hostRamGb": 16,
+        "otherResidentWorkloads": ["docker: falkordb-dev", "windows desktop session"],
+    }
+    assert data["observedAtAttestation"] == {"residencySource": "lmstudio-api-v0"}
+    assert "runtimeName" not in data["observedAtAttestation"]
+    assert "runtimeVersion" not in data["observedAtAttestation"]
+
+
+def test_attest_uses_the_given_api_base_url(workspace, monkeypatch) -> None:
+    _patch_lmstudio(monkeypatch)
+    main(
+        ["attest", "--root", str(workspace), "--api-base-url", "http://10.0.0.5:1234"]
+        + ATTESTED_SET_FLAGS
+    )
+    assert _FakeLMStudio.last_base_url == "http://10.0.0.5:1234"
+    data = json.loads((workspace / "host.json").read_text())
+    assert data["apiBaseUrl"] == "http://10.0.0.5:1234"
+
+
+def test_attest_exits_three_when_lm_studio_is_unreachable(workspace, capsys, monkeypatch) -> None:
+    """§3.4.4a's first distinguishing message — no `host.json` is written."""
+    _patch_lmstudio(monkeypatch, probe_result="unreachable")
+    code = main(
+        ["attest", "--root", str(workspace), "--api-base-url", "http://localhost:1234"]
+        + ATTESTED_SET_FLAGS
+    )
+    err = capsys.readouterr().err
+    assert code == 3
+    assert "not reachable at http://localhost:1234" in err
+    assert not (workspace / "host.json").exists()
+
+
+def test_attest_exits_three_when_only_v1_answers(workspace, capsys, monkeypatch) -> None:
+    """§3.4.4a's second distinguishing message — the OpenAI-compatible surface answered but not
+    LM Studio's native catalog, a *different* message from plain unreachability."""
+    _patch_lmstudio(monkeypatch, probe_result="v1-only")
+    code = main(["attest", "--root", str(workspace)] + ATTESTED_SET_FLAGS)
+    err = capsys.readouterr().err
+    assert code == 3
+    assert "not LM Studio's native /api/v0 catalog" in err
+    assert not (workspace / "host.json").exists()
+
+
+def test_attest_prompts_interactively_for_fields_not_given_via_set(
+    workspace, monkeypatch
+) -> None:
+    """§3.6a: "Prompts for the four operator-attested fields" is the default; `--set` is the
+    non-interactive override. Only `hostRamGb` is left unset here."""
+    _patch_lmstudio(monkeypatch)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "32")
+    code = main(
+        [
+            "attest", "--root", str(workspace),
+            "--set", "lmStudioAppVersion=0.3.31",
+            "--set", "kvCacheSetting=f16",
+            "--set", "otherResidentWorkloads=",
+        ]
+    )
+    assert code == 0
+    data = json.loads((workspace / "host.json").read_text())
+    assert data["attested"]["hostRamGb"] == 32
+
+
+def test_attest_exits_two_on_an_unrecognized_set_key(workspace, capsys, monkeypatch) -> None:
+    _patch_lmstudio(monkeypatch)
+    code = main(["attest", "--root", str(workspace), "--set", "notAField=x"])
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "notAField" in err
+    assert not (workspace / "host.json").exists()
+
+
+def test_attest_exits_two_on_a_malformed_set_pair(workspace, capsys, monkeypatch) -> None:
+    _patch_lmstudio(monkeypatch)
+    code = main(["attest", "--root", str(workspace), "--set", "lmStudioAppVersion"])
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "key=value" in err
+
+
+def test_attest_exits_two_on_a_non_integer_host_ram_gb(workspace, capsys, monkeypatch) -> None:
+    _patch_lmstudio(monkeypatch)
+    code = main(
+        [
+            "attest", "--root", str(workspace),
+            "--set", "lmStudioAppVersion=0.3.31",
+            "--set", "kvCacheSetting=f16",
+            "--set", "hostRamGb=sixteen",
+            "--set", "otherResidentWorkloads=",
+        ]
+    )
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "hostRamGb" in err
+    assert not (workspace / "host.json").exists()
+
+
+def test_attest_other_resident_workloads_empty_string_is_an_empty_list(
+    workspace, monkeypatch
+) -> None:
+    """A clean box has no other resident workloads — `[]`, not `[""]` (the same absent-versus-
+    empty discipline the fingerprint applies one file over)."""
+    _patch_lmstudio(monkeypatch)
+    main(
+        [
+            "attest", "--root", str(workspace),
+            "--set", "lmStudioAppVersion=0.3.31",
+            "--set", "kvCacheSetting=f16",
+            "--set", "hostRamGb=16",
+            "--set", "otherResidentWorkloads=",
+        ]
+    )
+    data = json.loads((workspace / "host.json").read_text())
+    assert data["attested"]["otherResidentWorkloads"] == []
