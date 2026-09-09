@@ -89,7 +89,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U34 | **`graph-dba` inbox — 1 entry** (`b7d3f0a2…`, bash joins a backslash continuation with **nothing**), plus a **rider**: `cobb`'s own retraction write-up in `claude/tdd-engineer/guard-testing-techniques.md` is half wrong — right about the scoped file, false about `pipeline.sh` as it then stood. Smallest-first resumes here | `acaa8fc45105704e6` | **accepted** (`813fd71`) | **1 promoted, 0 discarded** — my discard steer **overruled**, and rightly: the fact already stood in **three** places, not the one I named, but all three stated it as *what happened here*; what was missing was the **portable rule**, now point 4's closing sentence. A fourth copy in `devops/ops-quirks.md` rejected on the arc's own lesson. Rider applied: the retraction paragraph now says it was right about one file and wrong about the other, ending on *checking a bound means checking every place it is stated*. **4 files** | teco re-derivation → **accepted, no correction** — probe greps re-run independently (36 forms / 6 blind, matching); `A15` confirmed the *flagged* continuation form and `A14` the blind wrapper, so point 1's six-form list is right; graph census re-queried: **77 nodes, `graph-dba` absent**, 1 deliberate orphan; tree touched exactly 4 files | 137.4k tok, 41 tools |
 | U35 | **`qa-engineer` inbox — 1 entry** (`7f3c9a21…`, `TestClient` defaults to `raise_server_exceptions=True`, so an acceptance test on the default can never see the real bare 500). Two open questions handed over, not decided: one section or two in `python-web-quirks`, and whether `SKILL.md:47`'s audience line is stale for omitting `qa-engineer` | `ac2f1a4ba4ac40333` | **accepted** (`3f769ca`) | **1 promoted**, and re-derivation **narrowed the claim**: the client-parity `False` buys is `ServerErrorMiddleware`'s, not the flag's — outside it `TestClient` synthesizes a headerless, empty-bodied 500. Three-arm evidence incl. a **live uvicorn control**. Two sections kept, with a stated trigger (K-026) instead of a later judgement call. Audience list was stale in **4** places, not 1 — `6b0a401` had removed the reciprocal clause from all four consumer prompts. **7 files** | teco re-derivation → **accepted, no correction** — census 77/`qa-engineer` absent; root `AGENTS.md` edit is one clause and the >700 bar is clean. **My own char-count contradicted cobb's until I fixed my instrument**: counting raw YAML text gave 4,685/1,032, `yaml.safe_load` gives **4,584/1,003** — cobb's figures exactly | 158.3k tok, 65 tools |
 | U36 | **`tdd-engineer` inbox — 3 entries**, all model-bench S1: a `len()`-derived-constant wiring probe, and two views of one zero-variance degeneracy (a constant bootstrap sample makes a clamp undetectable). Their `suggestedHome`s **disagree** on the pair. Rider: `skills/agent-standards/SKILL.md`'s frontmatter **does not parse as YAML** | `ad439355235f4f7a6` | **accepted** (`4ca4098`) | **3 promoted, merged to 2 sections in a new KB** (`estimator-test-fixtures.md`, 89 lines) — the pair *was* one mechanism, argued from the captures' own history: one implementer, one unit, used a degenerate sample as a clamp's worked case **and** declined one as unconstructible. Re-derivation added a condition the captures missed: hiding a clamp needs zero width **and** the point inside the support. **My YAML rider inverted** — see below. K-027+K-028 → **K-029**; K-025 row fixed. **8 files** | teco re-derivation → **accepted, no correction** — census **74**, `tdd-engineer` absent; strict-parse scan re-run over all **24** frontmatter files, now **3** failures not 4, all agent definitions; `agent-standards`' description **byte-identical at 475 chars**; `claude/AGENTS.md` at **2,491 words**, at its own ~2,500 bar | 191.6k tok, 61 tools |
-| U37 | **`analyst` inbox — 5 entries**, re-queried at dispatch. **Three are about work this pass itself gated, and at least two look already-promoted** — so the **discard bar is the subject**, not the promotions. `RESULTSET_SIZE` is already stated in 4 places and `graph-dba` recorded that it answered `analyst`'s own open question *in the negative*. Two need a **routing call**: `git grep -c <rev>` has no home in this layout, and the median-latency done-condition is closest to `qa-engineer` | `a03b3f08a13aeeb01` | in-flight | `claude/analyst/*` · possibly none | teco re-derivation → — | — |
+| U37 | **`analyst` inbox — 5 entries**, re-queried at dispatch. **Three are about work this pass itself gated, and at least two look already-promoted** — so the **discard bar is the subject**, not the promotions. `RESULTSET_SIZE` is already stated in 4 places and `graph-dba` recorded that it answered `analyst`'s own open question *in the negative*. Two need a **routing call**: `git grep -c <rev>` has no home in this layout, and the median-latency done-condition is closest to `qa-engineer` | `a03b3f08a13aeeb01` | **accepted** (`af85412`) | **4 promoted, 1 discarded** — my discard steer **held this time**: `c3d81f7a` was already published *including* its narrow sub-claim, argued from the `falkordb-quirks.md` bullet **read whole** (710–724), not a grep hit. Both routing calls decided against my steer's default: `git grep -c <rev>` **half promoted** — its first half was already the section's rule, the unrecorded half is the BRE-vs-`-E` dialect trap — and the median entry ruled to **`analyst`, not `qa-engineer`**, on the catalogs' own words (fires where a done-condition is *written or gated*). Re-derivation **sharpened** the `$?` entry: the `if !` consumes the status, so the command substitution is innocent and removing it does not repair the call site. **5 files** | teco re-derivation → **accepted, no correction** — every load-bearing figure re-derived independently: `git grep -E` → **exit 128** vs BRE's `report.py:3`+`results.py:3` at `c523a35`; bash arms **0/0/2**; `app.py:369`/`config.py:247` as cited; probe **36 rows / 3 axes / 6 blind** confirmed (my pipe-delimited instrument was wrong again — the heredoc is whitespace-separated); `review-techniques.md` **11,003 w / 29 §§ / 0 lines >700**; `analyst.md`'s 7 long lines **pre-existed at HEAD**; `claude/AGENTS.md` untouched at **2,491 w**; every KB-carrying agent now named in `README.md`. Graph: all 5 ids gone, `analyst` **0 produced / 0 mentioned / node absent** | 209.7k tok, 64 tools |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
 agent's own kaizen files and the graph); each row is rewritten on delivery with
@@ -433,46 +433,59 @@ transcript mtime (4 seconds old, 815 KB) settled it in one command.
 not:** the task transcript's mtime is the cheap tell. A recent mtime means it
 is working; a stale one plus an empty worktree means it died before promoting.
 
-**What remains, in order:**
+**What remains, in order** — rewritten 2026-09-09 after U37; the earlier list
+was written at the U24 pause and every one of its five items has since moved.
 
-1. ~~**U25** — `analyst`'s two deferred entries.~~ **Done 2026-09-09** (`b7da439`):
-   both promoted into `review-techniques.md`, both cleared, **`analyst`'s produced
-   inbox is empty**. The `$(…)` subshell defect the first entry cited is **dead** —
-   `271c899` moved the call out of command substitution, added a populate-check that
-   exits 1, and added a regression case that reverts the call site — so **nothing
-   routes alongside K-009**, which was the open question at dispatch. `analyst`
-   retains **4 `MENTIONS`-only** edges; those belong to item 3, not here.
-2. **The other producers.** Re-queried on **2026-09-09**, at U25's dispatch:
-   `teco` **32**, `architect` **13**, `coder` **8**, `cobb` **7**,
-   `data-scientist` 1, `graph-dba` 1 — 13 orphan (`MENTIONS`-only) nodes on top,
-   77 in the graph altogether. `teco` gained **3 while the pass was paused**,
-   from concurrent coordinations, and nothing else moved: the inbox that grows
-   is the one whose agent is working, which is why the close condition is a
-   re-query and not a countdown. `teco` is now the largest
-   inbox in the graph — this coordination's own verification findings are the
-   bulk of it, so it is partly self-inflicted and partly the most direct record
-   of what the pass learned. `architect`'s 13 include
+1. ~~`analyst`'s inbox~~, ~~the `MENTIONS`-only backlog~~, ~~routing the `rq()`
+   fix~~ — **all done.** U25 and U37 drained `analyst` (empty, and its `:Agent`
+   node is gone from the graph); U31 drained the orphan backlog down to **one
+   deliberate survivor**; the `rq()` fix landed as `graph-dba` K-009 and closed
+   in U33. U32/U34/U35/U36 drained `devops`, `data-scientist`, `graph-dba`,
+   `qa-engineer` and `tdd-engineer`.
+2. **The four producers still holding entries.** Re-queried live at U37's
+   acceptance, **2026-09-09**: `teco` **37**, `architect` **15**, `coder` **9**,
+   `cobb` **8** — 69 produced plus the 1 orphan, **70** in the graph. Continue
+   smallest-first: `cobb`, `coder`, `architect`, `teco`. Chunk anything past ~12
+   date-ordered, per the standing decision. **Re-query at each dispatch; never
+   dispatch against a figure recorded here.** `architect`'s include
    `b1f2c7a4-3d59-4e18-9f60-7a2c5d8e41bb`, whose subject was already promoted
    from `analyst`'s near-twin `b1f0c7a4…` in U23: **read that section before
    re-promoting it.**
-3. **The `MENTIONS`-only unit** — now **13 nodes carrying 14 edges** (it grew:
-   U24 added two by design). Dated 08-30 to 09-07, the oldest population in the
-   graph. None hangs off a produced entry, so **no producer-organised unit will
-   ever reach them** — every pass so far has walked past them for a structural
-   reason, not by oversight. This needs a unit shaped by *edge*, not by
-   producer, and it has never been attempted. Two of the 13 are U24's
-   deliberate kept-opens and must **not** be cleared until `graph-dba` K-009 is
-   fixed.
-4. **Route the `rq()` fix** to `graph-dba` — now tracked as its **K-009**
-   (high), so the routing is recorded on the owner's backlog rather than living
-   only in this ledger.
+3. **The one orphan is not a residue and must not be swept.**
+   `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` is alive on its `tico` edge on
+   purpose — it is the routing signal for `tico` K-016. A close pass that
+   deletes it to reach zero destroys the signal.
+4. **`teco`'s 37 is the pass auditing itself.** It is the largest inbox in the
+   graph and most of it is this coordination's own verification findings, so it
+   is the one unit whose entries were written by the agent that will gate them.
+   Brief that asymmetry explicitly when it is dispatched.
 5. Only then: re-query every agent, drain what is actually there, and flip this
    document to `archived`.
 
 **The close condition is a re-query that comes back empty — never a planned
-count.** Two entries arrived while U23's own verification was running.
+count.** Two entries arrived while U23's own verification was running; U37's
+verification saw the total move 69 → 70 between `cobb`'s post-clear census and
+mine, from a **concurrent `teco` session's** capture, not from anything this
+unit did.
 
 ## Follow-ups
+
+- **A post-clear census is a snapshot of a graph other sessions are writing to, and the
+  delta is not evidence of a miscount.** U35 caught `cobb` reporting a figure taken before
+  its *own* subsequent capture. U37's delta has a different cause with the same shape:
+  `cobb` reported **69** nodes / `teco` **36**; my verification twenty minutes later read
+  **70** / **37**, the extra being `3f8c21ad-6e94-4b7f-a1d2-9c5e0b7a4318` (2026-09-09
+  15:05Z), written by a **concurrent `teco` session** working `model-bench`. Reconcile a
+  census delta by naming the extra node before treating it as a clearing defect — the
+  producer counts that matter for the *next* dispatch are the ones queried at that
+  dispatch, not either of these.
+- **My grep instrument has now been the defective party four times in this pass.** U35: raw
+  YAML text vs `yaml.safe_load` for a description's char count. U36: the inverted strict-parse
+  rider. U37: a pipe-delimited extraction over `test-stamp-wiring.sh`'s `FORMS` heredoc, which
+  is **whitespace**-separated — it returned `0 rows`, a result that reads exactly like a missing
+  block rather than a wrong parser. In every case the delegate's figure was right. A
+  re-derivation that comes out *empty* or *stable* deserves the same suspicion `teco.md`
+  already assigns to one that comes out clean.
 
 - **That YAML finding inverted under execution, and the inversion is the durable part.** I
   routed it as *"under a strict parser `cobb`'s own standards skill does not load at all"*.
