@@ -2,6 +2,86 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-09 — the report-side seam: `compare_report` routes a continuous verdict metric
+
+**What:** `docs/plans/small-model-benchmarking.md` §4 S1's `compare_report` block and §3.3 (iv),
+against `cf54f5b`. `modelbench/report.py`, `tests/test_report.py`. **628 → 634 tests** (7 added,
+1 rewritten test removed — the placeholder it replaced pinned a raise that is no longer reached),
+`.venv/bin/ruff check modelbench tests` clean, **10 mutations, all caught**, each `cp`-aside /
+mutate / run / `cp`-back / `diff -q` byte-identical restore.
+
+**Delivered — Table F's `report.py:623-789` row, its stated exception now closed.** Pass 1
+resolves each pre-registered verdict metric's kind from its own arm aggregate (`_metric_kind`,
+falling back to `b`'s aggregate when `a` declares none, and to `"binary"` when neither does — DC-10's
+existing cross-check has already reconciled an arm's own aggregate against its own items by this
+point, so the aggregate type is a type fact rather than a guess). Three branches follow: a
+**homogeneous binary** family is the unchanged two-pass Holm flow; an **all-continuous** family
+takes one difference per analysis unit (`_paired_diffs`, the continuous sibling of `_paired_rows`
+— joins at the unit id rather than at item `pairingKey`, folding a unit's items into one value by
+averaging, so a unit spanning more than one item gets the mean §3.2d asks for and a unit ≡ item
+gets the identity) and hands `diffs` and the metric's own `ContinuousMetric`/`DistributionSummary`
+`.support` to `stats.continuous_verdict()` — no `holm_steps`, no `mcnemar_exact`, no
+`resolving_power` on this path; a **mixed** family is refused *whole* per §3.3 (iv): no member
+verdicted, nothing excluded, each member's own block names its resolved kind, the Exploratory
+section widens to include the whole family, the headline (if one of the refused members) prints
+the same exploratory label instead of the false `_NO_PAIRED_DATA` fallback, and the family-wise
+section states the refusal instead of a Holm claim that never happened. The same replacement
+mechanism serves the all-continuous `k > 1` case, which states its correction was taken in the
+interval instead. `scored_outcome`'s `MetricKindError` raise (Table F's placeholder) is untouched
+as a contract but is no longer reached by a well-formed continuous member — the family loop now
+resolves kind before choosing an extractor rather than always calling `scored_outcome`.
+
+**Two guards the continuous branch owns that the binary branch's `rp is None` parallel doesn't
+quite cover.** Zero paired units renders the existing `_NO_PAIRED_DATA` message (parity with
+binary). Exactly **one** paired unit is a case `_NO_PAIRED_DATA` cannot state truthfully — one
+unit *is* paired — and `continuous_verdict` refuses a one-unit interval outright (`-ml` §3.4 Rule
+8, refusal 4), so a new message (`_ONE_PAIRED_UNIT`) names it rather than letting the `ValueError`
+escape uncaught.
+
+**One design call made and not escalated, per the coordination's own precedent for routine
+ambiguity:** which arm's aggregate to prefer when both declare one for the same metric (`a`, with
+`b` as fallback) and what a metric with no aggregate on either arm resolves to (`"binary"`,
+matching the pre-Table-F assumption). Neither is pinned by the plan or the note; both are cheap to
+reverse and untested by any fixture that would distinguish them from the alternative.
+
+**Mutation table (10, all caught):** `_metric_kind` forced to always return `"binary"` (7 tests
+caught — everything continuous- or mixed-family-shaped); `mixed_kinds` forced `False` (2 mixed
+tests — falls through to the binary branch, which raises `MetricKindError` on the continuous
+member); `continuous_family` forced `False` (5 continuous tests, same failure mode); `_paired_diffs`
+mutated to take a unit's first item instead of the mean (the averaging test only — required
+redesigning the test's fixture values first, since the original values happened to make first-item
+and mean coincide); the zero-diffs and one-diff guards each disabled in turn (each caught by its
+own test, surfacing as an uncaught `ValueError` from `stats.py` instead of a rendered message); the
+Exploratory filter's `or mixed_kinds` removed (`IndexError`, section absent); the headline's
+`mixed_kinds` branch removed (falls back to the old `_NO_PAIRED_DATA`-vs-`.text` logic and raises
+`StopIteration` looking up a verdict that was never computed); both family-wise replacement
+branches removed (all three of the mixed/continuous/mixed-headline tests — one via a direct
+assertion, two via an `AttributeError` reading `.mcnemar_p` off a `ContinuousVerdict`); the mixed
+per-member label forced to always read `"continuous"` (caught by the binary member's assertion);
+`_BOOTSTRAP_B` changed from `10_000` (caught once a `B=10000` provenance assertion was added to
+the routing test — the constant had no witness before that).
+
+**Whole-diff cross-check:** re-read as one change. Checked and found no issue: `computed`'s
+3-tuple shape holds a `None` `HolmStep` for every mixed/continuous entry, but the only loop that
+reads the third field is the Holm table, itself gated to the branch that never appends such an
+entry; the widened Exploratory filter (`m.name not in family or mixed_kinds`) only ever *adds*
+family members for a genuinely refused family, never suppresses an already-true case; the
+`tables`/`p_values`/`steps` locals are now scoped inside the binary `else:` branch with no use
+outside it. Nothing else found.
+
+**Line-pin drift, reported and not fixed** (routes to `architect`). The insertions before
+`compare_report` (`_BOOTSTRAP_B`, `_metric_aggregate`/`_metric_kind`, `PairedDiffs`/
+`_paired_diffs`, four message constants — about 155 lines) push every citation below them down by
+that much, and the family loop itself grew from 167 to about 280 lines. Table F's own site table
+(`docs/plans/small-model-benchmarking.md:3845-3847`) cites three now-stale locations against the
+pre-this-unit tree: `report.py:211` (DC-10's kind-cross-check selector) is now `:342`;
+`report.py:581-601` (the Arms table's `else`-split) is now approximately `:746-786`; and
+`report.py:623-789` (`compare_report`'s Table F row itself — "the family loop and the two
+renderers downstream of it") is now approximately `:810-1088`, `compare_report`'s def itself now
+at `:664`. §3.3 (iv)'s own citations (`:719`, `:738`, `:751`, `:763-777`, etc.) are pinned to a
+named historical commit (`5878014`) rather than the live tree, per that section's own v1.23
+discipline, and do not drift.
+
 ## 2026-09-09 — `-ml` §3.4 Rule 8: `continuous_verdict()`, the continuous producer
 
 **What:** `docs/plans/small-model-benchmarking-ml.md` §3.4 Rule 8 (v1.16-v1.19), against `2d23482`.

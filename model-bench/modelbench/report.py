@@ -67,6 +67,11 @@ _SAMPLE_NOUN = {"conversation": "scripts", "item": "items", "query": "queries"}
 #: whole comparison, never the other way round (plan §5 test 12b, `-ml` §3.4 Rule 4).
 _BASIS_STRENGTH = {"assumed": 0, "measured": 1, "by-construction": 2}
 
+#: The resample count `continuous_verdict()` is called with — this loop's one home for the number
+#: rather than a literal at the call site, matching `stats.cluster_bootstrap`'s own default and
+#: the `-ml` note's own rendered examples (`B=10000`).
+_BOOTSTRAP_B = 10_000
+
 
 def _pp(value: float, places: int = 1) -> str:
     return f"{value * 100:.{places}f}"
@@ -86,6 +91,29 @@ def _unit_ids(items: Sequence[ItemResult], pack: PackRef) -> list[str]:
     """Resolve each row's analysis-unit id from the pack. **No call site chooses this** (§3.3)."""
     index = pack.analysisUnitIndex
     return [item.pairingKey[index] for item in items]
+
+
+def _metric_aggregate(
+    run: RunResult, name: str
+) -> BinaryMetric | ContinuousMetric | DistributionSummary | None:
+    """`name`'s own aggregate on `run`, or `None` when this arm declares none for it (§3.3 (iv))."""
+    return next((m for m in run.aggregates.named_metrics() if m.name == name), None)
+
+
+def _metric_kind(a: RunResult, b: RunResult, name: str) -> str:
+    """`"binary"` or `"continuous"`, resolved from a family member's own arm aggregate type — never
+    guessed from which per-item map it lives in (§3.3 (iv)): a member whose resolved aggregate is a
+    `BinaryMetric` is binary, a `ContinuousMetric` or `DistributionSummary` is continuous. DC-10's
+    cross-check (`_aggregate_item_mismatches`) has already reconciled an arm's own aggregate against
+    its own items for any arm reaching this point, so the aggregate type is a type fact rather than
+    a guess.
+
+    Prefers `a`'s declaration, falling back to `b`'s when `a` carries none for this metric; a metric
+    neither arm declares an aggregate for resolves `"binary"`, matching this loop's pre-Table-F
+    assumption for the one case Table F's own carrier gives no aggregate to ask.
+    """
+    metric = _metric_aggregate(a, name) or _metric_aggregate(b, name)
+    return "continuous" if isinstance(metric, (ContinuousMetric, DistributionSummary)) else "binary"
 
 
 class PairedRows(NamedTuple):
@@ -153,6 +181,94 @@ def _paired_rows(a: RunResult, b: RunResult, metric: str, pack: PackRef) -> Pair
         a_ok=a_ok,
         b_ok=b_ok,
         considered=len(a_keys | {item.pairingKey for item in b.items}),
+        only_in_a=only_in_a,
+        only_in_b=only_in_b,
+        asymmetry_a=asymmetry_a,
+        asymmetry_b=asymmetry_b,
+        unscoreable_both=unscoreable_both,
+    )
+
+
+class PairedDiffs(NamedTuple):
+    """The continuous sibling of `PairedRows` (§4 S1e Table F, `-ml` §3.2d): one difference per
+    analysis unit rather than one boolean pair per item, plus the same `-ml` §4.3 tally
+    `PairedRows` carries. `_pairing_tally` reads only those six shared fields and does not care
+    which producer built them.
+    """
+
+    unit_ids: list[str]
+    diffs: list[float]
+    considered: int
+    only_in_a: int
+    only_in_b: int
+    asymmetry_a: int
+    asymmetry_b: int
+    unscoreable_both: int
+
+
+def _paired_diffs(a: RunResult, b: RunResult, metric: str, pack: PackRef) -> PairedDiffs:
+    """One difference per **analysis unit**, never per observation (`-ml` §3.2d).
+
+    The binary join above is at item-`pairingKey` granularity because a `verdictMetrics` item
+    already *is* its unit; this one joins at the analysis-unit id itself — every item in each arm
+    is read, and a unit's items are folded into one value by averaging: the identity when a unit is
+    one item (the embedder's case, unit ≡ query ≡ item), the mean §3.2d asks for when it is not.
+
+    A unit present in only one arm's items is excluded and counted `only_in_{a,b}`; a unit present
+    in both but scoreable in only one is excluded and counted into the `-ml` §4.3 asymmetry tally
+    — a silent drop here is that tally's laundering arriving on the continuous path.
+    """
+
+    def unit_values(run: RunResult, units: list[str]) -> dict[str, list[float]]:
+        acc: dict[str, list[float]] = {}
+        for item, unit_id in zip(run.items, units):
+            value = item.scored_value(metric)
+            if value is not None:
+                acc.setdefault(unit_id, []).append(value)
+        return acc
+
+    a_units = _unit_ids(a.items, pack)
+    b_units = _unit_ids(b.items, pack)
+    a_present, b_present = set(a_units), set(b_units)
+    a_values = unit_values(a, a_units)
+    b_values = unit_values(b, b_units)
+
+    # Deterministic walk order: a `set`'s own iteration is hash-randomized per process, and
+    # `diffs`' order is what the seeded bootstrap resamples by index (`rng.choice`) — a dict's
+    # insertion order is not affected by that randomization.
+    order: dict[str, None] = {}
+    for unit_id in a_units:
+        order.setdefault(unit_id, None)
+    for unit_id in b_units:
+        order.setdefault(unit_id, None)
+
+    unit_ids: list[str] = []
+    diffs: list[float] = []
+    only_in_a = only_in_b = asymmetry_a = asymmetry_b = unscoreable_both = 0
+    for unit_id in order:
+        in_a, in_b = unit_id in a_present, unit_id in b_present
+        if in_a and not in_b:
+            only_in_a += 1
+            continue
+        if in_b and not in_a:
+            only_in_b += 1
+            continue
+        a_vals, b_vals = a_values.get(unit_id), b_values.get(unit_id)
+        if a_vals is None or b_vals is None:
+            if a_vals is not None:
+                asymmetry_a += 1
+            elif b_vals is not None:
+                asymmetry_b += 1
+            else:
+                unscoreable_both += 1
+            continue
+        unit_ids.append(unit_id)
+        diffs.append(sum(a_vals) / len(a_vals) - sum(b_vals) / len(b_vals))
+
+    return PairedDiffs(
+        unit_ids=unit_ids,
+        diffs=diffs,
+        considered=len(order),
         only_in_a=only_in_a,
         only_in_b=only_in_b,
         asymmetry_a=asymmetry_a,
@@ -262,7 +378,9 @@ def _aggregate_item_mismatches(run: RunResult, pack: PackRef) -> list[AggregateM
     return found
 
 
-def _pairing_tally(rows: PairedRows, unit_plural: str, a_label: str, b_label: str) -> str:
+def _pairing_tally(
+    rows: PairedRows | PairedDiffs, unit_plural: str, a_label: str, b_label: str
+) -> str:
     """§4.3 rule 2's `n/a` tally, printed beside the rate it shaped — always, including when it is
     all zeros, because otherwise a reader cannot tell a shrunken `n` from a full one."""
     return (
@@ -503,6 +621,45 @@ _NEGATIVE_CONTROL_UNAVAILABLE = (
     "plan §3.9(5))."
 )
 
+#: §3.3 (iv) — printed in place of a verdict for every member of a family whose resolved kinds
+#: mixed: no member of a mixed family is verdicted, whichever kind it resolved to, and nothing is
+#: excluded — a mixed family is a pack-authoring defect with a one-line fix, never a fault in the
+#: arms' own numbers.
+_MIXED_FAMILY_MEMBER = (
+    "**{kind} metric — no verdict.** This pack's pre-registered verdict-metric family mixes "
+    "binary and continuous members, so Holm has no p-value ordering to rank it by and the "
+    "correction cannot be taken honestly for a subset of it. No member of the family is "
+    "verdicted; every one of the family's numbers prints as exploratory instead (§3.3 (iv))."
+)
+
+#: The `### Family-wise error control` block's replacement line for a refused family (decision
+#: (3), §3.3 (iv), plan-gate P8-2) — every column that block would otherwise print is a ladder
+#: artefact, so nothing in it is true when no ladder ran.
+_MIXED_FAMILY_CORRECTION = (
+    "This family mixes binary and continuous verdict metrics (named above), so no Holm ladder "
+    "ran and no correction was applied to any member — the whole family's verdicts are refused "
+    "rather than corrected at a weaker, ad-hoc threshold (§3.3 (iv))."
+)
+
+#: The same block's replacement line for an all-continuous family with `k > 1` — the other
+#: condition decision (3) names, taking its correction in each metric's own interval rather than
+#: in a ladder (`-ml` §3.3, §3.4 Rule 8).
+_CONTINUOUS_FAMILY_CORRECTION = (
+    "All {k} pre-registered verdict metrics are continuous, so Holm has no p-value ordering to "
+    "rank them by; the family-wise correction is taken in each metric's own interval instead of "
+    "in a ladder, at the family-adjusted levels `-ml` §3.4 Rule 8 derives from `alpha_family` and "
+    "`k` (§3.3)."
+)
+
+#: Continuous sibling of `_NO_PAIRED_DATA`, for the one case that message would state falsely:
+#: exactly one paired unit exists, so paired data is not absent, but `continuous_verdict` refuses
+#: a one-unit interval as a point masquerading as a measurement (`-ml` §3.4 Rule 8, refusal 4).
+_ONE_PAIRED_UNIT = (
+    "**No verdict: one paired {unit}.** Exactly one {unit} is scoreable for `{metric}` in both "
+    "arms, and a one-unit interval is a point: it would report a CI of zero width as though it "
+    "were a measurement, so no verdict is computed (`-ml` §3.4 Rule 8)."
+)
+
 
 def compare_report(
     runs: Sequence[RunResult],
@@ -662,134 +819,240 @@ def compare_report(
     # entire job is auditability (`-ml` §7.1, review m-ML-4).
     basis = min((a.basis, b.basis), key=_BASIS_STRENGTH.__getitem__)
 
-    # Two passes, because Holm is a property of the **family**: the step a metric is tested at
-    # depends on every other member's p-value, so no verdict can be decided until all of them
-    # exist. The delivered build ran one pass, decided every metric at the plain Bonferroni
-    # `resolving.alpha`, and then printed a Holm table beside verdicts that had not used it —
-    # `stats.verdict`'s `alpha_step` was built for exactly this and was passed by nothing (B-1).
-    tables: list[tuple[str, stats.PairedOutcomes, stats.ResolvingPower | None]] = []
-    p_values: list[float] = []
-    tallies: list[str] = []
-    for metric in family:
-        rows = _paired_rows(a, b, metric, pack)
-        outcomes = stats.PairedOutcomes.from_units(
-            unit_kind, list(zip(rows.unit_ids, rows.a_ok, rows.b_ok))
-        )
-        tallies.append(
-            _pairing_tally(rows, f"{unit_kind}s", arm_names[a.runId], arm_names[b.runId])
-        )
-        # An empty intersection has no resolving power to describe — `n_effective` of zero is not a
-        # small sample, it is no sample — so the metric gets no verdict rather than a figure
-        # computed from nothing (review P3-1). It stays in the family: *k* is fixed by
-        # pre-registration, not by how much data arrived.
-        rp = (
-            stats.resolving_power(
-                outcomes.n_units,
-                unit_kind=unit_kind,
-                design_effect=design_effect,
-                basis=basis,
-                # The two αs come from the pack's pre-registered family, which is the only thing
-                # that fixes *k*. They are different numbers whenever k > 1, and each bound takes
-                # the one that keeps its own sentence true (`-ml` v1.6 §7.1, review M-ML-6).
-                alpha_family=pack.metrics.alpha_family,
-                alpha_mdd=pack.metrics.alpha_mdd,
-            )
-            if outcomes.n_units
-            else None
-        )
-        tables.append((metric, outcomes, rp))
-        _a, table_b, table_c, _d = outcomes.table
-        p_values.append(stats.mcnemar_exact(table_b, table_c))
+    # §3.3 (iv) — a family member's kind is a type fact, resolved from its own arm aggregate, never
+    # guessed from which per-item map it lives in: DC-10's cross-check above has already reconciled
+    # the two for any arm reaching this point. A mixed family is refused *whole* — no member is
+    # verdicted, nothing is excluded — because `k` is `len(verdictMetrics)` and pre-registered, so
+    # dropping the minority kind would shrink `k` after the results exist and under-correct the
+    # survivors. An all-continuous family with `k > 1` takes its correction in each metric's own
+    # interval rather than in a ladder; a homogeneous binary family is the unchanged two-pass Holm
+    # flow below.
+    kinds = {metric: _metric_kind(a, b, metric) for metric in family}
+    resolved_kinds = set(kinds.values())
+    mixed_kinds = len(resolved_kinds) > 1
+    continuous_family = resolved_kinds == {"continuous"}
 
-    steps = stats.holm_steps(p_values, alpha=pack.metrics.alpha_family)
+    computed: list[
+        tuple[str, stats.Verdict | stats.ContinuousVerdict | None, stats.HolmStep | None]
+    ] = []
 
-    computed: list[tuple[str, stats.Verdict | None, stats.HolmStep]] = []
-    # `strict=True`: a Holm ladder shorter than the family would otherwise truncate the loop and
-    # a pre-registered verdict metric would vanish from the report — indistinguishable, to a
-    # reader, from one that was never pre-registered (review P2-3).
-    for (metric, outcomes, rp), step, tally in zip(tables, steps, tallies, strict=True):
-        if rp is None:
-            computed.append((metric, None, step))
+    if mixed_kinds:
+        for metric in family:
+            kind = kinds[metric]
+            if kind == "binary":
+                tally = _pairing_tally(
+                    _paired_rows(a, b, metric, pack),
+                    f"{unit_kind}s",
+                    arm_names[a.runId],
+                    arm_names[b.runId],
+                )
+            else:
+                tally = _pairing_tally(
+                    _paired_diffs(a, b, metric, pack),
+                    f"{unit_kind}s",
+                    arm_names[a.runId],
+                    arm_names[b.runId],
+                )
+            computed.append((metric, None, None))
             lines += [
                 f"### {metric}",
                 "",
-                _NO_PAIRED_DATA.format(unit=unit_kind, metric=metric) + _NO_PAIRED_DATA_TALLY,
+                _MIXED_FAMILY_MEMBER.format(kind=kind),
                 "",
                 tally,
                 "",
             ]
-            continue
-        v = stats.verdict(
-            outcomes,
-            resolving=rp,
-            metric_name=metric,
-            family=family,
-            a_label=arm_names[a.runId],
-            b_label=arm_names[b.runId],
-            alpha_step=step.threshold,
-            holm_tested=step.tested,
-        )
-        computed.append((metric, v, step))
-        lines += [
-            f"### {metric}",
-            "",
-            v.text,
-            "",
-            tally,
-            f"- marginal Wilson intervals overlap: {'yes' if v.marginal_overlap else 'no'}",
-            # **No seed parenthetical, and the audit that replaces it** (`-ml` v1.11 §3.4 Rule
-            # 4, §4 S1e Table D). Nothing on the paired binary path resamples any more, so there
-            # is no seed to quote; what the bullet owes instead is *which arm bound each bound*,
-            # which is cheap and deterministic once the resample is gone and makes Rule 4's
-            # mixture legible to a reader instead of inferable only from the code. Naming one arm
-            # of a two-arm interval was M-ML-8's error one layer over, and it was wrong on the
-            # 12.6-16.5% of tables where MOVER-D binds both bounds.
-            _decided_by_line(v),
-            "",
-            resolving_power_line(rp, pack),
-            "",
-        ]
+    elif continuous_family:
+        # §3.2d's continuous branch — one difference per analysis unit, handed to Rule 8's
+        # producer. No `holm_steps`, no `mcnemar_exact`, no `resolving_power`: none of the three
+        # exists on this path (`-ml` §3.4 Rule 8's four refused parameters).
+        for metric in family:
+            diffs_row = _paired_diffs(a, b, metric, pack)
+            tally = _pairing_tally(
+                diffs_row, f"{unit_kind}s", arm_names[a.runId], arm_names[b.runId]
+            )
+            if not diffs_row.diffs:
+                computed.append((metric, None, None))
+                lines += [
+                    f"### {metric}",
+                    "",
+                    _NO_PAIRED_DATA.format(unit=unit_kind, metric=metric) + _NO_PAIRED_DATA_TALLY,
+                    "",
+                    tally,
+                    "",
+                ]
+                continue
+            if len(diffs_row.diffs) == 1:
+                computed.append((metric, None, None))
+                lines += [
+                    f"### {metric}",
+                    "",
+                    _ONE_PAIRED_UNIT.format(unit=unit_kind, metric=metric),
+                    "",
+                    tally,
+                    "",
+                ]
+                continue
+            support_metric = _metric_aggregate(a, metric) or _metric_aggregate(b, metric)
+            support = support_metric.support if support_metric is not None else None
+            cv = stats.continuous_verdict(
+                diffs_row.diffs,
+                metric_name=metric,
+                family=family,
+                alpha_family=pack.metrics.alpha_family,
+                unit_kind=unit_kind,
+                design_effect=design_effect,
+                basis=basis,
+                B=_BOOTSTRAP_B,
+                seed=pack.seed,
+                support=support,
+                a_label=arm_names[a.runId],
+                b_label=arm_names[b.runId],
+            )
+            computed.append((metric, cv, None))
+            lines += [f"### {metric}", "", cv.text, "", tally, ""]
+    else:
+        # --- the unchanged homogeneous-binary two-pass flow (§4 S1, gate B-1) --------------------
+        # Two passes, because Holm is a property of the **family**: the step a metric is tested at
+        # depends on every other member's p-value, so no verdict can be decided until all of them
+        # exist. The delivered build ran one pass, decided every metric at the plain Bonferroni
+        # `resolving.alpha`, and then printed a Holm table beside verdicts that had not used it —
+        # `stats.verdict`'s `alpha_step` was built for exactly this and was passed by nothing (B-1).
+        tables: list[tuple[str, stats.PairedOutcomes, stats.ResolvingPower | None]] = []
+        p_values: list[float] = []
+        tallies: list[str] = []
+        for metric in family:
+            rows = _paired_rows(a, b, metric, pack)
+            outcomes = stats.PairedOutcomes.from_units(
+                unit_kind, list(zip(rows.unit_ids, rows.a_ok, rows.b_ok))
+            )
+            tallies.append(
+                _pairing_tally(rows, f"{unit_kind}s", arm_names[a.runId], arm_names[b.runId])
+            )
+            # An empty intersection has no resolving power to describe — `n_effective` of zero is
+            # not a small sample, it is no sample — so the metric gets no verdict rather than a
+            # figure computed from nothing (review P3-1). It stays in the family: *k* is fixed by
+            # pre-registration, not by how much data arrived.
+            rp = (
+                stats.resolving_power(
+                    outcomes.n_units,
+                    unit_kind=unit_kind,
+                    design_effect=design_effect,
+                    basis=basis,
+                    # The two αs come from the pack's pre-registered family, which is the only
+                    # thing that fixes *k*. They are different numbers whenever k > 1, and each
+                    # bound takes the one that keeps its own sentence true (`-ml` v1.6 §7.1,
+                    # review M-ML-6).
+                    alpha_family=pack.metrics.alpha_family,
+                    alpha_mdd=pack.metrics.alpha_mdd,
+                )
+                if outcomes.n_units
+                else None
+            )
+            tables.append((metric, outcomes, rp))
+            _a, table_b, table_c, _d = outcomes.table
+            p_values.append(stats.mcnemar_exact(table_b, table_c))
+
+        steps = stats.holm_steps(p_values, alpha=pack.metrics.alpha_family)
+
+        # `strict=True`: a Holm ladder shorter than the family would otherwise truncate the loop
+        # and a pre-registered verdict metric would vanish from the report — indistinguishable, to
+        # a reader, from one that was never pre-registered (review P2-3).
+        for (metric, outcomes, rp), step, tally in zip(tables, steps, tallies, strict=True):
+            if rp is None:
+                computed.append((metric, None, step))
+                lines += [
+                    f"### {metric}",
+                    "",
+                    _NO_PAIRED_DATA.format(unit=unit_kind, metric=metric) + _NO_PAIRED_DATA_TALLY,
+                    "",
+                    tally,
+                    "",
+                ]
+                continue
+            v = stats.verdict(
+                outcomes,
+                resolving=rp,
+                metric_name=metric,
+                family=family,
+                a_label=arm_names[a.runId],
+                b_label=arm_names[b.runId],
+                alpha_step=step.threshold,
+                holm_tested=step.tested,
+            )
+            computed.append((metric, v, step))
+            lines += [
+                f"### {metric}",
+                "",
+                v.text,
+                "",
+                tally,
+                f"- marginal Wilson intervals overlap: {'yes' if v.marginal_overlap else 'no'}",
+                # **No seed parenthetical, and the audit that replaces it** (`-ml` v1.11 §3.4 Rule
+                # 4, §4 S1e Table D). Nothing on the paired binary path resamples any more, so
+                # there is no seed to quote; what the bullet owes instead is *which arm bound each
+                # bound*, which is cheap and deterministic once the resample is gone and makes
+                # Rule 4's mixture legible to a reader instead of inferable only from the code.
+                # Naming one arm of a two-arm interval was M-ML-8's error one layer over, and it
+                # was wrong on the 12.6-16.5% of tables where MOVER-D binds both bounds.
+                _decided_by_line(v),
+                "",
+                resolving_power_line(rp, pack),
+                "",
+            ]
 
     if len(family) > 1:
         # Two co-equal verdicts at alpha=0.05 each carry a ~9.75% chance of at least one false
         # "better" under the null, which is the fishing artefact pre-registration exists to prevent
-        # (§3.3, `-ml` §3.3). Family-wise control is mandatory, not optional.
-        #
-        # The `decision` column is not decoration: a threshold alone is only interpretable under a
-        # step-down the table does not show, so a reader comparing p against it can reach the
-        # opposite conclusion from the verdict three paragraphs above (B-1, M-ML-2).
-        lines += [
-            "### Family-wise error control",
-            "",
-            f"Holm–Bonferroni across the {len(family)} pre-registered verdict metrics, applied: "
-            f"the smallest p is tested at alpha/{len(family)}, the next at "
-            f"alpha/{len(family) - 1}, and the first non-rejection stops the procedure. Every "
-            f"**MDD** above is computed at the family-adjusted alpha="
-            f"{pack.metrics.alpha_mdd:g}; every **observable floor** is computed at the unadjusted "
-            f"alpha={pack.metrics.alpha_family:g}, the loosest step a member can face, because "
-            "that is the only alpha at which the floor's own sentence is true (§7.1).",
-            "",
-            "| metric | McNemar p | Holm-adjusted threshold | decision |",
-            "|---|---|---|---|",
-        ]
-        for metric, v, step in computed:
-            # A member with no paired table has no p-value to print. `mcnemar_exact(0, 0)` returns
-            # 1.0 and would render as `1.000`, which reads as a test that was run and found nothing
-            # — so the cell says what actually happened instead (review P3-1).
-            p_cell = "—" if v is None else f"{v.mcnemar_p:.3f}"
-            lines.append(
-                f"| {metric} | {p_cell} | {step.threshold:.4f} | {_decision(v, step)} |"
-            )
-        lines.append("")
+        # (§3.3, `-ml` §3.3). Family-wise control is mandatory, not optional — but the ladder is
+        # only one of the three ways this section's claim can be made honestly (§3.3 (iv), decision
+        # (3)): a refused family had no ladder to run, and an all-continuous family takes its
+        # correction in the interval instead, so only the homogeneous-binary case below renders one.
+        lines += ["### Family-wise error control", ""]
+        if mixed_kinds:
+            lines += [_MIXED_FAMILY_CORRECTION, ""]
+        elif continuous_family:
+            lines += [_CONTINUOUS_FAMILY_CORRECTION.format(k=len(family)), ""]
+        else:
+            # The `decision` column is not decoration: a threshold alone is only interpretable
+            # under a step-down the table does not show, so a reader comparing p against it can
+            # reach the opposite conclusion from the verdict three paragraphs above (B-1, M-ML-2).
+            lines += [
+                f"Holm–Bonferroni across the {len(family)} pre-registered verdict metrics, "
+                f"applied: the smallest p is tested at alpha/{len(family)}, the next at "
+                f"alpha/{len(family) - 1}, and the first non-rejection stops the procedure. Every "
+                f"**MDD** above is computed at the family-adjusted alpha="
+                f"{pack.metrics.alpha_mdd:g}; every **observable floor** is computed at the "
+                f"unadjusted alpha={pack.metrics.alpha_family:g}, the loosest step a member can "
+                "face, because that is the only alpha at which the floor's own sentence is true "
+                "(§7.1).",
+                "",
+                "| metric | McNemar p | Holm-adjusted threshold | decision |",
+                "|---|---|---|---|",
+            ]
+            for metric, v, step in computed:
+                # A member with no paired table has no p-value to print. `mcnemar_exact(0, 0)`
+                # returns 1.0 and would render as `1.000`, which reads as a test that was run and
+                # found nothing — so the cell says what actually happened instead (review P3-1).
+                p_cell = "—" if v is None else f"{v.mcnemar_p:.3f}"
+                lines.append(
+                    f"| {metric} | {p_cell} | {step.threshold:.4f} | {_decision(v, step)} |"
+                )
+            lines.append("")
 
     # --- presentation: a headline exists only if the pack declared one ---------------------------
     if pack.metrics.headlineMetric is not None:
-        headline = next(v for m, v, _ in computed if m == pack.metrics.headlineMetric)
-        headline_text = (
-            _NO_PAIRED_DATA.format(unit=unit_kind, metric=pack.metrics.headlineMetric)
-            if headline is None
-            else headline.text
-        )
+        if mixed_kinds:
+            # §3.3 (iv) — `_NO_PAIRED_DATA` is false here either way: there *is* paired data, and
+            # there is no verdict, which is the state that message cannot express truthfully.
+            headline_text = "exploratory — no significance claim"
+        else:
+            headline = next(v for m, v, _ in computed if m == pack.metrics.headlineMetric)
+            headline_text = (
+                _NO_PAIRED_DATA.format(unit=unit_kind, metric=pack.metrics.headlineMetric)
+                if headline is None
+                else headline.text
+            )
         lines += [f"**Headline ({pack.metrics.headlineMetric}):** {headline_text}", ""]
     else:
         # No summary line above the verdicts, and no arithmetic combining them (§3.3(i)). The
@@ -806,7 +1069,10 @@ def compare_report(
         m
         for run in (a, b)
         for m in run.aggregates.named_metrics()
-        if m.name not in family
+        # §3.3 (iv), decision (1) — a refused family's own members are `in family` and must widen
+        # into this section too; a member with no paired data must not, and stays `_NO_PAIRED_DATA`
+        # in its own `### <metric>` block above rather than migrating here.
+        if m.name not in family or mixed_kinds
     ]
     if exploratory:
         lines += ["### Exploratory metrics", ""]

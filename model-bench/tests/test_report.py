@@ -32,8 +32,8 @@ from modelbench.results import (
     DistributionSummary,
     InvalidRecord,
     ItemResult,
-    MetricKindError,
     RetrievalAggregates,
+    RunResult,
 )
 from modelbench.roles import unit_kind as unit_kind_for_role
 from modelbench.stats import DuplicateAnalysisUnit, PairedOutcomes
@@ -1468,20 +1468,72 @@ def test_arms_table_renders_a_distribution_summary_without_reading_mean() -> Non
     assert "| cand | separationZ | n=40 | p50 1.5000, p10 -0.3000 | — |" in md
 
 
-def test_a_continuous_verdict_member_refuses_loudly_rather_than_booleanising() -> None:
-    """§4 S1e Table F ships the carrier and stops at its proof surface (plan-gate P6-1's scope
-    split, confirmed): a continuous verdict metric's family loop has no continuous branch yet —
-    building `-ml` §3.4 Rule 8's `continuous_verdict()` and the branch that calls it is a
-    separate, properly-sized unit that lands before S1 closes.
+def test_a_continuous_verdict_member_is_routed_through_continuous_verdict_not_booleanised() -> None:
+    """§4 S1e Table F shipped the carrier and stopped at its proof surface — a placeholder
+    `MetricKindError` raise, reached because the still-binary family loop's `_paired_rows` call
+    read `scored_outcome` on a `measures`-resident metric. **This unit closes that seam**: pass 1
+    now resolves `mrr`'s aggregate as continuous (`_metric_kind`), so the family loop routes it
+    through `_paired_diffs`/`continuous_verdict()` instead — `scored_outcome` is never called for
+    a well-formed continuous member, so the raise this test used to pin is no longer reached.
 
-    What Table F does ship is the refusal that makes the gap **loud rather than safe-by-absence**:
-    `ItemResult.scored_outcome` raises `MetricKindError` on a `measures`-resident metric, so the
-    still-binary family loop's `_paired_rows` call hits that raise the moment a pack declares a
-    continuous `verdictMetrics` member — the exact moment the shipped code would otherwise have
-    booleanised `mrr` into a silent, wrong McNemar verdict. This test is the seam for that future
-    unit: replace this raise with a resolved-kind branch that calls `continuous_verdict()` instead
-    of `_paired_rows` for a continuous member.
+    Ten paired queries (not one) so the interval `continuous_verdict` computes is a real one — the
+    one-unit refusal is
+    `test_a_continuous_verdict_member_with_one_paired_unit_prints_a_named_refusal`'s own case.
     """
+    pack = _embedder_pack()
+    items_a = [_mrr_item(f"q{i:02d}", 0.9) for i in range(10)]
+    items_b = [_mrr_item(f"q{i:02d}", 0.5) for i in range(10)]
+    agg_a = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=0.9, n=10, support=(0.0, 1.0))
+    )
+    agg_b = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=0.5, n=10, support=(0.0, 1.0))
+    )
+    a = run("cand", role="embedder", call_surface="embeddings", items=items_a, aggregates=agg_a,
+            fingerprint_fields=embeddings_fields(packId=pack.packId, modelKey="cand"))
+    b = run("bm25", role="embedder", arm_kind="deterministic", items=items_b, aggregates=agg_b,
+            fingerprint_fields=deterministic_fields(packId=pack.packId))
+
+    md = compare_report([a, b], pack=pack)  # must not raise
+
+    section = md.split("### mrr")[1].split("###")[0]
+    assert "No verdict: no paired data" not in section
+    provenance = "decided by paired bootstrap on per-query differences (B=10000, seed=20260902)"
+    assert provenance in section
+    # A McNemar verdict prints a percentage-point difference (`+X.X pp`); a continuous one prints
+    # a plain decimal (`diff:+.3f`) — the two renderings must not be confusable.
+    assert " pp" not in section
+    assert "**Headline (mrr):**" in md
+    assert "decided by paired bootstrap" in md.split("**Headline (mrr):**")[1].split("\n")[0]
+
+
+def test_a_continuous_verdict_member_with_zero_paired_units_prints_no_paired_data() -> None:
+    """The continuous branch's own empty-intersection guard — parity with the binary branch's
+    `rp is None` case (review P3-1) — rather than letting `continuous_verdict` raise on an empty
+    `diffs` list."""
+    pack = _embedder_pack()
+    items_a = [_mrr_item("q1", 0.9)]
+    items_b = [ItemResult(itemId="q1", pairingKey=("q1",), outcome="pass",
+                           scoreable={"mrr": False}, counts={}, latencyMs=None, measures={},
+                           detail={})]
+    agg_a = RetrievalAggregates(mrr=ContinuousMetric(name="mrr", mean=0.9, n=1, support=(0.0, 1.0)))
+    agg_b = RetrievalAggregates(mrr=ContinuousMetric(name="mrr", mean=0.0, n=0, support=(0.0, 1.0)))
+    a = run("cand", role="embedder", call_surface="embeddings", items=items_a, aggregates=agg_a,
+            fingerprint_fields=embeddings_fields(packId=pack.packId, modelKey="cand"))
+    b = run("bm25", role="embedder", arm_kind="deterministic", items=items_b, aggregates=agg_b,
+            fingerprint_fields=deterministic_fields(packId=pack.packId))
+
+    md = compare_report([a, b], pack=pack)
+
+    section = md.split("### mrr")[1].split("###")[0]
+    assert "No verdict: no paired data" in section
+    assert "paired n: 0 of 1" in section
+
+
+def test_a_continuous_verdict_member_with_one_paired_unit_prints_a_named_refusal() -> None:
+    """`continuous_verdict` refuses a one-unit interval (`-ml` §3.4 Rule 8, refusal 4) — but
+    `_NO_PAIRED_DATA` would be false here (one unit *is* paired), so the continuous branch guards
+    the refusal with its own message rather than letting the `ValueError` escape uncaught."""
     pack = _embedder_pack()
     items_a = [_mrr_item("q1", 1.0)]
     items_b = [_mrr_item("q1", 0.5)]
@@ -1492,8 +1544,180 @@ def test_a_continuous_verdict_member_refuses_loudly_rather_than_booleanising() -
     b = run("bm25", role="embedder", arm_kind="deterministic", items=items_b, aggregates=agg_b,
             fingerprint_fields=deterministic_fields(packId=pack.packId))
 
-    with pytest.raises(MetricKindError):
-        compare_report([a, b], pack=pack)
+    md = compare_report([a, b], pack=pack)  # must not raise
+
+    section = md.split("### mrr")[1].split("###")[0]
+    assert "No verdict: one paired query" in section
+    assert "paired n: 1 of 1" in section
+
+
+def test_a_continuous_units_value_is_the_mean_over_its_items_not_a_flattened_pool() -> None:
+    """`-ml` §3.2d — a unit's value is its item's `scored_value` when unit ≡ item, and the **mean
+    over its items** when a unit spans more than one. Values are chosen so three readings all
+    disagree: q1 is one item per arm (diff = 1.0 - 0.0 = 1.0); q2 is three items per arm, unequal
+    within each arm so a unit's *first* item is not its mean.
+
+    - **Correct (mean per unit, then averaged over units):** q2 diff = mean(0.0, 0.3, 0.9) -
+      mean(0.5, 0.5, 0.5) = 0.4 - 0.5 = -0.1. Over the two units: (1.0 + -0.1) / 2 = **+0.450**.
+    - **Wrong — first item, not the mean:** q2 diff = 0.0 - 0.5 = -0.5. Over the two units:
+      (1.0 + -0.5) / 2 = +0.250 — a different number this test catches.
+    - **Wrong — flattened over all four items, no per-unit grouping:** pairing same-index items
+      gives 1.0, -0.5, -0.2, +0.4, averaging to (1.0 - 0.5 - 0.2 + 0.4) / 4 = +0.175 — also
+      different, and also caught.
+    """
+    pack = PackRef(
+        packId="embedder-multi-chunk", packVersion="1.0.0", contentHash="f" * 64, role="embedder",
+        metrics=PackMetrics(verdictMetrics=("mrr",), headlineMetric="mrr"),
+        pairingKey=("queryId", "chunk"), analysisUnit="queryId", seed=20260902,
+    )
+
+    def chunk_items(values: dict[str, list[float]]) -> list[ItemResult]:
+        return [
+            ItemResult(itemId=f"{q}-{i}", pairingKey=(q, str(i)), outcome="pass",
+                       scoreable={"mrr": True}, counts={}, latencyMs=None,
+                       measures={"mrr": v}, detail={})
+            for q, vals in values.items()
+            for i, v in enumerate(vals)
+        ]
+
+    a_items = chunk_items({"q1": [1.0], "q2": [0.0, 0.3, 0.9]})
+    b_items = chunk_items({"q1": [0.0], "q2": [0.5, 0.5, 0.5]})
+    agg_a = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=0.55, n=len(a_items), support=(0.0, 1.0))
+    )
+    agg_b = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=0.375, n=len(b_items), support=(0.0, 1.0))
+    )
+    a = run("cand", role="embedder", call_surface="embeddings", items=a_items, aggregates=agg_a,
+            fingerprint_fields=embeddings_fields(packId=pack.packId, modelKey="cand"))
+    b = run("bm25", role="embedder", arm_kind="deterministic", items=b_items, aggregates=agg_b,
+            fingerprint_fields=deterministic_fields(packId=pack.packId))
+
+    md = compare_report([a, b], pack=pack)
+
+    section = md.split("### mrr")[1].split("###")[0]
+    assert "paired n: 2 of 2" in section
+    assert "+0.450" in section
+    assert "+0.250" not in section
+    assert "+0.175" not in section
+
+
+def _mixed_pack(
+    verdicts: tuple[str, ...] = ("mrr", "precisionAt1"), headline: str | None = None
+) -> PackRef:
+    return PackRef(
+        packId="embedder-mixed-family", packVersion="1.0.0", contentHash="a" * 64, role="embedder",
+        metrics=PackMetrics(verdictMetrics=verdicts, headlineMetric=headline),
+        pairingKey=("queryId",), analysisUnit="queryId", seed=20260902,
+    )
+
+
+def _mixed_item(query_id: str, mrr_value: float, precision_hit: bool) -> ItemResult:
+    return ItemResult(
+        itemId=query_id, pairingKey=(query_id,), outcome="pass",
+        scoreable={"mrr": True, "precisionAt1": True},
+        counts={"precisionAt1": int(precision_hit)}, latencyMs=None,
+        measures={"mrr": mrr_value}, detail={},
+    )
+
+
+def _mixed_arms(pack: PackRef) -> tuple[RunResult, RunResult]:
+    items_a = [_mixed_item(f"q{i:02d}", 0.9, True) for i in range(5)]
+    items_b = [_mixed_item(f"q{i:02d}", 0.5, False) for i in range(5)]
+    agg_a = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=0.9, n=5, support=(0.0, 1.0)),
+        precisionAt1=BinaryMetric(name="precisionAt1", successes=5, n=5, unit="query"),
+    )
+    agg_b = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=0.5, n=5, support=(0.0, 1.0)),
+        precisionAt1=BinaryMetric(name="precisionAt1", successes=0, n=5, unit="query"),
+    )
+    a = run("cand", role="embedder", call_surface="embeddings", items=items_a, aggregates=agg_a,
+            fingerprint_fields=embeddings_fields(packId=pack.packId, modelKey="cand"))
+    b = run("bm25", role="embedder", arm_kind="deterministic", items=items_b, aggregates=agg_b,
+            fingerprint_fields=deterministic_fields(packId=pack.packId))
+    return a, b
+
+
+def test_a_mixed_kind_family_is_refused_whole_not_pruned_to_the_majority_kind() -> None:
+    """§3.3 (iv) — a family mixing a continuous and a binary verdict metric is refused *whole*:
+    no member is verdicted, nothing is excluded, each member's own block names its resolved kind,
+    and the family-wise section states the refusal instead of a false Holm claim."""
+    pack = _mixed_pack()
+    a, b = _mixed_arms(pack)
+
+    md = compare_report([a, b], pack=pack)
+
+    assert "INVALID RESULTS EXCLUDED" not in md
+    mrr_section = md.split("### mrr")[1].split("###")[0]
+    precision_section = md.split("### precisionAt1")[1].split("###")[0]
+    assert "continuous metric — no verdict" in mrr_section
+    assert "binary metric — no verdict" in precision_section
+    assert "is better than" not in mrr_section
+    assert "is better than" not in precision_section
+    assert "paired n: 5 of 5" in mrr_section
+    assert "paired n: 5 of 5" in precision_section
+    fw_section = md.split("### Family-wise error control")[1].split("###")[0]
+    assert "mixes binary and continuous verdict metrics" in fw_section
+    assert "Holm–Bonferroni" not in fw_section
+    exploratory_section = md.split("### Exploratory metrics")[1]
+    assert "- `mrr` — exploratory — no significance claim" in exploratory_section
+    assert "- `precisionAt1` — exploratory — no significance claim" in exploratory_section
+
+
+def test_a_mixed_kind_familys_headline_prints_exploratory_not_no_paired_data() -> None:
+    """§3.3 (iv) — the headline fallback is `_NO_PAIRED_DATA` for an unverdicted member with no
+    data, which is false for a refused family (there *is* paired data); it prints the same
+    exploratory label the family's other numbers get instead."""
+    pack = _mixed_pack(headline="mrr")
+    a, b = _mixed_arms(pack)
+
+    md = compare_report([a, b], pack=pack)
+
+    assert "**Headline (mrr):** exploratory — no significance claim" in md
+    assert "No verdict: no paired data" not in md
+
+
+def test_an_all_continuous_family_takes_its_correction_in_the_interval_not_a_ladder() -> None:
+    """§3.3 (iv) — an all-continuous family with `k > 1` never reaches `holm_steps`; each member's
+    own interval is already computed at the family-adjusted levels, and the family-wise section
+    says so instead of printing a false Holm-ladder claim."""
+    pack = _embedder_pack(verdicts=("mrr", "separationZ"), headline=None)
+    n = 12
+
+    def dual_item(query_id: str, mrr_value: float, sepz_value: float) -> ItemResult:
+        return ItemResult(
+            itemId=query_id, pairingKey=(query_id,), outcome="pass",
+            scoreable={"mrr": True, "separationZ": True}, counts={}, latencyMs=None,
+            measures={"mrr": mrr_value, "separationZ": sepz_value}, detail={},
+        )
+
+    items_a = [dual_item(f"q{i:02d}", 0.9, 2.0 + 0.01 * i) for i in range(n)]
+    items_b = [dual_item(f"q{i:02d}", 0.3, 0.01 * i) for i in range(n)]
+    agg_a = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=0.9, n=n, support=(0.0, 1.0)),
+        separationZ=DistributionSummary(
+            name="separationZ", median=2.05, p10=2.0, n=n, unit="query", support=None
+        ),
+    )
+    agg_b = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=0.3, n=n, support=(0.0, 1.0)),
+        separationZ=DistributionSummary(
+            name="separationZ", median=0.05, p10=0.0, n=n, unit="query", support=None
+        ),
+    )
+    a = run("cand", role="embedder", call_surface="embeddings", items=items_a, aggregates=agg_a,
+            fingerprint_fields=embeddings_fields(packId=pack.packId, modelKey="cand"))
+    b = run("bm25", role="embedder", arm_kind="deterministic", items=items_b, aggregates=agg_b,
+            fingerprint_fields=deterministic_fields(packId=pack.packId))
+
+    md = compare_report([a, b], pack=pack)
+
+    fw_section = md.split("### Family-wise error control")[1].split("###")[0]
+    assert "family-wise correction is taken in each metric's own interval" in fw_section
+    assert "Holm–Bonferroni" not in fw_section
+    assert md.count("decided by paired bootstrap on per-query differences") == 2
+    assert "INVALID RESULTS EXCLUDED" not in md
 
 
 # --- M-6: fewer than two arms is its own reason, not the deterministic one ----------------------
