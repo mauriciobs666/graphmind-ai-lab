@@ -84,7 +84,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U28 | `graph-dba` **code unit** on `skills/joern-cpg/scripts/pipeline.sh`: fix **K-009** (`rq()` returns 0 on a bare runtime-error reply) + confirm and close/re-scope **K-008**. Not a distillation unit | `a71e467eb629d98ad` (resumed once, to correct a case count) | **accepted** (`48882d8`, `682fbed`) | **K-009 fixed by removing the blacklist**, not widening it: success is now recognised positively (reply's last line must begin `Query internal execution time:`), non-query commands refused rc 2. Second defect found and fixed in the same block (a read-back that never ran reported as *did not land*). **K-008 closed**, both facts confirmed by execution. 7 files | `analyst` (diff-scoped, `a8f29fed07dd1847e`) → **approve with suggestions**, two passes (`7edf98c`, `4bfe925`). Pass 1's 2 majors closed in `48882d8`; Pass 2 retracted 2 of its own claims in the implementer's favour and judged its own Pass 1 recommendation wrong by execution, then raised Major 7 — closed in `682fbed` against a **falsifiable stopping condition** (4 mutation shapes must redden + clean-tree control), all met. Review at `docs/reviews/rq-execution-gate.md` | 141.2k + 150.5k + 156.4k tok, 59 tools |
 | U30 | curator clear of the 2 entries held pending K-009 (`b7f3c2a1…`, `4f9c21ae…`) — orphans on `MENTIONS`→`graph-dba`. Fresh `cobb`, not U24's (248.5k ctx) | `a714ad00b16e9eccf` | accepted | **both cleared** after re-executing `rq()` at `682fbed` with two passing controls; abort reproduced under a harder shape (4,999 producible rows → one bare line). `graph-dba` now **0 produced / 0 mentioned**, absent from the census. `claude/graph-dba/kaizen/history.md` | teco re-derivation → **accepted, no correction** — 83/11/72 reconciled exactly | 130.0k tok, 34 tools |
 | U31 | **the orphan backlog** — 11 `MENTIONS`-only nodes, 08-30→09-07, the oldest population in the graph; item 3 of the resume plan, **never before attempted** because every prior unit was producer-organised | `ab74825681a290ac9` | accepted | **9 promoted / 1 already-promoted / 1 kept open**; 10 nodes cleared, 11 of 12 edges resolved; **19 files**, incl. a new `tdd-engineer` knowledge base. Orphans **11 → 1**. The dispatch hypothesis was **refuted** — see below | teco re-derivation → **accepted, no correction** — 73/1 census, bullet counts 10/8/19 unchanged, `HEAD == BASE` on all 18 tracked | 214.6k tok, 69 tools |
-| U32 | **generation four** of the `rq` guard defect: a literal command after a **backslash line continuation** is inside the check's stated reach and outside its line-based mechanism. Fresh `graph-dba` (U28's carries 217k) | `aa1435d89cf1f9eb5` | in-flight | `skills/joern-cpg/**`, `claude/graph-dba/kaizen/*` | teco re-derivation → — | — |
+| U32 | **generation four** of the `rq` guard defect: a literal command after a **backslash line continuation** is inside the check's stated reach and outside its line-based mechanism. Fresh `graph-dba` (U28's carries 217k) | `aa1435d89cf1f9eb5` | accepted (`4df5e45`) | **closed against a coverage probe, not a shape list**: 35 call-site forms on 3 axes, each adjudicated twice (bash vs the *extracted* delivered reader); 30 covered, **5 blind and stated as the bound**. **Generation five caught in flight** by the probe (bash joins continuations with *nothing*, not a space). Suite 15→16 PASS | teco re-derivation → **accepted, no correction** — my own bypass now FAILs at `pipeline.sh:432` in an isolated copy | 141.8k tok, 26 tools |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
 agent's own kaizen files and the graph); each row is rewritten on delivery with
@@ -468,6 +468,28 @@ is working; a stale one plus an empty worktree means it died before promoting.
 count.** Two entries arrived while U23's own verification was running.
 
 ## Follow-ups
+
+- **What finally stopped the regress: pinning the claim to the mechanism.** Four
+  generations of this defect were closed by fixing the *mechanism* and rewriting
+  the *claim* — and generation N+1 always arrived because nothing tied the two
+  together. U32's block records that widening the reader **without** rewriting
+  the stated bound turns a `blind` row **red**: the claim is now an assertion the
+  suite evaluates, not prose beside it. That is the structural answer to "a guard
+  whose stated reach exceeds its mechanism", and it is worth generalising beyond
+  this file.
+- **The probe carries controls on itself.** A coverage probe that agrees with its
+  author on every row proves nothing, so U32 mislabelled a row (probe fails) and
+  reverted the reader to its generation-three form (the two continuation rows
+  redden) — demonstrating the probe *would* have caught the defect that prompted
+  it. Same discipline as a passing control beside failing probes, one level up:
+  the instrument is tested against a known-bad version of itself.
+- **Two documents went stale the instant the fix landed**, both in other agents'
+  files and both routed to their owners rather than fixed in place:
+  `claude/tdd-engineer/guard-testing-techniques.md` (says the check is open) →
+  `cobb`; `docs/reviews/rq-execution-gate.md` lines 297-301 (quotes the
+  superseded comment) → `analyst`, as a compact Pass 3. A fix that closes a
+  finding invalidates every document that described it as open — sweep for those
+  in the same breath as the fix.
 
 - **The `MENTIONS` tag is a queue with no consumer — a structural defect, not a
   backlog.** U31 refuted this coordination's own dispatch hypothesis (that the
