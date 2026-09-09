@@ -324,24 +324,38 @@ done
 # The guard that was tried there could not be reddened by any test — removing it
 # left this suite byte-identical — so it was replaced by this check, which can.
 #
-# WHAT IT COVERS: a LITERAL non-query command written at any rq call site.
-# WHAT IT DOES NOT: a command reaching rq through a variable, which no call site
-# does today and which this file cannot see without executing pipeline.sh. Said
-# here rather than implied, because a guard whose stated reach exceeds its
-# mechanism is the defect this whole block exists to close.
+# WHAT IT COVERS: a LITERAL command token at any rq call site, in ANY CASE
+# (`redis-cli` accepts `graph.delete`), whether the site is written as a command
+# substitution or as a BARE STATEMENT. The first version of this check caught
+# neither of the last two: its anchor was `grep '\$(rq '` and its token match was
+# uppercase-only, so `rq … graph.delete` and a non-`$(…)` call site both scored
+# `PASS all 3` — measured, not supposed, before this widening.
+# WHAT IT DOES NOT COVER: a command reaching rq through a VARIABLE
+# (`rq "$Q" "$CMD"`), which no call site does today and which cannot be seen
+# without executing pipeline.sh. That bound is stated rather than implied,
+# because a guard whose stated reach exceeds its mechanism is the defect this
+# whole block exists to close — and this check is itself the third generation of
+# that defect, so the bound is the load-bearing half of the comment.
+#
+# The four shapes it is required to redden on, all four verified by mutation
+# (2026-09-09): a literal non-query command at an existing site; the anchor moved
+# so fewer than 3 sites are found; a new BARE-STATEMENT site; a LOWERCASE
+# command. It must also stay green, at exactly 3 sites, on the clean tree.
 echo "rq call-site precondition (static, over pipeline.sh):"
 rq_bad=""; rq_n=0
 while IFS= read -r rq_line; do
   [ -n "$rq_line" ] || continue
   rq_n=$((rq_n + 1))
-  for rq_tok in $(printf '%s\n' "$rq_line" | grep -o 'GRAPH\.[A-Z_.]*'); do
-    case "$rq_tok" in
+  for rq_tok in $(printf '%s\n' "$rq_line" | grep -oiE 'GRAPH\.[A-Z_.]*'); do
+    # normalise before judging: redis-cli takes `graph.delete` as happily as
+    # GRAPH.DELETE, so a case-sensitive allow-list is a hole, not a style choice.
+    case "$(printf '%s' "$rq_tok" | tr '[:lower:]' '[:upper:]')" in
       GRAPH.QUERY|GRAPH.RO_QUERY) ;;
       *) rq_bad="${rq_bad}${rq_bad:+; }${rq_tok} at pipeline.sh:${rq_line%%:*}" ;;
     esac
   done
 done <<RQCALLS
-$(grep -n '\$(rq ' "$HERE/pipeline.sh" | grep -v '^[0-9]*: *#')
+$(grep -nE '(^|[^_[:alnum:]])rq ' "$HERE/pipeline.sh" | grep -v '^[0-9]*: *#')
 RQCALLS
 if [ "$rq_n" -lt 3 ]; then
   echo "  FAIL  found only $rq_n rq call sites; pipeline.sh has 3, so the grep anchor moved and this checked nothing"; FAIL=1

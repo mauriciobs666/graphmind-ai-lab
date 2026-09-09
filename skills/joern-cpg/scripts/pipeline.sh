@@ -346,12 +346,19 @@ if [ -n "$LOAD" ]; then
   #     same command-substitution trap that ate cpg_provenance_stamp's
   #     allow-list two commits ago).
   #   * Deleting the guard is SAFE, because the untrapped behaviour already fails
-  #     CLOSED: a non-query reply carries no trailer, so rq returns 1. The cost of
-  #     a misuse is a false failure, never a false pass.
+  #     CLOSED, twice over. A non-query reply carries no trailer, so rq returns 1
+  #     — and through rq a GRAPH.DELETE cannot even reach its bare `OK`, because
+  #     rq always appends the cypher as a third argument: the reply is
+  #     `ERR wrong number of arguments for 'graph.DELETE' command`, rc 1 (both
+  #     observed 2026-09-09). The cost of a misuse is a false failure, never a
+  #     false pass — a different risk class from the silent pass K-009 was about.
   # What enforces the precondition instead is a STATIC check over this file, in
   # test-stamp-wiring.sh: every `rq` call site's command argument must be absent,
-  # GRAPH.QUERY, or GRAPH.RO_QUERY. It reddens on a bad call site — which the
-  # runtime guard could not do, since removing it left the suite byte-identical.
+  # GRAPH.QUERY, or GRAPH.RO_QUERY, in any case, whether the site is a `$(…)`
+  # substitution or a bare statement. It reddens on all four of those shapes —
+  # which the runtime guard could not do, since removing THAT left the suite
+  # byte-identical. Its one stated blind spot is a command reaching rq through a
+  # VARIABLE; see the block's own header in test-stamp-wiring.sh.
   #
   # [must-contain] stays per call site, because it is a semantic assertion about
   # one reply's contents and not a liveness test. The stray check below still

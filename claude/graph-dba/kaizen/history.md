@@ -166,6 +166,42 @@
   closing clause carried Major 1's generalisation; that wording is now scoped in both places the
   promoted text lives.
 
+### Review pass 2 — Major 7 closed by widening the mechanism, 2026-09-09
+
+- **The finding, reproduced before deciding.** The static check's anchor was `grep '$(rq '` and its
+  token match `grep -o 'GRAPH\.[A-Z_.]*'` — command-substitution-only and uppercase-only. Against
+  the shipped check, a bare-statement call site (`rq 'MATCH (b) RETURN b' GRAPH.DELETE || true`)
+  and a lowercase command (`graph.delete`) each reported **`PASS all 3 rq call sites`**, suite exit
+  0. The `< 3` count guard cannot fire on either, because the three legitimate sites are still
+  there.
+- **Closure chosen: WIDEN, not narrow.** This is the third generation of one defect (blacklist →
+  `rc 2` guard → this check), so the bar was a mechanism that can be falsified rather than more
+  careful prose. Widening cost two greps: the anchor becomes
+  `grep -nE '(^|[^_[:alnum:]])rq '` (a call site is any `rq` followed by a space and not preceded
+  by an identifier character — `rq() {` has no space and prose is comment-filtered) and the token
+  is matched `-i` then upper-cased through `tr` before the allow-list, because `redis-cli` accepts
+  `graph.delete` as happily as `GRAPH.DELETE`. Narrowing the stated bound would have been the
+  honest fallback, but it was not needed: all four shapes redden.
+- **The four required mutations, each restored by copy immediately after, never batched:**
+
+  | shape | observed | suite |
+  |---|---|---|
+  | **M1** literal non-query command at an existing site | `FAIL  rq is called with a command whose reply carries no statistics trailer: GRAPH.DELETE at pipeline.sh:419` | exit 1, 12 PASS / 3 FAIL |
+  | **M2** anchor moved (helper renamed at every site) | `FAIL  found only 0 rq call sites; pipeline.sh has 3, so the grep anchor moved and this checked nothing` | exit 1, 14 PASS / 1 FAIL |
+  | **M3** new call site as a **bare statement**, not `$(…)` | `FAIL  … GRAPH.DELETE at pipeline.sh:419` | exit 1, 14 PASS / 1 FAIL |
+  | **M4** **lowercase** command at an existing site | `FAIL  … graph.delete at pipeline.sh:444` | exit 1, 14 PASS / 1 FAIL |
+
+  Clean tree: **exit 0, 15 PASS, 0 FAIL**, the check reporting exactly 3 call sites — no false
+  positive. M1's extra two failures are the mutant call site actually issuing a `GRAPH.DELETE`
+  inside the block under test, not a second defect in the check.
+- **The bound that remains, stated in the file rather than implied:** a command reaching `rq`
+  through a **variable** (`rq "$Q" "$CMD"`) is invisible to a static check and no call site does
+  that today. That sentence is the load-bearing half of the comment, given what this arc has been.
+- **A sharpening of the fail-closed argument, observed here.** Through `rq` a `GRAPH.DELETE` cannot
+  even reach its bare `OK`: `rq` always appends the cypher as a third argument, so the reply is
+  `ERR wrong number of arguments for 'graph.DELETE' command`, rc 1. Both that and the bare-`OK`
+  path fail closed; the comment now says so.
+
 ### Docs updated in the same change
 
 - `skills/joern-cpg/SKILL.md` — the "rejected stamp" bullet now states the trailer mechanism, the
