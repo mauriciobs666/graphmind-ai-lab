@@ -2,6 +2,200 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-09 — S2 U75: the LM Studio adapter's read-phase exception taxonomy, closed
+
+**What:** `docs/reviews/small-model-benchmarking-impl.md` Pass 12's adapter thread (P12-1, the
+blocker; P12-4; P12-5), landing beside two concurrent units on disjoint files
+(`modelbench/hostinfo.py`+`modelbench/cli.py`; `modelbench/packs.py`+`tests/test_packs.py`, not
+touched here). Changed: `modelbench/lmstudio.py`, `tests/test_lmstudio.py`. No fixtures added.
+
+**P12-1 (blocker), fixed.** `_raw_get` and `_raw_post` each wrapped only the connect call
+(`self._opener(...)`) in their try/except ladder; `resp.read()` sat outside it, so a response
+whose body-read failed — `http.client.IncompleteRead`, `ConnectionResetError`, a read-phase
+`TimeoutError` — escaped `catalog()`, `residency()`, `probe()`, `chat()`, `embed()` and `warm_up()`
+untyped. Fixed by moving the read inside the same try in both methods and adding
+`http.client.HTTPException` as an explicit rung (`IncompleteRead` is not an `OSError`, so the
+existing socket catch did not reach it); a read-phase `TimeoutError`/`ConnectionResetError` are now
+covered by the ladder's existing timeout/socket rungs, unchanged, now that they're in scope.
+
+**P12-4, fixed.** `_raw_post` stopped its wall clock right after the connect call, before
+`resp.read()`, so `ChatResult.wallClockMs` excluded the entire body-read time — systematic and
+always short. The clock now stops after a successful read, matching §3.6 FR-11's definition
+("to the last byte of the body").
+
+**P12-10 (minor, in the same two methods so fixed alongside P12-1), fixed.** `catalog()` parsed
+the response body before checking its HTTP status, so a non-2xx response with a non-JSON body (an
+HTML error page) reported "not valid JSON" instead of the real status. Status is now checked
+first.
+
+**P12-5, decided and fixed.** `warm_up`'s docstring justified re-probing `residency()` internally,
+immediately before the timed call, by claiming `residentModelsAtStart` "would misreport every
+cold warm-up as already resident" if used instead — backwards: `model in set()` on an empty
+cold-start set is correctly `False` ("not resident"). §3.6 itself names `residentModelsAtStart` as
+`coldLoadSeconds`'s source in so many words. Decided on the merits (the brief delegated this call
+explicitly, and nothing outside this unit's tests calls `warm_up` yet — `runner.py` is a later
+unit — so this is the cheapest point to fix the interface rather than carry the false docstring
+and an unlisted extra catalog GET forward): `warm_up` now takes `was_resident_before: bool` as a
+required, no-default keyword argument, supplied by the caller from `residentModelsAtStart`, and no
+longer probes `residency()` itself. This is a public signature change (`LMStudio.warm_up`); safe
+now because nothing outside `tests/test_lmstudio.py` calls it yet.
+
+**§4B's coverage probe, built as the regression net (per Pass 12 §4B, "done when it reads 0").** A
+parametrized test grid over the six public operations `{catalog, residency, probe, chat, embed,
+warm_up}` x two failure phases `{connect/headers, body-read}` x four failure kinds `{timeout,
+non-2xx, connection drop, unparseable body}`. Two of the eight (phase, kind) cells per operation
+are not reachable through `urllib.request`'s own contract — `(connect, unparseable_body)`: no body
+exists before a response object is obtained; `(read, non_2xx)`: `urlopen()` raises `HTTPError` for
+any status >= 400 *before* ever handing back a response object, so non-2xx cannot be observed once
+`.read()` is reachable — declared as a module-level `_EXEMPT_CELLS` constant with those reasons,
+and a dedicated test re-derives the full 8-cell grid and asserts the exempted set equals that
+constant exactly (asserted, not implied by absence — required by the brief, and this is where a
+class-2 guard-reach defect would reappear if the exemption silently grew or shrank). The remaining
+six cells per operation are exercised for real, for all six operations: `catalog()`/`residency()`
+must land in `LMStudioUnreachable`/`LMStudioCallFailed`; `probe()` must never raise and must return
+one of its three literals; `chat()`/`embed()`/`warm_up()` (both call surfaces) must land in
+`LMStudioCallTimeout`/`LMStudioCallFailed`. **Run today: 0 cells escape** (down from the reviewer's
+measured 9 of 9 on the body-read row).
+
+**One test caught not pinning what it claimed — by my own mutation, before review.** The first
+version of `test_warm_up_passes_was_resident_before_through_verbatim` exercised only the chat call
+surface. Mutating `warm_up`'s embeddings-surface `return LoadResult(...)` to invert
+`wasResidentBefore` left the full suite green — the same class of defect Pass 12 (P12-8) and prior
+units have hit five times before. Parametrized over both call surfaces; the embeddings-branch
+inversion now reddens exactly that parametrize case, and only that one.
+
+**A discrepancy in the review document, not acted on.** Pass 12 §4's "the adapter thread" names
+P12-1, P12-3, P12-4 and P12-5 as this thread's findings, but P12-3's content (`tools.module`'s AST
+allowlist gaps) is entirely `modelbench/packs.py` — the concurrent unit's file, explicitly fenced
+off from this one. P12-3 was not touched; the fences govern over the thread label. (Independently
+confirmed: the concurrent U76 entry below lists P12-1/P12-4/P12-5/P12-8/P12-10/P12-11 as "this
+unit's" — i.e. mine — matching this read.)
+
+**Mutation-tested, each `cp`-aside / mutate / run `tests/test_lmstudio.py` / `cp`-back restore,
+`diff -q` byte-identical after every single one — nine mutations, all caught for the stated
+reason:** (1) full P12-1 revert in `_raw_get` (read moved back outside the try, `HTTPException`
+dropped from the catch) — reddened exactly the 6 GET-side read-phase probe cells (catalog,
+residency, probe x timeout/connection_drop); (2) `http.client.HTTPException` rung alone removed
+from `_raw_post` — reddened exactly the 4 `IncompleteRead` probe cells (chat, embed, both
+`warm_up` surfaces x read-connection_drop); (3) wall clock computed before `resp.read()` instead
+of after — reddened exactly the new P12-4 slow-body test; (4) `catalog()`'s status-check/parse
+order reverted — reddened exactly the new P12-10 test; (5) `warm_up` reverted to self-probing
+`residency()` — reddened all 16 `warm_up`-touching tests, `test_warm_up_never_probes_residency_
+itself` among them, each on "no stubbed route for .../api/v0/models"; (6) `_EXEMPT_CELLS` widened
+to include a genuinely-reachable cell — reddened the exemption-derivation test; (7) the same cell
+dropped from `_EXPECTED_FOR_GET` alone (an undeclared third exemption) — reddened the same test,
+plus silently lost 3 parametrize cases, which the test's own re-derivation still caught; (8) a
+default (`= False`) added to `warm_up`'s `was_resident_before` — reddened
+`test_warm_up_requires_was_resident_before_with_no_default`; (9) `wasResidentBefore` inverted on
+the `chat`-surface branch of `warm_up`'s return — reddened both the chat-surface warm-up test and
+the (then-unparametrized) passthrough test, which is what surfaced the "one test caught not
+pinning what it claimed" finding above; re-run after parametrizing, the embeddings-branch
+companion mutation reddened exactly the new `[embeddings]` case.
+
+**Observed, this run.** `model-bench/` as working directory. `tests/test_lmstudio.py` alone,
+throughout: stable at **79 passed, 1 deselected** (up from 32 passed, 1 deselected before this
+unit — 33 `def test_` functions before, 44 after; the difference between 44 functions and 79
+collected cases is the probe's parametrization). Two other units were mutation-testing
+`modelbench/packs.py`/`tests/test_packs.py` and `modelbench/hostinfo.py`/`modelbench/cli.py`
+concurrently during this session; the full suite showed transient, unrelated reds in
+`tests/test_packs.py`, `tests/test_hostinfo.py` and `tests/test_cli.py` at various points, each
+time gone on the next run — consistent with a sibling's live mutation, not this unit's work. Final
+full suite, this run: **812 passed, 3 deselected**. `.venv/bin/ruff check modelbench/lmstudio.py
+tests/test_lmstudio.py`: `All checks passed!`.
+
+**Files:** `modelbench/lmstudio.py`, `tests/test_lmstudio.py`. Left uncommitted for review;
+concurrent units append their own entries to this same `HISTORY.md`.
+
+## 2026-09-09 — S2 U76: impl-review Pass 12 fix round — the row-count identity's coverage probe, `tools.module`'s own path, and the `valid` fixture's role shape
+
+**What:** `docs/reviews/small-model-benchmarking-impl.md` Pass 12's `packs.py`-scoped findings —
+P12-6, P12-2, P12-3(i)/(ii)/(iii), and P12-7. `modelbench/lmstudio.py`'s findings (P12-1, P12-4,
+P12-5, P12-8, P12-10, P12-11) and the two open questions are a concurrent unit's / the plan
+owner's, not touched here.
+
+**P12-6 — round three of the row-count identity's exemption being wider than declared, closed
+with a falsifiable coverage property instead of a fourth narrowing.** U73's `declares_scripts`
+predicate (`isinstance(scripts, int)`) silently exempted a `scripts`-declaring pack whose `scripts`
+was the *wrong type* (`"12"`), and separately `replicatesPerScript` absent or wrong-typed always
+returned `[]` unconditionally. Closed per the reviewer's §4A design (accepted rather than
+overruled — it reads well and gives a property that survives a fourth attempt): `packs.py` gained
+`ROW_COUNT_IDENTITY_KEYS` (the four manifest keys the route reads, generated once and consulted by
+both the route and the new test) and `ROW_COUNT_IDENTITY_EXEMPT_CELLS` (a `dict[(key, kind), str]`
+naming the **one** sanctioned silent cell — `sampling.scripts` truly absent — with its reason).
+`_row_count_identity_problems` now skips only on true absence of `sampling.scripts`; every other
+absent-or-wrong-type field on a `scripts`-declaring pack is a reported problem, table-driven via
+`_row_count_identity_field`/`_row_count_identity_field_valid` rather than four hand-written `or`
+clauses. New test `test_row_count_identity_coverage_over_its_own_keys_and_value_kinds`
+(`tests/test_packs.py`) builds the 4-key × 3-value-kind grid (plus an all-valid control) against a
+rows file that violates the identity, computes the actual silent-cell set by execution, and asserts
+it equals `ROW_COUNT_IDENTITY_EXEMPT_CELLS` exactly.
+
+**P12-2 / P12-3(i) — `tools.module`'s own path, unconstrained.** A manifest declaring
+`"module": "../outside.py"` validated clean and `load_tool_module` executed code outside the pack
+root that `content_hash` never covers (falsifying §3.3's "pack code is part of the content hash");
+a `tools/sim.pyc` module validated clean and ran unscanned since the AST walk globs `*.py` only.
+New `_tool_module_problems`, called from `validate_pack`, refuses both: a `tools.module` that
+resolves outside `pack.root` (via `Path.is_relative_to`), or that does not end in `.py`. Two new
+fixtures, `tests/fixtures/packs/tools_module_outside_root/` (plus a stray
+`tests/fixtures/packs/outside.py` it points at) and `tests/fixtures/packs/tools_module_not_py/`
+(a dummy `tools/sim.pyc`), each with one new test.
+
+**P12-3(iii) — the overclaiming docstring, narrowed rather than the mechanism changed.**
+`Pack.load_tool_module`'s docstring said the AST check exists "to make safe … before this ever
+runs against an untrusted pack"; P12-3(ii) showed `__import__`/`importlib.import_module` inside a
+pack module reach any importable name the walk never sees. Rewritten to state the AST check is a
+coupling rule over each file's own `import` statements, not a sandbox — P12-3(ii) itself needed no
+code change, since it is the mechanism working as documented once the claim is corrected.
+
+**P12-7 — the `valid` fixture's positive control violated the plan's own role rule.**
+`tests/fixtures/packs/valid/pack.json` declared `role: "tool-caller"` with
+`pairingKey: ["conversationId", "turnIndex"]` / `analysisUnit: "conversationId"` — satisfying the
+*mechanised* half of §3.3's rule (`analysisUnit == pairingKey[0]`) while violating the *stated*
+half ("for the tool-caller that is `scriptId`, never a conversation id"). Re-keyed to
+`["scriptId", "turnIndex"]` / `"scriptId"`, with `conversations.jsonl` re-keyed to match. New test
+`test_the_valid_fixtures_analysis_unit_is_scriptId_not_a_conversation_id` pins the shape.
+
+**Test-first.** All six new tests were written before their corresponding production/fixture
+change and confirmed failing for the stated reason first: the coverage-probe and
+`ROW_COUNT_IDENTITY_EXEMPT_CELLS`-dependent tests via `ImportError` (the constants did not exist
+yet); the two `tools.module` tests via `PackConfigError: pack.json is absent` (the fixtures did
+not exist yet); the P12-7 test via `AssertionError: assert 'conversationId' == 'scriptId'`.
+
+**Six mutations, all caught, each `cp`-aside / mutate / run `tests/test_packs.py` / `cp`-back,
+`diff -q` confirmed byte-identical after every restore:** (1) the whole file reverted to the
+pre-U76 version — `ImportError` on collection, the same failure observed pre-fix; (2) the
+`sampling.scripts` exemption widened back to U73's type-based predicate — the coverage probe's
+`silent_cells == set(ROW_COUNT_IDENTITY_EXEMPT_CELLS)` assertion fails, naming the reopened
+`("sampling.scripts", "wrong-type")` cell exactly; (3) `_row_count_identity_field_valid` patched
+to always accept `sampling.replicatesPerScript` — the probe reddens with a `TypeError` inside the
+row math (an absent `replicatesPerScript` reaching `scripts * replicates` unguarded), a louder
+failure than a silent-cell mismatch but still a failure the mutation earns; (4) the `tools.module`
+containment check removed — `test_validate_pack_rejects_a_tool_module_outside_the_pack_root`
+reddens with `[] == [...]`; (5) the `.py`-suffix check removed —
+`test_validate_pack_rejects_a_non_py_tool_module` reddens the same way; (6) fixture-level: the
+`valid` fixture's `pack.json` reverted to `analysisUnit: "conversationId"` (`conversations.jsonl`
+left re-keyed, deliberately, to isolate this from a rows-file change) —
+`test_the_valid_fixtures_analysis_unit_is_scriptId_not_a_conversation_id` reddens on the exact
+`'conversationId' == 'scriptId'` assertion; `test_validate_pack_accepts_a_fully_valid_pack` also
+reddens, incidentally, because the row-count identity notices the mismatched key name against the
+still-`scriptId`-keyed rows file — both restored together.
+
+**Observed, this run.** `model-bench/` as working directory. `tests/test_packs.py` alone throughout
+the mutation loop: **35 passed** (29 pre-U76 + 6 new) at every restore point.
+`.venv/bin/ruff check .`: `All checks passed!`. Full suite, run once at the end per the
+coordinator's concurrency instructions (two other units were mutation-testing
+`modelbench/lmstudio.py` and `modelbench/hostinfo.py`/`modelbench/cli.py` concurrently; a
+transient full-suite red in `tests/test_lmstudio.py` mid-session, outside these fences, was
+confirmed to be that concurrent activity by re-running `tests/test_packs.py` alone per instruction,
+which stayed green throughout): **811 passed, 3 deselected**.
+
+**Files:** `modelbench/packs.py`; `tests/test_packs.py`;
+`tests/fixtures/packs/tools_module_outside_root/pack.json` (new),
+`tests/fixtures/packs/outside.py` (new), `tests/fixtures/packs/tools_module_not_py/pack.json` and
+`tools/sim.pyc` (new); `tests/fixtures/packs/valid/pack.json` and `conversations.jsonl` (re-keyed).
+Left uncommitted for review; other units continue to append their own sections to this same
+`HISTORY.md`.
+
 ## 2026-09-09 — S2 U74: `host.json`, the attestation trip-wire, and the `attest` CLI command
 
 **What:** `docs/plans/small-model-benchmarking.md` §3.4.4 (`host.json`'s schema), §3.4.4a

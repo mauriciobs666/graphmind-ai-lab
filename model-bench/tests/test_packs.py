@@ -1,7 +1,9 @@
 """§4 S2's real pack loader — `load_pack`, `content_hash`, `validate_pack`, and the §3.3 totality
 boundary (plan §4 S2, §5 test 4 and test 12).
 
-Every pack here is a real directory under `tests/fixtures/packs/` (`conftest.pack_fixture`), never
+Every pack here is a real directory — `tests/fixtures/packs/` (`conftest.pack_fixture`) for the
+checked-in shapes, `tmp_path` for the row-count identity's coverage probe, which needs a small
+combinatorial family of manifests rather than one fixture each. Both are real files on disk, never
 an in-memory manifest: the row-count identity and the AST import allowlist both need real files to
 mean anything. Nothing in this file touches the network, LM Studio, or `modelbench.lmstudio` /
 `modelbench.tooling` (both separate, concurrent S2 units — the AST-check fixtures that name
@@ -10,13 +12,17 @@ mean anything. Nothing in this file touches the network, LM Studio, or `modelben
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+from pathlib import Path
 
 import pytest
 from conftest import pack_fixture
 
 from modelbench.packs import (
+    ROW_COUNT_IDENTITY_EXEMPT_CELLS,
+    ROW_COUNT_IDENTITY_KEYS,
     PackConfigError,
     content_hash,
     derive_call_surface,
@@ -228,10 +234,129 @@ def test_validate_pack_rejects_a_scripts_declaring_pack_missing_data_conversatio
     pack = load_pack(pack_fixture("missing_data_conversations"))
     problems = validate_pack(pack)
     assert problems == [
-        "fixture-missing-data-conversations: sampling.scripts is declared (conversation-shaped) "
-        "but data.conversations is absent; the row-count identity has no rows file to check it "
-        "against (row-count identity, plan §3.3)"
+        "fixture-missing-data-conversations: data.conversations must be a non-empty string path "
+        "— a scripts-declaring pack is conversation-shaped and needs a rows file to check the "
+        "identity against, got NoneType (None) (row-count identity, plan §3.3)"
     ]
+
+
+# --------------------------------------------------------------------------------------------
+# validate_pack — the row-count identity's own coverage (impl review Pass 12, P12-6, §4A)
+# --------------------------------------------------------------------------------------------
+
+#: Rows that violate `scripts: 12, replicatesPerScript: 1` — 48 rows, 12 distinct `scriptId`
+#: values each appearing 4 times where 1 is required — the same shape Appendix L.5 built the
+#: coverage table against.
+_VIOLATING_ROWS = [{"scriptId": f"script-{i % 12:02d}", "turnIndex": 0} for i in range(48)]
+
+#: Rows that satisfy `scripts: 12, replicatesPerScript: 1` exactly — the all-valid control's rows.
+_SATISFYING_ROWS = [{"scriptId": f"script-{i:02d}", "turnIndex": 0} for i in range(12)]
+
+_ROW_COUNT_IDENTITY_VALUE_KINDS = ("valid", "absent", "wrong-type")
+
+#: One concrete wrong-type value per key. `sampling.analysisUnit` and `data.conversations` use a
+#: plain int rather than an unhashable type (a list would make `row.get(analysis_unit)` raise
+#: `TypeError: unhashable type`, which is a different failure than the one this probe is for).
+_ROW_COUNT_IDENTITY_WRONG_TYPE_VALUES = {
+    "sampling.scripts": "12",
+    "sampling.replicatesPerScript": "1",
+    "sampling.analysisUnit": 123,
+    "data.conversations": 123,
+}
+
+
+def _row_count_coverage_manifest(pack_id: str) -> dict:
+    return {
+        "packId": pack_id,
+        "packVersion": "1.0.0",
+        "role": "tool-caller",
+        "environment": {"requires": ["lmstudio-chat"]},
+        "data": {"conversations": "conversations.jsonl"},
+        "sampling": {
+            "scripts": 12,
+            "replicatesPerScript": 1,
+            "seed": 20260909,
+            "pairingKey": ["scriptId", "turnIndex"],
+            "analysisUnit": "scriptId",
+        },
+        "metrics": {
+            "verdictMetrics": ["cleanThroughTurnH"],
+            "headlineMetric": "cleanThroughTurnH",
+        },
+    }
+
+
+def _apply_row_count_cell(manifest: dict, key: str, kind: str) -> dict:
+    """Perturb `manifest` at `key` (one of `ROW_COUNT_IDENTITY_KEYS`) to `kind`
+    ("valid" / "absent" / "wrong-type"), leaving every other key untouched."""
+    manifest = copy.deepcopy(manifest)
+    block, name = key.split(".", 1)
+    target = manifest["sampling"] if block == "sampling" else manifest.setdefault("data", {})
+    if kind == "valid":
+        pass
+    elif kind == "absent":
+        target.pop(name, None)
+    elif kind == "wrong-type":
+        target[name] = _ROW_COUNT_IDENTITY_WRONG_TYPE_VALUES[key]
+    else:
+        raise ValueError(kind)
+    return manifest
+
+
+def _write_row_count_pack(root: Path, manifest: dict, rows: list[dict]):
+    root.mkdir(parents=True)
+    (root / "pack.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (root / "conversations.jsonl").write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8"
+    )
+    return load_pack(root)
+
+
+def test_row_count_identity_coverage_over_its_own_keys_and_value_kinds(tmp_path) -> None:
+    """impl review Pass 12 §4A: the four manifest keys `_row_count_identity_problems` actually
+    reads (`packs.ROW_COUNT_IDENTITY_KEYS`) crossed with three value-kinds — plan-valid, absent,
+    present but not the declared type — over a rows file that violates the identity, plus an
+    all-valid control against a rows file that does not. Every cell must either report at least
+    one problem or be named in `packs.ROW_COUNT_IDENTITY_EXEMPT_CELLS`; this probe computes the
+    actual silent cells by execution and asserts that set equals the exemption constant exactly,
+    so a stale exemption is as loud as a newly silent one. The axis list is
+    `ROW_COUNT_IDENTITY_KEYS` itself, the same constant the route consults to know which manifest
+    fields it owns — a fifth key added there is probed automatically, without a second edit here.
+
+    Written against the plan (§3.3's row-count identity), not against the implementation: run
+    against the pre-P12-6-fix predicate, this must go red on at least
+    `("sampling.scripts", "wrong-type")`, `("sampling.replicatesPerScript", "absent")` and
+    `("sampling.replicatesPerScript", "wrong-type")` — the three cells P12-6 names silent."""
+    base = _row_count_coverage_manifest("fixture-row-count-coverage")
+
+    silent_cells: set[tuple[str, str]] = set()
+    for key in ROW_COUNT_IDENTITY_KEYS:
+        for kind in _ROW_COUNT_IDENTITY_VALUE_KINDS:
+            manifest = _apply_row_count_cell(base, key, kind)
+            manifest["packId"] = f"fixture-row-count-coverage-{key}-{kind}"
+            pack = _write_row_count_pack(
+                tmp_path / f"cell-{key}-{kind}", manifest, _VIOLATING_ROWS
+            )
+            if validate_pack(pack) == []:
+                silent_cells.add((key, kind))
+
+    assert silent_cells == set(ROW_COUNT_IDENTITY_EXEMPT_CELLS)
+
+    control_manifest = _row_count_coverage_manifest("fixture-row-count-coverage-control")
+    control_pack = _write_row_count_pack(
+        tmp_path / "cell-control", control_manifest, _SATISFYING_ROWS
+    )
+    assert validate_pack(control_pack) == []
+
+
+def test_row_count_identity_exempt_cells_each_carry_a_reason() -> None:
+    """The exemption constant's whole point is a one-line reason beside each sanctioned silent
+    cell (plan §4A) — an empty or missing reason defeats that, silently."""
+    assert ROW_COUNT_IDENTITY_EXEMPT_CELLS
+    for cell, reason in ROW_COUNT_IDENTITY_EXEMPT_CELLS.items():
+        assert isinstance(cell, tuple) and len(cell) == 2
+        assert cell[0] in ROW_COUNT_IDENTITY_KEYS
+        assert isinstance(reason, str) and reason.strip()
 
 
 def test_validate_pack_rejects_analysis_unit_outside_pairing_key_structurally() -> None:
@@ -327,3 +452,64 @@ def test_validate_pack_accepts_a_module_importing_modelbench_tooling() -> None:
 def test_validate_pack_accepts_the_valid_packs_stdlib_only_module() -> None:
     pack = load_pack(pack_fixture("valid"))
     assert not any("allowlist" in problem for problem in validate_pack(pack))
+
+
+# --------------------------------------------------------------------------------------------
+# validate_pack — tools.module's own path (impl review Pass 12, P12-2 / P12-3(i))
+# --------------------------------------------------------------------------------------------
+
+
+def test_validate_pack_rejects_a_tool_module_outside_the_pack_root() -> None:
+    """`"tools": {"module": "../outside.py"}` validated CLEAN before this fix, `load_tool_module`
+    executed the outside file, and `content_hash` never moved when that file changed — falsifying
+    §3.3's "pack code is part of the content hash" (impl review Appendix L.2). The fix is at
+    `validate_pack`, not at `load_tool_module`: report it rather than let it raise."""
+    pack = load_pack(pack_fixture("tools_module_outside_root"))
+    problems = validate_pack(pack)
+    assert problems == [
+        "fixture-tools-module-outside-root: tools.module '../outside.py' resolves outside the "
+        "pack root; pack code must live under the pack directory so it is covered by content_hash "
+        "(plan §3.3, impl review P12-2)"
+    ]
+
+
+def test_validate_pack_rejects_a_non_py_tool_module() -> None:
+    """`tools/sim.pyc` as `tools.module` validated CLEAN before this fix and the unscanned
+    bytecode executed — the AST walk globs `*.py` only (impl review Appendix L.3(4)). A
+    file-selection gap, not a syntactic-versus-semantic one: closed by requiring the `.py` suffix
+    `validate_pack` can actually scan."""
+    pack = load_pack(pack_fixture("tools_module_not_py"))
+    problems = validate_pack(pack)
+    assert problems == [
+        "fixture-tools-module-not-py: tools.module 'tools/sim.pyc' must end in '.py'; the AST "
+        "import allowlist only scans '*.py' files, so anything else loads unscanned (plan §3.3, "
+        "impl review P12-3(i))"
+    ]
+
+
+def test_validate_pack_accepts_the_valid_packs_tool_module_path() -> None:
+    """The positive case beside both new refusals — a `.py` module under the pack root must not
+    trip either check."""
+    pack = load_pack(pack_fixture("valid"))
+    problems = validate_pack(pack)
+    assert not any("tools.module" in problem for problem in problems)
+
+
+# --------------------------------------------------------------------------------------------
+# The "valid" fixture's own role shape (impl review Pass 12, P12-7)
+# --------------------------------------------------------------------------------------------
+
+
+def test_the_valid_fixtures_analysis_unit_is_scriptId_not_a_conversation_id() -> None:
+    """§3.3: "the analysis unit is the *outermost* component of `pairingKey` … For the
+    tool-caller that is `scriptId`, never a conversation id" — and the plan's own manifest literal
+    declares `pairingKey: ["scriptId", ...]`. The fixture previously declared
+    `role: "tool-caller"` with `analysisUnit: "conversationId"`: it satisfied the *mechanised*
+    half of the rule (`analysisUnit == pairingKey[0]`) while violating the *stated* half, which
+    made it a positive control written against the implementation rather than the plan (impl
+    review P12-7)."""
+    pack = load_pack(pack_fixture("valid"))
+    assert pack.manifest["role"] == "tool-caller"
+    ref = pack.ref()
+    assert ref.analysisUnit == "scriptId"
+    assert ref.pairingKey[0] == "scriptId"

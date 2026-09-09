@@ -12,12 +12,14 @@ loader on top of that, unchanged:
 * **`load_pack`** / **`content_hash`** — read a pack directory and hash its bytes (excluding
   `PROVENANCE.md`), never the declared version alone (§3.3 — "declared versions get forgotten; a
   hash cannot").
-* **`validate_pack`** — `[]` means valid, matching `Fingerprint.validate()`'s shape. Three
+* **`validate_pack`** — `[]` means valid, matching `Fingerprint.validate()`'s shape. Four
   independent axes, per §4 S2's done-condition: the `sampling` contract (structural, reusing
   `check_sampling_contract` rather than re-implementing it, plus the row-count identity and `-ml`
   §3.4 Rule 6's `replicatesPerScript > 1` rejection), `callSurface` derived from
   `environment.requires` (§3.4.4a, rejecting a pack declaring neither or both of `lmstudio-chat` /
-  `lmstudio-embeddings`), and the AST import allowlist over every `.py` file the pack ships.
+  `lmstudio-embeddings`), `tools.module`'s own path (must resolve inside the pack root and end in
+  `.py` — impl review Pass 12 P12-2/P12-3(i), the AST allowlist's own reach cannot exceed what it
+  can see), and the AST import allowlist over every `.py` file the pack ships.
 
 **Not this module's job**, named so the boundary is checked rather than assumed: `run` cross-
 checking a pack's derived `callSurface` against a model's catalog `type`, and `run` calling
@@ -248,9 +250,15 @@ class Pack:
     def load_tool_module(self) -> ModuleType:
         """Import `tools.module` (§3.3) from the pack root via `importlib`, not `sys.path`.
 
-        The pack's own `tools.entrypoint` name is left for the caller to `getattr` — this method's
-        job is only the import, which is what `validate_pack`'s AST check exists to make safe
-        before this ever runs against an untrusted pack.
+        The pack's own `tools.entrypoint` name is left for the caller to `getattr`. `validate_pack`
+        constrains this load two ways before it is safe to call: `_tool_module_problems` refuses a
+        `tools.module` that resolves outside the pack root or does not end in `.py` (impl review
+        P12-2 / P12-3(i)), and `_tool_import_problems`'s AST walk is a **coupling** rule over each
+        file's own `import` statements — not a sandbox. `__import__(...)` and
+        `importlib.import_module(...)` inside a pack module reach any importable name the walk
+        never sees (impl review P12-3(ii), executed and confirmed), so a `validate_pack`-clean
+        pack is one whose declared imports are in scope, never one whose code is safe to run
+        untrusted.
         """
         tools = self.manifest.get("tools") or {}
         module_rel = tools.get("module")
@@ -371,6 +379,74 @@ def _call_surface_problems(pack: Pack) -> list[str]:
     ]
 
 
+#: The row-count identity's own manifest keys — `_row_count_identity_problems` consults exactly
+#: this tuple to decide what to check, and the coverage probe (`tests/test_packs.py`, impl review
+#: Pass 12 §4A) walks the same tuple to decide what to probe. One constant, not two lists that
+#: happen to agree: a fifth key added here is checked by `_row_count_identity_field`/
+#: `_row_count_identity_field_valid` below and probed by the test in the same edit, because both
+#: read it from here.
+ROW_COUNT_IDENTITY_KEYS: tuple[str, ...] = (
+    "sampling.scripts",
+    "sampling.replicatesPerScript",
+    "sampling.analysisUnit",
+    "data.conversations",
+)
+
+#: Human-readable "must be" clause per key, used only in the field-problem message.
+_ROW_COUNT_IDENTITY_KEY_HINTS: dict[str, str] = {
+    "sampling.scripts": "a plain int",
+    "sampling.replicatesPerScript": "a plain int",
+    "sampling.analysisUnit": "a non-empty string naming the identity's own grouping field",
+    "data.conversations": (
+        "a non-empty string path — a scripts-declaring pack is conversation-shaped and needs a "
+        "rows file to check the identity against"
+    ),
+}
+
+#: The one case this route is sanctioned to skip silently, each with the one-line reason it is
+#: exempt (impl review Pass 12 §4A: "a module-level exemption constant carrying a one-line
+#: reason"). `sampling.scripts` genuinely absent from the manifest — never merely invalid — is the
+#: plan's own signal that a pack is item-level rather than conversation-shaped (§3.3): the
+#: structural route (`check_sampling_contract`) covers that shape instead, and there is nothing
+#: left here to check. Every other absence or wrong type on a `scripts`-declaring pack is a
+#: reported problem, never a second silent case — round three of the same defect (P12-6) is closed
+#: by having exactly **one** true exemption, not a predicate that quietly widens to cover more
+#: than this constant names. The coverage probe asserts the *computed* silent-cell set equals this
+#: constant exactly, so a stale entry here is as loud as a missing one.
+ROW_COUNT_IDENTITY_EXEMPT_CELLS: dict[tuple[str, str], str] = {
+    ("sampling.scripts", "absent"): (
+        "no sampling.scripts at all is the item-level pack shape (no `scripts` declared, e.g. "
+        "the four item-level fixtures); check_sampling_contract is what that shape gets instead, "
+        "plan §3.3"
+    ),
+}
+
+
+def _row_count_identity_field(
+    key: str, sampling: Mapping[str, Any], data: Mapping[str, Any]
+) -> Any:
+    """Fetch one of `ROW_COUNT_IDENTITY_KEYS`'s dotted manifest paths (`"sampling.X"` /
+    `"data.X"`)."""
+    block, name = key.split(".", 1)
+    source = sampling if block == "sampling" else data
+    return source.get(name)
+
+
+def _row_count_identity_field_valid(key: str, value: Any) -> bool:
+    """Whether `value`, fetched for one of `ROW_COUNT_IDENTITY_KEYS`, is the declared type — a
+    plain `int` for the two counts, a non-empty `str` for the two names/paths."""
+    if key in ("sampling.scripts", "sampling.replicatesPerScript"):
+        return isinstance(value, int) and not isinstance(value, bool)
+    return isinstance(value, str) and bool(value)
+
+
+def _row_count_identity_field_problem(pack: Pack, key: str, value: Any) -> str:
+    return (
+        f"{pack.packId}: {key} must be {_ROW_COUNT_IDENTITY_KEY_HINTS[key]}, got "
+        f"{type(value).__name__} ({value!r}) (row-count identity, plan §3.3)"
+    )
+
+
 def _row_count_identity_problems(pack: Pack, sampling: Mapping[str, Any]) -> list[str]:
     """§3.3's data-driven route: `scripts × replicatesPerScript` rows, `scripts` distinct
     `analysisUnit` values, each appearing exactly `replicatesPerScript` times.
@@ -381,48 +457,43 @@ def _row_count_identity_problems(pack: Pack, sampling: Mapping[str, Any]) -> lis
     matching `sampling` block, and no other key is named anywhere for "the data file" the rule
     speaks of. **An earlier version of this function read `sampling.dataFile` instead** — a key
     this module invented and no plan-conformant manifest ever carries, which made the whole route
-    silently unreachable on every real pack shape (coordinator finding, 2026-09-09, confirmed:
-    line 435 already settles the key). Fixed to `data.conversations` so the check fires on the
-    manifest shape the plan actually specifies.
+    silently unreachable on every real pack shape (S2 U73). U73's own fix then introduced a second
+    round of the same shape: its `declares_scripts` predicate (`isinstance(scripts, int)`) skipped
+    on `"scripts": "12"` just as it skipped on `scripts` truly absent, so a `scripts`-declaring
+    pack could still evade the whole route by getting *any one* of its four fields' *type* wrong
+    rather than by omitting `scripts` (impl review Pass 12, P12-6 — round three of the same class).
 
-    A pack that declares `sampling.scripts` is conversation-shaped by the plan's own rule (§3.3's
-    one `sampling`-bearing manifest literal carries both; §3.9 point 2 defines a run as
-    `scripts × replicatesPerScript` for "a conversation pack"). Declaring `scripts` while omitting
-    `data.conversations` is therefore not "nothing to check" — it is itself a problem, reported
-    below rather than skipped. **Skips (returns `[]`) only when `scripts` itself is absent**: that
-    is the exemption the docstring's earlier revision named, and it is real for a pack of a
-    genuinely different shape — an item-level pack (no `scripts` declared at all, e.g. the four
-    item-level fixtures) — which gets the structural route instead and has nothing else this route
-    could check.
-
-    Once `data.conversations` is confirmed present, the identity itself still needs
-    `replicatesPerScript` and `analysisUnit` to be valid to compute against; those two are
-    unchanged from before and still skip silently when absent or malformed — narrowing that gap
-    further is not this fix's scope.
+    **Exactly one case is sanctioned to skip silently: `sampling.scripts` genuinely absent from
+    the manifest** (`ROW_COUNT_IDENTITY_EXEMPT_CELLS`) — the plan's own item-level-pack signal.
+    Every other case — `scripts` present but the wrong type, or any of the other three keys absent
+    or the wrong type on a `scripts`-declaring pack — is a reported problem below, generated from
+    `ROW_COUNT_IDENTITY_KEYS`/`_row_count_identity_field_valid` rather than hand-checked one at a
+    time, which is what let two of these branches (`replicatesPerScript`, then `scripts`'s own
+    type) go unnoticed across two fix rounds.
     """
-    scripts = sampling.get("scripts")
-    replicates = sampling.get("replicatesPerScript")
+    if "scripts" not in sampling:
+        return []
+
     data = pack.manifest.get("data") or {}
-    data_file = data.get("conversations")
-    analysis_unit = sampling.get("analysisUnit")
+    values = {
+        key: _row_count_identity_field(key, sampling, data) for key in ROW_COUNT_IDENTITY_KEYS
+    }
+    valid = {
+        key: _row_count_identity_field_valid(key, values[key]) for key in ROW_COUNT_IDENTITY_KEYS
+    }
 
-    declares_scripts = isinstance(scripts, int) and not isinstance(scripts, bool)
-    if not declares_scripts:
-        return []
+    problems = [
+        _row_count_identity_field_problem(pack, key, values[key])
+        for key in ROW_COUNT_IDENTITY_KEYS
+        if not valid[key]
+    ]
+    if not all(valid.values()):
+        return problems
 
-    if not data_file:
-        return [
-            f"{pack.packId}: sampling.scripts is declared (conversation-shaped) but "
-            "data.conversations is absent; the row-count identity has no rows file to check it "
-            "against (row-count identity, plan §3.3)"
-        ]
-
-    if (
-        not isinstance(replicates, int)
-        or isinstance(replicates, bool)
-        or not analysis_unit
-    ):
-        return []
+    scripts = values["sampling.scripts"]
+    replicates = values["sampling.replicatesPerScript"]
+    analysis_unit = values["sampling.analysisUnit"]
+    data_file = values["data.conversations"]
 
     rows_path = pack.root / data_file
     try:
@@ -434,17 +505,16 @@ def _row_count_identity_problems(pack: Pack, sampling: Mapping[str, Any]) -> lis
             f"identity ({exc})"
         ]
 
-    values = [row.get(analysis_unit) for row in rows]
+    values_seen = [row.get(analysis_unit) for row in rows]
     expected_total = scripts * replicates
-    problems: list[str] = []
-    if len(values) != expected_total:
+    if len(values_seen) != expected_total:
         problems.append(
-            f"{pack.packId}: data.conversations {data_file!r} holds {len(values)} rows, expected "
-            f"scripts × replicatesPerScript = {scripts} × {replicates} = {expected_total} "
-            "(row-count identity, plan §3.3)"
+            f"{pack.packId}: data.conversations {data_file!r} holds {len(values_seen)} rows, "
+            f"expected scripts × replicatesPerScript = {scripts} × {replicates} = "
+            f"{expected_total} (row-count identity, plan §3.3)"
         )
 
-    counts = Counter(values)
+    counts = Counter(values_seen)
     if len(counts) != scripts:
         problems.append(
             f"{pack.packId}: sampling.analysisUnit {analysis_unit!r} has {len(counts)} distinct "
@@ -486,6 +556,54 @@ def _sampling_problems(pack: Pack) -> list[str]:
 
     problems.extend(_row_count_identity_problems(pack, sampling))
     return problems
+
+
+def _tool_module_problems(pack: Pack) -> list[str]:
+    """`tools.module`'s own path, checked before anything asks `load_tool_module` to run it
+    (impl review Pass 12, P12-2 / P12-3(i); `_tool_import_problems` below is a different check —
+    the *contents* of whatever `.py` files the AST walk finds, not whether `tools.module` itself
+    is one of them or lives where the hash can see it).
+
+    Two properties, both executed and confirmed missing before this fix (Appendix L.2/L.3(4)):
+
+    * **containment (P12-2).** `"module": "../outside.py"` validated CLEAN, `load_tool_module`
+      executed the outside file, and `content_hash` never moved when that file changed —
+      falsifying §3.3's "pack code is part of the content hash, so a behavior change to a
+      simulated tool is a version change like any other." The resolved path must stay inside the
+      pack root.
+    * **suffix (P12-3(i)).** `tools/sim.pyc` as `tools.module` validated CLEAN and the unscanned
+      bytecode executed — `_tool_import_problems`'s walk globs `*.py` only, so anything else loads
+      unscanned. A file-selection gap the AST check cannot see past, not a syntactic-versus-
+      semantic one; closed by requiring the suffix that walk can actually scan.
+
+    Absent `tools.module` is not this function's problem — a pack with no `tools` block (e.g.
+    `guard-judge`) is never asked to load one, and `Pack.load_tool_module` already raises if one
+    without the key is.
+    """
+    tools = pack.manifest.get("tools") or {}
+    module_rel = tools.get("module")
+    if not module_rel:
+        return []
+    if not isinstance(module_rel, str):
+        return [
+            f"{pack.packId}: tools.module must be a string path, got "
+            f"{type(module_rel).__name__} ({module_rel!r}) (plan §3.3)"
+        ]
+    if not module_rel.endswith(".py"):
+        return [
+            f"{pack.packId}: tools.module {module_rel!r} must end in '.py'; the AST import "
+            "allowlist only scans '*.py' files, so anything else loads unscanned (plan §3.3, "
+            "impl review P12-3(i))"
+        ]
+    resolved_root = pack.root.resolve()
+    resolved_module = (pack.root / module_rel).resolve()
+    if not resolved_module.is_relative_to(resolved_root):
+        return [
+            f"{pack.packId}: tools.module {module_rel!r} resolves outside the pack root; pack "
+            "code must live under the pack directory so it is covered by content_hash (plan §3.3, "
+            "impl review P12-2)"
+        ]
+    return []
 
 
 def _import_allowed(module_name: str) -> bool:
@@ -539,14 +657,18 @@ def _tool_import_problems(pack: Pack) -> list[str]:
 def validate_pack(pack: Pack) -> list[str]:
     """§4 S2's pack-integrity checks. `[]` means valid, matching `Fingerprint.validate()`'s shape.
 
-    Three independent axes — a fixture can fail one, several, or none:
+    Four independent axes — a fixture can fail one, several, or none:
 
     * the `sampling` contract (§3.3): structural (`analysisUnit == pairingKey[0]`, via
       `check_sampling_contract`), the row-count identity, and `-ml` §3.4 Rule 6's
       `replicatesPerScript > 1` rejection;
     * `callSurface`, derived from `environment.requires` and rejected when neither or both of
       `lmstudio-chat` / `lmstudio-embeddings` are declared (§3.4.4a);
-    * the AST import allowlist over every `.py` file the pack ships (§3.3).
+    * `tools.module`'s own path — must resolve inside the pack root and end in `.py` (impl review
+      Pass 12, P12-2 / P12-3(i));
+    * the AST import allowlist over every `.py` file the pack ships (§3.3) — a coupling rule over
+      each file's own `import` statements, not a sandbox (impl review P12-3(ii); see
+      `Pack.load_tool_module`'s docstring).
 
     **Not here:** the `callSurface`-versus-catalog-`type` cross-check and the tool-calling
     eligibility gate are `run`'s (§3.4.4a, §3.6) — this function has no model catalog to check
@@ -555,5 +677,6 @@ def validate_pack(pack: Pack) -> list[str]:
     problems: list[str] = []
     problems.extend(_sampling_problems(pack))
     problems.extend(_call_surface_problems(pack))
+    problems.extend(_tool_module_problems(pack))
     problems.extend(_tool_import_problems(pack))
     return problems
