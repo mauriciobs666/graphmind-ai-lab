@@ -189,6 +189,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U53** — P21-4 (§5.2's summary of the residue is false through two doors its own sibling derivation opens) and P21-5 (an unnamed cost of the chosen placement) | `architect` | `ad44540e7e1aa876e` | **delivered — committed `069f6ae`** — plan **v1.31**. Fixed by **deletion, not rewording**: §5.2 cites the S9 row instead of summarising it, and `grep` now finds one statement of the residue in the whole plan. **Both doors re-verified by me** — cold pool `qsize=1 threads=0`, never ran, `shutdown(wait=True)` back in 0.0000s; warm pool ran the refused item | `docs/plans/salesperson-ui.md` **v1.31** | `analyst` Pass 22 | 99k tok / 53 tools |
 | **U54** — P21-1 (restore the guard's strength without giving up the raise), P21-2 (the false precedent, at two sites), P21-3 (the killing test), P21-6, P21-7. **Resumed, not fresh**: 157k tok / 67 tools is under both halves of the threshold and the guard sentence is its own | `coder` | `a7ebbee7e795fe497` | **delivered — committed `0db9fb3`**. **Guard mutation re-run by me**: injecting a second `RuntimeError` into `get_state` reddens the shipped guard (`Extra items in the left set: 'get_state'`) and passed `d776ca8`'s. Suite **2641/14 teco-verified solo**; `storefront.py` restored by byte-copy to md5 `64be8aca` | `storefront.py`, `test_storefront.py`, `test_storefront_api.py` | `analyst` Pass 22 | 222k tok / 50 tools |
 | **U55** — Pass 22's four findings: P22-1 (the killing test's oracle measures nothing), P22-2 (`set`→`list` site oracle), P22-3 (a self-falsifying `git log -S` instruction), P22-4 (`get_state`'s second call site breaks `_reset_state_unknown`'s documented `504`). **Fresh, not a resume**: U54 sits at 222k tok and every fix is fully specified by the review — and the docstring under P22-1 is one U54 wrote, so resuming it is producer-self-defence | `coder` (fresh) | `a07de4a1e90c2b72e` | **delivered — committed `fc2b43b`**. Suite **2642/14 teco-verified solo** (baseline 2641, +1 = P22-4's test); `storefront.py` md5 `cb735227` matches its reported value; `reference` re-seeded. **Both mutations re-run by me, not taken on report** — mutant D (flag read moved after `submit`) fails on the **new** `len(_threads)==0` line with the `qsize()` line above it still passing, which is the exact discrimination; reverting the widened `except` reddens P22-4's new test with the `RuntimeError` propagating uncaught. Declined to widen to bare `except Exception`, with its reasoning in the docstring | `storefront.py`, `test_storefront.py`, `test_storefront_api.py`, `HISTORY.md` | `analyst` Pass 23 | — |
+| **S9-QA** — acceptance pass on S9: drive the running system against §5.1's S9 row and the F-numbered ACs. Six static passes had judged S9 by reading; none had run it | `qa-engineer` | `ad5db7019ebeedac5` | **in-flight, third attempt** — killed twice by platform attrition (session rate limit at TP-022; then the session itself ended). Test plan **committed as `54ba5dd`** (30 test points) so a further kill cannot lose it. Reports **28/30 executed and passing**, but **evidence in context only, scratchpad wiped** — resumed with disk-first persistence made a hard requirement and instructed to re-run rather than transcribe. Authorized one scoped delete (its own `widget-qa` fixtures in `reference`) on stakeholder decision | `falkor-chat/docs/test-plans/salesperson-ui-s9.md` · `docs/test-reports/salesperson-ui-s9-report.md` | — (is the gate) | 213k tok |
 | **Pass 21** — re-gate: v1.30's rule (`395266e`), its implementation (`d776ca8`), P20-2's three sites (inside `f9d23fb`). **Fresh again on the U24 precedent**: Pass 20 prescribed the discriminator that was implemented | `analyst` (**fresh**) | `a3ad2209fae9fb0e1` | **delivered — committed `d26fa36`**. Ran the suite (2640/14, matching my solo number) and restored every file it mutated; `git status falkor-chat/` empty, md5 back to `08daf2ea` |  `docs/reviews/salesperson-ui-impl.md` `## Pass 21` | — (is the gate) | — |
 | **Pass 20** — gate S9a-fix. **Fresh by design**: Pass 17 *prescribed* reserve-then-write, so its author judging this diff is producer-self-review one seat over (the U24 precedent) | `analyst` (**fresh**) | `afc3c09ccd5b50340` | **delivered — committed `ac28f2c`** (+284 lines). Survived **two** rate-limit kills, the second seconds in; resumed on its own transcript both times and lost nothing, because its predecessor artefact was already committed | `docs/reviews/salesperson-ui-impl.md` `## Pass 20` | **needs changes** — 0 blockers, **3 majors**, 2 minors, 3 nits. P17-1/P17-2 closed and closed at the right unit; my four questions all answered (see §Pass 20 below) | 150k tok / 10 tools |
 | **U50** — P20-1 is a **plan** defect: v1.29's S9 row prescribes the unconditional release the implementer faithfully wrote. Fix the release condition, tombstone the false mechanism | `architect` | `a5d8f1e2a1d897af0` | **delivered — committed `395266e`** — plan **v1.30**. Took the reviewer's asymmetry and **rejected its placement**: the flag is read *before* `submit`, not inside its `except`. **CPython mechanism re-verified by me** (`:178` put precedes `:179` adjust; `t.start()` at `:202`; venv 3.12.3; executor built with `max_workers`/`thread_name_prefix` only, so `BrokenThreadPool` is unreachable) | `docs/plans/salesperson-ui.md` **v1.30** | `analyst` Pass 21 | 112k tok / 32 tools |
@@ -4895,4 +4896,42 @@ uncaught out of `reset_participant`.
 `coder` also declined a widening I had not asked about and would not have caught: it refused to make
 the `except` a bare `except Exception`, on the ground that doing so would hide genuine bugs behind
 F8's "unknown", and wrote that reasoning into the docstring rather than only into its report.
+
+## The acceptance pass found what six static passes structurally could not (2026-09-09)
+
+Three of its four findings are about **published prose contradicting measured behaviour**, which is
+precisely the class a static reviewer reading the same prose cannot catch:
+
+- `SERVER.md` §1.3 says setting `FALKORCHAT_STOREFRONT_QUIESCE_S` "changes nothing observable."
+  Driven both ways: `0.4` under a held turn → `503 quiesce_timeout` in 0.41 s, nothing reset;
+  `5.0` against a 0.8 s turn → waits 0.76 s, returns `200`. **That is S9f, answered by execution**
+  after sitting open on argument alone.
+- `POST /shop/api/messages` can answer a bare plain-text `500` inside the `shutdown_turns()` window.
+  §5.3's completeness table has no `5xx` row for that route at all. The lost turn was an accepted
+  trade; the undeclared response shape was never anywhere.
+- The `504` body carries `state: null` where §4.8 says "with no state body" — and this plan is
+  explicit elsewhere, in reset-all's `incomplete`, that present-with-null is not absent.
+
+**The fourth is a correction to this document.** When I routed P22-4 I framed it as a `RuntimeError`
+from the shutdown guard reaching `_reset_state_unknown`. `qa-engineer` injected a `RuntimeError` at
+each of `get_state`'s three service reads — all three still answered `504`, so the delivered catch
+works — and then established that **`enqueue_turn` is not in `get_state`'s call graph at all**. The
+scenario I described does not exist. The fix is right; my stated reason for it was inflated, and the
+docstring `coder` wrote was the accurate one because it hedged to "a *future* `raise RuntimeError`".
+
+Worth naming: the implementer's hedge was more accurate than the coordinator's justification, and
+nothing in the static chain caught the difference — Pass 22 proposed the finding, I ratified it, and
+both of us were reasoning from the same unexecuted story.
+
+## Two kills, and the rule that came out of them
+
+The pass died twice with 28 test points' worth of results held only in a context that then
+evaporated, and a scratchpad that was wiped underneath it. The plan survived both only because it
+had been written to disk and, after the first kill, committed.
+
+The resume brief now orders the work **persistence before progress**: probe scripts written to disk
+first, every run redirected to a file, and the report created **early, as a skeleton, filled in row
+by row as results land**. A half-written report on disk beats a complete one that never gets
+written. This is the same lesson the ledger itself encodes — state lives in the artefact, not in the
+agent — applied one level down, to a delegate's own working evidence.
 
