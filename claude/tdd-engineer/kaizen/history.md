@@ -3,6 +3,34 @@
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
 
+## 2026-09-09 — one `cobb`-produced mutant-design rule added to `guard-testing-techniques.md` (U38)
+
+- **What:** `cobb` ran U38 of `claude/docs/plans/kaizen-distillation2-coordination.md` over its own
+  8-entry produced inbox. One entry routed here:
+  `c4f1a2be-7d30-4a91-9c6e-5b2d81f0a37e` (2026-09-08, `suggestedHome: knowledge base`) —
+  **PROMOTED** into `claude/tdd-engineer/guard-testing-techniques.md`, folded as a closing
+  sub-point of §1 (*"A mutation test and a coverage probe answer different questions"*).
+- **The fact, re-derived rather than recalled** (2026-09-09, bash 5.2.21(1), WSL2): `set -u; echo
+  $NOPE` at top level, the same inside a function, and the same as `for k in $NOPE` all exit
+  **127** — identical to `set -u; nosuchcmd_xyz` and to calling a deleted function. The
+  set-but-empty shape exits **0** and lets the guard emit its own output. So the **exact-rc**
+  oracle, which is the right repair for `rc != 0` and which this file and
+  `claude/analyst/review-techniques.md` both prescribe, still cannot separate *"the guard is gone"*
+  from *"the helper is undefined"*; and an `unset`-based mutant proves nothing about a guard that
+  only **reads** the variable.
+- **The generalization is the promotion, not the fact.** The narrow instance was already stated in
+  three places — `skills/joern-cpg/scripts/test-stamp-wiring.sh:188`, `skills/joern-cpg/SKILL.md:175`
+  and `skills/cpg-analysis/references/freshness.md:299` — but all three say *an undefined function
+  aborts at 127*, which is a different proposition from *`set -u` aborts at 127 too, so the two are
+  indistinguishable and the mutant shape must be chosen to avoid the collision*. Read whole before
+  concluding this: `claude/analyst/review-techniques.md` § *"A guard derived from the artifact it
+  guards…"* (:655-681) states only the undefined-function half.
+- **Folded, not a new section, on two grounds.** It is mutant *design* — squarely §1's subject —
+  and `claude/AGENTS.md` enumerates this knowledge base's topics by name; a new top-level section
+  would make that enumeration incomplete, and `claude/AGENTS.md` is at 2,491 words against its own
+  ~2,500-word smell. File 2,030 → **2,241 words**, section count unchanged at 4.
+
+
 ## 2026-09-09 — three model-bench S1 entries distilled: a new knowledge base, two prompt folds, zero new bullets (U36)
 
 - **Scope.** `tdd-engineer`'s whole produced inbox at dispatch — three entries, all dated

@@ -872,6 +872,39 @@ made the stray query refuse an empty allow-list, and added a regression case tha
 site to `$(…)`) and is documented for that pipeline in `skills/joern-cpg/SKILL.md`; only the
 reviewer-facing rule was unpublished.
 
+## The reason attached to a rule is checked less than the rule — so a correct rule ships with a false mechanism
+
+A credential (section above) says *how* a claim was checked. A **justification** is a different
+object: the mechanism offered for *why the rule is true*. It is the least-verified prose in a
+document, for a reason that has nothing to do with care — **a reader who agrees with the rule does
+not re-open the mechanism offered for it.** Agreement with the conclusion suppresses scrutiny of
+the premise, which makes a true rule with a false reason strictly harder to catch than an outright
+wrong rule: a wrong rule eventually trips someone, a wrong reason never does.
+
+Worked instance, 2026-09-08. `skills/cpg-analysis/references/freshness.md` at `81b43cd` stated a
+rule that was true — a hand-authored CPG marker is provisional, and whoever rebuilds inherits none
+of its reasoning — and gave as its mechanism *"the next successful `--load` overwrites it
+wholesale, `NOTE` and `MARKER_ORIGIN` included."* False at that commit: `git-provenance.sh`'s stamp
+was `SET b.X = …` over eight named properties and touched neither key (re-read at `81b43cd`
+2026-09-09 — the stamp's own function body, not prose about it). The sentence was written by one
+agent, read and committed by a second, and handed back as a candidate durable learning by a third;
+none of the three opened the script, because none of them disagreed with the rule. It was caught
+only by a pairwise gate that re-derived the mechanism independently of the rule.
+
+**The repair is a tombstone on the mechanism, not deletion of the rule.** They are separable claims
+and only one failed: deleting the rule because its reason collapsed loses a true constraint, and
+quietly swapping in a new reason loses the reader's warning that this rule has already outlived
+one. State the superseding mechanism, name the level its evidence covers, date it, stop. That same
+file has now done this three times over the one rule, and its third tombstone's own closing advice
+is worth carrying: a sentence of the shape *"the earlier ones were wrong and here is why this one
+is different"* has the worst record in the file, so a further revision is **one dated line, not a
+new narrative.**
+
+**As a review move:** for each rule you are about to endorse, name the mechanism it rests on and
+ask whether you checked *that* — or only agreed with the rule. Read it beside the two sibling
+sections here (the credential's level, and the remedy a finding hands over): all three are the same
+family, in which the claim nobody argued about is the claim nobody ran.
+
 ## A document's claim about its own revision history is falsified by hashing the cited block at every revision
 
 When a document certifies itself — *"each of these has since been corrected"*, *"this section was

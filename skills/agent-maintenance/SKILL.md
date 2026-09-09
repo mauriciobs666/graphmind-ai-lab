@@ -405,6 +405,25 @@ distills — on request, and folded into every certification pass (§4):
      query — expected under FR-2's no-retrofit rule, not a gap; the legacy
      read above is what still reaches it.
 
+   **Both reads truncate every cell — page the long ones before dispositioning
+   anything.** The `cypher` MCP tool cuts each cell at `CYPHER_MCP_MAX_CELL`
+   chars (default **300**) and appends `…(+N chars)`, so any `fact` or
+   `evidence` longer than that is read **short** — and the tail is exactly
+   where an entry's scope caveats, negative results and self-corrections sit.
+   Page past it in the same tool with OpenCypher `substring`; no `redis-cli`
+   fallback is needed. Project several offsets in one row and check them
+   against `size()` so you know you reached the end:
+   ```cypher
+   MATCH (k:KaizenEntry {entryId: '<id>'})
+   RETURN size(k.fact) AS n, substring(k.fact,0,240) AS f1,
+          substring(k.fact,240,240) AS f2, substring(k.fact,480,240) AS f3
+   ```
+   Verified 2026-09-09 against `kaizen_team`: a 656-char `evidence` came back
+   as 300 chars plus `…(+356 chars)` on a plain read, and whole under the
+   slicing above. A disposition argued from a truncated cell is argued from
+   the half of the entry that makes the strongest claim, with the half that
+   bounds it missing.
+
    `kaizen_team` is a shared graph provisioned once up front — there is no
    per-agent "graph not found" case; an agent simply has zero matching
    entries (of either shape) until it writes one.

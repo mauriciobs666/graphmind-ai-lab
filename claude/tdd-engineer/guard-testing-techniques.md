@@ -44,6 +44,20 @@ The five-name set drops `Global`, `Import`, `ImportFrom`, `MatchMapping`, `Nonlo
 grammar has N binding forms" is not a fact on its own — cite the field set beside the number, or
 the next reader cannot tell a hole from a different question.
 
+**And a mutant whose kill signal collides with a harness failure proves nothing.** Bash exits
+**127** when `set -u` aborts on an unbound variable — the *same* status as command-not-found.
+Re-derived 2026-09-09, bash 5.2.21(1) on WSL2: `set -u; echo $NOPE` at top level, the same inside
+a function, and the same as `for k in $NOPE` all exit **127**, identical to `set -u; nosuchcmd_xyz`
+and to calling a function whose definition was deleted. So on a shell harness the **exact-rc**
+oracle — which is the right repair for a `rc != 0` oracle, and is assumed elsewhere in this file —
+still cannot separate *"the guard is gone"* from *"the helper is undefined"*, and a mutant built by
+`unset`-ing the variable additionally proves nothing about a guard that only **reads** it. Use the
+**set-but-empty** shape: it kills honestly at rc **0**, with the guard's own output emitted
+(`NOT k IN []`), so the red is attributable to the guard rather than to the harness. The portable
+rule: pick a mutant whose failure signal is **distinguishable from every way the harness itself can
+fail**, and establish that before reading a red as a kill — otherwise the mutation test degenerates
+into the same unfalsifiable green the exact-rc oracle was introduced to fix.
+
 ### The worked example — a five-generation arc, closed by a probe
 
 `skills/joern-cpg/scripts/test-stamp-wiring.sh`'s `rq` call-site check is the reference

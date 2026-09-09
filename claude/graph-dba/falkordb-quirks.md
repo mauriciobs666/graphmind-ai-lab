@@ -512,6 +512,17 @@ to the general fact here.
   `WITH`-as-clause-boundary rule the update-clause chaining entry below turns on — the parser
   demands the bridge, and the bridge is always trivially suppliable.
 
+- **FalkorDB refuses a multi-statement query outright — one `GRAPH.QUERY`, one statement.**
+  `RETURN 1 AS a; RETURN 2 AS b` comes back as the error *"query with more than one statement is
+  not supported"* (re-verified 2026-09-09 through the `cypher` MCP tool against `kaizen_team`).
+  Two consequences, pulling opposite ways. For a **design**: there is no clear-then-write, no
+  delete-and-recreate, no two-phase anything in a single call — either express it as one statement,
+  or accept two round trips with a window in which the node is absent. That is why a singleton
+  marker/stamp is a `MERGE … SET`, not a `DELETE` followed by a `CREATE`: the atomic version of
+  the latter is unconstructible here. For **injection**: a `;` buys an attacker nothing, so the
+  identifier-splice hazard in the next bullet is entirely about what fits inside *one* statement —
+  which, as that bullet shows, is more than the grammar first suggests.
+
 - **A single Cypher statement can chain a read clause, `DETACH DELETE`, and another read clause
   — the grammar is not a barrier to an identifier-splice mutation.** An update clause cannot be
   followed *directly* by a read clause (`MATCH (v:Product) DETACH DELETE v WHERE true RETURN 1`

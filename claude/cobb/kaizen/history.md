@@ -3,6 +3,162 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-09 — U38: my own 8-entry inbox, gated by me — 4 promoted (one of them half), 4 discarded, 0 kept open
+
+- **What:** U38 of `claude/docs/plans/kaizen-distillation2-coordination.md`, the `cobb` produced
+  inbox. Re-queried live at start: **8** entries, matching the dispatch list exactly. Every
+  `fact`/`evidence`/`context` read **whole**, paged past the tool's 300-char cell truncation with
+  `substring` slices checked against `size()`. Complete 36-character `entryId` used for every read,
+  count and clear.
+- **The unit's asymmetry, stated because it is the point.** I produced these entries and I gated
+  them, so the ordinary check *"does the producer's framing survive contact with the artifact"* had
+  no independent party. Compensation was to re-derive every fact from the artifact rather than
+  recall it, and to argue each home from the **receiving artifact's own scope line** in
+  `claude/AGENTS.md` / `skills/README.md` rather than from the capture's `suggestedHome`. It paid:
+  **three of the four discards were my own entries, one of them superseded within six hours of
+  being written, and one promotion contradicted two claims in its own capture.**
+
+### Promoted (4, one of them a half)
+
+- **`3b351bb5-a8a1-4006-8aa6-bdb3ef1c6448`** → `claude/analyst/review-techniques.md`, new section.
+  The justification attached to a rule is checked less than the rule. Routed **away from** the
+  capture's own suggested home (`agent-maintenance` §7) on §7's scope line — it lints one
+  *prompt/skill/steering artifact* over seven prompt-authoring dimensions, and the entry's instance
+  is a `references/` doc with a reviewer's failure mode. Argument and re-derivation at `81b43cd`:
+  `claude/analyst/kaizen/history.md`, 2026-09-09 (U38).
+- **`c4c6a858-f988-4fcf-9c03-a053d1dde30d`** → `claude/graph-dba/falkordb-quirks.md`,
+  § *Cypher dialect & query behavior*. FalkorDB refuses multi-statement queries; re-derived live.
+  The brief asked whether the `:515` chaining bullet already bounds it — **read whole: it assumes
+  the limit, it does not state it**, so the new bullet is sited immediately above and supplies its
+  premise. `claude/graph-dba/kaizen/history.md`, 2026-09-09 (U38).
+- **`c4f1a2be-7d30-4a91-9c6e-5b2d81f0a37e`** → `claude/tdd-engineer/guard-testing-techniques.md`,
+  folded into §1. bash exits **127** on a `set -u` unbound-variable abort, colliding with
+  command-not-found. **My discard steer from the dispatch brief did not apply here**: the three
+  places the brief named all state *an undefined function aborts at 127*, which is a different
+  proposition from the collision and the mutant-shape consequence. U34's lesson held — what was
+  missing was the generalization, not the fact. `claude/tdd-engineer/kaizen/history.md`,
+  2026-09-09 (U38).
+- **`bb3b1fde-0525-41bd-a5c5-602be36bab13`** → `skills/python-web-quirks/SKILL.md`, new section
+  after the two `TestClient` sections. **Promoted with the capture corrected in two places, both
+  mine.** (1) The entry framed the `StarletteDeprecationWarning` as a **1.6.0** fact; measured
+  2026-09-09 across every venv in the repo, starlette **1.3.1** warns identically — so the first
+  `TestClient` section is *already* on the deprecated transport, not one release ahead of it. (2)
+  The entry asserted *"falkor-chat pins no venv on this box so its own starlette version is
+  unknown"*; `falkor-chat/server/.venv` exists and carries starlette 1.3.1 / httpx 0.28.1. That is
+  the **U20 depth-4 venv trap** — recorded in this coordination doc — reproduced inside my own
+  capture by the agent that would later gate it. Measured: starlette 1.3.1
+  (`falkor-chat/server/.venv`) and 1.6.0 (`cypher-mcp/.venv`, `mcp-monitor/.venv`), httpx 0.28.1,
+  no `httpx2` anywhere, CPython 3.12.3 — identical warning at the import line, every run.
+  **Constraint honoured:** the skill's frontmatter `description` is byte-identical at **4,584
+  chars** (`yaml.safe_load`, U35's corrected instrument) — a body section does not touch it, and
+  the K-028 successor decision on that overrun stays the stakeholder's.
+- **`5c9d3e71-2a48-4b06-9f13-8e2c7d05a4b6` — HALF promoted, half already published.** The *tool*
+  half (the `cypher` MCP cuts each cell at `CYPHER_MCP_MAX_CELL`, default 300, appending
+  `…(+N chars)`) is already documented at `cypher-mcp/README.md:383`. The half that was **not**
+  anywhere is the one that matters to this pass: **§5's own step-1 read query silently returns
+  truncated `fact`/`evidence`**, and `substring` pages past it in the same tool. Promoted into
+  `skills/agent-maintenance/SKILL.md` §5 step 1 with a runnable multi-offset recipe and the
+  `size()` cross-check. Verified in this unit: `3b351bb5…`'s 656-char `evidence` came back as 300
+  chars + `…(+356 chars)` on a plain read (300 + 356 = 656, exact) and whole under the slicing.
+  **This was a live defect in the procedure this entire pass runs on** — the brief said so as a
+  lead and the lead was right.
+
+### Discarded (4)
+
+- **`2f944aa9-bd19-4a23-9b95-e71efdbd40c1`** — a `GRAPH.QUERY` read materializes an empty graph
+  key; `GRAPH.RO_QUERY` does not, and the `cypher` MCP uses `RO_QUERY`. **Both halves already
+  published**, and I read both whole rather than trusting the grep that pointed at them:
+  `claude/graph-dba/falkordb-quirks.md:736-747` (verified 2026-07-17, carries the materialization,
+  the `RO_QUERY` contrast, the `empty key` error and the extraction gotcha) and
+  `cypher-mcp/README.md:118-127`, § *Read-only — and why that is a design guarantee*, which states
+  the sub-claim the brief flagged as possibly new, in the entry's own terms: *"Plain `GRAPH.QUERY`
+  against a non-existent key **materialises** it; `GRAPH.RO_QUERY` does not. The read path is safe
+  by construction… This is a property of this tool only. …`redis-cli` is unrestricted."* Nothing
+  survives to promote. Not a half-discard.
+- **`3b8ded5d-500c-4895-8154-523e715bcfe9`** — the freshness stamp is `SET` over eight **named**
+  properties, so hand-authored keys survive an `--append` re-stamp. **True when written and dead
+  six hours later.** Entry `createdAt` 2026-09-08T11:37:42Z (08:37 −03:00); `29538d6` (12:29 −03:00)
+  closed the property list, and `5417f0e` (14:24 −03:00) replaced the whole mechanism with a
+  **map assignment**, `MERGE (b:CpgBuildInfo) SET b = {…}`. Verified against the **emitted Cypher**
+  in `skills/joern-cpg/scripts/git-provenance.sh:260-263`, not the prose about it, exactly as the
+  brief required. **The three documents the brief flagged as contradicting the entry are all
+  correct** — `skills/README.md`'s `joern-cpg` row, `skills/joern-cpg/SKILL.md` § *Provenance*, and
+  `pipeline.sh:319` — so there is **no docs defect and no fork to escalate**; the entry is the stale
+  party. Its `MARKER_WRITTEN_AT < BUILT_AT` discriminator goes with it: under whole-map replace the
+  hybrid marker it discriminates can no longer arise from a re-stamp.
+- **`420caf56-1db3-474a-9ad3-3e7a759ee599`** — a provenance literal meaning *"a human authored
+  this"* cannot carry a machine literal's blanket trust; a gate admitting it must be conditioned
+  per-record. **Already published at the point of use, generalization included.** Read whole:
+  `skills/cpg-analysis/references/freshness.md:86-102`, check 0, which states *"That last clause is
+  **per-marker, not per-literal** — `hand-backfilled` only asserts that a human filled the fields
+  in"*, plus the `cpg_falkorchat` `MANIFEST.txt` evidence and the stronger-than-`source-origin`
+  argument. The entry's own text says *"Applied at check 0 of freshness.md"*. There is no artifact
+  in this layout whose scope is "trust-gate design over provenance metadata", and manufacturing a
+  fourth copy of a rule that is stated well where it binds is what U34 rejected for
+  `devops/ops-quirks.md`.
+- The tool half of **`5c9d3e71…`** (see above) — recorded as a half-discard, not a separate entry.
+
+### Routing, which was this unit's subject
+
+Five of the eight belonged to other agents' artifacts, and none of the three promotions to another
+agent's file went to the home the capture proposed by default:
+
+| entry | capture's `suggestedHome` | actual home | decided on |
+|---|---|---|---|
+| `3b351bb5…` | knowledge base (self-named: `agent-maintenance` §7 **or** analyst) | `analyst/review-techniques.md` | §7's scope is one *prompt* artifact; the instance is a `references/` doc |
+| `c4c6a858…` | knowledge base | `graph-dba/falkordb-quirks.md` | a FalkorDB engine limit — `claude/AGENTS.md`'s scope line for that KB |
+| `c4f1a2be…` | knowledge base | `tdd-engineer/guard-testing-techniques.md` | mutant *design* for a guard over other code's text — that KB's stated subject |
+| `bb3b1fde…` | knowledge base | `skills/python-web-quirks/SKILL.md` | its catalog row names `TestClient` and this repo's Python venvs |
+| `5c9d3e71…` | knowledge base | `skills/agent-maintenance/SKILL.md` §5 | the defect is in the **procedure**, not in `cobb/TESTING.md` |
+
+**Nothing landed in `cobb`'s own artifacts** (`claude/cobb/TESTING.md`, `agent-standards`) — correct
+for this inbox, and the reason the unit was framed routing-first.
+
+### Bookkeeping
+
+- **Catalogs deliberately not touched.** No knowledge base or skill was created, renamed or
+  re-scoped: all five targets already exist and every addition sits inside its stated scope. The
+  `c4f1a2be…` promotion was **folded into §1 rather than made a new section** specifically to keep
+  `claude/AGENTS.md`'s by-name topic enumeration for `guard-testing-techniques.md` accurate, since
+  that file stands at **2,491 words** against its own ~2,500-word smell. `claude/README.md`,
+  `claude/AGENTS.md` and `skills/README.md` are all untouched and all still accurate.
+- **`skills/README.md` was considered and declined** for the `python-web-quirks` addition. Its row
+  is a contents enumeration and prior units (U9/U12/U22/U24) extended it — but the new section is a
+  **rider on the two `TestClient` sections that row already names**, not a new subject, and growing
+  the catalog row while the frontmatter description is frozen at 4,584 chars pending the K-028
+  successor decision would put the two further out of sync for no reader's benefit.
+- **Two of my own `plan.md` items were acted on, rewritten in place rather than appended to.**
+  **K-022** named two candidate homes for the *wrong-rather-than-absent* rule; the first is now
+  settled and shipped — `verify the reason, not just the rule` went to
+  `claude/analyst/review-techniques.md` as review methodology, **not** to `agent-maintenance` §7,
+  on §7's own scope line. K-022 now states only what remains (the mutation standard, and whether
+  *a tombstone certifies nothing* is a third rule). **K-026** set a trigger — *"on the third such
+  entry, promote the shared line to a parent heading; do not add a third flat sibling."* I added a
+  section touching `TestClient` and had to adjudicate my own trigger: it is a **version-rot rider
+  on the pair** with no `TestClient` mechanism of its own, so the count is still two. To stop a
+  header scan reading it as a third sibling anyway, the section was **retitled** to lead with the
+  `httpx`→`httpx2` migration rather than the class. Both recorded in K-026.
+- **A finding about the capture format itself, recorded rather than filed.** All eight of these
+  entries carried `suggestedHome: knowledge base` or `project docs`, and in every case the actual
+  routing was decided by the **receiving artifact's scope line**, not by that field — twice landing
+  somewhere the capture had not contemplated. `suggestedHome` records the producer's guess at
+  capture time, when the producer is deep in one task and has not read the candidate artifacts; it
+  is a hint about *urgency*, not a routing signal, and a distiller that treats it as one will route
+  by whoever happened to be holding the pen. Not filed as a `K-` item — no change to the write
+  shape follows from it, and every brief in this pass already says to argue the home from the
+  receiving artifact.
+- **The §5 truncation defect predates this unit by the whole of both passes.** Step 1's read query
+  has always returned truncated cells, so any disposition in pass 1 or in pass 2's first 37 units
+  that was argued from a long `fact`/`evidence` read without paging was argued from the first 300
+  chars — the half that states the claim, without the half that bounds it. Nothing is re-openable
+  from here (the nodes are cleared and the dispositions are in the history files), but it is a
+  standing caveat on this pass's own record and belongs in the coordination doc, not only here.
+- **Budgets after edit:** `review-techniques.md` 11,003 → **11,445 w**, 29 → 30 §§, 0 lines >700.
+  `guard-testing-techniques.md` 2,030 → **2,241 w**, 4 §§ unchanged. `falkordb-quirks.md` +1 bullet.
+  `python-web-quirks/SKILL.md` +1 §, description **4,584 chars unchanged**.
+  `agent-maintenance/SKILL.md` +1 note in §5 step 1. `claude/AGENTS.md` **untouched at 2,491 w**.
+
+
 ## 2026-09-09 — U36: `tdd-engineer`'s 3-entry inbox, a new knowledge base, and the skill-frontmatter finding that inverted its own premise
 
 - **What:** U36 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the `tdd-engineer`

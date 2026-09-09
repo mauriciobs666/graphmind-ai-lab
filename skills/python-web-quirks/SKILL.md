@@ -583,6 +583,23 @@ wire's 500 the same bytes; for anything outside that middleware's reach, assert 
 Surfaced deciding which HTTP status a plan contract was actually violated by, in falkor-chat's S9
 storefront concurrency acceptance pass (`qa-engineer`).
 
+## Version rot ahead of the two sections above: starlette deprecates `httpx` under `testclient` in favour of `httpx2`
+
+`from starlette.testclient import TestClient` emits a `StarletteDeprecationWarning` **at the import
+line** whenever `httpx` is installed and `httpx2` is not: *"Using `httpx` with
+`starlette.testclient` is deprecated; install `httpx2` instead."* Measured 2026-09-09, CPython
+3.12.3, across this repo's venvs — starlette **1.3.1** (`falkor-chat/server/.venv`) and **1.6.0**
+(`cypher-mcp/.venv`, `mcp-monitor/.venv`), both on httpx 0.28.1, with no `httpx2` installed
+anywhere: identical warning, every run, both versions.
+
+The warning itself is trivial to silence. What matters is that the two sections above are pinned to
+exactly those versions, so neither is one release *ahead* of the migration — both already describe
+the deprecated transport. And the behaviour those sections turn on is transport-side: the
+headerless, empty-bodied 500 under `raise_server_exceptions=False` is `TestClient`'s own synthesis
+rather than the app's, and response synthesis plus constructor surface are precisely what an
+httpx→httpx2 swap can move. So re-derive both sections against the starlette actually installed
+before citing them; do not read their version pins as "current".
+
 ## Holding an application lock across `ThreadPoolExecutor.submit()` does **not** deadlock at interpreter exit — it delays exit for exactly as long as the lock is held
 
 Verified against CPython 3.12.3. `_python_exit` (`concurrent/futures/thread.py:23-31`) takes

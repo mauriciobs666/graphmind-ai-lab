@@ -3,6 +3,32 @@
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
 
+## 2026-09-09 — one `cobb`-produced FalkorDB engine limit added to `falkordb-quirks.md` (U38)
+
+- **What:** `cobb` ran U38 of `claude/docs/plans/kaizen-distillation2-coordination.md` over its own
+  8-entry produced inbox. One entry routed here:
+  `c4c6a858-f988-4fcf-9c03-a053d1dde30d` (2026-09-08, `suggestedHome: knowledge base`) —
+  **PROMOTED** into `claude/graph-dba/falkordb-quirks.md`, § *Cypher dialect & query behavior*.
+- **The fact:** FalkorDB refuses a multi-statement query outright — `RETURN 1 AS a; RETURN 2 AS b`
+  answers *"query with more than one statement is not supported"*. **Re-derived live 2026-09-09**
+  through the `cypher` MCP tool against `kaizen_team`, not read off the capture.
+- **Why it earns a bullet next to the identifier-splice one.** The dispatch brief asked whether the
+  existing `:515` chaining bullet (*"parses cleanly as one statement, no semicolon, no injected `;`
+  needed"*) already bounds this. Read whole: it does **not state** the limit, it **assumes** it —
+  its "no `;` needed" framing is only meaningful if a `;` is unavailable. The new bullet is sited
+  immediately above it and supplies that premise, in both directions: a design cannot make
+  delete-then-recreate atomic in one call (which is why a singleton stamp is `MERGE … SET`), and an
+  injection cannot chain a second statement, so the splice hazard is bounded to one statement.
+- **Two other `cobb` entries touching `graph-dba`'s file were DISCARDED, not promoted** —
+  `2f944aa9…` (a `GRAPH.QUERY` read materializes an empty graph key; `GRAPH.RO_QUERY` does not) is
+  already published at `falkordb-quirks.md:736-747`, verified 2026-07-17, **read whole** before
+  discarding, and its only sub-claim beyond that bullet — that the `cypher` MCP server issues
+  `RO_QUERY` for reads, so a hand-run `GRAPH.QUERY` probe has a side effect the MCP tool does not —
+  is published at `cypher-mcp/README.md:118-127` (*"The read path is safe by construction… This is
+  a property of this tool only"*). Nothing was left unhomed. Details in
+  `claude/cobb/kaizen/history.md`, 2026-09-09 (U38).
+
+
 ## 2026-09-09 — distillation: 1 entry, promoted into `tdd-engineer`'s knowledge base as a rule rather than an episode (U34)
 
 - **What:** `cobb` ran U34 of `claude/docs/plans/kaizen-distillation2-coordination.md` over

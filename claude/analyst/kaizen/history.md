@@ -3,6 +3,36 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
+## 2026-09-09 — one `cobb`-produced entry routed here: the justification attached to a rule (U38)
+
+- **What:** `cobb` ran U38 of `claude/docs/plans/kaizen-distillation2-coordination.md` over its own
+  8-entry produced inbox. One entry routed to `analyst` on the receiving artifact's scope line
+  rather than on the producer's framing:
+  `3b351bb5-a8a1-4006-8aa6-bdb3ef1c6448` (2026-09-08, `suggestedHome: knowledge base`) — **PROMOTED**
+  into `claude/analyst/review-techniques.md` as a new section, *"The reason attached to a rule is
+  checked less than the rule — so a correct rule ships with a false mechanism."*
+- **The rule:** a **justification** — the mechanism offered for *why* a rule is true — is the
+  least-verified prose in a document, because a reader who agrees with the rule does not re-open
+  the mechanism. Agreement with the conclusion suppresses scrutiny of the premise, so a true rule
+  with a false reason is harder to catch than an outright wrong rule. The repair is a **tombstone
+  on the mechanism**, not deletion of the rule.
+- **Why here and not `agent-maintenance` §7** (the capture's own suggested home): §7's lint is
+  scoped to a single **prompt/skill/steering artifact** over seven prompt-authoring dimensions
+  (`skills/README.md`, `agent-maintenance` row), and the entry's own instance is a `references/`
+  document, not a prompt. `claude/AGENTS.md` scopes `review-techniques.md` as *"review-methodology
+  techniques consulted on demand"*, and the entry names a reviewer's check with a reviewer's
+  failure mode — caught by a pairwise gate, missed by three readers who agreed with the rule.
+- **Verified, not recalled.** Re-read `skills/cpg-analysis/references/freshness.md` **at `81b43cd`**
+  (`:181`: *"the next successful `--load` overwrites it wholesale, `NOTE` and `MARKER_ORIGIN`
+  included"*) against `skills/joern-cpg/scripts/git-provenance.sh` **at the same commit**, whose
+  `cpg_provenance_stamp` body is `SET b.BUILT_AT = …` over eight named properties and touches
+  neither key. The rule stated there was and remains true; only the mechanism was false.
+- **Siting.** Placed immediately after *"Verified by execution names a level"* (its nearest
+  sibling — a credential is evidence about the checking; a justification is a mechanism claim) and
+  cross-referenced to *"The remedy a finding hands over…"*. File 11,003 → **11,445 words**, 29 → 30
+  sections, **0 lines over 700 chars**. `analyst.md` untouched; no new always-loaded prose.
+
+
 ## 2026-09-09 — `kaizen_team` distillation pass 2, unit U37: the 5-entry `analyst` inbox — 4 promoted, 1 discarded
 
 - **What:** unit U37 of `claude/docs/plans/kaizen-distillation2-coordination.md`. `analyst`'s
