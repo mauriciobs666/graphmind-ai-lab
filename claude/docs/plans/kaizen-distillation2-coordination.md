@@ -82,7 +82,8 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U26 | `graph-dba` (its 1 produced entry; its 2 `MENTIONS`-only nodes are U24's kept-opens and are **out of scope**) | `afe9fd679115a7900` (resumed once, to fold the K-008 note into the item body) | accepted | 0 promoted / **1 discarded** / 0 kept open, `DETACH DELETE`d; the entry was accurate when written and **dead 40 minutes later** (`6012ddb`). Collateral find: `6012ddb` overtook **both** K-008 facts. `claude/graph-dba/kaizen/{history.md,plan.md}` | teco re-derivation → **accepted after one correction** (K-008 asserted "both facts verified true" above a note refuting it; rewritten present-tense, 2266→2075 words) | 145.3k + 155.8k tok, 33 tools |
 | U27 | `data-scientist` (its 1 produced entry; its 1 `MENTIONS`-only edge is out of scope). Re-derivation **pinned to `d45e5ff`**, not `HEAD` — `model-bench/` is another session's live area | `ad47fd00ddc79e335` | accepted | **1 promoted / 0 discarded**, cleared; folded onto an **existing** prompt bullet (28→28 bullets, +80 words), model-bench-specific half discarded as already published. `claude/data-scientist/{data-scientist.md,kaizen/history.md}`. **`data-scientist` produced inbox now 0.** | teco re-derivation → **accepted, no correction — and it corrected *my brief*** | 161.8k tok, 34 tools |
 | U28 | `graph-dba` **code unit** on `skills/joern-cpg/scripts/pipeline.sh`: fix **K-009** (`rq()` returns 0 on a bare runtime-error reply) + confirm and close/re-scope **K-008**. Not a distillation unit | `a71e467eb629d98ad` (resumed once, to correct a case count) | **accepted** (`48882d8`, `682fbed`) | **K-009 fixed by removing the blacklist**, not widening it: success is now recognised positively (reply's last line must begin `Query internal execution time:`), non-query commands refused rc 2. Second defect found and fixed in the same block (a read-back that never ran reported as *did not land*). **K-008 closed**, both facts confirmed by execution. 7 files | `analyst` (diff-scoped, `a8f29fed07dd1847e`) → **approve with suggestions**, two passes (`7edf98c`, `4bfe925`). Pass 1's 2 majors closed in `48882d8`; Pass 2 retracted 2 of its own claims in the implementer's favour and judged its own Pass 1 recommendation wrong by execution, then raised Major 7 — closed in `682fbed` against a **falsifiable stopping condition** (4 mutation shapes must redden + clean-tree control), all met. Review at `docs/reviews/rq-execution-gate.md` | 141.2k + 150.5k + 156.4k tok, 59 tools |
-| U30 | curator clear of the 2 entries held pending K-009 (`b7f3c2a1…`, `4f9c21ae…`) — orphans on `MENTIONS`→`graph-dba`. Fresh `cobb`, not U24's (248.5k ctx) | `a714ad00b16e9eccf` | in-flight | `claude/graph-dba/kaizen/history.md`, graph cleared | teco re-derivation → — | — |
+| U30 | curator clear of the 2 entries held pending K-009 (`b7f3c2a1…`, `4f9c21ae…`) — orphans on `MENTIONS`→`graph-dba`. Fresh `cobb`, not U24's (248.5k ctx) | `a714ad00b16e9eccf` | accepted | **both cleared** after re-executing `rq()` at `682fbed` with two passing controls; abort reproduced under a harder shape (4,999 producible rows → one bare line). `graph-dba` now **0 produced / 0 mentioned**, absent from the census. `claude/graph-dba/kaizen/history.md` | teco re-derivation → **accepted, no correction** — 83/11/72 reconciled exactly | 130.0k tok, 34 tools |
+| U31 | **the orphan backlog** — 11 `MENTIONS`-only nodes, 08-30→09-07, the oldest population in the graph; item 3 of the resume plan, **never before attempted** because every prior unit was producer-organised | `ab74825681a290ac9` | in-flight | mentioned agents' `claude/<agent>/**`, graph cleared | teco re-derivation → — | — |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
 agent's own kaizen files and the graph); each row is rewritten on delivery with
@@ -466,6 +467,16 @@ is working; a stale one plus an empty worktree means it died before promoting.
 count.** Two entries arrived while U23's own verification was running.
 
 ## Follow-ups
+
+- **The close condition is a re-query, and the refill proves it again.** Census
+  taken after U30 (2026-09-09): **83 nodes — 72 produced, 11 orphan**. Produced:
+  `teco` 35, `architect` 15, `coder` 8, `cobb` 7, `analyst` **3**,
+  `tdd-engineer` **3**, `qa-engineer` 1. **`analyst` was drained to 0 by U25
+  earlier the same day and `tdd-engineer` was closed out back at U9 — both have
+  refilled.** `graph-dba` and `data-scientist` are the only agents this pass has
+  taken to 0-and-still-0. A pass over this graph does not converge on a planned
+  count; it converges only on a re-query that comes back empty, and even that is
+  a moment rather than a state.
 
 - **One defect shape, three generations, each produced by the previous fix.**
   K-009's error **blacklist** overclaimed its reach → replaced by a positive
