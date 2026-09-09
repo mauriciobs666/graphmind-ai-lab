@@ -353,12 +353,18 @@ if [ -n "$LOAD" ]; then
   #     observed 2026-09-09). The cost of a misuse is a false failure, never a
   #     false pass — a different risk class from the silent pass K-009 was about.
   # What enforces the precondition instead is a STATIC check over this file, in
-  # test-stamp-wiring.sh: every `rq` call site's command argument must be absent,
-  # GRAPH.QUERY, or GRAPH.RO_QUERY, in any case, whether the site is a `$(…)`
-  # substitution or a bare statement. It reddens on all four of those shapes —
-  # which the runtime guard could not do, since removing THAT left the suite
-  # byte-identical. Its one stated blind spot is a command reaching rq through a
-  # VARIABLE; see the block's own header in test-stamp-wiring.sh.
+  # test-stamp-wiring.sh, which CAN be reddened — removing the runtime guard left
+  # the suite byte-identical. Its mechanism, stated as a mechanism: on every
+  # LOGICAL line here (backslash continuations joined) that calls `rq`, any
+  # literal `GRAPH.<word>` must upper-case to GRAPH.QUERY or GRAPH.RO_QUERY. No
+  # second argument is fine — rq defaults to GRAPH.QUERY.
+  # IT CANNOT SEE a command that is not one contiguous literal at the site (a
+  # variable or array element, or a token split by quote concatenation or an
+  # escaped dot), nor a site that does not spell `rq` beside the command (a
+  # wrapper function). Write the literal; if you cannot, CHECK IT BY HAND —
+  # nothing else will. That bound is enumerated form by form and pinned by a
+  # coverage probe in the same file; read the block header there before adding a
+  # call site of a new shape.
   #
   # [must-contain] stays per call site, because it is a semantic assertion about
   # one reply's contents and not a liveness test. The stray check below still

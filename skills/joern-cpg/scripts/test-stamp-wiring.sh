@@ -324,45 +324,247 @@ done
 # The guard that was tried there could not be reddened by any test — removing it
 # left this suite byte-identical — so it was replaced by this check, which can.
 #
-# WHAT IT COVERS: a LITERAL command token at any rq call site, in ANY CASE
-# (`redis-cli` accepts `graph.delete`), whether the site is written as a command
-# substitution or as a BARE STATEMENT. The first version of this check caught
-# neither of the last two: its anchor was `grep '\$(rq '` and its token match was
-# uppercase-only, so `rq … graph.delete` and a non-`$(…)` call site both scored
-# `PASS all 3` — measured, not supposed, before this widening.
-# WHAT IT DOES NOT COVER: a command reaching rq through a VARIABLE
-# (`rq "$Q" "$CMD"`), which no call site does today and which cannot be seen
-# without executing pipeline.sh. That bound is stated rather than implied,
-# because a guard whose stated reach exceeds its mechanism is the defect this
-# whole block exists to close — and this check is itself the third generation of
-# that defect, so the bound is the load-bearing half of the comment.
+# WHAT THIS CHECK DOES, EXACTLY. The sentence below is the whole claim, and it
+# describes the MECHANISM rather than an intent:
 #
-# The four shapes it is required to redden on, all four verified by mutation
-# (2026-09-09): a literal non-query command at an existing site; the anchor moved
-# so fewer than 3 sites are found; a new BARE-STATEMENT site; a LOWERCASE
-# command. It must also stay green, at exactly 3 sites, on the clean tree.
+#     On each LOGICAL line of pipeline.sh — backslash continuations joined —
+#     that is not a whole-line comment and that contains `rq` followed by
+#     whitespace, every run of characters matching /GRAPH\.[A-Za-z_.]*/ must
+#     upper-case to GRAPH.QUERY or GRAPH.RO_QUERY. No second argument at all is
+#     fine: rq defaults to GRAPH.QUERY.
+#
+# THEREFORE IT CANNOT SEE — and this half is the load-bearing half, because this
+# check is the FOURTH generation of ONE defect (a guard whose stated reach
+# exceeds its mechanism), and each of the previous three was closed by widening
+# the body and leaving the sentence alone:
+#   * a command that is not one contiguous `GRAPH.<word>` run of characters at
+#     the call site — reaching rq through a variable or array element
+#     (`rq "$Q" "$CMD"`), or split by quote concatenation (`GRAPH".DELETE"`) or
+#     an escaped dot (`GRAPH\.DELETE`);
+#   * a call site that does not spell `rq` on the same logical line as the
+#     command — a wrapper function (`w() { rq "$@"; }` … `w "$Q" GRAPH.DELETE`).
+# Nothing short of a shell parser closes those, so they are a DECISION and not
+# an omission. IF YOU ADD AN rq CALL SITE WHOSE COMMAND IS NOT A LITERAL AT THE
+# SITE, THIS CHECK CHECKS NOTHING ABOUT IT: verify it by hand, and prefer
+# writing the literal. Measured residual today: all 3 sites pass a literal or
+# nothing, so the uncovered forms occur zero times in pipeline.sh.
+#
+# THE COST OF A MISS IS BOUNDED, and that is why the mechanism stops where it
+# does. rq fails CLOSED on a non-query command twice over — the reply carries no
+# trailer, so rc 1; and rq appends the cypher as a third argument, so a
+# GRAPH.DELETE never even reaches its bare `OK`, it gets `ERR wrong number of
+# arguments` (both observed 2026-09-09). A miss costs a FALSE FAILURE, never a
+# false pass.
+#
+# The generation-three widening (2026-09-09) also fixed the anchor: it used to
+# be `grep '\$(rq '` with an uppercase-only token match, so a bare-statement site
+# and a lowercase `graph.delete` both scored `PASS all 3` — measured, not
+# supposed. Generation four (this one) fixed the UNIT OF ANALYSIS: the reader
+# was line-oriented and a shell call site is not, so `rq "$Q" \` + a continuation
+# line put the command where nothing looked, with the count guard still seeing
+# its 3 legitimate sites. Joining continuations can only ADD text to a scanned
+# line, so it cannot create a new blind spot — only a false alarm.
+#
+# THE COVERAGE PROBE BELOW PINS BOTH HALVES OF THE CLAIM. It enumerates
+# call-site forms along two axes, runs the DELIVERED reader over each, and
+# asserts the observed disposition against the table. Widening the mechanism
+# without rewriting the sentence above turns a `blind` row RED; that is the
+# point of shipping it rather than running it once.
+
+# rq_logical_lines <file> — `<first-physical-line>:<logical line>`, continuations
+# joined WITH NOTHING BETWEEN THEM, which is what bash does. Joining with a space
+# reads more naturally and is wrong: `GRAPH\` + `.DELETE` is one word to bash and
+# would become `GRAPH .DELETE` here, matching no token — a blind spot created by
+# the very fix that closed the last one (found by the probe below, form A15,
+# while writing this comment). It is textual, so it also joins a trailing
+# backslash that bash would read as an escaped character inside a quoted string;
+# that direction only over-joins, and over-joining can only ADD text to a scanned
+# line — never hide a token.
+rq_logical_lines() {
+  awk '{
+    l = $0; cont = (l ~ /\\$/); sub(/\\$/, "", l)
+    if (!pend) { start = NR; buf = l } else { buf = buf l }
+    if (cont) { pend = 1; next }
+    print start ":" buf; buf = ""; pend = 0
+  }
+  END { if (pend) print start ":" buf }' "$1"
+}
+
+# rq_scan <file> — THE DELIVERED READER, and the only copy of it. Prints one
+# `<token>@<line>` per offending token, then `SITES=<n>`. The probe below runs
+# THIS function; a probe over a re-typed reader would certify the wrong text.
+rq_scan() {
+  local rec lineno text tok n=0
+  while IFS= read -r rec; do
+    [ -n "$rec" ] || continue
+    lineno="${rec%%:*}"; text="${rec#*:}"
+    n=$((n + 1))
+    for tok in $(printf '%s\n' "$text" | grep -oiE 'GRAPH\.[A-Z_.]*'); do
+      # normalise before judging: redis-cli takes `graph.delete` as happily as
+      # GRAPH.DELETE, so a case-sensitive allow-list is a hole, not a style choice.
+      case "$(printf '%s' "$tok" | tr '[:lower:]' '[:upper:]')" in
+        GRAPH.QUERY|GRAPH.RO_QUERY) ;;
+        *) printf '%s@%s\n' "$tok" "$lineno" ;;
+      esac
+    done
+  done < <(rq_logical_lines "$1" | grep -v '^[0-9]*: *#' | grep -E '(^|[^_[:alnum:]])rq[[:space:]]')
+  printf 'SITES=%s\n' "$n"
+}
+
 echo "rq call-site precondition (static, over pipeline.sh):"
-rq_bad=""; rq_n=0
-while IFS= read -r rq_line; do
-  [ -n "$rq_line" ] || continue
-  rq_n=$((rq_n + 1))
-  for rq_tok in $(printf '%s\n' "$rq_line" | grep -oiE 'GRAPH\.[A-Z_.]*'); do
-    # normalise before judging: redis-cli takes `graph.delete` as happily as
-    # GRAPH.DELETE, so a case-sensitive allow-list is a hole, not a style choice.
-    case "$(printf '%s' "$rq_tok" | tr '[:lower:]' '[:upper:]')" in
-      GRAPH.QUERY|GRAPH.RO_QUERY) ;;
-      *) rq_bad="${rq_bad}${rq_bad:+; }${rq_tok} at pipeline.sh:${rq_line%%:*}" ;;
-    esac
-  done
-done <<RQCALLS
-$(grep -nE '(^|[^_[:alnum:]])rq ' "$HERE/pipeline.sh" | grep -v '^[0-9]*: *#')
-RQCALLS
+rq_out="$(rq_scan "$HERE/pipeline.sh")"
+rq_n="$(printf '%s\n' "$rq_out" | sed -n 's/^SITES=//p')"
+rq_bad="$(printf '%s\n' "$rq_out" | grep -v '^SITES=' | sed 's/@/ at pipeline.sh:/' | tr '\n' ';' | sed 's/;$//;s/;/; /g')"
 if [ "$rq_n" -lt 3 ]; then
   echo "  FAIL  found only $rq_n rq call sites; pipeline.sh has 3, so the grep anchor moved and this checked nothing"; FAIL=1
 elif [ -n "$rq_bad" ]; then
   echo "  FAIL  rq is called with a command whose reply carries no statistics trailer: $rq_bad"; FAIL=1
 else
   echo "  PASS  all $rq_n rq call sites use GRAPH.QUERY or GRAPH.RO_QUERY"
+fi
+
+# ---- coverage probe: what can rq_scan NOT see? ------------------------------
+# A mutation test asks "does my reproduction die?" — its enumeration is the
+# author's imagination, which is how generations two, three and four of this
+# defect each shipped green. This asks the opposite question, over the two axes
+# a shell call site actually varies on:
+#   A — invocation syntax (substitution, bare statement, pipeline, continuation,
+#       brace/subshell group, eval, a wrapper function …)
+#   B — how the command argument is SPELLED (case, quoting styles, quote
+#       concatenation, an escaped dot, a variable, an array element, absent …)
+# plus C — text that merely LOOKS like a call site. The axis lists are still
+# hand-written (bash has no `ast` module to walk), so state them: what is NOT
+# hand-written is each row's disposition. Every row is adjudicated twice —
+# bash itself says whether rq really receives a non-query command (`misuse`),
+# and rq_scan says whether it flags it (`flagged`) — so a mis-written snippet
+# fails the probe instead of quietly certifying a form that was never a call
+# site. The four dispositions are the whole 2x2:
+#   flag    misuse, flagged      — covered
+#   blind   misuse, NOT flagged  — THE STATED BOUND, above
+#   clean   no misuse, not flagged
+#   alarm   no misuse, flagged   — false alarm; loud, and the safe direction
+#   ignored no misuse, not flagged — not a call site at all
+echo "rq call-site coverage probe (form x the delivered reader):"
+probe_snippet() {
+  case "$1" in
+    A1)  printf '%s\n' 'V="$(rq "$Q" GRAPH.DELETE)"' ;;
+    A2)  printf '%s\n' 'rq "$Q" GRAPH.DELETE' ;;
+    A3)  printf '%s\n' 'V="`rq "$Q" GRAPH.DELETE`"' ;;
+    A4)  printf '%s\n' 'if rq "$Q" GRAPH.DELETE; then :; fi' ;;
+    A5)  printf '%s\n' 'rq "$Q" GRAPH.DELETE | cat >/dev/null' ;;
+    A6)  printf '%s\n' 'V=$(rq "$Q" GRAPH.DELETE)' ;;
+    A7)  printf 'rq\t"$Q" GRAPH.DELETE\n' ;;
+    A8)  printf '%s\n' 'rq "$Q" \' '   GRAPH.DELETE' ;;
+    A9)  printf '%s\n' 'V="$(rq "$Q" \' '   GRAPH.DELETE)"' ;;
+    A10) printf '%s\n' '{ rq "$Q" GRAPH.DELETE; }' ;;
+    A11) printf '%s\n' '( rq "$Q" GRAPH.DELETE )' ;;
+    A12) printf '%s\n' ':; rq "$Q" GRAPH.DELETE' ;;
+    A13) printf '%s\n' "eval 'rq \"\$Q\" GRAPH.DELETE'" ;;
+    A14) printf '%s\n' 'w() { rq "$@"; }' 'w "$Q" GRAPH.DELETE' ;;
+    A15) printf '%s\n' 'rq "$Q" GRAPH\' '.DELETE' ;;
+    B1)  printf '%s\n' 'rq "$Q" graph.delete' ;;
+    B2)  printf '%s\n' 'rq "$Q" Graph.Delete' ;;
+    B3)  printf '%s\n' "rq \"\$Q\" 'GRAPH.DELETE'" ;;
+    B4)  printf '%s\n' 'rq "$Q" "GRAPH.DELETE"' ;;
+    B5)  printf '%s\n' "rq \"\$Q\" \$'GRAPH.DELETE'" ;;
+    B6)  printf '%s\n' 'rq "$Q" GRAPH".DELETE"' ;;
+    B7)  printf '%s\n' 'rq "$Q" "GRAPH."DELETE' ;;
+    B8)  printf '%s\n' 'rq "$Q" GRAPH\.DELETE' ;;
+    B9)  printf '%s\n' 'rq "$Q" "$CMD"' ;;
+    B10) printf '%s\n' 'rq "$Q" "${NOPE:-GRAPH.DELETE}"' ;;
+    B11) printf '%s\n' 'rq "$Q" "$(printf %s GRAPH.DELETE)"' ;;
+    B12) printf '%s\n' 'rq "$Q" "${CMDS[0]}"' ;;
+    B13) printf '%s\n' 'rq "$Q"' ;;
+    B14) printf '%s\n' 'rq "$Q" GRAPH.RO_QUERY' ;;
+    C1)  printf '%s\n' '# rq "$Q" GRAPH.DELETE' ;;
+    C2)  printf '%s\n' ':   # rq "$Q" GRAPH.DELETE' ;;
+    C3)  printf '%s\n' 'echo "call rq with GRAPH.DELETE" >/dev/null' ;;
+    C4)  printf '%s\n' "cat >/dev/null <<'PEOF'" 'rq "$Q" GRAPH.DELETE' 'PEOF' ;;
+    C5)  printf '%s\n' "rq \"\$Q\" GRAPH.RO_QUERY 'GRAPH.DELETE'" ;;
+    C6)  printf '%s\n' '_rq "$Q" GRAPH.DELETE' ;;
+    *)   return 1 ;;
+  esac
+}
+probe_fail=0; probe_blind=""
+while read -r p_id p_exp p_desc; do
+  [ -n "$p_id" ] || continue
+  probe_snippet "$p_id" > "$WORK/form.sh" || { echo "  FAIL  $p_id has no snippet"; FAIL=1; continue; }
+  : > "$WORK/probe.saw"
+  # AXIS 1 — bash's own verdict: does rq actually receive a non-query command?
+  SAW="$WORK/probe.saw" FORM="$WORK/form.sh" bash -c '
+      set -uo pipefail
+      rq() { printf "%s\n" "${2:-GRAPH.QUERY}" >> "$SAW"
+             printf "Query internal execution time: 0.1 milliseconds\n"; return 0; }
+      Q="MATCH (n) RETURN n"; CMD=GRAPH.DELETE; CMDS=(GRAPH.DELETE); V=""
+      . "$FORM"
+    ' >/dev/null 2>&1 </dev/null
+  p_misuse=no
+  while IFS= read -r p_seen_cmd; do
+    case "$(printf '%s' "$p_seen_cmd" | tr '[:lower:]' '[:upper:]')" in
+      GRAPH.QUERY|GRAPH.RO_QUERY|"") ;;
+      *) p_misuse=yes ;;
+    esac
+  done < "$WORK/probe.saw"
+  # AXIS 2 — the delivered reader's verdict on the same text.
+  p_scan="$(rq_scan "$WORK/form.sh")"
+  if printf '%s\n' "$p_scan" | grep -q '@'; then p_flagged=yes; else p_flagged=no; fi
+  case "$p_exp" in
+    flag)             p_want_m=yes; p_want_f=yes ;;
+    blind)            p_want_m=yes; p_want_f=no  ;;
+    clean|ignored)    p_want_m=no;  p_want_f=no  ;;
+    alarm)            p_want_m=no;  p_want_f=yes ;;
+    *) echo "  FAIL  $p_id: unknown expectation [$p_exp]"; FAIL=1; continue ;;
+  esac
+  if [ "$p_misuse" = "$p_want_m" ] && [ "$p_flagged" = "$p_want_f" ]; then
+    printf '  %-5s %-7s %s\n' "$p_id" "$p_exp" "$p_desc"
+    [ "$p_exp" = blind ] && probe_blind="${probe_blind}${probe_blind:+, }$p_id"
+  else
+    printf '  %-5s FAIL    %s\n' "$p_id" "$p_desc"
+    printf '        expected misuse=%s flagged=%s; observed misuse=%s flagged=%s\n' \
+      "$p_want_m" "$p_want_f" "$p_misuse" "$p_flagged"
+    sed 's/^/        | /' "$WORK/form.sh"
+    probe_fail=1; FAIL=1
+  fi
+done <<'FORMS'
+A1  flag    command substitution, quoted            V="$(rq "$Q" GRAPH.DELETE)"
+A2  flag    bare statement                          rq "$Q" GRAPH.DELETE
+A3  flag    backtick substitution                   V="`rq ...`"
+A4  flag    condition position                      if rq ...; then
+A5  flag    head of a pipeline                      rq ... | cat
+A6  flag    command substitution, unquoted          V=$(rq ...)
+A7  flag    TAB between rq and its arguments        rq<TAB>"$Q" GRAPH.DELETE
+A8  flag    backslash continuation, bare statement  rq "$Q" \ + GRAPH.DELETE
+A9  flag    backslash continuation inside $(...)    V="$(rq "$Q" \ + GRAPH.DELETE)"
+A10 flag    brace group                             { rq ...; }
+A11 flag    subshell                                ( rq ... )
+A12 flag    second command on one line              :; rq ...
+A13 flag    eval of a literal string                eval 'rq "$Q" GRAPH.DELETE'
+A14 blind   wrapper function forwarding "$@"        w() { rq "$@"; } ; w "$Q" GRAPH.DELETE
+A15 flag    the TOKEN split by the continuation      rq "$Q" GRAPH\ + .DELETE
+B1  flag    lowercase command                       graph.delete
+B2  flag    mixed case                              Graph.Delete
+B3  flag    single-quoted                           'GRAPH.DELETE'
+B4  flag    double-quoted                           "GRAPH.DELETE"
+B5  flag    ANSI-C quoted                           $'GRAPH.DELETE'
+B6  blind   quote concatenation splits the dot      GRAPH".DELETE"
+B7  flag    quote after the dot leaves GRAPH.       "GRAPH."DELETE
+B8  blind   backslash-escaped dot                   GRAPH\.DELETE
+B9  blind   variable                                "$CMD"
+B10 flag    default value of an unset parameter     "${NOPE:-GRAPH.DELETE}"
+B11 flag    command substitution as the argument    "$(printf %s GRAPH.DELETE)"
+B12 blind   array element                           "${CMDS[0]}"
+B13 clean   no command argument (rq defaults)       rq "$Q"
+B14 clean   the legitimate read command             rq "$Q" GRAPH.RO_QUERY
+C1  ignored whole-line comment                      # rq "$Q" GRAPH.DELETE
+C2  alarm   trailing comment on a live line         :   # rq "$Q" GRAPH.DELETE
+C3  alarm   the text inside a string literal        echo "call rq with GRAPH.DELETE"
+C4  alarm   the text inside a heredoc body          <<'PEOF' ... rq "$Q" GRAPH.DELETE
+C5  alarm   command named in the must-contain arg   rq "$Q" GRAPH.RO_QUERY 'GRAPH.DELETE'
+C6  ignored a different function whose name ends rq _rq "$Q" GRAPH.DELETE
+FORMS
+if [ "$probe_fail" = 0 ]; then
+  echo "  PASS  every form's disposition matches the block header above"
+  echo "        blind (stated bound, verified still blind): $probe_blind"
 fi
 
 # ---- mutation: would this test have caught P5-1? ----------------------------

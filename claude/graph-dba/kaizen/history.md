@@ -3,6 +3,79 @@
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
 
+## 2026-09-09 — K-009 generation four: the rq call-site check re-closed by a COVERAGE PROBE, not a fifth shape list (U32)
+
+- **The finding, reproduced against the delivered reader before deciding.** U28 closed generation
+  three by widening the anchor to `grep -nE '(^|[^_[:alnum:]])rq '` with case-insensitive token
+  matching, and verified it against **four named mutation shapes**. The enumeration was the flaw: a
+  literal `GRAPH.DELETE` written after a **backslash line continuation** sits inside the comment's
+  stated reach and outside its mechanism, because the anchor is a line-based `grep` and tokens are
+  harvested from the anchor line only. The `< 3` count guard cannot fire — the three legitimate
+  sites are all still there.
+- **What replaced the shape list: a coverage probe, shipped as part of the suite.** Per
+  `claude/tdd-engineer/guard-testing-techniques.md` §1, a mutation test asks *"does my reproduction
+  die?"* and its enumeration is the author's imagination; a probe asks *"what can this reader not
+  see?"*. **35 call-site forms** on three axes — A invocation syntax (15), B how the command
+  argument is spelled (14), C text that merely looks like a call site (6) — each **adjudicated
+  twice**: bash itself says whether `rq` really receives a non-query command, and the **delivered**
+  reader (`rq_scan`, now a function so the probe cannot certify a re-typed copy) says whether it
+  flags it. That 2×2 is the disposition: `flag` / `blind` / `clean` / `alarm`. A mis-written
+  snippet fails the probe instead of quietly certifying a form that was never a call site.
+- **Closure chosen: WIDEN the mechanism for the two forms whose miss was a wrong UNIT OF ANALYSIS,
+  and NARROW the stated reach to exactly what remains.** The reader was line-oriented; a shell call
+  site is not. Joining backslash continuations (`rq_logical_lines`) and anchoring on `rq[[:space:]]`
+  rather than `rq ` cost nine lines and closed A7–A9, A15. Everything still missed is missed for a
+  different reason — **the command is not a contiguous literal at the site** — which nothing short
+  of a shell parser closes, so it is now written as a bound rather than implied.
+- **The five blind forms, named in the file and pinned by the probe** (each verified `misuse=yes,
+  flagged=no` in this run): `A14` wrapper function forwarding `"$@"`; `B6` quote concatenation
+  splitting the dot (`GRAPH".DELETE"`); `B8` backslash-escaped dot (`GRAPH\.DELETE`); `B9` variable
+  (`"$CMD"`); `B12` array element (`"${CMDS[0]}"`). What the reader must do by hand: **write the
+  literal at the site; if you cannot, check that call site yourself, because nothing else will.**
+  Measured residual in `pipeline.sh` today: **zero** — all 3 sites pass a literal or nothing.
+- **Six C-forms are false ALARMS, and that direction is deliberate**: a trailing comment, a string
+  literal, a heredoc body or a `GRAPH.` token in the *must-contain* third argument all make the
+  check FAIL loudly on text that is not a call site. Consistent with the whole precondition being
+  bounded — `rq` fails closed twice over, so a miss costs a false failure, never a false pass.
+- **A blind spot created by the fix, found by the probe while writing the claim.** The first joiner
+  joined continuations **with a space**, which reads naturally and is wrong: bash joins with
+  nothing, so `rq "$Q" GRAPH\` + `.DELETE` is one word to bash (`rq got [GRAPH.DELETE]`, executed)
+  and became `GRAPH .DELETE` to the reader — no token, silent pass. Joining with nothing fixed it;
+  form **A15** now pins it. This is the exact generation-five trap the unit was warned against, and
+  it was caught by the probe rather than by review.
+- **Controls on the probe itself — a probe that agrees with its author on every row proves
+  nothing.** (1) Mislabel `A9` as `blind` → `A9 FAIL`, exit 1. (2) Revert the joiner to physical
+  lines, i.e. **the generation-three reader** → `A8`/`A9` FAIL with
+  `expected misuse=yes flagged=yes; observed misuse=yes flagged=no`, exit 1 — the probe would have
+  caught the reported defect. (3) Revert the joiner to space-joining → `A15` FAIL, exit 1.
+- **Mutations over `pipeline.sh`, each restored by copy immediately after, never batched:**
+
+  | shape | observed | suite |
+  |---|---|---|
+  | **M1** literal command after a **backslash continuation** (the finding) | `FAIL  rq is called with a command whose reply carries no statistics trailer: GRAPH.DELETE at pipeline.sh:544` | exit 1 |
+  | **M2** **TAB** between `rq` and its arguments | `FAIL  … GRAPH.DELETE at pipeline.sh:544` | exit 1 |
+  | **M3** **lowercase** command at an existing site | `FAIL  … graph.delete at pipeline.sh:451` | exit 1 |
+  | **M4** new **bare-statement** site | `FAIL  … GRAPH.DELETE at pipeline.sh:544` | exit 1 |
+  | **M5** anchor moved (one site renamed away) | `FAIL  found only 2 rq call sites; pipeline.sh has 3, so the grep anchor moved and this checked nothing` | exit 1 |
+  | **M7** the **token itself** split across the continuation (`GRAPH\` + `.DELETE`) | `FAIL  … GRAPH.DELETE at pipeline.sh:550` | exit 1 |
+  | **M6** *bound demonstration* — variable-borne command at a real site | `PASS  all 4 rq call sites use GRAPH.QUERY or GRAPH.RO_QUERY`, exit 0 | the stated bound, shown rather than argued |
+
+  `pipeline.sh` verified byte-identical to its pre-mutation copy afterwards (`diff -q`), and
+  `bash -n` clean.
+- **Suite: 15 PASS / 0 FAIL / exit 0 before → 16 PASS / 0 FAIL / exit 0 after** (the probe adds one
+  `PASS` line), the check reporting exactly **3** call sites on the clean tree both times. No
+  FalkorDB was touched: the whole unit is static over two shell files, so `GRAPH.LIST` stays at 25.
+- **Docs updated in the same change.** `pipeline.sh`'s own description of the check (lines 355-361)
+  claimed "whether the site is a `$(…)` substitution or a bare statement … one stated blind spot is
+  a command reaching rq through a VARIABLE" — stale in both halves; rewritten to state the
+  mechanism and the five-form bound, with the by-hand instruction.
+- **Left for another owner (out of this unit's scope).**
+  `claude/tdd-engineer/guard-testing-techniques.md` lines 47-51 say this check *"is open as of
+  2026-09-09 … do not treat that check as a model"*. It is now closed, and the probe is arguably
+  the worked example that file asks for. `docs/reviews/rq-execution-gate.md` (`analyst`'s) still
+  quotes the superseded comment.
+
+
 ## 2026-09-09 — the two entries held open for K-009, cleared after independent re-execution (U30)
 
 - **What:** `cobb`, running a curator **clearing step** (not a distillation) under
