@@ -24,6 +24,7 @@ from modelbench.packs import (
     ROW_COUNT_IDENTITY_EXEMPT_CELLS,
     ROW_COUNT_IDENTITY_KEYS,
     PackConfigError,
+    _row_count_identity_problems,
     content_hash,
     derive_call_surface,
     load_pack,
@@ -313,20 +314,37 @@ def _write_row_count_pack(root: Path, manifest: dict, rows: list[dict]):
 
 
 def test_row_count_identity_coverage_over_its_own_keys_and_value_kinds(tmp_path) -> None:
-    """impl review Pass 12 §4A: the four manifest keys `_row_count_identity_problems` actually
-    reads (`packs.ROW_COUNT_IDENTITY_KEYS`) crossed with three value-kinds — plan-valid, absent,
-    present but not the declared type — over a rows file that violates the identity, plus an
-    all-valid control against a rows file that does not. Every cell must either report at least
-    one problem or be named in `packs.ROW_COUNT_IDENTITY_EXEMPT_CELLS`; this probe computes the
-    actual silent cells by execution and asserts that set equals the exemption constant exactly,
-    so a stale exemption is as loud as a newly silent one. The axis list is
-    `ROW_COUNT_IDENTITY_KEYS` itself, the same constant the route consults to know which manifest
-    fields it owns — a fifth key added there is probed automatically, without a second edit here.
+    """impl review Pass 12 §4A / Pass 13 P13-2: the four manifest keys
+    `_row_count_identity_problems` actually reads (`packs.ROW_COUNT_IDENTITY_KEYS`) crossed with
+    three value-kinds — plan-valid, absent, present but not the declared type — over a rows file
+    that violates the identity, plus an all-valid control against a rows file that does not.
+    Every cell must either report at least one problem **from the route itself** or be named in
+    `packs.ROW_COUNT_IDENTITY_EXEMPT_CELLS`; this probe calls `_row_count_identity_problems`
+    directly — not `validate_pack` — and computes the actual silent cells by execution, asserting
+    that set equals the exemption constant exactly, so a stale exemption is as loud as a newly
+    silent one. **Pass 13 P13-2:** `validate_pack(pack) == []` measures the whole validator's
+    silence, not the row-count route's — `_sampling_problems`' other call, `pack.ref()`, can flag
+    the same manifest for a reason that has nothing to do with the row-count arithmetic (e.g.
+    `_ref_from_manifest_fields` refusing a manifest with no `sampling.analysisUnit` at all, before
+    `check_sampling_contract` even runs) and keep `validate_pack(pack)` non-empty while
+    `_row_count_identity_problems` itself is silent underneath — so a fourth round of a
+    P12-6-shaped silent branch never registers as newly silent under the old criterion. Calling the
+    route directly is what closes that gap. The axis list is `ROW_COUNT_IDENTITY_KEYS` itself, the
+    same constant the route consults to know which manifest fields it owns — a fifth key added
+    there is probed automatically, without a second edit here.
 
     Written against the plan (§3.3's row-count identity), not against the implementation: run
     against the pre-P12-6-fix predicate, this must go red on at least
     `("sampling.scripts", "wrong-type")`, `("sampling.replicatesPerScript", "absent")` and
-    `("sampling.replicatesPerScript", "wrong-type")` — the three cells P12-6 names silent."""
+    `("sampling.replicatesPerScript", "wrong-type")` — the three cells P12-6 names silent; and
+    against a reinserted P12-6-shaped branch (`if "analysisUnit" not in sampling: return []` at
+    the route's head), it must go red on `("sampling.analysisUnit", "absent")` — even though
+    `validate_pack` does **not** stay `[]` on that cell (`_ref_from_manifest_fields` independently
+    refuses a manifest with no `sampling.analysisUnit` at all, before `check_sampling_contract`
+    ever runs), which is exactly the old probe's blind spot: `validate_pack(pack) == []` was never
+    true on this cell, so it was never counted "silent" even while the route itself, the mechanism
+    the probe is named for, had gone silent underneath an unrelated problem that happened to cover
+    the same manifest (Pass 13 P13-2, verified directly, not from the review's own appendix)."""
     base = _row_count_coverage_manifest("fixture-row-count-coverage")
 
     silent_cells: set[tuple[str, str]] = set()
@@ -337,7 +355,8 @@ def test_row_count_identity_coverage_over_its_own_keys_and_value_kinds(tmp_path)
             pack = _write_row_count_pack(
                 tmp_path / f"cell-{key}-{kind}", manifest, _VIOLATING_ROWS
             )
-            if validate_pack(pack) == []:
+            sampling = pack.manifest.get("sampling") or {}
+            if _row_count_identity_problems(pack, sampling) == []:
                 silent_cells.add((key, kind))
 
     assert silent_cells == set(ROW_COUNT_IDENTITY_EXEMPT_CELLS)
@@ -346,6 +365,8 @@ def test_row_count_identity_coverage_over_its_own_keys_and_value_kinds(tmp_path)
     control_pack = _write_row_count_pack(
         tmp_path / "cell-control", control_manifest, _SATISFYING_ROWS
     )
+    control_sampling = control_pack.manifest.get("sampling") or {}
+    assert _row_count_identity_problems(control_pack, control_sampling) == []
     assert validate_pack(control_pack) == []
 
 
