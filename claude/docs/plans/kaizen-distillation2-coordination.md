@@ -80,7 +80,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U24 | analyst chunk F (12 of the 14 held at dispatch: all 09-08) | `a554b6fb7d89af6f0` | accepted | 10 promoted / 1 discarded / **1 kept open** (`graph-dba` K-009), **12 entries → 7 edits**; `claude/analyst/{analyst.md,review-techniques.md,kaizen/history.md,kaizen/plan.md}`, `claude/graph-dba/{falkordb-quirks.md,kaizen/history.md,kaizen/plan.md}`, `claude/cobb/kaizen/history.md`, `skills/python-web-quirks/SKILL.md`, `skills/README.md`; 2x `MENTIONS`→`graph-dba` | teco re-derivation → **accepted, no correction needed** — the dataclass narrowing reproduced across three annotation shapes, both stdlib line refs exact, NaN asymmetry and all counts exact | 248.5k tok, 94 tools |
 | U25 | analyst chunk G (the 2 deferred; re-queried at dispatch 09-09 — `analyst` held exactly these 2, nothing new arrived) | `a271cfb21a2dbe1af` | accepted | 2 promoted / 0 discarded, both `DETACH DELETE`d, **2 entries → 1 file, 2 sections**; `claude/analyst/{review-techniques.md,kaizen/history.md}`, `claude/cobb/kaizen/history.md`. **`analyst` produced inbox now 0.** | teco re-derivation → **accepted, no correction needed** — second consecutive clean unit; tombstone byte-identity reproduced under an independent anchor pair to the entry's own cited digest, growth figures digit for digit | 147.6k tok, 39 tools |
 | U26 | `graph-dba` (its 1 produced entry; its 2 `MENTIONS`-only nodes are U24's kept-opens and are **out of scope**) | `afe9fd679115a7900` (resumed once, to fold the K-008 note into the item body) | accepted | 0 promoted / **1 discarded** / 0 kept open, `DETACH DELETE`d; the entry was accurate when written and **dead 40 minutes later** (`6012ddb`). Collateral find: `6012ddb` overtook **both** K-008 facts. `claude/graph-dba/kaizen/{history.md,plan.md}` | teco re-derivation → **accepted after one correction** (K-008 asserted "both facts verified true" above a note refuting it; rewritten present-tense, 2266→2075 words) | 145.3k + 155.8k tok, 33 tools |
-| U27 | `data-scientist` (its 1 produced entry; its 1 `MENTIONS`-only edge is out of scope). Re-derivation **pinned to `d45e5ff`**, not `HEAD` — `model-bench/` is another session's live area | `ad47fd00ddc79e335` | in-flight | `claude/data-scientist/kaizen/*`, graph cleared | teco re-derivation → — | — |
+| U27 | `data-scientist` (its 1 produced entry; its 1 `MENTIONS`-only edge is out of scope). Re-derivation **pinned to `d45e5ff`**, not `HEAD` — `model-bench/` is another session's live area | `ad47fd00ddc79e335` | accepted | **1 promoted / 0 discarded**, cleared; folded onto an **existing** prompt bullet (28→28 bullets, +80 words), model-bench-specific half discarded as already published. `claude/data-scientist/{data-scientist.md,kaizen/history.md}`. **`data-scientist` produced inbox now 0.** | teco re-derivation → **accepted, no correction — and it corrected *my brief*** | 161.8k tok, 34 tools |
 | U28 | `graph-dba` **code unit** on `skills/joern-cpg/scripts/pipeline.sh`: fix **K-009** (`rq()` returns 0 on a bare runtime-error reply) + confirm and close/re-scope **K-008**. Not a distillation unit | `a71e467eb629d98ad` | in-flight | `skills/joern-cpg/**`, `skills/cpg-analysis/**`, `claude/graph-dba/kaizen/*` | `analyst` (diff-scoped) → — | — |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
@@ -465,6 +465,31 @@ is working; a stale one plus an empty worktree means it died before promoting.
 count.** Two entries arrived while U23's own verification was running.
 
 ## Follow-ups
+
+- **A null result can be the right evidence for a rule, and the reporting defect
+  is what makes it look wrong.** U27's entry paired a methodological rule
+  (compute the which-instrument audit *before* any value-modifying transform)
+  with an exhaustive sweep finding **zero** differences — which reads as an
+  argument *against* the rule. Both are correct: the sweep measures **printed
+  numbers**, the rule is about **attribution**, so the null says adopting the
+  rule is **free**, not that ordering is irrelevant. The evidence line recorded
+  only the null half. When gating an entry whose evidence seems to contradict
+  its claim, check whether the two are measuring **different quantities** before
+  concluding either is wrong.
+- **My own brief carried a wrong figure into a unit, and the delegate caught
+  it.** I wrote the sweep's grid as "4 × 6 = 24 grid points"; 28,912 is already
+  the **sum** of `C(n+3,3)` over n ∈ {12,30,38,40} (455 / 5,456 / 10,660 /
+  12,341), and the only multiplier is the six design effects. My reading implied
+  693,888. **A brief is the one input no gate reads** — this one was corrected
+  only because the delegate recomputed instead of adopting my framing, which is
+  exactly what the accumulated-lesson list asks for. The lesson generalises: a
+  figure a coordinator states as background fact is load-bearing on the
+  delegate's done-condition, and it is unreviewed by construction.
+- **`claude/data-scientist/data-scientist.md` has seven lines over 700
+  characters** (longest 1,247; the U27 edit took line 49 to 1,182). All but the
+  edit are pre-existing and the ~700-char smell is written for `*AGENTS.md`, not
+  agent prompts — but this is an always-loaded file and the density is the same
+  problem. Worth a compaction pass by `cobb`; not this pass's scope.
 
 - **`graph-dba` owns one code unit on `skills/joern-cpg/scripts/pipeline.sh`, not two.**
   U25 and U26 between them settled what belongs in it: **K-009** (the `rq()`
