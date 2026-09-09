@@ -97,7 +97,9 @@ the actual promotion targets — agent prompts, knowledge bases, project docs.
 
 | U38 | **`cobb`'s own inbox — 8 entries**, re-queried at dispatch. **`cobb` gates its own captures** — the first unit in this pass whose producer and distiller are the same agent, so the usual independent check on the producer's framing is absent. And **almost none of these belong in `cobb`'s own artifacts**: the homes are `graph-dba`'s FalkorDB KB, `tdd-engineer`'s guard KB and `python-web-quirks`. **Routing is the subject, not promotion.** Two strong leads handed over: `2f944aa9` looks published at `falkordb-quirks.md:736`, and `3b8ded5d` **contradicts three shipping documents** plus a `pipeline.sh` comment dated a day after it | `aa35aec2cab8c5750` | **accepted** (`e79fb61`) | **4 promoted (one a half), 4 discarded** — routing-first was right: **not one entry landed in `cobb`'s own artifacts**; they went to `analyst`, `graph-dba`, `tdd-engineer` and `python-web-quirks`. Both my leads resolved, in opposite directions: `2f944aa9` was a **full** discard, not the half I predicted (the sub-claim I thought was new is at `cypher-mcp/README.md:118–127` in the entry's own words), and `3b8ded5d` was **superseded**, as hypothesised — but my discard steer on `c4f1a2be` **failed again**, U34's lesson repeating: four sites state *an undefined function aborts at 127*, none states that **`set -u` aborts at 127 too**, which is what breaks the exact-rc oracle those four prescribe. **The half-promotion is a defect in the procedure this pass runs on**: §5 step 1 reads `k.fact`/`k.evidence` through a tool that truncates at 300 chars and never said so. **10 files** | teco re-derivation → **accepted, no correction** — bash arms re-run: unbound at top level, in a function, and command-not-found all **127**, set-but-empty **0**; `CYPHER_MCP_MAX_CELL` default **300** confirmed at `README.md:383` and the paging mechanism re-derived live (`size(evidence)=1032` → `size(substring(…,250))=782`); the `81b43cd` worked example holds — `freshness.md:181` claimed the load *"overwrites it wholesale, `NOTE` and `MARKER_ORIGIN` included"* while the stamp at that same commit was `SET b.BUILT_AT = …` over named properties touching **neither** key; supersession confirmed against the **emitted Cypher** (`git-provenance.sh` → `SET b = {$_CPG_MAP}`) and `5417f0e`'s timestamp, hours after the capture; `python-web-quirks`' description **byte-identical at 4,584**; `claude/AGENTS.md` untouched at **2,491 w**; `review-techniques.md` 11,445 w / 30 §§ / 0 lines >700 | 211.2k tok, 78 tools |
 
-| U39 | **`coder` inbox — 9 entries**, re-queried at dispatch. **`coder` is the only agent this pass has drained that owns no knowledge base** — `claude/coder/` holds just `coder.md`, `hooks/` and `kaizen/` — so every promotion must land in another agent's artifact, a skill, or a component's docs tree, or force the decision to create one. **That decision is a stop-and-ask fork**, briefed as such. Three entries are falkor-chat-specific `project docs`; two visible pairs (`ThreadPoolExecutor` ×2, AST-guard reach ×2). Lead: `c7f1a3d2` looks published at `python-web-quirks/SKILL.md:603–629` **and in that skill's description** | `a28c977672e764a6d` | in-flight | homes unknown until routed | teco re-derivation → — | — |
+| U39 | **`coder` inbox — 9 entries**, re-queried at dispatch. **`coder` is the only agent this pass has drained that owns no knowledge base** — `claude/coder/` holds just `coder.md`, `hooks/` and `kaizen/` — so every promotion must land in another agent's artifact, a skill, or a component's docs tree, or force the decision to create one. **That decision is a stop-and-ask fork**, briefed as such. Three entries are falkor-chat-specific `project docs`; two visible pairs (`ThreadPoolExecutor` ×2, AST-guard reach ×2). Lead: `c7f1a3d2` looks published at `python-web-quirks/SKILL.md:603–629` **and in that skill's description** | `a28c977672e764a6d` | **accepted** (`88d13db`) | **6 promoted (2 halves), 3 discarded** — **neither fork fired**: no `coder` KB created, no `falkor-chat` file touched. The homes were `python-web-quirks` (the two `ThreadPoolExecutor` entries **merged on U36's criterion — one mechanism, not one topic** — plus a new `app.state` lifespan section), `tdd-engineer`'s guard KB and prompt, and `analyst`'s residual item 5 **rewritten in place**. The three `project docs` entries landed **nowhere near** `falkor-chat/docs/`: their premises are already in `storefront.py`'s docstring and `SERVER.md`'s own row, figure-for-figure. `suggestedHome` again predicted **zero** of nine homes. **10 files** | teco re-derivation → **accepted, no correction** — the 5 executor arms re-run: `qsize/threads` `0/0 → 0/1 → 0/1 → 0/1`, and **`shutdown(wait=True)` leaves `qsize=1`** (the `None` sentinel), so the entry's own oracle is unsound in both directions; `BrokenThreadPool → BrokenExecutor → RuntimeError` confirmed; the AST frontier comprehension returns **`_ex` *and* `_run_turn`**; `git grep -cF` at `e79fb61` reads `stats.py:1` beside `test_stats.py:2`, and the constructed 2-vs-3 case reproduces. **My own near-miss:** I read the section's two demonstrations as one and thought the 2-vs-3 figure was false against `test_stats.py` — the delivered text says *a file carrying `X[0]` once on one line and twice on the next*, and does so plainly. Budgets match to the word on all six live files; `claude/AGENTS.md` **2,491 w**; `python-web-quirks` description **byte-identical at 4,584** | 237.0k tok, 80 tools |
+
+| U40 | **`architect` inbox — chunk 1 of 2**, split on the date boundary: the **seven 2026-09-07 entries** (15 total is over the ~12 chunk bar). **Six of the seven are one theme** — grep-based done-conditions and residuals — whose home is `review-techniques.md`'s *closed six-item* list, a section **three consecutive units have now touched**. The failure mode briefed against is a seventh item that items 1–6 already cover. Near-certain discard flagged for disproof: `b1f2c7a4` reads like **item 6 itself**, which U23 promoted from `analyst`'s near-twin `b1f0c7a4…` | `a5f6321e6acf3612d` | in-flight | `claude/analyst/*` likely; homes unknown until routed | teco re-derivation → — | — |
 
 ## The graph is live during this pass
 
@@ -446,10 +448,14 @@ was written at the U24 pause and every one of its five items has since moved.
    deliberate survivor**; the `rq()` fix landed as `graph-dba` K-009 and closed
    in U33. U32/U34/U35/U36 drained `devops`, `data-scientist`, `graph-dba`,
    `qa-engineer` and `tdd-engineer`.
-2. **The producers still holding entries.** Re-queried live at U39's dispatch,
-   **2026-09-09**: `coder` **9**, `architect` **15**, `teco` **38** — 62 produced
-   plus the 1 orphan, **63** in the graph. `cobb` was drained by U38. Remaining
-   order, smallest-first: `coder` (U39, in flight), `architect`, `teco`. Chunk anything past ~12
+2. **The producers still holding entries.** Re-queried live at U40's dispatch,
+   **2026-09-09**: `architect` **15**, `teco` **38**, plus `analyst` **2** and
+   `cobb` **1** that arrived *after* their own inboxes were drained — 56 produced
+   plus the 1 orphan, **57** in the graph. `coder` was drained by U39, `cobb` by
+   U38. `architect` is over the ~12 chunk bar and splits on the date boundary:
+   **U40 = the seven 09-07 entries, U41 = the eight from 09-08/09-09.** Then
+   `teco`. **The refill is the reason the close condition is a re-query, not a
+   countdown** — two agents this pass has already drained are non-empty again. Chunk anything past ~12
    date-ordered, per the standing decision. **Re-query at each dispatch; never
    dispatch against a figure recorded here.** `architect`'s include
    `b1f2c7a4-3d59-4e18-9f60-7a2c5d8e41bb`, whose subject was already promoted
@@ -473,6 +479,24 @@ mine, from a **concurrent `teco` session's** capture, not from anything this
 unit did.
 
 ## Follow-ups
+
+- **`suggestedHome` has now predicted the home for 0 of 17 entries across U38–U39.** All eight of
+  U38's said *knowledge base* or *project docs*; all nine of U39's likewise, and **three marked
+  `project docs` landed nowhere near a component docs tree**. The producer knows the fact, not the
+  shelf — which is why a **routing-first** brief (argue the home from the receiving artifact's own
+  scope line) outperformed a promotion-first one twice running. Not a `K-` item: no change to the
+  write shape follows, and asking a capturing agent to route better would be asking it to know
+  something it structurally does not.
+- **`claude/tdd-engineer/tdd-engineer.md:40` is now 1,502 characters — the longest line in that
+  file**, after U39 folded the round-trip-blindness rule onto the mutation bullet. The fold was the
+  right routing (it is that bullet's mirror case: there a *surviving* mutant is not the test's
+  fault, here it is), but the bullet now wants a split into *prove the mutant* / *pick the mutant*.
+  Deliberately **not** done in U39 — restructuring as a side effect of a distillation is exactly
+  what K-026 exists to prevent. Owner: `cobb`, as its own unit.
+- **`claude/analyst/review-techniques.md`'s residual section opens "Six ways the residual
+  *passes* on an incomplete edit" while item 5 is a false *failure*** — a pre-existing inaccuracy
+  U39 found and left for the section's next reviser rather than widening its own scope to fix.
+  One-line fix whenever that section is next touched.
 
 - **The §5 truncation defect predates this pass and silently bounds its own record.** U38 found
   that `skills/agent-maintenance/SKILL.md` §5 step 1 tells a distiller to read `k.fact`/`k.evidence`
