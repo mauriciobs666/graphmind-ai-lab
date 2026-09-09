@@ -5,6 +5,27 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-09 — salesperson-ui S9f: `SERVER.md` §1.3's `QUIESCE_S` row rewritten against the S9 acceptance pass
+
+**What:** Closed the coordination's long-open item S9f. `docs/SERVER.md` §1.3's
+`FALKORCHAT_STOREFRONT_QUIESCE_S` row described the pre-S9 world — no caller for
+`Storefront.set_turn_state`, both drains passing on their first check, `503 quiesce_timeout` and
+`409 turn_in_progress` unreachable, `GET /state`'s turn block always idle, "setting the value
+changes nothing observable" — which S9's delivered concurrency core made false in every clause.
+`docs/test-reports/salesperson-ui-s9-report.md` finding D-1 measured the row's replacement by
+running the system rather than arguing about it: `quiesce_s=0.4` against a held turn answers `503
+{"error":"quiesce_timeout"}` after 0.41 s and resets nothing (messages `1 -> 1`, original `Thread`
+still present); `quiesce_s=5.0` against a 0.8 s turn waits `0.77 s` and then resets (old `Thread`
+rows `0`); a second post during a live turn answers `409 {"error":"turn_in_progress"}` and is not
+written; `GET /shop/api/state` during a turn reports `{"state": "thinking", "queuePosition": 0}`,
+not the idle payload. Rewrote the row against those four readings. Left the neighbouring
+`FALKORCHAT_STOREFRONT_TURN_WORKERS` row byte-identical — D-1 independently confirmed it correct
+(its published `{1:3, 2:2, 4:0}` reproduced exactly). Checked the rest of §1.3 against the same
+report and found no other row S9 falsified.
+
+**Prose only** — `docs/SERVER.md` and this file; no code touched, no suite run (per the unit's own
+instruction, to avoid contending for the live database with a concurrent session).
+
 ## 2026-09-08 — salesperson-ui S9a: `## Pass 22`'s four findings — the killing test's oracle, a raise-guard blind spot, a self-falsifying comment, and `get_state`'s missed second call site
 
 **What:** Closed `docs/reviews/salesperson-ui-impl.md` `## Pass 22`'s major and three minors
