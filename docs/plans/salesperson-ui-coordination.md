@@ -14,12 +14,18 @@ standalone `salesperson/` Streamlit app.
 (root `AGENTS.md`, component READMEs, `HISTORY.md`, a `tico` user manual) reflects the delivered
 surface.
 
-## RESUME HERE — state as of 2026-09-09, two decisions open
+## RESUME HERE — state as of 2026-09-09, both decisions answered
 
 **Read this section first. It is the entry point; the ledger below is the state of record.**
 Reconcile it against `git log` and `git status` before acting — if they disagree, they win.
 
-**Nothing is in flight.** No agent is running. The working tree holds no uncommitted work of this
+**Both decisions below were answered by the stakeholder on 2026-09-09**, both as recommended:
+Decision 1 → route all four findings now, two units (**U62**, **U63**, in flight). Decision 2 →
+one closing unit, **no Pass 8** (**U64** — *queued, not dispatched*: it collides with another
+session's in-flight unit; see "U64 is blocked on another session's U28" below). The two decision
+write-ups are kept verbatim for the record.
+
+**Nothing was in flight at the resume.** No agent was running. The working tree holds no uncommitted work of this
 coordination's; anything modified belongs to a concurrently-running session (`claude/**`,
 `model-bench/**`) and must not be staged or committed.
 
@@ -66,6 +72,23 @@ majors. **No unit is dispatched and none should be until the stakeholder chooses
 S9b–S9e (all touch `storefront.py`, so **serialize**; S9c owns `turn.lastTurn` and must clear the
 latch in `enqueue_turn`, not `reserve_turn`), S9f (**now answered by D-1's measurement**), then
 **S10–S16 are entirely unstarted**, including the whole UI (S12a-d, S13, S14 → `frontend-engineer`).
+
+## U64 is blocked on another session's U28, and it is the same defect (teco, 2026-09-09)
+
+The stakeholder approved the closing unit; I did not dispatch it. `claude/docs/plans/kaizen-distillation2-coordination.md` — a **different session's** coordination, running right now — has **U28 in flight**: a `graph-dba` code unit (`a71e467eb629d98ad`) whose declared file set is `skills/joern-cpg/**` and `skills/cpg-analysis/**`, fixing **K-009: `rq()` returns 0 on a bare runtime-error reply.**
+
+That is not an adjacent file. **It is P7-4's mechanism, stated in P7-4's own words.** P7-4 says `rq`'s blacklist does not see FalkorDB's *runtime* errors, so `rq` returns 0, `STAMP_OUT` is never printed, and the run lands in the read-back branch telling the operator to re-send Cypher that will fail identically. K-009 is that sentence with the ticket number attached.
+
+So the collision is on **two** axes, and only the first is visible in a diff:
+
+- **Files.** `pipeline.sh`, `test-stamp-wiring.sh`, `SKILL.md` and `freshness.md` carry P7-1, P7-3 and P7-4. All four are inside U28's declared set.
+- **The claim.** P7-1's mutant analysis (`mA`, `mI`, `mK`) and P7-4's whole diagnosis are derived against `375af25`. If U28 makes `rq` detect that reply class, P7-4's branch may no longer be unreachable and P7-1's guard gap is re-keyed. Dispatching `cobb` now would have it fix a defect against a revision that is being changed underneath it — and the fix would look correct in review, because a static gate reads the same stale file.
+
+**Not** blocked: the `claude/cobb/kaizen/{history,plan}.md` half of **P7-2** — the false *"3-for-3"* propagated into K-022's rationale, where it is the argument for escalating. Those files are `cobb`'s; U28's kaizen scope is `claude/graph-dba/kaizen/*`. But P7-2's third site is `freshness.md:252-254`, which *is* in U28's set, and splitting a three-site correction across two dispatches to save a few minutes is how one of the three ends up saying something different from the other two. Held whole.
+
+**Disposition:** U64 stays `queued` until U28 lands. When it does, `cobb` gets a **fresh** dispatch (the recorded `abeeb0ea31b20e7cc` is a dead session's) briefed to re-derive P7-1 and P7-4 **against U28's delivered diff**, not against `375af25` — explicitly including the possibility that U28 already closed P7-4 and the remaining work is smaller than Pass 7 states.
+
+**What I did not do:** reach into the other coordination. I have no standing there, and its `teco` is the right owner of its own sequencing. This is recorded here so that whoever picks either coordination up sees the overlap from whichever side they arrive on.
 
 ## Standing decision — the deprecated CPG is ignored (stakeholder, 2026-09-02)
 
@@ -281,6 +304,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S2c** — N-2: comment says "~20 chars", measured **46**; N-3: one sentence noting the timers test is now coupled to the start bound | `tdd-engineer` | `a1aa5c430de8da50d` | queued (**behind S4 — `services.py` same-file collision**) | `services.py`, `test_workflow_timers.py` | `analyst` → — | — |
 | S2 · S3 — `run_ctx` merge, responder kill switch | `tdd-engineer` | — | queued (**serialized behind S1 — shared live DB**) | — | — → — | — |
 | S4…S16 — remaining implementation | per plan v1.2 §5.1 | — | queued | — | — → — | — |
+| **U62** — D-1: rewrite `SERVER.md` §1.3's `QUIESCE_S` row against the acceptance measurements. **Closes S9f**, which had been held on argument | `coder` (**fresh** — the S7 `coder` is from a dead session; the brief is fully self-contained and the evidence is a published report) | `a07aa43f407bafdab` | in-flight | `falkor-chat/docs/SERVER.md`, `falkor-chat/docs/HISTORY.md` | `analyst` (combined with U63) → — | — |
+| **U63** — D-2 (§5.3 has no `5xx` row for `/messages`), D-3 (`504` carries `state: null` against §5.2's present-vs-absent precedent), and **my untestable S9 done-condition** → plan v1.32 | `architect` (**fresh** — every prior architect instance is from a dead session) | `a0cfb47caac4a8c3e` | in-flight | `docs/plans/salesperson-ui.md` v1.32 | `analyst` (combined with U62) → — | — |
+| **U64** — close the CPG provenance arc: P7-1, P7-2, P7-4, delete P7-3's tombstone block. **No Pass 8** (stakeholder, 2026-09-09) | `cobb` (**fresh** — `abeeb0ea31b20e7cc` is from a dead session) | — | **queued — blocked on another session's in-flight unit**, see below | `skills/joern-cpg/**`, `skills/cpg-analysis/references/freshness.md`, `claude/cobb/kaizen/{history,plan}.md` | **none — stakeholder stopped the gates** | — |
 
 ## Stakeholder decisions, 2026-09-02 (plan §8)
 
