@@ -465,7 +465,7 @@ def _compose(
     u_lo, u_hi = min(mover[0], exact[0]), max(mover[1], exact[1])
     lo = max(SUPPORT_DIFF_PROPORTIONS[0], u_lo)
     hi = min(SUPPORT_DIFF_PROPORTIONS[1], u_hi)
-    # `lo != u_lo` iff the support was strictly below the composed lower bound — `max` only ever
+    # `lo != u_lo` iff the composed lower bound ran strictly below the support — `max` only ever
     # moves its first argument's value onto its result when the second argument is strictly
     # smaller — so this is Rule 4a's strict support comparison, not a shortcut around it
     # (assertion 5: a bound sitting *at* the support because both arms genuinely produced it

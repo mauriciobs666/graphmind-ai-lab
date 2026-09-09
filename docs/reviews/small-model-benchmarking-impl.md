@@ -7,15 +7,16 @@ suggestions). **Pass 3** re-gated `95b4c88` (needs changes). **Pass 4** re-gated
 changes). **Pass 5** gated `8fc2341`, the first of S1e's three implementation units (needs changes).
 **Pass 6** re-gated its fix round `c523a35` (needs changes). **Pass 7** re-gated `f409905` (needs
 changes). **Pass 8** gated `cc28d48`, S1e's second and largest unit (needs changes). **Pass 9**
-re-gated its fix round `7f865e2` (needs changes). **Pass 10** re-gates `93b0e42` — jump to
-[`## Pass 10`](#pass-10--2026-09-08) for the current verdict; the earlier passes are kept intact
-because they are meant to be read together. Passes 1–4 gate the S1 build; Passes 5–7 are S1e's
-first unit (§4 S1e Tables A and B, the `fingerprint.py` re-key); Passes 8, 9 and 10 are its second
-(Tables C, D, E and G), leaving Table F undelivered and P8-1 held for `-ml` §3.4 Rule 4a's own
-unit. **Pass 7 §3 says which half of this document to trust** — the findings held, three suggested
-fixes did not; Passes 8, 9 and 10 are written to that standard and name, for each suggested fix,
-the assertion that catches it being wrong. Five of my fixes have now been rightly overruled and
-none of my findings has.
+re-gated its fix round `7f865e2` (needs changes). **Pass 10** re-gated `93b0e42` (needs changes;
+N4/N5 closed at `e162ba9`, outside this document). **Pass 11** re-runs DC-12's end-of-round check
+over all eight landed S1e tables at `bb24a44` — jump to [`## Pass 11`](#pass-11--2026-09-09) for the
+current verdict; the earlier passes are kept intact because they are meant to be read together.
+Passes 1–4 gate the S1 build; Passes 5–7 are S1e's first unit (§4 S1e Tables A and B, the
+`fingerprint.py` re-key); Passes 8, 9 and 10 are its second (Tables C, D, E and G); Pass 11 is the
+round-level re-run, once all eight tables (through Table H) have landed. **Pass 7 §3 says which half
+of this document to trust** — the findings held, three suggested fixes did not; Passes 8, 9 and 10
+are written to that standard and name, for each suggested fix, the assertion that catches it being
+wrong. Five of my fixes have now been rightly overruled and none of my findings has.
 
 ## Pass 1 — 2026-09-03
 
@@ -2719,3 +2720,228 @@ test side, and it is the rule this round has now applied twice to the source (`_
 three `parametrize` marks. **The assertion that catches it being wrong:** none is needed — the
 change is mechanical and the three id-lists must stay identical, which `pytest --collect-only` shows
 directly.
+
+## Pass 11 — 2026-09-09
+
+### 1. Scope & verdict
+
+**Reviewed:** not a diff — **DC-12's end-of-round re-run**, over the tree at `bb24a44` (a docs-only
+ledger commit atop `f17efa2`/`359c463`; `model-bench/` is byte-identical to `359c463`, confirmed by
+`git show --stat`). All eight §4 S1e tables (A–H) have landed; this is the residual property's
+**round-level** check — a later table's edit can move an earlier landed table's number — which has
+never been run before now. Also re-ran: the disowning-mention sweep, the third-form/fragility sweep,
+all eight tables' *enumerating* commands against their stated baselines, and the Table H row-text
+equivalence claim from `bb24a44`'s commit message. `model-bench/`: **648 passed**, `ruff` clean,
+tree clean (`git status`).
+
+**CPG:** not applicable — none exists for `model-bench/`, and this pass is pure re-run/verification
+of grep-based residuals, not a code-level task a CPG would help with.
+
+**Verdict: needs changes** — 0 blockers, **1 major** (**M11-1**), 0 minors, **1 nit** (**M11-2**).
+Both are new; nothing is carried from Pass 10 (N4/N5 closed at `e162ba9`/U62, confirmed in the
+coordination ledger and not re-checked here — out of DC-12's scope).
+
+**DC-12 itself is clean.** I extracted **24** residuals from §4 S1e (§2) — the plan's own stated
+count, no miscount. All 24 re-run against the current tree and **all 24 hit their stated target**
+(§2); no mismatch, so §3's mismatch-investigation step found nothing to investigate. Both standing
+sweeps re-run clean over the current 24 (§4): no new disowning mention, and the fragility partition
+is **20 robust / 4 third-form (Table E's pair, Table H's pair) / 0 blind** — independently
+re-derived, not just quoted from the plan's own v1.23 self-report, which states the same numbers.
+All eight tables' enumerating commands still return their stated counts and per-file splits against
+their stated baselines — **zero drift**, extending U68's own Table H check to the other seven (§5).
+The Table H row-text claim is **confirmed on both halves** (§6): the shipped form is equivalent to
+Rule 4a's ruling, and the plan's own row text is inconsistent with its own residuals — the **ninth**
+instance of the plan being the defective party, as flagged. **M11-1** is that this ninth instance is
+not yet corrected in the plan text, and — per the standing rule — it is **not blocked on unbuilt
+work**: it is a self-contained editorial fix to one table row, fixable now, so it may not be carried
+as "deferred by choice."
+
+### 2. All 24 residuals, extracted and re-run
+
+Extraction method: read §4 S1e in full (plan lines ~3243–4237, Tables A–H), pulling every line
+introduced by "Residual after the edit" (or, for Table H, the six-row residual table). Seven of the
+eight tables state theirs in prose immediately after that heading; only Table H's are a markdown
+table. Count: A 2, B 4, C 3, D 2, E 2, F 3, G 2, H 6 = **24**, matching DC-12's stated count exactly
+— no reconciliation needed.
+
+All commands run with `model-bench/` as the working directory, against `bb24a44`. "Target" is each
+residual's stated **after** value (every table has landed, so "after" is what the current tree must
+show).
+
+| # | Tbl | Command (verbatim) | Target | Observed | Result |
+|---|---|---|---|---|---|
+| 1 | A | `grep -rFc lmsCliCommit modelbench tests --include='*.py'` | 0 | 0 | PASS |
+| 2 | A | `grep -rFn sizeBytes modelbench tests/conftest.py --include='*.py'` | 0 | 0 | PASS |
+| 3 | B | `grep -rFc FORBIDDEN_BY_ARM_KIND modelbench tests --include='*.py'` | 0 | 0 | PASS |
+| 4 | B | `grep -rFn 'frozenset(FORBIDDEN' modelbench --include='*.py'` | 0 | 0 | PASS |
+| 5 | B | `grep -rFn 'REQUIRED_BY_SCHEMA[1]["model"]' modelbench tests --include='*.py'` | 0 | 0 | PASS |
+| 6 | B | `grep -rFn 'set(REQUIRED_BY_SCHEMA[1]) == {"model",' modelbench tests --include='*.py'` | 0 | 0 | PASS |
+| 7 | C | `grep -rFc _percentile modelbench/results.py` | 0 | 0 | PASS |
+| 8 | C | `grep -rFc _percentile modelbench/stats.py` | 0 | 0 | PASS |
+| 9 | C | `grep -rEn 'def [A-Za-z_]*(percentile\|quantile)' modelbench --include='*.py'` | 2, named (`stats.py:601 percentile`, `stats.py:304 exact_paired_quantiles`) | 2, same two names | PASS |
+| 10 | D | `grep -rEn '\bbootstrap_seed' modelbench tests --include='*.py'` | 0 | 0 | PASS |
+| 11 | D | `grep -rFn 'cluster-bootstrap' modelbench tests --include='*.py'` | 0 | 0 | PASS |
+| 12 | E | `grep -rFn 'max(clamp[0], widened[0])' modelbench --include='*.py'` | 1 (`stats.py:301`) | 1, same line | PASS |
+| 13 | E | `grep -rFn 'min(clamp[1], widened[1])' modelbench --include='*.py'` | 1 (`stats.py:301`) | 1, same line | PASS |
+| 14 | F | `grep -nF 'separationRaw: float \| None' modelbench/results.py` | 0 | 0 | PASS |
+| 15 | F | `grep -nF 'separationZ: float \| None' modelbench/results.py` | 0 | 0 | PASS |
+| 16 | F | `grep -rFn '{"binary", "continuous"}' modelbench --include='*.py'` | 0 | 0 | PASS |
+| 17 | G | `grep -rFn 'percentile(means, level=LEVEL_CI95_LO)' modelbench --include='*.py'` | 0 | 0 | PASS |
+| 18 | G | `grep -rFn 'percentile(means, level=LEVEL_CI95_HI)' modelbench --include='*.py'` | 0 | 0 | PASS |
+| 19 | H | `grep -nF 'clamp=(-1.0, 1.0)' modelbench/stats.py` | 0 | 0 | PASS |
+| 20 | H | `grep -nF 'SUPPORT_DIFF_PROPORTIONS[0]' modelbench/stats.py` | 1 (`:466`) | 1, same line | PASS |
+| 21 | H | `grep -nF 'SUPPORT_DIFF_PROPORTIONS[1]' modelbench/stats.py` | 1 (`:467`) | 1, same line | PASS |
+| 22 | H | `grep -nF '"MOVER-D" if mover_arm[0] <= exact_arm[0]' modelbench/stats.py` | 0 | 0 | PASS |
+| 23 | H | `grep -nF 'arm if arm == "MOVER-D" else' modelbench/report.py` | 0 | 0 | PASS |
+| 24 | H | `grep -nF 'tuple[str, str] \| None' modelbench/stats.py` | 0 | 0 | PASS |
+
+**24/24 PASS.** Residual 9 (Table C's third) is the one whose stated target is deliberately
+non-zero — the plan requires the count **and** the two survivor names (`percentile`,
+`exact_paired_quantiles`) to match, per §7 rule 5(b)'s named-line-set clause; both hold.
+
+### 3. Mismatch investigation
+
+**Nothing to investigate — all 24 residuals hit their target on the first run.** No later table's
+edit moved an earlier table's number: Table G's `stats.py:159` collision with Table C was already
+resolved by ordering (C then G) at landing and both commands still read their stated values; Table
+H's `envelope_arms`/`_compose` rewrite, which Table E's row explicitly warns is the collision point
+("Table H meets this table, and this table does not move"), left Table E's two third-form residuals
+at their stated 1/1, confirmed live in §2 rows 12–13. This is the round-level property working as
+designed rather than by luck: every pair of tables the plan itself names as meeting on a line (C/G on
+`stats.py:159`; E/H on `_widen`'s body and `envelope_arms`'s call sites; H/F on `report.py`) was
+checked at its own seam and none moved the other's residual.
+
+### 4. The two standing sweeps, re-run over the current 24
+
+**4a. Disowning-mention sweep — no new instance, the three known ones still hold.** The three
+previously-found instances (Table A residual 2, scoped to `modelbench` + `tests/conftest.py`; Table
+C residual 9/"3", scoped to `modelbench` because the unscoped form matches `def
+test_percentile_rejects_a_float_level`-shaped test names; Table H residual 19/"1", matched on the
+keyword form `clamp=(-1.0, 1.0)` rather than the bare tuple, because the bare tuple also matches a
+sentence in `_widen`'s own docstring) are all still in place verbatim in the landed commands (§2 rows
+2, 9, 19) and all three still read their stated value. I additionally spot-checked every
+broadly-scoped (`modelbench tests`) residual with a stated-zero target — rows 1, 3–6, 10–11 — for a
+comment or test name that would inflate the count above zero: none exists at `bb24a44` (all six
+observed at 0, §2). No fourth instance found.
+
+**4b. Third-form/fragility sweep — 20 robust / 4 third-form / 0 blind, re-derived.** The
+discriminator: does the matched span include text the table's own edit rewrites? I classified all 24
+by reading each command against its site's edit, not by citing the plan's own v1.19/v1.23 self-report
+(plan lines 3064–3090), which states the same numbers and is corroborating rather than the source
+here:
+
+- **Robust (20)** — span is either the retired token whole (rows 1–8, 10–11, 14–19, 22–24 — 19
+  rows), or a construct whose *form* the edit leaves alone while changing a name/key/value inside it
+  (row 6, `REQUIRED_BY_SCHEMA[1]`'s value-display subscript — the subscript syntax survives, only the
+  set literal inside changes). That is 20.
+- **Third-form / fragile (4)** — rows 12–13 (Table E) and 20–21 (Table H). Both pairs are stated over
+  text a *parameterising* edit creates, because the edit rewrites the expression the literal was
+  fused into (`_widen`'s clamp becoming an argument; `_compose`'s composed return becoming a clamp
+  over a composition) — a first-form residual over the pre-edit text would go blind on exactly the
+  half-application it exists to catch (documented at length on both tables' rows, and reproduced for
+  Table E's pair in Pass 9/impl-gate F1). Both pairs still read their non-zero target live (§2), so
+  neither has yet been asked to survive a further rewrite of the expression it pins — the risk is
+  named, not realised.
+- **0 blind.** No residual currently reads a value consistent with a faithful edit *and* with the
+  defect it exists to catch — the failure mode both sweeps exist to find.
+
+This matches the plan's own §7 rule 5(b) count ("twenty of twenty-four robust, four third-form (E 2,
+H 2), none fragile") — independently reproduced rather than merely trusted.
+
+### 5. Enumerating-command re-check — do all seven other tables' commands still return their stated counts?
+
+**Confirmed: yes, all seven, exactly, including per-file splits.** U68 (the Table H unit) already
+re-ran Table H's own two enumerating commands against its `e162ba9` baseline (`bound_by` → 15,
+`envelope_arms` → 22) and reported them undisturbed by the three units landed since. I ran the other
+seven tables' enumerating commands against **their own stated baselines** — `5878014` for the six
+tables the plan says "keep their own commits" (A, B, C, D, E, G) and `e162ba9` for Table F (re-
+pointed at v1.23) — using `git grep -c <pattern> <rev> -- <pathspec>`, which reads the tree at that
+ref without touching the working copy:
+
+| Table | Command | Baseline | Stated | Observed | Per-file match |
+|---|---|---|---|---|---|
+| A | `lmsCliCommit` | `5878014` | 3 | 3 | exact |
+| B (1–6) | `armKind`, `FORBIDDEN_BY_ARM_KIND`, `ARM_KINDS`, `arm_kind`, `REQUIRED_BY_SCHEMA`, `EXPECTED_MODEL_SCHEMA_1` | `5878014` | 50, 10, 2, 18, 22, 3 | 50, 10, 2, 18, 22, 3 | exact, all six |
+| C | `_percentile` | `5878014` | 7 | 7 | exact |
+| D (1–4) | `bootstrap_seed`, `conservative_envelope`, `cluster-bootstrap`, `DecidedBy` | `5878014` | 29, 8, 27, 3 | 29, 8, 27, 3 | exact |
+| D (subrow) | `paired_cluster_bootstrap`, `paired_bootstrap` | `5878014` | 13, 8 | 13, 8 | exact |
+| E (1–2) | `_widen`, `paired_cluster_bootstrap(` | `5878014` | 7, 5 | 7, 5 | exact |
+| F (1–8) | `scored_outcome`, `ItemResult(`, `ContinuousMetric`, `separation`, `named_metrics`, `isinstance(.*BinaryMetric`, `\.mean`, `"continuous"` | `e162ba9` | 17, 14, 5, 2, 12, 6, 3, 2 | 17, 14, 5, 2, 12, 6, 3, 2 | exact, all eight |
+| G (1–3) | `97.5`, `paired_bootstrap(`, `paired_cluster_bootstrap(` | `5878014` | 2, 5, 5 | 2, 5, 5 | exact |
+
+**Zero drift on every command, at every table's own stated baseline.** This is the answer to the
+round-level question DC-12 exists for: no unit landed since a table's own baseline has silently moved
+that table's site-finding surface. (I hit one tooling snag worth recording: `git grep -E
+'isinstance(.*BinaryMetric'` fails — `-E` requires the literal `(` escaped, where the plan's plain
+`grep -rn` treats it as basic-regex-literal; re-run without `-E`, matching git grep's default mode,
+resolved it. Not a finding against the plan — the plan's own command is correct as written for plain
+`grep`, and the discrepancy was mine.)
+
+### 6. The known issue — Table H's row text versus the shipped form
+
+**Confirmed on both halves asked.**
+
+**(a) Equivalence.** The shipped `_compose` (`modelbench/stats.py:465-472`) computes
+`u_lo, u_hi = min(mover[0], exact[0]), max(mover[1], exact[1])`, then `lo = max(SUPPORT_DIFF_PROPORTIONS[0],
+u_lo)` / `hi = min(SUPPORT_DIFF_PROPORTIONS[1], u_hi)`, and attributes `bound_by` from `lo != u_lo` /
+`hi != u_hi` rather than re-testing `u_lo`/`u_hi` against the support directly. Algebraically,
+`max(S_LO, u_lo) != u_lo` iff `u_lo < S_LO` — exactly Rule 4a's strict support comparison. Verified
+by execution too (not just traced):
+
+```
+compose_check(-1.5, 0.5)  -> lo=-1.0, hi=0.5, bound_lo='support', bound_hi='arm'   # escapes below
+compose_check(-1.0, 0.5)  -> lo=-1.0, hi=0.5, bound_lo='arm',     bound_hi='arm'   # exactly at support
+compose_check(-0.9, 1.5)  -> lo=-0.9, hi=1.0, bound_lo='arm',     bound_hi='support'
+```
+
+A bound sitting exactly *at* the support attributes to an arm, never to `"support bound"` — Rule 4a's
+assertion 5, holding live, not just in the docstring's prose.
+
+**(b) The plan's own row text is inconsistent with its own residuals.** The row at
+`docs/plans/small-model-benchmarking.md:4131` (`stats.py:444`) prescribes `bound_by = (…)` "computed
+from `u_lo`/`u_hi` against the support" **in addition to** the return line's own
+`max(SUPPORT_DIFF_PROPORTIONS[0], u_lo)` / `min(SUPPORT_DIFF_PROPORTIONS[1], u_hi)`. Read literally,
+that is a **second**, independent comparison of `u_lo`/`u_hi` against `SUPPORT_DIFF_PROPORTIONS[0]`/
+`[1]` inside the `bound_by` branch — so an implementer following the row text as its own two lines
+describe would spell each subscript **twice**, and residuals 20/21 (§2) — whose target is exactly
+**1** — would read **2** on that literal, faithful reading. The shipped form avoids the second
+mention by re-testing `lo != u_lo` (already-computed) instead of `u_lo < SUPPORT_DIFF_PROPORTIONS[0]`
+(a fresh comparison), which is why it reads 1, not 2. This is the **ninth** instance of the plan
+being the defective party on this coordination.
+
+### 7. Findings
+
+**M11-1 (major, owed to `architect`).** §4 S1e Table H's `stats.py:444` row (plan line 4131) is
+internally inconsistent: its own prose ("computed from `u_lo`/`u_hi` against the support") describes
+a `bound_by` implementation that, read literally, spells `SUPPORT_DIFF_PROPORTIONS[0]`/`[1]` a second
+time, in contradiction with the same row's residuals 20/21 (target exactly 1, §2). The shipped code
+sidesteps this correctly (§6a) and the implementer flagged it in the landing commit — but the plan
+text itself is still wrong and has not been corrected. **Not blocked on unbuilt work**: this is a
+self-contained rewrite of one row's `bound_by` sketch (e.g. reusing `lo`/`hi` via `lo != u_lo`/`hi !=
+u_hi` rather than re-deriving a comparison against the support), fixable in the next plan revision
+with no dependency on anything unbuilt — per the standing rule, it may not be carried as "deferred by
+choice."
+
+**M11-2 (nit).** `modelbench/stats.py:466-467`'s comment reads: `` `lo != u_lo` iff the support was
+strictly below the composed lower bound ``. That is backwards: `lo != u_lo` iff `u_lo < SUPPORT_DIFF_PROPORTIONS[0]`
+(the composed bound below the support, not the support below the bound) — confirmed by the second
+line of §6a's execution trace (`u_lo=-1.5` against `S_LO=-1.0`: the support is *above*, not below,
+and the clamp fires). The code is correct; only the comment's direction is stated backwards. Low
+stakes — it doesn't affect any residual, test, or the round-level property — but worth a one-clause
+fix (e.g. "iff the composed bound fell below the support") since it is exactly the kind of
+misdirection the exact-text residual discipline exists to prevent elsewhere.
+
+### 8. What's solid
+
+DC-12's substance is fully clean: 24/24 residuals extracted and matched the plan's own stated count,
+all 24 re-run and all 24 hit target, both standing sweeps re-run clean with an independent
+re-derivation (not a re-citation) of the fragility partition, and all eight tables' enumerating
+commands hold at their stated baselines with zero drift — the round-level property DC-12 exists to
+prove is proven, not merely asserted. The Table H unit's own equivalence claim and its "ninth
+defect" flag both check out under independent verification (algebra and execution, not just a
+re-read of its reasoning).
+
+### 9. Open questions
+
+None that block S1's closure on DC-12's own terms. M11-1 is a plan-text fix `architect` can make
+without further input; I did not attempt it myself (out of scope for `analyst`, per the guardrails).
