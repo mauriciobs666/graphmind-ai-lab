@@ -283,8 +283,11 @@ signal, not the threshold.
   that returns a bare runtime error, a stamp write rejected with **no error
   prefix**, a **read-back that itself errors**, the stray query called directly
   with an unusable allow-list, a **static check that every `rq` call site in
-  `pipeline.sh` passes `GRAPH.QUERY` or `GRAPH.RO_QUERY`** (no other command's
-  reply carries the trailer `rq` gates on), and two call-site mutations. **The prefix-less stamp
+  `pipeline.sh` passes `GRAPH.QUERY` or `GRAPH.RO_QUERY`, or nothing** (no other
+  command's reply carries the trailer `rq` gates on; the check is textual and its
+  reach has a **stated bound**, deliberately not restated here — it lives in the
+  block header of `test-stamp-wiring.sh`, pinned form by form by a coverage
+  probe), and two call-site mutations. **The prefix-less stamp
   rejection and the erroring read-back** were added 2026-09-09 with the `rq()`
   fix, and neither is judged on the exit code: both already exited 1 beforehand,
   by falling through to a *later* assertion and reporting that one's finding, so

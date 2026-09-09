@@ -339,14 +339,17 @@ done
 # the body and leaving the sentence alone:
 #   * a command that is not one contiguous `GRAPH.<word>` run of characters at
 #     the call site — reaching rq through a variable or array element
-#     (`rq "$Q" "$CMD"`), or split by quote concatenation (`GRAPH".DELETE"`) or
-#     an escaped dot (`GRAPH\.DELETE`);
+#     (`rq "$Q" "$CMD"`), split by quote concatenation (`GRAPH".DELETE"`) or an
+#     escaped dot (`GRAPH\.DELETE`), or NOT SPELLED `GRAPH.…` AT ALL: the token
+#     regex is anchored on `GRAPH\.`, so `rq "$Q" PING` is a literal AND a
+#     misuse AND invisible (form B15);
 #   * a call site that does not spell `rq` on the same logical line as the
 #     command — a wrapper function (`w() { rq "$@"; }` … `w "$Q" GRAPH.DELETE`).
 # Nothing short of a shell parser closes those, so they are a DECISION and not
-# an omission. IF YOU ADD AN rq CALL SITE WHOSE COMMAND IS NOT A LITERAL AT THE
-# SITE, THIS CHECK CHECKS NOTHING ABOUT IT: verify it by hand, and prefer
-# writing the literal. Measured residual today: all 3 sites pass a literal or
+# an omission. IF YOU ADD AN rq CALL SITE WHOSE COMMAND IS NOT A LITERAL
+# `GRAPH.<word>` AT THE SITE, THIS CHECK CHECKS NOTHING ABOUT IT: verify it by
+# hand, and prefer writing the literal. "A literal" alone is too loose — that is
+# how the sibling statement in pipeline.sh drifted, corrected 2026-09-09. Measured residual today: all 3 sites pass a literal or
 # nothing, so the uncovered forms occur zero times in pipeline.sh.
 #
 # THE COST OF A MISS IS BOUNDED, and that is why the mechanism stops where it
@@ -476,6 +479,7 @@ probe_snippet() {
     B12) printf '%s\n' 'rq "$Q" "${CMDS[0]}"' ;;
     B13) printf '%s\n' 'rq "$Q"' ;;
     B14) printf '%s\n' 'rq "$Q" GRAPH.RO_QUERY' ;;
+    B15) printf '%s\n' 'rq "$Q" PING' ;;
     C1)  printf '%s\n' '# rq "$Q" GRAPH.DELETE' ;;
     C2)  printf '%s\n' ':   # rq "$Q" GRAPH.DELETE' ;;
     C3)  printf '%s\n' 'echo "call rq with GRAPH.DELETE" >/dev/null' ;;
@@ -555,6 +559,7 @@ B11 flag    command substitution as the argument    "$(printf %s GRAPH.DELETE)"
 B12 blind   array element                           "${CMDS[0]}"
 B13 clean   no command argument (rq defaults)       rq "$Q"
 B14 clean   the legitimate read command             rq "$Q" GRAPH.RO_QUERY
+B15 blind   a command not spelled GRAPH.<word>      rq "$Q" PING
 C1  ignored whole-line comment                      # rq "$Q" GRAPH.DELETE
 C2  alarm   trailing comment on a live line         :   # rq "$Q" GRAPH.DELETE
 C3  alarm   the text inside a string literal        echo "call rq with GRAPH.DELETE"

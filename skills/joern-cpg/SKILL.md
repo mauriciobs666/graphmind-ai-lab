@@ -161,9 +161,13 @@ run a build:
   exited 1 before the fix too, by falling through to a later assertion and
   reporting that one's finding), the stray query called
   directly with an unusable allow-list, a **static check over `pipeline.sh`'s own
-  `rq` call sites** (each must pass `GRAPH.QUERY` or `GRAPH.RO_QUERY` — no other
-  command's reply carries the trailer `rq` gates on, and `GRAPH.DELETE`'s bare
-  `OK` would read as a failure), and mutations that revert the call site
+  `rq` call sites** (each must pass `GRAPH.QUERY` or `GRAPH.RO_QUERY`, or nothing
+  — `rq` defaults to `GRAPH.QUERY` — because no other command's reply carries the
+  trailer `rq` gates on, and `GRAPH.DELETE`'s bare `OK` would read as a failure;
+  that check is textual and its reach has a **stated bound**, deliberately not
+  restated here — read the block header in `test-stamp-wiring.sh`, where a
+  coverage probe enumerates every call-site form and pins what it cannot see),
+  and mutations that revert the call site
   to the `$(…)` form or drop the allow-list after a populated stamp.
   **Every case asserts an exact exit code, and every case expected to fail must
   also be shown to have printed its branch's stamp block** — that pair is not

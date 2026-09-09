@@ -358,11 +358,13 @@ if [ -n "$LOAD" ]; then
   # LOGICAL line here (backslash continuations joined) that calls `rq`, any
   # literal `GRAPH.<word>` must upper-case to GRAPH.QUERY or GRAPH.RO_QUERY. No
   # second argument is fine — rq defaults to GRAPH.QUERY.
-  # IT CANNOT SEE a command that is not one contiguous literal at the site (a
-  # variable or array element, or a token split by quote concatenation or an
-  # escaped dot), nor a site that does not spell `rq` beside the command (a
-  # wrapper function). Write the literal; if you cannot, CHECK IT BY HAND —
-  # nothing else will. That bound is enumerated form by form and pinned by a
+  # IT CANNOT SEE a command that is not one contiguous literal `GRAPH.<word>` at
+  # the site — a variable or array element, a token split by quote concatenation
+  # or an escaped dot, or a command not spelled `GRAPH.…` at all, since the token
+  # regex is anchored on `GRAPH\.` (`rq "$Q" PING` is a literal, a misuse, and
+  # invisible) — nor a site that does not spell `rq` beside the command (a
+  # wrapper function). Write the literal `GRAPH.<word>`; if you cannot, CHECK IT
+  # BY HAND — nothing else will. That bound is enumerated form by form and pinned by a
   # coverage probe in the same file; read the block header there before adding a
   # call site of a new shape.
   #
