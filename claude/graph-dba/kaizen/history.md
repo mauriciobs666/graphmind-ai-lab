@@ -3,6 +3,53 @@
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
 
+## 2026-09-09 — the CPG stamp-race entry discarded: fixed 40 minutes after it was captured (U26)
+
+- **What:** `cobb`, distilling `graph-dba`'s own single produced `kaizen_team` entry (unit U26),
+  **discarded** `f3c1a27e-9b64-4d18-a5e2-7c0b91d4e8a3` (2026-09-07, `suggestedHome: knowledge
+  base`). Nothing promoted, no backlog item opened. The entry held that `pipeline.sh` computed the
+  `CpgBuildInfo` `SOURCE_COMMIT`/`SOURCE_DIRTY` stamp with `git -C "$SRC"` *after* the load, so on
+  a multi-hour build both values were repo-wide and raced any concurrent session.
+- **It was accurate when written and dead the same evening.** The entry's `createdAt` is
+  2026-09-07T22:40:00Z; `6012ddb` ("capture CPG provenance before the parse, scoped by pathspec")
+  is dated 2026-09-07 20:20:21 -0300 — 40 minutes later.
+- **Re-derived by execution, not by re-reading the citation.**
+  - *Pre-fix* (`6012ddb^`): the stamp block sat at `pipeline.sh:136-140`, after build (`:66`),
+    export (`:69`) and transform+load (`:89`), and ran `git -C "$SRC" rev-parse --short HEAD`
+    plus an unscoped `git -C "$SRC" status --porcelain`. `git-provenance.sh` did not exist. The
+    entry's description of the mechanism is exact.
+  - *Now*: provenance is captured at `pipeline.sh:97-110`, before even `mkdir -p "$WORKDIR"`;
+    `cpg_provenance_stamp` at `:235` passes the captured `CPG_SOURCE_*` values verbatim, with no
+    `git` invocation anywhere between capture and stamp. Dirtiness is
+    `git status --porcelain -- ":(literal)<name>"` (`git-provenance.sh:105`), and object ids are
+    full 40-char OIDs rather than `--short`.
+  - *The race, reproduced in a throwaway repo*: captured `sub/` at `c1`, then moved `HEAD` twice
+    and modified a file **outside** `sub/`, then stamped. The rendered Cypher carried
+    `SOURCE_COMMIT: "13cbf9a2591fd5d3b447c9ec6d0122f111831a0c"` — the parsed commit — and
+    `SOURCE_DIRTY: false`. The pre-fix expressions, evaluated at that same instant, returned
+    `4e577c8` and `true`. Both defect directions reproduce under the old code; neither survives
+    the new one.
+  - *Paired probes against this repo* (dirty under `claude/` and `model-bench/`):
+    `cpg_provenance_capture model-bench` → `dirty=true` (the control, proving the detector fires
+    at all); `cpg_provenance_capture skills/joern-cpg` → `dirty=false`; an untracked staged copy
+    inside the work tree → return code 1, i.e. `PROVENANCE=none` rather than an inherited `HEAD`.
+- **Why discarded rather than promoted:** the lesson is already published at the point of use, in
+  three places, and stated more completely than the entry states it — the "Provenance" section of
+  `skills/joern-cpg/SKILL.md`, the header of `skills/joern-cpg/scripts/git-provenance.sh` (both
+  failure directions, with this build's four-commit `HEAD` sequence), and
+  `skills/cpg-analysis/references/freshness.md` for a consumer meeting a pre-fix marker. It is not
+  a FalkorDB fact, so `falkordb-quirks.md` is the wrong home; it binds only while building a CPG,
+  so an always-loaded prompt is the wrong price.
+- **No live residue.** `cpg_falkorchat`'s marker reads `PROVENANCE = hand-backfilled`,
+  `SOURCE_COMMIT = b795f4c23e066278ba8582d8cdd213d03b73e9df`, `SOURCE_DIRTY = false` over 10
+  keys — the correction the entry's own evidence describes, and the shape `freshness.md`
+  documents.
+- **Graph:** `producedEdges=1`, `mentionEdges=0`, so `otherRemaining == 0` and the whole node was
+  `DETACH DELETE`d. This agent's two `MENTIONS`-only nodes (U24's kept-opens against K-009) were
+  not touched.
+- **Plan items:** none opened. See the K-008 note below, recorded by the same pass.
+
+
 ## 2026-09-08 — K-009 opened, and `falkordb-quirks.md` gains the mid-stream abort (U24)
 
 - **What:** `cobb`, distilling `analyst`'s `kaizen_team` chunk F (unit U24), routed two

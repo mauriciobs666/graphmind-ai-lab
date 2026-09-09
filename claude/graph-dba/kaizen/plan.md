@@ -16,7 +16,7 @@
 | K-005 | 2026-07-28 | med | 🔵 | Streaming loader for large-repo CPGs — `joern-cpg`'s transformer dedupes in memory, fine for moderate repos but a risk at repo scale (inherited from the retired `joern` agent's K-003) |
 | K-006 | 2026-07-28 | low | 🔵 | CPGQL script library (`skills/joern-cpg/scripts/queries/*.sc`) for common security/taint/call-graph queries (inherited from `joern` K-004) |
 | K-007 | 2026-08-18 | low | 🔵 | Unreconciled relationship-count discrepancy on a scoped `DETACH DELETE` of a workflow-snapshot subgraph (34 deleted vs. ~15 expected) — investigate if it recurs |
-| K-008 | 2026-09-07 | med | 🔵 | Two verified CPG-freshness facts need promoting into the `joern-cpg`/`cpg-analysis` skill docs — outside `cobb`'s write remit, so parked here for `graph-dba` |
+| K-008 | 2026-09-07 | med | 🔵 | Two CPG-freshness facts from U6, overtaken by `6012ddb`: one delivered, one superseded — `graph-dba` to confirm, then close or re-scope |
 | K-009 | 2026-09-08 | high | 🔵 | `pipeline.sh`'s `rq()` returns **0** on a bare FalkorDB runtime-error reply — a failed query reads as success at any call site with no expected-substring argument |
 
 ### K-001 — Tool permissions decision  ⚪ DEFERRED (2026-06-05)
@@ -73,40 +73,34 @@
   `kaizen_graph_dba` (entryId `6e5d6451-72fa-400c-b002-52757727f805`) alongside this backlog
   item, in case a future occurrence supplies the missing pre-delete count.
 
-### K-008 — Promote two verified CPG-freshness facts into the skill docs
-- **Status:** 🔵 proposed (kept open from the `kaizen_team` distillation pass U6, 2026-09-07 —
-  **both facts are verified true**; the blocker is ownership, not doubt)
+### K-008 — Two CPG-freshness facts from U6, overtaken by the provenance rewrite
+- **Status:** 🔵 proposed — **`graph-dba` to confirm the two dispositions below, then close or
+  re-scope.** Both facts were verified true when this item was opened (U6, 2026-09-07). `6012ddb`
+  has since rewritten the very mechanism they describe: it delivered one and falsified the
+  other's premise. Neither is a doc edit to apply as written.
 - **Priority:** medium
-- **Why it is parked:** the correct homes are `skills/joern-cpg/SKILL.md` and
-  `skills/cpg-analysis/references/freshness.md`, which sit outside `cobb`'s unprompted-write
-  remit. They are also the *right* homes — seven agents read the freshness recipe, so hoarding
-  these in a `claude/graph-dba/` file would be the exact anti-pattern `agent-maintenance` §5
-  warns about. `graph-dba` owns the `joern-cpg` pipeline and should apply both.
-- **Fact 1 (raw entry `b701038b-f723-4c8c-81b8-c981c1819de9`) — a parse root can be BOTH
-  `.venv`-pruned AND a real git working tree.** Stage the pruned copy *inside* the repo under a
-  gitignored path (`cpg/.cpg-artifacts/src/<name>`, covered by `cpg/.gitignore`) instead of
-  `/tmp`. `pipeline.sh` then resolves `SOURCE_COMMIT`/`SOURCE_DIRTY` for the `:CpgBuildInfo`
-  marker, which the `/tmp` scratch-copy pattern cannot. Re-derived 2026-09-07: the staged root
-  `cpg/.cpg-artifacts/src/falkor-chat-server` exists, is gitignored, and
-  `git -C <root> rev-parse --short HEAD` resolves. **Target edits:** the "No `--exclude`/ignore
-  flag exists" bullet in `skills/joern-cpg/SKILL.md` (which today says "stage into a scratch
-  copy" without saying *where*), and the `sourceCommit`/`sourceDirty` bullet under **Limits** in
-  `skills/cpg-analysis/references/freshness.md` (which today states the `.git`-less limitation as
-  if inherent — it is a consequence of staging outside the repo, and is avoidable).
-- **Fact 2 (raw entry `4f1976fc-b7e0-4509-a274-c3994dbb7083`) — `SOURCE_DIRTY` is REPO-WIDE, not
-  scoped to the parse root.** `pipeline.sh:139` runs `git -C "$SRC" status --porcelain` with **no
-  pathspec**; `-C` only changes the working directory, never the scope, so unrelated
-  untracked/modified files anywhere in the repo stamp `SOURCE_DIRTY=true` even when the parsed
-  source is clean at `HEAD`. Re-derived 2026-09-07: `git -C claude/graph-dba status --porcelain`
-  returned four repo-root-relative paths while the pathspec-scoped form was empty. Read the flag
-  as *"the repo had uncommitted changes somewhere"*, never as *"the parsed source was modified"*.
-  **Target edit:** a `SOURCE_DIRTY` line under **Limits** in
-  `skills/cpg-analysis/references/freshness.md`. Optionally also tighten `pipeline.sh` to pass a
-  pathspec — but that changes stamped behavior, so treat it as a separate decision, not part of
-  the doc fix.
-- **Notes:** each raw entry was cleared from `kaizen_team` in the same pass; this item is their
-  durable record. `entryId`s are quoted above so a later distillation pass grepping this file
-  finds them.
+- **Fact 1 (raw entry `b701038b-f723-4c8c-81b8-c981c1819de9`) — superseded; do not apply.** As
+  opened, this held that a parse root could be both `.venv`-pruned and a real git working tree:
+  stage the pruned copy inside the repo under a gitignored path
+  (`cpg/.cpg-artifacts/src/<name>`) and `pipeline.sh` would resolve `SOURCE_COMMIT`/`SOURCE_DIRTY`
+  where a `/tmp` copy could not. That only ever worked because the pre-`6012ddb` stamp inherited
+  the *containing* repo's `HEAD` for an untracked copy — which was itself the defect `6012ddb`
+  removed. Capture now returns non-zero for such a copy and the build stamps `PROVENANCE=none`
+  with a warning in the first seconds of the run. `--source-origin <the tracked directory the copy
+  was staged from>` is the supported route, and `skills/joern-cpg/SKILL.md`'s "No `--exclude`"
+  bullet already says exactly that. Writing the fact as opened would re-document behaviour the fix
+  deliberately removed.
+- **Fact 2 (raw entry `4f1976fc-b7e0-4509-a274-c3994dbb7083`) — delivered; nothing to apply.** As
+  opened, `pipeline.sh` ran `git -C "$SRC" status --porcelain` with no pathspec, so unrelated
+  untracked or modified files anywhere in the repo stamped `SOURCE_DIRTY=true` over a parsed
+  source that was clean at `HEAD`. `git-provenance.sh:105` now scopes that check with a
+  `:(literal)` pathspec, and `skills/cpg-analysis/references/freshness.md` already documents
+  `sourceDirty` as scoped — "it says nothing about the rest of the repo".
+- **Notes:** each raw entry was cleared from `kaizen_team` in the pass that opened this item, so
+  this item is their durable record; the `entryId`s are quoted above so a later distillation pass
+  grepping this file finds them.
+- 2026-09-09 (`cobb`, U26): both dispositions above re-derived by execution against the current
+  tree, while distilling `f3c1a27e-9b64-4d18-a5e2-7c0b91d4e8a3`.
 
 ### K-009 — `pipeline.sh`'s `rq()` treats a bare runtime-error reply as success
 - **Status:** 🔵 proposed (kept open from the `kaizen_team` distillation pass U24, 2026-09-08 —
