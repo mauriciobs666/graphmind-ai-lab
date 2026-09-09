@@ -2,6 +2,77 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-09 — `data-scientist.md`: a provenance audit is computed before any value-modifying post-transform (U27)
+
+- **What:** `cobb`, distilling `data-scientist`'s single `kaizen_team` entry (unit U27, entry
+  `a4f1c6d2-3b7e-4c81-9f0a-6d25e8b7c913`, 2026-09-08, `suggestedHome: knowledge base`), folded one
+  sentence pair onto the existing *"The arithmetic of a published statistic is part of the claim"*
+  bullet in § *Classical ML & statistics*. No new bullet, no new knowledge base; one line changed,
+  +80 words.
+- **The promoted rule.** A provenance label is part of the published claim, so the
+  which-instrument-produced-this-number audit is computed **before** any value-modifying
+  post-transform (support clamp, rounding, normalisation), never after: the transform can collapse
+  two distinct candidates onto one printed value, and a tie-break over the transformed pair then
+  names a source that produced neither. Moving it is free wherever the transform is bound-wise and
+  monotone — it commutes exactly with a bound-by-bound `min`/`max` composition.
+- **Why the prompt and not `lm-studio-model-notes.md`.** That knowledge base is LM-Studio
+  small-model realism; this is a statistics-reporting rule, and § *Classical ML & statistics*
+  already hosts that class (exact index arithmetic; seeded-bootstrap atom instability). A second
+  knowledge base for a single entry is premature.
+- **Verified by re-derivation, not by re-reading**, against `model-bench/modelbench/stats.py` pinned
+  at `d45e5ff` and copied read-only into the session scratchpad. Nothing was written under
+  `model-bench/`.
+  - **The counts are exact, and were enumerated rather than decomposed.** Tables per `n`:
+    455 / 5 456 / 10 660 / 12 341 at `n` = 12 / 30 / 38 / 40 — each equal to `C(n+3,3)` — summing to
+    **28 912**; times the **6** design effects `{1.0, 1.2, 1.5, 2.0, 4.0, 7.0}` = **173 472**
+    combinations. The multiplier is the six design effects: 28 912 is already the total across all
+    four `n`, not a per-`n` figure.
+  - **The null result reproduced:** over all 173 472 combinations, **0** differences in the printed
+    bounds between compose-then-clamp and clamp-then-compose, **0** point-containment differences,
+    **0** zero-exclusion differences.
+  - **It is not a vacuous null.** The clamp actually bound at least one arm-bound in **8 180** of
+    173 472 combinations (4.7 %), and **1 781** had *both* arms' lower bounds outside support — the
+    tie-inducing shape.
+  - **Passing controls, run in the same loop over the same data**, so a uniform `0` could not be
+    read off a dead comparator: an asymmetric clamp `(-1,1)` vs `(-0.98,0.98)` → **10 056**
+    differences; width-normalisation, which is not bound-wise → **167 167**; a non-monotone
+    bound-wise `-abs()` → **141 412**; and rounding to 3 dp — monotone and bound-wise, like the
+    clamp → **0**, which is the commute theorem holding on a second transform rather than a second
+    dead probe.
+- **The rule-versus-null-result tension resolves in the entry's favour, and the entry itself says
+  so.** The sweep measures **printed numbers**; the rule is about **attribution**. The null result is
+  not evidence *for* the rule — it is evidence that adopting the rule is *free*. The evidence *for*
+  the rule is the divergence the sweep never counted: recomputing `bound_by` on the clamped arms
+  (what the code does at `d45e5ff`) against the unclamped arms disagrees on **3 525** of 173 472
+  combinations — 1 776 lower-bound flips, 1 776 upper-bound flips, 27 both
+  (1 776 + 1 776 − 27 = 3 525), counted independently by two scripts that agreed.
+- **One correction to the cited separating case.** `(0, 0, 38, 2)` at DEFF 1.5 reproduces exactly:
+  MOVER-D lower unclamped `-0.9943104520691852`, exact lower unclamped `-1.0112372435695796`,
+  printed interval `(-1.0, -0.7728921326614777)`, point `-0.95`, McNemar exact `p = 7.28e-12` — zero
+  is excluded, so the verdict is distinguishable. But at that table the shipped tie-break still
+  names the **right** arm under both orderings (`exact paired bootstrap`): it is a case where the
+  audit is *unanswerable* — the printed `-1.0` equals neither arm's own value — not one where it is
+  *mis-answered*. The stronger shape the fact asserts does occur, and the entry could have cited it:
+  `(0, 0, 6, 6)` at DEFF 7.0, where both lower bounds fall outside support (`-1.1514326608688510`
+  MOVER-D, `-1.1614378277661477` exact), both clamp to `-1.0`, and the `<=` tie-break names MOVER-D
+  where the exact arm was the more conservative one.
+- **Discarded as already published at the point of use:** the model-bench-specific half.
+  `docs/plans/small-model-benchmarking-ml.md` **Rule 4a** (pinned `a707d09`) already carries the
+  ruling, the same 28 912 / 173 472 counts, the commute proof and the `support bound` third token;
+  `stats.py`'s `_compose` docstring at `d45e5ff` records the pending placement. What that document
+  never states — and what was promoted — is the generalisation past a support clamp to *any*
+  value-modifying post-transform, rounding and normalisation included.
+- **Collateral, already scheduled — no routing needed.** At `d45e5ff`, `envelope_arms` clamps each
+  arm and `verdict()` reads `bound_by` off those clamped arms, so the shipped attribution is wrong
+  on the 3 525 combinations above. Rule 4a / `P8-1` moves the clamp into `_compose` and takes
+  `bound_by` from the unclamped composed value; `_compose`'s own docstring states the edit is
+  pending. Not a new defect, and not `cobb`'s to fix.
+- **Disposition:** 1 promoted (the generalisation) / 0 discarded outright / 0 kept open — no
+  `plan.md` item, since the only unfinished work is already scheduled as `P8-1`. Graph:
+  `producedEdges` 1, `mentionEdges` 0 → `otherRemaining` 0 → whole node `DETACH DELETE`d.
+  `data-scientist`'s one `MENTIONS`-only edge (`b7e41c92-3d5a-4f18-9c60-2a8e17d34f5b`) is out of
+  this unit's scope and untouched.
+
 ## 2026-09-08 — `lm-studio-model-notes.md`: `/api/v0/embeddings` carries no measurement fields, and the catalog size is not stable (U22)
 
 - **What:** `cobb`, distilling `analyst`'s `kaizen_team` chunk D (unit U22, entry
