@@ -2,7 +2,54 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
-## 2026-09-08 — U23: `kaizen_team` distillation pass 2, chunk E — 13 `analyst` entries, 12 promoted, 1 discarded
+## 2026-09-08 — U24: `kaizen_team` distillation pass 2, chunk F — 12 `analyst` entries, 10 promoted, 1 discarded, 1 kept open
+
+- **Deliverable.** `claude/analyst/review-techniques.md` (two new sections, three folds into
+  existing sections), `claude/analyst/analyst.md` (one existing bullet's lead replaced in place),
+  `skills/python-web-quirks/SKILL.md` (two folds + two frontmatter clauses),
+  `claude/graph-dba/falkordb-quirks.md` (one paragraph onto U23's bullet), plus
+  `claude/analyst/kaizen/{history,plan}.md`, `claude/graph-dba/kaizen/{history,plan}.md` (K-009,
+  new) and this file. **Twelve entries → seven content edits.** Zero new bullets in any
+  always-loaded prompt.
+- **What re-derivation changed.** Two of twelve dispositions moved on evidence, both in the
+  direction the pass has been finding all along — the *citation*, not the reasoning:
+  - `4e7c0a19…` claimed **any** `@dataclass` in an unregistered module dies with `AttributeError`
+    from `dataclasses._is_type`. Measured across three annotation shapes on CPython 3.12.3: only a
+    **string** annotation raises (`from __future__ import annotations`, or a quoted annotation); a
+    plain `@dataclass` loads fine unregistered. Mechanism read out of the stdlib — `_is_type`
+    (`dataclasses.py:750`) does an unguarded `sys.modules.get(cls.__module__).__dict__`, while
+    `_process_class` (`:929`) is guarded. Promoted with the claim narrowed and the discriminator
+    named, so the reader knows *when* the trap fires.
+  - `1024888a…` was **discarded as already published** — `review-techniques.md`'s technique (a)
+    already carries the appended-`_EditableFinder` mechanism *and* the cwd-precedence caveat the
+    entry omits. Re-deriving it first corroborated the published version **against** the entry:
+    with cwd at `falkor-chat/server`, `PYTHONPATH=<copy>` does not take effect (`sys.path[0] == ''`
+    outranks it) and the mutation run silently measures the original.
+- **Instruments tested before use.** Every count was taken under more than one definition: retired
+  tests counted as collected node IDs (**6**) *and* as unique def names (**3**), which is the
+  entry's own point rather than a discrepancy; the AST allowlist blindness reproduced on a
+  synthetic pair with both a name-set and a site-qualified reader; the `rq()` probe run with a
+  passing control and a caught parse error alongside the three misses, so a uniform 0 could not be
+  mistaken for a working helper. Every claim promoted with a figure was measured in the file that
+  shipped, not in this report.
+- **The live collision held.** `b1f2c7a4-9e33-4d61-8a52-0c6d5e77a913` (`analyst`, in scope) and
+  `b1f2c7a4-3d59-4e18-9f60-7a2c5d8e41bb` (`architect`, out of scope) agree on all eight leading
+  characters and were both unprocessed. Every read, count, tag and resolve in this unit was keyed
+  on the full 36 characters; the `architect` twin was verified alive after the last clear. Fourth
+  verified collision of the pass, first with both members live — the evidence for K-021 keeps
+  accumulating.
+- **A kept-open item routed to another agent's plan.** `b7f3c2a1…` reports a live, unfixed defect
+  in `skills/joern-cpg/scripts/pipeline.sh` (`rq()` returns 0 on a bare runtime-error reply,
+  re-confirmed by executing the helper verbatim). Its *knowledge* half is already published, so a
+  discard was tempting and would have been wrong: the disposition would have outrun the code fix.
+  Filed as `graph-dba` K-009 — `graph-dba` owns the `joern-cpg` skill, and the fix is component
+  code outside this agent's write remit. Together with `4f9c21ae…` it was tagged
+  `MENTIONS`→`graph-dba` so both nodes stay alive for that agent's own pass.
+- **Why.** Routine §5 curation under
+  `claude/docs/plans/kaizen-distillation2-coordination.md`; `analyst`'s chunk F of seven.
+
+## 2026-09-08 — U23: `kaizen_team` distillation pass 2, chunk E
+ — 13 `analyst` entries, 12 promoted, 1 discarded
 
 - **Deliverable.** `claude/analyst/review-techniques.md` (one new six-part section from six
   entries, one fold into the existing AST subsection from three), `claude/analyst/analyst.md` (one

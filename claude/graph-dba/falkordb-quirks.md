@@ -768,7 +768,19 @@ to the general fact here.
   reply, the discriminator that held across all five probes above is **affirmative**: a successful
   reply carries a header row plus the `Query internal execution time:` trailer, while every error
   reply is a single bare line — measured on `GRAPH.RO_QUERY` only, so don't assume it of a
-  `GRAPH.QUERY` write reply without checking. Never `redis-cli … >/dev/null` on a write whose
+  `GRAPH.QUERY` write reply without checking.
+  **That discriminator is sound rather than merely observed, because a mid-stream runtime error
+  aborts the whole reply.** Re-measured 2026-09-08, module `41811`:
+  `GRAPH.RO_QUERY <g> "UNWIND [1,0] AS x RETURN 1/x AS stray"` — whose first row *is* producible —
+  comes back as the single line `Division by zero` and nothing else: no `stray` column header, no
+  `Cached execution`, no trailer, exit 0. `Query timed out` (this instance's default
+  `TIMEOUT 1000`) has the identical shape. The rows already produced are discarded, so **there is
+  no partial reply to worry about**, and requiring the trailer makes a *negative* assertion ("this
+  query returned no rows") fail-closed instead of fail-quiet — a zero-row success still prints
+  header + blank + `Cached execution: 0` + `Query internal execution time:`, and every abort prints
+  one bare line.
+  Never `redis-cli … >/dev/null` on a write whose
+
   failure matters. Live instance of the outer trap, since fixed:
   `skills/joern-cpg/scripts/pipeline.sh:199` at `6012ddb` wrote the `CpgBuildInfo` provenance
   marker as `redis-cli … GRAPH.QUERY "$GRAPH" "$STAMP" >/dev/null`, making a failed stamp invisible

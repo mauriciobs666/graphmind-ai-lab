@@ -4,7 +4,8 @@ description: >-
   Live-verified Python gotchas beyond a quick docs read — mostly web/async, plus several
   pytest/import-timing traps: asyncio fire-and-forget GC-safety; FastAPI/Starlette
   BackgroundTasks' bounded thread pool (anyio's default limiter, total_tokens 40, raisable only
-  from inside a running event loop) vs. unbounded threading.Thread; uvicorn defaulting
+  from inside a running event loop, and silently accepting 0 — which deadlocks every sync call the
+  app offloads) vs. unbounded threading.Thread; uvicorn defaulting
   proxy_headers=True so ProxyHeadersMiddleware rewrites scope["client"] from X-Forwarded-For,
   falsifying any "request came from localhost" gate; response_model_exclude_unset
   dropping defaulted nested-model fields; FastAPI's four built-in doc routes (and which
@@ -35,7 +36,9 @@ description: >-
   stamping the start instant inside the thread body, since one taken before Thread.start()
   absorbs the scheduling gap and passes on a call that did nothing; and an application lock held across ThreadPoolExecutor.submit()
   delaying interpreter exit by the lock's hold time rather than deadlocking it (nothing holds
-  _global_shutdown_lock across a join). Use for asyncio.create_task scheduling, threading/executor
+  _global_shutdown_lock across a join), while submit() enqueues the work item *before* it grows the
+  pool, so its "can't start new thread" RuntimeError leaves the job running where the
+  same-typed post-shutdown RuntimeError does not — one compensating except-branch cannot serve both. Use for asyncio.create_task scheduling, threading/executor
   lock-ordering questions, background-task dispatch, a
   FastAPI response model using exclude_unset, an assertion over an app's route table or its
   responses={...} declarations, a method-matching or static-mount-shadowing question, a test that
@@ -105,6 +108,19 @@ plain `if __name__ == "__main__"` preamble, or anywhere else before the server s
 than applying. Put it inside the async lifespan (or any async startup hook). A plan that says
 "raise the limiter at startup" has not yet said *which* startup, and that ambiguity is the whole
 defect.
+
+**And the setter validates the type but not the *useful* range: `0` is accepted, and deadlocks.**
+Measured 2026-09-08 (`falkor-chat/server/.venv`, anyio 4.14.1, inside `anyio.run`):
+`total_tokens = -1` → `ValueError` *"total_tokens must be >= 0"*; `total_tokens = 0.5` →
+`TypeError` *"total_tokens must be an int or math.inf"*; **`total_tokens = 0` raises nothing** — and
+the next `to_thread.run_sync(...)` then never returns (a 2 s `move_on_after` around one had to
+cancel it). Every sync endpoint FastAPI offloads, and every sync `BackgroundTask`, hangs with no
+traceback anywhere. The shape that reaches this is an unvalidated env read assigned straight to the
+property: `falkor-chat`'s `config.THREAD_LIMIT` is a bare
+`int(os.environ.get("FALKORCHAT_THREAD_LIMIT", "100"))` (`config.py:243`), assigned to the limiter
+in the lifespan at `app.py:369` — so `FALKORCHAT_THREAD_LIMIT=0` is a one-character silent outage.
+**Review rule:** where a config value lands on a capacity limiter, the guard belongs on the config,
+not on the setter — the setter's own refusal covers the wrong half of the domain.
 
 A bare `threading.Thread(target=fn, ...).start()` has no such bound — every call spawns a new OS
 thread unconditionally, with no ceiling.
@@ -547,6 +563,19 @@ and must not gate a design. The real cost is a **non-daemon worker that cannot f
 the application lock stays held — a latency cost that becomes unbounded only if the lock is never
 released. Surfaced as a retraction: a `salesperson-ui` S9 plan amendment asserted the deadlock,
 `analyst` Pass 18 disproved it from source and by staging it (`architect`, 2026-09-08).
+
+**A second ordering fact inside the same `submit()`, with a live consequence for error handling.**
+`submit()` puts the work item on the queue **before** it tries to grow the pool —
+`self._work_queue.put(w)` at `thread.py:178`, `self._adjust_thread_count()` at `:179`. So when the
+pool cannot start a worker, `submit()` raises `RuntimeError("can't start new thread")` *with the
+job already enqueued*, and any worker already running picks it up. Reproduced 2026-09-08 on CPython
+3.12.3 by patching `threading.Thread.start` to raise while one worker was busy: `submit` raised, and
+the "refused" job still ran. The trap is that the **other** `RuntimeError` `submit()` raises —
+`cannot schedule new futures after shutdown`, from the checks at `:169-173`, which run *before* the
+`put` — is a clean refusal and the same exception type. **So a compensating action in the caller's
+`except RuntimeError:` — releasing a reservation, decrementing an in-flight counter, marking a turn
+free — is right for one shape and corrupts state for the other**, orphaning a job that is about to
+run. Discriminate on the message, or make the compensation idempotent against a job that runs anyway.
 
 ## Bounding a call whose deadline the code under test computes: a daemon thread, not an elapsed-time assert — and stamp the start instant *inside* the thread body
 

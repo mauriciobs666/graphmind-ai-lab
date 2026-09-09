@@ -3,7 +3,37 @@
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
 
+## 2026-09-08 — K-009 opened, and `falkordb-quirks.md` gains the mid-stream abort (U24)
+
+- **What:** `cobb`, distilling `analyst`'s `kaizen_team` chunk F (unit U24), routed two
+  `analyst`-produced entries here.
+  - **`claude/graph-dba/falkordb-quirks.md`**, "Ops, config & tooling": one paragraph onto the
+    `redis-cli`-exits-0 bullet U23 wrote, from `4f9c21ae-7b30-4d62-9c18-6ea5d0b73c41`. U23's
+    affirmative discriminator (a real reply carries a column header plus the
+    `Query internal execution time:` trailer) was hedged as *observed across five probes*; this
+    closes it as **sound**, because a mid-stream runtime error aborts the whole reply — the rows
+    already produced, the column header and the trailer are all discarded. Re-measured on module
+    `41811`: `UNWIND [1,0] AS x RETURN 1/x AS stray` → the single line `Division by zero`;
+    `Query timed out` identical; a zero-row success still prints header + `Cached execution: 0` +
+    trailer. Consequence: requiring the trailer makes a negative "no stray rows" assertion
+    fail-**closed**.
+  - **`kaizen/plan.md` K-009** (new, high): `skills/joern-cpg/scripts/pipeline.sh`'s `rq()` returns
+    **0** on a bare runtime-error reply — the prefix `case` at line 304 misses every unprefixed
+    FalkorDB error, so a call site with no expected-substring argument reads a failed query as
+    success. From `b7f3c2a1-9d4e-4c11-8a52-6e0f1d3b7c94`. Confirmed by extracting `rq()` verbatim
+    and running it against a live graph, with a passing control and a caught parse error to prove
+    the instrument.
+- **Why:** both facts are `graph-dba`'s — the reply-shape behaviour belongs in its knowledge base,
+  and the defect is in the `joern-cpg` pipeline it owns. The **fix** is component code, outside
+  `cobb`'s write remit, so it is filed rather than applied. `9124a1f` closed the discarded-output
+  half of this same trap; the guard that replaced it reopened it in a new shape.
+- **Graph:** both raw entries had their `analyst` `PRODUCED` edge resolved and carry a new
+  `MENTIONS`→`graph-dba` edge, so they stay alive for this agent's own distillation pass rather
+  than being cleared ahead of the fix.
+- **Plan items:** K-009 (opened).
+
 ## 2026-09-08 — `falkordb-quirks.md`: `redis-cli` exits 0 on an error reply (U23)
+
 
 - **What:** `cobb`, distilling `analyst`'s `kaizen_team` chunk E (unit U23, entry
   `6eeaa03e-98f9-42ac-8c6f-d9a0d9a06791`), added one bullet under the tooling run of bullets, after

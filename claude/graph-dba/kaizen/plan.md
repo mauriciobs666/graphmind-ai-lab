@@ -2,7 +2,8 @@
 
 > Forward-looking backlog for the `graph-dba` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-09-07 (kaizen_team distillation, U6 of pass 2 — 9 current-shape entries:
+> Last reviewed: 2026-09-08 (K-009 opened from analyst chunk F / U24; prior review
+> 2026-09-07, kaizen_team distillation, U6 of pass 2 — 9 current-shape entries:
 > 6 promoted to falkordb-quirks.md (one a merged/corrected refinement pair), 1 promoted into
 > qa-engineer's knowledge base, 2 kept open as K-008 for remit reasons; see history.md. Prior
 > pass 2026-08-25 (U10). K-007 opened 2026-08-18; last full certification pass 2026-07-11;
@@ -16,6 +17,7 @@
 | K-006 | 2026-07-28 | low | 🔵 | CPGQL script library (`skills/joern-cpg/scripts/queries/*.sc`) for common security/taint/call-graph queries (inherited from `joern` K-004) |
 | K-007 | 2026-08-18 | low | 🔵 | Unreconciled relationship-count discrepancy on a scoped `DETACH DELETE` of a workflow-snapshot subgraph (34 deleted vs. ~15 expected) — investigate if it recurs |
 | K-008 | 2026-09-07 | med | 🔵 | Two verified CPG-freshness facts need promoting into the `joern-cpg`/`cpg-analysis` skill docs — outside `cobb`'s write remit, so parked here for `graph-dba` |
+| K-009 | 2026-09-08 | high | 🔵 | `pipeline.sh`'s `rq()` returns **0** on a bare FalkorDB runtime-error reply — a failed query reads as success at any call site with no expected-substring argument |
 
 ### K-001 — Tool permissions decision  ⚪ DEFERRED (2026-06-05)
 - **Status:** ⚪ deferred — user chose "just document for now."
@@ -106,7 +108,44 @@
   durable record. `entryId`s are quoted above so a later distillation pass grepping this file
   finds them.
 
+### K-009 — `pipeline.sh`'s `rq()` treats a bare runtime-error reply as success
+- **Status:** 🔵 proposed (kept open from the `kaizen_team` distillation pass U24, 2026-09-08 —
+  **confirmed by execution, twice, independently**; the blocker is write remit, not doubt)
+- **Priority:** high — it is a silent-pass in a guard, in the shipped pipeline
+- **The defect.** `skills/joern-cpg/scripts/pipeline.sh`'s `rq()` helper classifies failure by
+  matching a prefix set at **line 304**:
+  `errMsg:*|ERR\ *|WRONGTYPE*|*"read only"*|*"read-only"*`. FalkorDB returns some runtime errors
+  **bare**, with no prefix at all, and `redis-cli` exits 0 for every error reply — so `rq()`
+  returns 0 on them. A call site that passes no expected-substring third argument therefore treats
+  a failed query as a success. Extracted verbatim and pointed at a live graph, 2026-09-08:
+
+  | probe | reply | `rq()` |
+  |---|---|---|
+  | `RETURN (((` | `errMsg: Invalid input …` | **1** (caught) |
+  | `RETURN nosuchfunc(1)` | `Unknown function 'nosuchfunc'` | **0** (missed) |
+  | `MATCH (n:KaizenEntry) RETURN keys(n.fact)` | `Type mismatch: …` | **0** (missed) |
+  | `UNWIND [1,0] AS x RETURN 1/x AS stray` | `Division by zero` | **0** (missed) |
+  | `MATCH (n:Agent) RETURN count(n)` (control) | header + trailer | 0 (correct) |
+
+- **Why this is a reopening, not a new bug.** `9124a1f` closed the *discarded-output* half of the
+  same trap (the stamp write was `redis-cli … >/dev/null`, so a failed stamp was invisible after a
+  multi-hour build) and replaced it with this prefix `case` — which reopens the identical
+  silent-pass class in a new shape.
+- **Proposed change:** classify **affirmatively**, not by prefix. A successful `GRAPH.RO_QUERY`
+  reply carries a column header plus the `Query internal execution time:` trailer; every error
+  reply — parse, runtime, mid-stream abort, timeout — is a single bare line with neither. Requiring
+  the trailer makes the negative "no stray rows" assertion fail-closed. Keep any prefix `case` as a
+  courtesy message, never as the check. (Both the general behaviour and this affirmative
+  discriminator are already published in `claude/graph-dba/falkordb-quirks.md`, "Ops, config &
+  tooling" — this item is the **code** fix, not a doc gap.)
+- **Notes:** raw entries `b7f3c2a1-9d4e-4c11-8a52-6e0f1d3b7c94` (the prefix taxonomy) and
+  `4f9c21ae-7b30-4d62-9c18-6ea5d0b73c41` (the mid-stream abort that makes the trailer test sound),
+  both produced by `analyst`. Their `PRODUCED` edges were resolved in U24; both nodes stay **alive**
+  in `kaizen_team` on a `MENTIONS`→`graph-dba` edge, so this agent's own distillation pass meets
+  them again. `entryId`s are quoted here so a later pass grepping this file finds them.
+
 ## Parking lot / ideas
+
 - **Judged and kept, do not re-litigate (2026-08-24, C6 lint).** Five passages will read as class-6/7
   waste to a future sweep; all are keeps.
   - **The single-shard-per-graph rule, in "FalkorDB fundamentals" and again in "Principles."** The

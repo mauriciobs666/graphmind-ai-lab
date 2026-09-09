@@ -66,6 +66,26 @@ old = importlib.util.module_from_spec(spec); spec.loader.exec_module(old)
 # 3. `old.some_function` and the working-tree import of the same function are now both
 #    live in one process — diff their behavior directly on a table of inputs.
 ```
+**Register the module in `sys.modules` before `exec_module` when its annotations are strings.**
+`module_from_spec` does not register it, and `dataclasses._is_type`
+(`/usr/lib/python3.12/dataclasses.py:750`) does an unguarded
+`sys.modules.get(cls.__module__).__dict__` when it resolves a **string** annotation for
+`ClassVar`/`InitVar` — so an unregistered module dies with
+`AttributeError: 'NoneType' object has no attribute '__dict__'`. Measured 2026-09-08 on CPython
+3.12.3 across three shapes: a plain `@dataclass` with real annotation objects loads **fine**
+unregistered; the same class under `from __future__ import annotations`, or with one quoted
+annotation (`a: "int" = 1`), raises. The trap therefore fires on any module carrying
+`from __future__ import annotations` — most modern code — and not at all on the rest, which is why
+it reads as intermittent. `_process_class` itself is guarded (`if cls.__module__ in sys.modules`,
+`:929`); only the `_is_type` path is not. One line fixes it: `sys.modules[name] = mod` between
+`module_from_spec` and `exec_module`.
+
+That one line is also what lets you gate a spec that is **not implemented yet**: re-implement the
+proposed rule over the module as it exists at a pinned sha (`git show <ref>:path > $SCRATCH/x.py`),
+load it this way, and run the *shipped* tests against it. It turns "would this edit break something
+that ships today?" from an inference into a measurement — on a tree another session is concurrently
+editing.
+
 Works cleanly when the module's only intra-package import is a small, enumerable set (`from .
 import config`); a module with a wider relative-import fan-out needs more stubs. Use this to
 independently confirm a claim like "N tests were red before the fix" without trusting the
@@ -591,11 +611,40 @@ idiom there. Scope the census the same way you scope the reader — counting `An
 whole package instead of function bodies gives 304, and mixing the two scopes inside one evidence
 line is how this measurement goes wrong.
 
+**Third flavour, and the one a fix round walks straight into: an allowlist keyed on *names*, not
+sites.** A guard that collects the set of exception class names a file raises and compares it to a
+frozen allowlist is blind to a **second raise site of a name already in the list** — so admitting
+one name to the allowlist in order to let a change through silently retires the guard for every
+later use of that name in that file, with no further test edit needed. Verified 2026-09-08 on a
+synthetic pair: a name-set reader stays green when a second, unrelated `raise RuntimeError` is
+added in a different method, while a site-qualified reader collecting
+`(enclosing_function, raised_name)` pairs over `ast.walk` sees it. The real instance was
+`falkor-chat`'s `test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume` after
+`RuntimeError` was admitted to `STOREFRONT_RAISES_TODAY`. **When adjudicating a guard widened to
+admit the change that tripped it, price the widening against the *next* change, not this one** — a
+set-of-names allowlist pays the whole guard for every subsequent use of that name, and the fix is
+~12 lines of site-qualification, not a narrower allowlist.
+
 **The move:** where a gate is generated from the artifact it gates — a parametrize source, an AST
 walk, a derived `frozenset` — the mutation that tests it is applied to the **source**, in the shape
 the next change is *decided* to take, never a synthetic call written to be seen. Read the step's
 plan row first and mutate that; a guard sequenced ahead of its consumer is worth exactly the
 mutation that proves it will redden when the consumer lands.
+
+**The same move on a shell harness — and that harness's own oracle trap.** A Bash test that proves
+a *wiring* defect by extracting the real code block between two anchors and running it under
+`set -euo pipefail` must assert the **exact** exit code, not merely non-zero. An undefined function
+aborts at **127**, and it aborts *after* the branch has already echoed its diagnostics (verified
+2026-09-08: a failure branch that `echo`s and then calls a missing helper prints the diagnostic,
+then exits 127) — so an oracle that scrapes the printed lines and only checks `rc != 0` cannot tell
+the intended failure from a broken failure path. Observed live: deleting `replay_stamp`'s
+definition from `skills/joern-cpg/scripts/pipeline.sh` left all six cases of the then-current
+`test-stamp-wiring.sh` reporting PASS, the exact defect class that file exists to close. Gate such
+a suite like any other derived guard — delete each helper definition and each refusal in turn and
+require a red — never by its own green run. (Re-run 2026-09-08 against the rebuilt suite, which now
+pins a per-case exact rc plus a positive "the branch reached its end and printed" assertion: the
+same mutation is killed.)
+
 
 ## A mutation-testing kill count is a draw from a distribution, not a fact — and pinning `PYTHONHASHSEED` does not always fix it
 
@@ -675,3 +724,55 @@ citations above, the three re-runnable at a pinned sha reproduced exactly (2026-
 from a gate against an uncommitted `S1e` tree, could not be re-derived at any sha —
 `FORBIDDEN_BY_ARM_KIND` appears in the plan and review documents at every commit in the window and
 in no source file. Re-derive at a sha, or say that you could not.
+
+## What a change silently stopped enforcing: execute the pre-image, diff the collected test IDs
+
+A plan's residual table and a green suite both answer "did the edit land?". Neither answers "does
+anything refuse, or assert, *less* than before?" — and two cheap instruments do.
+
+**A refusal that lived in a delegate retires when the delegating call is deleted, and no residual
+stated over the retired *parameter* can see it.** Re-derived 2026-09-08 on `model-bench`:
+`conservative_envelope(diffs, table, *, design_effect, B, seed)` collapsed at `cc28d48` to
+`(table, *, design_effect)`. Its `design_effect >= 1.0` refusal was never its own — it came from
+the `paired_cluster_bootstrap` call the collapse deleted. Loaded both pre-images side by side with
+the pinned-blob technique above: at `c19f875`, `design_effect=0.25` raises
+`ValueError: design_effect must be >= 1.0 (… precondition 4)`; at `cc28d48` the same input returns
+a value, and a **narrower** interval than the same call at `1.0` (width 0.18 vs 0.35 on one input
+pair) — so a lost precondition surfaces as *more* confidence, not as an error. **Diff-review the
+retired *call*, not only the retired parameter, and re-run each callee guard against the new public
+surface.** The full suite stays green throughout: nothing tested the delegate's refusal *through*
+the caller.
+
+**And to audit retired *tests* exactly, diff collected test IDs — a def-level diff undercounts by
+however many ways a retired test was parametrized.**
+
+```bash
+git archive <base-sha> <component> | tar -x -C "$SCRATCH/base"   # read-only; the tree is untouched
+(cd "$SCRATCH/base/<component>" && "<abs path to the live venv>/bin/python" -m pytest --collect-only -q) \
+  | grep '::' | sort > "$SCRATCH/base.ids"                       # repeat for the head tree, then comm
+```
+
+Re-derived 2026-09-08 across `cc28d48 → 7f865e2` in `model-bench`: `519 → 550` collected, and
+`comm` gives exactly **6** retired IDs and **37** added — matching the change's reported `+37/-6`.
+A `git diff … | grep '^-def test'` over the same range reports **3**, because one of the three
+retired defs (`test_percentile_rejects_a_level_outside_the_unit_interval`) was parametrized four
+ways. The extracted tree needs no install step and no venv of its own: point the live venv's
+absolute `python` at it.
+
+## A `max`/`min` clamp is a NaN launderer, and it is argument-order dependent
+
+`max(lo, x)` / `min(hi, x)` does not propagate a NaN — it silently returns the clamp bound, so "no
+number" prints as "the widest plausible number", attributed to whatever instrument named that
+bound. Measured 2026-09-08 on CPython 3.12.3: `max(-1.0, nan)` → `-1.0` but `max(nan, -1.0)` →
+`nan`; `min(1.0, nan)` → `1.0` but `min(nan, 1.0)` → `nan`. Every comparison against NaN is False
+and `max`/`min` keep the first argument on a False comparison, so **which argument was written
+first decides whether the NaN survives** — the two spellings are not interchangeable.
+
+**A guard on the far-upstream parameter closes only one of the routes in.** In the citing case
+(`model-bench` at `93b0e42`) four `design_effect >= 1.0` guards did close the below-1 NaN route —
+`nan >= 1.0` is False, so NaN is refused there — but `+inf` passes all four (`inf >= 1.0` is True),
+`_widen` then produced `(-inf, +inf)`, and the clamp turned that into `(-1.0, 1.0)`: a full-support
+interval reported with `bound_by=(MOVER-D, MOVER-D)`, a non-answer wearing an instrument's name. A
+NaN anywhere in the unguarded input sequence lands in the same place. **Guard the clamp's input or
+its pre-clamp result**, and read every `max`/`min` clamp in numeric output code as a site where a
+NaN or an infinity becomes indistinguishable from a measurement.

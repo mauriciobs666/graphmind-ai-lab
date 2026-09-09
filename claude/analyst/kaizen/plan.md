@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `analyst` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-09-08
+> Last reviewed: 2026-09-08 (kaizen_team distillation pass 2, chunks A-F / U19-U24)
 
 ## Active
 
@@ -36,10 +36,19 @@
 - **Blocked on:** nothing, but it is the analyst-side analogue of `K-016` progressive disclosure and deliberately out of scope for the prompt-waste plan (its finding 6 routes floor-bound files here rather than to cutting rules to reach a number).
 
 ## Parking lot / ideas
-- **No backlog item opened by the 2026-09-08 distillation (U19 chunk A + U20 chunk B + U21 chunk C,
-  33 entries).** Every entry in all three chunks resolved to a promotion or a discard; none was left
-  unverifiable, so nothing here needs a `K-` number. Dedup check run as required for each — none of
-  the 33 `entryId`s appears anywhere in this file. Dispositions: `kaizen/history.md`, 2026-09-08.
+- **No `analyst` backlog item opened by the 2026-09-08 distillation (U19-U24, six chunks, 69
+  entries).** Every entry resolved to a promotion, a discard, or — once, in U24 — a kept-open item
+  filed against **another** agent's plan, so nothing here needs a `K-` number. Dedup check run as
+  required for each; none of the 69 `entryId`s appears anywhere in this file. Dispositions:
+  `kaizen/history.md`, 2026-09-08.
+- **One U24 finding routed outward, tracked as `graph-dba` K-009, not here.**
+  `skills/joern-cpg/scripts/pipeline.sh`'s `rq()` helper (the prefix `case` at line 304) returns
+  **0** on a bare FalkorDB runtime-error reply, so a call site with no expected-substring argument
+  reads a failed query as success — confirmed by executing the helper verbatim against a live
+  graph. The general reply-shape behaviour is published in `claude/graph-dba/falkordb-quirks.md`;
+  the code fix is `graph-dba`'s, outside `cobb`'s write remit. Raw entries
+  `b7f3c2a1-9d4e-4c11-8a52-6e0f1d3b7c94` and `4f9c21ae-7b30-4d62-9c18-6ea5d0b73c41`, both tagged
+  `MENTIONS`→`graph-dba` and alive on that edge until its pass runs.
 - **A second finding routed outward, not tracked here (U21, 2026-09-08).** `falkor-chat/server`'s
   pytest suite **cannot be parallelised across processes** — `tests/conftest.py:86-91`'s `conn`
   fixture wipes the single shared `ws:test` graph (`MATCH (n) DETACH DELETE n`) at *setup*, once per

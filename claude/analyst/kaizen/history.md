@@ -3,7 +3,119 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
-## 2026-09-08 — `kaizen_team` distillation pass 2, chunk E (unit U23): 13 entries, 12 promoted, 1 discarded
+## 2026-09-08 — `kaizen_team` distillation pass 2, chunk F (unit U24): 12 entries, 10 promoted, 1 discarded, 1 kept open
+
+`cobb` processed twelve of the fourteen `analyst`-produced `kaizen_team` entries dated 2026-09-08
+(`claude/docs/plans/kaizen-distillation2-coordination.md` U24). Two 09-08 entries
+(`7c1d4a92…`, `8d2b47f0…`) were deliberately deferred to U25; `4f9c21ae…` was pulled forward out of
+strict `createdAt` order so it would land together with `b7f3c2a1…`, its subject twin — and they
+did fold into one bullet, as predicted. Every entry read, counted, tagged and resolved on the
+**complete 36-character** `entryId`, because this chunk carried the pass's first live collision:
+`b1f2c7a4-9e33-4d61-8a52-0c6d5e77a913` (mine) shares all eight leading characters with
+`b1f2c7a4-3d59-4e18-9f60-7a2c5d8e41bb`, which belongs to `architect`, is out of scope, and was
+verified still alive after every clear. **No always-loaded prompt gained a bullet** — the single
+`analyst.md` change replaces an existing bullet's lead in place, as in chunks A-E.
+
+**Twelve entries → seven edits across four files.**
+
+**Promoted (10):**
+
+- `claude/analyst/analyst.md` — `9d2b41f7-0c53-4a86-b1de-6e77a2c40853`, folded into the
+  *"Evidence over vibes"* bullet as a replacement of its lead: the unit of verification is the
+  citation's **scope**, not the citation, so a claim about an interaction between two functions
+  carrying one `file:line` is half-verified by construction. Its incident (a `salesperson-ui` v1.27
+  amendment forbidding an app lock across `ThreadPoolExecutor.submit()` on a three-party deadlock
+  whose second link was remembered, not read) is already published as a *Python* fact in
+  `skills/python-web-quirks/SKILL.md`; only the reviewer-facing lesson was unpublished. Re-derived:
+  `_python_exit` at `/usr/lib/python3.12/concurrent/futures/thread.py:23-31` does release
+  `_global_shutdown_lock` before both the `q.put(None)` and `t.join()` loops, and the staged
+  arrangement exits cleanly (0.42 s for a 0.4 s hold).
+- `skills/python-web-quirks/SKILL.md`, fold into the `BackgroundTasks` limiter section —
+  `3f1c9a24-7b6e-4d18-9a02-5c8e1d4b7f31`. Re-derived in `falkor-chat/server/.venv` (anyio 4.14.1),
+  and **widened by one probe the entry did not run**: `total_tokens = -1` → `ValueError`,
+  `0.5` → `TypeError` *"must be an int or math.inf"*, `0` → accepted silently, after which
+  `to_thread.run_sync` never returns (a 2 s `move_on_after` had to cancel it). Wired live:
+  `config.py:243` is a bare unvalidated `int(os.environ.get(…, "100"))`, assigned at `app.py:369`.
+- `skills/python-web-quirks/SKILL.md`, fold into the existing `ThreadPoolExecutor` section —
+  `b1f2c7a4-9e33-4d61-8a52-0c6d5e77a913`. Both halves re-derived: `thread.py:178` (`put`) precedes
+  `:179` (`_adjust_thread_count`), and patching `threading.Thread.start` to raise while one worker
+  was busy made `submit` raise **while the "refused" job still ran**. Same section rather than a
+  new one, because the consequence is a correction to the *same* function's error handling.
+- `claude/analyst/review-techniques.md`, fold into technique (a) —
+  `4e7c0a19-2b6d-4f38-9c51-8d0a3b7e6f22`, **promoted with its claim narrowed.** The entry says any
+  `@dataclass` in an unregistered module dies with `AttributeError` from `dataclasses._is_type`.
+  Measured across three shapes on CPython 3.12.3: a plain `@dataclass` with real annotation objects
+  loads **fine** unregistered; only a **string** annotation raises — under
+  `from __future__ import annotations` or a quoted annotation. Mechanism read out of the stdlib:
+  `_is_type` (`dataclasses.py:750`) does an unguarded `sys.modules.get(cls.__module__).__dict__`,
+  while `_process_class` (`:929`) is guarded. The citing module (`model-bench/modelbench/stats.py`
+  at `7f865e2`) does carry `from __future__ import annotations` and 5 `@dataclass`, so the entry's
+  own observation was real; its generalisation was not. **Not re-derived:** its `0/38/78` failure
+  sweep, which measures an unimplemented spec rule — no figure from it was promoted.
+- `claude/analyst/review-techniques.md`, fold into *"A guard derived from the artifact it
+  guards…"* — `c4f1b8e2-6d3a-4a71-9b2e-5f0c7a1d93e4`. Mechanism reproduced independently on a
+  synthetic pair: a name-set reader stays green across an added second `raise RuntimeError` in a
+  different method; a `(enclosing_function, raised_name)` reader sees it. Written as the section's
+  *third flavour* of derivation-blindness, not a new section.
+- `claude/analyst/review-techniques.md`, fold into the same section's closing move —
+  `c41a8e7d-2b60-4f39-97ac-5d18b2e0af63`. Verified in both directions: under `set -euo pipefail` a
+  missing helper aborts at **127 after** the branch's diagnostics have printed (so a
+  scrape-plus-`rc != 0` oracle cannot discriminate), **and** the shipped
+  `skills/joern-cpg/scripts/test-stamp-wiring.sh` — rebuilt since the entry was written — now
+  *kills* the `replay_stamp`-deletion mutant (`STAMP WIRING TEST FAILED`) where it once reported
+  six PASSes. Both runs were made on copies in the scratchpad; the repo tree was never mutated.
+- `claude/analyst/review-techniques.md`, **new section** *"What a change silently stopped
+  enforcing"* — `d816adc2-6b28-4372-9195-c849e5c3f94d` and
+  `eff06e4a-5da0-4a89-902b-0b2253f4914a`, written as one section with two instruments because they
+  answer one question. Both re-derived by execution. The signature collapse is exact
+  (`c19f875` six-parameter → `cc28d48` two-parameter); loading both pre-images side by side,
+  `design_effect=0.25` raises `ValueError … precondition 4` at `c19f875` and returns a **narrower**
+  interval at `cc28d48`. The retired-test figures reproduce to the digit: `519 → 550` collected,
+  `comm` giving **6** retired IDs and **37** added, against **3** at def level, the gap being
+  `test_percentile_rejects_a_level_outside_the_unit_interval` parametrized four ways. Counted under
+  two definitions (node IDs and unique def names) rather than one.
+- `claude/analyst/review-techniques.md`, **new section** *"A `max`/`min` clamp is a NaN
+  launderer"* — `b2fd33f5-4d6e-4c10-b600-939b86e134a5`. Every figure re-derived: `max(-1.0, nan)`
+  → `-1.0`, `max(nan, -1.0)` → `nan`, and `nan >= 1.0` is False while `inf >= 1.0` is True, so a
+  `>= 1.0` guard closes the NaN route and leaves the `+inf` route open exactly as claimed.
+- `claude/graph-dba/falkordb-quirks.md`, one sentence onto U23's `redis-cli` bullet —
+  `4f9c21ae-7b30-4d62-9c18-6ea5d0b73c41`. U23 already published the exit-0 trap, the missing
+  prefixes and the affirmative header+trailer discriminator; what it explicitly hedged is what this
+  entry closes — a **mid-stream** error discards the rows already produced *and* the column header
+  *and* the trailer, so there is no partial reply and the trailer test is fail-**closed**, not just
+  observed. Re-measured on module `41811`: `UNWIND [1,0] AS x RETURN 1/x AS stray` → the single
+  line `Division by zero`; `Query timed out` identical; a zero-row success still prints
+  header + `Cached execution: 0` + `Query internal execution time:`.
+
+**Discarded (1):** `1024888a-ecbb-428d-94e7-f99cc5a25ca3` — mutation-testing an editable install
+via a `PYTHONPATH` copy. Already published, in more detail, in the head of technique (a) of
+`review-techniques.md`: the appended `_EditableFinder`, the measured
+`[BuiltinImporter, FrozenImporter, PathFinder, _EditableFinder]` order, and the cwd-precedence
+caveat the entry omits. Re-derived independently before discarding, which **corroborated the
+published version against the entry**: with cwd at `falkor-chat/server`, `PYTHONPATH=<copy>` does
+**not** take effect (`sys.path[0] == ''` outranks it) and the import silently resolves back to the
+repo tree — a mutation run that way measures the original and passes. From a neutral cwd the
+shadow works. The entry's `../scripts` note is covered generically by technique (b).
+
+**Kept open (1):** `b7f3c2a1-9d4e-4c11-8a52-6e0f1d3b7c94` — its *knowledge* half is fully published
+by U23, but the **code defect it reports is live and unfixed**, so it is not a discard.
+Re-confirmed by executing `rq()` extracted verbatim from `skills/joern-cpg/scripts/pipeline.sh`
+(the `case` at line 304) against a live graph: `RETURN (((` → 1 (caught), while
+`RETURN nosuchfunc(1)`, `MATCH (n:KaizenEntry) RETURN keys(n.fact)` and
+`UNWIND [1,0] AS x RETURN 1/x` all → **0** (missed); the valid control → 0 with header and trailer.
+The fix is outside `cobb`'s write remit, so it is filed as **`graph-dba` K-009** (see
+`claude/graph-dba/kaizen/plan.md`) rather than left as a live node in this agent's inbox.
+
+**`MENTIONS` tags (2), both → `graph-dba`:** `b7f3c2a1-9d4e-4c11-8a52-6e0f1d3b7c94` and
+`4f9c21ae-7b30-4d62-9c18-6ea5d0b73c41`. Both are substantively about
+`skills/joern-cpg/scripts/pipeline.sh` and FalkorDB reply shapes — `graph-dba`'s skill and
+`graph-dba`'s knowledge base — not about review methodology. Their `analyst` `PRODUCED` edges are
+resolved; the nodes stay alive on the `MENTIONS` edges so `graph-dba`'s own pass sees them
+alongside K-009. `c41a8e7d…` touches the same skill and was **not** tagged: its defect is already
+fixed in the shipped file, so a tag would hand `graph-dba` a closed item.
+
+## 2026-09-08 — `kaizen_team` distillation pass 2, chunk E (unit U23)
+: 13 entries, 12 promoted, 1 discarded
 
 `cobb` processed the thirteen `analyst`-produced `kaizen_team` entries dated 2026-09-07
 (`claude/docs/plans/kaizen-distillation2-coordination.md` U23, the last of five chunks). Every
