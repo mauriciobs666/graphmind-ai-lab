@@ -249,3 +249,154 @@ RESP reply before printing, so a truncated-stdout-with-rc-0 was not reachable.
 Removing the entire `case "$cmd" in GRAPH.QUERY|GRAPH.RO_QUERY) ;; *) … return 2 ;; esac` block
 from a copy of `pipeline.sh` and running the current suite against it: **exit 0, 14 PASS, 0 FAIL** —
 byte-identical outcome to the unmutated tree.
+
+---
+
+## Pass 2 — 2026-09-09
+
+Re-gate of the delta committed as `48882d8`, against Pass 1 (committed `7edf98c`). Same scope;
+same evidence discipline. **[executed]** means I ran it this pass.
+
+**Verdict: approve with suggestions.** Both Pass 1 majors are closed, and Major 2's closure is
+better than what I proposed. One new major, and it is the same shape as Pass 1 Major 1 moved one
+level up: the replacement guard's stated reach exceeds its mechanism. The code is safe either way —
+every miss costs a false *failure*, never a false pass.
+
+Suite reproduced independently: **exit 0, 15 PASS, 0 FAIL.** `GRAPH.LIST` back to 25 keys; I
+created and deleted `analyst_u28_p2`, no residue.
+
+### Corrections to Pass 1 — both refutations are right, both were my error
+
+**Pass 1 Minor 4 (`git-provenance.sh` line numbers) — RETRACTED. I was wrong.** [executed]
+`grep -n` puts the `status --porcelain` call at **:105** and the `CPG_SOURCE_TREE` assignment at
+**:103**, on a clean file. The `history.md` citation was correct. My error was mechanical and worth
+naming: I read a `sed -n 103,107p` block of five printed lines and mapped them to line numbers
+while silently dropping the **blank line 104**, which shifted everything after it by two. Printed
+ranges are not a line-number oracle; `grep -n` or `cat -n` is. The residual half of the finding
+(the history quotes `":(literal)$name"` where the source reads `"$spec"`, with `spec` set at :76) I
+also withdraw — `spec` *is* that string, so quoting the effective pathspec is a fair rendering, and
+carrying a nit forward under a retracted heading would misrepresent the record.
+
+**Pass 1 Open question 1 (`RESULTSET_SIZE` novelty) — RETRACTED. I was wrong.** [executed]
+`claude/graph-dba/falkordb-quirks.md:710` carried the cap, verified 2026-07-30, *before* this
+delta — including the sharper property that it defeats an explicit larger `LIMIT`. I wrote "it is
+not mentioned in `falkordb-quirks.md`" having grepped that file for the blacklist strings and for
+`rq` claims, and never for `RESULTSET_SIZE` itself: an assertion of absence without running the
+search that would establish it. The implementer's handling was the right one — fold the genuinely
+new half (*"a capped reply is structurally indistinguishable from a complete one, which bounds the
+statistics-trailer discriminator below"*) onto the existing bullet rather than add a second.
+
+Neither error changes a Pass 1 major, but both are exactly the failure shapes this coordination
+keeps being bitten by, and they belong in the record as mine.
+
+### New finding
+
+#### Major 7 — the static call-site check states a reach its mechanism does not have; two *literal* bad commands pass it. [executed]
+
+`test-stamp-wiring.sh:135-139` says: *"WHAT IT COVERS: a LITERAL non-query command written at any
+rq call site. WHAT IT DOES NOT: a command reaching rq through a variable."* The mechanism is
+`grep -n '\$(rq '` plus `grep -o 'GRAPH\.[A-Z_.]*'`. Two literal-command shapes defeat it:
+
+- **A call site not written as `$(rq …)`.** Adding `rq 'MATCH (b) RETURN b' GRAPH.DELETE || true`
+  as a bare statement: the check reports `PASS all 3 rq call sites`, suite exit 0. The new site
+  doesn't match the anchor, and the three `$(rq ` sites keep the count at 3 so the `< 3` anchor
+  does not fire either.
+- **A lowercase command at an existing call site.** `graph.delete` in place of `GRAPH.RO_QUERY`:
+  `PASS all 3`. The token grep is case-sensitive, so it finds no `GRAPH.` token on that line and
+  the loop never runs. `redis-cli` accepts the lowercase form.
+
+This is the finding the coordinator asked me to test, and the answer is that the problem moved up
+one level rather than being solved: the replacement guard *can* redden (verified — see the
+disposition of Major 2), but its written bound is inaccurate, in a comment whose own last sentence
+is *"a guard whose stated reach exceeds its mechanism is the defect this whole block exists to
+close."* Consequence is bounded — a missed misuse produces a false runtime failure, never a false
+pass — which is why this is major and not a blocker.
+
+**Suggested improvement, verified by execution rather than proposed** (`graph-dba`): widen the
+anchor to `grep -nE '(^|[^_[:alnum:]])rq '` and make the token match case-insensitive
+(`grep -oiE 'GRAPH\.[A-Za-z_.]*'`, upcasing before the `case`). Run against five trees this pass
+(Appendix B1): clean → 3 sites, none bad; the bare-statement site → **4 sites, `GRAPH.DELETE`
+caught**; lowercase → **caught**; the Pass-1-style literal substitution → caught; the
+anchor-moved mutant → 2 sites, still reddens on the count. No false positive on the clean tree —
+the `rq() {` definition has no space after `rq`, and the prose `$(rq …)` mentions are inside
+comment lines the existing `grep -v '^[0-9]*: *#'` filter already removes. If the widening is
+declined, the alternative is equally acceptable: narrow the stated bound to *"a literal
+`GRAPH.*` command at a `$(rq …)` call site"*, which is what it actually checks.
+
+### Pass 1 dispositions
+
+- **Major 1 (trailer claimed to exclude a part-way reply) — FIXED, and the new positive claim
+  holds.** [executed] *"cannot satisfy it part-way"* is gone from `pipeline.sh`; the does-not-cover
+  list is now three items with `RESULTSET_SIZE` named and the call-site bound stated in place (1, 1
+  and ≤8 rows). I re-measured the figures quoted: `UNWIND range(1,200000) AS x RETURN x` → 10003
+  lines, last data row `10000`, trailer intact, rc 0. The mid-stream-abort claim — asserted
+  *positively*, which is what the coordinator flagged — is **true and I established it on a harder
+  case than the comment cites**: 5,000 matching rows with the division by zero at row 5,000
+  (`MATCH (n:R) RETURN CASE WHEN n.x = 5000 THEN 1/0 ELSE n.x END`) returns the single line
+  `Division by zero` — 4,999 producible rows genuinely discarded, no header, no trailer.
+  `falkordb-quirks.md:797-800` scopes the old wording to *aborts* and marks the generalisation
+  explicitly **false** with a cross-reference; `SKILL.md:120-121` widened correctly.
+- **Major 2 (rc 2 unreadable and untested) — FIXED, by a better closure than I proposed, and my
+  own Pass 1 suggestion was wrong.** [executed] Both bash claims hold: inside `if ! V="$(f)"`,
+  `$?` is **0** for a function returning 1 *and* for one returning 2 — the `if` consumed it — so my
+  "capture `rc=$?` at the three call sites" does not work as written and would have shipped a
+  branch that never fires. And `exit 2` inside `$(…)` kills only the subshell; the script runs to
+  its end (the substitution's own rc *is* 2, but every call site's `if !` collapses it anyway).
+  Deletion is right. Fail-closed confirmed live: `rq` with `GRAPH.DELETE` returns **1** — in fact
+  it cannot even reach the bare `OK` the comment cites, because `rq` always appends the cypher
+  argument, so the reply is `ERR wrong number of arguments for 'graph.DELETE' command`. Safer than
+  claimed, not less safe. The replacement check **does** redden where the deleted guard could not:
+  a literal `GRAPH.DELETE` at an existing call site → `FAIL … GRAPH.DELETE at pipeline.sh:444`,
+  exit 1; a call site rewritten out of the anchor → `FAIL found only 2 rq call sites`. The
+  self-anchor is real. See Major 7 for where it stops.
+- **Minor 3 (non-discriminating assertion) — FIXED as suggested**, by the comment option:
+  `test-stamp-wiring.sh:270-274` now states that only the first two `must-contain` strings pin the
+  fix and that the third is a branch-completion check, *"do not read it as one."*
+- **Minor 4 (line-number citation) — RETRACTED, my error.** See above.
+- **Minor 5 (doc enumerations named 9 of 10 cases) — FIXED.** [executed] Both `SKILL.md:155` and
+  `freshness.md:281` now name the pipeline-clean-marker control.
+- **Nit 6 (over-long line) — FIXED.** [executed] No introduced line over 100 chars remains in the
+  edited region of `freshness.md`; the sole survivor is the pre-existing 108-char line.
+- **Open question 1 (`RESULTSET_SIZE` novelty) — RETRACTED, my error.** See above.
+- **Open question 2 (clear `4f9c21ae…` before or after narrowing) — RESOLVED.** The narrowing has
+  landed in both `pipeline.sh` and `falkordb-quirks.md`, so the entry's over-broad closing clause
+  no longer has an inheriting home. **Both entries are now clear-able**, on the same reading as
+  Pass 1.
+
+### What's solid in the delta
+
+- The three-item does-not-cover list is the right structure: it separates *execution* from
+  *correctness* from *completeness*, which is the distinction the whole arc has been converging on,
+  and it puts the numeric bound at the point of use rather than in a doc a call-site author won't
+  open.
+- Moving the precondition from runtime to a static check is the correct direction, and the
+  `< 3 call sites` self-anchor is the part I'd have most expected to be missing. A check that can
+  silently check nothing is the failure mode; this one refuses to.
+- The commit message records the disputed line numbers resolving *against* the reviewer. That is
+  the right record to keep.
+
+### Appendix B
+
+#### B1 — the widened anchor, run against five trees
+
+Anchor `grep -nE '(^|[^_[:alnum:]])rq '` (comment lines filtered as today) + case-insensitive
+`GRAPH\.[A-Za-z_.]*`, upcased before comparison:
+
+```
+CLEAN : sites=3 bad=[none]
+M1 (literal GRAPH.DELETE at an existing $(rq ) site)  : sites=3 bad=[GRAPH.DELETE@444]
+M2 (a call site rewritten out of the $(rq ) form)     : sites=2 bad=[none]        <- count anchor fires
+M3 (new bare-statement call site, GRAPH.DELETE)       : sites=4 bad=[GRAPH.DELETE@420]
+M4 (lowercase graph.delete at an existing site)       : sites=3 bad=[graph.delete@444]
+```
+
+Against the shipped check, M3 and M4 both report `PASS all 3 rq call sites` with suite exit 0;
+M1 and M2 redden.
+
+#### B2 — mid-stream abort with 4,999 producible rows ahead of the error
+
+```
+GRAPH.QUERY  <throwaway> 'UNWIND range(1,5000) AS x CREATE (:R {x:x})'
+GRAPH.RO_QUERY <throwaway> 'MATCH (n:R) RETURN CASE WHEN n.x = 5000 THEN 1/0 ELSE n.x END AS v'
+  -> 1 line, exit 0: "Division by zero"      (no header, no rows, no trailer)
+```
