@@ -217,6 +217,23 @@ def test_validate_pack_rejects_undeclared_replication_row_count_only() -> None:
     )
 
 
+def test_validate_pack_rejects_a_scripts_declaring_pack_missing_data_conversations() -> None:
+    """A pack that declares `sampling.scripts` — conversation-shaped, per §3.3's own manifest
+    literal and the "conversation pack" run-shape rule (plan §3.3, §3.9 point 2) — but has no
+    `data` block at all, so `data.conversations` is absent. The docstring's stated exemption is
+    for a pack of a *different shape* — an item-level pack, which declares no `scripts` either —
+    not for a conversation-shaped pack that simply forgot its rows file. Only the row-count
+    identity route can tell these two "no `data.conversations`" cases apart, since the structural
+    route (`analysisUnit == pairingKey[0]`) does not look at `data` at all and passes either way."""
+    pack = load_pack(pack_fixture("missing_data_conversations"))
+    problems = validate_pack(pack)
+    assert problems == [
+        "fixture-missing-data-conversations: sampling.scripts is declared (conversation-shaped) "
+        "but data.conversations is absent; the row-count identity has no rows file to check it "
+        "against (row-count identity, plan §3.3)"
+    ]
+
+
 def test_validate_pack_rejects_analysis_unit_outside_pairing_key_structurally() -> None:
     """`analysisUnit` declared outside its own `pairingKey[0]` — caught by
     `check_sampling_contract`, reused rather than re-implemented (plan §3.3, impl review Pass 1

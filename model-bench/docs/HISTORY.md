@@ -2,6 +2,130 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-09 — S2 U73: the row-count identity's own exemption widened to match its stated reach
+
+**What:** `_row_count_identity_problems` (`modelbench/packs.py`) skipped silently — returned `[]`
+— for *any* pack missing `data.conversations`, including a `scripts`-declaring (conversation-
+shaped) pack that simply omitted the key; only an item-level pack (no `scripts` declared at all)
+was the shape its own docstring named as the intended exemption. Verified by execution before
+changing anything: a pack copied from `tests/fixtures/packs/valid` with `data.conversations`
+deleted from the manifest but `scripts`/`replicatesPerScript`/`analysisUnit` intact passed
+`validate_pack` with no problems. Closed per option (a) — widened the mechanism rather than the
+docstring — because §3.3's own manifest literal and the "conversation pack" run-shape rule
+(`docs/plans/small-model-benchmarking.md` §3.9 point 2) both tie `scripts` to conversation shape,
+so a `scripts`-declaring pack without a rows file is a real problem, not "nothing to check."
+
+**Change:** `_row_count_identity_problems` now skips only when `scripts` itself is absent or not a
+plain int (the item-level exemption, unchanged). A pack that declares `scripts` but has no
+`data.conversations` now gets exactly one reported problem naming the gap; `replicatesPerScript`
+and `analysisUnit` validity are unchanged and still skip silently when malformed (left out of this
+fix's scope). One existing fixture, `tests/fixtures/packs/replicates_per_script_violation`, had
+declared `scripts: 6, replicatesPerScript: 2` with no `data` block at all — a pre-existing instance
+of the same gap, invisible only because the route was exempt — so it gained a `data.conversations`
+key and a matching 12-row `conversations.jsonl` (6 distinct `scriptId` values × 2) to keep its
+Rule‑6‑only test isolated to the one violation it's meant to pin.
+
+**Test-first, confirmed failing for the stated reason.** New fixture
+`tests/fixtures/packs/missing_data_conversations/` (declares `scripts`/`replicatesPerScript`/
+`analysisUnit`, no `data` block) and
+`test_validate_pack_rejects_a_scripts_declaring_pack_missing_data_conversations` in
+`tests/test_packs.py`, run alone against the pre-fix code: `assert [] == ['fixture-mis...']` —
+red for the right reason before any production change.
+
+**Mutations, both caught, each `cp`-aside / mutate / run / `cp`-back, `diff -q` byte-identical
+after each restore:** (1) the whole file reverted to the pre-fix version — the new test alone goes
+red with the exact same `[] == [...]` failure observed pre-fix, the sibling
+`test_validate_pack_rejects_replicates_per_script_greater_than_one` still passes; (2) with the fix
+in place, `declares_scripts` forced to the constant `True` — 5 of 29 `test_packs.py` tests redden
+(`test_validate_pack_rejects_analysis_unit_outside_pairing_key_structurally`, both call-surface
+rejection tests, the bad-import test, and `test_validate_pack_accepts_a_module_importing_
+modelbench_tooling`), proving the item-level fixtures' green results depend on the exemption guard
+rather than passing by accident.
+
+**Observed, this run:** `model-bench/` as working directory. Baseline before any change:
+`708 passed, 1 deselected`. After the fix, full suite: `709 passed, 1 deselected` (the one new
+test; no other count moved). `.venv/bin/ruff check .`: `All checks passed!`.
+
+**Files:** `modelbench/packs.py`, `tests/test_packs.py`,
+`tests/fixtures/packs/missing_data_conversations/pack.json` (new),
+`tests/fixtures/packs/replicates_per_script_violation/pack.json` and `conversations.jsonl` (new
+data file). Left uncommitted for review; a separate concurrent unit appends its own entry to this
+same `HISTORY.md`.
+
+## 2026-09-09 — S2 U72: the LM Studio adapter, offline against stubbed HTTP
+
+**What:** `docs/plans/small-model-benchmarking.md` §3.4.4a/§3.6's LM Studio adapter, landing beside
+a concurrent unit building `modelbench/packs.py` (not touched here). `modelbench/lmstudio.py`
+(new), `tests/test_lmstudio.py` (new), `tests/fixtures/lmstudio/` (new). `tests/test_lmstudio.py`
+contributes **32 selected tests plus 1 deselected** (`-m live`) to the suite — this unit's own
+attributable delta; the suite-wide total is reported separately, in the concurrent pack-loader
+unit's entry above. `.venv/bin/ruff check .` clean on this unit's files. **Twelve mutations, all
+caught**, each `cp`-aside / mutate / run / `cp`-back restore, diffed byte-identical against the
+pre-mutation file after every single one: dropping the seconds→ms conversion; wrongly converting
+`tokensPerSecond` (the one figure that must stay a raw rate); `_seconds_to_ms` returning `0.0`
+instead of `None` on a missing key; removing the `stats or {}` guard so construction raises on a
+missing `stats`; inverting `toolCallForm`'s native/prose branch; widening the eligibility gate's
+`type` predicate to admit `"embeddings"`; changing the gate's scope constant from `"tool-caller"`
+to `"embedder"`; flipping `residency()`'s filter operator; inverting `warm_up`'s residency
+membership test; moving `warm_up`'s residency probe to *after* the chat call (an ordering defect,
+not a branch); computing `EmbedResult.dimension` from `len(vectors)` instead of the first vector;
+and swapping which raw `stats` key feeds `ttftMs` versus `generationMs`.
+
+**One test caught not pinning what it claimed — by mutation, before review, not after.** The first
+version of `test_warm_up_checks_residency_before_issuing_the_call_not_after` stubbed the residency
+catalog to change on the *second* call to `/api/v0/models`, but `warm_up` only ever calls that
+endpoint once regardless of where the call sits relative to the chat request — so the ordering
+mutation above (residency probed after the timed call instead of before) left the test green. Its
+name and docstring claimed to pin the ordering; its assertions did not. Rewritten to key the stub's
+answer on whether the chat call has actually fired yet, re-confirmed green against the correct
+implementation, then re-confirmed it fails under the same mutation that previously slipped past it.
+Recorded because this is the first time on this coordination the *test-whose-name-outruns-its-
+assertions* class was caught by the implementer during mutation testing rather than at review.
+
+**Delivered.** `LMStudio(base_url, *, opener=urllib.request.urlopen)` — `base_url` a constructor
+parameter (the not-yet-built `hostinfo` unit supplies it from `host.json`); `opener` injectable the
+way `falkorchat/transport.py`'s HTTP transport is, so every test but the one `-m live` test stays
+offline. `catalog()`, `residency()`, `probe()` (`GET /api/v0/models`, filtered, and the two-step
+reachability probe — `"api-v0"` / `"v1-only"` / `"unreachable"`, all three tested against stubbed
+HTTP); `chat()`, `embed()`, `warm_up()` with `timeout_s` required and **no default** on all three
+(§3.6's two budgets belong to the runner, a later unit). Deliberately **no `load`/`unload`/`ps`**
+— the CLI is gone and nothing on either HTTP surface can unload a model.
+
+`ChatResult` normalises LM Studio's seconds-valued `stats.time_to_first_token`/`generation_time`
+into `ttftMs`/`generationMs` on construction (§3.6's unit boundary, plan-gate P4-1); `tokensPerSecond`
+is the one figure left unconverted. Each of the three is `None` — never `0` — when its source key
+is absent, and construction never raises on a missing or partial `stats` object (plan-gate P5-8),
+mutation-tested three separate ways above. `ChatResult.toolCallForm` (`"native"` / `"prose"`,
+FR-8(b)) is decided at the transport boundary, on the one fact only this layer can observe
+directly — whether the response used LM Studio's native `tool_calls` mechanism — rather than
+deferred to a later prose-heuristic scorer. Transport failures raise one of two distinguishable
+exceptions, `LMStudioCallTimeout` versus `LMStudioCallFailed`, matching §3.6's "timeout" versus
+"no_response" dispositions.
+
+`tool_calling_eligible(model_info)` / `check_tool_calling_eligibility(role, model_info)` implement
+§3.6's eligibility gate. `role` is a plain `str`, **never a `Pack` object** — `packs.py` was a
+concurrent unit this wave and its shape was not final; the wiring unit is expected to call
+`check_tool_calling_eligibility(pack.role, model_info)`. Tested against the three real catalog
+entries that break the naive `"tool_use" in capabilities` rule (an `embeddings` model advertising
+`tool_use` → refused; an entry with no `capabilities` key → admitted; an `llm` with `tool_use` →
+admitted), plus the v1.11/plan-gate-P5-1 negative case: the same `embeddings`-advertising-`tool_use`
+entry is admitted, un-gated, on an `embedder` pack.
+
+**Fixture note.** No literal captured `GET /api/v0/models` 19-model payload exists anywhere in this
+repo's docs (checked: plan §2.5, review Pass 1 Appendix A.2, review Pass 4 Appendix D.3 — all
+narrative descriptions of a live probe, never a saved response). `tests/fixtures/lmstudio/catalog.json`
+holds the 7 entries the docs record a field for, each cited in a `_provenance` block, rather than a
+fixture padded to 19 with invented models. The "llm with `tool_use`" entry (`qwen/qwen3-4b-2507`)
+reuses `tests/conftest.py`'s own established S1 fixture precedent for that model (`modelType: "llm"`,
+`modelCapabilities: ["tool_use"]`) rather than an independent capture — worth closing properly in a
+future pass over the plan's fixture framing, not fixed here.
+
+**Not this unit's:** `run`'s capture-order sequence, the two timing budgets in anger,
+`coldLoadSeconds`, the withholding dispositions, `LatencyBlock`, and everything in `hostinfo.py` are
+the runner/host-info units'. One `-m live` test is written
+(`test_live_catalog_and_chat_stats_against_a_real_lm_studio`) and deselected by default — not run;
+no model may be loaded by an agent.
+
 ## 2026-09-09 — S2 U71: the real pack loader (`load_pack`, `content_hash`, `validate_pack`)
 
 **What:** `docs/plans/small-model-benchmarking.md` §4 S2's pack-loader portion — the first S2

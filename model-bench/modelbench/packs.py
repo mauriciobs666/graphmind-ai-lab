@@ -385,22 +385,41 @@ def _row_count_identity_problems(pack: Pack, sampling: Mapping[str, Any]) -> lis
     line 435 already settles the key). Fixed to `data.conversations` so the check fires on the
     manifest shape the plan actually specifies.
 
-    Skips (returns `[]`) when `scripts` / `replicatesPerScript` / `analysisUnit` /
-    `data.conversations` is absent: without a rows file naming the analysis unit per row, there is
-    nothing this route can check, and the structural route is what a pack of a different shape
-    (no `data.conversations` key at all — every item-level pack) gets instead.
+    A pack that declares `sampling.scripts` is conversation-shaped by the plan's own rule (§3.3's
+    one `sampling`-bearing manifest literal carries both; §3.9 point 2 defines a run as
+    `scripts × replicatesPerScript` for "a conversation pack"). Declaring `scripts` while omitting
+    `data.conversations` is therefore not "nothing to check" — it is itself a problem, reported
+    below rather than skipped. **Skips (returns `[]`) only when `scripts` itself is absent**: that
+    is the exemption the docstring's earlier revision named, and it is real for a pack of a
+    genuinely different shape — an item-level pack (no `scripts` declared at all, e.g. the four
+    item-level fixtures) — which gets the structural route instead and has nothing else this route
+    could check.
+
+    Once `data.conversations` is confirmed present, the identity itself still needs
+    `replicatesPerScript` and `analysisUnit` to be valid to compute against; those two are
+    unchanged from before and still skip silently when absent or malformed — narrowing that gap
+    further is not this fix's scope.
     """
     scripts = sampling.get("scripts")
     replicates = sampling.get("replicatesPerScript")
     data = pack.manifest.get("data") or {}
     data_file = data.get("conversations")
     analysis_unit = sampling.get("analysisUnit")
+
+    declares_scripts = isinstance(scripts, int) and not isinstance(scripts, bool)
+    if not declares_scripts:
+        return []
+
+    if not data_file:
+        return [
+            f"{pack.packId}: sampling.scripts is declared (conversation-shaped) but "
+            "data.conversations is absent; the row-count identity has no rows file to check it "
+            "against (row-count identity, plan §3.3)"
+        ]
+
     if (
-        not isinstance(scripts, int)
-        or isinstance(scripts, bool)
-        or not isinstance(replicates, int)
+        not isinstance(replicates, int)
         or isinstance(replicates, bool)
-        or not data_file
         or not analysis_unit
     ):
         return []

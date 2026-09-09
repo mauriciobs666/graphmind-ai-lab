@@ -1,12 +1,11 @@
 {
-  "packId": "fixture-replicates-per-script-violation",
+  "packId": "fixture-missing-data-conversations",
   "packVersion": "1.0.0",
   "role": "tool-caller",
   "environment": {"requires": ["lmstudio-chat"]},
-  "data": {"conversations": "conversations.jsonl"},
   "sampling": {
-    "scripts": 6,
-    "replicatesPerScript": 2,
+    "scripts": 12,
+    "replicatesPerScript": 1,
     "seed": 20260909,
     "pairingKey": ["scriptId", "turnIndex"],
     "analysisUnit": "scriptId"
