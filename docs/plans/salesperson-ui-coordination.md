@@ -92,11 +92,23 @@ response, but a *believed* handler.
 
 Two things follow that are worth more than the finding.
 
-**The acceptance pass could see it and eight static passes could not** — not because the static
-reviewers were careless, but because the docstring, the test and the plan are the same story told
-three times, and reading any of them confirms the other two. It took driving the route to produce
-a `500` that the story says is impossible. That is the second time in three days execution has
-settled something argument could not (the first was S9f).
+**~~The acceptance pass could see it and eight static passes could not.~~ RETRACTED at Pass 23 —
+this was false, and I told the stakeholder it in those words.** A static pass *did* see it.
+`tests/test_storefront_api.py`'s `NON_FAMILY_RAISES` already records *"Measured through
+`POST /shop/api/messages` with a `RuntimeError` out of `enqueue_turn`: a bare `500 text/plain
+'Internal Server Error'`"*, written by P21-1's reader **before** the acceptance pass ran; its own
+reason string concedes the path is request-reachable. I confirmed it at source (P23-3).
+
+So the failure was **mis-ruling, not invisibility** — which is the more interesting result and the
+worse one. A static pass measured the exact response, wrote it into the delivered suite, and ruled
+it acceptable; every later reader then found a *documented* bare `500` and inherited the ruling
+rather than re-testing it. Invisibility gets fixed by executing more. A wrong ruling that has been
+written down gets *harder* to see the more people read it.
+
+I reached for "execution beats argument" because this coordination had just been rewarded for it
+twice, and it fit. It was the wrong lesson from the right evidence, and no gate reads my prose —
+Pass 23 caught it only because I handed it the claim as something already verified and invited it
+to refute me. That invitation is the only reason this is a correction and not a permanent entry.
 
 **It came from a unit briefed to edit prose.** I sent `architect` to fix three documentation
 defects and told it to be suspicious of its own fixes; it went and read the code the documents
@@ -115,6 +127,34 @@ abstract: **my summary of a delegate's finding is a secondary source**, and it i
 reads. The brief is what saved it. It named the report by path and said *"read D-1 in full — do not
 work from my summary"*, so the delegate never had occasion to trust the wrong number. That clause
 is not ceremony; this is the second time in this coordination it has caught something.
+
+## The plan lane closes at v1.33, and the reviewer set the condition (teco, 2026-09-09)
+
+Same shape as the Pass 8 stopping rule, and set the same way — I asked for a falsifiable condition
+rather than another round, and took the reviewer's answer over my own judgment of when enough is
+enough:
+
+> *Pass 24 only if triggered by an execution or by S9e landing; the rule is falsified if S9e's
+> implementation review finds a plan-level defect in §5.2/§5.3/C14 that was statically visible in
+> v1.33.*
+
+**Why it is credible here and was not at Pass 22.** Pass 23's own assessment is that it paid for
+itself *"only because everything in it came from running something, not from a twenty-third
+reading"* — the blocker came off a purpose-built harness, C14's instance N+1 came off an executed
+raise, and P23-3 came off reading the delivered suite. None of the three was reachable by re-reading
+the plan. That is the stopping signal stated as a property of the *method*, not of anyone's
+patience: when the findings stop coming from the document, more passes over the document have
+negative expected value.
+
+**What it costs if it is wrong** is bounded and named: a plan-level defect in §5.2/§5.3/C14 that a
+static read of v1.33 would have caught, surfacing at S9e's review instead. That is one extra fix
+round on a step that gets a review anyway — cheap, and unlike an open-ended gate chain it is
+*detectable*, which is the whole point of writing the falsifier down.
+
+**S9e now carries two obligations from this pass**, and they are the thing most likely to trip:
+C14's mapping, and P23-3's three omitted sites (`TABLE` at `:131`, `STOREFRONT_RAISES_TODAY` at
+`:3939`, and the reason string). The name-set equality forces the sets red while leaving the false
+prose green, so S9e's brief must name the prose explicitly or it will ship green and wrong.
 
 ## U64 is blocked on another session's U28, and it is the same defect (teco, 2026-09-09)
 
@@ -349,7 +389,9 @@ citation. Trimming that citation is a one-line edit if preferred.
 | S4…S16 — remaining implementation | per plan v1.2 §5.1 | — | queued | — | — → — | — |
 | **U62** — D-1: rewrite `SERVER.md` §1.3's `QUIESCE_S` row against the acceptance measurements. **Closes S9f**, which had been held on argument | `coder` (**fresh** — the S7 `coder` is from a dead session; the brief is fully self-contained and the evidence is a published report) | `a07aa43f407bafdab` | delivered — **committed `404c409`**. All four readings teco-verified against D-1's own table; the SERVER.md diff is **1 line added, 1 removed**, so `TURN_WORKERS` being byte-identical is *verified*, not asserted. Its extra §1.3 sweep checked out too — I re-read TP-028/TP-029 and the `THREAD_LIMIT` row genuinely needed no change | `falkor-chat/docs/SERVER.md`, `falkor-chat/docs/HISTORY.md` | `analyst` (combined with U63) → — | 82k tok / 8 tools |
 | **U63** — D-2 (§5.3 has no `5xx` row for `/messages`), D-3 (`504` carries `state: null` against §5.2's present-vs-absent precedent), and **my untestable S9 done-condition** → plan v1.32 | `architect` (**fresh** — every prior architect instance is from a dead session) | `a0cfb47caac4a8c3e` | delivered — **committed `e06c92e`**, +83/−15, one file. **Ruled D-2 a *code* defect, not a missing table row**, and rejected the report's stated reason while accepting its substance; **ruled D-3 the document's defect, not the code's**. Created an obligation on **S9e** and an ordering hazard on S8's gate. Three of its four side-findings **teco-verified against source** before the gate — including a delivered docstring asserting a route `except` that does not exist | `docs/plans/salesperson-ui.md` v1.32 | `analyst` Pass 23 (U65) → — | 193k tok / 75 tools |
-| **U65** — Pass 23: gate U62 + U63 together. **Does C14 create the next instance of the class?** | `analyst` (**fresh** — every prior reviewer is from a dead session) | `a3d38bc7a7a12de74` | in-flight | `docs/reviews/salesperson-ui-impl.md` `## Pass 23` | — | — |
+| **U65** — Pass 23: gate U62 + U63 together. **Does C14 create the next instance of the class?** | `analyst` (**fresh** — every prior reviewer is from a dead session) | `a3d38bc7a7a12de74` | **accepted — committed `eedde26`. NEEDS CHANGES** (1 blocker, 3 major, 3 minor). **Answered the central question with a yes, by execution**: C14 creates instance N+1 once. Built a harness to break the new done-condition and did (P23-1). **Refuted a claim of mine I had already published** (P23-3). Upgraded my source-read claim 3 to executed. Gave the falsifiable stopping rule I asked for | `docs/reviews/salesperson-ui-impl.md` `## Pass 23` | — | 192k tok / 71 tools |
+| **U66** — close Pass 23 on the plan: P23-1 blocker, P23-2, P23-3's consequence, P23-5/6/7 → **v1.33, the last static plan touch** | `architect` | `a0cfb47caac4a8c3e` (resumed — its own review findings, same file, 193k tok) | in-flight | `docs/plans/salesperson-ui.md` v1.33 | **none — plan lane closes here** (see the stopping rule) | — |
+| **U67** — P23-4: S9f was **three sites, not one**; `config.py:216-224` still states the pre-S9 world | `coder` | `a07aa43f407bafdab` (resumed — its own S9f unit, holds D-1's readings) | in-flight | `falkorchat/config.py` (comments only), `falkor-chat/docs/HISTORY.md` | folded into S9e's review → — | — |
 | **U64** — close the CPG provenance arc: P7-1, P7-2, P7-4, delete P7-3's tombstone block. **No Pass 8** (stakeholder, 2026-09-09) | `cobb` (**fresh** — `abeeb0ea31b20e7cc` is from a dead session) | — | **queued — blocked on another session's in-flight unit**, see below | `skills/joern-cpg/**`, `skills/cpg-analysis/references/freshness.md`, `claude/cobb/kaizen/{history,plan}.md` | **none — stakeholder stopped the gates** | — |
 
 ## Stakeholder decisions, 2026-09-02 (plan §8)
