@@ -15,8 +15,8 @@
 - **What replaced the shape list: a coverage probe, shipped as part of the suite.** Per
   `claude/tdd-engineer/guard-testing-techniques.md` §1, a mutation test asks *"does my reproduction
   die?"* and its enumeration is the author's imagination; a probe asks *"what can this reader not
-  see?"*. **35 call-site forms** on three axes — A invocation syntax (15), B how the command
-  argument is spelled (14), C text that merely looks like a call site (6) — each **adjudicated
+  see?"*. **36 call-site forms** on three axes — A invocation syntax (15), B how the command
+  argument is spelled (15), C text that merely looks like a call site (6) — each **adjudicated
   twice**: bash itself says whether `rq` really receives a non-query command, and the **delivered**
   reader (`rq_scan`, now a function so the probe cannot certify a re-typed copy) says whether it
   flags it. That 2×2 is the disposition: `flag` / `blind` / `clean` / `alarm`. A mis-written
@@ -27,10 +27,12 @@
   rather than `rq ` cost nine lines and closed A7–A9, A15. Everything still missed is missed for a
   different reason — **the command is not a contiguous literal at the site** — which nothing short
   of a shell parser closes, so it is now written as a bound rather than implied.
-- **The five blind forms, named in the file and pinned by the probe** (each verified `misuse=yes,
+- **The six blind forms, named in the file and pinned by the probe** (each verified `misuse=yes,
   flagged=no` in this run): `A14` wrapper function forwarding `"$@"`; `B6` quote concatenation
   splitting the dot (`GRAPH".DELETE"`); `B8` backslash-escaped dot (`GRAPH\.DELETE`); `B9` variable
-  (`"$CMD"`); `B12` array element (`"${CMDS[0]}"`). What the reader must do by hand: **write the
+  (`"$CMD"`); `B12` array element (`"${CMDS[0]}"`); `B15` a command not spelled `GRAPH.…` at all
+  (`rq "$Q" PING` — a literal, a misuse, and invisible, because the token regex is anchored on
+  `GRAPH\.`). What the reader must do by hand: **write the
   literal at the site; if you cannot, check that call site yourself, because nothing else will.**
   Measured residual in `pipeline.sh` today: **zero** — all 3 sites pass a literal or nothing.
 - **Six C-forms are false ALARMS, and that direction is deliberate**: a trailing comment, a string
@@ -68,12 +70,42 @@
 - **Docs updated in the same change.** `pipeline.sh`'s own description of the check (lines 355-361)
   claimed "whether the site is a `$(…)` substitution or a bare statement … one stated blind spot is
   a command reaching rq through a VARIABLE" — stale in both halves; rewritten to state the
-  mechanism and the five-form bound, with the by-hand instruction.
-- **Left for another owner (out of this unit's scope).**
-  `claude/tdd-engineer/guard-testing-techniques.md` lines 47-51 say this check *"is open as of
-  2026-09-09 … do not treat that check as a model"*. It is now closed, and the probe is arguably
-  the worked example that file asks for. `docs/reviews/rq-execution-gate.md` (`analyst`'s) still
-  quotes the superseded comment.
+  mechanism and the six-form bound, with the by-hand instruction.
+- **Handed to other owners, both now settled.**
+  `claude/tdd-engineer/guard-testing-techniques.md` carried *"a live instance is open as of
+  2026-09-09 … do not treat that check as a model"* — **closed by `cobb` in `09270f2`**, which
+  replaced it with `### The worked example — a five-generation arc, closed by a probe`.
+  `docs/reviews/rq-execution-gate.md` (`analyst`'s) still quotes the superseded comment, and that
+  is **deliberate** — a note in that file says not to refresh the Pass 2 quote.
+
+### Follow-up, same day — the bound stated two ways in two files, converged
+
+- **The defect `teco` returned it for, and it is the arc's own shape one level out:** a corrected
+  statement in one file with the inherited version still standing in another.
+  `test-stamp-wiring.sh` scoped the bound to *"not one contiguous `GRAPH.<word>` run"*;
+  `pipeline.sh:361` said *"not one contiguous literal"*, dropping the `GRAPH.<word>`. The mechanism
+  only ever matches `/GRAPH\.[A-Za-z_.]*/`, so `rq "$Q" PING` is a literal at the site — **inside
+  pipeline.sh's stated reach and outside the mechanism.** `cobb` had a "generation six" half-drafted
+  off exactly this before retracting it against the *scoped* file's wording, without having read the
+  loose one.
+- **Converged on the scoped claim, never the loose one**, and the third sub-case is now named
+  identically in both files: not spelled `GRAPH.…` at all. Also tightened the one sentence in
+  `test-stamp-wiring.sh` that drifted the same way — *"WHOSE COMMAND IS NOT A LITERAL AT THE SITE"*
+  → *"NOT A LITERAL `GRAPH.<word>` AT THE SITE"* — with a clause saying why "a literal" alone is too
+  loose, so the next reader cannot re-derive the loose form from this file either.
+- **Prose was not trusted to hold it: form `B15` (`rq "$Q" PING`) pins the scoping.** Dual-adjudicated
+  like every row — bash confirms `rq` really receives `PING`, the reader does not flag it. Two
+  controls: mislabel `B15` as `flag` → `B15 FAIL`, exit 1; widen the token regex from `GRAPH\.[A-Z_.]*`
+  to `[A-Z][A-Z_.]*` → the blind rows go red (`expected misuse=yes flagged=no; observed … flagged=yes`),
+  exit 1. So the probe pins the *scoping* of the bound, not only its form list.
+- **No third copy of the bound exists — checked, and kept that way.** `skills/joern-cpg/SKILL.md:164`
+  and `skills/cpg-analysis/references/freshness.md:285` are inventory lines listing what the suite
+  covers; neither restates the reach or the blind spots. Both were nonetheless over-stating the
+  requirement (*"each must pass GRAPH.QUERY or GRAPH.RO_QUERY"* — site 1 passes **nothing**, and `rq`
+  defaults). Both corrected, and both given a **pointer** to the authoritative bound rather than a
+  copy of it — one bound in three places is a maintenance defect even while the wordings agree.
+- **Suite unchanged at 16 PASS / 0 FAIL / exit 0**, exactly 3 call sites; `B15` adds a probe row, not
+  a PASS line.
 
 
 ## 2026-09-09 — the two entries held open for K-009, cleared after independent re-execution (U30)
