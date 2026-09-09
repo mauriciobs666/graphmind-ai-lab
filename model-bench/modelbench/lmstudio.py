@@ -30,6 +30,7 @@ missing one.
 
 from __future__ import annotations
 
+import http.client
 import json
 import time
 import urllib.error
@@ -289,22 +290,27 @@ class LMStudio:
     # --- GET: catalog / residency / probe -----------------------------------------------------
 
     def _raw_get(self, path: str, timeout_s: float) -> tuple[int, bytes] | None:
-        """`None` on a connection-level failure (no response at all); `(status, body)` otherwise,
-        including a non-2xx status — the caller decides what each status means."""
+        """`None` on any connect- or read-phase failure (no trustworthy response at all);
+        `(status, body)` otherwise, including a non-2xx status — the caller decides what each
+        status means. The body read sits inside the same ladder as the connect (Pass 12 P12-1):
+        a response whose `read()` raises (`http.client.IncompleteRead`, a dropped connection, a
+        read-phase timeout) is exactly as unreachable as one that never connected, so both
+        phases fold to the same `None` — `IncompleteRead` is not an `OSError`, so it needs its
+        own rung rather than riding the socket catch."""
         req = urllib.request.Request(self._url(path), method="GET")
         try:
             resp = self._opener(req, timeout=timeout_s)
+            try:
+                return resp.status, resp.read()
+            finally:
+                resp.close()
         except urllib.error.HTTPError as exc:  # a subclass of URLError — must precede it
             try:
                 return exc.code, exc.read()
             finally:
                 exc.close()
-        except (urllib.error.URLError, TimeoutError, OSError):
+        except (urllib.error.URLError, TimeoutError, http.client.HTTPException, OSError):
             return None
-        try:
-            return resp.status, resp.read()
-        finally:
-            resp.close()
 
     def probe(self) -> ProbeResult:
         """§3.4.4a's two-step probe, against stubbed HTTP in every offline test:
@@ -332,9 +338,12 @@ class LMStudio:
                 f"GET /api/v0/models: no response from {self._base_url}"
             )
         status, raw = result
-        body = _parse_json(raw, context="GET /api/v0/models")
         if status != 200:
+            # Checked before parsing (Pass 12 P12-10): an error body is often not JSON at all
+            # (an HTML error page, a proxy's plain-text response), and parsing it first reported
+            # "not valid JSON" instead of the real HTTP status the operator actually needs.
             raise LMStudioCallFailed(f"GET /api/v0/models: HTTP {status}")
+        body = _parse_json(raw, context="GET /api/v0/models")
         entries = body.get("data") if isinstance(body, Mapping) else None
         if not isinstance(entries, list):
             raise LMStudioCallFailed("GET /api/v0/models: response has no 'data' list")
@@ -355,10 +364,16 @@ class LMStudio:
     def _raw_post(
         self, path: str, payload: Mapping[str, Any], timeout_s: float
     ) -> tuple[float, bytes]:
-        """Returns `(wallClockMs, body)` on a 2xx response. Raises `LMStudioCallTimeout` when the
-        budget was exhausted and `LMStudioCallFailed` for every other failure (HTTP error,
-        connection drop, unparseable transport) — the distinction §3.6's two withholding
-        dispositions ("timeout" vs "no_response") both need, decided here where the evidence is.
+        """Returns `(wallClockMs, body)` on a 2xx response, the clock stopped at the *last byte
+        of the body* (§3.6 FR-11: "measured around the HTTP call from just before the request to
+        the last byte of the body" — Pass 12 P12-4: it used to stop at the response headers, so
+        a slow body read off a fast-responding server was invisible). Raises
+        `LMStudioCallTimeout` when the budget was exhausted, at either the connect or the read
+        phase, and `LMStudioCallFailed` for every other failure (HTTP error, connection drop,
+        unparseable transport, a body read that never completes) — the distinction §3.6's two
+        withholding dispositions ("timeout" vs "no_response") both need, decided here where the
+        evidence is. The body read sits inside the same ladder as the connect (Pass 12 P12-1): a
+        response whose `read()` raises used to escape this method's taxonomy entirely.
         """
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
@@ -370,6 +385,10 @@ class LMStudio:
         start = time.monotonic()
         try:
             resp = self._opener(req, timeout=timeout_s)
+            try:
+                raw = resp.read()
+            finally:
+                resp.close()
         except urllib.error.HTTPError as exc:  # rung 1 — a URLError subclass, must precede it
             try:
                 body = exc.read()
@@ -378,19 +397,20 @@ class LMStudio:
             raise LMStudioCallFailed(
                 f"POST {path}: HTTP {exc.code}: {_truncate(body)}"
             ) from exc
-        except TimeoutError as exc:  # rung 2 — NOT a URLError; must be named explicitly
+        except TimeoutError as exc:  # rung 2 — NOT a URLError; must be named explicitly. Covers
+            # a connect-phase timeout and a read-phase one alike (`socket.timeout` has been an
+            # alias of `TimeoutError` since 3.10), because `resp.read()` sits inside this try.
             raise LMStudioCallTimeout(f"POST {path}: timed out after {timeout_s}s") from exc
         except urllib.error.URLError as exc:  # rung 3
             if isinstance(exc.reason, TimeoutError):
                 raise LMStudioCallTimeout(f"POST {path}: timed out after {timeout_s}s") from exc
             raise LMStudioCallFailed(f"POST {path}: connection failed: {exc.reason}") from exc
-        except OSError as exc:  # rung 4 — any other socket error
+        except http.client.HTTPException as exc:  # rung 4 — a dropped/truncated body, e.g.
+            # `IncompleteRead`; not an `OSError`, so the socket rung below would not catch it.
+            raise LMStudioCallFailed(f"POST {path}: {type(exc).__name__}: {exc}") from exc
+        except OSError as exc:  # rung 5 — any other socket error, connect or read phase
             raise LMStudioCallFailed(f"POST {path}: {type(exc).__name__}: {exc}") from exc
         wall_clock_ms = (time.monotonic() - start) * 1000.0
-        try:
-            raw = resp.read()
-        finally:
-            resp.close()
         return wall_clock_ms, raw
 
     def chat(
@@ -475,6 +495,7 @@ class LMStudio:
         *,
         call_surface: CallSurface,
         system_prompt: str | None,
+        was_resident_before: bool,
         timeout_s: float,
     ) -> LoadResult:
         """The mandatory per-arm warm-up (§3.6). Under JIT auto-load this call **is** the load;
@@ -482,13 +503,16 @@ class LMStudio:
         metadata is kept — `runtime`/`stats` on the chat surface are the sole source of
         `runtimeName`/`runtimeVersion` (§3.4.4a step 5).
 
-        `wasResidentBefore` is read from `residency()` **immediately before** issuing the timed
-        call, which is what makes it correct on a cold start: `residentModelsAtStart` (queried
-        earlier, at capture-order step 3, before this call) is `[]` by construction on a cold run
-        and would misreport every cold warm-up as "already resident" if used here instead.
+        `was_resident_before` is supplied by the caller, from `residentModelsAtStart`
+        (§3.4.4a capture-order step 3) — this method does not probe `residency()` itself (fixed
+        at S2 U75; `docs/reviews/small-model-benchmarking-impl.md` Pass 12 P12-5). §3.6 names
+        `residentModelsAtStart` as `coldLoadSeconds`'s source in so many words — "recorded only
+        when the model was not resident at start" — and on a cold run that snapshot is `[]` by
+        construction, so `model in set()` is `False`: "not resident", the *correct* answer, not
+        a misreport. An earlier version of this method re-probed `residency()` immediately
+        before the timed call instead, and justified it by inverting that same fact; the
+        substitution was undeclared and cost an unlisted extra catalog GET on every warm-up.
         """
-        resident_ids = {rm.id for rm in self.residency()}
-        was_resident_before = model in resident_ids
         if call_surface == "chat":
             messages: list[Mapping[str, Any]] = []
             if system_prompt:

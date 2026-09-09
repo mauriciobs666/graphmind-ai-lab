@@ -18,8 +18,10 @@ a fake, the same pattern `falkorchat/transport.py` uses for the same reason.
 
 from __future__ import annotations
 
+import http.client
 import io
 import json
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -64,27 +66,67 @@ class _FakeResponse:
         pass
 
 
-def make_opener(routes: dict[str, tuple[int, bytes] | Exception]) -> Callable[..., Any]:
-    """Build a fake `urlopen` replacement. `routes` maps a URL *suffix* (e.g. `/api/v0/models`)
-    to either `(status, body_bytes)` or an `Exception` instance to raise. A status >= 400 is
-    raised as `urllib.error.HTTPError`, exactly as the real `urlopen` would."""
+class _ReadFailsResponse:
+    """A response that is obtained successfully (a status exists) but whose `.read()` raises —
+    the body-read-phase failure class Pass 12 P12-1 found escaping the adapter's taxonomy
+    entirely, because `resp.read()` used to sit outside `_raw_get`/`_raw_post`'s try/except
+    ladder. An opener-level `Exception` (the `routes` dict's other failure shape) cannot express
+    this: it fails before a response object ever exists, which is a different phase."""
 
-    def opener(req: urllib.request.Request, timeout: float | None = None) -> _FakeResponse:
+    def __init__(self, status: int, exc: Exception) -> None:
+        self.status = status
+        self._exc = exc
+
+    def read(self) -> bytes:
+        raise self._exc
+
+    def close(self) -> None:
+        pass
+
+
+class _SlowReadResponse:
+    """A response whose `.read()` takes measurable wall-clock time — pins Pass 12 P12-4:
+    `wallClockMs` must be measured to the last byte of the body, not to the response headers."""
+
+    def __init__(self, status: int, body: bytes, delay_s: float) -> None:
+        self.status = status
+        self._body = body
+        self._delay_s = delay_s
+
+    def read(self) -> bytes:
+        time.sleep(self._delay_s)
+        return self._body
+
+    def close(self) -> None:
+        pass
+
+
+def make_opener(routes: dict[str, tuple[int, bytes] | Exception | Any]) -> Callable[..., Any]:
+    """Build a fake `urlopen` replacement. `routes` maps a URL *suffix* (e.g. `/api/v0/models`)
+    to one of: `(status, body_bytes)` (a status >= 400 is raised as `urllib.error.HTTPError`,
+    exactly as the real `urlopen` would), an `Exception` instance to raise from the opener call
+    itself (a connect-phase failure), or an already-constructed response-like object — anything
+    with `.read()`/`.close()`, e.g. `_ReadFailsResponse`/`_SlowReadResponse` — returned verbatim,
+    for a failure or a delay that only happens once the caller reaches `.read()`."""
+
+    def opener(req: urllib.request.Request, timeout: float | None = None) -> Any:
         url = req.full_url
         for suffix, outcome in routes.items():
             if url.endswith(suffix):
                 if isinstance(outcome, Exception):
                     raise outcome
-                status, body = outcome
-                if status >= 400:
-                    raise urllib.error.HTTPError(url, status, "error", None, io.BytesIO(body))
-                return _FakeResponse(status, body)
+                if isinstance(outcome, tuple):
+                    status, body = outcome
+                    if status >= 400:
+                        raise urllib.error.HTTPError(url, status, "error", None, io.BytesIO(body))
+                    return _FakeResponse(status, body)
+                return outcome  # an already-constructed response-like object
         raise AssertionError(f"no stubbed route for {url}")
 
     return opener
 
 
-def client(routes: dict[str, tuple[int, bytes] | Exception]) -> LMStudio:
+def client(routes: dict[str, tuple[int, bytes] | Exception | Any]) -> LMStudio:
     return LMStudio("http://localhost:1234", opener=make_opener(routes))
 
 
@@ -172,6 +214,15 @@ def test_catalog_keeps_capabilities_absent_distinct_from_present_and_empty():
 def test_catalog_raises_unreachable_when_nothing_listens():
     c = client({"/api/v0/models": urllib.error.URLError(OSError("Connection refused"))})
     with pytest.raises(LMStudioUnreachable):
+        c.catalog()
+
+
+def test_catalog_reports_http_status_even_when_the_error_body_is_not_json():
+    """Pass 12 P12-10: `catalog()` used to parse the body before checking the status, so a
+    non-2xx response with a non-JSON body (an HTML error page, a proxy's plain-text error)
+    reported a "not valid JSON" cause instead of the real HTTP status."""
+    c = client({"/api/v0/models": (500, b"<html>Internal Server Error</html>")})
+    with pytest.raises(LMStudioCallFailed, match="HTTP 500"):
         c.catalog()
 
 
@@ -359,10 +410,18 @@ def test_embed_requires_timeout_s_with_no_default():
 
 
 def test_warm_up_requires_timeout_s_with_no_default():
-    catalog_body = _json_bytes({"data": _load("catalog.json")["data"]})
-    c = client({"/api/v0/models": (200, catalog_body)})
+    c = client({})
     with pytest.raises(TypeError):
-        c.warm_up("m", call_surface="chat", system_prompt=None)
+        c.warm_up("m", call_surface="chat", system_prompt=None, was_resident_before=False)
+
+
+def test_warm_up_requires_was_resident_before_with_no_default():
+    """§3.6: `coldLoadSeconds` is recorded only when the model was not resident at start, so a
+    default here would silently pick a disposition rather than refuse to guess one (AGENTS.md's
+    "nothing that shapes a decision carries a default")."""
+    c = client({})
+    with pytest.raises(TypeError):
+        c.warm_up("m", call_surface="chat", system_prompt=None, timeout_s=300.0)
 
 
 # --- transport-boundary failure classification: timeout vs. everything else --------------------
@@ -412,6 +471,26 @@ def test_embed_call_that_times_out_raises_lmstudio_call_timeout():
         c.embed(["hi"], model="m", timeout_s=0.01)
 
 
+# --- wall-clock window (§3.6 FR-11, Pass 12 P12-4) ---------------------------------------------
+
+
+def test_chat_wall_clock_is_measured_to_the_last_byte_of_the_body_not_the_headers():
+    """§3.6 FR-11: `wallClockMs` is "measured around the HTTP call from just before the request
+    to the last byte of the body." Pass 12 P12-4: it used to stop the clock before `resp.read()`,
+    so a slow body read off a fast-responding server was invisible — a response that spent 250ms
+    in `read()` reported `wallClockMs = 0.001`."""
+    slow = _SlowReadResponse(200, _json_bytes(_load("chat_response_with_stats.json")), 0.2)
+    c = client({"/api/v0/chat/completions": slow})
+    result = c.chat(
+        [{"role": "user", "content": "hi"}],
+        model="m",
+        temperature=0.0,
+        max_tokens=10,
+        timeout_s=5.0,
+    )
+    assert result.wallClockMs >= 150.0  # 200ms sleep in read(), generous margin for jitter
+
+
 # --- embed() ----------------------------------------------------------------------------------
 
 
@@ -433,21 +512,23 @@ def test_embed_dimension_is_none_not_zero_on_an_empty_batch():
 
 
 # --- warm_up() — §3.6: call-surface aware, content discarded, metadata kept --------------------
+#
+# Pass 12 P12-5: `was_resident_before` is supplied by the caller (from `residentModelsAtStart`,
+# §3.4.4a capture-order step 3) rather than re-probed inside `warm_up` — the method no longer
+# calls `residency()`/`catalog()` itself, so none of these routes stub `/api/v0/models`.
 
 
 def test_warm_up_on_chat_surface_reads_runtime_and_stats_from_the_response():
     chat_body = _json_bytes(_load("chat_response_with_stats.json"))
-    catalog_body = _json_bytes({"data": _load("catalog.json")["data"]})  # all not-loaded
-    c = client(
-        {
-            "/api/v0/models": (200, catalog_body),
-            "/api/v0/chat/completions": (200, chat_body),
-        }
-    )
+    c = client({"/api/v0/chat/completions": (200, chat_body)})
     result = c.warm_up(
-        "qwen/qwen3-4b-2507", call_surface="chat", system_prompt="be terse", timeout_s=300.0
+        "qwen/qwen3-4b-2507",
+        call_surface="chat",
+        system_prompt="be terse",
+        was_resident_before=False,
+        timeout_s=300.0,
     )
-    assert result.wasResidentBefore is False  # cold: catalog.json has it not-loaded
+    assert result.wasResidentBefore is False
     assert result.runtime == {
         "name": "llama.cpp",
         "version": "1.52.0",
@@ -457,69 +538,206 @@ def test_warm_up_on_chat_surface_reads_runtime_and_stats_from_the_response():
     assert result.wallClockMs is not None
 
 
-def test_warm_up_was_resident_before_is_true_when_the_model_is_already_loaded():
-    catalog_body = _json_bytes({"data": _load("catalog_one_loaded.json")["data"]})
-    chat_body = _json_bytes(_load("chat_response_with_stats.json"))
-    c = client(
-        {
-            "/api/v0/models": (200, catalog_body),
-            "/api/v0/chat/completions": (200, chat_body),
-        }
-    )
+@pytest.mark.parametrize("call_surface", ["chat", "embeddings"])
+def test_warm_up_passes_was_resident_before_through_verbatim(call_surface):
+    """A plain contract test: `LoadResult.wasResidentBefore` is exactly the caller's value,
+    neither inverted nor ignored — on **both** call surfaces. Parametrized deliberately: a first
+    version of this test covered only the chat branch, and a mutation inverting the value on the
+    embeddings branch alone (`warm_up`'s second `return LoadResult(...)`) passed the full suite
+    unnoticed — the class this coordination has already hit five times, caught here by mutation
+    before review rather than after."""
+    if call_surface == "chat":
+        route = "/api/v0/chat/completions"
+        body = _json_bytes(_load("chat_response_with_stats.json"))
+    else:
+        route = "/api/v0/embeddings"
+        body = _json_bytes(_load("embed_response.json"))
+    c = client({route: (200, body)})
     result = c.warm_up(
-        "qwen/qwen3-4b-2507", call_surface="chat", system_prompt=None, timeout_s=300.0
+        "qwen/qwen3-4b-2507",
+        call_surface=call_surface,
+        system_prompt=None,
+        was_resident_before=True,
+        timeout_s=300.0,
     )
     assert result.wasResidentBefore is True
 
 
-def test_warm_up_checks_residency_before_issuing_the_call_not_after():
-    """§3.6/§3.4.4a: `wasResidentBefore` must come from a residency probe taken *before* the
-    warm-up's own request fires, because under JIT the warm-up **is** the load — probing after
-    would see the model it had just loaded and misreport every cold warm-up as already resident.
-
-    The stub's `/api/v0/models` route answers 'not-loaded' *until* the chat call has actually
-    happened, and 'loaded' from that point on — keyed on whether the chat call fired, not on how
-    many times `/api/v0/models` itself is hit, so this fails if `warm_up` reads residency even
-    once *after* issuing the chat request instead of only before it."""
-    state = {"chat_happened": False}
-    cold_catalog = _json_bytes({"data": _load("catalog.json")["data"]})
-    warm_catalog = _json_bytes({"data": _load("catalog_one_loaded.json")["data"]})
+def test_warm_up_never_probes_residency_itself():
+    """Pass 12 P12-5: an earlier version of `warm_up` called `residency()` (hence `catalog()`,
+    hence `GET /api/v0/models`) immediately before the timed call, on a false justification —
+    `residentModelsAtStart` is `[]` on a cold run, and `model in set()` is correctly `False`
+    ("not resident"), not a misreport, so there was nothing wrong for the extra probe to fix.
+    No `/api/v0/models` route is stubbed here, so this reddens with 'no stubbed route' if
+    `warm_up` ever re-probes residency itself again."""
     chat_body = _json_bytes(_load("chat_response_with_stats.json"))
-
-    def opener(req, timeout=None):
-        url = req.full_url
-        if url.endswith("/api/v0/models"):
-            return _FakeResponse(200, warm_catalog if state["chat_happened"] else cold_catalog)
-        if url.endswith("/api/v0/chat/completions"):
-            state["chat_happened"] = True
-            return _FakeResponse(200, chat_body)
-        raise AssertionError(f"no stubbed route for {url}")
-
-    c = LMStudio("http://localhost:1234", opener=opener)
-    result = c.warm_up(
-        "qwen/qwen3-4b-2507", call_surface="chat", system_prompt=None, timeout_s=300.0
+    c = client({"/api/v0/chat/completions": (200, chat_body)})
+    c.warm_up(
+        "qwen/qwen3-4b-2507",
+        call_surface="chat",
+        system_prompt=None,
+        was_resident_before=False,
+        timeout_s=300.0,
     )
-    assert result.wasResidentBefore is False
 
 
 def test_warm_up_on_embeddings_surface_has_no_runtime_or_stats():
-    catalog_body = _json_bytes({"data": _load("catalog.json")["data"]})
     embed_body = _json_bytes(_load("embed_response.json"))
-    c = client(
-        {
-            "/api/v0/models": (200, catalog_body),
-            "/api/v0/embeddings": (200, embed_body),
-        }
-    )
+    c = client({"/api/v0/embeddings": (200, embed_body)})
     result = c.warm_up(
         "text-embedding-qwen3-embedding-0.6b",
         call_surface="embeddings",
         system_prompt=None,
+        was_resident_before=False,
         timeout_s=300.0,
     )
     assert result.runtime is None
     assert result.stats is None
     assert result.wallClockMs is not None
+
+
+# --- §4B coverage probe (review Pass 12, `docs/reviews/small-model-benchmarking-impl.md`) ------
+#
+# A probe over (operation) x (failure phase) x (failure kind): the six public operations
+# {catalog, residency, probe, chat, embed, warm_up} x {connect/headers, body-read} x {timeout,
+# non-2xx, connection drop, unparseable body}. Every cell must land in exactly one of
+# `LMStudioCallTimeout` / `LMStudioCallFailed` / `LMStudioUnreachable`, or — for `probe()` — one
+# of its three literal outcomes. No cell may raise anything outside `LMStudioError`. The
+# reviewer ran the body-read row and found 9 of 9 cells escaping (three exception kinds x
+# chat/catalog/probe); this probe is the regression net, over every cell rather than the three
+# sampled by hand.
+#
+# Two of the eight (phase, kind) combinations are not reachable through `urllib.request`'s own
+# contract — not a judgement call to make silently, so they are named constants asserted below
+# rather than simply absent from the parametrized cases:
+#   - (connect, unparseable_body): no body exists to be unparseable before a response object —
+#     with a status — has even been obtained.
+#   - (read, non_2xx): `urlopen()` raises `HTTPError` for any status >= 400 *before* ever handing
+#     back a response object (see `make_opener`), so a non-2xx status cannot be observed once
+#     `.read()` is reachable — it is a connect/headers-phase fact by construction.
+
+_CONNECT_KINDS: dict[str, Callable[[], Any]] = {
+    "timeout": lambda: TimeoutError("timed out"),
+    "non_2xx": lambda: (500, b"upstream error"),
+    "connection_drop": lambda: urllib.error.URLError(ConnectionResetError("reset by peer")),
+}
+_READ_KINDS: dict[str, Callable[[], Any]] = {
+    "timeout": lambda: _ReadFailsResponse(200, TimeoutError("timed out mid-body")),
+    "connection_drop": lambda: _ReadFailsResponse(
+        200, http.client.IncompleteRead(b"partial")
+    ),
+    "unparseable_body": lambda: (200, b"not json{"),
+}
+
+# The six reachable cells and the exception each must raise, for a GET-based operation
+# (catalog/residency) and a POST-based one (chat/embed/warm_up) respectively. Both taxonomies
+# cover the same six cells — the exemption below is structural, not per-taxonomy.
+_EXPECTED_FOR_GET: dict[tuple[str, str], type[Exception]] = {
+    ("connect", "timeout"): LMStudioUnreachable,
+    ("connect", "non_2xx"): LMStudioCallFailed,
+    ("connect", "connection_drop"): LMStudioUnreachable,
+    ("read", "timeout"): LMStudioUnreachable,
+    ("read", "connection_drop"): LMStudioUnreachable,
+    ("read", "unparseable_body"): LMStudioCallFailed,
+}
+_EXPECTED_FOR_POST: dict[tuple[str, str], type[Exception]] = {
+    ("connect", "timeout"): LMStudioCallTimeout,
+    ("connect", "non_2xx"): LMStudioCallFailed,
+    ("connect", "connection_drop"): LMStudioCallFailed,
+    ("read", "timeout"): LMStudioCallTimeout,
+    ("read", "connection_drop"): LMStudioCallFailed,
+    ("read", "unparseable_body"): LMStudioCallFailed,
+}
+
+_ALL_KINDS = ("timeout", "non_2xx", "connection_drop", "unparseable_body")
+
+_EXEMPT_CELLS = frozenset({("connect", "unparseable_body"), ("read", "non_2xx")})
+
+
+def _route_outcome(phase: str, kind: str) -> Any:
+    return (_CONNECT_KINDS if phase == "connect" else _READ_KINDS)[kind]()
+
+
+def test_probe_cell_exemptions_are_exactly_the_structurally_unreachable_ones():
+    """The guard against the exemption silently growing (or shrinking) without anyone deciding
+    it: re-derive the full 8-cells-per-operation grid from the four failure kinds §4B names, and
+    assert the two cells this module does not exercise are exactly, and only, `_EXEMPT_CELLS` —
+    not implied by their absence from `_EXPECTED_FOR_GET`/`_POST`."""
+    all_cells = {(phase, kind) for phase in ("connect", "read") for kind in _ALL_KINDS}
+    exercised = set(_EXPECTED_FOR_GET)
+    assert exercised == set(_EXPECTED_FOR_POST)  # both taxonomies cover the same six cells
+    assert all_cells - exercised == _EXEMPT_CELLS
+
+
+@pytest.mark.parametrize("phase,kind", sorted(_EXPECTED_FOR_GET))
+def test_catalog_lands_in_the_taxonomy_on_every_reachable_cell(phase, kind):
+    c = client({"/api/v0/models": _route_outcome(phase, kind)})
+    with pytest.raises(_EXPECTED_FOR_GET[(phase, kind)]):
+        c.catalog()
+
+
+@pytest.mark.parametrize("phase,kind", sorted(_EXPECTED_FOR_GET))
+def test_residency_lands_in_the_taxonomy_on_every_reachable_cell(phase, kind):
+    c = client({"/api/v0/models": _route_outcome(phase, kind)})
+    with pytest.raises(_EXPECTED_FOR_GET[(phase, kind)]):
+        c.residency()
+
+
+@pytest.mark.parametrize("phase,kind", sorted(_EXPECTED_FOR_GET))
+def test_probe_never_raises_and_returns_a_literal_outcome_on_every_reachable_cell(phase, kind):
+    c = client(
+        {
+            "/api/v0/models": _route_outcome(phase, kind),
+            "/v1/models": urllib.error.URLError(OSError("connection refused")),
+        }
+    )
+    assert c.probe() == "unreachable"  # no exception, and it names a real literal outcome
+
+
+@pytest.mark.parametrize("phase,kind", sorted(_EXPECTED_FOR_POST))
+def test_chat_lands_in_the_taxonomy_on_every_reachable_cell(phase, kind):
+    c = client({"/api/v0/chat/completions": _route_outcome(phase, kind)})
+    with pytest.raises(_EXPECTED_FOR_POST[(phase, kind)]):
+        c.chat(
+            [{"role": "user", "content": "hi"}],
+            model="m",
+            temperature=0.0,
+            max_tokens=10,
+            timeout_s=5.0,
+        )
+
+
+@pytest.mark.parametrize("phase,kind", sorted(_EXPECTED_FOR_POST))
+def test_embed_lands_in_the_taxonomy_on_every_reachable_cell(phase, kind):
+    c = client({"/api/v0/embeddings": _route_outcome(phase, kind)})
+    with pytest.raises(_EXPECTED_FOR_POST[(phase, kind)]):
+        c.embed(["hi"], model="m", timeout_s=5.0)
+
+
+@pytest.mark.parametrize("phase,kind", sorted(_EXPECTED_FOR_POST))
+def test_warm_up_chat_surface_lands_in_the_taxonomy_on_every_reachable_cell(phase, kind):
+    c = client({"/api/v0/chat/completions": _route_outcome(phase, kind)})
+    with pytest.raises(_EXPECTED_FOR_POST[(phase, kind)]):
+        c.warm_up(
+            "m",
+            call_surface="chat",
+            system_prompt=None,
+            was_resident_before=False,
+            timeout_s=5.0,
+        )
+
+
+@pytest.mark.parametrize("phase,kind", sorted(_EXPECTED_FOR_POST))
+def test_warm_up_embeddings_surface_lands_in_the_taxonomy_on_every_reachable_cell(phase, kind):
+    c = client({"/api/v0/embeddings": _route_outcome(phase, kind)})
+    with pytest.raises(_EXPECTED_FOR_POST[(phase, kind)]):
+        c.warm_up(
+            "m",
+            call_surface="embeddings",
+            system_prompt=None,
+            was_resident_before=False,
+            timeout_s=5.0,
+        )
 
 
 # --- one -m live test, per §4 S2's done-condition. Written and NEVER run by this suite ---------
