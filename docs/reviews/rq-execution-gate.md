@@ -400,3 +400,51 @@ GRAPH.QUERY  <throwaway> 'UNWIND range(1,5000) AS x CREATE (:R {x:x})'
 GRAPH.RO_QUERY <throwaway> 'MATCH (n:R) RETURN CASE WHEN n.x = 5000 THEN 1/0 ELSE n.x END AS v'
   -> 1 line, exit 0: "Division by zero"      (no header, no rows, no trailer)
 ```
+
+---
+
+## Pass 3 — 2026-09-09 (disposition only)
+
+Status update on a closed finding. No new review; nothing here re-argues Pass 1 or Pass 2.
+
+**Major 7 — CLOSED, over two generations.** `682fbed` took both closures I offered (join the anchor
+widening with the case-insensitive token match). `cobb`, distilling an unrelated orphan entry, then
+found a **fifth** shape the widened check still missed: a literal `GRAPH.DELETE` after a
+**backslash line continuation** — the reader was line-oriented and a shell call site is not.
+`4df5e45` closes that as generation four.
+
+**The done-condition changed shape, and that is the durable part.** Generation three was gated on
+four named mutation shapes, held honestly, and was beaten inside the hour. **The enumeration was
+the flaw, and it was mine** — Major 7 handed over a fixed list of forms to close, which is an
+author's-imagination oracle wearing a mutation-test hat. Generation four is gated instead on a
+**coverage probe**: 35 call-site forms over three axes, each adjudicated twice — by bash (does `rq`
+really receive a non-query command?) and by the **delivered** reader extracted as `rq_scan`, so the
+probe cannot certify a re-typed copy. The stated bound is now five blind forms (`"$@"` forwarding,
+`GRAPH".DELETE"`, `GRAPH\.DELETE`, `"$CMD"`, `"${CMDS[0]}"`), all blind for one reason — the
+command is not a contiguous literal at the site — written as an explicit bound with a
+check-by-hand instruction.
+
+**The self-referential guarantee holds — verified, not taken.** [executed] The claim worth checking
+was that widening the mechanism *without* rewriting the stated bound turns a `blind` row **red**,
+which is the structural answer to the defect Major 7 named. Three controls, each on an isolated
+copy:
+
+| mutation | result |
+|---|---|
+| reader widened (strip `"` and `\` before token match), FORMS table untouched | **B6, B8 FAIL**, exit 1 — the bound is pinned by the mechanism |
+| reader reverted to line-oriented (no continuation join) | **A8, A9, A15 FAIL**, exit 1 |
+| one row mislabelled (`A2 flag` → `blind`) | **A2 FAIL**, exit 1, with `expected misuse=yes flagged=no; observed misuse=yes flagged=yes` |
+
+Also reproduced: the generation-four bypass (`rq 'MATCH (b) RETURN b' \` + `GRAPH.DELETE`) is now
+caught, reported at the **first physical line** of the joined logical call site — the exact line
+number tracks wherever the bypass is inserted, so it will differ between copies. Suite on the
+delivered tree: **16 PASS, 0 FAIL, exit 0**, still exactly 3 call sites.
+
+**Pass 1 §Question 5 — both entries cleared in U30** after independent re-execution, including the
+abort behaviour under a harder shape than the original entry used (4,999 rows producible ahead of
+the error, still the single line `Division by zero`). My Pass 1 split verdict is discharged.
+
+**Note for anyone maintaining this document:** Pass 2's Major 7 quotes a `test-stamp-wiring.sh`
+comment that generations three and four have since replaced. That quote is **left as written on
+purpose** — it is the evidence for the finding as it stood, and a review's value is the passes read
+together. Do not refresh it; this section is where its current state lives.
