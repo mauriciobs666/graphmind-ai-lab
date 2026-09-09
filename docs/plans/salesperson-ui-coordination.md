@@ -73,6 +73,19 @@ S9b–S9e (all touch `storefront.py`, so **serialize**; S9c owns `turn.lastTurn`
 latch in `enqueue_turn`, not `reserve_turn`), S9f (**now answered by D-1's measurement**), then
 **S10–S16 are entirely unstarted**, including the whole UI (S12a-d, S13, S14 → `frontend-engineer`).
 
+## My summary had a wrong digit, and the delegate used the report instead (teco, 2026-09-09)
+
+The RESUME HERE write-up I inherited says the `quiesce_s=5.0` case *"waits 0.76 s"*. D-1's own
+reproduction table, and TP-024 above it, both say **0.77 s**. `coder` took the figure from the
+report rather than from my summary of it and shipped the right number; I have corrected the
+coordination doc to match.
+
+One digit, no consequence — and exactly the failure mode this document already warns about in the
+abstract: **my summary of a delegate's finding is a secondary source**, and it is the one no gate
+reads. The brief is what saved it. It named the report by path and said *"read D-1 in full — do not
+work from my summary"*, so the delegate never had occasion to trust the wrong number. That clause
+is not ceremony; this is the second time in this coordination it has caught something.
+
 ## U64 is blocked on another session's U28, and it is the same defect (teco, 2026-09-09)
 
 The stakeholder approved the closing unit; I did not dispatch it. `claude/docs/plans/kaizen-distillation2-coordination.md` — a **different session's** coordination, running right now — has **U28 in flight**: a `graph-dba` code unit (`a71e467eb629d98ad`) whose declared file set is `skills/joern-cpg/**` and `skills/cpg-analysis/**`, fixing **K-009: `rq()` returns 0 on a bare runtime-error reply.**
@@ -304,7 +317,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **S2c** — N-2: comment says "~20 chars", measured **46**; N-3: one sentence noting the timers test is now coupled to the start bound | `tdd-engineer` | `a1aa5c430de8da50d` | queued (**behind S4 — `services.py` same-file collision**) | `services.py`, `test_workflow_timers.py` | `analyst` → — | — |
 | S2 · S3 — `run_ctx` merge, responder kill switch | `tdd-engineer` | — | queued (**serialized behind S1 — shared live DB**) | — | — → — | — |
 | S4…S16 — remaining implementation | per plan v1.2 §5.1 | — | queued | — | — → — | — |
-| **U62** — D-1: rewrite `SERVER.md` §1.3's `QUIESCE_S` row against the acceptance measurements. **Closes S9f**, which had been held on argument | `coder` (**fresh** — the S7 `coder` is from a dead session; the brief is fully self-contained and the evidence is a published report) | `a07aa43f407bafdab` | in-flight | `falkor-chat/docs/SERVER.md`, `falkor-chat/docs/HISTORY.md` | `analyst` (combined with U63) → — | — |
+| **U62** — D-1: rewrite `SERVER.md` §1.3's `QUIESCE_S` row against the acceptance measurements. **Closes S9f**, which had been held on argument | `coder` (**fresh** — the S7 `coder` is from a dead session; the brief is fully self-contained and the evidence is a published report) | `a07aa43f407bafdab` | delivered — **committed `404c409`**. All four readings teco-verified against D-1's own table; the SERVER.md diff is **1 line added, 1 removed**, so `TURN_WORKERS` being byte-identical is *verified*, not asserted. Its extra §1.3 sweep checked out too — I re-read TP-028/TP-029 and the `THREAD_LIMIT` row genuinely needed no change | `falkor-chat/docs/SERVER.md`, `falkor-chat/docs/HISTORY.md` | `analyst` (combined with U63) → — | 82k tok / 8 tools |
 | **U63** — D-2 (§5.3 has no `5xx` row for `/messages`), D-3 (`504` carries `state: null` against §5.2's present-vs-absent precedent), and **my untestable S9 done-condition** → plan v1.32 | `architect` (**fresh** — every prior architect instance is from a dead session) | `a0cfb47caac4a8c3e` | in-flight | `docs/plans/salesperson-ui.md` v1.32 | `analyst` (combined with U62) → — | — |
 | **U64** — close the CPG provenance arc: P7-1, P7-2, P7-4, delete P7-3's tombstone block. **No Pass 8** (stakeholder, 2026-09-09) | `cobb` (**fresh** — `abeeb0ea31b20e7cc` is from a dead session) | — | **queued — blocked on another session's in-flight unit**, see below | `skills/joern-cpg/**`, `skills/cpg-analysis/references/freshness.md`, `claude/cobb/kaizen/{history,plan}.md` | **none — stakeholder stopped the gates** | — |
 
@@ -4983,7 +4996,7 @@ precisely the class a static reviewer reading the same prose cannot catch:
 
 - `SERVER.md` §1.3 says setting `FALKORCHAT_STOREFRONT_QUIESCE_S` "changes nothing observable."
   Driven both ways: `0.4` under a held turn → `503 quiesce_timeout` in 0.41 s, nothing reset;
-  `5.0` against a 0.8 s turn → waits 0.76 s, returns `200`. **That is S9f, answered by execution**
+  `5.0` against a 0.8 s turn → waits 0.77 s, returns `200`. **That is S9f, answered by execution**
   after sitting open on argument alone.
 - `POST /shop/api/messages` can answer a bare plain-text `500` inside the `shutdown_turns()` window.
   §5.3's completeness table has no `5xx` row for that route at all. The lost turn was an accepted
