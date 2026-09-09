@@ -214,14 +214,18 @@ STOREFRONT_PRESENTER_KEY: str = os.environ.get("FALKORCHAT_STOREFRONT_PRESENTER_
 STOREFRONT_TURN_WORKERS: int = int(os.environ.get("FALKORCHAT_STOREFRONT_TURN_WORKERS", "4"))
 
 # §4.8/§7 of the graph note: how long either reset waits for in-flight turns to
-# drain before giving up and changing nothing (`503 quiesce_timeout`). **The wait
-# is delivered but has nothing to wait for — S9**: `set_turn_state` has no caller
-# anywhere in `falkorchat/`, so the turn map is never populated and both drains
-# (`Storefront._await_quiesce`, `presenter_reset_all`) pass on their first check.
-# The **stop-intake** designed to precede the wait is S10's. The value is still
-# chosen comfortably under the 180 s agent timeout, so that once S9 populates the
-# map a stuck turn cannot hold the reset past the point where the presenter gives
-# up on it.
+# drain before giving up and changing nothing (`503 quiesce_timeout`). S9 wired
+# `Storefront.set_turn_state` into the turn executor, so the turn map is
+# populated for every turn and this wait has something to act on — measured
+# both ways (`docs/test-reports/salesperson-ui-s9-report.md`, finding D-1): a
+# short window against a held turn answers the `503` and resets nothing; a
+# window that comfortably covers the turn instead waits it out and then
+# resets. While a turn is live, a second post from the same participant
+# answers `409 turn_in_progress` and is not written, and `GET /shop/api/state`
+# reports the turn as `thinking`, not idle.
+# The **stop-intake** designed to precede the wait is still S10's. The value is
+# chosen comfortably under the 180 s agent timeout, so a stuck turn cannot hold
+# the reset past the point where the presenter gives up on it.
 STOREFRONT_QUIESCE_S: float = float(os.environ.get("FALKORCHAT_STOREFRONT_QUIESCE_S", "30"))
 
 # The languages a participant may join in (FR-3/AC-9) — the enum `POST

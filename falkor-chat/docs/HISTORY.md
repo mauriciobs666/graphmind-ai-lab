@@ -5,26 +5,46 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
-## 2026-09-09 — salesperson-ui S9f: `SERVER.md` §1.3's `QUIESCE_S` row rewritten against the S9 acceptance pass
+## 2026-09-09 — salesperson-ui S9f: `SERVER.md` §1.3 and `config.py`'s `QUIESCE_S` comment rewritten against the S9 acceptance pass
 
-**What:** Closed the coordination's long-open item S9f. `docs/SERVER.md` §1.3's
-`FALKORCHAT_STOREFRONT_QUIESCE_S` row described the pre-S9 world — no caller for
-`Storefront.set_turn_state`, both drains passing on their first check, `503 quiesce_timeout` and
-`409 turn_in_progress` unreachable, `GET /state`'s turn block always idle, "setting the value
-changes nothing observable" — which S9's delivered concurrency core made false in every clause.
-`docs/test-reports/salesperson-ui-s9-report.md` finding D-1 measured the row's replacement by
-running the system rather than arguing about it: `quiesce_s=0.4` against a held turn answers `503
+**What:** Closed the coordination's long-open item S9f, in two passes the same day. The first
+(committed `404c409`) rewrote `docs/SERVER.md` §1.3's `FALKORCHAT_STOREFRONT_QUIESCE_S` row, which
+described the pre-S9 world — no caller for `Storefront.set_turn_state`, both drains passing on
+their first check, `503 quiesce_timeout` and `409 turn_in_progress` unreachable, `GET /state`'s
+turn block always idle, "setting the value changes nothing observable" — all false since S9's
+concurrency core landed. `docs/test-reports/salesperson-ui-s9-report.md` finding D-1 measured the
+replacement by running the system: `quiesce_s=0.4` against a held turn answers `503
 {"error":"quiesce_timeout"}` after 0.41 s and resets nothing (messages `1 -> 1`, original `Thread`
 still present); `quiesce_s=5.0` against a 0.8 s turn waits `0.77 s` and then resets (old `Thread`
 rows `0`); a second post during a live turn answers `409 {"error":"turn_in_progress"}` and is not
 written; `GET /shop/api/state` during a turn reports `{"state": "thinking", "queuePosition": 0}`,
-not the idle payload. Rewrote the row against those four readings. Left the neighbouring
-`FALKORCHAT_STOREFRONT_TURN_WORKERS` row byte-identical — D-1 independently confirmed it correct
-(its published `{1:3, 2:2, 4:0}` reproduced exactly). Checked the rest of §1.3 against the same
-report and found no other row S9 falsified.
+not the idle payload. That first pass's own record here **closed S9f as complete, which was
+wrong**: `docs/reviews/salesperson-ui-impl.md`'s Pass 23 (finding P23-4) traced the item back to
+Pass 19's Ruling 2 and Pass 22's disposition, which had already assigned S9f three sites — the
+`SERVER.md` row, `falkorchat/config.py`'s `STOREFRONT_QUIESCE_S` comment (the constant's own
+source), and `storefront_api.py`'s `presenter_reset_all` comments — and recorded only the first as
+done.
 
-**Prose only** — `docs/SERVER.md` and this file; no code touched, no suite run (per the unit's own
-instruction, to avoid contending for the live database with a concurrent session).
+The second pass closes the remaining two. `falkorchat/config.py:216-224`, the comment on the
+constant itself, still asserted the pre-S9 world verbatim in the same clauses as the old `SERVER.md`
+row and was rewritten against the same D-1 readings, in the same voice — comments only, the `30`
+default unchanged. `storefront_api.py`'s `presenter_reset_all` comments (the third assigned site)
+were read in full and found **already accurate** — they describe the reset-all drain as live and
+waiting for what is in flight, with no false clause — so no change was made there. A repo-wide,
+unfiltered `grep -rn` for the stale phrasing (`set_turn_state` having no caller, a drain passing on
+its first check, "nothing to wait for", "changes nothing observable") across `falkor-chat/` turned
+up no further live site: the remaining hits are either unrelated (coincidental phrase matches in
+other modules' comments and tests) or historical (the 2026-09-07 entry below, quoting the pre-S9
+comment it was introducing at the time — correctly left as a dated record, not a live claim) — with
+one exception flagged rather than fixed: `docs/test-plans/salesperson-ui-s9.md`'s R-g risk row still
+reads "as `SERVER.md` §1.3 still claims" and "S9f open", both now stale now that the `SERVER.md` row
+is fixed; that document is `qa-engineer`'s and already executed against, so the correction is left
+to its owner rather than made here.
+
+**Prose/comments only** — `docs/SERVER.md`, `falkorchat/config.py` (comment text only; no
+behaviour, default, or name changed — `python -m py_compile` on the one touched `.py` file is
+clean), and this file. No suite run either pass, per the unit's instruction, to avoid contending
+for the live database with a concurrent session.
 
 ## 2026-09-08 — salesperson-ui S9a: `## Pass 22`'s four findings — the killing test's oracle, a raise-guard blind spot, a self-falsifying comment, and `get_state`'s missed second call site
 
