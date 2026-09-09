@@ -73,6 +73,36 @@ S9b–S9e (all touch `storefront.py`, so **serialize**; S9c owns `turn.lastTurn`
 latch in `enqueue_turn`, not `reserve_turn`), S9f (**now answered by D-1's measurement**), then
 **S10–S16 are entirely unstarted**, including the whole UI (S12a-d, S13, S14 → `frontend-engineer`).
 
+## U63 found a docstring asserting a mechanism that was never built (teco, 2026-09-09)
+
+The unit's brief asked for three plan rulings. What it also returned is the sharpest thing this
+coordination has turned up in a while, and nobody had asked for it.
+
+`test_a_submit_refused_after_shutdown_releases_the_reservation`'s docstring — written during S9a,
+reviewed at Pass 17, and green ever since — says: *"The `RuntimeError` still propagates … so the
+route's own `except` is what turns it into a response."* **There is no such `except`.**
+`shop.enqueue_turn(...)` at `storefront_api.py:1226` sits outside the `try`, which wraps only
+`services.post_message`. I confirmed both halves at source before dispatching the gate.
+
+So the S9a implementer believed the route mapped that raise, the plan never said it did, and the
+test passes either way because it asserts the raise, not the response. **A green test, a reviewed
+docstring, and a plan section all agreed with each other and none of them was checked against the
+route.** That is what D-2 actually is, underneath the missing table row: not an undeclared
+response, but a *believed* handler.
+
+Two things follow that are worth more than the finding.
+
+**The acceptance pass could see it and eight static passes could not** — not because the static
+reviewers were careless, but because the docstring, the test and the plan are the same story told
+three times, and reading any of them confirms the other two. It took driving the route to produce
+a `500` that the story says is impossible. That is the second time in three days execution has
+settled something argument could not (the first was S9f).
+
+**It came from a unit briefed to edit prose.** I sent `architect` to fix three documentation
+defects and told it to be suspicious of its own fixes; it went and read the code the documents
+describe. The brief did not ask for that. I am recording it because the cheap lesson — "give
+delegates a scope" — would have prevented it.
+
 ## My summary had a wrong digit, and the delegate used the report instead (teco, 2026-09-09)
 
 The RESUME HERE write-up I inherited says the `quiesce_s=5.0` case *"waits 0.76 s"*. D-1's own
@@ -318,7 +348,8 @@ citation. Trimming that citation is a one-line edit if preferred.
 | S2 · S3 — `run_ctx` merge, responder kill switch | `tdd-engineer` | — | queued (**serialized behind S1 — shared live DB**) | — | — → — | — |
 | S4…S16 — remaining implementation | per plan v1.2 §5.1 | — | queued | — | — → — | — |
 | **U62** — D-1: rewrite `SERVER.md` §1.3's `QUIESCE_S` row against the acceptance measurements. **Closes S9f**, which had been held on argument | `coder` (**fresh** — the S7 `coder` is from a dead session; the brief is fully self-contained and the evidence is a published report) | `a07aa43f407bafdab` | delivered — **committed `404c409`**. All four readings teco-verified against D-1's own table; the SERVER.md diff is **1 line added, 1 removed**, so `TURN_WORKERS` being byte-identical is *verified*, not asserted. Its extra §1.3 sweep checked out too — I re-read TP-028/TP-029 and the `THREAD_LIMIT` row genuinely needed no change | `falkor-chat/docs/SERVER.md`, `falkor-chat/docs/HISTORY.md` | `analyst` (combined with U63) → — | 82k tok / 8 tools |
-| **U63** — D-2 (§5.3 has no `5xx` row for `/messages`), D-3 (`504` carries `state: null` against §5.2's present-vs-absent precedent), and **my untestable S9 done-condition** → plan v1.32 | `architect` (**fresh** — every prior architect instance is from a dead session) | `a0cfb47caac4a8c3e` | in-flight | `docs/plans/salesperson-ui.md` v1.32 | `analyst` (combined with U62) → — | — |
+| **U63** — D-2 (§5.3 has no `5xx` row for `/messages`), D-3 (`504` carries `state: null` against §5.2's present-vs-absent precedent), and **my untestable S9 done-condition** → plan v1.32 | `architect` (**fresh** — every prior architect instance is from a dead session) | `a0cfb47caac4a8c3e` | delivered — **committed `e06c92e`**, +83/−15, one file. **Ruled D-2 a *code* defect, not a missing table row**, and rejected the report's stated reason while accepting its substance; **ruled D-3 the document's defect, not the code's**. Created an obligation on **S9e** and an ordering hazard on S8's gate. Three of its four side-findings **teco-verified against source** before the gate — including a delivered docstring asserting a route `except` that does not exist | `docs/plans/salesperson-ui.md` v1.32 | `analyst` Pass 23 (U65) → — | 193k tok / 75 tools |
+| **U65** — Pass 23: gate U62 + U63 together. **Does C14 create the next instance of the class?** | `analyst` (**fresh** — every prior reviewer is from a dead session) | `a3d38bc7a7a12de74` | in-flight | `docs/reviews/salesperson-ui-impl.md` `## Pass 23` | — | — |
 | **U64** — close the CPG provenance arc: P7-1, P7-2, P7-4, delete P7-3's tombstone block. **No Pass 8** (stakeholder, 2026-09-09) | `cobb` (**fresh** — `abeeb0ea31b20e7cc` is from a dead session) | — | **queued — blocked on another session's in-flight unit**, see below | `skills/joern-cpg/**`, `skills/cpg-analysis/references/freshness.md`, `claude/cobb/kaizen/{history,plan}.md` | **none — stakeholder stopped the gates** | — |
 
 ## Stakeholder decisions, 2026-09-02 (plan §8)
