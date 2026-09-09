@@ -31,9 +31,11 @@ class UnknownModelKey(ValueError):
 
 
 class AttestUsageError(ValueError):
-    """Bad `--set key=value` arguments to `attest` (§3.6a's exit 2) — an unrecognized key, a
-    malformed `key=value` pair, or a value that fails the field's own type (`hostRamGb` not an
-    integer)."""
+    """A usage problem with `attest`'s inputs (§3.6a's exit 2) — a malformed `--set key=value`
+    pair, an unrecognized key, a value that fails the field's own type (`hostRamGb` not an
+    integer), or stdin running out while prompting for a field `--set` did not supply (review
+    Pass 13, P13-6 — non-interactive `--set` is the sanctioned route, so this is normal usage,
+    not abuse)."""
 
 
 EXIT_OK = 0
@@ -229,12 +231,31 @@ def _coerce_attested_value(name: str, raw: str) -> Any:
 def _gather_attested_fields(args: argparse.Namespace) -> dict[str, Any]:
     """The four operator-attested fields: from `--set`, or prompted for interactively when a
     field is not named there (§3.6a: "Prompts for the four operator-attested fields, ...
-    non-interactive `--set k=v`")."""
+    non-interactive `--set k=v`").
+
+    Raises `AttestUsageError` — never `EOFError` — when stdin has nothing left to give a prompt
+    (review Pass 13, P13-6): `--set` is §3.6a's own non-interactive route, so a partly-specified
+    non-interactive invocation is normal usage, not abuse, and every field still unset is named in
+    one message rather than failing prompt by prompt.
+    """
     set_values = _parse_set_flags(args.set_)
     fields: dict[str, Any] = {}
+    unset: list[str] = []
     for name in hostinfo.ATTESTED_FIELD_NAMES:
-        raw = set_values[name] if name in set_values else input(f"{name}: ")
+        if name in set_values:
+            raw = set_values[name]
+        else:
+            try:
+                raw = input(f"{name}: ")
+            except EOFError:
+                unset.append(name)
+                continue
         fields[name] = _coerce_attested_value(name, raw)
+    if unset:
+        raise AttestUsageError(
+            f"no more input to prompt with, and {', '.join(unset)} "
+            f"{'was' if len(unset) == 1 else 'were'} never given via --set"
+        )
     return fields
 
 
@@ -254,6 +275,12 @@ def _cmd_attest(args: argparse.Namespace) -> int:
     except hostinfo.AttestProbeFailed as exc:
         print(f"model-bench: {exc}", file=sys.stderr)
         return EXIT_LMSTUDIO_UNREACHABLE
+    except hostinfo.HostInfoError as exc:
+        # `attest()`'s own defensive re-validation (e.g. an empty `--api-base-url`) — a usage
+        # problem with the arguments given, not an LM Studio reachability failure (review Pass 13,
+        # P13-5: this previously escaped as an uncaught traceback, exit 1).
+        print(f"model-bench: {exc}", file=sys.stderr)
+        return EXIT_USAGE
     print(f"wrote {path}")
     return EXIT_OK
 

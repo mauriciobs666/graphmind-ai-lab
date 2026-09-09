@@ -35,6 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
+from modelbench import fingerprint
 from modelbench.lmstudio import LMStudio
 
 HOST_INFO_FILENAME = "host.json"
@@ -54,6 +55,25 @@ ATTESTED_FIELD_NAMES: tuple[str, ...] = (
     "kvCacheSetting",
     "hostRamGb",
     "otherResidentWorkloads",
+)
+
+#: Which of the four `attested` fields `validate_host_info` must refuse empty — **derived from
+#: `fingerprint.py`'s own `_NONEMPTY` tiering, not hand-typed** (review Pass 13, P13-4). Three of
+#: the four (`lmStudioAppVersion`, `kvCacheSetting`, `hostRamGb`) are `_NONEMPTY` in
+#: `fingerprint.REQUIRED_BY_SCHEMA[1]["model:chat"]`; `otherResidentWorkloads` is `_PRESENT`, so
+#: `[]` stays valid. Hand-writing "these three are non-empty" a second time here is exactly the
+#: shape that drifted: the fingerprint tiers a field, and this file agrees only because its author
+#: remembered to keep two lists in step. Reading the tier directly means a future field added to
+#: `ATTESTED_FIELD_NAMES` — or a tier change on the fingerprint side — is inherited rather than
+#: silently missed; `test_attested_field_tiers_agree_between_chat_and_embeddings_profiles`
+#: (`tests/test_hostinfo.py`) is the checkable claim that `"model:chat"` is a safe single profile
+#: to read this from, and `test_validate_host_info_agrees_with_the_fingerprints_own_attested_
+#: field_tiering` drives `validate_host_info`'s actual behavior against these tiers directly,
+#: rather than comparing two sets that could agree by coincidence.
+ATTESTED_NONEMPTY_FIELD_NAMES: frozenset[str] = frozenset(
+    name
+    for name in ATTESTED_FIELD_NAMES
+    if fingerprint.REQUIRED_BY_SCHEMA[1]["model:chat"][name].tier == "nonempty"
 )
 
 #: The trip-wire's three *stored* outcomes (plan §3.4.5 point 3; `RunResult.attestationTripWire`,
@@ -89,8 +109,10 @@ def host_info_path(root: Path) -> Path:
 
 def validate_host_info(d: Any) -> list[str]:
     """Every schema problem in `d`; `[]` means valid (the shape `Fingerprint.validate()` and
-    `packs.validate_pack` already share). Checks presence, type and the one non-empty field the
-    trip-wire depends on (`observedAtAttestation.residencySource`) — nothing this build cannot
+    `packs.validate_pack` already share). Checks presence, type, emptiness where the fingerprint's
+    own tiering requires it (`ATTESTED_NONEMPTY_FIELD_NAMES`, review Pass 13 P13-4), that
+    `attested` carries no key beyond the four §3.4.4 names (P13-12), and the one non-empty field
+    the trip-wire depends on (`observedAtAttestation.residencySource`) — nothing this build cannot
     yet know, such as a specific `apiBaseUrl` format the plan never constrains.
     """
     if not isinstance(d, Mapping):
@@ -113,16 +135,31 @@ def validate_host_info(d: Any) -> list[str]:
         for name in ATTESTED_FIELD_NAMES:
             if name not in attested:
                 problems.append(f"attested.{name}: absent")
-            elif attested[name] is None:
+                continue
+            value = attested[name]
+            if value is None:
                 problems.append(f"attested.{name}: null")
-        if "hostRamGb" in attested and not isinstance(attested["hostRamGb"], (int, float)):
-            problems.append("attested.hostRamGb: not a number")
-        if isinstance(attested.get("hostRamGb"), bool):
-            problems.append("attested.hostRamGb: not a number")
-        if "otherResidentWorkloads" in attested and not isinstance(
-            attested["otherResidentWorkloads"], list
-        ):
-            problems.append("attested.otherResidentWorkloads: not a list")
+                continue
+            if name == "hostRamGb" and (
+                isinstance(value, bool) or not isinstance(value, (int, float))
+            ):
+                problems.append("attested.hostRamGb: not a number")
+                continue
+            if name == "otherResidentWorkloads" and not isinstance(value, list):
+                problems.append("attested.otherResidentWorkloads: not a list")
+                continue
+            # P13-4: a value can be present, non-null and correctly typed and still be the empty
+            # value the fingerprint's own `_NONEMPTY` tier refuses (`""`, `0`) — checked last, and
+            # against the derived set, so a field the fingerprint does not tier non-empty
+            # (`otherResidentWorkloads`, `_PRESENT`) is correctly left alone.
+            if name in ATTESTED_NONEMPTY_FIELD_NAMES and not value:
+                problems.append(f"attested.{name}: empty")
+        unexpected = sorted(set(attested) - set(ATTESTED_FIELD_NAMES))
+        if unexpected:
+            problems.append(
+                f"attested: unexpected key(s) {unexpected} — only "
+                f"{', '.join(ATTESTED_FIELD_NAMES)} are allowed"
+            )
 
     attested_at = d.get("attestedAt")
     if not isinstance(attested_at, str) or not attested_at:
@@ -167,10 +204,13 @@ def _utc_stamp(now: Callable[[], datetime] | None) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _residency_source_for_probe(probe_result: str) -> str:
-    """The one value `attest` can ever write — `residency()`/`catalog()` in this codebase read
-    from `GET /api/v0/models`, and `"lmstudio-api-v0"` is this repo's own established literal for
-    that surface (`tests/conftest.py`'s `MODEL_FIELDS`), reused here rather than reinvented."""
+def _residency_source_after_a_successful_probe() -> str:
+    """The one value `attest` can ever write here: by the time this is called, `attest()` has
+    already returned on any probe outcome but `"api-v0"` (review Pass 13, P13-10 — the prior
+    signature took a `probe_result` parameter it never read, promising a decision this function
+    did not make). `"lmstudio-api-v0"` is this repo's own established literal for the
+    `GET /api/v0/models` surface (`tests/conftest.py`'s `MODEL_FIELDS`), reused here rather than
+    reinvented."""
     return "lmstudio-api-v0"
 
 
@@ -207,7 +247,7 @@ def attest(
         "apiBaseUrl": api_base_url,
         "attested": dict(attested),
         "attestedAt": _utc_stamp(now),
-        "observedAtAttestation": {"residencySource": _residency_source_for_probe(outcome)},
+        "observedAtAttestation": {"residencySource": _residency_source_after_a_successful_probe()},
     }
     problems = validate_host_info(host)
     if problems:
@@ -264,11 +304,29 @@ def check_attestation_staleness(
       6 compares runtimeName/runtimeVersion/residencySource ... from the second model:chat run
       onward") — a difference in any one of the three is a mismatch, and `message` carries
       `STALE_MESSAGE` iff `stale`.
+
+    **Precondition, enforced before either branch (review Pass 13, P13-8):** `host` must already
+    carry a non-empty `observedAtAttestation.residencySource` — exactly what `read_host_info`
+    guarantees and `write_host_info` does not. Without this, a `host` missing
+    `observedAtAttestation` entirely back-filled straight into an `updated_host` that itself fails
+    `validate_host_info` — a file that, once written, makes every later run exit `5` until the
+    operator re-attests. Raises `HostInfoError` instead, naming the precondition this function
+    depends on rather than corrupting the state it protects.
     """
+    observed_at_attestation = host.get("observedAtAttestation")
+    if not isinstance(observed_at_attestation, Mapping) or not observed_at_attestation.get(
+        "residencySource"
+    ):
+        raise HostInfoError(
+            "check_attestation_staleness: host carries no observedAtAttestation."
+            "residencySource — read it via read_host_info() first, which refuses a host.json "
+            "missing it"
+        )
+
     if call_surface == "embeddings":
         return AttestationCheck(outcome="unavailable", stale=False, message=None, updated_host=None)
 
-    observed = dict(host.get("observedAtAttestation") or {})
+    observed = dict(observed_at_attestation)
     if "runtimeName" not in observed:
         observed["runtimeName"] = runtime_name
         observed["runtimeVersion"] = runtime_version

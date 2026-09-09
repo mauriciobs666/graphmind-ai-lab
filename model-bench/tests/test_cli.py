@@ -536,6 +536,47 @@ def test_attest_exits_three_when_only_v1_answers(workspace, capsys, monkeypatch)
     assert not (workspace / "host.json").exists()
 
 
+def test_attest_exits_two_when_the_api_base_url_is_empty(workspace, capsys, monkeypatch) -> None:
+    """P13-5 (review Pass 13) — `_cmd_attest` previously caught only `hostinfo.AttestProbeFailed`.
+    `hostinfo.attest`'s own defensive re-validation raises `HostInfoError` on an empty
+    `--api-base-url` (M.4/B's exact repro), which escaped as an uncaught traceback, exit `1` —
+    outside §3.6a's closed set."""
+    _patch_lmstudio(monkeypatch)
+    code = main(
+        ["attest", "--root", str(workspace), "--api-base-url", ""] + ATTESTED_SET_FLAGS
+    )
+    err = capsys.readouterr().err
+    assert code == 2
+    assert err.strip()
+    assert not (workspace / "host.json").exists()
+
+
+def test_attest_exits_two_when_stdin_is_exhausted_while_prompting(
+    workspace, capsys, monkeypatch
+) -> None:
+    """P13-6 (review Pass 13) — a partly-specified non-interactive invocation with no piped stdin
+    previously raised an uncaught `EOFError` (M.4/C). `--set` is §3.6a's own non-interactive
+    route, so this is normal usage, not abuse; the fix names every field still unset."""
+    _patch_lmstudio(monkeypatch)
+
+    def _no_more_input(prompt: str = "") -> str:
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", _no_more_input)
+    code = main(
+        [
+            "attest", "--root", str(workspace),
+            "--set", "lmStudioAppVersion=0.3.31",
+            "--set", "kvCacheSetting=f16",
+        ]
+    )
+    err = capsys.readouterr().err
+    assert code == 2
+    assert "hostRamGb" in err
+    assert "otherResidentWorkloads" in err
+    assert not (workspace / "host.json").exists()
+
+
 def test_attest_prompts_interactively_for_fields_not_given_via_set(
     workspace, monkeypatch
 ) -> None:

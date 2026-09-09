@@ -17,6 +17,7 @@ import json
 
 import pytest
 
+from modelbench import fingerprint
 from modelbench.hostinfo import (
     ATTESTED_FIELD_NAMES,
     STALE_MESSAGE,
@@ -157,6 +158,73 @@ def test_validate_host_info_accepts_backfilled_runtime_keys() -> None:
     d["observedAtAttestation"]["runtimeVersion"] = "1.52.0"
     d["observedAtAttestation"]["runtimeObservedAt"] = "2026-09-03T10:00:05Z"
     assert validate_host_info(d) == []
+
+
+# --- P13-4: validate_host_info must agree with the fingerprint's own attested-field tiering ---
+#
+# `lmStudioAppVersion`, `kvCacheSetting` and `hostRamGb` are `_NONEMPTY` in `fingerprint.py`;
+# pre-fix, `validate_host_info` checked only presence and non-`null`, so `attest` could write a
+# `host.json` that `store()` refuses twenty minutes later, at the end of a whole run (review Pass
+# 13, P13-4). Rather than hand-writing a second set of "these three are non-empty" rules — the
+# exact shape that drifted the first time — the fix drives `validate_host_info`'s *behavior*
+# against `fingerprint.REQUIRED_BY_SCHEMA`'s own live tiers, so a tier change on that side reddens
+# this test rather than silently drifting one file over.
+
+
+def test_validate_host_info_rejects_the_reviews_own_m4a_repro() -> None:
+    """Review Pass 13, Appendix M.4/A's exact input — verified pre-fix to return `[]`, clean."""
+    d = json.loads(json.dumps(PLAN_LITERAL_HOST_JSON))
+    d["attested"] = {
+        "lmStudioAppVersion": "",
+        "kvCacheSetting": "",
+        "hostRamGb": 0,
+        "otherResidentWorkloads": [],
+    }
+    problems = validate_host_info(d)
+    assert problems != []
+    assert any("lmStudioAppVersion" in p for p in problems)
+    assert any("kvCacheSetting" in p for p in problems)
+    assert any("hostRamGb" in p for p in problems)
+
+
+def test_validate_host_info_agrees_with_the_fingerprints_own_attested_field_tiering() -> None:
+    """P13-4's required assertion: not two hand-written sets compared to each other, but
+    `validate_host_info`'s actual behavior driven against `fingerprint.py`'s own live tiers. Any
+    attested field the fingerprint tiers `_NONEMPTY` must be refused empty here; any field it
+    tiers `_PRESENT` must be accepted empty (`otherResidentWorkloads`, unaffected)."""
+    specs = fingerprint.REQUIRED_BY_SCHEMA[1]["model:chat"]
+    for name in ATTESTED_FIELD_NAMES:
+        d = json.loads(json.dumps(PLAN_LITERAL_HOST_JSON))
+        d["attested"][name] = [] if name == "otherResidentWorkloads" else (
+            0 if name == "hostRamGb" else ""
+        )
+        problems = validate_host_info(d)
+        flagged = any(f"attested.{name}" in p for p in problems)
+        is_nonempty_tier = specs[name].tier == "nonempty"
+        assert flagged == is_nonempty_tier, (name, specs[name].tier, problems)
+
+
+def test_attested_field_tiers_agree_between_chat_and_embeddings_profiles() -> None:
+    """The test above reads tiers from the single `"model:chat"` profile. This is the checkable
+    claim that makes that a safe reference rather than an assumption: none of the four attested
+    fields is among `model:embeddings`'s four forbidden runtime/sampling fields
+    (`fingerprint.py`'s `_EMBEDDINGS_HAVE_NO`), so both profiles must require them at the same
+    tier — if a future edit ever moved one of these four into that forbidden set, this reddens
+    rather than leaving the test above silently reading the wrong profile."""
+    chat = fingerprint.REQUIRED_BY_SCHEMA[1]["model:chat"]
+    embeddings = fingerprint.REQUIRED_BY_SCHEMA[1]["model:embeddings"]
+    for name in ATTESTED_FIELD_NAMES:
+        assert name in embeddings, name
+        assert chat[name].tier == embeddings[name].tier, name
+
+
+def test_validate_host_info_rejects_an_unexpected_attested_key() -> None:
+    """P13-12 — §3.4.4: the `attested` block "is exactly the four FR-7 fields". The CLI's own
+    `--set` already closes this route (`_parse_set_flags` rejects an unrecognized key), so this is
+    only reachable by hand-editing `host.json` — still worth refusing on read."""
+    d = json.loads(json.dumps(PLAN_LITERAL_HOST_JSON))
+    d["attested"]["surpriseField"] = "x"
+    assert any("surpriseField" in p for p in validate_host_info(d))
 
 
 # --- write_host_info / read_host_info -------------------------------------------------------
@@ -366,6 +434,59 @@ def test_trip_wire_first_observation_host_survives_round_trip_and_then_compares_
     )
     assert second.outcome == "compared"
     assert second.stale is False
+
+
+def test_trip_wire_raises_when_host_has_no_observed_at_attestation() -> None:
+    """P13-8 — `write_host_info` never validates and `check_attestation_staleness` did not either,
+    so a `host` missing `observedAtAttestation` entirely (reachable by any caller that skips
+    `read_host_info`, the only place that guarantees it) previously back-filled straight into an
+    `updated_host` that itself fails `validate_host_info` — a file that, once written, makes every
+    later run exit `5` until the operator re-attests. Refused here instead, at the precondition
+    this function actually depends on, rather than inside the branch it would otherwise corrupt."""
+    host = {
+        "schemaVersion": 1,
+        "apiBaseUrl": "http://localhost:1234",
+        "attested": dict(PLAN_LITERAL_HOST_JSON["attested"]),
+        "attestedAt": "2026-09-02T14:05:00Z",
+        # no "observedAtAttestation" key at all
+    }
+    with pytest.raises(HostInfoError):
+        check_attestation_staleness(
+            host,
+            call_surface="chat",
+            residency_source="lmstudio-api-v0",
+            runtime_name="llama.cpp",
+            runtime_version="1.52.0",
+        )
+
+
+def test_trip_wire_raises_when_residency_source_is_empty() -> None:
+    """The same precondition's other edge — `observedAtAttestation` present but its one required
+    field empty, the state `validate_host_info` itself refuses on read."""
+    host = json.loads(json.dumps(PLAN_LITERAL_HOST_JSON))
+    host["observedAtAttestation"]["residencySource"] = ""
+    with pytest.raises(HostInfoError):
+        check_attestation_staleness(
+            host,
+            call_surface="chat",
+            residency_source="lmstudio-api-v0",
+            runtime_name="llama.cpp",
+            runtime_version="1.52.0",
+        )
+
+
+def test_trip_wire_raises_on_a_malformed_host_even_on_the_embeddings_surface() -> None:
+    """The precondition is checked before the `call_surface` branch — a malformed `host` is a
+    contract violation regardless of which surface asks, not only the surfaces that would
+    otherwise touch `observedAtAttestation`."""
+    with pytest.raises(HostInfoError):
+        check_attestation_staleness(
+            {},
+            call_surface="embeddings",
+            residency_source="lmstudio-api-v0",
+            runtime_name="llama.cpp",
+            runtime_version="1.52.0",
+        )
 
 
 # --- R-1's probe (plan §4 S2, §6 R-1) — needs a model actually loaded in LM Studio -----------
