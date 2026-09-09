@@ -81,7 +81,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U25 | analyst chunk G (the 2 deferred; re-queried at dispatch 09-09 — `analyst` held exactly these 2, nothing new arrived) | `a271cfb21a2dbe1af` | accepted | 2 promoted / 0 discarded, both `DETACH DELETE`d, **2 entries → 1 file, 2 sections**; `claude/analyst/{review-techniques.md,kaizen/history.md}`, `claude/cobb/kaizen/history.md`. **`analyst` produced inbox now 0.** | teco re-derivation → **accepted, no correction needed** — second consecutive clean unit; tombstone byte-identity reproduced under an independent anchor pair to the entry's own cited digest, growth figures digit for digit | 147.6k tok, 39 tools |
 | U26 | `graph-dba` (its 1 produced entry; its 2 `MENTIONS`-only nodes are U24's kept-opens and are **out of scope**) | `afe9fd679115a7900` (resumed once, to fold the K-008 note into the item body) | accepted | 0 promoted / **1 discarded** / 0 kept open, `DETACH DELETE`d; the entry was accurate when written and **dead 40 minutes later** (`6012ddb`). Collateral find: `6012ddb` overtook **both** K-008 facts. `claude/graph-dba/kaizen/{history.md,plan.md}` | teco re-derivation → **accepted after one correction** (K-008 asserted "both facts verified true" above a note refuting it; rewritten present-tense, 2266→2075 words) | 145.3k + 155.8k tok, 33 tools |
 | U27 | `data-scientist` (its 1 produced entry; its 1 `MENTIONS`-only edge is out of scope). Re-derivation **pinned to `d45e5ff`**, not `HEAD` — `model-bench/` is another session's live area | `ad47fd00ddc79e335` | accepted | **1 promoted / 0 discarded**, cleared; folded onto an **existing** prompt bullet (28→28 bullets, +80 words), model-bench-specific half discarded as already published. `claude/data-scientist/{data-scientist.md,kaizen/history.md}`. **`data-scientist` produced inbox now 0.** | teco re-derivation → **accepted, no correction — and it corrected *my brief*** | 161.8k tok, 34 tools |
-| U28 | `graph-dba` **code unit** on `skills/joern-cpg/scripts/pipeline.sh`: fix **K-009** (`rq()` returns 0 on a bare runtime-error reply) + confirm and close/re-scope **K-008**. Not a distillation unit | `a71e467eb629d98ad` (resumed once, to correct a case count) | gated | **K-009 fixed by removing the blacklist**, not widening it: success is now recognised positively (reply's last line must begin `Query internal execution time:`), non-query commands refused rc 2. Second defect found and fixed in the same block (a read-back that never ran reported as *did not land*). **K-008 closed**, both facts confirmed by execution. 7 files | `analyst` (diff-scoped, `a8f29fed07dd1847e`) → — ; review at `docs/reviews/rq-execution-gate.md` | 141.2k + 150.5k + 156.4k tok, 59 tools |
+| U28 | `graph-dba` **code unit** on `skills/joern-cpg/scripts/pipeline.sh`: fix **K-009** (`rq()` returns 0 on a bare runtime-error reply) + confirm and close/re-scope **K-008**. Not a distillation unit | `a71e467eb629d98ad` (resumed once, to correct a case count) | gated | **K-009 fixed by removing the blacklist**, not widening it: success is now recognised positively (reply's last line must begin `Query internal execution time:`), non-query commands refused rc 2. Second defect found and fixed in the same block (a read-back that never ran reported as *did not land*). **K-008 closed**, both facts confirmed by execution. 7 files | `analyst` (diff-scoped, `a8f29fed07dd1847e`) → **approve with suggestions**, 2 majors both by execution, routed back to `graph-dba`; review at `docs/reviews/rq-execution-gate.md` | 141.2k + 150.5k + 156.4k tok, 59 tools |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
 agent's own kaizen files and the graph); each row is rewritten on delivery with
@@ -465,6 +465,28 @@ is working; a stale one plus an empty worktree means it died before promoting.
 count.** Two entries arrived while U23's own verification was running.
 
 ## Follow-ups
+
+- **The pass's own promoted lesson predicted a defect in the pass's own work,
+  three units later.** U25 promoted `analyst` entry `7c1d4a92` into
+  `review-techniques.md`: a helper whose contract is a **side-effect variable**
+  is silently defeated when its caller invokes it in `$(…)`, because command
+  substitution runs in a subshell. U28 then added an `rc 2` refusal path to
+  `rq()` — which is called at all three sites as `if ! VAR="$(rq …)"`. The
+  refusal cannot escape the subshell, and `! VAR=$(…)` collapses every non-zero
+  to "false" besides, so the tri-state has **no reader at all**. `analyst`
+  confirmed the guard can be deleted outright with the suite unchanged at 14
+  PASS / exit 0. **A guard no test can redden is a guard in name only** — and
+  the knowledge needed to catch it at authoring time was already in the
+  reviewer's own knowledge base, promoted by this same coordination.
+- **`RESULTSET_SIZE` is a silent correctness limit, not a display limit.**
+  `GRAPH.CONFIG GET RESULTSET_SIZE` = **10000** on this instance. A query
+  exceeding it is capped and **still emits a normal statistics trailer**:
+  `UNWIND range(1,200000) AS x RETURN x` returns rc 0, 10,003 lines, last line
+  the trailer — so a trailer-anchored gate passes a reply that lost 190,000
+  rows. The trailer proves the server **ran the query to completion**, never
+  that the reply carries every row matched. Any caller needing completeness must
+  check the row count against an expectation. Verified read-only by `teco`,
+  independently of `analyst`'s own measurement.
 
 - **A null result can be the right evidence for a rule, and the reporting defect
   is what makes it look wrong.** U27's entry paired a methodological rule
