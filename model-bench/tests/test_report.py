@@ -1679,9 +1679,15 @@ def test_a_mixed_kind_familys_headline_prints_exploratory_not_no_paired_data() -
 
 
 def test_an_all_continuous_family_takes_its_correction_in_the_interval_not_a_ladder() -> None:
-    """§3.3 (iv) — an all-continuous family with `k > 1` never reaches `holm_steps`; each member's
-    own interval is already computed at the family-adjusted levels, and the family-wise section
-    says so instead of printing a false Holm-ladder claim."""
+    """§3.3 (iv) — an all-continuous family with `k > 1` never reaches `holm_steps`: the
+    family-wise section states the interval-correction explanation instead of a Holm-ladder
+    claim, both members print the bootstrap-decided sentence, and no arm is excluded.
+
+    This test does **not** prove the family-size correction actually reaches each member's
+    interval — all four assertions below hold unchanged even if `compare_report` collapsed
+    `family` to `[metric]` before calling `stats.continuous_verdict()` (U67, found by mutation
+    testing). `test_continuous_verdict_receives_the_whole_family_not_just_the_metric` pins that
+    property instead."""
     pack = _embedder_pack(verdicts=("mrr", "separationZ"), headline=None)
     n = 12
 
@@ -1718,6 +1724,102 @@ def test_an_all_continuous_family_takes_its_correction_in_the_interval_not_a_lad
     assert "Holm–Bonferroni" not in fw_section
     assert md.count("decided by paired bootstrap on per-query differences") == 2
     assert "INVALID RESULTS EXCLUDED" not in md
+
+
+def test_continuous_verdict_receives_the_whole_family_not_just_the_metric() -> None:
+    """U67 (found by mutation testing during integration, not by the suite) — the all-continuous
+    branch of `compare_report`'s family loop must call `stats.continuous_verdict(family=family,
+    ...)` with the **whole** pre-registered family, not `family=[metric]`. Collapsing it sets
+    `k = len(family) = 1` inside `_family_ci_levels`, which silently skips the Bonferroni
+    correction §3.3 (iv) says a `k > 1` all-continuous family "takes ... in the interval — it has
+    nowhere else to put it": the printed interval would be too narrow and the verdict too
+    confident, with no visible symptom (`-ml` §3.4 Rule 8, §11.2.2).
+
+    Renders the identical `mrr` data and seed twice — once as the only pre-registered metric
+    (`k = 1`, levels `1/40, 39/40`) and once alongside a second all-continuous metric
+    (`k = 2`, levels `1/80, 79/80`, per `-ml` §11.2.2's worked table, already pinned directly for
+    `_family_ci_levels` in `tests/test_stats.py`). Same seed and identical per-unit `mrr`
+    differences mean the two runs bootstrap-resample identically; only the quantile levels differ,
+    so the `k = 2` interval must come out strictly wider. `family=[metric]` renders both at the
+    `k = 1` levels and this assertion fails.
+    """
+    n = 12
+    mrr_a = [0.9 - 0.01 * i for i in range(n)]
+    mrr_b = [0.3 + 0.005 * i for i in range(n)]
+
+    def mrr_only_item(query_id: str, value: float) -> ItemResult:
+        return ItemResult(
+            itemId=query_id, pairingKey=(query_id,), outcome="pass",
+            scoreable={"mrr": True}, counts={}, latencyMs=None,
+            measures={"mrr": value}, detail={},
+        )
+
+    def mrr_and_sepz_item(query_id: str, mrr_value: float, sepz_value: float) -> ItemResult:
+        return ItemResult(
+            itemId=query_id, pairingKey=(query_id,), outcome="pass",
+            scoreable={"mrr": True, "separationZ": True}, counts={}, latencyMs=None,
+            measures={"mrr": mrr_value, "separationZ": sepz_value}, detail={},
+        )
+
+    def mrr_ci(md: str) -> tuple[float, float]:
+        section = md.split("### mrr")[1].split("###")[0]
+        assert "CI" in section, section
+        bracket = section.split("CI [", 1)[1].split("]", 1)[0]
+        lo_str, hi_str = (part.strip() for part in bracket.split(","))
+        return float(lo_str), float(hi_str)
+
+    # k = 1: `mrr` is the only pre-registered metric.
+    pack_k1 = _embedder_pack(verdicts=("mrr",), headline="mrr")
+    items_a_k1 = [mrr_only_item(f"q{i:02d}", mrr_a[i]) for i in range(n)]
+    items_b_k1 = [mrr_only_item(f"q{i:02d}", mrr_b[i]) for i in range(n)]
+    agg_a_k1 = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=sum(mrr_a) / n, n=n, support=(0.0, 1.0))
+    )
+    agg_b_k1 = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=sum(mrr_b) / n, n=n, support=(0.0, 1.0))
+    )
+    a_k1 = run("cand", role="embedder", call_surface="embeddings", items=items_a_k1,
+               aggregates=agg_a_k1,
+               fingerprint_fields=embeddings_fields(packId=pack_k1.packId, modelKey="cand"))
+    b_k1 = run("bm25", role="embedder", arm_kind="deterministic", items=items_b_k1,
+               aggregates=agg_b_k1,
+               fingerprint_fields=deterministic_fields(packId=pack_k1.packId))
+    lo1, hi1 = mrr_ci(compare_report([a_k1, b_k1], pack=pack_k1))
+
+    # k = 2: `mrr` and `separationZ` both pre-registered, both continuous, identical `mrr` values
+    # in identical order — so `_paired_diffs(a, b, "mrr", pack)` is bit-identical to the k=1 run.
+    pack_k2 = _embedder_pack(verdicts=("mrr", "separationZ"), headline="mrr")
+    items_a_k2 = [mrr_and_sepz_item(f"q{i:02d}", mrr_a[i], 2.0 + 0.01 * i) for i in range(n)]
+    items_b_k2 = [mrr_and_sepz_item(f"q{i:02d}", mrr_b[i], 0.01 * i) for i in range(n)]
+    agg_a_k2 = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=sum(mrr_a) / n, n=n, support=(0.0, 1.0)),
+        separationZ=DistributionSummary(
+            name="separationZ", median=2.05, p10=2.0, n=n, unit="query", support=None
+        ),
+    )
+    agg_b_k2 = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=sum(mrr_b) / n, n=n, support=(0.0, 1.0)),
+        separationZ=DistributionSummary(
+            name="separationZ", median=0.05, p10=0.0, n=n, unit="query", support=None
+        ),
+    )
+    a_k2 = run("cand", role="embedder", call_surface="embeddings", items=items_a_k2,
+               aggregates=agg_a_k2,
+               fingerprint_fields=embeddings_fields(packId=pack_k2.packId, modelKey="cand"))
+    b_k2 = run("bm25", role="embedder", arm_kind="deterministic", items=items_b_k2,
+               aggregates=agg_b_k2,
+               fingerprint_fields=deterministic_fields(packId=pack_k2.packId))
+    lo2, hi2 = mrr_ci(compare_report([a_k2, b_k2], pack=pack_k2))
+
+    assert pack_k1.seed == pack_k2.seed, "the seeds must match for the resample to be comparable"
+    width1, width2 = hi1 - lo1, hi2 - lo2
+    assert width2 > width1, (
+        f"k=2 family's mrr interval [{lo2:+.3f}, {hi2:+.3f}] (width {width2:.4f}) is not wider "
+        f"than the k=1 interval [{lo1:+.3f}, {hi1:+.3f}] (width {width1:.4f}) with the same seed "
+        "and identical per-unit mrr differences — continuous_verdict() is not being handed the "
+        "whole pre-registered family, so the k>1 Bonferroni correction is not reaching the "
+        "interval (-ml §3.4 Rule 8, §11.2.2)"
+    )
 
 
 # --- M-6: fewer than two arms is its own reason, not the deterministic one ----------------------

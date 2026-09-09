@@ -82,6 +82,33 @@ at `:664`. §3.3 (iv)'s own citations (`:719`, `:738`, `:751`, `:763-777`, etc.)
 named historical commit (`5878014`) rather than the live tree, per that section's own v1.23
 discipline, and do not drift.
 
+**Amendment (U67) — a mutation-testing gap found during integration review, not by the suite.**
+The delivered `stats.continuous_verdict(family=family, ...)` call at `report.py:901` survives
+being mutated to `family=[metric]`: all 634 tests above still pass. That argument is not
+cosmetic — `continuous_verdict()` derives its quantile levels from `k = len(family)`
+(`_family_ci_levels`), so collapsing it to the metric's own singleton family sets `k = 1` and
+silently skips the `k > 1` Bonferroni-in-the-interval correction §3.3 (iv) commits to: a `k = 3`
+family would render at `k = 1` levels, publishing an interval too narrow and a verdict too
+confident, with no visible symptom.
+`tests/test_report.py::test_an_all_continuous_family_takes_its_correction_in_the_interval_not_a_ladder`
+names that correction in its docstring, but its four assertions only check the explanatory
+sentence's presence, the absence of a Holm claim, that both members print the bootstrap-decided
+text, and that no arm is excluded — none of which observes interval width, so all four hold
+unchanged under the mutation. Its docstring is corrected to say only what it actually proves (no
+Holm ladder, the explanatory section, both members verdicted, no exclusion) and to point at the
+new test for the correction itself. Closed by
+`tests/test_report.py::test_continuous_verdict_receives_the_whole_family_not_just_the_metric`:
+renders identical `mrr` data and seed once as a `k = 1` family and once as a `k = 2` family
+alongside a second all-continuous metric, and asserts the `k = 2` interval comes out strictly
+wider — same seed and identical per-unit differences mean the two runs bootstrap-resample
+identically, so only the quantile levels can account for a width difference; `family=[metric]`
+renders both at the `k = 1` levels and the assertion fails with a message naming the two
+intervals and widths. Mutation-confirmed: `report.py:901`'s `family=family,` changed to
+`family=[metric],` now fails exactly the new test (`1 failed, 634 passed`); `cp`-aside / mutate /
+run / `cp`-back / `diff -q` byte-identical restore. **634 → 635 tests**,
+`.venv/bin/ruff check modelbench tests` clean. No production code changed by this amendment —
+`modelbench/report.py` and `modelbench/stats.py` are exactly as this entry originally left them.
+
 ## 2026-09-09 — `-ml` §3.4 Rule 8: `continuous_verdict()`, the continuous producer
 
 **What:** `docs/plans/small-model-benchmarking-ml.md` §3.4 Rule 8 (v1.16-v1.19), against `2d23482`.
