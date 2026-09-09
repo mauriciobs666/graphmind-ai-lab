@@ -1,0 +1,10 @@
+{
+  "_provenance": "Synthetic — the OpenAI-compatible embeddings envelope per docs/plans/small-model-benchmarking.md §3.4.4a ('POST /api/v0/embeddings ... returns object, data, model and usage, and no runtime, model_info or stats'). The literal vector values are this fixture's own invention (4 dims, matching model-bench/tests/eval/... precedent's tiny placeholder embedding dimension used elsewhere in this repo's fixtures, e.g. falkor-chat/server/tests/data/opencode.json's dim: 4).",
+  "object": "list",
+  "model": "text-embedding-qwen3-embedding-0.6b",
+  "data": [
+    {"object": "embedding", "index": 0, "embedding": [0.1, 0.2, 0.3, 0.4]},
+    {"object": "embedding", "index": 1, "embedding": [0.5, 0.6, 0.7, 0.8]}
+  ],
+  "usage": {"prompt_tokens": 6, "total_tokens": 6}
+}

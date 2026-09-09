@@ -1,0 +1,38 @@
+{
+  "_provenance": "The `stats` object's keys and units (seconds) are verbatim from LM Studio's own v0 REST documentation, as fetched and quoted in docs/reviews/small-model-benchmarking.md Pass 4 Appendix D.2: tokens_per_second 51.43709529007664, time_to_first_token 0.111, generation_time 0.954, stop_reason 'eosFound'. `model_info`/`runtime`/`usage`/`choices` shapes follow docs/plans/small-model-benchmarking.md §2.3's description ('stats{...}, model_info{arch, quant, format, context_length}, runtime{name, version, supported_formats}') and the OpenAI-compatible chat-completion envelope; the literal field values inside model_info/runtime/usage/message are this fixture's own invention (not independently captured) since no full response body is quoted anywhere in the docs.",
+  "id": "chatcmpl-fixture-1",
+  "object": "chat.completion",
+  "model": "qwen/qwen3-4b-2507",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Sure — here is the answer, in plain text, with no tool call."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 42,
+    "completion_tokens": 18,
+    "total_tokens": 60
+  },
+  "stats": {
+    "tokens_per_second": 51.43709529007664,
+    "time_to_first_token": 0.111,
+    "generation_time": 0.954,
+    "stop_reason": "eosFound"
+  },
+  "model_info": {
+    "arch": "qwen3",
+    "quant": "Q4_K_M",
+    "format": "gguf",
+    "context_length": 262144
+  },
+  "runtime": {
+    "name": "llama.cpp",
+    "version": "1.52.0",
+    "supported_formats": ["gguf"]
+  }
+}

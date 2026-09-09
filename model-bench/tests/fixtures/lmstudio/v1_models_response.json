@@ -1,0 +1,7 @@
+{
+  "_provenance": "docs/plans/small-model-benchmarking.md §2.5: '`GET /v1/models` ... returns exactly `{id, object, owned_by}` per model - no state, no quantization, no arch, no type, no capabilities.' Used only for probe()'s v1-only scenario.",
+  "object": "list",
+  "data": [
+    {"id": "qwen/qwen3-4b-2507", "object": "model", "owned_by": "organization_owner"}
+  ]
+}

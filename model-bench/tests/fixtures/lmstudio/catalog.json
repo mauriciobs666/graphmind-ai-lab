@@ -1,0 +1,95 @@
+{
+  "_provenance": {
+    "note": "No literal 19-entry `GET /api/v0/models` capture exists anywhere in this repo's docs (checked: docs/plans/small-model-benchmarking.md §2.5, docs/reviews/small-model-benchmarking.md Pass 1 Appendix A.2 and Pass 4 Appendix D.3 — both narrative, not a saved payload). This fixture holds every catalog entry this repo's documentation records a field for, cited per entry below. It is NOT the real 19-model catalog, and this file does not pad to 19 with invented models. `object`, `arch`, `compatibility_type` and `publisher` are filled with reasonable, low-confidence placeholders where no citation exists (marked 'inferred' or 'placeholder' below); `type` and `capabilities` — the two fields the eligibility gate and residency() actually exercise — are cited wherever a citation exists.",
+    "perEntry": {
+      "text-embedding-qwen3-embedding-0.6b": "docs/reviews/small-model-benchmarking.md:1002-1004 (verbatim: id, type, quantization, state, max_context_length, capabilities). publisher/arch/object/compatibility_type: not captured anywhere; placeholder values.",
+      "google/gemma-3-4b": "docs/reviews/small-model-benchmarking.md:1006-1008 (verbatim: id, type, quantization, state, max_context_length, no capabilities key). publisher='google' inferred from the id prefix (documented verbatim in the id itself); arch/object/compatibility_type: placeholder.",
+      "google/gemma-3-12b": "docs/reviews/small-model-benchmarking.md:889 (type vlm, no capabilities key). quantization/max_context_length not documented; placeholder. publisher='google' inferred from id prefix.",
+      "text-embedding-nomic-embed-text-v1.5": "docs/reviews/small-model-benchmarking.md:889,1436 (type embeddings, no capabilities key). Other fields not documented; placeholder.",
+      "mistralai/ministral-3-3b": "docs/reviews/small-model-benchmarking.md:891,995 (id, quantization Q8_0, publisher mistralai, verbatim). type not stated explicitly; set to 'llm' per the model's known role as a chat arm in the plan's own known-answer validation (§4 S6 point 5). capabilities not documented; omitted (absent key), which is itself only a placeholder choice, not a captured fact.",
+      "mistralai_ministral-3-3b-instruct-2512": "docs/reviews/small-model-benchmarking.md:891,995 (id, quantization Q8_0, publisher bartowski, verbatim; same weights as mistralai/ministral-3-3b per plan §2.3 R-8, different catalog id/publisher). type set to 'llm' on the same basis as its sibling row above. capabilities not documented; omitted.",
+      "qwen/qwen3-4b-2507": "type='llm', capabilities=['tool_use'] per model-bench/tests/conftest.py MODEL_FIELDS (modelType/modelCapabilities), the S1 implementer's own established fixture for this exact model — NOT an independent §2.5 live-probe capture of the capabilities field specifically. This is the 'llm with tool_use' entry the eligibility gate's done-condition names; see this unit's result notes for why no better-sourced entry exists. publisher='qwen', arch='qwen3', compatibility_type='gguf' also match conftest.py's MODEL_FIELDS. quantization='Q4_K_M', max_context_length=262144 also from conftest.py."
+    }
+  },
+  "data": [
+    {
+      "id": "text-embedding-qwen3-embedding-0.6b",
+      "object": "model",
+      "type": "embeddings",
+      "publisher": "qwen",
+      "arch": "qwen3",
+      "compatibility_type": "gguf",
+      "quantization": "Q8_0",
+      "state": "not-loaded",
+      "max_context_length": 32768,
+      "capabilities": ["tool_use"]
+    },
+    {
+      "id": "google/gemma-3-4b",
+      "object": "model",
+      "type": "vlm",
+      "publisher": "google",
+      "arch": "gemma3",
+      "compatibility_type": "gguf",
+      "quantization": "Q4_K_M",
+      "state": "not-loaded",
+      "max_context_length": 131072
+    },
+    {
+      "id": "google/gemma-3-12b",
+      "object": "model",
+      "type": "vlm",
+      "publisher": "google",
+      "arch": "gemma3",
+      "compatibility_type": "gguf",
+      "quantization": "Q4_K_M",
+      "state": "not-loaded",
+      "max_context_length": 131072
+    },
+    {
+      "id": "text-embedding-nomic-embed-text-v1.5",
+      "object": "model",
+      "type": "embeddings",
+      "publisher": "nomic-ai",
+      "arch": "nomic-bert",
+      "compatibility_type": "gguf",
+      "quantization": "Q8_0",
+      "state": "not-loaded",
+      "max_context_length": 8192
+    },
+    {
+      "id": "mistralai/ministral-3-3b",
+      "object": "model",
+      "type": "llm",
+      "publisher": "mistralai",
+      "arch": "ministral",
+      "compatibility_type": "gguf",
+      "quantization": "Q8_0",
+      "state": "not-loaded",
+      "max_context_length": 32768
+    },
+    {
+      "id": "mistralai_ministral-3-3b-instruct-2512",
+      "object": "model",
+      "type": "llm",
+      "publisher": "bartowski",
+      "arch": "ministral",
+      "compatibility_type": "gguf",
+      "quantization": "Q8_0",
+      "state": "not-loaded",
+      "max_context_length": 32768
+    },
+    {
+      "id": "qwen/qwen3-4b-2507",
+      "object": "model",
+      "type": "llm",
+      "publisher": "qwen",
+      "arch": "qwen3",
+      "compatibility_type": "gguf",
+      "quantization": "Q4_K_M",
+      "state": "not-loaded",
+      "max_context_length": 262144,
+      "capabilities": ["tool_use"]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "_provenance": "Synthetic — an OpenAI-compatible `message.tool_calls` block, this fixture's own invention. Used only to exercise `toolCallForm == 'native'` at the transport boundary; no live capture of a tool-calling response exists in the docs (Pass 4 Appendix D.2 explicitly notes a `stats`/tool-call body was not probed live: 'obtaining a stats object requires a chat completion, which JIT-loads a model - outside this run's authorisation').",
+  "id": "chatcmpl-fixture-2",
+  "object": "chat.completion",
+  "model": "qwen/qwen3-4b-2507",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+              "name": "lookup_product_fact",
+              "arguments": "{\"productId\": \"p-42\", \"field\": \"price\"}"
+            }
+          }
+        ]
+      },
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 55,
+    "completion_tokens": 12,
+    "total_tokens": 67
+  },
+  "stats": {
+    "tokens_per_second": 60.0,
+    "time_to_first_token": 0.08,
+    "generation_time": 0.2,
+    "stop_reason": "toolCalls"
+  },
+  "model_info": {
+    "arch": "qwen3",
+    "quant": "Q4_K_M",
+    "format": "gguf",
+    "context_length": 262144
+  },
+  "runtime": {
+    "name": "llama.cpp",
+    "version": "1.52.0",
+    "supported_formats": ["gguf"]
+  }
+}

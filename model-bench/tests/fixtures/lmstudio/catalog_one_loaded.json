@@ -1,0 +1,43 @@
+{
+  "_provenance": {
+    "note": "Derived from catalog.json by changing exactly one field: `qwen/qwen3-4b-2507`'s `state` from 'not-loaded' to 'loaded', plus `loaded_context_length` (which §2.3 says appears only once a model is loaded). No real 'loaded' catalog row was ever captured on this box (§2.5's probe found all 19 entries not-loaded) — the {'id': 'qwen/qwen3-4b-2507', 'state': 'loaded'} shape and the loaded_context_length=8192 value are model-bench/tests/conftest.py's own established precedent (`MODEL_FIELDS['residentModelsAtEnd']`, `MODEL_FIELDS['loadedContextLength']`), reused here rather than invented fresh. Used only to exercise residency()'s non-empty mapping branch."
+  },
+  "data": [
+    {
+      "id": "text-embedding-qwen3-embedding-0.6b",
+      "object": "model",
+      "type": "embeddings",
+      "publisher": "qwen",
+      "arch": "qwen3",
+      "compatibility_type": "gguf",
+      "quantization": "Q8_0",
+      "state": "not-loaded",
+      "max_context_length": 32768,
+      "capabilities": ["tool_use"]
+    },
+    {
+      "id": "google/gemma-3-4b",
+      "object": "model",
+      "type": "vlm",
+      "publisher": "google",
+      "arch": "gemma3",
+      "compatibility_type": "gguf",
+      "quantization": "Q4_K_M",
+      "state": "not-loaded",
+      "max_context_length": 131072
+    },
+    {
+      "id": "qwen/qwen3-4b-2507",
+      "object": "model",
+      "type": "llm",
+      "publisher": "qwen",
+      "arch": "qwen3",
+      "compatibility_type": "gguf",
+      "quantization": "Q4_K_M",
+      "state": "loaded",
+      "max_context_length": 262144,
+      "loaded_context_length": 8192,
+      "capabilities": ["tool_use"]
+    }
+  ]
+}

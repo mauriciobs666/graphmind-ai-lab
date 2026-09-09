@@ -1,0 +1,16 @@
+{
+  "_provenance": "Synthetic — a chat response with no `stats` key at all, and `model_info`/`runtime` absent too. Used to pin plan-gate P5-8: ChatResult construction must never raise on a missing `stats`, and every derived field must come back `None`, not `0` or an exception. This shape is plausible on a build/endpoint that does not populate `stats` rather than a specifically documented capture.",
+  "id": "chatcmpl-fixture-3",
+  "object": "chat.completion",
+  "model": "some/model",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "no stats on this one"
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}
