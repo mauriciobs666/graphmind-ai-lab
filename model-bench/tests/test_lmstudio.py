@@ -84,6 +84,25 @@ class _ReadFailsResponse:
         pass
 
 
+class _RaisingFp:
+    """A minimal file-like object whose `.read()` raises — used as `HTTPError`'s own `fp`, to
+    express the failure phase Pass 13 found the grid could not: reading the *error* response's
+    body (`exc.read()`, inside `except urllib.error.HTTPError`), as opposed to
+    `_ReadFailsResponse` above, which fails reading a *success* response's body. `HTTPError` is
+    itself a response object — a status plus a `.read()` — and `probe()`'s own `v1-only`
+    diagnosis calls `exc.read()` on every 404 a non-LM-Studio server returns, so this is
+    normal-path code, not an edge case (review Pass 13, P13-1)."""
+
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    def read(self, *args: Any, **kwargs: Any) -> bytes:
+        raise self._exc
+
+    def close(self) -> None:
+        pass
+
+
 class _SlowReadResponse:
     """A response whose `.read()` takes measurable wall-clock time — pins Pass 12 P12-4:
     `wallClockMs` must be measured to the last byte of the body, not to the response headers."""
@@ -105,9 +124,12 @@ def make_opener(routes: dict[str, tuple[int, bytes] | Exception | Any]) -> Calla
     """Build a fake `urlopen` replacement. `routes` maps a URL *suffix* (e.g. `/api/v0/models`)
     to one of: `(status, body_bytes)` (a status >= 400 is raised as `urllib.error.HTTPError`,
     exactly as the real `urlopen` would), an `Exception` instance to raise from the opener call
-    itself (a connect-phase failure), or an already-constructed response-like object — anything
-    with `.read()`/`.close()`, e.g. `_ReadFailsResponse`/`_SlowReadResponse` — returned verbatim,
-    for a failure or a delay that only happens once the caller reaches `.read()`."""
+    itself — a connect-phase failure, *or* a pre-built `urllib.error.HTTPError` (itself an
+    `Exception`) raised exactly as real `urlopen` raises one for any non-2xx status, letting its
+    own `fp`/`.read()` behave arbitrarily (`_RaisingFp`, above — Pass 13 P13-1's error-body
+    phase) — or an already-constructed response-like object — anything with `.read()`/`.close()`,
+    e.g. `_ReadFailsResponse`/`_SlowReadResponse` — returned verbatim, for a failure or a delay
+    that only happens once the caller reaches `.read()`."""
 
     def opener(req: urllib.request.Request, timeout: float | None = None) -> Any:
         url = req.full_url
@@ -442,6 +464,90 @@ def test_chat_result_tokens_per_second_is_none_when_source_is_not_numeric():
     assert result.tokensPerSecond is None
 
 
+def test_chat_result_derived_fields_are_none_not_a_number_when_source_is_non_finite():
+    """P13-3: `float()` accepts `NaN`/`Infinity` without error, so `_as_float`/`_seconds_to_ms`
+    used to let a non-finite source land as an actual `nan`/`inf` *float* rather than degrading to
+    `None` — and this needs no malformed transport to reach: `json.loads` parses the bare tokens
+    `NaN`/`Infinity` by default, so a server serialising a 0/0 rate is enough (Pass 13, P13-3,
+    Appendix M.3). Downstream this is not cosmetic: `statistics.median` over a list containing
+    `nan` returns an arbitrary element with no error, and `-ml` §11.5.1's gap
+    (`latencyMs - (ttftMs + generationMs)`) goes `-inf`, so the in-call reload detector can never
+    fire on that item."""
+    result = ChatResult(
+        message={"role": "assistant", "content": "x"},
+        tool_calls=(),
+        toolCallForm="prose",
+        stats={
+            "time_to_first_token": float("nan"),
+            "generation_time": float("inf"),
+            "tokens_per_second": float("nan"),
+        },
+        model_info=None,
+        runtime=None,
+        usage=None,
+        wallClockMs=12.0,
+    )
+    assert result.ttftMs is None
+    assert result.generationMs is None
+    assert result.tokensPerSecond is None
+
+
+def test_chat_result_derived_fields_are_none_when_a_bare_nan_survives_json_loads_through_chat():
+    """The same boundary, reached the way it happens live: `json.loads` parses a body carrying the
+    bare tokens `NaN`/`Infinity` without raising (Python's default `parse_constant`), so the
+    non-finite value must be rejected at the coercion boundary (`ChatResult.__post_init__`), not
+    at parse time — `_parse_json` is deliberately left alone; the raw `stats` mapping still carries
+    the non-finite value verbatim, for auditability."""
+    body = json.dumps(
+        {
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "x"}}],
+            "stats": {
+                "time_to_first_token": float("nan"),
+                "generation_time": float("inf"),
+                "tokens_per_second": float("nan"),
+            },
+        }
+    ).encode("utf-8")
+    c = client({"/api/v0/chat/completions": (200, body)})
+    result = c.chat(
+        [{"role": "user", "content": "hi"}],
+        model="m",
+        temperature=0.0,
+        max_tokens=10,
+        timeout_s=5.0,
+    )
+    assert result.ttftMs is None
+    assert result.generationMs is None
+    assert result.tokensPerSecond is None
+    import math
+
+    assert math.isnan(result.stats["time_to_first_token"])  # kept verbatim, for auditability
+
+
+def test_chat_result_derived_fields_are_none_not_1000_or_0_when_source_is_a_bool():
+    """`float(True) == 1.0`, so an unguarded coercion turns `True` into `ttftMs=1000.0` and
+    `tokensPerSecond=1.0` (Pass 13, P13-3, Appendix M.3). This component excludes `bool` from
+    numeric coercion deliberately elsewhere — `packs._row_count_identity_field_valid` and
+    `results`' bool guard added at Pass 2 P2-2 — and the unit boundary now does the same."""
+    result = ChatResult(
+        message={"role": "assistant", "content": "x"},
+        tool_calls=(),
+        toolCallForm="prose",
+        stats={
+            "time_to_first_token": True,
+            "generation_time": False,
+            "tokens_per_second": True,
+        },
+        model_info=None,
+        runtime=None,
+        usage=None,
+        wallClockMs=12.0,
+    )
+    assert result.ttftMs is None
+    assert result.generationMs is None
+    assert result.tokensPerSecond is None
+
+
 def test_chat_result_tool_call_form_is_native_when_tool_calls_present():
     result = _chat("chat_response_native_tool_call.json")
     assert result.toolCallForm == "native"
@@ -657,25 +763,40 @@ def test_warm_up_on_embeddings_surface_has_no_runtime_or_stats():
     assert result.wallClockMs is not None
 
 
-# --- §4B coverage probe (review Pass 12, `docs/reviews/small-model-benchmarking-impl.md`) ------
+# --- §4B coverage probe (review Pass 12, `docs/reviews/small-model-benchmarking-impl.md`;
+#     extended at Pass 13, P13-1, to the phase the original grid could not express) -------------
 #
 # A probe over (operation) x (failure phase) x (failure kind): the six public operations
-# {catalog, residency, probe, chat, embed, warm_up} x {connect/headers, body-read} x {timeout,
-# non-2xx, connection drop, unparseable body}. Every cell must land in exactly one of
-# `LMStudioCallTimeout` / `LMStudioCallFailed` / `LMStudioUnreachable`, or — for `probe()` — one
-# of its three literal outcomes. No cell may raise anything outside `LMStudioError`. The
-# reviewer ran the body-read row and found 9 of 9 cells escaping (three exception kinds x
-# chat/catalog/probe); this probe is the regression net, over every cell rather than the three
-# sampled by hand.
+# {catalog, residency, probe, chat, embed, warm_up} x {connect/headers, success-body-read,
+# error-body-read} x {timeout, non-2xx, connection drop, unparseable body}. Every cell must land
+# in exactly one of `LMStudioCallTimeout` / `LMStudioCallFailed` / `LMStudioUnreachable`, or — for
+# `probe()` — one of its three literal outcomes. No cell may raise anything outside
+# `LMStudioError`. Pass 12's reviewer ran the success-body-read row by hand and found 9 of 9
+# cells escaping; Pass 13's reviewer then ran the error-body-read row and found 21 of 21
+# escaping, because `_EXEMPT_CELLS` declared `("read", "non_2xx")` structurally unreachable on
+# the grounds that `HTTPError` is raised *before* a response object exists — which is false:
+# `HTTPError` **is** a response object, with its own status and `.read()`, and reading *it* can
+# fail exactly like reading a normal response can (`probe()`'s own `v1-only` diagnosis calls
+# `exc.read()` on every 404 a non-LM-Studio server returns). This probe is the regression net
+# over every cell the grid can name, not the ones a reviewer happened to sample by hand.
 #
-# Two of the eight (phase, kind) combinations are not reachable through `urllib.request`'s own
-# contract — not a judgement call to make silently, so they are named constants asserted below
-# rather than simply absent from the parametrized cases:
-#   - (connect, unparseable_body): no body exists to be unparseable before a response object —
-#     with a status — has even been obtained.
-#   - (read, non_2xx): `urlopen()` raises `HTTPError` for any status >= 400 *before* ever handing
-#     back a response object (see `make_opener`), so a non-2xx status cannot be observed once
-#     `.read()` is reachable — it is a connect/headers-phase fact by construction.
+# Each phase has its own domain of applicable kinds — not every kind applies to every phase, and
+# that is a structural fact this module asserts rather than silently encodes by omission:
+#   - **connect**: all four kinds apply — the opener call itself can time out, return a non-2xx
+#     status, drop the connection, or (vacuously) never produce an unparseable body, since no
+#     body exists yet. That last one — `(connect, unparseable_body)` — is the one cell still
+#     exempt: no body exists to be unparseable before a response object, with a status, has even
+#     been obtained.
+#   - **read** (a *success* response's body): three kinds — `timeout`, `connection_drop`,
+#     `unparseable_body`. `non_2xx` does not apply here at all, and it is not a fourth exempt
+#     cell in this phase's domain: `urlopen()` raises `HTTPError` for any status >= 400 *before*
+#     ever handing back a response object (`make_opener`), so "the response I'm reading has a
+#     non-2xx status" cannot arise while reading a *success* response's body — the concept has no
+#     referent in this phase, which is why P13-1 needed a third phase rather than a corrected
+#     cell.
+#   - **error-body** (an `HTTPError`'s own body, `exc.read()`): one kind — `non_2xx` is the only
+#     way to be here at all, since reaching this phase presupposes the non-2xx status that raised
+#     the `HTTPError` in the first place.
 
 _CONNECT_KINDS: dict[str, Callable[[], Any]] = {
     "timeout": lambda: TimeoutError("timed out"),
@@ -689,10 +810,34 @@ _READ_KINDS: dict[str, Callable[[], Any]] = {
     ),
     "unparseable_body": lambda: (200, b"not json{"),
 }
+_ERROR_BODY_KINDS: dict[str, Callable[[], Any]] = {
+    "non_2xx": lambda: urllib.error.HTTPError(
+        "http://localhost:1234/x",
+        404,
+        "Not Found",
+        None,
+        _RaisingFp(http.client.IncompleteRead(b"partial")),
+    ),
+}
 
-# The six reachable cells and the exception each must raise, for a GET-based operation
+# Each phase's domain of applicable kinds (the comment block above states the reasons).
+_PHASE_KINDS: dict[str, tuple[str, ...]] = {
+    "connect": ("timeout", "non_2xx", "connection_drop", "unparseable_body"),
+    "read": ("timeout", "connection_drop", "unparseable_body"),
+    "error-body": ("non_2xx",),
+}
+
+# The seven reachable cells and the exception each must raise, for a GET-based operation
 # (catalog/residency) and a POST-based one (chat/embed/warm_up) respectively. Both taxonomies
-# cover the same six cells — the exemption below is structural, not per-taxonomy.
+# cover the same seven cells — the exemption below is structural, not per-taxonomy.
+#
+# `error-body` GET: `_raw_get` folds a failed error-body read to `None` — exactly how it already
+# folds a failed *success*-body read (`("read", "timeout")`/`("read", "connection_drop")` below)
+# — so both `catalog()`/`residency()` see "no usable response" and raise `LMStudioUnreachable`,
+# never a wrong-but-plausible `LMStudioCallFailed` built on a body that was never actually read.
+# `error-body` POST: `_raw_post` already had the status in hand (`exc.code`) before attempting
+# the read, so it degrades the message (empty body) rather than the exception type — the cell
+# stays `LMStudioCallFailed`, identical to every other non-2xx POST cell.
 _EXPECTED_FOR_GET: dict[tuple[str, str], type[Exception]] = {
     ("connect", "timeout"): LMStudioUnreachable,
     ("connect", "non_2xx"): LMStudioCallFailed,
@@ -700,6 +845,7 @@ _EXPECTED_FOR_GET: dict[tuple[str, str], type[Exception]] = {
     ("read", "timeout"): LMStudioUnreachable,
     ("read", "connection_drop"): LMStudioUnreachable,
     ("read", "unparseable_body"): LMStudioCallFailed,
+    ("error-body", "non_2xx"): LMStudioUnreachable,
 }
 _EXPECTED_FOR_POST: dict[tuple[str, str], type[Exception]] = {
     ("connect", "timeout"): LMStudioCallTimeout,
@@ -708,25 +854,32 @@ _EXPECTED_FOR_POST: dict[tuple[str, str], type[Exception]] = {
     ("read", "timeout"): LMStudioCallTimeout,
     ("read", "connection_drop"): LMStudioCallFailed,
     ("read", "unparseable_body"): LMStudioCallFailed,
+    ("error-body", "non_2xx"): LMStudioCallFailed,
 }
 
-_ALL_KINDS = ("timeout", "non_2xx", "connection_drop", "unparseable_body")
-
-_EXEMPT_CELLS = frozenset({("connect", "unparseable_body"), ("read", "non_2xx")})
+# The one cell that is structurally unreachable through `urllib.request`'s own contract — a
+# judgement not to be made silently, so it is a named constant asserted below rather than simply
+# absent from the parametrized cases. `("read", "non_2xx")` is deliberately **not** here any
+# more (Pass 13, P13-1): it was never a real cell to begin with — `non_2xx` is outside the `read`
+# phase's domain entirely (see `_PHASE_KINDS` and the comment block above), not a reachable
+# combination this module chooses not to exercise.
+_EXEMPT_CELLS = frozenset({("connect", "unparseable_body")})
 
 
 def _route_outcome(phase: str, kind: str) -> Any:
-    return (_CONNECT_KINDS if phase == "connect" else _READ_KINDS)[kind]()
+    kinds = {"connect": _CONNECT_KINDS, "read": _READ_KINDS, "error-body": _ERROR_BODY_KINDS}
+    return kinds[phase][kind]()
 
 
 def test_probe_cell_exemptions_are_exactly_the_structurally_unreachable_ones():
     """The guard against the exemption silently growing (or shrinking) without anyone deciding
-    it: re-derive the full 8-cells-per-operation grid from the four failure kinds §4B names, and
-    assert the two cells this module does not exercise are exactly, and only, `_EXEMPT_CELLS` —
-    not implied by their absence from `_EXPECTED_FOR_GET`/`_POST`."""
-    all_cells = {(phase, kind) for phase in ("connect", "read") for kind in _ALL_KINDS}
+    it: re-derive the full per-phase grid from `_PHASE_KINDS` — each phase's *own* domain, not a
+    flat cross product that would manufacture cells no phase can express (P13-1's own lesson) —
+    and assert the one cell this module does not exercise is exactly, and only, `_EXEMPT_CELLS`,
+    not implied by its absence from `_EXPECTED_FOR_GET`/`_POST`."""
+    all_cells = {(phase, kind) for phase, kinds in _PHASE_KINDS.items() for kind in kinds}
     exercised = set(_EXPECTED_FOR_GET)
-    assert exercised == set(_EXPECTED_FOR_POST)  # both taxonomies cover the same six cells
+    assert exercised == set(_EXPECTED_FOR_POST)  # both taxonomies cover the same seven cells
     assert all_cells - exercised == _EXEMPT_CELLS
 
 

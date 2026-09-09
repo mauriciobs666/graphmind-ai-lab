@@ -14,12 +14,17 @@ cold state, by design, not by omission.
 **The unit boundary (§3.6, plan-gate P4-1) lives here and nowhere else.** LM Studio's `stats`
 object reports `time_to_first_token` and `generation_time` in **seconds**; every `...Ms` field
 this plan names is **milliseconds**. `ChatResult` converts once, on construction, so no caller
-ever sees a raw seconds value. Three rules, all load-bearing (plan-gate P5-8): each of
-`ttftMs`/`generationMs`/`tokensPerSecond` is `None` when its source key is absent, **never `0`**;
-`tokensPerSecond` is the one figure *not unit-converted* (no ×1000 — a per-second rate already is
-what its name says) but it **is** type-coerced, same as the other two; and construction **never
-raises**, full stop, regardless of what `stats` holds — not just on a missing or partial `stats`
-object, but on one of the wrong type entirely (a list, a string, anything not `Mapping`-shaped).
+ever sees a raw seconds value. Four rules, all load-bearing (plan-gate P5-8; the fourth is review
+Pass 13, P13-3): each of `ttftMs`/`generationMs`/`tokensPerSecond` is `None` when its source key is
+absent, **never `0`**; `tokensPerSecond` is the one figure *not unit-converted* (no ×1000 — a
+per-second rate already is what its name says) but it **is** type-coerced, same as the other two;
+a `bool` source or a non-finite one (`nan`/`inf`/`-inf` — `float()` accepts these, and
+`json.loads` parses the bare `NaN`/`Infinity` tokens without error, so no malformed transport is
+needed) is rejected at this coercion boundary rather than surviving as a number, deliberately
+**not** at `_parse_json`, which parses every body this adapter reads and keeps `stats` verbatim
+for auditability; and construction **never raises**, full stop, regardless of what `stats` holds —
+not just on a missing or partial `stats` object, but on one of the wrong type entirely (a list, a
+string, anything not `Mapping`-shaped).
 A chat response without usable `stats` is an expected state (`-ml` §11.5.1 governs it), not an
 error, and nothing about that guarantee should depend on `chat()`'s own `isinstance` check one
 level up — a caller that constructs `ChatResult` directly gets the same promise (review Pass 12,
@@ -36,6 +41,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import math
 import time
 import urllib.error
 import urllib.request
@@ -143,8 +149,12 @@ class ChatResult:
     and never the raw un-coerced value; `tokensPerSecond` skips the ×1000 the other two apply (a
     per-second rate needs no unit conversion) but is coerced to `float` the same way they are, so a
     string- or otherwise wrong-typed source lands `None` rather than surviving untyped into a field
-    declared `float | None`. `stats` itself is kept exactly as given, whatever its shape, purely for
-    auditability — nothing downstream may read a timing figure out of it.
+    declared `float | None`. A `bool` source, or one that coerces to a non-finite `float`
+    (`nan`/`inf`/`-inf` — reachable with no malformed transport at all, since `json.loads` parses
+    the bare tokens by default), lands `None` the same way (review Pass 13, P13-3) — the coercion
+    boundary rejects both; `_parse_json` rejects neither. `stats` itself is kept exactly as given,
+    whatever its shape, purely for auditability — nothing downstream may read a timing figure out
+    of it.
     """
 
     message: Mapping[str, Any]
@@ -191,28 +201,53 @@ class LoadResult:
     stats: Mapping[str, Any] | None
 
 
-def _seconds_to_ms(value: Any) -> float | None:
-    """§3.6's unit boundary: `None` when absent, never `0`, and no exception on a bad type either
-    — a chat response without `stats` (or with a partial one) is an expected state."""
-    if value is None:
+def _coerce_finite_float(value: Any) -> float | None:
+    """The shared half of both `_seconds_to_ms` and `_as_float`: `None` when `value` is absent,
+    a `bool`, not coercible to `float` at all, or coercible but non-finite (`nan`/`inf`/`-inf`) —
+    never the raw value surviving untyped or non-finite into a `float | None` field (review
+    Pass 13, P13-3).
+
+    `bool` is excluded before coercion, not after: `float(True) == 1.0`, so an unguarded coercion
+    would turn a stray boolean into a real-looking number (`1000.0`, `1.0`) rather than `None`.
+    This mirrors the same deliberate exclusion elsewhere in the component
+    (`packs._row_count_identity_field_valid`, `results`' bool guard from review Pass 2 P2-2).
+
+    Non-finite is rejected **here, at the coercion boundary — not at `_parse_json`/`json.loads`.**
+    `json.loads` parses the bare tokens `NaN`/`Infinity`/`-Infinity` without error by default
+    (Python's `parse_constant`), so a chat body serialising e.g. a 0/0 rate needs no malformed
+    transport to reach this class at all. The boundary is deliberately *not* moved into
+    `_parse_json`: that function parses every response body this adapter reads (catalog, chat,
+    embed), and the raw `stats` mapping is kept verbatim beside the derived fields "for
+    auditability" — narrowing the fix to the two functions that actually produce a typed timing
+    figure keeps that verbatim guarantee intact and leaves every other body's parsing unchanged.
+    A non-finite value degrading silently downstream is not cosmetic: `statistics.median` over a
+    list containing `nan` returns an arbitrary element with no error, and `-ml` §11.5.1's gap
+    (`latencyMs - (ttftMs + generationMs)`) would go `-inf`, so the in-call reload detector could
+    never fire on that item.
+    """
+    if value is None or isinstance(value, bool):
         return None
     try:
-        return 1000.0 * float(value)
+        v = float(value)
     except (TypeError, ValueError):
         return None
+    return v if math.isfinite(v) else None
+
+
+def _seconds_to_ms(value: Any) -> float | None:
+    """§3.6's unit boundary: `None` when absent, never `0`, and no exception on a bad type or a
+    non-finite one either — a chat response without `stats` (or with a partial or non-finite one)
+    is an expected state (review Pass 13, P13-3)."""
+    v = _coerce_finite_float(value)
+    return None if v is None else 1000.0 * v
 
 
 def _as_float(value: Any) -> float | None:
     """`tokensPerSecond`'s half of §3.6's unit boundary: no ×1000 (already a per-second rate), but
-    the same type tolerance `_seconds_to_ms` applies — `None` when absent or not coercible to
-    `float` (review Pass 12, P12-11), never the raw value surviving untyped into a `float | None`
-    field."""
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+    the same tolerance `_seconds_to_ms` applies — `None` when absent, a `bool`, not coercible to
+    `float` (review Pass 12, P12-11), or coercible but non-finite (review Pass 13, P13-3) — never
+    the raw value surviving untyped into a `float | None` field."""
+    return _coerce_finite_float(value)
 
 
 def _parse_json(raw: bytes, *, context: str) -> Any:
@@ -325,7 +360,17 @@ class LMStudio:
         a response whose `read()` raises (`http.client.IncompleteRead`, a dropped connection, a
         read-phase timeout) is exactly as unreachable as one that never connected, so both
         phases fold to the same `None` — `IncompleteRead` is not an `OSError`, so it needs its
-        own rung rather than riding the socket catch."""
+        own rung rather than riding the socket catch.
+
+        The *error* body's own read (`exc.read()`, below) gets the identical treatment, and it
+        needs its own guard rather than inheriting the surrounding `try`'s (Pass 13 P13-1):
+        `HTTPError` **is** a response object — a status plus a `.read()` — so reading its body can
+        fail exactly like reading a success response's body can, and `probe()`'s own `v1-only`
+        diagnosis calls `exc.read()` on every 404 a non-LM-Studio server returns, which makes this
+        normal-path code rather than an edge case. Folding it to `None` here (rather than
+        surfacing `LMStudioCallFailed` with the known status) matches the read-phase fold just
+        above: neither branch has a trustworthy body to report a message from, so both degrade to
+        the same "no usable response" outcome, one rung apart."""
         req = urllib.request.Request(self._url(path), method="GET")
         try:
             resp = self._opener(req, timeout=timeout_s)
@@ -335,7 +380,10 @@ class LMStudio:
                 resp.close()
         except urllib.error.HTTPError as exc:  # a subclass of URLError — must precede it
             try:
-                return exc.code, exc.read()
+                try:
+                    return exc.code, exc.read()
+                except (TimeoutError, http.client.HTTPException, OSError):
+                    return None
             finally:
                 exc.close()
         except (urllib.error.URLError, TimeoutError, http.client.HTTPException, OSError):
@@ -403,6 +451,14 @@ class LMStudio:
         withholding dispositions ("timeout" vs "no_response") both need, decided here where the
         evidence is. The body read sits inside the same ladder as the connect (Pass 12 P12-1): a
         response whose `read()` raises used to escape this method's taxonomy entirely.
+
+        The *error* body's read (`exc.read()`, rung 1 below) gets the same guard, separately
+        (Pass 13 P13-1): `HTTPError` is itself a response object, so reading its body can fail
+        exactly like a success response's can, and it used to escape this method's taxonomy the
+        same way the success-body read once did. Unlike the GET side, the status is already in
+        hand (`exc.code`) before the read is attempted, so a failed error-body read degrades the
+        *message* (an empty body) rather than the exception type — the cell stays
+        `LMStudioCallFailed`, identical to every other non-2xx POST outcome.
         """
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
@@ -420,7 +476,10 @@ class LMStudio:
                 resp.close()
         except urllib.error.HTTPError as exc:  # rung 1 — a URLError subclass, must precede it
             try:
-                body = exc.read()
+                try:
+                    body = exc.read()
+                except (TimeoutError, http.client.HTTPException, OSError):
+                    body = b""
             finally:
                 exc.close()
             raise LMStudioCallFailed(

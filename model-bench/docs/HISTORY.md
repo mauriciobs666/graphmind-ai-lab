@@ -2,6 +2,289 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-09 — S2 U81: closing impl review Pass 13's `hostinfo.py`/`attest` findings
+
+**What:** review Pass 13 findings scoped to `modelbench/hostinfo.py` and the `attest` CLI command
+— P13-4 (major), P13-5, P13-6, P13-8 (minors), P13-10, P13-12 (nits) — against U74 as committed
+at `dd40ede`. P13-7 (minor) and P13-9 (a plan-text sweep) are **not fixed here**; see below.
+Changed: `modelbench/hostinfo.py`, `modelbench/cli.py` (the `attest` command and its wiring only),
+`tests/test_hostinfo.py`, `tests/test_cli.py`.
+
+**P13-4 (major) — the fix, and the coupling question the coordinator asked me to answer.**
+`lmStudioAppVersion`, `kvCacheSetting` and `hostRamGb` are `_NONEMPTY` in `fingerprint.py`;
+`validate_host_info` checked only presence and non-`null`, so `{"lmStudioAppVersion": "",
+"kvCacheSetting": "", "hostRamGb": 0, "otherResidentWorkloads": []}` returned `[]` — clean — and
+`attest` could write a `host.json` that `store()` refuses only after a whole run (§3.4.5 point 1),
+twenty minutes later. **Chose the coupled fix over three hand-written guards.** `hostinfo.py` now
+imports `modelbench.fingerprint` (read-only — no edit to that file) and derives
+`ATTESTED_NONEMPTY_FIELD_NAMES` directly from `fingerprint.REQUIRED_BY_SCHEMA[1]["model:chat"]`'s
+own tiers, rather than retyping "these three are non-empty" a second time — exactly the shape that
+drifted the first time, per the coordinator's framing that a shared, derived constant is worth
+more than hand-written checks a fourth field can silently outrun. `validate_host_info`'s attested-
+block loop now refuses any of the three an empty value (`not value`, the identical predicate
+`Fingerprint.validate()` itself uses for its `_NONEMPTY` tier) while leaving
+`otherResidentWorkloads` (`_PRESENT`) untouched. **The required assertion is behavioral, not a
+second set comparison**, per the coordinator's warning that a re-derivation test only proves two
+sets match, never that the shared reason is true:
+`test_validate_host_info_agrees_with_the_fingerprints_own_attested_field_tiering`
+(`tests/test_hostinfo.py`) drives `validate_host_info` against each attested field with an empty
+value and asserts the refusal *matches* `fingerprint.py`'s own live tier for that field — computed
+independently of `ATTESTED_NONEMPTY_FIELD_NAMES`, so it exercises the actual behavior rather than
+re-running the same derivation. A second test,
+`test_attested_field_tiers_agree_between_chat_and_embeddings_profiles`, is the checkable claim
+that reading tiers from the single `"model:chat"` profile is safe (none of the four attested names
+is in `model:embeddings`'s forbidden set, so both profiles must agree) rather than an unstated
+assumption. A third, `test_validate_host_info_rejects_the_reviews_own_m4a_repro`, is the review's
+own Appendix M.4/A input verified rejected. `hostRamGb`'s `> 0` half of the review's suggested fix
+needed no separate comparison: `Fingerprint.validate()`'s own `_NONEMPTY` check is `not value`, and
+`0` is already falsy under it — the identical predicate covers both without a second rule.
+
+**P13-8 (minor).** `check_attestation_staleness` now raises `HostInfoError` at entry, before either
+branch, when `host` carries no non-empty `observedAtAttestation.residencySource` — the precondition
+`read_host_info` alone guarantees. Pre-fix, a `host` missing `observedAtAttestation` entirely
+back-filled straight into an `updated_host` that itself failed `validate_host_info`, a file that,
+once written, would make every later run exit `5` until re-attested. Three tests, each red before
+the fix for the exact reason claimed: no `observedAtAttestation` key at all; the key present but
+`residencySource` empty; and the same missing-block case on the `"embeddings"` surface, confirming
+the guard runs before the `call_surface` branch rather than only inside the path that would
+otherwise corrupt the file.
+
+**P13-5 / P13-6 (minors), both closed exit-code escapes.** `_cmd_attest` now also catches
+`hostinfo.HostInfoError` (P13-5's repro: `attest --api-base-url ""` previously escaped as an
+uncaught traceback, exit `1`, outside §3.6a's closed set — now exit `2`).
+`_gather_attested_fields` now catches `EOFError` per missing field instead of leaving it uncaught
+(P13-6: `--set` with a field left unset and no stdin to prompt with previously raised `EOFError`
+uncaught; `--set` is §3.6a's own non-interactive route, so this is normal usage), collects every
+still-unset field name, and raises the existing `AttestUsageError` (exit `2`) naming all of them in
+one message rather than failing prompt by prompt.
+
+**P13-10 (nit).** `_residency_source_for_probe(probe_result)` ignored its only parameter and
+returned a constant, promising a decision the body never made. Renamed
+`_residency_source_after_a_successful_probe()` with no parameter — the only value reachable at its
+one call site, since `attest()` already returns on any probe outcome but `"api-v0"`.
+
+**P13-12 (nit).** `validate_host_info` now refuses an `attested` block carrying any key outside the
+four §3.4.4 names (`attested.{key}` reported as `unexpected key(s)`). The CLI's own `--set` already
+closed this route (`_parse_set_flags` rejects an unrecognized key); this closes the hand-edited
+`host.json` route too.
+
+**Not fixed — P13-7, left open on purpose.** The review's own §5 OQ-1 routes this to `architect`:
+whether §3.4.5's "the check degenerates to `residencySource` alone" on a `model:embeddings` arm
+means *compare just that field* or *give up entirely* is a genuine two-reading ambiguity in the
+plan text itself, and the two readings produce different stored `attestationTripWire` values on a
+surface `run` (not yet built) will eventually branch on. Nothing consumes `check_attestation_
+staleness` yet, so guessing wrong here costs a rename-sized fix later, not a stored-record
+migration — but it is still a plan-semantics call, not an implementation one, and the review
+already routed it correctly. Left as shipped (`"unavailable"` unconditionally on the embeddings
+surface, no comparison attempted) pending that one-clause answer. **Not fixed — P13-9** is a
+`docs/plans/` text sweep (the plan's own `warm_up` code block needs a parameter added), entirely
+outside this unit's fenced files and `architect`'s per the review.
+
+**Mutations, seven, all caught, each `cp`-aside / mutate / run (`tests/test_hostinfo.py
+tests/test_cli.py` only) / `cp`-back, `diff -q` byte-identical against the pre-mutation file after
+every single one:** in `hostinfo.py` — `ATTESTED_NONEMPTY_FIELD_NAMES` forced to `frozenset()`
+(2 of the new P13-4 tests reddened; the per-field agreement test and the M.4/A repro); the
+`attested`-unexpected-key check disabled (exactly its one test reddened); the `check_attestation_
+staleness` precondition removed (all three P13-8 tests reddened, one via an uncaught `TypeError`
+rather than the expected `HostInfoError` — still red for the missing-guard reason, just a
+different exception shape); `_residency_source_after_a_successful_probe` changed to return a wrong
+literal (caught by the pre-existing U74 regression tests, confirming the P13-10 rename carried no
+behavior change). In `cli.py` — the `EOFError` handling removed (the one P13-6 test reddened, via
+an uncaught `EOFError`, the exact pre-fix failure mode); the `HostInfoError` catch removed from
+`_cmd_attest` (the one P13-5 test reddened, via an uncaught `HostInfoError`, the exact pre-fix
+failure mode).
+
+**Observed, this run.** `model-bench/` as working directory. This unit's own attributable delta:
+`git diff -- tests/test_hostinfo.py tests/test_cli.py | grep -c '^+def test_'` → **9** new test
+functions (7 in `test_hostinfo.py`, 2 in `test_cli.py`). Scoped run,
+`.venv/bin/python -m pytest -q tests/test_hostinfo.py tests/test_cli.py`: **84 passed, 2
+deselected**. `.venv/bin/ruff check modelbench/hostinfo.py modelbench/cli.py
+tests/test_hostinfo.py tests/test_cli.py`: **All checks passed!**
+
+**Full suite, run once at the end, per the coordinator's concurrency note** (three sibling units
+were live on `modelbench/lmstudio.py`, `tests/test_packs.py`, and new `modelbench/tooling.py` +
+`convo.py`, all disjoint from this unit's files): `.venv/bin/python -m pytest -q` →
+**870 passed, 3 deselected**, no failures — nothing needed isolating and re-running.
+`.venv/bin/ruff check .` → **All checks passed!**. Baseline at `d013436` was 815 passed, 3
+deselected, ruff clean; the difference is this unit's 9 new tests plus whatever the three
+concurrent sibling units added, not decomposed here since only the total was directly observed.
+
+**Files:** `modelbench/hostinfo.py`, `modelbench/cli.py`, `tests/test_hostinfo.py`,
+`tests/test_cli.py`. Left uncommitted for review; `modelbench/lmstudio.py`, `tests/test_lmstudio.py`,
+`tests/test_packs.py`, `modelbench/tooling.py`, `modelbench/convo.py`, `tests/test_tooling.py` and
+`tests/test_convo.py` were modified/added by concurrent sibling units, not touched here.
+
+## 2026-09-09 — S2 U79: the error-body read closed, and the unit boundary rejects non-finite/boolean sources
+
+**What:** `docs/reviews/small-model-benchmarking-impl.md` Pass 13's blocker (P13-1) and one major
+(P13-3), landing beside three concurrent units on disjoint files (`modelbench/tooling.py` +
+`modelbench/convo.py`; `tests/test_packs.py`; `modelbench/hostinfo.py`, none touched here).
+Changed: `modelbench/lmstudio.py`, `tests/test_lmstudio.py`. No fixtures added.
+
+**P13-1 (blocker), fixed.** U75 (Pass 12, P12-1) moved the *success* body read
+(`resp.read()`) inside `_raw_get`/`_raw_post`'s try/except ladder and left the *error* body read
+(`exc.read()`, inside `except urllib.error.HTTPError`) outside any guard of its own — a response
+whose error body failed to read (`http.client.IncompleteRead`, `ConnectionResetError`, a
+read-phase `TimeoutError`) escaped `catalog()`, `residency()`, `probe()`, `chat()`, `embed()` and
+both `warm_up()` surfaces untyped, all six operations, all three exception kinds (reproduced: 21
+of 21 escaping). `§4B`'s coverage probe (U75) did not catch this because its own
+`_EXEMPT_CELLS` declared `("read", "non_2xx")` structurally unreachable on the grounds that
+`urlopen()` raises `HTTPError` *before* handing back a response object — true of the *success*
+read, false of `HTTPError` itself: it **is** a response object, with its own status and `.read()`,
+and `probe()`'s own `v1-only` diagnosis calls `exc.read()` on every 404 a non-LM-Studio server
+returns, making this normal-path code rather than an edge case.
+
+Fixed per the reviewer's own suggested shape: wrapped `exc.read()` in its own inner
+`try`/`except (TimeoutError, http.client.HTTPException, OSError)` in both `_raw_get` and
+`_raw_post`. `_raw_get` degrades to `None` on a failed error-body read — the same "no usable
+response" fold it already applies to a failed *success*-body read — so `catalog()`/`residency()`
+raise `LMStudioUnreachable`; `_raw_post` already has the status in hand (`exc.code`) before the
+read is attempted, so it degrades the *message* (empty body) and still raises
+`LMStudioCallFailed`, identical to every other non-2xx POST outcome.
+
+**The probe itself was the deeper fix, not the code change.** Per the reviewer's instruction ("the
+assertion that catches me being wrong goes in the grid, not in the fixed code"), `§4B`'s
+`(phase, kind)` axis gained a third phase, `error-body`, with `non_2xx` as its only applicable
+kind — the phase the original two-phase grid had no way to express at all, not a corrected cell
+within an existing phase. Each phase now owns its own domain of applicable kinds
+(`_PHASE_KINDS`), rather than one flat `phase x kind` cross product with two ad hoc exemptions:
+`(connect, unparseable_body)` stays exempt (no body exists before a response object, with a
+status, is obtained); `(read, non_2xx)` is **not** re-added as an exemption — it was never a real
+cell, since `non_2xx` was never in the `read` phase's domain to begin with, which is the lesson
+P13-1 draws out explicitly. `_EXEMPT_CELLS` is now a single-entry constant whose one remaining
+reason was re-checked, not assumed. A new fake, `_RaisingFp` (a file-like object whose `.read()`
+raises, used as a hand-built `urllib.error.HTTPError`'s own `fp`), expresses the new phase; seven
+new parametrize cases (one new cell x seven existing per-operation tests) exercise it for real,
+and the existing re-derivation test (`test_probe_cell_exemptions_are_exactly_the_structurally_
+unreachable_ones`) was rewritten to compute the grid from `_PHASE_KINDS`'s per-phase domains
+instead of a flat cross product, so a fifth axis value or a wrongly-scoped kind fails loudly
+rather than silently passing.
+
+**P13-3 (major), fixed.** `_seconds_to_ms`/`_as_float` accepted anything `float()` accepts,
+including `bool` (`float(True) == 1.0`, so a stray boolean landed as `ttftMs=1000.0`,
+`tokensPerSecond=1.0`) and non-finite values (`nan`/`inf`/`-inf` — `float("nan")` does not raise,
+and `json.loads` parses the bare tokens `NaN`/`Infinity`/`-Infinity` without error by default, so
+no malformed transport is needed, only a server serialising e.g. a 0/0 rate). Both landed as an
+actual number rather than degrading to `None`, contrary to `ChatResult`'s docstring. Decision
+(stated in both the module and class docstrings, per the brief's instruction to say exactly which
+boundary was chosen): reject **at the coercion boundary** (`_seconds_to_ms`/`_as_float`, now
+sharing one `_coerce_finite_float` helper), **not** at `_parse_json`/`json.loads` — `_parse_json`
+parses every body this adapter reads and the raw `stats` mapping is kept verbatim beside the
+derived fields "for auditability"; narrowing the fix to the two functions that actually produce a
+typed timing figure keeps that verbatim guarantee intact and leaves every other body's parsing
+unchanged. `bool` is excluded before coercion (an `isinstance` check), non-finite after
+(`math.isfinite`).
+
+**Mutation-tested, each `cp`-aside / mutate / run `tests/test_lmstudio.py` alone / `cp`-back
+restore, `diff -q` byte-identical after every one — four mutations against `modelbench/lmstudio.py`,
+all caught for the stated reason:** (1) `_raw_get`'s new inner error-body guard reverted —
+reddened exactly the 3 new GET-side `error-body`/`non_2xx` cells (catalog, residency, probe); (2)
+`_raw_post`'s new inner error-body guard reverted — reddened exactly the 4 new POST-side cells
+(chat, embed, both `warm_up` surfaces); (3) `math.isfinite` check dropped from
+`_coerce_finite_float` — reddened both new non-finite tests; (4) the `bool` exclusion dropped —
+reddened the new bool test. One additional check against the test-side guard itself (not the
+formal `cp`-aside process, since it is test machinery rather than production code): widening
+`_EXEMPT_CELLS` with a spurious extra entry reddened `test_probe_cell_exemptions_are_exactly_
+the_structurally_unreachable_ones`, confirming the re-derivation test still catches a stale
+exemption under the new per-phase-domain shape. Also verified directly (outside the grid, which
+samples one representative exception per kind): all three exception kinds the reviewer named
+(`IncompleteRead`, `ConnectionResetError`, `TimeoutError`) land in the correct typed outcome on
+both `catalog()` and `chat()`, not just the one the grid parametrizes.
+
+**Observed, this run.** `model-bench/` as working directory. `tests/test_lmstudio.py` alone: entry
+82 passed / exit **92 passed**, 1 deselected (+10: 3 new `def test_` functions for P13-3, plus 7
+new parametrize cases across the 7 existing per-operation grid tests for the new `error-body`
+phase — confirmed via `git diff | grep -c '^+def test_'` = 3). `ruff check modelbench/lmstudio.py
+tests/test_lmstudio.py`: `All checks passed!`. Full suite (before U80's own entry below landed):
+two reds appeared once in `tests/test_cli.py`/`tests/test_hostinfo.py` (a concurrent unit's
+`hostinfo.py`/`cli.py` work, fenced off from this one) and were gone, both in isolation and on a
+full re-run — consistent with a sibling's live edit, not this unit's work. Full suite, this run:
+**870 passed, 3 deselected**.
+
+**Not done — a decision, not an oversight.** P13-4 (a `validate_host_info` gap in `hostinfo.py`)
+and every other Pass 13 minor/nit land outside this unit's fences (`hostinfo.py`, `cli.py`,
+`packs.py`, `docs/reviews/`) and are untouched.
+
+**Files:** `modelbench/lmstudio.py`, `tests/test_lmstudio.py`. Left uncommitted for review;
+concurrent units append their own entries to this same `HISTORY.md`.
+
+## 2026-09-09 — S2 U80: the row-count identity's coverage probe corrected to measure its own route, not `validate_pack`
+
+**What:** `docs/reviews/small-model-benchmarking-impl.md` Pass 13's P13-2, landing beside three
+concurrent units on disjoint files (`modelbench/lmstudio.py`; `modelbench/tooling.py` +
+`convo.py`; `modelbench/hostinfo.py`, none touched here). Changed: `tests/test_packs.py` only —
+`modelbench/packs.py` is unchanged (every edit to it was a mutation, restored byte-identical
+before this entry was written; `git status` shows it clean). No fixtures added.
+
+**The finding, and what I checked before touching anything.** Pass 12 §4A's coverage probe
+(`test_row_count_identity_coverage_over_its_own_keys_and_value_kinds`) was written to guarantee
+that `_row_count_identity_problems` — the row-count identity route — never goes silent on a cell
+it doesn't own an exemption for. Its silence criterion was `validate_pack(pack) == []`
+(`tests/test_packs.py:340`, pre-fix), the *whole validator's* output, not the route's own return
+value. `ROW_COUNT_IDENTITY_EXEMPT_CELLS` is documented as "the one case **this route** is
+sanctioned to skip silently" (`packs.py:412`) — a claim about the route, checked by a probe over a
+different function. I reproduced the masking directly rather than trusting the review's appendix
+description: with a P12-6-shaped silent branch (`if "analysisUnit" not in sampling: return []`)
+re-inserted at the head of `_row_count_identity_problems`, the pre-fix probe stayed at **35
+passed** — unchanged. Calling `_row_count_identity_problems` and `validate_pack` on the exact
+manifest that mutation makes silent shows why: the route itself returns `[]` on that cell, but
+`validate_pack(pack)` still returns `['…: sampling.analysisUnit is absent']` — not from the route,
+but from `_sampling_problems`'s other call, `pack.ref()`, whose own `_ref_from_manifest_fields`
+independently refuses a manifest with no `sampling.analysisUnit` at all, before
+`check_sampling_contract` ever runs. The old criterion `validate_pack(pack) == []` was simply never
+true on this cell, so it was never counted "silent" — masking the route's own silence underneath
+an unrelated problem that happened to cover the same manifest. (My first written draft of this
+finding's regression-test docstring asserted the opposite — that `validate_pack` *does* stay `[]`
+on the masked cell — which is backwards; I caught it by executing the claim before committing to
+it, not by inspection, and corrected the docstring to the verified mechanism above.)
+
+**Fix.** `test_row_count_identity_coverage_over_its_own_keys_and_value_kinds` now calls
+`_row_count_identity_problems(pack, sampling)` directly for each of the 12 cells (imported as a
+private name from `modelbench.packs`, the same pattern `tests/test_stats.py` already uses for
+`_family_ci_levels` etc.) instead of `validate_pack(pack)`; the assertion shape
+(`silent_cells == set(ROW_COUNT_IDENTITY_EXEMPT_CELLS)`) and the all-valid control are unchanged.
+The control gained one extra assertion (`_row_count_identity_problems(...) == []` alongside the
+existing `validate_pack(...) == []`) so the route's own silence on the genuinely-valid case is
+pinned too, not only inferred from the whole validator.
+
+**Test-first, run both ways.** With the P12-6-shaped mutant re-inserted: pre-fix probe green (35
+passed, unchanged — the masking); corrected probe **red**, `AssertionError`, `silent_cells` holding
+the extra `("sampling.analysisUnit", "absent")` member the exemption constant does not name — the
+mutation caught for the exact reason the finding names. Restored `packs.py` (`cp`-back, `diff -q`
+byte-identical): corrected probe **green**, 35 passed, tip unchanged.
+
+**Mutation-tested.** `cp`-aside `modelbench/packs.py` before the first mutation; one mutation
+(the P12-6-shaped `analysisUnit`-absent branch), run against `tests/test_packs.py` alone, `cp`-back
+and `diff -q` byte-identical restore after. No second mutation was needed: this unit's job was the
+probe itself, not a new route defect, and the one mutation that reproduces P13-2 is also the one
+that proves the fix.
+
+**The other exemption mechanisms, checked.** The brief asked whether any exemption constant in my
+fences shares this guard-versus-mechanism gap. `modelbench/packs.py` carries exactly one exemption
+constant, `ROW_COUNT_IDENTITY_EXEMPT_CELLS` (grepped for `EXEMPT`/`exempt`/`sanctioned`; nothing
+else in the module declares a sanctioned-silent set), and it is the one just fixed. The other two
+exemption mechanisms the coordination has been bitten by — the adapter's `_EXEMPT_CELLS`
+(`modelbench/lmstudio.py`, P13-1) and the attested-field tiers `validate_host_info` checks against
+(`modelbench/hostinfo.py`, P13-4) — live in files this unit's fences exclude (both were modified,
+mid-flight, by the concurrent units named above); neither is addressed here.
+
+**Observed, this run.** `model-bench/` as working directory. `tests/test_packs.py` alone: **35
+passed** before and after (test count unchanged — this was an assertion-target fix, not a new
+test). `.venv/bin/ruff check modelbench/packs.py tests/test_packs.py`: `All checks passed!`. Full
+suite once at the end: **867 passed, 3 failed, 3 deselected** — the 3 failures are
+`tests/test_lmstudio.py::test_{catalog,residency,probe}_..._[error-body-non_2xx]`, entirely inside
+`modelbench/lmstudio.py` / `tests/test_lmstudio.py` (both showing modified in `git status`, owned
+by the concurrent unit chasing P13-1), untouched by and unrelated to this change — `packs.py` and
+`test_packs.py` are the only fenced files this unit modified, and `packs.py` ends this run
+byte-identical to how it started.
+
+**CPG:** considered, not relevant — no Code Property Graph is loaded for `model-bench` (only
+`cpg_falkorchat` and `cpg_deprecated_salesperson` exist on this instance), and this task is a
+test-only regression fix within one already-read, already-open file, with no call-graph or
+data-flow question to put to one.
+
+**Files:** `tests/test_packs.py`. Left uncommitted for review.
+
 ## 2026-09-09 — S2 U77: `ChatResult`'s "never raises" promise closed for any `stats` shape, not just the caller-guarded one
 
 **What:** `docs/reviews/small-model-benchmarking-impl.md` Pass 12's P12-11, the one finding U76 left
