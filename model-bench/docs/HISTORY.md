@@ -5,9 +5,9 @@
 ## 2026-09-09 — `-ml` §3.4 Rule 8: `continuous_verdict()`, the continuous producer
 
 **What:** `docs/plans/small-model-benchmarking-ml.md` §3.4 Rule 8 (v1.16-v1.19), against `2d23482`.
-`modelbench/stats.py`, `tests/test_stats.py`. **600 → 627 tests**, `.venv/bin/ruff check modelbench
-tests` clean, **13 mutations** (2 caught real gaps — see below), each `cp`-aside / mutate / run /
-`cp`-back / `diff -q` byte-identical.
+`modelbench/stats.py`, `tests/test_stats.py`. **600 → 628 tests**, `.venv/bin/ruff check modelbench
+tests` clean, **14 mutations** (2 caught real gaps, both closed in this entry — see below), each
+`cp`-aside / mutate / run / `cp`-back / `diff -q` byte-identical.
 
 **Delivered:** `ContinuousVerdict` (13 fields — a sibling type to `Verdict`, never one with six
 fields left `None`) and `continuous_verdict()`, the entry point for every continuous metric
@@ -40,12 +40,17 @@ that dropped the derived clamp entirely (`clamp=None` unconditionally): with eve
 identical, the bootstrap interval is a zero-width point at 1.0, and widening a zero half-width by
 any `sqrt(DEFF)` is still zero — so the clamp never has anything to clamp in that construction,
 and `v.ci == (1.0, 1.0)` holds with or without it. The test's own docstring claim ("the unclamped
-widened interval would run off `[-1, 1]`") is false of the construction it describes. Not a wrong
+widened interval would run off `[-1, 1]`") was false of the construction it describes. Not a wrong
 assertion — it passes, correctly — just not evidence the clamp ran. Added
 `test_continuous_verdict_clamp_actually_binds_when_diffs_have_variance` (diffs with real spread,
 `design_effect=9.0`, where the unclamped widened upper bound is measured at `1.08` against a
 clamped `1.0`) as a second, load-bearing witness; confirmed it kills the mutation the worked case
-did not.
+did not. **`teco` reviewed and accepted this finding, then asked for the false claim itself to be
+corrected** — a green test with a false docstring is how the next reader concludes the clamp is
+covered when it is not. `test_continuous_verdict_mrr_worked_case_from_the_note`'s docstring is
+rewritten to say only what the construction proves (the worked case runs and returns the note's
+published `(1.0, 1.0)`) and points at the clamp-binding test above for actual coverage; its
+assertion is untouched.
 
 **Mutations, and what each targeted:** the metric-not-in-family refusal · the degenerate-support
 refusal (both `_support_clamp` and `continuous_verdict`'s own path to it) · the single-analysis-
@@ -56,12 +61,22 @@ inherited empty-`diffs`, non-finite-`diffs` and `design_effect < 1.0` refusals (
 its source in `paired_bootstrap`/`paired_cluster_bootstrap`) · `_family_ci_levels`'s
 `Fraction(str(...))` recovery and its `2 * k` factor · `_support_clamp`'s difference conversion ·
 `alpha_used`'s `/ k` (against `/ (2 * k)`) · the family size `k` itself (off-by-one) · the clamp
-call-through (the gap above) · `distinguishable`'s strict `>`/`<` (against `>=`/`<=`) — this one
-**survived**: both existing worked tests place the CI bounds strictly away from zero, so the
-mutation is unwitnessed at the boundary. Consistent with `verdict()`'s own identical
-`ci[0] > 0 or ci[1] < 0` convention, which carries no boundary-exact test either; a bootstrap
-interval landing exactly on `0.0` could not be constructed cheaply in the time available for this
-pass and is left as a known gap rather than papered over.
+call-through (the gap above) · `distinguishable`'s strict `>`/`<` (against `>=`/`<=`).
+
+**The strict-comparison mutation initially survived** — both existing worked tests place the CI
+bounds strictly away from zero, so the mutation went unwitnessed at the boundary — **and this
+entry first reported it as a deferred, low-priority gap on the (wrong) assumption that an exact
+zero bound needed Monte-Carlo luck to construct.** `teco` verified it against the committed code
+and pushed back: an **all-zero** `diffs` sample makes every bootstrap percentile exactly `0.0`
+deterministically (the resample distribution is a single atom at zero, for any `B`/`seed`), which
+is neither Monte-Carlo-dependent nor blocked on unbuilt work — so the deferral was not earned.
+Added `test_continuous_verdict_is_not_distinguishable_at_an_exact_zero_boundary`
+(`diffs=[0.0]*8`, `ci == (0.0, 0.0)`, `distinguishable is False`); confirmed it now kills the
+`>=`/`<=` mutation and that the mutation survives the rest of the 627-test suite (628th being the
+new test itself) — i.e. this test is the sole witness. `verdict()`, the pre-existing binary-path
+producer, carries the identical strict `ci[0] > 0 or ci[1] < 0` convention with the identical
+absence of a boundary test; that predates this unit and is out of its scope, and is recorded as a
+follow-up for whichever unit next touches `verdict()` rather than fixed here.
 
 **Whole-diff cross-check, done before declaring done: nothing found beyond the one gap above.**
 Walked `stats.py` and `test_stats.py` together as one change — the ordering of

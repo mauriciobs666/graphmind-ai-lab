@@ -2489,6 +2489,32 @@ def test_continuous_verdict_not_distinguishable_when_the_interval_covers_zero() 
     assert "McNemar" not in v.text
 
 
+def test_continuous_verdict_is_not_distinguishable_at_an_exact_zero_boundary() -> None:
+    """`distinguishable = ci[0] > 0 or ci[1] < 0` is a **strict** comparison, and a bound sitting
+    exactly at zero must not count as excluding it (`-ml` §3.4 Rule 8, mirroring `verdict()`'s
+    identical `ci_excludes_zero = ci[0] > 0 or ci[1] < 0`).
+
+    All-zero `diffs` makes every bootstrap percentile exactly `0.0` with no Monte-Carlo luck
+    involved — the resample distribution is a single atom at zero, so `ci == (0.0, 0.0)`
+    deterministically for any `B`/`seed`. Kills `ci[0] > 0 or ci[1] < 0` mutated to
+    `ci[0] >= 0 or ci[1] <= 0`, which flips this case from not-distinguishable to
+    distinguishable while the rest of the suite is silent."""
+    v = continuous_verdict(
+        [0.0] * 8,
+        metric_name="mrr",
+        family=["mrr"],
+        alpha_family=0.05,
+        unit_kind="query",
+        design_effect=1.0,
+        basis="measured",
+        B=200,
+        seed=1,
+        support=(0.0, 1.0),
+    )
+    assert v.ci == (0.0, 0.0)
+    assert v.distinguishable is False
+
+
 def test_continuous_verdict_prints_three_decimal_places() -> None:
     """`-ml` §3.4 Rule 8 — `diff` and both bounds print at three decimal places, rounded to
     nearest."""
@@ -2527,9 +2553,16 @@ def test_continuous_verdict_alpha_used_is_alpha_family_over_k() -> None:
 
 
 def test_continuous_verdict_mrr_worked_case_from_the_note() -> None:
-    """`-ml` §3.4 Rule 8's own worked pair: `mrr` passes `(0.0, 1.0)` and is clamped to
-    `(-1.0, 1.0)`. Constructed so the clamp binds: every per-item difference at the support's own
-    edge, so the unclamped widened interval would run off `[-1, 1]`."""
+    """`-ml` §3.4 Rule 8's own worked pair: `mrr` passes `(0.0, 1.0)` and, at this construction,
+    prints `(1.0, 1.0)` — the note's own published number.
+
+    **This does not exercise the clamp**, and is not evidence it ran: `diffs = [1.0] * 10` has
+    zero resample variance, so every bootstrap percentile is exactly `1.0`, the pre-widening
+    half-width is zero, and `_widen` returns the unchanged point interval whatever `clamp` is —
+    confirmed by mutation testing, where deleting the clamp entirely (`clamp=None`
+    unconditionally) leaves this test green.
+    `test_continuous_verdict_clamp_actually_binds_when_diffs_have_variance`, below, is the test
+    that actually pins the clamp against diffs with real spread."""
     diffs = [1.0] * 10
     v = continuous_verdict(
         diffs,
