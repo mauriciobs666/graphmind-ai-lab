@@ -95,6 +95,8 @@ Deliverable paths above are the guaranteed minimum (every pass touches the
 agent's own kaizen files and the graph); each row is rewritten on delivery with
 the actual promotion targets — agent prompts, knowledge bases, project docs.
 
+| U38 | **`cobb`'s own inbox — 8 entries**, re-queried at dispatch. **`cobb` gates its own captures** — the first unit in this pass whose producer and distiller are the same agent, so the usual independent check on the producer's framing is absent. And **almost none of these belong in `cobb`'s own artifacts**: the homes are `graph-dba`'s FalkorDB KB, `tdd-engineer`'s guard KB and `python-web-quirks`. **Routing is the subject, not promotion.** Two strong leads handed over: `2f944aa9` looks published at `falkordb-quirks.md:736`, and `3b8ded5d` **contradicts three shipping documents** plus a `pipeline.sh` comment dated a day after it | `aa35aec2cab8c5750` | in-flight | `claude/*` · `skills/*` — homes unknown until routed | teco re-derivation → — | — |
+
 ## The graph is live during this pass
 
 The 196-entry snapshot at open is **not** a fixed target: other sessions keep
