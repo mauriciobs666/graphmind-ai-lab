@@ -3658,3 +3658,265 @@ ladder → **25**. U74 (8): `residencySource` non-empty check dropped → 2 · `
 `runtimeName` → 2 · embeddings returns `"compared"` → 1 · `residencySource` dropped from the stale
 comparison → 1 · back-fill rewrites `attestedAt` → 1 · `attest` exits `0` when unreachable → 2 ·
 `hostRamGb` bool accepted → 1 · `read_host_info` skips validation → 1.
+
+---
+
+## Pass 14 — 2026-09-09
+
+### 1. Scope & verdict
+
+**Reviewed:** the §6 reach audit promised in Pass 13, run at `b5f719b` — plus, subsumed into it,
+the three fix commits `2f64ea2` (U79: P13-1, P13-3), `b46708e` (U80: P13-2) and `39a2748` (U81:
+P13-4/5/6/8/10/12), which had never been gated on their own. Suite at that snapshot: **834 passed,
+3 deselected**, ruff clean.
+
+**Scope ruling — the audit subsumes the diff re-gate; no separate Pass 14b is needed.** Three
+reasons, and I would not have ruled this way on any of them alone. (a) The audit's inventory
+**covers all three constants the diffs changed** — `_EXEMPT_CELLS`, `ROW_COUNT_IDENTITY_EXEMPT_
+CELLS`, `ATTESTED_NONEMPTY_FIELD_NAMES` — which is why it waited for them. (b) Every Pass 13
+finding was re-driven by **its own original probe** against the new snapshot, not read off the
+diff (§3). (c) The diffs' non-constant surface is small and I executed all of it: the
+`_coerce_finite_float` split, both `exc.read()` inner guards, `_gather_attested_fields`' EOF path,
+`_cmd_attest`'s catch surface and the P13-8 precondition. What a constant-shaped audit would
+*not* have covered, I covered by hand; there is nothing left for a diff pass to find.
+
+**Verdict: needs changes** — but **exactly one required change, and it is not a code fix.** The
+three commits are **approve**: all six findings they targeted are closed, verified by execution,
+and nothing in them regressed. The audit, however, **fires its pre-stated failure branch** — five
+guard constants, not four — so per Pass 13 §6 the answer is the convention line in §4, routed to
+the human, *not* five find-and-fix rounds. I am holding myself to that branch.
+
+**CPG: considered, not relevant — no Code Property Graph is loaded for `model-bench` (only
+`cpg_falkorchat` and `cpg_deprecated_salesperson`), so the inventory was built by `grep` over
+`modelbench/*.py` and every judgement below is a mutation actually run.**
+
+**A correction I owe on Pass 13's own method.** Pass 13 Appendix M.0 claimed every result was
+produced inside the snapshot. That is true of all 17 mutations (they ran under `pytest`, whose
+rootdir insertion isolates correctly) and of the `-c` checks, but **false of the five standalone
+probe scripts**: `python <script.py>` puts the *script's* directory on `sys.path[0]`, not the cwd,
+so `modelbench` resolved through the editable install's `.pth` to the **working tree**. Stripping
+the meta-path finder in `sitecustomize.py` is not sufficient on its own — the `.pth` injects the
+path too. **Pass 13's findings are unaffected and I verified why rather than assuming it:**
+`git diff 7f0006b a1e2234 -- model-bench/modelbench/ model-bench/tests/` is empty, so the tree
+those probes hit was byte-identical to the reviewed commit. The house method needs one addition:
+**put the snapshot first on `PYTHONPATH` and assert `modelbench.__file__` inside the probe**, which
+is what every Pass 14 probe does (Appendix N.0).
+
+**On the coordinator's three self-checks: two right, one right for a reason worth stating.**
+(1) `("connect", "unparseable_body")`'s reason **is** true, not merely asserted — "unparseable
+body" is a JSON-level fact and JSON needs bytes, which need a read; there is no connect-phase
+referent. See the caveat in P14-6. (2) The `_PHASE_KINDS` / `_CONNECT_KINDS` reading is **correct**
+and is the audit's fifth gap — confirmed by mutation, with the reverse direction as a control
+(P14-5). (3) The P13-4 coupling holds: flipping `otherResidentWorkloads`' tier in `fingerprint.py`
+alone, with zero `hostinfo.py` edits, reddens **71 tests**.
+
+### 2. The audit
+
+**Method.** For each constant, the question "does anything executable hold this constant's reach?"
+is answered the only way it can be falsified: **shrink it by one member and run the suite.** A
+constant whose reach is genuinely held reddens. One that is merely *parametrized over itself*
+loses a test case and stays green — the M-4 shape from Pass 1. Three dispositions, decided before
+running: **(i) held** — a shrink reddens; **(d) derived** — the constant is computed from another
+source (`sys.stdlib_module_names`, a set difference, a `REQUIRED_BY_SCHEMA` key split) so
+transcription drift cannot arise, and I verified each derivation actually tracks by mutating its
+*source*; **(ii) gap** — a shrink is green.
+
+**Inventory, closed and enumerated.** Pass 13 sized it at "35 constants, ~22 set-shaped, ~7
+unpinned in S2". Re-run at `b5f719b` the grep returns 29, plus 7 more whose
+`frozenset(...)`-comprehension form that pattern missed — 36. Of those, **24 are set-shaped**
+under the criterion I stated (*a constant whose membership a guard consults to decide behaviour*,
+as against a message string or a scalar bound), which excludes report.py's ten prose constants and
+`stats.SUPPORT_DIFF_PROPORTIONS`. The §4B grid's four interlocking test-side registries count as
+**one** entry, since they fail or hold together. **Total judged: 25.** Full table in Appendix N.1.
+
+| Disposition | Count |
+|---|---|
+| **(i) held** — a one-member shrink reddens | **14** |
+| **(d) derived** — drift structurally impossible, derivation verified by mutating its source | **6** |
+| **(ii) gap** — a one-member shrink is green | **5** |
+
+**The count is 5. The pre-stated failure branch fires.** I want to be plain that I did not go
+looking for a fifth: `ROLES` was my expected fifth and it turned out **not** to be a guard
+constant at all — nothing consults it, so a shrink only changes an error message's wording, and I
+reclassified it out of the inventory rather than bank it. The fifth is `UNIT_KIND_BY_ROLE`, the
+constant `ROLES` merely describes.
+
+### 3. Disposition of Pass 13's thirteen findings
+
+| # | Disposition | Evidence I re-ran |
+|---|---|---|
+| **P13-1** error-body read escapes | **Fixed** | My own 21-cell probe, re-run isolated: **escaped 0 of 21**. Both `exc.read()` calls now carry their own inner guard; GET folds to `None`, POST degrades the message and keeps `LMStudioCallFailed`. The grid gained a third phase, `error-body`, rather than a corrected cell — the right shape. |
+| **P13-3** non-finite / bool coercion | **Fixed** | `NaN`/`Infinity` through `chat()` now land `None`, not `nan`/`inf`; `True` → `None`; `"51.4"` → `51.4` and `0.25` → `250.0` still work. `bool` excluded *before* coercion, as recommended. |
+| **P13-2** probe measured the validator | **Fixed** | `tests/test_packs.py` now calls `_row_count_identity_problems(pack, sampling)`. **The exact mutation that passed green in Pass 13 — re-inserting `if "analysisUnit" not in sampling: return []` — now fails.** |
+| **P13-4** attested values below the fingerprint tier | **Fixed, and by derivation rather than transcription** | `ATTESTED_NONEMPTY_FIELD_NAMES` is computed from `fingerprint.REQUIRED_BY_SCHEMA[1]["model:chat"]` tiers. Flipping a tier in `fingerprint.py` alone reddens 71. `otherResidentWorkloads` correctly still accepts `[]`. |
+| **P13-5** uncaught `HostInfoError` | **Fixed** | `attest --api-base-url ""` → exit **2**. |
+| **P13-6** `EOFError` with no stdin | **Fixed** | Now exit **2**, naming the three fields never given via `--set`. |
+| **P13-8** unvalidated back-fill | **Fixed** | A `host` with no `observedAtAttestation` now raises `HostInfoError` naming the precondition, before either branch. |
+| **P13-10** unused parameter | **Fixed** | Renamed `_residency_source_after_a_successful_probe()`, parameter gone. |
+| **P13-12** unknown `attested` keys | **Fixed** | `attested` now refuses any key outside the four. |
+| **P13-7** `residency_source` uncompared | **Open, correctly — routed, not dropped** | Still `"unavailable"` unconditionally on the embeddings path. It is §5 OQ-1, an `architect` plan-reading call, not an implementer's. |
+| **P13-9** plan §4 S2 `warm_up` signature | **Open, `architect`'s** | `docs/plans/small-model-benchmarking.md:4264-4265` unchanged. |
+| **P13-11** `tools.module: ""` validates then reports "absent" | **Not fixed** | `_tool_module_problems` still early-returns `[]` on falsy. Nit; still stands. |
+| **P13-13** header says S1 | **Not fixed** | Line 1 unchanged. Out of my write scope again this pass. |
+
+### 4. The ruling — the convention line
+
+Pass 13 pre-committed: *at five or more, the recurrence belongs to the convention, not to any
+author.* It came in at five. The response is therefore **one line in `model-bench/AGENTS.md`**, not
+five fixes. **Exact text, to be placed under that file's existing conventions list — I have not
+edited the file:**
+
+```markdown
+- **A guard's reach lives in an asserted constant, not in prose.** A module-level set or table a
+  guard consults — a required-key set, an allowlist, an exemption list, a role→unit map — needs one
+  test that drives *the function consulting it* and asserts the computed set equals the constant,
+  so both a shrink and a widen redden. Without that test the docstring may not claim a reach
+  (*only*, *every*, *never a sixth*). The five constants that failed this in the S2 audit are
+  listed in `docs/reviews/small-model-benchmarking-impl.md` Pass 14.
+```
+
+523 characters on its longest line, well under the ~700 bar; it states a live constraint rather
+than history, and cites its evidence in a clause rather than reproducing it.
+
+**Scope of the ruling, decided rather than assumed: `model-bench/` only.** The class is real
+elsewhere in this repo, but every instance I have evidence for is in this component, the audit
+that produced the number was scoped to it, and a root-`AGENTS.md` rule would bind components I
+have not audited on a count I did not measure there. Pass 13 pre-stated `model-bench/AGENTS.md`
+and I am not widening it on the strength of a hunch. If the convention proves out here, promoting
+it is `cobb`'s call with its own evidence.
+
+**What the ruling does and does not require.** Going forward: a new guard constant ships with its
+pin or it does not ship. Retrospectively it requires only that a constant either **gain the pin or
+lose the prose claim** — one sweep over five named constants, not five investigations, because the
+audit has already done the finding. Three of the five carry a prose reach claim today
+(`_REQUIRED_MODEL_INFO_KEYS`, `UNIT_KIND_BY_ROLE`'s "there is no sixth, and no default", the §4B
+kind registries); two do not and need only the pin.
+
+### 5. The five gaps
+
+Each is a **one-member shrink that leaves the full suite at 834 passed**. Consequences executed,
+not inferred.
+
+**P14-1 (major) — `_REQUIRED_MODEL_INFO_KEYS` (`lmstudio.py:261`) guards the taxonomy U79 just
+closed, and nothing holds it.** Dropping `"quantization"` → 834 passed; the missing-key check then
+passes and `ModelInfo(quantization=raw["quantization"])` raises a bare **`KeyError` out of
+`catalog()`** — executed. That is P13-1's own defect class, one layer up: an untyped escape from
+the adapter's exception taxonomy, and `quantization` is a `_NONEMPTY` fingerprint field. *Pin:* one
+test asserting the set of keys `_model_info_from_raw` actually rejects, computed by driving it with
+each key deleted in turn, equals `_REQUIRED_MODEL_INFO_KEYS`.
+
+**P14-2 (major) — `UNIT_KIND_BY_ROLE` (`roles.py:25`) can lose a role in green, and `ROLES` is
+unbound to it in both directions.** Dropping `"chat-responder"` → 834 passed (`"embedder"` reddens
+only because fixtures use it, so three of five roles are pinned by accident). Adding a spurious
+sixth entry to `ROLES` → 834 passed. The docstring says "There is no sixth, and no default"; two
+declarations of that set sit eight lines apart with nothing binding them — the exact shape U81 just
+removed from `hostinfo.py`. *Pin:* `assert set(UNIT_KIND_BY_ROLE) == set(ROLES)`, plus
+`unit_kind(r)` driven over all five.
+
+**P14-3 (minor) — `_SAMPLE_NOUN` (`report.py:63`) is read through `.get(rp.unit_kind,
+unit_plural)`, so a missing key silently reverts the rendered noun.** Dropping `"query"` → 834
+passed, and the render falls back to the generic plural — **Pass 1's n-4 defect exactly**
+("unwritten scripts" for every unit kind), recorded as fixed at Pass 2 and held by nothing since.
+*Pin:* assert the map's domain equals `set(UNIT_KIND_BY_ROLE.values())` and one render per noun.
+
+**P14-4 (minor) — `_AGGREGATE_BY_KIND` (`results.py:364`) can lose a kind in green.** Dropping
+`"grounding"` → 834 passed; `_AGGREGATE_BY_KIND[d["kind"]]` then raises `KeyError`, which
+`load_history` surfaces as `unparseable` — a **valid record silently quarantined**, in the module
+whose thesis is that an unreadable record is a finding, not an absence. Inert until S7 ships a
+grounding pack, which is exactly when nobody will be looking. *Pin:* one round-trip per kind.
+
+**P14-5 (minor) — the §4B grid's kind registries are unbound to `_PHASE_KINDS`, inside the fix that
+established the class.** `_PHASE_KINDS["connect"]` declares four kinds, `_CONNECT_KINDS` defines
+three. Adding `"dns_failure"` to `_CONNECT_KINDS` alone → **834 passed**: never exercised, never
+noticed. The reverse is covered — adding a kind to `_PHASE_KINDS` alone reddens (control run), and
+shrinking `_READ_KINDS` reddens via `_route_outcome`'s `KeyError`. So exactly one direction is
+open. *Pin:* assert each registry's key set equals its `_PHASE_KINDS` domain minus the exempt
+kinds.
+
+**P14-6 (nit) — the surviving exemption is inconsistent with the reasoning U79 applied to its
+sibling.** U79 removed `("read", "non_2xx")` from `_EXEMPT_CELLS` on the grounds that it "was never
+a real cell to begin with — `non_2xx` is outside the `read` phase's domain entirely", and dropped
+it from `_PHASE_KINDS["read"]`. `("connect", "unparseable_body")` is out of domain for the same
+kind of reason, yet stays *in* `_PHASE_KINDS["connect"]` and is then exempted. Its stated reason is
+true; its placement is the older treatment. Dropping it from the domain would empty `_EXEMPT_CELLS`
+— and the test asserting the exemption set would then need to permit an empty one, which is worth
+deciding rather than discovering.
+
+### 6. What's solid
+
+- **U81 fixed P13-4 by derivation rather than by transcription, which is more than I asked for.**
+  I suggested a test asserting the two tables agree; the implementer made the second table *be* the
+  first one's tiers, so there is no second table to disagree. Its own docstring names the shape it
+  was avoiding. That is the right answer to this whole class and it is the model the convention
+  line generalises.
+- **U79 added a phase to the grid rather than a cell.** Pass 13 suggested a third phase value; the
+  implementer took it and also re-derived why `("read", "non_2xx")` was never a cell, which is a
+  better closure than the one recommended. The GET/POST asymmetry — GET folds to `None`, POST keeps
+  the status it already holds and degrades only the message — is reasoned out at both call sites.
+- **U80 is a four-line change that closes the round-three thread by construction.** The probe now
+  measures its own route; the mutation that defeated it in Pass 13 reddens.
+- **Six of the twenty-five constants are already derived rather than transcribed**, and every one
+  of those derivations tracks under mutation of its *source*. The component was already halfway to
+  the convention it now needs stated.
+
+### 7. Open questions
+
+Unchanged from Pass 13 and still `architect`'s: OQ-1 (does §3.4.5's "degenerates to
+`residencySource` alone" mean compare-it or give-up — P13-7) and the one-line §4 S2 `warm_up`
+signature sweep (P13-9). **Both Pass 12 residuals classified as blocked remain blocked** — the real
+`GET /api/v0/models` capture and §4 S2's R-1 probe, both waiting on a human-run live LM Studio
+session. Nothing in these three commits could have moved either.
+
+---
+
+### Appendix N — Pass 14 evidence
+
+**N.0 — isolation, corrected.** `git archive b5f719b model-bench | tar -x -C <scratch>/p14/tip`.
+Probes run as `PYTHONPATH=<snap>:<scratch>/p14 python <probe>` with a prepended guard asserting
+`os.path.dirname(os.path.dirname(modelbench.__file__)) == <snap>`, which is the addition Pass 13's
+method needed. Mutations run under `pytest` from the snapshot root, which isolates on its own.
+
+**N.1 — the audit table.** 25 entries; 32 mutations run.
+
+| # | Constant | Shrink applied | Result | Disp |
+|---|---|---|---|---|
+| 1 | `hostinfo.ATTESTED_FIELD_NAMES` | −`hostRamGb` | 15 failed | **i** |
+| 2 | `hostinfo.ATTESTED_NONEMPTY_FIELD_NAMES` | source tier flipped in `fingerprint.py` | 71 failed | **d** |
+| 3 | `packs.ROW_COUNT_IDENTITY_KEYS` | −`data.conversations` | 10 failed | **i** |
+| 4 | `packs._ROW_COUNT_IDENTITY_KEY_HINTS` | −`sampling.analysisUnit` | 1 failed | **i** |
+| 5 | `packs.ROW_COUNT_IDENTITY_EXEMPT_CELLS` | emptied | 2 failed | **i** |
+| 6 | `packs._STDLIB_MODULE_NAMES` | source −`json` | 2 failed | **d** |
+| 7 | `lmstudio._REQUIRED_MODEL_INFO_KEYS` | −`quantization` | **834 passed** | **ii** |
+| 8 | `fingerprint._MODEL_CHAT_SCHEMA_1` | −`loadedContextLength` | 3 failed | **i** |
+| 9 | `fingerprint._MODEL_EMBEDDINGS_SCHEMA_1` | derivation defeated | 13 failed | **d** |
+| 10 | `fingerprint._DETERMINISTIC_SCHEMA_1` | −`pythonVersion` | 69 failed | **i** |
+| 11 | `fingerprint.REQUIRED_BY_SCHEMA` | −`model:embeddings` | collection error | **d** |
+| 12 | `fingerprint._EMBEDDINGS_HAVE_NO` | −`maxTokens` | 9 failed | **i** |
+| 13 | `fingerprint.ARM_KINDS` | derivation replaced by a literal | 1 failed | **d** |
+| 14 | `fingerprint.CALL_SURFACES` | filter defeated | collection error | **d** |
+| 15 | `fingerprint.RESIDENCY_ELEMENT_KEYS` | −`state` | 70 failed | **i** |
+| 16 | `fingerprint._RESIDENCY_FIELDS` | −`residentModelsAtEnd` | 11 failed | **i** |
+| 17 | `fingerprint._DISCRIMINATORS` | −`callSurface` | 15 failed | **i** |
+| 18 | `results._AGGREGATE_BY_KIND` | −`grounding` | **834 passed** | **ii** |
+| 19 | `results._METRIC_DECODERS` | −`distribution` | 4 failed | **i** |
+| 20 | `results.INDEX_COLUMNS` | −`quantization` | 5 failed | **i** |
+| 21 | `report._BASIS_STRENGTH` | −`measured` | 6 failed | **i** |
+| 22 | `report._SAMPLE_NOUN` | −`query` | **834 passed** | **ii** |
+| 23 | `report._NO_VERDICT_REASON` | −`too-few-arms` | 9 failed | **i** |
+| 24 | `roles.UNIT_KIND_BY_ROLE` | −`chat-responder` | **834 passed** | **ii** |
+| 25 | `test_lmstudio` kind registries vs `_PHASE_KINDS` | +`dns_failure` in `_CONNECT_KINDS` only | **834 passed** | **ii** |
+
+Out of inventory, with the criterion applied: `report.py`'s ten prose constants,
+`stats.SUPPORT_DIFF_PROPORTIONS` (a scalar bound), and **`roles.ROLES`** — nothing consults it, so
+a shrink changes only an error message; its unbound relationship to `UNIT_KIND_BY_ROLE` is folded
+into entry 24 rather than counted twice. Controls run for entry 25: +kind in `_PHASE_KINDS` alone →
+1 failed; −kind from `_READ_KINDS` → 7 failed.
+
+**N.2 — Pass 13 findings re-driven.** `escaped 0 of 21` (P13-1, was 21 of 21) ·
+`ttftMs=None generationMs=None tokensPerSecond=None` through `chat()` on a `NaN`/`Infinity` body
+(P13-3, was `nan`/`inf`/`nan`) · P13-2's own mutation now `1 failed, 34 passed` in
+`test_packs.py` (was 35 passed) · `attest --api-base-url ""` → exit 2 (P13-5) · `attest` with no
+stdin → exit 2 naming the unset fields (P13-6) · `check_attestation_staleness` on a host with no
+`observedAtAttestation` → `HostInfoError` (P13-8) · `validate_host_info` on
+`{"lmStudioAppVersion": "", "kvCacheSetting": "", "hostRamGb": 0, ...}` → three `: empty` problems
+(P13-4, was `[]`).
