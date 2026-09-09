@@ -128,6 +128,23 @@ reads. The brief is what saved it. It named the report by path and said *"read D
 work from my summary"*, so the delegate never had occasion to trust the wrong number. That clause
 is not ceremony; this is the second time in this coordination it has caught something.
 
+## Follow-up 17 — the S9 test plan's R-g row is stale, and it belongs to `qa-engineer`
+
+`falkor-chat/docs/test-plans/salesperson-ui-s9.md:75` still reads *"`QUIESCE_S` does nothing
+observable (as `SERVER.md` §1.3 still claims) | S9f open"*. Both clauses died today: the `SERVER.md`
+row no longer claims it, and S9f is closed across all three of its sites.
+
+`coder` found it during U67's sweep and **flagged it instead of fixing it** — `test-plans/*` routes
+to `qa-engineer` in the by-kind owner table, and that document has already been executed against.
+That was the right call and worth naming, because the tempting move is the opposite one: it is two
+false clauses in a row a competent editor could fix in ten seconds, and taking it would have put an
+implementer's edit inside an executed test artefact owned by someone else.
+
+**Not dispatched as its own unit** — one stale row in a document nobody reads again until S9b-S9e
+are tested does not earn an agent. It rides the next `qa-engineer` dispatch on this surface, which
+is where its owner will have the document open anyway. Recorded here so it is not lost if that
+dispatch is briefed by someone who did not run U67.
+
 ## The plan lane closes at v1.33, and the reviewer set the condition (teco, 2026-09-09)
 
 Same shape as the Pass 8 stopping rule, and set the same way — I asked for a falsifiable condition
@@ -391,7 +408,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U63** — D-2 (§5.3 has no `5xx` row for `/messages`), D-3 (`504` carries `state: null` against §5.2's present-vs-absent precedent), and **my untestable S9 done-condition** → plan v1.32 | `architect` (**fresh** — every prior architect instance is from a dead session) | `a0cfb47caac4a8c3e` | delivered — **committed `e06c92e`**, +83/−15, one file. **Ruled D-2 a *code* defect, not a missing table row**, and rejected the report's stated reason while accepting its substance; **ruled D-3 the document's defect, not the code's**. Created an obligation on **S9e** and an ordering hazard on S8's gate. Three of its four side-findings **teco-verified against source** before the gate — including a delivered docstring asserting a route `except` that does not exist | `docs/plans/salesperson-ui.md` v1.32 | `analyst` Pass 23 (U65) → — | 193k tok / 75 tools |
 | **U65** — Pass 23: gate U62 + U63 together. **Does C14 create the next instance of the class?** | `analyst` (**fresh** — every prior reviewer is from a dead session) | `a3d38bc7a7a12de74` | **accepted — committed `eedde26`. NEEDS CHANGES** (1 blocker, 3 major, 3 minor). **Answered the central question with a yes, by execution**: C14 creates instance N+1 once. Built a harness to break the new done-condition and did (P23-1). **Refuted a claim of mine I had already published** (P23-3). Upgraded my source-read claim 3 to executed. Gave the falsifiable stopping rule I asked for | `docs/reviews/salesperson-ui-impl.md` `## Pass 23` | — | 192k tok / 71 tools |
 | **U66** — close Pass 23 on the plan: P23-1 blocker, P23-2, P23-3's consequence, P23-5/6/7 → **v1.33, the last static plan touch** | `architect` | `a0cfb47caac4a8c3e` (resumed — its own review findings, same file, 193k tok) | in-flight | `docs/plans/salesperson-ui.md` v1.33 | **none — plan lane closes here** (see the stopping rule) | — |
-| **U67** — P23-4: S9f was **three sites, not one**; `config.py:216-224` still states the pre-S9 world | `coder` | `a07aa43f407bafdab` (resumed — its own S9f unit, holds D-1's readings) | in-flight | `falkorchat/config.py` (comments only), `falkor-chat/docs/HISTORY.md` | folded into S9e's review → — | — |
+| **U67** — P23-4: S9f was **three sites, not one**; `config.py:216-224` still states the pre-S9 world | `coder` | `a07aa43f407bafdab` (resumed — its own S9f unit, holds D-1's readings) | **accepted — committed `3c23992`**. Site count **confirmed three** from Pass 19/22 directly, not from my brief. Fixed `config.py` (comments only, `30` untouched — teco-verified by diff); **read the third site and found it already true**, so no edit — I spot-checked `presenter_reset_all`'s docstring and its drain description is live and correct. Unfiltered sweep found no fourth. **Corrected its own HISTORY entry in place** to say its earlier closure claim was wrong | `falkorchat/config.py`, `falkor-chat/docs/HISTORY.md` | folded into S9e's review → — | 137k tok / 19 tools |
 | **U64** — close the CPG provenance arc: P7-1, P7-2, P7-4, delete P7-3's tombstone block. **No Pass 8** (stakeholder, 2026-09-09) | `cobb` (**fresh** — `abeeb0ea31b20e7cc` is from a dead session) | — | **queued — blocked on another session's in-flight unit**, see below | `skills/joern-cpg/**`, `skills/cpg-analysis/references/freshness.md`, `claude/cobb/kaizen/{history,plan}.md` | **none — stakeholder stopped the gates** | — |
 
 ## Stakeholder decisions, 2026-09-02 (plan §8)
