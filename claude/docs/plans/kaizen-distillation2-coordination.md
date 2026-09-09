@@ -78,7 +78,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U22 | analyst chunk D (11: 09-03) | `a9a502324e0cf4ca5` | accepted | 8 promoted / 3 discarded, all 11 cleared; `review-techniques.md`, `python-web-quirks/SKILL.md`, `agent-standards/claude-code.md`, `lm-studio-model-notes.md`, `skills/README.md`, +3 `kaizen/history.md`; `falkordb-quirks.md` **held** | teco re-derivation → **accepted**, paired-control reproduction of the pipe finding | 238.8k tok, 112 tools |
 | U23 | analyst chunk E (13: 09-07, arrived after pass open) | `a096fa1ae04ee4cae` (resumed once, for the AST correction) | accepted | 12 promoted / 1 discarded, all 13 cleared, **13 entries → 4 edits** (six became one six-part section, three a fold); `claude/analyst/{review-techniques.md,analyst.md,kaizen/history.md}`, `claude/graph-dba/{falkordb-quirks.md,kaizen/history.md}`, `claude/cobb/kaizen/{history,plan}.md` | teco re-derivation → **accepted after one correction**: 68→65, 42→40, per-file 3/3/14; re-derived at both revisions under 5 definitions. `rq()` defect confirmed by executing the helper | 190.6k + 210.5k tok, 71 tools |
 | U24 | analyst chunk F (12 of the 14 held at dispatch: all 09-08) | `a554b6fb7d89af6f0` | accepted | 10 promoted / 1 discarded / **1 kept open** (`graph-dba` K-009), **12 entries → 7 edits**; `claude/analyst/{analyst.md,review-techniques.md,kaizen/history.md,kaizen/plan.md}`, `claude/graph-dba/{falkordb-quirks.md,kaizen/history.md,kaizen/plan.md}`, `claude/cobb/kaizen/history.md`, `skills/python-web-quirks/SKILL.md`, `skills/README.md`; 2x `MENTIONS`→`graph-dba` | teco re-derivation → **accepted, no correction needed** — the dataclass narrowing reproduced across three annotation shapes, both stdlib line refs exact, NaN asymmetry and all counts exact | 248.5k tok, 94 tools |
-| U25 | analyst chunk G (the 2 deferred; re-queried at dispatch 09-09 — `analyst` holds exactly these 2, nothing new arrived) | `a271cfb21a2dbe1af` | in-flight | `claude/analyst/kaizen/*`, graph cleared | teco re-derivation → — | — |
+| U25 | analyst chunk G (the 2 deferred; re-queried at dispatch 09-09 — `analyst` held exactly these 2, nothing new arrived) | `a271cfb21a2dbe1af` | accepted | 2 promoted / 0 discarded, both `DETACH DELETE`d, **2 entries → 1 file, 2 sections**; `claude/analyst/{review-techniques.md,kaizen/history.md}`, `claude/cobb/kaizen/history.md`. **`analyst` produced inbox now 0.** | teco re-derivation → **accepted, no correction needed** — second consecutive clean unit; tombstone byte-identity reproduced under an independent anchor pair to the entry's own cited digest, growth figures digit for digit | 147.6k tok, 39 tools |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
 agent's own kaizen files and the graph); each row is rewritten on delivery with
@@ -424,9 +424,13 @@ is working; a stale one plus an empty worktree means it died before promoting.
 
 **What remains, in order:**
 
-1. **U25** — `analyst`'s two deferred entries (`7c1d4a92-3f6b-4e58-9a01-2d8f5b0c6e77`,
-   `8d2b47f0-13ca-4e59-b6d7-51c0a9e2f8b4`) plus whatever has arrived since.
-   Re-query at dispatch, never from a figure in this document.
+1. ~~**U25** — `analyst`'s two deferred entries.~~ **Done 2026-09-09** (`b7da439`):
+   both promoted into `review-techniques.md`, both cleared, **`analyst`'s produced
+   inbox is empty**. The `$(…)` subshell defect the first entry cited is **dead** —
+   `271c899` moved the call out of command substitution, added a populate-check that
+   exits 1, and added a regression case that reverts the call site — so **nothing
+   routes alongside K-009**, which was the open question at dispatch. `analyst`
+   retains **4 `MENTIONS`-only** edges; those belong to item 3, not here.
 2. **The other producers.** Re-queried on **2026-09-09**, at U25's dispatch:
    `teco` **32**, `architect` **13**, `coder` **8**, `cobb` **7**,
    `data-scientist` 1, `graph-dba` 1 — 13 orphan (`MENTIONS`-only) nodes on top,
@@ -458,6 +462,25 @@ is working; a stale one plus an empty worktree means it died before promoting.
 count.** Two entries arrived while U23's own verification was running.
 
 ## Follow-ups
+
+- **Three stray `:Agent` nodes in `kaizen_team` carry no edges at all** —
+  `_qa_selftest_producer_4e24af1e`, `_qa_selftest_producer2_4e24af1e`,
+  `_qa_selftest_mentioned_4e24af1e`, surfaced by U25's gate query (which listed
+  agents rather than only producers). Test residue from a `cypher-mcp`
+  self-test that cleaned up its entries but not its agent nodes. Harmless, but
+  they inflate any `MATCH (a:Agent)` count and will read as real agents to the
+  next reader. Deleting an `:Agent` node is **not** one of the six authorized
+  write shapes, so this needs the maintainer or a widened curator remit — do
+  not improvise it.
+- **A delegate attributed one of my own commits to "another session."** `cobb`
+  closed U25 noting the coordination doc "was dirty when I started and is clean
+  now — another session committed it mid-run." It was **this** coordination
+  (`2d23482`, the U25 dispatch record). The inference was from absence of
+  evidence — *not me, therefore someone else* — in a repo where that is usually
+  true. It cost nothing here, but it is the same shape as attributing content
+  by who did **not** write it, which this pass has already been bitten by; a
+  brief that tells the delegate the coordinator commits the ledger mid-unit
+  removes it.
 
 - **Live defect in shipped tooling, confirmed by execution — route to
   `graph-dba` (owner of the `joern-cpg` skill).**
