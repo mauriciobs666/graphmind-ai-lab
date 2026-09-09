@@ -85,7 +85,7 @@ before the heavy ones. Counts are raw entries in scope at open.
 | U30 | curator clear of the 2 entries held pending K-009 (`b7f3c2a1…`, `4f9c21ae…`) — orphans on `MENTIONS`→`graph-dba`. Fresh `cobb`, not U24's (248.5k ctx) | `a714ad00b16e9eccf` | accepted | **both cleared** after re-executing `rq()` at `682fbed` with two passing controls; abort reproduced under a harder shape (4,999 producible rows → one bare line). `graph-dba` now **0 produced / 0 mentioned**, absent from the census. `claude/graph-dba/kaizen/history.md` | teco re-derivation → **accepted, no correction** — 83/11/72 reconciled exactly | 130.0k tok, 34 tools |
 | U31 | **the orphan backlog** — 11 `MENTIONS`-only nodes, 08-30→09-07, the oldest population in the graph; item 3 of the resume plan, **never before attempted** because every prior unit was producer-organised | `ab74825681a290ac9` | accepted | **9 promoted / 1 already-promoted / 1 kept open**; 10 nodes cleared, 11 of 12 edges resolved; **19 files**, incl. a new `tdd-engineer` knowledge base. Orphans **11 → 1**. The dispatch hypothesis was **refuted** — see below | teco re-derivation → **accepted, no correction** — 73/1 census, bullet counts 10/8/19 unchanged, `HEAD == BASE` on all 18 tracked | 214.6k tok, 69 tools |
 | U32 | **generation four** of the `rq` guard defect: a literal command after a **backslash line continuation** is inside the check's stated reach and outside its line-based mechanism. Fresh `graph-dba` (U28's carries 217k) | `aa1435d89cf1f9eb5` | accepted (`4df5e45`) | **closed against a coverage probe, not a shape list**: 35 call-site forms on 3 axes, each adjudicated twice (bash vs the *extracted* delivered reader); 30 covered, **5 blind and stated as the bound**. **Generation five caught in flight** by the probe (bash joins continuations with *nothing*, not a space). Suite 15→16 PASS | teco re-derivation → **accepted, no correction** — my own bypass now FAILs at `pipeline.sh:432` in an isolated copy | 141.8k tok, 26 tools |
-| U33 | one bound stated **two ways**: `test-stamp-wiring.sh:340` scopes it to a `GRAPH.<word>` run, `pipeline.sh:361` does not — so `rq "$Q" PING` sits inside the latter's stated reach and outside the mechanism. Consistency defect, not a mechanism gap | `aa1435d89cf1f9eb5` | in-flight | `skills/joern-cpg/**`, `claude/graph-dba/kaizen/*` | teco re-derivation → — | — |
+| U33 | one bound stated **two ways**: `test-stamp-wiring.sh:340` scopes it to a `GRAPH.<word>` run, `pipeline.sh:361` does not — so `rq "$Q" PING` sits inside the latter's stated reach and outside the mechanism. Consistency defect, not a mechanism gap | `aa1435d89cf1f9eb5` (resumed, not respawned) | delivered (`00bebdc`) | **converged on the scoped claim**; third sub-case (*not spelled `GRAPH.…` at all*) now named identically in both files, and a sentence in `test-stamp-wiring.sh` that had drifted the same way tightened too — **which I had not flagged**. Pinned by probe form `B15` (`rq "$Q" PING`), 35→36 forms. **No third copy of the bound**: `SKILL.md` and `freshness.md` are inventory lines, both over-stating the requirement (site 1 passes *nothing*), corrected and given a **pointer** rather than a third copy. Suite unchanged 16 PASS / 0 FAIL / 3 sites | teco re-derivation → **both controls re-run independently** — the widened-regex mutation reddens **6** blind rows and exits 1, so the probe pins the bound's *scoping*, not only its form list; file restored byte-identical and green. My own unfiltered repo sweep agrees: no third statement of the bound. **Sent back** for 3 structural fixes to `history.md` (orphaned bullet, missing blank line, one stale *five-form* figure the follow-up itself created) | — |
 
 Deliverable paths above are the guaranteed minimum (every pass touches the
 agent's own kaizen files and the graph); each row is rewritten on delivery with
@@ -481,6 +481,16 @@ count.** Two entries arrived while U23's own verification was running.
   right, about the file nobody checked. **One bound stated in two files is one
   claim and two chances to be stale**; the pass's other recurring defect
   (corrected here, inherited there) in its purest form.
+  - **Open, routed to `cobb`.** U33 converged the two script files, but the
+    retraction as *written up* survives in `claude/tdd-engineer/guard-testing-techniques.md`
+    (§*The worked example*, the `**One retraction…**` paragraph): it reasons from
+    the scoped wording and concludes flatly that the finding "is not" a
+    generation — true of `test-stamp-wiring.sh`, false of `pipeline.sh` as it
+    then stood. `cobb` wrote that paragraph and owns the file, so the one-clause
+    correction goes there, not to `graph-dba`; rider it onto `cobb`'s next unit.
+    The lesson the paragraph should end on is **checking a bound means checking
+    every place it is stated**, which is stronger than the one it currently
+    teaches.
 - **`cobb` contributed the stopping rule this arc had been missing**, and it was
   in nobody's brief: *you may stop widening a static guard when a miss is bounded
   to a **false failure** rather than a false pass* — because the check is a lint
