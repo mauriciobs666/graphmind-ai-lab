@@ -2,6 +2,118 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-09 — S2 U78: `modelbench/tooling.py` and `modelbench/convo.py`, new
+
+**What:** the two S2 units named in `docs/plans/small-model-benchmarking.md` §4 S2's code sketch
+that neither `packs.py`/`lmstudio.py`/`hostinfo.py` nor any concurrent unit this wave owns:
+`modelbench.tooling` (the pack-importable simulated-tool plugin seam — `ToolEnvironment`,
+`DispatchRecord`) and `modelbench.convo` (prompt assembly and the scripted-conversation driver —
+`PromptConfig`, `Turn`, `Conversation`, `assemble`, `drive`, `ConversationTrace`, `TurnTrace`). Both
+new. Added: `modelbench/tooling.py`, `modelbench/convo.py`, `tests/test_tooling.py`,
+`tests/test_convo.py`. No existing file touched — `packs.py`, `lmstudio.py`, `hostinfo.py`,
+`cli.py`, `conftest.py` and every existing test file are untouched, per this unit's fences.
+
+**Scope carved out, not built here, because it is the runner unit's:** the timing discipline and
+`LatencyBlock` (§4 S2's nine invariants), and the tool-caller scoring rules ((i)-(vi) including
+(iv-a/b/c)). `drive()` therefore issues exactly one LLM call per scripted turn, never catches an
+LLM error, and has no timeout parameter to size one with — all stated in its own docstring rather
+than left to be discovered by a caller.
+
+**The one design decision worth a reviewer's attention, because nothing in the plan states it in so
+many words: `assemble`'s replay of a prior turn (`historyReplay="structured"`/`"plaintext"`) is
+built from that turn's *scripted* `expect` block, never from what the model under test actually
+said or did this run.** Reasoned from three converging clues rather than assumed: (1) §3.8.4's "the
+harness never carries hidden state between turns beyond what the configuration says it carries"
+reads most literally as `assemble` being a pure function of `(turn_index, history, cfg)`; (2) the
+determinism probe (§3.8.4) re-runs a script and diffs outcome vectors turn by turn, which is only a
+clean comparison if every run sees an identical context regardless of what the model actually
+produced; (3) `expect` itself has no field for "what the model actually replied" — only what a
+correct agent should do — so replaying real output would need a second, undocumented type. Pinned
+by `test_drive_replays_history_from_the_script_never_from_this_runs_own_model_output`
+(`tests/test_convo.py`), which feeds the stub model *different* tool-call arguments than the
+script's `expect` and asserts turn 2's assembled messages carry the scripted ones, never the
+model's real ones — and by a mutation (below) that makes the drive loop replay from an
+`observed_turns` accumulator instead, confirming that exact test reddens and nothing else does.
+Also documented: the native `tools=` parameter is sent to the LLM on **every** turn regardless of
+`representToolSchemasEachTurn` (that knob governs only the *textual* schema block `assemble`
+embeds) — withholding it after turn 1 would make native tool calls structurally impossible from
+turn 2 on every pack that sets the flag `false`.
+
+**Both recurring defect classes checked against this unit's own work, per the brief.** Class 1 (a
+test's name/docstring asserting more than its assertions pin) found three instances before review,
+all fixed: `test_assemble_represent_tool_schemas_each_turn_true_keeps_schemas_every_turn` checked
+only 2 of 3 turns against a 3-turn fixture (widened to all 3, matching its `False` counterpart's
+own rigor); `test_assemble_no_tool_schemas_means_no_schema_message_regardless_of_the_flag` checked
+only one flag value despite "regardless" (parametrized over both);
+`test_assemble_history_turns_windows_to_only_the_last_n_prior_turns` and
+`test_drive_records_a_nonnegative_wall_clock_per_turn` each checked only one N / one turn despite an
+"N"/"per turn" in the name implying generality (parametrized to N=1 and N=2; widened to all three
+turns of a 3-turn script). Class 2 (a guard/docstring whose declared reach exceeds its mechanism)
+found one instance: `tooling.py`'s `ToolEnvironment` docstring, written first, stated
+"`@runtime_checkable` exists so the harness side (`modelbench.convo.drive`) can assert conformance
+with a plain `isinstance` check" — but `drive()` never actually called `isinstance`. Fixed by adding
+the guard for real (`drive` now raises `TypeError` before any LLM call when `env` does not
+structurally satisfy `ToolEnvironment`), not by softening the docstring, since the guard is cheap,
+correct, and exactly what a pack-facing contract should do rather than merely claim. New test
+`test_drive_raises_type_error_before_any_llm_call_when_env_is_not_a_tool_environment` pins it, and
+also asserts `llm.calls == []` so "before any LLM call" is checked, not just the raise.
+**Plan-literal check-input:** `test_dispatch_record_fields_match_the_plans_appendix_a_literal_in_
+order` transcribes Appendix A's own tuple `(name, rawArguments, parsedArguments, returnValue,
+timestamp)` and asserts `DispatchRecord`'s dataclass fields match it in that exact order;
+`test_assemble_transcribed_from_the_plans_own_conversation_row_literal` transcribes §3.8.4's own
+`conversations.jsonl` row JSON (the `A-02`/`lookup_product_fact`/`Wireless Charging Pad`/`24.99`
+example) verbatim and drives it through `assemble`'s structured-mode replay. **No exemption
+constant was needed** — the one type-tolerance fallback in this unit (`_parse_tool_arguments`
+degrading a malformed/unparseable tool-call-argument value to `{}`) is a coercion helper in the
+shape of `lmstudio.py`'s own `_seconds_to_ms`/`_as_float`, not a validator with silent-skip cells,
+so it is tested per malformed-input kind directly rather than framed as an exempt set.
+
+**Mutation-tested, `cp`-aside once per file / mutate / run the matching test file / `cp`-back
+restore, `diff -q` byte-identical after every single one — 14 mutations across both files, all
+caught for the stated reason, none batched:** (1) `tooling.py`: `@runtime_checkable` removed —
+reddened all 6 `isinstance`-based `ToolEnvironment` tests on `TypeError: … can only be used with
+@runtime_checkable protocols`; (2) `DispatchRecord`'s `rawArguments`/`parsedArguments` field order
+swapped — reddened exactly the Appendix A field-order test; (3) `frozen=True` dropped from
+`DispatchRecord` — reddened exactly the frozen test with "DID NOT RAISE"; (4) the Protocol's
+`dispatch` method renamed to `invoke` — reddened the conforming-object isinstance test and the
+declared-method-set coverage test. (5) `convo.py`: `assemble`'s `representToolSchemasEachTurn`
+gate removed — reddened the flag-off drop test and (as a bonus catch) the plaintext test, which
+happens to share a schema-bearing fixture; (6) `historyTurns` windowing block deleted — reddened
+exactly the windowing test; (7) the current-turn message moved from `append` to `insert(0, …)` —
+reddened 8 tests, every one that asserts message order or content-by-position; (8) `drive`'s
+per-turn dispatch slice (`env.trace()[trace_before:]`) widened to the whole trace — reddened
+exactly the per-turn-isolation test, on `2 == 1`; (9) `_expected_exchange`'s `toolRequired` branch
+inverted — reddened both structured-replay tests and the plan-literal test; (10)
+`_parse_tool_arguments` shorted to always return `{}` — reddened the dispatched-arguments test and
+the per-turn-isolation test; (11) the malformed-tool-call `if not name: continue` guard removed —
+reddened exactly the malformed-call test, on a `DispatchRecord(name=None, …)` appearing where none
+should; (12) `drive`'s history source changed from the script's own `script.turns` to an
+`observed_turns` accumulator poisoned with each turn's real dispatched arguments — reddened exactly
+`test_drive_replays_history_from_the_script_never_from_this_runs_own_model_output`, the central
+design-decision test, and nothing else; (13) the native `tools=` parameter withheld after turn 1
+when `representToolSchemasEachTurn=False` — reddened exactly the "tools sent every turn" test;
+(14) the new `isinstance(env, ToolEnvironment)` guard removed — reddened the new guard test with an
+`AttributeError` on the first `env.trace()` call instead of the expected `TypeError`, i.e. the
+guard's *absence* surfaces as a worse, later failure, which is the point of having it first.
+
+**Observed, this run.** `model-bench/` as working directory. This unit's own two test files alone,
+throughout: **39 passed** (`tests/test_tooling.py`: 8 `def test_` functions, 11 collected cases;
+`tests/test_convo.py`: 26 `def test_` functions, 28 collected cases — parametrization accounts for
+the gap in both). `.venv/bin/ruff check modelbench/tooling.py modelbench/convo.py
+tests/test_tooling.py tests/test_convo.py`: `All checks passed!`. Full suite at the start of this
+unit: **815 passed, 3 deselected**. A concurrent session was mid-edit on `modelbench/hostinfo.py`
+(`M`, uncommitted) partway through this run — one full-suite pass showed 13 reds in
+`tests/test_cli.py`/`tests/test_hostinfo.py`/`tests/test_packs.py`, none of them in a file this
+unit touches, and a `NameError` for an undefined name in `hostinfo.py` itself confirmed it as that
+session's own in-progress state rather than anything this unit caused; re-run after it moved on,
+full suite: **873 passed, 3 deselected**, of which this unit's own new files account for
+**39** attributable, new collected cases (both new files are untracked, `git status`-confirmed, so
+the whole 39 is this unit's delta on top of whatever the concurrent session landed independently).
+
+**Files:** `modelbench/tooling.py`, `modelbench/convo.py`, `tests/test_tooling.py`,
+`tests/test_convo.py` (all new). Left uncommitted for review; a concurrent session commits to this
+repository continuously and appends its own `HISTORY.md` entries.
+
 ## 2026-09-09 — S2 U81: closing impl review Pass 13's `hostinfo.py`/`attest` findings
 
 **What:** review Pass 13 findings scoped to `modelbench/hostinfo.py` and the `attest` CLI command
