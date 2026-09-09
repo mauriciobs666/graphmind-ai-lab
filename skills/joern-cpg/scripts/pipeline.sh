@@ -251,33 +251,75 @@ if [ -n "$LOAD" ]; then
   fi
 
   # `redis-cli` EXITS 0 ON AN ERROR REPLY and prints the error to stdout, so the
-  # old `… >/dev/null` discarded every failure and `set -e` saw success. Probed
-  # against this FalkorDB (2026-09-07), the shapes are:
-  #   errMsg: Invalid input …      <- Cypher errors; note it does NOT start
-  #                                   with the word "error", so a /^error/i
-  #                                   pattern misses the most likely failure
-  #   ERR unknown command '…'      <- Redis layer
-  #   ERR wrong number of arguments for 'graph.QUERY' command
-  #   WRONGTYPE Operation against a key holding the wrong kind of value
-  # Pattern-matching that list is inherently incomplete, and it is WORSE than
-  # incomplete in one measured way: FalkorDB returns RUNTIME errors BARE, with
-  # none of those prefixes and with redis-cli exiting 0. Verified read-only
-  # against this instance 2026-09-08 via GRAPH.RO_QUERY on cpg_falkorchat:
-  #   Unknown function 'nosuchfunc'                                    <- rc 0
-  #   Type mismatch: expected Map, Node, Edge, or Null but was String  <- rc 0
-  # A blacklist is therefore only ever the first gate. What closes it is a
-  # POSITIVE one, and the same probes measured what to require: every reply to a
-  # query that actually COMPLETED ends with the statistics trailer —
-  #   stray                                <- the projection's column header
-  #   STRAY_KEY=…                          <- rows (none, on a pass)
+  # old `… >/dev/null` discarded every failure and `set -e` saw success. A
+  # NON-ZERO exit from it means one thing only — the server was unreachable, and
+  # the message went to stderr instead (measured 2026-09-09 against port 6399:
+  # `Could not connect to Redis at localhost:6399: Connection refused`, exit 1).
+  # So `$?` is reliable for "unreachable" and blind to "rejected".
+  #
+  # SUCCESS IS RECOGNISED POSITIVELY, NOT BY ENUMERATING ERROR SHAPES. From
+  # 9124a1f until 2026-09-09 this helper classified failure with a prefix list
+  # (`errMsg:*|ERR *|WRONGTYPE*|*read-only*`). That is a blacklist of error
+  # shapes, and FalkorDB emits several with no prefix at all, so `rq` returned 0
+  # on them: a failed query read as SUCCESS at every call site passing no
+  # [must-contain]. Re-measured 2026-09-09 by extracting this function verbatim
+  # and pointing it at a live graph (throwaway key, since deleted):
+  #
+  #   RETURN (((                       errMsg: Invalid input …              caught
+  #   CREATE (…) on GRAPH.RO_QUERY     graph.RO_QUERY is to be executed …   caught
+  #   RETURN nosuchfunc(1)             Unknown function 'nosuchfunc'        MISSED
+  #   RETURN keys(n.k), k an integer   Type mismatch: expected Map, …       MISSED
+  #   UNWIND [1,0] AS x RETURN 1/x     Division by zero                     MISSED
+  #   a long scan with TIMEOUT 1       Query timed out                      MISSED
+  #
+  # Every one of those is a single bare line at redis-cli exit 0. What they have
+  # in common is not a prefix — it is the ABSENCE of the statistics trailer that
+  # a query the server ran to completion always ends with:
+  #
+  #   count(n)                             <- the projection's column header
+  #   1                                    <- rows (there may be none)
   #   Cached execution: 0
-  #   Query internal execution time: 0.525177 milliseconds
-  # — while every error reply above is a single bare line with no trailer at
-  # all. So `Query internal execution time:` is a checkable proof that the
-  # server ran the query to completion, and, being the LAST element, it also
-  # excludes a reply that was cut off part-way. The column header (`stray*`)
-  # would prove less: it is emitted before the rows, and it couples this file to
-  # an alias owned by git-provenance.sh.
+  #   Query internal execution time: 0.14 milliseconds   <- ALWAYS THE LAST LINE
+  #
+  # Hence the gate: THE REPLY'S LAST LINE MUST BEGIN `Query internal execution
+  # time:`. Positive, so an error shape nobody has met yet fails CLOSED instead
+  # of passing. Anchoring on the LAST line rather than searching the whole reply
+  # is worth it for two measured reasons: `Query timed out` shares the trailer's
+  # first word, and a row of returned data could carry the literal.
+  #
+  # WHAT THE GATE COVERS, EXACTLY: any GRAPH.QUERY / GRAPH.RO_QUERY reply the
+  # server did not run to completion — parse error, runtime error, read-only
+  # refusal, timeout, empty reply — plus, via the exit status above, an
+  # unreachable server. A query ABORTED MID-STREAM by a runtime error is covered
+  # for a specific reason, not by luck: FalkorDB discards the rows already
+  # produced and answers with one bare line, so there is no partial reply for the
+  # gate to mistake for a whole one (`UNWIND [1,0] AS x RETURN 1/x` returns
+  # `Division by zero` and nothing else — no header, no rows, no trailer).
+  #
+  # WHAT IT DOES NOT COVER — three things, and the third is the one that will
+  # bite a future call site:
+  #   1. A query that ran to completion and answered WRONG.
+  #   2. A query that answered about the wrong thing.
+  #   3. A COMPLETE-LOOKING REPLY THAT IS MISSING ROWS. `RESULTSET_SIZE` (10000
+  #      on this instance, `GRAPH.CONFIG GET RESULTSET_SIZE`) caps a result set
+  #      SILENTLY and still emits a normal trailer. Measured 2026-09-09:
+  #      `UNWIND range(1,200000) AS x RETURN x` comes back rc 0, 10003 lines,
+  #      last data row `10000`, last line the trailer — the gate PASSES a reply
+  #      that lost 190,000 rows, and nothing in the reply says so.
+  # So the trailer proves the server RAN THE QUERY TO COMPLETION. It does not
+  # prove the reply carries every row the query matched, and it proves nothing
+  # about correctness. A caller that needs COMPLETENESS must check the row count
+  # against an expectation of its own; the three call sites below return 1, 1 and
+  # <= 8 rows, so none of them is near the cap. Asserting anything about a
+  # reply's contents remains the caller's job — that is what [must-contain] and
+  # the PARSED_AT read-back below are for.
+  #
+  # WRITES CARRY THE TRAILER TOO, which the previous version of this comment
+  # declined to assume and therefore left the stamp write ungated. Measured
+  # 2026-09-09 on this exact shape — `MERGE (b:CpgBuildInfo) SET b = {…}
+  # RETURN 1` — on the run that created the node and on the re-run where the
+  # MERGE matched: both end with the trailer. That is why the gate is
+  # unconditional instead of per call site.
   #
   # <cypher> [redis-command] [must-contain] — the command defaults to
   # GRAPH.QUERY (needed for the stamp, which writes). The two READS below pass
@@ -286,22 +328,44 @@ if [ -n "$LOAD" ]; then
   # messages tell the operator to use GRAPH.RO_QUERY for the identical read — so
   # the pipeline should not be doing the thing it warns against.
   #
-  # [must-contain] IS PER CALL SITE, DELIBERATELY, AND IS NOT APPLIED TO THE
-  # STAMP WRITE. Two reasons, and neither is style. (1) The trailer was measured
-  # on GRAPH.RO_QUERY replies only; asserting it on a GRAPH.QUERY *write* reply
-  # would be this arc's own recurring defect — a credential covering a narrower
-  # level than the claim it licenses — and no write is available to check
-  # without writing. (2) The stamp write does not need it: its closure is the
-  # PARSED_AT read-back below, which is already a positive assertion on the
-  # graph's actual contents and strictly stronger than any reply-shape test.
-  # The stray check is the one assertion with no positive backstop, because a
-  # pass there is "no rows" — hence the requirement goes exactly there.
+  # THE TRAILER IS SPECIFIC TO THOSE TWO COMMANDS, and that is a PRECONDITION on
+  # calling rq, enforced OUTSIDE it. GRAPH.DELETE, for one, answers the bare
+  # status `OK` (observed 2026-09-09) and nothing else, so the gate would read a
+  # successful delete as a failure. rq does NOT check its own second argument,
+  # and the reason is worth the four lines, because the obvious guard was written
+  # here and then removed:
+  #   * A runtime `return 2` is UNREADABLE. Every call site is
+  #     `if ! VAR="$(rq …)"`, which collapses every non-zero to "false" — 1 and 2
+  #     are the same branch (verified 2026-09-09) — so the distinction reached
+  #     nobody, and at the stamp site the caller went on to print "FalkorDB
+  #     rejected the freshness stamp … <no reply>" about a call that never left
+  #     this shell. That is the same overclaim the read-back branch below was
+  #     just fixed for.
+  #   * A runtime `exit 2` CANNOT ESCAPE: rq runs inside `$(…)`, so the exit
+  #     kills the subshell and the script continues (verified 2026-09-09; the
+  #     same command-substitution trap that ate cpg_provenance_stamp's
+  #     allow-list two commits ago).
+  #   * Deleting the guard is SAFE, because the untrapped behaviour already fails
+  #     CLOSED: a non-query reply carries no trailer, so rq returns 1. The cost of
+  #     a misuse is a false failure, never a false pass.
+  # What enforces the precondition instead is a STATIC check over this file, in
+  # test-stamp-wiring.sh: every `rq` call site's command argument must be absent,
+  # GRAPH.QUERY, or GRAPH.RO_QUERY. It reddens on a bad call site — which the
+  # runtime guard could not do, since removing it left the suite byte-identical.
+  #
+  # [must-contain] stays per call site, because it is a semantic assertion about
+  # one reply's contents and not a liveness test. The stray check below still
+  # passes the trailer explicitly: redundant with the gate by design, kept so
+  # that the one assertion whose PASS is "no rows" carries its own guarantee at
+  # the point where a future edit would read it.
   rq() {
     local out
     out="$(redis-cli -h "$HOST" -p "$PORT" "${2:-GRAPH.QUERY}" "$GRAPH" "$1" 2>&1)" || { printf '%s' "$out"; return 1; }
     printf '%s' "$out"
-    case "$out" in
-      errMsg:*|ERR\ *|WRONGTYPE*|*"read only"*|*"read-only"*) return 1 ;;
+    # The LAST line, not a substring anywhere in the reply. See above.
+    case "${out##*$'\n'}" in
+      "Query internal execution time:"*) ;;
+      *) return 1 ;;
     esac
     if [ -n "${3:-}" ]; then
       case "$out" in
@@ -367,7 +431,29 @@ if [ -n "$LOAD" ]; then
   # rewritten on every stamp, an absent one removed rather than left stale" —
   # holds only if the write actually landed. PARSED_AT is the discriminator: it
   # is unique to this run, so a surviving older marker cannot match it.
-  STAMP_BACK="$(rq 'MATCH (b:CpgBuildInfo) RETURN b.PARSED_AT' GRAPH.RO_QUERY || true)"
+  #
+  # THE TWO FAILURES ARE SEPARATED, and until 2026-09-09 they were not: this
+  # line read `… GRAPH.RO_QUERY || true)` and judged only the reply's TEXT, so a
+  # read-back that never ran — the query errored, the server went away — fell
+  # into the branch below and told the operator "the freshness stamp did not
+  # land", a claim about the GRAPH that the run had no evidence for, followed by
+  # advice to re-send a stamp that may well be sitting there correctly. `|| true`
+  # was defensible while rq's status could not see a bare runtime error; now that
+  # it can, discarding it is throwing away the one signal that distinguishes
+  # "checked, and it is absent" from "could not check".
+  if ! STAMP_BACK="$(rq 'MATCH (b:CpgBuildInfo) RETURN b.PARSED_AT' GRAPH.RO_QUERY)"; then
+    echo "pipeline: FAILED — could not read the freshness stamp back from '$GRAPH':" >&2
+    echo "pipeline:   ${STAMP_BACK:-<no reply>}" >&2
+    echo "pipeline: the read-back query did not run to completion, so this says NOTHING about" >&2
+    echo "pipeline: whether the stamp landed — do not infer either way. Check by hand:" >&2
+    echo "pipeline:   redis-cli -h $HOST -p $PORT GRAPH.RO_QUERY $GRAPH \"MATCH (b:CpgBuildInfo) RETURN b.PARSED_AT\"" >&2
+    print_stamp \
+      "whether the stamp landed is UNKNOWN — the CHECK failed, not necessarily the" \
+      "stamp. This build's rendered Cypher is below so you can compare it against the" \
+      "marker as it actually stands; re-send it only once you have established that" \
+      "the marker is missing or describes a different build."
+    exit 1
+  fi
   case "$STAMP_BACK" in
     *"$PARSED_AT"*) ;;
     *) echo "pipeline: FAILED — the freshness stamp did not land in '$GRAPH'." >&2

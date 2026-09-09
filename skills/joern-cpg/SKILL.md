@@ -110,20 +110,36 @@ run a build:
   reintroduced by any writer other than the stamp. It is not redundant with the
   stamp, and it is not a regression test for the replace semantics.
 - **A rejected stamp now fails the run.** `redis-cli` exits 0 on an error reply
-  and prints it to stdout, so the stamp is checked for an error reply *and* read
-  back — the run fails unless the marker in the graph carries this build's
-  `PARSED_AT`. Worth knowing because the failure is late and specific: the load
-  succeeded, so **nothing here ever needs a re-parse**. What it needs depends on
-  which of the five failure branches you hit, and they split in two. **Two say
-  the stamp did not land** (FalkorDB rejected it; the read-back did not find
-  this build's `PARSED_AT`) — there, **re-sending the Cypher is the fix**, and
-  the branch prints it verbatim between `--- begin stamp ---` markers, because
-  it is a multi-line map literal with escaped quotes and retyping it is how you
-  get a subtly wrong marker. **Three say the stamp DID land** and a later
-  assertion failed (the property check could not be built, could not be run, or
-  found a stray key) — there the same Cypher is printed as **evidence to
-  compare against the marker, explicitly not as a fix**: re-sending it would
-  reproduce exactly the state being complained about. Until 2026-09-08 the
+  and prints it to stdout, so a reply is never judged by exit status alone:
+  since 2026-09-09 `pipeline.sh`'s `rq()` requires the reply's **last line** to
+  begin `Query internal execution time:` — the statistics trailer that only a
+  query the server ran to completion emits. That is a positive test, so an error
+  shape nobody has met yet fails closed; the prefix list it replaced
+  (`errMsg:`/`ERR `/`WRONGTYPE`/read-only) was a blacklist, and FalkorDB returns
+  several errors bare, with no prefix at all. What the trailer proves is
+  **that the server ran the query to completion** — not that the answer is
+  right, and not that the reply carries every matched row: `RESULTSET_SIZE`
+  (10000 on this instance) caps a large result set **silently and still trails**,
+  so a query that could return more than that needs its own row-count check. The
+  stamp is therefore also read back, and the
+  run fails unless the marker in the graph carries this build's `PARSED_AT`.
+  Worth knowing because the failure is late and specific: the load succeeded, so
+  **nothing here ever needs a re-parse**. What it needs depends on which of the
+  six failure branches you hit, and they split three ways. **Two say the stamp
+  did not land** (FalkorDB rejected it; the read-back ran and did not find this
+  build's `PARSED_AT`) — there, **re-sending the Cypher is the fix**, and the
+  branch prints it verbatim between `--- begin stamp ---` markers, because it is
+  a multi-line map literal with escaped quotes and retyping it is how you get a
+  subtly wrong marker. **Three say the stamp DID land** and a later assertion
+  failed (the property check could not be built, could not be run, or found a
+  stray key) — there the same Cypher is printed as **evidence to compare against
+  the marker, explicitly not as a fix**: re-sending it would reproduce exactly
+  the state being complained about. **One says nothing either way** — the
+  read-back query itself did not run — and it says so in those words: check the
+  marker by hand before deciding whether anything needs re-sending. That branch
+  is new in 2026-09-09; before it, a read-back that errored was reported as "the
+  stamp did not land", a claim about the graph from a check that never reached
+  it. Until 2026-09-08 the
   replay was wired into the second set only, so the branches that told you to
   re-stamp were the ones that showed you nothing, and the ones that showed you
   the Cypher told you to re-send it directly under a line saying the stamp had
@@ -136,10 +152,18 @@ run a build:
   shapes were measured against a live instance, covering the wiring rather than
   the Cypher. The cases: a clean pass over a hand-authored marker, the
   `provenance=none` narrowing, a planted foreign key caught under merge
-  semantics, the `provenance=none` subsumption, the two did-not-land branches
+  semantics, the same merge against a pipeline-clean marker (a control that must
+  still pass), the `provenance=none` subsumption, the two did-not-land branches
   (asserting the re-send wording, not merely that *something* was printed), a
-  stray read that returns a **bare** runtime error, the stray query called
-  directly with an unusable allow-list, and mutations that revert the call site
+  stray read that returns a **bare** runtime error, a **stamp write** rejected
+  with no error prefix and a **read-back** that itself errors (the two shapes the
+  old prefix list could not see — both assert the branch's wording, because both
+  exited 1 before the fix too, by falling through to a later assertion and
+  reporting that one's finding), the stray query called
+  directly with an unusable allow-list, a **static check over `pipeline.sh`'s own
+  `rq` call sites** (each must pass `GRAPH.QUERY` or `GRAPH.RO_QUERY` — no other
+  command's reply carries the trailer `rq` gates on, and `GRAPH.DELETE`'s bare
+  `OK` would read as a failure), and mutations that revert the call site
   to the `$(…)` form or drop the allow-list after a populated stamp.
   **Every case asserts an exact exit code, and every case expected to fail must
   also be shown to have printed its branch's stamp block** — that pair is not

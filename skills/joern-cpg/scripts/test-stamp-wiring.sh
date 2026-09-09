@@ -50,6 +50,16 @@ WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 # MODE=stray_error     -> the stray read comes back as a BARE runtime error,
 #                         which is what FalkorDB really returns and what
 #                         redis-cli really exits 0 on
+# MODE=stamp_bare_error -> the stamp WRITE comes back as a bare runtime error:
+#                         no `errMsg:` prefix, no trailer, exit 0. The shape the
+#                         old prefix blacklist in rq could not see, so the run
+#                         walked past its own rejection and misdiagnosed it one
+#                         assertion later.
+# MODE=readback_error  -> the PARSED_AT READ-BACK errors. Distinct from
+#                         stamp_lost: there the check ran and the marker was
+#                         absent; here the check never ran, and saying "the
+#                         stamp did not land" would be a claim about the graph
+#                         with no evidence behind it.
 #
 # REPLY SHAPES ARE MEASURED, NOT IMAGINED. Probed read-only against the live
 # instance 2026-09-08 (`GRAPH.RO_QUERY cpg_falkorchat`):
@@ -70,6 +80,12 @@ case "$q" in
     if [ "${MODE:-correct}" = stamp_rejected ]; then
       # a bare `errMsg:` line, exit 0 — the shape a Cypher error really has
       echo "errMsg: Invalid input 'X': expected a clause line: 2, column: 1"; exit 0
+    fi
+    if [ "${MODE:-correct}" = stamp_bare_error ]; then
+      # NO prefix at all, no trailer, exit 0 — measured against the live
+      # instance 2026-09-09 (`Unknown function 'x'`, `Division by zero`,
+      # `Query timed out` all arrive exactly like this)
+      echo "Division by zero"; exit 0
     fi
     # keys of the map = lines of the form `NAME: value` whose value is not NULL
     new="$(printf '%s\n' "$q" | sed -nE 's/^[[:space:]]*([A-Z][A-Z0-9_]*): (.*)$/\1 \2/p' \
@@ -96,6 +112,9 @@ case "$q" in
     fi
     echo "Properties set: 8"; ok_trailer; exit 0 ;;
   *"RETURN b.PARSED_AT"*)
+    if [ "${MODE:-correct}" = readback_error ]; then
+      echo "Unknown function 'nosuchfunc'"; exit 0   # bare, no trailer, exit 0
+    fi
     echo "b.PARSED_AT"; cat "$WORK/parsed_at"; ok_trailer; exit 0 ;;
   *"UNWIND keys(b)"*)
     if [ "${MODE:-correct}" = stray_error ]; then
@@ -238,6 +257,32 @@ run_case "stamp write did not land"                    stamp_lost     "$P8" pars
 run_case "stray read returns a bare runtime error"     stray_error    "$P8" parse-root 1 "FAILED(rc=1)" \
   "could not verify the marker's property list" "the stamp is NOT what needs"
 
+# THE TWO CASES rq's PREFIX BLACKLIST COULD NOT SEE (K-009, fixed 2026-09-09 by
+# gating on the statistics trailer instead). Neither is asserted on the exit code
+# alone: both exited 1 before the fix too, by falling through to a LATER
+# assertion and reporting that one's finding. What changed is WHICH branch fires,
+# so what is asserted is the branch's own wording.
+#
+# 1. The stamp write is rejected with no recognisable prefix. Before the fix rq
+#    returned 0, the run walked past its own rejection, and the read-back below
+#    reported "the freshness stamp did not land" — true, but describing the
+#    symptom two steps downstream of the cause it had already been handed.
+#    OF ITS THREE must-contain STRINGS, ONLY THE FIRST TWO PIN THE FIX. The third
+#    is printed by replay_stamp, which the pre-fix code also reaches — via the
+#    read-back branch — so the mutation run's `output lacks:` list names only the
+#    other two. It is kept as a check that the branch reached its end, not as a
+#    discriminator; do not read it as one.
+run_case "stamp rejected, no error prefix"             stamp_bare_error "$P8" parse-root 1 "FAILED(rc=1)" \
+  "FalkorDB rejected the freshness stamp" "only the provenance marker is missing" \
+  "does NOT need repeating — only the stamp does"
+# 2. The read-back query itself errors. Before the fix (`|| true`, judged on text
+#    alone) this was indistinguishable from a marker that is genuinely absent,
+#    and the run asserted the stamp "did not land" — a statement about the graph
+#    from a check that never reached it.
+run_case "read-back query itself errors"               readback_error  "$P8" parse-root 1 "FAILED(rc=1)" \
+  "could not read the freshness stamp back" "says NOTHING about" \
+  "whether the stamp landed is UNKNOWN"
+
 # ---- P6-5(a): the stray query's own empty-allow-list refusal -----------------
 # git-provenance.sh calls this one of "two mechanisms" protecting the
 # allow-list. It is unreachable through the block — the call-site guard fires
@@ -268,6 +313,43 @@ for shape in 'unset CPG_STAMPED_KEYS' 'CPG_STAMPED_KEYS=""'; do
     printf '%s\n' "$sq_out" | sed 's/^/        | /'; FAIL=1
   fi
 done
+
+# ---- rq's command precondition, checked STATICALLY over pipeline.sh ---------
+# rq judges a reply by the GRAPH.QUERY/GRAPH.RO_QUERY statistics trailer, which
+# no other command emits — GRAPH.DELETE answers a bare `OK`. That is a
+# precondition on CALLING rq, and it deliberately is not enforced inside rq: a
+# runtime `return 2` is invisible to every `if ! VAR="$(rq …)"` call site (which
+# collapses 1 and 2 into one branch, and then reports the failure as the
+# SERVER's), and a runtime `exit 2` cannot escape the `$(…)` subshell at all.
+# The guard that was tried there could not be reddened by any test — removing it
+# left this suite byte-identical — so it was replaced by this check, which can.
+#
+# WHAT IT COVERS: a LITERAL non-query command written at any rq call site.
+# WHAT IT DOES NOT: a command reaching rq through a variable, which no call site
+# does today and which this file cannot see without executing pipeline.sh. Said
+# here rather than implied, because a guard whose stated reach exceeds its
+# mechanism is the defect this whole block exists to close.
+echo "rq call-site precondition (static, over pipeline.sh):"
+rq_bad=""; rq_n=0
+while IFS= read -r rq_line; do
+  [ -n "$rq_line" ] || continue
+  rq_n=$((rq_n + 1))
+  for rq_tok in $(printf '%s\n' "$rq_line" | grep -o 'GRAPH\.[A-Z_.]*'); do
+    case "$rq_tok" in
+      GRAPH.QUERY|GRAPH.RO_QUERY) ;;
+      *) rq_bad="${rq_bad}${rq_bad:+; }${rq_tok} at pipeline.sh:${rq_line%%:*}" ;;
+    esac
+  done
+done <<RQCALLS
+$(grep -n '\$(rq ' "$HERE/pipeline.sh" | grep -v '^[0-9]*: *#')
+RQCALLS
+if [ "$rq_n" -lt 3 ]; then
+  echo "  FAIL  found only $rq_n rq call sites; pipeline.sh has 3, so the grep anchor moved and this checked nothing"; FAIL=1
+elif [ -n "$rq_bad" ]; then
+  echo "  FAIL  rq is called with a command whose reply carries no statistics trailer: $rq_bad"; FAIL=1
+else
+  echo "  PASS  all $rq_n rq call sites use GRAPH.QUERY or GRAPH.RO_QUERY"
+fi
 
 # ---- mutation: would this test have caught P5-1? ----------------------------
 # Revert the call site to the subshell form that shipped in 0da3eb9/5417f0e and

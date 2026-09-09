@@ -3,6 +3,190 @@
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
 
+## 2026-09-09 — K-009 fixed and K-008 closed: `rq()` now recognises success positively (U28)
+
+- **What:** both remaining `pipeline.sh` items closed in one unit, because they touch one file.
+  **K-009** — `rq()` returned 0 on a bare FalkorDB runtime-error reply — is **fixed**;
+  **K-008** — two CPG-freshness facts overtaken by `6012ddb` — is **closed with no doc edit**,
+  both dispositions re-derived by execution here.
+
+### K-009 — the fix
+
+- **What was wrong.** `rq()` classified failure with a prefix `case`
+  (`errMsg:*|ERR\ *|WRONGTYPE*|*"read only"*|*"read-only"*`). That is a blacklist of error
+  shapes; FalkorDB emits several with no prefix at all and `redis-cli` exits 0 on every error
+  reply, so those returned **0** — success — at any call site passing no `[must-contain]`.
+- **What replaced it: a positive test, not a longer blacklist.** `rq()` now requires the reply's
+  **last line** to begin `Query internal execution time:` — the statistics trailer that only a
+  query the server ran to completion emits. Any error shape, including ones nobody has met yet,
+  fails **closed**. The prefix `case` is gone entirely rather than kept as a second gate: with the
+  trailer required it can only ever agree, and leaving it would suggest the classification is
+  still by error shape.
+- **Also added: a command guard.** The trailer is a `GRAPH.QUERY`/`GRAPH.RO_QUERY` property.
+  `GRAPH.DELETE` answers the bare status `OK` (observed), so `rq()` now **refuses** any other
+  command with rc 2 and an internal-error message rather than mis-judging a reply the test cannot
+  apply to.
+- **Probe table — the helper extracted verbatim from `pipeline.sh` and pointed at a live throwaway
+  graph (`gdba_u28_rqprobe`, deleted afterwards), before and after:**
+
+  | probe | reply | before | after |
+  |---|---|---|---|
+  | `RETURN (((` | `errMsg: Invalid input at end of input: …` | 1 | 1 |
+  | `CREATE (:P2)` via `GRAPH.RO_QUERY` | `graph.RO_QUERY is to be executed only on read-only queries` | 1 | 1 |
+  | `RETURN nosuchfunc(1)` | `Unknown function 'nosuchfunc'` | **0** | 1 |
+  | `MATCH (n:Probe) RETURN keys(n.k)` | `Type mismatch: expected Map, Node, Edge, or Null but was Integer` | **0** | 1 |
+  | `UNWIND [1,0] AS x RETURN 1/x AS stray` | `Division by zero` | **0** | 1 |
+  | long scan with `TIMEOUT 1` | `Query timed out` | **0** | 1 |
+  | **CONTROL** `MATCH (n) RETURN count(n)` | header + row + trailer | 0 | 0 |
+  | **CONTROL** stray query returning **zero rows** | header + blank + trailer | 0 | 0 |
+  | **CONTROL** `MERGE (b:CpgBuildInfo) SET b = {…} RETURN 1` (a **write**) | counters + trailer | 0 | 0 |
+
+  Three passing controls, not just failing probes: without them "fixed" is indistinguishable from
+  "always returns 1". The timeout row was not in the item as opened — it was found here, and it is
+  the reason the test is anchored on the *whole* trailer prefix rather than on `Query`. Observed in
+  passing: with the graph key absent, every `GRAPH.RO_QUERY` probe answers
+  `ERR Invalid graph operation on empty key` and `rq()` returns 1, while the `GRAPH.QUERY` control
+  materialises the key and succeeds — the asymmetry `pipeline.sh`'s own comment gives as the reason
+  its reads use `GRAPH.RO_QUERY`.
+- **Writes carry the trailer**, which the code's own comment had declined to assume and therefore
+  left the stamp write ungated. Measured on the exact stamp shape, on the run that created the
+  node and on the re-run where the `MERGE` matched. That is why the gate is unconditional instead
+  of per call site.
+- **Mutation runs — each restored by copy immediately after, never batched:**
+  - *pre-fix `pipeline.sh` restored*: the two new wiring cases go **FAIL** (`output lacks:` the
+    branch wording), the 12 pre-existing assertions stay PASS — counted from that run's own
+    output: 12 `PASS` + 2 `FAIL`, suite exit 1.
+  - *gate pattern changed to one that can never match*: the three controls go MISMATCH, the six
+    error probes stay caught — the discriminator against "always returns 1".
+  - *gate weakened to `Query*`*: only the timeout probe reddens.
+  - *gate deleted outright*: all six error probes redden, controls stay green.
+- **Second defect found and fixed in the same block.** The `PARSED_AT` read-back call site read
+  `rq … GRAPH.RO_QUERY || true` and judged the reply's **text** alone, so a read-back that never
+  ran fell into the "the freshness stamp did not land in '<graph>'" branch — a claim about the
+  graph from a check that never reached it, followed by advice to re-send a stamp that may be
+  sitting there correctly. It is now a distinct branch that says whether the stamp landed is
+  **UNKNOWN**, prints the rendered Cypher as comparison material, and tells the operator to check
+  by hand. Six failure branches now, not five: two "did not land", three "did land", one "cannot
+  say".
+- **Regression cover.** `test-stamp-wiring.sh` gains two cases — `stamp_bare_error` (the stamp
+  write rejected with no prefix) and `readback_error` (the read-back itself errors). Neither is
+  asserted on the exit code: **both exited 1 before the fix too**, by falling through to a later
+  assertion and reporting that one's finding, so each asserts its branch's own wording. Suite:
+  **14 assertions, of which 10 `run_case`**, all green (`grep -c '^  PASS'` on the run's output =
+  14, `FAIL` = 0, exit 0). The two counts reconcile: 10 `run_case` invocations (8 at `d43ca40`,
+  plus these 2) and 4 `PASS` lines emitted outside `run_case` — the stray-query guard, which reads
+  as one block in the source but loops over two shapes and so prints two, plus the P5-1 and P6-6
+  mutation checks. 12 pre-existing, 2 new.
+- **What the guard covers, exactly.** Any `GRAPH.QUERY`/`GRAPH.RO_QUERY` reply the server did not
+  run to completion — parse error, runtime error, read-only refusal, timeout, mid-stream abort,
+  empty reply — plus, via the exit status, an unreachable server. **What it does not cover:** a
+  query that ran to completion and answered *wrong*, or answered about the wrong thing. The
+  trailer proves **execution, never correctness**; asserting anything about a reply's contents
+  stays the caller's job (`[must-contain]`, the `PARSED_AT` read-back). That distinction is
+  written into the code comment, not left implicit.
+
+### K-008 — closed, no doc edit warranted
+
+- **Fact 2 (scoped dirty check) — CONFIRMED delivered, by execution.** `git-provenance.sh:76`
+  sets `spec=":(literal)$name"` and `:105` reads
+  `if [ -n "$(git -C "$dir" status --porcelain -- "$spec" 2>/dev/null || true)" ]; then` — quoted
+  as they read, rather than as one substituted line. (`analyst`'s review reports the status call at
+  `:107` and `:105` as the `CPG_SOURCE_TREE` assignment; re-checked with `grep -n` against an
+  unmodified `git-provenance.sh`, the status call is `:105` and the tree assignment `:103`.) Run
+  against this repo while it was
+  dirty at `skills/joern-cpg/scripts/`: target `skills/cpg-analysis` → rc 0,
+  `commit=d43ca40a69a3`, `dirty=false`; target `skills/joern-cpg/scripts` (the dirt is inside it)
+  → `dirty=true`; target the repo root → `dirty=true`. The detector discriminates rather than
+  merely returning `false`. `skills/cpg-analysis/references/freshness.md:33` already documents
+  `sourceDirty` as scoped — "it says nothing about the rest of the repo".
+- **Fact 1 (staging a pruned copy inside the repo) — CONFIRMED superseded, by execution.** A copy
+  staged at `cpg/.cpg-artifacts/src/u28probe` (confirmed ignored via `git check-ignore`:
+  `cpg/.gitignore:3`) → `cpg_provenance_capture` returns **rc 1** with all four `CPG_SOURCE_*`
+  empty; the tracked directory it was copied from returns rc 0 with a real commit. Driving
+  `pipeline.sh`'s provenance branch on that path yields `PROVENANCE=none`. `--source-origin` is
+  the supported route and `skills/joern-cpg/SKILL.md`'s "No `--exclude`" bullet already says so
+  in those words ("Where you stage it doesn't recover the source's git identity —
+  `--source-origin` does"). The probe copy was removed.
+- **Disposition: closed.** Both facts are already published at their point of use, and neither
+  survives as an edit to apply. Nothing re-scoped.
+
+### Review round — `analyst`'s gate (`docs/reviews/rq-execution-gate.md`), closed 2026-09-09
+
+- **Major 1 — the truncation claim was false, narrowed.** `pipeline.sh`'s comment said the
+  last-line anchor meant "a reply cut off part-way cannot satisfy it". Re-measured here:
+  `GRAPH.CONFIG GET RESULTSET_SIZE` → **10000**, and
+  `GRAPH.RO_QUERY <g> "UNWIND range(1,200000) AS x RETURN x"` through the shipped `rq()` returns
+  **rc 0**, 10003 lines, last data row `10000`, last line
+  `Query internal execution time: 5.220555 milliseconds`. The gate passes a reply that lost 190,000
+  rows. The mid-stream-abort half is genuinely closed and is now stated as the scoped fact it is
+  (FalkorDB discards the produced rows and answers one bare line), while the comment now names
+  three things the trailer cannot see, the third being a complete-looking reply missing rows. The
+  three call sites return 1, 1 and ≤8 rows, so none is near the cap — said in the comment, so a
+  future call-site author reads the bound rather than inheriting the generalisation.
+  `falkordb-quirks.md` had the same generalisation ("no partial reply to worry about") and is now
+  scoped to *aborts*, cross-referenced to its **pre-existing** `RESULTSET_SIZE` bullet. That bullet
+  answers `analyst`'s open question 1 in the negative: `RESULTSET_SIZE` **was** already documented
+  (since 2026-07-30), so the new fact — that a capped reply is structurally indistinguishable from
+  a complete one, which is what bounds the trailer discriminator — was folded into it rather than
+  written as a second bullet.
+- **Major 2 — closure chosen: NARROW the runtime claim, and move the mechanism where it can be
+  tested.** The `return 2` guard is deleted. Three findings decided it, each verified here by
+  execution rather than taken on report:
+  1. *It reached nobody.* All three call sites are `if ! VAR="$(rq …)"`; a stub returning 1 and one
+     returning 2 take the same branch, and `$?` read inside the branch is **0** (the `if` consumed
+     it), so `$VAR` is empty and the caller renders `<no reply>`.
+  2. *`exit 2` could not have escaped either.* `f() { echo …; exit 2; }; out="$(f)"` leaves the
+     script running with `rc=2` captured — the exit killed only the `$(…)` subshell. That is the
+     same command-substitution trap that ate `cpg_provenance_stamp`'s allow-list two commits ago.
+  3. *Deleting it is safe.* Without the guard the untrapped behaviour already fails **closed**: a
+     `GRAPH.DELETE` success answers a bare `OK`, which does not match the trailer, so `rq` returns
+     1. The cost of a misuse is a false failure, never a false pass — a materially different risk
+     from the one K-009 was about.
+  Keeping it was not an option: at the stamp site it printed "FalkorDB rejected the freshness
+  stamp … `<no reply>`" about a call that never left the shell — structurally the same overclaim
+  the read-back branch was fixed for, two lines below `rq`'s own correct message.
+- **The precondition is now enforced statically, and it reddens.** `test-stamp-wiring.sh` gains a
+  check over `pipeline.sh`'s own `rq` call sites: every one must pass `GRAPH.QUERY` or
+  `GRAPH.RO_QUERY`. Mutation-tested both ways, each restored by copy immediately:
+  a fourth call site written as `rq "$STAMP" GRAPH.DELETE` → `FAIL … GRAPH.DELETE at
+  pipeline.sh:419`; the helper renamed so the grep anchor misses → `FAIL  found only 0 rq call
+  sites`. This is what the runtime guard could not do — `analyst` established, and the point is
+  the whole reason for the swap, that deleting the runtime guard left the suite byte-identical.
+  The check states its own bound in the file: it catches a **literal** wrong command, not one
+  reaching `rq` through a variable, which no call site does today.
+- **Minors.** Case 1 of the two new ones now carries a comment saying only its first two
+  `must-contain` strings pin the fix — the third is printed by the pre-fix code too, so it checks
+  the branch reached its end and is not a discriminator. Both docs' case enumerations gained the
+  tenth `run_case` (`regression: merge, pipeline-clean marker`) and the new static check. The
+  105-char line at `freshness.md:185` is re-wrapped. The `git-provenance.sh` citation is corrected
+  above — including `analyst`'s own line numbers, which I re-checked rather than adopted.
+- **Suite after the round: 15 `PASS`, 0 `FAIL`, exit 0.** `GRAPH.LIST` back to **25** keys; the
+  throwaway keys `gdba_u28_rqprobe`, `gdba_u28_delprobe` and `gdba_u28b` were all deleted.
+- **`4f9c21ae-7b30-4d62-9c18-6ea5d0b73c41` is unblocked.** It was held from clearing because its
+  closing clause carried Major 1's generalisation; that wording is now scoped in both places the
+  promoted text lives.
+
+### Docs updated in the same change
+
+- `skills/joern-cpg/SKILL.md` — the "rejected stamp" bullet now states the trailer mechanism, the
+  execution-not-correctness limit, and **six** branches split three ways; the
+  `test-stamp-wiring.sh` bullet lists the two new cases.
+- `skills/cpg-analysis/references/freshness.md` — the read-back guarantee no longer rests on a
+  check that might not have run.
+- `claude/graph-dba/falkordb-quirks.md` — the "`redis-cli` exits 0" bullet had two claims this run
+  falsified or closed: *"measured on `GRAPH.RO_QUERY` only, so don't assume it of a `GRAPH.QUERY`
+  write reply"* (writes **do** carry the trailer — measured) and *"`rq()` still returns 0 on a
+  `Type mismatch:` reply"* (fixed). Added: anchor the test on the **last line** and require the
+  whole trailer prefix, because `Query timed out` shares the first word and returned data could
+  carry the literal.
+
+- **Kept-open graph entries.** `b7f3c2a1-9d4e-4c11-8a52-6e0f1d3b7c94` (the prefix taxonomy) and
+  `4f9c21ae-7b30-4d62-9c18-6ea5d0b73c41` (the mid-stream abort that makes the trailer test sound)
+  are **fully addressed** by this change — both the code fix and the quirks-file correction. They
+  are the curator's to clear.
+- **Plan items:** K-008 and K-009 both closed and removed from `plan.md`.
+
+
 ## 2026-09-09 — the CPG stamp-race entry discarded: fixed 40 minutes after it was captured (U26)
 
 - **What:** `cobb`, distilling `graph-dba`'s own single produced `kaizen_team` entry (unit U26),

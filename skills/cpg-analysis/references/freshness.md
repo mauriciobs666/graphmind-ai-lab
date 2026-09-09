@@ -179,8 +179,12 @@ signal, not the threshold.
   actually landed. (`redis-cli` exits 0 on an error reply, so before that a
   rejected stamp was silent and an `--append` build could leave the *previous*
   marker standing over new content. A marker whose `builtAt` predates content
-  you can see in the graph is that shape.) **A hand-authored marker is subject
-  to the same rule**, and nothing exempts it: since 2026-09-08 the stamp is a
+  you can see in the graph is that shape. Since 2026-09-09 the read-back's own
+  failure is a distinct branch from an absent marker, so that guarantee no
+  longer rests on a check that might not have run — the pipeline says "could not
+  read the stamp back" rather than asserting the stamp did not land.)
+  **A hand-authored marker is subject to the same rule**, and nothing exempts
+  it: since 2026-09-08 the stamp is a
   **map assignment** (`SET b = {…}`), and `=` replaces the node's whole property
   set, so every property that stamp did not write is gone afterwards —
   `markerOrigin`, `NOTE`, `STATUS`, a key invented next year, all of it. There
@@ -273,14 +277,23 @@ signal, not the threshold.
   allow-list rather than asserting one (each case prints the list it built; an
   empty list fails the case by tripping the call-site guard), and it asserts: a
   clean pass over a hand-authored marker, the `provenance=none` narrowing, a
-  planted foreign key caught under merge semantics, the `provenance=none`
+  planted foreign key caught under merge semantics, **the same merge against a
+  pipeline-clean marker, which must still pass**, the `provenance=none`
   subsumption, the two branches where the stamp did **not** land, a stray read
-  that returns a bare runtime error, the stray query called directly with an
-  unusable allow-list, and two call-site mutations. Every case pins an **exact
+  that returns a bare runtime error, a stamp write rejected with **no error
+  prefix**, a **read-back that itself errors**, the stray query called directly
+  with an unusable allow-list, a **static check that every `rq` call site in
+  `pipeline.sh` passes `GRAPH.QUERY` or `GRAPH.RO_QUERY`** (no other command's
+  reply carries the trailer `rq` gates on), and two call-site mutations. **The prefix-less stamp
+  rejection and the erroring read-back** were added 2026-09-09 with the `rq()`
+  fix, and neither is judged on the exit code: both already exited 1 beforehand,
+  by falling through to a *later* assertion and reporting that one's finding, so
+  each pins the wording of the branch that is supposed to fire. Every case pins an **exact
   exit code**, and every case expected to fail must also be shown to have
   reached the end of its branch — both added 2026-09-08, after the previous
-  oracle reported all six cases green against a `pipeline.sh` whose
-  `replay_stamp` definition had been deleted and which was aborting at rc 127.
+  oracle reported all six of the cases the suite then had as green against a
+  `pipeline.sh` whose `replay_stamp` definition had been deleted and which was
+  aborting at rc 127.
   <br>**Neither level is worth anything alone, and neither is worth anything
   unmutated.** Every assertion named above was re-run against a byte-copy mutant
   that removes or reverses the thing it claims to protect, and every such mutant

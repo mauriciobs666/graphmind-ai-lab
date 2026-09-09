@@ -715,6 +715,14 @@ to the general fact here.
   document that its reported row count can itself be a silent cap, not the true total — a claim
   like "the reported total is always exact" is false against this default. (Verified 2026-07-30,
   v4.18.11, via the `cypher` MCP tool vs. raw `GRAPH.RO_QUERY`.)
+  **A capped reply is structurally indistinguishable from a complete one, which bounds the
+  statistics-trailer discriminator below** — re-measured 2026-09-09, module `41811`:
+  `GRAPH.RO_QUERY <g> "UNWIND range(1,200000) AS x RETURN x"` → exit 0, **10003 lines** (header +
+  10000 rows + `Cached execution` + trailer), last data row `10000`, last line
+  `Query internal execution time: 5.220555 milliseconds`. The trailer therefore proves the server
+  **ran the query to completion**; it does **not** prove the reply carries every matched row. Those
+  are different claims and only the first is checkable from the reply's shape — a caller needing
+  **completeness** must assert a row count against its own expectation, or page the query.
 - **A destructive op run through a wrapper script used to be invisible to `guard-destructive-ops.sh`
   — fixed 2026-08-08 (C-311), don't assume it's still open.** `pipeline.sh --reset` runs
   `redis-cli ... GRAPH.DELETE` *inside* the script, so the literal string never appeared in the
@@ -767,26 +775,43 @@ to the general fact here.
   any prefix `case` as a courtesy message, never the check. If you must classify a `redis-cli`
   reply, the discriminator that held across all five probes above is **affirmative**: a successful
   reply carries a header row plus the `Query internal execution time:` trailer, while every error
-  reply is a single bare line — measured on `GRAPH.RO_QUERY` only, so don't assume it of a
-  `GRAPH.QUERY` write reply without checking.
+  reply is a single bare line. **`GRAPH.QUERY` *write* replies carry the trailer too** — measured
+  2026-09-09, module `41811`, on the shape a provenance stamp actually uses
+  (`MERGE (b:CpgBuildInfo) SET b = {…} RETURN 1`): the run that created the node
+  (`Labels added: 1` / `Nodes created: 1` / `Properties set: 2` / `Cached execution: 0` / trailer)
+  and the re-run where the `MERGE` matched both end with it, as does a plain `CREATE (:X)`. So the
+  discriminator is safe to apply unconditionally to `GRAPH.QUERY` and `GRAPH.RO_QUERY` alike —
+  but **only** to those two: `GRAPH.DELETE` answers the bare status `OK` (observed 2026-09-09,
+  exit 0) — no trailer at all — so a helper that gates on the trailer must refuse any other
+  command rather than mis-judge its reply as a failure.
+  **Anchor the test on the reply's LAST line, and require the whole trailer prefix.** Same session:
+  a timed-out query answers the single bare line `Query timed out`, which shares its first word
+  with the trailer — a loose `Query*` test passes it. And a substring search over the whole reply
+  can be satisfied by returned *data* carrying the literal. `${out##*$'\n'}` against
+  `"Query internal execution time:"*` is the form that survives both.
   **That discriminator is sound rather than merely observed, because a mid-stream runtime error
   aborts the whole reply.** Re-measured 2026-09-08, module `41811`:
   `GRAPH.RO_QUERY <g> "UNWIND [1,0] AS x RETURN 1/x AS stray"` — whose first row *is* producible —
   comes back as the single line `Division by zero` and nothing else: no `stray` column header, no
   `Cached execution`, no trailer, exit 0. `Query timed out` (this instance's default
-  `TIMEOUT 1000`) has the identical shape. The rows already produced are discarded, so **there is
-  no partial reply to worry about**, and requiring the trailer makes a *negative* assertion ("this
-  query returned no rows") fail-closed instead of fail-quiet — a zero-row success still prints
-  header + blank + `Cached execution: 0` + `Query internal execution time:`, and every abort prints
-  one bare line.
+  `TIMEOUT 1000`) has the identical shape. The rows already produced are discarded, so **a
+  mid-stream abort leaves no partial reply for the trailer test to mistake for a whole one** —
+  scoped deliberately to *aborts*, because the generalisation "there is no partial reply to worry
+  about" is **false**; see the `RESULTSET_SIZE` bullet above. Requiring the trailer makes a
+  *negative* assertion ("this query returned no rows") fail-closed instead of fail-quiet — a
+  zero-row success still prints header + blank + `Cached execution: 0` +
+  `Query internal execution time:`, and every abort prints one bare line.
   Never `redis-cli … >/dev/null` on a write whose
 
   failure matters. Live instance of the outer trap, since fixed:
   `skills/joern-cpg/scripts/pipeline.sh:199` at `6012ddb` wrote the `CpgBuildInfo` provenance
   marker as `redis-cli … GRAPH.QUERY "$GRAPH" "$STAMP" >/dev/null`, making a failed stamp invisible
   after a multi-hour build; `9124a1f` replaced it with an `rq()` helper that captures stdout and
-  `case`-matches those same three prefixes — which closes the discarded-output half and **leaves
-  the bare-runtime-error half open**. `rq()` still returns 0 on a `Type mismatch:` reply.
+  `case`-matches those same three prefixes — which closed the discarded-output half and left the
+  bare-runtime-error half open (it returned 0 on `Unknown function`, `Type mismatch:`,
+  `Division by zero` and `Query timed out`). **Closed 2026-09-09** by replacing the prefix
+  blacklist with the affirmative last-line trailer test above; the probe table, its passing
+  controls and the mutation runs are in `claude/graph-dba/kaizen/history.md` (U28).
 - **`GRAPH.EXPLAIN` (unlike `GRAPH.QUERY`/`GRAPH.RO_QUERY`) refuses to run against a graph key
   that doesn't exist yet** — `GRAPH.EXPLAIN <key> "<any syntactically valid query>"` against a
   never-created key errors `ERR Invalid graph operation on empty key` and materializes nothing
