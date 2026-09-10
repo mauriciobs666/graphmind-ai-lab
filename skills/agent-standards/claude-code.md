@@ -638,6 +638,20 @@ the always-loaded project memory (`CLAUDE.md`).
   `docs/plans/small-model-benchmarking.md` re-run under both binaries agreed on every one
   (2026-09-08) — but agreement has to be measured, not assumed.
 
+- **The shim's `ugrep -G` rejects a bounded-context `grep -o` pattern outright — use `grep -in` +
+  `sed -n` on the returned line numbers instead.** `grep -o '.\{0,90\}PATTERN.\{0,90\}'` (the
+  common trick for a cheap surrounding-context extract) errors under the shim with `ugrep: error:
+  error at position N ... exceeds complexity limits` — reproduced verbatim, 2026-09-10 — rather
+  than falling back to GNU behavior or truncating. It is not equivalent to the real-`grep` escape
+  routes above (`/usr/bin/grep`, `bash script.sh`, `--no-ignore-files`): those dodge the
+  `.gitignore`/recursion divergence, not this parser limit, which is a property of the pattern
+  itself. Get bounded context the two-step way instead: `grep -in PATTERN file` for the line
+  numbers, then `sed -n '<n>p'` (or a small range) on each — no shim-specific flag needed.
+- **A Bash tool result over roughly 30 KB is diverted to a persisted tool-results file rather than
+  returned inline** — the call still succeeds, but the response is a path plus a short preview, not
+  the content. Large `sed`/`cat` ranges hit this the same way a genuinely huge single command does;
+  page with targeted, narrower reads (a smaller line range, or `grep`'s own `-A`/`-B`) rather than
+  re-running the same broad command expecting inline output.
 - **A single line in a markdown document can be tens of kilobytes, and every line-oriented tool
   degrades to useless on it.** `docs/plans/salesperson-ui.md`'s §5.1 step table stores each step as
   one line up to **~35 KB**: `grep -n` prints the whole row (an 85 KB result that had to be persisted

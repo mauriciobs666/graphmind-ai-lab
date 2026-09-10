@@ -448,6 +448,22 @@ distills — on request, and folded into every certification pass (§4):
    `kaizen_team` is a shared graph provisioned once up front — there is no
    per-agent "graph not found" case; an agent simply has zero matching
    entries (of either shape) until it writes one.
+
+   **A count delta between two census reads is a lead to attribute, not a
+   clearing defect to assume.** `PRODUCED.sessionId` names which coordination
+   wrote a node — `MATCH (a:Agent)-[p:PRODUCED]->(k) RETURN a.agentId,
+   p.sessionId` separates a concurrent writer's entries from this
+   coordination's own before you treat a moved figure as a miscount. Two
+   caveats keep it a lead rather than a verdict: `sessionId` is optional on
+   the producer-write shape and reads `null` on any entry whose writer
+   omitted it, and **inside a subagent `$CLAUDE_CODE_SESSION_ID` resolves to
+   the *parent* session, not the producing agent** — so the value identifies
+   *which coordination* captured an entry, never *which agent* or *which
+   unit*, and two units of the same coordination are indistinguishable by
+   this method alone. Worked example, including a mis-attribution this
+   caught and corrected: `claude/docs/plans/kaizen-distillation2-coordination.md`
+   (Follow-ups, "`$CLAUDE_CODE_SESSION_ID` resolves to the *parent* session
+   inside a subagent").
 2. **Verify each entry** — is it still true? Re-check cheaply against the live
    system or docs; environment facts rot on upgrades. **Re-derive the fact
    yourself; don't just confirm the entry's cited evidence still exists at that
@@ -566,7 +582,17 @@ distills — on request, and folded into every certification pass (§4):
         OPTIONAL MATCH (k)-[m:MENTIONS]->(:Agent)
         RETURN count(DISTINCT p) AS producedEdges, count(DISTINCT m) AS mentionEdges
         ```
-        a plain read, no `agent` needed. Compute
+        **A zero-row read on an `entryId` you believe exists is an id error
+        before it's an absence.** A UUID recalled from context (rather than
+        copy-pasted) can be misremembered on the suffix while the leading
+        characters read right — a sibling risk to two different entries
+        colliding on a shared 8-char prefix (`claude/docs/plans/
+        kaizen-distillation2-coordination.md`, U17) — same consequence: a
+        lookup that reads as *already gone* when it never existed as typed.
+        Before concluding the node was already cleared (by an earlier pass,
+        or a concurrent session), re-list the producer/mentions edges for
+        the entry you actually have in front of you and get the `entryId`
+        verbatim from that result, not from memory. Compute
         `otherRemaining = producedEdges + mentionEdges - 1` (subtracting the
         one edge this pass is about to resolve), then either resolve just
         that one edge or clear the whole node:

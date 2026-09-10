@@ -3,6 +3,58 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-10 — U46: `cobb` inbox, entry 1 of 2 (`2e14550b`) — census-delta sessionId attribution promoted to §5
+
+- **What:** unit U46 of `claude/docs/plans/kaizen-distillation2-coordination.md`, cobb's own
+  second inbox (re-queried fresh: exactly 2 entries, matching the briefed count). Entry
+  `2e14550b-a344-426b-a795-801774cbd30a` (2026-09-09, captured by U39's own cobb, self as
+  producer): a census/count delta across two graph reads can be *attributed* rather than guessed —
+  `PRODUCED.sessionId` names which coordination wrote a node — with two caveats: `sessionId` is
+  optional on the write shape and reads `null` on entries whose writer omitted it, and inside a
+  subagent `$CLAUDE_CODE_SESSION_ID` resolves to the *parent* session, never the producing agent
+  or unit. Re-derived by reading the coordination doc directly rather than trusting the entry's own
+  framing: this exact mechanism, with both caveats, is already fully stated there (Follow-ups,
+  "`$CLAUDE_CODE_SESSION_ID` resolves to the *parent* session inside a subagent") — including the
+  retroactive correction of U38's mis-attribution that this very entry is evidence for (its own
+  `sessionId` names *this* coordination session despite being written by a different unit's
+  delegate — self-demonstrating). **Not a plain discard**: the technique is generically reusable
+  for any future distillation pass reconciling a shared, concurrently-written graph, and until now
+  its only home was a pass-specific coordination doc headed for eventual archival. Promoted a
+  condensed, generalized version into `skills/agent-maintenance/SKILL.md` §5 step 1 (+139 w per
+  `git diff --stat`, 0 new sections), citing the coordination doc for the worked example instead of
+  re-narrating it. Verified `1 PRODUCED / 0 MENTIONS` before clearing; cleared via full-node
+  `DETACH DELETE` (its only edge, `otherRemaining == 0`).
+- **Why:** Same §5 procedure as every other unit in this pass: verify by re-deriving (not trusting
+  the stored `fact`), route to where the fact actually belongs, log, clear — one entry at a time,
+  never batching writes across entries. Routed to the skill rather than discarded because the fact
+  outlives this one pass's coordination doc.
+- **Plan items:** —
+
+## 2026-09-10 — U46: `cobb` inbox, entry 2 of 2 (`ceffe7e6`) — entryId zero-row caution + a ugrep/output-diversion pair, split across two skill files
+
+- **What:** same unit U46. Entry `ceffe7e6-996e-4b12-8073-48f49623f8c2` (2026-09-10, captured
+  during U45's teco run) bundled three facts under one node. Re-derived each independently rather
+  than trusting the stored text: (1) *a zero-row read on an `entryId` you believe exists is an id
+  error before it's an absence* — the entry's own evidence is a mis-recalled suffix
+  (`c58f1d27-9a4e-…` typed from context vs. the real `c58f1d27-0b3e-…`), a sibling risk to the
+  full-prefix collision U17 already logged in the coordination doc; not yet covered in this
+  skill's own §5, so promoted as a caution at the step-5 current-shape clear query (`skills/
+  agent-maintenance/SKILL.md`, +111 w of this unit's +250 total, 0 new sections). (2) the shim's
+  `ugrep -G` rejects a bounded-context `grep -o '.\{0,90\}PATTERN.\{0,90\}'` pattern with
+  `exceeds complexity limits` — **reproduced live** against `claude/AGENTS.md` before promoting,
+  verbatim error confirmed. (3) a Bash result past roughly 30 KB is diverted to a persisted
+  tool-results file rather than returned inline — **directly observed this same unit**, reading
+  the coordination doc's own 130.4 KB `cat` output. Facts (2)+(3) are host/tool-environment
+  gotchas, not distillation-procedure ones, so they went to `skills/agent-standards/claude-code.md`
+  § Bash tool environment instead (+14 lines / new bullets, 0 new sections) — this single entry's
+  write therefore spans two files, done together before the one log-then-clear cycle below.
+  Verified `1 PRODUCED / 0 MENTIONS` before clearing; cleared via full-node `DETACH DELETE`.
+- **Why:** Same §5 procedure, same per-entry discipline (write everything this entry needs, then
+  log, then clear — never batch across entries). Split by destination on subject matter (kaizen
+  distillation mechanics vs. general Bash/grep environment), the same way earlier units routed
+  bundled entries to more than one home.
+- **Plan items:** — (both skill homes already existed; no backlog item opened.)
+
 ## 2026-09-10 — U45: `teco` chunk 4 of 4 (seventeen entries) — the largest single chunk, and the first to route promotions out of the producing agent
 
 - **What:** unit U45 of `claude/docs/plans/kaizen-distillation2-coordination.md`, the final `teco` chunk. Seventeen `:KaizenEntry` nodes distilled — **thirteen dispositions** (several entries merged), all seventeen cleared. Full per-entry record in `claude/teco/kaizen/history.md` (2026-09-10, U45). Sized at seventeen rather than the standing ~12 on the cost argument in `aad72232`, which this unit then tested and confirmed.
