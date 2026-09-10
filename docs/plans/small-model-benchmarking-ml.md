@@ -1,6 +1,53 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.20
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.21
+
+2026-09-10 (v1.21, `data-scientist`) — plan-gate Pass 14's open question 1 (`P14-6`'s second half),
+ruled — and it is **not** downstream of `P14-1`: the dependency runs the other way. Ruling the
+question surfaced a **live three-site contradiction inside plan v1.26** that no gate has caught,
+and §4.3 rule 4 cannot be written around it, so it is ruled here too.
+
+**The `I(t)` question.** **The mean and p95 of `I(t)` are computed over turns dispositioned
+`replied` or `cap-hit`, and over no others.** Four reasons, the second and third each decisive
+alone: those two are the mechanisms in which the model's own behaviour or the harness's declared
+cap ended the turn, so they are the only ones carrying an observation of *stopping* behaviour; a
+non-completing turn contributes `I(t) = 0` — **forced**, since v1.20 pinned
+`iterations == len(chatResults)` — and **`0` there means *not observed*, never *zero
+iterations***, this component's absent-never-zero rule (`coldLoadSeconds`, `scored_outcome`'s
+refused absent count) arriving inside a mean; including them biases the mean **down**, so a server
+that rejects a model reports that model as *better* at stopping, §4.3's laundering with the sign
+reversed; and nothing is lost, because the *cost* question already has its own unrestricted
+denominator in §11.4's `Y_calls / Y`. **§4.2(f)'s denominator statement did need correcting, and
+that is what made the question unanswerable** — it named one denominator and reported three
+statistics, only one of which used it. It now carries three, over **three different subsets** of
+the mechanism set. That **sharpens `P14-1`'s prescribed fix rather than waiting on it**: three
+figures are keyed on the mechanism rather than on `E(t)`, not one. **I concur with `P14-1` and add
+what it does not use: §4.3's funnel already routes its case correctly** — a `cap-hit` turn with
+`|E(t)| = 0` lands under *no attempt* — so the plan's four-row table is a second home for a mapping
+that already had one, and it is the second home that is wrong.
+
+**The contradiction, and it is the plan's, not this note's.** Plan v1.26 §3.6's fourth disposition
+rules that *"a non-2xx response, a dropped connection or an unparseable body"* scores **`fail`,
+never `n_a`**, while §3.8.4's table and §4 S5 both route a status-bearing `LMStudioCallFailed` to
+**`unrunnable`** — opposite dispositions for one event, and not a wording difference: `fail` keeps
+the turn in the denominator as a loss, `unrunnable` removes it. Verified live at committed
+`1842b1d` (`:1577`, `:2243`, `:4978`). **Rule 4 decides it with a discriminator rather than a
+case list: a turn scores `fail` only where the harness gave the model its whole declared budget and
+observed nothing come back** — which is the **timeout**, and nothing else. Every other
+non-completion is a channel failure the harness cannot attribute (a `400` from a model's runaway
+message list and a `400` from a malformed harness payload are the same status code) and is
+`unrunnable`. **This is §11.5.1's own distinction reaching a second consumer** — *a timeout is a
+censored observation and a call that failed at 40 ms is a missing one*, ruled at v1.14 for
+`censoringExact`. Two consequences: the mechanism set is **five**, not four (v1.26 folds `timed-out`
+into `no-response`, which leaves the scorer unable to tell a `fail` from an `unrunnable`); and
+§4.6's `cleanThroughTurnH` gains a **third state**, since *"zero failure of any kind"* would
+otherwise read an `unrunnable` turn as **clean** — the very escape §3.6 feared, arriving at the
+headline. P4-7's accounting fix is untouched: only the sentence assigning the scored outcome moves.
+
+**Nothing already committed is invalidated.** `-ml` v1.20 stands unchanged, and none of §11.9 ask
+7's twelve items moves — the *timing* withholding split (`withheldFor: timeout | no_response`) is
+orthogonal to the *scoring* outcome and rule 4 cites it as precedent rather than touching it. New
+**§4.3 rule 4** and new **§4.3.1**, the plan-side edit list.
 
 2026-09-09 (v1.20, `data-scientist`) — plan-gate Pass 13's `P13-2`, ruled, together with the two
 arithmetic errors of this note's own that the finding inherited. **Plan v1.25 stopped a scored item
@@ -1708,7 +1755,18 @@ Per turn `t` of a scripted conversation, the pack supplies ground truth and the 
   abstention turn, a chit-chat turn) — those turns are first-class, not filler.
 - `E(t)` — the calls actually dispatched, from the harness's own dispatch trace (FR-10).
 - `P(t)` — whether the reply contained a prose-shaped pseudo-call (harness heuristic).
-- `I(t)` — LLM iterations consumed in the turn, and whether the iteration cap was hit.
+- `I(t)` — the number of model calls in the turn that **completed**, i.e. returned a response the
+  harness could record. It is `0` on a turn whose first call raised, and **`0` means *no iteration
+  was observed*, never *the model used no iterations*** — §4.2(f) is where that distinction is
+  spent. It is one number with `-ml` §11.4's `callCount` and plan §4 S1's `TurnTrace.iterations`,
+  bound by assertion (§11.10 (7d)) rather than by convention.
+- `D(t)` — the **mechanism** that ended the turn, over a closed **five**-member set:
+  `replied`, `cap-hit`, `timed-out`, `no-response`, `server-rejected`. A mechanism vocabulary,
+  deliberately not a scoring one; §4.3 rule 4 is the single place it maps onto this section's
+  denominators, and the three subsets that matter are all different. *(Plan v1.26 records four,
+  folding `timed-out` into `no-response` — a fold this note's own §11.5.1 unfolded at v1.14 for
+  `censoringExact`, and one that leaves the scorer unable to tell a `fail` from an `unrunnable`;
+  §4.3.1 item 2 is the ask.)*
 - `S(t)` — simulated tool state after the turn.
 
 **Hard design rule that makes every denominator below well-defined: the harness always drives the
@@ -1782,11 +1840,110 @@ with `|E(t)| ≥ 1`.
   within-turn and cross-turn variants as a named breakdown — the ministral defect was
   turn-2-specific and a pooled duplicate rate would have hidden it.
 
-**(f) — Stopping when done.** Denominator: turns with `|E(t)| ≥ 1`. Numerator: no call dispatched
-after `R(t)` was fully satisfied, **and** the loop terminated below the iteration cap. Report
-alongside, over **all** turns as a diagnostic: `iteration_cap_hit_rate`, plus mean and p95 of
-`I(t)`. The `gpt-oss-20b` message-spam defect (§8.4) presented purely as cap-hits; a binary
-"stopped" rate alone would have scored it as a failure without saying what kind.
+**(f) — Stopping when done, and the two iteration figures beside it. Three statistics, three
+denominators, and they are not the same denominator** *(v1.21, plan-gate P14-6. Until now this
+bullet named **one** denominator and then reported three figures, only one of which used it —
+which is exactly why "does a non-`replied` turn enter the `I(t)` summary?" had no answer in the
+text. Each figure now carries its own.)*
+
+- **`stopping_when_done`.** Denominator: turns with `|E(t)| ≥ 1`, less the two `unrunnable`
+  mechanisms (`no-response`, `server-rejected` — rule 4 below). Numerator: `D(t) == replied`
+  **and** no call dispatched after `R(t)` was fully satisfied. A `cap-hit` turn is **in** the
+  denominator and fails it — that is the count's whole purpose. A `timed-out` turn is in it and
+  fails it too: outcome `fail`, never `n_a`, per §3.6's third disposition and rule 4's
+  discriminator.
+- **`iteration_cap_hit_rate`.** Denominator: **all turns driven**, less the two `unrunnable`
+  mechanisms. Numerator: `D(t) == cap-hit`. **Keyed on the disposition alone and on nothing about `E(t)`** — a
+  turn that reached the cap emitting only malformed tool calls reached the cap. This figure and the
+  two below it are why the bullet is not a single binary rate: the `gpt-oss-20b` message-spam defect
+  (§8.4) presented **purely** as cap-hits, and a `stopping_when_done` rate alone would have scored
+  it as a failure without saying what kind.
+- **Mean and p95 of `I(t)`.** Denominator: turns with **`D(t) ∈ {replied, cap-hit}`**, and no
+  others. All **three** non-completion mechanisms are excluded — including `timed-out`, which is
+  in the two denominators above and out of this one, because a turn cut off by the request budget
+  carries no observation of where the model would have stopped. The combined excluded count is
+  printed beside the figures (§4.3 rule 2). **Three figures, three different subsets of `D(t)`**,
+  which is the whole reason this bullet no longer states one denominator.
+
+**Why those two dispositions and not all four — four reasons, of which the second and third are
+each decisive alone.**
+
+1. **The estimand.** `I(t)`'s summary describes how much the model loops before it stops. `replied`
+   and `cap-hit` are the two mechanisms in which *the model's own behaviour or the harness's
+   declared cap* ended the turn, so they are the only two that carry an observation of stopping
+   behaviour. A turn ended by a dropped socket carries none — and neither does one ended by the
+   request budget, which is why `timed-out` is excluded here while scoring `fail` everywhere else
+   (rule 4). A timeout bounds *how long*, not *how many*.
+2. **The arithmetic, and it is this component's own recorded defect.** Such a turn contributes
+   `I(t) = 0` — **forced**, not chosen: v1.20 pinned `callCount == len(ItemTiming.calls) ==
+   TurnTrace.iterations` (§11.4), and a turn whose first call raised has no `ChatResult`. A `0` that
+   means *not observed* entering a mean is the absent-as-zero shape this note has already ruled
+   twice — `coldLoadSeconds` is **absent, never `0`** (§11.6), and `ItemResult.scored_outcome`
+   **refuses** an absent count rather than reading it as a zero, the default that once turned an arm
+   holding no data at all into *"+100.0 pp, p=0.002"*.
+3. **The direction.** Including them biases the mean **down**, so a run in which the server rejected
+   the model repeatedly reports that model as *more* efficient at stopping. That is §4.3's
+   laundering with the sign reversed, and it is not hypothetical: `salesperson-tool-reliability-ml.md`
+   §8.4 lost **6 of 8** `gpt-oss-20b` conversations to HTTP 400.
+4. **Nothing is lost by excluding them**, which is what makes the exclusion cheap rather than a
+   trade. The *cost* question — how many model calls did this run actually make — has its own
+   unrestricted denominator since v1.20: `Y_calls / Y` over **every** item including the failed
+   ones (§11.4). Two questions, two denominators, both printed. **They will differ on any run with a
+   non-`replied` turn, and that difference is a testable consequence, not a discrepancy** — a report
+   that shows them equal on such a run has substituted one for the other.
+
+**Two censoring properties, computed and printed rather than assumed.** A `cap-hit` turn's `I(t)` is
+**right-censored**: the observation is *the model wanted at least `maxIterationsPerTurn`*, not *the
+model used `maxIterationsPerTurn`*. So:
+
+> **The mean prints as `>= <value>` whenever the cap-hit count `c > 0`**, and as a bare value only
+> when `c == 0`.
+>
+> **The p95 is exact iff `r ≤ X − c`**, where `X` is the summary population, `c` its cap-hit count
+> and `r` the integer rank of §11.2.1 — and prints as `>= <value>` otherwise. Integer arithmetic,
+> no float and no comparison of values: censoring that pushes the top `c` observations upward
+> cannot move an order statistic that has `c` observations above it, and must move one that does
+> not. The same one-sided argument §11.5 makes for the attained level, and the budget it buys is
+> generous where it matters — at `X = 80`, `r = 76`, so the p95 is exact up to **4** cap-hits.
+
+**The p95 is `stats.percentile(level=LEVEL_P95)` and inherits §11.3's identity floor.** §11.2.2's
+one-implementation rule is package-wide, and an `I(t)` p95 is precisely the second quantile a reader
+would otherwise hand-roll — the first cost this component an `index.csv` column computing
+`latencyMsP95` at the 50th percentile. Inheriting §11.3 means that when `r == X` the figure is the
+sample maximum and is labelled `max`, which is reachable here in a way it is not for latency:
+a degraded run can leave the summary population well under 20 turns.
+
+**No refusal gate, and the reason is that §4.3 already carries the instrument.** §11.6 refuses a
+latency figure below a coverage floor because `index.csv` strips a prose qualifier from a bare
+column; the `I(t)` figures are report-only — they are in no `index.csv` column — and §4.3's rules 1
+and 2 already oblige every rate to print its `k/n` inline and its excluded count beside it. A third
+floor here would add a refusal without adding information.
+
+**The reach of `{replied, cap-hit}` is pinned in constants, in both directions** *(the component's
+guard-reach convention, both halves)*. `ITERATION_SUMMARY_DISPOSITIONS = frozenset({"replied",
+"cap-hit"})` **and** `ITERATION_SUMMARY_EXCLUDED = frozenset({"timed-out", "no-response",
+"server-rejected"})` are written out **separately and literally** — the second is *not* derived as
+the first's complement, because a derived complement makes the union assertion a tautology, which
+is the exact defect the convention was amended twice to close. Three assertions:
+
+1. **Union, against an independent declaration.** `ITERATION_SUMMARY_DISPOSITIONS |
+   ITERATION_SUMMARY_EXCLUDED == convo.TURN_DISPOSITIONS`, and the two are disjoint. `TURN_DISPOSITIONS`
+   is authored in `convo.py` by another unit, so this binds two independent declarations and
+   **reddens on a widen**: a fifth disposition added by the rework unit belongs to neither set and
+   fails here before it can be silently included or silently dropped.
+2. **A distinct behavioural consequence per member**, five cases, each observable and each
+   different: appending a `replied` turn moves the mean; appending a `cap-hit` turn moves the mean
+   **and** flips it to the `>=` form; appending a `timed-out` turn leaves the mean and p95
+   **unchanged** while still incrementing `stopping_when_done`'s denominator and its failures;
+   appending a `no-response` turn leaves the mean and p95 unchanged **and** leaves that denominator
+   untouched **and** increments `unrunnable`; appending a `server-rejected` turn does the same by a
+   different mechanism token. Moving any one member between the two sets reddens exactly one of
+   these, so the pin **reddens on a shrink** as well. The third and fourth cases are the pair that
+   pins rule 4's `fail`/`unrunnable` discriminator — they differ in nothing but the mechanism.
+3. **The exactness rule swept, both directions** — over `X ≤ 200` and every `c ≤ X`, raising each
+   cap-hit observation to any larger value leaves the `r`-th order statistic unchanged **iff**
+   `r ≤ X − c`. A test asserting only the *iff*'s forward half would bless a report that printed a
+   bare p95 where a `>=` was owed.
 
 **(g) — Final reply matches what the tool returned.** Denominator: turns with ≥1 dispatched call
 whose return value is **fact-bearing** — i.e. the pack declares at least one checkable value for
@@ -1807,7 +1964,7 @@ already contain abstention turns.
 
 ### 4.3 Precondition failures must never be laundered
 
-Three rules, all mandatory:
+Four rules, all mandatory *(three until v1.21)*:
 
 1. **Every printed rate carries its denominator inline** — `k/n`, never a bare percentage.
 2. **A turn excluded from a conditional denominator is counted in that count's own `n/a` tally**,
@@ -1837,11 +1994,189 @@ comparable to 95% on two hundred. Without it, a model that collapses early looks
 conditional count, because it never generated the calls that could be wrong. That is the single
 most likely way this harness lies, and the funnel is the fix.
 
+4. **The turn's *mechanism* maps onto every denominator in one place, and this is it** *(v1.21;
+   plan-gate P14-1's shape, answered from the note's side, plus one contradiction P14-1 did not
+   reach)*. `D(t)` is a mechanism (§4.1) and each §4.2 count is a scoring question, so the mapping
+   is a rule here rather than a column on the plan's table of mechanisms.
+
+   **The discriminator between `fail` and `unrunnable`, stated once.** A turn scores **`fail`**
+   only where **the harness gave the model its whole declared budget and observed nothing come
+   back**. That is one mechanism: the **timeout**. Every other non-completion is a failure of the
+   request/response channel, about which the harness holds **no observation of the model at all** —
+   and it must not be guessed at, because a `400` produced by a model's runaway message list and a
+   `400` produced by a malformed harness payload are the same status code. So they are
+   **`unrunnable`**: out of every scoring denominator, counted, and printed. **This is §11.5.1's
+   own distinction, arriving at a second consumer** — *a timeout is a **censored** observation and
+   a call that failed at 40 ms is a **missing** one* — ruled at v1.14 for `censoringExact` and
+   binding here for the same reason: a censored observation has a known bound and is evidence; a
+   missing one is neither.
+
+   | mechanism | in a scoring denominator? | how it scores where it is in |
+   |---|---|---|
+   | `replied` | yes, wherever its own `R(t)`/`E(t)` condition admits it | on its own FR-8 counts |
+   | `cap-hit` | yes, wherever its own `R(t)`/`E(t)` condition admits it | **fails** `stopping_when_done`; enters `iteration_cap_hit_rate`'s numerator and the `I(t)` summary; enters (g)'s `unscoreable` bucket **only if `|E(t)| ≥ 1`** |
+   | **`timed-out`** | yes | outcome **`fail`**, never `n_a` — §3.6's third disposition, and the only non-completion that earns it. **Out of the `I(t)` summary** all the same (§4.2(f)): a budget bounds *how long*, not *how many* |
+   | `no-response` (dropped connection, unparseable or unusable body) | **no** | §4.1's **`unrunnable`** count |
+   | `server-rejected` (the server answered with a status and refused) | **no** | §4.1's **`unrunnable`** count |
+
+   **Three consequences, and the second and third are where the plan is currently wrong.**
+
+   *(i)* An `unrunnable` turn leaves **before** any `R(t)`/`E(t)` condition is evaluated, which is
+   already the funnel's shape above — subtracted at the top, one line under *turns driven*.
+
+   *(ii)* **A disposition does not by itself decide what scores a turn.** Except for
+   `iteration_cap_hit_rate` and the two `I(t)` figures — keyed on the mechanism alone, and on **two
+   different subsets** of it (§4.2(f)) — every §4.2 count is conditioned on `R(t)` or `E(t)` too,
+   so the mapping is a function of the **pair**. The case that proves it is plan-gate P14-1's: a
+   `cap-hit` turn with `|E(t)| = 0`, which the loop reaches whenever the model emits only
+   undispatchable tool calls. That turn is `no_attempt` under §4.2(a) — a **failure** — and is
+   outside (f)'s `stopping_when_done` denominator and outside (g)'s denominator entirely, so it
+   cannot occupy (g)'s `unscoreable` bucket. It is **not** *absent, not failed*. The funnel already
+   routes it correctly, under *no attempt*; the plan's four-row table is a second home for a
+   mapping that already had one, and it is the second home that is wrong.
+
+   *(iii)* **A second row of that table is not a single scoring population either, and this one is
+   a live contradiction between two plan sections rather than an omission.** Plan §3.6's fourth
+   disposition rules that *"a non-2xx response, a dropped connection or an unparseable body"*
+   scores **`fail`, never `n_a`**; plan §3.8.4's v1.26 table routes a status-bearing failure to
+   **`unrunnable`** while citing that same fourth disposition for the row beside it. Both are live
+   at v1.26 and they cannot both stand. **This rule decides it against §3.6's outcome clause and
+   for §4.1's**, on the discriminator above — and the reversal costs §3.6 nothing else it was
+   written for: P4-7's fourth disposition exists to close a `LatencyBlock` accounting hole (an item
+   withheld under neither named cause falsified invariants (iii) and (iv)), and every part of that
+   fix — the third `withheldFor` value, the one counter, the `ItemTiming` that exists without a
+   figure — is untouched. Only the sentence assigning the **scored outcome** moves. **The
+   discriminator needs no new field**: `drive` catches `LMStudioCallTimeout` and `LMStudioCallFailed`
+   separately already, so the mechanism is known where the disposition is assigned, and the plan's
+   own record has carried the distinction since plan-gate P5-6 for `censoringExact`. What it does
+   need is for the mechanism set to **name** it — see §4.3.1 item 2.
+
+   **Why `unrunnable` cannot be an escape hatch, which is the objection §3.6 raised and answered
+   the other way.** §3.6's argument is that scoring a non-completion `n_a` *"would let a model that
+   hangs out-score one that answers wrongly"*. That is true of a **rate whose denominator silently
+   shrinks**, and it is exactly why §4.3 rules 1–3 exist. Under those rules an `unrunnable` turn
+   costs the model **`n`**, visibly: the conversation leaves the paired table for **both** arms
+   (§4.3's intersection corollary), the funnel prints the count at its head, and §7.1's
+   resolving-power line renders the collapsed `n_effective` and the widened floor in its own words —
+   §8.4's `gpt-oss-20b`, which lost **6 of 8** conversations to HTTP 400, would arrive at the
+   headline with an `n` the report states rather than a rate it invents. Losing power and saying so
+   is §4.5.3's own trade; scoring a box's bad twenty minutes as a model's failure at `n = 12`
+   manufactures a difference, and one dropped connection is worth **8.3 pp** on the headline and can
+   flip a McNemar discordant pair. This note has ruled that comparison once already, one field over:
+   storing the timeout constant in the p95 *"would print a figure about the configuration rather
+   than about the model"* (§11.5).
+
+   **And one hole that must close with it, or the escape is real.** §4.6's `cleanThroughTurnH` is
+   *"the fraction of conversations with zero failure of any kind through turn `H`"*, and it says
+   nothing about `unrunnable`. Under the rule above, an `unrunnable` turn is not a failure — so a
+   conversation carrying one would read as **clean**, which is precisely the laundering §3.6
+   feared, arriving at the headline instead of at a conditional count. **`cleanThroughTurnH` takes
+   a third state:** a conversation with an `unrunnable` turn at any `t ≤ H` is **neither clean nor
+   failed**; it leaves the headline's denominator and is counted in the headline's own `n/a` tally
+   (rule 2), printed beside it. No new gate is needed to stop the resulting `n` from being read as
+   sound: `verdict()` already refuses below `resolving.observable_floor` (§3.4 Rule 7) and the
+   floor is computed from the surviving `n`, so a collapsed denominator refuses itself.
+
 **Paired-comparison corollary:** for the conditional counts (c)–(g), pairing only works on items
 where *both* models produced a scoreable outcome. The paired `n` is the **intersection** and must
 be printed separately from each arm's own `n`. Items scoreable for exactly one model are reported
 as an `asymmetry` count — they are not missing data, they are a finding about the model that could
 not produce them.
+
+#### 4.3.1 What §4.2(f) and rule 4 need from the plan — `architect`'s, and precisely scoped
+
+Stated here in one place because a fresh `architect` is writing plan v1.27 concurrently and this
+note may not edit that document. **Nothing in §11.9 ask 7 is invalidated by anything below** — that
+list is about *timing* and rule 4 is about *scored outcomes*, and the two meet only at item 3's
+warning. Residual classification is at the end; nothing is deferred by choice.
+
+1. **§3.8.4's four-row table, column 4 — the recommended fix is to delete the column, not to split
+   the row.** The table declares itself *"the only home of that mapping"* and it is not: §4.3's
+   funnel has routed these turns since v1.1 and rule 4 now states the mapping outright. Two homes
+   for one mapping is what produced plan-gate P14-1, and the deeper reason is §7 rule 2 — the plan
+   owns the harness surface and `TurnTrace`'s **mechanism** vocabulary, while which denominator a
+   mechanism lands in is a scoring question and is this note's. So column 4 should become a
+   **citation to §4.3 rule 4**, and the sole-ownership sentence should be deleted rather than
+   corrected. **If the architect prefers the mapping visible in the plan**, P14-1's row split is the
+   fallback and must be exactly rule 4's. Either way **P14-1's own fix sentence needs one correction
+   as it lands**: it calls `iteration_cap_hit_rate` *"the one count keyed on the disposition alone"*.
+   There are **three** — the cap-hit rate and the mean and p95 of `I(t)` — keyed on **two different
+   subsets**, `all-less-unrunnable` for the first and `{replied, cap-hit}` for the other two. A
+   reader who takes the singular literally puts the `I(t)` summary back under `E(t)`.
+2. **The mechanism set is five, not four, and this one is time-critical.**
+   `TurnDisposition`/`TURN_DISPOSITIONS` gains **`timed-out`**, split out of `no-response`. The
+   reason is rule 4's discriminator: a timeout scores `fail` and every other non-completion scores
+   `unrunnable`, so a token that folds the two leaves the S5 scorer unable to tell them apart. The
+   information is already in hand where the disposition is assigned — `drive` catches
+   `LMStudioCallTimeout` and `LMStudioCallFailed` separately — and this note's own §11.5.1 unfolded
+   exactly this pair at v1.14 for `censoringExact`, so re-deriving the scoring split from
+   `ItemTiming.withheldFor` would be the two-vocabularies collision the plan has paid for twice.
+   **It must reach P14-3's precursor unit before `TURN_DISPOSITIONS` lands**, or a four-member set
+   ships and the widen has to be caught later by the union assertion of §4.2(f)'s pin — which will
+   catch it, at the cost of a rework. *The fallback — keep four members and have the scorer read
+   `withheldFor` — is workable and is the collision shape, so if it is taken it should be recorded
+   as a deliberate trade rather than arrived at by default.*
+3. **§3.6's fourth disposition: the outcome clause moves, and only that clause.** *"A non-2xx
+   response, a dropped connection or an unparseable body … scored per the pack's rule with outcome
+   `fail`, never `n_a`"* becomes **`unrunnable`** (§4.1's count), leaving the **timeout** — §3.6's
+   third disposition — as the only non-completion scoring `fail`. **Everything else P4-7 bought is
+   untouched and must not be re-opened**: the third `withheldFor` value, the single
+   `latencyWithheldForNoResponse` counter, invariants (iii)/(iv), the `ItemTiming` that exists
+   without a figure, the re-probe/exit-3 asymmetry. P4-7's fix was a *record-keeping* fix and the
+   outcome sentence rode along with it. **This is the one place ask 7 is adjacent**: ask 7's §3.6
+   item is about withholding a *timing* and says a partial turn is withheld under
+   `timeout`/`no_response` — that stays true verbatim, and it must not be merged with this edit,
+   because the two sentences now give the same turn different answers to different questions.
+4. **§4 S5's restatement (`:4978` at `1842b1d`) is the contradiction's third site and must be
+   rewritten, not patched.** *"`no-response` is §3.6's `fail` and `server-rejected` is `-ml` §4.1's
+   `unrunnable`"* becomes rule 4's five-row mapping; *"Only `turnDisposition == 'cap-hit'` is
+   absent, not failed"* becomes conditioned on `|E(t)| ≥ 1`. The synthetic-trace set must carry the
+   two discriminating cases, neither of which a four-disposition list produces by accident: **a
+   cap-hit turn with an empty dispatch trace** (assert all three at once — it is `no_attempt`, it
+   **does** enter `iteration_cap_hit_rate`, it **does** enter the `I(t)` summary), and **a
+   timed-out turn beside a dropped-connection turn** (identical in every respect but the mechanism,
+   asserting `fail` against `unrunnable`).
+5. **The S5 scorer implements `cleanThroughTurnH`'s third state.** A conversation with an
+   `unrunnable` turn at any `t ≤ H` is neither clean nor failed: out of the headline's denominator,
+   into its own `n/a` tally, printed (rule 4, §4.6). No new gate is needed to keep the shrunken `n`
+   honest — `verdict()` already refuses below `resolving.observable_floor` and the floor is computed
+   from the surviving `n`, so a collapsed denominator refuses itself.
+6. **§4 S1 and Appendix A — `iterations` is not an open choice, and P14-6's first half closes by
+   consequence.** `iterations == len(chatResults)` is already forced: `-ml` §11.4 (v1.20) binds
+   `callCount == len(ItemTiming.calls) == TurnTrace.iterations` and ask 7 builds `ItemTiming.calls`
+   from `chatResults` in order. State it as a consequence with that citation rather than as a fresh
+   decision, and add the value it forces: a turn whose first call raised records `iterations == 0`.
+   **`0` is a real recorded value on the record and a non-observation in the statistic** — it stays
+   on `TurnTrace`, and §4.2(f) is what keeps it out of the mean. Appendix A's `TurnDisposition` row
+   moves with item 2.
+7. **The report surface.** The `I(t)` summary prints its own denominator inline and the excluded
+   count beside it (rules 1–2); the mean prints `>= v` whenever `c > 0` and the p95 `>= v` whenever
+   `r > X − c`. The two iteration figures are **both** printed and never substituted for one
+   another: `Y_calls / Y` (§11.4) is the unrestricted calls-per-item **cost** figure, the mean of
+   `I(t)` the restricted **behaviour** figure, and on any run with a non-`replied` turn they differ.
+8. **Where the two scoring constants live, and it is not `convo.py`.**
+   `ITERATION_SUMMARY_DISPOSITIONS` and `ITERATION_SUMMARY_EXCLUDED` are a **scoring** vocabulary
+   and belong beside the scorer; `TURN_DISPOSITIONS` is a **mechanism** vocabulary and stays in
+   `convo`. The union assertion reaching across the two modules is the point, not an inconvenience —
+   it is what makes the pin bind two independent declarations.
+9. **§5 test 10c and the S5 scorer tests** carry §4.2(f)'s three pins verbatim: the cross-module
+   union with disjointness; the **five** per-member behavioural cases, one distinct observable each;
+   and the swept exactness rule in **both** directions. **The union assertion should land in
+   P14-3's precursor unit**, on that finding's own corrected rationale — it buys nothing in round 1,
+   where one author writes every artifact, and everything when the **rework** unit widens the enum.
+10. **One sweep this ruling does not cause but sits beside.** §3.5's `index.csv` bullet still reads
+    that `latencyMsMax` *"carries the tail figure for … every tool-caller run (`-ml` §11.3)"*. That
+    is the substitution v1.20 corrected in three places — the tool-caller's `Y` is 80 turns, not 12
+    conversations, so `latencyMsMax` is `None` on every declared pack — and §3.5 is a section ask 7
+    already opens. Fix it in the same pass rather than leave the fourth instance standing.
+
+**Residuals, classified.** The five-member set, the two scoring constants, the cross-module union
+assertion and the swept exactness rule are buildable now and are **not blocked**: they need
+`TURN_DISPOSITIONS` and `stats.percentile`, which exist or land in the precursor unit. The five
+per-member behavioural cases, the two discriminating traces and `cleanThroughTurnH`'s third state
+need the **S5 scorer**, which does not exist — **blocked on unbuilt work**, and gated by being named
+in S5's *Done when* list rather than referenced in its prose, which is plan-gate P14-3's own finding
+applied to this ruling's own tests. Nothing here is deferred by choice.
 
 ### 4.4 Per-turn-position reporting when turns are not independent
 
