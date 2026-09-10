@@ -18,7 +18,10 @@ from modelbench import stats
 from modelbench.fingerprint import Fingerprint
 from modelbench.results import (
     _AGGREGATE_BY_KIND,
+    _METRIC_DECODERS,
     BENCH_SCHEMA_VERSION,
+    INDEX_COLUMNS,
+    BinaryMetric,
     ClassificationAggregates,
     ContinuousMetric,
     DistributionSummary,
@@ -993,3 +996,85 @@ def test_index_row_renders_a_distribution_summary_with_its_median_labelled_p50(t
     row = text.splitlines()[1]
     assert "separationZ=p50 1.2340" in row
     assert "p10" not in row
+
+
+# --------------------------------------------------------------------------------------------
+# `_METRIC_DECODERS` and `INDEX_COLUMNS` — two tables pinned only against themselves
+# (impl review Pass 16, P16-2 and P16-3)
+# --------------------------------------------------------------------------------------------
+#
+# Both reddened on a shrink and went green on a **widen**, so both read as covered and neither
+# was: a fixture happened to use the member that was deleted, and nothing refused an added one.
+
+
+#: One instance of every member of the `MetricValue` union, hand-written — never built by
+#: iterating the union or the decoder table, because parametrising from the thing under test can
+#: only ever lose a case (the `_ALL_AGGREGATE_CLASSES` precedent above, review M-4). The
+#: assertion below is what refuses a fourth member added to the union and forgotten here.
+_ONE_OF_EVERY_METRIC_KIND = (
+    BinaryMetric(name="falseAdvanceRate", successes=7, n=40, unit="item"),
+    ContinuousMetric(name="mrr", mean=0.5, n=38, support=(0.0, 1.0)),
+    DistributionSummary(name="separationZ", median=1.2, p10=0.3, n=40, unit="query", support=None),
+)
+
+
+def test_the_metric_decoders_cover_exactly_the_metric_kinds_the_encoder_emits() -> None:
+    """`_METRIC_DECODERS` is the `"type"` tag set's one home, and the *encoder* is the second
+    declaration of the same set — `_metric_to_dict` writes the tag, `_metric_from_dict` looks it
+    up, and nothing bound them.
+
+    The widen is the consequential direction and it was open: a metric kind added to the union
+    and the encoder without a decoder is a `KeyError` on read, which `load_history` quarantines
+    as `unparseable` — a record this build wrote, refused by this build, reported as damage. The
+    shrink is the mirror: a decoder for a tag nothing can emit.
+    """
+    from typing import get_args
+
+    from modelbench.results import MetricValue
+
+    assert {type(m) for m in _ONE_OF_EVERY_METRIC_KIND} == set(get_args(MetricValue))
+    assert {_metric_to_dict(m)["type"] for m in _ONE_OF_EVERY_METRIC_KIND} == set(_METRIC_DECODERS)
+
+
+@pytest.mark.parametrize("metric", _ONE_OF_EVERY_METRIC_KIND, ids=lambda m: type(m).__name__)
+def test_each_metric_kind_decodes_back_to_its_own_class(metric) -> None:
+    """The per-member consequence behind the domain equality: each tag's decoder rebuilds *that*
+    class, so a decoder wired to the wrong constructor — a `distribution` read back as a
+    `continuous`, which is a median read as a mean (§4 S1e Table F) — reddens here and not only
+    in the one round-trip test that happens to use that kind."""
+    assert _metric_from_dict(_metric_to_dict(metric)) == metric
+
+
+#: Transcribed by hand, in order: the fourteen published columns of `results/index.csv` (plan
+#: §3.5). `index.csv` is a *consumed artifact* — regenerable, but read by anything pointed at the
+#: results directory — so its column names and their order are the contract, and the emitted
+#: header was only ever asserted against `INDEX_COLUMNS` itself, which is true of any tuple.
+_INDEX_COLUMNS_PER_PLAN_3_5 = (
+    "runId", "date", "role", "packId", "packVersion", "packContentHash8", "modelKey",
+    "quantization", "armKind", "n", "headlineMetrics", "latencyMsP50", "latencyMsP95", "valid",
+)
+
+
+def test_the_index_columns_are_exactly_the_published_fourteen_in_order() -> None:
+    """Leg 1 — the declaration, against the transcript. Order is asserted, not just membership:
+    a positional CSV reader is broken by a reordering that a set comparison calls identical."""
+    assert INDEX_COLUMNS == _INDEX_COLUMNS_PER_PLAN_3_5
+
+
+def test_the_written_index_header_is_the_published_fourteen_and_every_cell_is_filled(
+    tmp_root,
+) -> None:
+    """Leg 2 — the artifact on disk, against the same transcript rather than against the
+    constant that produced it.
+
+    The second assertion is what catches the widen from the other side: `csv.DictWriter` fills a
+    fieldname `_index_row` never emits with the empty string, so a column added to
+    `INDEX_COLUMNS` alone appears in every row as a silent blank rather than an error.
+    """
+    store(_run("r1"), tmp_root)
+    lines = rebuild_index(tmp_root).read_text().splitlines()
+    assert lines[0].split(",") == list(_INDEX_COLUMNS_PER_PLAN_3_5)
+    from modelbench.results import _index_row
+
+    emitted = _index_row(_run("r1"), valid=True)
+    assert tuple(emitted) == _INDEX_COLUMNS_PER_PLAN_3_5

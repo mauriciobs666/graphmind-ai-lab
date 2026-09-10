@@ -21,9 +21,11 @@ import pytest
 from conftest import pack_fixture
 
 from modelbench.packs import (
+    _ROW_COUNT_IDENTITY_KEY_HINTS,
     ROW_COUNT_IDENTITY_EXEMPT_CELLS,
     ROW_COUNT_IDENTITY_KEYS,
     PackConfigError,
+    _row_count_identity_field_valid,
     _row_count_identity_problems,
     content_hash,
     derive_call_surface,
@@ -368,6 +370,55 @@ def test_row_count_identity_coverage_over_its_own_keys_and_value_kinds(tmp_path)
     control_sampling = control_pack.manifest.get("sampling") or {}
     assert _row_count_identity_problems(control_pack, control_sampling) == []
     assert validate_pack(control_pack) == []
+
+
+def test_every_row_count_identity_key_has_a_hint_and_no_hint_has_no_key() -> None:
+    """`_ROW_COUNT_IDENTITY_KEY_HINTS` is a second declaration of `ROW_COUNT_IDENTITY_KEYS`, and
+    nothing bound them (impl review Pass 16, P16-3): dropping a hint reddened only because
+    `_row_count_identity_field_problem` `KeyError`s on a key some other test happened to
+    perturb, and **adding** a hint for a key that does not exist left the suite green — an
+    entry no message can ever render, and the shape a fifth key added to one table alone takes.
+    """
+    assert set(_ROW_COUNT_IDENTITY_KEY_HINTS) == set(ROW_COUNT_IDENTITY_KEYS)
+
+
+def test_each_row_count_identity_keys_own_hint_reaches_its_own_message(tmp_path) -> None:
+    """The other direction of the same pin, per member: the hint written for a key is the hint
+    the operator is shown when *that* key is the one that is wrong.
+
+    This pins the *lookup*, not the wording: it reads the hint from the same table the message
+    does, so swapping two hints between keys leaves it green (measured). The wording is pinned
+    against the predicate in the next test instead.
+    """
+    base = _row_count_coverage_manifest("fixture-row-count-hints")
+    for key in ROW_COUNT_IDENTITY_KEYS:
+        manifest = _apply_row_count_cell(base, key, "wrong-type")
+        manifest["packId"] = f"fixture-row-count-hints-{key}"
+        pack = _write_row_count_pack(tmp_path / f"hint-{key}", manifest, _VIOLATING_ROWS)
+        problems = _row_count_identity_problems(pack, pack.manifest["sampling"])
+        assert problems, f"{key} wrong-type produced no problem to carry a hint"
+        assert f"{key} must be {_ROW_COUNT_IDENTITY_KEY_HINTS[key]}" in problems[0]
+
+
+def test_each_hint_states_the_type_its_own_validity_predicate_enforces() -> None:
+    """The hint's *prose*, bound to the behaviour it claims to describe.
+
+    The table's domain and its lookup are both pinned above, and neither can see a hint pasted
+    under the wrong key: swapping `sampling.scripts`' hint with `sampling.analysisUnit`'s leaves
+    a domain-correct table that tells the operator to make an int a string, and the whole suite
+    stayed green on exactly that mutation. So the two claims the hints make are asserted against
+    what `_row_count_identity_field_valid` actually accepts, per key. The two prefixes below are
+    the test's own literals — reading them off the table is what made the swap invisible.
+    """
+    for key in ROW_COUNT_IDENTITY_KEYS:
+        accepts_int = _row_count_identity_field_valid(key, 12)
+        accepts_str = _row_count_identity_field_valid(key, "twelve")
+        assert accepts_int is not accepts_str, f"{key} accepts both types or neither"
+        expected = "a plain int" if accepts_int else "a non-empty string"
+        assert _ROW_COUNT_IDENTITY_KEY_HINTS[key].startswith(expected), (
+            f"{key}: hint {_ROW_COUNT_IDENTITY_KEY_HINTS[key]!r} does not describe the type "
+            f"its own predicate enforces"
+        )
 
 
 def test_row_count_identity_exempt_cells_each_carry_a_reason() -> None:

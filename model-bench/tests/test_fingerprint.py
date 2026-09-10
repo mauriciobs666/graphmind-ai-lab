@@ -681,3 +681,107 @@ def test_the_arm_kind_discriminator_keeps_absent_distinct_from_null() -> None:
     )
     assert reference_arm.callSurface is None
     assert reference_arm.validate() == []
+
+
+# --------------------------------------------------------------------------------------------
+# The discriminator vocabularies, declared in four places (impl review Pass 16, P16-1)
+# --------------------------------------------------------------------------------------------
+#
+# `ArmKind` and `CallSurface` are `Literal` aliases this module declares and never annotates a
+# field with — `Fingerprint.armKind`/`.callSurface` are typed `str` on purpose, because
+# `validate()` has to be able to *receive* a value outside the set and report it as `unknown`.
+# That makes them pure documentation of a closed set, and `lmstudio.py` declares its own
+# `CallSurface` besides. Python enforces none of them at runtime, so a member added to or
+# dropped from any one copy was invisible: the same shape as `Basis` (Pass 16 §6 P16-1), one
+# vocabulary over from it.
+#
+# The two frozensets are *derived* from `REQUIRED_BY_SCHEMA`'s profile keys and are already
+# pinned above, against the same two transcripts. Every declaration is bound to the transcript
+# and none to another declaration: two sets authored in one unit agree by construction
+# (`AGENTS.md`, "A guard's reach lives in an asserted constant").
+
+#: Transcribed by hand from `docs/plans/small-model-benchmarking.md` §3.4.1 — the two arm kinds
+#: and the two call surfaces whose product (minus the deterministic arm's absent surface) is the
+#: three `armProfile` keys of schema 1.
+_ARM_KINDS_PER_PLAN = {"model", "deterministic"}
+_CALL_SURFACES_PER_PLAN = {"chat", "embeddings"}
+
+
+def test_the_discriminator_literals_are_exactly_the_plans_two_vocabularies() -> None:
+    """`fingerprint`'s two documentation-only aliases, against §3.4.1's transcript."""
+    from typing import get_args
+
+    from modelbench.fingerprint import ArmKind, CallSurface
+
+    assert set(get_args(ArmKind)) == _ARM_KINDS_PER_PLAN
+    assert set(get_args(CallSurface)) == _CALL_SURFACES_PER_PLAN
+
+
+def test_the_adapters_call_surface_literal_is_the_same_vocabulary_as_the_records() -> None:
+    """`lmstudio.CallSurface` — the surface `warm_up` dispatches on — against the same
+    transcript as the value the fingerprint records.
+
+    The adapter deliberately imports nothing from `modelbench` (it is the one module that talks
+    to the outside world), so the two cannot be collapsed onto one home the way `Basis` was;
+    they are bound here instead. They must agree: `callSurface` on the stored record is the
+    *name of the surface the adapter called*, and if the two vocabularies drift, a record either
+    names a surface no adapter can call or an adapter calls a surface no record can name.
+    """
+    from typing import get_args
+
+    from modelbench.lmstudio import CallSurface as AdapterCallSurface
+
+    assert set(get_args(AdapterCallSurface)) == _CALL_SURFACES_PER_PLAN
+
+
+# --------------------------------------------------------------------------------------------
+# Two private field sets `validate()`/`from_dict` branch on (impl review Pass 16, P16-3)
+# --------------------------------------------------------------------------------------------
+#
+# Both reddened on a shrink at the Pass 14 audit and both went green on a **widen**, which is
+# what "cleared" meant there: a fixture happened to use the member that was deleted, and nothing
+# refused a spurious one. Each is a second declaration of a set that is declared elsewhere too,
+# so each is bound to that other declaration here.
+
+
+def test_the_discriminators_are_exactly_the_fingerprints_non_field_attributes() -> None:
+    """`_DISCRIMINATORS` is what `from_dict` strips out of `fields`, and the reason it strips
+    them is structural: a discriminator left in `fields` is a member of no profile's required
+    set and therefore lands in **every** profile's forbidden set. So the set is not a choice —
+    it is exactly `Fingerprint`'s own attributes other than `fields`, which is the independent
+    declaration bound here.
+
+    Both halves of that sentence are asserted, because the second is what makes the first true:
+    a name that *is* in some required set does not belong here, and stripping it would delete a
+    required field from every record on read.
+    """
+    import dataclasses
+
+    from modelbench.fingerprint import _DISCRIMINATORS
+
+    attributes = {f.name for f in dataclasses.fields(Fingerprint)} - {"fields"}
+    assert set(_DISCRIMINATORS) == attributes
+    for name in _DISCRIMINATORS:
+        for profile, required in REQUIRED_BY_SCHEMA[1].items():
+            assert name not in required, f"{name} is required by {profile}; it is not a stripper"
+
+
+def test_the_residency_fields_are_exactly_the_schemas_residency_snapshot_fields() -> None:
+    """`_RESIDENCY_FIELDS` selects which required fields get `_residency_problems`' element-shape
+    check on top of the `present` tier (§3.4.4a), and the schema is the other declaration of
+    that set: a residency snapshot is a `residentModelsAt<phase>` field and nothing else is.
+
+    The widen is the direction that was open, and it is not inert. Adding a *real* schema field
+    here — `temperature`, say — runs the element-shape check over a float and reports a valid
+    record as malformed; adding a name the schema does not carry is dead code that reads as
+    coverage. Both redden here now.
+    """
+    from modelbench.fingerprint import _MODEL_CHAT_SCHEMA_1, _RESIDENCY_FIELDS
+
+    assert _RESIDENCY_FIELDS == frozenset(
+        name for name in _MODEL_CHAT_SCHEMA_1 if name.startswith("residentModelsAt")
+    )
+    # …and the join key is real: every one of them is a `present`-tier field, because `[]` is the
+    # correct value on a clean box and `nonempty` would refuse it.
+    for name in _RESIDENCY_FIELDS:
+        assert _MODEL_CHAT_SCHEMA_1[name].tier == "present"

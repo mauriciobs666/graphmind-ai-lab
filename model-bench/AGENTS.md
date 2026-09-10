@@ -164,12 +164,18 @@ imports it — which is why FR-17a's function is `models_with_stored_results`, n
 - **Empty `docs/` subdirectories are held by `.gitkeep`** (repo precedent), so the module
   documentation convention's layout survives a clone before its first document exists.
 - **A guard's reach lives in an asserted constant, not in prose.** A module-level set or table a
-  guard consults — a required-key set, an allowlist, an exemption list, a role→unit map — needs one
-  test that drives *the function consulting it* and binds it to the other declaration of the same
-  set, or asserts a distinct behavioural consequence for every member — never merely that the guard
-  accepts what the guard's own constant contains, which is true of any constant. Without that test
-  the docstring may not claim a reach (*only*, *every*, *never a sixth*). The five constants that
-  failed this in the S2 audit are listed in `docs/reviews/small-model-benchmarking-impl.md` Pass 14.
+  guard consults — a required-key set, an allowlist, an exemption list, a role→unit map — needs a
+  test that binds it to another declaration of the same set, or asserts a distinct behavioural
+  consequence per member; never merely that the guard accepts what its own constant contains,
+  which is true of any constant. **To know you have one, mutate the constant alone both ways: a
+  shrink and a widen must each redden.** Shrink-only is not a pin — a fixture is covering it, or
+  its widen stays inert until the second declaration is bound. **A table takes a third mutation:
+  move a value to another key.** Its keys and its contents are two pins, and a value the test
+  reads back out of the table is asserted against itself. Absent that, the docstring may not claim
+  a reach (*only*, *every*, *never a sixth*). The one standing exception is a constant built
+  wholesale from the runtime (`packs._STDLIB_MODULE_NAMES`): it has nothing independent to bind
+  to, and a per-member consequence would be ~300 assertions. Audits:
+  `docs/reviews/small-model-benchmarking-impl.md` Pass 14 and Pass 16.
 
 ## Commands
 

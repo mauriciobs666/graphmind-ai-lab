@@ -742,10 +742,14 @@ def compare_report(
     if invalid or excluded:
         lines += ["> **INVALID RESULTS EXCLUDED** (AC-2)", ">"]
         for record in invalid:
-            detail = (
-                ", ".join(f"`{p.field}` ({p.reason})" for p in record.problems) or record.reason
-            )
-            lines.append(f"> - `{record.runId or record.path.name}` — {record.reason}: {detail}")
+            # An `unparseable` record carries no problems at all — nothing about the file was
+            # legible, so there are no fields to name (`results.load_history`). The detail used
+            # to fall back to `record.reason`, which is already the first half of this line, so
+            # every such record printed as "unparseable: unparseable". The colon introduces the
+            # fields that failed; with none to introduce, the reason stands on its own.
+            detail = ", ".join(f"`{p.field}` ({p.reason})" for p in record.problems)
+            suffix = f": {detail}" if detail else ""
+            lines.append(f"> - `{record.runId or record.path.name}` — {record.reason}{suffix}")
         for run, mismatches in excluded:
             # The same block, deliberately: exclude-and-name is AC-2's own mechanism, already built
             # and already read as "this record did not enter the comparison, and here is why". Both

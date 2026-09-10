@@ -975,11 +975,27 @@ def test_probe_cell_exemptions_are_exactly_the_structurally_unreachable_ones():
     it: re-derive the full per-phase grid from `_PHASE_KINDS` — each phase's *own* domain, not a
     flat cross product that would manufacture cells no phase can express (P13-1's own lesson) —
     and assert the one cell this module does not exercise is exactly, and only, `_EXEMPT_CELLS`,
-    not implied by its absence from `_EXPECTED_FOR_GET`/`_POST`."""
+    not implied by its absence from `_EXPECTED_FOR_GET`/`_POST`.
+
+    Written as a **partition of the whole grid** — the two lines below — and not as
+    `all_cells - exercised == _EXEMPT_CELLS` (impl review Pass 16, P16-4). A subtraction
+    constrains only the cells the domains declare and never exercise, so a cell exercised here
+    that *no* phase domain declares cancels out of the left-hand side and the assertion stays
+    green; that direction was caught only incidentally, by the GET/POST symmetry beside it and
+    by `_route_outcome`'s `KeyError`, which is coverage by accident.
+
+    **The union alone is not the fix**, and swapping one form for the other is a trade, not a
+    repair: `all_cells == exercised | _EXEMPT_CELLS` is satisfied by a cell that is exercised
+    *and* exempt at once — an exemption claiming a cell this file demonstrably reaches, which
+    the subtraction did refuse (measured: it drops that cell's kill from 2 tests to 1). The
+    disjointness line is the half that keeps it, so the assertion holds in every direction:
+    nothing undeclared, nothing unaccounted for, nothing both.
+    """
     all_cells = {(phase, kind) for phase, kinds in _PHASE_KINDS.items() for kind in kinds}
     exercised = set(_EXPECTED_FOR_GET)
     assert exercised == set(_EXPECTED_FOR_POST)  # both taxonomies cover the same seven cells
-    assert all_cells - exercised == _EXEMPT_CELLS
+    assert all_cells == exercised | _EXEMPT_CELLS
+    assert not (exercised & _EXEMPT_CELLS)
 
 
 @pytest.mark.parametrize("phase,kind", sorted(_EXPECTED_FOR_GET))

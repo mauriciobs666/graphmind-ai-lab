@@ -2,6 +2,83 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-10 — The constant-pin convention's directional half, restored and applied
+
+**What:** impl review Pass 16 (`docs/reviews/small-model-benchmarking-impl.md`), whose subject is
+Pass 14's own audit. Pass 15 fixed a tautology in `AGENTS.md`'s "A guard's reach lives in an
+asserted constant" and deleted the directional clause in the same edit; the forms then said what
+a good pin looks like without saying how to tell whether the pin in front of you is one. Nine of
+the fourteen constants Pass 14 recorded as held were named by no test at all — they reddened on a
+shrink only because some other fixture happened to use the deleted member — and **seven of twenty
+went green on a widen**. Both halves are now in the line, and all seven are pinned in both
+directions.
+
+**1. `AGENTS.md`, the convention line, third revision.** Pass 16 §4's proposal was applied with
+two changes the pins themselves forced. It says *"the two standing exceptions"*; after §P16-3's
+paired-declaration bindings land there is exactly **one** (`packs._STDLIB_MODULE_NAMES`, measured
+below) — the "inert widen" class was an artefact of the missing binding, not an exception to the
+rule. And it earns a third clause: *both directions is necessary and not sufficient for a
+**table***. Three mutations landed here that no key-set assertion can see — two
+`_ROW_COUNT_IDENTITY_KEY_HINTS` hints swapped between keys, two `INDEX_COLUMNS` reordered, one
+`_EXEMPT_CELLS` member made both exercised and exempt — so keys and contents are two pins, and a
+value the test reads back out of the table under test is asserted against itself.
+
+**2. P16-1 — `Basis` was declared three times with nothing binding any pair.** `stats.py:67`,
+`results.py:39` and `report._BASIS_STRENGTH`. Python does not enforce a `Literal` at runtime, so
+**deleting `"measured"` from `stats.Basis` alone left the suite at 920 passed** (reproduced before
+changing anything). `basis` is what `-ml` §3.4 Rule 4 turns on — which instrument may decide a
+verdict — and a value absent from `_BASIS_STRENGTH` is a `KeyError` in the report path. Closed two
+ways, because the two duplications differ in kind: `results.Basis` is now an **import** of
+`stats.Basis` (one home, on an import edge that already carries `percentile` for the same reason),
+and `_BASIS_STRENGTH` is bound to a literal transcribed from `-ml` §7.1 — never to the other
+declaration, since two sets authored in one unit agree by construction. The ranking's *values* are
+pinned too, through `min(..., key=...)` rather than against the integers. `CallSurface` had the
+same shape (`fingerprint.py`, `lmstudio.py`, and `CALL_SURFACES` derived from a third source), as
+did `ArmKind`; those are bound by test rather than collapsed, because `lmstudio.py` deliberately
+imports nothing from `modelbench` and the two `Literal`s are static declarations of a set the
+other module derives at runtime.
+
+**3. P16-2/P16-3 — the seven widen-green constants, each pinned in both directions.**
+`INDEX_COLUMNS` against a hand-transcribed fourteen **in order** (a positional CSV reader is
+broken by a reordering a set comparison calls identical) plus the header actually written to disk
+and the keys `_index_row` actually emits — `csv.DictWriter` fills a declared-but-unemitted column
+with a blank, so the widen was silent. `_METRIC_DECODERS` against the tags `_metric_to_dict`
+emits, with a per-kind round trip that kills a decoder wired to the wrong constructor.
+`_ROW_COUNT_IDENTITY_KEY_HINTS` against `ROW_COUNT_IDENTITY_KEYS`, plus each hint against the type
+`_row_count_identity_field_valid` actually enforces. `_DISCRIMINATORS` against `Fingerprint`'s own
+non-`fields` attributes. `_RESIDENCY_FIELDS` against the schema's `residentModelsAt*` fields.
+`_NO_VERDICT_REASON` against the causes `_comparison_pair` returns over an exhaustive grid of the
+two dimensions it branches on.
+
+**4. P16-4 — the grid-coverage assertion is a partition, not a subtraction.** Pass 16's named fix
+(`all_cells == exercised | _EXEMPT_CELLS`) is a trade rather than a repair: measured, it closes
+the undeclared-cell direction and **opens** another, going green on a cell that is exercised and
+exempt at once, which the subtraction refused (2 kills down to 1). Both lines are now asserted —
+union *and* disjointness.
+
+**5. One rendering nit, from a unit that reported rather than fixed it.** An `unparseable` record
+carries `problems=[]` by construction, and the detail fell back to `record.reason`, which is
+already the first half of the line: every such record printed as `unparseable: unparseable`. The
+colon now introduces the fields that failed, and with none to introduce the reason stands alone.
+Pinned from both sides, so removing the suffix outright reddens too.
+
+**Verification.** Every pin mutated in both directions, one at a time, restored by file copy and
+`diff -q` after each: 36 distinct mutations, each re-run after a test it targets changed. Every
+previously-green widen now reddens, each named by the test written for it: `_DISCRIMINATORS`
+and `_RESIDENCY_FIELDS` widened by a bogus name are killed by exactly one test each, the new
+one. The coordinator's own mutation (`stats.Basis` − `"measured"`) reddens
+`test_the_basis_literal_is_exactly_the_ml_notes_vocabulary`. Suite `940 passed, 3 deselected`
+(from 920), `ruff check .` clean, `AGENTS.md` 2 255 words with no line over 700 characters.
+
+**One residual, and it is a finding rather than a deferral.** `_STDLIB_MODULE_NAMES` is carried by
+the convention line as its one standing exception, and the widen that makes it an exception is
+still green (`frozenset(sys.stdlib_module_names) | {"requests"}` → 940 passed, measured). Pass
+16 §6 P16-5's reasoning — that binding it to `sys.stdlib_module_names` is the definition rather
+than a check — holds for a *re-derivation* and not for an *augmentation*, which is the shape a
+hand-added non-stdlib name would take and the one that actually widens what a pack may import. A
+one-line equality would kill it. Not done here: the brief rules P16-5 a decided exception and says
+explicitly not to pin it, so this is routed rather than taken.
+
 ## 2026-09-09 — S2 precursor to the `drive` loop rework: `LMStudioCallFailed.status` and `convo.TURN_DISPOSITIONS`
 
 **What:** the two pieces plan v1.26 §3.8.4/§4 S2 require to exist *before* the unit that rewrites

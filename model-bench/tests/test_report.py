@@ -6,6 +6,7 @@ Every fixture is a hand-built `RunResult`; no LM Studio, no network, no pack on 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from conftest import (
@@ -136,6 +137,49 @@ def test_invalid_records_are_named_with_their_problems(tmp_path) -> None:
     assert "bad" in md
     assert "kvCacheSetting" in md
     assert "empty" in md
+
+
+def test_a_record_with_no_legible_problems_states_its_reason_once(tmp_path) -> None:
+    """An `unparseable` record carries `problems=[]` by construction — nothing about the file was
+    legible, so there are no fields to name (`results.load_history`, both `unparseable` paths).
+
+    The detail fell back to `record.reason`, which is already the first half of the same line, so
+    every such record rendered as *"unparseable: unparseable"* — a stutter that reads like a
+    field named `unparseable` failed for the reason `unparseable`. The reason is printed once and
+    the colon belongs to the details that follow it.
+    """
+    invalid = [
+        InvalidRecord(
+            path=tmp_path / "runs" / "truncated.json",
+            runId=None,
+            benchSchemaVersion=None,
+            problems=[],
+            reason="unparseable",
+        )
+    ]
+    md = compare_report(
+        _nested_arms(), pack=guard_pack(headline=METRIC, verdicts=(METRIC,)), invalid=invalid
+    )
+    assert "> - `truncated.json` — unparseable" in md
+    assert "unparseable: unparseable" not in md
+
+
+def test_a_record_whose_problems_are_legible_still_lists_them_after_its_reason() -> None:
+    """The other side of the same line, so removing the suffix outright reddens: a record that
+    *does* carry problems keeps `reason: detail`, which is what names the failing fields."""
+    invalid = [
+        InvalidRecord(
+            path=Path("runs/bad.json"),
+            runId="bad",
+            benchSchemaVersion=1,
+            problems=[FieldProblem(field="kvCacheSetting", reason="empty")],
+            reason="field",
+        )
+    ]
+    md = compare_report(
+        _nested_arms(), pack=guard_pack(headline=METRIC, verdicts=(METRIC,)), invalid=invalid
+    )
+    assert "> - `bad` — field: `kvCacheSetting` (empty)" in md
 
 
 def test_no_invalid_block_when_every_record_is_valid() -> None:
@@ -2315,3 +2359,139 @@ def test_a_manifest_that_declares_no_analysis_unit_is_refused_by_name(tmp_path) 
     }))
     with pytest.raises(PackConfigError, match="sampling.analysisUnit is absent"):
         pack_ref_from_manifest(manifest)
+
+
+# --------------------------------------------------------------------------------------------
+# `Basis` — the `-ml` §7.1 vocabulary, declared in three places (impl review Pass 16, P16-1)
+# --------------------------------------------------------------------------------------------
+#
+# `basis` is what Rule 4 turns on — whether the design effect was *established* by the pairing,
+# *measured* from the data, or *assumed* — so it decides which instrument may decide a verdict.
+# It was written out three times (`stats.Basis`, `results.Basis`, `report._BASIS_STRENGTH`) with
+# nothing binding any pair, and Python does not enforce a `Literal` at runtime: **deleting
+# `"measured"` from `stats.Basis` alone left the whole suite green** (Pass 16 §6 P16-1, Appendix
+# P.2). Two closures were taken, because the two duplications are different in kind:
+#
+#  1. `results.Basis` is now an *import* of `stats.Basis` — one home, the way `results.py`
+#     already imports `stats.percentile` rather than keeping a second percentile. A second
+#     `Literal` on an import edge that already exists is a copy waiting to drift, not a
+#     declaration.
+#  2. `_BASIS_STRENGTH` cannot be collapsed — it is a *ranking* over the same domain, and its
+#     keys are the domain. So it is bound below, and both surviving declarations are bound to a
+#     literal transcribed from the note, never to each other: two sets authored in one unit agree
+#     by construction (`AGENTS.md`, "A guard's reach lives in an asserted constant"; the
+#     `TURN_DISPOSITIONS` probe in `test_convo.py` is the same shape).
+
+#: Transcribed by hand from `docs/plans/small-model-benchmarking-ml.md` §7.1's `ResolvingPower`
+#: declaration (v1.17, line `basis: Literal["by-construction", "measured", "assumed"]`). The
+#: independent declaration the module's two are each bound to; never derive it from either.
+_BASIS_PER_ML_NOTE = {"by-construction", "measured", "assumed"}
+
+
+def test_the_basis_literal_is_exactly_the_ml_notes_vocabulary() -> None:
+    """Leg 1: the type every `basis` field and parameter is annotated with, against the note.
+
+    `results.Basis` is the same object by construction now (it imports it), which is the point —
+    the assertion below is what refuses a re-declaration that has drifted by one member.
+    """
+    from typing import get_args
+
+    from modelbench import results
+
+    assert set(get_args(stats.Basis)) == _BASIS_PER_ML_NOTE
+    assert set(get_args(results.Basis)) == _BASIS_PER_ML_NOTE
+
+
+def test_the_basis_strength_ranking_covers_exactly_the_declared_bases() -> None:
+    """Leg 2: `_BASIS_STRENGTH`'s key set, against the same transcript.
+
+    `_comparison_pair`'s consumer reads it as `min(..., key=_BASIS_STRENGTH.__getitem__)`, so a
+    basis the ranking does not carry is a `KeyError` in the report path — and a *rank* for a basis
+    that no longer exists is an entry nothing can ever select. Both are the same edit here.
+    """
+    from modelbench.report import _BASIS_STRENGTH
+
+    assert set(_BASIS_STRENGTH) == _BASIS_PER_ML_NOTE
+
+
+def test_the_basis_ranking_orders_weakest_first_so_a_pair_takes_the_weaker_claim() -> None:
+    """The ranking's *values*, driven through the consumer: a comparison's basis is the weaker of
+    its two arms', so `assumed` must lose to `measured` and `measured` to `by-construction`.
+
+    Asserted through `min(..., key=...)` — the operation `_comparison_pair`'s caller performs —
+    rather than against the integers, which would assert the table against itself.
+    """
+    from modelbench.report import _BASIS_STRENGTH
+
+    def weaker(a: str, b: str) -> str:
+        return min((a, b), key=_BASIS_STRENGTH.__getitem__)
+
+    assert weaker("assumed", "measured") == "assumed"
+    assert weaker("measured", "by-construction") == "measured"
+    assert weaker("assumed", "by-construction") == "assumed"
+
+
+# --------------------------------------------------------------------------------------------
+# `_NO_VERDICT_REASON` — the causes, bound to the function that produces them (Pass 16, P16-3)
+# --------------------------------------------------------------------------------------------
+
+
+def _det_arm(name: str, correct: int = 20):
+    return run(
+        name,
+        arm_kind="deterministic",
+        items=[item(f"g{i:02d}", correct=i < correct, metric=METRIC) for i in range(40)],
+        aggregates=classification_aggregates(correct, 40),
+        fingerprint_fields=deterministic_fields(
+            packId=PACK_ID, armId=name, armParametersHash="b" * 64
+        ),
+    )
+
+
+def test_the_no_verdict_reasons_are_exactly_the_causes_comparison_pair_returns() -> None:
+    """`_NO_VERDICT_REASON` is looked up as `_NO_VERDICT_REASON[pair]` on every cause
+    `_comparison_pair` answers with, so the two are one closed set declared twice — and nothing
+    bound them (impl review Pass 16, P16-3). A cause with no reason is a `KeyError` mid-render;
+    a reason with no cause is a paragraph nothing can ever print.
+
+    The grid is exhaustive over the two dimensions `_comparison_pair` branches on — how many
+    arms it was handed (0, 1, 2) and what kind each is — so it is the function's own domain, not
+    a sample of it. A third cause introduced on a *new* dimension is still owed a case here, and
+    the equality is what says so out loud.
+    """
+    from modelbench.report import _NO_VERDICT_REASON, _comparison_pair
+
+    model, det = _arm("cand", 34), _det_arm("bm25")
+    grid = [
+        [],
+        [model],
+        [det],
+        [model, _arm("other", 30)],
+        [model, det],
+        [det, model],
+        [det, _det_arm("bm25-tuned", 30)],
+    ]
+    causes = {r for r in (_comparison_pair(runs) for runs in grid) if isinstance(r, str)}
+    assert causes == set(_NO_VERDICT_REASON)
+
+
+def test_each_no_verdict_cause_prints_its_own_reason_and_not_the_other_one() -> None:
+    """The per-cause consequence behind the domain equality: one explanation serving two causes
+    is what let a one-arm comparison assert a deterministic-arm reason that was untrue (review
+    M-6), so each cause is driven end-to-end and the *other* cause's sentence is asserted absent.
+    """
+    from modelbench.report import _NO_VERDICT_REASON
+
+    pack = guard_pack(headline=METRIC, verdicts=(METRIC,))
+    rendered = {
+        "too-few-arms": compare_report([_arm("cand", 34)], pack=pack),
+        "both-deterministic": compare_report(
+            [_det_arm("bm25"), _det_arm("bm25-tuned", 30)], pack=pack
+        ),
+    }
+    assert set(rendered) == set(_NO_VERDICT_REASON), "a cause lost its end-to-end case"
+    for cause, md in rendered.items():
+        assert _NO_VERDICT_REASON[cause] in md
+        for other, text in _NO_VERDICT_REASON.items():
+            if other != cause:
+                assert text not in md

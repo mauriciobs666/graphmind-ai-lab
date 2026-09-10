@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, Callable, Literal, Mapping
 
 from modelbench.fingerprint import FieldProblem, Fingerprint
-from modelbench.stats import LEVEL_P50, LEVEL_P95, percentile
+from modelbench.stats import LEVEL_P50, LEVEL_P95, Basis, percentile
 
 #: Plan §3.4.3 — a separate integer, never derived from `benchVersion` and never bumped by a
 #: release. It increments only when the required-field set or the on-disk record shape changes in a
@@ -36,7 +36,13 @@ from modelbench.stats import LEVEL_P50, LEVEL_P95, percentile
 BENCH_SCHEMA_VERSION: int = 1
 
 Outcome = Literal["pass", "fail", "n_a", "parse_failure"]
-Basis = Literal["by-construction", "measured", "assumed"]
+
+# `Basis` is **imported** above, never re-declared here: `RunResult.basis` and
+# `stats.resolving_power`'s `basis` parameter are one vocabulary (`-ml` §7.1), and a second
+# `Literal` on an import edge this module already crosses is a copy waiting to drift. Python
+# enforces neither copy at runtime, so dropping a member from one of the two was invisible in
+# both directions and left the whole suite green (impl review Pass 16, P16-1) — the same reason
+# `percentile` is imported rather than re-implemented here.
 
 
 class InvalidFingerprint(ValueError):
