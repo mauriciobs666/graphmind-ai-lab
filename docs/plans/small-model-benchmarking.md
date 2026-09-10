@@ -1,6 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.26 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.27 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+
+2026-09-10 — v1.27 (M11-2): the plan gate's `## Pass 14` on v1.26 (`docs/reviews/small-model-benchmarking.md`, `2f5406b`) closed in full — **1 blocker, 2 majors, 3 minors, none carried** — together with **two** `-ml` note revisions folded in at once, **v1.20**'s §11.9 ask 7 and **v1.21**'s §4.3.1 (`998d13b`), and one contradiction between two of this plan's own sections that no gate pass reached. **P14-1 (blocker)** — §3.8.4's four-row table asserted column 4 (what scores a turn) as a function of column 1 (the mechanism), and it is not one: a turn emitting only undispatchable tool calls reaches the cap with `|E(t)| = 0`, which is §4.2(a)'s `no_attempt` — a **failure** — and is outside both denominators the `cap-hit` row routed it into. **The gate's two-row split is adopted in substance and refused in form: the column is deleted, not split.** `-ml` §4.3's funnel has routed these turns since v1.1 and §4.3 rule 4 now states the mapping outright, so the table was a *second home* for a mapping that already had one — which is the same defect class one level up, and §7 rule 2 gives *which denominator a mechanism lands in* to the note. Column 4 now carries only what the plan owns (the record fields the mechanism sets) and cites rule 4 for the rest; the *"only home of that mapping"* sentence is deleted rather than corrected. The gate's own fix sentence needed a correction as it landed and gets it: `iteration_cap_hit_rate` is not "the one count keyed on the disposition alone" — there are **three**, on **two different subsets**. **P14-2 (major) is closed on arrival**, verified against the tree rather than taken: `LMStudioCallFailed.status` shipped at `d5b549d` as a **required keyword argument with no default**, with twelve raise sites audited and a completeness pin that computes **both** sides (`test_every_raise_site_of_lmstudio_call_failed_is_covered_here`) — strictly stronger than the prescribed grep-with-a-count, and the reason the finding's own arithmetic slip (eleven named, twelve enumerated, thirteen matched by the grep) could not ship. §3.8.4's *"one-line adapter change"* is replaced by what was delivered. **P14-3 (major)**: §5 test 10c said three legs land now while §4 S2's stage row said two, and §4 S5's *Done when* never named the third — all three swept, and the third leg plus deleting its shipped tripwire is now **§4 S5 *Done when* item 1**, gated rather than referenced. The precursor's rationale is restated as **cross-unit** protection: v1.26's *"two sets authored in one unit agree by construction"* over-reached, since the transcript is authored there too. **P14-4 (minor)**: the `no-response` row leads with the discriminator — *the server did not answer, or answered unusably; no HTTP status is carried* — rather than a paraphrase four status-less sites contradict. **P14-5 (minor)**: the exception path is tested before the cap, so a call raising at the cap-th iteration is never `cap-hit`; stated under the table and added to test 10c. **P14-6 (minor)**: `iterations == len(chatResults)`, stated as the consequence of a pin the note already carries; its second half was fenced to `data-scientist` and is **now ruled** (§4.2(f): the `I(t)` summary is over `{replied, cap-hit}` and no others), so the seam closes as a citation. **The disposition set widens to five, `timed-out` split out of `no-response`** — reached here from three consumers (the scorer's `fail`/`unrunnable` split, `censoringExact`'s per-item distinction, and §3.6's re-probe asymmetry) and independently in `-ml` §4.3.1 item 2; the four-members-plus-`withheldFor` alternative is recorded as the two-vocabularies collision and refused on that ground. **`TurnDisposition`/`TURN_DISPOSITIONS` and their probe already shipped at `d5b549d` holding four**, so this is an edit to guarded code: legs 1 and 2 go red until the transcribed constant moves with them, **which is the guard working and not a regression**, and the plan says so where the rework unit will read it. **The contradiction, and it is the plan's**: §3.6's fourth disposition scored a non-2xx `fail` while §3.8.4 and §4 S5 scored the same turn `unrunnable`. Decided against §3.6's outcome clause on `-ml` §4.3 rule 4's discriminator — a turn scores `fail` only where the harness gave the model its **whole declared budget** and observed nothing come back, which is the timeout and nothing else; every other non-completion is an unattributable channel failure. **Judged, not adopted**: the objection §3.6 raised is real about a rate whose denominator silently shrinks, and §4.3 rules 1–3 are what stop that, with the one remaining escape closed by **`cleanThroughTurnH`'s third state** (an `unrunnable` turn at `t ≤ H` leaves the headline's denominator, never reads as clean). Everything P4-7 bought is untouched and said to be untouched. **Ask 7's twelve items all land** — §3.3 (`callCount` as a consequence, no manifest key), §3.5 (`callCount` column), §3.6 (five FR-11 rows moved to their real unit, one added, and a withholding bullet kept **deliberately separate** from the outcome clause above it), §3.8.4 (the runner's `ItemTiming`), §4 S1 (`ItemTiming` **smaller**, the new `CallTiming`, `unexplainedMs`/`callCount` derived), §4 S2 (`LatencyBlock` gains `callCount`, `statsCoveredCount` and (iv-c) move to the **call**, (iv-b)'s `Y` is `callCount` **not** `latencyItemCount`, `unexplainedMsMax` split out of rule (i), and (ii)/(iii)/(v)/(vi) stated as unmoved), §5 tests 10b and 15b, Appendix A, and the `lmstudio.py` docstring sweep pinned by symbol and a grep count. Ask 4's correction is swept with them: **`latencyMsMax` is `None` on every declared pack**, so v1.9's justification is withdrawn at §3.5 **and** §6 R-13 rather than softened. **Two §7 rule 3 raises opened** (R-1, the netted `Y_calls`; R-2, a drifted line cite), both consequences of rulings this revision adopts, neither blocking anything here.
 
 2026-09-09 — v1.26 (M11-2): the plan gate's `## Pass 13` on v1.25 (`docs/reviews/small-model-benchmarking.md`, `05e449d`) closed except for its second blocker, which is routed and not mine — **1 blocker, 4 majors, 4 minors closed; P13-2 (`ItemTiming`/`unexplainedMs` under the loop) is `data-scientist`'s and this revision touches no latency, timing or withholding statement**, carrying one pointer so a rework unit does not build across the open seam. Item 1's ruling is unchanged: the gate judged it over-determined with reason 3 decisive alone. **P13-1 (blocker)** — `finalReplyText is None` **iff** `capHit` was false in the ← direction, and §4 S5's *absent-not-failed* rule keyed on it, laundering a §3.6 `fail` into an `n_a`. **The prescription is adopted — split the disposition off the field, never widen the `iff`** — with two corrections the gate's own set does not survive: the fourth member cannot be `-ml` §4.1's scoring word `unrunnable`, because `TurnTrace` records a **mechanism** and the count is the scorer's, the same two-vocabularies collision `BinaryMetric.unit`/`analysisUnit` and `unit_kind`/`analysis_unit_field` have already cost this plan twice, so it is `server-rejected` with the mapping to `-ml` §4.1's count written out; and the partition is **not derivable at `40a9bc8`**, since an HTTP 400 and a dropped connection both raise `LMStudioCallFailed` (`lmstudio.py:485,495`), so `LMStudioCallFailed` gains `status: int | None` and that is what separates them. The guard is honoured structurally: `TURN_DISPOSITIONS` and its **three-way** probe — the `Literal`'s members, the scorer's branch set, and a constant transcribed from this plan, each compared against the transcribed constant rather than against each other — land in a **precursor unit before** the rework unit, because a coverage probe authored beside the value it must reject contains it from birth. **P13-3** — `structured-replies-only` reproduces the executor's *replay policy*, not its shape; the speaker-name prefix, the per-assembly `CONTEXT:\n<json>` block and `_append_turn`'s same-role merging are named, judged, and added to R-3's candidate causes (verified at `executor.py:1243-1277`, read here rather than taken from the review). **P13-4** — the breadcrumb equation is deleted from §3.8.4 and R-3: `structured`'s native scaffolding is not U37/U38/U39's free-text suffix, and that suffix did **not** suppress onset — it was reverted as a severity increase (`salesperson-tool-reliability-impl.md` MAJOR 1, and the executor's own docstring). **P13-5** — the emission form is `-ml` §4.2's predicate over the turn's dispatch trace, never iteration 1, which diverges on an all-undispatchable first iteration; test 10b's clause pinned the divergence and is rewritten. **P13-6** — `maxIterationsPerTurn` is required **iff** the role runs a multi-call turn, held as a third role-table column with the same computed completeness assertion route (iii) uses, and forbidden elsewhere so a dead knob cannot accrete inside four content hashes. **P13-7** — claim 1's conclusion stands and its justification is narrowed: the basis was measured with the loop running, so the loop is not a *new* cost, but §4.5.2's minutes are a **floor** whose multiplier is bounded by `maxIterationsPerTurn`; the restatement of the figure is routed to `data-scientist`, the sizing decision is not reopened. **P13-8** — the enum spans **two** axes, role ownership and tool evidence, not one ladder. **P13-9** — a cap-hit prior turn under `structured` contributes its iterations and no trailing assistant message. **P13-10** — item 3 gains the U76 clause; item 2's provenance sentence is corrected to the shape that **already exists** rather than put in the imperative, since the gate read *"zero `_provenance` keys"* as per-entry keys while the fixture carries one `_provenance.perEntry` map citing all seven ids by name (parsed at `40a9bc8`) — what was missing was the assertion, which is now specified.
 
@@ -518,6 +520,13 @@ Key decisions:
   item-level packs' manifests gain nothing, and `tests/fixtures/packs/valid/pack.json` — the only
   fixture with a `prompt` block, declaring `historyReplay: "structured"` and no
   `maxIterationsPerTurn` at `40a9bc8` — needs both fields.
+  **One consequence of this field, and it is a consequence rather than a second declaration**
+  *(v1.27, `-ml` §11.9 ask 7)*: an item's **`callCount`** — the number of model calls the item
+  comprises, and the unit `-ml` §11.4's three `stats`-derived figures are denominated in — is
+  `I(t)` on a `tool-caller` and **`1` for every other role**, because
+  `MULTI_CALL_TURN_BY_ROLE[role]` is `False` there and a single-call turn is one call by
+  construction. **No new manifest key**: `callCount` is recorded per item (§4 S1's `ItemTiming`),
+  never declared, and the two are bound by assertion rather than by convention (§4 S2 rule (ii)).
 - **`metrics` pre-registers the verdict family, and a pack may legitimately have no headline.**
   Two separable fields, because they control different things — `-ml` §3.3 states the split and
   this plan owns the names:
@@ -1384,17 +1393,28 @@ without becoming unreadable, so:
 - **`results/index.csv` — one row per run**, the human-openable summary: runId, date, role, packId,
   packVersion, packContentHash(8), modelKey, quantization, n, headline metric(s),
   `latencyMsP50`, `latencyMsP95`, `latencyMsMax`, `latencyTimedCount`, `latencyItemCount`,
-  valid/invalid. **Every latency cell is copied from the run's own `LatencyBlock` and never
+  **`callCount`**, valid/invalid. **Every latency cell is copied from the run's own `LatencyBlock` and never
   recomputed here** *(v1.10)*: the block is where `-ml` §11's estimator and both floors are applied,
   so a percentile computed in the index builder bypasses both — which is what the shipped
   `_index_row` does today, and §4 S1e Table C is the edit. **A latency cell is empty exactly when the
   record's field is `None`** — no
   qualifier, no zero, no placeholder — which is what makes a populated cell readable without its
-  prose (`-ml` §11.6, §11.8). `latencyMsMax` is a v1.9 column and carries the tail figure for every
-  run whose sample is too small for a p95 to be anything but the maximum, which is *every*
-  tool-caller run (`-ml` §11.3); without it the long-pole pack would have no tail number anywhere in
-  the record. The two count columns are a readability addition, not a correctness one: the gate is
-  what makes the figure columns honest. **Derived and fully regenerable** (`model-bench index rebuild`), so it is never a
+  prose (`-ml` §11.6, §11.8). `latencyMsMax` is a v1.9 column carrying the tail figure on any run
+  where `-ml` §11.3's identity floor **renames** the p95 rather than refusing it; **it is `None` on
+  every run of every pack this plan declares**, because that rename is reachable only at `Y ≤ 21`
+  and the smallest declared `Y` is 30 (`-ml` §11.3, swept there — the bound is the note's and is
+  not re-derived here). The column still earns its home on the narrower argument: it is what keeps
+  the `p95` **label** honest the day a pack with `Y ≤ 21` is declared, and the alternative is
+  discovering at that point that the maximum has nowhere to live. *(v1.27 withdraws v1.9's
+  justification rather than softening it — "the tail figure is the sample maximum at every
+  tool-caller run's sample size" substituted the pack's analysis-unit count for its item count,
+  which `-ml` v1.20 corrects and which is this component's signature defect; the same sentence is
+  withdrawn at §6 R-13.)* **Three count columns join the figures, and the third is a correctness
+  requirement rather than a readability one** *(v1.27, `-ml` §11.8)*: `latencyTimedCount` and
+  `latencyItemCount` are coverage a CSV reader cannot otherwise see, while **`callCount`** is what
+  tells that reader whether the `latencyMsP50` cell in front of them is a per-call figure or a
+  per-turn one. Without it one column silently holds two estimands — the same defect the gate
+  closes at the value, one column over. **Derived and fully regenerable** (`model-bench index rebuild`), so it is never a
   second source of truth to keep honest — the same argument §3.1 makes about golden sets, applied
   internally.
 - **`reports/<pack-id>-<date>-<n>.md` — generated comparisons**, committed because they are the
@@ -1546,14 +1566,22 @@ break under deadline pressure.
     **(i)** the item is **scored per the pack's rule** and the run continues — the call produced no
     output, which is evidence about the model, so its outcome is `fail`, never `n_a`; scoring it
     `n_a` would drop it from its denominator and let a model that hangs out-score one that answers
-    wrongly, which is §5 test 7's laundering rule pointed at the clock. **(ii)** Its `latencyMs` is
+    wrongly, which is §5 test 7's laundering rule pointed at the clock. **From v1.27 this is the
+    *only* non-completion that scores `fail`**, and the reason is the one in this clause: a timeout
+    is the single mechanism where the harness gave the model its whole declared budget and observed
+    nothing come back. The fourth disposition's outcome clause moves to `unrunnable` below (`-ml`
+    §4.3 rule 4). **(ii)** Its `latencyMs` is
     **withheld**: storing `latencyMs = 120000` would put the *timeout
     constant* into the tail, where it is by construction the largest value, so the report would
     print a figure about the configuration rather than about the model. Its three siblings are
     absent too, for a different reason worth keeping distinct — a timed-out call returned no
     response, so no `stats` object was ever produced to keep. In (b) a figure exists and is dirty;
-    here nothing exists. The item still carries an **`ItemTiming`**, whose only populated field is
-    `withheldFor: "timeout"` (§4 S1) — absence of a measurement is not absence of a record.
+    here nothing exists. The item still carries an **`ItemTiming`** with
+    `withheldFor: "timeout"` (§4 S1) — absence of a measurement is not absence of a record. On a
+    single-call item that is its only populated field; on a **turn** it also carries the
+    `CallTiming`s of the iterations that *did* return before the timing-out one, which are real
+    per-call measurements and stay (v1.27) — what does not exist is the turn's own `wallClockMs`,
+    which is `None` because the turn is incomplete.
     **(iii)** The count is
     carried separately from the load-contamination count, in `latencyWithheldForNoResponse` (§4 S2),
     because the two demand different operator actions (`-ml` §11.7 slot 2 prints both).
@@ -1572,9 +1600,9 @@ break under deadline pressure.
     under *neither* named cause: §4 S2's invariants (iii) and (iv) both fail on it and `-ml` §11.7's
     two-cause split stops summing to `M`. An implementer writing those invariants as `assert`s
     crashes the run on the first 500; writing them as computed values miscounts silently and prints a
-    false cause line. The disposition is the timeout's, verbatim, because from the record's point of
-    view the two are one situation — **the call returned no response**: the item is scored per the
-    pack's rule with outcome `fail`, never `n_a`; it carries **no timing figure at all**, neither
+    false cause line. **For the *timing record* the disposition is the timeout's, verbatim**, because
+    from the record's point of view the two are one situation — **the call returned no response**:
+    it carries **no timing figure at all**, neither
     wall clock nor `stats`-derived siblings — but it does carry an **`ItemTiming` whose only
     populated field is `withheldFor: "no_response"`** *(v1.11, plan-gate P5-9: v1.10 wrote "no timing
     at all", which reads against §4 S1's `timing is None` **iff** the arm produces no timings at all
@@ -1589,6 +1617,27 @@ break under deadline pressure.
     (iv) specifies, because that is the case where the server may be gone. **The printed label is the note's and it has ruled**: `-ml`
     v1.12 §11.7 states that widening this counter to any scored call that returned no response makes
     slot 2's cause read `no response <MT>` and moves nothing else in the grammar.
+
+    **The *scored outcome* is `unrunnable`, not `fail`, and that one clause is what v1.27 reverses**
+    *(`-ml` v1.21 §4.3 rule 4, and §4.3.1 item 3 naming this sentence)*. v1.10 wrote *"the
+    disposition is the timeout's, verbatim"* and carried the timeout's `fail` across with the
+    record-keeping — but the two are one situation only for the **record**, and two for the
+    **scoring**. A timeout is the one non-completion where the harness gave the model its whole
+    declared budget and observed nothing come back; a non-2xx, a dropped connection and an
+    unparseable body are channel failures the harness cannot attribute — a `400` from a model's
+    runaway message list and a `400` from a malformed harness payload are the same status code —
+    so all three are `-ml` §4.1's **`unrunnable`**: out of every scoring denominator, counted,
+    printed. §3.8.4's disposition block is where the discriminator and the *why it is not an escape
+    hatch* argument live, and `cleanThroughTurnH`'s third state (§3.8.4) is the one hole that had
+    to close with it. **Everything else P4-7 bought is untouched and must not be reopened by a
+    reader who finds this reversal**: the third `withheldFor` value, the single
+    `latencyWithheldForNoResponse` counter, invariants (iii) and (iv), the `ItemTiming` that exists
+    without a figure, and the re-probe/exit-`3` asymmetry above. P4-7 was a `LatencyBlock`
+    accounting fix and the outcome sentence rode along with it.
+    **This paragraph and the withholding bullet below answer two different questions about the
+    same turn, and they are deliberately not merged** — one says what the turn *scores*, the other
+    what its *timing record* holds. Collapsing them is how the contradiction this reverses was
+    made.
 
     **One counter, three item states — the merge was right for the total and wrong for the item**
     *(v1.11, plan-gate P5-6, ruled by `-ml` v1.14 §11.5.1)*. v1.10 folded the timeout into
@@ -1611,13 +1660,19 @@ break under deadline pressure.
     The between-item probe structurally cannot see a reload that begins *and* ends inside one timed
     call. The same measurement that reversed (b) supplies the detector, because the field the load
     hides in is exactly the field `stats` does not see: the runner computes **`-ml` §11.5.1's gap**
-    per scored item — over `latencyMs`, `ttftMs` and `generationMs` as the unit boundary above
-    normalises them — and **withholds `latencyMs` when it exceeds the threshold §11.5.1 sets**,
+    **per call** — over that call's `wallClockMs`, `ttftMs` and `generationMs` as the unit boundary
+    above normalises them — **sums the gaps over the item's calls** *(v1.27: at `callCount == 1`
+    that is v1.9's expression unchanged, and a single-call role cannot tell the two rules apart,
+    which is why the choice is not left to an implementer)*, and **withholds `latencyMs` when the
+    sum exceeds the threshold §11.5.1 sets**,
     counting the item under §11.7's
     **model-load** cause — the same cause, a second way of detecting it, which is why it opens no
     third entry in the published cause split. Three things this plan owns and the note does not:
-    **placement** (here, in the runner, per item, beside the residency guard rather than instead of
-    it — the probe sees a reload *before* an item and the gap sees one *inside* it); the **field
+    **placement** (here, in the runner, beside the residency guard rather than instead of
+    it — the probe sees a reload *before* an item and the gap sees one *inside* any of its calls;
+    **the gap is measured per call and the withholding decided per item**, v1.27, because the
+    subtrahends are properties of one generation and the thing withheld is the item's admitted
+    wall clock); the **field
     name**; and that `unexplainedMs` is **stored per item and its maximum reported** even when it is
     below the threshold, so the threshold — which the note names as a starting value on two cold
     observations, not a derived constant — can be re-checked against the first real pack run rather
@@ -1635,6 +1690,31 @@ break under deadline pressure.
     only what the probe saw, and an in-call reload is undetected exactly as R-14 describes for the
     general case. Recorded here rather than left for an implementer to discover when the subtraction
     meets a `None`.
+  - **Withholding is at the unit of the figure, and the loop makes that a real distinction rather
+    than a restatement** *(v1.27, `-ml` §11.9 ask 7)*. `latencyMs` is withheld **per item**; the
+    three `stats`-derived figures lose or keep coverage **per call**; and **no call is ever
+    withheld for load** — §11.4's measurement is that the load sits outside `ttftMs` and
+    `generationMs`, and nothing about how many calls an item has changes that. Four consequences,
+    all of which an implementer would otherwise have to derive:
+    - **A reload *between* two iterations of one turn costs nothing.** It is invisible to the
+      between-item probe (which runs between items) and sits outside every call's wall clock, so
+      the sum above would miss it — but LM Studio loads **JIT on the request**, so whatever was
+      unloaded is re-loaded inside the *next* call, where that call's own gap sees it (`-ml`
+      §11.5.1). No guard is owed here, and this sentence exists so nobody builds one.
+    - **What does sit between the calls is the harness's own tool dispatch and message assembly,
+      and it is not foreign time.** It is real time the operator waits through and it belongs
+      inside the turn's latency; the identity worth asserting rather than assuming is
+      `ItemTiming.wallClockMs ≥ Σᵢ wallClockMsᵢ` (§5 test 10b).
+    - **A turn whose loop ended on a call that timed out or returned nothing is *not timed*.** Its
+      wall clock measures only the iterations that happened to succeed, so it is **incomplete**:
+      `ItemTiming.wallClockMs` is `None`, the partial turn wall clock is never stored as a
+      measurement, and `latencyMs` is withheld under `timeout` / `no_response` exactly as a
+      single-call item's is. §3.8.4's table gives the map from the three failing dispositions onto
+      those two `withheldFor` values.
+    - **A `cap-hit` turn is the opposite case and must not be folded into it.** Every one of its
+      `maxIterationsPerTurn` calls returned, its wall clock is complete, and it is timed and ranked
+      like any other item. The two are one word apart in prose and opposite in the record, which is
+      why they are two bullets.
 
   Two rejected alternatives, both of which contaminate the data they are meant to protect. **One
   widened timeout (300 s everywhere)**: it removes the only signal that a warm call has hung, and it
@@ -1660,13 +1740,14 @@ break under deadline pressure.
 
   | Field | Source | Status |
   |---|---|---|
-  | `latencyMsP50` / `latencyMsP95` / `latencyMsMax` | **client wall clock**, measured around the HTTP call from just before the request to the last byte of the body, over items whose timing block survived; estimator, denominator, both floors and the printed grammar are `-ml` §11's | **headline** |
-  | `ttftMs` | **`ChatResult.ttftMs`** = `1000 × stats.time_to_first_token` — the unit boundary above, and the only place the conversion is written | reported; **kept on a load-contaminated item** — it measures generation after the load (`-ml` §11.4) — and printed with **its own** denominator, its median taking the p50 gate against its own coverage |
-  | `generationMs` | **`ChatResult.generationMs`** = `1000 × stats.generation_time` | stored per item (§4 S1's `ItemResult`); it is the second operand of `-ml` §11.5.1's gap and is printed nowhere on its own. **New row in v1.10** — v1.9 used the name without defining it (plan-gate P4-9) |
-  | `prefillMsPer1kPromptTokens` | `ttftMs ÷ (usage.prompt_tokens ÷ 1000)`, per call, aggregated as median. **No second conversion:** `ttftMs` is already milliseconds, and v1.9's `1000 × stats.time_to_first_token ÷ …` was the same arithmetic written from the raw seconds — correct in itself, and the row above it read the same field as milliseconds (plan-gate P4-1) | reported (**new in v1.2 — FR-11 names it and v1.1 omitted it**); same treatment and same gate as `ttftMs` |
+  | `latencyMsP50` / `latencyMsP95` / `latencyMsMax` | **client wall clock**, measured around the HTTP call from just before the request to the last byte of the body, over items whose timing block survived; estimator, denominator, both floors and the printed grammar are `-ml` §11's | **headline**; an **item** figure, and on a `tool-caller` an item is a *turn* — so it is the whole turn's wall clock, every iteration and the tool dispatches between them included (v1.27: "client wall clock" no longer disambiguates it, `-ml` §11.4) |
+  | `ttftMs` | **`ChatResult.ttftMs`** = `1000 × stats.time_to_first_token` — the unit boundary above, and the only place the conversion is written | reported; a **call** figure, pooled over calls with a **call** denominator (v1.27, `-ml` §11.4); **kept on a load-contaminated item** — it measures generation after the load — its median taking the p50 gate against its own coverage |
+  | `generationMs` | **`ChatResult.generationMs`** = `1000 × stats.generation_time` | stored per **call**, on `CallTiming` (v1.27, §4 S1 — v1.10 put it on the item, which the loop makes wrong); it is the second operand of `-ml` §11.5.1's per-call gap and is printed nowhere on its own. **New row in v1.10** — v1.9 used the name without defining it (plan-gate P4-9) |
+  | `prefillMsPer1kPromptTokens` | `ttftMs ÷ (usage.prompt_tokens ÷ 1000)`, per call, aggregated as median. **No second conversion:** `ttftMs` is already milliseconds, and v1.9's `1000 × stats.time_to_first_token ÷ …` was the same arithmetic written from the raw seconds — correct in itself, and the row above it read the same field as milliseconds (plan-gate P4-1) | reported (**new in v1.2 — FR-11 names it and v1.1 omitted it**); a **call** figure with a call denominator, same treatment and same gate as `ttftMs` |
   | `coldLoadSeconds` | the warm-up call's wall clock, once per run, **only** when the model was not resident at start | reported separately, never averaged into steady state; **absent** (not `0`) otherwise |
-  | `tokensPerSecond` | `stats.tokens_per_second`, **unconverted** — a per-second rate is already in the units its name claims | **diagnostic only** — FR-11 says so in words, and the report labels it so; kept like its two siblings, and still printed with its denominator, because a diagnostic over an unstated subset is the same defect one severity down (`-ml` §11.4) |
-  | `unexplainedMs` | `-ml` §11.5.1's gap, per scored item, over `latencyMs`, `ttftMs` and `generationMs` as normalised above — the metric and its threshold are the note's | the in-call reload detector: **withholds `latencyMs`** above `-ml` §11.5.1's threshold, stored and its maximum reported either way; **chat surface only** |
+  | `tokensPerSecond` | `stats.tokens_per_second`, **unconverted** — a per-second rate is already in the units its name claims | **diagnostic only** — FR-11 says so in words, and the report labels it so; a **call** figure like its two siblings, kept on a contaminated item and still printed with its (call) denominator, because a diagnostic over an unstated subset is the same defect one severity down (`-ml` §11.4) |
+  | `unexplainedMs` | `-ml` §11.5.1's gap **summed over the item's own calls**, each call's gap taken over that call's `wallClockMs`, `ttftMs` and `generationMs` as normalised above — **`None` unless every call of the item yields a readable gap**; the metric, the sum and the threshold are the note's | an **item** figure: the in-call reload detector, **withholding `latencyMs`** above `-ml` §11.5.1's threshold, stored and its maximum reported either way; **chat surface only** |
+  | `callCount` | `int`, `len(ItemTiming.calls)` — the calls the item comprises, asserted equal to `TurnTrace.iterations` (§4 S2 rule (ii)) | **new in v1.27** (`-ml` §11.9 ask 7, §11.8): `Y_calls` is its sum over items and is the denominator the three `stats`-derived figures print against; it is also what tells an `index.csv` reader whether a latency cell is per call or per turn |
   | `modelSizeBytes`, `peakHostRssBytes` | **no source (v1.8, R-2)**; sampled `Get-Process` | first recorded absent, never `0`; second best-effort, method-labelled (R-2) |
 
   **Every figure in that table needs a typed home, and four of them had none until v1.10**
@@ -1676,7 +1757,9 @@ break under deadline pressure.
   `latencyMs` and nothing else timing-related and `LatencyBlock` carried only wall-clock figures and
   counts. With no typed home those figures land in `ItemResult.detail`, which this plan's own
   contract forbids `report.py` to read. The shape is **one record per item, `ItemTiming`, holding
-  every timing the call produced** (§4 S1), and the **per-run** medians and maximum on
+  the item's own wall clock and an ordered `CallTiming` per call** (§4 S1 — v1.27 splits the two
+  levels apart, and the item record gets *smaller*: the five scalars v1.10 put on it move onto
+  `CallTiming` and have no second home), and the **per-run** medians and maximum on
   `LatencyBlock` (§4 S2). Two things about that shape are decisions rather than packaging:
   - **`latencyMs` becomes a derivation over `ItemTiming`, not a second field holding the same
     number.** `ItemTiming.wallClockMs` is what the harness measured; `latencyMs` — the *admitted*
@@ -2148,6 +2231,19 @@ checks today.
     another route; a warning would be ignored. Fail closed.
   - **`H` is printed beside the metric name in every report** — `cleanThroughTurn4`, never
     `cleanThroughTurnH`.
+  - **The metric has three states, not two, and the third is what stops `unrunnable` becoming an
+    escape hatch at the headline** *(v1.27; `-ml` v1.21 §4.3 rule 4's closing clause and §4.3.1
+    item 5)*. *"No failure through turn `H`"* reads a turn the harness could not drive as **clean**,
+    which is `-ml` §4.3's laundering arriving at the one number the report calls its headline —
+    and it arrives there precisely *because* rule 4 rules such a turn `unrunnable` rather than
+    `fail` (§3.8.4's disposition block). So: a conversation carrying an `unrunnable` turn at any
+    `t ≤ H` is **neither clean nor failed**. It leaves the headline's denominator —
+    `ItemResult.scoreable["cleanThroughTurnH"] is False`, the machinery §4 S1 already has — is
+    counted in the headline's own `n/a` tally and printed beside it (rule 2), and drops out of the
+    paired intersection for **both** arms, surfacing as an `asymmetry` count. **No new gate keeps
+    the shrunken `n` honest**: `verdict()` already refuses below `resolving.observable_floor`
+    (`-ml` §3.4 Rule 7) and that floor is computed from the surviving `n`, so a collapsed
+    denominator refuses itself.
   - **`H` strictly below `min(script length)` is legitimate, and the gap is reported.** Declaring
     `H < min` keeps the headline's meaning stable across pack versions, at the price that turns
     `H+1 … min` are scored and then excluded from the headline — the metric becomes **coarser, not
@@ -2227,36 +2323,153 @@ checks today.
   working list, and call again; stop when a response carries no tool calls — that response's text is
   the turn's final reply — or when `maxIterationsPerTurn` is reached.
 
-  **A turn ends in one of four ways, and the *mechanism* is recorded as `TurnTrace.turnDisposition`,
-  separately from the reply field** *(v1.26, P13-1 — v1.25 wrote `finalReplyText is None` **iff**
-  `capHit`, which is false in the ← direction: a call that times out, drops or is refused also
+  **A turn ends in one of five ways, and the *mechanism* is recorded as `TurnTrace.turnDisposition`,
+  separately from the reply field** *(v1.26, P13-1: v1.25 wrote `finalReplyText is None` **iff**
+  `capHit`, which is false in the ← direction — a call that times out, drops or is refused also
   yields no final reply with `capHit == False`, and §4 S5's *absent-not-failed* rule keyed on that
   field converted a §3.6 `fail` into an `n_a`, in the paragraph that names laundering as the enemy.
-  The `iff` is **not** widened — that would keep the name and delete the guarantee; the disposition
-  is split off the field instead.)*
+  The `iff` was **not** widened; the disposition was split off the field instead. v1.27 widens the
+  set from four members to five and **deletes the scoring claim the last column used to make** —
+  P14-1, the `fail`/`unrunnable` ruling, and the timing ruling, all below.)*
 
-  | `turnDisposition` | mechanism | `finalReplyText` | what scores it |
+  | `turnDisposition` | mechanism | `finalReplyText` | what the **record** then carries |
   |---|---|---|---|
-  | `replied` | a response carrying no tool calls terminated the loop | `str(content or "")` — **never `None`**; a terminating response with `content: null` or `""` is *captured and empty* | the turn's own FR-8 counts |
-  | `cap-hit` | `maxIterationsPerTurn` reached with tool calls still being emitted | `None` | `-ml` §4.2(f)'s `iteration_cap_hit_rate` and §4.2(g)'s printed `unscoreable` bucket — *absent, not failed*, and **this row alone** |
-  | `no-response` | the call did not complete: `LMStudioCallTimeout`, or `LMStudioCallFailed` carrying **no** HTTP status (dropped connection, socket or body error) | `None` | §3.6's third and fourth dispositions — outcome **`fail`**, never `n_a` |
-  | `server-rejected` | the server answered and refused: `LMStudioCallFailed` carrying an HTTP status | `None` | `-ml` §4.1's **`unrunnable`** count — never a failure, never silently dropped |
+  | `replied` | a response carrying no tool calls terminated the loop | `str(content or "")` — **never `None`**; a terminating response with `content: null` or `""` is *captured and empty* | `withheldFor`: `None`, or `"load"` if a guard fired |
+  | `cap-hit` | `maxIterationsPerTurn` reached with tool calls still being emitted, **every one of those calls having returned** | `None` | the turn is **timed** — its wall clock is complete — so `withheldFor` is `None`, or `"load"` if a guard fired |
+  | `timed-out` | a call hit `requestTimeoutSeconds`: `LMStudioCallTimeout` | `None` | `withheldFor: "timeout"`; the runner re-probes and may exit `3` (§3.6 clause (iv)) |
+  | `no-response` | the server did not answer, or answered unusably — **no HTTP status is carried**: `LMStudioCallFailed` with `status is None` (dropped connection, socket error, or a 2xx whose body is not a usable response) | `None` | `withheldFor: "no_response"`; **no** re-probe and no exit `3` (§3.6's fourth disposition) |
+  | `server-rejected` | the server answered and refused: `LMStudioCallFailed` carrying an HTTP status | `None` | `withheldFor: "no_response"`; no re-probe, as above |
 
   So `finalReplyText is None` **iff** `turnDisposition != "replied"`, and no consumer keys
   *absent-not-failed* on the reply field. **The set is a mechanism vocabulary and deliberately not
-  the note's**: the gate proposed `unrunnable` as the fourth member, and `unrunnable` is `-ml`
+  the note's**: the gate proposed `unrunnable` as a member, and `unrunnable` is `-ml`
   §4.1's *count*. Naming a `TurnTrace` field after a scoring category is the collision that has
   already cost this plan twice (`BinaryMetric.unit` against `PackRef.analysisUnit`; `unit_kind`
-  against `analysis_unit_field`), so the token names what happened and the table above is where it
-  maps to the count.
-  **The partition is not derivable from the adapter as built, and that is part of this ruling.** At
-  `40a9bc8` an HTTP 400 — `-ml` §4.1's own example, and what cost §8.4 six of eight `gpt-oss-20b`
-  conversations — and a dropped connection both raise `LMStudioCallFailed`
-  (`lmstudio.py:485` and `:495`), so the last two rows are indistinguishable. **`LMStudioCallFailed`
-  gains `status: int | None`**, the HTTP status when the failure was a status response and `None`
-  when the call never completed; that field, not the exception class, is what `drive` partitions on.
-  It is *absent versus empty* one more time, and it is a one-line adapter change in the file S2
-  already owns.
+  against `analysis_unit_field`), so the token names what happened and `-ml` §4.3 rule 4 is where
+  it maps onto the counts.
+
+  **What the mechanism *scores* is not in that table, and v1.27 deletes the column that said it
+  was** *(P14-1, and `-ml` v1.21 §4.3.1 item 1 recommending the deletion over the row split)*.
+  v1.26's fourth column asserted a scoring mapping and called this table *"the only home of that
+  mapping"*. It was never the only home: `-ml` §4.3's funnel has routed these turns since v1.1, and
+  §4.3 **rule 4** now states the mechanism-to-denominator mapping outright, in one place, as a
+  function of the **pair** `(D(t), E(t))` rather than of the mechanism alone. **Two homes for one
+  mapping is what produced P14-1**, and the ownership reason is §7 rule 2's: this plan owns
+  `TurnTrace`'s mechanism vocabulary and the record fields above, while *which denominator a
+  mechanism lands in* is a scoring question and the note's. So the column is a citation now, the
+  sole-ownership sentence is deleted rather than corrected, and the plan restates none of rule 4's
+  five rows. What P14-1 found is closed by that deletion: a `cap-hit` turn with `|E(t)| = 0` —
+  which the loop reaches whenever a model emits only undispatchable tool calls, `drive` skipping a
+  nameless call (`convo.py`'s `if not name: continue`, at `d5b549d`) — is `no_attempt` under
+  §4.2(a), a **failure**, and is outside (f)'s `stopping_when_done` denominator and outside (g)'s
+  entirely, so it cannot occupy (g)'s `unscoreable` bucket. v1.26's table routed it into both.
+  *Two corrections the gate's own fix sentence needs and this deletion makes moot rather than
+  inherits:* `iteration_cap_hit_rate` is **not** "the one count keyed on the disposition alone" —
+  there are **three** so keyed (the cap-hit rate, and the mean and p95 of `I(t)`) and they use
+  **two different subsets**, `all-less-unrunnable` for the first and `{replied, cap-hit}` for the
+  other two; and a reader who takes the singular literally puts the `I(t)` summary back under
+  `E(t)`. Both are `-ml` §4.2(f)'s and neither is restated here beyond that warning.
+
+  **The outcome a non-completion scores is `-ml` §4.3 rule 4's, and it reverses one clause of
+  §3.6** *(v1.27; `-ml` v1.21 §4.3 rule 4 and §4.3.1 item 3)*. Only the **timeout** scores `fail` —
+  it is the one mechanism where the harness gave the model its whole declared budget and observed
+  nothing come back. `no-response` and `server-rejected` are channel failures the harness cannot
+  attribute (a `400` from a model's runaway message list and a `400` from a malformed harness
+  payload are the same status code), so both are §4.1's **`unrunnable`**: out of every scoring
+  denominator, counted, printed. §3.6's fourth disposition said `fail` and §3.8.4's v1.26 table
+  said `unrunnable` for the same non-2xx turn; **the contradiction is real and is decided against
+  §3.6's outcome clause**, which is amended there. *Judged rather than adopted: the discriminator
+  is attributability, and it is the same distinction §11.5.1 already spends on `censoringExact` —
+  a censored observation has a known bound and is evidence, a missing one is neither. The objection
+  §3.6 raised — that `n_a` lets a model that hangs out-score one that answers wrongly — is real
+  about a **rate whose denominator silently shrinks**, and `-ml` §4.3 rules 1–3 are what stop that:
+  an `unrunnable` turn costs the model `n` visibly, in the funnel's head, in the paired
+  intersection, and in the resolving-power line. The one place it could still escape is the
+  headline, which is why `cleanThroughTurnH` takes a third state (above).*
+
+  **Why the set is five and not four, and it is not P14-1's doing** *(v1.27; independently reached
+  here and in `-ml` v1.21 §4.3.1 item 2)*. v1.26 folded the
+  timeout and the status-less failure into one `no-response` row, and **three** consumers need them
+  apart. **Scoring**: under rule 4 above a timeout is `fail` and a status-less failure is
+  `unrunnable`, so a folded token leaves the S5 scorer unable to tell one from the other — the
+  decisive reason, and the one v1.26 could not have had. **Timing**: `-ml` §11.5.1's
+  `censoringExact` reads the distinction **per item** — a timeout is a *censored* observation and a
+  call that failed at 40 ms is a *missing* one — which is exactly why §3.6 already carries
+  **three** `withheldFor` item states. **Operations**: §3.6 clause (iv) re-probes after a
+  timeout and deliberately does not after a non-timeout failure. Under the loop `drive` catches
+  the exception, so the runner and the scorer see only the `TurnTrace` and can recover none of the
+  three facts from a four-member set. The alternative — keeping four members and having the scorer
+  re-derive the split from `ItemTiming.withheldFor` — is workable and is precisely the
+  two-vocabularies collision this plan has paid for twice (`BinaryMetric.unit` against
+  `PackRef.analysisUnit`; `unit_kind` against `analysis_unit_field`), now with a *timing* field
+  deciding a *scoring* question; it is rejected on that ground and recorded here so the choice is
+  not re-made by default. With `timed-out` split out the set is *two loop outcomes plus the
+  transport boundary's own three*, and both `withheldFor` and rule 4's outcome column are total
+  maps over it rather than second judgements.
+  **The cost is one transcribed constant, and the probe going red is the guard working, not a
+  regression.** `convo.TurnDisposition`, `convo.TURN_DISPOSITIONS` and
+  `tests/test_convo.py`'s `_DISPOSITIONS_PER_PLAN_3_8_4` landed at `d5b549d` holding the four, and
+  legs 1 and 2 of §4 S2's probe redden the moment either module declaration changes. That is the
+  failure mode the precursor unit exists to catch; the rework unit updates the transcript to the
+  five rows above **in the same change** as the two declarations, in files it is already editing,
+  and must not read the red as a defect in its own work. *(`-ml` §4.3.1 item 2 asks for the widen
+  to reach that unit "before `TURN_DISPOSITIONS` lands". It landed first — the note was written
+  without sight of `d5b549d` — and the sequencing is fine either way: the probe is what makes a
+  late widen visible rather than silent, which is the whole reason it was given a round of its
+  own.)*
+
+  **The partition of the last two rows is not derivable from the adapter as v1.25 found it, and
+  closing that was part of P13-1's ruling — it has landed.** At `40a9bc8` an HTTP 400 — `-ml`
+  §4.1's own example, and what cost §8.4 six of eight `gpt-oss-20b` conversations — and a dropped
+  connection both raised `LMStudioCallFailed` (`lmstudio.py:485` and `:495`), so the two were
+  indistinguishable. `LMStudioCallFailed` now carries **`status: int | None`** — the HTTP status
+  when the server answered and refused, `None` when it did not — as a **required keyword argument
+  with no default**, and that field, not the exception class, is what `drive` partitions on.
+  Delivered at `d5b549d`: twelve raise sites audited, two carrying a status, and a completeness pin
+  that computes **both** sides —
+  `test_every_raise_site_of_lmstudio_call_failed_is_covered_here` compares the set of source lines
+  that raise the class against the set the scenario table actually reaches — so a thirteenth site
+  cannot arrive untested. *(v1.26 called this "a one-line adapter change", which under-stated it by
+  the site count; the gate's correction, P14-2, named eleven sites while enumerating twelve, and a
+  `grep -c` on the constructor returns thirteen because the class statement matches the same
+  pattern — which is why the shipped pin derives both sides rather than transcribing a count. The
+  precursor unit reached the same two decisions independently, before the pass existed, so P14-2 is
+  closed on arrival.)* `timed-out` needs no equivalent field: `LMStudioCallTimeout` is already its
+  own class.
+
+  **`iterations` is the count of calls in the turn that *completed*, and it is one number with two
+  others: `iterations == len(chatResults) == len(ItemTiming.calls)`** *(v1.27, P14-6's first half;
+  the pin is `-ml` §11.9 ask 7's, in its `ItemTiming` item and its test-10b item, and §11.10 (7d)
+  asserts it rather than leaving it a convention)*. A turn whose first call raised therefore has
+  `iterations == 0` and `calls == ()`; one that raised on its third call has `iterations == 2`.
+  **`0` there means *no iteration was observed*, never *the model used no iterations***, which is
+  this component's absent-never-zero rule and is half of why `-ml` §4.2(f) keeps such a turn out
+  of the `I(t)` summary below.
+  *Raise **R-1** to `data-scientist` under §7 rule 3 — a consequence of that pin, not a
+  disagreement with it.* Under the completed reading `-ml` §11.4's *"`callCount` is `1` for every
+  role but `tool-caller`"* is false on an item whose only call returned nothing (it is `0` there),
+  and ask 7's bound `statsCoveredCount ≤ Y_calls − (calls that returned no response)` has an
+  **identically zero** subtrahend, since such a call is not in `Y_calls` at all. Two consequences,
+  each stated where it is used: §4 S2 rule (iv) carries the bound in the form that holds under
+  either reading, and `Y_calls` is a **netted** call denominator — the calls removed from it are
+  exactly the ones that could not have carried `stats` — which is what §11.4's own `Y` argument
+  refuses one unit up. The plan builds the note's pin; if the note unnets `Y_calls` the change is
+  one field's definition plus one test, and nothing stored moves, because §4 S1's `ItemTiming` is
+  unbuilt (`git grep -c ItemTiming` over `model-bench/**/*.py` at `d5b549d` → no match).
+
+  **Which turns enter `-ml` §4.2(f)'s `I(t)` mean and p95 is settled, and it is not this
+  document's** *(v1.27; P14-6's second half, fenced out of v1.26 and ruled in `-ml` v1.21
+  §4.2(f))*. The summary is over `D(t) ∈ {replied, cap-hit}` and no others — `timed-out` included
+  in the exclusion, because a budget bounds *how long*, not *how many*. The plan cites it and
+  restates neither the reasoning nor the two censoring properties printed with it; what the plan
+  fixes is only that **`iterations` is recorded on every turn regardless of disposition**, so the
+  summary's population is a filter over the record rather than a decision made while writing it.
+
+  **Precedence, which the loop's control flow determines and which no earlier revision stated**
+  *(v1.27, P14-5)*: the exception path is tested **before** the cap, so a call that raises at the
+  cap-th iteration is `timed-out` / `no-response` / `server-rejected`, never `cap-hit` — `cap-hit`
+  requires a completed response still carrying tool calls.
+
   **`drive` catches `LMStudioError`, records the disposition, and continues the script** — `-ml`
   §4.1's hard rule is that a turn is never skipped because a previous turn failed, so an error that
   propagated out of `drive` would abandon the script and destroy every later turn's denominator.
@@ -2280,10 +2493,22 @@ checks today.
   states the binding constraint is FR-19 human verification, not compute. §4.5.2's figure is the
   note's and its restatement is routed to `data-scientist`, not made here.
 
-  **One seam this bullet does not close.** How a multi-call turn's `ItemTiming` is taken — and what
-  `-ml` §11.5.1's per-call gap detector is applied to under the loop — is plan-gate **P13-2**, ruled
-  in `docs/plans/small-model-benchmarking-ml.md` by `data-scientist`. Nothing in this section
-  asserts an answer, and a rework unit must read that ruling alongside this one.
+  **How a multi-call turn's timing is taken — plan-gate P13-2, now ruled and carried** *(v1.27;
+  the ruling is `-ml` v1.20 §11.4/§11.5.1 and its plan-side list is §11.9 ask 7, which this
+  revision folds in section by section)*. The runner builds **one `ItemTiming` per turn** from
+  `TurnTrace.chatResults`, in order — one `CallTiming` per completed call (§4 S1). Three
+  consequences belong here rather than in §3.6, because they are properties of the turn:
+  - The turn's **`wallClockMs` is the item figure**: every iteration and the tool dispatches
+    between them, which is the response time an operator waits through, and the only latency an
+    operator can act on. Redefining it as one call of the turn would make a model that loops eight
+    times report a *smaller* latency than one that answers in a single call.
+  - `-ml` §11.5.1's gap detector is **computed per call and summed over the item**; the item's
+    `unexplainedMs` is `None` unless **every** one of its calls yields a readable gap. Subtracting
+    one call's `ttftMs + generationMs` from the *turn's* wall clock would make the detector fire on
+    iteration count — the quantity §4.2(f) exists to measure — rather than on a load.
+  - **A turn that ended on a raise has an incomplete wall clock and is not timed**; a `cap-hit`
+    turn is the opposite case and must not be folded into it. §3.6's withholding bullet is where
+    both are stated, because withholding is a `LatencyBlock` concern.
 - **Validation target (§2.2):** running this pack against `qwen/qwen3-4b-2507` and
   `mistralai/ministral-3-3b` must reproduce the documented per-turn contrast. If it does not, the
   harness — not the models — is what has been measured. **The pack declares
@@ -2539,22 +2764,40 @@ class Fingerprint:
 
 # results.py
 @dataclass(frozen=True)
-class ItemTiming:                   # v1.10 (§3.6's unit boundary; plan-gate P4-3, -ml §11.9 2b)
-    wallClockMs: float | None       # what the harness measured; None iff no response was received
+class CallTiming:                   # v1.27 (-ml v1.20 §11.4/§11.5.1, §11.9 ask 7): ONE MODEL CALL.
+    wallClockMs: float | None       # this call's own client wall clock
     ttftMs: float | None            # 1000 x stats.time_to_first_token — normalised in ChatResult
     generationMs: float | None      # 1000 x stats.generation_time
     promptTokens: int | None        # usage.prompt_tokens; prefill is derived, never stored
-    tokensPerSecond: float | None    # stats.tokens_per_second, unconverted
-    unexplainedMs: float | None     # -ml §11.5.1's gap; None on a surface with no stats
+    tokensPerSecond: float | None   # stats.tokens_per_second, unconverted
+    # Every field None-when-absent and never 0. These five are CALL figures: a `tool-caller` item
+    # is a turn of I(t) calls, prefill is not even constant within a turn (the prompt grows with
+    # each appended `tool` message), and -ml §11.4 pools them over calls rather than averaging up
+    # to the item first. They lived on ItemTiming from v1.10 to v1.26, when an item was one call.
+
+@dataclass(frozen=True)
+class ItemTiming:                   # v1.10 (§3.6's unit boundary; plan-gate P4-3, -ml §11.9 2b);
+                                    # v1.27: SMALLER — three fields, the five scalars moved down.
+    wallClockMs: float | None       # the ITEM's wall clock: on a tool-caller the whole turn, every
+                                    # iteration and the tool dispatches between them. None when the
+                                    # turn is incomplete (it ended on a raise) — a partial turn's
+                                    # wall clock is never stored as a measurement (§3.6).
+    calls: tuple[CallTiming, ...]   # one per COMPLETED call, in order (-ml §11.9 ask 7). Empty for
+                                    # an item whose only/first call returned nothing.
     withheldFor: Literal["load", "timeout", "no_response"] | None   # why latencyMs is absent
+    # unexplainedMs and callCount are DERIVED PROPERTIES over `calls`, not stored fields — the same
+    # §7 rule 4 move ItemResult.latencyMs already is over this record, applied to it a second time:
+    #   callCount     == len(calls)                       # -ml §11.4's per-item Y_calls term
+    #   unexplainedMs == sum of each call's own gap        # -ml §11.5.1, over calls in order,
+    #                                                      # None unless EVERY call yields a gap
     # v1.11 (plan-gate P5-6, -ml v1.14 §11.5.1): THREE withheld states, ONE counter. `timeout` and
     # `no_response` are both counted in latencyWithheldForNoResponse (§4 S2 (vi)); they are separate
     # item states because §11.5.1's `censoringExact` is satisfied by a timeout (a censored
     # observation) and falsified by a non-timeout failure (a missing one). `None` = timed.
-    # Every field is None-when-absent and never 0. On a model:embeddings arm only wallClockMs and
-    # withheldFor are populated: that surface returns no `stats` (§3.4.4a). An item that returned no
-    # response still carries an ItemTiming — withheldFor populated, every other field None
-    # (plan-gate P5-9); `timing is None` means the ARM produces no timings at all (deterministic).
+    # On a model:embeddings arm each CallTiming carries wallClockMs only: that surface returns no
+    # `stats` (§3.4.4a). An item that returned no response still carries an ItemTiming — withheldFor
+    # populated, wallClockMs None, calls () (plan-gate P5-9); `timing is None` means the ARM
+    # produces no timings at all (deterministic).
 
 class MetricKindError(ValueError): ...   # v1.12 (plan-gate P6-1, -ml v1.15 §3.2d) — a metric name
                                         # present in BOTH `counts` and `measures`, or
@@ -4540,12 +4783,19 @@ class LMStudio:                                     # base_url from host.json ap
                                                     # `runtime`/`stats` kept on the chat surface only
     def probe(self) -> Literal["api-v0", "v1-only", "unreachable"]: ...   # §3.4.4a's two-step probe
 class LMStudioCallFailed(LMStudioError):
-    status: int | None                              # v1.26: the HTTP status when the server
-                                                    # ANSWERED and refused, None when the call never
-                                                    # completed. Absent-vs-empty again, and the only
-                                                    # thing separating §3.8.4's `server-rejected`
-                                                    # from `no-response` — at 40a9bc8 an HTTP 400
-                                                    # and a dropped connection raise the same class
+    status: int | None                              # v1.26; DELIVERED at d5b549d as a REQUIRED
+                                                    # keyword arg with no default. The HTTP status
+                                                    # when the server ANSWERED and refused, None
+                                                    # when the call never completed OR answered
+                                                    # unusably (a 2xx whose body is not a usable
+                                                    # response carries None deliberately: the
+                                                    # server did not refuse). Absent-vs-empty
+                                                    # again, and the only thing separating
+                                                    # §3.8.4's `server-rejected` from
+                                                    # `no-response` — at 40a9bc8 an HTTP 400 and a
+                                                    # dropped connection raised the same class.
+                                                    # `timed-out` needs no field: LMStudioCallTimeout
+                                                    # is its own class.
 # No load/unload/ps: v1.7's three lms.exe operations are gone with the CLI (§2.5, §3.4.4a), and
 # nothing on either HTTP surface can unload — the harness cannot force a cold state.
 
@@ -4664,24 +4914,42 @@ tail; `0` replays all of it.
 - **`drive`** runs §3.8.4's bounded per-turn loop, `assemble`s each turn from the `TurnTrace`s it has
   accumulated, catches `LMStudioError` and **continues the script** (§3.8.4; `-ml` §4.1), and
   returns a `ConversationTrace`. `TurnTrace` carries `messagesSent`, `chatResults` (**all**
-  iterations, in order — empty for a turn whose first call raised), `dispatches` (that turn's own
-  slice of `env.trace()`), `envState`, `iterations`, `turnDisposition`, `finalReplyText: str | None`
-  — `None` **iff** `turnDisposition != "replied"`, per §3.8.4's four-row table, which is the only
-  home of that mapping — and `wallClockMs`. *(`capHit` is retired as a field: it was one bit
-  standing where four states are, and `turnDisposition == "cap-hit"` is the same fact without the
-  false `iff`. What `wallClockMs` is taken over on a multi-call turn is plan-gate P13-2's, ruled in
-  the `-ml` note; this list asserts nothing about it.)*
+  completed iterations, in order — empty for a turn whose first call raised), `dispatches` (that
+  turn's own slice of `env.trace()`), `envState`, `iterations`, `turnDisposition`,
+  `finalReplyText: str | None`
+  — `None` **iff** `turnDisposition != "replied"`, per §3.8.4's table, which is the only
+  home of that mapping — and `wallClockMs`. **`iterations == len(chatResults)`**, the calls that
+  *completed*, so a turn that raised on its third call records `2` (§3.8.4, P14-6). **`wallClockMs`
+  brackets the whole turn** — every iteration and the tool dispatches between them — and the runner
+  stores it as the item's measured figure only when the turn completed; on a turn that ended on a
+  raise it is incomplete and `ItemTiming.wallClockMs` is `None` (§3.6's withholding bullet, §3.8.4).
+  *(`capHit` is retired as a field: it was one bit standing where five states are, and
+  `turnDisposition == "cap-hit"` is the same fact without the false `iff`.)*
 - **The disposition set is plan data, and its guard lands in a precursor unit** *(v1.26; the plan
-  gate's structural condition)*. `convo.TURN_DISPOSITIONS: frozenset[str]` holds exactly
-  `{"replied", "cap-hit", "no-response", "server-rejected"}`, and a **three-way** probe asserts
-  that `set(get_args(TurnDisposition))`, the set of dispositions the S5 scorer branches on, and
-  `TURN_DISPOSITIONS` **each equal a constant transcribed into the test from this bullet** — each
-  compared against the transcript, never against each other, because two sets authored in one unit
-  agree by construction and a probe that cannot redden is not a guard. **`TURN_DISPOSITIONS` and the
-  probe land in their own unit, before the rework unit that builds the loop**, so the declared set
-  is authored and gated in a round where nobody is adding a member to it, and the rework unit
-  consumes a constant it did not write. A fifth mechanism arriving later reddens the probe instead
-  of silently joining the enum — which is how the two-state reading arrived in the first place.
+  gate's structural condition. **Delivered at `d5b549d`**, holding v1.26's four members — the two
+  module declarations and legs 1 and 2 of the probe — so from v1.27 the rows below are an **edit**
+  to shipped code, not a fresh build.)* `convo.TURN_DISPOSITIONS: frozenset[str]` holds exactly
+  the members of §3.8.4's table — **five from v1.27**, `{"replied", "cap-hit", "timed-out",
+  "no-response", "server-rejected"}` — and a **three-way** probe asserts that
+  `set(get_args(TurnDisposition))`, `TURN_DISPOSITIONS`, and the set of dispositions the S5 scorer
+  branches on **each equal a constant transcribed into the test from §3.8.4's table** — each
+  compared against the transcript, never against each other. **The transcript's source is §3.8.4's
+  table in all three places**; two of them named §4 S2 at v1.26, which pointed a reader at the
+  bullet holding the set literal rather than at the mapping's declared only home.
+  **What the precursor buys is cross-unit protection, and v1.26 over-claimed it** *(v1.27, P14-3's
+  second half)*. The claim was that *"two sets authored in one unit agree by construction and a
+  probe that cannot redden is not a guard"* — but the **transcript** is authored in that same unit
+  too, so in round 1 all three artefacts share one author and the probe cannot redden then either.
+  What it genuinely buys is real and is the reason it was worth a round of its own: it reddens when
+  a **later** unit widens the enum without touching the transcript — which is exactly what v1.27
+  does, and which is how the two-state reading arrived in the first place. The shipped module
+  docstring on `TURN_DISPOSITIONS` carries the same over-claim in its own words; the rework unit
+  corrects it in the same pass, in a file it is already editing.
+- **The v1.27 edit to that shipped guard, stated so the rework unit does not read red as
+  regression.** `convo.TurnDisposition` gains `"timed-out"`; `convo.TURN_DISPOSITIONS` gains the
+  same string; `tests/test_convo.py`'s transcribed constant gains the fifth row's token, and legs
+  1 and 2 go **red until it does**. That reddening is the guard working. All three sites are in the
+  two files the rework unit already owns, and the third leg is S5's (below).
 - **The tests that make it real** are §5 tests 10 and 10b; the one that would have caught v1.24's
   reading is its negative: a `structured`-mode fixture whose `observed` assistant text differs from
   every string in the script's `expect` blocks, asserting the **observed** text appears in the
@@ -4732,53 +5000,89 @@ tail; `0` replays all of it.
   same cause; a scored call that hits `requestTimeoutSeconds`
   is scored `fail` with no timing **figure** — an `ItemTiming` whose only populated field is
   `withheldFor: "timeout"` (v1.11, plan-gate P5-6/P5-9) — and the run continues; and item 1's
-  baseline is the **post-warm-up** probe, so a clean cold run withholds nothing.
+  baseline is the **post-warm-up** probe, so a clean cold run withholds nothing. **Three
+  multi-call cases join them at v1.27** and are written out at §5 test 15b, because every timing
+  fixture named above is single-call and the regression they catch — a per-call reading of
+  §11.5.1's gap firing on iteration count rather than on a load — is invisible without one.
+- **One shipped docstring is stale from the moment the loop lands, and it is a one-word sweep
+  rather than a rewrite** *(v1.27, `-ml` §11.9 ask 7's last item)*. `modelbench/lmstudio.py`'s
+  `_coerce_finite_float` docstring quotes the detector's gap as `latencyMs - (ttftMs +
+  generationMs)`. The operand at that level is the **call's** `wallClockMs`; `latencyMs` is the
+  *item's* admitted figure and after this ruling is not an operand of the gap at all. The
+  docstring's actual claim — that a non-finite value would send the gap to `-inf` so the detector
+  could never fire — is unaffected and correct, so only the expression changes. Pinned by symbol
+  and not by line, because the note cites `:225` and the same text sits at `:247` at `d5b549d`:
+  `grep -n 'latencyMs' modelbench/lmstudio.py` returns **exactly one** line today, and **zero**
+  after the sweep — the module has no other business with an item-level field name.
 - **The latency block is S2's to produce**, because S2 is the first stage at which a timing exists.
   `RunResult.latency: LatencyBlock | None`, a frozen dataclass carrying `latencyMsP50`,
   `latencyMsP95`, `latencyMsMax` (each `float | None`), `latencyTimedCount`, `latencyItemCount`,
-  `latencyWithheldForLoad`, `latencyWithheldForNoResponse` and — because the `stats`-derived figures
+  `latencyWithheldForLoad`, `latencyWithheldForNoResponse`, **`callCount`** (`-ml` §11.4's
+  `Y_calls`, v1.27) and — because the `stats`-derived figures
   are **kept** on a load-contaminated item and so have a *different* coverage from the wall clock
-  (`-ml` §11.4) — `statsCoveredCount`, the number of items whose response carried a `stats` object
-  **and a usable `promptTokens`** (rule (iv-c), v1.11).
+  (`-ml` §11.4) — `statsCoveredCount`, the number of **calls** carrying a `stats` object
+  **and a usable `promptTokens`** (rule (iv-c), v1.11; **calls, not items, from v1.27** — the three
+  figures it denominates are call figures and an item is `callCount` of them).
   **Four aggregate figures join them in v1.10** *(plan-gate P4-3: v1.9 committed the report to
   printing these and gave them nowhere to live)* — `ttftMsMedian`, `prefillMsPer1kMedian`,
   `tokensPerSecondMedian` and `unexplainedMsMax`, each `float | None` — and
   `latencyWithheldForTimeout` is **renamed `latencyWithheldForNoResponse`** *(plan-gate P4-7)*,
   which is what it was always counting.
   One coverage number per *field group*, not one per run and not one per field: the wall clock has
-  its own, its three siblings share `statsCoveredCount`, and each is printed beside the figures it
-  governs. **Every figure and every count is computed from `run.items` in one pass and asserted
+  its own — **in items** — its three siblings share `statsCoveredCount` — **in calls** — and each
+  is printed beside the figures it governs. **The two units are printed side by side and never
+  substituted for one another** (`-ml` §11.4, §11.7 slot 2's two lines); on every role but
+  `tool-caller` they coincide, which is precisely why a substitution would ship green. **Every figure and every count is computed from `run.items` in one pass and asserted
   against a recomputation from them** — the block is stored for the record's self-containment, and a
   stored number whose inputs are also stored is one that can be checked rather than trusted. **Nine**
   rules, none of them optional *(eight at v1.10; (iv-c) is v1.11's — plan-gate P5-5)*:
   **(i)** the three **wall-clock** figures — `latencyMsP50`, `latencyMsP95`, `latencyMsMax` — are
   `None` exactly when `-ml` §11's gates refuse them, never `0`,
-  never a number carrying a prose qualifier. **The four `stats`-derived figures**
-  (`ttftMsMedian`, `prefillMsPer1kMedian`, `tokensPerSecondMedian`, `unexplainedMsMax`) are `None`
+  never a number carrying a prose qualifier. **The three `stats`-derived medians**
+  (`ttftMsMedian`, `prefillMsPer1kMedian`, `tokensPerSecondMedian`) are `None`
   under **either** of two causes — a gate refusal against their own coverage (iv-b), or
   absence-of-input under (iv-a) — and **the block does not distinguish them**; a reader who needs to
   can, because `statsCoveredCount` is `None` in the second case and a number in the first.
+  **`unexplainedMsMax` is split out of that sentence at v1.27** (`-ml` §11.9 ask 7): it is a
+  **maximum over the items that had a reading**, it takes **no** coverage gate, and it is `None`
+  only under absence-of-input — no item yielded a readable gap, or (iv-a)'s surface produces no
+  `stats` at all. §11.6 gates *medians* because a median over a selected subset misrepresents the
+  run; a maximum over a subset is a **lower bound** on the run's largest gap, which is the useful
+  direction for the one job that figure has. It is printed with the count of items that had a
+  reading, because a bound whose base is unstated reads as a point estimate;
   *(v1.11, plan-gate P5-7. At v1.9 this block held exactly three `float | None` figures and "the
   three figures" was unambiguous; v1.10 added four more without sweeping the clause, and the
   sentence directly above it uses "its three **siblings**" for the other trio — so under the sibling
   reading (i) forbade exactly the `None`s (iv-a) mandates. One word, and it is §7 rule 4's sweep
-  missed inside the revision that wrote rule 5.)* **(ii)** `latencyItemCount == len(run.items)`, asserted,
-  because it is stored for the record's self-containment and a stored duplicate that can drift is
-  worse than a derived one; **(iii)** `latencyWithheldForLoad + latencyWithheldForNoResponse ==
+  missed inside the revision that wrote rule 5.)* **(ii)** `latencyItemCount == len(run.items)` **and** `callCount == Σ_items len(timing.calls)`,
+  both asserted,
+  because they are stored for the record's self-containment and a stored duplicate that can drift is
+  worse than a derived one. **`callCount` is v1.27's and carries a third assertion** the note asks
+  for by name (`-ml` §11.4, §11.10 (7d)): each item's `len(timing.calls)` equals that item's
+  `TurnTrace.iterations`, because two independently maintained counts of the same thing is how
+  several of this component's defects started; **(iii)** `latencyWithheldForLoad + latencyWithheldForNoResponse ==
   latencyItemCount − latencyTimedCount`, asserted, so the cause split can never fail to account for
   the gap — and it now holds for **every** withheld item, because §3.6's fourth disposition gives the
   scored call that fails without timing out a named cause, where v1.9's two causes left it under
-  neither and falsified this very line (plan-gate P4-7); **(iv)** `statsCoveredCount` is the count of items carrying **both** a usable `stats` object
+  neither and falsified this very line (plan-gate P4-7); **(iv)** `statsCoveredCount` is the count of **calls** carrying **both** a usable `stats` object
   **and** a usable `promptTokens` (iv-c), computed in the same one pass as everything else and
-  **asserted against a recomputation from `run.items`** — that recomputation is the equality worth
+  **asserted against a recomputation from `run.items`** — now a **sum over each item's `calls`**
+  (v1.27) — and that recomputation is the equality worth
   asserting. On a `stats`-bearing surface it is bounded by
-  **`statsCoveredCount ≤ latencyItemCount − latencyWithheldForNoResponse`**, an **inequality** whose
-  gap is exactly (iv-c)'s co-presence exclusions; a load-contaminated item still returned a response
+  **`statsCoveredCount ≤ callCount`**, an **inequality** whose
+  gap is exactly (iv-c)'s co-presence exclusions; a load-contaminated call still returned a response
   and still contributes, which is the whole content of the note's v1.10 reversal and the thing an
   implementer who withholds the siblings anyway will break. *(v1.11, plan-gate P5-5: v1.10 wrote this
-  as an equality, which (iv-c)'s disposition falsifies — an excluded item returned a response and
-  **was** timed, so it sits on neither side of that subtraction. `-ml` v1.14 §11.4 names the
-  consequence and this rule carries it.)*;
+  as an equality against `latencyItemCount − latencyWithheldForNoResponse`, which (iv-c)'s
+  disposition falsifies — an excluded item returned a response and
+  **was** timed, so it sits on neither side of that subtraction. **v1.27 re-bases it on the call
+  count**, because the left side counts calls and the old right side counted items, which differ by
+  construction on any pack whose `maxIterationsPerTurn` exceeds 1 — the one-word substitution
+  `-ml` §11.9 ask 7 warns will otherwise ship. The bound is written in the form above rather than
+  as that ask's `Y_calls − (calls that returned no response)` because, under the same note's pin
+  that `callCount == len(chatResults)`, a call that returned no response is not in `callCount` at
+  all and the subtrahend is identically zero; §3.8.4's raise **R-1** carries that to
+  `data-scientist`, and the form here is true under either resolution.)*;
   **(iv-a)** on a call surface that returns **no** `stats` — today `POST /api/v0/embeddings`, and
   every `deterministic` arm — `statsCoveredCount` is **`None`, never `0`**, rule (iv) does not apply,
   and `-ml` §11.7's second denominator line is not rendered *(v1.10, plan-gate P4-13, confirmed by
@@ -4789,22 +5093,33 @@ tail; `0` replays all of it.
   `unexplainedMsMax` — with no `stats` there is no gap, so §11.5.1's detector does not run and the
   between-item probe is that arm's only load producer (§3.6);
   **(iv-b)** the three sibling **medians** take `-ml` §11.6's p50 gate against **their own** coverage
-  — `X = statsCoveredCount`, `Y = latencyItemCount` — never against the wall clock's, which is the
+  — **`X = statsCoveredCount`, `Y = callCount`** — never against the wall clock's, which is the
   whole point of giving them a separate denominator (§11.4). The gate, its constant and its integer
-  form are the note's;
+  form are the note's. ***`Y` is `callCount` and not `latencyItemCount`, and v1.27 says so in bold
+  because it is the one-word substitution `-ml` §11.9 ask 7 predicts will otherwise ship*** — the
+  two are equal on every role but `tool-caller`, so the wrong one passes every test that does not
+  use a multi-call fixture;
   **(iv-c)** **co-presence — one coverage number is honest only while the three figures are
-  co-present, and where they are not the item leaves *both* the count and the medians** *(v1.11,
-  plan-gate P5-5; ruled by `-ml` v1.14 §11.4)*. `ttftMs` and `tokensPerSecond` need a `stats` object;
+  co-present, and where they are not the *call* leaves *both* the count and the medians** *(v1.11,
+  plan-gate P5-5; ruled by `-ml` v1.14 §11.4; **restated per call at v1.27**, since v1.25 made an
+  item several of them)*. `ttftMs` and `tokensPerSecond` need a `stats` object;
   the prefill figure **additionally** needs a usable `usage.prompt_tokens`, and
-  `ItemTiming.promptTokens` is `int | None` — so the plan's own type admits the case a single
-  denominator denies. The rule: an item carrying `stats` whose `promptTokens` is **absent or `≤ 0`**
-  is excluded from `statsCoveredCount` **and from all three sibling medians**. **Both halves of that
+  `CallTiming.promptTokens` is `int | None` — so the plan's own type admits the case a single
+  denominator denies. The rule: a **call** carrying `stats` whose `promptTokens` is **absent or `≤ 0`**
+  is excluded from `statsCoveredCount` **and from all three sibling medians**. **The exclusion is
+  per call and never per item**: on a multi-call item the sibling figures of its *other* calls are
+  good measurements and nothing about the excluded one contaminates them (`-ml` §11.4). The item's
+  `unexplainedMs` is the separate question with the opposite answer — §11.5.1 forms **no partial
+  sum**, so one unreadable call makes the whole item's gap `None`. **Both halves of that
   sentence are load-bearing** — excluding it from the count while still letting it into the `ttftMs`
   and `tokensPerSecond` medians prints a denominator that does not describe its own numerator, which
   is worse than either clean option. **And it is a *disposition*, not an assertion: nothing raises.**
   An implementer who writes it as an `assert` crashes a real run on a rarity — plan-gate P4-7's shape
   a second time — and one who applies it to the count but not to all three medians reintroduces the
-  defect it closes. The four places are one edit: the count, and each median's input set. *The
+  defect it closes. The four places are one edit: the count, and each median's input set.
+  **Rules (ii), (iii), (v) and (vi) are item-level and do not move** — v1.27 says so explicitly,
+  because *"one unit changed"* is how the other five get changed by accident (`-ml` §11.9 ask 7).
+  *The
   alternative the note weighed and rejected — a fourth `prefillCoveredCount`, exact but a permanent
   second gate evaluation, second stored count and second printed line — carries a reversal trigger
   that costs nothing to watch, since the exclusions are countable from `run.items`: the first run in
@@ -4960,6 +5275,16 @@ duplicated a call within a turn, re-issued one across turns, kept going after do
 the tool result, and called a tool when none was required). This is the piece where a scoring bug is
 invisible and expensive, and synthetic traces are the only way to test it deterministically.
 
+**Two of those traces are v1.27's and neither is produced by accident, which is why they are named
+rather than left to "one per disposition"** *(P14-1; `-ml` §4.3.1 item 4)*. **(1) A `cap-hit` turn
+with an *empty* dispatch trace** — the model emitted only undispatchable tool calls every iteration
+— asserting all three consequences at once: it partitions as `no_attempt`, it **does** enter
+`iteration_cap_hit_rate`, and it **does** enter the `I(t)` summary. A list of five dispositions is
+not coverage over a mapping keyed on the pair `(D(t), E(t))`, which is exactly how P14-1 got in.
+**(2) A `timed-out` turn beside a `no-response` turn, identical in every respect but the
+mechanism**, asserting `fail` against `unrunnable` — the pair that pins `-ml` §4.3 rule 4's
+discriminator, and the pair a four-member disposition set could not express at all.
+
 **Done when:** each FR-8 count (including the restraint count and the three-way call-form partition)
 has at least one synthetic trace that moves it and one that does not; the **outcome-vector
 comparison the determinism probe needs** exists as a pure function over two `ConversationTrace`s and
@@ -4967,19 +5292,68 @@ is unit-tested on identical and one-turn-differing pairs (§3.8.4 — no new sta
 not be the first place it runs); denominators and `n/a` tallies
 behave per `-ml` §4.2–§4.3, verified by test, including the laundering case — a model that collapses
 at turn 2 must not score *better* than one that reaches turn 8; the funnel table renders; and
-`report.py` renders both the per-turn-position table and the hazard curve. Per amended FR-8(d),
+`report.py` renders both the per-turn-position table and the hazard curve.
+**Seven items v1.27 adds to this list, gated here rather than referenced in prose** *(P14-3's own
+finding — a contract owed by no done-condition stays unbuilt — applied to `-ml` §4.3.1's tests as
+well as to the probe)*: **(1)** the **third leg** of §4 S2's disposition probe is written — the set
+of dispositions this scorer branches on, asserted equal to the same constant transcribed from
+§3.8.4's table that legs 1 and 2 use, never to either of them — **and
+`test_the_third_leg_of_the_disposition_probe_is_still_owed_by_s5` is deleted in the same change**;
+that tripwire reddens the moment `modelbench/scoring/` exists, which is this stage's own `Create`
+line, so S5 cannot start without meeting it. **(2)** The two discriminating synthetic traces above.
+**(3)** `cleanThroughTurnH`'s third state, asserted on a conversation carrying one `unrunnable`
+turn at `t ≤ H`: not clean, not failed, out of the headline's denominator, into its `n/a` tally,
+and out of the paired intersection for both arms. **(4)** The **cross-module union**:
+`ITERATION_SUMMARY_DISPOSITIONS | ITERATION_SUMMARY_EXCLUDED == convo.TURN_DISPOSITIONS`, and the
+two disjoint — binding two independently authored declarations across two modules, so a sixth
+mechanism belongs to neither set and reddens before it can be silently included or dropped.
+**(5)** **A distinct behavioural consequence per member**, five cases, each observable and each
+different, so that moving any one member between the two sets reddens exactly one of them —
+`-ml` §4.2(f) enumerates the five and this list does not restate them. **(6)** The **exactness
+rule swept in both directions** over `X ≤ 200` and every `c ≤ X` (`-ml` §4.2(f)): raising each
+cap-hit observation leaves the `r`-th order statistic unchanged **iff** `r ≤ X − c` — a test
+asserting only the forward half would bless a bare p95 where a `>=` was owed. **(7)** The `I(t)`
+summary and `Y_calls / Y` are asserted to **differ** on a run containing a non-`replied` turn; a
+report that shows them equal there has substituted one for the other.
+*(Items 4 and 6 need only `TURN_DISPOSITIONS` and `stats.percentile`, both of which exist; they
+land here rather than in the precursor unit because their other comparand is this stage's own
+scoring constant. `-ml` §4.3.1 item 9 asks for the union in the precursor unit, which had already
+landed when that was written — and landing it here is the stronger placement anyway, since the two
+declarations then have two authors as well as two modules.)*
+Per amended FR-8(d),
 one of those synthetic traces asserts that a `boundary_unit` error increments **both**
 `wrong_value` and its `boundary_unit` subset, driven by the pack's declared `boundaryRule` — never
-double-counted as two sibling failures, never classified by scorer heuristics. **And a turn with no
-final reply is dispositioned on `TurnTrace.turnDisposition`, never on `finalReplyText`** *(v1.25,
-corrected in v1.26 per plan-gate P13-1)*. Only `turnDisposition == "cap-hit"` is *absent, not
-failed* — the scorer gives that turn §4.2(f)'s `iteration_cap_hit_rate` and §4.2(g)'s printed
-`unscoreable` bucket, never a silent zero and never a containment failure. `"no-response"` is
-§3.6's `fail` and `"server-rejected"` is `-ml` §4.1's `unrunnable`; §3.8.4's four-row table is the
-mapping and this bullet does not restate it. **Keying the rule on the reply field instead was
-`fail` laundered into `n_a` in the paragraph that names laundering as the enemy**, which is why the
-synthetic traces cover all four dispositions rather than the cap-hit one alone, and why the scorer's
-branch set is pinned by §4 S2's three-way probe rather than by a list written beside it.
+double-counted as two sibling failures, never classified by scorer heuristics.
+
+**And a turn with no final reply is dispositioned on `TurnTrace.turnDisposition`, never on
+`finalReplyText`** *(v1.25, corrected in v1.26 per plan-gate P13-1; rewritten at v1.27 — the
+mapping is `-ml` §4.3 rule 4's and this bullet no longer restates it, because restating it is what
+made §3.8.4's table a second home and produced P14-1)*. **Keying the rule on the reply field
+instead was `fail` laundered into `n_a` in the paragraph that names laundering as the enemy.** What
+S5 owes, stated as work rather than as a mapping:
+
+- **The scorer branches on all five `turnDisposition` members and reads every scoring consequence
+  out of `-ml` §4.3 rule 4** — including that a turn's admission to a conditional count is a
+  function of the **pair** `(D(t), E(t))` and not of the mechanism alone, and that `no-response`
+  and `server-rejected` are `unrunnable` while `timed-out` alone is `fail`.
+- **`cleanThroughTurnH`'s third state** (§3.8.4): a conversation with an `unrunnable` turn at any
+  `t ≤ H` is neither clean nor failed — `scoreable` is `False` for that metric, it leaves the
+  headline's denominator into that metric's own `n/a` tally, and it drops out of the paired
+  intersection for both arms as an `asymmetry`.
+- **The two scoring constants, and they do not live in `convo.py`** *(`-ml` §4.3.1 item 8)*.
+  `ITERATION_SUMMARY_DISPOSITIONS = frozenset({"replied", "cap-hit"})` and
+  `ITERATION_SUMMARY_EXCLUDED = frozenset({"timed-out", "no-response", "server-rejected"})` are a
+  **scoring** vocabulary and sit beside the scorer in `modelbench/scoring/toolcalls.py`;
+  `TURN_DISPOSITIONS` is a **mechanism** vocabulary and stays in `convo`. Each is written out
+  literally; the second is **not** derived as the first's complement, because a derived complement
+  makes the union assertion below a tautology.
+- **The `I(t)` summary's report surface** *(`-ml` §4.2(f), §4.3.1 item 7)*: mean and p95 over
+  `ITERATION_SUMMARY_DISPOSITIONS` only, printing their own denominator inline and the excluded
+  count beside it; the mean rendered `>= <value>` whenever the cap-hit count is non-zero and the
+  p95 `>= <value>` whenever `r > X − c`; the p95 computed through `stats.percentile`, never
+  hand-rolled. **`Y_calls / Y` and the mean of `I(t)` are both printed and never substituted for
+  one another** — the first is the unrestricted *cost* figure and the second the restricted
+  *behaviour* figure, and they differ on any run with a non-`replied` turn.
 
 ### S6 — `tool-caller` pack, part 2: the conversation scripts (FR-22)
 
@@ -5079,10 +5453,10 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
 | Stage | Items it owes | Where an item splits across stages |
 |---|---|---|
 | **S1** — core | **1, 2, 3, 5, 6, 7b, 11b, 11c, 11d** | **7b** is a `stats.py` test over a synthetic clustered fixture and needs no pack loader — S1 done-conditions 4 and 5 already require it. **11b**'s `validate_pack` clause is S2's; at S1 those same refusals go through `metrics_from_manifest`, which raises `PackConfigError`. **12**'s `metrics`-block rule (a non-null `headlineMetric` outside `verdictMetrics`) is S1's too, at that same seam. **11c** is S1's whole and does not split: `RunResult` carries `items` and `aggregates` side by side, so the cross-check needs nothing S2 produces (impl-gate P4-4, v1.8 — S1 done-condition 10). **11d** is S1's whole for the same reason: the continuous carrier is a record shape and a renderer branch, both S1-local, and the first *run* that exercises them is S3's (v1.12, S1 done-condition 13). |
-| **S2** — packs, adapter, host info, runner | **4, 10, 10b, 10c, 12, 12b, 13, 14, 15, 15b** | **10b** is v1.25's, the per-turn iteration loop, and is S2's whole. **10c** is v1.26's and **splits**: its four `drive` disposition cases are S2's, while its three-way coverage probe reaches the S5 scorer's branch set — so the probe lands with `TURN_DISPOSITIONS` in the precursor unit asserting two of its three sets, and S5 completes it when the scorer exists (§4 S2) — `drive` is S2's and a stub LLM is all it needs. **4** is `packs.content_hash`, which S1 does not have: S1 ships `PackRef` / `metrics_from_manifest` / `check_sampling_contract` only. **12**'s rule machinery — the `sampling` contract, the AST import allowlist, `replicatesPerScript > 1` — is `validate_pack`'s, tested here against fixture packs and re-run against each real pack at that pack's own stage. **12b** splits three ways: the four `basis` cases are `runner`'s and land here, the outcome-vector comparison is S5's, and "`assumed` moves the decision off McNemar" is already S1's. **13–15** are the `-m live` adapter tests S2's done-condition names. **15b** is offline (stub clock, stub LLM) and is filed in the unit block for that reason (v1.9, G3-12); its report half — the latency block and `-ml` §11.7's rendered slots — lands here rather than at S1 for the same reason `basis` does: S2 is the first stage at which a latency exists at all. S2 does **not** own **11c**; it owns the scorer contract that makes 11c's failure unreachable (§4 S2). |
+| **S2** — packs, adapter, host info, runner | **4, 10, 10b, 10c, 12, 12b, 13, 14, 15, 15b** | **10b** is v1.25's, the per-turn iteration loop, and is S2's whole. **10c** is v1.26's and **splits**: its `drive` disposition cases — **five** from v1.27, plus the precedence case — are S2's, while its three-way coverage probe reaches the S5 scorer's branch set. So the probe lands **two of its three legs** with `TURN_DISPOSITIONS` (which it did, at `d5b549d`), and **S5's *Done when* item 1 completes it** when the scorer exists — gated there, not merely referenced (§4 S5) — `drive` is S2's and a stub LLM is all it needs. **4** is `packs.content_hash`, which S1 does not have: S1 ships `PackRef` / `metrics_from_manifest` / `check_sampling_contract` only. **12**'s rule machinery — the `sampling` contract, the AST import allowlist, `replicatesPerScript > 1` — is `validate_pack`'s, tested here against fixture packs and re-run against each real pack at that pack's own stage. **12b** splits three ways: the four `basis` cases are `runner`'s and land here, the outcome-vector comparison is S5's, and "`assumed` moves the decision off McNemar" is already S1's. **13–15** are the `-m live` adapter tests S2's done-condition names. **15b** is offline (stub clock, stub LLM) and is filed in the unit block for that reason (v1.9, G3-12); its report half — the latency block and `-ml` §11.7's rendered slots — lands here rather than at S1 for the same reason `basis` does: S2 is the first stage at which a latency exists at all. S2 does **not** own **11c**; it owns the scorer contract that makes 11c's failure unreachable (§4 S2). |
 | **S3** — embedder pack | **8, 11, 16, 18** | **16** is one arm of a per-pack obligation: each of S3–S7 owes the end-to-end run for the pack it builds. |
 | **S4** — guard-judge, nlq-generator | **9, 16** | — |
-| **S5** — tool-caller scoring | **7**, **12b** (outcome-vector half), **16** | S5's done-condition requires the outcome-vector comparison to exist and be unit-tested here, precisely so S6 is not the first place it runs. |
+| **S5** — tool-caller scoring | **7**, **10c** (third leg only), **12b** (outcome-vector half), **16** | S5's done-condition requires the outcome-vector comparison to exist and be unit-tested here, precisely so S6 is not the first place it runs. **10c** appears twice on purpose: its third probe leg is the half S2 cannot write, and §4 S5's *Done when* item 1 is what gates it (v1.27, P14-3). §4 S5's own list carries six further v1.27 pins — the two discriminating traces, `cleanThroughTurnH`'s third state, the cross-module union, the five per-member cases and the exactness sweep — which are done-conditions rather than numbered items here because they are scorer behaviour, not a module's test surface. |
 | **S6** — tool-caller scripts | **12** (the `H ≤ min(script length)` clause), **16**, **17**, **19** | **19a** must pass before **19b** is interpreted at all. §4 S6 gates on 19b being *run and recorded*, never on the contrast appearing. |
 | **S7** — chat-responder | **16** | — |
 | **S8** — close | **20** | The FR-23 audit is only meaningful once every stage has shipped; §4 S8's done-condition does not currently name it, and should record it at close. |
@@ -5159,25 +5533,39 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
     with `turnDisposition != "replied"` is present in every mode — `content: ""` in the two
     reply-text modes, and under `structured` its iterations with **no** trailing assistant message —
     and the assembled list never has one fewer turn than the observed prefix.
-10b. `convo.drive`'s per-turn loop and its four dispositions (§3.8.4) — a stub LLM that returns tool
+10b. `convo.drive`'s per-turn loop and its dispositions (§3.8.4) — a stub LLM that returns tool
     calls twice and then text records `iterations == 3`, `turnDisposition "replied"` and the third
     response's text as `finalReplyText`; one that never stops records
     `iterations == cfg.maxIterationsPerTurn`, `"cap-hit"` and `finalReplyText is None`; one that
     terminates with `content: None` records `"replied"` and `finalReplyText == ""`, **not `None`**;
-    and `cfg.maxIterationsPerTurn is None` **raises** rather than defaulting (§3.3). **The emission
+    and `cfg.maxIterationsPerTurn is None` **raises** rather than defaulting (§3.3).
+    **Two timing assertions on a multi-call fixture are v1.27's** (`-ml` §11.9 ask 7, §11.10 (7d)):
+    `callCount == len(chatResults) == TurnTrace.iterations` — one number, asserted rather than
+    assumed, because two independently maintained counts of the same thing is how several of this
+    component's defects started — and `ItemTiming.wallClockMs >= Σᵢ wallClockMsᵢ`, the difference
+    being the harness's own dispatch and message assembly, which is real time the operator waits
+    through and belongs inside the turn's latency (§3.6). **The emission
     form is `-ml` §4.2's predicate over the turn's dispatch trace**, asserted on the case that
     discriminates it: a turn whose only `tool_calls` were undispatchable partitions as
     `no_attempt`, never `native`. *(v1.26, P13-5: v1.25 asserted the form is "read from
     `chatResults[0]` and unchanged by what later iterations return", which pinned exactly that
     divergence as a green test.)*
-10c. **The guard, and it lands before the rework unit** *(v1.26, P13-1)* — a stub LLM raising
+10c. **The guard, and it lands before the rework unit** *(v1.26, P13-1; the dispositions widened
+    and the leg count corrected at v1.27, P14-3)* — a stub LLM raising
     `LMStudioCallFailed` with no `status` at turn 3 of a 5-turn script yields **5** `TurnTrace`s
     with the third `"no-response"`; the same raising it with `status=400` yields
-    `"server-rejected"`; a `LMStudioCallTimeout` yields `"no-response"`; and in every case the
-    script runs to completion, because `-ml` §4.1 forbids abandoning it. Plus the **three-way
-    coverage probe** of §4 S2's replay contract — the `Literal`'s members, `TURN_DISPOSITIONS`, and
-    the S5 scorer's branch set, each asserted equal to a constant transcribed from §4 S2 rather
-    than to one another.
+    `"server-rejected"`; a `LMStudioCallTimeout` yields **`"timed-out"`**; and in every case the
+    script runs to completion, because `-ml` §4.1 forbids abandoning it. **A fourth case is the
+    precedence one** (v1.27, P14-5): a stub whose `maxIterationsPerTurn`-th call raises records
+    `"timed-out"`/`"no-response"`/`"server-rejected"` and **never `"cap-hit"`** — one more stub-LLM
+    script, and the assertion that pins the exception path being tested before the cap.
+    Plus the **coverage probe** of §3.8.4's table — the `Literal`'s members, `TURN_DISPOSITIONS`,
+    and the S5 scorer's branch set, each asserted equal to a constant transcribed from **§3.8.4's
+    table**, never to one another. **Two of its three legs land here and the third at S5**, which
+    is what §4 S2's stage-split row says and what shipped at `d5b549d`; §4 S5's *Done when* item 1
+    is what completes it. *(v1.26 wrote this item as though all three landed together, which
+    contradicted the stage table in the same breath and left the third leg owed by no
+    done-condition — the shape that stays two-legged forever.)*
 11. `test_metrics_agreement.py` — all 20 transcribed cases from §3.1 point 2, reading only
     `model-bench/tests/fixtures/`, including the two `ValueError` cases. A test that skips or
     xfails any case is a failing test: the case count is the guarantee.
@@ -5284,16 +5672,21 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
     here rather than silently withholding every turn of the tool-caller pack (v1.10, plan-gate P4-1;
     a unit assertion on a stub costs nothing and is the only thing that catches this class);
     **a scored call that returns no response without timing out** — a stubbed HTTP 500 — is scored
-    `fail`, carries no timing figure and an `ItemTiming` whose only populated field is
-    **`withheldFor: "no_response"`**, does **not** re-probe or exit `3`, and lands in
+    **`unrunnable`** (v1.27, `-ml` §4.3 rule 4 — an unattributable channel failure, where the
+    timeout above scores `fail`; **the two assertions sit side by side here on purpose**, since the
+    only thing separating them is the mechanism), carries no timing figure and an `ItemTiming`
+    whose only populated field is
+    **`withheldFor: "no_response"`** — the *timing* answer, which is unchanged and is deliberately
+    not the same answer as the scoring one — does **not** re-probe or exit `3`, and lands in
     `latencyWithheldForNoResponse` — **the same counter the timeout landed in, from a different item
     state**, which is the assertion that pins v1.11's three-states-two-counts mapping (§4 S2 (vi),
     plan-gate P5-6) — with invariants (iii) and (iv) asserted to still hold on that run
     (plan-gate P4-7);
-    **the three sibling figures share one count and lose an item together** — an item carrying a
+    **the three sibling figures share one count and lose a *call* together** — a call carrying a
     `stats` object whose `promptTokens` is absent or `≤ 0` is absent from `statsCoveredCount`
     **and** from all three medians, **and the run does not raise**; the same run's (iv) bound holds
-    as the inequality it now is (v1.11, plan-gate P5-5, `-ml` §11.10 test 7);
+    as the inequality it now is (v1.11, plan-gate P5-5, `-ml` §11.10 test 7; **per call from
+    v1.27**, and case (c) below is the multi-call fixture that distinguishes the two units);
     **a chat response carrying no `stats` at all constructs a `ChatResult` whose `ttftMs`,
     `generationMs` and `tokensPerSecond` are `None` — not `0` — and raises nothing**, the assertion
     that keeps rule (iv-a)'s `statsCoveredCount == 0` reachable on the chat surface (v1.11,
@@ -5306,7 +5699,18 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
     the last two are v1.11's, and they are the branches v1.10's merged `withheldFor` could not
     express — plan-gate P5-6); and **a clean cold run withholds nothing**
     — `latencyTimedCount == latencyItemCount` — which is the assertion that pins G3-4's baseline fix
-    and would have gone green on the wrong mechanism under v1.8's wording. The rendered figures,
+    and would have gone green on the wrong mechanism under v1.8's wording.
+    **Three multi-call cases are v1.27's, and every timing fixture above is single-call, so the
+    regression they catch is invisible without them** *(`-ml` §11.9 ask 7)*: **(a)** a warm
+    3-iteration turn, and one at the cap of 8, report **no** model-load contamination and **keep**
+    their `latencyMs` — the regression a per-call reading of §11.5.1's gap produces, where the
+    detector fires on iteration count rather than on a load; **(b)** a 3-iteration turn one of
+    whose calls carries a 3 485.6 ms gap **is** withheld and counted under model load, while the
+    other two calls' sibling figures are **kept**; **(c)** a 3-iteration turn one of whose calls
+    has no `stats` has `unexplainedMs is None`, is **not** withheld, and contributes its two
+    readable calls to `statsCoveredCount` — the partial-sum refusal and the per-call exclusion in
+    one fixture, which are the two rules an implementer is most likely to apply at the wrong unit.
+    The rendered figures,
     their floors and their refusal cases are asserted against `-ml` §11.7's slots and §11.10's
     fixtures, never against a string written in this plan.
 
@@ -5516,9 +5920,16 @@ v1.10, an edit to shipped S1 code that v1.9's own prose implied and no table nam
 `_percentile` copies are `int(round(p/100·(X−1)))`, the estimator `-ml` §11.2 explicitly rejects, and
 `results.py` computes `index.csv`'s p50/p95 inline from `run.items`, bypassing both of §11's floors.
 **§4 S1e Table C enumerates it** (plan-gate P4-2's second instance) — plus
-the one field the note asked this plan to name: **`latencyMsMax`**, because the tail figure is the
-sample maximum at every tool-caller run's sample size, and without a home for it the long-pole pack
-would carry no tail number in the record or in `index.csv` at all.
+the one field the note asked this plan to name: **`latencyMsMax`**, the home for the tail figure on
+any run where `-ml` §11.3's identity floor **renames** the p95 rather than refusing it. *(v1.27
+withdraws v1.9's justification for it — "the tail figure is the sample maximum at every tool-caller
+run's sample size" — rather than softening it. That substituted the tool-caller pack's
+analysis-unit count for its item count, which is this component's signature defect and which
+`-ml` v1.20 corrects: the rename is reachable only at `Y ≤ 21`, the smallest declared `Y` is 30,
+and `latencyMsMax` is therefore `None` on every run of every pack this plan declares. The field
+still earns its home on the narrower argument §3.5 now carries — a pack with `Y ≤ 21` is buildable
+and the `p95` label would be false without it. The same sentence is withdrawn at §3.5; `-ml`
+§4.3.1 item 10 flags it as the fourth instance of the substitution.)*
 
 **The residual, and it is a reader risk rather than a method one:** a run can now legitimately print
 no latency figure at all. That is the design working — an absent number beats a number whose label
@@ -5548,7 +5959,9 @@ the tool reports fewer latency samples honestly rather than all of them optimist
 `-ml` §11.7's block prints the coverage and its cause split instead of quietly shrinking the sample.
 
 *(v1.10 — the in-call residual has a detector **and a rule**, and this entry now says the same thing
-§3.6 does.* `unexplainedMs` *is computed per scored call, stored, its maximum reported, and it
+§3.6 does.* `unexplainedMs` *is computed **per call and summed over the item** (v1.27, `-ml`
+§11.5.1 under the loop — at `callCount == 1` that is v1.9's expression unchanged), stored per item,
+its maximum reported, and it
 **withholds `latencyMs` above the threshold `-ml` §11.5.1 sets**, counting the item under §11.7's
 **model-load** cause rather than opening a third — an in-call reload* is *a model load, so a third
 entry would name a detector rather than a cause. **v1.9's parenthetical here said the opposite** —
@@ -5655,14 +6068,20 @@ particular **§3.4, the binding rules that are `stats.py`'s contract** (their nu
 too — v1.7 stops restating it), and **§7.2's verbatim resolving-power string**, which is a test
 target.
 
-**Version pairing:** this plan **v1.19** is aligned to the note **v1.19** (`a707d09`) — the note
-moved for the first time since v1.15, adding **§3.4 Rule 4a**, and this revision folds it in as §4
-S1e **Table H**. *(v1.16, v1.17 and v1.18 each folded in no note delta and raised none; v1.17 cites
-the note twice on facts it already publishes — §11.2 reason 2, for why `exact_paired_quantiles` is
-not a second sample-quantile estimator, and §3.4 Rule 4, for its being mandated at all.)*
+**Version pairing:** this plan **v1.27** is aligned to the note **v1.21** (`998d13b`), folding in
+**two** note revisions at once. **v1.20** rules plan-gate P13-2 — `ItemTiming` under the loop — and
+its plan-side edit list is §11.9 **ask 7**, landed here at §3.3, §3.5, §3.6 (the FR-11 table and the
+withholding bullet), §3.8.4, §4 S1, §4 S2, §5 tests 10b and 15b, and Appendix A. **v1.21** rules
+P14-6's second half (§4.2(f)'s three denominators), adds **§4.3 rule 4** — the
+mechanism-to-denominator mapping, in one place — and reports a **live contradiction between two
+sections of this plan** that no gate pass reached; its plan-side list is §4.3.1, landed here at
+§3.6's third and fourth dispositions, §3.8.4, §3.8.4's `cleanThroughTurnH` bullet, §4 S5 and §5.
+*(Plan v1.19–v1.26 were paired to note v1.19 (`a707d09`), which added §3.4 Rule 4a and landed as §4
+S1e Table H; v1.20 through v1.26 folded in no note delta.)*
 
-**One §7 rule 3 raise is open against the note, and it is a citation defect rather than a method
-one** *(v1.19)*. Rule 4a's opening attributes itself to *"plan-gate Pass 8's `P8-1`"*. The finding it
+**One §7 rule 3 raise carried forward, and two opened at v1.27.** The carried one is a citation
+defect rather than a method one *(v1.19)*: Rule 4a's opening attributes itself to *"plan-gate Pass
+8's `P8-1`"*. The finding it
 closes is **impl-gate** `P8-1` — the `- decided by:` audit naming the arm that did not bind, in
 `docs/reviews/small-model-benchmarking-impl.md` — whereas **plan-gate `P8-1` exists and is a
 different finding**: Tables C and G colliding on `stats.py:159`
@@ -5671,7 +6090,27 @@ because two reviews number `P8-*` independently, and it says an unprefixed or mi
 "names nothing". Nothing in this plan depends on the resolution and Table H lands unaffected; the
 note is the `data-scientist`'s and this document does not edit it (§7 rule 3). *(v1.10 paired
 itself to v1.12 and was one revision stale by the time the gate read it — plan-gate P5-5. The pairing
-is a claim about a named commit and it is re-checked in the revision that makes it.)* The two note
+is a claim about a named commit and it is re-checked in the revision that makes it.)*
+
+**The two v1.27 raises, both consequences of note rulings this revision adopts rather than
+disagreements with them, and neither blocking anything here.**
+**R-1 — the `Y_calls` netting** (stated at §3.8.4 where it is used, and carried into §4 S2 rule
+(iv)). `-ml` §11.4 and §11.9 ask 7 pin `callCount == len(ItemTiming.calls) == len(chatResults)`,
+i.e. **completed** calls. Two sentences of §11.4 do not survive that pin: *"`callCount` is `1` for
+every role but `tool-caller`"* is false on an item whose only call returned nothing (it is `0`),
+and the bound `statsCoveredCount ≤ Y_calls − (calls that returned no response)` has an
+**identically zero** subtrahend, because such a call is not in `Y_calls` at all. The substantive
+half is that `Y_calls` is then a **netted** call denominator whose removed members are exactly the
+calls that could not have carried `stats` — the pattern §11.4's own `Y` argument refuses one unit
+up. The plan builds the pin and writes rule (iv)'s bound in the form true under either resolution;
+if the note unnets `Y_calls`, the cost is one field's definition and one test, and nothing stored
+moves.
+**R-2 — a line cite that has drifted.** `-ml` §11.9 ask 7's last item cites the stale gap
+expression at `modelbench/lmstudio.py:225`; at `d5b549d` that text is `_coerce_finite_float`'s
+docstring at `:247`. §4 S2 pins the sweep by symbol and by a grep with a count rather than by the
+line, so nothing here waits on it.
+
+The two note
 revisions v1.10 folded in are separable and are recorded first: **v1.11** makes §3.4 Rule 4's
 closed-form percentile **binding** — so the paired *binary* interval resamples nothing, takes no
 seed, and the four printed strings naming one arm of the envelope are corrected — with the plan-side
@@ -6251,13 +6690,16 @@ against.
   estimator, the single implementation, the denominator, both floors and the published block. S2
   implements it and cites it; **no figure, floor or string from §11 is restated in this plan**.
   What S2 owes on the plan's side is the `LatencyBlock` and its nine rules (§4 S2), §3.5's
-  `index.csv` columns including **`latencyMsMax`**, and the three dispositions §11 depends on: a
+  `index.csv` columns including **`latencyMsMax`** and **`callCount`**, and the three dispositions
+  §11 depends on: a
   load-contaminated item loses **`latencyMs` only** and keeps its `stats`-derived siblings under
   their own coverage (§11.4 — measured, and the reverse of what v1.9 first wrote); **a scored call
   that returns no response — timed out or failed — stores no latency figure at all** and is counted
   in `latencyWithheldForNoResponse`, from **two** distinct `withheldFor` item states (v1.11,
   plan-gate P5-6); and `unexplainedMs` withholds above §11.5.1's threshold, which
-  closes R-14's residual. **`-ml` §11.2's estimator is a change to shipped S1 code, not only to S2's**
+  closes R-14's residual. **From v1.27 all of that is denominated in two units, not one** — the
+  wall clock per item, the three `stats`-derived figures per call — because a `tool-caller` item is
+  a turn of `I(t)` calls (§3.6, §4 S2). **`-ml` §11.2's estimator is a change to shipped S1 code, not only to S2's**
   — §4 S1e Table C.
 
 **Plan gate Pass 3, and what it changed here** *(v1.9)*. `docs/reviews/small-model-benchmarking.md`
@@ -6599,12 +7041,17 @@ note v1.19's citation is confirmed and is the one item here that this document c
 **What S2 additionally inherits from v1.10**:
 
 - **`ItemResult.timing: ItemTiming | None` is the timing carrier, and `latencyMs` is a property over
-  it** (§4 S1). A withheld item keeps its `wallClockMs`; only the admitted figure disappears. Every
-  aggregate reads `latencyMs` and nothing reads `wallClockMs`.
+  it** (§4 S1). A load-withheld item keeps its `wallClockMs`; only the admitted figure disappears.
+  Every aggregate reads `latencyMs` and nothing reads `wallClockMs`. **v1.27 splits the record in
+  two**: `ItemTiming` keeps the item's wall clock, an ordered `CallTiming` per call and
+  `withheldFor`, with `callCount` and `unexplainedMs` as derived properties over `calls`; the five
+  per-call scalars live on `CallTiming` and nowhere else (§4 S1, Appendix A).
 - **`LatencyBlock` carries four more figures and one renamed count** —`ttftMsMedian`,
   `prefillMsPer1kMedian`, `tokensPerSecondMedian`, `unexplainedMsMax`, and
   `latencyWithheldForTimeout` → `latencyWithheldForNoResponse` — with nine invariants, all asserted
-  against a recomputation from `run.items` (§4 S2).
+  against a recomputation from `run.items` (§4 S2). **v1.27 adds `callCount`** (`-ml` §11.4's
+  `Y_calls`) and moves `statsCoveredCount` and rule (iv-c) to the **call**; rules (ii), (iii), (v)
+  and (vi) stay item-level, which the rule list now says out loud.
 - **`RunResult.attestationTripWire` is required with no default on a model arm** (§3.4.4, §3.4.5).
   `attest` no longer writes a runtime it cannot observe; the first `model:chat` run back-fills it.
 - **`stats.verdict` loses `bootstrap_seed`, `conservative_envelope` loses `diffs`/`B`/`seed`, and
@@ -6620,10 +7067,12 @@ note v1.19's citation is confirmed and is the one item here that this document c
   `"no_response"` are separate item states feeding one `latencyWithheldForNoResponse`, because
   `-ml` §11.5.1's `censoringExact` reads the distinction per item while §11.7 slot 2 prints one label
   (§3.6, §4 S1, §4 S2 (vi)).
-- **`statsCoveredCount` counts items carrying a usable `stats` *and* a usable `promptTokens`**, and
-  an item failing the second leaves the count **and** all three sibling medians — a disposition that
-  **raises nothing**. Rule (iv)'s identity is now an **inequality**; the equality asserted is against
-  the one-pass recomputation from `run.items` (§4 S2 (iv), (iv-c)).
+- **`statsCoveredCount` counts *calls* carrying a usable `stats` *and* a usable `promptTokens`**
+  (**calls, not items, from v1.27**), and a call failing the second leaves the count **and** all
+  three sibling medians — a disposition that
+  **raises nothing**, applied per call and never per item. Rule (iv)'s identity is now an
+  **inequality** against `callCount`; the equality asserted is against
+  the one-pass recomputation from `run.items`, a sum over each item's `calls` (§4 S2 (iv), (iv-c)).
 - **`ChatResult` never raises on a missing or partial `stats`**, and each derived timing field is
   `None`-never-`0` when its source key is absent (§3.6's unit boundary) — which is what keeps rule
   (iv-a)'s `statsCoveredCount == 0` reachable on the chat surface.
@@ -6667,7 +7116,8 @@ note v1.19's citation is confirmed and is the one item here that this document c
   §3.4.4a). Without this, S3 — the first end-to-end run — cannot store a record at all.
 - **The first call to each arm is a warm-up on the arm's own call surface, and is never timing
   data**, under a separate `firstCallTimeoutSeconds` budget, with a between-item residency probe and
-  an `unexplainedMs` gap check withholding a contaminated item's **`latencyMs` only** — its
+  an `unexplainedMs` gap check — per call, summed over the item (v1.27) — withholding a
+  contaminated item's **`latencyMs` only**; its
   `stats`-derived siblings are kept, under their own coverage (§3.6, §5 test 15b). The measured number
   this exists for is a JIT load whose cost is model-dependent — 3.6 s and 21.1 s on two models on
   this box (§2.5, `-ml` §11.4) — which is why the budget is sized by magnitude and no figure is
@@ -6698,8 +7148,9 @@ its rows here in the same pass.
 | `FieldProblem` | `fingerprint` | `NamedTuple(field: str, reason: Literal["absent","empty","null","forbidden","unknown"])`. **`unknown` is v1.5's fifth value**, for a ***value* this build cannot interpret** *(widened at v1.16 from v1.5's "a **discriminator** this build cannot interpret" — impl-gate P5-5: the shipped code widened at `8fc2341` and the module docstring was swept with it, this row was not, which is the rule 4 staleness this appendix warns about in its own preamble)*. Three families, and the row names all three so a fourth is a decision rather than a drift: an **unrecognised discriminator** — an `armKind` or a `callSurface` this build does not know (§3.4.1); a **`benchSchemaVersion` from the future** (§3.4.3); and a **type error inside a structured value** — a residency snapshot that is not a list, an element that is not a mapping, an element key whose value is not a string (§3.4.4a, S1 DC-1). None of the three is absent, empty, null or forbidden, so the four-value set would have forced a mislabel, and for the third the closed five leave `unknown` as the only honest answer rather than the natural one; it is the field-level counterpart of `InvalidRecord.reason == "unknown_schema"`. **`field` carries an element path for the third family** — `<field>[<index>].<key>` — which is `results.py:466`'s already-shipped grammar one level down and not a new convention; `report.py:534` renders `field` as opaque text and parses nothing, so the grammar constrains no consumer. |
 | `Fingerprint` | `fingerprint` | frozen dataclass, §3.4.1–§3.4.2. **Two discriminators (v1.9):** `armKind` and `callSurface`, combining into the derived `armProfile` key (`model:chat` / `model:embeddings` / `deterministic`). Both are members of no required set and are checked before any mapping is consulted; `callSurface` is `None` iff `armKind == "deterministic"`, and its value is *declared* by the pack, never observed (§3.4.4a) |
 | `ItemResult`, `RunResult`, `InvalidRecord`, `Aggregates` | `results` | as given in S1. **v1.12:** `ItemResult` gains **`measures: Mapping[str, float]`** beside `counts` — the per-item *continuous* values (`-ml` v1.15 §3.2d), defaulted `{}`, finite, domain-unconstrained, and **not** `float \| None` because absence stays `scoreable`'s job — plus `scored_value()` beside `scored_outcome()`, which now **raises `MetricKindError`** on a `measures`-resident metric rather than booleanising it. A metric name is in one map or the other, never both (`MetricKindError` at construction); a non-finite value is `NonFiniteMeasure`. **v1.10:** `ItemResult.timing` replaces the stored `latencyMs`, which becomes a **property** over it; `RunResult` gains `attestationTripWire: Literal["compared","first-observation","unavailable"] \| None`, required with no default and `None` iff the arm is `deterministic` |
-| `ItemTiming` | `results` | **v1.10** (plan-gate P4-3; `-ml` v1.12 §11.9 ask 2b): frozen dataclass `(wallClockMs, ttftMs, generationMs, promptTokens, tokensPerSecond, unexplainedMs, withheldFor)`, every field `\| None` and never `0`. `wallClockMs` is what the harness measured and **survives on a withheld item** — which is what makes `-ml` §11.6's *"the summary is withheld, not the data"* true of the record, and what §11.5.1's `censoringExact` compares. `withheldFor: Literal["load","timeout","no_response"] \| None` names the producer, so §4 S2's cause split is a count over the items rather than a parallel tally. **v1.11 (plan-gate P5-6):** three item states, still **one** counter — `timeout` and `no_response` both feed `latencyWithheldForNoResponse`, and they are distinct item states because `-ml` §11.5.1's `censoringExact` is satisfied by the first and falsified by the second. An item that returned no response still carries an `ItemTiming`, its `withheldFor` populated and every other field `None` (plan-gate P5-9); `timing is None` means the **arm** produces no timings at all. On a `model:embeddings` arm only `wallClockMs` and `withheldFor` are populated: that surface returns no `stats` (§3.4.4a). `ItemResult.latencyMs` — the **admitted** figure, the only timing any aggregate reads — is derived from this record and stored nowhere (§7 rule 4 prefers the derivation to the invariant two stored copies would need) |
-| `LatencyBlock` | `results` | **v1.9, extended v1.10**, produced by S2 and carried as `RunResult.latency: LatencyBlock \| None`: `latencyMsP50` / `latencyMsP95` / `latencyMsMax` (`float \| None`, `None` exactly when `-ml` §11's gates refuse them), `latencyTimedCount`, `latencyItemCount`, `latencyWithheldForLoad`, **`latencyWithheldForNoResponse`** (renamed from `…ForTimeout` — plan-gate P4-7), `statsCoveredCount`, and **v1.10's four aggregate figures** `ttftMsMedian` / `prefillMsPer1kMedian` / `tokensPerSecondMedian` / `unexplainedMsMax` (each `float \| None` — plan-gate P4-3). The wall clock and the three `stats`-derived figures have **different** coverage and each prints its own (`-ml` §11.4); `statsCoveredCount` is `None`-never-`0` on a call surface returning no `stats`. The block's **nine** invariants are in §4 S2 — v1.11 adds **(iv-c)**, co-presence, and turns (iv)'s identity into an inequality (plan-gate P5-5) — and the estimator, floors and printed grammar are the note's |
+| `CallTiming` | `results` | **v1.27** (`-ml` v1.20 §11.4, §11.5.1, §11.9 ask 7): frozen dataclass `(wallClockMs, ttftMs, generationMs, promptTokens, tokensPerSecond)`, every field `\| None` and never `0` — **one model call**. These five lived on `ItemTiming` from v1.10 to v1.26, when a scored item *was* one call; they are **call** figures (a `tool-caller` item is a turn of `I(t)` calls, prefill is not even constant within one, and `-ml` §11.4 pools them over calls rather than averaging up to the item), so they have exactly one home and it is here. §4 S2 rule (iv-c)'s co-presence exclusion is evaluated **per call** over this record |
+| `ItemTiming` | `results` | **v1.10** (plan-gate P4-3; `-ml` v1.12 §11.9 ask 2b), **and smaller at v1.27** (`-ml` §11.9 ask 7): frozen dataclass `(wallClockMs, calls: tuple[CallTiming, ...], withheldFor)` — three fields, the five scalars having moved down to `CallTiming`. `callCount == len(calls)` and `unexplainedMs` (`-ml` §11.5.1's per-call gap **summed** over `calls`, `None` unless every call yields one) are **derived properties**, not stored fields — §7 rule 4's preference for a derivation over the invariant two stored copies would need, applied to this record a second time. `wallClockMs` is the **item's** wall clock — on a `tool-caller` the whole turn, dispatches included — and is `None` on a turn that ended on a raise, whose wall clock is incomplete and is never stored as a measurement. `calls` is `()` exactly when the item's first call returned nothing. `wallClockMs` is what the harness measured and **survives on a withheld item** — which is what makes `-ml` §11.6's *"the summary is withheld, not the data"* true of the record, and what §11.5.1's `censoringExact` compares. `withheldFor: Literal["load","timeout","no_response"] \| None` names the producer, so §4 S2's cause split is a count over the items rather than a parallel tally. **v1.11 (plan-gate P5-6):** three item states, still **one** counter — `timeout` and `no_response` both feed `latencyWithheldForNoResponse`, and they are distinct item states because `-ml` §11.5.1's `censoringExact` is satisfied by the first and falsified by the second. An item that returned no response still carries an `ItemTiming`, its `withheldFor` populated, `wallClockMs` `None` and `calls` `()` (plan-gate P5-9, restated over the v1.27 shape); `timing is None` means the **arm** produces no timings at all. On a `model:embeddings` arm each `CallTiming` carries `wallClockMs` alone: that surface returns no `stats` (§3.4.4a). `ItemResult.latencyMs` — the **admitted** figure, the only timing any aggregate reads — is derived from this record and stored nowhere (§7 rule 4 prefers the derivation to the invariant two stored copies would need) |
+| `LatencyBlock` | `results` | **v1.9, extended v1.10**, produced by S2 and carried as `RunResult.latency: LatencyBlock \| None`: `latencyMsP50` / `latencyMsP95` / `latencyMsMax` (`float \| None`, `None` exactly when `-ml` §11's gates refuse them), `latencyTimedCount`, `latencyItemCount`, `latencyWithheldForLoad`, **`latencyWithheldForNoResponse`** (renamed from `…ForTimeout` — plan-gate P4-7), `statsCoveredCount`, **v1.27's `callCount`** (`-ml` §11.4's `Y_calls`, the sum of each item's `len(timing.calls)`, and the denominator the three `stats`-derived medians are gated against — **not** `latencyItemCount`, §4 S2 (iv-b)), and **v1.10's four aggregate figures** `ttftMsMedian` / `prefillMsPer1kMedian` / `tokensPerSecondMedian` / `unexplainedMsMax` (each `float \| None` — plan-gate P4-3). The wall clock and the three `stats`-derived figures have **different** coverage **and different units** — items and calls respectively, v1.27 — and each prints its own (`-ml` §11.4); `statsCoveredCount` counts **calls** and is `None`-never-`0` on a call surface returning no `stats`. The block's **nine** invariants are in §4 S2 — v1.11 adds **(iv-c)**, co-presence, and turns (iv)'s identity into an inequality (plan-gate P5-5); v1.27 re-bases that inequality on `callCount`, moves (iv-b)'s `Y` and (iv-c)'s exclusion to the call, splits `unexplainedMsMax` out of (i), and leaves (ii), (iii), (v) and (vi) item-level — and the estimator, floors and printed grammar are the note's |
 | `BinaryMetric` | `results` | frozen dataclass `(name, successes, n, unit: str)` — a count and **the unit its denominator is in**, `unit` required with no default (v1.6). It is what lets `report.py` honour `-ml` §4.4's "never print a Wilson interval over a turn-pooled count": without it a per-conversation rate and a turn-pooled one are the same type. Every S2 scorer therefore states its denominator unit; the permitted values are the note's denominators (`-ml` §4.2). |
 | `ContinuousMetric`, `DistributionSummary` | `results` | `ContinuousMetric(name, mean, n, support)` and `DistributionSummary(name, median, p10, n, unit, support)` — **v1.12** (plan-gate P6-1). `support: tuple[float, float] \| None` is the **metric's own** support, required with no default on both, and is what the paired bootstrap's `clamp` is derived from — `(lo−hi, hi−lo)`, or `None` for an unbounded metric — without the manifest field §4 S1e Table E rejects. **v1.14** (`-ml` v1.17, closing v1.13's open seam): on the verdict path `report.py` **forwards** this value as Rule 8's `support` and derives nothing, the producer deriving the clamp inside itself; the one caller that states a clamp directly is the exploratory `sep_z` comparison (§4 S1, §4 S1e Table E). **Stored form** — the `"distribution"` tag, the keys, `support` as `[lo, hi]` or `null` — is §4 S1e Table F's (v1.14). `DistributionSummary` exists because `-ml` §5.2 publishes a **median and a p10** for `sep_z` and `sep_raw` alike and **no mean for either** (v1.16 §5.2); the third published figure, the fraction above zero, is P@1 by §5.2's own identity and is deliberately not a second field (§3.8.1); `RetrievalAggregates.separationRaw`/`separationZ` carry it in place of the bare `float \| None` they carry today, and `named_metrics()` returns them, which is what makes `sep_z` reach a table at all. |
 | `HolmStep` | `stats` | frozen dataclass `(p, rank, threshold, tested, rejected)`, one per pre-registered family member, returned by `holm_steps` in the family's own order and always exactly `k` long. **v1.6 — it replaces `holm_thresholds`' `list[float]`, which could not express the step-down stop.** `tested=False` marks a member past the stop: its `threshold` is still printed (§3.3(ii)) and decided nothing. The α it is computed at is the note's (`-ml` §3.3). |
@@ -6711,7 +7162,8 @@ its rows here in the same pass.
 | `EmbedResult`, `LoadResult`, `ResidentModel` | `lmstudio` | vectors + dimension; **`LoadResult` is the warm-up call's outcome** — `(wallClockMs, wasResidentBefore: bool, runtime: Mapping \| None, stats: Mapping \| None)`, with `coldLoadSeconds` derived from it only when `wasResidentBefore` is `False`, and `runtime`/`stats` populated on the chat surface only — they are the sole source of `runtimeName`/`runtimeVersion` (§3.4.4a step 5), so v1.8's `discardedResponse` naming is retired: the *content* is discarded, the metadata is not (v1.9); **`ResidentModel` is one `/api/v0/models` row surviving `state != "not-loaded"`** — `(id, state)`, the literal `state` string kept, not a boolean (v1.8, §3.4.4a; v1.7's "one `lms ps --json` row" is gone with the CLI) |
 | `PromptConfig` | `convo` | the manifest's `prompt` block, parsed: `systemPrompt, toolSchemas, historyReplay, representToolSchemasEachTurn, historyTurns, maxIterationsPerTurn, temperature, maxTokens`. **`historyReplay` is four-valued** (`structured`, `structured-replies-only`, `plaintext`, `none`) spanning §3.3's **two** axes, role ownership and tool evidence — not one ladder (v1.26, P13-8). **`maxIterationsPerTurn` is `int \| None`**: it is `-ml` §4.1's `I(t)` cap and §4.2(f) reports against it, so it is pack data inside the content hash, and **v1.26 scopes it by role** — required iff `roles.MULTI_CALL_TURN_BY_ROLE[role]`, forbidden otherwise, `None` here iff that column is `False`, and `drive` **raises** on `None` rather than substituting a value, which is how the no-default rule survives a field four packs must not carry (§3.3) |
 | `Turn`, `Conversation` | `convo` | one scripted turn (`seq, user, expect`); one row of `conversations.jsonl`. **`expect` is a scoring oracle, and `scoring/toolcalls.py` is its only reader** — `assemble` never reads it, because a prior turn is replayed from what the model actually produced (§3.8.4, v1.25) |
-| `TurnTrace`, `ConversationTrace` | `convo` | **`TurnTrace` is one turn's record** — `(messagesSent, chatResults: tuple[ChatResult, ...], dispatches, envState, iterations: int, turnDisposition: TurnDisposition, finalReplyText: str \| None, wallClockMs)`, `chatResults` holding **every** iteration of §3.8.4's per-turn loop in order (empty when the first call raised); `ConversationTrace` is `(scriptId, turns: tuple[TurnTrace, ...])`. **v1.25 replaced the singular `ChatResult` field**, since a one-call-per-turn shape leaves a tool-calling turn with no final reply to score `-ml` §4.2(g) against or to replay. **v1.26 retires `capHit: bool` for `turnDisposition`** (plan-gate P13-1): `finalReplyText is None` **iff** `turnDisposition != "replied"`, and the four members' mechanisms and scoring mappings are §3.8.4's table, which is their only home — one bit could not stand for four states, and the false `iff` was laundering a §3.6 `fail` into an `n_a` |
-| `TurnDisposition`, `TURN_DISPOSITIONS` | `convo` | `Literal["replied", "cap-hit", "no-response", "server-rejected"]` and the `frozenset` of the same four, **v1.26's**. A **mechanism** vocabulary, deliberately not `-ml` §4.1's scoring word `unrunnable` — `server-rejected` *maps to* that count (§3.8.4) and naming the field after it would repeat the `BinaryMetric.unit`/`PackRef.analysisUnit` collision. Both land in a **precursor unit before** the loop's rework unit, with §5 test 10c's three-way probe against a constant transcribed from §4 S2 |
+| `TurnTrace`, `ConversationTrace` | `convo` | **`TurnTrace` is one turn's record** — `(messagesSent, chatResults: tuple[ChatResult, ...], dispatches, envState, iterations: int, turnDisposition: TurnDisposition, finalReplyText: str \| None, wallClockMs)`, `chatResults` holding **every completed** iteration of §3.8.4's per-turn loop in order (empty when the first call raised); `ConversationTrace` is `(scriptId, turns: tuple[TurnTrace, ...])`. **v1.27:** `iterations == len(chatResults)`, forced rather than chosen — `-ml` §11.4 binds `callCount == len(ItemTiming.calls) == TurnTrace.iterations` and §11.9 ask 7 builds `calls` from `chatResults` in order — so a turn whose first call raised records `0`, and that `0` is *not observed* rather than *no iterations used*, which is what keeps it out of §4.2(f)'s summary and on the record all the same. `wallClockMs` brackets the whole turn, dispatches included. **v1.25 replaced the singular `ChatResult` field**, since a one-call-per-turn shape leaves a tool-calling turn with no final reply to score `-ml` §4.2(g) against or to replay. **v1.26 retires `capHit: bool` for `turnDisposition`** (plan-gate P13-1): `finalReplyText is None` **iff** `turnDisposition != "replied"`, and the four members' mechanisms and scoring mappings are §3.8.4's table, which is their only home — one bit could not stand for four states, and the false `iff` was laundering a §3.6 `fail` into an `n_a` |
+| `TurnDisposition`, `TURN_DISPOSITIONS` | `convo` | `Literal["replied", "cap-hit", "timed-out", "no-response", "server-rejected"]` and the `frozenset` of the same **five** — v1.26's four, **widened at v1.27** (`-ml` v1.21 §4.3.1 item 2) because `timed-out` scores `fail` while the other two non-completions score `unrunnable`, and a folded token leaves the S5 scorer unable to tell them apart (§3.8.4). A **mechanism** vocabulary, deliberately not `-ml` §4.1's scoring word `unrunnable` — two rows *map to* that count (`-ml` §4.3 rule 4) and naming the field after it would repeat the `BinaryMetric.unit`/`PackRef.analysisUnit` collision. Both landed in the **precursor unit** at `d5b549d` holding four members, so v1.27 is an **edit** to shipped code and legs 1 and 2 of §5 test 10c's probe go red until the transcript moves with them — the guard working. The transcript is taken from **§3.8.4's table** |
+| `ITERATION_SUMMARY_DISPOSITIONS`, `ITERATION_SUMMARY_EXCLUDED` | `scoring.toolcalls` | **v1.27** (`-ml` v1.21 §4.2(f), §4.3.1 item 8): `frozenset({"replied", "cap-hit"})` and `frozenset({"timed-out", "no-response", "server-rejected"})`, the population of §4.2(f)'s `I(t)` mean and p95 and its complement. A **scoring** vocabulary, so it sits beside the scorer and **not** in `convo`, whose set is a mechanism vocabulary — that separation is what makes the union assertion (§4 S5 *Done when* item 4) bind two independently authored declarations across two modules rather than restate one of them. Each is written out literally; the second is **not** derived as the first's complement, which would make that assertion a tautology |
 | `DispatchRecord` | `tooling` | `(name, rawArguments, parsedArguments, returnValue, timestamp)` — FR-10's ground truth |
 | `DecidedBy` | `stats` | `Literal["mcnemar-exact", "conservative-envelope", "paired-bootstrap"]`. **v1.12 adds the third member** for `-ml` §3.2d's continuous path (§4 S1): a machine token must name the instrument that ran, and on that path neither of the other two did; free while no stored record carries a verdict. **v1.10 renames the second member** from `"cluster-bootstrap"`: after note v1.11 the paired binary interval is Rule 4's bound-by-bound **envelope** computed in closed form, so no cluster bootstrap runs on that path and a token naming one is the machine-readable form of the prose defect the note corrects in its own four strings. The note left the rename to this document and recommended it; §4 S1e Table D enumerates the sites |
