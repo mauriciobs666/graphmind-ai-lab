@@ -109,7 +109,7 @@ the actual promotion targets — agent prompts, knowledge bases, project docs.
 | U47 | **`qa-engineer`'s inbox — 1 entry** (`a1c2e9d4`), re-derived live and found broader than stated: an unrecognized `model` id gets HTTP 400 only from a **cold start**; with anything already resident, the identical call silently returns 200 served by whatever's loaded — no catalog validation. Promoted the corrected, scope-explicit form (plus the QA consequence: assert on response body's `model`, not just status) to `data-scientist/lm-studio-model-notes.md`, not `qa-engineer`'s own KB — all three facts are server/API behavior. `suggestedHome` (`project docs`) overridden to KB. | `ac37e105af7b82e96` | **accepted** (`5e54603`) | `claude/data-scientist/{lm-studio-model-notes.md,kaizen/history.md}`, `claude/qa-engineer/kaizen/history.md` | self-verified: word count 2,323→2,660 (+337) reproduced exactly, diff content matches all 3 claimed facts verbatim, census confirms `qa-engineer` drained to 0 and 31 total (30 produced + 1 orphan) matching report exactly, `tico` orphan untouched | 181,990 tok / 36 tool uses / 14 min, no kill |
 | U48 | **`teco`'s inbox — 2 entries**, both promoted into `teco.md`, one widened one narrowed. `b7d4e1a9` (cd-failure masking a backup) re-derived by execution and found the real mechanism broader than stated: the harness's Bash tool never runs `set -e`, so *any* unchained command's failure is silently survivable, not a `cd`-specific case — promoted the general rule, `cd` kept as the illustrative example. `f3a1c9e2` (shared git tree wiping a delegate's edits) re-derived against the model-bench coordination's own ledger (read-only) and found the entry's flat causal claim overstated that source's own "most likely" hedge — promoted the narrower, epistemically honest form instead. | `a9a6a4a95fdadae88` | **accepted** (`4a9335d`) | `claude/teco/{teco.md,kaizen/history.md}` | self-verified: word count 10,445→10,612 (+167) reproduced exactly, diff content matches both dispositions verbatim, census confirms `teco` drained to 0 and 30 total (29 produced + 1 orphan, `architect`'s 4→5 confirmed concurrent-session refill not this unit's), `tico` orphan untouched | 158,860 tok / 34 tool uses / 14 min, no kill |
 | U49 | **`coder`'s inbox — 4 entries**, all 4 re-derived by live execution and confirmed as-stated (none narrowed/widened/discarded): `typing.Protocol` methods derivable from `vars(cls)`; `http.client.IncompleteRead` not an `OSError` subclass, read-phase escapes a connect-only guard; `HTTPError.read()` fails independently of the connect-phase guard; `json.loads` parses bare NaN/Infinity; pytest's `DontReadFromInput` raises `OSError` on in-test `input()`. All 4 routed to `skills/python-web-quirks/SKILL.md` (grepped clean first), none into `coder`'s own prompt. | `a114033bcce88b819` | **accepted** (`0059ec5`) | `skills/python-web-quirks/SKILL.md`, `skills/README.md`, `claude/coder/kaizen/history.md` | self-verified: word/section count 8,377→9,218 (+841)/24→27 reproduced exactly, diff content matches all 4 dispositions verbatim, census confirms `coder` drained to 0, `tico` orphan untouched (`tdd-engineer`'s 6→7 confirmed further concurrent-session refill, not this unit's) | 170,560 tok / 64 tool uses / 16 min, no kill |
-| U50 | **`data-scientist`'s inbox — 4 entries**, several model-bench-specific (`b3f1c0a4`: pack sizing terminology confusion; `e09bd084`: bare `file.py:NNN` cites rot, sha-pinned ones don't; `e3e8ead6`: `callCount` name collision with an existing test stub; `3f9c1e42`: `undispatchable` is a model-failure bucket by construction). **Live collision risk flagged in the brief**: model-bench has an active concurrent coordination (U114+) — cobb instructed not to touch any `model-bench/*` or `docs/plans/small-model-benchmarking*.md` file, route to a safe target instead, or keep open if none exists. | `a53b342293ec835d3` | in-flight | — | — → — | — |
+| U50 | **`data-scientist`'s inbox — 4 entries**, 2 promoted 2 discarded — no model-bench collision (nothing needed a write there). `b3f1c0a4` generalized (analysis-unit vs. item count in a repeated-measures design) into `data-scientist.md`, its model-bench-specific example already superseded by `roles.py`'s own `ANALYSIS_UNIT_FIELD_BY_ROLE` table. `e09bd084` (bare `file.py:NNN` cites rot) promoted to `analyst/review-techniques.md` — general review hygiene, not ML content. `e3e8ead6` (`callCount` collision) and `3f9c1e42` (`undispatchable` bucket) both discarded — both hazards already fixed in the current tree (`results.py`'s real `callCount` field, `convo.py`'s `ToolDispatchFailed`), independently re-verified against HEAD. | `a53b342293ec835d3` | **accepted** (`40b0daf`) | `claude/data-scientist/{data-scientist.md,kaizen/history.md}`, `claude/analyst/review-techniques.md` | self-verified: word/section counts (2,569→2,661/+92; 13,904→14,129/+225, 32→33 sections) reproduced exactly, diff content matches both promotions verbatim, both "discarded as superseded" claims independently re-verified by grepping the actual code (exact line matches), census confirms `data-scientist` drained to 0 and 23 total matching report, `tico` orphan untouched | 168,754 tok / 43 tool uses / 5 min, no kill |
 
 ## The graph is live during this pass
 
@@ -494,19 +494,20 @@ list was written after U40, and item 2 has now moved four times.
    in U33. U32/U34/U35/U36 drained `devops`, `data-scientist`, `graph-dba`,
    `qa-engineer` and `tdd-engineer`.
 2. **The producers still holding entries.** All five `teco` chunks are done
-   (U42–U45, U48), `cobb`'s own inbox is done (U46, `b6b136b`), `qa-engineer`'s
-   is done (U47, `5e54603`), and `coder`'s is done (U49, `0059ec5`) — all
-   **drained to 0.** Re-queried live at U49's close, **2026-09-10**: `analyst`
-   **10**, `tdd-engineer` **7** (up from 6 at U48's close — second consecutive
-   concurrent-session refill on this producer, confirm fresh before
-   dispatching it), `architect` **5**, `data-scientist` **4**, plus the 1
-   orphan — **27** in the graph. Next, small → large: `data-scientist` (4),
-   then `architect` (5, watch for further drift), then `tdd-engineer` (7 and
-   rising — dispatch it as a fresh count, not this one). The stakeholder
-   decision below keeps this open-ended rather than closing on any fixed
-   list. **Re-query at each dispatch; never dispatch against a figure
-   recorded here** — this list has been wrong at every single dispatch it
-   has been read at.
+   (U42–U45, U48), `cobb`'s own inbox is done (U46, `b6b136b`),
+   `qa-engineer`'s is done (U47, `5e54603`), `coder`'s is done (U49,
+   `0059ec5`), and `data-scientist`'s is done (U50, `40b0daf`) — all
+   **drained to 0.** Re-queried live at U50's close, **2026-09-10**:
+   `analyst` **10**, `tdd-engineer` **7**, `architect` **5**, plus the 1
+   orphan — **23** in the graph. Next, small → large: `architect` (5), then
+   `tdd-engineer` (7), then `analyst` (10) — but **re-verify every one of
+   these fresh at dispatch**; `architect` and `tdd-engineer` have both drifted
+   upward from concurrent-session refills mid-pass already (U46→U48:
+   `architect` 4→5; U48→U49: `tdd-engineer` 6→7), so treat every recorded
+   figure here as a lower bound, not a fact. The stakeholder decision below
+   keeps this open-ended rather than closing on any fixed list. **Re-query at
+   each dispatch; never dispatch against a figure recorded here** — this
+   list has been wrong at every single dispatch it has been read at.
 3. **The one orphan is not a residue and must not be swept.**
    `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` is alive on its `tico` edge on
    purpose — it is the routing signal for `tico` K-016. A close pass that
