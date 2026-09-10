@@ -26,7 +26,7 @@ from conftest import (
 from modelbench import stats
 from modelbench.fingerprint import FieldProblem
 from modelbench.packs import PackConfigError, metrics_from_manifest
-from modelbench.report import compare_report, resolving_power_line
+from modelbench.report import _SAMPLE_NOUN, compare_report, resolving_power_line
 from modelbench.results import (
     ContinuousMetric,
     DistributionSummary,
@@ -35,6 +35,7 @@ from modelbench.results import (
     RetrievalAggregates,
     RunResult,
 )
+from modelbench.roles import UNIT_KIND_BY_ROLE
 from modelbench.roles import unit_kind as unit_kind_for_role
 from modelbench.stats import DuplicateAnalysisUnit, PairedOutcomes
 
@@ -866,6 +867,30 @@ def test_the_conditionality_clause_names_the_packs_own_sample_noun() -> None:
     assert "conditional on the 40 items" in md
     assert "generalization to unwritten items" in md
     assert "unwritten scripts" not in md
+
+
+def test_sample_noun_domain_is_exactly_the_declared_unit_kinds():
+    """Review Pass 14 P14-3: `_SAMPLE_NOUN` is read through `.get(rp.unit_kind, unit_plural)`, so
+    a unit kind missing from the map does not raise — it silently reverts to the generic plural
+    (`"items"` for every kind), which is Pass 1's n-4 defect exactly. Nothing pinned the map's
+    domain to the set of unit kinds a role can actually declare (`roles.UNIT_KIND_BY_ROLE`'s
+    values), so dropping an entry left the full suite green."""
+    assert set(_SAMPLE_NOUN) == set(UNIT_KIND_BY_ROLE.values())
+
+
+@pytest.mark.parametrize(
+    "unit_kind,expected_noun", sorted(_SAMPLE_NOUN.items())
+)
+def test_the_conditionality_clause_uses_each_declared_sample_noun(unit_kind, expected_noun):
+    """Drives `resolving_power_line` over every noun `_SAMPLE_NOUN` declares, not just the
+    conversation and item packs the rest of this suite happens to build fixtures for — the
+    `"query"` (embedder) row had no render assertion anywhere in this file."""
+    rp = stats.resolving_power(
+        40, unit_kind=unit_kind, design_effect=1.0, basis="by-construction",
+        alpha_family=0.05, alpha_mdd=0.05,
+    )
+    line = resolving_power_line(rp, guard_pack(headline=METRIC, verdicts=(METRIC,)))
+    assert f"the 40 {expected_noun} in" in line
 
 
 # --- M-3 / m-ML-4: the fail-safe propagation is decision 4's whole justification -----------------

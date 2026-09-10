@@ -17,10 +17,13 @@ from modelbench import results as results_module
 from modelbench import stats
 from modelbench.fingerprint import Fingerprint
 from modelbench.results import (
+    _AGGREGATE_BY_KIND,
     BENCH_SCHEMA_VERSION,
     ClassificationAggregates,
     ContinuousMetric,
     DistributionSummary,
+    ExtractionAggregates,
+    GroundingAggregates,
     IncompleteItemRecord,
     InvalidFingerprint,
     ItemResult,
@@ -28,6 +31,7 @@ from modelbench.results import (
     NonFiniteMeasure,
     RetrievalAggregates,
     RunResult,
+    ToolCallAggregates,
     _metric_from_dict,
     _metric_to_dict,
     load_history,
@@ -491,6 +495,52 @@ def test_a_record_with_no_aggregates_block_is_quarantined(tmp_root) -> None:
     valid, invalid = load_history(tmp_root, packId=PACK)
     assert valid == []
     assert [r.reason for r in invalid] == ["unparseable"]
+
+
+# --- Pass 14 P14-4: `_AGGREGATE_BY_KIND` can lose a kind in green -------------------------------
+
+# The five `Aggregates` subclasses themselves — named directly, not read off `_AGGREGATE_BY_KIND`.
+# Parametrizing from the constant under test could only ever lose a case on the exact shrink this
+# pins against (review Pass 15 §4's tautology warning); driving from each dataclass's own `kind`
+# default is what keeps the source of truth independent of the dict being checked.
+_ALL_AGGREGATE_CLASSES = (
+    RetrievalAggregates,
+    ToolCallAggregates,
+    ClassificationAggregates,
+    ExtractionAggregates,
+    GroundingAggregates,
+)
+
+
+def test_aggregate_by_kind_domain_matches_the_declared_aggregate_classes():
+    """Form (i) (review Pass 15 §4): binds `_AGGREGATE_BY_KIND` to an independent declaration of
+    the same five kinds — each dataclass's own `kind: Literal[...]` default — rather than to
+    anything computed from the dict itself. Dropping `"grounding"` from `_AGGREGATE_BY_KIND`
+    disagrees with `GroundingAggregates().kind` either way a bare membership check on the dict
+    alone could not."""
+    assert set(_AGGREGATE_BY_KIND) == {cls().kind for cls in _ALL_AGGREGATE_CLASSES}
+
+
+@pytest.mark.parametrize("cls", _ALL_AGGREGATE_CLASSES, ids=lambda c: c().kind)
+def test_every_aggregate_kind_round_trips_through_load_history(tmp_root, cls) -> None:
+    """Form (ii) (review Pass 15 §4): a behavioural consequence per member — a genuine
+    `store()`/`load_history()` round trip, not a membership check — complementing the declarative
+    pin above.
+
+    Dropping a kind from `_AGGREGATE_BY_KIND` leaves the full suite green today (§N.1 entry 18:
+    834 passed) only because nothing drives a real record of that kind through storage end to
+    end — `grounding` is inert until an S7 pack exists. When it is dropped,
+    `_aggregates_from_dict`'s `KeyError` is caught by `load_history`'s broad `except Exception`
+    (the same catch that legitimately quarantines a truncated file) and the record — genuinely
+    valid, merely of a kind this build's dict forgot — is reported as `"unparseable"`,
+    indistinguishable from file corruption, in the one module whose thesis is that an unreadable
+    record is a finding and not an absence."""
+    aggregates = cls()
+    store(_run(f"r-{aggregates.kind}", aggregates=aggregates), tmp_root)
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert [r.reason for r in invalid] == []
+    assert len(valid) == 1
+    assert valid[0].aggregates == aggregates
 
 
 # --- m-7: `store()` names the reason instead of raising from pathlib ---------------------------

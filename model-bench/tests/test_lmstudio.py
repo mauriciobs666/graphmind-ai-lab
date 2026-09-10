@@ -31,12 +31,14 @@ from typing import Any
 import pytest
 
 from modelbench.lmstudio import (
+    _REQUIRED_MODEL_INFO_KEYS,
     ChatResult,
     LMStudio,
     LMStudioCallFailed,
     LMStudioCallTimeout,
     LMStudioUnreachable,
     ToolCallingIneligible,
+    _model_info_from_raw,
     check_tool_calling_eligibility,
     tool_calling_eligible,
 )
@@ -246,6 +248,75 @@ def test_catalog_reports_http_status_even_when_the_error_body_is_not_json():
     c = client({"/api/v0/models": (500, b"<html>Internal Server Error</html>")})
     with pytest.raises(LMStudioCallFailed, match="HTTP 500"):
         c.catalog()
+
+
+# A full, valid `/api/v0/models` entry — every field `_model_info_from_raw` reads, required and
+# optional alike (mirrors the synthetic entry in the capabilities test above).
+_FULL_MODEL_INFO_RAW: dict[str, Any] = {
+    "id": "x",
+    "object": "model",
+    "type": "llm",
+    "publisher": "p",
+    "arch": "a",
+    "compatibility_type": "gguf",
+    "quantization": "Q4",
+    "state": "not-loaded",
+    "max_context_length": 100,
+    "capabilities": ["tool_use"],
+    "loaded_context_length": 50,
+}
+
+
+# The two fields `_model_info_from_raw` reads with `.get(...)` rather than `raw[...]` — named
+# directly, independently of `_REQUIRED_MODEL_INFO_KEYS`, so a widen that marks one of them
+# required *in the constant* still has something outside the constant to disagree with (review
+# Pass 15 §4: the missing-key check is a pure membership test, so "does the constant's own
+# member get rejected when absent" is tautological — true for any member — and cannot alone
+# catch a widen onto an already-optional field; P14-1's probe below only catches the file's
+# *shrink* mutation because a second, independent mechanism, the bare `raw["quantization"]`
+# access, diverges from the missing-key check under that specific mutation).
+_OPTIONAL_MODEL_INFO_KEYS: frozenset[str] = frozenset({"capabilities", "loaded_context_length"})
+
+
+def test_required_model_info_keys_partitions_every_catalog_field():
+    """Form (i) (review Pass 15 §4): binds `_REQUIRED_MODEL_INFO_KEYS` to an independent
+    declaration of the same partition — the full field set named in `_FULL_MODEL_INFO_RAW` minus
+    the two named above as optional — rather than to anything computed from the constant itself.
+    A widen that marks `"capabilities"` or `"loaded_context_length"` required, or a shrink that
+    drops any of the nine, disagrees with this fixed right-hand side either way."""
+    assert set(_REQUIRED_MODEL_INFO_KEYS) == set(_FULL_MODEL_INFO_RAW) - _OPTIONAL_MODEL_INFO_KEYS
+
+
+def test_required_model_info_keys_is_exactly_what_model_info_from_raw_rejects():
+    """Form (ii) (review Pass 15 §4): a *behavioural* consequence per member, complementing the
+    declarative pin above rather than duplicating it — this one drives `_model_info_from_raw`
+    itself and would catch, for instance, a typo'd `in`/`not in` in the missing-key check that
+    the declaration-only pin above cannot see.
+
+    Review Pass 14 P14-1: `_REQUIRED_MODEL_INFO_KEYS` is a hand-maintained list, kept in sync by
+    hand with the `raw[key]` accesses `_model_info_from_raw` makes to build `ModelInfo`. Dropping
+    `"quantization"` from the constant leaves the missing-key check blind to it: a catalog entry
+    genuinely missing that field no longer gets the named `LMStudioCallFailed` — it raises a bare
+    `KeyError` out of `catalog()` instead, an untyped escape from this adapter's declared
+    exception taxonomy (`LMStudioError` and its three subclasses), the same defect class as
+    P13-1 one layer down.
+
+    Driving every field of a full, valid entry, deleted one at a time, is what catches that: a
+    key whose absence raises anything other than `LMStudioCallFailed` (a bare `KeyError`,
+    notably) is **not** caught here and so is **not** counted as rejected — the `except` clause
+    names the typed refusal specifically, never a bare `except Exception`, which is what makes
+    the equality below fail loudly on that drift rather than silently matching a shrunken
+    constant (verified: an untyped `KeyError` propagates out of this test rather than being
+    absorbed as *some* refusal)."""
+    rejected: set[str] = set()
+    for key in _FULL_MODEL_INFO_RAW:
+        mutated = dict(_FULL_MODEL_INFO_RAW)
+        del mutated[key]
+        try:
+            _model_info_from_raw(mutated, index=0)
+        except LMStudioCallFailed:
+            rejected.add(key)
+    assert rejected == set(_REQUIRED_MODEL_INFO_KEYS)
 
 
 # --- residency() — §3.4.4a: catalog filtered on state != "not-loaded", {id, state} -------------
@@ -782,11 +853,14 @@ def test_warm_up_on_embeddings_surface_has_no_runtime_or_stats():
 #
 # Each phase has its own domain of applicable kinds — not every kind applies to every phase, and
 # that is a structural fact this module asserts rather than silently encodes by omission:
-#   - **connect**: all four kinds apply — the opener call itself can time out, return a non-2xx
-#     status, drop the connection, or (vacuously) never produce an unparseable body, since no
-#     body exists yet. That last one — `(connect, unparseable_body)` — is the one cell still
-#     exempt: no body exists to be unparseable before a response object, with a status, has even
-#     been obtained.
+#   - **connect**: three kinds apply — the opener call itself can time out, return a non-2xx
+#     status, or drop the connection. `unparseable_body` is not a fourth cell in this phase's
+#     domain at all (Pass 14, P14-6, applying P13-1's own reasoning to its sibling): no body
+#     exists to be unparseable before a response object, with a status, has even been obtained —
+#     the concept has no referent here, the same shape as `non_2xx` having none in `read` below.
+#     It used to be modelled as the older treatment, an exemption (`_EXEMPT_CELLS`) rather than a
+#     domain absence; that was inconsistent with how `("read", "non_2xx")` was fixed and is why
+#     `_EXEMPT_CELLS` is empty now rather than carrying it.
 #   - **read** (a *success* response's body): three kinds — `timeout`, `connection_drop`,
 #     `unparseable_body`. `non_2xx` does not apply here at all, and it is not a fourth exempt
 #     cell in this phase's domain: `urlopen()` raises `HTTPError` for any status >= 400 *before*
@@ -822,7 +896,7 @@ _ERROR_BODY_KINDS: dict[str, Callable[[], Any]] = {
 
 # Each phase's domain of applicable kinds (the comment block above states the reasons).
 _PHASE_KINDS: dict[str, tuple[str, ...]] = {
-    "connect": ("timeout", "non_2xx", "connection_drop", "unparseable_body"),
+    "connect": ("timeout", "non_2xx", "connection_drop"),
     "read": ("timeout", "connection_drop", "unparseable_body"),
     "error-body": ("non_2xx",),
 }
@@ -857,13 +931,35 @@ _EXPECTED_FOR_POST: dict[tuple[str, str], type[Exception]] = {
     ("error-body", "non_2xx"): LMStudioCallFailed,
 }
 
-# The one cell that is structurally unreachable through `urllib.request`'s own contract — a
-# judgement not to be made silently, so it is a named constant asserted below rather than simply
-# absent from the parametrized cases. `("read", "non_2xx")` is deliberately **not** here any
-# more (Pass 13, P13-1): it was never a real cell to begin with — `non_2xx` is outside the `read`
-# phase's domain entirely (see `_PHASE_KINDS` and the comment block above), not a reachable
-# combination this module chooses not to exercise.
-_EXEMPT_CELLS = frozenset({("connect", "unparseable_body")})
+# No cell is exempt (Pass 14, P14-6): `("connect", "unparseable_body")` — the last remaining
+# member — held exactly the reasoning that took `("read", "non_2xx")` out of `_PHASE_KINDS["read"]`
+# at Pass 13 rather than exempting it (see `_PHASE_KINDS` and the comment block above), and stayed
+# in `_PHASE_KINDS["connect"]` under the older treatment only by inconsistency, not by a real
+# difference in kind. `_EXEMPT_CELLS` is kept as a named constant, asserted below, rather than
+# deleted: a future structurally-unreachable cell is a decision recorded here, not a silent
+# absence from the parametrized cases.
+_EXEMPT_CELLS: frozenset[tuple[str, str]] = frozenset()
+
+# Pass 14, P14-5: `_PHASE_KINDS` names each phase's domain, but the per-phase outcome-factory
+# registries above (`_CONNECT_KINDS`/`_READ_KINDS`/`_ERROR_BODY_KINDS`) are a second, independent
+# declaration of the same domains, and nothing bound them to each other — adding a kind to
+# `_CONNECT_KINDS` alone (so `_route_outcome` can produce it, but no `_PHASE_KINDS`-derived
+# parametrization ever asks for it) left the full suite green, never exercised, never noticed.
+_REGISTRY_BY_PHASE: dict[str, dict[str, Callable[[], Any]]] = {
+    "connect": _CONNECT_KINDS,
+    "read": _READ_KINDS,
+    "error-body": _ERROR_BODY_KINDS,
+}
+
+
+def test_outcome_registries_match_their_phase_kinds_domain():
+    """The pin: each registry's key set must equal its `_PHASE_KINDS` domain minus that phase's
+    exempt kinds — in both directions, so a registry that gains an unexercised kind reddens
+    exactly as one that silently loses a kind `_route_outcome` needs already does (via the
+    `KeyError` `_route_outcome` raises)."""
+    for phase, registry in _REGISTRY_BY_PHASE.items():
+        exempt_kinds = {kind for (p, kind) in _EXEMPT_CELLS if p == phase}
+        assert set(registry) == set(_PHASE_KINDS[phase]) - exempt_kinds
 
 
 def _route_outcome(phase: str, kind: str) -> Any:

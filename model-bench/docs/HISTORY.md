@@ -2,6 +2,63 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-09 — S2 U82: closing impl review Pass 14's five guard-reach gaps (P14-1..5), and Pass 15's correction to the convention that closes them
+
+**What:** `docs/reviews/small-model-benchmarking-impl.md` Pass 14 audited every guard-reach
+constant in the S2 diff and found five (of 25 judged) where a one-member shrink left the full
+suite green — the pre-committed threshold (Pass 13 §6) for treating the recurrence as a
+convention gap rather than five separate defects. Added one line to `AGENTS.md`'s Conventions
+list and closed all five with a pin test plus, where the review found a worse consequence, the
+production fix.
+
+**The convention line was itself defective as first written, and a concurrent Pass 15 caught it
+by execution before this unit finished.** The first wording ("asserts the computed set equals the
+constant") is a tautology whenever the guard it describes is a pure membership test: driving the
+guard over its own constant's members and asserting it accepts them is true *for any value* of
+the constant, so it reddens on nothing. `AGENTS.md` now reads "binds it to the other declaration
+of the same set, or asserts a distinct behavioural consequence for every member — never merely
+that the guard accepts what the guard's own constant contains." Every pin below was re-verified
+against this: P14-2/3/4/5 bind two independently-written declarations (form (i)) and, for P14-3
+and P14-4, also assert a distinct rendered/round-tripped output per member (form (ii)). P14-1's
+first-written pin escaped the tautology only by accident — it distinguishes a *typed*
+`LMStudioCallFailed` from a bare `KeyError`, which happens to redden on the review's named
+*shrink* — but a companion mutation found during this unit (marking an already-`.get()`-optional
+field, e.g. `"capabilities"`, required in the constant) stayed green under that pin alone, because
+both sides of the comparison were computed from the same mutated constant. Added a second, form
+(i) test (`test_required_model_info_keys_partitions_every_catalog_field`) that binds
+`_REQUIRED_MODEL_INFO_KEYS` to an independently-named partition of the full field set, closing
+that direction too.
+
+**P14-1** (`modelbench/lmstudio.py` `_REQUIRED_MODEL_INFO_KEYS`) — pin only, no production change:
+the bare `KeyError` the review found escaping `catalog()` is reachable only through the constant
+drifting out of sync with the `raw[key]` accesses `_model_info_from_raw` makes, which the two new
+tests in `tests/test_lmstudio.py` now hold in both directions; no currently-reachable malformed
+catalog response can still trigger it. **P14-2** (`modelbench/roles.py` `ROLES` /
+`UNIT_KIND_BY_ROLE`) — new `tests/test_roles.py`, binding the two declarations directly.
+**P14-3** (`modelbench/report.py` `_SAMPLE_NOUN`) — bound to `UNIT_KIND_BY_ROLE.values()` and
+given a render assertion per noun, including `"query"` (embedder), which no existing fixture had
+exercised. **P14-5** (`tests/test_lmstudio.py` §4B grid) — the three per-phase outcome registries
+bound to `_PHASE_KINDS` minus `_EXEMPT_CELLS`. **P14-6** (nit, decided rather than merely pinned):
+`("connect", "unparseable_body")` held the exact reasoning U79 used to drop
+`("read", "non_2xx")` from `_PHASE_KINDS["read"]` rather than exempt it — no body exists before a
+response object does, in either case — so it gets the same treatment now: removed from
+`_PHASE_KINDS["connect"]`'s domain, and `_EXEMPT_CELLS` is `frozenset()`, kept as a named constant
+(not deleted) so a future genuinely-unreachable cell is still a recorded decision.
+
+**P14-4** (`modelbench/results.py` `_AGGREGATE_BY_KIND`) — pinned in `tests/test_results.py`
+(domain-equality against each `Aggregates` subclass's own `kind` default, plus a real
+`store`/`load_history` round trip per kind). **The worse consequence the review named — a
+genuinely valid record of a dropped kind is quarantined as `"unparseable"`, indistinguishable
+from a corrupt file — is pinned but not fixed**: closing it for real would add a value to
+`InvalidRecord.reason`'s closed `Literal`, a shape `report.py`'s exclusion block already renders
+downstream. That reaches a stored-record shape this unit's brief named as a stop-and-ask
+boundary; routed back to the coordinator rather than decided here.
+
+**Tests:** `tests/test_roles.py` (new), plus additions to `tests/test_lmstudio.py`,
+`tests/test_report.py`, `tests/test_results.py`. Every pin verified by the mutation discipline the
+review itself used — the named one-member shrink (and, for P14-1, the widen this unit found)
+applied by file copy, run isolated, confirmed red, restored byte-identical, confirmed green again.
+
 ## 2026-09-09 — S2 U78: `modelbench/tooling.py` and `modelbench/convo.py`, new
 
 **What:** the two S2 units named in `docs/plans/small-model-benchmarking.md` §4 S2's code sketch

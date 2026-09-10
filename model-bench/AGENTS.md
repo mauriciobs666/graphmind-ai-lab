@@ -163,6 +163,13 @@ imports it — which is why FR-17a's function is `models_with_stored_results`, n
   staleness trip-wire that keeps them honest.
 - **Empty `docs/` subdirectories are held by `.gitkeep`** (repo precedent), so the module
   documentation convention's layout survives a clone before its first document exists.
+- **A guard's reach lives in an asserted constant, not in prose.** A module-level set or table a
+  guard consults — a required-key set, an allowlist, an exemption list, a role→unit map — needs one
+  test that drives *the function consulting it* and binds it to the other declaration of the same
+  set, or asserts a distinct behavioural consequence for every member — never merely that the guard
+  accepts what the guard's own constant contains, which is true of any constant. Without that test
+  the docstring may not claim a reach (*only*, *every*, *never a sixth*). The five constants that
+  failed this in the S2 audit are listed in `docs/reviews/small-model-benchmarking-impl.md` Pass 14.
 
 ## Commands
 
