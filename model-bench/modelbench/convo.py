@@ -76,31 +76,50 @@ HistoryReplay = Literal["structured", "plaintext", "none"]
 
 _HISTORY_REPLAY_MODES: frozenset[str] = frozenset({"structured", "plaintext", "none"})
 
-#: How a turn ended — plan §3.8.4's four-row `turnDisposition` table (v1.26), which is the only
-#: home of the mapping from mechanism to what scores it: `replied` (a response carrying no tool
-#: calls terminated the turn's loop) · `cap-hit` (`maxIterationsPerTurn` reached with tool calls
-#: still being emitted) · `no-response` (the call did not complete — `LMStudioCallTimeout`, or
-#: `LMStudioCallFailed` carrying **no** HTTP status) · `server-rejected` (the server answered and
-#: refused — `LMStudioCallFailed` carrying one; `LMStudioCallFailed.status` is the field that
-#: partition reads, and the adapter, not a caller, decides it).
+#: How a turn ended — the **mechanism**, transcribed from plan §3.8.4's five-row
+#: `turnDisposition` table (v1.27, which split `timed-out` out of `no-response`):
+#:
+#: * `replied` — a response carrying no tool calls terminated the turn's loop.
+#: * `cap-hit` — `maxIterationsPerTurn` reached with tool calls still being emitted, every one
+#:   of those calls having returned.
+#: * `timed-out` — a call hit `requestTimeoutSeconds`, raising `LMStudioCallTimeout`.
+#: * `no-response` — the server did not answer, or answered unusably: `LMStudioCallFailed`
+#:   with `status is None` (a dropped connection, a socket error, or a 2xx whose body is not a
+#:   usable response).
+#: * `server-rejected` — the server answered and refused: `LMStudioCallFailed` carrying an HTTP
+#:   status. `LMStudioCallFailed.status` is the field that partition reads, and the adapter,
+#:   not a caller, decides it.
+#:
+#: **This is a mechanism vocabulary and it maps to no scored outcome here.** What a mechanism
+#: scores is `-ml` §4.3 rule 4's, decided on the pair `(D(t), E(t))` rather than on the
+#: mechanism alone; two homes for one mapping is what produced the plan gate's P14-1, so this
+#: block states none of it and claims no ownership of it. What the mechanism does decide is the
+#: **record**, §3.8.4's own columns: `finalReplyText`, `ItemTiming.withheldFor`, and whether the
+#: runner re-probes and may exit `3` — which it does after `timed-out` alone (§3.6 clause (iv)),
+#: never after the other two transport rows.
 #:
 #: The mechanism is recorded **separately from the reply field**: `finalReplyText is None` iff
-#: `turnDisposition != "replied"`, so no consumer keys §4 S5's *absent-not-failed* rule on the
-#: reply text and converts a §3.6 `fail` into an `n_a`.
-TurnDisposition = Literal["replied", "cap-hit", "no-response", "server-rejected"]
+#: `turnDisposition != "replied"`, so the four mechanisms that share an absent reply stay
+#: distinguishable from one another, and no consumer can key §4 S5's *absent-not-failed* rule on
+#: the reply text.
+TurnDisposition = Literal["replied", "cap-hit", "timed-out", "no-response", "server-rejected"]
 
-#: The same four, as runtime data a consumer can validate against — Appendix A types it
-#: `frozenset[str]`. **Declared and gated ahead of every consumer, on purpose** (plan §4 S2): a
-#: probe authored in the same step that introduces a member can never redden against it, so
-#: `TURN_DISPOSITIONS` lands in its own unit and the rework unit that builds `drive`'s bounded
-#: per-turn loop consumes a constant it did not write. A fifth mechanism arriving later reddens
-#: `tests/test_convo.py`'s probe instead of silently joining the enum.
+#: The same five, as runtime data a consumer can validate against — Appendix A types it
+#: `frozenset[str]`. **Declared and gated ahead of every consumer, on purpose** (plan §4 S2),
+#: and what that buys is **cross-unit** protection specifically — the narrower claim, correcting
+#: this block's own earlier one (plan gate P14-3). `tests/test_convo.py`'s transcript is authored
+#: in the same unit as these two declarations, so in the round that introduces a member all three
+#: agree by construction and the probe cannot redden then either. It reddens when a **later**
+#: unit widens the vocabulary and leaves the transcript behind, which is what earned this
+#: constant a round of its own ahead of the rework unit that builds `drive`'s bounded per-turn
+#: loop and consumes a constant it did not write.
 #:
-#: Written out rather than derived from `TurnDisposition` for that same reason: the two are
-#: *independent* declarations, each bound in the probe to the plan table transcribed there, so a
-#: member added to either one alone is caught. Nothing in this module consumes it yet.
+#: Written out rather than derived from `TurnDisposition`: the two are *independent*
+#: declarations, each bound in the probe to the plan table transcribed there, so a member added
+#: to either one alone is caught. A sixth mechanism arriving later reddens that probe instead of
+#: silently joining the enum. Nothing in this module consumes it yet.
 TURN_DISPOSITIONS: frozenset[str] = frozenset(
-    {"replied", "cap-hit", "no-response", "server-rejected"}
+    {"replied", "cap-hit", "timed-out", "no-response", "server-rejected"}
 )
 
 

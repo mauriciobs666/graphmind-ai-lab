@@ -83,26 +83,35 @@ class LMStudioCallTimeout(LMStudioError):
 
 class LMStudioCallFailed(LMStudioError):
     """A `chat`/`embed`/`warm_up` call returned no usable response for a reason other than a
-    timeout. This is plan §3.6's fourth disposition, `"no_response"` — a *missing* observation,
-    not a censored one, and the runner is expected to score it `fail` and continue rather than
-    treat it as a crash.
+    timeout. This is plan §3.6's `"no_response"` withholding disposition — a *missing*
+    observation, not a censored one — and the runner records it and continues the script rather
+    than treating the raise as a crash.
+
+    **Both mechanisms this class covers are `-ml` §4.3 rule 4's `unrunnable`, never a
+    failure the model is charged with** (v1.27, reversing one clause of §3.6). They are channel
+    failures the harness cannot attribute: a `400` from a model's runaway message list and a
+    `400` from a malformed harness payload are the same status code. So such a turn leaves every
+    scoring denominator and is counted and printed instead — funnel head, paired intersection,
+    resolving-power line. Only `LMStudioCallTimeout` is scored a failure, being the one mechanism
+    where the model was given its whole declared budget and nothing came back.
 
     **`status` is what distinguishes the two mechanisms this class covers** (plan §3.8.4's
-    four-row `turnDisposition` table, v1.26): the HTTP status when the server answered and
-    refused — §3.8.4's `server-rejected`, `-ml` §4.1's `unrunnable` count — and `None` when the
-    call never completed: a dropped connection, a socket error, or a body that could not be read
-    as a response, which is §3.8.4's `no-response` and scores `fail`. The two used to be
-    indistinguishable to any caller (this docstring itself folded "a non-2xx status, a dropped
-    connection, or an unparseable body" into one disposition), and `drive` partitions on
-    `status is not None`, so the distinction is decided here, at the boundary that has the
-    evidence, exactly as `LMStudioCallTimeout` already is.
+    five-row `turnDisposition` table, v1.27): the HTTP status when the server answered and
+    refused — §3.8.4's `server-rejected` — and `None` when the call never completed: a dropped
+    connection, a socket error, or a body that could not be read as a response, which is
+    §3.8.4's `no-response`. The two used to be indistinguishable to any caller (this docstring
+    itself folded "a non-2xx status, a dropped connection, or an unparseable body" into one
+    disposition), and `drive` partitions on `status is not None`, so the distinction is decided
+    here, at the boundary that has the evidence, exactly as `LMStudioCallTimeout` already is.
+    The partition decides which mechanism the **record** carries, not what the turn scores —
+    rule 4 answers both rows the same way.
 
     A **2xx whose body is unusable carries `None`**, deliberately: unparseable JSON, a missing
     `choices`/`data` list, a malformed catalog entry. The server did not *refuse* — §3.8.4 files
     a body error under `no-response` — so this is the refusal status, never "the last status
     seen". `status` is a **required** keyword argument for the same reason: a new raise site must
-    decide which side of that partition it is on rather than inheriting a default that silently
-    scores `fail`.
+    decide which side of that partition it is on rather than inheriting a default, which would
+    silently record a refusal the server never made — or hide one it did.
     """
 
     def __init__(self, message: str, *, status: int | None) -> None:

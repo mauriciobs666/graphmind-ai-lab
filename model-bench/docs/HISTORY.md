@@ -2,6 +2,54 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-10 — `turnDisposition` widened to five, and the prose the widen falsified
+
+**What:** plan v1.28 (`docs/plans/small-model-benchmarking.md` §3.8.4, §4 S2) splits `timed-out`
+out of `no-response`, taking the turn-disposition vocabulary from four members to five. Both
+halves of that landed here: the widen itself, and the shipped comments and docstrings the widen
+made false.
+
+**1. The widen, and the probe reddening on it is the whole return on the precursor unit.**
+`convo.TurnDisposition`, `convo.TURN_DISPOSITIONS` and `tests/test_convo.py`'s
+`_DISPOSITIONS_PER_PLAN_3_8_4` each gained `"timed-out"`. The transcript moved first: legs 1 and 2
+of §4 S2's probe both went red naming the missing member, then each module declaration was widened
+separately — leg 1 green with leg 2 still red — which is the independence the two written-out
+declarations exist to have. Ten mutants, one at a time, restored by file copy: shrink, widen and
+member-rename on each of the three declarations (a set takes no move-a-value-to-another-key
+mutation, having no keys; the rename is its analogue), plus `TURN_DISPOSITIONS` demoted to a plain
+`set`. All killed, and the two module mutations kill only their own leg.
+
+**2. The scoring ruling reversed, so five doc blocks were rewritten whole.** Under `-ml` §4.3
+rule 4 only a **timeout** scores `fail`; `no-response` and `server-rejected` are channel failures
+the harness cannot attribute and are both `unrunnable`. `LMStudioCallFailed`'s class docstring
+stated the old rule in three places and cited a four-row table; `convo.TurnDisposition`'s block
+claimed to be *the only home of the mapping from mechanism to what scores it* — which was the plan
+gate's P14-1, two homes for one mapping — and folded `LMStudioCallTimeout` into `no-response`;
+`TURN_DISPOSITIONS`' block carried P14-3's over-claim (a probe authored beside its transcript
+cannot redden in round 1, so what the precursor buys is **cross-unit** protection, not
+same-unit); the test transcript's gloss and `tests/test_lmstudio.py`'s `status`-partition banner
+carried the same two. Each block was rewritten whole rather than edited token by token, and the
+mechanism vocabulary now states no scored outcome at all — it cites rule 4 for that.
+
+**3. Why whole blocks, and the defect class it comes from.** The review that raised this proposed
+pinning the sole-ownership claim with `grep -rnF 'only home'`. That command **matched nothing**:
+the sentence wrapped across `convo.py:79/80` at exactly *"…which is the only / home of the
+mapping…"*, and `grep` is line-based. A reviewer's pin was silently vacuous — the same class of
+defect as the prose it was aimed at. The plan's replacement pins are five **symbols** whose blocks
+are rewritten, plus five residual counts scoped to `modelbench tests`, all of which moved as
+specified: ``scores `fail`|score it `fail``` 3 → 0, `four-row` 5 → 0, `home of the mapping` 1 → 0,
+`no-response.*LMStudioCallTimeout` 2 → 0, and `"timed-out"` 0 → 3. Each of the four zero-target
+commands was mutation-tested against the **rewritten** text by reintroducing the falsified claim
+into the new block, and each fired.
+
+**Not in scope, and why.** The `convo` module docstring's textbook-replay claim (v1.25 forbids
+replaying a script's `expect`) is false at this tree and is assigned by §4 S2 to the `drive`
+rework unit, which owns the body that would make it true. The disposition probe's **third leg** —
+the set S5's scorer branches on — is still owed and still blocked on unbuilt work, held by
+`test_the_third_leg_of_the_disposition_probe_is_still_owed_by_s5`, which was left untouched.
+
+Suite: 941 passed, 3 deselected. `ruff check .` clean.
+
 ## 2026-09-10 — The constant-pin convention's directional half, restored and applied
 
 **What:** impl review Pass 16 (`docs/reviews/small-model-benchmarking-impl.md`), whose subject is

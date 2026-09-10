@@ -594,14 +594,21 @@ def test_drive_raises_type_error_before_any_llm_call_when_env_is_not_a_tool_envi
 
 
 # --------------------------------------------------------------------------------------------
-# `TURN_DISPOSITIONS` — plan §3.8.4's four-row `turnDisposition` table, asserted (plan §4 S2)
+# `TURN_DISPOSITIONS` — plan §3.8.4's five-row `turnDisposition` table, asserted (plan §4 S2)
 # --------------------------------------------------------------------------------------------
 #
 # §4 S2 requires a **three-way** probe: `set(get_args(TurnDisposition))`, the set of dispositions
 # the S5 scorer branches on, and `TURN_DISPOSITIONS` must **each** equal a constant transcribed
 # into this test from §3.8.4's table — each against the transcript, never against each other,
-# because two sets authored in one unit agree by construction and a probe that cannot redden is
-# not a guard (`AGENTS.md`, "A guard's reach lives in an asserted constant", form (i)).
+# because two declarations bound to one another agree without either being checked against the
+# plan (`AGENTS.md`, "A guard's reach lives in an asserted constant", form (i)).
+#
+# What that buys is **cross-unit** protection, and the narrower claim is the correct one (plan
+# gate P14-3): the transcript below is authored in the same unit as the two module declarations,
+# so in the round that introduces a member all three agree by construction and these legs cannot
+# redden then either. They redden when a **later** unit widens the vocabulary and leaves the
+# transcript behind — which is what the `timed-out` split did, on the round after this guard
+# landed, and is the whole return on having built it early.
 #
 # THE THIRD LEG IS ABSENT ON PURPOSE, AND IT IS OWED. The S5 scorer that branches on these
 # dispositions is not built yet — §4 S2 says this row splits across stages — so only two of the
@@ -609,13 +616,26 @@ def test_drive_raises_type_error_before_any_llm_call_when_env_is_not_a_tool_envi
 # `test_the_third_leg_of_the_disposition_probe_is_still_owed_by_s5` below is the tripwire that
 # refuses to let it be forgotten: it reddens the moment a scorer package appears.
 
-#: Transcribed by hand from plan §3.8.4's four-row table (v1.26), one row per mechanism:
-#: `replied` (a response with no tool calls ended the loop) · `cap-hit` (`maxIterationsPerTurn`
-#: reached) · `no-response` (the call did not complete — `LMStudioCallTimeout`, or
-#: `LMStudioCallFailed` with no HTTP status) · `server-rejected` (the server answered and
-#: refused — `LMStudioCallFailed` carrying an HTTP status). This literal is the *independent*
-#: declaration the module's two are each bound to; never derive it from either of them.
-_DISPOSITIONS_PER_PLAN_3_8_4 = {"replied", "cap-hit", "no-response", "server-rejected"}
+#: Transcribed by hand from plan §3.8.4's five-row table (v1.27), one row per mechanism:
+#:
+#:   * `replied` — a response with no tool calls ended the loop.
+#:   * `cap-hit` — `maxIterationsPerTurn` reached with tool calls still being emitted.
+#:   * `timed-out` — a call hit `requestTimeoutSeconds`, raising `LMStudioCallTimeout`.
+#:   * `no-response` — the server did not answer, or answered unusably: `LMStudioCallFailed`
+#:     with no HTTP status.
+#:   * `server-rejected` — the server answered and refused: `LMStudioCallFailed` carrying one.
+#:
+#: Mechanisms only. What each one *scores* is `-ml` §4.3 rule 4's and is deliberately not
+#: transcribed here — a second home for that mapping is what the plan gate's P14-1 was. This
+#: literal is the *independent* declaration the module's two are each bound to; never derive it
+#: from either of them.
+_DISPOSITIONS_PER_PLAN_3_8_4 = {
+    "replied",
+    "cap-hit",
+    "timed-out",
+    "no-response",
+    "server-rejected",
+}
 
 
 def test_turn_disposition_literal_is_exactly_the_plan_table() -> None:
@@ -627,7 +647,7 @@ def test_turn_disposition_literal_is_exactly_the_plan_table() -> None:
 def test_turn_dispositions_constant_is_exactly_the_plan_table() -> None:
     """Leg 2: the runtime constant a consumer validates against, against the same transcript.
     Deliberately not asserted against leg 1 — the two module-level declarations are written out
-    separately so that a fifth member added to either one alone reddens here."""
+    separately so that a member added to either one alone reddens here."""
     assert convo.TURN_DISPOSITIONS == frozenset(_DISPOSITIONS_PER_PLAN_3_8_4)
 
 

@@ -1069,15 +1069,20 @@ def test_warm_up_embeddings_surface_lands_in_the_taxonomy_on_every_reachable_cel
         )
 
 
-# --- `LMStudioCallFailed.status` — the partition plan §3.8.4's four-row table keys on ----------
+# --- `LMStudioCallFailed.status` — the partition plan §3.8.4's five-row table keys on ----------
 #
-# §3.8.4 splits a failed call two ways: `server-rejected` (the server answered and refused — an
-# HTTP status is in hand) and `no-response` (the call never completed — a dropped connection, a
-# socket error, or a body that could not be read as a response). Before this field both raised a
-# bare `LMStudioCallFailed`, so the two were indistinguishable to any caller: an HTTP 400 (`-ml`
-# §4.1's own example) and a dropped connection differed only in a message string. `status` is
-# what `drive` will partition on — `status is not None` iff `server-rejected` — so it is the
-# adapter's job, not a caller's, to get every raise site's side of that partition right.
+# Two of §3.8.4's five rows are this class's: `server-rejected` (the server answered and refused
+# — an HTTP status is in hand) and `no-response` (the call never completed — a dropped
+# connection, a socket error, or a body that could not be read as a response). The other three
+# are `replied`, `cap-hit` and `timed-out`, and only the last of those is this module's too
+# (`LMStudioCallTimeout`, its own class, needing no discriminating field).
+#
+# Before this field both of this class's rows raised a bare `LMStudioCallFailed`, so the two were
+# indistinguishable to any caller: an HTTP 400 (`-ml` §4.1's own example) and a dropped
+# connection differed only in a message string. `status` is what `drive` will partition on —
+# `status is not None` iff `server-rejected` — so it is the adapter's job, not a caller's, to get
+# every raise site's side of that partition right. Both rows score the same (`-ml` §4.3 rule 4's
+# `unrunnable`); what the partition decides is the mechanism the record carries.
 #
 # **A 2xx whose body is unusable carries `status=None`**, deliberately. The server did not
 # *refuse*: §3.8.4 files a "body error" under `no-response`, and reporting `200` here would make
