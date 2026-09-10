@@ -3,6 +3,69 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
+## 2026-09-10 — analyst's own inbox drained, ten entries, **five new sections** (U55)
+
+- **What:** U55 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `analyst`'s own
+  10-entry inbox, all captured 2026-09-09/09-10 during model-bench review passes 12–18. **6
+  promoted / 4 discarded**, all 10 cleared. `analyst.md` untouched — every promotion landed in
+  this file, none needed a prompt change.
+- **`8b41d7e0…` (urllib exception ladder gap) and `b7f3c1de…` (`json.loads` NaN/Infinity)
+  discarded as already published**, verbatim, in `skills/python-web-quirks/SKILL.md` (delivered by
+  `coder`'s U49) — re-checked against the shipped text, word-for-mechanism identical.
+- **`3f0c9a52…` (editable-install `.pth` finder "wins over" `PYTHONPATH`) and `e2a9d417…` (a
+  script probe's `sys.path[0]`) discarded as already published, and the raw entries' own stated
+  mechanism is backwards.** This file's §*"Verifying an uncommitted diff without mutating the
+  working tree"* already documents — and cites the identical Pass-14/"five of Pass 13's probes"
+  incident — that a setuptools editable install **appends** its finder to `sys.meta_path`, so
+  `PathFinder` (which implements `sys.path`/`PYTHONPATH` lookup) is checked *first*; the leak is
+  cwd/script-directory precedence within `sys.path`, not "meta-path beats `sys.path`" as these two
+  entries assert. Reproduced independently in a scratch dir against `model-bench`'s own editable
+  install (read-only — no `model-bench` file touched): a probe script sitting in a neutral
+  directory correctly resolved `PYTHONPATH` to a snapshot package; the same probe run from
+  inside `model-bench/` itself (the real package's own parent dir) leaked to the live tree
+  regardless of `PYTHONPATH` — confirming the published mechanism, not the discarded entries'.
+- **`b1d47e3a…` → new §*"A design amendment that changes a scored unit's ARITY silently turns
+  every per-call downstream figure into a per-turn sum"*.** Placed after the taxonomy-sweep
+  section as a sibling completeness technique (numeric/derived-figure definitions instead of
+  tables); the model-bench specifics (plan version, exact detector) generalized out, kept only as
+  the origin citation.
+- **`b7c1f2a4…` + `c41f8b02…` merged into one new §*"A 'does the accepted set equal its constant'
+  pin is tautological under a pure membership guard — audit it with SHRINK and WIDEN, not one
+  direction"*.** Placed immediately before the mutation-testing-kill-count section, adjacent to
+  the existing "guard derived from the artifact it guards" material, which covers SHRINK
+  (deletion) but not the WIDEN direction these two entries add. Both re-derived by construction
+  (toy frozenset/`Literal` pair, and a hand-authored fixture list that happens to equal a
+  constant): the tautological "assert against itself" pin stays green under widen exactly as
+  claimed; a cross-declaration pin (frozenset vs. `Literal.get_args()`) reddens on the same widen;
+  and a constant only incidentally covered by a fixture reddens on shrink, stays green on widen.
+- **`c93f5a17…` → new §*"A negative result from a shape-specific structural probe is evidence
+  about the assumed shape, not about the substance"*.** Placed before the "pinning a finding's
+  named cause" section — same family of "verify before trusting a negative/derived claim."
+- **`e7b1c9a4…` → new §*"A shared, read-mutating fixture can couple two 'logically independent'
+  mutation-tested checks"*.** Routed here rather than to `tdd-engineer`'s
+  `guard-testing-techniques.md`: that KB is explicitly scoped to static-analysis tripwires (a
+  guard's subject is other code's *text*), while this entry is about a **behavioral** mutation-test
+  suite's own coupling, diagnosed during an analyst review gate — the same discipline as the
+  adjacent mutation-testing sections in this file. Partially re-derived by construction (a toy
+  stateful read-mutating fixture: deleting one check's read call site does shift the read count a
+  second, independent check depends on); the specific "second check's kill becomes a false pass"
+  direction is taken from the entry's own cited evidence
+  (`docs/reviews/small-model-benchmarking-impl.md` Pass 18 P18-1/Appendix R.2), not re-derived
+  fresh.
+- **`b7f3c2a1…` → new §*"A parallel implementer can move HEAD and dirty the tracked tree
+  mid-review — pin every count to an explicit sha, at both ends"*.** Appended after the "bare
+  `file.py:NNN` citation rots" section as its live-review sibling: that section is about a written
+  citation rotting over days, this one about a `gitStatus` snapshot / working-tree grep rotting
+  *within one active review pass* because a concurrent implementer moves `HEAD`.
+- **Model-bench collision protocol held with margin to spare**: no `model-bench/*` file or
+  `docs/plans/small-model-benchmarking*.md` was written; every promoted rule was generalized past
+  its model-bench origin, with the origin kept only as a dated citation.
+- **Graph:** all 10 entries `DETACH DELETE`d (each was the sole edge on its node — `otherRemaining
+  == 0` throughout, no `MENTIONS` tags needed). `analyst` producer count **0**. The `tico` orphan
+  (`e1a6c4d2…`) re-confirmed alive and untouched (`MENTIONS`→`tico`, count 1) before and after.
+- **Budget:** `review-techniques.md` **14,747 → 16,264 w** (+1,517), sections **34 → 39** (+5),
+  spot-checked for lines over 700 characters on the new material only (none).
+
 ## 2026-09-10 — one `teco`-produced entry routed here, **one new section**: a null result that reads as a refutation (U45)
 
 - **What:** U45 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the final `teco` chunk (seventeen entries). One of them is a general static-review technique with no home in `teco`'s own files, so it landed here rather than in `teco.md`. Full disposition, including why it was promoted despite already appearing in two non-durable places, is in `claude/teco/kaizen/history.md` (2026-09-10, U45).

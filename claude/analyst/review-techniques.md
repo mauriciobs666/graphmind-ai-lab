@@ -263,6 +263,25 @@ Origin: falkor-chat's guard-calibration live suite (255 judge calls, ~155s) inde
 re-executed and reproduced the exact G1/G2 numbers a `tdd-engineer` report claimed (K-027 item 4,
 2026-08-21).
 
+## A negative result from a shape-specific structural probe is evidence about the assumed shape, not about the substance
+
+A probe like `any("_provenance" in e for e in data)` tests one hypothesis about *where* a claimed
+fact would live — a per-entry key — and a `False` from it says only that the fact is not shaped
+that way; reporting it as "the fact is absent" mistakes a shape check for a substance check.
+Verified instance: a plan claimed each of seven entries "carries a per-entry `_provenance`
+citation"; the per-entry-key probe returned `False` and was reported as "zero `_provenance` keys" —
+the fixture actually carried one **top-level** `_provenance.perEntry` map citing all seven ids, so
+the claim was true and only its wording (or the probe's assumed shape) was off.
+
+**Before reporting a structural probe's negative as an absence finding, dump the object's own
+top-level keys** (`data.keys()`, `jq 'keys'`, whatever the format's equivalent is) and look for the
+fact under a different shape — nested, hoisted to a parent key, pluralised — before concluding it
+is not there at all.
+
+Origin: 2026-09-09, model-bench plan gate reviewing a done-condition claim about
+`tests/fixtures/lmstudio/catalog.json`; the next plan revision overruled the finding on exactly
+this basis, and was right to.
+
 ## Pinning a finding's named cause does not close its stated consequence — re-derive the consequence's reachability independently
 
 A review finding names both a cause and a consequence ("X drifts, which lets an invalid record
@@ -464,6 +483,29 @@ to `docs/plans/doc-reference-convention.md`. It added `manuals/` as a recognized
 `manuals/` row — while §9.6 itself states that root `AGENTS.md` copies from it, and root
 `AGENTS.md` already carried the `manuals/` → `tico` pairing. Fixed in v1.5.1; that row now reads
 `requirements/*`, `manuals/*`.
+
+## A design amendment that changes a scored unit's ARITY silently turns every per-call downstream figure into a per-turn sum
+
+When a plan amendment changes how many times a scored operation runs per unit — one LLM call per
+turn becomes a bounded N-call loop, say — sweeping the type signatures and the sections the
+amendment's own changelog names is not the same as sweeping every **derived-figure definition**
+that assumed arity 1. A timing/latency detector built as a difference or ratio over *one call*, at
+a fixed threshold, does not know the loop exists: after the amendment, several iterations at the
+plan's own per-turn baseline can clear that per-call threshold outright on their sum alone, and the
+detector misreports the result as an unrelated failure mode rather than as what it actually is — an
+unswept arity assumption.
+
+**As a review move:** when an amendment changes arity, grep for every downstream figure defined in
+terms of "one call" — timing detectors, per-call cost/latency thresholds, anything computing a
+ratio or a difference over a single operation — and check each one against the new loop, not just
+against the sections the amendment's changelog claims to have swept. Same completeness failure as
+the taxonomy-sweep technique above, applied to numeric/derived-figure definitions instead of
+tables.
+
+Origin: 2026-09-09, plan gate on a bounded per-turn iteration loop added to a model-bench plan —
+the amendment swept the request/response schema and an appendix but left an existing in-call
+reload detector defined over a single call, whose fixed threshold a multi-iteration turn clears by
+simple summation.
 
 ## An untracked plan/review doc has no re-verification baseline
 
@@ -776,6 +818,44 @@ pins a per-case exact rc plus a positive "the branch reached its end and printed
 same mutation is killed.)
 
 
+## A "does the accepted set equal its constant" pin is tautological under a pure membership guard — audit it with SHRINK **and** WIDEN, not one direction
+
+The commonest guard-reach pin for an allowed-values constant is "drive the guard, assert the
+accepted set equals the constant." Whenever the guard itself is a pure membership test (`x in
+CONSTANT`), that pin is **tautological**: both sides of the assertion trace back to the same
+object, so it stays green under any widen of the constant — adding a member widens what the guard
+accepts and what the pin compares it to in lockstep. Verified by construction: a frozenset-backed
+membership guard, an "assert accepted-set == CONSTANT" test on it, and a widened constant with one
+member added — the test passes unchanged, because the assertion never referenced anything the
+widen could diverge from.
+
+**A guard-reach pin only binds if it does one of two things:**
+1. **Equates two independently-written declarations of the set** — e.g. a `frozenset` and a
+   parallel `Literal`'s `get_args()`, so a widen of only one side reddens the comparison; or
+2. **Asserts a distinct behavioural consequence per member**, so a widen that adds a member with
+   no distinguishing behaviour reddens on the completeness of *that* assertion instead.
+Verified by construction on the same toy pair: widening only the frozenset side of a
+frozenset-vs-`Literal` cross-check reddens immediately, where the tautological "assert against
+itself" form does not move.
+
+**Auditing an existing pin for which of these it is needs both mutation directions, and they fail
+differently.** SHRINK (remove a member) catches the tautological, self-referential case — a test
+parametrized over the constant under audit loses a case and the suite still reports green, never
+red (the tell described in the parametrize-deletion technique above). WIDEN (add a member) is the
+*only* direction that separates a real pin from a constant a fixture merely happens to exercise
+today: such a constant reddens on SHRINK (a case the fixture still submits is now rejected) and
+stays green on WIDEN (the new member is simply never exercised by anything) — it reads as pinned
+and is not. Verified by construction: a validation function plus a hand-authored sample-input list
+that happens to equal the constant today — shrinking the constant reddens, widening it stays
+green. **Corollary for review:** before trusting a shrink-redden as proof of a pin, grep whether
+any test names the constant (or the guard built on it) at all — if none does, the shrink-redden is
+coincidental fixture coverage, not a pin, and only the widen check exposes that.
+
+Origin: 2026-09-09, model-bench review passes 15–16 — a frozenset/`Literal` allowed-modes pin
+re-audited after a prior pass's shrink-only sweep had cleared 20 constants; re-running with widen
+too found 7 of those 20 were not actually held, and 9 of the 14 still called held were named by
+zero tests.
+
 ## A mutation-testing kill count is a draw from a distribution, not a fact — and pinning `PYTHONHASHSEED` does not always fix it
 
 Whenever the code a mutant sits in iterates a Python `set` of `str`, iteration order is
@@ -802,6 +882,32 @@ range** is honest.
 **Consequence when adjudicating.** A disagreement between two mutation ledgers over the same mutant
 is not a defect in either until you know whether either pinned anything. A single-seed *survived*
 is not a coverage gap; a single-seed *killed by three tests* is not redundancy.
+
+## A shared, read-mutating fixture can couple two "logically independent" mutation-tested checks
+
+When two production checks are mutation-tested against a **stateful** fixture whose read method
+itself mutates state (e.g. dropping the oldest queued entry on every read), deleting one check's
+call site does not just remove that check's own coverage — it changes how many mutating reads
+happen before the *other* check's site runs, which can silently flip whether the *other* check's
+mutant is still caught. The two checks can be logically independent in the production code and
+still be coupled through the fixture's shared, order-sensitive state.
+
+Verified instance: two `TraceContractViolated` checks (a per-call one and a per-iteration one)
+sharing one read-mutating environment fixture. Deleting only the per-call check's call site (while
+leaving an earlier, unrelated `trace()` read in place) reddened **both** its own dedicated test and
+the unrelated per-iteration check's test — traced to a 4-reads-vs-3-reads shift in how many
+entries the fixture had already dropped by the time the per-iteration check ran. The
+per-iteration test's apparent kill was not evidence of that check working as designed; it was
+evidence of an accidental read-count shift the deletion happened to cause.
+
+**As a review move:** when a fixture's read method mutates shared state, do not read one check's
+mutation-test result in isolation — after deleting the check under audit, re-run the **other**
+checks sharing that fixture and confirm each one's own kill/no-kill still traces to *its own*
+mechanism, not to a shifted read count. A stateful, order-sensitive fixture is exactly the shape
+that lets a mutation-testing suite look more complete than it is.
+
+Origin: 2026-09-10, analyst Pass 18 gate of a model-bench fix round
+(`docs/reviews/small-model-benchmarking-impl.md`, Pass 18 P18-1/Appendix R.2).
 
 ## A grep-pinned edit table is an edit list, not a completeness proof
 
@@ -1274,3 +1380,27 @@ against a moving target. Either a symbol name plus an enumerating count (`grep -
 of how many hits it expects — a drifted count is itself the staleness signal — or a line number
 pinned to a named sha (`file.py:NNN` at `<sha>`), which stays exact regardless of what the working
 tree does afterward. A bare, unpinned line cite is a wasting asset from the moment it's written.
+
+## A parallel implementer can move HEAD and dirty the tracked tree mid-review — pin every count to an explicit sha, at both ends
+
+The section above is about citations rotting over days. The same hazard bites inside a single,
+active review pass: the session-start `gitStatus` snapshot and any ad hoc working-tree `grep` are
+both a snapshot at the moment they ran, not a fact about the review's whole duration. A concurrent
+implementer unit can commit and re-dirty the tree between two of your own tool calls, and neither
+the stale `gitStatus` block nor a repeated working-tree grep will tell you it happened — they just
+silently answer a question about a tree that no longer exists. Verified instance: a session-start
+status reporting one modified file; two Bash calls later `HEAD` had moved and two more files were
+modified by a concurrent `tdd-engineer` unit; a working-tree grep for a plan's pinned literal
+returned 3 hits where `git grep` at the actually-reviewed sha returned 0 — the plan's pin was
+0-before/3-after, so the stale working-tree measurement would have reported the pending rework as
+already done and the pin as already satisfied.
+
+**The fix, generalized from the citation-rot technique above:** every count a review uses as
+evidence must come from `git grep <pattern> <sha> -- <path>` against an **explicit** sha, never a
+bare working-tree grep or the session-start status block — and re-run it at **both** ends that
+matter: the sha you are actually reviewing, and (when the artifact under review itself cites a
+sha, e.g. a plan pin naming "as of `<sha>`") the sha the artifact claims, since those two can
+already have diverged by the time you check.
+
+Origin: 2026-09-10, model-bench plan gate Pass 16, verifying a plan-stated grep pin over shipped
+code while a `tdd-engineer` unit edited the same files concurrently.
