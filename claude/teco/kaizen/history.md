@@ -2,6 +2,326 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-09-10 — Kaizen distillation, U43 (twelve 2026-09-08 entries, mostly foreign coordinations)
+
+- **What:** U43 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled
+  twelve `teco` `:KaizenEntry` nodes dated 2026-09-08. Unlike U42 (all thirteen written by the
+  distillation coordination itself), only two of these twelve were written by the U43 session;
+  seven came from two other `teco` coordinations (`a2d1489d-…`, `018NnCEHvvYdHyqEatoYxLsY`) and
+  three carry no `sessionId`. Result: **9 promoted, 3 discarded, 0 kept open, 0 `MENTIONS` tags**.
+  Every entry was re-derived against the published artifact rather than against this pass's own
+  narration of it; two re-derivations changed a disposition and one falsified a published
+  measurement.
+- **Graph shape:** all twelve were current-shape, `producedEdges = 1`, `mentionEdges = 0`
+  (`otherRemaining = 0`), so each was cleared with the full-node curator shape after its
+  disposition was on disk. Per-entry write-and-clear throughout, never batched.
+
+**`b83e5c17-9d24-4a6f-8e01-5c7a2b9f3d68` — promoted into `teco.md` (step 3, mutation bullet).**
+The claim: when briefing an implementer to mutation-test, the mutant to specify is **the design
+the plan rejected**, not the absence of the design it chose. Deleting a mechanism proves only the
+test reaches the code; substituting the argued-down alternative proves the decision itself was
+load-bearing. **Re-derived before ruling:** the rule already exists, in full, at
+`claude/tdd-engineer/tdd-engineer.md:41` — *"When a plan explicitly rejected an alternative, the
+mutant is that alternative."* That reads as a discard, and it is not: `claude/coder/coder.md`
+contains **no** occurrence of `mutation`, `mutant` or `rejected` (grepped whole), and `teco`
+routes implementation to `coder` by default whenever a detailed plan is ready. So the rule reaches
+`tdd-engineer` through its own always-loaded prompt and reaches `coder` through nothing at all —
+the brief is the only channel. Promoted as one clause on the existing `Mutation-test the
+green-on-arrival tests` bullet, not as a new bullet, and stated without provenance.
+- **Reach check:** the promoted sentence is conditioned on *"where the plan argued down an
+  alternative"* — it claims nothing about units with no rejected alternative on record, which is
+  the majority. Widest set claimed = plans that document a considered-and-rejected design.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`e41b7d06-2a58-4c93-b7f1-9d3e6c85a2b4` — promoted into `teco.md` (step 3, dispatch bullet, item
+(c)).** The claim: two units are not safely parallel merely because their *write* sets are
+disjoint — they are also coupled when one unit's deliverable cites **line numbers inside** a file
+the other unit edits; the durable fix is symbol citations, the coordination fix is treating
+citation targets as part of the dependency set. **Re-derived before ruling:** `teco.md` step 3
+already states three things that make two units sequential, and the third — *"one unit decides a
+fact the other's deliverable must encode … a brief saying today's X or the current shape of Y
+asserts a fact about the world"* — **already covers this**, since a line number is exactly "the
+current shape of Y". So this is **not a fourth item**, and the bullet's *"and only the first is
+visible in a diff"* framing is unchanged and still true (a stale line number is not visible in
+either unit's diff). What was genuinely missing is the instance and its **dissolving** fix: item
+(c) as written prescribes only serialization, while a symbol citation removes the coupling
+altogether and lets the pair stay parallel. Folded in as one clause on (c) rather than promoted as
+a new rule.
+- **Reach check:** the promoted sentence claims symbol citations for *"any file under active
+  change"* and explicitly reserves line numbers for pinned external sources — it does not claim
+  line numbers are wrong in general, which would falsely condemn every citation into a third-party
+  or archived source.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`d2a97f31-6c84-4b05-9e72-8f1a3d6b5c09` — discarded (published whole, on both halves).**
+The claim: an *"I executed this"* credential is only as wide as what was executed; verifying a
+primitive in isolation does not license a claim about the shipped mechanism, because the wiring
+between verified pieces is where the defect hides — so a tombstone claiming execution must state
+**which level** was executed, and a reviewer should treat an unqualified execution credential as
+the least-re-checked sentence in the document. **Read whole before ruling:**
+`claude/analyst/review-techniques.md` § *"Verified by execution" names a level — check it against
+the level of the claim it licenses*. That section carries every element: the reviewer-facing rule
+(*"the review question is not did they run it but **run what, and is the assertion about that same
+thing**"*), the explicit anti-narrowing instruction (*"Do not narrow this to 'primitive vs. call
+path' — that is one instance of the shape"*), and this entry's own CPG-stamp incident as its
+worked instance, including the `STAMP="$(cpg_provenance_stamp …)"` subshell that left
+`CPG_STAMPED_KEYS` unset and the callee-sited warning that did not protect the caller. The
+author-side obligation the entry adds — a tombstone must name the level — is published too, in the
+sibling section: *"State the superseding mechanism, **name the level its evidence covers**, date
+it, stop."* Nothing survives; no clause promoted.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`2d8f30b7-4c15-49ae-8e6a-b31f7d05c9a4` — promoted into `teco.md` (Documentation curation,
+unfiltered-sweep rule).** The claim: a bounded scan cannot establish a negative, two bounded scans
+agreeing is not corroboration, and the bound may be **depth** (`-maxdepth`), not only a glob or
+`--include` filter. **Re-derived before ruling, and the entry's own citation is wrong:** it states
+*"Root `AGENTS.md` states the unfiltered-scan rule"*. It does not — root `AGENTS.md` contains no
+occurrence of `unfiltered`; the rule lives in `teco`'s own always-loaded prompt
+(`claude/teco/teco.md`, Documentation curation: *"as must any scan whose purpose is proving a
+negative"*). That misattribution is itself an instance of `4e7a15c3` below, in the same batch.
+Of the entry's two additions, the **corroboration** half is already published — `teco.md` step 5:
+*"Corroboration needs independence of **method**, not a second agent — two agents running the same
+grep are one check"*; two depth-bounded `find`s are one method. The **depth** half was a real gap:
+the published rule's only worked filter is an extension glob, so an agent running
+`find . -maxdepth 3` reads as compliant. Promoted as one clause extending the existing rule, with
+the corroboration half restated only as the clause's tail because it is what makes the depth case
+bite.
+- **Reach check:** the promoted clause claims *"any bound"* — the widest set is every filter that
+  can exclude a path from a scan (depth, glob, `--include`, path prefix). Instrument pointed at it:
+  the failure it names was reproduced in the source incident twice with two different bound kinds
+  (`-maxdepth 3` on `pyvenv.cfg`, `-maxdepth 8` on `fastapi-*.dist-info`), and the rule is stated
+  as a property of bounding rather than of any one flag, so a new flag cannot fall outside it.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`f6c3b820-71d4-4e69-a8b3-0e59d2f7a1c6` — promoted into `claude/analyst/review-techniques.md`
+(new section, on-demand knowledge base — not a prompt).** The claim: a grep that finds a name has
+found a *reference*, not a definition; and `bash -n` is a syntax check that cannot detect an
+undefined function, an unset variable, or any name-resolution failure, so citing it as evidence a
+script works offers a real check for a property it does not test. **Re-derived, not merely
+confirmed:** both halves were re-run here rather than read back. `bash --version` 5.2.21(1) on
+WSL2, a three-line script calling `nosuch_helper_fn "$UNSET_VAR"` under `set -euo pipefail` —
+`bash -n` returns **rc 0**, execution dies at **rc 1** on the unbound variable before ever reaching
+the missing function; `grep -c nosuch_helper_fn` → **1**, `grep -c 'nosuch_helper_fn *()'` → **0**.
+The citing incident is now fixed in the tree: `skills/joern-cpg/scripts/pipeline.sh` today returns
+four `replay_stamp` hits, of which `:419` is the definition and `:398` a comment — which is a
+second reason the bare-name count is not the check.
+- **Routed by receiving scope, not by producer.** `teco` produced it, but it is a
+  verification/review technique with a mechanism and a worked command, not coordination doctrine
+  that changes routing in most sessions — so it lands in `analyst`'s on-demand knowledge base,
+  where the credential-level section it extends already lives. No `teco.md` words spent.
+- **Deliberately not "corrected":** `claude/analyst/analyst.md` already prescribes *"`bash -n`
+  **plus direct execution**"*, which is right as written; the new section supplies the reason the
+  pairing is load-bearing rather than replacing the line.
+- **Reach check:** the section claims `bash -n` cannot see *name-resolution* failures — not that it
+  is useless. Instrument: the same run shows it correctly returning rc 0 on a syntactically valid
+  file, so the bound is "parses vs. resolves", stated as such.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`3a93075c-d725-43e6-9cec-6eb90720ca51` — discarded (published, in a strictly stronger form).**
+The claim: a review gate has stopped paying when its findings stay real but its **fix rounds stop
+shrinking**; real findings are not evidence of convergence, so severity counts cannot be the stop
+signal — the round-over-round trend is. **Read whole before ruling:** `claude/teco/teco.md`,
+Guardrails — *"A repeated gate has a decidable stopping signal, and the reviewer sets it, not your
+patience. When the marginal finding is produced **by** the fixes rather than found **in** the
+original artifact, further static passes have negative expected value — ask the reviewer for a
+**falsifiable stopping condition** … and move to execution gates."* That already carries the
+entry's whole premise (findings can be genuine while the gate has stopped converging) and gives a
+**better** test for it. The entry's test is a trend over rounds, which needs several more rounds to
+read and is confounded by artifact size; the published test is the **provenance of the marginal
+finding**, decidable on the *current* round from the finding itself. Promoting the weaker signal
+beside the stronger one would invite the wrong one to be used. Nothing survives.
+- **Checked the entry's own framing, and it is the same case the published rule was written from:**
+  the evidence cites the model-bench S1e plan gate, Pass 12 returning 3 majors on the revision that
+  closed Pass 11's, *"the seventh instance of a recurring residual defect was introduced by the fix
+  for the sixth"* — which is verbatim the published trigger, not a different one.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`50f0ae6b-3542-419e-8851-04a362188e4e` — promoted into `claude/analyst/review-techniques.md`
+as a correction (tombstone) on an existing section.** The claim: counting a prose phrase in
+markdown with `grep` silently undercounts, because **inline bold splits the phrase** —
+`never re-**widened**` does not match `never re-widened` — so any completeness claim about wording
+needs an emphasis-tolerant pattern or the markup stripped first; the producing agent had
+attributed the miss to a line wrap. **This is the entry that changed a published claim.** Both
+sections the U43 brief flagged as prior art were read whole first: § *A grep-pinned edit table is
+an edit list, not a completeness proof* (an edit-list-vs-proof rule, different mechanism) and
+§ *What a change silently stopped enforcing* (test collection, the mechanism U42 discarded
+`f4c1a7e2` against). Neither covers it. What **does** cover it is a third section — § *A "this
+already exists" claim is a grep away from confirmation* — which already carried a
+line-based-grep-misses-a-phrase rule, attributed to a **hard wrap**, with a worked 3-vs-4
+measurement and a whitespace-normalisation remedy.
+- **Re-derived, and the published measurement does not reproduce.** Over the whole of
+  `docs/plans/small-model-benchmarking.md`, identically at `a6a676b` (U41) and at the 2026-09-10
+  working tree: `grep -o 'never re-widened' | wc -l` → **2**; whitespace-flattened → **2**
+  (wrapping contributes **nothing**); whitespace-flattened **and** `*_\``-stripped → **5**, at
+  lines 17, 4383, 4911, 7193. No line ends in `never re-`. The phrase the published measurement
+  names, `never re-scoped`, occurs **0** times under every normalisation (`re-scoped` alone occurs
+  6 times at both shas). So the published section was a true rule carrying a false mechanism and a
+  remedy insufficient for the real one — the exact defect that same file names in § *The reason
+  attached to a rule is checked less than the rule*, found in the file that names it.
+- **Repaired per that file's own doctrine:** the rule kept, the mechanism tombstoned with the
+  superseding one, the level its evidence covers named (one document, two revisions), dated,
+  stopped — and the unreproducible measurement removed rather than re-argued.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`900c9508-5ccf-4cf5-abd2-0a70337d57b4` — promoted into `teco.md` (step 2, decomposition).**
+The claim: when a plan and a method note split a feature, work falls in the seam — the plan
+disclaims the piece because the note specifies it, the note owns no code, so no unit ever gets it;
+neither document is wrong alone and no review of either catches it. **Re-derived, and the
+entry's own instance is now stale — the rule is not.** The entry asserts that `continuous_verdict`
+and `ContinuousVerdict` exist *"nowhere in code (3 `stats.py` comments, 1 test docstring)"*. As of
+the 2026-09-10 working tree both are **real, implemented symbols**: `continuous_verdict` and
+`ContinuousVerdict` are imported from `stats` at `model-bench/tests/test_stats.py:30,41`, and
+`stats.continuous_verdict(family=…)` is pinned as a `compare_report` call at
+`model-bench/tests/test_report.py:1798-1800` (97 hits across the component, with `:1757` naming
+U67 as the unit that closed it). So the seam described was closed after the entry was written; had
+I confirmed only that the citation still existed I would have promoted a false absolute.
+- **Promoted as the decomposition rule, with the instance left out of the prompt** — the rule is
+  what survives, and it is a step-2 obligation (`teco` is the only party that sees both
+  deliverables' ownership at once).
+- **Reach widened deliberately, then bounded.** The entry says *"check every plan-to-note citation"*;
+  the promoted sentence says **every cross-deliverable citation**, because `teco`'s own handoff
+  contracts define five co-owned document kinds (`-ml`, `-graph`, reviews, test plans, manuals) and
+  nothing about the failure is specific to `-ml`. The instrument on the wider claim: the mechanism
+  is *"the cited document owns no code"*, which is a property stated in the handoff contract of
+  every one of those kinds, not an empirical generalisation from one case.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`4e7a15c3-2f9b-4d06-b8e1-3a5c0f92d7b4` — promoted into `teco.md` (step 5, re-verification
+bullet); its second half discarded as already published.** The claim: when integrating a subagent
+deliverable, verify the **citation** attached to each claim, not the claim itself — version stamps,
+accessor expressions, revision counts and shas are end-of-run summary artifacts and are where a
+confident wrong figure appears, even on a full-strength model; two consecutive units failed this
+way and neither failed at the mechanism.
+- **Both cited failures re-derived, and both hold.** (1) `falkor-chat/server/.venv`, redis 8.0.1:
+  `hasattr(redis.Redis(host='127.0.0.1', port=6379), 'retry')` → **False**, and `c.retry._retries`
+  raises `AttributeError: 'Redis' object has no attribute 'retry'` — the accessor U20 cited to
+  support a retry-safety conclusion does not evaluate, while the conclusion itself stands. (2) U21's
+  *"five committed revisions … 20 step rows present in all five"* is contradicted by the corrected
+  figures now published in `claude/analyst/review-techniques.md` § *Per-row hashing…* — a
+  **16**-revision window in which `S7c` enters at `732f5e0` (v1.19), so 3 revisions carry 20 rows
+  and 13 carry 21.
+- **The entry's tail half — *"a subsample can only OVER-report stability"* — is already published**,
+  in that same section, near-verbatim: *"Hash the whole window, never a sample of it. A subsample
+  can only **over**-report stability — a row that changed in a revision you skipped reads as
+  identical — so a stable-row list from five of sixteen revisions is an upper bound presented as a
+  measurement."* Not re-promoted.
+- **What was genuinely missing from `teco.md`:** the existing bullet re-verifies *"every summarized
+  number and every new identifier … threshold, count, or breakdown"*. An **accessor expression** is
+  none of those, and it is the shape both failures took. Promoted as one clause naming the cited
+  *expression* as the object to re-run.
+- **Reach check:** the promoted sentence claims that end-of-run citations are where the wrong figure
+  appears — not that delegate conclusions are unreliable. Instrument: in both instances the
+  mechanism re-derived clean and only the citation failed, which is the bound the sentence states.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`0e2a0bf5-40e9-4a57-83fc-0784bdd545cf` — promoted into `teco.md` (Guardrails, the commit grant).**
+The claim: committing by explicit path protects a concurrent session from you **only when the paths
+are disjoint** — if a delegate appends to a file another session has already modified in the shared
+tree, no path-scoped commit takes your delegate's work without also taking theirs; `git add -A` is
+not the only way to sweep someone else's state, and the safe move is to leave the file uncommitted
+and record where the work is. **Read whole before ruling, because U42 landed the neighbouring rule
+at `117df76`:** `teco.md`'s grant bullet now carries the path-limited `git commit -- <path>` form
+and the shared-index reasoning, and `claude/AGENTS.md` owns the atomicity half in full. Those cover
+the **index** race. This entry is a different failure — **file-content** collision — and the two
+sources treat it inconsistently: `claude/AGENTS.md` does state *"the commit takes that path's
+**whole** working-tree content … and a concurrent session's edit to the same file is committed under
+your message"*, but only inside the *"never partial-stage a path you then name in one"* warning,
+which reads as conditional on partial-staging when the clause it rests on ("whole working-tree
+content") is unconditional. `teco.md` did not carry it at all, and its neighbouring sentence —
+*"avoiding `git add -A` protects other sessions from you"* — actively invites the wrong inference.
+- **Folded into the same bullet U42 wrote, not opened as a separate hazard**, because it is the
+  bound on that bullet's own claim rather than a new one; and the actionable half the entry adds
+  (leave it uncommitted, record where the work is) existed nowhere.
+- **`claude/AGENTS.md` left unedited** — the promotion does not change what it asserts, only where
+  `teco` reads it, and the file is at **2,491 words** against the ~2,500 smell.
+- **Level of verification, stated because it is short of re-derivation:** the unit's fence forbids
+  git mutation of any kind in this tree, so the pathspec semantics were **not** re-run here. The
+  promoted sentence is entailed by the unconditional clause already published and verified in
+  `claude/AGENTS.md` ("the commit takes that path's *whole* working-tree content"); what I removed
+  is a condition, not what I added is a mechanism.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`6fbc6ecb-ae0b-42fb-9aa8-1cf162893daa` — promoted into
+`claude/tdd-engineer/guard-testing-techniques.md` (new section, on-demand knowledge base).**
+The claim: a guard is a **probe plus an oracle**, and a review gate that mutation-tests the probe
+does not cover the oracle — an artifact strengthened over many rounds had every mutation asking
+whether the test *reached* the right code and none asking whether the pass/fail decision could
+*see* the failure. **Read whole before ruling, because U41 grew this exact file (2,545 → 2,794
+words):** U41's addition is the rc-127 collision paragraph, which mentions *"the **exact-rc**
+oracle — which is the right repair for a `rc != 0` oracle"* but only ever as the repair assumed
+elsewhere; nothing in the file says to **test** the oracle, and its opening framing (mutation test
+vs. coverage probe) is entirely about the reader. Confirmed gap.
+- **Also checked the reviewer-side file, which carries the instance but not the decomposition.**
+  `claude/analyst/review-techniques.md` § *A guard derived from the artifact it guards…* already
+  publishes this incident verbatim (the `rc != 0`-plus-scrape oracle, `replay_stamp` deleted, all
+  six cases PASS) and the remedy *"delete each helper definition and each refusal in turn and
+  require a red"*. That is the **reviewer's** gate move. What was unpublished is the **author's**
+  decomposition — that a mutation list has two target halves and must name which one each mutant is
+  aimed at — which belongs where guard authors read, so it went to `tdd-engineer`, not to `teco.md`
+  and not as a duplicate into `analyst`'s file.
+- **Instance re-checked, and it is closed:** `skills/joern-cpg/scripts/test-stamp-wiring.sh` at the
+  2026-09-10 tree asserts a per-case **exact** `expect_rc` (`:191-208`, `run_case` signature
+  `… <expect_rc> <expect>`), with its own header comment `:20-27` recording the `rc 127` scrape
+  failure. The section cites the rebuilt state rather than re-asserting the broken one.
+- **Reach check:** the promoted text claims the probe/oracle split for *guards* — the file's own
+  declared subject (a reader whose subject is other code's text) — not for tests in general, and it
+  states the oracle-mutant construction concretely (break the failure path) rather than as an
+  attitude.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`b7f1c2a4-3e58-4d92-9c1b-8a6f0d4e2b73` — promoted into `teco.md` (step 4, as a new bullet).**
+The claim: carrying a defect class named in one coordination arc into the brief of a
+concurrently-running gate in an **unrelated** component produces findings — the receiving reviewer
+looked for that shape and found it; and cross-pollinating defect classes across in-flight briefs is
+a move no specialist can make, because each runs in an isolated context and sees only its own arc.
+**Read whole before ruling:** step 4 already carries *"a finding that invalidates a still-running
+sibling's premise gets `SendMessage`d immediately"*. That is the **defensive** direction — a
+correction pushed to stop a sibling working on a false premise — and says nothing about pushing a
+*shape to look for* into a sibling that is not wrong. Different move, opposite polarity, unpublished.
+Promoted as a new bullet beside it, the only new bullet in U43.
+- **Reach claim narrowed before shipping.** The entry says the move is *"coordinator-only"*. That
+  over-claims: an interactive specialist steered by a human across two topics could make it too, and
+  so could `cobb` reading several agents' material. What is actually true, and what the promoted
+  sentence says, is the **mechanism**: each *delegate* runs in an isolated context and sees only its
+  own arc, so within a coordination `teco` is the only party positioned to transfer. Instrument on
+  the narrower claim: it is a restatement of step 3's own opening premise (*"Each specialist runs in
+  an isolated context — no delegate shares your context or another agent's output"*), already
+  established, rather than a new empirical generalisation from n=1.
+- **Composition checked against step 3's brief-construction rule** (*"route a mandate by stating it
+  and asking where it belongs, never by supplying the answer as background fact"*): the promoted
+  bullet transfers the **question**, not the finding, which is what the source incident actually did
+  (*"I folded that question verbatim into the Pass 22 brief"*) and what keeps the two rules
+  consistent rather than in tension.
+- **CPython details in the entry's evidence deliberately not promoted** (`qsize()==0` before submit
+  and after drain, `_threads` never shrinking after `shutdown(wait=True)`) — they belong to the
+  finding the move produced, not to the move.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**Shape of this pass, and the answer to the question the unit asked.** Only **1 of the 12 records
+something that worked**; the other 11 record something that went wrong. Split by
+`PRODUCED.sessionId` — which names the parent **coordination**, never the agent — the bias is not
+this distillation pass's: coordination `a2d1489d-…` contributed six entries, **6/6 failures**
+(`0e2a0bf5`, `f6c3b820`, `b83e5c17`, `e41b7d06`, `d2a97f31`, `6fbc6ecb`); the three with no
+`sessionId` are **3/3 failures**; the two written by this session are **2/2 failures** — the same
+13/13 ratio U42 found in its home-grown batch. The single exception is `b7f1c2a4`, from the second
+foreign coordination (`018NnCEHvvYdHyqEatoYxLsY`, n=1), and its shape is the diagnostic one: it is
+the only entry recording a move `teco` **invented** rather than a mistake `teco` made. Nothing in
+the twelve records a standing mechanism working as designed — no "the review gate caught this, as
+intended", no "serializing these two units prevented that". So capture fires on **surprise**, and a
+mechanism behaving correctly surprises nobody; the deliberate-novel-move is the only success shape
+that clears the bar today. The corollary for `teco.md`: rules earn their place here by the failures
+they prevent, and no entry in this graph can ever tell you which of them are still earning it.
+
+**`teco.md` goes from 26 to 27 over-700-character lines**, measured against `117df76`. U43 pushed
+**one line over the bar** — step 2's line 77, 763 → **885** (the cross-deliverable-citation clause)
+— extended five lines that were already over (98 → 1716, 122/123 → 1423, 136/137 → 1199, 150/151 →
+1305, and 112's neighbourhood), kept one edit under it (95 → 667), and added one new bullet at 514
+chars. Words 7,901 → **8,278** (+4.8%). `teco/kaizen/plan.md` **K-016** (blocking) already proposes the split of rare-path rules
+into an on-demand `coordination-techniques.md`; five of U43's nine promotions are clauses on
+existing always-loaded sentences, which is that item accruing interest, not being paid down. No new
+plan item opened — `entryId` dedup check run against `plan.md`, no prior item references any of
+the twelve.
+
 ## 2026-09-07 — Kaizen distillation, chunk D (the final fourteen 2026-09-07 entries)
 
 - **What:** U18b of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled the

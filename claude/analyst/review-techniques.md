@@ -332,11 +332,23 @@ a phrase a hard wrap has split.** This repo's `docs/` are hard-wrapped near 100 
 *multi-word* citation has some chance of straddling a break and matching nothing while sitting in the
 file twice — which turns the weakest kind of evidence, a negative result, into a confident false
 finding. Verify a prose invariant with a whitespace-normalised scan (`tr '\n' ' ' < f | grep -o …`,
-or a whole-file read in python) and reserve `grep -c` for single tokens. Measured 2026-09-08: Pass 12
-of `docs/plans/small-model-benchmarking.md` reported `grep -n 'never re-scoped'` → **3** sites
-(finding P12-6); there were **4**, the fourth wrapping as `never re-` / `scoped`. It was caught by
-reading the region and confirmed by a whole-file count. The failure runs in both directions — it
-undercounts a completeness sweep, and it *inverts* an existence check.
+or a whole-file read in python) and reserve `grep -c` for single tokens. The failure runs in both
+directions — it undercounts a completeness sweep, and it *inverts* an existence check.
+
+**Tombstone, 2026-09-10 — the wrap mechanism is real, was not the one in the case this section
+cited, and the whitespace remedy above does not close the one that was.** **Inline emphasis splits
+a grepped phrase exactly the way a wrap does, and normalising whitespace cannot see it:**
+`never re-**widened**` is not `never re-widened`. Re-derived over the whole of
+`docs/plans/small-model-benchmarking.md`, identically at `a6a676b` and at the 2026-09-10 working
+tree: `grep -o 'never re-widened' | wc -l` → **2**; wrap-tolerant (`re.sub(r'\s+', ' ', s)`) →
+still **2**, so wrapping contributes **nothing**; wrap-**and**-emphasis-tolerant (additionally
+stripping `*`, `_`, `` ` ``) → **5**, at lines 17, 4383, 4911 and 7193. No line in that file ends
+in `never re-`, and `never re-scoped` — the phrase this section's earlier 2026-09-08 measurement
+named — occurs **0** times under every normalisation, so that measurement does not reproduce and
+has been removed rather than re-argued. **Strip emphasis markers as well as whitespace before
+counting**, and treat any wording count over markdown taken with a bare `grep` as a lower bound.
+The evidence covers this one document at two revisions; the mechanism is a property of markdown
+emphasis, not of this file.
 
 **A pasted grep result is the same kind of claim, and unlike a fabricated one it decays**: it was
 honestly run, it was true when it was run, and the document lands days later against a codebase
@@ -357,6 +369,33 @@ scripts/bootstrap_schema.sh` → no matches)". True when run on 2026-08-21; fals
 later by commit `8d7dcfb` (K-050 fusion), which added `gconstraint … UNIQUE RELATIONSHIP SAME_AS
 PROPERTIES 1 matchId`; the doc, written 2026-08-26, repeated it verbatim and **still carries it**
 (`:205`, re-checked 2026-09-08 against `scripts/bootstrap_schema.sh:265`).
+
+## A grep that finds a name has found a REFERENCE, not a definition — and `bash -n` is not evidence a script works
+
+Two checks that return the right answer to a question nobody asked, one abstraction below the
+credential-level defect in *"Verified by execution" names a level* (above): here the **domain of a
+single command** is narrower than the claim it is offered for.
+
+**Existence.** `grep -c '<name>' <file>` counts *uses*. Establishing that a function exists means
+grepping its **definition** form (`<name>()` in shell, `def <name>` in Python); establishing that a
+variable is populated means finding where it is **assigned**, not where it is read. Re-derived
+2026-09-10 (bash 5.2.21(1), WSL2) on a script whose only mention of `nosuch_helper_fn` is a call:
+`grep -c nosuch_helper_fn` → **1**, `grep -c 'nosuch_helper_fn *()'` → **0**. The citing incident:
+an integration commit was accepted on the bare-name hits for `replay_stamp` in
+`skills/joern-cpg/scripts/pipeline.sh` — every one a call site, the function defined nowhere — so
+under `set -euo pipefail` all three stamp-failure paths aborted at 127, swallowing the exact
+diagnostic the function existed to print. (Now fixed: at the 2026-09-10 working tree the same grep
+returns four hits of which `:419` is the definition and `:398` a comment — which is also the point,
+since the *count* moved without the check changing.)
+
+**Syntax.** `bash -n` parses; it does not resolve names. Same run: a script whose body is
+`nosuch_helper_fn "$UNSET_VAR"` under `set -euo pipefail` passes `bash -n` at **rc 0** and dies at
+**rc 1** on the first line executed (`UNSET_VAR: unbound variable`). It cannot see an undefined
+function, an unset variable, or any other name-resolution failure — so a commit message citing
+*"both scripts pass `bash -n`"* as evidence the fix works has offered a real check for a property
+it does not test. `analyst.md` already pairs `bash -n` **with direct execution**; this is the
+reason the pairing is not decoration, and re-running `bash -n` on the *pre-fix* file — which still
+passes — is the cheapest way to show a reviewer that the credential was empty.
 
 ## A document that adds a member to its own taxonomy is swept table-by-table, not changelog-by-changelog
 

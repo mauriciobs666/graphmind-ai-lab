@@ -3,6 +3,74 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-10 — U43: `teco` chunk 2 of 4 (twelve 2026-09-08 entries) — the chunk that falsified a published measurement
+
+- **What:** unit U43 of `claude/docs/plans/kaizen-distillation2-coordination.md`. Unlike U42, most
+  of this chunk came from **other** `teco` coordinations: reading `PRODUCED.sessionId` (which names
+  the parent coordination, never the agent), seven of twelve carry `a2d1489d-…` or
+  `018NnCEHvvYdHyqEatoYxLsY`, three are `null`, and two were written by the U43 session itself. So
+  the discard bar was not "already published by this pass's own narration" but the ordinary one:
+  read the published site. **9 promoted, 3 discarded, 0 kept open, 0 `MENTIONS` tags.** Per-entry
+  write-and-clear throughout; all twelve were current-shape with `otherRemaining = 0`, cleared with
+  the full-node curator shape. Per-entry dispositions are in `claude/teco/kaizen/history.md`.
+- **The result that matters: a published knowledge-base section carried a false mechanism and a
+  measurement that does not reproduce.** `claude/analyst/review-techniques.md` § *A "this already
+  exists" claim is a grep away from confirmation* stated that a line-based grep misses a phrase a
+  **hard wrap** has split, with a worked 3-vs-4 count over `docs/plans/small-model-benchmarking.md`
+  and a **whitespace-normalisation** remedy. Re-derived at `a6a676b` and at the 2026-09-10 working
+  tree, identically: `grep -o 'never re-widened' | wc -l` → **2**; whitespace-flattened → **2**, so
+  wrapping contributes **nothing**; whitespace-flattened *and* `*_\``-stripped → **5**. No line in
+  that file ends in `never re-`, and the phrase the published measurement names, `never re-scoped`,
+  occurs **0** times under every normalisation. The real mechanism is **inline emphasis**
+  (`never re-**widened**`), which the published remedy cannot see. Repaired per that file's own
+  tombstone doctrine — rule kept, mechanism superseded, evidence level named, dated, stopped, and
+  the unreproducible measurement removed rather than re-argued. That file's § *The reason attached
+  to a rule is checked less than the rule* predicted exactly this, in the file it happened in.
+- **Two other re-derivations changed a disposition, both by refusing to stop at the citation.**
+  `900c9508` asserted `continuous_verdict`/`ContinuousVerdict` existed nowhere in code; both are now
+  implemented and pinned (`model-bench/tests/test_report.py:1798-1800`), so the instance was
+  promoted as a **rule** with the instance left out. `b83e5c17` looked like a discard against
+  `tdd-engineer.md:41` until `claude/coder/coder.md` turned out to contain no occurrence of
+  `mutation`, `mutant` or `rejected` — the rule reaches `coder` through the brief or not at all.
+- **Routing by receiving scope held again.** Two of the nine went to files `teco` does not own —
+  `claude/analyst/review-techniques.md` (a grep/`bash -n` verification technique) and
+  `claude/tdd-engineer/guard-testing-techniques.md` (guard = probe + oracle) — on the artifact's own
+  scope line, not on the producer. **`suggestedHome`'s record breaks here, and the honest number is not the one I first wrote.**
+  I drafted "0 of 12, running 0 of 58" from the brief's prior and then counted: it is **8 of 12**.
+  Eleven entries predicted `prompt`; seven of those did land in `teco.md` (`b83e5c17`, `e41b7d06`,
+  `2d8f30b7`, `900c9508`, `4e7a15c3`, `0e2a0bf5`, `b7f1c2a4`), two went to a knowledge base
+  (`f6c3b820`, `6fbc6ecb`) and two were discarded (`d2a97f31`, `3a93075c`); the twelfth predicted
+  `knowledge base` and landed in one (`50f0ae6b`). Running record across U38–U43: **8 of 58**.
+  **This is agreement, not usefulness** — every disposition was routed from the receiving artifact's
+  scope line with the field ignored, per the brief, so the agreement is a property of this chunk
+  being unusually rich in coordination-role facts, not evidence the field carries signal. Its
+  failure mode is unchanged: it defaults to the most expensive home, which is right whenever the
+  answer happens to be the expensive one. Recording the miss in my own draft as the finding it is —
+  it is the same defect this pass keeps naming, committed by the pass's own curator.
+- **Reach-claim instrument, applied per promotion as the brief required.** Each promotion's history
+  entry carries an explicit *Reach check* naming the widest set the promoted sentence claims and the
+  instrument pointed at it. It changed one sentence before it shipped: `b7f1c2a4` claimed
+  cross-arc defect-class transfer is *"coordinator-only"*, which over-claims (an interactive
+  specialist, or `cobb`, can see two arcs); the promoted form states the **mechanism** — each
+  *delegate* is context-isolated — which is already-established fact rather than a generalisation
+  from n=1.
+- **Budgets.** `teco.md` 7,901 → **8,278** words, 7 sections unchanged, over-700 lines **26 → 27**
+  and over-1,000 **13 → 14** (longest 1,716) — U43 pushed line 77 over the bar and extended five
+  lines already past it; recorded against **K-030**, whose `teco` figures were stale and are now
+  corrected. `claude/analyst/review-techniques.md` 12,651 → **13,150** words, 39 → **40** sections,
+  0 lines over 700. `claude/tdd-engineer/guard-testing-techniques.md` 2,794 → **3,100** words,
+  5 → **6** sections, 0 lines over 700. `claude/AGENTS.md` **unchanged at 2,491 words** — no
+  promotion changed what it asserts; the `0e2a0bf5` promotion narrows a condition that file already
+  states unconditionally, so it landed in `teco.md` instead.
+- **K-022 advanced:** its outstanding "mutation standard" half shipped with `b83e5c17`; only the
+  *does a tombstone certify nothing* question remains open.
+- **Fence observed:** no git mutation of any kind, no `HEAD` read — baselines taken as
+  `git show a6a676b:…` / `git show 117df76:…` only. The `kaizen_team` producer/curator writes are
+  the carve-out the brief named. `a90c5f31-…` was not in this chunk and was not sought; the `tico`
+  orphan `e1a6c4d2-…` was not touched.
+- **Left uncommitted for the coordinating session to gate and commit by explicit path.**
+
+
 ## 2026-09-09 — U42: `teco` chunk 1 of 4 (thirteen 2026-09-08 entries) — the unit where producer, briefer and gate are one agent
 
 - **What:** unit U42 of `claude/docs/plans/kaizen-distillation2-coordination.md`. `teco`'s own

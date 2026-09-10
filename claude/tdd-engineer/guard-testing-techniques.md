@@ -126,6 +126,33 @@ the claim is a finding about the documentation's illustrations; and **checking a
 checking every place it is stated**, because one bound written in two files is one claim with two
 chances to go stale.
 
+## A guard is a PROBE plus an ORACLE — mutation-testing the probe does not cover the oracle
+
+Everything above mutates the **probe**: the half that decides *what the guard looks at*. A guard
+has a second, independently breakable half — the **oracle**, which decides *what counts as a
+failure* — and a suite can be hardened over many rounds against the first while the second was
+never tested at all. Round count on the probe is not evidence about the oracle.
+
+The instance: `skills/joern-cpg/scripts/test-stamp-wiring.sh` had survived four anchor-mutation
+modes **and** a full restoration of the design its plan had rejected, and its oracle still decided
+each case on `rc != 0` plus a text scrape. Deleting the `replay_stamp` function definition — the
+exact defect the commit was named for — left **all six cases reporting PASS**, because case 3
+aborted at rc 127 *after* the branch had already printed the lines the oracle scraped. That file
+now carries a per-case **exact** expected exit code plus a positive "the branch reached its end"
+assertion, and its own header comment records why (`:20-27`).
+
+**So a mutation list needs at least one mutant aimed at the oracle, named as such.** The two ask
+different questions:
+
+- **probe mutant** — *does the check reach the right code?* Mutate the system under test.
+- **oracle mutant** — *could the pass/fail decision see the failure if it happened?* Mutate the
+  **failure path itself**: delete the helper the failing branch calls, delete a refusal, break the
+  diagnostic the assertion reads — then require red.
+
+Compose this with the rc-127 collision above: an oracle repaired to an exact-rc check is still
+unfalsifiable on a shell harness when the mutant's own failure signal is 127, so the oracle mutant
+has to be chosen for a distinguishable signal the same way any other mutant is.
+
 ## A hand-written "which object is this" resolver has two axes, and only one of them is finishable
 
 Any guard that resolves *what a name refers to* is answering two separate questions, and
