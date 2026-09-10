@@ -2,6 +2,70 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-10 — Distillation U56: a fresh 2-entry chunk, 1 promoted to the knowledge base, 1 discarded as already captured by an in-flight, out-of-scope plan doc
+
+- **What:** `cobb` distilled `data-scientist`'s newly-refilled 2-entry `kaizen_team` chunk
+  (`a1f2c3d4…`, `b2e3d4c5…`, both 2026-09-10 — `data-scientist` was fully drained at U50/`40b0daf`
+  and this is a distinct, later capture, not a re-run). Both entries were captured while
+  `data-scientist` was writing `claude/docs/plans/agent-knowledge-base-strategy-ml.md` (K-030),
+  which is explicitly out of scope for this pass to touch (a separate concurrent session is
+  progressing it) — that plan doc turned out to already contain a fuller, more rigorous treatment
+  of both entries' substance.
+- **`a1f2c3d4…` (falkor-chat's `OpenAICompatibleEmbedder.embed()` sends unprefixed text for both
+  query and document embedding; Qwen3-Embedding-0.6B's model card documents an asymmetric
+  Instruct/Query convention) — re-derived independently, confirmed true, then promoted in
+  generalized form.** Read `falkor-chat/server/falkorchat/embedding.py` in full: `embed()` takes
+  one `text` argument with no query/document branch, and every call site
+  (`embedding.py:207`, `tools.py:357`, `responder.py:103`, `services.py:1253`) calls the same
+  method identically for stored content and for retrieval queries — confirmed symmetric, not
+  merely as the entry paraphrased it. Independently WebFetched
+  `huggingface.co/Qwen/Qwen3-Embedding-0.6B`: confirmed the asymmetric convention
+  (`"Instruct: {task}\nQuery:{q}"` for queries, no prefix for documents) and additionally found the
+  card's own bound on the effect — "1% to 5%" MTEB improvement from the instruction, not a
+  correctness-scale defect. **Judged not a stop-and-ask fork**: `agent-knowledge-base-strategy-ml.md`
+  Recommendation 1 had already reached, and stated, the substantive verdict — falkor-chat's own
+  symmetric usage is "defensible" because its retrieval is message-to-message (roughly symmetric
+  register), and the asymmetric convention is worth adopting only for that plan's own, sharply
+  asymmetric corpus (a short query against a long distilled-technique passage). So this is not a
+  live, un-triaged production bug that changes scope if acted on wrong — a more careful analysis
+  than mine already exists and already declined to flag it as one. **Promoted the durable,
+  reusable half** — not the falkor-chat-specific verdict (already owned by the out-of-scope plan
+  doc) — as a new dated section in `claude/data-scientist/lm-studio-model-notes.md`: check a
+  model's card for a documented asymmetric query/document convention before reusing one embedder
+  call symmetrically, weigh the modest (1-5%) benefit against how asymmetric the actual corpus is,
+  and don't file symmetric reuse as a bug by default. File went 2,660 → 2,913 words (+253, one new
+  section, no restructuring of existing sections).
+- **`b2e3d4c5…` (`claude/analyst/review-techniques.md` doesn't uniformly hold its own "one `##`
+  heading = one self-contained technique, 50-400 words" convention; cited example "A guard derived
+  from the artifact it guards…") — re-derived independently, confirmed true and understated,
+  discarded without a file edit.** Recomputed word counts per section
+  (`awk '/^## /{...}'`): the cited section is 1,287 words (not "50-400"), and it is not the only
+  outlier — two more sections run 1,448 and 2,057 words, plus eight more between 419 and 635; only
+  28 of 39 sections fit the file's own stated band. Read the cited section in full: it bundles at
+  least seven independently-verified sub-claims (parametrized-test deletion blindness, AST-alias
+  blindness, the two-axis coverage-enumeration argument, the `ast.Assign` census, the name-vs-site
+  allowlist gap, the docstring-vs-body semantic/syntactic gap, and the shell-harness exit-code
+  trap), each with its own "Verified 2026-09-08" citation — confirms, and somewhat exceeds, the
+  entry's "5+" count. **Not acted on directly** — `agent-knowledge-base-strategy-ml.md`
+  Recommendation 2 already analyzes this exact section by name (citing the same heading) at
+  strictly greater depth (RAG topic-dilution reasoning, a concrete split-trigger heuristic, a
+  `familyId`/`SAME_FAMILY` sibling-linkage design) and explicitly assigns the actual heading split
+  to a **future, sized migration effort** routed through `cobb` — not a standalone edit made now,
+  disconnected from that migration's still-open schema questions. Restructuring the file today
+  would risk redoing the split to a shape the in-flight K-030 plan hasn't settled yet. Today's
+  actual consumption model for this file is whole-file, on-demand load (its own header: "loaded on
+  demand… not part of the always-loaded prompt body") — the retrieval-dilution harm the finding
+  describes is specific to the future embedding-based consumption K-030 is designing for, so
+  deferring costs nothing under the current model. **Discarded as already documented, not
+  re-tracked** — the finding is fully captured, at greater depth, in the K-030 plan doc, which is
+  itself a tracked, owned effort; opening a duplicate `analyst` plan item would fork the same fact
+  across two backlogs with no single owner. `review-techniques.md` untouched (16,264 words / 39
+  sections, unchanged — verified via the same `wc -w`/`awk` count before and after).
+- **Both entries verified true; net file changes this unit: `lm-studio-model-notes.md` +253 words
+  (one section); `review-techniques.md` 0 words (no edit); no `plan.md` item opened for either
+  agent** (both already tracked under K-030, owned elsewhere — dedup-checked, neither entryId
+  appears anywhere else in `claude/`).
+
 ## 2026-09-10 — Distillation U50: 2 promoted (1 generalized, 1 routed to `analyst`), 2 discarded as superseded by the tree's own subsequent development
 
 - **What:** `cobb` distilled `data-scientist`'s 4-entry `kaizen_team` inbox, re-queried fresh at

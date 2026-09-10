@@ -232,3 +232,28 @@ Model-specific: measured only on `mistralai/ministral-3-3b` at n=20 per arm — 
 as a design caution, not the effect size as portable.
 
 **Context:** `falkor-chat` K-057 (salesperson demo agent tool-call reliability wording fix).
+
+## Qwen3-Embedding's model card documents an asymmetric query/document instruction convention — a symmetric embedding call is a modest, not a large, quality risk
+
+**Verified 2026-09-10** against `Qwen/Qwen3-Embedding-0.6B`'s Hugging Face model card (WebFetch):
+queries are meant to carry a task instruction — `"Instruct: {task_description}\nQuery:{query}"` —
+while documents/passages get **no** prefix at all ("No need to add instruction for retrieval
+documents"). The card bounds the effect: customizing the instruction "typically yields an
+improvement of 1% to 5%" on its benchmarks versus omitting it — real, but modest, not a
+correctness bug.
+
+**Consequence — a reusable check before reusing an embedder symmetrically:** before calling one
+embedding client identically for both stored content and search queries, check the model's card
+for a documented asymmetric convention. If one exists, the question is *how asymmetric this
+corpus's own query/document pair is* — `falkor-chat`'s retrieval is message-to-message (roughly
+symmetric register: chat text against chat text), which is why its own `OpenAICompatibleEmbedder`
+calling the same `embed(text)` unprefixed for both sides was judged **not** a defect
+(`falkor-chat/server/falkorchat/embedding.py`, no query/document branch anywhere in the call
+path). A corpus with a sharply asymmetric query/document register — a short informal question
+against a long formal passage — is where the 1-5% is worth collecting; one that is already
+near-symmetric mostly is not. Don't assume symmetric reuse is either always safe or always a bug —
+check the card, then check the corpus.
+
+**Context:** `claude/docs/plans/agent-knowledge-base-strategy-ml.md` (data-scientist's K-030
+method note, which works this exact question for a genuinely asymmetric corpus and recommends
+adopting the query-side prefix there).
