@@ -20,8 +20,18 @@ description: >-
   starlette.exceptions.HTTPException rather than fastapi.HTTPException, and replaced silently (but
   readably) by a second add_exception_handler on the same type; pydantic
   Field(min_length=1) accepting whitespace-only strings; urllib's HTTPError/URLError/TimeoutError
-  taxonomy and redis-py's sibling TimeoutError/ConnectionError, both falsifying a handler map
-  claimed total by exception type; a test that gates itself on config.option.keyword rather than on
+  connect-phase taxonomy plus a read-phase gap one layer down — http.client.IncompleteRead is not
+  an OSError subclass, a try/except wrapped only around urlopen() leaves resp.read() unguarded
+  outside it, and HTTPError is itself a response object whose own exc.read() can fail independently
+  of the connect-phase guard — and redis-py's sibling TimeoutError/ConnectionError, both falsifying
+  a handler map claimed total by exception type; json.loads parsing bare NaN/Infinity/-Infinity by
+  default, so a numeric-coercion boundary must reject non-finite floats via math.isfinite
+  explicitly; a typing.Protocol's declared methods being derivable from vars(cls) as plain callables
+  (runtime_checkable or not) for a coverage-equals-declared-set test with no hand-written method
+  list; pytest's default capture making an in-test input() call raise OSError
+  (DontReadFromInput) rather than block or read — worth recognizing when a mutation-testing kill
+  shows up with that traceback shape instead of AssertionError; a test that gates itself on
+  config.option.keyword rather than on
   what request.session.items collected, so a node id, --lf and --deselect all slip past it; an
   OpenAI-compatible server's HTTP-200 error envelope on a missing /v1; a bare json.loads LLM-judge
   parser failing silently on a fenced completion; an env var set after import (a monkeypatch.setenv
@@ -48,7 +58,10 @@ description: >-
   FastAPI response model using exclude_unset, an assertion over an app's route table or its
   responses={...} declarations, a method-matching or static-mount-shadowing question, a test that
   must bound a possibly-hanging call, an HTTP client against urllib/OpenAI-compatible
-  endpoints, an LLM-judge parser, a pytest monkeypatch touching an env var or deferred import, a
+  endpoints (including its read-phase exception handling), a numeric-coercion boundary parsing
+  untrusted JSON, a coverage-equals-declared-set test over a typing.Protocol, a mutation test whose
+  kill surfaces as an unexpected OSError from input(), an LLM-judge parser, a pytest monkeypatch
+  touching an env var or deferred import, a
   circular-import fix, an edit or scripted mutation that appears not to take effect, a
   TestClient-driven lifespan/background-task test, or an acceptance assertion
   on what a client actually receives from an unhandled server error — coder, tdd-engineer, architect,
@@ -374,6 +387,38 @@ the HTTP-status branch dead code and discards the response body — `HTTPError` 
 first; (b) a client that catches only `URLError`/`HTTPError` lets every read timeout escape
 unclassified — a stdlib-only HTTP client's failure-mode enumeration must list `TimeoutError` and
 `ValueError` (bad URL) as their own cases, not assume they land under `URLError`.
+
+**A second gap, one phase later, on the body read rather than the connect.**
+`http.client.IncompleteRead` is **not** an `OSError` subclass — its MRO is `(IncompleteRead,
+HTTPException, Exception, BaseException)` — so an `except OSError` catch-all around a read does not
+catch a body cut short mid-read; it needs its own `except http.client.HTTPException` rung (or a
+named `IncompleteRead` one) alongside `OSError`. And *where* the read sits matters as much as what
+it's caught by: wrapping only `urlopen()` in `try/except` and leaving `resp.read()` outside that
+block lets any read-phase exception (`IncompleteRead`, `ConnectionResetError`, a read-phase
+`TimeoutError`) escape completely untyped — no test catches this unless the fake response object's
+`.read()` can raise, not just return bytes. `urllib.error.HTTPError` compounds it on the error path:
+it is itself a response object (`.status` + `.read()`), so `exc.read()` inside `except HTTPError`
+can fail **independently** of the connect-phase try/except — a fix that moves the success-path
+`resp.read()` inside the guard still leaves the error-path `exc.read()` unguarded unless it gets its
+own try/except. Verified against CPython 3.12: `issubclass(http.client.IncompleteRead, OSError)` →
+**`False`**; a real `urllib.error.HTTPError(url, code, msg, hdrs, fp)` built with a `fp.read()` that
+raises `ConnectionResetError`/`IncompleteRead`/`TimeoutError` propagates that exception untyped out
+of `exc.read()`, uncaught by any guard placed around `urlopen()` alone. (`socket.timeout` has been
+an alias for the builtin `TimeoutError` since Python 3.10, so one `except TimeoutError` rung
+correctly covers both connect- and read-phase timeouts once the read call is actually inside the
+guarded block.)
+
+## `json.loads` parses bare `NaN`/`Infinity`/`-Infinity` by default — a numeric-coercion boundary must reject non-finite floats explicitly
+
+`json.loads` is not strict JSON: as a Python extension it accepts the bare tokens `NaN`,
+`Infinity` and `-Infinity` with no error, and `json.dumps` round-trips a non-finite float back out
+the same way. Verified on CPython 3.12: `json.loads("NaN")` → `nan`, `json.loads("Infinity")` →
+`inf`, `json.loads("-Infinity")` → `-inf`, and `json.dumps({"x": float("nan")})` →
+`'{"x": NaN}'` — no malformed transport needed to produce one; a server or upstream client that
+serializes a `nan`/`inf` float (e.g. from a division, a stats computation, or a degenerate model
+score) hands it straight through. So any boundary that coerces parsed JSON into a numeric/typed
+field must reject non-finite values explicitly — `math.isfinite(x)` — rather than relying on
+`json.loads` to raise; it won't.
 
 ## An OpenAI-compatible local server can answer a missing `/v1` prefix with HTTP 200 + an error envelope, not a 404 or 400
 
@@ -761,3 +806,33 @@ rm -rf {} +` before the run that must be trusted, with `PYTHONDONTWRITEBYTECODE=
 programmatically, put the cache removal in the harness rather than in the operator's habits. And
 when a mutation "has no effect", check the cache before concluding the code path is dead — an
 unkilled mutant and an unloaded edit are indistinguishable from the output.
+
+## Under pytest's default capture, an in-test `input()` call raises `OSError`, not a block or a real read
+
+pytest's default output capture replaces `sys.stdin` with `_pytest.capture.DontReadFromInput`,
+whose `.read()` raises `OSError: pytest: reading from stdin while output is captured!` rather than
+blocking or returning real input. So any code path that reaches a bare `input()` call under a
+normal (non-`-s`) pytest run fails with that `OSError`, not a hang and not whatever the caller
+would naturally do with real stdin. Verified by execution (pytest 9.1.1): a test invoking a
+function whose only body is `input("prompt: ")` fails with exactly that `OSError`, traceback rooted
+in `_pytest/capture.py`'s `DontReadFromInput.read`. Worth recognizing specifically during mutation
+testing: a mutation that disables a validation guard whose fallback path calls `input()` (e.g. a
+CLI arg-validation guard, deleted so an unrecognized flag falls through to an interactive prompt)
+still kills the test — for the right reason — but the traceback is this `OSError`, not the
+`AssertionError` a coverage probe would expect; don't read the unexpected exception type as a
+harness malfunction or a false kill.
+
+## A `typing.Protocol`'s own declared methods are derivable from `vars(cls)` — no hand-written list needed for a coverage-equals-declared-set test
+
+A `typing.Protocol` class — `@runtime_checkable` or not — exposes each method it declares as a
+plain callable directly in `vars(cls)`, alongside the usual dunders and ABC machinery
+(`_is_protocol`, `_abc_impl`, `__protocol_attrs__`, …). So `{n for n in vars(cls) if not
+n.startswith("_") and callable(getattr(cls, n, None))}` recovers exactly the Protocol's own
+declared method set, with no hand-maintained list to drift. Verified on CPython 3.12.3: a
+two-method Protocol (plain and `@runtime_checkable`) both yield `{'foo', 'bar'}` from this
+expression, filtering out every dunder/ABC name `vars(cls)` also carries. Useful for a
+coverage-equals-declared-set test — assert an implementation class's public surface matches this
+derived set rather than a copied-out method list, the same "derive from the runtime, not a
+written-down list" shape as the `ast`-subclass enumeration technique elsewhere in this repo
+(`claude/tdd-engineer/guard-testing-techniques.md`) — here applied to a `Protocol` instead of an
+AST grammar.

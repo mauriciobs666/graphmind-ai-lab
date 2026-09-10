@@ -2,6 +2,57 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-09-10 — `kaizen_team` distillation pass 2, unit U49 (`coder` inbox, 4 raw entries): 4 promoted, 0 discarded, 0 kept open — all 4 cleared, **none of them into a `coder` artifact**
+
+- **What:** `cobb` ran `agent-maintenance` §5 over the four `coder`-produced `kaizen_team` entries
+  dated 2026-09-09 — unit U49. All four were current-shape
+  (`(:Agent {agentId:'coder'})-[:PRODUCED]->`); re-queried fresh at dispatch, confirmed unchanged
+  from the brief.
+- **Every cell was paged past the 300-char truncation** via `substring(k.fact/evidence/context, n,
+  240)` projections, cross-checked against `size()`, before judging any of the four.
+- **All four re-derived by actual execution, not just re-checked against their own citation** —
+  no fact was narrowed, widened, or found false:
+  - `7e2c1a4e` (`typing.Protocol`/`vars(cls)`): built a plain and a `@runtime_checkable` two-method
+    Protocol on CPython 3.12.3; `{n for n in vars(cls) if not n.startswith("_") and
+    callable(getattr(cls, n, None))}` returned exactly `{'foo', 'bar'}` in both cases. Confirmed
+    as stated.
+  - `e3f1c2a4` (`http.client.IncompleteRead` not an `OSError` subclass): `issubclass(IncompleteRead,
+    OSError)` → `False`, MRO `(IncompleteRead, HTTPException, Exception, BaseException)`; an
+    `except OSError` around a raised `IncompleteRead` does not catch it, confirmed by raising it
+    inside a live `try/except OSError`. Confirmed as stated.
+  - `312f05b6` (`HTTPError.read()` / `json.loads` NaN): built a real
+    `urllib.error.HTTPError(url, code, msg, hdrs, fp)` with a `fp.read()` that raises
+    `ConnectionResetError` — propagated out of `exc.read()` uncaught by any guard around
+    `urlopen()` alone. Separately, `json.loads("NaN"/"Infinity"/"-Infinity")` returned
+    `nan`/`inf`/`-inf` with no error, and `json.dumps({"x": float("nan")})` round-tripped to
+    `'{"x": NaN}'`. Confirmed as stated; the two halves are unrelated topics (urllib body-read vs.
+    JSON numeric coercion) and were routed separately.
+  - `c1e8f4b2` (CLI guard mutation + `input()` under pytest capture): reproduced live with a
+    scratch pytest file (model-bench's own venv's pytest 9.1.1, run outside `model-bench/` to
+    respect the concurrent session's claim on that tree) — a function whose only body is
+    `input(...)` fails under default capture with `OSError: pytest: reading from stdin while
+    output is captured!`, traceback rooted in `_pytest.capture.DontReadFromInput.read`. Confirmed
+    as stated; the fact is a general pytest mechanism, not model-bench- or CLI-specific.
+- **Routing.** `suggestedHome` said `knowledge base` on three, `unsure` on one; all four landed in
+  `skills/python-web-quirks/SKILL.md` — the shared cross-agent KB already carrying general
+  Python/pytest facts beyond its "web" name (circular imports, `.pyc` caching, `pytest.raises`),
+  confirmed by grep to hold no prior coverage of any of the four topics before this unit. Two
+  became a new section each (`typing.Protocol`/`vars(cls)`; `json.loads` NaN/Infinity); one folded
+  into the existing urllib taxonomy section as a second, read-phase paragraph (same mechanism,
+  next phase, rather than a new section) — this merged `e3f1c2a4` and `312f05b6`'s urllib half;
+  one became a new section (pytest `input()`/capture). The CLI-guard entry was explicitly
+  considered for `claude/tdd-engineer/guard-testing-techniques.md` (mutation-testing overlap) and
+  `claude/qa-engineer/qa-testing-techniques.md` (testing-mechanics overlap) and routed past both:
+  the tdd-engineer KB is scoped to static-analysis *text* guards (AST/lint/grep readers), not a
+  runtime CLI-argument validator; the qa-engineer KB is scoped to QA's own black-box tooling
+  mechanics, not an implementer's mutation-test kill-signal recognition. `coder` still has no
+  knowledge base of its own and this unit did not create one — no entry needed it.
+- **Files touched:** `skills/python-web-quirks/SKILL.md` (+841 words: 3 new sections, 1 section
+  extended; frontmatter `description` updated with all four topics) · `skills/README.md` (catalog
+  row synced to match) · this file.
+- **Graph state after:** `coder` 0 produced / 0 mentioned (drained). No other producer's count
+  touched by this unit.
+
 ## 2026-09-09 — `kaizen_team` distillation pass 2, unit U39 (`coder` top-up, 9 raw entries): 6 promoted (2 of them halves), 3 discarded, 0 kept open — all 9 cleared, **none of them into a `coder` artifact**
 
 - **What:** `cobb` ran `agent-maintenance` §5 over the nine `coder`-produced `kaizen_team` entries
