@@ -228,10 +228,15 @@ class TurnTrace:
       home of **that** mapping (the `finalReplyText`↔disposition one, and no other — what a
       mechanism *scores* is `-ml` §4.3 rule 4's). A terminating response whose `content` is `null`
       or `""` records `""`, *captured and empty*, never `None`.
-    * `wallClockMs` — this turn's own stopwatch, **bracketing the whole turn**: every iteration and
-      the tool dispatches between them, which is the response time an operator waits through. Never
-      one `ChatResult.wallClockMs` substituted for it, which would make a model that loops eight
-      times report a *smaller* latency than one that answers in a single call.
+    * `wallClockMs` — this turn's own stopwatch, **bracketing the whole turn**: the message
+      assembly, every iteration, and the tool dispatches between them, which is the response time
+      an operator waits through. Never one `ChatResult.wallClockMs` substituted for it, which would
+      make a model that loops eight times report a *smaller* latency than one that answers in a
+      single call. **`float`, never `None`, on every one of the five dispositions** — a turn whose
+      first call raised still took time and still records it; §4 S2 puts the *withholding* on
+      `ItemTiming.withheldFor`, which is the runner's, so an optional annotation here would be the
+      only statement to the contrary and would invite the runner to key withholding on a value that
+      never arrives (impl review Pass 17, P17-9).
 
     **There is deliberately no singular `chatResult` property over `chatResults[0]`.** The
     temptation is real — the plan gives iteration 1 no privileged role, and P13-5 ruled that a
@@ -248,7 +253,7 @@ class TurnTrace:
     iterations: int
     turnDisposition: TurnDisposition
     finalReplyText: str | None
-    wallClockMs: float | None
+    wallClockMs: float
 
 
 @dataclass(frozen=True)
@@ -298,7 +303,51 @@ class TraceContractViolated(RuntimeError):
     checked fact rather than an assumption: a mismatch there would replay the *n*-th call's message
     carrying the *m*-th call's return value, which is a plausible transcript nobody would read as
     wrong.
+
+    **Check (2) is taken per *call*, which is the granularity `tooling.py` states the contract at
+    and the granularity the pairing is read at** (impl review Pass 17, P17-2). Taken per
+    *iteration* it is a strictly weaker claim than the prose it enforces: an environment recording
+    **0** entries for one call and **2** for the next balances the aggregate exactly, and the turn
+    then completes clean with the first call's `tool` message carrying the second call's return
+    value — the very substitution the paragraph above says is checked. Check (1) is additionally
+    re-taken over the whole iteration and again over the whole turn, and those two are not
+    redundant with the per-call pair: a `trace()` that mutates the environment on *read* moves the
+    record **between** two calls, where a check reading its own `before` afterwards cannot see it,
+    and on a turn that dispatches nothing at all only the turn-level re-take is left.
     """
+
+
+class ToolDispatchFailed(RuntimeError):
+    """A pack's `ToolEnvironment.dispatch` raised. A **pack** defect, like `TraceContractViolated`
+    above, and deliberately a *sibling* of it rather than a subclass: one says the environment
+    misreported what it did, the other that it could not do it at all.
+
+    **It exists to be a name.** `drive`'s catch is narrowed to two transport classes and everything
+    else propagates to the runner, which reads a propagated exception as §3.6 clause (iv)'s *server
+    went away* and re-probes before exiting `3`. A bare `KeyError` out of a pack's `tools/sim.py`
+    therefore bought a re-probe and an exit under a **false cause** — a live server diagnosed as
+    dead — which is exactly the mis-attribution §3.6 exists to prevent (impl review Pass 17,
+    P17-3). With a name the runner can tell the two apart before deciding anything.
+
+    `toolName` and `turnIndex` travel on the exception so a caller can attribute the fault without
+    re-parsing a message, and the pack's own exception is preserved as `__cause__`, never swallowed.
+
+    **What is deliberately *not* decided here is whether such a call should abort the conversation
+    at all.** Today it does: `drive` lets this propagate, so the whole `ConversationTrace` is lost,
+    which is `TraceContractViolated`'s precedent and defensible as a pack defect failing closed
+    (§3.3). But plan §4 S2's replay contract has a category for *"the dispatch raised"* — a `tool`
+    message naming the failure, the call recorded as undispatchable and the script driven past, the
+    treatment `-ml` §4.1 gives a *model* failure — and the trigger is partly model-chosen, since the
+    model picks the arguments a sim raises on. That is a design decision owed to whoever writes
+    `tools/sim.py` (S5) and it is left open on purpose; if it is settled the other way, the change
+    is a `try`/`except ToolDispatchFailed` at this exception's one raise site plus the
+    `_undispatchable_tool_content` reason to go with it, and this class is unaffected either way.
+    """
+
+    def __init__(self, message: str, *, toolName: str, turnIndex: int) -> None:
+        super().__init__(message)
+        self.toolName = toolName
+        self.turnIndex = turnIndex
 
 
 def _system_message(cfg: PromptConfig) -> dict[str, Any] | None:
@@ -549,7 +598,16 @@ def drive(
     to those two classes — `LMStudioError` is the base and has two further subclasses carrying no
     `.status`, so `except LMStudioError as exc: ... exc.status` would raise `AttributeError`
     *inside the handler* and abandon the script, the one thing §4.1 forbids absolutely (v1.28,
-    P15-6). Anything else propagates to the runner as §3.6 clause (iv)'s *server went away*.
+    P15-6). Anything else **from `llm`** propagates to the runner as §3.6 clause (iv)'s *server
+    went away*.
+
+    **A pack's `ToolEnvironment.dispatch` that raises is not that**, and is re-raised as
+    `ToolDispatchFailed` so the runner cannot confuse the two: unnamed, it propagated bare and the
+    runner's *anything else* rule diagnosed a live server as dead (impl review Pass 17, P17-3).
+    That divergence from §4 S2's *"or the dispatch raised"* replay category is stated at
+    `ToolDispatchFailed` itself, together with what remains open about it — this function's current
+    behaviour is to fail closed and abandon the conversation, exactly as for
+    `TraceContractViolated`.
 
     **The exception path is tested before the cap** (§3.8.4's precedence, P14-5), so a call that
     raises at the cap-th iteration is `timed-out`/`no-response`/`server-rejected` and never
@@ -601,7 +659,8 @@ def _check_trace_contract(
 ) -> None:
     """The two checks `drive` takes around a set of dispatches — see `TraceContractViolated` for
     why each one is needed and why a length comparison is neither. `dispatched` is the number of
-    calls just handed to `env.dispatch`, or `None` where only the prefix is being re-checked."""
+    calls just handed to `env.dispatch` — **`1` at the per-call site, which is the granularity the
+    count contract is stated and read at** — or `None` where only the prefix is being re-checked."""
     if list(after[: len(before)]) != list(before):
         raise TraceContractViolated(
             f"drive: env.trace() no longer starts with the {len(before)} entries it reported "
@@ -670,7 +729,25 @@ def _drive_turn(
             )
             if arguments is None:
                 continue
-            env.dispatch(name, arguments)
+            before_call = list(env.trace())
+            try:
+                env.dispatch(name, arguments)
+            except Exception as exc:
+                raise ToolDispatchFailed(
+                    f"drive: env.dispatch({name!r}, ...) raised "
+                    f"{type(exc).__name__} on turn {index}'s iteration {iteration + 1}; a "
+                    "ToolEnvironment.dispatch that raises is a pack defect and fails closed "
+                    "(plan §3.3), and it is named rather than propagated bare so the runner does "
+                    "not read it as §3.6 clause (iv)'s server went away",
+                    toolName=name,
+                    turnIndex=index,
+                ) from exc
+            _check_trace_contract(
+                list(env.trace()),
+                before_call,
+                1,
+                f"turn {index}'s iteration {iteration + 1}, dispatch of {name!r}",
+            )
             dispatched += 1
         after_iteration = list(env.trace())
         _check_trace_contract(

@@ -2,6 +2,90 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-10 — Impl review Pass 17 closed: the per-call trace contract, a name for a raising `dispatch`, and five coverage gaps whose names claimed the coverage
+
+**What:** the eight Pass 17 findings assigned to this unit — **P17-1, P17-2, P17-4** (majors),
+**P17-3's unconditional half**, and **P17-6, P17-7, P17-8, P17-9**. Two files:
+`modelbench/convo.py` and `tests/test_convo.py`. `modelbench/tooling.py` is **unchanged and did not
+need to change** — P17-2 named its *"must append **exactly one** `DispatchRecord` … `drive`
+**enforces** that count"* as a claim exceeding its mechanism, and the closure widens the mechanism
+to meet the claim rather than narrowing the prose. **P17-5 is not this unit's** (`packs.py`) and
+neither is P17-3's record-versus-refuse design decision.
+
+**Every change was mutation-tested one at a time under `PYTHONDONTWRITEBYTECODE=1`, restored by
+file copy and verified with `diff -q`.** Baseline **1009 passed, 3 deselected**; final **1020
+passed, 3 deselected**, `ruff check .` clean.
+
+**1. The trace-count contract is now enforced per *call*, not per iteration (P17-2, major).**
+`_drive_turn` reads `env.trace()` immediately before and after **each** `env.dispatch` and calls
+`_check_trace_contract(..., dispatched=1, ...)`, naming the offending tool in the message. The
+per-iteration aggregate it replaces is a strictly weaker claim than the prose it enforced: an
+environment recording **0** entries for one call and **2** for the next balances it exactly, and
+the turn then completed clean with the first call's replayed `tool` message carrying the second
+call's return value — the substitution `TraceContractViolated`'s own docstring says is a checked
+fact. `SkewEnvironment` is that environment; before the fix it drove the turn to completion with
+no refusal. The per-iteration and per-turn re-takes of the **prefix** check are kept and are not
+redundant: a `trace()` that mutates the environment on *read* moves the record **between** two
+calls, where a per-call check reading its own `before` afterwards cannot see it, and on a turn that
+dispatches nothing at all only the turn-level re-take is left. Each of the three layers now has a
+test that only that layer can pass, and each dies to its own deletion.
+
+**2. A pack's `ToolEnvironment.dispatch` that raises has a name: `ToolDispatchFailed` (P17-3, the
+unconditional half).** It propagated bare, and `drive`'s own docstring rules *"anything else"* to
+be §3.6 clause (iv)'s **server went away** — so a `KeyError` out of a pack's `tools/sim.py` bought
+a re-probe and an exit `3` under a **false cause**, a live server diagnosed as dead. The new class
+sits beside `TraceContractViolated` as a sibling, carries `toolName`/`turnIndex` and preserves the
+pack's own exception as `__cause__`. **The record-versus-refuse question is deliberately left
+open** and is stated as open at the class: today a raising `dispatch` fails closed and abandons the
+conversation, which is `TraceContractViolated`'s precedent, but §4 S2's replay contract has a
+category for *"the dispatch raised"* and the trigger is partly model-chosen, so the decision is
+owed to whoever writes `tools/sim.py` (S5). Settling it the other way is a
+`try`/`except ToolDispatchFailed` at this exception's one raise site plus an
+`_undispatchable_tool_content` reason — the naming is unaffected either way, and the current
+behaviour has its own named test so the ruling is one visible test to change rather than an
+implication to find.
+
+**3. `TurnTrace.wallClockMs` is `float`, never `float | None` (P17-9).** `_drive_turn` always
+computes a figure, including on a turn whose first call raised — correctly, since §4 S2 puts the
+*withholding* on `ItemTiming.withheldFor`, which is the runner's. The optional annotation was the
+only statement to the contrary and invited the runner to key withholding on a value that never
+arrives.
+
+**4. Five coverage gaps whose test names claimed the coverage.** Each was green under the defect
+before and reddens under it now.
+
+- **P17-1** — `_replay_structured` threads one dispatch cursor across a turn's iterations, and
+  **no fixture had two tool-calling iterations**, so the only property a multi-iteration turn can
+  exercise was the one no test reached, under a test named *"every iteration"*. That test is
+  renamed to what its one-iteration fixture pins, and a new one replays a two-iteration turn with
+  two **distinct** return values — distinct deliberately, since equal ones make the pairing
+  assertion vacuous.
+- **P17-4** — the propagate axis drove three classes that propagate under *any* narrowing
+  (`RuntimeError` is `LMStudioError`'s **parent**), while the docstring named *"two further
+  subclasses carrying no `.status`"* as the whole reason the catch is narrow and included
+  **neither**. `LMStudioUnreachable` and `ToolCallingIneligible` are now driven — they are the only
+  members that can see the widening — and the *"two further subclasses"* **reach** claim is bound
+  to `lmstudio.py`'s own exception tree, so a third `.status`-less subclass added there reddens
+  instead of quietly joining the set the docstring counts.
+- **P17-6** — the turn-level trace check and `_iteration_exchange`'s `no-dispatch-record` branch
+  were reachable by no test, and the per-iteration aggregate became hard to reach as a side effect
+  of finding 1. Three fixtures, one per layer: `ReadMutatingEnvironment` on an iteration with a
+  dispatch, the same environment on a turn that dispatches nothing, and a hand-built `TurnTrace`
+  with more dispatchable calls than `DispatchRecord`s.
+- **P17-7** — `plaintext`'s **role ownership** was asserted nowhere, and §3.3 (P13-8) makes it the
+  axis on which `plaintext` and `structured-replies-only` differ *alone*. The existing four-mode
+  test separates the modes by JSON inequality, which is blind to *which* role differs. A new test
+  pins the contrast: the same two replies, `user`-owned in one mode and `assistant`-owned in the
+  other.
+- **P17-8** — the wall-clock fixture modelled the calls and the dispatches but not `assemble`,
+  which §5 test 10b names as half of the difference it measures, so the exact `==` could not see
+  the stopwatch starting one statement late. `convo.assemble` is now on the fixture's stub clock.
+
+**No residual is deferred by choice, and none is blocked on unbuilt work.** The one thing this unit
+does **not** decide is P17-3's record-versus-refuse question, which is a design decision routed to
+a named owner (S5's `tools/sim.py`), not a deferral: the behaviour that ships is stated in code,
+pinned by its own test, and reversible by that owner in one call site.
+
 ## 2026-09-10 — `convo.drive` becomes a bounded per-turn loop, and the replay stops being textbook
 
 **What:** the `convo.py` rework plan v1.29 §3.8.4 and §4 S2 specify. Two rulings land together

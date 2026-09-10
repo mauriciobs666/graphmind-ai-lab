@@ -30,13 +30,21 @@ from modelbench.convo import (
     Conversation,
     ConversationTrace,
     PromptConfig,
+    ToolDispatchFailed,
     TraceContractViolated,
     Turn,
     TurnTrace,
     assemble,
     drive,
 )
-from modelbench.lmstudio import ChatResult, LMStudioCallFailed, LMStudioCallTimeout
+from modelbench.lmstudio import (
+    ChatResult,
+    LMStudioCallFailed,
+    LMStudioCallTimeout,
+    LMStudioError,
+    LMStudioUnreachable,
+    ToolCallingIneligible,
+)
 from modelbench.tooling import DispatchRecord
 
 # --------------------------------------------------------------------------------------------
@@ -128,6 +136,61 @@ class ResettingEnvironment(StubEnvironment):
         return_value = super().dispatch(name, arguments)
         self._trace.clear()
         return return_value
+
+
+class SkewEnvironment(StubEnvironment):
+    """A **pack** defect no per-*iteration* aggregate can see: the environment's own bookkeeping is
+    off by one in both directions **inside a single iteration** — it records nothing for the first
+    call it is handed and two entries for the second. Two calls, two new entries, so any check that
+    compares the iteration's growth against the iteration's dispatch count balances exactly.
+
+    What it costs is the thing `tooling.py` states as a per-**call** contract and
+    `TraceContractViolated` calls a checked fact: `assemble` reads the tool-message pairing
+    positionally out of the slice, so call 1's `tool` message would carry call 2's return value.
+
+    Its own fixture rather than a flag on `StubEnvironment` for `ResettingEnvironment`'s reason:
+    an environment that conforms by construction can never redden.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._dispatch_count = 0
+
+    def dispatch(self, name: str, arguments: Mapping[str, Any]) -> Any:
+        self._dispatch_count += 1
+        return_value = self._results.get(name, {"ok": True})
+        # The call really runs and really mutates state either way — that is what makes losing
+        # its record a defect rather than bookkeeping.
+        self._state[f"lastCall_{name}"] = dict(arguments)
+        self._state["callCount"] = self._dispatch_count
+        if self._dispatch_count == 1:
+            return return_value  # executed, recorded nowhere
+        for suffix in ("A", "B"):
+            self._trace.append(
+                DispatchRecord(
+                    name=name,
+                    rawArguments=arguments,
+                    parsedArguments=arguments,
+                    returnValue={"from": f"{name}-{suffix}"},
+                    timestamp="2026-09-09T00:00:00Z",
+                )
+            )
+        return return_value
+
+
+class ReadMutatingEnvironment(StubEnvironment):
+    """The **pack** defect the per-call check is structurally blind to: `trace()` drops its oldest
+    entry every time it is *read*. A check that reads its own `before` and `after` around one
+    `dispatch` sees a perfectly balanced pair, because the damage happens on the reads themselves
+    and between the calls — which is why the per-iteration and per-turn re-takes of the prefix
+    check are not redundant with the per-call pair.
+    """
+
+    def trace(self) -> list[DispatchRecord]:
+        entries = list(self._trace)
+        if self._trace:
+            del self._trace[0]
+        return entries
 
 
 def stub_llm(responses: list[Any]):
@@ -610,10 +673,14 @@ def test_assemble_history_turns_pairs_each_replayed_user_with_its_own_observed_r
 # --------------------------------------------------------------------------------------------
 
 
-def test_assemble_structured_replays_every_iteration_and_the_real_return_value() -> None:
+def test_assemble_structured_replays_an_iterations_tool_calls_and_its_return_value() -> None:
     """`structured` replays the whole real exchange: per in-turn iteration the model's own
     assistant message with its `tool_calls` **verbatim, ids included**, then one `tool` message per
-    call carrying the environment's real `DispatchRecord.returnValue`."""
+    call carrying the environment's real `DispatchRecord.returnValue`.
+
+    One tool-calling iteration, which is what this fixture has — the *across*-iterations half of
+    the claim (each iteration getting its **own** return value) is the sibling test below, on the
+    only fixture shape in which it is visible."""
     script = (turn(1, "price of the Pad?"), turn(2, "anything else?"))
     observed = (tool_calling_prior_turn(),)
     messages = assemble(1, script, observed, make_cfg(toolSchemas=()))
@@ -628,6 +695,56 @@ def test_assemble_structured_replays_every_iteration_and_the_real_return_value()
     assert tool_msg["name"] == "lookup_product_fact"
     assert json.loads(tool_msg["content"]) == {"price": 24.99}
     assert messages[-2] == {"role": "assistant", "content": "That one is 24.99."}
+
+
+def test_assemble_structured_replays_every_iteration_with_its_own_return_value() -> None:
+    """`_replay_structured` threads **one** dispatch cursor across a turn's iterations, and a turn
+    with **two** tool-calling iterations is the only shape in which that threading is observable:
+    on a one-iteration turn a cursor reset per iteration is indistinguishable from the real thing,
+    and every other `structured` fixture in this file has exactly one.
+
+    Under a reset, iteration 2's `tool` message carries iteration 1's return value — *"a plausible
+    transcript nobody would read as wrong"*, which is `TraceContractViolated`'s own phrase for the
+    failure it closes on the *dispatch* side, arriving here on the *replay* side instead. So the
+    two return values are deliberately distinct: with equal ones the pairing assertion is vacuous.
+    """
+    call_1 = native_call("c1", "lookup_product_fact", {"name": "Pad"})
+    call_2 = native_call("c2", "lookup_product_fact", {"name": "Case"})
+    reply = "The Pad is 24.99 and the Case is 9.99."
+    script = (turn(1, "price of the Pad and the Case?"), turn(2, "anything else?"))
+    observed = (
+        observed_turn(
+            chat_results=(
+                chat_result(content=None, tool_calls=(call_1,)),
+                chat_result(content=None, tool_calls=(call_2,)),
+                chat_result(content=reply),
+            ),
+            dispatches=(
+                dispatch_record("lookup_product_fact", {"name": "Pad"}, {"price": 24.99}),
+                dispatch_record("lookup_product_fact", {"name": "Case"}, {"price": 9.99}),
+            ),
+            final_reply=reply,
+        ),
+    )
+    messages = assemble(1, script, observed, make_cfg(toolSchemas=()))
+
+    assert [m["role"] for m in messages] == [
+        "system",
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+        "tool",
+        "assistant",
+        "user",
+    ]
+    assert [m["tool_calls"] for m in (messages[2], messages[4])] == [[call_1], [call_2]]
+    tool_messages = [m for m in messages if m["role"] == "tool"]
+    assert [m["tool_call_id"] for m in tool_messages] == ["c1", "c2"]
+    assert [json.loads(m["content"]) for m in tool_messages] == [
+        {"price": 24.99},
+        {"price": 9.99},
+    ]
 
 
 @pytest.mark.parametrize(
@@ -670,6 +787,41 @@ def test_assemble_structured_emits_one_tool_message_per_call_including_undispatc
     assert json.loads(tool_messages[1]["content"])["reason"] == reason
 
 
+def test_assemble_names_a_dispatchable_call_with_no_record_instead_of_reusing_one() -> None:
+    """`_iteration_exchange`'s third undispatchable reason, and the only one whose cause is the
+    *record* rather than the call: an iteration emitting two dispatchable calls whose turn slice
+    holds one `DispatchRecord`.
+
+    `drive` cannot produce that record any more — the per-call trace check refuses such an
+    environment mid-run — but `assemble` replays a `TurnTrace` it is *handed*, and one rebuilt by a
+    later unit or read back off disk carries no such guarantee. The entry still owes a `tool`
+    message, exactly like the other two reasons, and nothing here may invent a return value for it:
+    reusing the previous record's is the plausible wrong answer and is the substitution this pins.
+    """
+    call_1 = native_call("c1", "lookup_product_fact", {"name": "Pad"})
+    call_2 = native_call("c2", "lookup_product_fact", {"name": "Case"})
+    script = (turn(1, "price of both?"), turn(2, "anything else?"))
+    observed = (
+        observed_turn(
+            chat_results=(
+                chat_result(content=None, tool_calls=(call_1, call_2)),
+                chat_result(content="done"),
+            ),
+            dispatches=(dispatch_record("lookup_product_fact", {"name": "Pad"}, {"price": 24.99}),),
+            final_reply="done",
+        ),
+    )
+    messages = assemble(1, script, observed, make_cfg(toolSchemas=()))
+
+    tool_messages = [m for m in messages if m["role"] == "tool"]
+    assert [m["tool_call_id"] for m in tool_messages] == ["c1", "c2"]
+    assert json.loads(tool_messages[0]["content"]) == {"price": 24.99}
+    assert json.loads(tool_messages[1]["content"]) == {
+        "error": "tool-call-not-dispatched",
+        "reason": "no-dispatch-record",
+    }
+
+
 @pytest.mark.parametrize("mode", REPLY_TEXT_MODES)
 def test_assemble_reply_text_modes_show_no_tool_evidence_for_a_tool_calling_prior_turn(
     mode: str,
@@ -686,6 +838,41 @@ def test_assemble_reply_text_modes_show_no_tool_evidence_for_a_tool_calling_prio
     serialized = json.dumps(messages)
     assert "lookup_product_fact" not in serialized
     assert "That one is 24.99." in serialized  # the reply text itself is still replayed
+
+
+def test_the_two_reply_text_modes_differ_on_role_ownership_alone() -> None:
+    """§3.3 (P13-8) rules `historyReplay`'s four values across **two** axes — role ownership and
+    tool evidence — not one ladder, and rules that `plaintext` and `structured-replies-only` differ
+    on **ownership alone**: both carry the prior turns' text, neither carries tool evidence, but
+    `structured-replies-only` gives each prior reply its own `assistant` message while `plaintext`
+    quotes the whole transcript inside somebody else's `user` message. §6 R-3's bisect inference
+    turns on exactly that difference, so ownership is the canonical axis and not a rendering
+    detail.
+
+    Nothing pinned it (impl review Pass 17, P17-7):
+    `test_every_history_replay_mode_renders_a_distinct_message_list` separates the four modes by
+    JSON inequality, which is blind to *which* role differs — retagging `plaintext`'s flattened
+    message `system` keeps all four renderings distinct and leaves the suite green (measured)."""
+    script = (turn(1, "u1"), turn(2, "u2"), turn(3, "u3"))
+    observed = (observed_turn(final_reply="a1"), observed_turn(final_reply="a2"))
+    flattened = assemble(2, script, observed, make_cfg(historyReplay="plaintext", toolSchemas=()))
+    native = assemble(
+        2, script, observed, make_cfg(historyReplay="structured-replies-only", toolSchemas=())
+    )
+
+    # `plaintext`: the whole history is one `user`-owned quotation, never the model's own voice.
+    assert [m["role"] for m in flattened] == ["system", "user", "user"]
+    assert "a1" in flattened[-2]["content"] and "a2" in flattened[-2]["content"]
+    # `structured-replies-only`: the same two replies, owned by `assistant`.
+    assert [m["role"] for m in native] == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert [m["content"] for m in native[1:-1]] == ["u1", "a1", "u2", "a2"]
 
 
 def test_assemble_structured_replies_only_emits_exactly_one_assistant_per_prior_turn() -> None:
@@ -887,18 +1074,33 @@ def test_drive_iterations_equals_the_number_of_completed_chat_results() -> None:
     assert trace.turns[1].iterations == 2  # the third call raised and is not an iteration
 
 
-def test_drive_turn_wall_clock_brackets_every_iteration_in_it(monkeypatch) -> None:
-    """`wallClockMs` brackets the **whole turn** — every iteration and the tool dispatches between
-    them — so it is strictly greater than any one of that turn's `ChatResult.wallClockMs` and at
-    least their sum. Redefining it as one call of the turn would make a model that loops eight
-    times report a *smaller* latency than one that answers in a single call (§3.8.4).
+def test_drive_turn_wall_clock_brackets_the_whole_turn_assembly_included(monkeypatch) -> None:
+    """`wallClockMs` brackets the **whole turn** — the message assembly, every iteration, and the
+    tool dispatches between them — so it is strictly greater than any one of that turn's
+    `ChatResult.wallClockMs` and at least their sum. Redefining it as one call of the turn would
+    make a model that loops eight times report a *smaller* latency than one that answers in a
+    single call (§3.8.4).
 
     Driven against a **stub clock** the stubs advance themselves, so the figures are exact rather
     than timing-dependent — and, deliberately, the three per-call figures are **distinct and
     non-zero**: with equal or zero ones the plan's own `>=` assertion is satisfied by the last
-    call's figure too, and the substitution it exists to catch ships green (measured: it does)."""
+    call's figure too, and the substitution it exists to catch ships green (measured: it does).
+
+    **`assemble` is on the clock too, and it is a third of what §5 test 10b measures** — that
+    test's own words are *"the difference being the harness's own dispatch **and message
+    assembly**"* (impl review Pass 17, P17-8). Modelling the calls and the dispatches but not the
+    assembly left the exact `==` blind to the stopwatch starting one statement too late, since a
+    fake clock does not advance on its own during a function that never touches it."""
     clock = _FakeClock()
     monkeypatch.setattr(convo, "time", SimpleNamespace(monotonic=clock))
+    assemble_ms = 3.0
+    real_assemble = convo.assemble
+
+    def ticking_assemble(*args: Any, **kwargs: Any):
+        clock.advance_ms(assemble_ms)
+        return real_assemble(*args, **kwargs)
+
+    monkeypatch.setattr(convo, "assemble", ticking_assemble)
 
     script = conversation("S-07", (turn(1, "t1"),))
     tool_call = native_call("c", "view_cart", {})
@@ -919,21 +1121,29 @@ def test_drive_turn_wall_clock_brackets_every_iteration_in_it(monkeypatch) -> No
     turn_trace = drive(env, script, ticking_llm, make_cfg(toolSchemas=())).turns[0]
 
     calls_total = sum(per_call_ms)
-    assert turn_trace.wallClockMs == pytest.approx(calls_total + 2 * 5.0)
+    assert turn_trace.wallClockMs == pytest.approx(assemble_ms + calls_total + 2 * 5.0)
     assert turn_trace.wallClockMs >= calls_total
     # And strictly above any single call's figure, which is what the substitution would report.
     assert turn_trace.wallClockMs > max(c.wallClockMs or 0.0 for c in turn_trace.chatResults)
 
 
-def test_drive_records_a_nonnegative_wall_clock_per_turn() -> None:
+def test_drive_records_a_wall_clock_figure_on_every_turn_including_one_that_raised() -> None:
     """Checked on every turn of a 3-turn script, not just the first — "per turn" names a property
-    of each turn's own record, not only turn 0's."""
+    of each turn's own record, not only turn 0's.
+
+    Turn 2's **first call raises**, which is the one shape a reader might expect to withhold a
+    figure and is why `wallClockMs` is typed `float` rather than `float | None`: the turn still
+    took time and still records it, and §4 S2 puts the withholding on `ItemTiming.withheldFor`,
+    which is the runner's (impl review Pass 17, P17-9). Without a raised turn in the fixture the
+    claim is checked three times on the one disposition that could never have been `None`."""
     script = conversation("S-08", (turn(1, "t1"), turn(2, "t2"), turn(3, "t3")))
-    llm = stub_llm([chat_result(), chat_result(), chat_result()])
+    llm = stub_llm([chat_result(), LMStudioCallTimeout("slow"), chat_result()])
     trace = drive(StubEnvironment(), script, llm, make_cfg(toolSchemas=()))
-    assert len(trace.turns) == 3
+
+    assert [t.iterations for t in trace.turns] == [1, 0, 1]
+    assert [t.turnDisposition for t in trace.turns] == ["replied", "timed-out", "replied"]
     for turn_trace in trace.turns:
-        assert turn_trace.wallClockMs is not None
+        assert isinstance(turn_trace.wallClockMs, float)
         assert turn_trace.wallClockMs >= 0.0
 
 
@@ -1219,6 +1429,122 @@ def test_drive_refuses_an_environment_that_drops_an_entry_it_had_already_reporte
         drive(_RewritingEnvironment(), script, llm, make_cfg(toolSchemas=()))
 
 
+def test_drive_refuses_an_environment_whose_per_call_record_count_is_skewed() -> None:
+    """The contract `tooling.py` states and says `drive` **enforces** is *"exactly one
+    `DispatchRecord` per call"* — per **call**, which is also the granularity `assemble`'s
+    positional pairing is read at. A per-*iteration* aggregate is a weaker claim than the prose:
+    an environment recording 0 entries for one call and 2 for the next balances it exactly, and the
+    turn completes clean with `add_to_cart`'s replayed `tool` message carrying `view_cart`'s return
+    value (measured: it did).
+
+    The refusal names the offending **call**, not just the iteration, which is what distinguishes
+    this check from the aggregate one it replaces."""
+    script = conversation("S-22d", (turn(1, "add it and show me the cart"),))
+    calls = (
+        native_call("c1", "add_to_cart", {"name": "Pad"}),
+        native_call("c2", "view_cart", {}),
+    )
+    llm = stub_llm([chat_result(content=None, tool_calls=calls), chat_result(content="done")])
+    env = SkewEnvironment()
+
+    with pytest.raises(
+        TraceContractViolated, match=r"grew by 0 entries.*dispatch of 'add_to_cart'"
+    ):
+        drive(env, script, llm, make_cfg(toolSchemas=()))
+    # It really ran, which is why a lost record is a defect and not a bookkeeping nicety.
+    assert env.state()["lastCall_add_to_cart"] == {"name": "Pad"}
+
+
+def test_drive_refuses_an_environment_that_loses_an_entry_between_two_calls() -> None:
+    """The per-**iteration** re-take, on the only path that reaches it now that the per-call check
+    holds: an environment that mutates itself on `trace()` *read* moves the record between the
+    reads a per-call check brackets, so that check sees a balanced 1-for-1 pair and passes.
+
+    The refusal names the **iteration** and not a call, which is what shows it was this layer and
+    not the per-call one that fired."""
+    script = conversation("S-22e", (turn(1, "show me the cart"),))
+    call = native_call("c1", "view_cart", {})
+    llm = stub_llm([chat_result(content=None, tool_calls=(call,)), chat_result(content="done")])
+
+    with pytest.raises(
+        TraceContractViolated, match=r"grew by 0 entries across turn 0's iteration 1, which"
+    ):
+        drive(ReadMutatingEnvironment(), script, llm, make_cfg(toolSchemas=()))
+
+
+def test_drive_refuses_a_rewritten_trace_on_a_turn_that_dispatched_nothing() -> None:
+    """The per-**turn** re-take, on the only path that reaches *it*: a turn whose response carries
+    no tool calls runs neither the per-call nor the per-iteration check, so the prefix `drive` was
+    shown at the start of the turn is checked exactly once, at the end of it. Without that re-take
+    a `trace()` that rewrites history on read silently reattributes every later turn's slice.
+
+    The two prior entries are dispatched **before** `drive` is called, so there is a prefix for the
+    environment to lose — on an empty trace the check has nothing to compare and cannot fire."""
+    env = ReadMutatingEnvironment()
+    env.dispatch("view_cart", {})
+    env.dispatch("view_cart", {})
+    script = conversation("S-22f", (turn(1, "just answer, no tools"),))
+    llm = stub_llm([chat_result(content="done")])
+
+    with pytest.raises(TraceContractViolated, match=r"no longer starts with the 2 entries"):
+        drive(env, script, llm, make_cfg(toolSchemas=()))
+
+
+class RaisingEnvironment(StubEnvironment):
+    """A pack whose `dispatch` raises — the shape a `tools/sim.py` author writes without thinking
+    about it (`raise KeyError(...)` on an unknown product), and one the model can *trigger*, since
+    the model chooses the arguments."""
+
+    def dispatch(self, name: str, arguments: Mapping[str, Any]) -> Any:
+        raise KeyError(f"no such product: {dict(arguments)}")
+
+
+def test_drive_names_the_exception_a_packs_raising_dispatch_reaches_the_runner_as() -> None:
+    """A `ToolEnvironment.dispatch` that raises used to arrive at the runner as whatever the pack
+    happened to raise, and `drive`'s own docstring rules *"anything else"* to be §3.6 clause (iv)'s
+    **server went away** — so a `KeyError` from a pack's `tools/sim.py` bought a re-probe and an
+    exit `3` under a **false cause**, which is the signature defect §3.6 names (impl review Pass 17,
+    P17-3). Naming it is what makes the two tellable apart, and it is unconditionally right
+    regardless of how the record-versus-refuse question below is settled.
+
+    The original is preserved as `__cause__` rather than swallowed, and the tool and turn travel on
+    the exception so the runner can attribute the fault to a pack without re-parsing a message."""
+    script = conversation("S-30", (turn(1, "add the Ghost"), turn(2, "and then?")))
+    call = native_call("c1", "add_to_cart", {"name": "Ghost"})
+    llm = stub_llm([chat_result(content=None, tool_calls=(call,)), chat_result(content="done")])
+
+    with pytest.raises(ToolDispatchFailed) as excinfo:
+        drive(RaisingEnvironment(), script, llm, make_cfg(toolSchemas=()))
+
+    assert type(excinfo.value) is ToolDispatchFailed
+    assert isinstance(excinfo.value.__cause__, KeyError)
+    assert excinfo.value.toolName == "add_to_cart"
+    assert excinfo.value.turnIndex == 0
+    assert "add_to_cart" in str(excinfo.value)
+    assert "KeyError" in str(excinfo.value)
+
+
+def test_drive_fails_closed_on_a_raising_dispatch_and_drives_no_further_turn() -> None:
+    """The record-versus-refuse half, pinned **as it stands** so the ruling is visible rather than
+    implied. Today a raising `dispatch` is treated the way `TraceContractViolated` is — a pack
+    defect that fails closed (§3.3) — so the conversation is abandoned and no `ConversationTrace`
+    is returned at all.
+
+    It is deliberately its own test: §4 S2's *"or the dispatch raised"* clause is evidence that
+    *record the call as undispatchable and drive past* was the original intent, and the trigger is
+    partly model-chosen, so the question is genuinely two-sided and is owed to whoever writes
+    `tools/sim.py` (S5). Whichever way it is settled, this is the test that changes — the naming
+    above does not."""
+    script = conversation("S-31", (turn(1, "add the Ghost"), turn(2, "and then?")))
+    call = native_call("c1", "add_to_cart", {"name": "Ghost"})
+    llm = stub_llm([chat_result(content=None, tool_calls=(call,)), chat_result(content="done")])
+
+    with pytest.raises(ToolDispatchFailed):
+        drive(RaisingEnvironment(), script, llm, make_cfg(toolSchemas=()))
+    # Turn 2 was never reached: one call issued out of a two-turn script.
+    assert len(llm.calls) == 1
+
+
 def test_drive_accepts_a_conforming_environment_across_several_turns() -> None:
     """The control for the two refusals above: a `StubEnvironment` that appends one record per
     call and never rewrites earlier ones drives a two-turn script clean, so the guard is shown to
@@ -1364,12 +1690,31 @@ def test_drive_catches_exactly_the_two_transport_classes_and_continues(raised: E
     assert trace.turns[1].finalReplyText == "second"
 
 
+#: The `LMStudioError` subclasses `drive` deliberately does **not** catch — the two the narrowing
+#: exists for. Written out here and bound to `lmstudio.py`'s own tree below, since "two further
+#: subclasses" is a **reach** claim and the axis is what would silently go on driving two of three.
+_UNCAUGHT_LMSTUDIO_SUBCLASSES = (LMStudioUnreachable, ToolCallingIneligible)
+
+
+def test_the_lmstudio_subclasses_drive_declines_to_catch_are_exactly_the_two_it_names() -> None:
+    """`drive`'s docstring gives *"that base has two further subclasses carrying no `.status`"* as
+    the **whole** reason its `except` is narrowed, and the propagate axis below is what drives
+    them. That is a claim about `lmstudio.py`'s exception tree, so it is bound to the tree rather
+    than restated: a third `.status`-less subclass added there reddens here instead of quietly
+    joining the set the docstring counts while the axis keeps driving two of three."""
+    caught = {LMStudioCallTimeout, LMStudioCallFailed}  # transcribed from `drive`'s two `except`s
+    assert set(LMStudioError.__subclasses__()) - caught == set(_UNCAUGHT_LMSTUDIO_SUBCLASSES)
+    assert not any(hasattr(cls("x"), "status") for cls in _UNCAUGHT_LMSTUDIO_SUBCLASSES)
+
+
 @pytest.mark.parametrize(
     "raised",
     [
         _SynthesizedFailure("a class this module has never seen"),
         RuntimeError("a bare runtime error"),
         ValueError("something else entirely"),
+        LMStudioUnreachable("no server"),
+        ToolCallingIneligible("not eligible"),
     ],
 )
 def test_drive_lets_every_other_exception_propagate(raised: Exception) -> None:
@@ -1378,7 +1723,13 @@ def test_drive_lets_every_other_exception_propagate(raised: Exception) -> None:
     `.status`, so a handler reading `exc.status` off the base would raise `AttributeError` *inside
     the handler* and abandon the script — the one thing `-ml` §4.1 forbids absolutely. Anything
     outside the two classes is §3.6 clause (iv)'s *server went away* and is the runner's, not a
-    turn disposition."""
+    turn disposition.
+
+    **Both of those subclasses are driven here, and that is the whole point of the case list**
+    (impl review Pass 17, P17-4). Without them the widening this docstring warns about leaves the
+    suite green: `RuntimeError` is `LMStudioError`'s **parent** and propagates under any narrowing,
+    and the two hand-picked non-`LMStudio` classes never reach the handler at all — so the only
+    members that can see the defect are the ones the reason names."""
     script = conversation("S-28", (turn(1, "t1"), turn(2, "t2")))
     llm = stub_llm([raised, chat_result()])
     with pytest.raises(type(raised)):
