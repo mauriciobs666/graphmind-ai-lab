@@ -424,7 +424,10 @@ class RunResult:
             items=tuple(ItemResult.from_dict(i) for i in d.get("items", [])),
             # No `.get` default: fabricating an empty `ClassificationAggregates` for a record
             # that has no aggregates block repairs the one absence this module exists to report
-            # (review n-3). A `KeyError` here surfaces as `unparseable` in `load_history`.
+            # (review n-3). A `KeyError` here reaches `load_history` as `unparseable` when the
+            # record declares a schema this build knows, and as `unknown_schema` when it declares
+            # a later one — that call is the reader's, made from the envelope, and not this
+            # function's to anticipate (review P14-4).
             aggregates=_aggregates_from_dict(d["aggregates"]),
             designEffect=d.get("designEffect", 1.0),
             basis=d.get("basis", "assumed"),
@@ -525,8 +528,10 @@ def _metric_from_dict(d: Mapping[str, Any]) -> MetricValue:
     except KeyError:
         # An unrecognised tag raises rather than falling through as a raw `dict` — a dict tagged
         # with a `"type"` this build does not know is a record written by a build that knew a
-        # metric type this one does not (§4 S1e Table F, plan-gate P7-1). It surfaces as
-        # `unparseable` in `load_history`, exactly as a `KeyError` in `from_dict` does (`:327`).
+        # metric type this one does not (§4 S1e Table F, plan-gate P7-1). Raising is all this
+        # function decides: whether that record reads as a later build's or as a damaged one is
+        # `load_history`'s call, taken from the envelope before the body is decoded, exactly as
+        # for a `KeyError` in `from_dict` (review P14-4).
         raise ValueError(f"unrecognised metric type {d.get('type')!r}") from None
     return decoder(d)
 
@@ -635,6 +640,13 @@ def load_history(root: Path, *, packId: str) -> tuple[list[RunResult], list[Inva
 
     There is no API to load across packs, and that is how FR-20 (no cross-role aggregate) is
     enforced structurally rather than by convention (§3.5).
+
+    Each record is classified from its **envelope** — `runId`, and the fingerprint's `packId` and
+    `benchSchemaVersion` — *before* its body is decoded, so a record left by a later build is
+    diagnosed by the schema it declares rather than by whether this build happens to understand
+    its aggregates. Decoding first made the pack filter and `unknown_schema` below reachable only
+    for the one future record whose shape had not changed, which is the future record that would
+    not have needed the version bump (review P14-4).
     """
     from modelbench.fingerprint import REQUIRED_BY_SCHEMA
 
@@ -647,10 +659,22 @@ def load_history(root: Path, *, packId: str) -> tuple[list[RunResult], list[Inva
     for path in sorted(directory.glob("*.json")):
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
-            run = RunResult.from_dict(raw)
+            # The **envelope** — the record's identity, and the two fields that decide whether
+            # this build may read the body at all — is parsed first and *separately from the
+            # body*, because the body is the half a later build changes. `BENCH_SCHEMA_VERSION`'s
+            # docstring says the integer increments when the on-disk shape changes in a way a
+            # reader must branch on, so the ordinary future record is one this build cannot
+            # decode — and decoding it first put it on `unparseable` before either branch below
+            # ran, which is P14-4's consequence with no drift of `_AGGREGATE_BY_KIND` required.
+            # It is read through `Fingerprint.from_dict` rather than off `raw` so that how a
+            # stored fingerprint is read keeps one home.
+            runId = raw["runId"]
+            fingerprint = Fingerprint.from_dict(raw["fingerprint"])
         except Exception:
             # A truncated or hand-mangled file cannot declare its pack, so it is surfaced rather
-            # than silently skipped: an unreadable record is a finding, not an absence.
+            # than silently skipped: an unreadable record is a finding, not an absence. This is
+            # now the *only* record that answers `None` for both fields, and that is the claim
+            # the two values make: nothing about this file was legible, not even its name.
             invalid.append(
                 InvalidRecord(
                     path=path,
@@ -667,12 +691,13 @@ def load_history(root: Path, *, packId: str) -> tuple[list[RunResult], list[Inva
         # put the record in neither returned list — the comparison quietly lost an arm and the
         # report said nothing, against AC-2's "excluded on read *and named*" (review M-1).
         #
-        # The filter now applies to an unknown schema too, whose `packId` is right there and
-        # readable, so another pack's future-schema record is no longer surfaced as this pack's
-        # exclusion — but it stays **off** `unparseable` above, because a truncated file genuinely
-        # cannot declare its pack (review m-1).
-        schema = run.fingerprint.benchSchemaVersion
-        declared = run.fingerprint.get("packId")
+        # The filter applies to an unknown schema too, and — since the envelope is parsed on its
+        # own — to a record whose body this build cannot decode at all: in both cases the
+        # `packId` is right there and readable, so another pack's future record is not surfaced
+        # as this pack's exclusion (review m-1). It stays **off** the `unparseable` above,
+        # because a file that could not even yield an envelope genuinely cannot declare its pack.
+        schema = fingerprint.benchSchemaVersion
+        declared = fingerprint.get("packId")
         if isinstance(declared, str) and declared and declared != packId:
             continue
         if not isinstance(schema, int) or isinstance(schema, bool) or (
@@ -681,7 +706,7 @@ def load_history(root: Path, *, packId: str) -> tuple[list[RunResult], list[Inva
             invalid.append(
                 InvalidRecord(
                     path=path,
-                    runId=run.runId,
+                    runId=runId,
                     # `not isinstance(schema, bool)` as well, because `True` is an `int` and
                     # this field is typed `int | None`: a quarantined bool would otherwise be
                     # reported as the schema version `True` (review P2-2).
@@ -695,6 +720,26 @@ def load_history(root: Path, *, packId: str) -> tuple[list[RunResult], list[Inva
                 )
             )
             continue
+
+        try:
+            run = RunResult.from_dict(raw)
+        except Exception:
+            # A record that claims a schema this build **does** know and still will not decode is
+            # not a record from the future: it is damaged, or its writer changed the shape without
+            # bumping the version. `unknown_schema` would launder that into a tooling-version
+            # excuse, so it stays `unparseable` — but its envelope was legible, so AC-2's line
+            # names the run and the schema it claimed instead of a bare filename.
+            invalid.append(
+                InvalidRecord(
+                    path=path,
+                    runId=runId,
+                    benchSchemaVersion=schema,
+                    problems=[],
+                    reason="unparseable",
+                )
+            )
+            continue
+
         # Both halves are `field` failures and share one exclusion path: a record whose
         # environment is incomplete and one whose items are internally self-contradictory are
         # equally unreadable, and AC-2's block already says which fields failed (review P4-5).

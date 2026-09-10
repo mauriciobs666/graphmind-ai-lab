@@ -439,6 +439,140 @@ def test_an_unparseable_record_is_still_this_packs_finding(tmp_root) -> None:
     assert [r.reason for r in invalid] == ["unparseable"]
 
 
+# --- P14-4: the envelope is classified before the body is decoded ------------------------------
+#
+# The pack filter and `unknown_schema` above are reachable only for a future record whose *body*
+# this build still happens to decode — that is, for the one future record whose schema bump was
+# not needed. `BENCH_SCHEMA_VERSION`'s own docstring says the integer increments when *the
+# on-disk record shape changes in a way a reader must branch on*, so the ordinary future record
+# is one this build cannot decode, and that record reached neither branch: `RunResult.from_dict`
+# raised first and the whole file landed on `unparseable`, with `runId=None` and
+# `benchSchemaVersion=None`.
+#
+# P14-4 named one instance of this (`_AGGREGATE_BY_KIND` losing a kind). Both breakages below
+# reach it through two *independent* decoders and neither involves any drift of that constant, so
+# the pin U82 put on it cannot close them: the defect is the ordering, not the table.
+
+
+def _a_future_schema(raw) -> None:
+    """The bump that accompanies any shape change (`BENCH_SCHEMA_VERSION`'s own docstring)."""
+    raw["fingerprint"]["benchSchemaVersion"] = 99
+
+
+def _a_sixth_aggregate_kind(raw) -> None:
+    """A kind a later build added — `_AGGREGATE_BY_KIND[d["kind"]]` raises `KeyError`."""
+    raw["aggregates"]["kind"] = "grounding2"
+
+
+def _a_fourth_metric_tag(raw) -> None:
+    """A metric tag a later build added — `_metric_from_dict` raises `ValueError`."""
+    raw["aggregates"]["mrr"]["type"] = "quantile-sketch"
+
+
+_UNDECODABLE_BODIES = pytest.mark.parametrize(
+    "break_body",
+    [_a_sixth_aggregate_kind, _a_fourth_metric_tag],
+    ids=["new-aggregate-kind", "new-metric-tag"],
+)
+
+
+def _store_then_edit(tmp_root, run_id: str, *edits, **fingerprint_overrides) -> None:
+    """Store a decodable record, then hand-edit the file as a later build would have left it."""
+    path = store(
+        _run(
+            run_id,
+            aggregates=RetrievalAggregates(
+                mrr=ContinuousMetric(name="mrr", mean=0.5, n=1, support=(0.0, 1.0))
+            ),
+            fingerprint_fields=model_fields(**fingerprint_overrides),
+        ),
+        tmp_root,
+    )
+    raw = json.loads(path.read_text())
+    for edit in edits:
+        edit(raw)
+    path.write_text(json.dumps(raw))
+
+
+@_UNDECODABLE_BODIES
+def test_another_packs_future_record_is_filtered_even_when_its_body_will_not_decode(
+    tmp_root, break_body
+) -> None:
+    """m-1's claim, applied to the record that actually motivates it.
+
+    The comment above the schema branch says another pack's future-schema record is no longer
+    surfaced as this pack's exclusion because "its `packId` is right there and readable". It was
+    just as readable in this file — a complete, well-formed fingerprint block — and the record
+    still landed in a `tool-caller` comparison's AC-2 block as `unparseable`, because the body
+    was decoded before anything read the pack.
+    """
+    _store_then_edit(tmp_root, "theirs", _a_future_schema, break_body, packId="embedder-x")
+
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert valid == []
+    assert invalid == []
+
+
+@_UNDECODABLE_BODIES
+def test_this_packs_future_record_is_quarantined_as_unknown_schema_not_as_corruption(
+    tmp_root, break_body
+) -> None:
+    """The operator-visible half. "Written under a schema this build does not know" and "this
+    file is damaged" call for different actions — upgrade the tool, versus restore the file — and
+    the AC-2 block printed the second for both, under a *filename* rather than a run id because
+    `runId` came back `None`. Whether this build also chokes on the body is an accident of which
+    fields the bump changed, and must not change the diagnosis."""
+    _store_then_edit(tmp_root, "r1", _a_future_schema, break_body)
+
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert valid == []
+    assert [(r.reason, r.runId, r.benchSchemaVersion) for r in invalid] == [
+        ("unknown_schema", "r1", 99)
+    ]
+    assert [(p.field, p.reason) for p in invalid[0].problems] == [
+        ("benchSchemaVersion", "unknown")
+    ]
+
+
+@_UNDECODABLE_BODIES
+def test_a_known_schema_record_that_will_not_decode_stays_unparseable_but_is_named(
+    tmp_root, break_body
+) -> None:
+    """The half that keeps the fix honest. A record claiming a schema this build *does* know and
+    still failing to decode is not a record from the future — it is a damaged or non-conforming
+    one, and answering `unknown_schema` would launder it into a tooling-version excuse. It stays
+    `unparseable`; what changes is that its identity was readable all along, so the AC-2 line
+    names the run instead of the bare filename."""
+    _store_then_edit(tmp_root, "r1", break_body)
+
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert valid == []
+    assert [(r.reason, r.runId, r.benchSchemaVersion) for r in invalid] == [
+        ("unparseable", "r1", BENCH_SCHEMA_VERSION)
+    ]
+
+
+@pytest.mark.parametrize("envelope_field", ["runId", "fingerprint"])
+def test_a_record_whose_envelope_is_unreadable_is_never_pack_filtered(
+    tmp_root, envelope_field
+) -> None:
+    """The reach of the degraded classification, one behavioural consequence per member: reading
+    the envelope first must not widen the silent drop. A record that cannot state its identity
+    cannot state its pack either, so it stays m-1's finding — surfaced even under another pack's
+    id, with nothing invented for the two fields it never supplied."""
+
+    def _drop(raw) -> None:
+        del raw[envelope_field]
+
+    _store_then_edit(tmp_root, "r1", _drop, _a_sixth_aggregate_kind)
+
+    valid, invalid = load_history(tmp_root, packId="some-other-pack")
+    assert valid == []
+    assert [(r.reason, r.runId, r.benchSchemaVersion) for r in invalid] == [
+        ("unparseable", None, None)
+    ]
+
+
 # --- M-2 / m-ML-3: the record seam carries no anti-conservative default -------------------------
 
 
@@ -530,11 +664,13 @@ def test_every_aggregate_kind_round_trips_through_load_history(tmp_root, cls) ->
     Dropping a kind from `_AGGREGATE_BY_KIND` leaves the full suite green today (§N.1 entry 18:
     834 passed) only because nothing drives a real record of that kind through storage end to
     end — `grounding` is inert until an S7 pack exists. When it is dropped,
-    `_aggregates_from_dict`'s `KeyError` is caught by `load_history`'s broad `except Exception`
-    (the same catch that legitimately quarantines a truncated file) and the record — genuinely
-    valid, merely of a kind this build's dict forgot — is reported as `"unparseable"`,
-    indistinguishable from file corruption, in the one module whose thesis is that an unreadable
-    record is a finding and not an absence."""
+    `_aggregates_from_dict`'s `KeyError` is caught by `load_history`'s late `except Exception`
+    (the same catch that quarantines a record whose body will not decode) and the record —
+    genuinely valid, merely of a kind this build's dict forgot — is reported as `"unparseable"`
+    under a schema it does conform to, in the one module whose thesis is that an unreadable
+    record is a finding and not an absence. That report is now *named* rather than anonymous
+    (P14-4's envelope fix, below), which is why this round trip and not the reason string is
+    what catches the drift."""
     aggregates = cls()
     store(_run(f"r-{aggregates.kind}", aggregates=aggregates), tmp_root)
     valid, invalid = load_history(tmp_root, packId=PACK)

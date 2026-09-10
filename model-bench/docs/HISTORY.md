@@ -67,6 +67,79 @@ change to `drive`, and no edit to `convo.py`'s module docstring (which still des
 one-call-per-turn design) — all of that is the rework unit's, and touching it here would
 reintroduce exactly the ordering problem this round exists to prevent.
 
+## 2026-09-09 — S2 U83: `load_history` classifies a record's envelope before decoding its body (P14-4's live consequence)
+
+**What:** Pass 14's **P14-4** named a consequence of `_AGGREGATE_BY_KIND` losing a kind — a
+structurally valid record quarantined as `"unparseable"`, indistinguishable from a corrupt file.
+U82 pinned the constant and argued the consequence was reachable only through the drift the pin
+now blocks. **That premise was wrong, and the coordinator's reproduction settled it: the
+consequence needs no drift at all.**
+
+**The defect was an ordering, not a table.** `load_history` decoded the whole record with
+`RunResult.from_dict` inside the same `try` that read the file, so *any* body this build cannot
+decode landed on `unparseable` with `runId=None` and `benchSchemaVersion=None` — before the pack
+filter or the schema branch below it ever ran. Both of those branches were therefore reachable
+only for a future record whose *body shape had not changed*, which is precisely the future record
+that would not have needed the version bump: `BENCH_SCHEMA_VERSION`'s own docstring says the
+integer increments when the on-disk shape changes in a way a reader must branch on. The guard was
+tested only on the case it was not written for.
+
+Two measured consequences, neither involving any drift of `_AGGREGATE_BY_KIND` (a well-formed
+record, a complete fingerprint block, the constant exactly as shipped):
+
+- **The comment above the schema branch made a claim that was false of the very record it
+  describes.** Review m-1 fixed "another pack's future-schema record is surfaced as this pack's
+  exclusion" on the grounds that "its `packId` is right there and readable". It was just as
+  readable in a record whose body had also changed — and that record was still reported in a
+  `tool-caller` comparison's `INVALID RESULTS EXCLUDED` block.
+- **A record left by a later build was reported as file corruption.** "Upgrade the tool" and
+  "restore the file" are different operator actions, and the AC-2 line printed the second for
+  both, under a filename rather than a run id.
+
+Reached through two independent decoders — an unknown aggregate kind (`_AGGREGATE_BY_KIND`'s
+`KeyError`) and an unknown metric tag (`_metric_from_dict`'s `ValueError`) — so P14-4 named one
+instance of a general defect. The `from_dict` and `_metric_from_dict` comments that documented
+`unparseable` as the intended landing place were half right: raising is theirs to decide, the
+diagnosis is the reader's, and both now say so.
+
+**The fix:** the **envelope** — `runId`, and the fingerprint's `packId` and `benchSchemaVersion` —
+is parsed first and separately, through `Fingerprint.from_dict` rather than off the raw dict so
+that how a stored fingerprint is read keeps one home. The pack filter and the schema branch then
+run on it, and the body is decoded afterwards. Three outcomes, all behavioural:
+
+| the file | before | after |
+|---|---|---|
+| envelope unreadable (truncated, no `runId`, no `fingerprint` block) | `unparseable`, `None`/`None` | unchanged — still surfaced even under another pack's id (m-1's boundary) |
+| envelope readable, declares another pack | `unparseable`, this pack's finding | dropped, as m-1 already promised for its readable sibling |
+| envelope readable, declares a schema this build does not know | `unparseable`, `None`/`None` | `unknown_schema`, naming the run and the schema |
+| envelope readable, declares a **known** schema, body still will not decode | `unparseable`, `None`/`None` | `unparseable`, **named** — the record claims a contract it does not meet |
+
+**`InvalidRecord.reason` gained no fourth value, though the unit had authority to add one.** The
+last row is what makes that right: a record claiming a schema this build knows and still failing
+to decode is damaged or non-conforming, not from the future, and answering `unknown_schema` would
+launder it into a tooling-version excuse. Reusing the three existing values also makes the two
+future-schema populations — body decodable or not — indistinguishable in the report, which is the
+point: whether this build happens to choke on the body is an accident of which fields the bump
+changed and must not change the diagnosis. `report.py` needed no change; its block reads `reason`
+generically, verified by rendering both new cases end to end.
+
+**Verification:** eight new tests in `tests/test_results.py`, six red before the change (the two
+envelope-reach tests are green either way by design — they guard against the fix *widening* the
+silent drop). Five mutations, each applied alone and restored by file copy with `diff -q`:
+restoring the pre-fix ordering kills 6; answering `unknown_schema` for a known-schema decode
+failure kills 4 (including two tests that predate this unit, which is independent evidence the
+classification matches what the suite already demanded); a tolerant envelope read
+(`raw.get(...)`) kills 2; dropping `runId` or `benchSchemaVersion` from the named-`unparseable`
+record kills 2 each. `.venv/bin/python -m pytest -q` from `model-bench/` → **920 passed, 3
+deselected**, exit 0 — `tests/test_results.py` alone went 68 → 76; the rest of the rise over the
+893 this unit started from is three concurrent units' work landing in the same tree, not this
+one's. `.venv/bin/python -m ruff check .` → `All checks passed!`.
+
+**No new constant, set, table or `Literal`** — so `AGENTS.md`'s guard-reach convention has nothing
+to bind here; the reach that *is* new (which fields must be legible to classify a record) is
+pinned behaviourally, one consequence per member, by
+`test_a_record_whose_envelope_is_unreadable_is_never_pack_filtered`.
+
 ## 2026-09-09 — S2 U82: closing impl review Pass 14's five guard-reach gaps (P14-1..5), and Pass 15's correction to the convention that closes them
 
 **What:** `docs/reviews/small-model-benchmarking-impl.md` Pass 14 audited every guard-reach
