@@ -4874,3 +4874,150 @@ failed** under M11.
 
 **Q.8 — P17-8's fix, run.** `convo.assemble` monkeypatched to advance the stub clock 3 ms, expected
 `3 + 66 + 10`: **1009 passed** as shipped · **1 failed** under M9.
+
+---
+
+## Pass 18 — 2026-09-10
+
+### 1. Scope & verdict
+
+**Reviewed:** commit **`1c9972b`** (U104, Pass 17's fix round) — the whole diff: `modelbench/convo.py`
+(+85/−8), `tests/test_convo.py` (+367/−16), `docs/HISTORY.md` (+84). Confirmed out of scope and
+untouched: `packs.py`, `roles.py`, `tests/fixtures/packs/` — `git show 1c9972b --stat` names only
+the three files above. Judged against Pass 17's nine findings (P17-1..P17-9, this document,
+`## Pass 17` §3) and Pass 17's own disposition table (§4), which is what this pass extends.
+
+**Isolation.** `git archive 1c9972b model-bench | tar -x` into a scratch dir; `sitecustomize.py`
+strips the `__editable__` meta-path finder; `modelbench.__file__` asserted inside the snapshot on
+every probe (`.../scratchpad/p18/model-bench/modelbench/__init__.py`, never the working-tree path).
+Baseline at the snapshot: **1020 passed, 3 deselected**, `ruff check .` clean. All mutations
+`PYTHONDONTWRITEBYTECODE=1`, one at a time, restored by file copy and verified with `diff -q`
+(`RESTORED-OK` every time). The repository working tree was not touched. **11 mutations this pass.**
+
+**CPG: considered, not relevant — no Code Property Graph is loaded for `model-bench`; every
+judgement below is a mutation actually run against the isolated snapshot or a construction site
+actually read in full.**
+
+**Verdict: approve.** **0 blockers, 0 majors, 1 minor, 0 nits.** All nine of Pass 17's findings are
+closed — each fix reddens under the mutation that reproduces the finding it claims to close, and no
+fix reintroduces or masks a different one. One genuinely new issue surfaces under mutation that
+neither Pass 17 nor this round's own `HISTORY.md` entry anticipated: P17-2's and P17-6's fixes
+interact, so one of the three trace-contract layers is not as independently reachable as the
+closing `HISTORY.md` entry (*"each dies to its own deletion"*) claims. It does not indicate a
+production defect — every mutation that matters is still caught — so it is a minor finding, not a
+blocker.
+
+### 2. Per-finding disposition, each re-derived by mutation
+
+| # | Verdict | Evidence |
+|---|---|---|
+| **P17-1** | **Closed** | Resetting `_replay_structured`'s cursor to `0` per iteration (the exact defect the finding names): **1 failed** (`test_assemble_structured_replays_every_iteration_with_its_own_return_value`), 1019 passed — nothing else moves. The renamed test (`test_assemble_structured_replays_an_iterations_tool_calls_and_its_return_value`) is checked against its own one-iteration fixture (`tool_calling_prior_turn`) and the new name ("an iteration's ... its return value", singular) matches what that fixture actually exercises — it no longer claims "every iteration" |
+| **P17-2** | **Closed, with a new coupling — see P18-1** | Deleting the per-call `_check_trace_contract` call site alone: **2 failed** — the intended `SkewEnvironment` test, **and** a second, unintended one (`test_drive_refuses_an_environment_that_loses_an_entry_between_two_calls`). See P18-1 |
+| **P17-3** | **Closed (unconditional half only)** | Reverting `env.dispatch` to a bare, unwrapped call: **2 failed** (the naming test and the fails-closed test), 1018 passed. `ToolDispatchFailed(RuntimeError)` is a sibling of `TraceContractViolated`, not a subclass (`convo.py:319`); carries `toolName`/`turnIndex`; `from exc` chains `__cause__` (verified both in the source and via `excinfo.value.__cause__` in the test). `drive`'s docstring now reads *"Anything else **from `llm`**"* (`convo.py:600`), correctly scoping the propagation rule now that a second, differently-caused exception exists. The record-versus-refuse design question is untouched, as instructed, and is stated as open at the class and in `HISTORY.md` |
+| **P17-4** | **Closed, and the added reach pin is worth keeping** | Widening `except LMStudioCallFailed` to `except LMStudioError` (with the needed import added for the mutation to even compile): **2 failed** (`raised3`, `raised4` in the propagate parametrize) — exactly Pass 17's own prediction, reproduced independently. Reach-pin binding verified both directions: removing `ToolCallingIneligible` from the test's own `_UNCAUGHT_LMSTUDIO_SUBCLASSES` tuple (shrink) reddens `test_the_lmstudio_subclasses_...` with a set-difference assertion failure. This is small (12 lines), directly closes the docstring's prior over-claim, and both directions of the guard-reach convention hold — worth keeping, not unnecessary complexity |
+| **P17-6** | **Closed for reachability; not fully independent — see P18-1** | Deleting the per-iteration check alone: **1 failed**, only its own test. Deleting the per-turn check alone: **1 failed**, only its own test. Mutating `_iteration_exchange`'s `no-dispatch-record` branch to reuse the previous record instead of refusing: **1 failed**, only `test_assemble_names_a_dispatchable_call_with_no_record_instead_of_reusing_one`. All three of Pass 17's named gaps (turn-level check, iteration-level check reachability, `no-dispatch-record` branch) now have a reaching test. The one asymmetry is P17-2's per-call layer — P18-1 |
+| **P17-7** | **Closed** | Flipping `plaintext`'s flattened-history message role from `"user"` to `"system"` (`convo.py:557`): **1 failed** (`test_the_two_reply_text_modes_differ_on_role_ownership_alone`), 1019 passed. The contrast is real and independently checked: `plaintext` → `["system", "user", "user"]`, both replies quoted inside the single `user`-owned message; `structured-replies-only` → `["system", "user", "assistant", "user", "assistant", "user"]`, each reply its own `assistant` message |
+| **P17-8** | **Closed** | Moving `start = time.monotonic()` (`convo.py:693`) to after the `assemble` call: **1 failed** (`test_drive_turn_wall_clock_brackets_the_whole_turn_assembly_included`), expected `76.0` got `79.0` (the reverse of the diagnostic direction — confirming the fixture's `assemble_ms=3.0` really is on the clock as shipped) |
+| **P17-9** | **Closed** | `TurnTrace.wallClockMs` is `float` (`convo.py:253`). `grep -rn "TurnTrace(" modelbench/*.py` finds exactly **one** construction site (`convo.py:766`), inside `_drive_turn`'s single `return` statement, reached on every code path including a turn whose first call raised — no branch skips it, so `None` cannot occur. Cross-checked against the plan: `docs/plans/small-model-benchmarking.md`'s Appendix A `TurnTrace` row (line 7840, v1.30) states most fields' types (`chatResults: tuple[ChatResult, ...]`, `iterations: int`, `finalReplyText: str \| None`) but lists `wallClockMs` with **no type annotation at all** — neither `float` nor `float \| None`. That is not a contradiction of the widening this unit shipped, but it is a gap the appendix's own rule 4 (track shipped code exactly) would want closed the next time that row is touched — reported below as P18-2, not blocking |
+
+### 3. Findings
+
+**P18-1 (minor) — the per-call and per-iteration trace-contract layers are not independently
+reachable in the direction `HISTORY.md` claims.** `HISTORY.md`'s closing entry for this unit says
+"Each of the three layers now has a test that only that layer can pass, and each dies to its own
+deletion." Measured: deleting the **per-iteration** check alone, or the **per-turn** check alone,
+each reddens exactly one test (§2 above). Deleting the **per-call** check alone reddens **two**:
+its own (`test_drive_refuses_an_environment_whose_per_call_record_count_is_skewed`) and the
+per-iteration layer's own control fixture
+(`test_drive_refuses_an_environment_that_loses_an_entry_between_two_calls`, built on
+`ReadMutatingEnvironment`, which drops its oldest entry on every `trace()` *read*). The mechanism:
+`ReadMutatingEnvironment`'s redness depends on the exact *count* of `env.trace()` reads taken
+between two dispatches, not on which check is present. As shipped, the per-call check contributes
+one of those reads; deleting it changes the read count from four to three within the one-call
+iteration this test drives, which shifts *which* read sees the record and makes the per-iteration
+check's own comparison balance (`1 - 0 == 1 dispatched`) instead of catching the drop. The
+production guard is unaffected — every mutation that must be caught still is, including this one
+(P17-2's own test still reddens) — but the *iteration*-layer test's pass, as shipped, is
+incidentally propped up by the per-call layer's read, not solely by the per-iteration check's own
+logic, which is the opposite of what "each dies to its own deletion" claims. *Suggested fix:* a
+`ReadMutatingEnvironment` fixture for the per-iteration layer that does not share this read-count
+coupling — e.g., one that drops an entry only on the **N-th** read counted from its own
+construction (so the per-call check's extra read is inert to it), or a docstring correction in
+`TraceContractViolated` and `HISTORY.md` narrowing the independence claim to the two layers it
+actually holds for (per-iteration, per-turn) and naming the per-call/per-iteration coupling as
+known and accepted. Either is a test-fixture-only change; nothing in `convo.py`'s production logic
+needs to move.
+
+**P18-2 (nit) — Appendix A's `TurnTrace` row omits `wallClockMs`'s type entirely, unlike its
+sibling fields, and so does not reflect this unit's `float \| None` → `float` widening.**
+`docs/plans/small-model-benchmarking.md:7840` (v1.30) lists the tuple with per-field type
+annotations for `chatResults`, `iterations`, `finalReplyText`, but bare `wallClockMs` with none —
+neither the old `float \| None` nor the new `float`. Not a contradiction (an absent annotation
+asserts nothing), and explicitly out of this diff's scope to fix, but it is exactly the kind of
+staleness the appendix's own rule 4 exists to catch, and P17-9 is now the second finding in this
+coordination to touch this exact field without the row picking up its type. *Suggested fix, for
+whoever next revises Appendix A (not this unit):* one clause, `wallClockMs: float`, alongside the
+existing v1.27/v1.25/v1.26 provenance notes already on that cell.
+
+### 4. What's solid
+
+- **Every one of Pass 17's nine findings closes under the mutation that reproduces the finding
+  itself**, re-derived independently rather than taken on `HISTORY.md`'s word — eight of nine with
+  no side effect at all, and the ninth (P17-2) closes correctly while exposing a test-design
+  coupling that is itself new information, not a re-litigation.
+- **The exception design for P17-3 is careful about scope**: sibling rather than subclass (so a
+  `except TraceContractViolated` elsewhere cannot accidentally swallow a dispatch failure),
+  `__cause__` chained rather than swallowed, `toolName`/`turnIndex` on the exception so a caller
+  need not re-parse a message, and the record-versus-refuse question stated as open in three places
+  (the class docstring, `drive`'s docstring, `HISTORY.md`) rather than answered by omission.
+- **The reach pin added for P17-4 is genuinely bidirectional and cheap** — 12 lines that bind a
+  docstring's *"two further subclasses"* claim to `LMStudioError.__subclasses__()` itself, so a
+  third subclass added to `lmstudio.py` in the future reddens here instead of silently joining an
+  uncaught set nobody re-counted.
+- **`ruff check .` is clean and the suite is green at 1020 passed** (up from Pass 17's 1009; the
+  net matches the nine new/renamed test functions plus two new parametrize cases), all measured
+  against the isolated snapshot, never the working tree.
+
+### 5. Open questions
+
+None. Nothing above reopens Pass 17's gate or blocks on unbuilt work. P18-1 is actionable entirely
+inside `tests/test_convo.py`'s existing fixtures; P18-2 is a one-clause plan edit for whichever unit
+next touches Appendix A's `TurnTrace` row (not this one — the plan is explicitly out of this diff's
+scope per this pass's brief).
+
+---
+
+### Appendix R — Pass 18 evidence
+
+**R.0 — isolation.** `git archive 1c9972b model-bench | tar -x -C <scratch>/p18`; `sitecustomize.py`
+strips the `__editable__` meta-path finder; `PYTHONPATH=<scratch>:<scratch>/p18/model-bench`;
+`modelbench.__file__` asserted from inside the snapshot on every run. Baseline **1020 passed, 3
+deselected**, `ruff check .` clean. Every mutation restored by `cp` from a pristine copy and
+verified with `diff -q` (`RESTORED-OK` each time).
+
+| # | Mutation | Result | Finding |
+|---|---|---|---|
+| R1 | `_replay_structured` cursor reset to `0` per iteration | 1 failed | P17-1 |
+| R2 | per-call `_check_trace_contract` call site deleted (kept `before_call = list(env.trace())`) | **2 failed** | P17-2, P18-1 |
+| R3 | per-iteration `_check_trace_contract(after_iteration, ...)` call deleted alone | 1 failed | P17-6 |
+| R4 | per-turn `_check_trace_contract(after, before_turn, ...)` call deleted alone | 1 failed | P17-6 |
+| R5 | `env.dispatch` unwrapped (no `ToolDispatchFailed`, bare propagation restored) | 2 failed | P17-3 |
+| R6 | `except LMStudioCallFailed` → `except LMStudioError` (`LMStudioError` imported for the mutation) | 2 failed (`raised3`, `raised4`) | P17-4 |
+| R7 | `_UNCAUGHT_LMSTUDIO_SUBCLASSES` shrunk by one member (test-side) | 1 failed | P17-4 reach pin, shrink direction |
+| R8 | `_iteration_exchange`'s `no-dispatch-record` branch reuses the previous record instead of refusing | 1 failed | P17-6 |
+| R9 | `plaintext` flattened-history message role `"user"` → `"system"` | 1 failed | P17-7 |
+| R10 | `start = time.monotonic()` moved after the `assemble` call | 1 failed (`76.0 != 79.0`) | P17-8 |
+| R11 | `grep -rn "TurnTrace(" modelbench/*.py` (not a mutation — a construction-site sweep) | 1 site, always reached | P17-9 |
+
+**R.2 — P18-1's mechanism, traced.** With `ReadMutatingEnvironment` (drops its oldest entry on
+every `trace()` read) and one dispatch in one iteration: as shipped, four `env.trace()` reads occur
+before the per-iteration comparison (`before_iteration`, `before_call`, the per-call check's own
+`after`-read, `after_iteration`), and the record is consumed by the per-call check's read, leaving
+`after_iteration` empty against `before_iteration` empty and `dispatched=1` — a `0 - 0 != 1`
+mismatch, which is what the per-iteration test's `match="grew by 0 entries across turn 0's
+iteration 1"` pins. Under R2 (per-call check deleted, `before_call` read kept), only three reads
+occur; the record survives to be seen once at `after_iteration`, so `1 - 0 == 1 == dispatched` and
+the per-iteration check passes clean — the mutation `SkewEnvironment` targets is caught, but the
+unrelated `ReadMutatingEnvironment` test's own expected failure silently stops occurring, which is
+why deleting the per-call check reddens the *test* (it now asserts a raise that no longer happens)
+rather than reddening only through the per-call layer's own logic.
