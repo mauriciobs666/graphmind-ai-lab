@@ -2,6 +2,20 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-10 — P18-1 (minor): trace-contract test-fixture coupling documentation
+
+**What:** Impl review Pass 18 (P18-1) identified that the test fixture for the per-iteration
+trace-contract check has a known coupling with the per-call check, via the fixture's read-count
+behavior: deleting the per-call check alone does not redden the per-iteration test, because the
+fixture's drop timing depends on when that read occurs. The production guard logic is unaffected
+and all detectable defects are still caught. This is a test-fixture issue only, not a production
+defect.
+
+**How:** Narrowed the independence claim in `TraceContractViolated`'s docstring and `HISTORY.md`
+entry for the P17-2 closure (this unit's trace-contract work) from "all three layers are
+independent" to "per-iteration and per-turn layers are independent; per-call and per-iteration
+have a known test-fixture coupling". No production code changed.
+
 ## 2026-09-10 — P17-5: the manifest→`PromptConfig` route, closing the gap Pass 17 left to this unit
 
 **What:** the one Pass 17 finding explicitly left to `packs.py` — **P17-5**, that `validate_pack`
@@ -66,8 +80,13 @@ fact. `SkewEnvironment` is that environment; before the fix it drove the turn to
 no refusal. The per-iteration and per-turn re-takes of the **prefix** check are kept and are not
 redundant: a `trace()` that mutates the environment on *read* moves the record **between** two
 calls, where a per-call check reading its own `before` afterwards cannot see it, and on a turn that
-dispatches nothing at all only the turn-level re-take is left. Each of the three layers now has a
-test that only that layer can pass, and each dies to its own deletion.
+dispatches nothing at all only the turn-level re-take is left. The **per-iteration and per-turn
+layers are independently reachable** (each dies to its own deletion), while the **per-call and
+per-iteration layers have a test-fixture coupling** (impl review Pass 18, P18-1): the
+`ReadMutatingEnvironment` fixture's drop timing depends on whether the per-call check's extra
+`trace()` reads occur, so deleting the per-call check does not cause the per-iteration test to
+redden — a test-fixture issue only, the production guard logic is unaffected and all detectable
+defects are still caught.
 
 **2. A pack's `ToolEnvironment.dispatch` that raises has a name: `ToolDispatchFailed` (P17-3, the
 unconditional half).** It propagated bare, and `drive`'s own docstring rules *"anything else"* to

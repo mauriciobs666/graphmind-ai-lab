@@ -179,11 +179,15 @@ class SkewEnvironment(StubEnvironment):
 
 
 class ReadMutatingEnvironment(StubEnvironment):
-    """The **pack** defect the per-call check is structurally blind to: `trace()` drops its oldest
-    entry every time it is *read*. A check that reads its own `before` and `after` around one
-    `dispatch` sees a perfectly balanced pair, because the damage happens on the reads themselves
-    and between the calls — which is why the per-iteration and per-turn re-takes of the prefix
-    check are not redundant with the per-call pair.
+    """The **pack** defect the per-iteration check is designed to catch: `trace()` drops its
+    oldest entry on every *read*, so the entry's visibility depends on how many reads occur
+    between two comparison points — which is why the per-iteration and per-turn re-takes of the
+    prefix check are needed even when the per-call check is present. The per-call and per-iteration
+    checks are not independently reachable via deletion (impl review Pass 18, P18-1): whether the
+    per-call check's extra reads occur affects when the drop happens, changing which check fires
+    first. This is a test-fixture coupling only — the production guard logic is unaffected and
+    all detectable defects are still caught (`TraceContractViolated` docstring for the full
+    explanation).
     """
 
     def trace(self) -> list[DispatchRecord]:

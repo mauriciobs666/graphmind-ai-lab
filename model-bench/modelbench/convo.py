@@ -310,10 +310,15 @@ class TraceContractViolated(RuntimeError):
     **0** entries for one call and **2** for the next balances the aggregate exactly, and the turn
     then completes clean with the first call's `tool` message carrying the second call's return
     value — the very substitution the paragraph above says is checked. Check (1) is additionally
-    re-taken over the whole iteration and again over the whole turn, and those two are not
-    redundant with the per-call pair: a `trace()` that mutates the environment on *read* moves the
-    record **between** two calls, where a check reading its own `before` afterwards cannot see it,
-    and on a turn that dispatches nothing at all only the turn-level re-take is left.
+    re-taken over the whole iteration and again over the whole turn. The **per-iteration and
+    per-turn re-takes are independent of each other**: a `trace()` that mutates the environment on
+    *read* moves the record **between** two calls, where a check reading its own `before`
+    afterwards cannot see it, and on a turn that dispatches nothing at all only the turn-level
+    re-take is left. The **per-iteration check has a known coupling with the per-call check**, via
+    the test fixture's read-count behavior: deleting the per-call check alone does not cause the
+    per-iteration test to redden, because the fixture's drop timing depends on when that read
+    occurs; the production guard logic is unaffected and all detectable defects are still caught
+    (impl review Pass 18, P18-1).
     """
 
 
