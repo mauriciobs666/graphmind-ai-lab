@@ -2,6 +2,47 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-09-10 — `kaizen_team` distillation pass 2, unit U53 (`coder`'s second, fresh 1-entry chunk): 1 promoted, 0 discarded, 0 kept open — cleared, **folded into `coder.md` itself**
+
+- **What:** `cobb` ran `agent-maintenance` §5 over `coder`'s one fresh `PRODUCED` entry
+  (`a1e3c9d2-6f4b-4a2e-9c1a-3d5f7b8e2c41`, dated 2026-09-10), re-queried fresh at dispatch — a new
+  arrival from a different concurrent session, since `coder`'s inbox was fully drained at U49
+  (`0059ec5`). Current-shape (`(:Agent {agentId:'coder'})-[:PRODUCED]->`). Paged past the
+  `cypher` tool's 300-char truncation via `substring(k.fact/k.evidence, n, 240)` cross-checked
+  against `size()` (336-char fact, 422-char evidence) before judging it.
+- **The fact:** when another agent concurrently modifies shared files in the same working tree, a
+  full-suite failure can be pre-existing and unrelated to your own diff — confirm by checking
+  whether the failing fixture/assertion touches code your diff never modified, before assuming
+  your change broke it. Evidence: model-bench Step 0 unit (U115), 11 `test_report.py` failures
+  traced via `git --no-pager diff` to a concurrent sibling unit (U114); the offending fixture was
+  untouched by the reporting unit's own diff, confirming the failures were pre-existing/concurrent
+  rather than self-caused.
+- **Checked for prior coverage before promoting** (this pass's own recurring failure mode is a
+  stale/duplicate promotion): `claude/teco/teco.md`'s U48-promoted shared-tree fact
+  (`f3a1c9e2`, "shared git tree wiping a delegate's edits") is a **different mechanism** — data
+  loss/reversion detected by the *coordinator* integrating results — not test-failure
+  misattribution diagnosed by the *implementer* mid-run; not a duplicate. `coder/kaizen/history.md`'s
+  own 2026-08-?? entry (`c1e8f4b2`'s neighbor, promoted into `coder.md` step 5: report the
+  *attributed* delta when a suite baseline can move under you) is the closest sibling — same step,
+  same "shared tree" theme, but a distinct discipline: that clause is about honest **reporting** of
+  counts, this fact is about **diagnosing** a failure's cause before reporting anything. Grepped
+  `skills/python-web-quirks/SKILL.md`, `claude/tdd-engineer/guard-testing-techniques.md`,
+  `claude/analyst/review-techniques.md`, and `claude/AGENTS.md` for "pre-existing"/"full-suite"/
+  "sibling unit"/"concurrent" — no existing statement of this specific diagnostic technique found.
+- **Routing.** `suggestedHome` said `prompt`; agreed. Ruled out `skills/python-web-quirks/SKILL.md`
+  — the fact is a general shared-working-tree diagnostic discipline, not a Python/pytest-library
+  quirk (the skill's scope is Python's own runtime/library behavior, not git-coordination
+  process). Ruled out `teco.md`/`claude/AGENTS.md` — those are the *coordinator's* integration-time
+  concerns (has a delegate's work been wiped/reverted); this fact fires at the *implementer's* own
+  verification step, before any report reaches a coordinator. Folded into `claude/coder/coder.md`
+  step 5 ("Verify and report"), directly after the existing attributed-delta sentence it
+  complements — same bullet, same shared-tree theme, no new section.
+- **Files touched:** `claude/coder/coder.md` (+50 words: 1,269→1,319, one sentence added to the
+  existing step 5 bullet, no new sections) · this file.
+- **Graph state after:** `coder` 0 produced / 0 mentioned (drained again). `tico` orphan
+  (`e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e`) untouched. `model-bench/` untouched (no test/backup/doc
+  file there was read for write purposes, only the entry's own evidence text).
+
 ## 2026-09-10 — `kaizen_team` distillation pass 2, unit U49 (`coder` inbox, 4 raw entries): 4 promoted, 0 discarded, 0 kept open — all 4 cleared, **none of them into a `coder` artifact**
 
 - **What:** `cobb` ran `agent-maintenance` §5 over the four `coder`-produced `kaizen_team` entries
