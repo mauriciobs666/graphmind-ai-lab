@@ -12,6 +12,7 @@
     "historyReplay": "structured",
     "representToolSchemasEachTurn": true,
     "historyTurns": 0,
+    "maxIterationsPerTurn": 8,
     "temperature": 0.0,
     "maxTokens": 1024
   },

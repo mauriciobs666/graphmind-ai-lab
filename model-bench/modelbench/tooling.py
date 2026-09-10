@@ -21,7 +21,14 @@ Two names, taken verbatim from §4 S2's code sketch and Appendix A:
   catalog) is the pack's own business, and this module has no opinion on it.
 * **`DispatchRecord`** — one entry of `ToolEnvironment.trace()`, `(name, rawArguments,
   parsedArguments, returnValue, timestamp)` per Appendix A. `rawArguments` is what the model's tool
-  call actually carried (JSON-parsed into a mapping, but not otherwise interpreted);
+  call actually carried, JSON-parsed into a mapping but not otherwise interpreted — **and the claim
+  is now true of the mechanism, which it was not** (plan gate P15-4(ii)): `drive` used to degrade
+  an unreadable `arguments` value to `{}` and dispatch it anyway, so unparseable JSON, a JSON
+  array, a JSON scalar and a genuine `{}` all arrived here as the same four bytes and the field
+  whose name promises the model's own object carried the harness's fallback. Such a call is no
+  longer dispatched at all (`convo._parse_tool_arguments` returns `None` for it and §4 S2's replay
+  contract answers it with a `tool` message naming the failure), so every `rawArguments` mapping
+  that reaches this type is one the model really sent.
   `parsedArguments` is what the environment's own dispatch logic made of them after its own
   unit/boundary handling — the distinction FR-8(d)'s boundary-rule scoring needs, and it is the
   environment implementation's job to keep the two apart, not this module's: a `dispatch()` that
@@ -65,16 +72,20 @@ class ToolEnvironment(Protocol):
         """Execute one tool call against this environment's (in-memory, per-conversation) state
         and return the call's result. `arguments` is already a mapping — parsed from the model's
         raw tool-call JSON by the caller (`modelbench.convo.drive`), never a JSON string here.
-        Implementations are expected to append a `DispatchRecord` to their own internal trace on
-        every call, since `trace()` below is this environment's own record, not something the
-        harness reconstructs from the outside."""
+        Implementations must append **exactly one** `DispatchRecord` to their own internal trace
+        on every call, since `trace()` below is this environment's own record, not something the
+        harness reconstructs from the outside. `modelbench.convo.drive` **enforces** that count
+        rather than trusting it: a turn's dispatch slice and the replayed `tool` message per
+        `tool_calls` entry are both read positionally out of the new tail (plan gate P15-5)."""
         ...
 
     def trace(self) -> list["DispatchRecord"]:
         """Every dispatched call so far, in call order — FR-10's ground truth half. Growing across
-        one whole conversation; `drive()` isolates one turn's share by diffing `len(trace())`
-        before and after that turn's dispatches, so this must return calls in a stable order and
-        never drop or reorder an earlier entry on a later call."""
+        one whole conversation; `drive()` isolates one turn's share as the tail beyond a prefix it
+        read before that turn's dispatches, so this must return calls in a stable order and never
+        drop or reorder an earlier entry on a later call. `drive()` **checks** that prefix on every
+        iteration and raises `convo.TraceContractViolated` when it has moved — a pack defect, and
+        pack defects fail closed (plan §3.3, gate P15-5)."""
         ...
 
     def state(self) -> dict[str, Any]:
