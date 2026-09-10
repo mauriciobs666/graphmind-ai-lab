@@ -1,6 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.24 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.25 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+
+2026-09-09 — v1.25 (M11-2): five rulings routed to `architect`, four of them plan-semantics questions no implementer owned. **Item 1 — a prior turn is replayed from what the model *actually* produced, and U78's scripted-`expect` replay (`convo.py` at `40a9bc8`) is invalidated.** The clause it cited — §3.8.4's *"the harness never carries hidden state between turns beyond what the configuration says it carries"* — constrains the replay's **shape** and forbids **undeclared** state; no statelessness rule was ever written here, pinned rather than asserted — `git show 40a9bc8:docs/plans/small-model-benchmarking.md | grep -i -c stateless` → **0**, at the tip U78 built against, and pinned to that sha because this note and §3.8.4 now discuss the absent rule by name, which no live grep can distinguish from the rule itself — and a prior turn's real output replayed under a declared `historyReplay` is neither hidden nor undeclared, so the clause never decided whose content is replayed. What decides it is the prior art: `falkor-chat/docs/reviews/salesperson-tool-reliability-ml.md` §4.1 attributes the documented turn-4 collapse to **the model's own prior turns, replayed as ordinary chat with no visible evidence a tool was ever used** — a precedent a textbook replay makes identical for every conversation and every model, so §3.8.4's validation target and §5 test 19(b) stop measuring the documented phenomenon: §8.2's persistence half (zero recoveries in 121 post-onset turns) is unreproducible by construction, and its onset half survives or not according to which `historyReplay` value the pack happens to declare. **The claim is deliberately narrower than *the collapse cannot happen*** — a textbook prefix in a reply-text mode presents the same stimulus shape, so onset may well fire; what it would not be is evidence. Three further consequences, each independent of that one: the per-turn hazard's *clean through t−1* conditioning exists to hold accumulated contamination out of the denominator and has nothing to condition away once every turn sees the same textbook prefix, so the statistic stops separating the two hypotheses FR-9 names; `drive` dispatches real calls into a stateful `ToolEnvironment`, so a scripted context and the FR-10 ground-truth state disagree from the first failed turn onward, manufacturing failures that are the harness's; and U78's determinism-probe argument inverts — `-ml` §4.5.1(iii)'s probe object is the **conversation-level observation** that enters `n`, so a re-run that diverges mid-conversation is exactly the flakiness the probe must report, and scripted replay would return `identical` on a run whose observation did not reproduce, buying `basis: "by-construction"` for a design effect the evidence does not support. **What follows, all built from the plan alone:** §3.3's `historyReplay` gains a fourth value, `structured-replies-only` — native roles, the model's real final reply text, no tool scaffolding — because that is falkor-chat's executor shape and no existing value reaches it, which made §3.3's own *"reproducing falkor-chat's executor shape is one pack's settings"* false; `tool-caller-shop-assistant` declares it, and R-3's bisect ladder is now the enum; and `drive` gains the bounded per-turn iteration loop `-ml` §4.1's `I(t)` and §4.2(f)/(g) already presuppose, since one call per turn leaves a tool-calling turn with no final reply to replay or to score containment against. No conversation datum is re-authored and the 2026-09-02 sizing decision is untouched — §4.5.2's ~1.3 s/turn basis was measured on falkor-chat's own multi-step executor and already includes the loop. **Item 2 (F-S2-1)** — §4 S2's done-condition cited *"§2.5's captured 19-model response"* and no such artifact exists; §2.5 is a narrative probe record and now says so, the done-condition names the real, per-entry-provenanced `tests/fixtures/lmstudio/catalog.json`, and the verbatim capture rides the live session R-1 already requires. **Item 3** — §3.3's role-specific half is mechanised as `check_sampling_contract`'s **third** route against a role→analysis-unit-field table in `roles.py`, the existing closed-role home; P12-7's fixture passed both existing routes while violating the rule, which is what proves two routes were not two. **Item 4 (P13-7)** — *degenerates to `residencySource` alone* means **compare it**: outcome and result are different columns, `"unavailable"` names the comparands that were missing and `stale` carries the one that was not. **Item 5 (P13-9)** — §4 S2's `warm_up` sketch gains `was_resident_before`.
 
 2026-09-09 — v1.24 (M11-1): §4 S1e Table H's landed `:444` row is corrected to write out the expression `f17efa2` actually shipped — the row had sketched `bound_by` as re-testing `u_lo`/`u_hi` against the support a second time, spelling `SUPPORT_DIFF_PROPORTIONS[0]`/`[1]` twice each against residuals 2 and 3's stated target of 1 apiece; it now names `lo`/`hi` from the clamp itself and derives `bound_by` from `lo != u_lo` / `hi != u_hi`, with the `max`/`min` identity stated as the reason that is Rule 4a's strict comparison and not a shortcut around it. Verified against the current tree: both residuals read 1. No residual, target, count or enumerating command moves, and Table H's `Landed:` commit stays `f17efa2`, per the landed-table convention. §7 rule 5(b) needed no new clause: the ninth instance of the specification-is-the-defective-party shape, and the rule's existing third-form clause already covers it — this row was written before it, not around it.
 
@@ -229,7 +231,10 @@ re-measured here rather than taken on report. The design consequences are §3.4.
   each carrying `id`, `object`, `type`, `publisher`, `arch`, `compatibility_type`, `quantization`,
   `state`, `max_context_length`, `capabilities` (plus `loaded_context_length` once a model is
   loaded — §2.3). All 19 read `state: "not-loaded"` at probe time, so the clean-box case is real and
-  observable: the residency list is genuinely `[]`, from a probe that succeeded.
+  observable: the residency list is genuinely `[]`, from a probe that succeeded. **This bullet is a
+  narrative record, not a payload** *(v1.25, F-S2-1)*: it names the field set, the count and the
+  aggregate state, and no verbatim response body was ever saved anywhere in this repo. No
+  done-condition, test or fixture may cite it as a capture — §4 S2 did, and is corrected.
 - **`GET /v1/models` cannot substitute for it.** The OpenAI-compatible route returns exactly
   `{id, object, owned_by}` per model — no `state`, no `quantization`, no `arch`, no `type`, no
   `capabilities`. It can populate `modelKey` and nothing else in §3.4.2, which is why §3.4.4a uses
@@ -426,9 +431,10 @@ mismatches to be detectable after the fact.
   "prompt": {
     "systemPrompt": "prompts/system.md",
     "toolSchemas": "tools/schemas.json",
-    "historyReplay": "structured",
+    "historyReplay": "structured-replies-only",
     "representToolSchemasEachTurn": true,
     "historyTurns": 0,
+    "maxIterationsPerTurn": 8,
     "temperature": 0.0,
     "maxTokens": 1024
   },
@@ -449,14 +455,44 @@ mismatches to be detectable after the fact.
 
 Key decisions:
 
-- **`prompt` is the FR-9a carrier.** `historyReplay` ∈ `{structured, plaintext, none}` selects how
-  prior turns are re-presented (native `assistant`/`tool` message scaffolding vs a flattened text
-  transcript); `representToolSchemasEachTurn` and `historyTurns` (0 = unbounded) are separate
-  knobs. `convo.py` implements exactly these three axes and reads them from the manifest — nothing
-  about prompt shape is hardcoded, and nothing is imported from any product. Reproducing
-  falkor-chat's executor shape is then *one pack's settings*, and the settings themselves become a
-  testable variable (two packs differing only in `historyReplay` answer "is the replay style what
-  breaks at turn 4?").
+- **`prompt` is the FR-9a carrier, and it declares the replay's *shape*. Whose content is replayed
+  is not a knob: it is always the model's own, from this run** *(v1.25 — the ruling is §3.8.4's
+  "Prompt assembly" bullet and is not restated here)*. `representToolSchemasEachTurn`,
+  `historyTurns` (0 = unbounded) and `maxIterationsPerTurn` are separate knobs;
+  `historyReplay` selects how prior turns are re-presented, over **four** values on one axis —
+  how much of the prior turn the model is shown:
+
+  | value | what a prior turn contributes to the message list |
+  |---|---|
+  | `structured` | the whole real exchange in native roles: per in-turn iteration, the model's own `assistant` message with its `tool_calls` verbatim, then one `tool` message per call carrying the environment's real return value; then the final `assistant` reply |
+  | `structured-replies-only` | native roles, one `assistant` message per prior turn carrying that turn's **final reply text only** — no `tool_calls`, no `tool` messages, no breadcrumb |
+  | `plaintext` | one flattened `user` message, `User: …` / `Assistant: <final reply text>` per prior turn, likewise with no tool evidence |
+  | `none` | nothing |
+
+  The scripted `user` text is always the script's, at every value — the harness drives the full
+  script and never rewrites a user turn (`-ml` §4.1).
+
+  **`structured-replies-only` is v1.25's, and it exists because this bullet's own
+  *reproducing-the-executor-shape* claim below was false without it.** falkor-chat's executor replays *native* `user`/`assistant` roles carrying only
+  each prior turn's final text, discarding the tool scaffolding used inside that turn
+  (`falkor-chat/docs/reviews/salesperson-tool-reliability-ml.md` §4.1) — a point the three original
+  values do not reach: `structured` shows full tool evidence and `plaintext` quotes the history
+  inside someone else's message rather than presenting it as the model's own turns. Since §4.1
+  attributes the documented collapse to precisely the absence of visible tool evidence in the
+  model's own replayed turns, the difference is the mechanism, not a rendering detail.
+
+  `convo.py` implements exactly these axes and reads them from the manifest — nothing about prompt
+  shape is hardcoded, and nothing is imported from any product. Reproducing falkor-chat's executor
+  shape is then *one pack's settings* — `structured-replies-only`, which is what
+  `tool-caller-shop-assistant` declares — and the settings themselves become a testable variable
+  (two packs differing only in `historyReplay` answer "is the replay style what breaks at turn 4?",
+  and the four values are now a ladder in tool evidence rather than two points and a hole; §6 R-3's
+  bisect is that ladder).
+
+  **`maxIterationsPerTurn` is v1.25's too, and it is pack data with no default** — it is `-ml`
+  §4.1's `I(t)` cap, which §4.2(f) reports `iteration_cap_hit_rate` against, so a harness-side
+  constant would put a number the report analyses outside the content hash. `8` for this pack is
+  falkor-chat's own budget, the one §8.4's `gpt-oss-20b` message-spam defect exhausted.
 - **`metrics` pre-registers the verdict family, and a pack may legitimately have no headline.**
   Two separable fields, because they control different things — `-ml` §3.3 states the split and
   this plan owns the names:
@@ -623,7 +659,11 @@ Key decisions:
     it. Why a required field whose only consumer arrives with §3.2d's path is nonetheless the right
     call, and the discriminator under which it would be removed, are the note's (`-ml` v1.11's
     *"what retires, what stays"*) and are cited rather than restated.
-  - **`validate_pack` enforces the rule twice, by two independent routes.**
+  - **`validate_pack` enforces the rule by three independent routes** *(the third is v1.25's; two
+    was the claim and P12-7 falsified it — a `tool-caller` fixture declaring
+    `pairingKey: ["conversationId", "turnIndex"]`, `analysisUnit: "conversationId"` over 12
+    conversation rows passed **both** existing routes while violating the half this bullet states in
+    prose, and shipped as the suite's positive control)*.
     **(i) Structural:** `analysisUnit` must equal `pairingKey[0]`, and `pairingKey` is ordered
     outermost → innermost. This catches the pack that declares a correct unit against a
     wrongly-ordered key.
@@ -636,6 +676,36 @@ Key decisions:
     arithmetic rather than by intent. It also catches the pack that declares
     `replicatesPerScript: 1` and ships four conversations per script, the case that slips past
     Rule 6's declaration check *and* past Rule 1 at once.
+    **(iii) By the role — the check that catches the *consistently* wrong id, which neither (i) nor
+    (ii) can** *(v1.25, impl-gate Pass 12 OQ-1)*. Routes (i) and (ii) are both satisfied by any
+    self-consistent naming, so the *role-specific* half of this bullet — "for the tool-caller that
+    is `scriptId`, never a conversation id; for the four item-level packs it is `itemId`" — was
+    prose with no mechanism, and the defect it describes shipped. It is mechanised as a **second
+    column on the existing closed role table**: `roles.ANALYSIS_UNIT_FIELD_BY_ROLE`, beside
+    `UNIT_KIND_BY_ROLE`, read through `roles.analysis_unit_field(role)`, and `pairingKey[0]` must
+    equal it.
+
+    | role | `analysis_unit_field` | `unit_kind` (unchanged, `-ml` §3.3) |
+    |---|---|---|
+    | `tool-caller` | `scriptId` | `conversation` |
+    | `guard-judge` | `itemId` | `item` |
+    | `nlq-generator` | `itemId` | `item` |
+    | `chat-responder` | `itemId` | `item` |
+    | `embedder` | `itemId` | `query` |
+
+    **Three things make this a rule and not the per-pack list this bullet rejects.** It is keyed by
+    **role**, and the role set is closed and already lives in `roles.py` — adding a role is a harness
+    change today, adding a *pack* is not, so FR-5 is untouched. It goes in `roles.py` rather than
+    `packs.py` because a role's unit is a property of the role, which is the premise
+    `UNIT_KIND_BY_ROLE` already rests on. And the two columns are **different vocabularies** — a
+    `pairingKey` **component name** against a denominator **noun** — which is why the embedder's row
+    reads `itemId` / `query` and why deriving either from the other is wrong; the function is named
+    `analysis_unit_field`, with `field`, so a call site cannot read it as the noun.
+    **Two assertions keep the table honest rather than decorative:**
+    `set(ANALYSIS_UNIT_FIELD_BY_ROLE) == set(roles.ROLES)`, computed, so a sixth role cannot be
+    added without a unit field; and the negative case is driven **over every role**, each with a
+    `pairingKey[0]` borrowed from another row, by executing `check_sampling_contract` — never by
+    reading the constant back.
 - **Identity is `(packId, packVersion, contentHash)`.** `contentHash` = SHA-256 over the sorted
   relative paths and bytes of every file in the pack directory except `PROVENANCE.md`. Declared
   versions get forgotten; a hash cannot. `compare` flags a mismatch in **either** (AC-3), which
@@ -1121,8 +1191,9 @@ owns the profile key's shape; this owns its provenance and its consequences.
 - **The trip-wire is chat-surface only, and that is a real narrowing rather than an oversight.** Step
   6 compares `runtimeName`/`runtimeVersion`/`residencySource` — from the second `model:chat` run
   onward, the first having back-filled the attested side (§3.4.4); on an embeddings arm the first two do
-  not exist, so the comparison degenerates to a near-constant and the attestation-staleness check is
-  **effectively unavailable on embedding runs**. The alternative — issuing a chat-surface probe call
+  not exist, so **only `residencySource` is comparable there — and it *is* compared** (§3.4.5 point 3,
+  v1.25), which is a real check on a field that today takes one value and a real one on the day it
+  takes two, but no check at all on the runtime. The alternative — issuing a chat-surface probe call
   to obtain a runtime — would JIT-load a second model on a 16 GB box, evicting the one under test at
   a whole model load a side, which trades a stronger check for a corrupted measurement. Recorded as a residual in
   R-1 rather than papered over.
@@ -1226,19 +1297,38 @@ amended to say so. `peakHostRssBytes` is unaffected — it was never a CLI readi
    **When it fires is §3.4.4a's capture-order step 6** *(v1.9, G3-2)*: immediately after the warm-up
    returns, which is the first moment `runtimeName`/`runtimeVersion` exist and the last moment before
    any scored item is consumed. `host.json` is still read at step 1; what step 6 adds is that the
-   *comparison* cannot happen earlier, and must not happen later. **On a `model:embeddings` arm the
-   check degenerates to `residencySource` alone** and is effectively unavailable — §3.4.4a's last
-   bullet says why, and R-1 carries it as the residual.
+   *comparison* cannot happen earlier, and must not happen later.
+
+   **`residencySource` is compared on every path the check runs at all, and "degenerates to
+   `residencySource` alone" means *compare it*, never *give up*** *(v1.25, impl-gate P13-7 / Pass 13
+   OQ-1 — the code at `40a9bc8` read it as give-up and returned `"unavailable"` without comparing
+   anything)*. Two reasons, and the second is the plan's own scope statement one paragraph down:
+   the field is present on both sides of every non-deterministic arm — `attest` always writes
+   `observedAtAttestation.residencySource`, and §3.4.4a's step 3 observes one **before** the
+   warm-up, so an embeddings run has it too — and the trip-wire's stated triggers are an
+   inference-runtime change **or a change of capture surface**, of which `residencySource` is the
+   only comparand that carries the second. Not comparing it makes that half of the stated scope
+   uninstantiated on the embeddings surface and half-uninstantiated on the first chat run, opening
+   exactly when §3.4.4a says the field starts earning its keep — "once there is more than one
+   answer".
 
    **The check has three outcomes, not two, because `attest` cannot observe a runtime** *(v1.10,
-   plan-gate P4-6 — §3.4.4 carries the schema and the reasoning)*. `"first-observation"`: the
-   attested side is absent, so step 6 **back-fills** `runtimeName`/`runtimeVersion`/`runtimeObservedAt`
-   into `host.json` and the run proceeds. `"compared"`: both sides present — equal proceeds, a
-   difference exits `5`. `"unavailable"`: a `model:embeddings` arm, where only `residencySource` is
-   comparable. The outcome is stored on the run as `RunResult.attestationTripWire`, so a reader of a
-   stored record can tell a run that was checked from one that established the baseline — a
-   first-observation run is **not** evidence that the runtime was unchanged, and a record that did
-   not say so would imply it was.
+   plan-gate P4-6 — §3.4.4 carries the schema and the reasoning)*, **and the outcome names the
+   check's *coverage* while `stale` carries its *result*: they are different columns and neither
+   substitutes for the other** *(v1.25)*. `"first-observation"`: the attested runtime side is
+   absent, so step 6 **back-fills** `runtimeName`/`runtimeVersion`/`runtimeObservedAt` into
+   `host.json` and the run proceeds — the two runtime keys are being established and are not
+   evidence of anything, but `residencySource` **is** compared, and on a difference the run exits
+   `5` **and `host.json` is not written**: a baseline runtime must not be recorded against attested
+   values the operator is about to redo. `"compared"`: all three present — equal proceeds, a
+   difference in any one exits `5`. `"unavailable"`: a `model:embeddings` arm, where the two runtime
+   comparands do not exist; the string names *those two*, `residencySource` is still compared, and a
+   difference exits `5` on this path as on the others. So the stored outcome is unchanged from
+   v1.10 on all three paths and the *reach* is not: what a reader of a record learns from
+   `"unavailable"` is which comparands were missing, not that nothing was checked. The outcome is
+   stored on the run as `RunResult.attestationTripWire`, so a reader of a stored record can tell a
+   run that was checked from one that established the baseline — a first-observation run is **not**
+   evidence that the runtime was unchanged, and a record that did not say so would imply it was.
 
    *(v1.8: `lmsCliCommit` was the third comparand and is gone with the CLI (§3.4.4a). The trip-wire
    is therefore **narrower and stated as such**: it fires on an inference-runtime change or a
@@ -1629,7 +1719,7 @@ met — owned by no stage. One table, and each command is assigned to the stage 
 | `index rebuild` | — | Regenerates `results/index.csv` from `results/runs/` | **S1** |
 | `models --tested` | `--pack <id>` · `--role <role>` | Lists models with stored results (`armKind == "model"`); from S2 also intersects with the installed catalog | **S1**, catalog half **S2** |
 | `attest` | `--api-base-url <url>` · non-interactive `--set k=v` | Prompts for the four operator-attested fields, probes LM Studio (§3.4.4a's two-step probe), writes `host.json` (§3.4.4) — with `observedAtAttestation` carrying **`residencySource` only**, since neither probed endpoint exposes a `runtime` and `attest` has no model to call (v1.10, plan-gate P4-6); the two runtime keys are back-filled by the first `model:chat` run | **S2** |
-| `validate --pack <path>` | `--strict` | Runs `validate_pack`: manifest schema, `metrics` block, `sampling` contract (§3.3 — `analysisUnit == pairingKey[0]`, row-count identity, `replicatesPerScript`), ids, provenance, paraphrase rule, pack-module import allowlist, `H ≤ min(script length)` | **S2** |
+| `validate --pack <path>` | `--strict` | Runs `validate_pack`: manifest schema, `metrics` block, `sampling` contract (§3.3's three routes — `analysisUnit == pairingKey[0]`, the row-count identity, and `pairingKey[0] == roles.analysis_unit_field(role)`; plus `replicatesPerScript`), ids, provenance, paraphrase rule, pack-module import allowlist, `H ≤ min(script length)` | **S2** |
 | `run --pack <id> --model <key>` | `--session <id>` · `--reference <key>` · `--warmup <n>` · `--first-call-timeout <s>` · `--request-timeout <s>` | One model × one pack; calls `validate` first and fails closed | **S2** plumbing, first usable **S3** |
 
 **`--no-cold-load` is deleted in v1.9** *(G3-10)*. It survived from v1.7, where it meant "skip the
@@ -2042,9 +2132,77 @@ checks today.
 - **Prompt assembly** is `convo.py` reading the pack's `prompt` block (§3.3). Turn *n* is built by
   replaying turns 1..*n*−1 in the configured shape; the harness never carries hidden state between
   turns beyond what the configuration says it carries.
+
+  **What is replayed is what the model actually produced in *this* run — never the script's
+  `expect`** *(v1.25; this sentence is the ruling, and every other section cites it rather than
+  restating it)*. A turn's `expect` block is a **scoring oracle**: it names what a correct agent
+  should have done, and `scoring/toolcalls.py` is its only reader. A prior turn's replayed content
+  comes from that turn's own record — the model's `ChatResult`s and the environment's
+  `DispatchRecord`s — and the scripted `user` text, which is the script's at every turn because the
+  harness drives the full script (`-ml` §4.1). The clause above decides the replay's **shape** and
+  forbids **undeclared** state; a prior turn's real output is neither hidden (it is in the message
+  list) nor undeclared (`historyReplay` is what declares it), so it never decided this — and no other
+  rule here did either, which the v1.25 revision line pins to `40a9bc8` rather than asserting.
+  **Four reasons, each sufficient alone:**
+  - **The validation target below stops being a measurement of the documented phenomenon.**
+    `falkor-chat/docs/reviews/salesperson-tool-reliability-ml.md` §4.1 attributes the turn-4 collapse
+    to the model's **own prior turns, replayed as ordinary chat with no visible evidence a tool was
+    ever used** — "exactly three prior 'user asks, assistant answers' text exchanges" flipping the
+    completion pattern on the next turn. Under a textbook replay that precedent is **identical for
+    every conversation and every model**, decoupled from what the model under test did. **The claim
+    here is narrower than "the collapse cannot happen", and deliberately so:** a textbook prefix in
+    one of the reply-text modes presents a stimulus of the same *shape*, so onset might well fire.
+    What cannot happen is the finding. §8.2's result is onset **and** persistence — zero recoveries
+    in 121 post-onset turns — and persistence is unreproducible by construction, since the model's
+    own collapsed turn never enters any later context. Worse, onset's reachability becomes a
+    function of the *mode*: present under a reply-text replay, absent under `structured`, whose
+    textbook tool evidence is the U37/U38/U39 breadcrumb condition. So a reproduced contrast would
+    be a coincidence of stimulus shape rather than evidence that the harness measures what §8.2
+    measured — and §3.8.4's own words for that outcome are that the harness, not the models, is what
+    has been measured.
+  - **The per-turn hazard stops separating what FR-9 needs separated.** P(first failure at *t* |
+    clean through *t*−1) conditions on cleanliness to keep conversations whose context is already
+    contaminated out of the turn-*t* denominator. Under a textbook replay the context at turn *t* is
+    identical whether the model failed at *t*−1 or not, so the conditioning removes nothing about
+    the trial, the accumulation channel is gone, and both "gradual degradation" and "deterministic
+    collapse" reduce to position sensitivity under a fixed clean prefix.
+  - **The context would contradict FR-10's ground truth.** `drive` dispatches the model's real calls
+    into a stateful `ToolEnvironment`, so from the first failed write-mutating turn onward a
+    textbook context asserts a cart the environment does not have, and the next `view_cart` returns
+    the real one. Failures produced that way are the harness's, which is precisely what the
+    validation target is worded to catch.
+  - **It would corrupt the determinism probe rather than protect it.** `-ml` §4.5.1(iii)'s probe
+    object is the **conversation-level observation that enters `n`** — "this model is flaky" versus
+    "this script is hard". A re-run that diverges mid-conversation *is* that flakiness, and must be
+    reported. A textbook replay makes every turn an independent trial against a fixed prompt, so a
+    run whose observation did not reproduce can still return `identical` — buying
+    `basis: "by-construction"` and McNemar's decision seat on evidence that was never taken. The
+    fail-safe direction §3.8.4 built into `basis` runs the other way under this design.
+- **One turn is a bounded iteration loop, not one call** *(v1.25 — a gap the plan carried and item
+  1's ruling makes load-bearing)*. `-ml` §4.1's notation already has `I(t)`, "LLM iterations consumed
+  in the turn, and whether the iteration cap was hit"; §4.2(f) scores stopping-when-done as *no call
+  dispatched after `R(t)` was satisfied **and** the loop terminated below the cap*, and reports
+  `iteration_cap_hit_rate` with mean and p95 of `I(t)`; §4.2(g) checks the turn's **final reply**
+  against what the tool returned. One call per turn leaves a tool-calling turn with no final reply
+  at all — nothing to score (g) against, nothing to replay under `structured-replies-only` or
+  `plaintext`, and no source for `I(t)`. So `drive` runs, per scripted turn: call the model;
+  while the response carries native `tool_calls` and the cap is not reached, dispatch each call
+  against `env`, append the assistant message and one `tool` message per call to the **in-turn**
+  working list, and call again; stop when a response carries no tool calls — that response's text is
+  the turn's final reply — or when `maxIterationsPerTurn` is reached, in which case the turn has
+  **no** final reply and records `capHit`. The turn's emission form (§3.8.4's three-way partition)
+  is read from **iteration 1**, where the decision to call or not was made. No sizing consequence:
+  §4.5.2's ~1.3 s/turn basis was measured on falkor-chat's own multi-step executor and already
+  includes the loop.
 - **Validation target (§2.2):** running this pack against `qwen/qwen3-4b-2507` and
   `mistralai/ministral-3-3b` must reproduce the documented per-turn contrast. If it does not, the
-  harness — not the models — is what has been measured.
+  harness — not the models — is what has been measured. **The pack declares
+  `historyReplay: "structured-replies-only"`** (§3.3) because that is falkor-chat's executor shape —
+  native roles, real reply text, no tool scaffolding — and it is the shape the documented contrast
+  was produced under; asking a known-answer question under a different prompt shape asks a different
+  question. That the shape is *reachable* is verified from §4.1's reading of the executor; that it
+  *reproduces* the contrast is what S6 step 5 measures and R-3's bisect ladder answers if it does
+  not.
 
 #### 3.8.5 `chat-responder` — pack `chat-responder-grounded-answers`
 
@@ -2184,6 +2342,8 @@ each one's arithmetic is at the cited section:
 | Replicates at `temperature > 0` instead of more scripts | Informative about run-to-run variance, but it adds a second variance source to a comparison whose subject is the *model*, and it weakens what FR-18's temperature pinning means. Declined with the same decision. |
 | `numpy`/`scipy` for the numerics | Zero runtime dependencies keeps old results reproducible years later; the workload is seconds of pure Python. Reversal trigger stated in §3.2. |
 | A declarative mini-language for simulated tools instead of pack Python | Would become a worse Python; pack code is content-hashed, so it is versioned data like everything else (§3.3). |
+| Replaying each prior turn's scripted `expect` — the "textbook" conversation — instead of what the model produced | Decouples the in-context precedent from what the model under test did, so the validation target stops measuring the documented phenomenon (persistence unreproducible, onset a function of the declared mode); severs the per-turn hazard's conditioning from the accumulation it exists to handle; and puts the replayed context in contradiction with FR-10's stateful ground truth (§3.8.4, which carries all four reasons). **v1.25**, ruling on `convo.py` as built at `40a9bc8`. |
+| Making scripted-vs-actual replay a pack knob, so a pack could choose teacher forcing | A genuine ablation, and rejected as a *setting*: `cleanThroughTurn4` under a textbook prefix is not the same quantity as under a real one, so one pre-registered metric name would cover two meanings — M-11 by another route (§3.8.4's own `H` argument). **Reversal trigger:** a pack that wants the ablation gets it as a manifest field **plus a distinct metric name**, never as a second setting under the existing one. **v1.25.** |
 
 ---
 
@@ -4262,7 +4422,12 @@ class LMStudio:                                     # base_url from host.json ap
              timeout_s: float) -> ChatResult: ...   # timeout_s required, no default (§3.6's two budgets)
     def embed(self, texts: Sequence[str], *, model, timeout_s: float) -> EmbedResult: ...
     def warm_up(self, model: str, *, call_surface: Literal["chat", "embeddings"],
-                system_prompt: str | None, timeout_s: float) -> LoadResult: ...
+                system_prompt: str | None, was_resident_before: bool,
+                timeout_s: float) -> LoadResult: ...
+                                                    # was_resident_before: required, no default;
+                                                    # the caller's §3.4.4a step-3 snapshot, echoed
+                                                    # onto LoadResult so coldLoadSeconds' precondition
+                                                    # is explicit at the type (v1.25, impl-gate P13-9)
                                                     # under JIT this is the load; content discarded,
                                                     # `runtime`/`stats` kept on the chat surface only
     def probe(self) -> Literal["api-v0", "v1-only", "unreachable"]: ...   # §3.4.4a's two-step probe
@@ -4277,7 +4442,12 @@ class ToolEnvironment(Protocol):
     def state(self) -> dict[str, Any]: ...
 
 # convo.py
-def assemble(turn_index: int, history: Sequence[Turn], cfg: PromptConfig) -> list[ChatMessage]: ...
+def assemble(turn_index: int, script: Sequence[Turn], observed: Sequence[TurnTrace],
+             cfg: PromptConfig) -> list[ChatMessage]: ...
+             # v1.25: `observed` is what this run actually produced for turns 0..turn_index-1;
+             # PRECONDITION len(observed) == turn_index, raise otherwise. That equality is the
+             # structural guarantee — you cannot assemble turn n from anything but n observations,
+             # so the §3.8.4 ruling cannot be undone by a caller. `script` supplies user text only.
 def drive(env: ToolEnvironment, script: Conversation, llm, cfg: PromptConfig) -> ConversationTrace: ...
 ```
 
@@ -4306,8 +4476,13 @@ plan-gate P5-8)* — a chat response without `stats` is an expected state, not a
 pack; **`validate_pack` enforces the §3.3 `sampling` contract** — a fixture pack declaring
 `analysisUnit: "conversationId"` under `scripts: 12, replicatesPerScript: 4` is rejected on the
 row-count identity (48 distinct values where 12 are required), one declaring
-`analysisUnit` outside its own `pairingKey[0]` is rejected structurally, and one declaring
-`replicatesPerScript > 1` is rejected per `-ml` §3.4 Rule 6; **`validate_pack` derives `callSurface`
+`analysisUnit` outside its own `pairingKey[0]` is rejected structurally, one declaring
+`replicatesPerScript > 1` is rejected per `-ml` §3.4 Rule 6, and — **route (iii), v1.25** — a pack
+whose `pairingKey[0]` is not `roles.analysis_unit_field(role)` is rejected for **every** role in
+`roles.ROLES`, driven by executing `check_sampling_contract` rather than by reading the constant,
+with `set(ANALYSIS_UNIT_FIELD_BY_ROLE) == set(roles.ROLES)` computed in its own assertion; the
+`tool-caller` case of that sweep is P12-7's own fixture shape (`pairingKey[0] == "conversationId"`),
+which passes routes (i) and (ii); **`validate_pack` derives `callSurface`
 from `environment.requires` and rejects a pack declaring neither or both of `lmstudio-chat` /
 `lmstudio-embeddings`** (§3.4.4a), and `run` rejects, before any model call, a pack whose derived
 surface contradicts the model's catalog `type`; `validate_pack`'s AST import check
@@ -4334,6 +4509,46 @@ embeddings arm records `"unavailable"`; and
 **one** `-m live` test confirms `catalog()` returns the real installed models and that `chat()`
 surfaces `stats.time_to_first_token`.
 
+**`convo.py`'s replay contract, spelled out because v1.24 left it to be inferred and it was inferred
+wrongly** *(v1.25 — the ruling and its reasons are §3.8.4's "Prompt assembly" bullet; what follows is
+only what to build)*. `assemble(turn_index, script, observed, cfg)` returns the **whole** message
+list for turn `turn_index` — the harness resends the conversation from scratch every turn — in this
+order: system prompt if any · the tool-schema text block on turn 0, or every turn when
+`representToolSchemasEachTurn` · the replayed history · `{"role": "user", "content":
+script[turn_index].user}`, always last. `historyTurns > 0` windows the replayed prefix from the
+tail; `0` replays all of it.
+
+- **Preconditions, both raising:** `0 <= turn_index < len(script)`, and `len(observed) ==
+  turn_index`. The second is the whole mechanism — a caller cannot assemble turn *n* without *n*
+  observations, so there is no argument through which a textbook prefix could re-enter.
+- **`structured`** — per replayed prior turn *i*: `{"role": "user", "content": script[i].user}`;
+  then, per in-turn iteration, the model's own assistant message with `content` exactly as returned
+  (`None` permitted) and `tool_calls` **verbatim, ids included**, followed by one
+  `{"role": "tool", "tool_call_id": …, "name": …, "content": …}` per call in emission order, the
+  content being that call's real `DispatchRecord.returnValue` JSON-encoded; then the turn's final
+  assistant reply. **Every `tool_calls` entry gets exactly one `tool` message, without exception** —
+  for one that could not be dispatched (no name, or the dispatch raised) the content is a JSON
+  object naming the failure. An unanswered tool call is rejected by OpenAI-shaped servers, so
+  omitting it would convert a model failure into a transport failure at the next turn.
+- **`structured-replies-only`** — `{"role": "user", …}` then one `{"role": "assistant", "content":
+  <that turn's final reply text>}`. No `tool_calls`, no `tool` message, no breadcrumb.
+- **`plaintext`** — one `{"role": "user", …}` carrying a flattened transcript, `User: …` /
+  `Assistant: <final reply text>` per prior turn, likewise with no tool evidence.
+- **In both reply-text modes, a cap-hit prior turn (`finalReplyText is None`) renders as the empty
+  string** — *captured and empty*, which is what the conversation actually contained — and the turn
+  is never omitted from the replay. Omitting it would shorten the visible history, and history
+  length is the covariate this whole pack is measuring against.
+- **`none`** — no history messages.
+- **`drive`** runs §3.8.4's bounded per-turn loop, `assemble`s each turn from the `TurnTrace`s it has
+  accumulated, and returns a `ConversationTrace`. It never stops early on a bad turn (`-ml` §4.1),
+  and `TurnTrace` carries `messagesSent`, `chatResults` (**all** iterations, in order),
+  `dispatches` (that turn's own slice of `env.trace()`), `envState`, `iterations`, `capHit`,
+  `finalReplyText: str | None` — `None` **iff** `capHit` — and `wallClockMs` covering the whole turn.
+- **The tests that make it real** are §5 test 10; the one that would have caught v1.24's reading is
+  its negative: a `structured`-mode fixture whose `observed` assistant text differs from every
+  string in the script's `expect` blocks, asserting the **observed** text appears in the assembled
+  list and no `expect` string does.
+
 **Three additions in v1.8, all in the adapter and the runner:**
 
 - **The host-info seam is §3.4.4a's, and `hostinfo` launches no subprocess for it.** `probe()`
@@ -4341,7 +4556,24 @@ surfaces `stats.time_to_first_token`.
   `/v1/models` but 404 on `/api/v0/models`; nothing listening — `run` exits `3` with the
   *distinguishing* message in the second case, and **no `model` record is written in either failure**;
   `residency()` maps a stubbed catalog to `{id, state}` on `state != "not-loaded"` and returns `[]`
-  for an all-not-loaded payload (§2.5's captured 19-model response is the fixture).
+  for an all-not-loaded payload. **The fixture is `tests/fixtures/lmstudio/catalog.json`, and this
+  done-condition no longer cites a capture that does not exist** *(v1.25, F-S2-1: v1.8 wrote
+  "§2.5's captured 19-model response is the fixture" and §2.5 is a narrative probe record — it names
+  the field set and states all 19 entries read `state: "not-loaded"`, and no response body was ever
+  saved)*. Two halves, and the second is the one that closes it:
+  - **Now, offline:** the shipped fixture holds only entries this repo's documentation records a
+    field for, each carrying a per-entry `_provenance` citation, and it **does not pad to 19 with
+    invented models** — the count is whatever the citations support. Any field with no citation is
+    marked as a placeholder there, and no placeholder may sit in `type` or `capabilities`, the two
+    fields the §3.6 eligibility gate and `residency()` actually read. A fixture that padded would
+    make the all-not-loaded assertion true of a catalog nobody observed.
+  - **On the live session this stage already requires** (R-1's probe below, which needs a human):
+    save the verbatim `GET /api/v0/models` body to `tests/fixtures/lmstudio/catalog-live-<date>.json`,
+    re-point these assertions and
+    `test_catalog_parses_every_fixture_entry_into_model_info` at it, and record the capture in
+    `model-bench/docs/HISTORY.md`. It is nearly free — the call needs LM Studio **running**, not a
+    model **loaded**, which is exactly §2.5's clean-box state — and it is the only thing that turns
+    "documented" back into "captured". Until it runs, the honest framing above is what ships.
 - **The timing discipline is tested offline against a stub clock and a stub LLM** (§5 test 15b): the
   warm-up is issued exactly once per arm, on the right surface for the arm's profile, and produces
   no `ItemResult`; a stubbed 21 s first response
@@ -4591,7 +4823,13 @@ at turn 2 must not score *better* than one that reaches turn 8; the funnel table
 `report.py` renders both the per-turn-position table and the hazard curve. Per amended FR-8(d),
 one of those synthetic traces asserts that a `boundary_unit` error increments **both**
 `wrong_value` and its `boundary_unit` subset, driven by the pack's declared `boundaryRule` — never
-double-counted as two sibling failures, never classified by scorer heuristics.
+double-counted as two sibling failures, never classified by scorer heuristics. **And a cap-hit turn
+gets an explicit disposition** *(v1.25)*: `TurnTrace.finalReplyText is None` means the loop
+exhausted `maxIterationsPerTurn` and the turn produced no final reply, which is *absent*, not
+*failed* — the scorer gives it §4.2(f)'s `iteration_cap_hit_rate` and §4.2(g)'s printed
+`unscoreable` bucket per the note's own rules, never a silent zero and never a containment failure.
+A synthetic cap-hit trace asserts that disposition, because absence read as failure is the exact
+laundering shape the funnel table exists to stop.
 
 ### S6 — `tool-caller` pack, part 2: the conversation scripts (FR-22)
 
@@ -4691,7 +4929,7 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
 | Stage | Items it owes | Where an item splits across stages |
 |---|---|---|
 | **S1** — core | **1, 2, 3, 5, 6, 7b, 11b, 11c, 11d** | **7b** is a `stats.py` test over a synthetic clustered fixture and needs no pack loader — S1 done-conditions 4 and 5 already require it. **11b**'s `validate_pack` clause is S2's; at S1 those same refusals go through `metrics_from_manifest`, which raises `PackConfigError`. **12**'s `metrics`-block rule (a non-null `headlineMetric` outside `verdictMetrics`) is S1's too, at that same seam. **11c** is S1's whole and does not split: `RunResult` carries `items` and `aggregates` side by side, so the cross-check needs nothing S2 produces (impl-gate P4-4, v1.8 — S1 done-condition 10). **11d** is S1's whole for the same reason: the continuous carrier is a record shape and a renderer branch, both S1-local, and the first *run* that exercises them is S3's (v1.12, S1 done-condition 13). |
-| **S2** — packs, adapter, host info, runner | **4, 10, 12, 12b, 13, 14, 15, 15b** | **4** is `packs.content_hash`, which S1 does not have: S1 ships `PackRef` / `metrics_from_manifest` / `check_sampling_contract` only. **12**'s rule machinery — the `sampling` contract, the AST import allowlist, `replicatesPerScript > 1` — is `validate_pack`'s, tested here against fixture packs and re-run against each real pack at that pack's own stage. **12b** splits three ways: the four `basis` cases are `runner`'s and land here, the outcome-vector comparison is S5's, and "`assumed` moves the decision off McNemar" is already S1's. **13–15** are the `-m live` adapter tests S2's done-condition names. **15b** is offline (stub clock, stub LLM) and is filed in the unit block for that reason (v1.9, G3-12); its report half — the latency block and `-ml` §11.7's rendered slots — lands here rather than at S1 for the same reason `basis` does: S2 is the first stage at which a latency exists at all. S2 does **not** own **11c**; it owns the scorer contract that makes 11c's failure unreachable (§4 S2). |
+| **S2** — packs, adapter, host info, runner | **4, 10, 10b, 12, 12b, 13, 14, 15, 15b** | **10b** is v1.25's, the per-turn iteration loop, and is S2's whole — `drive` is S2's and a stub LLM is all it needs. **4** is `packs.content_hash`, which S1 does not have: S1 ships `PackRef` / `metrics_from_manifest` / `check_sampling_contract` only. **12**'s rule machinery — the `sampling` contract, the AST import allowlist, `replicatesPerScript > 1` — is `validate_pack`'s, tested here against fixture packs and re-run against each real pack at that pack's own stage. **12b** splits three ways: the four `basis` cases are `runner`'s and land here, the outcome-vector comparison is S5's, and "`assumed` moves the decision off McNemar" is already S1's. **13–15** are the `-m live` adapter tests S2's done-condition names. **15b** is offline (stub clock, stub LLM) and is filed in the unit block for that reason (v1.9, G3-12); its report half — the latency block and `-ml` §11.7's rendered slots — lands here rather than at S1 for the same reason `basis` does: S2 is the first stage at which a latency exists at all. S2 does **not** own **11c**; it owns the scorer contract that makes 11c's failure unreachable (§4 S2). |
 | **S3** — embedder pack | **8, 11, 16, 18** | **16** is one arm of a per-pack obligation: each of S3–S7 owes the end-to-end run for the pack it builds. |
 | **S4** — guard-judge, nlq-generator | **9, 16** | — |
 | **S5** — tool-caller scoring | **7**, **12b** (outcome-vector half), **16** | S5's done-condition requires the outcome-vector comparison to exist and be unit-tested here, precisely so S6 is not the first place it runs. |
@@ -4757,8 +4995,23 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
 8. `scoring/retrieval` — recall@k/MRR/precision@k/score-separation on hand-built ranked lists with
    known answers, including multi-relevant items, fewer than *k* results, and zero relevant found.
 9. `scoring/extraction` — the scalar/set shape rules and numeric epsilon.
-10. `convo.assemble` — the three `historyReplay` modes produce the documented message sequences;
-    `representToolSchemasEachTurn=false` really does drop the schemas after turn 1.
+10. `convo.assemble` — the **four** `historyReplay` modes produce the documented message sequences
+    (§4 S2's replay contract), `representToolSchemasEachTurn=false` really does drop the schemas
+    after turn 1, and `historyTurns=k` windows the replayed prefix to the last `k`. **Four
+    assertions are v1.25's and none of them passes under a scripted-`expect` replay:** (a) the
+    negative — a fixture whose `observed` assistant text shares no string with any `expect` block
+    asserts the observed text is present in the assembled list and no `expect` string is; (b)
+    `len(observed) != turn_index` raises, on both sides; (c) `structured` emits exactly one `tool`
+    message per `tool_calls` entry, including for an entry the environment could not dispatch, with
+    ids matching pairwise; (d) `structured-replies-only` and `plaintext` emit **no** `tool_calls` and
+    no `tool` message for a prior turn that really did call a tool — the tool-evidence axis §3.3's
+    table declares, asserted as an absence rather than assumed.
+10b. `convo.drive`'s per-turn loop (§3.8.4) — a stub LLM that returns tool calls twice and then text
+    records `iterations == 3`, `capHit False` and the third response's text as `finalReplyText`;
+    one that never stops records `iterations == cfg.maxIterationsPerTurn`, `capHit True` and
+    `finalReplyText is None`; the emission form is read from `chatResults[0]` and is unchanged by
+    what later iterations return; and every scripted turn runs even after a turn scores as a
+    failure.
 11. `test_metrics_agreement.py` — all 20 transcribed cases from §3.1 point 2, reading only
     `model-bench/tests/fixtures/`, including the two `ValueError` cases. A test that skips or
     xfails any case is a failing test: the case count is the guarantee.
@@ -4824,8 +5077,11 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
     one-level `cluster_bootstrap` exists** (`-ml` §3.4 Rule 6), the **`sampling` contract** (§3.3 —
     `analysisUnit == pairingKey[0]`; the row-count identity over `analysisUnit`'s values, with a
     fixture declaring `analysisUnit: "conversationId"` under `scripts: 12` rejected for having 48
-    distinct values where 12 are required), and `validate_pack`'s AST import check rejecting a pack
-    module that imports outside stdlib + `modelbench.tooling`.
+    distinct values where 12 are required; and **route (iii)**, `pairingKey[0] ==
+    roles.analysis_unit_field(role)`, swept over every member of `roles.ROLES` with a borrowed unit
+    field and rejected in each, plus the computed
+    `set(ANALYSIS_UNIT_FIELD_BY_ROLE) == set(roles.ROLES)` — v1.25), and `validate_pack`'s AST
+    import check rejecting a pack module that imports outside stdlib + `modelbench.tooling`.
 12b. **The determinism probe's wiring** (§3.8.4) — the outcome-vector comparison is exact on
     identical traces and localises the first differing turn; and `runner` sets `basis` correctly in
     all four cases: probe ran and identical → `"by-construction"`; probe ran and differed →
@@ -4959,13 +5215,15 @@ runtime version goes undetected.** The probe above is what would retire the whol
 runs, this is the gap.)*
 
 *(v1.9 — a second, larger residual, and it follows from §3.4.4a's `callSurface` discriminator rather
-than from anything about attestation. **On a `model:embeddings` arm the trip-wire is effectively
-unavailable**: its comparands are `runtimeName`/`runtimeVersion`/`residencySource`, the first two
-come only from a chat response, and an embeddings run never makes one, so the check degenerates to a
-near-constant. Obtaining a runtime would mean JIT-loading a chat model beside the embedder on a
-16 GB box — a whole model load a side, and an eviction of the model under test — buying a staleness check by
-corrupting the measurement it protects. So embedding runs trust `host.json` without a trip-wire, and
-that is stated here rather than left for a reader to infer from the absence of a failure.)*
+than from anything about attestation. **On a `model:embeddings` arm the trip-wire loses its two runtime
+comparands**: `runtimeName`/`runtimeVersion` come only from a chat response and an embeddings run
+never makes one, leaving `residencySource` — which **is** compared, and exits `5` on a difference
+like any other comparand (§3.4.5 point 3, v1.25), but which takes one value today, so the *runtime*
+half of the check is genuinely unavailable there. Obtaining a runtime would mean JIT-loading a chat
+model beside the embedder on a 16 GB box — a whole model load a side, and an eviction of the model
+under test — buying a staleness check by corrupting the measurement it protects. So an embedding run
+trusts `host.json` on everything the runtime pair would have caught, and that is stated here rather
+than left for a reader to infer from the absence of a failure.)*
 
 **R-2 — FR-11's "peak RAM at the measured settings" is best-effort, not exact (medium).** There is
 no RAM endpoint. What was available through the CLI: `lms ps --json`'s loaded-weights size and
@@ -4991,9 +5249,18 @@ rebuilt from a prose description (§2.2) because the originals were never commit
 will not be turn-for-turn identical to what produced §8.2's numbers, so the known-answer validation
 (§5 test 19) is a **qualitative** check — "does the same contrast appear" — not a numeric
 reproduction. If the contrast fails to appear, the ambiguity between "the harness is wrong" and "the
-scripts differ" is real; the fallback is to bisect by making the pack's prompt-assembly settings
-match falkor-chat's executor shape as closely as the manifest allows (which is exactly the FR-9a
-side benefit the requirements anticipate).
+scripts differ" is real; the fallback is to bisect on prompt-assembly settings, which is exactly the
+FR-9a side benefit the requirements anticipate. **v1.25 makes that bisect concrete, and narrows this
+risk by construction.** The pack now *starts* at falkor-chat's executor shape rather than reaching
+for it — `historyReplay: "structured-replies-only"`, native roles carrying real reply text and no
+tool evidence (§3.3, §3.8.4) — where v1.1 through v1.24 declared `structured`, whose full tool
+scaffolding is the U37/U38/U39 breadcrumb *mitigation* the prior run tried and reverted, i.e. a
+condition under which the contrast had already been observed not to be the baseline. The bisect is
+then the enum: re-run the same scripts at `structured` (add tool evidence) and at `plaintext`
+(same evidence, quoted rather than owned). A contrast that appears at one value and not another
+localises the cause to replay shape; one that appears at none, with §5 test 19(a)'s negative control
+passing, points at the scripts. What the ladder cannot do is separate "these scripts differ from
+§8.1's" from "this model changed since 2026-08-29", and nothing in this harness can.
 
 **R-4 — `chat-responder` measures grounding, not quality (resolved by FR-21a; residual is a
 reader-expectation risk).** Raised as a funding decision — 30 golden items plus 30 calibration
@@ -6259,8 +6526,8 @@ its rows here in the same pass.
 | `ModelInfo` | `lmstudio` | one `/api/v0/models` entry, verbatim: `id, object, type, publisher, arch, compatibility_type, quantization, state, max_context_length, capabilities?, loaded_context_length?` — the ten keys the 2026-09-03 probe returned for every model, plus `loaded_context_length` once loaded (§2.5, §2.3) |
 | `ChatResult` | `lmstudio` | `message, tool_calls, toolCallForm, stats, model_info, runtime, usage, wallClockMs` — plus **v1.10's normalised trio, derived on construction**: `ttftMs = 1000 × stats.time_to_first_token`, `generationMs = 1000 × stats.generation_time`, `tokensPerSecond = stats.tokens_per_second` (unconverted). LM Studio reports the first two in **seconds** and every `…Ms` field in this plan is milliseconds, so the conversion happens once, here, at the transport boundary (§3.6's unit boundary, plan-gate P4-1). **v1.11:** each of the three — and `usage.prompt_tokens` — is `None` when its source key is absent, **never `0`**, and construction **never raises** on a missing or partial `stats` (plan-gate P5-8). The raw `stats` mapping is retained for auditability and **no runner, scorer or report path reads a timing figure out of it** |
 | `EmbedResult`, `LoadResult`, `ResidentModel` | `lmstudio` | vectors + dimension; **`LoadResult` is the warm-up call's outcome** — `(wallClockMs, wasResidentBefore: bool, runtime: Mapping \| None, stats: Mapping \| None)`, with `coldLoadSeconds` derived from it only when `wasResidentBefore` is `False`, and `runtime`/`stats` populated on the chat surface only — they are the sole source of `runtimeName`/`runtimeVersion` (§3.4.4a step 5), so v1.8's `discardedResponse` naming is retired: the *content* is discarded, the metadata is not (v1.9); **`ResidentModel` is one `/api/v0/models` row surviving `state != "not-loaded"`** — `(id, state)`, the literal `state` string kept, not a boolean (v1.8, §3.4.4a; v1.7's "one `lms ps --json` row" is gone with the CLI) |
-| `PromptConfig` | `convo` | the manifest's `prompt` block, parsed: `systemPrompt, toolSchemas, historyReplay, representToolSchemasEachTurn, historyTurns, temperature, maxTokens` |
-| `Turn`, `Conversation` | `convo` | one scripted turn (`seq, user, expect`); one row of `conversations.jsonl` |
-| `ConversationTrace` | `convo` | per-turn `(messages_sent, ChatResult, dispatches, env_state, wallClockMs)` |
+| `PromptConfig` | `convo` | the manifest's `prompt` block, parsed: `systemPrompt, toolSchemas, historyReplay, representToolSchemasEachTurn, historyTurns, maxIterationsPerTurn, temperature, maxTokens`. **`historyReplay` is four-valued** (`structured`, `structured-replies-only`, `plaintext`, `none`) and **`maxIterationsPerTurn` is v1.25's**, required with no default — it is `-ml` §4.1's `I(t)` cap and §4.2(f) reports against it, so it is pack data inside the content hash (§3.3) |
+| `Turn`, `Conversation` | `convo` | one scripted turn (`seq, user, expect`); one row of `conversations.jsonl`. **`expect` is a scoring oracle, and `scoring/toolcalls.py` is its only reader** — `assemble` never reads it, because a prior turn is replayed from what the model actually produced (§3.8.4, v1.25) |
+| `TurnTrace`, `ConversationTrace` | `convo` | **`TurnTrace` is one turn's record** — `(messagesSent, chatResults: tuple[ChatResult, ...], dispatches, envState, iterations: int, capHit: bool, finalReplyText: str \| None, wallClockMs)`, `chatResults` holding **every** iteration of §3.8.4's per-turn loop in order and `finalReplyText` being `None` **iff** `capHit`; `ConversationTrace` is `(scriptId, turns: tuple[TurnTrace, ...])`. **v1.25 renames the singular `ChatResult` field and adds the last three**: v1.24's row described a one-call-per-turn shape, which leaves a tool-calling turn with no final reply to score `-ml` §4.2(g) against or to replay |
 | `DispatchRecord` | `tooling` | `(name, rawArguments, parsedArguments, returnValue, timestamp)` — FR-10's ground truth |
 | `DecidedBy` | `stats` | `Literal["mcnemar-exact", "conservative-envelope", "paired-bootstrap"]`. **v1.12 adds the third member** for `-ml` §3.2d's continuous path (§4 S1): a machine token must name the instrument that ran, and on that path neither of the other two did; free while no stored record carries a verdict. **v1.10 renames the second member** from `"cluster-bootstrap"`: after note v1.11 the paired binary interval is Rule 4's bound-by-bound **envelope** computed in closed form, so no cluster bootstrap runs on that path and a token naming one is the machine-readable form of the prose defect the note corrects in its own four strings. The note left the rename to this document and recommended it; §4 S1e Table D enumerates the sites |
