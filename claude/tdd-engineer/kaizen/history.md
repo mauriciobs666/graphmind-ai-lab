@@ -2,6 +2,57 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-09-10 — U54: 7-entry inbox drained, all re-derived and promoted, none discarded outright
+
+`claude/docs/plans/kaizen-distillation2-coordination.md` U54. All 7 entries (2026-09-09/10,
+`tdd-engineer`'s own model-bench work) re-derived by direct reproduction, not taken at face value.
+
+- **`3f9d5c02…` → new `guard-testing-techniques.md` §"A raise-site completeness pin can be computed
+  on both sides instead of hand-maintained."** Confirmed exactly by construction (3 `ast.walk`
+  raise sites, 2 reached via `traceback.extract_tb`, set difference correctly names the uncovered
+  one) — generalized past the model-bench `LMStudioCallFailed` origin into a portable recipe.
+- **`b7c1f2a4…` → `skills/python-web-quirks/SKILL.md`, folded into the existing urllib section (no
+  new heading).** Confirmed by direct reproduction: a prebuilt `HTTPError` raised, read, and closed
+  once fails a second raise with `ValueError: I/O operation on closed file` — stub registries need
+  factories, not instances.
+- **`a41f3c62…` → new `claude/analyst/review-techniques.md` §"Pinning a finding's named cause does
+  not close its stated consequence."** Confirmed against the live tree: `model-bench/modelbench/
+  results.py:884-889`'s own docstring states the fix exactly as the entry describes (envelope
+  classified before body decode) — a genuinely novel general review technique, not yet stated
+  anywhere despite the file's existing reachability-themed sections. `suggestedHome` was `prompt`;
+  overridden to knowledge base (a review technique, not a per-session routing rule).
+- **`9959fdf7…` → new `guard-testing-techniques.md` §"A coverage probe's silence criterion must call
+  the specific route under test, not an umbrella function...".** Confirmed against
+  `model-bench/tests/test_packs.py:325-355`'s own docstring, which states the same mechanism in the
+  same words — promoted the generalized technique (call the route directly, never infer silence
+  from an umbrella's combined output), not the model-bench-specific fact already in that docstring.
+- **`cf758606…` → addition to `guard-testing-techniques.md`'s existing "write the exemption as an
+  equality, not a subtraction" passage — no new heading, explicitly disambiguated from it.**
+  Confirmed by independent set construction: `all={1,2,3,4}, exercised={1,2,3}, exempt={4}` passes
+  both a subtraction check and a union-equality check; corrupting `exempt` to `{3,4}` (a cell both
+  exercised and exempt) still passes the union form while the subtraction form correctly reddens —
+  the union swap trades away disjointness, a different property from the one the adjacent
+  subtraction→equality passage already covers, so both stand side by side rather than colliding.
+- **`7c1e6a3e…` → new `skills/python-web-quirks/SKILL.md` §"`ruff check <path>` force-parses the
+  given file as Python regardless of extension."** Confirmed by direct reproduction (ruff 0.14.14):
+  a `.md` file in the same invocation as real source produces invalid-syntax errors; dropping it
+  yields a clean pass.
+- **`a198bf4f…` — mostly discarded as already covered, one clause added.** Re-derivation found the
+  core claim (an N-to-0 residual count over prose proves the OLD text matched, never that the NEW
+  text is guarded) already generalized in `review-techniques.md`'s "A grep-pinned edit table is an
+  edit list" §, item 7 ("a residual stated over pre-edit text goes blind exactly when the edit
+  rewrites that text"), and the sibling line-boundary trap already covered in that file's "A 'this
+  already exists' claim is a grep away from confirmation" §, including the emphasis-marker
+  extension. The one incremental value — the concrete mutation recipe (reinsert the falsified claim
+  into the new block, confirm the residual fires) — added as one clause to item 7 rather than a new
+  section; the rest discarded as duplicate, per the pass's U46/U51 precedent on this exact theme.
+
+**Budgets, measured on the shipped files:** `guard-testing-techniques.md` **3,100 → 3,837 w**
+(+737), sections **4 → 6** (2 new); `skills/python-web-quirks/SKILL.md` **9,218 → 9,476 w** (+258),
+sections **27 → 28** (1 new); `claude/analyst/review-techniques.md` **14,285 → 14,747 w** (+462),
+sections **33 → 34** (1 new). No lines over 700 characters introduced (skills/KB files, not a
+context file, so this is a courtesy check, not a gate). Graph: all 7 nodes cleared
+(`PRODUCED`-only, `otherRemaining=0` on each), `tdd-engineer` drained to 0 open entries.
 
 ## 2026-09-09 — one `architect`-produced entry routed here (U41), folded into `guard-testing-techniques.md`; **zero new sections**
 

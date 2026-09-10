@@ -408,6 +408,15 @@ an alias for the builtin `TimeoutError` since Python 3.10, so one `except Timeou
 correctly covers both connect- and read-phase timeouts once the read call is actually inside the
 guarded block.)
 
+**A stubbed `HTTPError` is single-use as a test double.** Code under test that calls `exc.close()`
+on a caught `HTTPError` closes its wrapped `fp`; raising the same prebuilt instance a second time
+(e.g. from a module-level fixture reused across two test functions) fails inside whatever reads it
+next with `ValueError: I/O operation on closed file` — a failure that reads as a bug in the second
+call site, not in the fixture. Verified: `HTTPError(url, code, msg, {}, io.BytesIO(body))`, read and
+closed once, raises exactly that `ValueError` on a second `.read()`/`.close()`. A stub registry for
+`HTTPError` (or any exception wrapping a stateful stream) must hold zero-arg **factories**, not
+built instances, the same way a fixture factory is preferred over a shared fixture value.
+
 ## `json.loads` parses bare `NaN`/`Infinity`/`-Infinity` by default — a numeric-coercion boundary must reject non-finite floats explicitly
 
 `json.loads` is not strict JSON: as a Python extension it accepts the bare tokens `NaN`,
@@ -836,3 +845,15 @@ derived set rather than a copied-out method list, the same "derive from the runt
 written-down list" shape as the `ast`-subclass enumeration technique elsewhere in this repo
 (`claude/tdd-engineer/guard-testing-techniques.md`) — here applied to a `Protocol` instead of an
 AST grammar.
+
+## `ruff check <path>` force-parses the given file as Python regardless of extension
+
+`ruff check` does not skip or cleanly error on a non-Python path passed alongside real source
+files — it parses it as Python and reports a wall of `invalid-syntax` findings against ordinary
+prose. Verified (ruff 0.14.14): `ruff check some_module.py some_test.py docs/HISTORY.md` in one
+invocation reports invalid-syntax errors pointing at `HISTORY.md`'s prose lines; dropping the
+`.md` path from the same command leaves a clean `All checks passed!`. A final-verification `ruff
+check` invocation assembled from "every file this pass touched" must filter to source paths (or
+be run per-directory with ruff's own file-discovery) rather than listing every edited path
+verbatim — a doc file edited in the same pass silently turns a clean lint gate into a false
+failure that looks like a real syntax defect.

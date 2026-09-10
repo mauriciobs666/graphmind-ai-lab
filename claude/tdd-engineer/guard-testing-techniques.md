@@ -242,7 +242,26 @@ with no test edit needed. Site-qualify (`(enclosing_function, name)` pairs) inst
 `issubset`) admits every *further* member silently — that is the shape that lets an allowlist grow
 without anyone deciding to grow it. `residual == {allowed}` makes the next unlisted member a
 stop-and-decide, and it reddens in the other direction too, on an exemption left behind by a raise
-that is gone. Read whole 2026-09-09 in the reference implementation
+that is gone.
+
+**A different equality swap on the same kind of guard trades away a different property — check
+which one before accepting it as a straight upgrade.** A coverage guard partitioning a cell grid
+into "exercised" and "exempt" is sometimes written as a subtraction, `all - exercised == exempt`
+(every cell not exercised must be exactly the declared exempt set), and "simplified" to a union
+equality, `all == exercised | exempt` (every cell is exercised or exempt). These are not
+equivalent: the union form is satisfied by a cell that is **both** exercised and exempt, which the
+subtraction form refused (a cell wrongly declared exempt despite being live-exercised silently
+stops reddening). Confirmed by construction: `all={1,2,3,4}, exercised={1,2,3}, exempt={4}` passes
+both forms; corrupting `exempt` to `{3,4}` (cell 3 now claimed both exercised and exempt) still
+satisfies `all == exercised | exempt` (`{1,2,3,4} == {1,2,3,4}`) while `all - exercised == exempt`
+correctly reddens (`{4} != {3,4}`). Only the **partition** — union **and** disjointness, two
+asserted lines (`all == exercised | exempt` **and** `not (exercised & exempt)`) — holds every
+direction a subtraction form covered. The general rule: an assertion swapped for its
+"stronger-looking" algebraic sibling must be mutated in the direction the OLD form covered, not
+only the direction the swap was made to fix — the same discipline as the mutation-testing-the-probe
+section above, applied to the assertion itself rather than to the code it checks.
+
+Read whole 2026-09-09 in the reference implementation
 (`falkor-chat/server/tests/test_storefront_api.py`, `test_the_raises_a_route_can_reach_…`):
 `set(STOREFRONT_RAISES_TODAY) - storefront_family == frozenset({"RuntimeError"})`, with that one
 name pinned further by a **list** of `(function, class)` sites (`== ["enqueue_turn"]`) — a list
@@ -266,3 +285,42 @@ which is true of the key and not of the sentence under it. So when you admit a n
 one site, write the reason **per-site** and pin each site the way the key set is pinned — that file
 already does exactly this for the site list. A reason a guard cannot check is documentation: it needs
 a reviewer on every change to the sites it names, not a test.
+
+## A raise-site completeness pin can be computed on both sides instead of hand-maintained
+
+A black-box test suite's "every raise site of exception class X is covered by some scenario" claim
+is usually written against a hand-typed list of line numbers or scenario names on one or both
+sides — which drifts the moment a raise site moves or a new one ships. Both sides can instead be
+derived at run time and asserted equal: `traceback.extract_tb(exc.__traceback__)[-1].lineno` gives
+the source line of the raise a given black-box scenario actually reached, and `ast.walk` over the
+module's parsed source gives every line where that exception class is raised, full stop. Asserting
+the two sets equal reddens the moment a new raise site ships with no covering scenario, and is
+immune to line-number drift because both sides are recomputed from the current source on every
+run — neither is a list anyone maintains. Verified by construction: three raise sites derived via
+`ast.walk` (`{6, 9, 12}`), two of them actually exercised and captured via
+`traceback.extract_tb` (`{6, 9}`), the set difference (`{12}`) correctly names the one instance
+never reached — no test author had to write any of the three numbers down. The same shape as this
+file's other "derive from the runtime, not a written-down list" techniques, applied to the
+suite's own completeness claim rather than to the guard under test.
+
+## A coverage probe's silence criterion must call the specific route under test, not an umbrella function whose other checks can independently produce the same signal
+
+A coverage probe that asserts "this validator returns no problems on every cell of a grid, except
+the ones named exempt" is measuring the wrong thing if "this validator" is an umbrella function
+(e.g. `validate_pack`) that calls several independent checks, only one of which is the route the
+probe is meant to cover (e.g. `_row_count_identity_problems`). A sibling check inside the umbrella
+can flag the exact same mutated input for an unrelated reason — an absent required field rejected
+by a completely different sub-check, before the route under test ever runs — and the umbrella
+still reports non-empty, so the probe reads "not silent, no gap" while the actual route being
+tested has gone silent underneath, masked by the sibling. Verified against the worked instance
+(`model-bench/tests/test_packs.py::test_row_count_identity_coverage_over_its_own_keys_and_value_kinds`,
+its own docstring at `:325-355`): re-inserting a previously-fixed silent branch at the head of
+`_row_count_identity_problems` (returning `[]` before doing any work on one specific cell) left
+`validate_pack(pack) == []` **still non-empty** on that cell, because `pack.ref()` independently
+refuses a manifest missing that same field before the route-under-test ever runs — the old
+"validate the umbrella" probe would have called this cell covered. Switching the probe to call
+`_row_count_identity_problems` directly went red on exactly that cell, then green again once the
+mutation was reverted. **The fix generalizes: when a coverage probe's completeness claim is about
+one specific route, call that route directly and compute the actually-silent cells by execution —
+never infer silence from an umbrella function's combined output, which conflates the route's own
+coverage with every sibling check's.**

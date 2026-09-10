@@ -263,6 +263,34 @@ Origin: falkor-chat's guard-calibration live suite (255 judge calls, ~155s) inde
 re-executed and reproduced the exact G1/G2 numbers a `tdd-engineer` report claimed (K-027 item 4,
 2026-08-21).
 
+## Pinning a finding's named cause does not close its stated consequence — re-derive the consequence's reachability independently
+
+A review finding names both a cause and a consequence ("X drifts, which lets an invalid record
+through as valid"). A fix that pins the *named cause* — the drifted constant, the stale mapping —
+is not automatically a fix for the *consequence*: verify the consequence is actually gone by
+constructing a caller-observable probe against the fix as shipped, rather than accepting "the
+cause is pinned, so the consequence can't reach" as a logical consequence of the fix.
+
+The failure mode: a guard placed *after* a total-parse step is reachable only for the inputs that
+parse tolerates — if something upstream of the named cause independently produces the same
+observable symptom through a different mechanism, pinning the named cause leaves the consequence
+exactly as reachable as before, just for a reason the fix never touched. Worked instance
+(`model-bench`, review finding P14-4 — "a valid record quarantined as unparseable," attributed to
+an aggregate-kind mapping drift, which a later unit pinned as a constant and argued closed the
+consequence): a probe built with the pinned constant exactly as shipped reproduced the
+"quarantined as unparseable" symptom in two independent ways anyway (an unknown aggregate kind, an
+unknown metric tag) — the actual mechanism was that record loading decoded the file's body inside
+the same `try` that read the file, so *any* undecodable body pre-empted the pack filter and the
+schema-mismatch branch the constant lived in, regardless of the constant's value. The real fix
+was structural — classify the record's envelope (run id, pack id, schema version) before decoding
+its body at all — and is now recorded in the loader's own docstring, independent of and prior to
+the originally-named cause.
+
+The general check: when a fix's own narrative is "I pinned the named cause, so the stated
+consequence is closed," treat that as a claim to verify, not a conclusion the pin licenses — build
+or re-run a probe against the consequence's own observable symptom, on the code exactly as it now
+stands, before accepting "unreachable now" as a disposition.
+
 ## Reconciling a kaizen-graph distillation's claimed dispositions
 
 When auditing (or self-checking) a `kaizen_team` distillation pass, don't trust the history
@@ -859,7 +887,14 @@ chain (`docs/plans/small-model-benchmarking.md`, Passes 5–9):
    landed. Measured 2026-09-08 on the `model-bench` S1e edit list: Table E (fused) misreported
    under exactly this half-application, sibling Table G (call site) stayed detectable under the
    same class. **Only the fused case needs a behavioural test standing in the grep's place**; do not
-   pay for one where the literal sits at a call site.
+   pay for one where the literal sits at a call site. **The concrete recipe for that behavioural
+   check, over prose as much as code:** an N-to-0 before/after count only proves the OLD text
+   matched before the edit — never that the REWRITTEN text is itself guarded. Mutate it: reinsert
+   the falsified claim into the NEW block and confirm the residual command fires (goes non-zero)
+   before trusting a zero measured only against the rewritten prose. This residual's own line-based
+   nature compounds the risk on prose specifically — see "A 'this already exists' claim is a grep
+   away from confirmation," above, for the sibling trap of a claim wrapping a hard-wrapped line
+   boundary reading as absent when it is present.
 8. **A pin table living *inside* the document it counts inflates its own residual by exactly the
    table's own occurrences of the token.** A grep run against the whole file matches both the real
    sites and the pin/residual table describing them, so an unscoped `grep -cF <token>` over a
