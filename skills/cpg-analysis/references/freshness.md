@@ -184,133 +184,44 @@ signal, not the threshold.
   longer rests on a check that might not have run — the pipeline says "could not
   read the stamp back" rather than asserting the stamp did not land.)
   **A hand-authored marker is subject to the same rule**, and nothing exempts
-  it: since 2026-09-08 the stamp is a
-  **map assignment** (`SET b = {…}`), and `=` replaces the node's whole property
-  set, so every property that stamp did not write is gone afterwards —
-  `markerOrigin`, `NOTE`, `STATUS`, a key invented next year, all of it. There
-  is no list of keys involved and nothing to keep in sync. **What this buys you
-  as a reader: a marker is the product of exactly one act** — one build's stamp,
-  or one hand-authoring — and never a mixture of both, which was a real shape
-  found in the wild the day before. A hand-authored marker is therefore
-  provisional: it stands exactly until the graph is rebuilt, it dies **silently**
-  when that happens (the rebuild reports success and says nothing about what it
-  erased), and whoever rebuilds inherits none of its reasoning. So
-  `cpg_falkorchat`'s ten keys today are ten keys until someone rebuilds it and
-  then they are eight, with no warning either way. **If you rebuild a hand-authored graph, re-write whatever
+  it: since 2026-09-08 the stamp is a **map assignment** (`SET b = {…}`), and
+  `=` replaces the node's whole property set, so every property that stamp did
+  not write is gone afterwards — `markerOrigin`, `NOTE`, `STATUS`, a key
+  invented next year, all of it. **What this buys you as a reader: a marker is
+  the product of exactly one act** — one build's stamp, or one hand-authoring —
+  and never a mixture of both, which was a real shape found in the wild. A
+  hand-authored marker is therefore provisional: it stands exactly until the
+  graph is rebuilt, it dies **silently** when that happens (the rebuild reports
+  success and says nothing about what it erased), and whoever rebuilds inherits
+  none of its reasoning. **If you rebuild a hand-authored graph, re-write whatever
   annotation still applies** — the stamp will have cleared it, and the marker
   is build-scoped by design, so anything durable about the graph or its
   component belongs in `docs/` rather than on this node.
-  *(Tombstone, 2026-09-08: this rule was documented one commit before it was
-  true. The stamp then wrote only its own eight fields, so an `--append`
-  rebuild left the hand-authored keys standing over freshly captured pipeline
-  values — a marker announcing itself as "NOT a pipeline stamp" while carrying
-  one. The rule was right and the mechanism given for it was not; the mechanism
-  was made true rather than the rule weakened, by closing the stamp's property
-  list in `skills/joern-cpg/scripts/git-provenance.sh`. Re-checked there, not
-  inferred. Don't delete the rule on rediscovering the history.)*
-  *(Second tombstone, same day: closing the list did not close the hole. A sixth
-  hand-authored key, `MARKER_EVIDENCE`, was written onto a marker and survived a
-  full `parse-root` stamp — the same defect one key over, because a closed list
-  cannot enforce its own completeness and whoever hand-writes a marker is
-  editing a different file from the one that would need updating. So the rule
-  survived a **second** wrong mechanism: "the stamp writes every property on the
-  node" was never true, only "the stamp writes the properties it names". What
-  made the rule hold **at that point** was a post-stamp assertion whose
-  allow-list was generated from the stamp's own assignments rather than
-  hand-copied. That mechanism was itself superseded within the day — see the
-  third tombstone, which is the one in force. And read this sentence as the
-  cautionary part: it was written under a credential of "verified by execution
-  in both directions", which was true of the *query* and untrue of the *wiring
-  that called it* — the allow-list was empty in the shipped pipeline. The
-  credential was real and covered the wrong level.)*
-  *(Third tombstone, same day, and this one is the mechanism that is actually
-  here. The clearing enumeration above is gone: the stamp replaces the marker's
-  whole property set with `SET b = {…}`, so **closure of the marker is by
-  construction** — nothing has to be listed for a property to be erased. State
-  that precisely, because the first version of this sentence said "there is no
-  list at any layer" and that was false one clause wide: `CPG_STAMPED_KEYS`
-  **is** a list, at the assertion layer, and the pipeline's stray check reads
-  it. The claim that survives is the stronger one — that list is **derived from
-  the stamp's own map, in the call that builds it** (`_cpg_prop`), so it cannot
-  drift from what was written the way a hand-copied second list can. A generated
-  list is not the absence of a list, and saying so was a false universal of
-  exactly the shape these tombstones exist to retract.
-  <br>**Read the sequence rather than only the answer.** The rule "a rebuild
-  erases a hand-authored marker" has now been stated three times with three
-  different mechanisms, and the first two were both wrong while sounding
-  checkable. What separates the third is not that it is more plausible, and —
-  the correction that matters — not merely that it was "executed", since
-  mechanisms one and two carried credentials too. **The shared defect is that
-  the credential named a narrower level than the claim it licensed.** Mechanism
-  one's credential was *"Re-checked there, not inferred"* — a re-reading of the
-  code, which is what it covered; the claim it licensed was about the *space of
-  keys* that code had to close, and a sixth key existed. Mechanism two's
-  credential was an executed query, which is what it covered; the claim it
-  licensed was about the call path, and the call path passed the allow-list
-  through a `$(…)` subshell, so the shipped check saw an empty list. Neither
-  credential was fake, and neither was an execution credential covering a
-  primitive — that generalisation was written here and is untrue of mechanism
-  one. Each credential was one level below its claim. That is the thing to
-  check on the next one.
-  <br>**And this part is about the tombstones rather than about the stamp.**
-  Each of these three was written in the same sitting as the fix it certifies,
-  by whoever had just made it — and each has since had its own certifying
-  sentence corrected on review, this one included, twice. **The form is
-  therefore a hazard.** The retraction half is trustworthy: it reports a failure
-  that already happened. The certification half is not, and it inherits
-  credibility from the retraction it is bolted to. So, for whoever edits this
-  passage next: a sentence of the shape *"the earlier ones were wrong and here
-  is why this one is different"* has the worst record of any sentence in this
-  file. State the mechanism and the level its evidence covers, and stop. **Do
-  not write a fourth tombstone certifying the third** — a further revision is
-  one dated line, not a new narrative.
-  <br>**What is checked, at both levels.** *The construct:* executed on
-  throwaway graphs, with `keys(b)` read back every time — a marker carrying the
-  eight pipeline keys plus three hand-authored ones, `MARKER_EVIDENCE` among
-  them, the key that had just defeated mechanism two — came back with `keys(b)`
-  of size 8 and all three gone, while `count(b)` stayed 1 and `labels(b)` stayed
-  `[CpgBuildInfo]`, so `MATCH (b:CpgBuildInfo)` still finds it. *The call path:*
-  `skills/joern-cpg/scripts/test-stamp-wiring.sh`, which extracts the real stamp
-  block out of `pipeline.sh` between two anchors — never a retyped copy — and
-  drives it against a fake `redis-cli` whose reply shapes were measured against
-  the live instance rather than imagined. It **exercises** a populated
-  allow-list rather than asserting one (each case prints the list it built; an
-  empty list fails the case by tripping the call-site guard), and it asserts: a
-  clean pass over a hand-authored marker, the `provenance=none` narrowing, a
-  planted foreign key caught under merge semantics, **the same merge against a
-  pipeline-clean marker, which must still pass**, the `provenance=none`
-  subsumption, the two branches where the stamp did **not** land, a stray read
-  that returns a bare runtime error, a stamp write rejected with **no error
-  prefix**, a **read-back that itself errors**, the stray query called directly
-  with an unusable allow-list, a **static check that every `rq` call site in
-  `pipeline.sh` passes `GRAPH.QUERY` or `GRAPH.RO_QUERY`, or nothing** (no other
-  command's reply carries the trailer `rq` gates on; the check is textual and its
-  reach has a **stated bound**, deliberately not restated here — it lives in the
-  block header of `test-stamp-wiring.sh`, pinned form by form by a coverage
-  probe), and two call-site mutations. **The prefix-less stamp
-  rejection and the erroring read-back** were added 2026-09-09 with the `rq()`
-  fix, and neither is judged on the exit code: both already exited 1 beforehand,
-  by falling through to a *later* assertion and reporting that one's finding, so
-  each pins the wording of the branch that is supposed to fire. Every case pins an **exact
-  exit code**, and every case expected to fail must also be shown to have
-  reached the end of its branch — both added 2026-09-08, after the previous
-  oracle reported all six of the cases the suite then had as green against a
-  `pipeline.sh` whose `replay_stamp` definition had been deleted and which was
-  aborting at rc 127.
-  <br>**Neither level is worth anything alone, and neither is worth anything
-  unmutated.** Every assertion named above was re-run against a byte-copy mutant
-  that removes or reverses the thing it claims to protect, and every such mutant
-  fails the suite. The ones worth naming are the designs that were *rejected*,
-  not merely the absence of the ones chosen: the `$(…)` call site, an `rq` that
-  keeps only its error blacklist, an emitted `SET b += {`, and the replay wired
-  into the three branches that had already read the stamp back instead of the
-  two where it never landed. Reply *counters* were not used as evidence anywhere
-  in this, and the reason is stated as what was observed rather than as a
-  mechanism nobody checked: `Properties removed` does not track actual removals
-  — one probe reported 13 against 5 real ones, another 4 against none. Why it
-  diverges is not known here and is not asserted. If you are re-checking this,
-  `keys(b)` is the discriminator. Don't
-  delete the rule on rediscovering the history.)*
+  *(Tombstone. Three mechanisms have been given for this rule; the first two
+  were wrong and are retracted. **The one in force is the map assignment
+  above** — closure of the marker is by construction, so nothing need be listed
+  for a property to be erased. `CPG_STAMPED_KEYS` is a list, at the assertion
+  layer, but it is **derived from the stamp's own map in the call that builds
+  it** (`_cpg_prop`) and so cannot drift from what was written.
+  <br>**The level the evidence covers**, which is the part both retracted
+  mechanisms got wrong: the *construct* is executed against throwaway graphs
+  with `keys(b)` read back; the *call path* is driven by
+  `skills/joern-cpg/scripts/test-stamp-wiring.sh`, which lifts the real block
+  out of `pipeline.sh` between two anchors — never a retyped copy — and pins
+  each assertion with a mutant that reverses it. Its block headers are the
+  authority on which cases exist and how far each reaches; not restated here.
+  Both retracted mechanisms carried real credentials: **the shared defect was a
+  credential naming a narrower level than the claim it licensed**, which is
+  what to check on the next one.
+  <br>All three certifying sentences proved unreliable anyway: two have since
+  had theirs corrected on review, and the **first** never has — *"Re-checked
+  there, not inferred"* stands as written, while the mechanism it certified was
+  retracted the same day by a defect that credential could not have caught. So
+  **a tombstone certifies nothing**: state the mechanism and the level its
+  evidence covers, and stop; a further revision is one dated line, not a new
+  narrative. The sequence, and the evidence for every claim above, is in
+  `claude/cobb/kaizen/history.md`.
+  Don't delete the rule on rediscovering the history.)*
 - **`sourcePath` is a parse root, not a git path.** It is what Joern was
   pointed at — frequently a pruned scratch copy staged to keep `.venv` and
   friends out of the parse. Running it straight through `git log` doesn't

@@ -171,7 +171,15 @@ run a build:
   to the `$(…)` form or drop the allow-list after a populated stamp.
   **Every case asserts an exact exit code, and every case expected to fail must
   also be shown to have printed its branch's stamp block** — that pair is not
-  decoration. Under the previous `rc != 0` oracle, deleting `replay_stamp`'s
+  decoration. Since 2026-09-10 each failing case additionally pins **which of
+  the two advice sets fired** (`replay_stamp`'s "re-send this" vs `show_stamp`'s
+  "this is evidence, not a fix") and, where the branch echoes a reply,
+  **FalkorDB's own reply text**. Both were unguarded before: reverting the
+  stray-key-found branch to `replay_stamp`, telling the operator to re-send the
+  write via `GRAPH.RO_QUERY`, and deleting any one of the three reply echoes all
+  passed the suite green. **One branch is still uncovered and it is deliberate:**
+  the stray query being unbuildable has no case, because `CPG_STAMPED_KEYS` is
+  asserted non-empty at the call site above it and nothing reaches it. Under the previous `rc != 0` oracle, deleting `replay_stamp`'s
   definition left the whole suite green while the run was aborting at rc 127 on
   `replay_stamp: command not found`: the test written to close "verified in
   isolation, broken in the wiring" was itself blind to a wiring defect of

@@ -28,6 +28,148 @@
   producer inbox — `cobb` is both producer and distiller here.
 - **Plan items:** —
 
+## 2026-09-10 — U64: closing the CPG provenance-stamp arc — P7-1 fixed, P7-4 already closed by a sibling arc, P7-2/P7-3 applied (K-022)
+
+- **The unit's premise was stale and checking that first was most of the value.** Pass 7 derived its
+  findings against `375af25`. A different session's coordination has since landed four commits on the
+  same mechanism (`48882d8` K-009 → `682fbed` → `4df5e45` → `00bebdc`), gated at
+  `docs/reviews/rq-execution-gate.md`. Everything below is re-derived against the working tree, and
+  every line number Pass 7 cites is four commits stale — this entry cites symbols and case names.
+- **P7-4 — ALREADY CLOSED, by K-009, at the mechanism level. No code written.** P7-4's mechanism is
+  K-009's in K-009's own words: `rq`'s prefix blacklist could not see FalkorDB's bare runtime errors,
+  so `rq` returned 0, the "FalkorDB rejected the freshness stamp" branch was unreachable, and
+  `STAMP_OUT` held the server's message and was never printed. `48882d8` replaced the blacklist with
+  a positive gate — the reply's last line must begin `Query internal execution time:` — and `rq`
+  `printf`s the reply *before* returning 1, so the branch fires with the text in hand. Verified by
+  execution, not inference: driving the shipped block in `stamp_bare_error` mode prints
+  `pipeline: FAILED — FalkorDB rejected …` / `pipeline:   Division by zero` as its first two lines.
+  The eighth case Pass 7 asked for also already exists (`stamp rejected, no error prefix`).
+- **What K-009 did NOT close, and this is generation five.** The case pins the *branch wording*; it
+  never asserted the *reply text*. Deleting the `${STAMP_OUT:-<no reply>}` echo left the suite green.
+  Same gap in the two sibling branches `48882d8`/earlier work added — `${STAMP_BACK}` on the erroring
+  read-back and `${STRAY_BACK}` on the stray read: **all three echoes were unguarded.** Closed all
+  three together rather than only P7-4's, because a correction landing on one of three surfaces is
+  how the other two end up saying something different.
+- **P7-1 — STILL OPEN against the current tree, and fixed.** `mA` (the stray-key-found branch's
+  `show_stamp` → `replay_stamp`) still passed the suite green. Two `must-contain` arguments on the
+  cases that already drive it — the merge-foreign-key case and the subsumption case — kill it.
+  Pass 7's prescription stops there and is **not sufficient**: it leaves `mI` alive (the replay's
+  re-send command rewritten to `GRAPH.RO_QUERY`, which cannot execute a write), because every string
+  asserted came from `print_stamp`'s lead-in and nothing looked at the command the operator is told
+  to run. Added `GRAPH.QUERY cpg_fake` on both replay cases. **After the fix `mA`, `mI` and all three
+  echo mutants FAIL**; controls `mA2`/`mK`/`mF`/`mD` still FAIL.
+- **Two mutants pass green ON PURPOSE, and both are recorded in the battery rather than left to be
+  rediscovered as defects.** `mB` — the stray-query-unbuildable branch's `show_stamp` — is
+  unreachable (`CPG_STAMPED_KEYS` is asserted non-empty at the call site above it); that is the
+  review's `n9`, out of this unit's scope. `mC` — dropping the stray read's explicit
+  `'Query internal execution time:'` third argument — **died at `375af25` and passes green today**,
+  because K-009 made the gate unconditional inside `rq` and `pipeline.sh` says so in place. A
+  mutation battery's expected verdicts are versioned against the mechanism, not permanent.
+- **My own mutation harness produced a false green and I caught it with a paired control.** `mD`
+  (the rejected design: emitted Cypher reverted to `SET b += {`) reported PASSES GREEN — because I
+  targeted `pipeline.sh`, which only *mentions* `SET b = {` in comments and operator messages. The
+  harness's "did the mutation apply" check was an md5 comparison, which a comment edit satisfies.
+  Re-targeted at `git-provenance.sh:261` it FAILS on cases 1 and 2, exactly as Pass 7 recorded. **An
+  md5 delta is not evidence a mutation landed on the semantic site.**
+- **I also shipped a wrong bound and caught it by measuring instead of reasoning.** My first draft of
+  the reply-text comment claimed the assertion "does not pin that the right branch's variable was
+  echoed". Both halves were wrong: cross-wiring `${STAMP_OUT}` to `${STRAY_BACK}` **does** fail
+  (the others render `<no reply>`), while dropping `>&2` **passes** (the harness merges the streams).
+  The comment now states the measured pair and names both mutants. Same discipline applied to the
+  `GRAPH.QUERY` argument's bound: rewriting the port and mangling `$(cat <file>)` both pass green,
+  verified rather than asserted.
+- **P7-2 — the "3-for-3" claim corrected in all three files in one pass.** Tombstone one's certifying
+  sentence, *"Re-checked there, not inferred"*, has never been corrected — its block is
+  byte-identical across all **seven** committed revisions of `freshness.md` that carry it
+  (`29538d6` … `00bebdc`): one distinct content, derived this run under the boundary *its own
+  `*(Tombstone` line through its own first `rediscovering the history` close*. Pass 7 said five
+  because it stopped at `375af25`; my digest differs from its A12.4 for the same boundary reason,
+  and the invariant that matters holds under both. The mechanism it certified was
+  retracted the same day by its own author in tombstone two, before any review pass saw it. The rate
+  is **2-for-3 on correction by review**, and **3-for-3 on the certifications being unreliable** —
+  which is the sharper claim, because the routes differ. `freshness.md`, `history.md` (U60, as a
+  dated in-place correction per this file's precedent) and `plan.md` (K-022, rewritten) now say the
+  same thing. Unfiltered repo sweep for `3-for-3` and for the *"each has since had its own certifying
+  sentence corrected"* phrasing: **zero live assertions survive** — every remaining hit is either
+  quoted review history (`docs/reviews/`, `docs/plans/salesperson-ui-coordination.md`,
+  `claude/analyst/*`, all of which state it is false) or my own explicit withdrawals.
+- **K-022 escalation ruling — MINE to make, and it still escalates, on a narrower basis.** The
+  escalation never rested on the tombstone rate; it rests on the class's breadth, and the corrected
+  count went **up**: nine instances, derived this run from K-022's own enumeration (3 values + 5
+  prose + 1 executable), the ninth being the "3-for-3" claim itself. The tombstone evidence is
+  retained as an *illustration* of the mechanism and explicitly **not** as a measurement — quoting a
+  rate off three self-adjudicated trials is the same defect the entry is about. What survives is
+  better than a rate: review caught two and would never have caught the first, so **review is not
+  what this form fails at; being believed is** — which argues for the lint check, not against it.
+  Target unchanged: the `agent-maintenance` §7 lint for the prose half.
+- **Two count defects caught inside this fix.** Bumping the class to nine left K-022's `**Four are
+  prose:**` header enumerating five, and `The invariant across all eight` stale — both fixed in the
+  same pass. The Notes tally (`four of the eight … in a cobb run`) my own edit falsified further, so
+  it is now **enumerated rather than tallied**, on this plan's own precedent for dropping a numeral
+  that duplicates a list. That incidentally settles `n10`'s off-by-one without adjudicating it.
+- **P7-3 — the tombstone block compacted, and the deletions verified preserved first.** Every figure
+  here was re-derived in this run against `00bebdc` (the last commit touching the file) by
+  `measure.sh` in the session scratchpad, and **each one carries its boundary, because two of them
+  were wrong while they did not.**
+  *Tombstone block* — first `*(Tombstone` line through the **last** `rediscovering the history`
+  line: **111 → 25 lines, 1,348 → 278 words.**
+  *The markdown list item containing it* — nearest preceding `^- ` through the line before the next
+  `^- `/`^#`, the boundary any reader can reproduce without knowing my prose: **141 → 52 lines,
+  1,733 → 625 words.**
+  *The sub-paragraph I actually rewrote* — the `**A hand-authored marker is subject…**` sentence
+  through the same close: **128 → 39 lines, 1,562 → 454 words**, of which **14** lines are the rule
+  and **25** the tombstone.
+  *Whole file*, `wc -l`: **382 → 293 lines, 4,669 → 3,561 words** (cross-checked: `grep -c ''` =
+  293, file ends `0a`, so no trailing-newline ambiguity). The block is now **7.8%** of the file,
+  from **28.9%**.
+  Pass 7's target — "the bullet back under ~30 lines" — **states no boundary**: under the
+  sub-paragraph reading I land at **39**, under the list-item reading at **52**. The delta is
+  **−89 lines under both**, which is what makes the compaction checkable and the target not. I
+  stopped short rather than cutting into it: what remains is exactly the four things the brief said
+  to keep plus the two corollaries K-022 cites as living there.
+- **Two figures in the first draft of this entry were wrong, and how they were wrong is the finding.**
+  It reported the file at **295** lines (measured: 293) and the sub-paragraph at **40** (measured:
+  39). Neither was a mis-measurement — both were **stale**, transcribed from a measurement taken
+  before the last reflow and never re-run, so this entry and my report to `teco` disagreed with each
+  other. That is `n8`'s shape (a commit message certifying "13 checks green" against 12 PASS lines)
+  recurring inside the entry that certifies the fix for it, and it was caught by `teco` on an
+  independent instrument, not by me. The repair is not the digits: every figure above now carries
+  its boundary, and `measure.sh` re-derives all of them in one command, so the next reader re-runs
+  instead of re-reading. **The first version of `measure.sh` was itself wrong at the baseline end** —
+  anchoring on the *first* `rediscovering the history` line measured tombstone one alone and
+  reported the whole block as 8 lines; it now anchors on the last, and the fixed script reproduces
+  `teco`'s independent 141 → 52 line figures exactly (its word figures predate my last two
+  edits to the file, which changed words and not lines).
+- **The block's committed growth, derived rather than quoted:** six distinct revisions,
+  **8 → 36 → 58 → 99 → 108 → 111** lines (90 → 419 → 684 → 1,206 → 1,314 → 1,348 words); this
+  compaction is the seventh. Pass 7 records `8 → 19 → 36 → 58 → 99`: the extra step is `0da3eb9`
+  adding tombstone **two**, which my close-phrase anchor does not reach, so the two sequences are a
+  definition gap and not a contradiction. Neither numeral is quoted anywhere outside this entry —
+  `freshness.md` now points here without a count, because a numeral duplicating a sequence in
+  another file is the drift surface this whole unit is about.
+- **What moved and what was checked before it was dropped.** The historiography of mechanisms one and
+  two, the "read the sequence" narrative and the tombstone-form essay are already carried in this
+  file (U45→U47, U60, and the entries above); confirmed present before deleting. Two things were
+  dropped rather than moved, deliberately: the enumerated roster of the suite's cases — a third copy
+  after the suite's own block headers and `SKILL.md`, and the copy that generated `n5`, `n8` and the
+  sibling arc's Minor 5 — replaced by a pointer to the headers; and *"There is no list of keys
+  involved and nothing to keep in sync"*, a weakened echo of the *"there is no list at any layer"*
+  false universal that P6-7 retracted, which had survived inside the rule half.
+- **`SKILL.md` updated to match, and its claim narrowed rather than widened.** It now records that
+  each failing case pins which advice set fired and the server's reply text, and states plainly that
+  **one branch is still uncovered and deliberately so** — the unreachable stray-unbuildable branch.
+  A guard whose stated reach exceeds its mechanism is the defect this whole arc keeps regenerating;
+  the honest closure here was to narrow the claim, not to widen the guard into dead code.
+- **Suite, counted this run under two definitions:** `grep -c '^  PASS'` = **16**, exit 0;
+  `run_case` invocations = **10**. Reconciled: 10 `run_case` + 2 stray-guard shapes + 1 `rq`
+  call-site check + 1 coverage probe + 2 call-site mutation cases = 16. Unchanged by this unit — I
+  added arguments to existing cases, no new cases.
+- **Scope held.** P7-5..P7-8 and n7..n11 untouched; none was closed incidentally by the sibling arc
+  (`n9` is confirmed still open, `mB`). Nothing committed or staged, nothing under
+  `claude/analyst/**`, `model-bench/**` or `falkor-chat/**` touched, `pipeline.sh` never run, no
+  graph written. Re-runnable artifacts (`mutate.sh`, `battery.sh` with expected verdicts,
+  `dump-mode.sh`) are in the session scratchpad.
+
 ## 2026-09-10 — U52: `cobb` inbox, self-produced entry (`f4a91cbe`) — `exists()`-over-relationship-pattern scoping bug promoted to `falkordb-quirks.md` + a sibling caution in §5
 
 - **What:** unit U52 of `claude/docs/plans/kaizen-distillation2-coordination.md`. Re-queried
@@ -1253,7 +1395,15 @@ for this inbox, and the reason the unit was framed routing-first.
   fixes I wrote the pattern in: **all three tombstones were authored in the same sitting as the fix
   they certify, and all three have since had their certifying sentence corrected on review.** The
   retraction half is trustworthy; the certification half inherits credibility it has not earned. The
-  passage now says so, and says not to write a fourth tombstone certifying the third.
+  passage now says so, and says not to write a fourth tombstone certifying the third. *(Corrected
+  2026-09-10, U64/P7-2: **two** of three, not three. Tombstone one's certifying sentence —
+  *"Re-checked there, not inferred"* — has never been corrected, on review or otherwise: its block
+  is byte-identical across all five revisions of `freshness.md`, and the mechanism it certified was
+  retracted the same day by its own author, in tombstone two, before any review pass saw it. The
+  hazard is unchanged and the checkable claim is stronger: all three certifications proved
+  unreliable, two by correction on review and the **first** by a retraction its own credential could
+  not have caught — so being reviewed is not what the form fails at. The same wrong clause went into
+  `freshness.md` and into K-022's rationale in `plan.md`; all three are corrected in U64.)*
 - **n4 (fixed)** — "asserts a populated allow-list" → **exercises**: the list is printed, never
   compared; an empty one fails a case by tripping the call-site guard.
 - **`MARKER_WRITTEN_AT` now has a written definition** (asked mid-run by `teco` after `graph-dba`

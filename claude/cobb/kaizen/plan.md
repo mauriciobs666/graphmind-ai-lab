@@ -139,32 +139,50 @@
 ### K-022 — The "wrong rather than absent" defect class may have outgrown per-agent guardrails
 - **Status:** 🔵 proposed
 - **Priority:** high
-- **Rationale:** The same defect shape has now surfaced **eight** times across different agents and
-  artifact kinds. **Three are values:** a CPG marker naming a commit whose tree was never parsed; a
+- **Rationale:** The same defect shape has now surfaced **nine** times across different agents and
+  artifact kinds — derived in U64 by counting this paragraph's own enumeration: 3 values + 5 prose
+  + 1 executable = 9. **Count the prose group by clause, not by semicolon**: it is 1 + 1 + *2 in one
+  passage* + 1, which is where a reader tallying separators gets 4. **Three are values:** a CPG marker naming a commit whose tree was never parsed; a
   stamp that could fail and still announce success; `git rev-parse` echoing its argument back on
-  stdout so a marker took the literal string `HEAD:./src` as a tree OID. **Four are prose:**
+  stdout so a marker took the literal string `HEAD:./src` as a tree OID. **Five are prose:**
   `architect`'s `kaizen_team` entry `7f3c1a92` asserting a CPython deadlock mechanism that does not
   exist; a `cobb` sentence in `freshness.md` (`81b43cd`) giving a false mechanism for a correct
   rule; and — 2026-09-08, gate Pass 6 — two more in the *same passage as that repair*: *"there is no
   list at any layer"* (false one clause wide: `CPG_STAMPED_KEYS` is a list, at the assertion layer)
   and *"both earlier ones covered the primitive and not the call path"* (untrue of mechanism one,
-  whose credential was a re-reading one). **The eighth is executable**, which is what makes the
+  whose credential was a re-reading one); and — 2026-09-08, gate Pass 7 — the *"3-for-3"* claim
+  written in the sentence that repaired those two, false of tombstone one and propagated into three
+  files before it was caught. **One is executable**, which is what makes the
   class bigger than prose: `test-stamp-wiring.sh`'s first oracle certified the *wiring* while being
   structurally unable to see a wiring defect — deleting `replay_stamp` left all six cases green at
-  rc 127. The invariant across all eight: **a slot that should have been empty or loud instead held
+  rc 127. The invariant across all nine: **a slot that should have been empty or loud instead held
   a plausible, checkable-looking value that was wrong**, and every downstream reader accepted it
   because it had the shape of a verified one. A green suite is that slot too.
-  <br>**What the 2026-09-08 instances isolate, and it is sharper than the earlier diagnosis.** The
-  three `freshness.md` tombstones are a controlled experiment: each was written in the same sitting
-  as the fix it certifies, by whoever had just made it, and **each has since had its own certifying
-  sentence corrected on review** — a 3-for-3 failure rate on one document. The earlier reading was
-  *a rule's stated justification is the least-verified prose in a document, because agreement with
-  the conclusion suppresses scrutiny of the premise*. That still holds, and this adds the stronger
-  half: **a retraction launders credibility onto whatever sits next to it.** The retraction half is
+  <br>**What the `freshness.md` tombstones isolate, and it is sharper than the earlier diagnosis.**
+  Each of the three was written in the same sitting as the fix it certifies, by whoever had just
+  made it, and **all three certifications proved unreliable** — two had their certifying sentence
+  corrected on review, and the **first never did**: *"Re-checked there, not inferred"* stands
+  unedited today, while the mechanism it certified was retracted the same day by a defect that
+  credential could not have caught. **The earlier framing of this as a controlled experiment with a
+  "3-for-3 failure rate" is withdrawn, and was itself the ninth instance** — n=3, self-selected,
+  adjudicated by the agent that wrote them, and false of the first. What survives is stronger than
+  a rate, because the two routes differ: review caught two and would never have caught the first.
+  **Review is not what this form fails at; being believed is.** The earlier reading was *a rule's
+  stated justification is the least-verified prose in a document, because agreement with the
+  conclusion suppresses scrutiny of the premise*. That still holds, and this adds the stronger half:
+  **a retraction launders credibility onto whatever sits next to it.** The retraction half is
   trustworthy — it reports a failure that already happened, against evidence. The certification half
   attached to it is a fresh, unreviewed claim, and it is read at the confidence of its neighbour.
   "The first two were wrong and here is why this one is different" is the highest-risk sentence
   shape found so far, and nobody re-opens the script behind a rule they already think is right.
+  <br>**Escalation ruling (U64, 2026-09-10 — `cobb`'s call, assigned by gate Pass 7 open question
+  1): K-022 still escalates, on a narrower and better-founded basis.** The escalation never rested
+  on the tombstone rate; it rests on the class's *breadth* — nine instances, three artifact kinds,
+  and four agents (`architect`, `cobb`, `analyst`, `graph-dba`, named so the numeral is checkable) —
+  and that count went up, not down, when the rate was corrected. The tombstone
+  evidence is retained as an *illustration* of the mechanism, not as a measurement: quoting a rate
+  off three self-adjudicated trials is the same defect the entry is about, and it will not be
+  quoted again. Escalation target unchanged: the `agent-maintenance` §7 lint for the prose half.
 - **Proposed change:** at the next certification pass (§4), decide whether this is one rule or
   several. The value cases and the prose cases do **not** share a fix — the value fix is "make the
   failure loud", and no amount of loudness helps prose, which has no schema to validate against,
@@ -176,8 +194,9 @@
     v1.27). (2) **A tombstone certifies nothing.** A claim about the current mechanism gets no
     credit from the retraction it is attached to; state the mechanism and the level its evidence
     covers, and stop. Do not write a further tombstone certifying the last one — record a revision
-    as one dated line. Both corollaries are now written into `freshness.md`'s third tombstone as a
-    worked instance the lint can point at.
+    as one dated line. Both corollaries are written into `freshness.md`'s tombstone as a worked
+    instance the lint can point at — compacted in U64 from three stacked tombstones to one, which
+    is corollary (2) applied to itself.
   - **Executable** — the mutation standard this arc converged on, which is stricter than "the test
     fails when the code is deleted": **the mutant worth running is the design that was rejected.**
     Deleting a mechanism only proves the test reaches the code; substituting the alternative the
@@ -187,14 +206,17 @@
     affected agent's Guardrails (`architect` already has its half as of 2026-09-08 — *"a mechanism
     claim is only as verified as its least-verified clause"*); or a root-`AGENTS.md`-level
     statement, still probably wrong for a class this abstract.
-- **Notes:** four of the eight instances have now been in evidence in a `cobb` run (the fourth via
-  the retraction pass, the fifth self-inflicted and self-found, the sixth and seventh self-inflicted
-  and caught by the gate), which retires the earlier reason for not acting — that writing a
-  team-wide rule from a single instance is the same error the rule would be about. Three of the four
-  `cobb` instances were **self-inflicted inside a repair**, which is the argument for a lint check
-  rather than a Guardrails bullet: the author was already being careful. The remaining instances
-  live in `analyst`'s and `graph-dba`'s files. Full trail: `docs/reviews/cpg-provenance-stamp.md`
-  (Passes 5-6), `docs/reviews/salesperson-ui-impl.md` Passes 17-18, and `kaizen_team` entry
+- **Notes:** most of these instances have been in evidence in a `cobb` run — the retraction pass;
+  one self-inflicted and self-found; and the rest self-inflicted and caught by the gate, including
+  the soft oracle and this entry's own withdrawn "3-for-3". That retires the earlier reason for not
+  acting: writing a team-wide rule from a single instance is the same error the rule would be about.
+  **Enumerated rather than tallied on purpose** — the tally here was previously "four of the eight"
+  and was already off by one before U64 added another, which is the drift surface a numeral
+  duplicating a list always is. All but the first of the `cobb` instances were **self-inflicted
+  inside a repair**, which is the argument for a lint check rather than a Guardrails bullet: the
+  author was already being careful. The remaining instances live in `analyst`'s and `graph-dba`'s
+  files. Full trail: `docs/reviews/cpg-provenance-stamp.md` (Passes 5-7),
+  `docs/reviews/salesperson-ui-impl.md` Passes 17-18, and `kaizen_team` entry
   `3b351bb5-a8a1-4006-8aa6-bdb3ef1c6448`.
 
 ### K-024 — Two out-of-remit documents still describe the pre-K-023 marker

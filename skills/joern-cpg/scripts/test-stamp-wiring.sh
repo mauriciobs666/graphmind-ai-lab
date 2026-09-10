@@ -235,9 +235,18 @@ P8="BUILT_AT PARSED_AT SOURCE_PATH PROVENANCE SOURCE_ORIGIN SOURCE_COMMIT SOURCE
 echo "stamp wiring:"
 run_case "correct replace over a hand-authored marker" correct "$P8 MARKER_ORIGIN NOTE MARKER_EVIDENCE" parse-root 0 PASS
 run_case "correct replace, provenance=none"            correct "$P8 MARKER_ORIGIN NOTE"                 none      0 PASS
-run_case "regression: merge semantics, foreign key"    merge   "$P8 MARKER_EVIDENCE"                    parse-root 1 MARKER_EVIDENCE
+# THE TWO STRAY-KEY CASES ALSO PIN show_stamp's WORDING, for the same reason the
+# two did-not-land cases below pin replay_stamp's: this is the branch the whole
+# stray assertion exists to reach, and the stamp HAS landed by the time it fires,
+# so advice to re-send it would contradict the branch's own first line. Without
+# the argument, reverting this branch to `replay_stamp` passed the suite green
+# (measured 2026-09-10) — reinstating exactly the self-contradiction the
+# show_stamp/replay_stamp split was introduced to remove.
+run_case "regression: merge semantics, foreign key"    merge   "$P8 MARKER_EVIDENCE"                    parse-root 1 MARKER_EVIDENCE \
+  "the stamp is NOT what needs"
 run_case "regression: merge, pipeline-clean marker"    merge   "$P8"                                    parse-root 0 PASS
-run_case "subsumption: stale SOURCE_* under none"      merge   "$P8"                                    none      1 "SOURCE_COMMIT SOURCE_DIRTY SOURCE_ORIGIN SOURCE_TREE"
+run_case "subsumption: stale SOURCE_* under none"      merge   "$P8"                                    none      1 "SOURCE_COMMIT SOURCE_DIRTY SOURCE_ORIGIN SOURCE_TREE" \
+  "the stamp is NOT what needs"
 
 # The two branches where the stamp did NOT land. These are the only branches in
 # which re-sending the Cypher is the fix, and until 2026-09-08 they were the two
@@ -245,17 +254,51 @@ run_case "subsumption: stale SOURCE_* under none"      merge   "$P8"            
 # already read the stamp back. So assert the WORDING, not just the exit code:
 # a branch that tells the operator to re-send must be a branch where re-sending
 # helps.
+#
+# `GRAPH.QUERY cpg_fake` PINS THE ADVICE BODY, not just the lead-in. Advice to
+# re-send a WRITE via GRAPH.RO_QUERY passed the suite green (measured
+# 2026-09-10): every string asserted here came from print_stamp's lead-in, and
+# nothing looked at the command the operator is told to run. The bound of this
+# one argument: it discriminates the read command from the write command at this
+# call site, and NOTHING ELSE about the line. Measured, not reasoned — rewriting
+# the port to 9999, and replacing `$(cat <file>)` with a nonsense token, both
+# pass the suite green.
 run_case "stamp rejected by FalkorDB"                  stamp_rejected "$P8" parse-root 1 "FAILED(rc=1)" \
-  "only the provenance marker is missing" "does NOT need repeating — only the stamp does"
+  "only the provenance marker is missing" "does NOT need repeating — only the stamp does" \
+  "GRAPH.QUERY cpg_fake"
 run_case "stamp write did not land"                    stamp_lost     "$P8" parse-root 1 "FAILED(rc=1)" \
-  "the freshness stamp did not land" "does NOT need repeating — only the stamp does"
+  "the freshness stamp did not land" "does NOT need repeating — only the stamp does" \
+  "GRAPH.QUERY cpg_fake"
 
+# ---- THE SERVER'S OWN REPLY TEXT, on all three branches that echo one --------
+# Three branches print what FalkorDB actually said — the stamp write's rejection
+# (`${STAMP_OUT}`), the read-back's (`${STAMP_BACK}`), and the stray read's
+# (`${STRAY_BACK}`). Reaching the right branch is not the same as telling the
+# operator WHY, and until 2026-09-10 NONE of the three echoes was asserted:
+# deleting any one of them left the suite green (measured; the branch wording
+# carried every case). So each of the three cases below asserts the exact string
+# its fake emits.
+#
+# THE BOUND, measured rather than reasoned out (the first draft of this comment
+# got it wrong in both directions, so the two mutants are named):
+#   * IT DOES pin that the branch echoed ITS OWN variable. Swapping the stamp
+#     branch's `${STAMP_OUT}` for `${STRAY_BACK}` FAILS the case — the other two
+#     are unset at that point and render `<no reply>`, so a cross-wired echo
+#     cannot borrow another branch's text.
+#   * IT DOES NOT pin the STREAM. Dropping `>&2` from the echo passes green,
+#     because run_block merges stdout and stderr. Nor does it pin the label the
+#     text is printed under, or where in the branch it appears.
+# Worth the argument anyway: the whole point of these branches is the CAUSE, and
+# a cause that is computed and then dropped is the defect the read-back split was
+# fixed for, one echo further down.
+#
 # The stray read comes back as a BARE runtime error. redis-cli exits 0, the
-# reply carries no STRAY_KEY= and matches none of rq's error prefixes, so before
-# the positive trailer requirement this reported "stamp verified by read-back"
-# over a marker that was never checked.
+# reply carries no STRAY_KEY= and matches none of the error prefixes rq used to
+# gate on, so before the positive trailer requirement this reported "stamp
+# verified by read-back" over a marker that was never checked.
 run_case "stray read returns a bare runtime error"     stray_error    "$P8" parse-root 1 "FAILED(rc=1)" \
-  "could not verify the marker's property list" "the stamp is NOT what needs"
+  "could not verify the marker's property list" "the stamp is NOT what needs" \
+  "Type mismatch: expected Map, Node, Edge, or Null but was String"
 
 # THE TWO CASES rq's PREFIX BLACKLIST COULD NOT SEE (K-009, fixed 2026-09-09 by
 # gating on the statistics trailer instead). Neither is asserted on the exit code
@@ -267,21 +310,22 @@ run_case "stray read returns a bare runtime error"     stray_error    "$P8" pars
 #    returned 0, the run walked past its own rejection, and the read-back below
 #    reported "the freshness stamp did not land" — true, but describing the
 #    symptom two steps downstream of the cause it had already been handed.
-#    OF ITS THREE must-contain STRINGS, ONLY THE FIRST TWO PIN THE FIX. The third
-#    is printed by replay_stamp, which the pre-fix code also reaches — via the
-#    read-back branch — so the mutation run's `output lacks:` list names only the
-#    other two. It is kept as a check that the branch reached its end, not as a
-#    discriminator; do not read it as one.
+#    OF ITS FIRST THREE must-contain STRINGS, ONLY THE FIRST TWO PIN THE FIX. The
+#    third is printed by replay_stamp, which the pre-fix code also reaches — via
+#    the read-back branch — so the mutation run's `output lacks:` list names only
+#    the other two. It is kept as a check that the branch reached its end, not as
+#    a discriminator; do not read it as one. The fourth is a reply-text
+#    assertion — see the block above the stray case.
 run_case "stamp rejected, no error prefix"             stamp_bare_error "$P8" parse-root 1 "FAILED(rc=1)" \
   "FalkorDB rejected the freshness stamp" "only the provenance marker is missing" \
-  "does NOT need repeating — only the stamp does"
+  "does NOT need repeating — only the stamp does" "Division by zero"
 # 2. The read-back query itself errors. Before the fix (`|| true`, judged on text
 #    alone) this was indistinguishable from a marker that is genuinely absent,
 #    and the run asserted the stamp "did not land" — a statement about the graph
 #    from a check that never reached it.
 run_case "read-back query itself errors"               readback_error  "$P8" parse-root 1 "FAILED(rc=1)" \
   "could not read the freshness stamp back" "says NOTHING about" \
-  "whether the stamp landed is UNKNOWN"
+  "whether the stamp landed is UNKNOWN" "Unknown function 'nosuchfunc'"
 
 # ---- P6-5(a): the stray query's own empty-allow-list refusal -----------------
 # git-provenance.sh calls this one of "two mechanisms" protecting the
