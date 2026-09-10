@@ -2,6 +2,64 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-10 — `-m live` run against a real LM Studio: R-1 resolved (no), `loadedContextLength` confirmed on a loaded embeddings model
+
+**What:** the stakeholder's 2026-09-10 authorization to trigger a model load (coordination doc,
+"2026-09-10 — reversed") unblocked `tests/test_hostinfo.py`'s two `-m live` probes, written by U72
+and never run. Both ran against a real, locally reachable LM Studio (`http://localhost:1234`) and
+resolved their open questions:
+
+- **R-1 (plan §4 S2, §6 R-1): no.** With a real model resident — checked on two, an
+  `embeddings`-type load (`text-embedding-qwen3-embedding-0.6b`, via `client.embed()`) and
+  separately a `vlm`/chat-type load (`google/gemma-4-e2b`, via `client.chat()`) — the re-read
+  `GET /api/v0/models` entry exposes exactly the same field set both times: the plan's known ten
+  (§2.5: `id`, `object`, `type`, `publisher`, `arch`, `compatibility_type`, `quantization`,
+  `state`, `max_context_length`, `capabilities`) plus the already-known eleventh,
+  `loaded_context_length` (§2.3). No KV-cache or load-configuration key appears on either loaded
+  entry. Verbatim loaded entry (embeddings arm):
+  ```json
+  {"id": "text-embedding-qwen3-embedding-0.6b", "object": "model", "type": "embeddings",
+   "publisher": "Qwen", "arch": "qwen3", "compatibility_type": "gguf", "quantization": "Q8_0",
+   "state": "loaded", "max_context_length": 32768, "loaded_context_length": 2048,
+   "capabilities": ["tool_use"]}
+  ```
+  and (chat/vlm arm):
+  ```json
+  {"id": "google/gemma-4-e2b", "object": "model", "type": "vlm", "publisher": "google",
+   "arch": "gemma4", "compatibility_type": "gguf", "quantization": "Q4_K_M", "state": "loaded",
+   "max_context_length": 131072, "loaded_context_length": 8192, "capabilities": ["tool_use"]}
+  ```
+  `kvCacheSetting` stays operator-attested; no `fingerprint.py`/`AGENTS.md` change follows from
+  this finding (out of this unit's fences — routes to `architect` only if a future probe on a
+  different LM Studio build disagrees).
+- **§3.4.4a's open question: yes.** `loaded_context_length` does appear on a loaded *embeddings*
+  model, not only a loaded chat model — `tests/test_hostinfo.py::test_live_loaded_context_length_on_a_loaded_embeddings_model`
+  passed against the real server (`entries["text-embedding-qwen3-embedding-0.6b"].loaded_context_length == 2048`).
+  §3.4.4a's placement of `loadedContextLength` outside the required set stands as a design choice
+  now made with the embeddings case actually observed, not left open; no `fingerprint.py` change
+  follows.
+
+**How:** no code changed. `.venv/bin/python -m pytest -m live -v` from `model-bench/`, plus a
+one-off `client.chat(model="google/gemma-4-e2b", ...)` script and raw `GET /api/v0/models` reads
+run by hand outside the test file to get the second (chat-type) loaded entry. Both remaining `-m
+live` tests failed on test-authoring defects unrelated to either finding above, left unfixed per
+this unit's fences (reported to the dispatching session, not detailed here):
+`test_live_loaded_catalog_entry_reveals_kv_cache_or_load_configuration` calls `client.chat()` with
+the literal placeholder string `"<a model already loaded by the operator>"` as the `model`
+argument rather than a real catalog id, so it never actually triggers a load and fails on LM
+Studio's 400; `test_live_catalog_and_chat_stats_against_a_real_lm_studio` takes `catalog()[0]` as
+the chat target, which — after the embed call above left the embeddings model resident and
+sorted first by LM Studio — resolved to that non-chat-capable model and failed the same way. Three
+live model interactions total: one embed call (the test's own), one chat call (manual,
+`google/gemma-4-e2b`), one `GET /api/v0/models` catalog read.
+
+**Verification:** `test_live_loaded_context_length_on_a_loaded_embeddings_model` — **passed**
+against the real server. The other two `-m live` tests failed on the authoring defects above, not
+on either finding; the manual reproduction here answers R-1's question on two independent
+loaded-model observations (embeddings-type and chat-type), and a manual `client.chat()` call
+against a real chat-capable model (`google/gemma-4-e2b`) separately confirmed usable `stats` with
+`time_to_first_token` (0.093439 s), which is what the third test exists to check.
+
 ## 2026-09-10 — P18-1 (minor): trace-contract test-fixture coupling documentation
 
 **What:** Impl review Pass 18 (P18-1) identified that the test fixture for the per-iteration
