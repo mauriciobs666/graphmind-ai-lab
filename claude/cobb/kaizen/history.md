@@ -3,6 +3,337 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-09 — U42: `teco` chunk 1 of 4 (thirteen 2026-09-08 entries) — the unit where producer, briefer and gate are one agent
+
+- **What:** unit U42 of `claude/docs/plans/kaizen-distillation2-coordination.md`. `teco`'s own
+  inbox, so the brief instructed me to treat the **discard bar** as the subject of the unit: a
+  `teco` capture is disproportionately likely to be already published in the coordination document
+  itself. I read that document's prose **whole** before dispositioning anything — lines 105–502
+  (`## The graph is live during this pass` → `## Stopped here`) *and* 503–1130 (`## Follow-ups`,
+  6,701 words, which the brief did not scope but which turned out to carry several of the
+  candidate rules). Per-entry disposition below; per-entry write-and-clear throughout, never
+  batched.
+- **Applied in both directions, per the brief:** an entry that restates a coordination-doc section
+  is a discard; an entry that extracts the *rule* from a section that only tells the story is a
+  promotion. Four discards, nine promotions.
+
+**`c1e8b530-47af-4d92-8a06-2f9b7e6c05a1` — discarded (already published, by my own U41 edit).**
+The claim: the `grep` on the Bash tool PATH is a shell function exec-ing ugrep 7.8.4 with
+`--ignore-files`, which skips gitignored paths **only under recursion**, so a recursive sweep meant
+to prove a negative can return a false zero while a named-path probe gives a false all-clear.
+**Read whole before ruling:** `skills/agent-standards/claude-code.md`, `## Bash tool environment`,
+bullet 2 — *"The real GNU `grep` is reachable inline at `/usr/bin/grep`, and the shim's
+`--ignore-files` is a property of **recursion**, not of the file."* That bullet already carries
+every element of the entry: the named-path-vs-recursive asymmetry, the same probe token
+(`include-system-site-packages` under `model-bench/.venv`), the same figures (1 under both binaries
+for the named path; 2 vs 0 for the recursive sweep), the ruled-out confounds (hidden-file
+suppression, the `-I` binary skip), the `--no-ignore-files` escape, and the consequence stated as a
+rule — *"why two agents can test 'does `.gitignore` apply here?' and get opposite answers with
+neither being careless."* The entry's remaining generalization — a bounded scan cannot prove a
+negative — is likewise already a rule in `teco`'s **own always-loaded prompt**
+(`claude/teco/teco.md:132`: *"as must any scan whose purpose is proving a negative"* be unfiltered).
+Nothing survives; no clause promoted.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node
+  `DETACH DELETE`.
+
+**`f4c1a7e2-8b3d-4a19-9e57-2d6b0c3f81aa` — discarded (published on both surfaces it needs).**
+The claim: reconcile a delegate-reported per-file test-count breakdown against the **suite delta**
+rather than against the grep it cites, because `git diff | grep -c '^+def test_'` counts function
+definitions and undercounts every `@pytest.mark.parametrize` case. **Read whole before ruling:**
+`claude/analyst/review-techniques.md`, `## What a change silently stopped enforcing: execute the
+pre-image, diff the collected test IDs` — which states the identical mechanism as a rule
+(*"a def-level diff undercounts by however many ways a retired test was parametrized"*), carries a
+re-derived worked instance in the same repo and the same week (`cc28d48 → 7f865e2`, 519 → 550
+collected, `comm` giving 6 retired and 37 added against a `grep '^-def test'` reading **3**, one def
+parametrized four ways), and supplies a **stronger** remedy than the entry's: diff `--collect-only`
+test IDs out of a `git archive` extraction, which attributes per file where a suite delta cannot.
+The coordinator-side half — *don't check a delegate's figure against the delegate's own cited
+command* — is `claude/teco/teco.md:121`: *"Corroboration needs independence of **method**, not a
+second agent — two agents running the same grep are one check."* Re-running the cited grep is that
+same one check. Nothing survives.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node
+  `DETACH DELETE`.
+
+**`c9a4515c-ad6b-4e77-af14-a09ff05e6ef5` — discarded (this is U38's own promotion, read back).**
+The claim: the least-verified prose in any document is the **justification** attached to a rule the
+reader agrees with; and a coordinator who relays that reason onward converts one delegate error
+into a team-wide one. **Read whole before ruling:** `claude/analyst/review-techniques.md`,
+`## The reason attached to a rule is checked less than the rule — so a correct rule ships with a
+false mechanism` — U38's promotion, which states the rule in the entry's own terms (*"a reader who
+agrees with the rule does not re-open the mechanism offered for it… a wrong rule eventually trips
+someone, a wrong reason never does"*) and whose **worked instance is this entry's own generation
+5**: `skills/cpg-analysis/references/freshness.md` at `81b43cd`, the *"the next successful `--load`
+overwrites it wholesale, `NOTE` and `MARKER_ORIGIN` included"* sentence, falsified against
+`git-provenance.sh`'s eight-property `SET`. The relay clause the entry adds — one agent writes the
+reason, a second commits it, a third hands it back as a candidate learning — is *narrated verbatim*
+in that section's third paragraph, and its rule-form is the section's closing move: *"for each rule
+you are about to endorse, name the mechanism it rests on and ask whether you checked **that** — or
+only agreed with the rule."* Endorsing and relaying are the same act; the published rule already
+binds the relayer. The entry's paged tail (evidence runs to 1,032 chars) adds only the repair, which
+that section also carries as **the tombstone, not deletion**. Nothing survives.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node
+  `DETACH DELETE`.
+
+**`7c1f0a94-3b62-4d8e-9a05-2f8e1c6b4d73` — discarded as a fact; it surfaced a live contradiction in
+`teco.md`, which I fixed.** The claim: the git index is shared per working tree, not per session, so
+`git add -A` avoidance protects other sessions from you rather than you from them, and the
+protection that works is **atomicity** — `git add <paths> && git commit` in one tool invocation.
+**Read whole before ruling:** `claude/AGENTS.md`, `**`git add` then `git commit` is not atomic
+against a concurrent process sharing the same working tree.**` (the paragraph running to the
+`git status`-staleness clause). It publishes every element — the shared index, the 2026-08-21
+`analyst`/`qa-engineer` observation, the direction inversion in the entry's own words
+(*"File-disjoint work does not avoid this — the race is on the index, not on any one path"*), and
+the entry's evidence as a stated consequence (*"a `git diff --cached` beforehand shows your hunks
+and proves nothing about what lands"*). **And its remedy is strictly better than the entry's:** the
+path-limited commit `git commit -m … -- <path>…` never touches the shared index at all, where the
+entry's `git add && git commit` merely shortens the window. Promoting the entry verbatim would have
+been a regression.
+- **What it did surface:** `claude/teco/teco.md`'s own Bash-grant bullet still read *"you may
+  `git add`/`git commit` … by explicit path"* — the racy sequence, endorsed in the prompt of the one
+  agent that commits most, contradicting `claude/AGENTS.md`. That is the direct cause of the
+  incident the entry records. **Fixed:** one clause added to that bullet pointing at the
+  path-limited form, `git add` reserved for a still-untracked path, plus the direction inversion.
+  Not a promotion of the entry's fact — a composition-conflict repair the entry made visible.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node
+  `DETACH DELETE`.
+
+**`7b41d process-e2a-4c19-9f30-1d5e8c07a4b2` — promoted (`claude/teco/teco.md`, step 3, new bullet
+beside *Mutation-test the green-on-arrival tests*), merged with `3f8c1a92…`.** The malformed id —
+40 characters with a literal space, the same corruption class as U17's `PLACEHOLDER` node. Matched
+on the **full literal including the space**; every `MATCH` verified to return exactly 1 before any
+mutation; the id was not "fixed", the node was cleared as it stood. The claim: against a harness
+that kills long runs without warning, the decisive habit is instructing a delegate to write its
+deliverable to disk **first** and fill it incrementally — not to serialize or shorten dispatches.
+**Read whole before ruling:** the coordination document's `## Five platform failures, all cleanly
+recovered` (lines 153–200). It derives **three** rules from those five kills — *write and clear per
+entry*, *establish actual state before acting*, *prefer resuming over re-dispatching* — and all
+three are **recovery-side**, addressed to whoever picks the corpse up. **None of them is the
+briefing-side rule**, and neither is anything in `teco.md`, whose only durability instruction was
+the mutation-test restore. That is the "story about Tuesday vs. a rule a future reader would apply"
+test coming out on the promote side: the document narrates five kills and never tells the
+coordinator what to put in the *next* brief.
+- **Promoted in its corrected form, not as captured — deliberately.** The entry as written says
+  *skeleton with every section marked pending*, which `3f8c1a92…` (same family, same inbox)
+  falsifies for a live gated document and `claude/analyst/review-techniques.md` independently
+  forbids (*"do not park pending markers in the authoritative document while you re-measure: a
+  coordinator committing by explicit path commits the placeholder"*). I merged the two into one
+  bullet in a **single** edit rather than shipping the crude form and correcting it two calls later:
+  agent prompts deploy by symlink, so an uncommitted edit is already live for the running team
+  (`review-techniques.md`, *"An uncommitted agent-prompt edit under review is already live"*), and a
+  knowingly-wrong intermediate state would have been live too. This is the one deviation from strict
+  per-entry write ordering in the unit; both entries' writes still precede both history appends and
+  both clears, so the fail-safe property is intact.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node
+  `DETACH DELETE`.
+
+**`3f8c1a92-6d4e-4b17-9a55-c0e21b7f4d83` — promoted in part; the rest discarded as already
+published.** The claim has two halves. **The measurement half** — *the durable artifact is a
+re-runnable measurement script, which caught its own bug reporting a false `0` for two residuals it
+ran under `grep -rn` where the plan states `-rEn`* — is published verbatim, incident and figures
+included, in `claude/analyst/review-techniques.md`, the closing block of `## A grep-pinned edit
+table is an edit list, not a completeness proof` (*"Keep the measurement as a re-runnable script,
+not as numbers in your context or markers in the document"* — built 2026-09-08 after a
+mid-measurement kill, *"immediately reported **0** where the answer was **2** for
+`def [A-Za-z_]*(percentile|quantile)`"*). That was **U41's own promotion**, an hour before this
+unit; discarded. **The briefing half** — the *form* of the durable artifact depends on the
+deliverable, and a delegate is right to refuse a literal skeleton-first instruction when its
+deliverable is a live document a gate reads — is the qualifier that makes `7b41d process-…`'s rule
+safe to state, and is not on any prompt surface. It landed in the same `teco.md` bullet, in the same
+edit, for the live-symlink reason recorded above.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node
+  `DETACH DELETE`.
+
+**`b9f27c04-8e13-4a5d-b6f0-71d2a9e33c58` — promoted in the sharpened form (`claude/teco/teco.md`,
+step 2, new paragraph under the ledger).** Captured claim: a coordination-ledger edit made by string
+replace must assert its match count, because an unasserted replace no-ops silently and leaves the
+`Status` cell stale. **Read whole before ruling:** `claude/teco/teco.md`'s step-2 ledger block —
+which establishes the ledger as the state of record (*"The ledger, not your context window, is where
+a unit's state lives"*) and says nothing whatever about how to edit it safely. Not in the
+coordination document either. So the entry is a genuine gap — but a **partial** one, and the brief
+supplied the missing half from an incident the same day: the assertion passed at `count == 1` and
+the edit still landed 56 lines away under a different section, because the document holds two tables
+and the anchor was the *header* of the wrong one; the two tables differ in column names, so the
+header was unique text and the assert was satisfied.
+- **Scope of the promotion, and a supersession for `teco` to action.** I promoted the **sharpened**
+  rule — assert the count *and* anchor a row insertion on the last data row of the intended table,
+  because a cell-count check validates shape and is blind to location — rather than the captured
+  half. Two half-rules landing separately in an already-dense always-loaded prompt is the outcome
+  worth avoiding. **Consequence:** `a90c5f31-7d24-4e68-b3af-1c8e02d97b45` (not in this chunk, not
+  touched) is now **superseded** by the promoted text and should be retired when its own chunk comes
+  up, not promoted again.
+- **One scope correction on the captured wording.** *"An unasserted replace no-ops silently"* is true
+  of a scripted `str.replace`/`sed`, and **false of the `Edit` tool**, which errors on a missing or
+  non-unique `old_string`. The promoted text says *scripted* string replace for that reason.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node
+  `DETACH DELETE`.
+
+**`b62d7e04-91af-4c8a-8f3b-2e5a9d16c740` — promoted (`claude/teco/teco.md`, step 5, folded onto
+*Re-verify every summarized number*).** The claim: a coordinator re-verifying a spec can confirm
+every stated number and still miss the defect, because the verifiable half is the **before** value
+while the defect lives in whether the **after** value is reachable by a faithful implementer.
+**Read whole before ruling:** the coordination document's `## The same defect shape, four times
+running: right method, wrong evidence line` (lines 259–322) — and it is the *opposite* finding.
+That section is about **wrong** figures shipped by confident delegates, and its standing check is
+*"re-run the evidence, not the assertion."* This entry says the figures were **right**, all six of
+them, reproduced independently, and that being right is exactly what made them uninformative. The
+document contains no such rule anywhere; nor does `teco.md`, whose *Re-verify every summarized
+number* bullet prescribes the measurement without ever saying what a clean result licenses. That is
+the whole point of this unit — the pass has been recording the failure mode where its own
+verification came out *dirty*, and never the one where it came out *clean*.
+- **Deliberately worded to reinforce, not contradict, the rule two bullets down.** The entry's own
+  advice is *"brief the review gate **off** the arithmetic you verified"*, and `teco.md` already
+  forbids exactly that (*"Never tell a review gate that one of your own conclusions is settled and
+  out of scope; it is the one input a reviewer has no independent reason to re-check"*). The entry's
+  evidence is the reason the prohibition is right, not an exception to it: the verification proved
+  transcription only, so declaring it settled would hand the gate a false floor. Promoted form
+  therefore redirects **`teco`'s own** next question and closes with *"it never narrows the gate's
+  scope, for the reason below"* — pointing at the standing rule rather than competing with it.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node
+  `DETACH DELETE`.
+
+**`d41b9c37-5e82-4f60-a3d9-7b8e2c05a916` — promoted (`claude/teco/teco.md`, step 5, new bullet).**
+The claim: when a fix round closes several findings in **one** revision, the next defect comes from
+the interaction of two *correct* fixes rather than from either being wrong, and no finding's own
+re-check can catch it. **Read whole before ruling:** `claude/analyst/review-techniques.md`,
+`## A grep-pinned edit table…` **item 6** (*Cross-table collisions survive per-table discipline*) —
+the closest published relative, and it is scoped to residual **tables** colliding on a line, with a
+plan-side structural remedy (require colliding tables to name each other, fix their order, restate
+the later residual over the surviving spelling). This entry is one level up and on a different
+axis: two **findings** closed in one revision, where the collision is between the fixes' *semantics*
+(P10-3 made a residual survive a varied implementer spelling; P10-2 required a second module to
+reach the same constant; package-scoped `grep -F` matched through the module qualifier, so the
+natural implementation reads 2 against a stated target of 1). Nothing on any prompt surface says to
+re-gate fixes against each other — `teco.md`'s gate rules are *two gates, not one* and *a repeated
+gate has a decidable stopping signal*, both about gate **count**, not gate **scope**.
+- **The belt-and-braces corollary is the half worth the prompt line.** *Both repairs applied to one
+  finding* currently reads to a coordinator as extra safety, and the entry shows it is the precise
+  condition under which the two can disagree. Promoted with the rule.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node
+  `DETACH DELETE`.
+
+**`c337165d-4984-40ef-8128-45689f783f66` — promoted narrowly (`claude/teco/teco.md`, step 3,
+extending the existing *Fencing note*).** The claim: a brief that fences by **directory** silently
+captures unrelated work under it, naming two standing `teco` fences as the offenders —
+*"do not touch `claude/`"* capturing the delegate's own `claude/<agent>/kaizen/history.md`, and
+*"no graph writes"* capturing the `kaizen_team` producer-write. **Read whole before ruling:**
+`teco.md`'s *Fencing note* bullet — which already covers the **first** offender in both halves (the
+capture is a graph write, not a file write, so a subtree exclusion does not block it; and carve the
+`kaizen/history.md` out explicitly when a distillation step needs it). `git log -S` dates that
+bullet to **`0de88ff`, 2026-08-20** — nineteen days *before* this entry. So the largest part of the
+entry is a rule that was already in `teco`'s own always-loaded prompt and was not applied; that half
+is discarded, and the fact that it did not bind is worth more to `teco` than a re-promotion would be.
+- **What genuinely was missing, and is now promoted:** the **second** offender. A *"no graph writes"*
+  fence is not a subtree exclusion — it names the operation, so it textually *does* bar a producer-
+  write, and the existing bullet's reasoning (*it's a graph write, not a file write*) argues the
+  wrong way round for it. Added as its own clause, plus the entry's general principle (**fence by
+  file, not by directory**) and its observation that the delegate cannot distinguish an intentional
+  bar from an over-broad one — which is why `cobb` correctly did neither and reported both.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node
+  `DETACH DELETE`.
+
+**`d7a4e916-3b02-4f88-9c15-5e0b6a2f71d3` — promoted (`claude/analyst/review-techniques.md`,
+`## A grep-pinned edit table…`, as **item 7**; opener renumbered six → seven).** The claim: a
+verification grep stated over pre-edit text goes blind exactly when the edit rewrites that text, so
+it certifies a **half-applied** edit as complete; the discriminator is where the retired literal
+sits — at a call site it survives verbatim and the grep works, fused into a rewritten expression it
+cannot survive to be counted, and only that case needs a behavioural test in the grep's place.
+**Read whole before ruling:** all six existing items of that section plus its two derived checks
+(the brief's Lead 3 suggested this restates the coordination document's `## The same defect shape,
+four times running` — it does not; that section is about wrong *figures* in an evidence line, this
+is about a **correct** command that cannot see what it was written to see). Item 4 is the nearest
+neighbour and is the inverse (*a rename that keeps its token alive has no zero-residual to assert*);
+item 5's false-failure case is a different sign. The entry's own `context` field calls it the
+*"fifth instance of the residual-that-fails-on-a-correct-edit family"*, and that family's home is
+precisely this closed list — so the right promotion was into the list, not beside it.
+- **Renumbering, and the drift it creates in a document I must not edit.** The opener now reads
+  *"Seven ways … six of them by passing an incomplete one, and item 5 by doing that and failing a
+  correct one."* `claude/docs/plans/kaizen-distillation2-coordination.md:536` quotes the previous
+  *"Six ways"* wording verbatim as the record of U40's fix to that opener. That quote is now stale
+  as a quote (it remains accurate as history). Flagged to `teco` in the U42 report rather than
+  edited — the coordination document is `teco`'s.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node
+  `DETACH DELETE`.
+
+**`0da6c8d6-1ade-4756-8a91-dcd8f93b7827` — promoted (`skills/agent-standards/claude-code.md`,
+`## Bash tool environment`, new bullet after the scratchpad one; plus a one-clause correction in
+`claude/teco/teco.md`).** Produced by `teco`, but the fact is harness/agent-engineering, so routed on
+merit rather than by producer. The claim: a subagent `agentId` lost from the ledger is recoverable
+from the harness itself, which writes one JSONL transcript per subagent.
+- **Shipped form** (after the correction below): the canonical store is
+  `~/.claude/projects/<slugified-cwd>/<session-id>/subagents/agent-<agentId>.jsonl`, **45** for this
+  session, each with a sibling **`agent-<agentId>.meta.json`** carrying `{agentType, description,
+  toolUseId, spawnDepth, requestShape, requestNonInteractive, model}` — so *which agent, what task,
+  which model* is one structured read. The `.jsonl` still answers cost
+  (`grep -o '"usage":{[^}]*}' … | tail`, `grep -c '"type":"tool_use"'`).
+  `/tmp/claude-<uid>/<slugified-cwd>/<session-id>/tasks/` is documented as what it is: a partial,
+  mixed-content convenience view — **24** entries, **17** symlinks into `subagents/` plus **7** plain
+  files that are the session's own persisted `Bash` tool-result outputs, covering 17 of 45 with
+  **28** canonical ids absent.
+- **My first re-derivation reproduced the entry and was wrong — twice over, and this is the useful
+  part of the record.** The coder transcript the entry cited no longer exists on this box, so I
+  established the path from live state, found `tasks/` populated, found
+  `a74ea49194ca86329.output` in it (the `agentId` the coordination document's
+  `## Five platform failures` table names for U41), and concluded *"enumeration,
+  brief-identification and the usage/tool-use cost greps all behave as described."* Two independent
+  defects under that: **(a)** `tasks/` is not the store — it is a symlink view over
+  `~/.claude/projects/…/subagents/`, mixed with unrelated tool-result files, covering 38% of the
+  session's subagents; **(b)** my count of **66** came from the glob `…/*/tasks/*.output`, which
+  spans **every session directory under the project slug**, so I reported a cross-session aggregate
+  as a per-session figure. Re-measured 2026-09-10 05:15: that glob returns **78** (24 + 12 + 1 + 41)
+  across the **four** session directories holding any output, of **ten** that exist. My stated
+  *"five session ids"* was a third quantity again — `ls -d …/*/tasks | wc -l`, which returns **six**
+  today and counts directories that merely *have* the subdirectory. **Ten, six and four are all real
+  and all mean different things, and the obvious sanity check returns the middle one** — which is
+  what let a wrong denominator look checked.
+- **Two spot-checked ids could not have caught it.** Both ids I verified (`a74ea49194ca86329`,
+  `a904a5d98e993c179`) resolve in the canonical directory, and one of them happens to be symlinked
+  into `tasks/` as well. A membership check confirms a superset relation it cannot measure; only
+  `comm -23` over the two full id lists shows the 28.
+- **Caught by `teco`'s gate, not by me**, and it is the pass's own recurring shape turned on the
+  distiller: **right mechanism, over-wide reach claim** — the same defect class as U20's accessor,
+  U21's revision count and U23's headline figure. What made mine harder to see is that the reach
+  claim (*"enumerates **every** id"*) was the part I had no instrument pointed at; I tested that the
+  files existed and never that the directory was complete.
+- **Routing, unchanged by the correction.** The existing scratchpad bullet documents
+  `/tmp/claude-<uid>/<slugified-cwd>/<session-id>/scratchpad` and the parent-session keying, so this
+  is its neighbour; every path is written in the generic `<uid>`/`<slugified-cwd>` form, carrying no
+  personal identifier. **It also falsifies a live absolute in `teco.md`** — *"you have no
+  agent-enumeration tool"* — so that clause now reads *no enumeration **tool***, with a pointer to
+  the skill. That correction is **better** supported after the fix, not worse: the filesystem does
+  enumerate every id, one directory over. The bound it states is untouched — an id recovered after a
+  session reboot still will not resolve for `SendMessage`.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node
+  `DETACH DELETE`.
+
+**`3f8c21a9-7d4e-4b60-9c15-8ae2f0d6b374` — promoted (`skills/agent-standards/claude-code.md`, new
+bullet directly under the *Frontmatter hooks fire in main-session mode too* callout).** Produced by
+`teco`; routed to the standards skill on merit — this is a harness-scoping fact, `cobb`'s remit, and
+`teco.md` is the wrong price for it. The claim: a `PreToolUse` hook declared in an agent's
+frontmatter also evaluates tool calls made by **subagents that agent dispatches**, so a
+coordinator's write-guard fires on every delegate write and emits spurious approval prompts on
+in-remit implementer edits.
+- **Independently re-derived, and the entry understated it.** The entry's cited evidence (coder
+  `ab774117c13e7f953`, `toolu_01GFHL642Q7umfEqbz8yn2FM`) is unreachable — that transcript is not on
+  this box. So I established the fact from live state instead, using the mechanism promoted one
+  entry earlier: `guard-coordination-doc-writes.sh` is registered **only** in
+  `~/.claude/agents/teco/teco.md` frontmatter and nowhere in `~/.claude/settings.json`, and it fires
+  **four times inside U41's `cobb` transcript**, each `permissionDecision: "ask"` carrying `teco`'s
+  remit text against `cobb`'s in-remit edits to `skills/agent-standards/claude-code.md`,
+  `claude/architect/kaizen/history.md`, `claude/cobb/kaizen/history.md` and
+  `skills/python-web-quirks/SKILL.md`. Claude Code **2.1.266**.
+- **Why it earns a place in the skill rather than a note.** It changes the
+  **enforcement-parity check** in `agent-maintenance` §4.4: an agent's declared hooks are not a
+  complete account of what gates it, because its *dispatcher's* hooks gate it too — a drift class
+  neither the catalogs nor `audit-team.sh` can see. Bounded honestly in the promoted text: this is
+  the delegation direction, distinct from the main-session/subagent *mode* question the bullet above
+  it records, and the observation shows the decision **emitted**, not that it reached the human.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 1 + 0 − 1 = 0` ⇒ full-node
+  `DETACH DELETE`.
+- **Docs touched by U42:** `claude/teco/teco.md`, `skills/agent-standards/claude-code.md`,
+  `claude/analyst/review-techniques.md`, `claude/cobb/kaizen/history.md`. No catalog line earned —
+  every promotion is a fold into an existing bullet, section or numbered item; no new knowledge base,
+  no new agent, no new skill. `claude/AGENTS.md` untouched at 2,491 words.
+
 ## 2026-09-09 — U41: `architect` chunk 2 of 2 (the eight 09-08/09-09 entries) **plus one `cobb` entry folded in** — 6 promoted (2 halves), 2 discarded, 0 kept open; `architect` closed out at 0/0
 
 - **What:** unit U41 of `claude/docs/plans/kaizen-distillation2-coordination.md`. The full disposition record for the eight `architect` entries lives in `claude/architect/kaizen/history.md` (same date); recorded here is `cobb`'s **own** entry, folded into this unit on my U40 recommendation because it lands on the same `claude-code.md` paragraph as two of `architect`'s. One edit, one unit — the standing *one agent at a time* rule was not relaxed, only the producer boundary inside a single edit target.

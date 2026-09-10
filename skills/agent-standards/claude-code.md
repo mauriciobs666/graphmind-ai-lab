@@ -154,6 +154,24 @@ conversational agent**:
   > from any source (frontmatter or settings.json), on any matcher tested (`Bash`, `Write`/
   > `Edit`), in either main-session or subagent execution**, until independently reconfirmed
   > fixed. Full trail: `claude/cobb/kaizen/history.md`, 2026-08-21 entries (K-018/K-019).
+- **A `PreToolUse` hook declared in an agent's frontmatter is not scoped to that agent's own tool
+  calls — it also evaluates the tool calls of subagents that agent dispatches** (re-derived
+  2026-09-09, Claude Code **2.1.266**, graphmind-ai-lab). `teco`'s `Write|Edit` write-guard is
+  registered **only** in `~/.claude/agents/teco/teco.md` frontmatter — absent from
+  `~/.claude/settings.json` — and it fires **four times inside a `cobb` delegate's transcript**
+  (`.../tasks/a74ea49194ca86329.output`), each returning `permissionDecision: "ask"` with `teco`'s
+  own remit text, on `cobb` edits that were entirely within `cobb`'s remit
+  (`skills/agent-standards/claude-code.md`, `claude/architect/kaizen/history.md`,
+  `claude/cobb/kaizen/history.md`, `skills/python-web-quirks/SKILL.md`). Two consequences. **For
+  hook authors:** a coordinator's guard must be written to tolerate paths that are legitimate for
+  its *delegates*, or every dispatch pays spurious approval prompts; the delegate's own guard
+  evaluates the same `toolUseID` independently, so two hooks from two different agent definitions
+  can return different decisions on one call. **For the enforcement-parity check
+  (`agent-maintenance` §4.4):** an agent's declared hooks are not a complete account of what gates
+  it — its dispatcher's hooks gate it too. Note this is the delegation direction, distinct from the
+  main-session/subagent *mode* question in the bullet above; and unlike the 2026-08-21 non-firing
+  callout, the hook here demonstrably fires and emits its decision (whether that decision then
+  reaches the human is a separate question this observation does not settle).
 - The **withheld-tools list applies to subagents only** — as the main session the agent
   can use `AskUserQuestion` etc., so live multi-turn interaction works.
 - The main-thread agent can spawn subagents via `Agent`; the **`Agent(agent_type)`
@@ -644,6 +662,37 @@ the always-loaded project memory (`CLAUDE.md`).
   reuse leaves stale files a later run can mistake for its own. Namespace every scratch filename per
   agent/run, or work in a `mktemp -d` sandbox; a briefing that dispatches two agents expecting to
   write scratch files should say so.
+
+- **A lost subagent `agentId` is recoverable from disk — but the canonical store is under
+  `~/.claude/projects/`, not the `tasks/` view beside the scratchpad.** The harness writes one JSONL
+  transcript per subagent at
+  `~/.claude/projects/<slugified-cwd>/<session-id>/subagents/agent-<agentId>.jsonl`, with a sibling
+  **`agent-<agentId>.meta.json`** — `{agentType, description, toolUseId, spawnDepth, requestShape,
+  requestNonInteractive, model}`. That meta file is the identification surface: *which agent, what
+  task, which model* is one structured read, no grepping the brief. The `.jsonl` answers the
+  resume-vs-fresh cost question before you spend it — `grep -o '"usage":{[^}]*}' … | tail` and
+  `grep -c '"type":"tool_use"'`. All of it survives a context compaction, which the coordinator's own
+  memory of the id does not.
+  **Do not enumerate `/tmp/claude-<uid>/<slugified-cwd>/<session-id>/tasks/` instead — it is a
+  partial, mixed-content convenience view.** Measured 2026-09-09 in graphmind-ai-lab, one
+  coordinator session: **45** canonical transcripts against **24** `tasks/` entries — **17**
+  symlinks into `subagents/`, plus **7** plain files that are not subagents at all but the session's
+  own persisted `Bash` tool-result outputs (`b13156s17.output` and the like). Coverage is 17 of 45 —
+  **28** canonical ids have no `tasks/` entry — and the plain tool-result files are transient
+  besides. **The trap that actually bites, though, is the glob.** `…/*/tasks/*.output` spans **every
+  session directory under the project slug**, silently aggregating other sessions' work into what
+  reads as a per-session count: it returned **78** here (24 + 12 + 1 + 41) across the **four**
+  session directories holding any output — of **ten** that exist, and **six** that carry a `tasks/`
+  subdirectory at all — and it had returned **66** six hours earlier, growing as a concurrent
+  session kept dispatching. Three different denominators, 10 / 6 / 4, and the obvious sanity check
+  `ls -d …/*/tasks | wc -l` returns the **middle** one, which is exactly what makes a wrong
+  per-session figure look checked. Spot-checking two known ids cannot detect any of this — both will
+  usually resolve.
+  Three bounds worth stating: a prompt claiming *"you have no agent-enumeration tool"* is true of
+  **tools** and false of the filesystem; the directory is keyed by the **parent** session, so this
+  works from the coordinator and not from a sibling session; and an `agentId` still only *resolves*
+  for `SendMessage` inside the session that spawned it (above) — what this recovers is the id, not a
+  dead session's ability to use it.
 
 - **The repo working tree is shared the same way, and a concurrent session can silently revert an
   `Edit` you already confirmed landed — not only at commit time.** Observed once, graphmind-ai-lab

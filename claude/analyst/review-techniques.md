@@ -721,7 +721,7 @@ is not a coverage gap; a single-seed *killed by three tests* is not redundancy.
 
 When a plan prescribes a change across already-shipped code by pinning each site with a `grep`
 command and a count, and closes with a **residual** (`grep -rFc <token> … → 0`), the table looks
-self-verifying and is not. Six ways the residual misreports the edit — five of them by passing an
+self-verifying and is not. Seven ways the residual misreports the edit — six of them by passing an
 incomplete one, and item 5 by doing that *and* failing a correct one — all met in one plan-gate
 chain (`docs/plans/small-model-benchmarking.md`, Passes 5–9):
 
@@ -791,6 +791,17 @@ chain (`docs/plans/small-model-benchmarking.md`, Passes 5–9):
    restate the later table's residual over the **surviving post-edit spelling — re-derived, not
    merely re-scoped**. Narrowing the path is the tempting fix and the wrong one: it leaves the
    stale pattern in place and only hides the collision.
+7. **A residual stated over *pre-edit* text goes blind exactly when the edit rewrites that text —
+   so it certifies a **half-applied** edit as complete.** The discriminator is where the retired
+   literal sits. At a **call site** the edit does not restructure, the literal survives verbatim
+   wherever it was missed, and the residual works as intended. **Fused into an expression the edit
+   rewrites**, it cannot survive to be counted: parameterising a clamp whose two literals sit
+   inside the returned expression, then wiring only the lower bound to the new argument, drives
+   **both** stated residuals to 0 while a test fails — the residual is measuring the half that
+   landed. Measured 2026-09-08 on the `model-bench` S1e edit list: Table E (fused) misreported
+   under exactly this half-application, sibling Table G (call site) stayed detectable under the
+   same class. **Only the fused case needs a behavioural test standing in the grep's place**; do not
+   pay for one where the literal sits at a call site.
 
 **Two derived checks.** A residual command must be re-asked against *every* implementation the same
 table authorises — an authorised literal branch can re-add the very string the residual asserts to
