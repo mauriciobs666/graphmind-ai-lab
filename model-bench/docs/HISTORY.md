@@ -2,6 +2,71 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-10 — S2, Step 1: `runner.py`'s core — capture order, `LatencyBlock` accumulation, both driving loops
+
+**What:** `docs/plans/small-model-benchmarking-runner-spec.md` §7 Step 1, built directly on Step
+0's `results.py`/`convo.py` landing (U115, previous entry). New `modelbench/runner.py`:
+`RunConfig`, `RunRefused`, `DispatchFailureDisclosure`, `ItemScorer`/`ConversationScorer`
+Protocols, `run_pack` (the ten-step capture-order sequence, §3.4.4a), `_drive_single_call_items`
+(the four item-level roles), `_drive_conversations`/`_turn_timings` (`tool-caller`), the two load
+producers `_load_withheld_for`/`_gap_withheld_for` plus `_gap_ms`, and `latency_block` — the
+accumulation pass building `LatencyBlock` from a run's `items`, satisfying all nine invariants in
+spec §5. `modelbench/packs.py` gains `Pack.iter_items()`/`iter_scripts()`/`find_script()` (spec §9's
+own flagged, unspecified helpers — pure data-iteration, no design stakes). New
+`tests/test_runner.py` (55 tests), entirely offline: hand-built stub `LMStudio`/`ToolEnvironment`/
+pack objects, no real pack, no scorer, no network — driven in the spec's own order: test 15b's
+case list first (`latency_block`'s nine invariants, the multi-call (a)-(f) cases via
+`_turn_timings`), then v1.31's per-conversation `ToolEnvironment` tests, then a confirmation pass
+on `_drive_conversations`'s reading of `TurnTrace`/`ConversationTrace`, then the dispatch-failure
+note's E2-E4, then 12/12b's `basis` wiring, then `run_pack`'s own capture-order refusals and one
+offline happy path.
+
+**Three genuine gaps in the spec's own pseudocode, resolved and documented at their own sites in
+`runner.py`'s module docstring** (not silently patched):
+
+1. `_drive_conversations`'s `design_effect = stats.design_effect(...)` is called with its
+   arguments elided in the spec. Reading `docs/plans/small-model-benchmarking-ml.md` §4.5.1/R1
+   directly (as spec §7 Step 1 instructs) settles it differently from a bootstrap-width call: the
+   note states "DEFF 1.00 by construction" for the 12×1 tool-caller design outright — the sampling
+   unit (script) and the analysis unit (script) coincide, so `_drive_conversations` returns `1.0`
+   unconditionally, exactly like the item-level loop, and never calls `stats.design_effect`
+   (a general Rule 5 utility for a design that *does* cluster its sampling unit).
+2. `latency_block`'s spec signature (`items` only) cannot implement its own rule (iv-a):
+   `statsCoveredCount` must read `None` on a surface with no `stats` at all (embeddings) and a real
+   `0` on a chat surface where every call happened to lack `stats` — two states structurally
+   identical in `items` alone. `latency_block` therefore takes a required keyword-only
+   `call_surface`, threaded from `run_pack`'s own already-computed value.
+3. `run_pack`'s pseudocode constructs `RunResult(aggregates=aggregates, ...)` from a variable the
+   item-level driving loop never produces — `ItemScorer.score_item` (spec §3.2) yields one
+   `ItemResult` per item with no run-level aggregation method, unlike
+   `ConversationScorer.score_conversations`. `ItemScorer` gains one method beyond the spec's own
+   two, `aggregate(items, *, pack) -> Aggregates`. Inert today: `_load_item_scorer`/
+   `_load_conversation_scorer` raise `NotImplementedError` unconditionally (no scorer ships before
+   S3), so this is a seam for S3 to confirm or revise, not a load-bearing decision anything already
+   depends on.
+
+**One finding, not fixed here:** `ToolCallAggregates` (`results.py`) has no `determinismProbe`
+field, though the plan (§3.8.4) and the runner spec both describe `basis` as read from it.
+`_drive_conversations` reads it defensively (`getattr(aggregates, "determinismProbe", None)`,
+fail-safe to `"assumed"` when absent) so a real `ToolCallAggregates` cannot crash the run; the
+12/12b basis-wiring tests use a stub `ConversationScorer` returning an object that *does* carry the
+attribute, per the spec's own §8 test-strategy guidance. The field itself is presumably S5's to add
+alongside the first real `ConversationScorer`.
+
+**Mutation-tested** (source restored by copy after each, `diff -q` verified, `PYTHONDONTWRITEBYTECODE=1`):
+the disposition-over-load precedence rule in both `_turn_timings` and
+`_drive_single_call_items` (P15-3/P16-1 — a failing call/turn must not also be marked `"load"` by
+the residency guard); `_drive_conversations`'s one-`ToolEnvironment`-per-conversation obligation
+(v1.31); the censoring-vs-scored-failure discrimination E2/E4 exist to catch (dropping the
+disclosure record while still censoring the trace). All four mutations reddened the intended
+tests and no others; all four restorations diffed clean against the pre-mutation source.
+
+**Verified:** full suite `1109 passed, 3 deselected` (up from `1054 passed, 3 deselected`),
+`ruff check .` clean.
+
+CPG: considered, not relevant — `cpg_model-bench` is not a loaded graph on this FalkorDB instance;
+a code-level task in a component with no CPG built, not a task without a code-level component.
+
 ## 2026-09-10 — `tests/test_report.py`'s embedder fixtures corrected to `itemId` (route (iii) fallout)
 
 **What:** U114's sampling-contract route (iii) enforcement (`check_sampling_contract`, previous

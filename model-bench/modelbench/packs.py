@@ -40,9 +40,9 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType, ModuleType
-from typing import Any, Mapping, NamedTuple
+from typing import Any, Iterator, Mapping, NamedTuple
 
-from modelbench.convo import _HISTORY_REPLAY_MODES, PromptConfig
+from modelbench.convo import _HISTORY_REPLAY_MODES, Conversation, PromptConfig, Turn
 from modelbench.roles import MULTI_CALL_TURN_BY_ROLE, analysis_unit_field
 from modelbench.stats import ALPHA_FAMILY
 
@@ -289,6 +289,48 @@ class Pack:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module
+
+    def iter_items(self) -> Iterator[Mapping[str, Any]]:
+        """Yield each row of `data.items` (`items.jsonl`), parsed, in file order — the generic
+        item-level pack data source (§3.8.1-3.8.3's `items.jsonl` copies). Pure data iteration; a
+        role-specific typed parse is each role's own scorer's job, not this loader's (runner spec
+        §9's own flag: this method is named for readability, not specified by the plan, and has no
+        cross-cutting design stakes)."""
+        with self.data_path("items").open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    yield json.loads(line)
+
+    def iter_scripts(self) -> Iterator[Conversation]:
+        """Yield each row of `data.conversations` (`conversations.jsonl`) as a `convo.Conversation`,
+        in file order — `tool-caller`'s own data source (§3.8.4). Same readability-only naming
+        caveat as `iter_items` above."""
+        with self.data_path("conversations").open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                row = json.loads(line)
+                yield Conversation(
+                    scriptId=row["scriptId"],
+                    shape=row["shape"],
+                    replicate=row["replicate"],
+                    turns=tuple(
+                        Turn(seq=t["seq"], user=t["user"], expect=t.get("expect", {}))
+                        for t in row["turns"]
+                    ),
+                    description=row.get("description", ""),
+                    provenance=row.get("provenance"),
+                )
+
+    def find_script(self, script_id: str) -> Conversation:
+        """One named script from `data.conversations`, by `scriptId` — §3.8.4's determinism-probe
+        scripts (`sampling.determinismProbeScripts`). Raises `PackConfigError` if absent."""
+        for script in self.iter_scripts():
+            if script.scriptId == script_id:
+                return script
+        raise PackConfigError(f"{self.packId}: no script {script_id!r} in data.conversations")
 
     def ref(self) -> PackRef:
         """The §3.3 totality boundary: `contentHash` is never `None` on this path."""
