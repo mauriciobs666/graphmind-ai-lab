@@ -4550,3 +4550,327 @@ failed, none of them the coverage equality (P16-4) · re-widen `_EXEMPT_CELLS` b
 
 **P.4 — `UNIT_KIND_BY_ROLE` values (beyond P14-2's domain pin).** `guard-judge` `item` →
 `conversation` → 13 failed · `embedder` `query` → `item` → 4 failed. Held.
+
+## Pass 17 — 2026-09-10
+
+### 1. Scope & verdict
+
+**Reviewed:** commit **`3286f26`** (U84, the `drive` rework) — the whole diff:
+`modelbench/convo.py` (+639), `modelbench/tooling.py` (docstrings only), `tests/test_convo.py`
+(32 → 100 tests), `tests/fixtures/packs/valid/pack.json` (+1 line), `docs/HISTORY.md`. Judged
+against plan **v1.29** §3.3 / §3.8.4 / §4 S2 / Appendix A, `-ml` **v1.22** §4.1–§4.3 / §11.4, this
+document's **Pass 15 §5** (ten carry-forwards) and **§6** (six collisions), and
+`model-bench/AGENTS.md`'s guard-reach convention in its **final** form (shrink *and* widen must each
+redden). Every line cite below is `git show 3286f26:<path>`, never the working tree.
+
+**Isolation.** `git archive 3286f26 model-bench | tar -x` into a scratch dir; snapshot first on
+`PYTHONPATH` with a `sitecustomize.py` that strips the editable finder; `modelbench.__file__`
+asserted inside every probe. Baseline at the snapshot: **1009 passed, 3 deselected**. All mutations
+`PYTHONDONTWRITEBYTECODE=1`, one at a time, restored by file copy and verified with `diff -q`. The
+repository working tree was not touched. **22 mutations and 2 probes this pass, plus eight
+fix-verification runs** (Appendix Q).
+
+**CPG: considered, not relevant — no Code Property Graph is loaded for `model-bench`; every
+judgement below is a mutation actually run, a probe actually executed, or a test docstring read
+against its own assertions.**
+
+**Verdict: needs changes.** **0 blockers, 5 majors, 3 minors, 1 nit.** None is blocked on unbuilt
+work and none is deferrable: every one is actionable in the two files U84 already owns, except
+**P17-5**, which is a one-sentence correction to a classification. The rework itself is the
+strongest unit this coordination has produced — the ten carry-forwards are all preserved (verified,
+not taken on trust), the six collisions are each decided, the eleven deleted tests are all
+accounted for by a named successor, and the guard-reach convention holds in **all eight** directions
+on both closed sets. The majors are four coverage gaps whose *names* claim the coverage, and one
+mislabelled residual.
+
+### 2. The four commissioned questions, answered by execution
+
+**Q1 — §4 S2's *"or the dispatch raised"* branch. Neither document is instance 15; the shipped
+*decision* is, and it must be recorded in code, not in the plan.** See **P17-3**. The short form:
+the shipped code claims **no** reach for that branch (`_undispatchable_tool_content`,
+`convo.py:353-358`, enumerates no causes; its three reasons live at their call sites), so by the
+letter it does not over-claim. The plan's parenthetical is *stale* rather than wrong in a way that
+needs an edit — Pass 15's own P15-4 already extended that category with a third cause
+(`unparseable-arguments`) **without** a plan change, so the list was already being read as
+illustrative. **No plan change is needed and the closed gate stays closed.** What is missing is the
+statement and the pin of the behaviour that actually ships, and that gap is P17-3.
+
+**Q2 — P15-5's literal prescription. U84 is right, and I executed it rather than re-arguing it.**
+I replaced `_check_trace_contract`'s body with the finding's own words (`if len(after) <
+len(before): raise`) and ran the suite: **2 failed, 1007 passed** — and the two that fail are
+`test_drive_refuses_an_environment_that_loses_a_dispatch_it_executed` (the `ResettingEnvironment`
+fixture **P15-5 itself describes**) and `test_drive_refuses_an_environment_that_drops_an_entry_it_
+had_already_reported`. Both escape a length comparison for the reason U84 gives: clearing a trace
+and re-appending leaves the length unchanged, and on the first call there is no prefix to have
+shrunk. **Recorded: P15-5's prescription was insufficient, and the divergence is a strengthening.**
+That is the sixth of my own suggested fixes to be overruled on evidence, and rightly.
+
+**Q3 — the `wallClockMs` fixture. The fix is sufficient and is not a relocated tautology.** Three
+mutations, each on its own copy: turn `wallClockMs` ← **last** call's → 1 failed; ← **first**
+call's → 1 failed; ← **sum** of the calls' → 1 failed. The same single test catches all three, and
+it can: the fixture's three per-call figures are distinct and non-zero (11/22/33) and the
+`_TickingEnvironment` adds 2 × 5 ms, so the turn's figure is `76.0` and no substitution reaches it.
+The load-bearing assertion is the `== approx(66 + 10)`, not the plan's `>=`; with `dispatch_ms=0`
+the sum substitution would pass the `>=` again. One residue: **`assemble`'s own cost is outside the
+fixture** — P17-8.
+
+**Q4 — both judgement calls are right and both are pinned.** `maxIterationsPerTurn < 1`: the
+reasoning is exactly the plan's own (§3.8.4's five-member set has no member for *the cap forbade the
+first call*), and deleting the `cap < 1` branch (`convo.py:578-582`) reddens **2** parametrized
+cases; the test also asserts `llm.calls == []`, so *"before any LLM call"* is checked and not just
+the raise. `messagesSent` = the working list at the turn's **last** model call: stated at
+`convo.py:210-214`, and pinning it costs a mutation — restricting the assignment to iteration 1
+reddens `test_drive_messages_sent_is_the_working_list_of_the_turns_last_call`. The second test
+(`…_on_a_turn_whose_first_call_raised…`) is what makes the definition *total* over the five
+dispositions rather than defined on one. P15-7 asked only that the choice be stated; U84 stated it
+and pinned it.
+
+### 3. Findings
+
+**P17-1 (major) — `structured` replay threads a dispatch cursor across a turn's iterations, and no
+fixture has two tool-calling iterations, so the threading is unpinned while its test name says
+*"every iteration"*.** `_replay_structured` (`convo.py:409-430`) carries `cursor` from one
+iteration's `_iteration_exchange` to the next; resetting it to `0` per iteration leaves the suite at
+**1009 passed** (Q.1 M1). Every `structured` fixture in the file has exactly one tool-calling
+iteration — `tool_calling_prior_turn` (`test_convo.py:227`) and the two-call case at `:643` — so the
+one property that only a multi-iteration turn can exercise is the one no test reaches. Under the
+mutation, a replayed turn hands iteration 2's `tool` message iteration 1's return value: "a
+plausible transcript nobody would read as wrong", which is the phrase `TraceContractViolated`'s own
+docstring uses for the failure it claims to have closed. And
+`test_assemble_structured_replays_every_iteration_and_the_real_return_value` (`:613`) says *every
+iteration* while its fixture has one. *Suggested fix, and I ran it:* one test replaying a prior turn
+with **two** tool-calling iterations and two distinct `DispatchRecord`s, asserting
+`[tool_call_id] == ["c1","c2"]` and each `tool` message carrying **its own** iteration's
+`returnValue` — green as shipped (1010 passed), red under the cursor reset (Q.2).
+
+**P17-2 (major) — the trace-growth check is a per-*iteration* aggregate, while `tooling.py` says
+`drive` **enforces** exactly one record per **call** and `TraceContractViolated` says the positional
+pairing is now a **checked fact**. An environment that records 0 for one call and 2 for the next
+passes both.** `convo.py:661-681` counts `dispatched` over the whole iteration and compares
+`len(after) - len(before)` once. Executed (probe Q.3): a two-call turn against a `SkewEnvironment`
+completes with **no** `TraceContractViolated`, and the `tool` message for `add_to_cart` carries
+`view_cart`'s return value. The claims that exceed the mechanism are `tooling.py:75-79`
+(*"must append **exactly one** … `drive` **enforces** that count"*) and `convo.py:295-300`
+(*"makes `assemble`'s positional pairing a checked fact rather than an assumption"*). *Suggested
+fix, and I ran it:* move the count check **inside** the per-call loop — read `env.trace()` after
+each `env.dispatch` and call `_check_trace_contract(after_call, before_call, 1, …)`. Suite stays at
+**1009 passed**, the skew environment is refused, and the existing `match="grew by 0 entries"`
+assertion still matches (Q.4).
+
+**P17-3 (major) — a `ToolEnvironment.dispatch` that raises destroys the whole conversation and
+reaches the runner as *"the server went away"*. The behaviour is right, undecided, unstated and
+untested, all at once.** `convo.py:673` calls `env.dispatch(name, arguments)` bare. Executed (probe
+Q.5): a 3-turn script whose sim raises `KeyError` on turn 1 issues **1 of 3** calls and returns
+**no `ConversationTrace` at all** — P15-1's shape with a pack-side trigger. Two consequences.
+(i) `drive`'s docstring (`convo.py:552`) says *"Anything else propagates to the runner as §3.6
+clause (iv)'s server went away"*; a bare `KeyError` from a pack's `tools/sim.py` therefore buys a
+re-probe and exit `3` under a **false cause** — the signature defect §3.6 names. (ii) U84's ruling
+(a raising `dispatch` is a pack defect that fails closed) is defensible and is the one I would take
+— but a raising sim can also be *model-induced* (the model chooses the arguments), and then one
+weird argument costs the whole conversation, which is the harness measuring itself. *Suggested fix,
+and it does not touch the plan:* wrap `env.dispatch` and re-raise as a **named** class beside
+`TraceContractViolated` so the runner can tell a pack defect from a dead server; state the
+divergence from §4 S2's *"or the dispatch raised"* in `drive`'s docstring and in `HISTORY.md`; add
+the probe above as a test. *The record-versus-refuse half is a design decision I will not make for
+you* — it belongs with whoever writes `tools/sim.py` (S5), and §4 S2's clause is the evidence that
+*record and continue* was the original intent.
+
+**P17-4 (major) — the narrowed `except` is the clause the plan says correctness is "read off the
+diff" for, and widening it back to `LMStudioError` leaves the suite green — under a test named
+*"catches exactly the two transport classes"*.** Executed: `except LMStudioCallFailed as exc:`
+(`convo.py:653`) → `except LMStudioError as exc:` → **1009 passed** (Q.1 M2). Neither
+`test_drive_catches_exactly_the_two_transport_classes_and_continues` (`:1356`, which drives only the
+caught side) nor `test_drive_lets_every_other_exception_propagate` (`:1375`, three hand-picked
+non-`LMStudio` classes) can see it — and the second's docstring names *"that base has two further
+subclasses carrying no `.status`"* as its whole reason while including **neither of them**. The
+docstring asserts more than the assertions pin, on the property v1.28 calls *"the one thing §4.1
+forbids absolutely"*. I accept that the plan routed this class to execution rather than to a test
+item; that makes an over-claiming test worse, not better, since it is now the only thing a reader
+would take for the pin. *Suggested fix, and I ran it:* add `LMStudioUnreachable("no server")` and
+`ToolCallingIneligible("not eligible")` to the propagate parametrize — **1011 passed** as shipped,
+**2 failed** under the widen (Q.6).
+
+**P17-5 (major) — the second residual is *not* blocked on unbuilt work; Pass 15 executed that
+question and answered it, and re-labelling it "blocked" is the deferral wearing the other label.**
+`HISTORY.md`'s closing block calls the `prompt`-block half of `validate_pack` *"blocked on unbuilt
+work"*. P15-2's own disposition line reads: *"**not blocked** — `validate_pack` ships today and this
+half is buildable now; only the manifest→`PromptConfig` constructor is the rework unit's."*
+`validate_pack` does ship (`packs.py:657`) and its four axes are already in place; the
+`historyReplay` route needs nothing that does not exist (it imports `convo._HISTORY_REPLAY_MODES`).
+What genuinely does not exist is `roles.MULTI_CALL_TURN_BY_ROLE` (`roles.py` at `3286f26` carries
+`ROLES` and `UNIT_KIND_BY_ROLE` only), which the `maxIterationsPerTurn` half needs — and that is an
+unwritten two-line table, not unbuilt work. The honest label is this document's own third category,
+**open and routed to a named owner** (`packs.py`/`roles.py`), which Pass 16 §7 already uses. *Fix:*
+one sentence in `HISTORY.md`, plus — the part that makes it self-clearing — **a tripwire in the
+shape that already works here**: a test asserting `validate_pack` accepts a `prompt` block declaring
+`historyReplay: "verbose"` today, whose failure message says to delete it and add the route. That is
+exactly `test_the_third_leg_of_the_disposition_probe_is_still_owed_by_s5`'s shape, and the contrast
+is the point: the residual U84 correctly calls blocked **has** a tripwire; the one it mislabels has
+none. *(The first residual is genuinely blocked: `modelbench/scoring/` is S5's own `Create` line and
+its tripwire is live.)*
+
+**P17-6 (minor) — the turn-level trace check and the `no-dispatch-record` branch are both reachable
+by no test.** Deleting `_check_trace_contract(after, before_turn, None, …)` (`convo.py:688`) leaves
+the suite at **1009 passed** (Q.1 M8): every refusal in the file is caught by the per-iteration
+call. Likewise `grep -c 'no-dispatch-record' tests/test_convo.py` → **0** (`convo.py:396-399`). Both
+are defence in depth and I would keep them, but under this component's own convention an
+unexercised guard is a guard nobody knows the reach of. *Fix:* one fixture each — an environment
+whose `trace()` mutates on read (the turn-level check's only live path once the per-iteration one
+holds), and a hand-built `TurnTrace` with more dispatchable calls than `DispatchRecord`s.
+
+**P17-7 (minor) — `plaintext`'s **role ownership** is asserted nowhere, and ownership is the axis
+§3.3 makes canonical.** Changing the flattened history message's role from `user` to `system`
+(`convo.py:508`) leaves the suite at **1009 passed** (Q.1 M11). §3.3 (P13-8) rules that the four
+modes span two axes and that `plaintext` differs from `structured-replies-only` on **ownership
+alone** — "quotes the history inside someone else's message" — which is what §6 R-3's bisect
+inference turns on; `test_every_history_replay_mode_renders_a_distinct_message_list` distinguishes
+the modes by JSON inequality, which is blind to it. *Fix, and I ran it:* assert the whole role
+sequence in `test_assemble_history_turns_zero_replays_every_prior_turn` —
+`["system", "user", "user"]`. Green as shipped, red under the role swap (Q.7).
+
+**P17-8 (minor) — the wall-clock fixture models the calls and the dispatches but not `assemble`,
+which §5 test 10b names as half of the difference it is measuring.** Moving `start = time.monotonic()`
+to **after** the `assemble` call (`convo.py:633-634`) leaves the suite at **1009 passed** (Q.1 M9):
+the fake clock does not advance during assembly, so the exact `==` cannot see it. Test 10b's own
+words are *"the difference being the harness's own dispatch **and message assembly**"*. *Fix, and I
+ran it:* monkeypatch `convo.assemble` with a wrapper that advances the stub clock 3 ms and expect
+`3 + 66 + 10`. Green as shipped, red with `start` moved (Q.8).
+
+**P17-9 (nit) — `TurnTrace.wallClockMs: float | None` (`convo.py:251`) can never be `None`.**
+`_drive_turn` always computes a figure, including on a turn that raised — correctly, because §4 S2
+puts the withholding on `ItemTiming`, not here. The optional annotation is the only statement to the
+contrary and invites the runner to key withholding on a value that never arrives. *Fix:* type it
+`float` and let §3.6's withholding stay the runner's, or say in the field's own line why `None` is
+reserved.
+
+### 4. Disposition of everything already reported
+
+| # | Disposition | Evidence rechecked |
+|---|---|---|
+| **P15-1** (blocker) `drive` propagates and abandons the script | **Fixed** | Both mutations re-run here rather than inherited (M20, M21): propagating the timeout → **5 failed**; aborting after a non-replied turn → **8 failed**, matching U84's stated figures exactly. `test_drive_records_a_failed_turn_and_runs_the_rest_of_the_script` asserts 5 traces, 5 calls, and turns 0/1/3/4 intact. The pack-side twin is **P17-3** |
+| **P15-2** (major) `validate_pack` never inspects the `prompt` block | **Not fixed, and misclassified** | Open and routed, not blocked — **P17-5** |
+| **P15-3** (major) `_HISTORY_REPLAY_MODES` vs the `Literal` | **Fixed, both directions, both declarations** | Four mutations: widen/shrink each declaration alone → 1, 1, 1, 8 failed. Form (i) binding at `test_convo.py:308`, plus the four-way distinct-rendering test |
+| **P15-4** (major) the `rawArguments` seam | **Fixed** | `_parse_tool_arguments` returns `dict \| None`; four wire shapes parametrized plus the `"{}"` control; `tooling.py:24-31`'s gloss corrected to what the mechanism now does |
+| **P15-5** (major) trace monotonicity | **Fixed, and the prescription was mine and wrong** | Q2 above |
+| **P15-6** (minor) multiple calls per turn unpinned | **Fixed** | Coverage probe over `(0, 1, 2, 5)`, emission order asserted per index |
+| **P15-7** (minor) `messagesSent` unpinned | **Fixed** | Q4 above |
+| **P15-8** (minor) `ConversationTrace` lacks `shape`/`replicate` | **Fixed** | Both carried and asserted together with `scriptId` |
+| **P15-9** (minor) `PromptConfig` field names unpinned | **Fixed** | Form (i) against a hand-transcribed Appendix A tuple, field **order** included |
+| **P16-1..P16-4** (`Basis`, `INDEX_COLUMNS`, five bindings, the grid equality) | **Not fixed; out of U84's scope** | All four live in `stats.py`/`results.py`/`report.py`, untouched by this commit. Still routed to their owners |
+| **P16-5** `_STDLIB_MODULE_NAMES` | **Superseded** | The standing exception was withdrawn in `AGENTS.md`'s final form; the constant is `packs.py`'s |
+| **P13-7 / P13-9** | **Closed** | Both closed by plan v1.25 (items 4 and 5), as Pass 15 §8 recorded |
+| **P13-11** `tools.module: ""` · **P13-13** header says "S1" | **Not fixed** | Both still stand; both nits with owners |
+| Pass 12's two live items | **Still blocked** | The verbatim `GET /api/v0/models` capture and §4 S2's R-1 probe both need a human-run LM Studio session |
+
+**Nothing above and nothing in §3 is deferred by choice.** P17-1..P17-9 are all actionable in
+`convo.py`/`test_convo.py` today; P17-5 is a label and a tripwire; the two Pass 12 items and the
+disposition probe's third leg are blocked on unbuilt work and each carries a live tripwire or a
+named human step. **Two residuals U84 did not declare at all** are P17-3 (the raising `dispatch`)
+and P17-4 (the unpinned narrowing); neither is blocked.
+
+### 5. What's solid
+
+- **The guard-reach convention holds in all eight directions, which is the first time this
+  coordination can say that.** Widen and shrink, applied alone, to each of `HistoryReplay`,
+  `_HISTORY_REPLAY_MODES`, `TurnDisposition` and `TURN_DISPOSITIONS`: **every one reddens** (Q.1).
+  Both pairs are written out independently with the reason stated at the declaration
+  (`convo.py:86-97`, `:127-143`), and `test_drive_final_reply_text_is_none_exactly_when_the_turn_
+  did_not_reply` additionally binds the **driven** set to the constant — a third, behavioural
+  route to the same pin that nobody asked for.
+- **All ten of Pass 15 §5's carry-forwards survive, checked one by one rather than assumed.** The
+  `isinstance` guard is still `drive`'s first statement with `llm.calls == []` beside it; `tooling.py`
+  is untouched but for the one docstring correction owed; `_TOOL_ENVIRONMENT_METHODS` is left alone;
+  `envState`-after-the-last-dispatch is pinned; `tools=` on every turn is pinned; the whole-list
+  order contract now reddens **23** tests under an `insert(0, …)`, up from Pass 15's 10.
+- **Eleven tests were deleted and every one has a named successor** — including
+  `test_drive_never_catches_an_error_the_llm_callable_raises`, which pinned the behaviour `-ml` §4.1
+  forbids and was Pass 15's named class-2 root cause. Deleting a test that asserts the wrong thing
+  is the right move and it is the one most likely to be skipped.
+- **The two decisions U84 made on its own it reported rather than hid**, and both are right and both
+  are pinned (Q4). The `chatResult` singular is *not* reintroduced, with P13-5's reason written at
+  the field it would have sat on — a convenience accessor refused because it would be the ready-made
+  way to reach for the wrong value.
+- **Appendix A and the shipped types agree** on `PromptConfig` (order included), `Turn`,
+  `Conversation`, `TurnTrace`, `TurnDisposition`/`TURN_DISPOSITIONS` and `DispatchRecord`. The one
+  known-stale `ConversationTrace` row is out of scope by instruction and I found no second
+  divergence; `TraceContractViolated` has no row, but neither do `ToolEnvironment`, `HistoryReplay`
+  or the `lmstudio` exception classes, so the table's scope is consistent rather than incomplete.
+
+### 6. Open questions
+
+1. **P17-3's record-versus-refuse half is a design decision with no owner yet.** Should a
+   `ToolEnvironment.dispatch` that raises abort the conversation (pack defect, fail closed, P15-5's
+   precedent) or be recorded as an undispatchable call and driven past (§4 S2's own clause, and the
+   `-ml` §4.1 instinct)? The trigger is partly model-chosen, which is what makes it genuinely
+   two-sided. It needs deciding **before** `tools/sim.py` is written, because a sim author writes
+   `raise KeyError` without thinking about it. Naming the exception is unconditionally right and
+   should not wait for the answer.
+2. No plan reading is required by anything above, and I am not asking for one. **The gate is
+   closed and nothing here reopens it** — P17-1..P17-9 are all decidable in `model-bench/`.
+
+---
+
+### Appendix Q — Pass 17 evidence
+
+**Q.0 — isolation.** `git archive 3286f26 model-bench | tar -x -C <scratch>/p17`; `sitecustomize.py`
+removes the `__editable__` meta-path finder; `PYTHONPATH=<snap>:<scratch>/p17`;
+`modelbench.__file__` asserted from inside each probe. Baseline **1009 passed, 3 deselected**.
+Restores verified with `diff -q` after every single mutation (`RESTORED-OK` each time).
+
+**Q.1 — the mutation sweep.** Green = a gap.
+
+| # | Mutation (all in `convo.py` unless noted) | Result | Finding |
+|---|---|---|---|
+| M1 | `_replay_structured` cursor reset to `0` per iteration | **1009 passed** | P17-1 |
+| M2 | `except LMStudioCallFailed` → `except LMStudioError` | **1009 passed** | P17-4 |
+| M3a | turn `wallClockMs` ← last call's | 1 failed | Q3 — held |
+| M3b | turn `wallClockMs` ← first call's | 1 failed | Q3 — held |
+| M3c | turn `wallClockMs` ← Σ of the calls' | 1 failed | Q3 — held |
+| M4 | `_check_trace_contract` ← P15-5's literal `len(after) < len(before)` | 2 failed | Q2 — the prescription is insufficient |
+| M6 | `cap < 1` refusal deleted | 2 failed | Q4 — held |
+| M7 | `messages_sent` captured at iteration 1 only | 1 failed | Q4 — held |
+| M8 | turn-level `_check_trace_contract(…, None, …)` deleted | **1009 passed** | P17-6 |
+| M9 | `start = time.monotonic()` moved after `assemble` | **1009 passed** | P17-8 |
+| M10 | current-turn `user` message `insert(0, …)` | 23 failed | §5 — carry-forward 9, stronger than Pass 15's 10 |
+| M11 | `plaintext` history message role `user` → `system` | **1009 passed** | P17-7 |
+| M12–M19 | widen **and** shrink, alone, on each of `HistoryReplay`, `_HISTORY_REPLAY_MODES`, `TurnDisposition`, `TURN_DISPOSITIONS` | 1 / 1 / 1 / 8 / 1 / 1 / 2 / 3 failed | §5 — all eight redden |
+| M20 | propagate `LMStudioCallTimeout` instead of catching | 5 failed | §4 — U84's figure independently reproduced |
+| M21 | `break` out of the script after any non-`replied` turn | 8 failed | §4 — likewise |
+
+**Q.2 — P17-1's fix, run.** A prior turn with two tool-calling iterations and two distinct
+`DispatchRecord`s, asserting each `tool` message carries its own iteration's `returnValue`:
+**1010 passed** as shipped · **1 failed** (that test alone) with the cursor reset.
+
+**Q.3 — P17-2's probe.** `SkewEnvironment` records 0 for call 1 and 2 for call 2 of one iteration:
+
+```
+drive completed with NO TraceContractViolated
+dispatched calls  : 2 (add_to_cart, view_cart)
+recorded slice    : ['view_cart-A', 'view_cart-B']
+tool messages     : [('add_to_cart', {'from': 'view_cart-A'}), ('view_cart', {'from': 'view_cart-B'})]
+```
+
+**Q.4 — P17-2's fix, run.** Count check moved inside the per-call loop: **1009 passed**, and the
+probe above now raises `TraceContractViolated: … grew by 0 entries across turn 0's dispatch of
+'add_to_cart' …` — so `test_drive_refuses_an_environment_that_loses_a_dispatch_it_executed`'s
+`match="grew by 0 entries"` still matches.
+
+**Q.5 — P17-3's probe.** A `StubEnvironment` subclass whose `dispatch` raises `KeyError`, over a
+3-turn script:
+
+```
+propagated out of drive: KeyError "no such product: {'name': 'Ghost'}"
+llm calls issued: 1 of 3 scripted turns
+ConversationTrace returned: NONE — turn 1's record lost with the exception
+```
+
+**Q.6 — P17-4's fix, run.** `LMStudioUnreachable` and `ToolCallingIneligible` added to
+`test_drive_lets_every_other_exception_propagate`: **1011 passed** as shipped · **2 failed**
+(`raised3`, `raised4`) under M2.
+
+**Q.7 — P17-7's fix, run.** Role sequence `["system", "user", "user"]` asserted in
+`test_assemble_history_turns_zero_replays_every_prior_turn`: **1009 passed** as shipped · **1
+failed** under M11.
+
+**Q.8 — P17-8's fix, run.** `convo.assemble` monkeypatched to advance the stub clock 3 ms, expected
+`3 + 66 + 10`: **1009 passed** as shipped · **1 failed** under M9.
