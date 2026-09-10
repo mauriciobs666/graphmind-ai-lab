@@ -9,14 +9,25 @@ for the full design.
 
 ## Current state
 
-**Stage S1 — the harness core is built; nothing calls a model yet.** `modelbench/` holds
-`fingerprint`, `results`, `stats`, `report`, `packs`, `roles`, `cli` and `__main__`; the CLI ships
-`compare` (with `--negative-control`), `index rebuild` and `models --tested`. **S2 owns everything
-that touches the outside world** — `lmstudio.py`, `hostinfo.py`, the real pack loader
-(`load_pack`/`validate_pack`, content hashing, the AST import allowlist, the row-count identity),
-`convo.py`, `tooling.py`, `runner.py`, and the `attest`/`validate`/`run` commands. A test asserts
-those three commands are still absent, so the stage boundary is checked rather than promised.
-`docs/plans/small-model-benchmarking.md` §4 sequences S2–S8.
+**Stage S2, most of the way through — the outside world is reachable, but no run has ever been
+executed end to end.** `modelbench/` holds `fingerprint`, `results`, `stats`, `report`, `roles`,
+`cli`, `__main__` and — S2's — `packs` (the real loader: `load_pack`/`validate_pack`, content
+hashing, the AST import allowlist, the row-count identity), `lmstudio`, `hostinfo`, `tooling` and
+`convo` (`assemble` and the bounded per-turn `drive`); the CLI ships `compare` (with
+`--negative-control`), `index rebuild`, `models --tested` and `attest`.
+
+**What S2 still owes, and each one's live consequence.** `runner.py` does not exist, and with it
+neither do the timing carriers `results.py` has no declaration of yet — `CallTiming`, `ItemTiming`,
+`ItemResult.timing` (still a stored `latencyMs`), `LatencyBlock`, `RunResult.latency` and
+`RunResult.attestationTripWire` — so nothing in the tree produces a latency figure and `report.py`'s
+latency slots are unreachable. The `validate` and `run` commands are absent, and
+`tests/test_cli.py::test_s2s_remaining_commands_are_not_shipped_yet` asserts **those two** exit `2`,
+so that half of the stage boundary is checked rather than promised (`attest` shipped and left the
+assertion). And `packs.py` contains no `historyReplay`, `maxIterationsPerTurn` or `PromptConfig`:
+the manifest→`PromptConfig` route is unbuilt, the only construction of it in the tree is
+`tests/test_convo.py`'s fixture, so `drive` has no production caller.
+`docs/plans/small-model-benchmarking.md` §4 sequences S2–S8; `docs/HISTORY.md` carries the unit
+trail.
 
 **The fingerprint has two discriminators and one derived key, and `ARM_KINDS` is deliberately not
 derived from the forbidden mapping.** `REQUIRED_BY_SCHEMA[schema]` and `FORBIDDEN_BY_ARM_PROFILE`
@@ -188,9 +199,9 @@ from the repo root pytest ignores this component's `testpaths` and walks the who
 
 ```bash
 ./setup.sh                                       # create/refresh .venv (idempotent; --recreate)
-./run.sh compare --pack <id>                     # the CLI (S1: compare, index rebuild, models)
+./run.sh compare --pack <id>                     # the CLI (compare, index rebuild, models, attest)
 .venv/bin/python -m pytest -q                    # default suite, network-free
-.venv/bin/python -m pytest -m live               # real LM Studio, opt-in (none exist until S2)
+.venv/bin/python -m pytest -m live               # real LM Studio, opt-in (3 exist: lmstudio, hostinfo)
 .venv/bin/ruff check .
 ```
 
