@@ -14,18 +14,34 @@ standalone `salesperson/` Streamlit app.
 (root `AGENTS.md`, component READMEs, `HISTORY.md`, a `tico` user manual) reflects the delivered
 surface.
 
-## RESUME HERE — state as of 2026-09-09, both decisions answered
+## RESUME HERE — state as of 2026-09-10, S9b and U64 in flight
 
 **Read this section first. It is the entry point; the ledger below is the state of record.**
 Reconcile it against `git log` and `git status` before acting — if they disagree, they win.
 
 **Both decisions below were answered by the stakeholder on 2026-09-09**, both as recommended:
-Decision 1 → route all four findings now, two units (**U62**, **U63**, in flight). Decision 2 →
-one closing unit, **no Pass 8** (**U64** — *queued, not dispatched*: it collides with another
-session's in-flight unit; see "U64 is blocked on another session's U28" below). The two decision
-write-ups are kept verbatim for the record.
+Decision 1 → route all four findings now, two units (**U62**, **U63**) — **both landed, with
+U65/U66/U67/U68 closing Pass 23 behind them.** Decision 2 → one closing unit, **no Pass 8**
+(**U64**). The two decision write-ups are kept verbatim for the record.
 
-**Nothing was in flight at the resume.** No agent was running.
+**In flight as of 2026-09-10:** **S9b** (`coder`) and **U64** (`cobb`), dispatched in parallel —
+file-disjoint and claim-disjoint, so neither serializes on the other. Identities are in their
+ledger rows.
+
+**U64's blocker cleared.** The other session's U28 landed and then some: `48882d8` → `682fbed` →
+`4df5e45` → `00bebdc`, gated at `docs/reviews/rq-execution-gate.md` Passes 1-3. `skills/**` is
+clean in the working tree. See the resolution under "U64 is blocked on another session's U28".
+
+**The plan lane is closed at v1.33** and stays closed — Pass 23's stopping rule is falsified only
+by an execution finding or by S9e landing a defect statically visible in v1.33's §5.2/§5.3/C14.
+
+**CPG `cpg_falkorchat` is stale and was not rebuilt — measured here so nobody re-measures.** Its
+snapshot is `b795f4c`, **10 `falkor-chat/server` commits behind**, and six of those are on
+`storefront.py`/`storefront_api.py` **including S9a itself**, so the graph predates the entire
+concurrency core. S9b's brief tells `coder` not to consult it for those files. It was **not**
+rebuilt on purpose: `graph-dba` snapshots `falkor-chat/server/` to build, which tears against an
+implementer writing those exact files — the constraint already recorded under "S9 is five units".
+A rebuild and any S9 unit are mutually exclusive; the rebuild waits for a gap in the S9 chain.
 
 **⚠ ORDERING HAZARD — read before dispatching S8's gate or any S9 unit.** Since plan v1.32, §5.3
 carries one row whose producer **does not exist yet**: `POST /shop/api/messages` → `503
@@ -252,7 +268,7 @@ So the collision is on **two** axes, and only the first is visible in a diff:
 
 **Not** blocked: the `claude/cobb/kaizen/{history,plan}.md` half of **P7-2** — the false *"3-for-3"* propagated into K-022's rationale, where it is the argument for escalating. Those files are `cobb`'s; U28's kaizen scope is `claude/graph-dba/kaizen/*`. But P7-2's third site is `freshness.md:252-254`, which *is* in U28's set, and splitting a three-site correction across two dispatches to save a few minutes is how one of the three ends up saying something different from the other two. Held whole.
 
-**Disposition:** U64 stays `queued` until U28 lands. When it does, `cobb` gets a **fresh** dispatch (the recorded `abeeb0ea31b20e7cc` is a dead session's) briefed to re-derive P7-1 and P7-4 **against U28's delivered diff**, not against `375af25` — explicitly including the possibility that U28 already closed P7-4 and the remaining work is smaller than Pass 7 states.
+**RESOLVED 2026-09-10 — U28 landed and U64 is dispatched (`a6a06e8fa1aee1a38`).** The sibling arc ran four commits, not one (`48882d8` → `682fbed` → `4df5e45` → `00bebdc`), and gated itself at `docs/reviews/rq-execution-gate.md` Passes 1-3 — its own last commit message is *"converge the rq check's stated bound on the scoped claim in both files"*, which is this coordination's recurring defect class appearing in the other coordination. `cobb`'s brief therefore carries the re-derivation instruction below **plus** an explicit licence to report P7-4 (and possibly P7-1) as already closed rather than manufacture an edit. Original disposition, kept because it is the reasoning that held the unit: U64 stays `queued` until U28 lands. When it does, `cobb` gets a **fresh** dispatch (the recorded `abeeb0ea31b20e7cc` is a dead session's) briefed to re-derive P7-1 and P7-4 **against U28's delivered diff**, not against `375af25` — explicitly including the possibility that U28 already closed P7-4 and the remaining work is smaller than Pass 7 states.
 
 **What I did not do:** reach into the other coordination. I have no standing there, and its `teco` is the right owner of its own sequencing. This is recorded here so that whoever picks either coordination up sees the overlap from whichever side they arrive on.
 
@@ -438,7 +454,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U51** — apply P20-1's corrected release + the P20-3/4/5/6 docstring corrections. **Fresh, not a resume**: S9a-fix's author is at 286k tok / 114 tools and every one of these fixes is self-contained | `coder` (fresh) | `a7ebbee7e795fe497` | **delivered — committed `d776ca8`**. Suite **2640/14 teco-verified solo** (baseline 2639, +1 = the new test); `storefront.py` md5 `08daf2ea` matches its reported restore exactly; `ws:acme` 871; `reference` re-seeded twice. Mutation-tested: release moved back into the `except` → new test red on `turn_in_flight is True`, shutdown test **stays green**, which is the discrimination | `storefront.py`, `test_storefront.py`, `test_storefront_api.py` | `analyst` **Pass 21 (fresh again)** — in flight, guard ruling first | 157k tok / 67 tools |
 | **U52** — P20-2: three delivered documents state the inverse of measured behaviour about `turn_workers` and `queuePosition`. Prose-only; **measure before writing**, because this sentence position has now been wrong twice | `coder` | `a9d876aa92c41d005` | **delivered — content committed, attribution lost.** Landed inside the concurrent session's `f9d23fb`, which swept my staged index; my own commit found nothing to make. Content verified byte-identical to what I reviewed (`git diff HEAD` clean). **Numbers re-measured by me, not taken on report** — 3 / 2 / 0 at `turn_workers` 1 / 2 / 4, real-executor arm agreeing with the staged-map arm; `config.py` verified comment-only | `SERVER.md`, `config.py`, `HISTORY.md` | `analyst` Pass 21 | 98k tok / 34 tools |
 | **S9f** — `STOREFRONT_QUIESCE_S`'s docs describe a quiesce that S9a made live | `tico`/`coder` (tbd) | — | queued (held behind Pass 17) | `config.py` + `docs/SERVER.md` prose | `analyst` (fold into Pass 17 re-check) | — |
-| **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` | — | queued (behind S9a — same files) | `storefront.py`, tests | `analyst` | — |
+| **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` (**fresh**) | `a44bf8a80492995ea` | **in-flight** (dispatched 2026-09-10). Brief names the real fork: `storefront_api.py` **discards the `Future` `enqueue_turn` returns**, so S9b must give it a home — a lifecycle decision against `reserve_turn`'s atomic booking lock. Three mutations mandated, one of them **re-implementing the design the docstring argued down** (drop the map entry as a stand-in) | `storefront.py`, `storefront_api.py`, tests, `HISTORY.md`, `SERVER.md` §1.3 if reached | `analyst` → — | — |
 | **S9c** — the dead-turn latch `turn.lastTurn` and its lifecycle | `coder` | — | queued (behind S9b) | `storefront.py`, `storefront_api.py`, tests | `analyst` | — |
 | **S9d** — remove the per-participant record cache whole | `coder` | — | queued (behind S9c) | `storefront.py`, tests | `analyst` | — |
 | **S9e** — the three `INHERITED_HANDLERS` reason strings + armed-fault measurements | `coder` | — | queued (behind S9d) | `storefront_api.py`, tests | `analyst` | — |
@@ -476,7 +492,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U66** — close Pass 23 on the plan: P23-1 blocker, P23-2, P23-3's consequence, P23-5/6/7 → **v1.33, the last static plan touch** | `architect` | `a0cfb47caac4a8c3e` (resumed — its own review findings, same file, 193k tok) | **accepted — committed `6da8ec0`**, +64/−25. **Refused to narrow into a hole**: the assertion Pass 23 said already owned the request-thread design *did not exist*, so v1.33 adds it before narrowing onto it. **Rejected half of the blocker's proposed fix** with a number (a relative tail clause reddens on GC noise at a 3-4 ms idle median). **Rejected a third option neither the gate nor I raised**, verified at CPython source. **Resolved the provenance discrepancy I flagged** — both commits right, different questions. All four load-bearing claims teco-verified | `docs/plans/salesperson-ui.md` **v1.33** | **none — plan lane closes here** (see the stopping rule) | 256k tok / 29 tools |
 | **U68** — P23-5: `storefront_api.py` ~`:1494` says the `504` comes back "simply with no roster"; it ships `participants` present-and-null | `coder` | `a07aa43f407bafdab` (resumed — holds the false-absence context from U62/U67) | **accepted — committed `1918ac6`**. **The sweep found a second site nobody had cited**: `ResetStateUnknownError`'s own docstring (`storefront.py:164`) still said *"simply with no state body"* — D-3's exact claim, surviving in code after the plan text was fixed. Both mechanisms teco-verified at their construction sites. Docstrings only, 4/2 and 2/1 lines | `falkorchat/storefront_api.py`, `falkorchat/storefront.py`, `falkor-chat/docs/HISTORY.md` | folded into S9e's review → — | 166k tok / 16 tools |
 | **U67** — P23-4: S9f was **three sites, not one**; `config.py:216-224` still states the pre-S9 world | `coder` | `a07aa43f407bafdab` (resumed — its own S9f unit, holds D-1's readings) | **accepted — committed `3c23992`**. Site count **confirmed three** from Pass 19/22 directly, not from my brief. Fixed `config.py` (comments only, `30` untouched — teco-verified by diff); **read the third site and found it already true**, so no edit — I spot-checked `presenter_reset_all`'s docstring and its drain description is live and correct. Unfiltered sweep found no fourth. **Corrected its own HISTORY entry in place** to say its earlier closure claim was wrong | `falkorchat/config.py`, `falkor-chat/docs/HISTORY.md` | folded into S9e's review → — | 137k tok / 19 tools |
-| **U64** — close the CPG provenance arc: P7-1, P7-2, P7-4, delete P7-3's tombstone block. **No Pass 8** (stakeholder, 2026-09-09) | `cobb` (**fresh** — `abeeb0ea31b20e7cc` is from a dead session) | — | **queued — blocked on another session's in-flight unit**, see below | `skills/joern-cpg/**`, `skills/cpg-analysis/references/freshness.md`, `claude/cobb/kaizen/{history,plan}.md` | **none — stakeholder stopped the gates** | — |
+| **U64** — close the CPG provenance arc: P7-1, P7-2, P7-4, delete P7-3's tombstone block. **No Pass 8** (stakeholder, 2026-09-09) | `cobb` (**fresh** — `abeeb0ea31b20e7cc` is from a dead session) | `a6a06e8fa1aee1a38` | **in-flight** (dispatched 2026-09-10) — **unblocked: U28's arc landed**, four commits `48882d8`→`682fbed`→`4df5e45`→`00bebdc` plus its own gate at `docs/reviews/rq-execution-gate.md`. Briefed to **re-derive P7-1/P7-4 against that range, not `375af25`**, and to close a finding the sibling arc already closed rather than manufacture an edit | `skills/joern-cpg/**`, `skills/cpg-analysis/references/freshness.md`, `claude/cobb/kaizen/{history,plan}.md` | **none — stakeholder stopped the gates** | — |
 
 ## Stakeholder decisions, 2026-09-02 (plan §8)
 
