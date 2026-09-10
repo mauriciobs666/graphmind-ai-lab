@@ -1,5 +1,5 @@
 # Agent knowledge-base strategy — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`) · **Last updated:** 2026-09-10
+> **Status:** Ready for design — substrate stage (everything past Stage 0) blocked pending `falkor-chat/docs/requirements/document-ingestion2.md` · **Owner:** `tico` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`) · **Last updated:** 2026-09-10
 
 ## Intent
 Four custom agent prompts (`teco.md`, `architect.md`, `data-scientist.md`, `tdd-engineer.md`)
@@ -28,6 +28,17 @@ content additionally *ingested* into `falkor-chat`'s own GraphRAG corpus for sea
 reached via `falkor-chat`'s own MCP server, not `cypher-mcp`/`kaizen_team`. The stakeholder
 explicitly does not know yet whether this replaces the `kaizen_team`-as-substrate answer or sits
 alongside it, and wants both weighed rather than one assumed.
+
+**Resolved as a sequencing decision (2026-09-10, see decision log):** the stakeholder's underlying
+reasoning is that `falkor-chat` is *meant* to be the one substrate for agent-and-human
+interaction/knowledge generally — not one graph among several with overlapping GraphRAG
+capability — so a gap in its document-ingestion pipeline (no update/delete, found by `architect`'s
+plan below) is worth closing rather than routing around with a parallel system on `kaizen_team`.
+This document's substrate stage (everything past Stage 0's interim K-030 relief) is therefore
+**blocked** on a separate, successor falkor-chat feature,
+`falkor-chat/docs/requirements/document-ingestion2.md`, adding real update/delete to document
+ingestion. Once that exists, this document's Option A/Option B choice is revisited — not assumed
+to flip automatically to Option B just because the capability now exists.
 
 ## Problem & current state
 - **Today's pattern (six agents already have it):** `analyst`, `graph-dba`, `qa-engineer`,
@@ -178,3 +189,8 @@ alongside it, and wants both weighed rather than one assumed.
 - 2026-09-10 — Should this document also cover `BACKLOG.md`'s parallel "headed for the graph" direction? → no; stays scoped to agent knowledge bases only.
 - 2026-09-10 — Readback confirmed: FR-1 through FR-7 are correct as drafted; both open questions (file counterpart, write-authorization shape) stay genuinely open for design. Status flipped to Ready for design; handing off to `architect`.
 - 2026-09-10 — After handoff, stakeholder floated a refinement: keep the flat Markdown knowledge-base files as the authoritative, versioned artifact `cobb` distills into (unchanged from today), and use `falkor-chat`'s existing ingestion mechanism to make that content searchable via `falkor-chat`'s own MCP server, rather than storing distilled knowledge directly in `kaizen_team`. Asked whether this replaces or sits alongside the earlier "`kaizen_team` is the substrate" answer → stakeholder not sure yet, wants both weighed. Recorded as new Open question #1 (substrate choice); FR-2/FR-3/FR-5/FR-6 and AC-2/AC-3 generalized to not presuppose `kaizen_team` specifically. `architect` (already dispatched before this arrived) notified of the update via follow-up message.
+- 2026-09-10 — `architect`'s plan (`claude/docs/plans/agent-knowledge-base-strategy.md`) resolved Open question #1 with CPG-backed evidence: falkor-chat's document ingestion (`ingest_document`/`create_document`) has no update/delete/list capability and is pinned non-idempotent by its own test — a correctness defect against a corpus that gets re-edited constantly (knowledge-base entries), since re-ingesting an edited entry would leave stale, superseded content permanently searchable alongside the new version with no way to retract it. Recommended `kaizen_team` (Option A): reuse falkor-chat's model/endpoint/query-style decisions, not its running document-store code. Flagged explicitly for stakeholder sanity-check, since it reads "reuse the actual machinery" more narrowly (pattern-level) than the most literal reading (falkor-chat's actual running server).
+- 2026-09-10 — Asked whether the `kaizen_team` recommendation matches stakeholder intent → **no, wants to reconsider.** Asked why literal reuse specifically matters → **falkor-chat's document store gaining real update/delete has independent value beyond this feature** (not just an interim workaround) — reframes the question from "accept kaizen_team's gap-avoidance" to "should falkor-chat's document ingestion gain update/delete as its own feature, and should this effort depend on it."
+- 2026-09-10 — Sequencing decision → **block this feature's substrate work (everything past Stage 0) on a separate falkor-chat feature adding real update/delete to document ingestion.** K-030's four agents still get interim flat-file relief per Stage 0, unaffected either way. A new, separate requirements interview opens for the falkor-chat side (`falkor-chat/docs/requirements/document-ingestion2.md` — successor to the archived `document-ingestion.md`, same topic family); once that feature is specified/built, this document's substrate choice (Option A vs. Option B) is revisited, not assumed to flip automatically to Option B.
+- 2026-09-10 — Status changed from "Ready for design" to "Ready for design — substrate stage blocked" pending the new falkor-chat requirements doc. `architect` notified so its plan can reflect the block.
+- 2026-09-10 — Stakeholder's underlying rationale for the block, stated directly: this **is** falkor-chat's intended purpose — being *the* substrate for agent-and-human interaction/knowledge generally, not one graph among several with overlapping GraphRAG capability. Building a second, parallel semantic-retrieval system on `kaizen_team` runs against that, even though `kaizen_team` is technically capable and CPG-evidence-backed today. This is why the gap in falkor-chat's document store is worth closing rather than routing around.
