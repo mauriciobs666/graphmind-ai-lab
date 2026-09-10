@@ -3920,3 +3920,368 @@ stdin → exit 2 naming the unset fields (P13-6) · `check_attestation_staleness
 `observedAtAttestation` → `HostInfoError` (P13-8) · `validate_host_info` on
 `{"lmStudioAppVersion": "", "kvCacheSetting": "", "hostRamGb": 0, ...}` → three `: empty` problems
 (P13-4, was `[]`).
+
+## Pass 15 — 2026-09-09
+
+### 1. Scope & verdict
+
+**Reviewed:** unit **U78** at `40a9bc8` — `modelbench/tooling.py` (99 lines), `modelbench/convo.py`
+(337), `tests/test_tooling.py` (172), `tests/test_convo.py` (591). Snapshot pinned to `6d6d4fe`;
+the four files are **byte-identical** at `6d6d4fe` and at `5cbdf9e`
+(`git diff --stat 6d6d4fe 5cbdf9e -- model-bench/modelbench/ model-bench/tests/` → empty), so the
+plan amendment did not move the code under me. Baseline at that snapshot: **873 passed, 3
+deselected**, ruff clean. Judged against plan **v1.25** (`5cbdf9e`) §3.3 / §3.8.4 / §4 S2 /
+Appendix A and `-ml` §4.1–§4.2.
+
+**Verdict: needs changes** — one blocker and four majors, all of which survive the mid-pass
+ruling and none of which the rework closes for free.
+
+**CPG: considered, not relevant — no Code Property Graph is loaded for `model-bench` (only
+`cpg_falkorchat` and `cpg_deprecated_salesperson`), so every inventory below was built by `grep`
+and every judgement is a mutation or probe actually run.**
+
+**Isolation, per Pass 14 §N.0's correction, which this pass needed:** `git archive 6d6d4fe
+model-bench | tar -x`, snapshot **first on `PYTHONPATH`**, and every probe opens with
+`assert os.path.dirname(os.path.dirname(modelbench.__file__)) == <snap>`. Three other units were
+committing to this tree while I worked (`5cbdf9e`, `127fca3`, plus five uncommitted paths), and the
+assert is what makes the results below statements about `40a9bc8` rather than about whatever the
+tree held at the moment each probe ran.
+
+### 2. The rescope, stated plainly
+
+**Mid-pass, `architect` ruled item 1 against the built behaviour** (plan v1.25, `5cbdf9e`): a prior
+turn is replayed from **what the model actually produced this run**, `expect` is a scoring oracle
+with `scoring/toolcalls.py` as its only reader, `assemble` becomes
+`assemble(turn_index, script, observed, cfg)` with the precondition `len(observed) == turn_index`,
+`historyReplay` gains `structured-replies-only`, and a turn becomes a bounded iteration loop with
+`prompt.maxIterationsPerTurn` as required pack data.
+
+**So the scripted-`expect` replay path and `assemble`'s current signature are excluded from this
+pass.** I had findings there — the `role: "tool"` message carrying the oracle's
+`finalReplyMustContain` fragments as if they were the tool's return value, the prior turn's own
+final assistant reply never being replayed at all, and the replayed context contradicting the live
+`ToolEnvironment` state from the first failed write-mutating turn onward. **They are withdrawn, not
+overlooked.** The third is now §3.8.4's own third reason for the ruling; the first two are what
+v1.25's `finalReplyText` and its verbatim-`tool_calls` rule exist to fix. A later reader should not
+read their absence below as an oversight, and §5–§6 are where the knowledge from them went.
+
+Everything else stood, and the pass had substance without them: **9 findings, 15 mutations and 5
+probe scripts run.**
+
+### 3. Findings
+
+**P15-1 (blocker) — `drive` propagates any error from `llm(...)`, so one failed turn destroys the
+whole conversation's record and the remaining turns are never driven.** `-ml` §4.1 is explicit that
+a turn that cannot be driven at all (*"LM Studio 400 / crash, as `gpt-oss-20b` produced"*) is
+**recorded as `unrunnable` and reported in its own count — never as a failure, never silently
+dropped**, and v1.25's §4 S2 restates it for `drive` by name (*"It never stops early on a bad turn
+(`-ml` §4.1)"*). Executed (Appendix O.2, probe B): a 3-turn script whose turn 2 raises issues **2 of
+3** LLM calls and returns **no `ConversationTrace` at all** — turn 1's completed record is lost with
+the exception. No caller can repair this: `drive`'s loop is `range(len(script.turns))` from 0 with
+no resume entry point and no partial return, so a runner-side `try` recovers nothing. `drive`'s
+docstring — *"Every scripted turn runs unconditionally, in order — `drive` never stops early on a
+bad turn"* — is the **eleventh** instance of the coordination's class-1 defect: the non-exception
+mechanism *is* held (M16, a `break` on a tool-call-free turn → 2 failed), the exception path is not.
+And `test_drive_never_catches_an_error_the_llm_callable_raises` pins the behaviour the note forbids
+— class 2's named root cause, written against the implementation rather than against `-ml` §4.1.
+*Fix:* wrap each turn's model call in the rework's iteration loop, record the turn with an
+`unrunnable` cause on `TurnTrace`, and continue. *Where the test goes:* the rework unit's
+`test_convo.py`, driving `drive` over a 3-turn script whose turn 2 raises — asserting **3**
+`TurnTrace`s, `llm` called **3** times, turn 2 `unrunnable`, turns 1 and 3 intact. **Not a list of
+exception shapes: a coverage probe over the axis** — parametrize over a *generated* set including a
+synthesized `Exception` subclass the module has never seen, so a catch narrowed to any named type
+reddens. One consequence to carry: `turnIndex` (§3.3's third `pairingKey` component) is **positional
+only** in `ConversationTrace.turns`, so a dropped turn silently shifts every later pairing key.
+
+**P15-2 (major) — `validate_pack` never inspects the `prompt` block, so every FR-9a axis reaches
+the harness unvalidated and fails, if at all, mid-conversation.** Executed (Appendix O.2, probe 2):
+the `valid` fixture pack amended to declare `historyReplay: "verbose"`,
+`representToolSchemasEachTurn: "yes"`, `historyTurns: -3` returns **`validate_pack(pack) == []`**;
+`assemble` refuses `"verbose"` only at run time, after model calls have been spent. Nothing in
+`modelbench/` outside `convo.py` mentions `prompt`, `historyReplay` or `PromptConfig` (grep). §3.3's
+whole design is that `run` calls `validate_pack` first and **fails closed** — a pack-configuration
+error is not a run-time discovery. v1.25 sharpens this twice over: `maxIterationsPerTurn` is now
+**required pack data with no default**, and a manifest omitting it would validate clean today.
+*Fix:* a `prompt`-block route in `validate_pack`, driven by a field→validator table, importing
+`convo`'s own mode constant rather than transcribing it. **Coverage probe over the axes, not a list
+of bad manifests:** generate one manifest per table entry with that single field invalidated and
+assert the set of fields producing a refusal **equals the table's domain**, so a `PromptConfig`
+field added without a validator reddens. *Absorbs the `historyTurns` nit:* `-3` currently behaves
+exactly as `0` (unbounded) — executed, probe E. *Disposition:* **not blocked** — `validate_pack`
+ships today and this half is buildable now; only the manifest→`PromptConfig` constructor is the
+rework unit's, and that is dispatched work, not unbuilt work.
+
+**P15-3 (major) — `_HISTORY_REPLAY_MODES` and the `HistoryReplay` `Literal` are two declarations of
+one set, eight lines apart, with nothing binding them — P14-2's shape exactly, and v1.25 is about to
+widen both.** Mutations, all against the full suite: adding `"quiet"` to the **frozenset** alone →
+**873 passed**; adding it to the **`Literal`** alone → **873 passed**; a one-member shrink → 2
+failed. Consequence executed (probe 2): a member of the constant with no branch in `assemble` is
+**accepted** and silently produces no history — it degrades to `none` without saying so. The rework
+must add `structured-replies-only` to both declarations, and today nothing would catch adding it to
+one. *Fix, and I ran it (Appendix O.3):* one test with three clauses — **(b)**
+`_HISTORY_REPLAY_MODES == set(get_args(HistoryReplay))`; **(c)** every member renders a **distinct**
+message list from a fixture with one prior tool-calling turn; and (a) the accepted set equals the
+constant. As shipped the probe is **green on all three**; under the widen it is **red on (b) and
+(c)** and — the point of §4 below — **green on (a)**. *Disposition:* not blocked.
+
+**P15-4 (major) — the `rawArguments`/`parsedArguments` seam: the premise handed to me is right about
+the malformed case, wrong about the general one, and the plan is not the thing that is wrong.**
+Three separable answers, each executed (Appendix O.4). **(i) `rawArguments` *can* differ from
+`parsedArguments`** — the dependency runs env→env, not drive→env: `tooling.py`'s docstring assigns
+`parsedArguments` to *"what the environment's own dispatch logic made of them after its own
+unit/boundary handling"*, which is exactly the input FR-8(d)'s `boundary_unit` subset needs, and
+§3.8.4's *"the environment records every call"* reads the same way. **The distinction is not
+vestigial and the plan is not wrong to declare it.** **(ii) But `tooling.py`'s claim that
+`rawArguments` is *"what the model's tool call actually carried"* exceeds its mechanism** — class 1
+again. On a malformed call `_parse_tool_arguments` degrades to `{}`, and executed: unparseable JSON,
+a JSON array, a JSON scalar and a genuine `{}` all arrive at `dispatch` as the same four bytes.
+**(iii) The evidence is not lost from the *record*** — `TurnTrace.chatResult.tool_calls[i]
+["function"]["arguments"]` still holds the raw string — **but it is lost from the field whose name
+promises it**, and the recovery join is named nowhere. *Fourth, and the one I would fix first:*
+`drive` **dispatches** the malformed call, mutating FR-10 ground-truth state on a call the model
+never validly made; under v1.25's loop that `{}` dispatch's return value is now fed back to the
+model as a `tool` message, so a harness-side parse failure shapes the model's next iteration.
+*Fix:* v1.25 §4 S2 has already created the category — *"for one that could not be dispatched (no
+name, or the dispatch raised) the content is a JSON object naming the failure"*. An
+unparseable-arguments call belongs in it: `_parse_tool_arguments` returns `dict | None`, `None` is
+not dispatched, and `{}` recovers its single meaning. *Route:* the rework unit; it touches neither
+`ToolEnvironment.dispatch`'s signature nor the pack data format. Correct `tooling.py`'s docstring in
+the same change — and note that
+`test_dispatch_record_round_trips_distinct_raw_and_parsed_arguments` hand-builds its two distinct
+mappings, so it demonstrates the dataclass and **not** that any producer in the codebase can make
+them differ. *Disposition:* not blocked.
+
+**P15-5 (major) — a turn's dispatch slice is `env.trace()[trace_before:]`, and an environment whose
+trace does not grow monotonically silently yields an *empty* slice with no error.** Executed
+(probe F): a `ToolEnvironment` that clears its own trace inside `dispatch` — a plausible pack bug —
+produces a real `add_to_cart` on turn 2 that `drive` records as **0 dispatches**. FR-10 ground truth
+is silently lost in the module whose entire thesis is that ground truth is the trace and the state.
+The Protocol's docstring *states* the requirement (*"must return calls in a stable order and never
+drop or reorder an earlier entry"*) and the `isinstance` guard checks **method presence only** —
+declared reach against implemented reach, at the one seam a third party implements. v1.25 sharpens
+it: the slice now spans several iterations. *Fix:* after the turn's dispatches, read
+`after = env.trace()` once and refuse when `len(after) < trace_before`. *Trade-off, named rather
+than hidden:* this raises mid-run and so can abort a conversation — which is right, because it is a
+**pack** defect and pack defects fail closed (§3.3), unlike the *model* failure P15-1 requires to be
+recorded and driven past. *Where the test goes:* a `ResettingEnv` fixture in the rework unit's test
+file — **never** an assertion bolted onto `StubEnvironment`/`_FullEnvironment`, which conform by
+construction and could not redden. *Disposition:* not blocked.
+
+**P15-6 (minor) — a turn's *multiple* tool calls are unpinned.** Truncating the dispatch loop to
+`chat_result.tool_calls[:1]` leaves the suite at **873 passed** — no test in either file gives one
+response more than one call. `-ml` §4.2(e) requires `duplicate_turn_rate`'s **within-turn** variant
+and `spurious_turn_rate`, both over `|E(t)| ≥ 1`, and names K-061's same-turn `add_to_cart` as the
+observed defect; neither is scoreable if only the first call reaches the trace. *Fix:* a coverage
+probe over the fan-out axis — parametrize a turn's call count over `(0, 1, 2, 5)` and assert
+`len(turn.dispatches)` equals the number of dispatchable calls in emission order at every value,
+rather than adding one two-call test. *Disposition:* not blocked.
+
+**P15-7 (minor) — `TurnTrace.messagesSent` is not pinned against what was actually sent.** Replacing
+it with `()` leaves the suite at **873 passed**. It is the stored record of the context the model
+saw, and v1.25's entire ruling is about what is in that list — a run whose `messagesSent` did not
+describe its own prompt could not be audited for the thing the ruling turns on. *Fix:* one
+assertion in the existing per-turn tests, `trace.turns[i].messagesSent == tuple(llm.calls[i]
+["messages"])` for every `i`. Under the loop this becomes iteration 1's list plus the in-turn
+working list; say which the field holds. *Disposition:* not blocked.
+
+**P15-8 (minor) — `ConversationTrace` carries `scriptId` but neither `replicate` nor `shape`, so
+§3.3's `pairingKey` is not derivable from the trace alone.** `pairingKey` is
+`["scriptId", "replicate", "turnIndex"]` and §3.8.4 says `replicate` *"exists so that raising
+`replicatesPerScript` later does not change the record shape"* — a trace that omits it **is** that
+record-shape change, arriving early and while it is still free. `shape` ∈ `{A, B, C}` is §3.8.4's
+reporting stratum and is dropped the same way. *Fix:* carry `replicate: int` and `shape: str` on
+`ConversationTrace`, sourced from `script`, pinned by a `Conversation(replicate=2, shape="B")`
+fixture — `test_drive_returns_a_conversation_trace_named_for_the_script` currently pins `scriptId`
+alone (control: blanking it → 1 failed). *Disposition:* not blocked.
+
+**P15-9 (minor) — `PromptConfig`'s Appendix A field names are unpinned, while `DispatchRecord`'s are
+pinned.** Renaming `historyTurns` → `historyWindow` with its own tests swept leaves the suite at
+**873 passed**; the same rename on `DispatchRecord.rawArguments` **reddens** (control). The names
+are manifest keys, so a drift is a silently-unreadable `pack.json`, and v1.25 adds
+`maxIterationsPerTurn` to the tuple. *Fix:* `test_prompt_config_fields_match_the_plans_appendix_a_
+literal_in_order`, in the exact shape of the `tooling.py` one that already works, transcribed from
+§3.3's manifest example. *Disposition:* not blocked.
+
+**No residual on this pass is deferred by choice, and none is blocked on unbuilt work.** Every
+finding above is actionable either in `packs.py` today (P15-2's validator half) or in the rework
+unit that v1.25 already requires. The two genuinely blocked items are Pass 12's and are unchanged:
+the verbatim live `GET /api/v0/models` capture and §4 S2's R-1 probe, both waiting on a human-run LM
+Studio session — and v1.25's F-S2-1 ruling has now given the first of those a written interim shape
+rather than leaving it as a citation to an artifact that does not exist.
+
+### 4. A refinement Pass 14's own convention line needs, found by running it
+
+The line landed in `model-bench/AGENTS.md` (uncommitted, working tree) as written: *"needs one test
+that drives the function consulting it and asserts **the computed set equals the constant**, so both
+a shrink and a widen redden."* **Executed against `_HISTORY_REPLAY_MODES`, that clause is a
+tautology and reddens on nothing.** Probe 5, clause (a) — drive `assemble` over every member plus a
+bogus value and collect what it accepts — is **green both as shipped and under the widen**, because
+the only mechanism consulting the constant is a membership test, so the accepted set equals the
+constant *for any constant*. Clauses (b) and (c) are what go red.
+
+So the convention has three forms and only two of them bind:
+
+- **(i) bind two independent declarations** — `set(UNIT_KIND_BY_ROLE) == set(ROLES)`,
+  `_HISTORY_REPLAY_MODES == set(get_args(HistoryReplay))`. Non-tautological because the two
+  declarations are written separately.
+- **(ii) assert a *behavioural* consequence per member** — each member renders a distinct output,
+  each key round-trips, each missing key produces the *typed* refusal rather than any refusal.
+  Non-tautological because the behaviour is not the membership test.
+- **(iii) assert the consulting function's accepted set equals the constant** — **tautological
+  whenever the guard is a pure membership test.** P14-1's pin escapes it only because
+  `_model_info_from_raw` has a *second* mechanism (`raw["quantization"]`) whose bare `KeyError` the
+  pin can distinguish from the typed refusal; P14-3/4/5's pins are form (i) or (ii).
+
+**Suggested amendment, for the human to apply since the line is theirs to place:** replace *"asserts
+the computed set equals the constant"* with *"binds it to the other declaration of the same set, or
+asserts a distinct behavioural consequence for every member — never merely that the guard accepts
+what the guard's own constant contains, which is true of any constant."* I have not edited
+`AGENTS.md`.
+
+### 5. What the rework must carry forward — the highest-value output of this pass
+
+Ten things U78 got right that a rewrite from the amended plan would plausibly lose. Each is verified
+here, not remembered.
+
+1. **`drive`'s `isinstance(env, ToolEnvironment)` guard, and its test's second assertion.** The unit
+   caught its own docstring overclaiming and closed it by **building the guard** rather than
+   softening the prose; the test asserts `llm.calls == []`, so *"before any LLM call"* is checked and
+   not just the raise. It must be the first statement of the rebuilt `drive`.
+2. **`tooling.py` is untouched by the ruling** — §4 S2's `tooling.py` sketch is identical across the
+   amendment. Do not reopen it except for P15-4(ii)'s docstring correction.
+3. **`_TOOL_ENVIRONMENT_METHODS` is a correct instance of the Pass 14 convention, written before the
+   convention existed** — and it is form (i)+(ii), not the tautological (iii): a fifth Protocol
+   method → **13 failed**, a one-member shrink of the constant → **1 failed**. Leave it alone.
+4. **The Appendix-A field-order pin on `DispatchRecord`** (control: reddens on rename). It is the
+   working template P15-9 asks for on `PromptConfig`.
+5. **Per-turn dispatch isolation by `len(env.trace())` diff** — v1.25 keeps the mechanism verbatim
+   (*"`dispatches` (that turn's own slice of `env.trace()`)"*), and its test reddens when widened to
+   the whole trace. Carry both, plus P15-5's guard.
+6. **`envState` read *after* the turn's own dispatches** — pinned (reading it before → 1 failed).
+   Under the loop it must be read after the **last** iteration's dispatches; the existing
+   `callCount` fixture extends directly.
+7. **`tools=` on every turn regardless of `representToolSchemasEachTurn`** — v1.25 does not touch
+   this and the reasoning holds (withholding it makes native calls structurally impossible from turn
+   2 on any pack setting the flag `false`). The test survives verbatim.
+8. **`_parse_tool_arguments`' *tolerance* is right in shape** — a malformed tool call is the model's
+   failure to score, not the harness's to crash on. Only its lossy `{}` collapse is wrong (P15-4).
+9. **Order assertions and the whole-list contract** — v1.25 restates both (system · schema block ·
+   history · current user **last**; the whole list, never an increment), and the current tests catch
+   an `insert(0, …)` mutation on **10** tests. Port them; do not re-derive them.
+10. **The `representToolSchemasEachTurn` and `historyTurns` tests' deliberate generality** — N=1 and
+    N=2 for the window, all three turns for "every turn". Both axes are unchanged in v1.25. A
+    rewrite costs a signature edit; a re-derivation loses the generality the unit added on purpose.
+
+### 6. Collisions the new `TurnTrace` / iteration-loop shape will hit
+
+- **`_expected_exchange` and `_flatten_turn` are dead** under the ruling — they are `convo.py`'s
+  only readers of `expect`, and §3.8.4 now names `scoring/toolcalls.py` as its **only** reader.
+  *Gate for the rework, runnable:* `grep -c 'turn\.expect\|expect\.get\|expect = '
+  modelbench/convo.py` returns **9** today and must return **0**; `Turn.expect`'s own field
+  declaration and docstring are the only permitted survivors.
+- **`chatResult` singular → `chatResults` plural.** §3.8.4 gives **iteration 1** a privileged role
+  (*"the turn's emission form is read from iteration 1"*), so decide explicitly whether a
+  `chatResult` property over `chatResults[0]` survives rather than letting every scorer reach for
+  the index.
+- **`finalReplyText: str | None`, `None` iff `capHit`** is a two-declaration invariant of exactly
+  the shape §4 above is about. It needs one test driving `drive` over **both** branches — the
+  docstring will not hold it, and this coordination has eleven instances proving that.
+- **`wallClockMs` keeps its name and widens its meaning** — one call today, *"covering the whole
+  turn"* under v1.25. The existing non-negative test passes under either scope, so nothing would
+  catch the wrong one. Assert the turn's `wallClockMs` is `>=` the sum of its `chatResults`'
+  `wallClockMs`.
+- **`historyTurns` windowing now spans two sequences.** Today it windows `history[:turn_index]`;
+  under `assemble(turn_index, script, observed, cfg)` each replayed prior turn `i` draws its user
+  text from `script[i]` and its content from `observed[i]`, so the window must be applied to the
+  **pair** — an index drift between the two is silent and produces a plausible transcript.
+- **Both preconditions raise, and the old one must survive.** `0 <= turn_index < len(script)` is
+  pinned today (dropping the negative half → 1 failed); v1.25 adds `len(observed) == turn_index`
+  beside it, not in place of it.
+
+### 7. What's solid
+
+Beyond §5's ten: the **plan-literal check-input discipline** is real in this unit and it is the
+answer to the coordination's named root cause. `test_dispatch_record_fields_match_the_plans_
+appendix_a_literal_in_order` transcribes Appendix A's tuple and `test_assemble_transcribed_from_the_
+plans_own_conversation_row_literal` drives §3.8.4's own `A-02` row JSON verbatim — including
+`argChecks` and `terminal`, which nothing reads and everything must tolerate. Where the unit applied
+that discipline it held; the four majors above are all in places where it did not reach (a
+`prompt`-block validator that does not exist, a constant with no plan literal to transcribe, a
+docstring sentence with no test). The HISTORY.md entry is honest about its own 14 mutations and
+routes both open questions rather than assuming them — including the `rawArguments` one, which was
+right to route and is answered in P15-4.
+
+### 8. Open questions
+
+- **`architect`** — Pass 14's OQ-1 (P13-7) and the `warm_up` signature (P13-9) are **both closed by
+  v1.25** (items 4 and 5); nothing carries forward from Pass 14's §7 except the two blocked live
+  items named at the end of §3.
+- **The human** — §4's amendment to the convention line now in `model-bench/AGENTS.md`. It is a
+  wording change to a line that has not yet been committed, and it is the difference between a pin
+  that reddens and one that cannot.
+
+---
+
+### Appendix O — Pass 15 evidence
+
+**O.1 — isolation.** `git archive 6d6d4fe model-bench | tar -x -C <scratch>/p15/tip`. Probes run as
+`PYTHONPATH=<snap>:<scratch>/p15 .venv/bin/python <probe>` with a prepended
+`assert os.path.dirname(os.path.dirname(modelbench.__file__)) == <snap>`. Mutations run by copying
+the snapshot aside, editing the copy, and running `pytest -q` from the copy's root with the same
+`PYTHONPATH`; the snapshot itself is never edited. Baseline **873 passed, 3 deselected**.
+
+**O.2 — the 15 mutations.** Green = a gap. Every one was applied to its own fresh copy of the
+snapshot and the snapshot itself was never edited, so no restore step can have leaked.
+
+| # | Mutation | Result | Finding |
+|---|---|---|---|
+| 1 | `_HISTORY_REPLAY_MODES` + `"quiet"` | **873 passed** | P15-3 |
+| 2 | `_HISTORY_REPLAY_MODES` − `"none"` | 2 failed | — |
+| 3 | `HistoryReplay` Literal + `"quiet"` only | **873 passed** | P15-3 |
+| 4 | fifth method added to `ToolEnvironment` | 13 failed | §5.3 |
+| 5 | `_TOOL_ENVIRONMENT_METHODS` − `"state"` | 1 failed | §5.3 |
+| 6 | `PromptConfig.historyTurns` → `historyWindow`, tests swept | **873 passed** | P15-9 |
+| 7 | `envState` read before the turn's dispatches | 1 failed | §5.6 |
+| 8 | current-turn user message `insert(0, …)` | 10 failed | §5.9 |
+| 9 | `historyTurns` windowing block deleted | 2 failed | §5.10 |
+| 10 | `break` out of the turn loop on a tool-call-free turn | 2 failed | P15-1 (control: the non-exception mechanism *is* held) |
+| 11 | dispatch only `tool_calls[:1]` | **873 passed** | P15-6 |
+| 12 | `0 <= turn_index` half of the range guard dropped | 1 failed | §6 |
+| 13 | `DispatchRecord.rawArguments` → `raw_arguments`, tests swept | 1 failed | P15-9 (control) |
+| 14 | `messagesSent=()` | **873 passed** | P15-7 |
+| 15 | `ConversationTrace(scriptId="")` | 1 failed | P15-8 (control) |
+
+**O.3 — probe 5, the P15-3 fix, run.** Clauses: **(a)** accepted set == constant; **(b)** constant
+== `set(get_args(HistoryReplay))`; **(c)** every member renders a distinct message list from a
+fixture with one prior tool-calling turn.
+
+```
+--- as shipped at 40a9bc8 ---            --- with "quiet" added to the constant ---
+  pass (b)                                 FAIL (b): Literal != constant
+  pass (a)                                 pass (a)      <- the tautology, §4
+  pass (c): all 3 modes distinct           FAIL (c): ('none', 'quiet') render identically
+  PROBE GREEN                              PROBE RED
+```
+
+**O.4 — probe A, the `rawArguments` seam.** A native call carrying `arguments: "{name: 'Pad', qty:
+2"` (unparseable):
+
+```
+dispatched         : add_to_cart -> {}
+rawArguments       : {}   parsedArguments: {}
+env state mutated  : {'calls': 1}          <- FR-10 state moved on an invalid call
+raw string only in : chatResult.tool_calls[0]["function"]["arguments"] = {name: 'Pad', qty: 2
+_parse('[1,2]')    : {}     _parse('5') : {}     _parse('{}') : {}   <- all four collapse
+```
+
+**O.5 — probe B, the blocker.** 3-turn script, `llm` raises on turn 2: `llm calls issued: 2 of 3` ·
+`raised: LM Studio 400` · `ConversationTrace returned: NONE`.
+
+**O.6 — probe F, the trace-monotonicity gap.** `ResettingEnv` (clears its trace inside `dispatch`),
+2 turns, one real call each: `turn 1 dispatches: 1` · `turn 2 dispatches: 0`.
+
+**O.7 — probe 2, the unvalidated `prompt` block.** `valid` fixture amended to
+`{"historyReplay": "verbose", "representToolSchemasEachTurn": "yes", "historyTurns": -3, …}` →
+`validate_pack(load_pack(root))` returns **`[]`**; `assemble` raises
+`unknown historyReplay 'verbose'` only when called. Probe E: `historyTurns=-1` replays the full
+unbounded prefix, identical to `historyTurns=0`.
