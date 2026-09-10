@@ -324,3 +324,46 @@ mutation was reverted. **The fix generalizes: when a coverage probe's completene
 one specific route, call that route directly and compute the actually-silent cells by execution —
 never infer silence from an umbrella function's combined output, which conflates the route's own
 coverage with every sibling check's.**
+
+## A mutation battery's expected verdicts are perishable, pinned to the mechanism at the time it was written — not permanent
+
+Re-running an existing mutation battery against a newer tree is not a replay: the **expected**
+verdict at each site is pinned to the mechanism as it stood when the battery was written, and the
+mechanism moves. A guard strengthened centrally can make a previously load-bearing local assertion
+redundant, so the mutant that used to kill it correctly flips from FAILS to PASSES GREEN — with no
+regression having occurred. Reading a changed result against the old table's PASS/FAIL column
+reads a correct green as a lost guard.
+
+Worked instance: mutant `mC` (drop the third argument `"Query internal execution time:"` from the
+stray-read call site in `pipeline.sh`) was recorded FAILING at commit `375af25`
+(`docs/reviews/cpg-provenance-stamp.md` Pass 7, appendix A12.2). Re-run against a tree four commits
+later it PASSES GREEN (16 PASS, exit 0) — correctly: `48882d8` (K-009) moved the trailer gate
+inside `rq` unconditionally, so `pipeline.sh`'s own local check now states a redundancy already
+enforced upstream. Same run, same reason category but a different cause: mutant `mB` also passes
+green, because its branch is unreachable (nit n9) — also correct.
+
+**The rule:** before reading a changed verdict as a regression or a live defect, re-derive what
+each site's expected verdict *should be* against the current mechanism — don't diff against the
+battery's own prior PASS/FAIL column, diff against what the current code is supposed to do.
+
+## A mutation harness's own "did the mutation apply" check can silently target a non-semantic occurrence
+
+A harness that verifies "the mutation applied" by comparing a file's digest before/after the edit
+can be satisfied by a change to a **non-semantic** occurrence of the pattern — a comment, an
+echoed string literal — and then report the run as PASSES GREEN. That result reads as "the guard
+is missing," when in fact the intended construct was never mutated at all: the experiment is
+invalid, not the guard.
+
+Worked instance: `mutate.sh` applied `s/SET b = {/SET b += {/` to
+`skills/joern-cpg/scripts/pipeline.sh`. The file's md5 changed — but that string occurs there only
+inside comments and an operator-echo line, never in the emitted Cypher — and the harness reported
+`mD exit=0 PASS=16 FAIL=0 PASSES GREEN`, apparently contradicting
+`docs/reviews/cpg-provenance-stamp.md` Pass 7, which had recorded the same mutant killing cases 1
+and 2. The actual emitted-Cypher call site lives in `git-provenance.sh:261`; re-targeted there, the
+mutant FAILS exactly as Pass 7 recorded.
+
+**The rule:** an "applied" check keyed on a whole-file digest is not evidence the mutation landed
+where intended. Pin the applied-check to the semantic site — right file, right line, right
+construct actually executed — not merely to whether some byte in the file changed. A green result
+from a mutation whose own applied-check can't distinguish a comment edit from a code edit proves
+nothing about the guard under test.

@@ -2,6 +2,38 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-10 — U59: distilled own inbox — 2 entries, promoted to tdd-engineer's mutation-testing KB
+
+- **What:** Distilled `cobb`'s own 2-entry `kaizen_team` inbox
+  (`886e1266-5b20-442f-8e79-5014473aa45e`, `8657e0e9-11f3-41ad-9989-2a7f30b7986c`), both self-logged
+  during a separate, concurrent K-022 CPG-provenance-stamp session's own U64 work (re-deriving
+  `docs/reviews/cpg-provenance-stamp.md` Pass 7 findings against a tree four commits newer than the
+  one the review was written against). Re-derived both from their full (untruncated) `fact`/
+  `evidence` fields via `substring` paging — confirmed accurate, not exaggerated; did not touch the
+  actual CPG-provenance-stamp artifacts, out of scope. Both are genuine, generalizable
+  mutation-testing-method lessons, not specific to that effort: (1) a mutation battery's expected
+  verdicts are pinned to the mechanism at the time the battery was written, not permanent — a
+  centrally strengthened guard can make a previously load-bearing local assertion redundant, so its
+  mutant flips from FAILS to PASSES GREEN with no regression having occurred (worked instance:
+  mutant `mC` in `pipeline.sh`, FAILING at `375af25`, PASSES GREEN four commits later once K-009
+  moved the trailer gate upstream); (2) a mutation harness's own "did the mutation apply" check,
+  when keyed on a whole-file digest, can be satisfied by a change to a non-semantic occurrence (a
+  comment, an echoed string) and report a false PASSES GREEN (worked instance: `mutate.sh`'s
+  `pipeline.sh` md5 changed via a comment/echo-line hit, reporting green, while the real emitted-
+  Cypher site in `git-provenance.sh:261` still correctly FAILS). Checked
+  `claude/tdd-engineer/guard-testing-techniques.md` (already grew a related mutation-testing
+  caution at U54) and `skills/agent-maintenance/SKILL.md` §5 for existing coverage first — neither
+  covers either lesson. Promoted both as two new sections onto
+  `claude/tdd-engineer/guard-testing-techniques.md` (its established on-demand-KB home for
+  mutation-testing method — not one of `cobb`'s own files), each keeping its worked instance
+  (commit/file citations), matching the file's existing convention throughout. Cleared both entries
+  from `kaizen_team` (each was cobb's sole edge — `otherRemaining` 0 both times — full
+  `DETACH DELETE`). Re-verified the `tico` orphan (`e1a6c4d2…`) still carries exactly its one
+  `MENTIONS` edge, untouched.
+- **Why:** Routine distillation pass (`teco`-dispatched, same precedent as U52/U57) over `cobb`'s
+  own producer inbox — `cobb` is both producer and distiller here.
+- **Plan items:** —
+
 ## 2026-09-10 — U57: distilled own inbox — 1 entry, promoted as a §5 method caution
 
 - **What:** Distilled `cobb`'s own single `kaizen_team` entry (`f3c8e1a2-4b6d-4e9f-8a1c-7d2e5f0b3a6c`,
