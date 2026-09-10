@@ -2,6 +2,56 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-10 — `lm-studio-model-notes.md`: an unrecognized `model` id's outcome depends on residency, not the catalog; catalog reordering and single-model residency (inbound promotion from `qa-engineer`'s capture, U47)
+
+- **What:** `cobb`, distilling `qa-engineer`'s single `kaizen_team` entry (unit U47, entry
+  `a1c2e9d4-7b3f-4e2a-9c1d-2f6b8a0e5d17`, 2026-09-10, `suggestedHome: project docs` — overridden;
+  see below), added three bullets to the existing `/api/v0/` section in `lm-studio-model-notes.md`,
+  right after the existing JIT-auto-load bullet. No new section. **2,323 → 2,660 w (+337).**
+- **Why here and not `qa-engineer`'s own `qa-testing-techniques.md`** (the entry's producer, and
+  the destination its `suggestedHome` implied): all three facts describe LM Studio **server/API
+  behavior** — the same class already living in this file's JIT-load bullet — not a testing method
+  or environment/tooling workaround. They sit beside their natural companion content rather than
+  fragmenting one `/api/v0` loading-mechanics story across two knowledge bases.
+- **Re-derived live on this box, 2026-09-10 — and the re-derivation corrected the entry's central
+  claim from an absolute to a conditional it never stated.** The entry's own evidence quote read as
+  internally contradictory (a model "already loaded by the operator" producing a 400), so it was
+  not taken at face value; ran three arms directly instead, via the real `/api/v0` server and the
+  `lms.exe` CLI for unload control:
+  1. **Unrecognized `model`, nothing resident** (`lms ps --json` → `[]`): `POST
+     /api/v0/chat/completions` with a bogus id → HTTP 400 `"No models loaded. Please load a model
+     in the developer page or use the 'lms load' command."`, no load attempt. The entry's claim,
+     confirmed — for this one precondition.
+  2. **Unrecognized `model`, something already resident** (the entry did not test this arm): the
+     identical bogus id against a server with `prism-ml/bonsai-27b` loaded returned **HTTP 200**,
+     served by `bonsai-27b`, with the response's own `model`/`model_info` reporting what actually
+     ran. `/api/v0/chat/completions` performs **no validation of `model` against the catalog** once
+     anything is loaded — it answers from whatever is resident regardless of what was asked for.
+  3. **Valid catalog `model`, nothing resident:** JIT-loads and serves correctly (matches the
+     existing "unloaded model" bullet's mechanism) — confirming fact 1 is not a general "JIT never
+     fires" claim, only the cold-start-plus-no-catalog-match case.
+  - Promoted with the corrected scope stated explicitly, plus the QA consequence the entry itself
+    never drew: a live test asserting "unknown model → 400" holds only from a cold start; from a
+    warm one, the identical call **silently succeeds against the wrong model** instead of catching
+    the intended validation — assert on the response body's `model`, not just the status code,
+    whenever cross-test residency isn't controlled.
+  - The other two facts reproduced exactly as captured, no correction needed: reloading a
+    different model moved it to index 0 of `GET /api/v0/models`'s `data` array and dropped the
+    prior model to `state: not-loaded` with no explicit unload call — catalog order tracks load
+    state, not any stable identity, and this config never holds two models resident at once.
+- **Checked for prior coverage before writing:** grepped this file and `qa-testing-techniques.md`
+  for JIT/400/reorder/index/resident/evict language — none of the three facts existed anywhere in
+  the repo before this promotion.
+- **`suggestedHome: project docs` overridden to knowledge base.** The fact is durable LM-Studio
+  server behavior on this lab's own stack, exactly this file's charter — not something any
+  project's docs tree needs (no falkor-chat/model-bench code depends on it today).
+- **Graph:** cleared as part of the same disposition as `qa-engineer`'s U47 entry — 1 `PRODUCED`
+  (`qa-engineer`) / 0 `MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`, run only after
+  both this entry and `qa-engineer`'s matching history entry landed.
+- **Docs touched:** `claude/data-scientist/{lm-studio-model-notes.md,kaizen/history.md}` ·
+  `claude/qa-engineer/kaizen/history.md` (producer's disposition record).
+- **Plan items:** none opened — fully promoted, no follow-up needed.
+
 ## 2026-09-09 — orphan-backlog entry `b7e41c92` cleared: already promoted, accurately, by this agent's own U15 (U31)
 
 - **What:** U31 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the **orphan-backlog** unit, the first shaped by *edge* rather than by producer. The 11 nodes it covers carry **0 `PRODUCED` edges** and are alive only on `MENTIONS`; every earlier unit was organised by producer, so none of them could ever have been reached. `data-scientist` carried one of the 12 edges, tagged by `teco`'s U18.

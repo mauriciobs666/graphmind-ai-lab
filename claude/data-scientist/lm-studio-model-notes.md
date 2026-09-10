@@ -168,6 +168,29 @@ JIT clause added 2026-09-07 from a 2026-09-03 observation).
   withheld call can be faster than a timed one (a 1.1 s gap around 0.2 s of generation is withheld
   at 1.3 s while a clean 2.0 s call beside it is timed). Any "every withheld call was slower than
   every timed call" claim has to be **computed per render**, never argued from the rule's shape.
+- **An unrecognized `model` string's outcome depends on whether anything is already resident — it
+  is not a validation error against the catalog.** Re-derived 2026-09-10 on this box. From a cold
+  start (`lms ps --json` → `[]`), `POST /api/v0/chat/completions` (or `/embeddings`) naming a
+  `model` string that isn't in the catalog at all never attempts a JIT load: it returns HTTP 400
+  `"No models loaded. Please load a model in the developer page or use the 'lms load' command."`
+  immediately. But once **any** model is loaded, the same route does **not** check `model` against
+  the catalog before answering — a bogus id gets served by whatever is already resident, HTTP 200,
+  with the response's own `model`/`model_info` reporting what actually ran, not what was asked for
+  (confirmed live: a nonsense id against a `bonsai-27b`-loaded server returned 200 from
+  `bonsai-27b`). **Consequence:** a live test asserting "unknown model → 400" only holds from a
+  cold start; if an earlier test in the same run left a model resident, the same request silently
+  succeeds against the wrong model instead — assert on the response body's `model` field, not just
+  the status code, whenever cross-test residency isn't controlled.
+- **`GET /api/v0/models` moves whichever entry is `state: loaded` to index 0 of `data`, regardless
+  of its position while unloaded** — re-derived 2026-09-10: `prism-ml/bonsai-27b` sat at index 0
+  while loaded; loading `qwen/qwen3-4b-2507` (originally several entries later) put *it* at index 0
+  and dropped `bonsai-27b`, now `not-loaded`, further down. Catalog order is not stable across
+  loads — filter on `state`/`id`, never index positionally, and never assume `data[0]` is a stable
+  arbitrary model (a prior JIT-load elsewhere in the same test run silently changes it).
+- **This LM Studio config holds exactly one model resident at a time — loading a second evicts the
+  first**, confirmed in the same exchange: loading `qwen/qwen3-4b-2507` dropped `bonsai-27b` to
+  `not-loaded` with no explicit unload call. A harness that assumes a chat model and an embeddings
+  model can stay warm simultaneously will find the first evicted the moment the second is used.
 
 **Consequence:** an environment fingerprint or latency report can be collected automatically from
 `/api/v0/` plus `lms.exe`, except the app version and the KV-cache setting, which have to be

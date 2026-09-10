@@ -2,6 +2,58 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-09-10 — `kaizen_team` distillation: 1 entry, promoted (routed to `data-scientist`, not this agent's own KB) (U47)
+
+- **What:** U47 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `qa-engineer`'s
+  inbox, re-queried at dispatch and confirmed to hold exactly the one entry cited in the brief. A
+  fresh arrival (didn't exist at U45's close), verified on its own merits rather than assumed
+  stale or mis-scoped.
+- **`a1c2e9d4-7b3f-4e2a-9c1d-2f6b8a0e5d17` (2026-09-10) — promoted, but not here.** Three bundled
+  facts about the real `/api/v0` LM Studio server on this box, captured from a live-test unit
+  (three `-m live` tests, R-1/`loadedContextLength` probes): (1) an unrecognized `model` string
+  gets HTTP 400 `"No models loaded"` rather than a JIT-load attempt; (2) `GET /api/v0/models`
+  reorders the just-loaded model to index 0; (3) this config holds exactly one model resident —
+  loading a second evicts the first.
+- **Routed to `claude/data-scientist/lm-studio-model-notes.md`, not `qa-testing-techniques.md`.**
+  All three facts are about **LM Studio server/API behavior**, not a testing method or tooling
+  workaround — they land beside that file's own existing JIT-auto-load bullet (added across
+  U7/U7b/U15), the natural companion content, not this agent's environment/tooling-technique KB
+  (whose charter is WSL2 browser fallback, TUI driving, CLI health-check gotchas — mechanics of
+  *running tests here*, not facts about the model server's own contract). `qa-engineer`'s
+  live-QA context produced the observation; it doesn't make the fact qa-engineer's to own.
+- **Re-derived live on this box, not confirmed from the citation — and the re-derivation narrowed
+  fact (1) to a scope the entry never stated.** The entry's own evidence quote ("curl … with
+  model=\"\<a model already loaded by the operator\>\" -\> 400") reads as contradictory taken
+  literally, so it was not trusted; re-ran the three scenarios directly instead:
+  - **Unrecognized id, nothing loaded** (`lms ps --json` → `[]`): `POST /api/v0/chat/completions`
+    with a bogus `model` → HTTP 400 `"No models loaded…"`, immediately, no load attempt. Confirms
+    the entry as stated — **for this one precondition.**
+  - **Unrecognized id, something already loaded** (not tested by the entry at all): the same bogus
+    `model` string against a server with `prism-ml/bonsai-27b` loaded returned **HTTP 200**, served
+    by `bonsai-27b`, with the response's own `model`/`model_info` naming the model actually used,
+    not the one requested. `/api/v0/chat/completions` does **not** validate `model` against the
+    catalog when anything is resident — it just answers from whatever's loaded.
+  - **Valid catalog id, nothing loaded:** correctly JIT-loads and serves — the entry's fact 1 is
+    not a general "no JIT" claim, only the no-catalog-match-and-cold-start case.
+  - This is the pass's recurring shape once more: a true fact stated as if precondition-free. The
+    corrected, promoted form states the split explicitly and adds the QA-relevant consequence the
+    entry itself never drew: a live test asserting "unknown model → 400" only holds from a cold
+    start, and silently passes against the *wrong* model instead of catching the intended
+    validation if an earlier test in the same run left something resident — assert on the response
+    body's `model` field, not just the status code, when cross-test residency isn't controlled.
+  - Facts 2 and 3 reproduced exactly as stated: reloading a different model moved it to index 0 of
+    `GET /api/v0/models` and dropped the previously-loaded model to `not-loaded`, no explicit
+    unload call.
+- **No prior mention of any of the three facts anywhere in the repo** — grepped both
+  `lm-studio-model-notes.md` and `qa-testing-techniques.md` for JIT/400/reorder/index/resident/
+  evict language before writing; none present.
+- **Graph:** 1 `PRODUCED` (`qa-engineer`) / 0 `MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node
+  `DETACH DELETE`, run only after both this entry and `data-scientist`'s matching history entry
+  landed.
+- **Docs touched:** `claude/data-scientist/{lm-studio-model-notes.md,kaizen/history.md}` (the
+  promotion target) · `claude/qa-engineer/kaizen/history.md` (this entry).
+- **Plan items:** none opened for `qa-engineer` — fully promoted, no follow-up needed here.
+
 ## 2026-09-09 — `TestClient`'s default `raise_server_exceptions=True` promoted to `python-web-quirks`; the skill's audience line corrected to name `qa-engineer` (U35)
 
 - **What:** U35 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the `qa-engineer` inbox, exactly one entry. **1 promoted, 0 discarded, 0 kept open.**
