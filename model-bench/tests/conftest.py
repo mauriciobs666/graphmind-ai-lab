@@ -18,6 +18,7 @@ from modelbench.results import (
     BinaryMetric,
     ClassificationAggregates,
     ItemResult,
+    ItemTiming,
     RunResult,
     ToolCallAggregates,
 )
@@ -146,7 +147,7 @@ def item(
         outcome="pass" if correct else "fail",
         scoreable={metric: scoreable},
         counts={metric: 1 if correct else 0},
-        latencyMs=1300.0,
+        timing=ItemTiming(wallClockMs=1300.0, calls=(), withheldFor=None),
         detail={},
     )
 
@@ -173,6 +174,7 @@ def run(
     session_id: str | None = "s1",
     design_effect: float = 1.0,
     basis: str = "by-construction",
+    attestation_trip_wire: str | None = "compared",
 ) -> RunResult:
     from modelbench.fingerprint import Fingerprint
 
@@ -180,6 +182,10 @@ def run(
     # profile-aware, because otherwise a `model:embeddings` fixture is not expressible at all.
     if arm_kind == "deterministic":
         call_surface = None
+        # `RunResult.attestationTripWire` is None iff armKind == "deterministic" (§4 S1
+        # `:3145-3147`) — forced here the same way `call_surface` is, so a caller cannot build an
+        # inconsistent fixture by leaving the default in place.
+        attestation_trip_wire = None
     profile = arm_kind if call_surface is None else f"{arm_kind}:{call_surface}"
 
     fields = fingerprint_fields
@@ -203,6 +209,7 @@ def run(
         aggregates=aggregates,
         designEffect=design_effect,
         basis=basis,
+        attestationTripWire=attestation_trip_wire,
     )
 
 

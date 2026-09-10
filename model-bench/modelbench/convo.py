@@ -336,23 +336,40 @@ class ToolDispatchFailed(RuntimeError):
 
     `toolName` and `turnIndex` travel on the exception so a caller can attribute the fault without
     re-parsing a message, and the pack's own exception is preserved as `__cause__`, never swallowed.
+    `completedTurns` and `parsedArguments` travel too (`docs/plans/small-model-benchmarking-ml-
+    dispatch-failure.md` §4(b)) — the turns completed before this one, so the runner can build the
+    censored `ConversationTrace` it stores without reconstructing state `drive` already had, and the
+    parsed arguments the failing dispatch was called with.
 
-    **What is deliberately *not* decided here is whether such a call should abort the conversation
-    at all.** Today it does: `drive` lets this propagate, so the whole `ConversationTrace` is lost,
-    which is `TraceContractViolated`'s precedent and defensible as a pack defect failing closed
-    (§3.3). But plan §4 S2's replay contract has a category for *"the dispatch raised"* — a `tool`
-    message naming the failure, the call recorded as undispatchable and the script driven past, the
-    treatment `-ml` §4.1 gives a *model* failure — and the trigger is partly model-chosen, since the
-    model picks the arguments a sim raises on. That is a design decision owed to whoever writes
-    `tools/sim.py` (S5) and it is left open on purpose; if it is settled the other way, the change
-    is a `try`/`except ToolDispatchFailed` at this exception's one raise site plus the
-    `_undispatchable_tool_content` reason to go with it, and this class is unaffected either way.
+    **The abort-vs-record question is decided, by the dispatch-failure note (§4(b)-(c)), not open.**
+    `drive` wraps the `env.dispatch` call site, raises this class here, and the **runner** — not
+    `drive` — catches it: it stores the conversation **censored at this turn** (the completed turns
+    kept, this one and every later turn absent) and proceeds to the next script with a fresh
+    `ToolEnvironment`, routing the censored conversation to `-ml` §4.1's `unrunnable` funnel
+    category rather than driving a shortened-history turn past it. `drive` itself still lets the
+    exception propagate unchanged — censoring is the runner's job, once it has `completedTurns` to
+    censor with — and this function's own docstring above states why: a raising `dispatch` is a
+    pack defect, and `TraceContractViolated`'s precedent (propagate, do not swallow) still applies
+    to *this* function. **Why no sixth `TurnDisposition` member for it:** a dispatch raise is
+    conversation-scoped, not turn-scoped — it invalidates the environment, not just the turn — so
+    naming it as a turn mechanism would be the two-vocabularies collision the plan has refused three
+    times already (dispatch-failure note §4(c)).
     """
 
-    def __init__(self, message: str, *, toolName: str, turnIndex: int) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        toolName: str,
+        turnIndex: int,
+        completedTurns: tuple[TurnTrace, ...],
+        parsedArguments: Mapping[str, Any] | None,
+    ) -> None:
         super().__init__(message)
         self.toolName = toolName
         self.turnIndex = turnIndex
+        self.completedTurns = completedTurns
+        self.parsedArguments = parsedArguments
 
 
 def _system_message(cfg: PromptConfig) -> dict[str, Any] | None:
@@ -609,10 +626,10 @@ def drive(
     **A pack's `ToolEnvironment.dispatch` that raises is not that**, and is re-raised as
     `ToolDispatchFailed` so the runner cannot confuse the two: unnamed, it propagated bare and the
     runner's *anything else* rule diagnosed a live server as dead (impl review Pass 17, P17-3).
-    That divergence from §4 S2's *"or the dispatch raised"* replay category is stated at
-    `ToolDispatchFailed` itself, together with what remains open about it — this function's current
-    behaviour is to fail closed and abandon the conversation, exactly as for
-    `TraceContractViolated`.
+    This function still lets `ToolDispatchFailed` propagate unchanged — it carries `completedTurns`
+    precisely so the **runner** can catch it, censor the conversation at that turn, and drive past
+    it (dispatch-failure note §4(b)-(c), stated in full at `ToolDispatchFailed` itself); `drive`'s
+    own job stops at raising it, the same as for `TraceContractViolated`.
 
     **The exception path is tested before the cap** (§3.8.4's precedence, P14-5), so a call that
     raises at the cap-th iteration is `timed-out`/`no-response`/`server-rejected` and never
@@ -746,6 +763,8 @@ def _drive_turn(
                     "not read it as §3.6 clause (iv)'s server went away",
                     toolName=name,
                     turnIndex=index,
+                    completedTurns=tuple(observed),
+                    parsedArguments=arguments,
                 ) from exc
             _check_trace_contract(
                 list(env.trace()),

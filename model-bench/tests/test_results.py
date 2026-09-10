@@ -21,7 +21,9 @@ from modelbench.results import (
     _METRIC_DECODERS,
     BENCH_SCHEMA_VERSION,
     INDEX_COLUMNS,
+    AttestationTripWireMismatch,
     BinaryMetric,
+    CallTiming,
     ClassificationAggregates,
     ContinuousMetric,
     DistributionSummary,
@@ -30,6 +32,8 @@ from modelbench.results import (
     IncompleteItemRecord,
     InvalidFingerprint,
     ItemResult,
+    ItemTiming,
+    LatencyBlock,
     MetricKindError,
     NonFiniteMeasure,
     RetrievalAggregates,
@@ -243,7 +247,7 @@ def test_record_round_trips_through_disk(tmp_root) -> None:
                 outcome="pass",
                 scoreable={"cleanThroughTurn4": True},
                 counts={"cleanThroughTurn4": 1},
-                latencyMs=1300.0,
+                timing=ItemTiming(wallClockMs=1300.0, calls=(), withheldFor=None),
                 detail={"note": "kept"},
             )
         ],
@@ -251,6 +255,101 @@ def test_record_round_trips_through_disk(tmp_root) -> None:
     path = store(original, tmp_root)
     restored = RunResult.from_dict(json.loads(path.read_text()))
     assert restored == original
+
+
+def test_item_timing_and_call_timing_round_trip_through_json() -> None:
+    """The nested timing carriers round-trip through `ItemResult.to_dict`/`from_dict` with a
+    populated `calls` tuple, not just the `calls=()` shape every mechanically-converted fixture
+    elsewhere in this suite uses (spec §7 Step 0)."""
+    timing = ItemTiming(
+        wallClockMs=4200.0,
+        calls=(
+            CallTiming(
+                wallClockMs=2000.0, ttftMs=150.0, generationMs=1700.0,
+                promptTokens=512, tokensPerSecond=42.5,
+            ),
+            CallTiming(
+                wallClockMs=2200.0, ttftMs=None, generationMs=None,
+                promptTokens=None, tokensPerSecond=None,
+            ),
+        ),
+        withheldFor=None,
+    )
+    original = ItemResult(
+        itemId="i1", pairingKey=("i1",), outcome="pass", scoreable={"m": True},
+        counts={"m": 1}, timing=timing, detail={},
+    )
+    restored = ItemResult.from_dict(json.loads(json.dumps(original.to_dict())))
+    assert restored == original
+    assert restored.timing is not None
+    assert restored.timing.callCount == 2
+    # The second call carries no `stats`, so the pair's gap is unmeasurable (`-ml` §11.5.1).
+    assert restored.timing.unexplainedMs is None
+
+
+def test_item_timing_unexplained_ms_sums_every_calls_gap() -> None:
+    """`unexplainedMs` is the sum of each call's own gap, only when EVERY call yields one
+    (plan §4 S1 `:2999-3025`)."""
+    timing = ItemTiming(
+        wallClockMs=1000.0,
+        calls=(
+            CallTiming(
+                wallClockMs=500.0, ttftMs=100.0, generationMs=350.0,
+                promptTokens=10, tokensPerSecond=5.0,
+            ),
+            CallTiming(
+                wallClockMs=500.0, ttftMs=100.0, generationMs=350.0,
+                promptTokens=10, tokensPerSecond=5.0,
+            ),
+        ),
+        withheldFor=None,
+    )
+    assert timing.callCount == 2
+    assert timing.unexplainedMs == 100.0  # 2 * (500 - (100 + 350))
+
+
+def test_item_timing_unexplained_ms_is_none_with_no_completed_calls() -> None:
+    assert ItemTiming(wallClockMs=None, calls=(), withheldFor="timeout").unexplainedMs is None
+
+
+def test_latency_block_call_attempted_count_adds_no_response_withholds() -> None:
+    """`callAttemptedCount` (v1.28) is `-ml` §11.4's `Y_calls` — `callCount` plus every item
+    withheld for `no_response`/`timeout`, a derived property and never a second stored counter."""
+    block = LatencyBlock(
+        latencyMsP50=None, latencyMsP95=None, latencyMsMax=None,
+        latencyTimedCount=0, latencyItemCount=3,
+        latencyWithheldForLoad=1, latencyWithheldForNoResponse=2,
+        statsCoveredCount=None, callCount=5,
+        ttftMsMedian=None, prefillMsPer1kMedian=None, tokensPerSecondMedian=None,
+        unexplainedMsMax=None,
+    )
+    assert block.callAttemptedCount == 7
+
+
+def test_run_result_latency_round_trips_through_disk(tmp_root) -> None:
+    """`RunResult.latency` round-trips through storage the same way every other block does —
+    `to_dict`/`from_dict` symmetric, nothing dropped (spec §7 Step 0's shape-only `LatencyBlock`).
+    """
+    block = LatencyBlock(
+        latencyMsP50=1200.0, latencyMsP95=3400.0, latencyMsMax=5000.0,
+        latencyTimedCount=8, latencyItemCount=10,
+        latencyWithheldForLoad=1, latencyWithheldForNoResponse=1,
+        statsCoveredCount=7, callCount=9,
+        ttftMsMedian=120.0, prefillMsPer1kMedian=45.0, tokensPerSecondMedian=30.0,
+        unexplainedMsMax=250.0,
+    )
+    original = RunResult(
+        runId="r1", sessionId="s1", role="guard-judge", armKind="model",
+        fingerprint=Fingerprint(armKind="model", callSurface="chat", fields=model_fields()),
+        items=(), aggregates=ClassificationAggregates(),
+        designEffect=1.0, basis="by-construction",
+        attestationTripWire="compared", latency=block,
+    )
+    path = store(original, tmp_root)
+    restored = RunResult.from_dict(json.loads(path.read_text()))
+    assert restored == original
+    assert restored.latency is not None
+    assert restored.latency.callAttemptedCount == 10
 
 
 def test_bench_schema_version_is_a_separate_constant() -> None:
@@ -295,7 +394,7 @@ def test_models_with_stored_results_still_includes_an_embeddings_arm(tmp_root) -
 def _item(scoreable: dict, counts: dict) -> ItemResult:
     return ItemResult(
         itemId="i1", pairingKey=("i1",), outcome="pass",
-        scoreable=scoreable, counts=counts, latencyMs=None, detail={},
+        scoreable=scoreable, counts=counts, timing=None, detail={},
     )
 
 
@@ -352,15 +451,21 @@ def test_load_history_excludes_and_names_an_item_that_declares_a_count_it_does_n
     every other record still loads.
     """
     def ok(item_id: str) -> ItemResult:
-        return ItemResult(itemId=item_id, pairingKey=(item_id,), outcome="pass",
-                          scoreable={"m": True}, counts={"m": 1}, latencyMs=1.0, detail={})
+        return ItemResult(
+            itemId=item_id, pairingKey=(item_id,), outcome="pass",
+            scoreable={"m": True}, counts={"m": 1},
+            timing=ItemTiming(wallClockMs=1.0, calls=(), withheldFor=None), detail={},
+        )
 
     store(_run("good", items=[ok("i1")]), tmp_root)
     store(
         _run("bad", items=[
             ok("i1"),
-            ItemResult(itemId="i9", pairingKey=("i9",), outcome="pass",
-                       scoreable={"m": True}, counts={}, latencyMs=1.0, detail={}),
+            ItemResult(
+                itemId="i9", pairingKey=("i9",), outcome="pass",
+                scoreable={"m": True}, counts={},
+                timing=ItemTiming(wallClockMs=1.0, calls=(), withheldFor=None), detail={},
+            ),
         ]),
         tmp_root,
     )
@@ -599,10 +704,45 @@ def test_run_result_requires_the_design_effect_and_its_basis(omitted: str) -> No
         "fingerprint": Fingerprint(armKind="model", callSurface="chat", fields=model_fields()),
         "items": (), "aggregates": ClassificationAggregates(),
         "designEffect": 1.0, "basis": "by-construction",
+        # attestationTripWire is required too (§4 S1 `:3145-3147`) — supplied here so popping
+        # `omitted` leaves exactly one field missing, the one this test is about.
+        "attestationTripWire": "compared",
     }
     kwargs.pop(omitted)
     with pytest.raises(TypeError):
         RunResult(**kwargs)
+
+
+def test_attestation_trip_wire_is_required_with_no_default() -> None:
+    """Plan §4 S1 `:3145-3147` — required, no default, the same discipline as `designEffect`/
+    `basis` above."""
+    import dataclasses
+
+    field = {f.name: f for f in dataclasses.fields(RunResult)}["attestationTripWire"]
+    assert field.default is dataclasses.MISSING
+    assert field.default_factory is dataclasses.MISSING
+
+
+def test_attestation_trip_wire_must_be_none_iff_arm_kind_is_deterministic() -> None:
+    """`RunResult.attestationTripWire` is `None` **iff** `armKind == "deterministic"` (plan §4 S1
+    `:3145-3147`, §3.4.4, §3.4.5 point 3): a deterministic arm makes no LM Studio call and so has
+    no trip-wire outcome, and a model arm always gets one. Both directions of the mismatch are
+    refused at construction (`AttestationTripWireMismatch`) rather than left to drift; the two
+    matching pairs are the control, constructing cleanly.
+    """
+    base = dict(
+        runId="r", sessionId=None, role="guard-judge",
+        fingerprint=Fingerprint(armKind="model", callSurface="chat", fields=model_fields()),
+        items=(), aggregates=ClassificationAggregates(),
+        designEffect=1.0, basis="by-construction",
+    )
+    with pytest.raises(AttestationTripWireMismatch):
+        RunResult(**base, armKind="model", attestationTripWire=None)
+    with pytest.raises(AttestationTripWireMismatch):
+        RunResult(**base, armKind="deterministic", attestationTripWire="compared")
+
+    RunResult(**base, armKind="model", attestationTripWire="compared")
+    RunResult(**base, armKind="deterministic", attestationTripWire=None)
 
 
 def test_from_dict_is_the_one_place_the_legacy_fallback_belongs(tmp_root) -> None:
@@ -729,8 +869,10 @@ def test_the_index_latency_columns_are_p50_and_p95(tmp_root) -> None:
     """Review m-4 — the index test asserted only the header and the runId, so computing
     `latencyMsP95` at the 50th percentile was green."""
     items = [
-        ItemResult(itemId=f"i{i}", pairingKey=(f"i{i}",), outcome="pass", scoreable={},
-                   counts={}, latencyMs=float(i), detail={})
+        ItemResult(
+            itemId=f"i{i}", pairingKey=(f"i{i}",), outcome="pass", scoreable={}, counts={},
+            timing=ItemTiming(wallClockMs=float(i), calls=(), withheldFor=None), detail={},
+        )
         for i in range(1, 101)
     ]
     store(_run("r1", items=items), tmp_root)
@@ -793,7 +935,7 @@ def test_the_index_valid_column_distinguishes_a_usable_record_from_a_quarantined
 def _citem(*, scoreable: dict, measures: dict, counts: dict | None = None) -> ItemResult:
     return ItemResult(
         itemId="i1", pairingKey=("i1",), outcome="pass", scoreable=scoreable,
-        counts=counts or {}, latencyMs=None, measures=measures, detail={},
+        counts=counts or {}, timing=None, measures=measures, detail={},
     )
 
 
@@ -816,7 +958,7 @@ def test_scored_outcome_raises_on_a_measures_resident_metric() -> None:
 def test_scored_outcome_is_unaffected_for_a_metric_that_lives_in_counts() -> None:
     """The raise is scoped to `measures`-resident metrics only — the binary path is untouched."""
     it = ItemResult(itemId="i1", pairingKey=("i1",), outcome="pass", scoreable={"m": True},
-                     counts={"m": 1}, latencyMs=None, measures={}, detail={})
+                     counts={"m": 1}, timing=None, measures={}, detail={})
     assert it.scored_outcome("m") is True
 
 
@@ -872,7 +1014,7 @@ def test_measures_defaults_empty_and_from_dict_reads_a_missing_key_the_same_way(
     record written before this field existed carries none, exactly as a constructor default
     would — but the two are different mechanisms, so both are asserted."""
     assert ItemResult(
-        itemId="i1", pairingKey=("i1",), outcome="pass", scoreable={}, counts={}, latencyMs=None,
+        itemId="i1", pairingKey=("i1",), outcome="pass", scoreable={}, counts={}, timing=None,
         detail={},
     ).measures == {}
     d = _citem(scoreable={}, measures={}).to_dict()

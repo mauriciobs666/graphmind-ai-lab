@@ -12,7 +12,7 @@ from conftest import classification_aggregates, item, model_fields, run
 
 from modelbench import cli, hostinfo
 from modelbench.cli import main
-from modelbench.results import ItemResult, store
+from modelbench.results import ItemResult, ItemTiming, store
 
 PACK = "guard-judge-understanding"
 
@@ -102,8 +102,11 @@ def test_an_incomplete_item_record_does_not_take_the_comparison_down_with_it(
     _store_arm(workspace, "incumbent", correct=34)
     broken = [item(f"g{i:02d}", correct=True, metric="falseAdvanceRate") for i in range(39)]
     broken.append(
-        ItemResult(itemId="g39", pairingKey=("g39",), outcome="pass",
-                   scoreable={"falseAdvanceRate": True}, counts={}, latencyMs=1300.0, detail={})
+        ItemResult(
+            itemId="g39", pairingKey=("g39",), outcome="pass",
+            scoreable={"falseAdvanceRate": True}, counts={},
+            timing=ItemTiming(wallClockMs=1300.0, calls=(), withheldFor=None), detail={},
+        )
     )
     store(
         run("halfscored", items=broken, aggregates=classification_aggregates(40, 40),

@@ -1526,6 +1526,37 @@ def test_drive_names_the_exception_a_packs_raising_dispatch_reaches_the_runner_a
     assert excinfo.value.turnIndex == 0
     assert "add_to_cart" in str(excinfo.value)
     assert "KeyError" in str(excinfo.value)
+    # The raise is on turn 0's very first call, so no turn has completed yet, and the parsed
+    # arguments are the dict the model's tool call actually carried (dispatch-failure note §4(b)).
+    assert excinfo.value.completedTurns == ()
+    assert excinfo.value.parsedArguments == {"name": "Ghost"}
+
+
+def test_dispatch_failure_carries_the_turns_completed_before_it() -> None:
+    """`ToolDispatchFailed.completedTurns` is the turns `drive` already finished before the raise
+    — the runner's only way to build the censored `ConversationTrace` it stores, since `drive`
+    builds `turn_traces` as a private local and returns nothing on a raise (dispatch-failure note
+    §4(b); `docs/plans/small-model-benchmarking-runner-spec.md` §2.2 item 2)."""
+    script = conversation(
+        "S-30b", (turn(1, "just answer"), turn(2, "add the Ghost"), turn(3, "and then?"))
+    )
+    call = native_call("c1", "add_to_cart", {"name": "Ghost"})
+    llm = stub_llm(
+        [
+            chat_result(content="ok"),
+            chat_result(content=None, tool_calls=(call,)),
+            chat_result(content="done"),
+        ]
+    )
+
+    with pytest.raises(ToolDispatchFailed) as excinfo:
+        drive(RaisingEnvironment(), script, llm, make_cfg(toolSchemas=()))
+
+    assert excinfo.value.turnIndex == 1
+    assert len(excinfo.value.completedTurns) == 1
+    assert excinfo.value.completedTurns[0].turnDisposition == "replied"
+    assert excinfo.value.completedTurns[0].finalReplyText == "ok"
+    assert excinfo.value.parsedArguments == {"name": "Ghost"}
 
 
 def test_drive_fails_closed_on_a_raising_dispatch_and_drives_no_further_turn() -> None:

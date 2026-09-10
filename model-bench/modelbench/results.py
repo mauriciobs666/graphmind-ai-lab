@@ -71,6 +71,17 @@ class NonFiniteMeasure(ValueError):
     """
 
 
+class AttestationTripWireMismatch(ValueError):
+    """`RunResult.attestationTripWire` disagrees with `RunResult.armKind` (§3.4.4, §3.4.5 point 3).
+
+    It is `None` **iff** `armKind == "deterministic"`: a deterministic arm makes no LM Studio call
+    and so has no trip-wire outcome to record, and a model arm always does (`attest`'s first
+    `model:chat` run back-fills it, so every model-arm record has one). A record where the two
+    disagree is not a result the runner ever produces, so it is refused at construction rather
+    than read back later as a puzzling `None`/non-`None` on the wrong kind of arm.
+    """
+
+
 # --- metric values ---------------------------------------------------------------------------
 # Every rate prints as `k/n = p̂ [lo, hi]` — never a bare percentage, never without its denominator
 # (`-ml` §3.2a). Carrying the numerator and denominator in the type is what makes that possible.
@@ -140,6 +151,177 @@ class TurnPositionRate:
     metric: BinaryMetric
 
 
+# --- timing --------------------------------------------------------------------------------
+# `docs/plans/small-model-benchmarking-runner-spec.md` §5, plan §4 S1 `:2985-3025`/Appendix A
+# `:7826-7828`. Shapes only here (Step 0) — the accumulation pass that builds a `LatencyBlock`
+# from a run's `items` is `runner.py`'s (spec §7 Step 1, `latency_block()`), not this module's.
+
+
+@dataclass(frozen=True)
+class CallTiming:
+    """One model call (plan §4 S1 `:2987-2996`, `-ml` v1.20 §11.4/§11.5.1).
+
+    Every field `None`-when-absent and never `0`. These five are CALL figures, not item figures:
+    a `tool-caller` item is a turn of several calls, and prefill is not even constant within a
+    turn (the prompt grows with each appended `tool` message) — `-ml` §11.4 pools them over calls
+    rather than averaging up to the item first.
+    """
+
+    wallClockMs: float | None
+    ttftMs: float | None
+    generationMs: float | None
+    promptTokens: int | None
+    tokensPerSecond: float | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "wallClockMs": self.wallClockMs,
+            "ttftMs": self.ttftMs,
+            "generationMs": self.generationMs,
+            "promptTokens": self.promptTokens,
+            "tokensPerSecond": self.tokensPerSecond,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> "CallTiming":
+        return cls(
+            wallClockMs=d.get("wallClockMs"),
+            ttftMs=d.get("ttftMs"),
+            generationMs=d.get("generationMs"),
+            promptTokens=d.get("promptTokens"),
+            tokensPerSecond=d.get("tokensPerSecond"),
+        )
+
+
+def _call_gap_ms(call: CallTiming) -> float | None:
+    """`-ml` §11.5.1's per-call gap: `wallClockMs` minus `(ttftMs + generationMs)`. `None` if any
+    operand is `None` — a chat-surface-only figure, since an embeddings call carries no `stats`.
+
+    This is the plan's own arithmetic at the unit boundary (§3.6 `:1487-1512`), not `-ml`'s — the
+    runner's own `_gap_withheld_for` (spec §7 Step 1) reuses the same formula to decide
+    withholding; this copy exists only because `ItemTiming.unexplainedMs` needs it and lives here.
+    """
+    if call.wallClockMs is None or call.ttftMs is None or call.generationMs is None:
+        return None
+    return call.wallClockMs - (call.ttftMs + call.generationMs)
+
+
+@dataclass(frozen=True)
+class ItemTiming:
+    """One scored unit of work's timing (plan §4 S1 `:2999-3025`; v1.27 shrank this to three
+    fields, moving the five per-call scalars down to `CallTiming`).
+
+    `wallClockMs` is the ITEM's wall clock: on a `tool-caller` item, the whole turn — every
+    iteration and the tool dispatches between them. `None` when the item is incomplete (it ended
+    on a raise or a failure); a partial item's wall clock is never stored as a measurement.
+
+    `calls` holds one `CallTiming` per COMPLETED call, in order — empty only when the item's
+    first/only call never returned.
+
+    `withheldFor` is why `ItemResult.latencyMs` is absent for this item — THREE states, ONE
+    counter (v1.11, plan-gate P5-6, `-ml` v1.14 §11.5.1): `"timeout"` and `"no_response"` are both
+    counted in `LatencyBlock.latencyWithheldForNoResponse`; they are separate item states because
+    `-ml` §11.5.1's `censoringExact` is satisfied by a timeout (a censored observation) and
+    falsified by a non-timeout failure (a missing one). `None` means the item is timed.
+    """
+
+    wallClockMs: float | None
+    calls: tuple[CallTiming, ...]
+    withheldFor: Literal["load", "timeout", "no_response"] | None
+
+    @property
+    def callCount(self) -> int:
+        """COMPLETED calls — `-ml` §11.4's `Y_calls` (the ATTEMPT count) is NOT this (v1.28)."""
+        return len(self.calls)
+
+    @property
+    def unexplainedMs(self) -> float | None:
+        """The sum of each call's own gap, in order — `None` unless EVERY call yields one, and
+        `None` on an item with no completed calls at all (`-ml` §11.5.1)."""
+        gaps = [_call_gap_ms(c) for c in self.calls]
+        return None if not self.calls or any(g is None for g in gaps) else sum(gaps)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "wallClockMs": self.wallClockMs,
+            "calls": [c.to_dict() for c in self.calls],
+            "withheldFor": self.withheldFor,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> "ItemTiming":
+        return cls(
+            wallClockMs=d.get("wallClockMs"),
+            calls=tuple(CallTiming.from_dict(c) for c in d.get("calls", [])),
+            withheldFor=d.get("withheldFor"),
+        )
+
+
+@dataclass(frozen=True)
+class LatencyBlock:
+    """One run's latency summary — nine invariants, all asserted against a recomputation from
+    `run.items` by `runner.py`'s `latency_block()` (spec §7 Step 1; the invariants themselves are
+    listed in `docs/plans/small-model-benchmarking-runner-spec.md` §5, sourced from plan §4 S2
+    `:5416-5576` and Appendix A `:7826-7828`). This class carries the shape only — Step 0 does not
+    build the accumulation pass.
+    """
+
+    latencyMsP50: float | None
+    latencyMsP95: float | None
+    latencyMsMax: float | None
+    latencyTimedCount: int
+    latencyItemCount: int
+    latencyWithheldForLoad: int
+    latencyWithheldForNoResponse: int
+    statsCoveredCount: int | None
+    callCount: int
+    ttftMsMedian: float | None
+    prefillMsPer1kMedian: float | None
+    tokensPerSecondMedian: float | None
+    unexplainedMsMax: float | None
+
+    @property
+    def callAttemptedCount(self) -> int:
+        """`-ml` §11.4's `Y_calls` / rule (iv-b)'s gate denominator (v1.28) — `callCount` plus
+        every item withheld for `no_response`/`timeout`, never a second stored counter."""
+        return self.callCount + self.latencyWithheldForNoResponse
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "latencyMsP50": self.latencyMsP50,
+            "latencyMsP95": self.latencyMsP95,
+            "latencyMsMax": self.latencyMsMax,
+            "latencyTimedCount": self.latencyTimedCount,
+            "latencyItemCount": self.latencyItemCount,
+            "latencyWithheldForLoad": self.latencyWithheldForLoad,
+            "latencyWithheldForNoResponse": self.latencyWithheldForNoResponse,
+            "statsCoveredCount": self.statsCoveredCount,
+            "callCount": self.callCount,
+            "ttftMsMedian": self.ttftMsMedian,
+            "prefillMsPer1kMedian": self.prefillMsPer1kMedian,
+            "tokensPerSecondMedian": self.tokensPerSecondMedian,
+            "unexplainedMsMax": self.unexplainedMsMax,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Mapping[str, Any]) -> "LatencyBlock":
+        return cls(
+            latencyMsP50=d.get("latencyMsP50"),
+            latencyMsP95=d.get("latencyMsP95"),
+            latencyMsMax=d.get("latencyMsMax"),
+            latencyTimedCount=d["latencyTimedCount"],
+            latencyItemCount=d["latencyItemCount"],
+            latencyWithheldForLoad=d["latencyWithheldForLoad"],
+            latencyWithheldForNoResponse=d["latencyWithheldForNoResponse"],
+            statsCoveredCount=d.get("statsCoveredCount"),
+            callCount=d["callCount"],
+            ttftMsMedian=d.get("ttftMsMedian"),
+            prefillMsPer1kMedian=d.get("prefillMsPer1kMedian"),
+            tokensPerSecondMedian=d.get("tokensPerSecondMedian"),
+            unexplainedMsMax=d.get("unexplainedMsMax"),
+        )
+
+
 # --- per-item records ------------------------------------------------------------------------
 
 
@@ -154,6 +336,12 @@ class ItemResult:
     `scoreable` records, per conditional count, whether its precondition was met (`-ml` §4.3), so a
     precondition failure can never be laundered into the numerator or silently out of the
     denominator.
+
+    `timing` carries the item's raw timing record; `latencyMs` (below) is a **derived property**
+    over it, not a stored field (plan v1.10, §4 S1 `:3087-3097`, Appendix A `:7825`) — `timing` is
+    the only home for a call's `wallClockMs` and a stored `latencyMs` alongside it would be two
+    homes for one measurement, needing an asserted invariant to stop them drifting (§7 rule 4).
+    `None` iff this arm produces no timings at all (a `deterministic` arm).
     """
 
     itemId: str
@@ -161,7 +349,7 @@ class ItemResult:
     outcome: Outcome
     scoreable: Mapping[str, bool]
     counts: Mapping[str, int]
-    latencyMs: float | None
+    timing: ItemTiming | None
     #: The per-item **continuous** values (`mrr`, `separationRaw`, `separationZ`) — a second map,
     #: never a widened `counts`: widening makes the booleanisation type-legal without making it
     #: wrong, and puts a count that §4.2's denominators count into the same key space as a
@@ -245,6 +433,18 @@ class ItemResult:
             )
         return self.measures[metric]
 
+    @property
+    def latencyMs(self) -> float | None:
+        """The *admitted* wall clock: the only timing any aggregate reads (§3.6).
+
+        A derivation, not a stored field (v1.10) — `timing.wallClockMs` and a stored `latencyMs`
+        would be two homes for one measurement, needing an asserted invariant to stop them
+        drifting; §7 rule 4 takes the derivation instead. `to_dict` still emits it, so a stored
+        record reads the same; `from_dict` ignores it and re-derives from `timing`.
+        """
+        t = self.timing
+        return None if t is None or t.withheldFor is not None else t.wallClockMs
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "itemId": self.itemId,
@@ -252,6 +452,9 @@ class ItemResult:
             "outcome": self.outcome,
             "scoreable": dict(self.scoreable),
             "counts": dict(self.counts),
+            "timing": self.timing.to_dict() if self.timing is not None else None,
+            # Still emitted for a stored record's own readability (spec §7 Step 0) — never read
+            # back; `from_dict` re-derives it from `timing` instead.
             "latencyMs": self.latencyMs,
             "measures": dict(self.measures),
             "detail": dict(self.detail),
@@ -259,13 +462,16 @@ class ItemResult:
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ItemResult":
+        timing = d.get("timing")
         return cls(
             itemId=d["itemId"],
             pairingKey=tuple(d["pairingKey"]),
             outcome=d["outcome"],
             scoreable=dict(d.get("scoreable", {})),
             counts=dict(d.get("counts", {})),
-            latencyMs=d.get("latencyMs"),
+            # `latencyMs` on the stored dict is ignored on read (spec §7 Step 0) — `timing` is the
+            # one source and `latencyMs` re-derives from it via the property above.
+            timing=ItemTiming.from_dict(timing) if timing is not None else None,
             # A reader's compatibility rule under §3.4.3, not a constructor default: a record
             # written before `measures` existed reads as carrying none (§4 S1e Table F).
             measures=dict(d.get("measures", {})),
@@ -405,6 +611,27 @@ class RunResult:
     #: `from_dict`, where it means "a record written before these fields existed" (§3.4.3).
     designEffect: float
     basis: Basis
+    #: Required, **no default** (plan v1.10, §4 S1 `:3145-3147`, §3.4.4, §3.4.5 point 3): `None`
+    #: **iff** `armKind == "deterministic"`, enforced in `__post_init__` below — a deterministic
+    #: arm makes no LM Studio call and so has no trip-wire outcome, and a model arm always gets
+    #: one (`attest`'s first `model:chat` run back-fills it).
+    attestationTripWire: Literal["compared", "first-observation", "unavailable"] | None
+    #: One run's latency summary (`LatencyBlock`), or `None` when every item's `timing is None`
+    #: (a `deterministic` arm, or a fixture that never wired timing at all). Unlike
+    #: `attestationTripWire`, this field is **not** required — Step 0 adds the shape only; the
+    #: accumulation pass that builds one from `items` is `runner.py`'s (spec §7 Step 1), and every
+    #: fixture built before that pass exists is entitled to omit it.
+    latency: LatencyBlock | None = None
+
+    def __post_init__(self) -> None:
+        """`attestationTripWire is None` iff `armKind == "deterministic"` — refused here rather
+        than left to drift silently between the two fields (`AttestationTripWireMismatch`)."""
+        if (self.attestationTripWire is None) != (self.armKind == "deterministic"):
+            raise AttestationTripWireMismatch(
+                f"run {self.runId!r}: attestationTripWire={self.attestationTripWire!r} but "
+                f"armKind={self.armKind!r} — attestationTripWire must be None iff "
+                'armKind == "deterministic"'
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -417,10 +644,13 @@ class RunResult:
             "aggregates": _aggregates_to_dict(self.aggregates),
             "designEffect": self.designEffect,
             "basis": self.basis,
+            "attestationTripWire": self.attestationTripWire,
+            "latency": self.latency.to_dict() if self.latency is not None else None,
         }
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "RunResult":
+        latency = d.get("latency")
         return cls(
             runId=d["runId"],
             sessionId=d.get("sessionId"),
@@ -437,6 +667,10 @@ class RunResult:
             aggregates=_aggregates_from_dict(d["aggregates"]),
             designEffect=d.get("designEffect", 1.0),
             basis=d.get("basis", "assumed"),
+            # No `.get` default: required with no default on the constructor (above), so a record
+            # missing it is not a legacy record this module knows how to read back.
+            attestationTripWire=d["attestationTripWire"],
+            latency=LatencyBlock.from_dict(latency) if latency is not None else None,
         )
 
     @property

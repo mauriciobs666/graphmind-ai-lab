@@ -16,11 +16,13 @@ hashing, the AST import allowlist, the row-count identity), `lmstudio`, `hostinf
 `convo` (`assemble` and the bounded per-turn `drive`); the CLI ships `compare` (with
 `--negative-control`), `index rebuild`, `models --tested` and `attest`.
 
-**What S2 still owes, and each one's live consequence.** `runner.py` does not exist, and with it
-neither do the timing carriers `results.py` has no declaration of yet — `CallTiming`, `ItemTiming`,
-`ItemResult.timing` (still a stored `latencyMs`), `LatencyBlock`, `RunResult.latency` and
-`RunResult.attestationTripWire` — so nothing in the tree produces a latency figure and `report.py`'s
-latency slots are unreachable. The `validate` and `run` commands are absent, and
+**What S2 still owes, and each one's live consequence.** `runner.py` does not exist yet
+(`docs/plans/small-model-benchmarking-runner-spec.md` is its spec). `results.py` carries the
+timing shapes it needs — `CallTiming`, `ItemTiming`, `ItemResult.timing` (`latencyMs` is now a
+derived `@property` over it), `LatencyBlock`, `RunResult.latency` and
+`RunResult.attestationTripWire` — but no code builds one yet: `latency_block()`'s accumulation
+pass is `runner.py`'s, so every stored/compared run still carries `latency=None` and `report.py`'s
+latency slots stay unreachable until it lands. The `validate` and `run` commands are absent, and
 `tests/test_cli.py::test_s2s_remaining_commands_are_not_shipped_yet` asserts **those two** exit `2`,
 so that half of the stage boundary is checked rather than promised (`attest` shipped and left the
 assertion).

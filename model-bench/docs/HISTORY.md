@@ -2,6 +2,91 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-10 — S2 U115: `results.py`'s timing carriers, `RunResult.latency`/`attestationTripWire`, and `ToolDispatchFailed`'s censoring payload
+
+**What:** Step 0 of `docs/plans/small-model-benchmarking-runner-spec.md` §7 — the two genuine
+plan-vs-shipped-code gaps the spec's §2.2 flagged, both required before `runner.py` (Step 1) can
+be built at all.
+
+`modelbench/results.py` gains `CallTiming` (one model call — `wallClockMs`/`ttftMs`/
+`generationMs`/`promptTokens`/`tokensPerSecond`, plan §4 S1 `:2987-2996`), `ItemTiming`
+(`wallClockMs`/`calls`/`withheldFor`, with `callCount` and `unexplainedMs` as **derived
+properties** over `calls`, never stored — plan `:2999-3025`) and `LatencyBlock` (the nine-invariant
+shape in the spec's §5, with `callAttemptedCount` derived as `callCount +
+latencyWithheldForNoResponse`, v1.28's rule). All three carry `to_dict`/`from_dict`. Shapes only —
+the accumulation pass that builds a `LatencyBlock` from a run's `items` (`latency_block()`) is
+Step 1's, in `runner.py`, which does not exist yet.
+
+`ItemResult.latencyMs` (a stored constructor field since S1) is now `timing: ItemTiming | None`
+plus a derived `latencyMs` `@property` reading `None if timing is None or timing.withheldFor is
+not None else timing.wallClockMs` — plan v1.10, §4 S1 `:3087-3097`, Appendix A `:7825`. `to_dict`
+still emits both `timing` and a redundant `latencyMs` for a stored record's own readability;
+`from_dict` ignores any `latencyMs` key and re-derives from `timing`. Every existing
+`ItemResult(..., latencyMs=X, ...)` call site (`tests/conftest.py`, `tests/test_results.py`,
+`tests/test_report.py`, `tests/test_cli.py`) converts mechanically to `timing=ItemTiming
+(wallClockMs=X, calls=(), withheldFor=None)` (or `timing=None` for a `None` `latencyMs`) — no
+test's *assertions* changed, only fixture construction.
+
+`RunResult` gains `attestationTripWire: Literal["compared","first-observation","unavailable"] |
+None`, required with no default, and `latency: LatencyBlock | None = None` (not required — Step 0
+adds no producer for it, so every pre-`runner.py` fixture is entitled to omit it). A new
+`__post_init__` refuses construction (`AttestationTripWireMismatch`) unless `attestationTripWire
+is None` is exactly `armKind == "deterministic"` (plan `:3145-3147`, §3.4.4, §3.4.5 point 3). The
+one direct `RunResult(...)` fixture builder (`tests/conftest.py`'s `run()`) gains an
+`attestation_trip_wire` parameter, forced to `None` alongside `call_surface` on a deterministic
+arm exactly as that function already forces `call_surface` — so no existing caller can build an
+inconsistent fixture by leaving the default in place.
+
+`modelbench/convo.py`'s `ToolDispatchFailed` gains two keyword-only constructor parameters,
+`completedTurns: tuple[TurnTrace, ...]` and `parsedArguments: Mapping[str, Any] | None`, per the
+dispatch-failure note's §4(b) payload; `_drive_turn`'s one raise site now passes `observed` (the
+turns already completed before this one, already in scope there) as `completedTurns` and the
+already-parsed `arguments` dict as `parsedArguments`. The class docstring's "deliberately not
+decided" paragraph is rewritten to state the note's §4(b)-(c) ruling as decided: the runner (not
+`drive`) catches the raise, stores the conversation censored at that turn, and routes it to `-ml`
+§4.1's `unrunnable` funnel category — and why there is still no sixth `TurnDisposition` member (a
+dispatch raise is conversation-scoped, not turn-scoped). `drive()`'s own docstring is updated to
+match; `drive` itself is otherwise unchanged — it still lets `ToolDispatchFailed` propagate, only
+carrying more now.
+
+**Tests:** `tests/test_results.py` adds direct-construction coverage for the new invariant
+(`test_attestation_trip_wire_is_required_with_no_default`,
+`test_attestation_trip_wire_must_be_none_iff_arm_kind_is_deterministic`, both directions plus the
+two matching-pair controls) and for the new shapes (`ItemTiming`/`CallTiming` round-tripping
+through JSON with a populated `calls` tuple, `unexplainedMs`'s sum-of-gaps and no-calls-at-all
+cases, `LatencyBlock.callAttemptedCount`, and `RunResult.latency` round-tripping through storage).
+`tests/test_convo.py` adds two cases for `ToolDispatchFailed`'s new fields: the existing single-
+call-site test now also asserts `completedTurns == ()` and `parsedArguments == {"name": "Ghost"}`
+on a first-call raise, and a new test drives a raise on turn 2 of a three-turn script to confirm
+`completedTurns` carries exactly the one `TurnTrace` that finished cleanly before it.
+
+**Mutation-tested both invariants named in the brief**, each in isolation, restored via `cp` from
+a pre-mutation backup and `diff -q`-verified byte-identical, under `PYTHONDONTWRITEBYTECODE=1`:
+disabling `RunResult.__post_init__`'s check (`if False:` in place of the real condition) reddened
+`test_attestation_trip_wire_must_be_none_iff_arm_kind_is_deterministic` (`DID NOT RAISE
+AttestationTripWireMismatch`); dropping the `+ self.latencyWithheldForNoResponse` term from
+`LatencyBlock.callAttemptedCount` reddened
+`test_latency_block_call_attempted_count_adds_no_response_withholds` (`5 == 7` failed).
+
+**Concurrent with U114** (`roles.py`/`packs.py`'s sampling-contract route (iii), disjoint files,
+dispatched in parallel): the full suite shows 11 pre-existing failures in `tests/test_report.py`,
+all `PackConfigError: pairingKey[0] 'queryId' is not role 'embedder''s own analysis-unit field
+'itemId'` — confirmed unrelated to this unit before touching anything (the offending fixture,
+`_embedder_pack()`'s `pairingKey=("queryId",)`, is untouched here; the failure is
+`check_sampling_contract`'s new route (iii) rejecting a `test_report.py` fixture U114 did not
+update, entirely orthogonal to `timing`/`latencyMs`). Left as-is, per this unit's fence against
+`packs.py`/`roles.py`.
+
+**Verification:** `.venv/bin/python -m pytest -q` → **1043 passed, 11 failed (pre-existing, U114),
+3 deselected**, 1057 collected total (starting-point baseline before either concurrent unit: 1030
+passed, 3 deselected, 1033 total; this unit's own contribution is 8 new tests — 7 in
+`tests/test_results.py`, 1 in `tests/test_convo.py` — all passing; the remaining delta is U114's).
+`grep -rn 'latencyMs=' modelbench tests` → 29 hits before this unit (all `ItemResult(...,
+latencyMs=X, ...)` constructor keywords, one `from_dict` read), 0 after (the read is gone;
+`to_dict`'s own emission uses `"latencyMs":`, which the pattern does not match). `.venv/bin/ruff
+check .` → `All checks passed!`. `modelbench/runner.py`, `modelbench/cli.py`, `modelbench/packs.py`
+and `modelbench/roles.py` were not touched.
+
 ## 2026-09-10 — S2 U114: sampling-contract route (iii) — `roles.ANALYSIS_UNIT_FIELD_BY_ROLE` and `check_sampling_contract`'s role check
 
 **What:** the gap U113's runner-spec synthesis flagged (`docs/plans/small-model-benchmarking-
