@@ -1,6 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.28 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.29 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+
+2026-09-10 — v1.29 (M11-2): the plan gate's `## Pass 16` on v1.28 (`docs/reviews/small-model-benchmarking.md`, read at `b0725f4`; the pass reviewed the plan at `ad9130b` and the tree at `ae3d71a`) closed **in full** — **0 blockers, 2 majors, 4 minors, 1 nit, none deferred** — and **it is the last gate pass.** Pass 16 landed on `## Pass 15` §6's **branch 1**: zero class-D blockers and exactly one class-D finding, with the previous reviewer's pre-registered prediction (*≥ 6 findings, 0 class-D blockers, 0–1 class-D*) confirmed on all three counts. **There is no Pass 17, so anything left open here goes to execution rather than to another reading**, and this revision is written to that standard. The note pairing does not move — v1.29 is aligned to `-ml` **v1.22** (`551c946`), the same revision v1.28 was paired to, re-checked at §7 rather than inherited. **P16-1 (major, and the one class-D finding) — v1.28's fix for P15-3 carried the defect class it was closing, one severity step down, and the gate's prescription is adopted with its scope corrected.** v1.28 keyed the disposition-over-load precedence on `turnDisposition`, which lives on `TurnTrace` and so exists on `tool-caller` alone: `MULTI_CALL_TURN_BY_ROLE` is `False` for the four item-level roles, where the collision is reachable in exactly the shape §3.6 describes — the residency probe shows not-resident, the item's one call then returns a 500 — and the rule left it undecided. Worse, the **enforcement** the plan and `-ml` §11.4 both name, rule (ii)'s fourth assertion recomputed over the dispositions, has **no second route** on those four roles: the only per-item signal there is `timing.withheldFor`, which is what `latencyWithheldForNoResponse` is summed from, so the check degenerated into a tautology on precisely the roles the finding is about. **Two clauses close it, and neither is blocked.** §3.6 restates the precedence over a fact every role has — the item's own last call raised rather than returning, `turnDisposition ∉ {replied, cap-hit}` being the `tool-caller` spelling of that same condition — and the rule is additionally cited at the **residency-guard bullet**, which is the site that *produces* the mis-file and which v1.28 left unqualified. §4 S2 rule (ii) gains the genuinely independent branch: on a single-call **model** arm the attempt count equals the item count, the two sides computed from disjoint inputs, reddening one below on the mis-file and on nothing else while rule (iii) still balances. **One divergence from the gate, stated as one:** the gate scoped that branch to the role column alone, which reads it onto a `deterministic` arm, where `callCount` is `0` by §3.3 and every item's `timing` is `None` by §4 S1. It is vacuous rather than false today — rule (iii) makes a `deterministic` latency block unconstructible — and it is written with `armKind == "model"` anyway, because a rule that holds only through another rule's side effect is what §7 rule 4 refuses. **One extension:** §5 test 15b gains case **(f)**, the block's first *single-call* fixture, a `guard-judge` item preceded by a not-resident snapshot whose one call returns a 500 — because (a)–(e) are all `tool-caller` turns and none of them reaches the roles this finding is about. **P16-2 (major, class-S)** — rule 5's own sweep produced one **report** obligation the plan did not transcribe and no done-condition owned: under censoring two arms' hazard curves are conditioned on different risk sets, so their difference is not a difference and is never printed, each curve going beside the other with its own `c_t`. That is the discipline `-ml` §11.7 slot 7 already applies to two arms' latency figures at unequal coverage, and `report.py` is a two-arm comparison tool whose curve §4 S5 already commissions, so the difference was the natural thing to render and its failure mode is silent. Transcribed at §3.8.4 and gated at §4 S5 as item **(3a-i)**, with the both-arms-censored fixture that is what makes it a test. **P16-3 (minor, class-S)** — §3.3 stated the attempt count's per-item value without its role qualifier while §3.6's FR-11 table stated the qualified form 1 250 lines away, so the plan carried the false form and the true one far apart and an implementer builds from the first. Swept, in the two-clause form: one per item on a single-call model arm, `I(t)` or `I(t) + 1` on a `tool-caller`. The sentence is transcribed from `-ml` §11.9 ask 8, which carries the same slip; that copy is `data-scientist`'s and is raised back as **§7 raise `R-4`** rather than edited. **P16-4 (minor, class-S)** — rule 5's funnel disclosure line, the integer that makes the deliberate non-exclusion of §4.2's turn-level counts honest rather than assumed away, was owed by prose and by no done-condition **inside the revision that cited P14-3 as its reason for gating item (3a) by name**. Gated as item **(3a-ii)**, on a fixture where the disclosure count is non-zero and differs from the `unrunnable` count. The note's *"no gate"* means no coverage gate, and §3.8.4 now says so. **P16-5 (minor, class-S)** — v1.28 sent the rework unit at `modelbench/convo.py`, and at `ae3d71a` that block already states P14-3's corrected cross-unit rationale in its own words: a faithful application would have rewritten a correct block and left the wrong one standing. The live over-claim is in **`tests/test_convo.py`'s section banner**, which the symbol table now reaches by its own row — five rows become six, in the same four files. **No residual count moves and the reason is §7 rule 5(a) at sub-line granularity**: the banner's heading line is already the `four-row` residual's third hit, so a residual-zero edit was always reachable while the over-claim two lines under it survived, that sentence carrying none of the four tokens and the one phrase that would reach it being a widening hazard the table already names. What reaches a token-free clause is a symbol row whose whole block is rewritten. **P16-6 (minor, class-S)** — §3.8.4's scorer-contract bullet, the plan's only statement of what `scoring/toolcalls.py` produces per position, still assigned §4.2's denominators to it after rule 5 made §4.2's turn-level population and §4.4's per-position one deliberately different; an implementer reading there for the module contract and item (3a) for the report could finish with a numerator and a denominator drawn from different populations — green, and a rate that is not a rate. One clause, censoring both halves of the per-position slice. **P16-7 (nit, class-S)** — `ItemResult.outcome`'s own definition carried no comment while every neighbouring field carries its ruling inline; v1.28 ruled it at §3.8.4 only. The field now says it. **One item outside Pass 16's inventory, flagged by the gate and verified on both sides here, is gated rather than described** *(that pass's §7 item 1)*: §3.3 has declared `historyReplay` **four**-valued since v1.26 and `tool-caller-shop-assistant` declares the fourth value, while the shipped module declares three and `assemble` refuses anything else (`convo.py:75`, `:77`, `:250` at `ae3d71a`). The failure mode is loud — a raise on the first pack that declares it — which is why it is not a blocker, but it lands on the long pole, and a *Done when* item is the only thing this document has shown will get a stated contract built (P14-3). §4 S2 gains its own edit block — three symbols in one module plus its test, **two** residuals over the two spellings of the three-mode set so a half-applied edit cannot pass one of them, and a positive pin whose target is a stated **lower bound** because one of the four sites may legally be derived rather than written out — and §4 S2's *Done when* gains the behavioural gate, which is the real check. **The pin discipline is shipped, and §6's own test was never actually run.** §6 predicted that a revision changing a rule ships a grep pin with a count on both sides for that rule; v1.28 shipped pins for **one** rule of fourteen, all five reproduced, and Pass 16 reports honestly that **none** of its six class-S findings arose on the pinned surface — evidence the discipline was untested, not that it works. So **§7 now carries a pin table with one pin per changed rule**, nine rows, plan-side commands scoped to the document before §7 (without that scope every command would match its own text and every count would be one high), tree-side commands measured at **`ae3d71a`** and never against the working tree, and four properties stated so the table is not overclaimed: a residual checks *this* revision and a positive pin checks the *next* one; a row's tree half is absent exactly where the code that rule governs is unbuilt, which is derived from the table rather than counted beside it and is verified by a command re-run at `ae3d71a`; where a rule's falsified statements share no greppable shape the row **says so and names the sites** — rows 1 and 3 are in that position and rows 4 and 6 are the two that fail today on a partial sweep; and one v1.28 wording is corrected as part of a fix because it split a phrase across two lines around a bold marker, where no line-based command could ever have reached it. **No residual is deferred by choice.** Everything above is closed in this document except the **implementation** of items (3a-i), (3a-ii) and the `historyReplay` widening, all three **blocked on unbuilt work** — the S5 report and the S2 rework unit — and each gated **by name in a *Done when* list** rather than referenced in prose, which is what makes the block honest rather than a deferral wearing a better name.
 
 2026-09-10 — v1.28 (M11-2): the plan gate's `## Pass 15` on v1.27 (`docs/reviews/small-model-benchmarking.md`, `ae3d71a`, with the §6 stopping condition appended at `d33a552`) closed **in full** — **1 blocker, 3 majors, 4 minors, 1 nit, none deferred** — together with `-ml` **v1.22** (`551c946`), which rules the blocker, resolves both of v1.27's raises and rules one of the majors. **The gate upheld v1.27's central move** — rule 4 is total over five mechanisms, the five-member set is necessary, the reversal is soundly argued — so the deletion, the `fail`/`unrunnable` ruling and the five-not-four argument are untouched here. **The organising finding is Pass 15 §6's one class that must stay with the gate: *a rule stated for one consumer of a predicate and silently not for its siblings*, which execution cannot catch because the second consumer is built to the unstated rule and goes green.** Every rule this revision touches was swept over its other consumers, and that sweep is what found the four sites below that no pass reached. **P15-1 (blocker) — closed by transcription, not by decision.** `cleanThroughTurnH` took a third state while the **per-turn hazard**, which conditions on the identical *clean through `t−1`* predicate, took none; the substance is `data-scientist`'s under §7 rule 2 and `-ml` v1.22 rules it as new §4.3 **rule 5** — **three** consumers of that predicate, not the gate's two, and **two mechanisms**: the headline's is a per-conversation ternary, while the hazard's and §4.4's per-position `n` are position-indexed **censoring** from `t` onward (the conversation keeps `1 … t−1`). §3.8.4 transcribes and restates none of it; the *"one remaining escape"* sentence is replaced at both its sites; §4 S5's *Done when* gains item **(3a)** — the hazard's censoring, §4.4's observed `n`, the discriminating pair (`H = 4`, `unrunnable` at `t = 5` is **in** the headline and **out** of the hazard), both mutation directions, and `f_t`/`r_t`/`c_t` stored and never a rate. Gated by name, because writing a rule into prose for one consumer is exactly what P15-1 was. **The `-ml` v1.22 delta that changes what v1.27 bolded, and it is the same class one count over.** v1.27 refused `latencyItemCount` as rule (iv-b)'s `Y` and picked `callCount`, one short: `statsCoveredCount` is a subset of **completed** calls and `callCount` counts exactly those, so both sides of §11.6's gate delete the calls that never returned and the gate cannot fire on the shortfall it exists to catch (the note's worked case: 37 of 38 calls fail and the run reports `1 of 1 calls`). **`Y` is `callAttemptedCount = callCount + latencyWithheldForNoResponse`**, derived and never stored, with rule (ii) gaining a **fourth** assertion that recomputes it from the dispositions, the at-most-one-non-returning-call lemma and its within-turn-retry reversal trigger written where the arithmetic is read, and rule (iv)'s bound unmoved with its R-1 hedge withdrawn. Swept to §3.3, §3.5 (no new CSV column), §3.6's FR-11 table, §4 S1's comment, §4 S5's two `Y_calls / Y` sites, §5 tests 10b and 15b, and Appendix A. **P15-2 (major)**: v1.27's multi-call correction to a withheld item's record landed at §3.6 clause (ii) and nowhere else — §3.6's fourth disposition, §4 S2's timing done-condition, §4 S2's `censoringExact` bullet, §4 S1's `ItemTiming` comment, two cases of §5 test 15b and Appendix A's own row (which stated the scoped form and the unscoped one in the same cell) are all swept, and test 15b gains case **(d)**, a 3-iteration turn whose third call raises, which is the only fixture in which the two readings differ and also the fixture that makes `callCount` and `callAttemptedCount` distinguishable. **P15-3 (major) is a sweep, not a ruling — the plan had already decided it and never said so.** §3.8.4's table admits `"load"` on `replied` and `cap-hit` and on no other row; what was missing is the rule in §3.6's withholding bullet, and the gate's fix reached only the `unexplainedMs` detector while the **between-item residency probe** is the other load producer and needs the same clause. Both are ruled: a failing disposition sets `withheldFor` and **no load producer runs on that item**, with `unexplainedMs` still stored and still feeding `unexplainedMsMax` as a lower bound in the direction that figure is already published in. `-ml` v1.22 §11.4 rules the same way and makes it load-bearing: the `Y_calls` identity is off by the overlap without it. **P15-4 (major): the finding is adopted and the gate's prescription is not, on the gate's own §6.** §6 rules that shipped comments and docstrings leave the gate and that the plan state the **pin**, not the sites; an enumeration is also a line pin's cousin, which is R-2's cost one level down. So §4 S2 now carries **five symbols in four files**, each block rewritten whole, plus **four residual greps and one positive pin**, counts re-run at `ae3d71a` rather than inherited — the gate read `d5b549d` and a concurrent unit has since moved one site's line number, which is the drift a symbol pin exists for. **The pin is not complete and the plan says so**: the shipped prose stating the set's *cardinality* shares no pattern with any of the four commands, and a pattern wide enough to reach it returns 60-odd unrelated lines, so §7 rule 5's property here is *no-forgetting over token-carrying sites* and the symbol rows are what reach the rest. Two widening hazards are named so nobody walks into them. **P15-5 (minor)**: §4 S5's regression trace (1) asserted three positives and neither exclusion that *was* P14-1 — a scorer that partitions the turn `no_attempt` **and** increments `unscoreable` passed it. Both negatives added, which is also what pins rule 4's unqualified *"fails `stopping_when_done`"* cell to consequence (ii)'s narrowing. **P15-6 (minor) routes to execution per §6, with one clause so the disposition is decided rather than left open**: `drive` narrows its catch to `LMStudioCallTimeout` and `LMStudioCallFailed`, and any other `LMStudioError` propagates as §3.6 clause (iv)'s server-gone exit `3`, which is not §4.1's forbidden turn-skip. **One divergence stated:** §6's rationale for that class — *S2 finds those in one loud run* — does not hold for this member, since neither remaining subclass is reachable from a `chat` call at `ae3d71a`, so no run reaches it and only the narrowed `except` closes it. No test item is added. **P15-7 (minor) landed at two plan sites, not one.** §4 S2's `finalReplyText` clause is qualified to the `finalReplyText`↔disposition mapping, and so is **Appendix A's `TurnTrace` row, which no pass reached and is the worse copy** — it named *scoring mappings* outright and *four* members besides. **No plan-wide grep is prescribed and the reason is stated**: §3.8.4's deletion paragraph quotes the retired sentence in order to disown it, so a residual over that text is unpassable — §7 rule 5(b)'s disowning-mention trap, met inside the revision closing the finding. **P15-8 (minor)** also landed at **two** sites — §3.8.4 and §4 S5's bullet, the third (S5's *Done when* item (3)) already correct: a conversation both arms lose is no `asymmetry`, it is simply gone from both. **P15-9 (nit)**: an `unrunnable` turn records `outcome: "n_a"` with `scoreable` `False` throughout and no fifth member — nothing reads `outcome`, the funnel's head is read from `turnDisposition`, and a fifth member would put a `-ml` §4.1 *count* name on a record field — and the mechanism table's fourth column header now carries rule 4's citation. **Four sites this revision's own consumer sweep found and no gate pass did**: Appendix A's `TurnTrace` row (P15-7's worse copy), Appendix A's `ItemTiming` row contradicting itself two sentences apart (P15-2), §4 S5's second `asymmetry` site (P15-8), and §5's stage table promising *"six further v1.27 pins"* while enumerating five — §7 rule 4's hand-maintained-list defect inside the table written to prevent it, now replaced by a citation to §4 S5's item numbers. **One raise opened, §7 raise `R-3`**: `-ml` §4.3.1 item 11 asks the plan to rule that a reply-less turn contributes **nothing** to replayed history, on the premise that this is unspecified. The premise is stale — §4 S2's contract has ruled it since v1.26 (P13-9) — and the prescription is refused on that ruling's own reason, that omitting the turn shortens the visible history and history length is the covariate the pack measures against; the item's substantive half, *never substitute the script's `expect`*, is v1.25's and is now restated as a prohibition at the site where the temptation is. Nothing waits on it: rule 5's reason (ii) holds under either answer. **§7 also states once, because two sequences collide and both are cited by number, that its rule 3 raises (`R-1`…`R-3`) are not §6's risks (`R-1`…`R-15`)** — nothing is renumbered. **No residual is deferred by choice**; the only work not closeable in this document is item (3a)'s and P15-4's, both **blocked on unbuilt work** (the S5 scorer, the S2 rework unit) and both gated by name rather than referenced in prose.
 
@@ -528,8 +530,16 @@ Key decisions:
   role**, because `MULTI_CALL_TURN_BY_ROLE[role]` is `False` there and a single-call turn is one
   call by construction; it is **`0`** where that one call did not return, and `0` throughout a
   `deterministic` arm. **It is not the denominator the three `stats`-derived figures print
-  against** — that is the *attempt* count, `callAttemptedCount`, which is exactly `1` per item on
-  any model-calling arm and is derived rather than declared or stored (§4 S2, `-ml` §11.4). **No new manifest key**: `callCount` is recorded per item (§4 S1's `ItemTiming`),
+  against** — that is the *attempt* count, `callAttemptedCount`, which is
+  exactly `1` per item on any single-call model arm and is `I(t)` or `I(t) + 1` on a `tool-caller`,
+  and is derived rather than declared or stored (§4 S2, `-ml` §11.4) *(the two-clause form is
+  v1.29's, P16-3: v1.28 stated the single-call value here without its qualifier while stating the
+  qualified form in the FR-11 table 1 250 lines below, so the plan carried the false form and the
+  true one far apart, and an implementer builds from this one. On a `tool-caller` item the attempt
+  count is `len(timing.calls) + [the item's last call did not return]` — `-ml` §11.10 (7d)'s own
+  fixture gives `Y = 3` and `Y_calls = 7`. The sentence is transcribed from `-ml` §11.9 ask 8,
+  which carries the same slip; that copy is `data-scientist`'s and is raised back as §7 raise
+  `R-4` rather than corrected here)*. **No new manifest key**: `callCount` is recorded per item (§4 S1's `ItemTiming`),
   never declared, and the two are bound by assertion rather than by convention (§4 S2 rule (ii)).
 - **`metrics` pre-registers the verdict family, and a pack may legitimately have no headline.**
   Two separable fields, because they control different things — `-ml` §3.3 states the split and
@@ -1536,7 +1546,13 @@ break under deadline pressure.
     `powershell.exe` sampler already follows for the same reason), and for any item whose preceding
     snapshot did not show the model resident it **withholds that item's `latencyMs`**. The
     item is still scored — only that one measurement is absent, which is exactly what §3.4.4a's
-    second row is for. Two clauses make that precise, and both were review findings:
+    second row is for. **The probe is subordinate to the item's own failure**: where the item's
+    only, or last, call did not return, that failure sets `withheldFor` and this probe does not
+    (the withholding bullet below) *(v1.29, P16-1 — the rule is cited at the guard as well as
+    stated at the bullet, because this is the site that produces the mis-file: an implementer who
+    builds the guard here, unconditionally, files a turn that never returned under
+    `latencyWithheldForLoad`)*.
+    Two clauses make that precise, and both were review findings:
 
     **(a) The baseline for item 1 is the residency probe taken *after* the warm-up returns**
     (§3.4.4a capture-order step 7), **never `residentModelsAtStart`** *(v1.9, G3-4)*. The start
@@ -1731,10 +1747,24 @@ break under deadline pressure.
       **computable** on a `timed-out` or `no-response` turn — before v1.27 such an item had no
       timing at all — and it can exceed §11.5.1's threshold; and the between-item residency probe,
       the **other** load producer, can show not-resident before a turn that then fails, which was
-      always possible and was never dispositioned. **Neither may overwrite the disposition: on any
-      `turnDisposition` other than `replied`/`cap-hit` the disposition sets `withheldFor`, and no
+      always possible and was never dispositioned. **Neither may overwrite the disposition: an
+      item whose only, or last, call did not return takes `withheldFor` from that failure, and no
       load producer runs on that item** — the residency guard no more than the gap detector, which
-      is the half the finding reached only for the second. `withheldFor` is single-valued and §4 S2
+      is the half the finding reached only for the second.
+      **The predicate is stated over the call and not over `turnDisposition`, because four of the
+      five roles do not have one** *(v1.29, P16-1 — the same defect class this coordination has
+      been chasing, arriving inside v1.28's own fix for it)*. `MULTI_CALL_TURN_BY_ROLE` is `True`
+      for `tool-caller` alone and `False` for the four item-level roles, which are single-call by
+      construction (§3.3), and `turnDisposition` lives on `TurnTrace`, which only `drive` produces
+      — so a disposition-keyed rule leaves the collision **undecided on four of the five roles**,
+      where it is reachable in exactly the shape described above: the residency probe shows
+      not-resident before the item, the item's one call then returns a 500, and rule (vi) admits
+      one value. What the runner tests is a fact about the call, available on every role: it
+      raised `LMStudioCallTimeout` or `LMStudioCallFailed` rather than returning. On a
+      `tool-caller` that same condition is `turnDisposition ∉ {replied, cap-hit}` — the loop
+      terminates on the first call that raises (P14-5) and `cap-hit` requires every one of its
+      calls to have returned (§3.8.4's table) — so the two spellings are one rule and the
+      enforcement has two independent routes rather than one (§4 S2 rule (ii)). `withheldFor` is single-valued and §4 S2
       rule (vi) requires every withheld item in **exactly one** of the two counters, so a
       load-first evaluation files a turn that never returned under `latencyWithheldForLoad`, which
       **(i)** prints `-ml` §11.7 slot 2's **model-load** cause for it — a true number beside a
@@ -1784,7 +1814,7 @@ break under deadline pressure.
   | `tokensPerSecond` | `stats.tokens_per_second`, **unconverted** — a per-second rate is already in the units its name claims | **diagnostic only** — FR-11 says so in words, and the report labels it so; a **call** figure like its two siblings, kept on a contaminated item and still printed with its (call) denominator, because a diagnostic over an unstated subset is the same defect one severity down (`-ml` §11.4) |
   | `unexplainedMs` | `-ml` §11.5.1's gap **summed over the item's own calls**, each call's gap taken over that call's `wallClockMs`, `ttftMs` and `generationMs` as normalised above — **`None` unless every call of the item yields a readable gap**; the metric, the sum and the threshold are the note's | an **item** figure: the in-call reload detector, **withholding `latencyMs`** above `-ml` §11.5.1's threshold, stored and its maximum reported either way; **chat surface only** |
   | `callCount` | `int`, `len(ItemTiming.calls)` — the calls the item **completed**, asserted equal to `TurnTrace.iterations` (§4 S2 rule (ii)) | **new in v1.27** (`-ml` §11.9 ask 7, §11.8); **its denominator role is withdrawn at v1.28** (ask 8): `-ml` §11.4's `Y_calls` is the **attempt** count, `callAttemptedCount = callCount + latencyWithheldForNoResponse`, derived and never stored (§4 S2 rule (ii)) — `callCount` itself is what tells an `index.csv` reader whether a latency cell is per call or per turn, and it keeps that job and no other |
-| `callAttemptedCount` | derived, `callCount + latencyWithheldForNoResponse` — the calls the run **attempted**, exactly `1` per item on any single-call model arm | **new in v1.28** (`-ml` v1.22 §11.4, §11.9 ask 8): `Y_calls`, and the denominator the three `stats`-derived figures print against and rule (iv-b)'s p50 gate is taken against. Never stored: §7 rule 4 prefers the derivation to the invariant two stored copies would need, and §4 S2 rule (ii)'s fourth assertion recomputes it from the dispositions |
+  | `callAttemptedCount` | derived, `callCount + latencyWithheldForNoResponse` — the calls the run **attempted**, exactly `1` per item on any single-call model arm | **new in v1.28** (`-ml` v1.22 §11.4, §11.9 ask 8): `Y_calls`, and the denominator the three `stats`-derived figures print against and rule (iv-b)'s p50 gate is taken against. Never stored: §7 rule 4 prefers the derivation to the invariant two stored copies would need, and §4 S2 rule (ii)'s fourth assertion recomputes it from the dispositions |
   | `modelSizeBytes`, `peakHostRssBytes` | **no source (v1.8, R-2)**; sampled `Get-Process` | first recorded absent, never `0`; second best-effort, method-labelled (R-2) |
 
   **Every figure in that table needs a typed home, and four of them had none until v1.10**
@@ -2226,8 +2256,18 @@ checks today.
   contents, orders). FR-10's "system ground truth" is exactly these two — never the model's reply
   text. Reply text is used only for FR-8(g), and only as a containment check against what the tool
   actually returned.
-- **Scoring (`scoring/toolcalls.py`)** produces the FR-8 counts **per turn position**, with the
-  exact denominators in `-ml` §4.2. Never a single blended percentage; `report.py` has no code path
+- **Scoring (`scoring/toolcalls.py`)** produces the FR-8 counts **per turn position**. `-ml`
+  §4.2's exact denominators govern the **pooled** counts; the **per-position** slice additionally
+  drops every conversation censored by `-ml` v1.22 §4.3 rule 5 at `t' ≤ t`,
+  **numerator and denominator alike** (§4.4) *(v1.29, P16-6: this sentence is the plan's only statement of what
+  the module produces per position and it was written when the two were one population. Rule 5
+  made them deliberately different — §4.2(a)–(g) keep every turn after an `unrunnable` one, §4.4's
+  per-position `n` does not — so an implementer who reads here for the module contract and §4 S5
+  item (3a) for the report can otherwise finish with a numerator and a denominator drawn from
+  different populations: green, and a rate that is not a rate. Rule 5's table states
+  numerator and denominator alike for the hazard row and for neither the per-position row nor
+  this one, which is why the clause is written here rather than cited)*.
+  Never a single blended percentage; `report.py` has no code path
   that produces one (AC-1 enforced structurally, not by discipline). Four shape changes the note
   requires, all of which the implementer must build rather than infer:
   - FR-8(a) and (b) **collapse into one three-way partition** over the same denominator —
@@ -2304,16 +2344,33 @@ checks today.
       and **out** of the hazard from `t = 5`. An implementation that collapses the two into one
       rule passes every test built from an early `unrunnable` turn alone, which is why §4 S5 gates
       the discriminating pair by name.
+      **One report obligation falls straight out of the censoring, and it is the plan's to carry**
+      *(v1.29, P16-2)*: under censoring two arms' hazard curves are conditioned on **different
+      risk sets**, so `report.py` prints them **side by side, each with its own `c_t`, and never a
+      cross-arm hazard difference** — which is exactly the discipline `-ml` §11.7 slot 7 already
+      applies to two arms' latency figures at unequal coverage, where the two figures are
+      different order statistics and their difference is therefore not a latency difference. This
+      is rule 5's own closing clause and it is a **report** obligation, which is the half of rule 5
+      this plan owes; `report.py` is a two-arm comparison tool and §4 S5 already commissions the
+      curve, so a per-position difference is the natural thing to render and its failure mode is
+      silent — a difference between two curves that is not one. Gated at §4 S5 *Done when* item
+      **(3a-i)**, because a rule stated in prose for one consumer and gated for none is what
+      P15-1 was.
     - **What the scorer stores per position is three integers — `f_t`, `r_t`, `c_t` — never a
       rate** (`-ml` §4.3.1 item 11). The report divides. A stored rate whose base is not stored
       beside it is a denominator nobody can audit, which is §4.3 rule 1 and the same argument
       §11.8 makes for storing `X` and `Y`. `c_t > 0` is what selects §4.6's imputation bound; the
       bound and both renderings are the note's.
-    - **The funnel gains one line under its `unrunnable` count**: turns scored **after** an
-      `unrunnable` turn in the same conversation. One integer from the same pass, no gate and no
+    - **The funnel gains one line under its `unrunnable` count**: the count of turns
+      scored after an `unrunnable` turn in the same conversation. One integer from the same pass,
+      no coverage gate and no
       second denominator — rule 5 deliberately does **not** reach §4.2's turn-level counts (a)–(g)
       or the `I(t)` summary, and the line is how that non-exclusion is disclosed rather than
       assumed away.
+      **The note's *no gate* means no coverage gate, not no done-condition** *(v1.29, P16-4)*: this
+      line is a new report obligation owed by prose alone in the revision that cited P14-3 —
+      *a contract owed by no done-condition stays unbuilt* — as its reason for gating item (3a) by
+      name. It is gated at §4 S5 *Done when* item **(3a-ii)**.
     - **Why the exclusion carries forward rather than punching one hole, in the half that is this
       plan's**: reason (ii) of rule 5 is that a turn with no final reply contaminates the stimulus
       of every later turn, and that is a claim about **this plan's replay contract**. It holds:
@@ -2948,6 +3005,14 @@ class ItemResult:
                                     # the analysis-unit id is pairingKey[pack.analysisUnitIndex],
                                     # resolved from sampling.analysisUnit — never chosen by a caller
     outcome: Literal["pass", "fail", "n_a", "parse_failure"]
+                                    # v1.29 (P16-7): an unrunnable turn takes "n_a" here; scoreable
+                                    # is False for EVERY metric, nothing in the tool reads this
+                                    # field, and the funnel's head count is read from
+                                    # TurnTrace.turnDisposition, never from this (§3.8.4). NO fifth
+                                    # member: it would put a -ml §4.1 COUNT name on a record field,
+                                    # the two-vocabularies collision this plan has refused twice.
+                                    # Every neighbouring field carries its ruling inline; v1.28
+                                    # ruled this one at §3.8.4 and left the field's own home bare.
     scoreable: Mapping[str, bool]   # per conditional count: was its precondition met? (-ml §4.3)
     counts: Mapping[str, int]       # per-count numerator contributions, plus a pooled metric's
                                     # denominator contribution under "<metric>#denominator" (DC-10)
@@ -5006,7 +5071,22 @@ each asserted: a first `model:chat` run **back-fills** both keys and records
 `"compared"` and proceeds, a second run with a changed `runtimeVersion` exits `5`, and an
 embeddings arm records `"unavailable"`; and
 **one** `-m live` test confirms `catalog()` returns the real installed models and that `chat()`
-surfaces `stats.time_to_first_token`.
+surfaces `stats.time_to_first_token`; **and `historyReplay`'s fourth value is built, not merely
+declared** *(v1.29 — the shipped module carries three modes at `ae3d71a` while §3.3 has declared
+four since v1.26, and this item is what gates the gap by name rather than describing it)*:
+`assemble` accepts `structured-replies-only` and emits, per replayed prior turn, one
+`{"role": "user", …}` followed by **exactly one** `{"role": "assistant", "content": <that turn's
+observed final reply text>}` with **no** `tool_calls` and **no** `tool` message — asserted on a
+fixture whose prior turn really did dispatch a tool, so the absence is a fact about the mode and
+not about the fixture (§5 test 10 case (d)); `assemble` still **raises** on a value outside the
+four, asserted on a fifth string; **and both shipped-code blocks' commands are re-run and their
+stated counts asserted** — the disposition set's **four residual greps and one positive pin**, and
+the `historyReplay` block's two residuals and one lower-bounded positive *(v1.29: §7 rule 5 asks a
+shipped-code table for three things, and the third is* a done-condition that re-runs them and
+asserts a stated residual. *§4 S1e's tables have carried that since v1.10; §4 S2's disposition
+table, added at v1.28, stated its counts in prose and no done-condition re-ran them, which is
+P16-4's shape one section over. Both are gated here now, in one clause, because the rework unit
+edits both files in one pass.)*
 
 **`convo.py`'s replay contract, spelled out because v1.24 left it to be inferred and it was inferred
 wrongly** *(v1.25 — the ruling and its reasons are §3.8.4's "Prompt assembly" bullet; what follows is
@@ -5084,9 +5164,21 @@ tail; `0` replays all of it.
   too, so in round 1 all three artefacts share one author and the probe cannot redden then either.
   What it genuinely buys is real and is the reason it was worth a round of its own: it reddens when
   a **later** unit widens the enum without touching the transcript — which is exactly what v1.27
-  does, and which is how the two-state reading arrived in the first place. The shipped module
-  docstring on `TURN_DISPOSITIONS` carries the same over-claim in its own words; the rework unit
-  corrects it in the same pass, in a file it is already editing.
+  does, and which is how the two-state reading arrived in the first place. **The over-claim's
+  shipped copy is in `tests/test_convo.py`, not in `modelbench/convo.py`** *(v1.29, P16-5: v1.28
+  sent the rework unit at the module, and at `ae3d71a` that block already states the cross-unit
+  protection in its own words — a probe authored in the same step that introduces a member can
+  never redden against it, so the constant lands in its own unit and the rework unit consumes one
+  it did not write. A faithful application of v1.28's prescription would therefore have rewritten
+  a correct block and left the wrong one standing. The live copy is the **section banner** above
+  `_DISPOSITIONS_PER_PLAN_3_8_4`, which the symbol table below now reaches by its own row.
+  **The residual counts do not move and the reason is §7 rule 5(a) at sub-line granularity**: the
+  banner's *heading* line is already residual 2's third hit, so a residual-zero edit was always
+  reachable while the over-claim two lines under it survived — that sentence carries none of the
+  four tokens, and the one phrase that would reach it is a widening hazard the table names below,
+  correct where it appears in `tests/test_fingerprint.py` for a different guard. What reaches a
+  token-free clause is a symbol row whose whole block is rewritten, which is what this adds)*;
+  the rework unit corrects it there, in a file it is already editing.
 - **The v1.27 edit to that shipped guard, stated so the rework unit does not read red as
   regression.** `convo.TurnDisposition` gains `"timed-out"`; `convo.TURN_DISPOSITIONS` gains the
   same string; `tests/test_convo.py`'s transcribed constant gains the fifth row's token, and legs
@@ -5101,7 +5193,7 @@ tail; `0` replays all of it.
   failure `fail`, which after rule 4 is the timeout's answer alone, and one comment carries the
   sole-ownership sentence §3.8.4 deleted, in the **stronger** form that names scoring outright.
   A clause list is a line pin's cousin and goes stale the moment anything moves, which is R-2's
-  cost one level down; so what follows is **five symbols in four files**, each of whose comment or
+  cost one level down; so what follows is **six symbols in four files**, each of whose comment or
   docstring block the rework unit rewrites **whole** against §3.8.4's five-row table and `-ml` §4.3
   rule 4, plus **four residual greps**. Counts are **matching lines** from `grep -rn` under
   `model-bench/`, scoped to `modelbench` and `tests`, **re-run at `ae3d71a`** and not inherited
@@ -5112,8 +5204,9 @@ tail; `0` replays all of it.
   |---|---|---|
   | `LMStudioCallFailed` (class docstring) | `modelbench/lmstudio.py` | the runner scores a status-less failure **`unrunnable`** (`-ml` §4.3 rule 4) and continues — **not** `fail`, in any of the three places the docstring says so, including the reason `status` is required with no default; and the table it cites is §3.8.4's **five-row** one |
   | `TurnDisposition` (the `#:` block above it) | `modelbench/convo.py` | five members, `timed-out` split out; the `no-response` gloss no longer folds `LMStudioCallTimeout` into itself; and **no scoring mapping and no sole-ownership claim at all** — the block names mechanisms and record fields and cites rule 4 for what they score |
-  | `TURN_DISPOSITIONS` (the `#:` block above it) | `modelbench/convo.py` | five members; P14-3's corrected rationale (**cross-unit** protection — a probe authored beside its transcript cannot redden in round 1); and its **cardinality prose swept with the set** |
+  | `TURN_DISPOSITIONS` (the `#:` block above it) | `modelbench/convo.py` | five members, and its **cardinality prose swept with the set**. **The rationale in this block is already correct at `ae3d71a` and is not to be rewritten** — it states the cross-unit protection in its own words (v1.29, P16-5) |
   | `_DISPOSITIONS_PER_PLAN_3_8_4` (the `#:` block above it) | `tests/test_convo.py` | the transcript and its per-row gloss, both at five rows, with the same two corrections |
+  | the `TURN_DISPOSITIONS` **section banner** — the `# ---` block whose heading names §3.8.4's disposition table and which sits immediately above `_DISPOSITIONS_PER_PLAN_3_8_4`'s `#:` block | `tests/test_convo.py` | five rows; **and P14-3's corrected rationale replaces the over-claim that lives here** — the protection is **cross-unit**, a probe authored beside its transcript being unable to redden in round 1 (v1.29, P16-5). Distinct from the row above it, which covers only the `#:` block |
   | `test_every_raise_site_of_lmstudio_call_failed_is_covered_here`'s section banner | `tests/test_lmstudio.py` | the table it names is five-row |
 
   **Residuals — four commands, each zero after a faithful rewrite and non-zero before it, plus one
@@ -5142,6 +5235,48 @@ tail; `0` replays all of it.
   construction` also appears in `tests/test_fingerprint.py` for a **different** guard, where it is
   correct, and the word `fifth` appears in `packs.py`, `stats.py`, `cli.py` and four test modules
   for unrelated set-completeness arguments.
+- **A second shipped-code edit this plan has owed since v1.26, stated as its own block with its
+  own pins because it is a *different rule* from the disposition set above — a shared residual
+  would be satisfiable by a half-applied edit of the pair** *(v1.29; raised as the plan gate's
+  `## Pass 16` §7 item 1, outside that pass's inventory, and verified here on both sides)*. §3.3
+  has declared `historyReplay` **four**-valued since v1.26 (P13-8), §4 S2's replay contract above
+  specifies the fourth value's message shape, and `tool-caller-shop-assistant` declares
+  `structured-replies-only` (§3.8.4) — while the shipped module declares **three** modes and
+  refuses everything else. At `ae3d71a`: `HistoryReplay` (`convo.py:75`), `_HISTORY_REPLAY_MODES`
+  (`:77`), and `assemble`'s refusal (`:250`, raising `ValueError` on any value outside that
+  frozenset). **The failure mode is loud — a raise on the first `structured-replies-only` pack** —
+  which is why it is not a blocker; it is gated here rather than left to be met cold, because the
+  pack it lands on is the long pole and because a *Done when* item is the only thing this document
+  has ever shown will get a stated contract built (P14-3). **Three symbols in one module plus its
+  test**, each block rewritten whole against §3.3's four-value table and the replay contract above:
+
+  | Symbol | File | What the rewrite must say |
+  |---|---|---|
+  | the module docstring's `historyReplay` bullet (`:15` at `ae3d71a`) | `modelbench/convo.py` | four values, the fourth glossed from §3.3's own table row — native roles, one `assistant` message per prior turn carrying that turn's **final reply text only**, no `tool_calls` and no `tool` messages |
+  | `HistoryReplay` (the `Literal`) | `modelbench/convo.py` | four members |
+  | `_HISTORY_REPLAY_MODES`, and `assemble`'s branch chain under it | `modelbench/convo.py` | four members, and a branch emitting the shape the replay contract above specifies for the fourth |
+  | the `assemble` mode tests and their section banner | `tests/test_convo.py` | the banner and the mode loop cover four modes; §5 test 10's case (d) already names the fourth value and is the shape assertion |
+
+  **Residuals — two commands, both zero after the edit, plus one positive pin**, all scoped to
+  `modelbench tests` under `model-bench/` and **measured at `ae3d71a`, never against the working
+  tree** *(§7 rule 5; the tree was under concurrent edit during the gate's own run and a
+  tree-measured pin reported one of the block above's residuals already closed when at `ae3d71a`
+  it was not)*:
+  - ``grep -rnF '"structured", "plaintext", "none"' modelbench tests`` → **3 → 0** — the `Literal`,
+    the `frozenset`, and `test_convo.py`'s mode loop, the three sites that spell the set as a
+    sequence
+  - ``grep -rnF '"structured" | "plaintext" | "none"' modelbench tests`` → **1 → 0** — the module
+    docstring, which spells it in the other form and which the first command cannot reach. Two
+    literals, two residuals, per §7 rule 5(b): one command over one of them is passed by the edit
+    that retires that one and leaves the other standing
+  - positive: ``grep -rnF 'structured-replies-only' modelbench tests`` → **0 → at least 2**. The
+    target is a **lower bound and says so**: the `Literal` and `assemble`'s new branch are the two
+    sites that cannot be written without the token, while `_HISTORY_REPLAY_MODES` may legally be
+    derived from the `Literal` here — nothing requires those two to be independent declarations,
+    unlike `TURN_DISPOSITIONS`, whose independence is a probe's whole point — so a faithful edit
+    can land two, three or four sites and a fixed target would fail on a correct one.
+  **The greps are the no-forgetting layer and the behavioural gate is the check**: the *Done when*
+  item below asserts the assembled message shape, which no count can.
 - **The tests that make it real** are §5 tests 10 and 10b; the one that would have caught v1.24's
   reading is its negative: a `structured`-mode fixture whose `observed` assistant text differs from
   every string in the script's `expect` blocks, asserting the **observed** text appears in the
@@ -5195,12 +5330,16 @@ tail; `0` replays all of it.
   beside the completed iterations' `CallTiming`s (v1.11, plan-gate P5-6/P5-9; scoped at v1.28,
   P15-2) — and the run continues; and item 1's
   baseline is the **post-warm-up** probe, so a clean cold run withholds nothing. **Three
-  multi-call cases join them at v1.27, and two more at v1.28** — all five written out at §5 test
+  multi-call cases join them at v1.27, two more at v1.28 and one single-call case at v1.29** — all
+  six written out at §5 test
   15b, because every timing fixture named above is single-call and the regressions they catch are
   invisible without one: v1.27's three catch a per-call reading of §11.5.1's gap firing on
   iteration count rather than on a load, and v1.28's two are the first fixtures with an
   **incomplete** multi-call turn, which is what distinguishes `callCount` from `callAttemptedCount`
-  (P15-2) and what makes the disposition-over-load precedence testable (P15-3).
+  (P15-2) and what makes the disposition-over-load precedence testable (P15-3). **v1.29's (f) is
+  single-call on purpose** and is the only fixture in the block on a role with no `TurnTrace`,
+  which is where rule (ii)'s disposition route does not exist and its single-call branch is the
+  whole enforcement (P16-1).
 - **One shipped docstring is stale from the moment the loop lands, and it is a one-word sweep
   rather than a rewrite** *(v1.27, `-ml` §11.9 ask 7's last item)*. `modelbench/lmstudio.py`'s
   `_coerce_finite_float` docstring quotes the detector's gap as `latencyMs - (ttftMs +
@@ -5269,7 +5408,32 @@ tail; `0` replays all of it.
   **dispositions** — `Σ_items (len(timing.calls) + [turnDisposition ∈ {timed-out, no-response,
   server-rejected}])` — and asserts it equals what the two stored counts give, which is the
   two-route check that makes the precedence §3.6 states an enforced fact rather than a remembered
-  one. **Why the identity holds, and the one thing that would break it:** a turn's loop terminates
+  one.
+  **That route exists only on a `tool-caller`, and on the four single-call roles the second route
+  is a different expression rather than the same one re-spelled** *(v1.29, P16-1)*. Those roles
+  have no `TurnTrace`, so the only per-item signal available there is `timing.withheldFor` — which
+  is exactly what `latencyWithheldForNoResponse` is summed from (rule (vi)) — and a
+  disposition-shaped second route collapses on them into the first, leaving the assertion **true
+  by construction**: a check that cannot fail on the four roles where the mis-file is reachable.
+  The independent branch is **`callAttemptedCount == latencyItemCount`, asserted on every arm
+  where `armKind == "model"` and `roles.MULTI_CALL_TURN_BY_ROLE[run.role]` is `False`**. A
+  single-call model arm attempts exactly one call per item, and the two sides are computed from
+  disjoint inputs — `Σ_items len(timing.calls)` plus the `withheldFor` values on one side,
+  `len(run.items)` on the other — so it is a constraint and not a restatement. It catches the
+  mis-file it exists for: an item whose one call returned a 500 but whose `withheldFor` was set
+  `"load"` by the residency probe contributes `0` to `callCount` **and** `0` to
+  `latencyWithheldForNoResponse`, so `callAttemptedCount` falls one below `latencyItemCount` and
+  the assertion reddens — where rule (iii) still balances, rule (vi) is satisfied, and nothing
+  else in the block moves.
+  **`armKind == "model"` is half the condition and not decoration.** `callCount` is `0` throughout
+  a `deterministic` arm (§3.3) and every item's `timing` is `None` there (§4 S1), so a branch read
+  over the role column alone would assert `0 == latencyItemCount` on a `deterministic` arm running
+  a single-call role. That is **vacuous rather than false today** — rule (iii) already makes a
+  `deterministic` `LatencyBlock` unconstructible, so `run.latency` is `None` on that arm — and the
+  scope is written anyway, because a rule that holds only through another rule's side effect is
+  the shape §7 rule 4 exists to refuse. The branch is deliberately **not** asserted on a
+  `tool-caller`, where the two figures are meant to differ on any run with a non-`replied` turn:
+  that difference is §4 S5 *Done when* item (7), and asserting equality here would contradict it. **Why the identity holds, and the one thing that would break it:** a turn's loop terminates
   on the first call that raises (§3.8.4's precedence, P14-5), so an item has **at most one**
   non-returning call, and the three failing dispositions map totally onto
   `withheldFor ∈ {"timeout", "no_response"}` — which `latencyWithheldForNoResponse` counts exactly,
@@ -5533,7 +5697,8 @@ not be the first place it runs); denominators and `n/a` tallies
 behave per `-ml` §4.2–§4.3, verified by test, including the laundering case — a model that collapses
 at turn 2 must not score *better* than one that reaches turn 8; the funnel table renders; and
 `report.py` renders both the per-turn-position table and the hazard curve.
-**Seven items v1.27 adds to this list, and one more at v1.28 as item (3a), gated here rather than
+**Seven items v1.27 adds to this list, one more at v1.28 as item (3a), and two v1.29 sub-items
+under it — (3a-i) and (3a-ii), rule 5's two *report* obligations — all gated here rather than
 referenced in prose** *(P14-3's own finding — a contract owed by no done-condition stays unbuilt —
 applied to `-ml` §4.3.1's tests as well as to the probe; item (3a) is `-ml` v1.22 §4.3 rule 5's,
 and it is gated by name for the reason P15-1 exists: v1.27 wrote the third state into prose for one
@@ -5560,7 +5725,22 @@ implementation that collapses the two rules into one); **both mutation direction
 `model-bench/AGENTS.md` — censoring from *every* position including `1 … t−1` must redden, and
 censoring from *none* must redden, the second being the behaviour P15-1 found and the first the
 natural over-correction; and the scorer storing **`f_t`, `r_t`, `c_t` and never a rate**, with
-`c_t == 0` rendering §4.6's bound **absent** and the point estimate bare, asserted on the absence. **(4)** The **cross-module union**:
+`c_t == 0` rendering §4.6's bound **absent** and the point estimate bare, asserted on the absence.
+**Two *report* obligations of rule 5 join item (3a) at v1.29, as sub-items so §5's stage table's
+citation of items (2)–(7) plus (3a) stays exact, and each is gated here for the reason (3a) itself
+is: a rule stated in prose for one consumer and gated for none is what P15-1 was.**
+**(3a-i)** *(P16-2)* the two arms' hazard curves render **side by side, each with its own `c_t`,
+and no cross-arm hazard difference string is emitted on any path** — asserted on a two-arm render
+in which **both** arms carry a censored conversation, that no difference string appears and that
+**both** `c_t` lines do. The both-arms condition is what makes it a test: a fixture in which only
+one arm is censored passes on a renderer that suppresses the difference for the wrong reason.
+(§3.8.4; `-ml` §4.3 rule 5's closing clause, and the discipline §11.7 slot 7 already applies to
+latency at unequal coverage.) **(3a-ii)** *(P16-4)* the funnel prints, under its `unrunnable`
+count, the count of turns scored after an `unrunnable` turn in the same conversation — asserted on
+a fixture where that count is **non-zero and differs from the `unrunnable` count**, since a
+fixture in which the two coincide passes on a render that prints the wrong one. This is rule 5's
+disclosure line, and it is what makes rule 5's deliberate non-exclusion of §4.2(a)–(g) honest
+rather than assumed away. **(4)** The **cross-module union**:
 `ITERATION_SUMMARY_DISPOSITIONS | ITERATION_SUMMARY_EXCLUDED == convo.TURN_DISPOSITIONS`, and the
 two disjoint — binding two independently authored declarations across two modules, so a sixth
 mechanism belongs to neither set and reddens before it can be silently included or dropped.
@@ -5716,10 +5896,10 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
 | Stage | Items it owes | Where an item splits across stages |
 |---|---|---|
 | **S1** — core | **1, 2, 3, 5, 6, 7b, 11b, 11c, 11d** | **7b** is a `stats.py` test over a synthetic clustered fixture and needs no pack loader — S1 done-conditions 4 and 5 already require it. **11b**'s `validate_pack` clause is S2's; at S1 those same refusals go through `metrics_from_manifest`, which raises `PackConfigError`. **12**'s `metrics`-block rule (a non-null `headlineMetric` outside `verdictMetrics`) is S1's too, at that same seam. **11c** is S1's whole and does not split: `RunResult` carries `items` and `aggregates` side by side, so the cross-check needs nothing S2 produces (impl-gate P4-4, v1.8 — S1 done-condition 10). **11d** is S1's whole for the same reason: the continuous carrier is a record shape and a renderer branch, both S1-local, and the first *run* that exercises them is S3's (v1.12, S1 done-condition 13). |
-| **S2** — packs, adapter, host info, runner | **4, 10, 10b, 10c, 12, 12b, 13, 14, 15, 15b** | **10b** is v1.25's, the per-turn iteration loop, and is S2's whole. **10c** is v1.26's and **splits**: its `drive` disposition cases — **five** from v1.27, plus the precedence case — are S2's, while its three-way coverage probe reaches the S5 scorer's branch set. So the probe lands **two of its three legs** with `TURN_DISPOSITIONS` (which it did, at `d5b549d`), and **S5's *Done when* item 1 completes it** when the scorer exists — gated there, not merely referenced (§4 S5) — `drive` is S2's and a stub LLM is all it needs. **4** is `packs.content_hash`, which S1 does not have: S1 ships `PackRef` / `metrics_from_manifest` / `check_sampling_contract` only. **12**'s rule machinery — the `sampling` contract, the AST import allowlist, `replicatesPerScript > 1` — is `validate_pack`'s, tested here against fixture packs and re-run against each real pack at that pack's own stage. **12b** splits three ways: the four `basis` cases are `runner`'s and land here, the outcome-vector comparison is S5's, and "`assumed` moves the decision off McNemar" is already S1's. **13–15** are the `-m live` adapter tests S2's done-condition names. **15b** is offline (stub clock, stub LLM) and is filed in the unit block for that reason (v1.9, G3-12); its report half — the latency block and `-ml` §11.7's rendered slots — lands here rather than at S1 for the same reason `basis` does: S2 is the first stage at which a latency exists at all. S2 does **not** own **11c**; it owns the scorer contract that makes 11c's failure unreachable (§4 S2). |
+| **S2** — packs, adapter, host info, runner | **4, 10, 10b, 10c, 12, 12b, 13, 14, 15, 15b** | **10b** is v1.25's, the per-turn iteration loop, and is S2's whole. **10c** is v1.26's and **splits**: its `drive` disposition cases — **five** from v1.27, plus the precedence case — are S2's, while its three-way coverage probe reaches the S5 scorer's branch set. So the probe lands **two of its three legs** with `TURN_DISPOSITIONS` (which it did, at `d5b549d`), and **S5's *Done when* item 1 completes it** when the scorer exists — gated there, not merely referenced (§4 S5) — `drive` is S2's and a stub LLM is all it needs. **4** is `packs.content_hash`, which S1 does not have: S1 ships `PackRef` / `metrics_from_manifest` / `check_sampling_contract` only. **12**'s rule machinery — the `sampling` contract, the AST import allowlist, `replicatesPerScript > 1` — is `validate_pack`'s, tested here against fixture packs and re-run against each real pack at that pack's own stage. **12b** splits three ways: the four `basis` cases are `runner`'s and land here, the outcome-vector comparison is S5's, and "`assumed` moves the decision off McNemar" is already S1's. **13–15** are the `-m live` adapter tests S2's done-condition names. **10 is unchanged and its case (d) becomes load-bearing at v1.29**: §5 test 10 has specified four `historyReplay` modes since v1.26 while the shipped module carries three, so S2's done-condition now gates the widening by name and (d) is its shape assertion (§4 S2's `historyReplay` block). **15b** is offline (stub clock, stub LLM) and is filed in the unit block for that reason (v1.9, G3-12); its report half — the latency block and `-ml` §11.7's rendered slots — lands here rather than at S1 for the same reason `basis` does: S2 is the first stage at which a latency exists at all. S2 does **not** own **11c**; it owns the scorer contract that makes 11c's failure unreachable (§4 S2). |
 | **S3** — embedder pack | **8, 11, 16, 18** | **16** is one arm of a per-pack obligation: each of S3–S7 owes the end-to-end run for the pack it builds. |
 | **S4** — guard-judge, nlq-generator | **9, 16** | — |
-| **S5** — tool-caller scoring | **7**, **10c** (third leg only), **12b** (outcome-vector half), **16** | S5's done-condition requires the outcome-vector comparison to exist and be unit-tested here, precisely so S6 is not the first place it runs. **10c** appears twice on purpose: its third probe leg is the half S2 cannot write, and §4 S5's *Done when* item 1 is what gates it (v1.27, P14-3). §4 S5's own list carries **items (2)–(7)**, v1.27's, plus **(3a)**, v1.28's — done-conditions rather than numbered items here because they are scorer behaviour, not a module's test surface. They are cited by number and not re-listed: v1.27's prose here named *"six further pins"* and then enumerated five, omitting item (7) (the `I(t)` mean and `callAttemptedCount / Y` asserted to differ), which is §7 rule 4's hand-maintained-list defect inside the table that exists to prevent it (v1.28). |
+| **S5** — tool-caller scoring | **7**, **10c** (third leg only), **12b** (outcome-vector half), **16** | S5's done-condition requires the outcome-vector comparison to exist and be unit-tested here, precisely so S6 is not the first place it runs. **10c** appears twice on purpose: its third probe leg is the half S2 cannot write, and §4 S5's *Done when* item 1 is what gates it (v1.27, P14-3). §4 S5's own list carries **items (2)–(7)**, v1.27's, plus **(3a)** and its two sub-items **(3a-i)** and **(3a-ii)**, v1.28's and v1.29's — done-conditions rather than numbered items here because they are scorer behaviour, not a module's test surface. The v1.29 additions are sub-items of (3a) rather than items (8) and (9) precisely so this citation stays exact without a hand-maintained count (§7 rule 4). They are cited by number and not re-listed: v1.27's prose here named *"six further pins"* and then enumerated five, omitting item (7) (the `I(t)` mean and `callAttemptedCount / Y` asserted to differ), which is §7 rule 4's hand-maintained-list defect inside the table that exists to prevent it (v1.28). |
 | **S6** — tool-caller scripts | **12** (the `H ≤ min(script length)` clause), **16**, **17**, **19** | **19a** must pass before **19b** is interpreted at all. §4 S6 gates on 19b being *run and recorded*, never on the contrast appearing. |
 | **S7** — chat-responder | **16** | — |
 | **S8** — close | **20** | The FR-23 audit is only meaningful once every stage has shipped; §4 S8's done-condition does not currently name it, and should record it at close. |
@@ -5998,6 +6178,19 @@ done-conditions hold — the two lists overlap on purpose and neither replaces t
     same run asserts the second load producer's half**: an item whose preceding residency snapshot
     showed the model **not resident** and whose turn then times out is likewise counted under
     `no_response` and not under load.
+    **(f) is v1.29's and is deliberately *not* a multi-call fixture** *(P16-1 — every case above,
+    including (e)'s residency half, is a `tool-caller` turn, and the precedence's enforcement has
+    no second route on the four roles that have no `TurnTrace` at all)*: a **`guard-judge`** arm —
+    one call per item, `MULTI_CALL_TURN_BY_ROLE` `False` — with one item whose **preceding
+    residency snapshot showed the model not resident** and whose single call then returns an HTTP
+    500, asserting `withheldFor == "no_response"`, **absence** from `latencyWithheldForLoad`,
+    presence in `latencyWithheldForNoResponse`, rule (iii)'s identity intact, and
+    **`callAttemptedCount == latencyItemCount`** over the run (§4 S2 rule (ii)'s single-call
+    branch). The mutation that makes it a test rather than a demonstration is stated with it:
+    evaluate the residency guard first and that item leaves **both** summands, so
+    `callAttemptedCount` falls one below `latencyItemCount` and this assertion is the only one in
+    the block that reddens — rule (iii) still balances, rule (vi) is satisfied, and rule (ii)'s
+    disposition route does not exist on this arm.
     The rendered figures,
     their floors and their refusal cases are asserted against `-ml` §11.7's slots and §11.10's
     fixtures, never against a string written in this plan.
@@ -6356,7 +6549,10 @@ particular **§3.4, the binding rules that are `stats.py`'s contract** (their nu
 too — v1.7 stops restating it), and **§7.2's verbatim resolving-power string**, which is a test
 target.
 
-**Version pairing:** this plan **v1.28** is aligned to the note **v1.22** (`551c946`). **v1.22**
+**Version pairing:** this plan **v1.29** is aligned to the note **v1.22** (`551c946`) — **the same
+note revision v1.28 was paired to; no note delta lands at v1.29**, which is why the paragraph below
+is unchanged and is re-checked rather than inherited (`git log -1 --format=%H -- docs/plans/small-model-benchmarking-ml.md`
+still returns `551c946`). **v1.22**
 rules plan-gate **P15-1** as new §4.3 **rule 5** (the `unrunnable` turn's trajectory: three
 consumers of one predicate, two mechanisms, and §4.2's turn-level counts deliberately untouched),
 resolves this plan's raises **R-1** and **R-2**, and rules **P15-3**'s precedence in §11.4 because
@@ -6378,16 +6574,16 @@ Plan v1.19–v1.26 were paired to note v1.19 (`a707d09`), which added §3.4 Rule
 S1e Table H; v1.20 through v1.26 folded in no note delta.)*
 
 **Raise numbering, stated once because two sequences collide.** The raises below are **§7 rule 3
-raises** and their numbers are §7's own sequence (`R-1`, `R-2`, `R-3`); §6's risks are a
-**different** sequence that also runs `R-1`, `R-2`, `R-3`, and the two have never been the same
+raises** and their numbers are §7's own sequence (`R-1` … `R-4`, `R-4` being v1.29's); §6's risks
+are a **different** sequence that also runs `R-1`, `R-2`, `R-3`, and the two have never been the same
 thing (§6 `R-1` is the two source-less FR-7 fields; §6 `R-3` is the reconstructed-scripts risk).
 Cite a raise as **§7 raise `R-n`** and a risk as **§6 `R-n`** — the same discipline §7's own
 `P8-*` prefix convention exists for, applied to this document's other colliding numbering
 *(v1.28; the collision is pre-existing and nothing is renumbered, because both sequences are cited
 by number from the coordination ledger and the reviews)*.
 
-**One §7 rule 3 raise carried forward, two opened at v1.27 and both now closed, and one opened at
-v1.28.** The carried one is a citation
+**One §7 rule 3 raise carried forward, two opened at v1.27 and both now closed, one opened at
+v1.28 and one at v1.29.** The carried one is a citation
 defect rather than a method one *(v1.19)*: Rule 4a's opening attributes itself to *"plan-gate Pass
 8's `P8-1`"*. The finding it
 closes is **impl-gate** `P8-1` — the `- decided by:` audit naming the arm that did not bind, in
@@ -6436,6 +6632,78 @@ the site where the temptation is (§4 S2's failed-turn bullet). **Nothing waits 
 rule 5's reason (ii) holds under either answer, because an assistant message with empty content
 contaminates the downstream stimulus exactly as an absent one does, and the plan says so where the
 rule is transcribed (§3.8.4).
+
+**One raise opened at v1.29, and it is a transcription slip in a sentence this plan copied.**
+**§7 raise `R-4` — `-ml` §11.9 ask 8's §3.3 item states the attempt count's per-item value without
+its role qualifier, and the plan transcribed it.** The item reads that the attempt count is
+*exactly one per item on any model-calling arm*; on a `tool-caller` it is
+`len(timing.calls) + [the item's last call did not return]`, i.e. `I(t)` or `I(t) + 1`, and the
+note's own §11.10 (7d) fixture gives `Y = 3` against `Y_calls = 7`. The plan's copy is corrected at
+§3.3 either way — an implementer builds from this document — and the note's is `data-scientist`'s
+under §7 rule 3, so it is raised rather than edited. **Nothing waits on it**: §4 S2 (iv-b), rule
+(ii)'s fourth assertion and §4 S5 item (7) are all written against the two-clause form already, and
+the note's derivations are unaffected because §11.4 states the identity, not the per-item value.
+*(Reported as plan-gate P16-3 and as that pass's §7 item 2, which routes the note's half here.)*
+
+**The v1.29 pin table — one pin per changed rule, which is `## Pass 15` §6's discipline given its
+first real test.** §6 pre-registered a falsifiable claim: a revision that changes a rule ships,
+in its own note, a **grep pin with a count on both sides** for that rule across the plan *and* the
+shipped tree; if class-S findings do not then fall, the discipline fails. **v1.28 shipped a pin for
+one rule of fourteen** — P15-4's shipped-code sweep — so `## Pass 16` could report only that all
+five of those pins reproduced and that **none** of its six class-S findings arose on the pinned
+surface. That is evidence the discipline was never tested rather than that it works, and Pass 16
+says so. **v1.29 ships one pin per changed rule.** Four things about the form, stated because
+overclaiming a pin is the failure this document has already paid for once (§7 rule 5's own *"v1.10
+claimed more and the claim is the dangerous part"*):
+
+1. **The plan-side commands are scoped to the document *before* §7**, written out once here and
+   referred to below as **«pre-§7»**:
+   `awk '/^## 7\. Ready to implement/{exit} {print}' docs/plans/small-model-benchmarking.md`.
+   The scope is not cosmetic — it is §7 rule 5(b)'s disowning-mention rule applied to a document
+   that pins itself: without it every command in this table would match its own text and every
+   count would be one high. The revision note at the head of this document *is* inside the scope,
+   and where it contributes a match the row says so.
+2. **A residual and a positive pin are not the same instrument, and only the first checks *this*
+   revision.** A residual over a retired literal fails now if the sweep was partial. A positive pin
+   over a phrase this revision writes is satisfied the moment it is written; what it buys is the
+   **next** revision — it fails then, on a partial edit, exactly as v1.8's and v1.9's edit lists
+   would have. Both are worth having and they are labelled apart below.
+3. **Where a rule's falsified statements share no greppable shape, the row says so and names the
+   sites instead**, per §7 rule 5(a) and (b). A command that cannot fail is worse than none.
+4. **A row's tree half is absent exactly when the code that rule governs is unbuilt, and the
+   absence is derived rather than declared** — so the count of *none — unbuilt* cells follows from
+   the table and is not maintained beside it (§7 rule 4). The scorer, the report and the latency
+   block do not exist: run at `ae3d71a`, `git grep -n -E 'ItemTiming|LatencyBlock|callAttemptedCount'
+   ae3d71a -- 'model-bench/modelbench/*.py'` returns **two** lines and both are prose
+   cross-references (`convo.py:48`, `results.py:819`) — the same measurement `-ml` §11.9 ask 8
+   made at `d71c83e`, reproduced here rather than inherited. Every row that *does* carry a tree
+   half is pinned **at `ae3d71a`, never against the working tree**, per §7 rule 5's citation form
+   and Pass 16's own experience of a tree that moved under it mid-run: a working-tree
+   `grep -F '"timed-out"'` returned 3 where the same command at `ae3d71a` returned 0, so a
+   tree-measured pin would have reported rework already done.
+
+| # | Rule v1.29 changes | Plan pin, «pre-§7» | Tree pin |
+|---|---|---|---|
+| 1 | **P16-1a** — the disposition-over-load precedence is stated over *the item's own call* rather than over `turnDisposition`, so it binds on the four roles that have no `TurnTrace` | *positive*: `grep -cF 'only, or last, call did not return'` → **0 → 2** (§3.6's contamination-guard bullet and §3.6's withholding bullet). *No residual exists*: the falsified form is *keyed on a token that survives by design everywhere*, so any command reaching it returns dozens of correct lines — §7 rule 5(b), and the two sites are named here instead | none — unbuilt |
+| 2 | **P16-1b** — rule (ii)'s fourth assertion gains an independent single-call branch, scoped to `armKind == "model"` | *positive*: `grep -cF 'callAttemptedCount == latencyItemCount'` → **0 → 2** (§4 S2 rule (ii); §5 test 15b case (f)) | none — unbuilt |
+| 3 | **P16-2** — two arms' hazard curves are conditioned on different risk sets, so their difference is never printed | *positive*: `grep -cF 'cross-arm'` → **0 → 2** (§3.8.4's rule-5 sub-bullet; §4 S5 item (3a-i)) | none — unbuilt |
+| 4 | **P16-3** — the attempt count is one per item on a **single-call model** arm and `I(t)`-or-`I(t)+1` on a `tool-caller` | *residual*: `grep -cF 'model-calling arm'` → **1 → 0**, the one site being §3.3's. *positive*: ``grep -cF 'exactly `1` per item on any single-call model arm'`` → **1 → 2** (§3.6's FR-11 table row, which already carried it; §3.3, which now does). The residual is the instrument here: it fails on a partial sweep today | none — unbuilt |
+| 5 | **P16-4** — the funnel's post-`unrunnable` disclosure line is a done-condition, not prose | *positive*: ``grep -cF 'scored after an `unrunnable` turn in the same conversation'`` → **0 → 2** (§3.8.4's funnel sub-bullet; §4 S5 item (3a-ii)). The v1.28 wording split the phrase across two lines around a bold marker, so no line-based command could have reached it — the normalisation is part of the fix | none — unbuilt |
+| 6 | **P16-5** — the shipped over-claim is in `tests/test_convo.py`, not in `modelbench/convo.py`, and the symbol table gains the row that reaches it | *residual*: ``grep -cF 'docstring on `TURN_DISPOSITIONS` carries the same over-claim'`` → **1 → 0**. *residual, non-zero target*: `grep -cF 'five symbols in four files'` → **2 → 1**; the survivor is **the v1.28 revision note at the head of this document**, which records what v1.28 shipped and is history, per §7 rule 5(b)'s named-survivor clause. *positive*: `grep -cF 'six symbols in four files'` → **0 → 1** | the four residuals and the positive pin of §4 S2's symbol table are **unchanged and re-verified at `ae3d71a`**: 3 / 5 / 1 / 2 → 0, and `"timed-out"` **0 → at least 3**. The new row's site is already residual 2's third hit (`tests/test_convo.py:597`), which is why no count moves |
+| 7 | **P16-6** — §4.2's denominators govern the pooled counts; the per-position slice censors both halves | *positive*: `grep -cF 'numerator and denominator alike'` → **0 → 2**, both in §3.8.4's scorer-contract bullet — the clause itself and the sentence recording that rule 5's table states it for the hazard row and for neither the per-position row nor this one | none — unbuilt |
+| 8 | **P16-7** — `ItemResult.outcome`'s own definition carries the `unrunnable` ruling | *positive*: `grep -cF 'an unrunnable turn takes "n_a" here'` → **0 → 1** (§4 S1's field comment) | none — unbuilt |
+| 9 | **`historyReplay`'s fourth value** is gated by a *Done when* item rather than described | *positive*: `grep -cF '_HISTORY_REPLAY_MODES'` → **0 → 3** (§4 S2's new block: its opening, its symbol table, and its positive-pin clause) | **three commands, in §4 S2's `historyReplay` block, measured at `ae3d71a`**: two residuals `3 → 0` and `1 → 0` over the two spellings of the three-mode set, and one positive `0 → at least 2` whose target is a stated lower bound. Not restated here — the block is where an implementer reads them |
+
+**What this table does not claim.** It is a no-forgetting guarantee over the sites that carry each
+row's literal, and nothing more (§7 rule 5). **Which rows check *this* revision is read off the
+table's own labels rather than counted beside it** (§7 rule 4): every row whose plan-pin cell is
+labelled *positive* only changed nothing that retires, so it is checkable at the **next** revision
+of this document and not at this one; the rows carrying a *residual* — 4 and 6 — are the ones that
+fail today on a partial sweep, and they are why the table is not decorative. Row 9's tree half is
+a third that fails today, against the shipped module. Whether the discipline works is a claim about **Pass 17's class-S count**,
+and there is no Pass 17: the gate stopped at branch 1. So the honest statement is that §6's second
+falsifiable claim is now *testable at the next revision of this document* and was not before, and
+the implementer who re-runs these commands is who tests it.
 
 The two note
 revisions v1.10 folded in are separable and are recorded first: **v1.11** makes §3.4 Rule 4's
