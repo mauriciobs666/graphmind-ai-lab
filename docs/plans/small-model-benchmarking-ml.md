@@ -1,6 +1,47 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.21
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.22
+
+2026-09-10 (v1.22, `data-scientist`) — plan-gate Pass 15's blocker **P15-1**, plus plan v1.27's two
+`§7 rule 3` raises; all three ruled, and two of the three are against this note.
+**P15-1: v1.21 closed one hole and there were three, so the fix is a rule and not a second
+clause.** §4.3 gains **rule 5** — an `unrunnable` turn ends its conversation's *trajectory*, and
+every statistic indexed by turn position drops that conversation from that position **onward**,
+with a total map over the three consumers. The per-turn hazard's treatment is **censoring, not a
+third state**: the conversation keeps its observations at `1 … t−1` and leaves the risk set from
+`t`, which is deliberately *not* `cleanThroughTurnH`'s per-conversation ternary — at `H = 4` an
+`unrunnable` turn at `t = 5` leaves the headline untouched and censors the hazard, and that pair is
+the test that proves the two are two rules. Carry-forward rather than a per-position hole because
+the estimand is a trajectory **and** the replayed history downstream of a reply-less turn is not
+the pack's declared stimulus. **The censoring may be informative** — an HTTP 400 from a model's own
+runaway message list is caused by what the hazard measures — so §4.6 prints `c_t` at every position
+and a two-sided imputation bound wherever `c_t > 0`, and §4.4's per-position `n` becomes the
+**observed** count with the structural one beside it. Rule 5 deliberately does **not** reach §4.2's
+turn-level counts, which measure behaviour rather than a trajectory; that boundary is disclosed
+with one funnel line instead. §4.3.1 item 11 carries the plan's edits and the four tests, including
+a replayed-history gap the sweep found: nothing anywhere says what a reply-less turn contributes to
+the next turn's history, and the natural implementation repairs it from the script.
+**The two raises, both ruled true.** **R-1: `Y_calls` was netted by accident, and it
+unnets.** Under this note's own pin `callCount == len(chatResults)`, the quantity §11.4 called *"the
+run's total model calls"* counts only the calls that **returned** — so the coverage base for the
+three `stats`-derived figures loses exactly the calls that could not have carried `stats`, which is
+§4.3's laundering pattern one unit below where §11.4's own `Y` refuses it. It is not cosmetic: a
+netted base leaves `X_calls == Y_calls` on every run whose only losses are failures, so rule
+(iv-b)'s p50 gate cannot fire, and `Y_calls == 0` is reachable on the run with the least data. So
+**`Y_calls` is the count of calls the run *attempted*** — `callCount + latencyWithheldForNoResponse`,
+**derived, not stored** — while `callCount` keeps its pin and its meaning (calls that returned).
+Five sentences of this note were false under the netted reading; the two §11.4 owns are rewritten
+here (its `callCount is 1` claim, and its bound, which under the correction **is** plan v1.27's
+`statsCoveredCount ≤ callCount`), and §11.7, §11.8, §4.2(f) and §4.3.1 were already written for the
+attempted reading and become true rather than changing. §11.10 (7d)'s fixture is re-derived: it set
+`Y_calls == Σ callCount` by construction and so could not separate the two counts it exists to pin.
+**R-2: the cite drifted, and the durable defect is the form** — `modelbench/lmstudio.py:225` is
+`:247` four days later. Measured at `d71c83e`: two of this note's three unpinned `modelbench` line
+cites no longer resolve, both sha-pinned ones do, so a code citation here is a symbol plus an
+enumerating command with its count, or a line pinned to a named sha. One ruling arrives unasked and
+is R-1's dependency: plan-gate **P15-3**'s missing precedence is settled here — a turn that ended on
+a raise takes `withheldFor` from the **failing disposition**, never `"load"` — because the
+attempted-call identity is off by the overlap without it.
 
 2026-09-10 (v1.21, `data-scientist`) — plan-gate Pass 14's open question 1 (`P14-6`'s second half),
 ruled — and it is **not** downstream of `P14-1`: the dependency runs the other way. Ruling the
@@ -1964,7 +2005,7 @@ already contain abstention turns.
 
 ### 4.3 Precondition failures must never be laundered
 
-Four rules, all mandatory *(three until v1.21)*:
+Five rules, all mandatory *(three until v1.21, four until v1.22)*:
 
 1. **Every printed rate carries its denominator inline** — `k/n`, never a bare percentage.
 2. **A turn excluded from a conditional denominator is counted in that count's own `n/a` tally**,
@@ -2066,16 +2107,97 @@ most likely way this harness lies, and the funnel is the fix.
    storing the timeout constant in the p95 *"would print a figure about the configuration rather
    than about the model"* (§11.5).
 
-   **And one hole that must close with it, or the escape is real.** §4.6's `cleanThroughTurnH` is
-   *"the fraction of conversations with zero failure of any kind through turn `H`"*, and it says
-   nothing about `unrunnable`. Under the rule above, an `unrunnable` turn is not a failure — so a
-   conversation carrying one would read as **clean**, which is precisely the laundering §3.6
-   feared, arriving at the headline instead of at a conditional count. **`cleanThroughTurnH` takes
-   a third state:** a conversation with an `unrunnable` turn at any `t ≤ H` is **neither clean nor
-   failed**; it leaves the headline's denominator and is counted in the headline's own `n/a` tally
-   (rule 2), printed beside it. No new gate is needed to stop the resulting `n` from being read as
-   sound: `verdict()` already refuses below `resolving.observable_floor` (§3.4 Rule 7) and the
-   floor is computed from the surviving `n`, so a collapsed denominator refuses itself.
+   **And the holes that must close with it, or the escape is real.** Under the rule above an
+   `unrunnable` turn is not a failure, so **every statistic whose predicate is *this conversation
+   has not failed yet* reads it as clean** unless told otherwise. `cleanThroughTurnH` is one such
+   statistic — *"the fraction of conversations with zero failure of any kind through turn `H`"*,
+   saying nothing about `unrunnable` — and v1.21 ruled it in isolation: **`cleanThroughTurnH` takes
+   a third state**, a conversation with an `unrunnable` turn at any `t ≤ H` being **neither clean
+   nor failed**, out of the headline's denominator and into the headline's own `n/a` tally (rule
+   2), printed beside it. That ruling stands unchanged, and no new gate is needed to stop the
+   resulting `n` from being read as sound: `verdict()` already refuses below
+   `resolving.observable_floor` (§3.4 Rule 7) and the floor is computed from the surviving `n`, so a
+   collapsed denominator refuses itself. **What v1.21 got wrong is the count** — it called this the
+   *one* remaining hole, and there are three consumers of that predicate. **Rule 5 is the total
+   map**, and it exists because a fix applied only where the defect was noticed is the failure this
+   coordination has paid for most *(v1.22, plan-gate P15-1)*.
+
+5. **An `unrunnable` turn ends its conversation's *trajectory*: every statistic indexed by turn
+   position drops that conversation from that position onward** *(v1.22, plan-gate P15-1 — the
+   generalisation of v1.21's `cleanThroughTurnH` third state, which was one consumer of this
+   predicate ruled as though it were the only one)*. Rule 4 maps a turn onto the **turn-level**
+   denominators; rule 5 maps the same turn onto the **conversation-level** ones. Two different
+   questions about one turn, and answering only the first is what left the hazard reading an
+   unobserved turn as a pass.
+
+   **Why *from `t` onward* and not *at `t` alone*.** Two independent reasons, either sufficient.
+   **(i) The estimands are conditional on history.** The hazard's *clean through `t−1`* and the
+   headline's *zero failure through `H`* are claims about a **trajectory**, and a trajectory with an
+   unobserved turn in it answers neither; carrying it forward as clean **imputes a pass** on a turn
+   nobody observed, which is rule 4's laundering one level up. **(ii) The stimulus downstream is
+   contaminated.** A turn with no final reply has no assistant message to replay, so under any
+   `historyReplay` but `"none"` every later turn of that conversation is answered against a history
+   the pack does not declare — the outcome at `t+1` is then partly the harness's, which is §4.1's
+   own reason for `unrunnable` arriving one turn later. Reason (ii) is what makes this a
+   **carry-forward** rather than a per-position hole, and it is the one that is conditional:
+   *reversal trigger* — a pack declaring `historyReplay: "none"` **and** a per-turn hazard could
+   narrow the exclusion to position `t` alone; no declared pack does, and the branch is not built
+   until one exists.
+
+   **This is censoring, and it is the survival answer rather than a convenience.** A conversation
+   censored at `t` **keeps its observations at `1 … t−1`** — they are real, and discarding them
+   would throw away good data and widen every earlier position for nothing. Only its risk-set
+   membership at `≥ t` goes. The alternative — carrying it in the denominator under a distinct
+   state — puts a non-observation in a rate's base and deflates the hazard, which is the same
+   defect as imputing a pass with an extra label on it.
+   **And the censoring may be informative, which this note will not assume away.** An HTTP 400
+   raised by a model's own runaway message list is *caused by* the degeneration the hazard exists to
+   measure, so the conversations that leave are plausibly the ones about to fail and the bias runs
+   **downward** — toward the flat, low curve that reads as "gradual degradation", which is the exact
+   misreading FR-9 exists to prevent. Censoring is unbiased only under independent censoring, an
+   assumption this design cannot make, so §4.6 prints a **bound** beside the point estimate rather
+   than claiming one.
+
+   **The three consumers, and the map is total.**
+
+   | consumer | what an `unrunnable` turn at `t` does | mechanism |
+   |---|---|---|
+   | **`cleanThroughTurnH`** (§4.6, headline) | `t ≤ H`: **neither clean nor failed** — out of the denominator, into the `n/a` tally (rule 2). `t > H`: **nothing** — its first `H` turns were fully observed, so it stays clean-or-failed | a per-conversation **ternary**; one observation per conversation |
+   | **the per-turn hazard** (§4.6, always printed) | out of the **risk set at every position `≥ t`**, numerator and denominator both; **in** at `1 … t−1` | position-indexed **censoring**, with `c_t` and §4.6's bound printed |
+   | **the per-position table** (§4.4) | out of that position's `n` at every position `≥ t`; the printed `n` is the **observed** count, never the structural 12 / 8 / 4 | the same censoring, on an unconditional rate |
+
+   **The two are not the same state, and the difference is testable**: with `H = 4`, an
+   `unrunnable` at `t = 5` leaves the conversation **in** `cleanThroughTurn4`'s denominator and
+   **out** of the hazard from `t = 5`. An implementation that collapses the two rules into one
+   passes every test built only from an early `unrunnable` turn (§4.3.1 item 11).
+
+   **What rule 5 does *not* reach: §4.2's turn-level counts (a)–(g) and the `I(t)` summary.** Their
+   estimand is **per-turn behaviour**, not a trajectory, and a turn answered against a shortened
+   history is still an observation of what the model does with the turn it was given. Excluding
+   those turns would discard most of the evidence on exactly the runs where behaviour is most in
+   question, to remove a contamination whose effect on a *behavioural* rate this note has no basis
+   to sign — and an exclusion whose direction is unknown is not conservative, it is just smaller.
+   It is **disclosed rather than assumed away**: the funnel (rule 3) prints, under its `unrunnable`
+   line, the count of turns scored **after** an `unrunnable` turn in the same conversation. One
+   integer from the same pass, no gate and no second denominator. *(This asymmetry is the answer to
+   "the same third state, or a different treatment?" — one predicate, three consumers, two
+   mechanisms, and a fourth group deliberately untouched.)*
+
+   **The sweep, and its result — P15-1 asks for exhaustive rather than sampled.** Every occurrence
+   of the token was read at v1.22 (`grep -ni clean docs/plans/small-model-benchmarking-ml.md`) and
+   dispositioned. **Three sites condition on the predicate** and are the table above. **Two sites
+   depend on the headline's surviving `n`** — §4.5.1's *"`cleanThroughTurnH` has 12 rows, so
+   McNemar exact is a valid decision rule"* and §4.5's sampling-table cell — and both stand
+   unchanged: rule 5 shrinks the headline no further than v1.21's third state already did, and
+   `verdict()` refuses below the floor computed from the surviving `n` (§3.4 Rule 7). **One site**
+   is §3.1's metrics-table row, which names the headline and not its denominator rules. The
+   remainder — every occurrence under §11, plus §4.4's *"a clean binomial"* — uses the word in the
+   unrelated sense of an uncontaminated measurement or a fully covered run, and none of them
+   conditions on a conversation's history. **One consequence the sweep turned up that is not a
+   rewrite of anything:** under censoring two arms' hazard curves are conditioned on **different
+   risk sets**, so **no cross-arm hazard difference is printed** — the two curves go side by side,
+   each with its own `c_t`, which is the discipline §11.7 slot 7 already applies to two arms'
+   latency figures at unequal coverage.
 
 **Paired-comparison corollary:** for the conditional counts (c)–(g), pairing only works on items
 where *both* models produced a scoreable outcome. The paired `n` is the **intersection** and must
@@ -2136,7 +2258,8 @@ warning. Residual classification is at the end; nothing is deferred by choice.
    **does** enter `iteration_cap_hit_rate`, it **does** enter the `I(t)` summary), and **a
    timed-out turn beside a dropped-connection turn** (identical in every respect but the mechanism,
    asserting `fail` against `unrunnable`).
-5. **The S5 scorer implements `cleanThroughTurnH`'s third state.** A conversation with an
+5. **The S5 scorer implements `cleanThroughTurnH`'s third state** — and, from v1.22, §4.3 rule 5's
+   two other consumers with it, which land in the same scorer and are item 11. A conversation with an
    `unrunnable` turn at any `t ≤ H` is neither clean nor failed: out of the headline's denominator,
    into its own `n/a` tally, printed (rule 4, §4.6). No new gate is needed to keep the shrunken `n`
    honest — `verdict()` already refuses below `resolving.observable_floor` and the floor is computed
@@ -2170,13 +2293,55 @@ warning. Residual classification is at the end; nothing is deferred by choice.
     conversations, so `latencyMsMax` is `None` on every declared pack — and §3.5 is a section ask 7
     already opens. Fix it in the same pass rather than leave the fourth instance standing.
 
+11. **New at v1.22: §4.3 rule 5's plan-side consequences** *(plan-gate **P15-1**, raised under §7
+    rule 3 and ruled here; the plan transcribes and does not re-derive)*.
+    - **§3.8.4 and §4 S5 — the *"one remaining escape"* sentence is false as written**, and the
+      correction is not a second clause bolted on: `cleanThroughTurnH`'s third state is **one of
+      three** consumers of one predicate, and §4.3 rule 5 is the map. Replace the sentence, cite
+      rule 5, and restate nothing of it. §4 S5's *Done when* gains **the hazard's censoring** and
+      **§4.4's observed `n`** beside v1.27's item (3) — gated by name, not referenced in prose, for
+      plan-gate P14-3's reason.
+    - **What the scorer stores per position: three integers, `f_t`, `r_t`, `c_t` — never a rate.**
+      The report divides. A stored rate whose base is not stored beside it is a denominator nobody
+      can audit, which is rule 1 and §11.8's own argument for storing `X` and `Y`.
+    - **§3.8.4, and this one is a gap rather than a sweep: what a failed turn contributes to the
+      replayed history is specified nowhere.** Under `structured-replies-only` a turn with
+      `finalReplyText is None` has no assistant message to replay. The plan must state that it
+      contributes **nothing**, and that the harness **never** substitutes the script's `expect` for
+      it. The repair is the more natural implementation and it is the worse one three ways over: it
+      is hidden state §3.8.4 already forbids, it silently un-contaminates the trajectory rule 5
+      censors, and it makes the pack's declared `historyReplay` false on exactly the conversations
+      under study.
+    - **§4.4's per-position `n`** is the observed count with the structural one printed beside it,
+      and the `n < 10` marking is evaluated on the observed one.
+    - **The funnel** (rule 3) gains one line under `unrunnable`: turns scored **after** an
+      `unrunnable` turn in the same conversation. One integer, no gate, no new denominator.
+    - **Tests — S5's, and gated by name in *Done when*.** **(a)** A 9-turn conversation with one
+      `unrunnable` turn at `t = 2`, three others clean: it is in the risk set at `t = 1` and in
+      **no** risk set at `t ≥ 2`; `c_2 == 1`; the hazard at `t ≥ 3` is over **3** conversations, not
+      4. **(b)** The **discriminating pair**, which is what proves the two exclusions are two rules:
+      at `H = 4`, an `unrunnable` at `t = 5` leaves the conversation **in** `cleanThroughTurn4`'s
+      denominator and **out** of the hazard from `t = 5`, while one at `t = 3` takes it out of both.
+      A suite built only from an early `unrunnable` turn passes on an implementation that collapses
+      the two into one rule. **(c)** Both mutation directions, per `model-bench/AGENTS.md`: an
+      implementation censoring the conversation from **every** position (including `1 … t−1`) must
+      redden, and one censoring it from **none** must redden — the second is the behaviour P15-1
+      found, the first is the natural over-correction. **(d)** `c_t == 0` renders the bound
+      **absent** and the point estimate bare; `c_t > 0` renders it. Asserted on the absence, for
+      §11.10 (7c)'s reason.
+
 **Residuals, classified.** The five-member set, the two scoring constants, the cross-module union
 assertion and the swept exactness rule are buildable now and are **not blocked**: they need
 `TURN_DISPOSITIONS` and `stats.percentile`, which exist or land in the precursor unit. The five
-per-member behavioural cases, the two discriminating traces and `cleanThroughTurnH`'s third state
-need the **S5 scorer**, which does not exist — **blocked on unbuilt work**, and gated by being named
+per-member behavioural cases, the two discriminating traces, `cleanThroughTurnH`'s third state and
+**all of item 11's** need the **S5 scorer**, which does not exist — **blocked on unbuilt work**, and
+gated by being named
 in S5's *Done when* list rather than referenced in its prose, which is plan-gate P14-3's own finding
-applied to this ruling's own tests. Nothing here is deferred by choice.
+applied to this ruling's own tests. Nothing here is deferred by choice. **The one non-test residual
+is item 11's replayed-history gap**: it is a *plan* statement about an unbuilt behaviour, closeable
+in the plan today and therefore not deferred either — if the rework unit reaches the replay before
+the plan says this, it will choose the repair, because the repair is what makes the transcript look
+right.
 
 ### 4.4 Per-turn-position reporting when turns are not independent
 
@@ -2212,7 +2377,17 @@ Two mandatory consequences:
    those `n` (z=1.959963984540054): `0/12 → [0.000, 0.242]`, `12/12 → [0.758, 1.000]`,
    `0/8 → [0.000, 0.324]`, `0/4 → [0.000, 0.490]`, `4/4 → [0.510, 1.000]`. **Mark every position with
    n < 10 `descriptive at this n — no significance claim`**; that is positions 5 onward, i.e. most of
-   the deep-turn region. A deterministic collapse still shows (12/12 vs 0/12 at a position is
+   the deep-turn region.
+   **The printed `n` is the *observed* count, and 12 / 8 / 4 are the design rather than the
+   denominator** *(v1.22, plan-gate P15-1)*. A conversation censored by §4.3 rule 5 at `t' ≤ t` is
+   not in position `t`'s `n`, so what the row carries is `structural(t) − censored(≤ t)` — with the
+   structural figure printed beside it, because the gap between the two **is** the run's
+   contamination made visible and is what a reader needs to judge the row at all. The widths above
+   are computed at the structural `n`s and illustrate the design; the interval actually printed
+   takes the observed `n`, and **the `n < 10` marking is evaluated on the observed one** — so
+   censoring can push a position out of significance-claiming territory, which is correct and is
+   exactly what printing 12 would hide.
+   A deterministic collapse still shows (12/12 vs 0/12 at a position is
    unmistakable), but a 30-pp difference at turn 7 is not resolvable and the table must not look as
    though it were.
 
@@ -2298,7 +2473,10 @@ puts the paired run at **≤ ≈28 min** at this pack's declared cap of 8. Plan 
 against the 3.5. **The typical case is unmeasured and this note will not put a number on it** — an
 inference from §8.2's turn-position table is not a measurement of a run nobody has made — and it
 costs nothing to obtain: §4.2(f) already reports the mean and p95 of `I(t)`, and §11.4's
-`Y_calls / Y` is the same quantity read off the latency block. **The sizing decision stands**:
+`Y_calls / Y` is the **cost-side** reading of it off the latency block — unrestricted, over attempts
+and over every item, which is the right base for a run-time estimate (a call that times out costs
+its whole budget) and is deliberately not §4.2(f)'s restricted mean *(v1.22: "the same quantity"
+overstated it, and §4.3.1 item 7 forbids substituting either for the other)*. **The sizing decision stands**:
 §4.5.3's reversal trigger is denominated in *scripts*, and the binding constraint is FR-19 human
 verification, not compute.
 
@@ -2378,10 +2556,36 @@ one and the headline becomes a weighted average of script lengths.
   `min(script length)` as discriminating information deliberately left on the table — worth a line
   in the report when the gap is non-zero, and worth nothing when it is zero (as it is today).
 - Diagnostic, always printed: the **per-turn hazard** — `P(first failure at t | clean through
-  t-1)`, denominator = conversations still clean entering `t`. Hazard is what distinguishes
+  t-1)`, over the **risk set at `t`**: the conversations that reached `t` clean **and whose turn
+  `t` was observed**. A conversation leaves that risk set by either of two exits — its first
+  `fail`, or an `unrunnable` turn, and the second removes it from `t` **onward** while keeping its
+  observations at `1 … t−1` (§4.3 rule 5, which is where the reasoning lives and is not restated
+  here). Hazard is what distinguishes
   "gradual degradation" (flat, low hazard) from "deterministic collapse at a fixed position"
   (hazard ≈ 0, 0, 0, 1.0 — §8.2's actual shape). A pooled accuracy number cannot tell those apart
   and the difference is the whole reason FR-9 exists.
+
+  **Three numbers per position, not one** *(v1.22, plan-gate P15-1)*: the rate `f_t / r_t` inline
+  per rule 1; the **censored count `c_t`** beside it, printed **even at zero** so the row's shape is
+  constant (§11.7's reason, one report over) — `c_t` counting only conversations that **entered `t`
+  clean**, since one that had already failed is out of the risk set and its later `unrunnable` turn
+  censors nothing; and — **when and only when `c_t > 0`** — the
+  two-sided imputation bound
+
+  > `[ f_t / (r_t + c_t) , (f_t + c_t) / (r_t + c_t) ]`
+
+  the hazard's value if every censored conversation had passed at `t` and if every one had failed.
+  Two divisions, no resample, and it **collapses onto the point estimate at `c_t == 0`**, so a
+  clean run pays nothing for it. It is printed because rule 5's censoring may be **informative**:
+  the point estimate is the value under an assumption this design cannot support, and the bound is
+  what is actually known. On §8.4's shape — 6 of 8 conversations lost to HTTP 400 — it is wide
+  enough to be visibly uninformative, which is the honest rendering of that run and the one thing a
+  bare flat curve cannot be. **The bound is per position and does not propagate**: a censored
+  conversation's counterfactual at `t+1` needs a second assumption, and the per-position bound is
+  already the honest statement at each point. **No gate, no interval, no verdict** — the hazard
+  carries none of those (§4.4 rule 1 forbids a Wilson interval over turns, and refusing the curve
+  below some coverage would delete the one picture FR-9 is for); §4.4's `n < 10` marking on the
+  observed risk set is what says a position is thin.
 - Per-condition tables are always printed underneath. A cross-condition headline other than
   `cleanThroughTurnH` is not reported at all.
 
@@ -3372,7 +3576,7 @@ this component's most-recorded defect.
   comparison is like-for-like. Two packs' figures are different order statistics of different item
   sets and are not comparable; nothing in the report may place them in one column.
 
-### 11.4 The denominators — `Y` is the item count, `Y_calls` the call count, and which fields the withholding governs
+### 11.4 The denominators — `Y` is the item count, `Y_calls` the attempted-call count, and which fields the withholding governs
 
 **`Y = len(run.items)`** — every item the run recorded — and **`X` = the count of items whose timing
 survived**. No item is removed from `Y` for any reason.
@@ -3385,7 +3589,7 @@ two counts are printed side by side and never substituted for one another:
 | figure(s) | unit | counts | printed denominator |
 |---|---|---|---|
 | `latencyMs` → `latencyMsP50` / `latencyMsP95` / `latencyMsMax` | **item** | `Y = len(run.items)`; `X` = items whose wall clock survived | §11.7 slot 2, in **items** |
-| `ttftMs`, `prefillMsPer1kPromptTokens`, `tokensPerSecond` | **call** | `Y_calls = Σ_items callCount`; `X_calls = statsCoveredCount` | §11.7 slot 2's second line, in **calls** |
+| `ttftMs`, `prefillMsPer1kPromptTokens`, `tokensPerSecond` | **call** | `Y_calls` = the calls the run **attempted** (below, v1.22 — *not* `Σ_items callCount`); `X_calls = statsCoveredCount` | §11.7 slot 2's second line, in **calls** |
 | `unexplainedMs` → `unexplainedMsMax` | **item** (a sum over that item's calls, §11.5.1) | items with a readable gap | disclosed with the figure; **no gate** (§11.5.1) |
 
 **The wall clock is an item figure because the item is what the report ranks and what the operator
@@ -3404,10 +3608,87 @@ Holm step (§11.7 slot 6), so the within-item clustering that §4.4 makes fatal 
 statistic has nothing to invalidate in a descriptive median. Anything that ever puts an interval on
 them inherits §4.5.1(i)'s cluster bootstrap over the analysis unit — and nothing does today.
 
-**`callCount` is `1` for every role but `tool-caller`, and it is recorded rather than assumed.** It
-is `len(ItemTiming.calls)` and it must equal `TurnTrace.iterations`; two independently maintained
+**`callCount` counts the calls that *returned*, and on every role but `tool-caller` an item makes at
+most one call — so it is `1` where that call completed and `0` where it did not.** It is
+`len(ItemTiming.calls)` and it must equal `TurnTrace.iterations`; two independently maintained
 counts of the same thing is how several of this component's defects started, so the agreement is one
-assertion (§11.10 (7d)) rather than a convention.
+assertion (§11.10 (7d)) rather than a convention. The `≤ 1` is a **consequence** of
+`maxIterationsPerTurn` and never a second declaration, and on a `deterministic` arm `callCount` is
+`0` for every item because that arm makes no model call at all — a real count, not an absence.
+*(v1.22, plan R-1: v1.20 wrote "`callCount` is `1` for every role but `tool-caller`", which the pin
+`callCount == len(chatResults)` falsifies on both of those cases. The same one word is owed to
+§11.9 ask 7's §3.3 item, and ask 8 carries it.)*
+
+**`Y_calls` counts the calls the run *attempted*, and `Σ callCount` is not that number** *(v1.22 —
+plan v1.27's raise R-1, ruled: the netting is real, it is not intended, and it does not survive)*.
+The two differ by exactly the calls that did not return, and those are precisely the calls that
+could not have carried `stats`. Denominating the sibling coverage in **completed** calls therefore
+removes a rate's losses from its own base — Rule 3's question, one unit below where `Y` answers it:
+the sentence `Y_calls` carries is §11.6's **refusal threshold** and §11.7 slot 2's printed coverage,
+and a threshold is weakened by every member netted out of its base whether the member is an item or
+a call. Three consequences make it structural rather than cosmetic:
+
+- **A netted base cannot refuse.** `X_calls = statsCoveredCount` is a subset of the *completed*
+  calls, so under netting the only shortfalls left are (iv-c)'s co-presence exclusions and a
+  completed call whose body carried no `stats` — both of which this section itself calls defensive
+  rarities. The systematic shortfall, the calls that never returned, is deleted from the base
+  instead of counted in it. A run of 38 single-call items in which 37 calls failed reports
+  `X_calls = Y_calls = 1`, clears §11.6's gate at full nominal coverage, and prints a median of one
+  call as `n = 1 of 1 calls`. Unnetted it is `1 of 38` and the gate refuses.
+- **`Y_calls == 0` is reachable** — the run in which every call failed — and §11.6's integer gate
+  `100·r ≥ 45·Y` is vacuously **true** at `Y == 0`. A denominator that collapses to zero on the run
+  carrying the least data is the wrong denominator.
+- **The invariant the report is written against inverts.** §11.7 slot 6 renders its second sentence
+  on `<Yc> > <Y>` and says a `tool-caller` run exceeds it *by construction*; netted, a `tool-caller`
+  run with failures can sit at or below `<Y>` and drop the sentence on exactly the run that needs
+  it. Unnetted, every item that ran a turn contributes at least one attempt, so `Y_calls ≥ Y` holds
+  wherever every item reached the call boundary and the condition means what it says.
+
+**The arithmetic, and it needs no new stored count.** A turn's loop terminates on the first call
+that raises (plan §3.8.4, P14-5), so an item has **at most one** non-returning call; the three
+failing dispositions map totally onto `withheldFor ∈ {"timeout", "no_response"}` (plan §3.8.4's
+table), and `latencyWithheldForNoResponse` counts exactly those items (plan Appendix A: three item
+states, one counter). So:
+
+> **`Y_calls = callCount + latencyWithheldForNoResponse`** per run, and
+> `a_i = callCount_i + [D(t_i) ∈ {timed-out, no-response, server-rejected}]` per item.
+
+`Y_calls` is therefore **derived, never stored** (§11.8) — the call §11.9 ask 7 already makes for
+`unexplainedMs` and `callCount` on `ItemTiming`, for the same reason: a derived number cannot
+disagree with the record it is reconstructed from. Three things to state rather than leave to
+inference. The derivation **crosses units** — an item count standing in for a call count — and is
+valid only under the at-most-one lemma, so **a within-turn retry breaks it**, and that is the
+reversal trigger: the day one exists, the attempt is recorded per call and `Y_calls` is summed
+directly. It rests on a **precedence the plan states in effect and nowhere states as a rule**, and
+plan-gate P15-3 is right that the gap is live: keeping the completed calls' `CallTiming`s on an
+incomplete turn (plan v1.27 §3.6(ii)) newly makes `unexplainedMs` computable there, so a load guard
+and a failing disposition can both fire on one turn while `withheldFor` holds one value. **Ruled,
+because this derivation makes it load-bearing rather than tidy: the failing disposition wins, and
+`"load"` is reachable only on a turn every one of whose calls returned.** The cause a withholding
+names is the reason the wall clock is absent, and on that turn the reason is that the turn never
+finished — the load reading on an earlier call is a real datum about a call, not a cause of the
+item's missing measurement, and it survives in that call's own gap. It is also the direction the
+counters need: `latencyWithheldForNoResponse` must count exactly the items with a non-returning
+call or the identity above is off by the overlap. §11.10 (7d) therefore asserts it by **two
+routes** rather than one. And
+`Y_calls` sums over `run.items`, so the warm-up call, the residency probe, §3.6's post-timeout
+re-probe and any corpus-embedding pass are outside it by construction, as they always were.
+
+**What this does not touch, and the harmonisation that would bring the netting back.** §4.3 rule
+4's `fail`/`unrunnable` split partitions the **scoring** denominators. `Y` and `Y_calls` are
+**coverage** denominators: they count every item and every attempt whatever the scorer does with
+them, which is why an `unrunnable` item is already in `Y` and why a `server-rejected` call — scored
+out of every rate — is still in `Y_calls`. The two vocabularies answer different questions (*did the
+model succeed?* against *does this figure describe the run?*) and must not be aligned.
+
+**Rejected: giving the non-returning call a `CallTiming` of its own**, so that `calls` holds attempts
+and `callCount` needs no companion. It is the tidier record, and it costs the pin
+`callCount == len(ItemTiming.calls) == len(chatResults) == TurnTrace.iterations` that plan-gate
+P14-6 has just closed and that §4.2(f) reads directly. The only datum it buys — the failed call's own
+duration — has no consumer: a timeout's is `requestTimeoutSeconds` by construction, and §11.5.1's
+`censoringExact` takes its fail-safe branch on a no-response item without reading any wall clock
+(§11.10 (7b)). *Reversal trigger:* the first consumer that needs a per-call duration for a call that
+did not return.
 
 **Back to `Y` itself.** The temptation is to net out items that were never timed, so that coverage
 reads better. Rule 3's
@@ -3491,7 +3772,14 @@ surface. That identity fails twice over now. It fails on the co-presence exclusi
 call **returned a response and was timed**, so it sits on neither side of the subtraction — and it
 fails on the units, since the left side counts calls and the right side items, which differ by
 construction on any pack whose `maxIterationsPerTurn` exceeds 1. **The bound that survives is
-`statsCoveredCount ≤ Y_calls − (calls that returned no response)`**, and the equality worth
+`statsCoveredCount ≤ callCount`, which is the same statement as
+`statsCoveredCount ≤ Y_calls − (calls that returned no response)`** once `Y_calls` counts attempts
+— one identity, not two forms *(v1.22: at v1.20 this sentence carried only the second spelling, and
+under the netted reading its subtrahend either did nothing or, read literally as a count of every
+non-returning call, made the bound **false** on the first run with a failed call and full `stats`
+coverage — an assertion that crashes on the data the harness exists to characterise. Plan v1.27
+rule (iv) chose the first spelling and is right; its hedge that the two differ is superseded here)*
+— and the equality worth
 asserting is against a recomputation over `run.items`: `statsCoveredCount` is the count of **calls**
 carrying **both** a usable `stats` and a usable `promptTokens`, which §4 S2's one-pass recomputation
 already mandates and which is now a sum over each item's `calls`.
@@ -3851,16 +4139,20 @@ the **slots and their order are fixed**, each variant is published verbatim, and
 fully rendered examples as test targets.
 
 **Substitutions.** `<X>` timed **item** count · `<Y>` item count · `<M> = Y − X` · `<ML>` withheld
-for model load · `<MT>` withheld for timeout · `<Xc>` = `statsCoveredCount`, a **call** count ·
-`<Yc>` = `Y_calls`, the run's total model calls (§11.4) · `<TAIL>` = `max` when `r95 == X` (§11.3)
+for model load · `<MT>` withheld for a **non-returning call** — timeout *or* no response, plan-gate
+P4-7's widened `latencyWithheldForNoResponse`, which is why it is also the attempt count below
+*(v1.22: the gloss said "timeout", naming one of the two things the counter counts)* ·
+`<Xc>` = `statsCoveredCount`, a **call** count ·
+`<Yc>` = `Y_calls`, the run's **attempted** model calls — `callCount + <MT>`, never
+`callCount` alone (§11.4, v1.22) · `<TAIL>` = `max` when `r95 == X` (§11.3)
 else `p95` · `<p50>`/`<tail>` in **milliseconds, rounded to the nearest integer** · `<s> = X − r95` ·
 `<L95>`/`<L50>` **truncated** to 1 dp.
 
 **Two nouns, one per field group, and they are bound to the group rather than typed into a string**
 *(v1.20)*. Every wall-clock line is denominated in **items** and every `stats`-derived line in
 **calls**, because that is what §11.4 denominates the figures in. On four of the five packs the two
-numbers are equal (`callCount == 1` everywhere), so a fixture built on any of them cannot tell the
-nouns apart — which makes the multi-call fixture of §11.10 (7d) the only thing that pins this, and
+numbers are equal (one call **attempted** per item, whether or not it returned — v1.22), so a
+fixture built on any of them cannot tell the nouns apart — which makes the multi-call fixture of §11.10 (7d) the only thing that pins this, and
 makes typing the noun into each string the one implementation that will pass the suite and print a
 false denominator on the pack that matters. The same trap, one vocabulary over, already cost this
 component a silent comparison (`BinaryMetric.unit` against `PackRef.analysisUnit`).
@@ -3998,7 +4290,10 @@ can read a real turn-latency difference as a speed difference when it is an `I(t
 report needs no new statistic to separate them: `ttftMsMedian` and `tokensPerSecondMedian` are the
 speed figures and §4.2(f)'s mean and p95 of `I(t)` are the behaviour figures, and both are already
 printed. What was missing was the sentence saying so. **The mean is rendered from `<Yc>/<Y>` to
-1 dp and never typed**, for §3.2c's reason.
+1 dp and never typed**, for §3.2c's reason. It is **attempts per item over every item** *(v1.22)*,
+which is neither the mean over the run's *timed* turns nor §4.2(f)'s restricted `I(t)` mean — the
+sentence around it already sends a reader to the second, and the two differ on any run with a
+non-`replied` turn (§4.3.1 item 4).
 
 **Slot 7 — `compare`, per figure, when either arm has none.** Both arms' blocks always print in
 full, side by side; only the *difference* is withheld:
@@ -4031,9 +4326,12 @@ withheld), because a grammar is only checkable against at least one full renderi
 - **`RunResult` / the record:** `latencyMsP50` and the tail figure are **`None` exactly when the
   gate refuses them** (and `latencyMsP95` is additionally `None` whenever `<TAIL>` is `max`, §11.3),
   never `0` and never a figure carrying a hidden qualifier. `X`, `Y`, `ML`, `MT` and — v1.20 —
-  `Y_calls` are stored beside them, so every clause in §11.7 is reconstructible from the record
-  alone. `Y_calls` is the fifth because slot 2's second line and slot 6's second sentence are both
-  computed from it.
+  the run's **call** count are stored beside them, so every clause in §11.7 is reconstructible from
+  the record alone. The fifth stored count is `callCount`; `Y_calls`, which is what slot 2's second
+  line and slot 6's second sentence are actually computed from, is **derived** from `callCount` and
+  `MT` and is not a sixth *(v1.22, §11.4)* — a denominator built out of two stored counts in one
+  named place cannot drift from them, and storing it would be the third home for a number this
+  block has already substituted once.
 - **`index.csv`:** the cells are **empty exactly when the record's fields are `None`**. This is the
   property that makes a qualifier-free column honest: *a populated `latencyMsP95` cell is always a
   genuine 95th percentile whose attained level is within 5 points of its name.* That single sentence
@@ -4122,7 +4420,9 @@ so one plan revision can serve both.
    residuals are restated over the surviving spelling of `:159`, which after Table C is
    `percentile(means, level=…)` and carries neither retired literal — so the pair must be re-derived
    rather than re-scoped, and the two tables' collision is named on both rows the way Table D/E's is
-   on `stats.py:263`. **(e)** Table C's residual gains the `stats.py` half plan-gate P8-3 asks for,
+   on **their own shared site** *(v1.22: v1.18 wrote that as a bare `stats.py:263`, which is a blank
+   line at `d71c83e`; the plan's tables own those pins and re-base them, so this note names the
+   rows)*. **(e)** Table C's residual gains the `stats.py` half plan-gate P8-3 asks for,
    over all three sites, plus §11.10(3)'s package-wide command as the one that cannot be passed by a
    half-application. **(f)** Nothing here reopens Table G's *"required rather than defaulted"*
    argument, which is unaffected by the element type.
@@ -4194,11 +4494,69 @@ so one plan revision can serve both.
      TurnTrace.iterations` and `ItemTiming.wallClockMs >= Σᵢ wallClockMsᵢ` on a multi-call fixture.
    - **Appendix A.** `ItemTiming`, the new `CallTiming`, and `LatencyBlock`'s new `callCount`.
    - **One shipped docstring, and it is a one-word sweep, not a rewrite.**
-     `modelbench/lmstudio.py:225` quotes the detector's gap as `latencyMs - (ttftMs + generationMs)`.
+     **`_coerce_finite_float`'s docstring** in `modelbench/lmstudio.py` quotes the detector's gap as
+     `latencyMs - (ttftMs + generationMs)` — the module's only occurrence of that token, so the
+     sweep is enumerable rather than remembered: `grep -c latencyMs modelbench/lmstudio.py` → **1**
+     today, **0** after it *(v1.22, plan raise R-2: v1.20 pinned this as `:225`, which is `:247`
+     four days later; the plan pinned it by symbol and count and was right to)*.
      The operand at that level is the **call's** `wallClockMs`; `latencyMs` is the item's admitted
      figure and after this ruling is not an operand of the gap at all. The docstring's actual claim
      — that a non-finite value would send the gap to `-inf` and the detector could never fire — is
      unaffected and correct.
+
+8. **New at v1.22: R-1's resolution, as the delta on ask 7 and not a rewrite of it.** Ask 7 landed
+   in plan v1.27; every item of it stands except where named here. Nothing below is blocked and
+   nothing is deferred — `ItemTiming`, `CallTiming` and `LatencyBlock`'s new fields are all still
+   unbuilt — `git grep -n -E 'ItemTiming|LatencyBlock' d71c83e -- 'model-bench/modelbench/*.py'`
+   returns **two** lines and both are prose cross-references (`convo.py:48`, `results.py:819`), so
+   no stored record moves and no `benchSchemaVersion` does.
+   - **§4 S2, `LatencyBlock`.** `callCount` is unchanged — completed calls, `Σ_items len(calls)`,
+     the pin and rule (ii)'s third assertion exactly as delivered. What ask 7 called `Y_calls` is
+     **not** that number: add **`callAttemptedCount`** as a **derived** property,
+     `callCount + latencyWithheldForNoResponse` (§11.4), carrying the
+     at-most-one-non-returning-call lemma and its reversal trigger (a within-turn retry) where an
+     implementer reads it, plus a fourth assertion under rule (ii) — recomputed from `run.items`
+     over the **dispositions**, it equals what the two stored counts give. Do not store it as a
+     seventh count. *(Rejected: renaming `callCount` to `callCompletedCount` so the pair cannot be
+     confused at all. It is the strongest fix and it is refused on price — a rename across six plan
+     sections, Appendix A, an `index.csv` column and the tests, whose **half**-application is this
+     component's signature defect and would be worse than the ambiguity. The guard replaces it:
+     §11.10 (7d)'s fixture makes the three counts pairwise distinct, so the substitution is caught
+     rather than avoided. Reversal trigger: one more review or implementation that confuses the
+     two.)*
+   - **§4 S2 rule (iv-b) — the one place v1.27 must change what it bolded.** The gate is
+     `X = statsCoveredCount, Y = callAttemptedCount`: **not** `callCount`, and still not
+     `latencyItemCount`. v1.27 refused the second substitution and stopped one short of the first,
+     which is the same one-word failure one count over. All three are pairwise distinct on §11.10
+     (7d)'s fixture, which is what makes the refusal testable rather than editorial.
+   - **§4 S2 rule (iv).** The bound does not move — `statsCoveredCount ≤ callCount` is right. What
+     goes is the hedge: the parenthetical reasoning that ask 7's subtrahend is identically zero was
+     true only of the netted reading, and the two spellings are now one identity (§11.4).
+   - **§3.3.** One word: `callCount` is `I(t)` for a `tool-caller` and **at most** `1` for every
+     other role — `0` where the call did not return, `0` throughout a `deterministic` arm. The
+     *attempt* count is exactly `1` per item on any model-calling arm, and that is what `Y_calls`
+     sums.
+   - **§3.5 (`index.csv`) — no new column.** The CSV carries no `statsCoveredCount`, so an
+     attempted-call column would be a denominator with no numerator in its own row; `callCount`
+     keeps the job ask 7 gave it (which estimand the `latencyMs*` cells hold).
+   - **§3.6 / §3.8.4 — one sentence, and it is plan-gate P15-3's.** The precedence this
+     derivation rests on must be **written**, not left implied by §3.8.4's table: a turn that ended
+     on a raise takes `withheldFor` from the failing disposition, never `"load"`, whatever an
+     earlier call's gap showed — ruled in §11.4 with the reason, because the counter identity
+     `Y_calls = callCount + latencyWithheldForNoResponse` is off by the overlap without it. That
+     is the answer to P15-3's *"nothing says which wins"*, and §11.10 (7d)'s two-route assertion is
+     what keeps it true rather than remembered.
+   - **§5 test 10b and Appendix A.** Test 10b's multi-call assertion gains the failed-turn leg
+     (§11.10 (7d)); Appendix A's `LatencyBlock` row gains the derived property beside `callCount`.
+   - **R-2, whose durable half is the citation form.** Ask 7's last item is corrected in place.
+     Measured at `d71c83e`: of this note's three unpinned `modelbench/*.py` line cites **two no
+     longer resolve** (`lmstudio.py:225` → the text is at `:247`; `stats.py:263` → a blank line),
+     while **both** cites pinned to an explicit sha resolve exactly — `results.py:573` and
+     `stats.py:296` at `5878014` are still the two `_percentile` copies, days after that symbol left
+     the package entirely. So a citation into shipped code is **a symbol plus an enumerating command
+     with its count, or a line number pinned to a named sha — never a bare line.** The five
+     `stats.py:159` cites still resolve and are left alone; they resolve because the edit they
+     prescribe landed on that very line, which is luck rather than form.
 
 Two consequences that are the standing sweep obligation of plan §7 rather than new asks:
 **§3.6's `latency n = X of Y` sketch and §5 test 15b's assertion are superseded by §11.7's slots** —
@@ -4310,14 +4668,38 @@ any tolerance would hide the defect it was meant to catch.
    `unexplainedMs`; on a chat arm with `statsCoveredCount == 0` that line **is** rendered. Asserted
    on the **absence** — a line that should not exist is invisible to a test that only checks the
    lines that should.
-7d. **The two units, and they are separable only on a multi-call fixture** *(v1.20)*. On one
-   `tool-caller`-shaped run: `callCount == len(ItemTiming.calls) == TurnTrace.iterations` per item;
-   `ItemTiming.wallClockMs >= Σᵢ wallClockMsᵢ` per item, with the difference attributed to the
-   harness and subtracted nowhere; `Y_calls == Σ callCount > Y`; the rendered block's wall-clock
-   lines read `of <Y> items` and its sibling line `of <Yc> calls`; and slot 6's second sentence
-   renders with the mean computed from `<Yc>/<Y>`. **The same suite must carry the single-call
-   negative**: where `Y_calls == Y` the two numbers are equal, the two nouns still differ, and slot
-   6's second sentence is **absent**. Asserted on the absence, for (7c)'s reason.
+7d. **Three counts, and they are separable only on a fixture where all three differ** *(v1.20;
+   re-derived at v1.22, because the v1.20 fixture could not separate two of them)*. `Y`,
+   `callCount` and `Y_calls` are three numbers this block prints or gates on, and v1.20 set
+   `Y_calls == Σ callCount` **by construction** — so a `callCount`/`Y_calls` substitution passed
+   that fixture silently, which is how the netted denominator R-1 found reached plan v1.27 as a
+   bolded instruction. A guard hole first, a wrong number second. **One `tool-caller`-shaped run of
+   three items** — one `replied` after 3 returning calls, one that returned 2 and then timed out,
+   one whose first call was `server-rejected` — gives `Y = 3`, `callCount = 5`, `Y_calls = 7`,
+   `<MT> = 2` and `X = 1` timed item: pairwise distinct, so each of the three one-word
+   substitutions reddens on its own. On it: `callCount == len(ItemTiming.calls) ==
+   TurnTrace.iterations` **per item** (`3, 2, 0`); `ItemTiming.wallClockMs >= Σᵢ wallClockMsᵢ` on
+   the timed item, the difference attributed to the harness and subtracted nowhere, and `is None`
+   on the other two; **`Y_calls == callCount + latencyWithheldForNoResponse`, recomputed over the
+   `TurnTrace` dispositions and asserted against the block's value recomputed over
+   `ItemTiming.withheldFor`** — two routes, so what the pin actually tests is the runner's
+   disposition→`withheldFor` map, and a turn that ended on a raise but was filed under `"load"`
+   fails it; `Y_calls > Σ callCount`, which the netted implementation cannot satisfy; the rendered
+   block's wall-clock lines read `of <Y> items` and its sibling line `of <Yc> calls`; and slot 6's
+   second sentence renders with the mean computed from `<Yc>/<Y>`. **Mutate both ways**: netting
+   `Y_calls` to `5` and inflating it to `8` (a second attempt counted for one failed turn) must
+   **each** redden — a fixture that catches only the shrink is being covered by something else for
+   the widen. **Two negatives in the same suite.** *(a)* The single-call run **with no
+   failures**: `Y_calls == Y == callCount`, the three numbers coincide, the two nouns still differ,
+   and slot 6's second sentence is **absent** — asserted on the absence, for (7c)'s reason.
+   *(b)* A chat-surface run in which
+   **every** item's only call failed: `callCount == 0`, `Y_calls == Y`, `statsCoveredCount == 0` (a
+   real `0`, not `None` — (iv-a) keys on the surface, not on what arrived), the three medians
+   **refused by the gate** rather than absent for want of input — which is what rule (i)'s
+   discriminator says when the count is a number — and slot 2's second line rendering
+   `0 of <Y> calls`. Under a netted `Y_calls`
+   that same run prints `0 of 0` and evaluates §11.6's gate at `Y == 0`, where `100·r ≥ 45·Y` is
+   vacuously true; this is the fixture that forbids both.
 
 8. **String rendering.** Five blocks rendered against fixtures and asserted **verbatim**, the way
    §7.2's resolving-power line is, with §11.7's measured sample as the fixture:
