@@ -1,6 +1,35 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.19
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.20
+
+2026-09-09 (v1.20, `data-scientist`) — plan-gate Pass 13's `P13-2`, ruled, together with the two
+arithmetic errors of this note's own that the finding inherited. **Plan v1.25 stopped a scored item
+being a model call, so every FR-11 figure is redefined on the unit it is a property of** — the wall
+clock on the **item**, the three `stats`-derived figures on the **call** — with two coverage
+numbers, two denominators and two nouns in §11.7's block, and never mixed *(§11.4, §11.7)*.
+**§11.5.1's detector was never a per-call rule; it is a matched-bracket accounting identity, and the
+loop is the first place the two spellings differ.** `unexplainedMs` becomes the **sum over the
+item's calls** of `wallClockMsᵢ − (ttftMsᵢ + generationMsᵢ)` — v1.9's expression verbatim at
+`callCount == 1`, so the 3 485.6 ms / −11.3 … +7.6 ms measurement, the 1 000 ms threshold and every
+fixture survive untouched — and it is the **only** form that preserves the detector's own
+false-negative bound: under a per-call *maximum* rule an 8-iteration turn retains up to 8 × 999 ms of
+foreign time with every one of its calls passing. **The gate's mechanism is confirmed; its size was
+understated in one direction and overstated in the other.** Understated: the withheld set is not
+three items but **every multi-iteration turn**, which on the `tool-caller` pack is correlated with
+the behaviour the pack scores, so the surviving latency sample would be the turns where the model
+did *not* loop. Overstated: at `Y = 38` three withholdings refuse the **tail** figure alone and four
+refuse both, so this note's own *"a clean run prints no latency summary at all"* was off by one —
+corrected, with the per-pack budget tabulated in §11.6 rather than asserted from one example.
+**`Y` for the `tool-caller` pack is 80, not 12** — its items are turns and have been since plan
+v1.4 — so §11.3's *"the tool-caller pack's 12 conversations"*, §11.6's *"every pack in §3.3's table
+has `Y ≥ 12`"* and §11.9 ask 4's *"every tool-caller run"* were all reading the **analysis-unit**
+count as the **item** count, three instances of one substitution. Corrected, and it closes a
+reachability question nobody had asked: the identity floor's `max` label is reachable only at
+**`Y ≤ 21`** (exact, swept), therefore on **no** declared pack. Every reach claim this revision
+introduces or repairs is pinned in an asserted constant, per the component's convention — the
+threshold's margin against `maxIterationsPerTurn`, the `Y ≤ 21` bound, and the two denominators'
+nouns (§11.10). §4.5.2's minutes are restated as a **floor** (plan-gate P13-7), and §11.9 gains
+**ask 7**, the whole plan-side edit list this ruling implies, in one place.
 
 2026-09-08 (v1.19, `data-scientist`) — plan-gate Pass 8's `P8-1`, adjudicated at the altitude the
 reviewer routed it to *(new §3.4 Rule 4a)*. **A support is the parameter space of the estimand, so
@@ -1922,6 +1951,22 @@ construction rather than by hope.
 is ≈1.7 min per model, ≈3.5 min for both arms of a paired comparison. (The old 48-conversation
 design was 320 turns ≈ 7 min per model, ≈14 min paired — v1.1's estimate, same basis.)
 
+**Those minutes are a floor, not a central estimate** *(v1.20, plan-gate P13-7)*. The ~1.3 s/turn was
+measured on falkor-chat's real multi-step executor, whose node declares `maxIterations: 8`
+(`falkor-chat/server/falkorchat/proof_defs.py:415`), so plan §3.8.4's per-turn loop is **not a new
+cost** and no sizing decision is reopened by it. What the figure will not carry is *typical*: it was
+measured on `qwen/qwen3-4b-2507`, the model that stops calling tools at turn 4 in 39 of 40
+conversations, so a large share of those turns ran a single iteration and the average is a mixture
+rather than a per-turn cost. A model that calls tools on every turn runs more iterations per turn
+and costs proportionally more; the multiplier is **bounded above by `maxIterationsPerTurn`**, which
+puts the paired run at **≤ ≈28 min** at this pack's declared cap of 8. Plan against that bound, not
+against the 3.5. **The typical case is unmeasured and this note will not put a number on it** — an
+inference from §8.2's turn-position table is not a measurement of a run nobody has made — and it
+costs nothing to obtain: §4.2(f) already reports the mean and p95 of `I(t)`, and §11.4's
+`Y_calls / Y` is the same quantity read off the latency block. **The sizing decision stands**:
+§4.5.3's reversal trigger is denominated in *scripts*, and the binding constraint is FR-19 human
+verification, not compute.
+
 **A correction the stakeholder is owed: this is not the same run budget, it is one quarter of it.**
 The authoring budget is unchanged — 12 human-verified scripts either way, which is the expensive
 half — but the *inference* budget drops from ~320 to ~80 turns per model. What that freed budget can
@@ -2944,8 +2989,8 @@ session with the integer expression above:
 | 85 | 81 | 4 | 43 |
 | 100 | 95 | 5 | 50 |
 
-**`r = X` — the tail figure *is* the sample maximum — for every `X ≤ 19`** (swept `X ≤ 200`), and the
-tool-caller pack's 12 conversations sit inside that range. Review G3-11 is right that printing that
+**`r = X` — the tail figure *is* the sample maximum — for every `X ≤ 19`** (swept `X ≤ 200`).
+Review G3-11 is right that printing that
 number under the name `p95` is meaningless; it is wrong only in the remedy, and the difference
 matters. The number itself is fine — the largest of 12 timed calls is a real measurement and a
 legitimate, low-biased estimator of the population 95th percentile (`E[F̂(max)] = 12/13 = 0.923`).
@@ -2962,6 +3007,26 @@ at which `ceil(0.95X) < X`, i.e. where a 95th percentile stops being the maximum
 is tunable, which is what distinguishes it from §11.6's floor and is why the two are separate rules
 rather than one blended threshold.
 
+**Its *reach* is a second, composed question, and this section had it wrong** *(v1.20)*. The
+withdrawn clause read *"the tool-caller pack's 12 conversations sit inside that range"*, which took
+the pack's **analysis-unit** count for its **item** count. They are different numbers by a factor of
+6.7: a scored `tool-caller` item is a **turn** — `pairingKey = ["scriptId", "replicate",
+"turnIndex"]`, plan §3.3, unchanged since plan v1.4 — so `Y = 80` there (4×9 + 4×7 + 4×4, §4.5.2),
+beside 85, 40, 38 and 30 for `guard-judge`, `nlq-generator`, `embedder` and `chat-responder`. `X ≤ 19`
+is then far below §11.6's level floor at every one of them, and the two rules compose to a closed
+bound:
+
+> **The `max` label is reachable only at `Y ≤ 21`** — and at `Y = 21` only at `X = 19`. Computed in
+> the gate's own integer arithmetic and swept over `Y ≤ 200`: at `Y = 22` the level floor already
+> requires `X ≥ 21`, where `r = 20 < X`, so no surviving `X` has `r == X`.
+
+**No declared pack is in range, so `max` and `latencyMsMax` are unreachable today** — which does not
+retire the rule (a pack with `Y ≤ 21` is buildable and the label would then be false without it) but
+does change what it is for and what §11.9 ask 4 may claim for it. **`21` is an asserted constant,
+not a sentence** (§11.10 (4a)): the reachability bound and the per-pack `Y` census are the two
+things that make the paragraph above true, and a prose reach claim that outlives its mechanism is
+this component's most-recorded defect.
+
 **Two consequences worth stating before someone rediscovers them.**
 - **`p50` here is not `statistics.median`.** At even X, type 1 returns the **lower** of the two
   middle observations, not their mean. An implementer must not "fix" `latencyMsP50` to the median:
@@ -2972,12 +3037,45 @@ rather than one blended threshold.
   comparison is like-for-like. Two packs' figures are different order statistics of different item
   sets and are not comparable; nothing in the report may place them in one column.
 
-### 11.4 The denominator — `Y` is the item count, and which fields the withholding governs
+### 11.4 The denominators — `Y` is the item count, `Y_calls` the call count, and which fields the withholding governs
 
 **`Y = len(run.items)`** — every item the run recorded — and **`X` = the count of items whose timing
 survived**. No item is removed from `Y` for any reason.
 
-The temptation is to net out items that were never timed, so that coverage reads better. Rule 3's
+**There are two units now, and plan v1.25 is what separated them** *(v1.20)*. A scored item is no
+longer one model call: a `tool-caller` item is a **turn**, and a turn is a bounded loop of `I(t)`
+calls (plan §3.8.4). So each FR-11 figure is denominated in the unit it is a property of, and the
+two counts are printed side by side and never substituted for one another:
+
+| figure(s) | unit | counts | printed denominator |
+|---|---|---|---|
+| `latencyMs` → `latencyMsP50` / `latencyMsP95` / `latencyMsMax` | **item** | `Y = len(run.items)`; `X` = items whose wall clock survived | §11.7 slot 2, in **items** |
+| `ttftMs`, `prefillMsPer1kPromptTokens`, `tokensPerSecond` | **call** | `Y_calls = Σ_items callCount`; `X_calls = statsCoveredCount` | §11.7 slot 2's second line, in **calls** |
+| `unexplainedMs` → `unexplainedMsMax` | **item** (a sum over that item's calls, §11.5.1) | items with a readable gap | disclosed with the figure; **no gate** (§11.5.1) |
+
+**The wall clock is an item figure because the item is what the report ranks and what the operator
+waits through.** On a `tool-caller` that is a whole turn, every iteration and the tool dispatches
+between them — the user-visible response time, and the only latency figure an operator can act on.
+Redefining it as one call of the turn (the final one, say) would make a model that loops eight times
+report a *smaller* latency than one that answers in a single call, which inverts the quantity.
+
+**The three `stats`-derived figures are call figures because a generation is what they measure**, and
+they are **pooled over calls** rather than averaged up to the item first: a median of per-item
+medians is not a median, and prefill in particular is not even constant within a turn — the prompt
+grows with each appended `tool` message, so per-iteration prefill is the signal, not noise to be
+averaged out. Pooling weights an item by its own `I(t)`, which is admissible **here and nowhere else
+in this note** for one stated reason: these three carry no verdict, no confidence interval and no
+Holm step (§11.7 slot 6), so the within-item clustering that §4.4 makes fatal for an inferential
+statistic has nothing to invalidate in a descriptive median. Anything that ever puts an interval on
+them inherits §4.5.1(i)'s cluster bootstrap over the analysis unit — and nothing does today.
+
+**`callCount` is `1` for every role but `tool-caller`, and it is recorded rather than assumed.** It
+is `len(ItemTiming.calls)` and it must equal `TurnTrace.iterations`; two independently maintained
+counts of the same thing is how several of this component's defects started, so the agreement is one
+assertion (§11.10 (7d)) rather than a convention.
+
+**Back to `Y` itself.** The temptation is to net out items that were never timed, so that coverage
+reads better. Rule 3's
 question settles it: *which denominator keeps this sentence's claim true?* The sentence the
 denominator carries is a **refusal threshold** (§11.6), and a threshold is weakened by every item
 netted out of its base — a conditional denominator would let a run that timed 8 of 38 items report
@@ -3020,26 +3118,31 @@ then overruled. Plan v1.10's §4 S2 rule (iv-b) already gates all three, and it 
 
 **One coverage number for three figures is correct only while the three are co-present, and that is
 an invariant rather than an assumption.** `ttftMs` and `tokensPerSecond` need a `stats` object; the
-prefill figure additionally needs a usable `usage.prompt_tokens`. An item carrying `stats` but no
-usable token count puts prefill's true `X` below `statsCoveredCount`, so both the gate and §11.7
-slot 2's single denominator line would overstate coverage for one figure of the three — silently,
-and in the direction that prints. The closure is one assertion beside the recomputation plan §4 S2
-already mandates: **the three medians are computed over the same item count, and that count is
-`statsCoveredCount`.**
+prefill figure additionally needs a usable `usage.prompt_tokens`. A call carrying `stats` but no
+usable token count puts prefill's true `X_calls` below `statsCoveredCount`, so both the gate and
+§11.7 slot 2's single denominator line would overstate coverage for one figure of the three —
+silently, and in the direction that prints. The closure is one assertion beside the recomputation
+plan §4 S2 already mandates: **the three medians are computed over the same call count, and that
+count is `statsCoveredCount`.**
 
-**The runtime disposition, ruled** *(v1.14, plan-gate P5-5)*. An item carrying `stats` whose
-`promptTokens` is absent or `≤ 0` is **excluded from `statsCoveredCount` and from all three sibling
-medians** — the conservative single count, not a second count for prefill. **Both halves of that
-sentence are load-bearing:** dropping the item from the count while still letting it into the
+**The runtime disposition, ruled** *(v1.14, plan-gate P5-5; restated per call at v1.20, since v1.25
+made an item several of them)*. A **call** carrying `stats` whose `promptTokens` is absent or `≤ 0`
+is **excluded from `statsCoveredCount` and from all three sibling medians** — the conservative
+single count, not a second count for prefill. **Both halves of that sentence are load-bearing:**
+dropping the call from the count while still letting it into the
 `ttftMs` and `tokensPerSecond` medians would print a denominator that does not describe its own
 numerator, which is §4.3's laundering with the sign reversed and worse than either clean option. The
-cost is two good measurements discarded on such an item; the purchase is one number that is true of
+cost is two good measurements discarded on such a call; the purchase is one number that is true of
 all three figures, one gate evaluation, one printed line, and a §11.7 slot 2 whose grammar does not
 fork. It is a **disposition, not an assertion** — nothing raises, so an implementer cannot turn it
-into a run-ending `assert` (plan-gate P4-7's shape).
+into a run-ending `assert` (plan-gate P4-7's shape). **The exclusion is per call and never per
+item**: on a multi-call item the sibling figures of its other calls are good measurements and
+nothing about the excluded one contaminates them. The item's `unexplainedMs` is a separate question
+with the opposite answer, and §11.5.1 gives it.
 
 **Why not the separate `prefillCoveredCount` this note leaned toward at v1.13.** `usage.prompt_tokens`
-is a standard field of every chat completion and every pack item carries a non-empty prompt, so the
+is a standard field of every chat completion and every call this harness makes carries a non-empty
+prompt, so the
 case is **defensive against something that should not occur** rather than a regime the design serves.
 A permanent second denominator — a second gate evaluation, a second stored count, a second line in
 slot 2 — is the wrong price for a rarity, and this note has ruled the same way before (§11.6 takes
@@ -3049,11 +3152,14 @@ rarity is the run that buys `prefillCoveredCount`.
 
 **One consequence the plan must carry, or its own invariant refutes the disposition.** §4 S2 rule
 (iv) pins `statsCoveredCount == latencyItemCount − latencyWithheldForNoResponse` on a `stats`-bearing
-surface. An excluded item **returned a response and was timed**, so it sits on neither side of that
-subtraction: under this ruling (iv)'s identity becomes an **inequality** (`≤`), the gap being exactly
-the co-presence exclusions. The equality that survives — and the one worth asserting — is against a
-recomputation over `run.items`: `statsCoveredCount` is the count of items carrying **both** a usable
-`stats` and a usable `promptTokens`, which §4 S2's one-pass recomputation already mandates.
+surface. That identity fails twice over now. It fails on the co-presence exclusions — an excluded
+call **returned a response and was timed**, so it sits on neither side of the subtraction — and it
+fails on the units, since the left side counts calls and the right side items, which differ by
+construction on any pack whose `maxIterationsPerTurn` exceeds 1. **The bound that survives is
+`statsCoveredCount ≤ Y_calls − (calls that returned no response)`**, and the equality worth
+asserting is against a recomputation over `run.items`: `statsCoveredCount` is the count of **calls**
+carrying **both** a usable `stats` and a usable `promptTokens`, which §4 S2's one-pass recomputation
+already mandates and which is now a sum over each item's `calls`.
 
 ### 11.5 The missingness is informative, and how far its direction is known
 
@@ -3078,13 +3184,13 @@ recomputation over `run.items`: `statsCoveredCount` is the count of items carryi
 - **The in-call reload detector** (§11.5.1), and it is different **in kind** from the two above:
   it withholds on `unexplainedMs`, a **covariate**, never on the wall clock. Nothing ties a withheld
   item's latency to a timed item's — an item with a 1.1 s gap around 0.2 s of generation is withheld
-  at 1.3 s while a clean 2.0 s call beside it is timed.
+  at 1.3 s while a clean 2.0 s item beside it is timed.
 
 **What all three share is weaker than what two of them share, and every published sentence has to sit
 on the weaker one.** Producers 1 and 2 censor the summarised quantity itself, so their withheld calls
 do sit above every timed call — **by construction** for the timeout (a timed call returned inside the
 budget) and **on measured magnitudes** for the probe-detected load. Producer 3 does not, and its
-failure is not exotic: it needs only a timed call slower than the threshold, which on §2.2's ~1.3 s
+failure is not exotic: it needs only a timed item slower than the threshold, which on §2.2's ~1.3 s
 pack turns is the ordinary case. **So the ordering stops being argued and starts being computed**
 (§11.5.1's `censoringExact`), and §11.7's slot 3 selects on the result.
 
@@ -3123,40 +3229,112 @@ Worked, exactly, at `Y = 38` — including plan §3.6's own `34 of 38` sketch:
 | 35 | 34 | **89.4** | 18 | 47.3 | **p50 only** |
 | **34** | 33 | **86.8** | 17 | **44.7** | **neither** |
 
-#### 11.5.1 The in-call reload detector — R-14's residual, closed by the same measurement
+#### 11.5.1 The in-call reload detector — R-14's residual, and what it becomes once an item is a loop
 
 Plan R-14 accepts one residual it cannot see: a reload that **begins and ends inside a single timed
 call** is invisible to a between-item residency probe, which only ever looks *between* items.
 §11.4's table closes it, and the separation is not marginal:
 
-> **`latencyMs − (ttftMs + generation_time)` is the load, isolated.** Measured: **3 485.6 ms** on the
+> **`wallClockMs − (ttftMs + generationMs)` is the load, isolated.** Measured: **3 485.6 ms** on the
 > cold call against **−11.3 … +7.6 ms** across 50 warm calls — the cold gap is **461×** the largest
 > warm gap observed.
 
-**Recommendation:** `runner` computes that gap per item and withholds `latencyMs` as a contamination
-(§11.5) whenever it exceeds **1 000 ms**. The negative warm gaps are expected rather than anomalous
-(the client wall clock and the server's own timers bracket different work), which is why the rule is
-a one-sided threshold on a magnitude and never `gap > 0`.
+**The gap is an accounting identity over one wall clock, and both operands must bracket the same
+interval.** That was always the rule. Until plan v1.25 a scored item was one call, so the
+matched-bracket form and a per-call form were the same expression and nothing in this note
+distinguished them — which is why plan-gate P13-2 could read the rule as per-call and be neither
+wrong nor right. They stop being the same expression the moment a `tool-caller` turn runs a bounded
+loop (plan §3.8.4) and a scored item is `I(t)` calls: the **item's** wall clock brackets every
+iteration plus the tool dispatches between them, while `ttftMs` and `generationMs` bracket **one**
+generation. Subtract one call's pair from the turn's wall clock and the residual is the non-final
+iterations' entire duration — so the detector fires on **iteration count**, the quantity §4.2(f)
+exists to measure, rather than on a load.
 
-**The basis is the asymmetry of the detector's two errors, not a margin against the smallest load**
-*(revised at v1.12; plan-gate P4-11)*. The withdrawn clause read the threshold as sitting *"~3.5×
-below the smallest cold load measured anywhere"*. It cannot: the two cold loads are one observation
-each and differ in model, quantization and route (§11.5), so **the data bounds no load from below**,
-and the page-cache-warm reload this note itself hypothesised is precisely the case a sample of two
-unattributed cold starts cannot exclude from landing under a second. What does size the value is
-that its two errors do not cost alike:
+> **The ruling: `unexplainedMs` is the sum over the item's own calls of each call's own gap.**
+>
+> `unexplainedMs = Σᵢ [ wallClockMsᵢ − (ttftMsᵢ + generationMsᵢ) ]`, over the `ChatResult`s the item
+> comprises, in order. `runner` withholds `latencyMs` as a contamination (§11.5) whenever it exceeds
+> **1 000 ms**. **At `callCount == 1` this is v1.9's expression unchanged**, so every existing
+> fixture, the measurement above and the threshold's whole basis survive verbatim — and a
+> single-call role cannot tell the two rules apart, which is exactly why the plan may not leave the
+> choice to an implementer.
 
-- **A false positive** — a warm call misread as a load — is **discrete and can be severe**: it
-  withholds a good wall clock *and* misreports it under §11.7 slot 2's model-load cause, and three of
-  them at `Y = 38` take the run below §11.6's floor, so a clean run prints no latency summary at all.
+The negative warm gaps are expected rather than anomalous — the client wall clock and the server's
+own timers bracket different work — which is why the rule stays a one-sided threshold on a
+magnitude and is never `gap > 0`.
+
+**The measurement is per call and the decision is per item, and neither level is a matter of
+taste.** The gap can only be *computed* per call: its two subtrahends are properties of one
+generation and of nothing larger. The withholding can only be *decided* per item, because the thing
+withheld is the item's admitted wall clock and `latencyMs` aggregates over items (§11.4). So
+`ChatResult` carries the operands, `ItemTiming` carries the ordered calls, and exactly one number
+per item meets the threshold. **Nothing is withheld at the call level**: a load inside call 3
+contaminates the turn's wall clock, which is the figure that has to go, while the three
+`stats`-derived figures of all `I(t)` calls stay — the load is outside them, which is §11.4's
+measured ruling and is unaffected by how many calls an item has.
+
+**Why the sum and not the largest call's gap.** The two agree on every case the detector was built
+for: a 3.5 s load inside one call clears 1 000 ms under either rule. They differ on exactly the case
+the loop creates, and this section's own false-negative argument decides it — *a false negative is
+continuous and **bounded by the threshold itself**; the retained wall clock carries at most that
+much foreign time, by the detector's own definition*. That sentence is true of the sum and **false**
+of a per-call maximum: at `maxIterationsPerTurn = 8` a turn could retain up to 8 × 999 ms of
+unaccounted time with every one of its calls passing, and the bound the threshold's whole
+justification rests on would be silently void. A rule that voids its own justification is not the
+same rule at a different granularity.
+
+**A partial sum is never formed** — §11.4's co-presence discipline, one unit down. A call yields a
+gap only if its `wallClockMs`, `ttftMs` and `generationMs` are all readable. If **any** call of an
+item does not, the item's `unexplainedMs` is **`None`**, and the detector does not fire on that item:
+it has no reading, and a sum over the calls that happened to report is a number that does not
+describe its own item. The item's `latencyMs` stands, guarded by the between-item probe alone —
+which is precisely the state a single-call item with no `stats` is already in today, stated here
+rather than left to be inherited. **`unexplainedMsMax` therefore takes no coverage gate and opens no
+third denominator.** §11.6 gates *medians* because a median over a selected subset misrepresents the
+run; a **maximum** over a subset is a **lower bound** on the run's largest gap, which is the useful
+direction for the one job that figure has — re-checking the threshold against real payloads.
+Wherever it is printed it names the count of items that had a reading, because a bound whose base is
+unstated reads as a point estimate.
+
+**The threshold's false-positive margin now scales with the iteration cap, so the claim is pinned to
+the cap and not asserted in prose.** The margin was *"~130× the largest warm gap"* — one call's.
+Summed over `I(t)` calls the clean ceiling is `I(t) × 7.6 ms`, so the margin is
+`1 000 / (7.6 · I(t))`: **~16× at this pack's declared cap of 8**, and **gone entirely at a cap of
+132** (`1 000 / 7.6 = 131.6`). That is a reach claim, and a reach claim outliving its mechanism is
+this component's most-recorded defect class, so it does not live in this sentence:
+**`WARM_GAP_CEILING_MS = 7.6` (§11.4's measurement) and the 1 000 ms threshold are named constants,
+and one test asserts `WARM_GAP_CEILING_MS × cap < threshold` for the `maxIterationsPerTurn` of every
+pack the suite loads, rendering the margin from the constants rather than quoting it**
+(§11.10 (7a)). *Reversal trigger:* the first pack that fails that assertion. The disposition then is
+to raise the threshold, or to move to a per-call rule **with its weaker bound stated in the
+report** — never to keep this paragraph.
+
+**The basis for 1 000 ms is the asymmetry of the detector's two errors, not a margin against the
+smallest load** *(revised at v1.12; plan-gate P4-11)*. The withdrawn clause read the threshold as
+sitting *"~3.5× below the smallest cold load measured anywhere"*. It cannot: the two cold loads are
+one observation each and differ in model, quantization and route (§11.5), so **the data bounds no
+load from below**, and the page-cache-warm reload this note itself hypothesised is precisely the case
+a sample of two unattributed cold starts cannot exclude from landing under a second. What does size
+the value is that its two errors do not cost alike:
+
+- **A false positive** — a warm item misread as a load — is **discrete and can be severe**: it
+  withholds a good wall clock *and* misreports it under §11.7 slot 2's model-load cause. **At
+  `Y = 38`, three of them refuse the tail figure and four refuse both**, the second being the run
+  that prints no latency summary at all; §11.6 tabulates the budget for every declared pack and the
+  smallest is **2 (tail) / 3 (p50)**. *(v1.20 corrects this bullet's own arithmetic. It read "three
+  of them at `Y = 38` take the run below §11.6's floor, so a clean run prints no latency summary at
+  all", conflating the tail floor with both floors — three is the tail, four is the summary — and
+  plan-gate P13-2 quoted it faithfully and inherited the error. The correction makes the false
+  positive *cheaper by one item* and changes nothing about the ruling above, whose cost is not three
+  items but every multi-iteration turn.)*
 - **A false negative** — a load smaller than the threshold — is **continuous and bounded by the
   threshold itself**: the retained wall clock carries at most that much foreign time, by the
-  detector's own definition.
+  detector's own definition, and it is the **sum** form above that keeps that true at every `I(t)`.
 
 A bounded, disclosed error against an unbounded, discrete one puts the threshold **high**, and
-1 000 ms is the highest value that still has a *measured* false-positive margin: **~130× the largest
-warm gap** in §11.4's table. So the value stands and its second margin does not. **What it must not
-be read as claiming:** 1 000 ms is roughly three-quarters of a §2.2 pack turn, so this detects a
+1 000 ms is the highest value that still has a *measured* false-positive margin at every declared
+iteration cap. So the value stands and its second margin does not. **What it must not be read as
+claiming:** 1 000 ms is roughly three-quarters of a §2.2 pack turn, so this detects a
 **load-magnitude** event — R-14's residual, which is seconds — and does not protect a latency figure
 to within a fraction of its own scale.
 
@@ -3165,7 +3343,25 @@ scheduled rather than deferred — it needs no new instrumentation.** The plan a
 stores `unexplainedMs` on every item and reports its maximum below the threshold; that maximum, on
 the first real pack run, *is* the false-positive margin on realistic payloads, which is what §11.4's
 50 minimal calls of one model cannot supply. The asymmetry above says the value should not move
-**down** before that measurement exists.
+**down** before that measurement exists. **What the loop adds to that re-check is free and must be
+read with it:** `Y_calls / Y` is the run's mean iterations per item, so the observed margin and the
+`I(t)` it was observed at arrive together, and a margin read without its `I(t)` is not a margin.
+
+**What the loop does *not* open, stated so that nobody builds a guard for it.** A reload that happens
+*between* two iterations of one turn is invisible to the between-item probe (which runs between
+items) **and** sits outside every call's wall clock, so the sum above would miss it. It costs
+nothing, because LM Studio's load is **JIT on the request**: whatever was unloaded is re-loaded
+inside the *next* call, where that call's own gap sees it — the same mechanism §11.4 measured, a
+cold call whose 3 485.6 ms is entirely invisible to the server's own `stats`. What genuinely does
+sit between the calls is the harness's own tool dispatch and message assembly, and that is **not**
+foreign time to be subtracted: it is real time the operator waits through and it belongs inside the
+turn's latency. The identity worth asserting rather than assuming is
+`ItemTiming.wallClockMs ≥ Σᵢ wallClockMsᵢ`, the difference being harness-side (§11.10 (7d)).
+*(On `tool-caller-shop-assistant` the tools are an in-process simulated storefront, so that
+difference is microseconds. A pack whose tool module performed network or disk I/O would put that
+I/O inside its latency figure — the honest place for it, and a fact the report must state rather
+than let a reader discover. Reversal trigger: the first pack declaring such a module owes a
+dispatch-time figure of its own.)*
 
 **The detector is not right-censoring, so slot 3's ordering is computed rather than assumed**
 *(v1.12; plan gate Pass 4 open question 2)*. The predicate, evaluated per render whenever `M > 0`:
@@ -3181,6 +3377,15 @@ no-response branch is new at v1.14** (plan-gate P5-6), and it is not a fine poin
 **a timeout is a *censored* observation and a call that failed at 40 ms is a *missing* one.** The
 first has a known bound; the second has no value in either direction, so a string asserting it was
 slower than every timed call asserts something about a measurement that never existed.
+
+**The loop changes how often the predicate comes back false, and that is the predicate working**
+*(v1.20)*. Items are now heterogeneous in `I(t)`, so a clean 8-iteration turn is legitimately slower
+than a load-contaminated 1-iteration one, and the second clause — a load-withheld item's wall clock
+above every timed item's — fails more often than it did when every item was one call. Slot 3's
+stronger string would be **untrue** on such a run, so the weaker one is owed and is what renders.
+Nobody should "fix" the increased false rate by comparing within iteration count: the claim the
+string makes is about the run's items as printed, and stratifying the comparison would make it a
+claim about a stratum the block never shows.
 
 **What the plan must preserve, and it is one field value.** Plan v1.10 merged timeout into
 `no_response`, which is **right for the counter** — §11.7's cause split prints one `no response`
@@ -3200,11 +3405,12 @@ worry is that an item with no timing at all breaks a statement about *the run's 
 counts only items known to be **≤** the printed figure, so an item with no value — or with a value
 nobody will ever know — can fail to be counted but can never falsify the count. That one-sidedness is
 what made the bound distribution-free at v1.12, and it is what makes it survive a third item state
-here.
+here — and a multi-call item, which changes what an item *is* without changing that it is one member
+of the ranked set.
 
 This detector is **additive to** the residency probe, not a replacement: the probe catches a reload
-that happened *before* an item, the gap catches one *inside* it, and neither sees what the other
-does. Placing it is `architect`'s (§11.9); the metric, the threshold and its basis are here.
+that happened *before* an item, the gap catches one *inside* any of its calls, and neither sees what
+the other does. Placing it is `architect`'s (§11.9); the metric, the threshold and its basis are here.
 
 ### 11.6 Floor 2 — the level floor, which refuses; and how the two floors divide the work
 
@@ -3237,18 +3443,38 @@ reported at any coverage moves this constant and nothing else; the strings, the 
 denominator and §11.3's identity floor are all unaffected by its value.
 
 **How the two floors divide the work — G3-11's question answered directly, with the numbers.**
-A ratio floor and a count floor do fail in different regimes, and here **neither dominates; they are
-complementary and only one of them refuses:**
+A ratio floor and a count floor fail in different regimes, and here they are **complementary rather
+than redundant — only one of them refuses — with one honesty correction at v1.20: at the pack sizes
+actually declared, the level floor is always reached first, so the identity floor is a live rule
+with no run to fire on rather than a co-equal gate:**
 
 - The level floor implies a **count** floor, because `r ≤ X` forces `100·X ≥ 90·Y`, i.e.
-  **`X ≥ 0.9·Y`**. Every pack in §3.3's table has `Y ≥ 12`, so the level floor already requires
-  `X ≥ 11` on the tool-caller pack, `X ≥ 36` on the embedder's 38 and `X ≥ 81` on guard-judge's 85.
-  **G3-11's four-surviving-latencies case is refused outright at every declared pack** — it is not
-  merely renamed. A bare count floor would have to be re-chosen per pack to achieve that; the level
-  floor gets it for free because it is expressed against `Y`.
+  **`X ≥ 0.9·Y`** — a floor that is re-derived per pack for free, because it is expressed against
+  `Y`. **G3-11's four-surviving-latencies case is refused outright at every declared pack**, not
+  merely renamed. **The per-pack budget, computed in the gate's own integer arithmetic** *(v1.20 —
+  the withdrawn version of this bullet said "every pack in §3.3's table has `Y ≥ 12`" and put the
+  tool-caller at `X ≥ 11`, reading its **analysis-unit** count for its **item** count; §11.3
+  carries the correction and the general rule)*:
+
+  | pack (role) | `Y` items | tail prints while | `p50` prints while | withheld budget, tail / p50 |
+  |---|---|---|---|---|
+  | `tool-caller` | **80** turns (4×9 + 4×7 + 4×4) | `X ≥ 75` | `X ≥ 71` | **5 / 9** |
+  | `guard-judge` | 85 | `X ≥ 81` | `X ≥ 77` | 4 / 8 |
+  | `nlq-generator` | 40 | `X ≥ 37` | `X ≥ 35` | 3 / 5 |
+  | `embedder` | 38 | `X ≥ 36` | `X ≥ 35` | 2 / 3 |
+  | `chat-responder` | 30 | `X ≥ 28` | `X ≥ 27` | 2 / 3 |
+
+  **This is the table §11.5.1's false-positive cost is priced against**, and it is why the
+  detector's unit had to be settled before a rework unit built the loop. The tool-caller's budget is
+  the largest in the component, and a gap taken against the turn's wall clock would have exhausted
+  both halves of it on the first clean run.
 - What the level floor **cannot** see is a *clean* small sample: at `X == Y == 12` the shortfall is
   zero and the gate passes, correctly. That is exactly the regime §11.3's identity floor governs,
   and it governs it by **renaming**, because the number is sound and only the label is not.
+  **No declared pack is in that regime** — the identity floor's `max` label is reachable only at
+  `Y ≤ 21` (§11.3) and the smallest declared `Y` is 30 — so today the identity floor is a rule with
+  no run to fire on. It stays, because the label it refuses would be false on the pack that
+  eventually has one, and because its cost is a comparison.
 
 So: **one floor for a sample that is short (refuse), one for a sample that is small (rename).** They
 are checked in that order, and the identity floor is evaluated first so that a refusal message names
@@ -3260,7 +3486,7 @@ the figure the run would have had.
    definition of `ceil`, so the shortfall is never positive. A run that timed every item always
    prints both figures, at every X including X = 1.
 2. **A single withheld item never suppresses either figure at `Y ≥ 10`** (swept `Y ≤ 399`,
-   contiguous from 10). Every pack has `Y ≥ 12`, so the common disturbance — one TTL expiry — costs a
+   contiguous from 10). Every pack has `Y ≥ 30`, so the common disturbance — one TTL expiry — costs a
    printed qualifier, not a printed number. **This is what makes the floor safe against G3-4:** if
    the guard's first comparand is left as written and every cold-start run discards item 1, the floor
    still prints both figures on every pack. The floor does not depend on G3-4 being fixed — but
@@ -3289,10 +3515,20 @@ note has already paid once for two statements about the same thing drifting apar
 the **slots and their order are fixed**, each variant is published verbatim, and §11.10 pins five
 fully rendered examples as test targets.
 
-**Substitutions.** `<X>` timed count · `<Y>` item count · `<M> = Y − X` · `<ML>` withheld for model
-load · `<MT>` withheld for timeout · `<TAIL>` = `max` when `r95 == X` (§11.3) else `p95` ·
-`<p50>`/`<tail>` in **milliseconds, rounded to the nearest integer** · `<s> = X − r95` ·
+**Substitutions.** `<X>` timed **item** count · `<Y>` item count · `<M> = Y − X` · `<ML>` withheld
+for model load · `<MT>` withheld for timeout · `<Xc>` = `statsCoveredCount`, a **call** count ·
+`<Yc>` = `Y_calls`, the run's total model calls (§11.4) · `<TAIL>` = `max` when `r95 == X` (§11.3)
+else `p95` · `<p50>`/`<tail>` in **milliseconds, rounded to the nearest integer** · `<s> = X − r95` ·
 `<L95>`/`<L50>` **truncated** to 1 dp.
+
+**Two nouns, one per field group, and they are bound to the group rather than typed into a string**
+*(v1.20)*. Every wall-clock line is denominated in **items** and every `stats`-derived line in
+**calls**, because that is what §11.4 denominates the figures in. On four of the five packs the two
+numbers are equal (`callCount == 1` everywhere), so a fixture built on any of them cannot tell the
+nouns apart — which makes the multi-call fixture of §11.10 (7d) the only thing that pins this, and
+makes typing the noun into each string the one implementation that will pass the suite and print a
+false denominator on the pack that matters. The same trap, one vocabulary over, already cost this
+component a silent comparison (`BinaryMetric.unit` against `PackRef.analysisUnit`).
 
 **The values in the renderings below are measured, not illustrative.** Source: **50 warm
 `POST /api/v0/chat/completions` calls against `qwen/qwen3-4b-2507` (Q4_K_M)** on this box,
@@ -3326,7 +3562,13 @@ A **second denominator line follows it when the arm's call surface produces a `s
 two counts differ**, because §11.4 keeps the server-side timings on an item the wall clock was
 withheld for:
 
-> `ttft/prefill/tokens-per-second n = 38 of 38 items; these are LM-Studio-side figures and a model load is outside them (see the note's 11.4).`
+> `ttft/prefill/tokens-per-second n = 38 of 38 calls; these are LM-Studio-side figures and a model load is outside them (see the note's 11.4).`
+
+**Its denominator is `<Xc>` of `<Yc>` and its noun is `calls`, on every pack** — not `items`, and
+not `items` on the four packs where the two counts coincide. The condition selecting the line is
+unchanged (the surface produces a `stats` object and the two *coverages* differ); what v1.20 changes
+is that "the two counts differ" becomes the ordinary case rather than the exception, since on a
+`tool-caller` run `<Yc>` exceeds `<Y>` by construction.
 
 **The surface condition is a ruling, not decoration** *(v1.12; plan-gate P4-13, confirmed — and
 placed on the surface rather than on the arm profile, which is the wider condition)*.
@@ -3352,9 +3594,9 @@ names what the counter counts, and the split stays exhaustive.)*
 computed `censoringExact`** — not on the producer, and not on an argument *(v1.12)*:
 
 - `censoringExact` true →
-  > `Every withheld call was slower than every timed call — a model load adds seconds to a call that otherwise takes tens to hundreds of milliseconds, and a timed-out call by definition exceeded the request budget — so the figures below are lower bounds.`
+  > `Every withheld item was slower than every timed item — a model load adds seconds to a call, and a timed-out call by definition exceeded the request budget — so the figures below are lower bounds.`
 - `censoringExact` false →
-  > `The withheld calls are not all slower than the timed ones: a call is also withheld when too much of its wall clock is unaccounted for by the server's own timers, and a call that returned no response has no timing to compare at all — neither is necessarily among this run's slowest. So the figures below are computed over the surviving calls only and are not lower bounds on the run's own figures; the levels below hold either way.`
+  > `The withheld items are not all slower than the timed ones: an item is also withheld when too much of its wall clock is unaccounted for by the server's own timers, and one whose call returned no response has no timing to compare at all — neither is necessarily among this run's slowest. So the figures below are computed over the surviving items only and are not lower bounds on the run's own figures; the levels below hold either way.`
 
 **Why two strings rather than one weaker one that is always true.** The true branch is the ordinary
 case — both wall-clock-censoring producers land in it, and §11.7's own measured fixtures withhold the
@@ -3362,6 +3604,15 @@ case — both wall-clock-censoring producers land in it, and §11.7's own measur
 operator acts on. Deleting it would cost every render the statement that is true on most of them; the
 selector is *computed*, so neither string is ever rendered where it is false, which is the property
 four review passes have been spent buying for this block.
+
+**Both branches say *item* where v1.11 said *call*, and the true branch has lost one clause**
+*(v1.20)*. The withheld and timed objects are items, which are calls only on four of the five packs,
+so the noun had to move. The deleted clause is *"a call that otherwise takes tens to hundreds of
+milliseconds"*: that magnitude was measured on §11.4's minimal warm calls and is false of a
+`tool-caller` turn at ~1.3 s and up, and this section's own rule below — a string carrying a figure
+is a string that is false on most of the runs that render it — condemns it. What survives is the
+*load's* magnitude (*"adds seconds"*), which §11.5's measurements do support and which is the half
+the sentence needs.
 
 **Slot 3 names a magnitude and never a figure — in both branches**, and that is a correction to
 v1.9, which wrote
@@ -3394,12 +3645,25 @@ decimal is a rule an implementer has to encode and will get wrong, and the phras
 **Slot 5 — the tail figure's own reading.** Present only when a tail figure was printed. Two
 variants, and the condition is `<TAIL>`:
 
-- `p95` (i.e. `X ≥ 20`) → `Timed calls slower than the p95 figure: 1 of 36.`
-- `max` (i.e. `X ≤ 19`) → `At 12 timed calls the 95th percentile is the largest observation, so this run reports the maximum and no p95.`
+- `p95` (i.e. `X ≥ 20`) → `Timed items slower than the p95 figure: 1 of 36.`
+- `max` (i.e. `X ≤ 19`) → `At 12 timed items the 95th percentile is the largest observation, so this run reports the maximum and no p95.`
 
-**Slot 6 — the standing label, on every render whatever the coverage.**
+**Slot 6 — the standing label, on every render whatever the coverage.** One sentence always, plus a
+second **when and only when `<Yc> > <Y>`** — a computed condition over the record, never a pack
+declaration, so a pack that declares an iteration cap and never reaches it renders the short form.
 
 > `Latency is descriptive: it is in no pack's verdictMetrics, it carries no verdict, no confidence interval and no Holm step, and no difference between two arms' latency figures is printed unless both arms report the same order statistic.`
+
+> *(`<Yc> > <Y>` only)* `A timed item on this pack is a whole turn — every model call the turn made, and the tool dispatches between them; this run averaged 2.4 calls per turn. A latency difference between two arms may therefore be a difference in how many calls they made rather than in how fast they generate: the per-call figures above and the iteration counts in the tool-calling block are what separate the two.`
+
+**The second sentence exists because the estimand changed and the column name did not.**
+`index.csv`'s `latencyMsP50` holds a per-call figure on four packs and a per-turn figure on one, and
+§11.3 already forbids comparing across packs — but a reader comparing two *arms* of the same pack
+can read a real turn-latency difference as a speed difference when it is an `I(t)` difference. The
+report needs no new statistic to separate them: `ttftMsMedian` and `tokensPerSecondMedian` are the
+speed figures and §4.2(f)'s mean and p95 of `I(t)` are the behaviour figures, and both are already
+printed. What was missing was the sentence saying so. **The mean is rendered from `<Yc>/<Y>` to
+1 dp and never typed**, for §3.2c's reason.
 
 **Slot 7 — `compare`, per figure, when either arm has none.** Both arms' blocks always print in
 full, side by side; only the *difference* is withheld:
@@ -3421,22 +3685,30 @@ withheld), because a grammar is only checkable against at least one full renderi
 
 > `Latency (client wall clock): p50 = 76 ms, p95 = 105 ms.`
 > `latency n = 36 of 38 items; timings withheld: 2 (model load 2, request timeout 0).`
-> `ttft/prefill/tokens-per-second n = 38 of 38 items; these are LM-Studio-side figures and a model load is outside them (see the note's 11.4).`
-> `Every withheld call was slower than every timed call — a model load adds seconds to a call that otherwise takes tens to hundreds of milliseconds, and a timed-out call by definition exceeded the request budget — so the figures below are lower bounds.`
+> `ttft/prefill/tokens-per-second n = 38 of 38 calls; these are LM-Studio-side figures and a model load is outside them (see the note's 11.4).`
+> `Every withheld item was slower than every timed item — a model load adds seconds to a call, and a timed-out call by definition exceeded the request budget — so the figures below are lower bounds.`
 > `The p95 figure is at worst percentile 92.1 of the run's 38 items, and the p50 figure at worst percentile 47.3.`
-> `Timed calls slower than the p95 figure: 1 of 36.`
+> `Timed items slower than the p95 figure: 1 of 36.`
 > `Latency is descriptive: it is in no pack's verdictMetrics, it carries no verdict, no confidence interval and no Holm step, and no difference between two arms' latency figures is printed unless both arms report the same order statistic.`
 
 ### 11.8 Where the figures live
 
 - **`RunResult` / the record:** `latencyMsP50` and the tail figure are **`None` exactly when the
   gate refuses them** (and `latencyMsP95` is additionally `None` whenever `<TAIL>` is `max`, §11.3),
-  never `0` and never a figure carrying a hidden qualifier. `X`, `Y`, `ML` and `MT` are stored beside
-  them, so every clause in §11.7 is reconstructible from the record alone.
+  never `0` and never a figure carrying a hidden qualifier. `X`, `Y`, `ML`, `MT` and — v1.20 —
+  `Y_calls` are stored beside them, so every clause in §11.7 is reconstructible from the record
+  alone. `Y_calls` is the fifth because slot 2's second line and slot 6's second sentence are both
+  computed from it.
 - **`index.csv`:** the cells are **empty exactly when the record's fields are `None`**. This is the
   property that makes a qualifier-free column honest: *a populated `latencyMsP95` cell is always a
   genuine 95th percentile whose attained level is within 5 points of its name.* That single sentence
-  is the whole argument for gating at the value rather than in the prose.
+  is the whole argument for gating at the value rather than in the prose. **Three count columns join
+  it at v1.20 and the third is a correctness requirement, not a readability one** — `latencyTimedCount`
+  and `latencyItemCount` are the coverage a CSV reader cannot otherwise see (§11.9 ask 4's
+  recommendation), and **`callCount`** is what tells that reader whether the `latencyMsP50` cell in
+  front of them is a per-call figure or a per-turn one. Without it the column silently holds two
+  estimands, which is the same defect the gate closes at the value: a number whose qualifier lives
+  somewhere the reader is not.
 - **`compare` and the per-run report:** §11.7's slots.
 
 ### 11.9 What this needs from the plan — `architect`'s, and precisely scoped
@@ -3460,11 +3732,14 @@ so one plan revision can serve both.
    the wall clock's `n = X of Y`. The defect G3-3 names is real and its fix is the **denominator**,
    not the nulling. **This reverses what this section asked for at v1.9**, on the evidence G3-3
    itself proposed gathering.
-2a. **New, from the same measurement: the in-call reload detector (§11.5.1).** `runner` computes
-   `latencyMs − (ttftMs + generation_time)` per item and withholds `latencyMs` above **1 000 ms**.
-   It closes R-14's acknowledged residual — a reload inside a single timed call, which the
-   between-item probe structurally cannot see — at the cost of one subtraction per item, and it
-   needs no new probe. Its placement is the plan's; the metric and the threshold are §11.5.1's.
+2a. **The in-call reload detector (§11.5.1)** *(v1.12; the arithmetic restated at v1.20 for plan
+   v1.25's loop)*. `runner` computes each call's own gap — `wallClockMsᵢ − (ttftMsᵢ +
+   generationMsᵢ)` — **sums them over the item's calls**, and withholds the item's `latencyMs`
+   above **1 000 ms**. At `callCount == 1` that is the v1.9 expression unchanged. It closes R-14's
+   acknowledged residual — a reload inside a single timed call, which the between-item probe
+   structurally cannot see — at the cost of one subtraction per call, and it needs no new probe.
+   Its placement is the plan's; the metric, the threshold and the unit each is applied at are
+   §11.5.1's, and ask 7 below lists what the plan must say to carry them.
 2b. **New at v1.12: a withheld item's wall clock must stay readable on the record.** §11.5.1's
    `censoringExact` is one comparison between the withheld and the timed wall clocks, and §11.6
    already promises the reader that *the summary is withheld, not the data* — so the number has to
@@ -3477,13 +3752,20 @@ so one plan revision can serve both.
    a blocker for R-13. It should still be fixed as G3-4 specifies (baseline = a probe taken *after*
    the warm-up returns), because otherwise `MT`/`ML` count a systematically absent item 1 as a
    contamination event and slot 2's line reports a mechanism that did not occur.
-4. **New, and this section's own ask: a `latencyMsMax` field and column.** §11.3 makes
-   `latencyMsP95` `None` for every run with `X ≤ 19` — which is *every* tool-caller run, the pack
-   that is the long pole. Without somewhere to put the maximum, the component's headline pack has no
-   tail figure in the record or in `index.csv` at all. The field's name is the plan's; the
-   requirement is that the number have a home. **Recommended alongside it:** columns carrying `X`
-   and `Y`, so coverage is visible to a CSV reader. That one is a readability improvement rather
-   than a correctness requirement — the gate is what makes the existing columns honest without it.
+4. **A `latencyMsMax` field and column — kept, on a corrected justification** *(restated at
+   v1.20)*. The v1.12 wording read *"§11.3 makes `latencyMsP95` `None` for every run with `X ≤ 19` —
+   which is every tool-caller run, the pack that is the long pole"*. That is false, and the way it
+   is false is this component's signature defect: it took the tool-caller's **analysis-unit** count
+   (12 conversations) for its **item** count (80 turns). §11.3 now carries the general correction
+   and the exact reachability bound, and the consequence for this ask is that **`latencyMsMax` is
+   `None` on every run of every declared pack** — the `max` label is reachable only at `Y ≤ 21` and
+   the smallest declared `Y` is 30. The field still earns its home, on the narrower argument: §11.3's
+   rename is the rule that keeps the `p95` **label** honest, a pack with `Y ≤ 21` is buildable and
+   costs nothing to be ready for, and the alternative — discovering at that point that the maximum
+   has nowhere to live — is the state this ask was written to prevent. What must **not** survive is
+   the claim that the component's headline pack needs it today. **Alongside it:** columns carrying
+   `X`, `Y` and `callCount` (§11.8) — the first two a readability improvement, the third a
+   correctness requirement now that one column holds two estimands.
 5. **New at v1.12: `statsCoveredCount` is `None`, never `0`, on a call surface that returns no
    `stats`** — today `POST /api/v0/embeddings`, and every `deterministic` arm. §11.7's second
    denominator line renders on exactly that condition, and §4 S2's invariant over the field is then
@@ -3509,6 +3791,79 @@ so one plan revision can serve both.
    over all three sites, plus §11.10(3)'s package-wide command as the one that cannot be passed by a
    half-application. **(f)** Nothing here reopens Table G's *"required rather than defaulted"*
    argument, which is unaffected by the element type.
+
+7. **New at v1.20: the whole plan-side consequence of the loop ruling, section by section — this is
+   the one place it is stated** *(plan-gate P13-2)*. Nothing here is optional and nothing is
+   deferred; every item is closeable in the plan today, because no implementation unit has built
+   any of it. **Nothing stored becomes unreadable:** `ItemTiming` is designed and unbuilt (DC-11 has
+   not landed — `modelbench/results.py` still carries a bare `ItemResult.latencyMs`), no run record
+   has ever been written with a timing block, and no `benchSchemaVersion` moves. **No run budget
+   moves either** — the ruling adds no call, no probe and no pass over the data.
+
+   - **§3.3.** State that `callCount` per item is `I(t)` for a `tool-caller` and `1` for every other
+     role, and that this is a *consequence* of `maxIterationsPerTurn`, not a second declaration. No
+     new manifest key.
+   - **§3.5 (`index.csv`).** Add `latencyTimedCount`, `latencyItemCount` and **`callCount`**;
+     §11.8 gives the reason the third is not cosmetic.
+   - **§3.6, the FR-11 table.** Four rows move and one is added. `latencyMs` is an **item** figure
+     and on a `tool-caller` it is the turn's wall clock, tool dispatches included — say so in the
+     row, because "client wall clock" no longer disambiguates it. `ttftMs`,
+     `prefillMsPer1kPromptTokens` and `tokensPerSecond` are **call** figures aggregated over calls
+     with a call denominator. `unexplainedMs` is §11.5.1's **sum over the item's calls**, `None`
+     unless every call yields a gap. New row: `callCount`, `int`, `len(ItemTiming.calls)`, asserted
+     equal to `TurnTrace.iterations`.
+   - **§3.6, the withholding dispositions.** Withholding is at the unit of the figure: `latencyMs`
+     per item, the sibling coverage per call, and **no call is ever withheld for load** (§11.4's
+     measurement is unchanged by the loop). Add the one sentence that closes the residual an
+     implementer will otherwise go looking for: a reload *between* two iterations costs nothing
+     because LM Studio loads JIT on the request, so it lands inside the next call's own gap
+     (§11.5.1). **And one the loop creates that P13-1's disposition split does not cover:** a turn
+     whose loop terminated on a call that timed out or returned nothing has an **incomplete** wall
+     clock — it measures only the iterations that happened to succeed — so it is **not timed**. Its
+     `latencyMs` is withheld under `timeout`/`no_response` exactly as a single-call item's is, and
+     the partial turn wall clock is never stored as a measurement. A **cap-hit** turn is the
+     opposite case and must not be folded into it: every one of its `maxIterationsPerTurn` calls
+     returned, its wall clock is complete, and it is timed and ranked like any other item.
+   - **§3.8.4.** The runner builds one `ItemTiming` per turn from `TurnTrace.chatResults`, in
+     order — the loop bullet currently ends at `capHit` and says nothing about timing at all. Narrow
+     the *"No sizing consequence"* clause to what §4.5.2 now says: the loop is not a *new* cost, and
+     the derived minutes are a floor bounded above by `maxIterationsPerTurn` (plan-gate P13-7).
+   - **§4 S1, `ItemTiming`.** New shape, and it is **smaller** than v1.10's, not larger:
+     `(wallClockMs: float | None, calls: tuple[CallTiming, ...], withheldFor: … | None)`, with
+     `CallTiming = (wallClockMs, ttftMs, generationMs, promptTokens, tokensPerSecond)`, each field
+     `| None` and never `0`. `unexplainedMs` and `callCount` become **derived properties** over
+     `calls`, exactly as `ItemResult.latencyMs` is already a derivation over `ItemTiming` — §7 rule
+     4's preference for a derivation over two stored copies, applied to the same record a second
+     time. The five scalars v1.10 put on `ItemTiming` move onto `CallTiming` and have no second
+     home. An item that returned no response still carries an `ItemTiming`, now with `calls == ()`.
+   - **§4 S2, `LatencyBlock`.** Add **`callCount`** (`Y_calls`) beside `latencyItemCount`.
+     `statsCoveredCount` becomes a count of **calls** and rule (iv)'s recomputation is a sum over
+     each item's `calls`; rule (iv)'s surviving bound is
+     `statsCoveredCount ≤ Y_calls − (calls that returned no response)` (§11.4). Rule **(iv-b)**'s
+     gate takes `X = statsCoveredCount, Y = callCount` — **not** `latencyItemCount`, which is the
+     one-word substitution that will otherwise ship. Rule **(iv-c)** is restated per call, both
+     halves intact. Rules (ii), (iii), (v) and (vi) are item-level and do not move; state that,
+     because "one unit changed" is how the other five get changed by accident.
+   - **§4 S2, `unexplainedMsMax`.** It is a maximum over the items that had a reading, takes **no**
+     coverage gate, and is printed with that count. Rule (i)'s sentence currently folds it in with
+     the three medians under (iv-b); split it out.
+   - **§5 test 15b.** Three cases the existing list cannot express, all offline against the stub
+     clock and stub LLM: **(a)** a warm 3-iteration turn, and one at the cap of 8, report **no**
+     model-load contamination and keep their `latencyMs` — this is the regression P13-2 names and
+     every current timing fixture is single-call, so it is invisible without it; **(b)** a
+     3-iteration turn one of whose calls carries a 3 485.6 ms gap **is** withheld, counted under
+     model load, with the other two calls' sibling figures kept; **(c)** a 3-iteration turn one of
+     whose calls has no `stats` has `unexplainedMs is None`, is **not** withheld, and contributes
+     its two readable calls to `statsCoveredCount`.
+   - **§5 test 10b.** Beyond P13-5's own fix: assert `callCount == len(chatResults) ==
+     TurnTrace.iterations` and `ItemTiming.wallClockMs >= Σᵢ wallClockMsᵢ` on a multi-call fixture.
+   - **Appendix A.** `ItemTiming`, the new `CallTiming`, and `LatencyBlock`'s new `callCount`.
+   - **One shipped docstring, and it is a one-word sweep, not a rewrite.**
+     `modelbench/lmstudio.py:225` quotes the detector's gap as `latencyMs - (ttftMs + generationMs)`.
+     The operand at that level is the **call's** `wallClockMs`; `latencyMs` is the item's admitted
+     figure and after this ruling is not an operand of the gap at all. The docstring's actual claim
+     — that a non-finite value would send the gap to `-inf` and the detector could never fire — is
+     unaffected and correct.
 
 Two consequences that are the standing sweep obligation of plan §7 rather than new asks:
 **§3.6's `latency n = X of Y` sketch and §5 test 15b's assertion are superseded by §11.7's slots** —
@@ -3558,27 +3913,54 @@ any tolerance would hide the defect it was meant to catch.
    contains `max = ` and slot 5's `max` variant; at `X = 20` it contains `p95 = ` and
    `Timed calls slower than the p95 figure: 1 of 20.` The boundary is asserted on both sides,
    because a floor tested on one side is a floor with an untested inequality.
+4a. **The identity floor's reach, as a constant rather than a sentence** *(v1.20, §11.3)*. Two
+    assertions, both integer. **(i)** `IDENTITY_FLOOR_MAX_Y == 21`, bound to the sweep that
+    produces it: over `Y ≤ 200`, the set of `Y` for which some `X` passes the level floor **and**
+    has `r95(X) == X` is exactly `1…21`, and at `Y = 21` that `X` is uniquely 19. **(ii)** No
+    declared pack is in range — `min(Y over the loaded packs) > IDENTITY_FLOOR_MAX_Y`, driven
+    through the pack loader rather than over a hand-written list, so a pack added later fails the
+    assertion rather than the paragraph. Together these are what license §11.3's *"`max` is
+    unreachable on every declared pack"* and §11.9 ask 4's narrowed argument; without them both are
+    prose reach claims of exactly the kind the component's convention forbids.
+
 5. **Level-floor boundaries, at `Y = 38`.** `X = 36` → both figures present; `X = 35` → `p50`
    present and the tail `None`; `X = 34` → both `None`. Exactly §11.5's table, and it is the test
-   that fails if the 5-point tolerance is silently moved. **The same table's p50 column, read with
-   `X = statsCoveredCount`, gates the three sibling medians** (§4 S2 (iv-b)) — and they are asserted
+   that fails if the 5-point tolerance is silently moved. **The same table's p50 column gates the three sibling
+   medians** (§4 S2 (iv-b)) — read with `X = statsCoveredCount` and, **v1.20, `Y = callCount`,
+   never `latencyItemCount`**: the gate is over the coverage of the unit those three figures are
+   computed in, and on a single-call pack the two denominators are equal, so only a multi-call
+   fixture distinguishes the correct gate from the one an implementer will write. They are asserted
    to refuse **together**, never one of them, which is the property their shared coverage number
    claims *(v1.13)*.
 6. **The clean-run invariant.** For every `X` in `1…200`, a run with `X == Y` has both figures
    present. §11.6(1) is a theorem; a fire means the gate is wrong, not the data.
 7. **The two denominators (§11.4).** An item withheld by the guard contributes to **no**
-   `latencyMs` aggregate and **does** contribute to `ttftMs`, prefill and `tokensPerSecond`; the
-   rendered block prints **both** denominator lines and they differ (`n = 36 of 38` against
-   `n = 38 of 38`). A test asserting one denominator for all four fields pins v1.9's withdrawn
-   ruling and must fail. **And the three siblings are co-present** *(v1.13, §11.4)*: the count of
-   items contributing to each of the three medians is one number and it is `statsCoveredCount`. An
-   item carrying `stats` but no usable `usage.prompt_tokens` is absent from that count **and** from
-   all three medians, and **the run does not raise** *(v1.14, §11.4's disposition)* — the assertion
-   is on the exclusion being applied to all four places, never on the item being impossible.
-7a. **The in-call reload detector (§11.5.1).** An item whose
-   `latencyMs − (ttftMs + generation_time)` exceeds 1 000 ms has its `latencyMs` withheld and is
-   counted under model load; one at 7.6 ms — the largest warm gap measured — does not. Both sides of
-   the threshold, since a threshold tested on one side is an untested inequality.
+   `latencyMs` aggregate, and its calls **do** contribute to `ttftMs`, prefill and
+   `tokensPerSecond`; the rendered block prints **both** denominator lines, they differ
+   (`n = 36 of 38 items` against `n = 38 of 38 calls`), **and their nouns differ** *(v1.20)*. A test
+   asserting one denominator for all four fields pins v1.9's withdrawn ruling and must fail.
+   **And the three siblings are co-present** *(v1.13, §11.4; per **call** from v1.20)*: the count of
+   calls contributing to each of the three medians is one number and it is `statsCoveredCount`. A
+   call carrying `stats` but no usable `usage.prompt_tokens` is absent from that count **and** from
+   all three medians while its sibling calls in the same item stay, and **the run does not raise**
+   *(v1.14, §11.4's disposition)* — the assertion is on the exclusion being applied to all four
+   places at the call level, never on the call being impossible.
+7a. **The in-call reload detector (§11.5.1), and every one of these needs a multi-call fixture
+   except the first** *(rewritten at v1.20)*. **(i)** A single-call item whose gap exceeds 1 000 ms
+   has its `latencyMs` withheld and is counted under model load; one at 7.6 ms — the largest warm
+   gap measured — does not. Both sides of the threshold, since a threshold tested on one side is an
+   untested inequality. **(ii)** A **3-iteration** item whose three calls are each warm — gaps at
+   the measured warm ceiling — is **not** withheld, and neither is one at the cap of 8. This is the
+   regression plan-gate P13-2 names: it fails under a gap taken against the turn's wall clock and
+   passes under the sum, and every timing fixture that exists today is single-call and cannot see
+   it. **(iii)** A 3-iteration item one of whose calls carries the measured 3 485.6 ms cold gap
+   **is** withheld, counted under model load, with the other two calls' sibling figures kept.
+   **(iv)** A 3-iteration item one of whose calls has an unreadable gap has `unexplainedMs is None`
+   and is **not** withheld — the partial sum is never formed. **(v)** The margin claim, as a
+   constant rather than a sentence: `WARM_GAP_CEILING_MS * cap < threshold` for the
+   `maxIterationsPerTurn` of **every** pack the suite loads, with the quoted margin computed from
+   those two constants. A test that asserts the number `16` rather than computing it is the defect
+   this item exists to prevent.
 7b. **The censoring predicate, all four branches (§11.5.1).** A run whose one load-withheld item has
    a wall clock **below** the largest timed one renders slot 3's `censoringExact == false` variant;
    the same run with that wall clock above renders the true variant; a run whose only withholding is
@@ -3593,6 +3975,15 @@ any tolerance would hide the defect it was meant to catch.
    `unexplainedMs`; on a chat arm with `statsCoveredCount == 0` that line **is** rendered. Asserted
    on the **absence** — a line that should not exist is invisible to a test that only checks the
    lines that should.
+7d. **The two units, and they are separable only on a multi-call fixture** *(v1.20)*. On one
+   `tool-caller`-shaped run: `callCount == len(ItemTiming.calls) == TurnTrace.iterations` per item;
+   `ItemTiming.wallClockMs >= Σᵢ wallClockMsᵢ` per item, with the difference attributed to the
+   harness and subtracted nowhere; `Y_calls == Σ callCount > Y`; the rendered block's wall-clock
+   lines read `of <Y> items` and its sibling line `of <Yc> calls`; and slot 6's second sentence
+   renders with the mean computed from `<Yc>/<Y>`. **The same suite must carry the single-call
+   negative**: where `Y_calls == Y` the two numbers are equal, the two nouns still differ, and slot
+   6's second sentence is **absent**. Asserted on the absence, for (7c)'s reason.
+
 8. **String rendering.** Five blocks rendered against fixtures and asserted **verbatim**, the way
    §7.2's resolving-power line is, with §11.7's measured sample as the fixture:
    `(X=Y=38)` → `p50 = 78 ms, p95 = 112 ms`, `1 of 38` slower ·
@@ -3602,7 +3993,12 @@ any tolerance would hide the defect it was meant to catch.
    `(X=34, Y=38)` → both refused, levels 86.8 / 44.7.
    Plus one with `MT > 0`, so the cause split is exercised rather than assumed, and one on the
    **false** branch of §11.5.1's predicate, so both slot-3 strings are pinned verbatim rather than
-   one of them *(v1.12)*. **The fixture is the measured sample, so the ranks and levels are checkable
+   one of them *(v1.12)*. **Plus, from v1.20, one multi-call rendering** (`Y_calls > Y`), pinning
+   the `calls` noun on the second denominator line and slot 6's second sentence verbatim. All five
+   existing renderings change in two places and must be **re-pinned rather than re-derived**: slot
+   2's second line now ends `of 38 calls`, and slot 3's true branch has lost the *"tens to hundreds
+   of milliseconds"* clause (§11.7). A fixture table is invalidated by a wording change exactly as
+   it is by a unit change — §3.2c's trap, which this note has now paid for twice. **The fixture is the measured sample, so the ranks and levels are checkable
    by hand against it** — which is the property a hand-invented fixture does not have.
 9. **The unit guard.** Every printed figure in the block carries ` ms`, and no latency in the block
    is printed in seconds. The ms/s boundary sits one field away from `coldLoadSeconds`, and a figure
