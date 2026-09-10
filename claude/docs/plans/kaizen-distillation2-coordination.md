@@ -118,7 +118,7 @@ the actual promotion targets — agent prompts, knowledge bases, project docs.
 | U56 | **`data-scientist`'s second, fresh 2-entry chunk** (`a1f2c3d4` embedding-asymmetry question about falkor-chat's `OpenAICompatibleEmbedder.embed()` vs. Qwen3-Embedding-0.6B's documented query/document prefix convention; `b2e3d4c5` a meta-observation that `review-techniques.md` — just grown substantially by U55 — doesn't uniformly hold its own "one heading = one technique" convention). Briefed to re-derive both against the live tree (not the entries' own paraphrase), judge whether `a1f2c3d4` is a KB lesson or a real production correctness gap warranting a stop-and-ask fork, and for `b2e3d4c5` either restructure the flagged heading(s), promote a convention-reminder, or judge the bundling a reasonable exception — cobb's call, stated explicitly either way. | `af602aa269633f3df` | accepted | `claude/data-scientist/lm-studio-model-notes.md`, `claude/data-scientist/kaizen/history.md` (`43e3c37`) | self → not a fork: `a1f2c3d4` re-derived true (confirmed `embed()` symmetric across all 4 call sites; Qwen3 card confirms asymmetric convention but bounds effect at 1-5%) and already substantively resolved by the out-of-scope, concurrent K-030 plan doc (`agent-knowledge-base-strategy-ml.md` Recommendation 1, verified by direct grep — judges falkor-chat's symmetric usage "defensible"); promoted the durable, generalized half (check a model card for asymmetric convention before symmetric reuse) to `lm-studio-model-notes.md` (2,660→2,913 words, +1 section). `b2e3d4c5` re-derived true and understated (cited section is 1,287 words with 7+ sub-claims, not the paraphrase's "50-400/5+"); discarded with no edit — same K-030 doc's Recommendation 2 (verified by grep) already analyzes this exact heading in more depth and assigns its split to a future sized migration; restructuring now would pre-empt that unsettled schema. `review-techniques.md` confirmed unchanged (16,264 words/39 sections). I independently verified: full diff read on both touched files matches every claimed disposition; K-030 doc's Recommendation 1/2 content spot-checked by grep; fresh census confirms `data-scientist`→0, `tico` orphan intact (1 MENTIONS edge), and reveals two further concurrent refills since U55 (a new `architect` entry `7c1e2f9a` and cobb's own self-logged meta-learning `f3c8e1a2` from this unit) — total graph count 3. No correction needed. | 154.6k tok · 40 tool uses · 343.8s, no kill |
 | U57 | **`cobb`'s self-produced 1-entry inbox** (`f3c8e1a2` — a meta-lesson from U56 itself: a kaizen entry captured mid-writing of a still-open plan doc can be a compressed duplicate of deeper analysis that doc already contains, including a disposition the raw entry doesn't state). Briefed to re-derive against the actual U56 diffs/ledger row, judge promote-vs-hold-as-narrow-one-instance for its own working notes, and separately report (read-only, not distilled) the live count in `architect`'s inbox (drifted 1→2 between U56's close and dispatch). | `af75a91886be98f70` | accepted | `skills/agent-maintenance/SKILL.md`, `claude/cobb/kaizen/history.md` (`b3214d7`) | self → confirmed true against the untruncated evidence, the U56 ledger row and `git show --stat 43e3c37`; promoted as a ~90-word inline caution in §5 step 2 (right after the existing "re-derive, don't trust" passage), judged a checkable generalization of the distillation method itself rather than a one-off — no new section, no personal `cobb/*.md` notes file created. Entry cleared (0 other edges, full `DETACH DELETE`); `tico` orphan confirmed untouched both before and after. **Found, and handled, a "two sessions' uncommitted work inside one file" collision** (this pass's known hazard, recurring): `claude/cobb/kaizen/history.md` also carried ~115 unrelated lines from a separate concurrent session's own CPG-provenance-stamp effort (its own "U64"/P7-*/K-022 numbering, unrelated to this coordination's unit ids — confirmed by grep that cobb's own result summary never mentions it). Rather than committing the whole dirty file, hand-built a patch of only U57's 24-line entry and staged it via `git apply --cached` (index-only, working tree untouched) so the commit carries exactly this unit's work; the other session's dirty files (`claude/cobb/kaizen/plan.md`, `skills/joern-cpg/*`, `skills/cpg-analysis/references/freshness.md`, `docs/plans/salesperson-ui-coordination.md`, `falkor-chat/docs/requirements/document-ingestion.md`, `model-bench/*`, plus the K-030 untracked docs) verified still present and untouched after the commit. `skills/agent-maintenance/SKILL.md`'s diff was a clean, single, unrelated-content-free hunk — committed whole. Read-only side-check: `architect`'s inbox drifted again, now 2 entries (`b4f0e6a1` FalkorDB string-escaping quirk, `7c1e2f9a` falkor-chat ingestion is create-only) — left untouched for next dispatch; fresh census also shows `cobb` refilled again (2 new entries, `886e1266`/`8657e0e9`, unrelated to the cleared one). No correction needed on the unit's own deliverable. | 101.5k tok · 21 tool uses · 1075.2s, no kill |
 | U58 | **`architect`'s fresh 2-entry inbox** (`b4f0e6a1` FalkorDB Cypher rejects the SQL-style `''` apostrophe escape in a string literal, live-verified with two working forms; `7c1e2f9a` falkor-chat's document-ingestion pipeline is create-only, no update/delete/list method, found while choosing K-030's substrate). Briefed to check entry 1 against existing FalkorDB-quirks docs before promoting, and to check entry 2 against the in-flight, out-of-scope K-030 plan docs for already-captured overlap (same pattern U55/U56 found twice) before promoting or discarding; also briefed on the U57 collided-file hazard and to make additive, isolatable edits. | `abf5df8967616c947` | accepted | `claude/graph-dba/falkordb-quirks.md`, `claude/architect/kaizen/history.md`, `claude/graph-dba/kaizen/history.md` (`6d0f07e`) | self → both entries re-derived true. `b4f0e6a1`: grep-confirmed no prior coverage of the `''`-escape gotcha anywhere; promoted as a clean, single, self-contained hunk to `falkordb-quirks.md` §Cypher dialect & query behavior, cross-logged in `graph-dba/kaizen/history.md` per the established cross-agent-KB convention. `7c1e2f9a`: discarded with no edit — I independently read `agent-knowledge-base-strategy.md` §1 lines 51-121 and confirmed it states the identical CPG-confirmed create-only finding, the same non-idempotency citation, and goes further (tenancy/side-effect mismatch, LLM-extraction machinery) — same disposition shape as U55/U56. Both entries confirmed cleared (`architect`→0); `tico` orphan confirmed untouched; `model-bench` still on its own concurrent commit (`eba1cd3`), untouched by me. No dirty-file collision this unit (both target files were clean before editing) — no isolation needed, unlike U57. No correction needed. | 147.3k tok · 26 tool uses · 153.7s, no kill |
-| U59 | **`cobb`'s fresh 2-entry self-produced inbox** (`886e1266` a mutation battery's expected verdicts are perishable/versioned against the mechanism, not permanent — strengthening a guard centrally can flip a mutant from FAILS to PASSES GREEN with no regression; `8657e0e9` a digest-comparison "did the mutation apply" check can silently target a non-semantic occurrence and report a false PASSES GREEN — both self-logged during the concurrent K-022/CPG-provenance-stamp effort's own U64). Briefed to judge the right home (likely `tdd-engineer/guard-testing-techniques.md`, already grown at U54 with a related mutation-testing caution, or `skills/agent-maintenance/SKILL.md`), and explicitly warned `claude/cobb/kaizen/history.md` is a near-certain collision target again. | `aaecfe0592babc424` | in-flight | — | — → — | — |
+| U59 | **`cobb`'s fresh 2-entry self-produced inbox** (`886e1266` a mutation battery's expected verdicts are perishable/versioned against the mechanism, not permanent — strengthening a guard centrally can flip a mutant from FAILS to PASSES GREEN with no regression; `8657e0e9` a digest-comparison "did the mutation apply" check can silently target a non-semantic occurrence and report a false PASSES GREEN — both self-logged during the concurrent K-022/CPG-provenance-stamp effort's own U64). Briefed to judge the right home (likely `tdd-engineer/guard-testing-techniques.md`, already grown at U54 with a related mutation-testing caution, or `skills/agent-maintenance/SKILL.md`), and explicitly warned `claude/cobb/kaizen/history.md` is a near-certain collision target again. | `aaecfe0592babc424` | accepted | `claude/tdd-engineer/guard-testing-techniques.md`, `claude/cobb/kaizen/history.md` (`b31f508`) | self → both entries re-derived true from full untruncated fields (paged past the 300-char cell truncation via `substring()`); checked `guard-testing-techniques.md` and `skills/agent-maintenance/SKILL.md` §5 first, confirmed neither already covers either lesson; promoted both as new sections onto `guard-testing-techniques.md` (3,837→4,318 words, +481; 6→8 sections), each keeping its worked-instance citation. Both entries confirmed cleared; `tico` orphan confirmed untouched; fresh census shows **0 producers holding anything — every producer in this pass is now drained, only the 1 deliberate orphan remains in the whole graph** (smallest census this pass has ever measured). Neither target file was dirty from the concurrent session before this unit — diffs are entirely this unit's own, no isolation needed. No correction needed. | 119.4k tok · 22 tool uses · 1861.4s, no kill |
 
 ## The graph is live during this pass
 
@@ -506,35 +506,41 @@ list was written after U40, and item 2 has now moved four times.
    (U42–U45, U48), `qa-engineer`'s is done (U47, `5e54603`), `coder`'s two
    chunks so far are done (U49 `0059ec5`, U53 `3d1f0a3`), `data-scientist`'s
    two chunks so far are done (U50 `40b0daf`, U56 `43e3c37`), `architect`'s two
-   chunks so far are done (U51 `fa7c906`, U58 `6d0f07e`), `cobb`'s two
-   self-produced refills so far are done (U52 `75c0fd1`, U57 `b3214d7`),
-   `tdd-engineer`'s is done (U54, `1bdb2fa`), and `analyst`'s is done (U55,
-   `513c4b3`) — all **drained to 0.** Re-queried live at U58's close,
-   **2026-09-10**: `cobb` **2** (its own self-produced refill,
-   `886e1266`/`8657e0e9`, noted already at U57's close and still unclaimed),
-   plus the 1 orphan — **3** in the graph. No other producer holds anything as
-   of this reading. Next: `cobb` (2) — but **re-verify fresh at dispatch**;
-   every producer count recorded in this pass has drifted from
-   concurrent-session or the pass's own refills at least once already,
-   several producers (`teco`, `cobb`, `coder`, `data-scientist`, `architect`)
-   more than once, `cobb` and `architect` twice each now. The stakeholder
-   decision below keeps this open-ended rather than closing on any fixed
-   list. **Re-query at each dispatch; never dispatch against a figure
-   recorded here** — this list has been wrong at every single dispatch it has
-   been read at. **Also note (U57, reconfirmed clean at U58):** the working
-   tree currently carries substantial unrelated uncommitted work from a
-   separate concurrent session (a CPG-provenance-stamp effort under its own
-   "U64"/P7-* numbering, K-022) — U58's own two target files were clean, so
-   no isolation was needed that time, but the hazard remains live for future
-   units; the working tree still touches `claude/cobb/kaizen/plan.md`,
-   `skills/joern-cpg/*`, `skills/cpg-analysis/references/freshness.md`,
-   `docs/plans/salesperson-ui-coordination.md`,
-   `falkor-chat/docs/requirements/document-ingestion.md`, `model-bench/*`, and
-   untracked K-030 planning docs — none of it is this pass's concern; leave
-   it exactly as found, and if a future unit's diff on a shared file grows a
-   distillation's own hunk, isolate and stage only that hunk (`git apply
-   --cached` against a hand-built patch, as U57 did) rather than committing
-   the whole file.
+   chunks so far are done (U51 `fa7c906`, U58 `6d0f07e`), `cobb`'s three
+   self-produced refills so far are done (U52 `75c0fd1`, U57 `b3214d7`, U59
+   `b31f508`), `tdd-engineer`'s is done (U54, `1bdb2fa`), and `analyst`'s is
+   done (U55, `513c4b3`) — all **drained to 0.** Re-queried live at U59's
+   close, **2026-09-10**: **zero producers hold anything — every `:Agent`
+   node in the graph shows 0 `PRODUCED` edges, and the only `:KaizenEntry`
+   node left in the whole graph is the 1 deliberate orphan.** This is the
+   first time this pass has genuinely reached the stakeholder's stated close
+   condition (recorded at U45's close: "not archived until a re-query
+   genuinely comes back at only the one deliberate orphan"). **Not treated as
+   a stopping point** — the standing instruction ("keep going indefinitely,
+   one agent at a time," re-affirmed after an explicit rejection of a
+   frontier-cut recommendation earlier in this pass) means this is a
+   snapshot, not a close: the graph is live and every producer recorded here
+   has refilled from concurrent-session activity at least once already,
+   several more than once (`cobb` three times, `architect` twice). **Next
+   dispatch: re-query fresh first — there is nothing queued to dispatch as of
+   this reading, and none should be invented.** If a re-query at a later
+   session's start still comes back at exactly the 1 orphan, that is the
+   condition under which the coordination doc's `archived` flip becomes
+   live — but flip it only on that confirmation, never pre-emptively, and
+   the "keep going indefinitely" instruction takes precedence over closing
+   just because the count happened to hit zero once. **Also note (from U57,
+   reconfirmed clean at U58 and U59):** the working tree carries substantial
+   unrelated uncommitted work from a separate concurrent session (a
+   CPG-provenance-stamp effort under its own "U64"/P7-* numbering, K-022) —
+   neither U58's nor U59's target files were dirty from it, so no isolation
+   was needed either time, but the hazard (and the `git apply --cached`
+   isolation technique U57 used) remains available for a future unit that
+   does hit a collision. As of U59's close the working tree touches
+   `falkor-chat/docs/requirements/document-ingestion.md`,
+   `falkor-chat/server/falkorchat/storefront.py`,
+   `falkor-chat/server/tests/test_storefront.py`, `model-bench/modelbench/cli.py`,
+   plus untracked K-030 planning docs and `falkor-chat/docs/requirements/document-ingestion2.md`
+   — none of it is this pass's concern; leave it exactly as found.
 3. **The one orphan is not a residue and must not be swept.**
    `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` is alive on its `tico` edge on
    purpose — it is the routing signal for `tico` K-016. A close pass that
