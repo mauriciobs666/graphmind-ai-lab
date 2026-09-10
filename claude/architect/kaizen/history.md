@@ -2,6 +2,93 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-09-10 — Kaizen distillation, `architect`'s inbox (5 entries): 3 promoted (all generalized, 0 model-bench facts recorded), 1 discarded as already published, 1 discarded as superseded (U51)
+
+- **What:** U51 of `claude/docs/plans/kaizen-distillation2-coordination.md`. Re-queried at dispatch:
+  exactly the 5 entries the brief named, all dated 2026-09-10. Three read as general
+  grep-pin/plan-editing techniques; two as model-bench-specific facts, flagged for the same
+  collision risk U50 hit (a concurrent, unrelated model-bench coordination has commits and
+  uncommitted work in flight right now) — **no file under `model-bench/` or
+  `docs/plans/small-model-benchmarking*.md` was read for writing, staged, or committed.**
+
+- **`a4f1c2e8` (line-break-wrapped grep residual pin) — DISCARDED, already published.** The fact
+  ("a line-based grep cannot see a phrase a hard wrap has split") is, word for mechanism, the rule
+  `claude/analyst/review-techniques.md`'s section *"A 'this already exists' claim is a grep away
+  from confirmation"* already states — including a same-day (2026-09-10) Tombstone correction
+  sharpening it further (inline emphasis markers split a phrase the same way a wrap does). The
+  entry's addendum — verify the residual's before-count is non-zero rather than assumed — is
+  likewise already covered in substance by this file's own Guardrails ("a residual asserted over a
+  token the edit does not retire is satisfied by construction") and by `review-techniques.md`'s
+  item 4 in the grep-pinned-edit-table section. Re-derivation note: the entry's own worked citation
+  (`convo.py:79-80`, "home of the mapping") does not match current `model-bench/modelbench/convo.py`
+  at all — that file has moved past the state the citation was taken from — but this is
+  irrelevant to the disposition, since the entry states a general technique, not a fact about
+  `convo.py`'s current content.
+
+- **`7c1f0a3e` (wrong plan/note mapping cell: delete the plan's column, don't split the row) —
+  PROMOTED, new Guardrails bullet in `architect.md`.** Checked `review-techniques.md` and
+  `architect.md` for overlap first (grepped "denominator", "second home", "split its rows",
+  "single source of truth" — no hits). Genuinely new: distinct from the existing "Compress by
+  pointer" bullet's `-graph.md`/`-ml.md`-divergence case (a stale *premise*), this is a
+  review-gate-found *wrong cell* in a mapping duplicated across the plan and a note. Added as its
+  own short bullet rather than folded into `architect.md:51` (already flagged 1,617 chars / the
+  file's longest line across three prior units — U31, U40, U41 — as wanting a compaction pass, not
+  a further extension).
+
+- **`3f1c9e42` (self-referential grep pin over-counts by one) — PROMOTED, new item 8 in
+  `review-techniques.md`'s *"A grep-pinned edit table is an edit list, not a completeness proof"*
+  section.** Checked the existing six-item list plus "Two derived checks" for overlap (grepped
+  "self-referential", "matches its own", "inside the document", "pin table", "one high" — no
+  hits): none of items 1–7 cover a pin table living *inside* the very document it counts. Added as
+  item 8, directly before "Two derived checks" — same section, no new `##`.
+
+- **`a2f6b6b0` (plan Appendix A describes a shape shipped S1 code doesn't implement — `latencyMs`)
+  and `a1e6f2b0` (`ToolDispatchFailed` pins a deliberately-open design decision) — both
+  RE-DERIVED TRUE at the last **committed** sha, both PROMOTED as generalized rules only; no
+  model-bench-specific fact recorded anywhere.** Re-derivation was pinned to the last commit
+  (`41d82e9`), not the dirty working tree, per U27's precedent that `model-bench/` is another
+  session's live area — and this mattered: the working tree right now carries a large **uncommitted**
+  diff (another session's in-flight work) that already converts `latencyMs` to a derived
+  `@property` over a new `ItemTiming` and decides the exact `ToolDispatchFailed` question this
+  entry calls "deliberately open." At committed HEAD, neither fix has landed: `results.py:164`
+  still declares `latencyMs: float | None` as a plain dataclass field (no `ItemTiming` class exists
+  in that file at all), and `convo.py`'s `ToolDispatchFailed` docstring still reads *"What is
+  deliberately not decided here is whether such a call should abort the conversation at all …
+  left open on purpose"* — matching both entries exactly, unlike U50's two casualties. So this is
+  **not** the U50 pattern (fixed-in-tree, discard) — both hold, right now, at the pinned baseline.
+  But the *specific* facts have an unusually short half-life: the concurrent session is mid-fix on
+  both, uncommitted, and either could land before this sentence is read. Recording either as a
+  durable project-docs fact would very likely ship something false within hours, and I have no safe
+  place to put it anyway (`model-bench/` is off-limits this unit). What survives the transience is
+  the **generalized technique** each entry is really an instance of — neither previously stated
+  anywhere in `architect.md` or `review-techniques.md` (grepped "deliberately open", "design
+  decision", "provisional", "owed to" — no hits) — so both are promoted as new Guardrails bullets
+  in `architect.md`, stated as rules with no current-state claim about `model-bench` attached:
+  (1) a prior plan's own Appendix/skeleton description of shipped code is a claim, not a fact —
+  diff the actual module source before specifying downstream work on a claimed shape; (2) when a
+  plan defers a design decision, specify pinning the deferral in the implementation itself (name
+  the mechanism up front, state decided-vs-open in its own docstring, add one self-flagging
+  "this is the test that changes" test) rather than leaving it as prose an implementer can resolve
+  silently.
+
+- **Graph ops (in order, per entry — write history, confirm, then clear; never batched):** all
+  five re-queried individually immediately before clearing
+  (`MATCH (k:KaizenEntry {entryId:'<id>'}) OPTIONAL MATCH (:Agent)-[p:PRODUCED]->(k) OPTIONAL MATCH
+  (k)-[m:MENTIONS]->(:Agent) RETURN count(DISTINCT p), count(DISTINCT m)`), each returning
+  `producedEdges=1, mentionEdges=0` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE` for all
+  five. No `MENTIONS` tag added to any: none of the five is substantively about a different agent.
+- **Budget:** `architect.md` **1,896 → 2,172 w** (+276, three new Guardrails bullets), longest line
+  unchanged at 1,617 chars (`:51`, still the pre-existing compaction candidate, not touched here).
+  `claude/analyst/review-techniques.md` **14,129 → 14,285 w** (+156), sections unchanged at **33**
+  (item 8 is inside the existing grep-pinned-edit-table section, no new `##`), 0 lines newly over
+  700 chars.
+- **Docs touched:** `claude/architect/{architect.md,kaizen/history.md}`,
+  `claude/analyst/review-techniques.md`.
+- **Why:** unit U51 of `claude/docs/plans/kaizen-distillation2-coordination.md`. `architect`'s
+  produced inbox is now 0.
+- **Plan items:** none opened — every entry landed inside `cobb`'s write remit or was discarded;
+  nothing kept open.
+
 ## 2026-09-09 — Kaizen distillation, `architect` chunk 2 of 2 (the eight entries dated 2026-09-08/09-09): 6 promoted (2 halves), 2 discarded — **`architect`'s inbox closed at 0/0** (U41)
 
 - **What:** U41 of `claude/docs/plans/kaizen-distillation2-coordination.md`, the closing chunk, run with one `cobb`-produced entry (`2746ee65…`) folded in deliberately because three of the nine land on the **same paragraph** of `skills/agent-standards/claude-code.md` and splitting them across two units a day apart is the concurrent-edit hazard this coordination keeps logging. **Zero new sections in any file** — every promotion is a fold into existing material, except the two new bullets inside `claude-code.md`'s existing `## Bash tool environment` section.

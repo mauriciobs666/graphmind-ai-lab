@@ -860,6 +860,16 @@ chain (`docs/plans/small-model-benchmarking.md`, Passes 5–9):
    under exactly this half-application, sibling Table G (call site) stayed detectable under the
    same class. **Only the fused case needs a behavioural test standing in the grep's place**; do not
    pay for one where the literal sits at a call site.
+8. **A pin table living *inside* the document it counts inflates its own residual by exactly the
+   table's own occurrences of the token.** A grep run against the whole file matches both the real
+   sites and the pin/residual table describing them, so an unscoped `grep -cF <token>` over a
+   self-referential document reads one (or more) high for every row that quotes the token. Anchor
+   the scan to the content being verified, not to the whole file — an `awk` range keyed on a stable
+   section boundary (`awk "/^## <heading>/{exit} {print}" file | grep -cF <token>`), or a
+   path/line-range restriction that excludes the pin table by construction — so the count survives
+   line drift instead of being re-derived by hand at every revision. Measured on a nine-pin sweep:
+   unscoped, `grep -cF "cross-arm"` returned 3 (2 real sites + the pin command's own line in the
+   table); anchored to the section under revision, 2 — the intended count.
 
 **Two derived checks.** A residual command must be re-asked against *every* implementation the same
 table authorises — an authorised literal branch can re-add the very string the residual asserts to
