@@ -4,7 +4,10 @@
 
 ## Pass 1 — 2026-09-02
 
-*(Current verdict is **`## Pass 8 (narrow)`**'s, at the end of this document: **needs changes** on
+*(Current verdict is **`## Pass 13`**'s, at the end of this document: **needs changes** on plan
+**v1.25** (`5cbdf9e`) — 2 blockers, 4 majors, 4 minors, plus an explicit judgement on the four
+load-bearing claims the v1.25 amendment rests on. Passes 9–13 each gate a later version's delta;
+`## Pass 8 (narrow)` was **needs changes** on
 plan v1.14 / note v1.17 — 1 blocker, 2 majors, and an explicit answer on whether the plan is ready
 for implementation. Pass 8 is a **narrow** re-check of v1.14's delta, not a full gate; Pass 7 gated
 plan v1.13, Pass 6 plan v1.11, Pass 5 plan v1.10, Pass 4 plan v1.9, Pass 3 plan v1.8, all
@@ -3568,3 +3571,281 @@ home exists yet and none of this is retrospective. `grep -rn 'separation' modelb
 gloss-name and tenth-row-name uniqueness checks, residual 5's `report.py` scope, and the `bound_by`
 14 → 15 / `envelope_arms` 21 → 22 movement under `e162ba9`. All supplied by the coordinator, taken as
 given, and used only where the argument does not turn on my having taken them.
+
+---
+
+## Pass 13 — 2026-09-09
+
+### Scope & verdict
+
+**Reviewed:** the plan amendment **v1.24 → v1.25**, `git diff 40a9bc8 5cbdf9e -- docs/plans/small-model-benchmarking.md`
+(+369/−54 across the two shas, read in full), plus every section it lands in read whole — §2.5's
+probe-record bullet, §3.3's `prompt` and `sampling` bullets, §3.4.4a's capture order and its last
+bullet, §3.4.5 point 3, §3.8.4 entire, §4 S2's replay contract and adapter done-conditions, §4 S5's
+funnel bullet, §5 tests 10/10b/12/19, §6 R-1/R-3 and Appendix A's four amended rows. Cross-read
+against the co-equal method note `docs/plans/small-model-benchmarking-ml.md` (§4.1, §4.2, §4.5.1,
+§4.5.2, §4.5.3, §11.5.1) and the cited prior art
+`falkor-chat/docs/reviews/salesperson-tool-reliability-ml.md` (§4.1, §4.3, §8.1, §8.2, §8.4) and
+`falkor-chat/docs/reviews/salesperson-tool-reliability-impl.md` MAJOR 1. Shipped code read at the
+pinned `40a9bc8`: `modelbench/convo.py`, `modelbench/lmstudio.py`, `modelbench/roles.py`,
+`modelbench/hostinfo.py`, the twelve fixture `pack.json`s and `tests/fixtures/lmstudio/catalog.json`.
+Third-party ground truth read live at `falkor-chat/server/falkorchat/executor.py` and
+`proof_defs.py`. Findings carry the prefix **`P13-*`** on this document's own plan-gate series (the
+impl gate numbers its own).
+
+**Not in scope, by the commissioner's instruction:** the revision note's length and narrative form.
+**Not re-run:** the impl gate's Passes 12–14 findings; I read them for premises only.
+
+**Verdict: needs changes.** **2 blockers**, 4 majors, 4 minors. Every one is closeable in this
+document today — none is blocked on unbuilt work and none may be deferred by choice. The one item
+correctly classified *blocked on unavailable work* is the amendment's own: item 2's verbatim catalog
+capture, which rides R-1's live session. **P13-2 needs a `data-scientist` ruling before a rework
+unit builds, not after**, which is a routing, not a residual.
+
+**CPG:** considered, not relevant — no Code Property Graph is loaded for `model-bench`. I re-checked
+rather than inherited the claim: a query against `cpg_model_bench` answers with the loaded-graph list,
+which holds only `cpg_falkorchat` and `cpg_deprecated_salesperson` among CPGs. Every finding below was
+established by reading the pinned trees and by `grep`.
+
+### The four commissioned claims, judged
+
+| # | Claim | Verdict |
+|---|---|---|
+| 1 | "The 2026-09-02 sizing decision is untouched" | **Holds — but the argument offered for it does not, and the cost figures do move.** See P13-7. **No escalation**: the decision's binding axis is scripts, not seconds. |
+| 2 | "No existing `historyReplay` value reaches falkor-chat's executor shape", and this made §3.3's own claim false | **Both halves true, verified in the executor's source.** But the new value is an *approximation* of that shape presented as identity — P13-3. |
+| 3 | Item 1's narrow argument, and whether it carries the ruling | **Narrow claim correct; it carries. The ruling is over-determined** — its third reason is decisive on its own and I verified it in shipped code. One supporting sentence is contradicted by its own prior art — P13-4. |
+| 4 | `TurnTrace.finalReplyText: str \| None`, `None` **iff** `capHit` | **False in the ← direction, and the error is the laundering shape the plan exists to stop** — P13-1. |
+
+### Findings
+
+#### P13-1 (blocker) — `finalReplyText is None` **iff** `capHit` is false: a turn whose call fails or times out also has no final reply, and §4 S5's new rule reads it as *absent* when §3.6 requires *fail*
+
+*Evidence.* §3.6's third and fourth dispositions both rule that a call which times out or returns no
+response is **scored per the pack's rule, outcome `fail`, never `n_a`, and the run continues**;
+`-ml` §4.1 rules the sibling case (`LM Studio 400 / crash, as gpt-oss-20b produced`) an explicit
+**`unrunnable`** count, *"never as a failure, never silently dropped"*. Both are reachable here and
+both are observed prior art — `salesperson-tool-reliability-ml.md` §8.4 lost 6 of 8 gpt-oss-20b
+conversations to `HTTP 400`. `lmstudio.chat` raises `LMStudioCallTimeout` / `LMStudioCallFailed` on
+exactly these (`lmstudio.py:528,534` at `40a9bc8`). A turn that ends that way has `capHit == False`
+and no final reply, so `finalReplyText` must be `None` — and §4 S5's amended bullet then gives it
+§4.2(f)'s `iteration_cap_hit_rate` and the `unscoreable` bucket, *"absent, not failed"*. That is
+`fail` laundered into `n_a` through a two-way reach claim, in the same paragraph that names
+laundering as the thing the funnel exists to stop. The amendment also leaves `drive`'s behaviour on
+a raised `LMStudioError` unstated, while `-ml` §4.1's hard rule forbids abandoning the script.
+
+*Fix.* Do not widen the `iff` — **split the field from the disposition**. Give `TurnTrace` an
+explicit `turnDisposition: Literal["replied", "cap-hit", "no-response", "unrunnable"]`, make
+`finalReplyText is None` **iff** `turnDisposition != "replied"`, and key §4 S5's *absent-not-failed*
+rule on `turnDisposition == "cap-hit"` alone, with `"no-response"`/`"unrunnable"` routed to §3.6's
+and `-ml` §4.1's own dispositions. State in §3.8.4 that `drive` catches `LMStudioError`, records the
+disposition and **continues the script**. Separately, pin the extraction so a *replied* turn cannot
+manufacture a `None`: the final reply is `str(message.get("content") or "")` — a terminating
+response with `content: null` or `""` (a `max_tokens` truncation, a refusal with empty content) is
+*captured and empty*, exactly as the amendment already rules for cap-hit under replay. **Put the
+guard in a round before the rework unit, not inside it**: one test that drives `drive` with a stub
+LLM raising `LMStudioCallFailed` at turn 3 of a 5-turn script and asserts 5 `TurnTrace`s with the
+third dispositioned `no-response`, plus a **coverage probe** asserting the set of dispositions the
+scorer branches on equals the `Literal`'s own members — a list of shapes here is defeated by shape
+N+1, which is how this one arrived.
+
+#### P13-2 (blocker) — the loop changes a scored `tool-caller` item from one call to *N*, and `unexplainedMs` was not swept; `-ml` §11.5.1's gap is a **per-call** identity and becomes a guaranteed false positive
+
+*Evidence.* `-ml` §11.5.1 defines the in-call reload detector as `latencyMs − (ttftMs +
+generationMs)` over **one call** — the measurement behind it is *"3 485.6 ms on the cold call against
+−11.3 … +7.6 ms across 50 warm calls"* — and §3.6's FR-11 table carries it *"per scored item"*, with
+`ItemTiming` (§4 S1, Appendix A) holding one `ttftMs` and one `generationMs`. For the `tool-caller`,
+`pairingKey` is `["scriptId", "replicate", "turnIndex"]`, so a scored item **is a turn**, and v1.25
+makes `TurnTrace.wallClockMs` *"cover the whole turn"* over `chatResults` (**all** iterations). The
+gap then equals the non-final iterations' entire duration plus dispatch. On §4.5.2's own ~1.3 s/turn
+basis a 3-iteration turn clears the **1 000 ms** threshold outright, and every such turn is withheld
+and printed under `-ml` §11.7 slot 2's **model-load** cause. §11.5.1 states the cost in its own
+words: three false positives at `Y = 38` take the run below §11.6's floor and a clean run prints no
+latency summary at all. The amendment names no `ItemTiming` consequence anywhere.
+
+*Fix.* Rule, in §3.6, which call a multi-call item's `ItemTiming` is taken over — the defensible
+options are (a) the **final** iteration only, with `latencyMs` redefined for that role as that call's
+wall clock and the turn's total carried separately, or (b) the gap computed **per `ChatResult`** and
+the item withheld if any iteration's gap clears the threshold. Both change what §11.5.1's detector
+is applied to, so **route the choice to `data-scientist` before a rework unit builds** — the note is
+co-equal and the plan may not contradict it. Whichever lands, §5 test 15b needs a case at
+`iterations >= 3` asserting the run does *not* report model-load contamination on a warm multi-call
+turn; without it the defect is invisible, because every existing timing fixture is single-call.
+
+#### P13-3 (major) — `structured-replies-only` is *not* falkor-chat's executor shape; it is an approximation of it, and §3.8.4 and R-3 state it as identity
+
+*Evidence.* I read the executor rather than the review's summary of it.
+`WorkflowExecutor._assemble_messages` (`falkor-chat/server/falkorchat/executor.py:1243-1277`) does
+three things the amendment's `structured-replies-only` does not: every replayed turn's content is
+**speaker-prefixed**, `f"{speaker}: {m.get('text','')}"`; a **`CONTEXT:\n<json>` `user` message**
+carrying the run's serialized `run_ctx` is appended on every assembly and coalesced into a trailing
+`user` turn; and every append routes through `_append_turn`, which **merges consecutive same-role
+turns** (K-048). So R-3's new sentence — the pack *"now starts at falkor-chat's executor shape rather
+than reaching for it"* — over-claims, and §3.8.4's *"that is falkor-chat's executor shape"* is an
+identity claim over a mechanism that implements three-quarters of it. The claims that *do* verify:
+native roles, final reply text only, no tool scaffolding, and `historyTurns: 0` being equivalent to
+the executor's `THREAD_CONTEXT_WINDOW = 20` on this pack (the 9-turn script is 18 messages).
+
+*Fix.* State the correspondence as what it is, in §3.8.4's validation-target bullet: the pack
+reproduces the executor's *replay policy* — native roles, final text only, no tool evidence — and
+**deliberately does not reproduce** the speaker-name prefix or the per-turn `CONTEXT` block, with one
+clause each on why that is judged immaterial to §4.1's mechanism. Then add both to R-3's list of
+candidate causes if the contrast fails to appear at S6 step 5, so a non-reproduction is not
+attributed to the scripts by elimination when two named prompt-shape differences are standing.
+
+#### P13-4 (major) — §3.8.4's *"onset … absent under `structured`, whose textbook tool evidence is the U37/U38/U39 breadcrumb condition"* is contradicted by the prior art it cites, and R-3 repeats it
+
+*Evidence.* Two independent errors in one clause. **(a)** `structured` replays native `tool_calls`
+plus one `tool` message per call; the U37/U38/U39 breadcrumb was a free-text suffix
+(`"… [verified via <tool>]"`) folded into a replayed *assistant* message — a different stimulus, and
+the executor's own docstring says so (`executor.py:1259-1266`). **(b)** More seriously, the breadcrumb
+condition is **not** one under which onset was absent: `salesperson-tool-reliability-impl.md` MAJOR 1
+records it live-verified 2/2 that *"the breadcrumb does not reduce fabrication"* and that the model
+imitated its surface text while calling no tool — *"a severity increase on the defect it was meant to
+mitigate"*. The plan cites it as evidence for the opposite direction. R-3 carries the same equation
+(*"whose full tool scaffolding is the U37/U38/U39 breadcrumb mitigation … a condition under which the
+contrast had already been observed not to be the baseline"*), and R-3's job is to say what the bisect
+can conclude — so a reader who runs the ladder will read a null result at `structured` as expected
+when the only live evidence says added tool evidence changed nothing.
+
+*Fix.* Delete the breadcrumb equation from both places. Neither argument needs it: the ruling stands
+on the decoupling argument alone (and on P13-5's third reason), and the pack's default value is
+justified by the executor's shape plus the fact that §8.2's numbers were produced under it — both of
+which the plan already says. Replace with one honest sentence: the effect of adding tool evidence is
+**unknown at this replay shape**, the one adjacent probe (the text breadcrumb) found no reduction,
+and that is what makes `structured` worth a bisect rung rather than a prediction.
+
+#### P13-5 (major) — the emission form *"is read from iteration 1"* contradicts `-ml` §4.2(a)+(b), and §5 test 10b would pin the divergence
+
+*Evidence.* `-ml` §4.1 defines `E(t)` as *"the calls actually dispatched, from the harness's own
+dispatch trace (FR-10)"*, over the whole turn; §4.2's three-way partition is `native` **iff**
+`|E(t)| ≥ 1`. §3.8.4's new loop bullet instead reads the form from **iteration 1**. Given the loop's
+stopping rule the two usually coincide — but not when iteration 1 emits `tool_calls` that are all
+**undispatchable**. That case is not hypothetical: the amendment's own replay contract provides for
+it (*"for one that could not be dispatched (no name, or the dispatch raised)"*), and `drive` at
+`40a9bc8` skips a nameless call (`if not name: continue`), so it never reaches `env.trace()`. Then
+`|E(t)| = 0` — `no_attempt` or `prose_pseudo_call` per the note — while the plan says `native`. §5
+test 10b makes it worse by asserting the form *"is read from `chatResults[0]` and is unchanged by
+what later iterations return"*, which pins the divergence as a green test.
+
+*Fix.* Define the emission form by `-ml` §4.2's own predicate over the turn's dispatch trace, and
+delete "read from iteration 1". If the intent is to keep intent-at-iteration-1 as a *diagnostic*,
+carry it as a separate named field, never as the partition. Rewrite test 10b's clause to assert a
+turn whose only `tool_calls` were undispatchable partitions as `no_attempt`, not `native`.
+
+#### P13-6 (major) — `maxIterationsPerTurn` is "required, no default" with no statement of which roles must declare it, and it sits inside the content hash
+
+*Evidence.* §3.3 makes it *"pack data with no default"* and Appendix A repeats *"required with no
+default"*, but the plan carries **exactly one** manifest example (§3.3's `tool-caller`), and the four
+item-level roles are single-call by construction. An implementer in an isolated context has two
+readings with opposite costs: *required on every pack with a `prompt` block* puts a dead knob inside
+four packs' content hashes, where changing it later re-identifies the pack under AC-3; *required only
+for `tool-caller`* makes the `PromptConfig` field optional, which contradicts the stated rule and
+re-opens the "nothing that shapes a decision carries a default" discipline. Neither is derivable.
+The amendment's "what follows" list also omits the mechanical consequences it creates: the `valid`
+fixture pack (`tests/fixtures/packs/valid/pack.json` at `40a9bc8`) declares `historyReplay:
+"structured"` and no `maxIterationsPerTurn`, and it is the only fixture with a `prompt` block.
+
+*Fix.* One sentence in §3.3: `maxIterationsPerTurn` is required **iff** the pack's role is
+`tool-caller`, `validate_pack` refuses a `tool-caller` manifest without it and refuses any other role
+*with* it (the second half is what stops a dead knob accreting) — or the opposite rule, stated. Hold
+it the way the component's own convention now requires: a role-keyed constant with a computed
+`set(...) == set(roles.ROLES)` assertion and the refusal driven through `validate_pack` per role, not
+a prose sentence. Add the fixture and manifest updates to the rework unit's file list explicitly.
+
+#### P13-7 (minor) — claim 1's conclusion holds, but its one-clause justification does not, and §4.5.2's minutes are now a floor rather than an estimate
+
+*Evidence.* *"§4.5.2's ~1.3 s/turn basis was measured on falkor-chat's own multi-step executor and
+already includes the loop"* is literally true — `-ml` §4.5.2 sources it from *"the prior run's
+measured"* figure, `salesperson-tool-reliability-ml.md` §8.1 measures it on `_build_live_stack`
+against the real `salesperson@v2`, and that node declares `"maxIterations": 8`
+(`falkor-chat/server/falkorchat/proof_defs.py:415`) — which also **verifies** the amendment's separate
+claim that `8` is falkor-chat's own budget, the one §8.4's `gpt-oss-20b` exhausted. What it does not
+support is *"no sizing consequence"*: the 20 turns behind the figure were a model that collapses at
+turn 4 in 39/40 conversations, so roughly half of them were single-iteration text turns (inferred
+from §8.2's turn-position table, not read from the smoke test's own trace). A model that calls tools
+on every turn runs ~2 calls/turn; one that hits the cap runs 8. **This does not reopen the
+stakeholder decision, and I do not escalate it:** §4.5.3 denominates its reversal trigger in
+*scripts* and states in its own words that *"the binding constraint is FR-19 human verification of
+scripts, not compute; the compute is already paid for"*, and even an 8× blow-up takes the paired run
+from ~3.5 to ~28 minutes.
+*Fix.* Narrow the plan's clause to what is true — the basis was measured with the loop running, so
+the loop is not a *new* cost, but the derived minutes are a floor whose multiplier is bounded by
+`maxIterationsPerTurn` — and route to `data-scientist` the one-line restatement §4.5.2 needs, since
+the figure is the note's.
+
+#### P13-8 (minor) — §3.3 calls the four values *"a ladder in tool evidence"*; two of them carry identical tool evidence
+
+*Evidence.* `structured-replies-only` and `plaintext` are both defined in the same table as carrying
+**no** tool evidence; they differ on whether the history is presented as the model's own turns or
+quoted inside someone else's message. R-3's own prose gets this right (*"at `structured` (add tool
+evidence) and at `plaintext` (same evidence, quoted rather than owned)"*), so the section contradicts
+itself one screen apart.
+*Fix.* Say the enum now spans **both** axes the executor differs on — role ownership and tool
+evidence — rather than "a ladder", and keep R-3's two-axis wording as the canonical description.
+This matters because the bisect's inference rule depends on which axis moved.
+
+#### P13-9 (minor) — `structured`'s rendering of a cap-hit prior turn is unspecified
+
+*Evidence.* §4 S2's replay contract rules the cap-hit case for *"both reply-text modes"* only. Under
+`structured` the amendment's per-turn recipe ends *"then the turn's final assistant reply"* — which,
+for a cap-hit turn, does not exist. The resulting prefix ends on a `tool` message immediately before
+the next `user` turn.
+*Fix.* One clause: under `structured` a cap-hit prior turn contributes its iterations and **no**
+trailing assistant message, and the turn is still never omitted (the same reason the reply-text modes
+give — history length is the covariate). Add it to §5 test 10's assertion list.
+
+#### P13-10 (minor) — two amendments describe, in the present tense, states of the tree that do not exist at `40a9bc8`
+
+*Evidence.* (a) Item 2's *"**Now, offline:** the shipped fixture holds only entries this repo's
+documentation records a field for, each carrying a per-entry `_provenance` citation"* —
+`tests/fixtures/lmstudio/catalog.json` at `40a9bc8` holds 7 entries and **zero** `_provenance` keys
+(checked by parsing it). The un-padded half is already true; the provenance half is work. (b) Item 3's
+parenthetical says P12-7's fixture *"shipped as the suite's positive control"* and *"the defect it
+describes shipped"* — true as history, but `model-bench/docs/HISTORY.md` (U76, before `40a9bc8`)
+records the fixture already re-keyed to `["scriptId","turnIndex"]` / `"scriptId"` with a pinning test,
+which the current `pack.json` confirms.
+*Fix.* Put both in the imperative — *"the fixture is re-authored to carry a per-entry `_provenance`"*
+— and add one clause to item 3: the fixture itself was corrected at U76; what route (iii) adds is the
+**rule**, so a rework unit does not re-fix the fixture and conclude the finding is closed.
+
+### What's solid
+
+- **Item 1's ruling is right and is over-determined.** Its third reason is decisive on its own and I
+  verified it in shipped code: `convo.assemble` at `40a9bc8` builds prior turns from `Turn.expect`
+  (`_expected_exchange`, `_flatten_turn`) while `drive` dispatches the model's *real* calls into a
+  stateful `ToolEnvironment` — so a textbook context and FR-10's ground truth diverge from the first
+  failed mutating turn. Reasons 2 and 4 also check out against `-ml` §4.2's hazard definition and
+  §4.5.1(iii)'s probe object. The narrow framing (persistence unreproducible *as a finding*; onset a
+  function of the declared mode) is the correct claim and is enough to disqualify §5 test 19(b).
+- **Claim 2, both halves, verified in the executor's source** rather than in the review that
+  summarises it. `_assemble_messages` uses native `user`/`assistant` roles and replays final text
+  only; `structured` shows full tool evidence and `plaintext` quotes history inside a `user` message,
+  so none of the three original values reached it and §3.3's own reproducing-the-executor claim was
+  false as written. Subject to P13-3's precision.
+- **Route (iii) is the amendment's best work.** It is keyed by the closed role set, it lands in
+  `roles.py` beside `UNIT_KIND_BY_ROLE` (which it matches verbatim), it keeps the two vocabularies
+  apart with a reason, and it is held by exactly the two things the component's new convention
+  requires — a computed `set(...) == set(roles.ROLES)` and a negative case **driven through
+  `check_sampling_contract` over every role**, never read back off the constant.
+- **Item 4's outcome/result column split is coherent and its premise verified.** `hostinfo.py` at
+  `40a9bc8` does return `"unavailable"` with `stale=False` without comparing anything, and §3.4.4a
+  step 3 does observe `residencySource` before the warm-up on every non-deterministic arm, so the
+  comparand genuinely exists on both sides of all three paths. The *"exit 5 and `host.json` is not
+  written"* clause on the first-observation path is the right call.
+- **Item 5 is exact.** The amended `warm_up` sketch matches the shipped signature at `40a9bc8`
+  parameter for parameter.
+- **The `8` is not a guess.** Verified against `proof_defs.py:415` and §8.4's message-spam record.
+- **The plan's own sweep for item 2 is complete** — the only surviving *"§2.5's captured 19-model
+  response"* strings outside the plan are in the coordination doc's historical unit row and in the
+  impl review's finding text, neither of which is the architect's to move.
+
+### Open questions
+
+1. **P13-2's unit choice is `data-scientist`'s, not mine and not the architect's.** Applying
+   §11.5.1's per-call detector to a multi-call item is a method question; I have named the two
+   defensible options and the cost of each, but the note is co-equal and the plan may not pick
+   unilaterally.
+2. **P13-7 is offered as a documentation narrowing, not an escalation.** If the stakeholder treats
+   *wall clock per paired run* as a decision variable in its own right — rather than the script
+   budget §4.5.3 makes binding — then the ~2–8× range is theirs to see, and this reviewer's call
+   should be overridden rather than argued with.
