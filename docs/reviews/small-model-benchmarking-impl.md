@@ -4285,3 +4285,268 @@ _parse('[1,2]')    : {}     _parse('5') : {}     _parse('{}') : {}   <- all four
 `validate_pack(load_pack(root))` returns **`[]`**; `assemble` raises
 `unknown historyReplay 'verbose'` only when called. Probe E: `historyTurns=-1` replays the full
 unbounded prefix, identical to `historyTurns=0`.
+
+---
+
+## Pass 16 — 2026-09-09
+
+### 1. Scope & verdict
+
+**Reviewed:** (A) my own Pass 14 audit, re-run against Pass 15's corrected convention; (B) a
+stopping condition, pre-stated below before I ran anything; (C) commit `ce811a8` (U82), the pins
+for P14-1..P14-5 and the P14-6 decision — test-only, no production file changed. Snapshot
+`git archive ce811a8`, snapshot first on `PYTHONPATH`, `modelbench.__file__` asserted from inside
+each probe (the correction Pass 14 §1 owed). At the snapshot: **893 passed, 3 deselected**, ruff
+clean.
+
+**CPG: considered, not relevant — no Code Property Graph is loaded for `model-bench`; every
+judgement below is a mutation actually run, 27 of them, or a test docstring read line by line.**
+
+**Verdict: needs changes** — and, as at Pass 14, **one required change that is not a code fix.**
+**U82 itself is `approve`**: nine new tests, every one correctly formed, **zero** form (iii)
+wearing a form (i)/(ii) docstring, and the P14-6 call is right. But the re-audit fires the
+stopping condition below at **7**, and the answer is a further correction to the convention line.
+
+### 2. Task B — the stopping condition, pre-stated before the audit ran
+
+Pass 14's instrument had a defect Pass 15 did not name: **it ran shrink only.** A pure form (iii)
+tautology does go green on shrink, so that instrument *did* catch tautologies. What it cannot see
+is a constant that reddens on shrink for an **incidental** reason — a fixture happens to use the
+removed member — while nothing at all refuses a spuriously **added** one. That is "declared reach
+exceeds implemented reach" turned on the audit itself.
+
+So, written down before running: re-run the cleared set with the omitted direction, **widen by one
+spurious member**. `W` = cleared constants green on widen; `F` = cleared constants whose pinning
+test reads as form (iii). Thresholds fixed in advance, following Pass 13's precedent that ≤4 is
+individual and ≥5 is systemic:
+
+- **W + F ≤ 4** → the corrected line is right; re-pin in one sweep. Ordinary findings.
+- **W + F ≥ 5** → **the line is still wrong**; the response is a line change, **not** W+F pins.
+- **Independently, ≥ 3 constants undecidable between (i)/(ii)/(iii)** → the line fails for a
+  second reason (its user cannot apply it) and the same response follows.
+
+### 3. Task A — the re-audit, and the answer to the question asked
+
+**The number is 7, and the reason is not the one anticipated.** The coordinator asked how many of
+the ~20 cleared constants were cleared because I read a **tautology** as a binding assertion. The
+answer to *that* question is **zero** — and it has to be, structurally: a pure form (iii) pin goes
+green under shrink, so Pass 14's shrink test would have filed it as a gap, which is exactly what
+happened to all five it found. The instrument was not vulnerable to the defect Pass 15 named.
+
+It was vulnerable to a different one, and worse. **Nine of the fourteen constants I recorded as
+"held" are named by no test at all** (`grep -l` over `tests/`: `_ROW_COUNT_IDENTITY_KEY_HINTS`,
+`_MODEL_CHAT_SCHEMA_1`, `RESIDENCY_ELEMENT_KEYS`, `_RESIDENCY_FIELDS`, `_DISCRIMINATORS`,
+`_METRIC_DECODERS`, `INDEX_COLUMNS`, `_BASIS_STRENGTH`, `_NO_VERDICT_REASON`). They reddened on
+shrink because some other suite's fixture happened to use the member I deleted. **Incidental
+coverage, read as a pin.** Under the widen direction, **7 of the 20 go green** (Appendix P.1):
+
+| Constant | Widen result | Is the widen itself consequential? |
+|---|---|---|
+| `packs._ROW_COUNT_IDENTITY_KEY_HINTS` | 893 passed | no — an unread message; but it is a second declaration of `ROW_COUNT_IDENTITY_KEYS` with nothing binding it |
+| `fingerprint._RESIDENCY_FIELDS` | 893 passed | no — inert; the dangerous direction (a new residency field not added here) is the shrink, which is held |
+| `fingerprint._DISCRIMINATORS` | 893 passed | no — inert, same asymmetry |
+| `results.INDEX_COLUMNS` | 893 passed | **yes** — the CSV gains a column and nothing notices; the header contract is pinned only against `INDEX_COLUMNS` itself |
+| `report._BASIS_STRENGTH` | 893 passed | **yes, via its pair** — see P16-1 |
+| `results._METRIC_DECODERS` | 893 passed | **yes, via its pair** — a new metric kind without a decoder is a `KeyError` read as `unparseable` |
+| `report._NO_VERDICT_REASON` | 893 passed | no — inert; the dangerous direction is a new cause with no reason |
+| *(`packs._STDLIB_MODULE_NAMES`)* | 893 passed | **the convention has no applicable form** — see §6 |
+
+**W = 7, F = 0, undecidable = 0. The first branch fires; the third does not.**
+
+### 4. The ruling — and where my own pre-stated remedy was wrong
+
+I follow the branch: at 7, the answer is a line change, not seven pins. But the branch's *stated
+remedy* — "replace the form clause with the operational one, because the taxonomy is undecidable" —
+**is falsified by this pass's own evidence.** The taxonomy is perfectly decidable: I classified all
+nine of U82's tests into (i)/(ii)/(iii) without hesitation (§5), and U82's author classified them
+the same way unprompted, in the docstrings. Undecidability was my guess and it is wrong.
+
+The real defect is narrower and easy to miss: **Pass 15's amendment fixed the tautology and deleted
+the directional clause in the same edit.** Pass 14's original line ended *"so both a shrink and a
+widen redden"*; the landed correction replaced that whole tail with the three forms. The forms say
+**what a good pin looks like**; the directional clause was the only part that said **how to tell
+whether the pin in front of you is one** — and without it, nine incidental clearances read as
+pinned, including mine. The two clauses are not alternatives. Restore the second alongside the
+first.
+
+**Proposed line, replacing the one at `ce811a8` — I have not edited `AGENTS.md`:**
+
+```markdown
+- **A guard's reach lives in an asserted constant, not in prose.** A module-level set or table a
+  guard consults — a required-key set, an allowlist, an exemption list, a role→unit map — needs a
+  test that binds it to another declaration of the same set, or asserts a distinct behavioural
+  consequence per member; never merely that the guard accepts what its own constant contains,
+  which is true of any constant. **To know you have one, mutate the constant alone both ways: a
+  shrink and a widen must each redden.** Shrink-only means fixtures are covering it by accident.
+  Absent that, the docstring may not claim a reach (*only*, *every*, *never a sixth*). Audit and
+  the two standing exceptions: `docs/reviews/small-model-benchmarking-impl.md` Pass 16.
+```
+
+Longest physical line 99 characters, ~110 words; it adds ~20 words to the item now in the file.
+Scope stays `model-bench/` for the reason Pass 14 §4 gave, unchanged.
+
+### 5. Task C — U82, read for form
+
+**Q1 — is any new test form (iii) wearing a form (i)/(ii) docstring? No.** All nine classified,
+none misdescribed:
+
+| Test | Claimed | Actually | Note |
+|---|---|---|---|
+| `test_required_model_info_keys_partitions_every_catalog_field` | (i) | **(i)** | RHS is `set(_FULL_MODEL_INFO_RAW) - _OPTIONAL_MODEL_INFO_KEYS`, both independent literals |
+| `..._is_exactly_what_model_info_from_raw_rejects` | (ii) | **(ii)** | Non-tautological only because it iterates `_FULL_MODEL_INFO_RAW`, not the constant, **and** because the bare `KeyError` is deliberately not caught. Its docstring says both, and says it cannot catch a widen alone |
+| `test_outcome_registries_match_their_phase_kinds_domain` | (i) | **(i)** | `_REGISTRY_BY_PHASE` vs `_PHASE_KINDS` |
+| `test_aggregate_by_kind_domain_matches_the_declared_aggregate_classes` | (i) | **(i)** | RHS from each dataclass's own `kind` default, explicitly *not* read off the dict |
+| `test_every_aggregate_kind_round_trips_through_load_history` | (ii) | **(ii)** | a real `store`/`load_history` round trip |
+| `test_sample_noun_domain_is_exactly_the_declared_unit_kinds` | (i) | **(i)** | vs `UNIT_KIND_BY_ROLE.values()` |
+| `test_the_conditionality_clause_uses_each_declared_sample_noun` | (ii) | **(ii)** | parametrized from the constant, but claims only to drive the render, and the domain pin sits above it |
+| `test_unit_kind_by_role_domain_is_exactly_roles` | (i) | **(i)** | the P14-2 binding |
+| `test_unit_kind_resolves_every_declared_role` | — | (iii)-shaped | claims only "drives `unit_kind` over all five roles", which is what it does; it still binds the *function* (a `return "item"` default reddens it). Not a defect |
+
+**Q2 — does any docstring claim more than its assertions pin? No.** The one imprecision is
+`test_outcome_registries...`, which attributes the loss direction to `_route_outcome`'s `KeyError`
+when its own equality already catches it. Harmless.
+
+**Q3 — is `_EXEMPT_CELLS = frozenset()` vacuous? No. The coordinator's reading is right, and I
+checked it rather than deferring.** With an empty exempt set, `all_cells - exercised ==
+_EXEMPT_CELLS` collapses to `all_cells ⊆ exercised`, which is a *stronger* demand: dropping one
+cell from `_EXPECTED_FOR_GET` reddens exactly that test (Q3a), and re-widening `_EXEMPT_CELLS` by
+one member reddens two tests (Q3c). Keeping it as a named empty constant rather than deleting it is
+also the right call — it keeps a future exemption a recorded decision rather than a silent absence.
+
+**P14-6 itself was decided correctly.** `("connect", "unparseable_body")` genuinely has no
+referent — "unparseable body" is a JSON-level fact and JSON needs bytes, which need a read — so it
+is a domain absence, not an exemption, exactly as `("read", "non_2xx")` was. Removing it from
+`_PHASE_KINDS["connect"]` rather than exempting it makes the two siblings consistent.
+
+### 6. New findings
+
+**P16-1 (major) — `Basis` is declared three times and nothing binds any pair; diverging two of
+them leaves the suite green.** `stats.py:67` and `results.py:39` each declare
+`Basis = Literal["by-construction", "measured", "assumed"]`, and `report._BASIS_STRENGTH` is a
+third declaration of the same closed set. Executed: adding `"estimated"` to either declaration →
+**893 passed**; **removing `"measured"` from `stats.Basis` while `results.Basis` keeps it → 893
+passed.** Python does not enforce a `Literal` at runtime and no test compares the three, so a
+divergence is invisible in both directions. The consequence is not hypothetical: `_BASIS_STRENGTH`
+is read as `min(_BASIS_STRENGTH[a.basis], ...)`, so a `Basis` value absent from it is a `KeyError`
+in the report path, and Rule 4's "which instrument may decide" turns on exactly this value.
+`CallSurface` has the same shape — declared in `lmstudio.py` and `fingerprint.py`, with
+`fingerprint.CALL_SURFACES` derived from a third source. *Suggested fix (judge it):* one form (i)
+test per pair, `assert set(get_args(results.Basis)) == set(get_args(stats.Basis)) ==
+set(_BASIS_STRENGTH)` — the same shape Pass 15 already landed for `_HISTORY_REPLAY_MODES` against
+`get_args(HistoryReplay)`, so the remedy has a working precedent in this codebase. Routes to
+whoever owns `stats.py`/`results.py`/`report.py`.
+
+**P16-2 (major) — `INDEX_COLUMNS` is the CSV's published column contract and is pinned only
+against itself.** Widening it by one column → 893 passed: the emitted `index.csv` gains a column
+and the header assertion, computed from `INDEX_COLUMNS`, agrees with it. That is form (iii) on a
+*consumed artifact* — `index.csv` is what `models --tested` and FR-17a read. *Suggested fix:* one
+independent literal of the fourteen column names in `tests/test_results.py`, form (i).
+
+**P16-3 (minor) — five second-declaration bindings are simply absent**, each cheap and each the
+same shape: `_ROW_COUNT_IDENTITY_KEY_HINTS` vs `ROW_COUNT_IDENTITY_KEYS`; `_METRIC_DECODERS` vs the
+`MetricValue` kinds; `_NO_VERDICT_REASON` vs the no-verdict causes `_comparison_pair` can return;
+`_RESIDENCY_FIELDS` vs the schema's residency-valued fields; `_DISCRIMINATORS` vs the `Fingerprint`
+attributes in no required set. All five redden on shrink today only through fixture coincidence.
+*Suggested fix:* one `assert set(X) == set(Y)` each, in the suite that owns each module.
+
+**P16-4 (nit) — the grid-coverage assertion is one-directional.** `all_cells - exercised ==
+_EXEMPT_CELLS` constrains cells declared-but-unexercised; a cell in `_EXPECTED_FOR_GET`/`_POST`
+that no phase domain declares is caught only incidentally, by the GET/POST symmetry assert beside
+it and by `_route_outcome`'s `KeyError`. Executed: a bogus cell added to `_EXPECTED_FOR_GET` alone
+reddens 4 tests, none of them by the coverage equality. *Fix:* make it `all_cells == exercised |
+_EXEMPT_CELLS`.
+
+**P16-5 (finding, and a decided exception rather than a deferral) — `_STDLIB_MODULE_NAMES` is a
+constant the convention cannot govern.** It is `frozenset(sys.stdlib_module_names)`. Form (i) has
+no independent declaration to bind to — binding it to `sys.stdlib_module_names` is the definition,
+not a check — and form (ii) would mean a behavioural assertion per stdlib module, roughly 300 of
+them, for an allowlist whose whole point is that it tracks the interpreter. Widening it is green
+and there is no proportionate pin. **The disposition is not "defer": it is that the convention line
+carries a named exception**, which is why the proposed line in §4 says "the two standing
+exceptions" and cites this document. The second exception is the class of constants whose widen is
+semantically inert because their domain is closed elsewhere — the three inert rows in §3 — which
+the paired-declaration binding of P16-3 closes properly.
+
+### 7. Disposition of everything already reported
+
+| # | Disposition | Evidence rechecked |
+|---|---|---|
+| **P14-1** `_REQUIRED_MODEL_INFO_KEYS` | **Fixed** | Two tests, form (i) + form (ii), correctly formed and correctly described; the widen gap U82 found in itself is closed by the partition test |
+| **P14-2** `UNIT_KIND_BY_ROLE` / `ROLES` | **Fixed** | `test_roles.py` new; form (i) binding plus a per-role drive. I additionally checked the *values* (not just the domain): mutating `guard-judge`→`conversation` reddens 13, `embedder`→`item` reddens 4, so the `-ml` §3.3 column is held too |
+| **P14-3** `_SAMPLE_NOUN` | **Fixed** | Domain bound to `UNIT_KIND_BY_ROLE.values()`; the `"query"` render, previously asserted nowhere, now is |
+| **P14-4** `_AGGREGATE_BY_KIND` | **Fixed** | Form (i) against each dataclass's own `kind`, plus a real round trip per kind |
+| **P14-5** kind registries vs `_PHASE_KINDS` | **Fixed** | `_REGISTRY_BY_PHASE` binding; both directions |
+| **P14-6** exemption inconsistency | **Fixed, and decided the way I would have** | Domain absence, not exemption; `_EXEMPT_CELLS` empty but retained and still held (Q3a/Q3c) |
+| **P13-7** `residency_source` uncompared | **Open, routed** | `architect`'s plan-reading call (OQ-1), unchanged |
+| **P13-9** plan §4 S2 `warm_up` signature | **Open, routed** | `architect`'s, unchanged |
+| **P13-11** `tools.module: ""` | **Not fixed** | Nit, still stands |
+| **P13-13** header says "S1" | **Not fixed** | Line 1 unchanged; outside my write scope again |
+| Pass 12 blocked residuals | **Still blocked, not re-litigated** | The real `GET /api/v0/models` capture and §4 S2's R-1 probe both need a human-run live LM Studio session |
+
+Nothing above is "deferred by choice": P16-1..P16-4 are findings with named fixes, P16-5 is a
+decided exception recorded in the line itself, P13-7/P13-9 are routed to `architect`, P13-11 and
+P13-13 are open nits with owners, and the two Pass 12 residuals are blocked on unbuilt work.
+
+### 8. What's solid
+
+- **U82 did the thing this class most needs and did it unprompted: it found a gap in its own
+  pin.** The widen onto an already-optional key defeats the behavioural test, so it added a form
+  (i) partition test beside it and *documented why the behavioural one alone is insufficient*.
+  That reasoning, written at the test, is worth more than the test.
+- **Every one of the nine new tests names its form and the naming is accurate** — checked one by
+  one, which is the check execution cannot perform. On a coordination whose second recurring defect
+  is a docstring outrunning its assertions, nine for nine is the strongest signal in this pass.
+- **`_ALL_AGGREGATE_CLASSES` and `_FULL_MODEL_INFO_RAW` are hand-written on purpose**, with the
+  reason stated: parametrising from the constant under test could only ever lose a case. That is
+  Pass 1's M-4 lesson applied without being told.
+- **Pass 15's correction was right about the tautology** — it is real, and my own line invited it.
+  This pass restores what the correction removed rather than reversing it.
+
+### 9. Open questions
+
+Unchanged and still `architect`'s: OQ-1 (§3.4.5's "degenerates to `residencySource` alone") and the
+§4 S2 `warm_up` signature sweep. No new open question — P16-1..P16-5 are decidable by their owners
+without a plan reading.
+
+---
+
+### Appendix P — Pass 16 evidence
+
+**P.0 — isolation.** `git archive ce811a8 model-bench | tar -x -C <scratch>/p16/tip`;
+`PYTHONPATH=<snap>:<scratch>/p16`; `sitecustomize.py` strips the editable meta-path finder; every
+probe begins by asserting `os.path.dirname(os.path.dirname(modelbench.__file__)) == <snap>` and the
+script form was verified to pass that assertion before any result was trusted.
+
+**P.1 — the widen sweep over Pass 14's cleared set** (27 mutations total this pass; the six the
+coordinator already ran were not repeated).
+
+| Constant | Pass 14 shrink | Pass 16 widen |
+|---|---|---|
+| `ATTESTED_FIELD_NAMES` | 15 failed | 2 errors (the U81 derivation `KeyError`s at import) |
+| `ROW_COUNT_IDENTITY_KEYS` | 10 failed | 10 failed |
+| `_ROW_COUNT_IDENTITY_KEY_HINTS` | 1 failed | **893 passed** |
+| `ROW_COUNT_IDENTITY_EXEMPT_CELLS` | 2 failed | 1 failed |
+| `_STDLIB_MODULE_NAMES` | 2 failed | **893 passed** (§6 P16-5) |
+| `_MODEL_CHAT_SCHEMA_1` | 3 failed | 74 failed |
+| `_DETERMINISTIC_SCHEMA_1` | 69 failed | 7 failed |
+| `REQUIRED_BY_SCHEMA` | collection error | 3 failed |
+| `_EMBEDDINGS_HAVE_NO` | 9 failed | 8 failed |
+| `RESIDENCY_ELEMENT_KEYS` | 70 failed | 71 failed |
+| `_RESIDENCY_FIELDS` | 11 failed | **893 passed** |
+| `_DISCRIMINATORS` | 15 failed | **893 passed** |
+| `_METRIC_DECODERS` | 4 failed | **893 passed** |
+| `INDEX_COLUMNS` | 5 failed | **893 passed** |
+| `_BASIS_STRENGTH` | 6 failed | **893 passed** |
+| `_NO_VERDICT_REASON` | 9 failed | **893 passed** |
+
+**P.2 — paired-declaration probes (P16-1).** `stats.Basis + "estimated"` → 893 passed ·
+`results.Basis + "estimated"` → 893 passed · **`stats.Basis − "measured"`, diverging it from
+`results.Basis`** → **893 passed**. `grep` over `tests/` for any assertion relating the two
+declarations or `_BASIS_STRENGTH`: none.
+
+**P.3 — `_EXEMPT_CELLS` at zero members (Q3).** Drop a cell from `_EXPECTED_FOR_GET` → 1 failed,
+`test_probe_cell_exemptions_are_exactly_the_structurally_unreachable_ones` · add a bogus cell → 4
+failed, none of them the coverage equality (P16-4) · re-widen `_EXEMPT_CELLS` by one → 2 failed.
+
+**P.4 — `UNIT_KIND_BY_ROLE` values (beyond P14-2's domain pin).** `guard-judge` `item` →
+`conversation` → 13 failed · `embedder` `query` → `item` → 4 failed. Held.
