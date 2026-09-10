@@ -369,28 +369,42 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
 ### K-030 — The always-loaded-prompt compaction backlog is now four agents, and distillation is what feeds it
 
 - **Status:** 🔵 proposed
-- **Priority:** medium
+- **Priority:** high
 - **Rationale:** Four separate follow-ups in `claude/docs/plans/kaizen-distillation2-coordination.md`
-  now name the same defect in four different prompts — `tdd-engineer.md:40` (1,502 chars),
-  `architect.md:51` (1,617), `data-scientist.md` (seven lines over 700, longest 1,247), and after
-  U42 **`teco.md`**. Filing a fifth individual item would repeat the mistake; this is one item
-  about a **mechanism**, not four about four files. **`teco.md` measured at U43 (2026-09-10):**
-  8,278 words, **27** lines over 700 characters and **14** over 1,000, longest **1,716** — against
-  7,901 / 26 / 13 / 1,677 at `117df76`. Five of U43's nine promotions were clauses folded onto
-  existing always-loaded sentences because there was nowhere else for them to go; `teco`'s own
-  `kaizen/plan.md` **K-016** (blocking) proposes the same split from the other side.
-- **The mechanism:** an agent with **no knowledge base** has exactly one landing site for every
-  promotion, so distillation can only ever fold onto its always-loaded prompt. `analyst`,
-  `graph-dba` and `tdd-engineer` each have a `<agent>/<topic>.md`; `teco`, `architect` and
-  `data-scientist` do not, and those are precisely the three prompts on this list.
+  name the same defect in four prompts — `tdd-engineer.md:40` (1,502 chars), `architect.md:51`
+  (1,617), `data-scientist.md` (seven lines over 700, longest 1,247), and `teco.md`. This is one
+  item about a **mechanism**, not four about four files. **`teco.md`, measured across the pass:**
+  7,901 w at `117df76` (U41) → 8,278 w at U43 → **9,063 w at `8973269`** → **10,445 w after U45**,
+  i.e. **+2,544 words in four distillation units**, of which **+1,382 landed in U45 alone**. Lines
+  over 700 chars went 26 → 32; over 1,000, 13 → **20**; and the longest line went 1,677 → **3,105**
+  — `teco.md:89` (step 3, *Brief contents*), which absorbed two U45 promotions and is now nearly
+  twice the baseline maximum. `teco`'s own `kaizen/plan.md` **K-016** (blocking) proposes the same
+  split from the other side.
+- **The mechanism, and U45 is the cleanest evidence for it yet:** an agent with **no knowledge
+  base** has exactly one landing site for every promotion, so distillation can only ever fold onto
+  its always-loaded prompt. `analyst`, `graph-dba`, `tdd-engineer`, `qa-engineer`, `data-scientist`
+  and `devops` each have one; `teco` and `architect` do not. **Eight of U45's thirteen dispositions
+  landed in `teco.md`, and the routing evidence says most of them did not belong there** — they are
+  on-demand *gate and brief techniques* (how to read an empty result, how to probe a mutation
+  table, how to size a dispatch), consulted when a specific situation arises, not routing rules
+  needed in most sessions. That is §5's knowledge-base criterion stated exactly. The contrast is
+  decisive rather than suggestive: in the same unit, two entries that met the same criterion
+  **left `teco` entirely** — `f0f56a09` to `claude/analyst/review-techniques.md` and `5fc1dfea` to
+  `skills/agent-maintenance/SKILL.md` — because a suitable on-demand home existed. The others had
+  nowhere to go. **Argue this from routing, not from the word count**: the word count is the
+  symptom, the absent landing site is the cause.
 - **Proposed change:** decide the general question before compacting anything — does an agent whose
   prompt has crossed the density threshold get a knowledge base, or does its prompt get
   restructured? Then one compaction unit per prompt, none of them a side effect of a distillation
-  (K-026's rule). **`teco`'s answer is a stakeholder call and was explicitly reserved as such in
-  U42's brief** — do not create one unilaterally.
-- **Notes:** Opened 2026-09-09 from U42. Entry ids are not the trigger here; no `entryId` dedup
-  applies. U42's own promotions all landed under 1,200 chars per line and were folded into existing
-  bullets rather than added as new sections, which is the containment measure, not a fix.
+  (K-026's rule). For `teco` specifically the candidate is `claude/teco/coordination-techniques.md`,
+  mirroring `analyst/review-techniques.md`. **`teco`'s answer is a stakeholder call and was
+  explicitly reserved as such in U42's brief** — do not create one unilaterally, and note that
+  creating it would restructure `teco.md` as a distillation side-effect, which is exactly what
+  K-026 exists to prevent.
+- **Notes:** Opened 2026-09-09 from U42; rewritten 2026-09-10 after U45 with the four-unit growth
+  series, the eight-of-thirteen routing figure, and the two contrasting out-of-`teco` promotions.
+  Raised to **high** — the table row already said high while this body still said medium; the body
+  was the stale half. Entry ids are not the trigger here; no `entryId` dedup applies.
 
 ### K-031 — Shared-tree commit rules are split by audience, and the half that bounds the grant is teco-only
 

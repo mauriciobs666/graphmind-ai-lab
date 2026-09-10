@@ -365,7 +365,28 @@ all** (FR-12/AC-9) — its Learning-capture section points straight at the
 `kaizen_team` producer-write recipe above. During runs, every agent writes
 dated, evidence-backed observations of **durable, non-obvious environment
 facts in its discipline** — tool quirks, undocumented behaviors, conventions
-that live only in the code — as new graph nodes. Agents never promote their
+that live only in the code — as new graph nodes.
+
+**What capture systematically misses, and how a distiller should read around
+it.** The trigger for writing an entry is **surprise** — the environment
+behaved other than the agent expected. Being *wrong* is the commonest kind of
+surprise and dominates any inbox, but it is not the boundary: an unexpected
+*discovery* that involved no error at all is captured just as readily
+(measured 2026-09-10 over one 17-entry chunk, of which 10 were written by
+other coordinations and so uncontaminated by the request to write them: about
+9 of the 10 were surprise-triggered, and two recorded no mistake of any kind).
+The consequence is the part to hold on to. What is never captured is the
+**unsurprising success** — the routine check that held, the gate that worked
+as designed, the practice that quietly prevented a defect before it had a
+name. Those are exactly the load-bearing practices, and they are invisible to
+anyone reading the graph to learn how the team actually works. So: **never
+read an inbox as a description of a pass** — it is a description of that
+pass's surprises, and the pass's working machinery is systematically absent
+from it; and when a promotion turns on a practice having worked, expect its
+evidence in the coordination document or in `history.md`, not in an entry.
+(Note the shape of that second point: it is a claim about an **absence**, so
+it is checked by asking *where would such an entry be if it existed, and did I
+look there* — not by the reach check, which a negative passes vacuously.) Agents never promote their
 own entries, never edit or delete a `:KaizenEntry` once created, and never tag
 a `MENTIONS` edge onto one — the MCP tool's producer-write authorization only
 lets an agent *create* its own entry (and, incidentally, the `:Agent` node

@@ -26,7 +26,9 @@ description: >-
   OpenAI-compatible server's HTTP-200 error envelope on a missing /v1; a bare json.loads LLM-judge
   parser failing silently on a fenced completion; an env var set after import (a monkeypatch.setenv
   or a script's own os.environ assignment in main()) being a no-op against an import-frozen
-  constant; a bare pytest.raises with no match= passing on an unrelated same-type raise from an
+  constant; a same-second, byte-length-preserving source edit matching a stale __pycache__ entry on
+  both fields CPython's default timestamp validation checks, so the pre-edit bytecode is imported
+  and PYTHONDONTWRITEBYTECODE=1 does not rescue a cache that already exists; a bare pytest.raises with no match= passing on an unrelated same-type raise from an
   earlier check in the same validator; a function-local deferred import re-resolving each call vs. a
   def-time-bound default arg; a one-way circular import between two modules that fails in every
   load order unless the deferred import is inside a function body (not a class body); and
@@ -47,7 +49,8 @@ description: >-
   responses={...} declarations, a method-matching or static-mount-shadowing question, a test that
   must bound a possibly-hanging call, an HTTP client against urllib/OpenAI-compatible
   endpoints, an LLM-judge parser, a pytest monkeypatch touching an env var or deferred import, a
-  circular-import fix, a TestClient-driven lifespan/background-task test, or an acceptance assertion
+  circular-import fix, an edit or scripted mutation that appears not to take effect, a
+  TestClient-driven lifespan/background-task test, or an acceptance assertion
   on what a client actually receives from an unhandled server error — coder, tdd-engineer, architect,
   analyst, qa-engineer in a Python codebase.
 allowed-tools: Read, WebFetch, WebSearch
@@ -726,3 +729,35 @@ The outside-stamped form passes on a call that did nothing. Re-stamp as the **fi
 thread body** and the ordering assertion measures the call again. (A `perf_counter`-resolution clock
 hides this — the delta comes back at ~1 µs and still passes; it is the coarse timestamp the code
 under test actually records that makes the difference visible.)
+
+## A same-second edit that keeps the file's byte length is invisible to CPython's default `.pyc` validation — and `PYTHONDONTWRITEBYTECODE=1` does not rescue a cache that already exists
+
+CPython's default *timestamp* invalidation mode validates a cached `__pycache__/*.pyc` against two
+fields only: the source's **mtime in whole seconds** and its **size in bytes**. So an edit that
+lands within the same second as the previous one *and* leaves the byte length unchanged — flipping
+a constant `"AAAA"` to `"BBBB"`, a `<` to `>`, a `0` to `1` — matches a stale cache on both fields
+and the old bytecode is imported. Verified on Python 3.12.3, 2026-09-10: a module rewritten in
+place and re-imported in a fresh interpreter printed the **pre-edit** value; a control edit that
+changed the byte length (same second, different length) invalidated correctly and printed the new
+one. This is the shape that bites a rapid edit–run loop and a scripted mutation test, both of which
+generate size-preserving edits faster than the clock's resolution — and it presents as *the fix
+didn't take*, so the reflex is to re-edit, which regenerates the same collision.
+
+**The remedy that looks right and is not.** `PYTHONDONTWRITEBYTECODE=1` (and `python -B`) suppress
+**writing** a `.pyc`; neither suppresses **reading** one. Setting it after noticing the confusing
+result is therefore a no-op — the stale cache is already on disk and still wins. Measured, three
+legs: with a pre-existing cache, the env var set, the post-edit run still printed the stale value;
+from a genuinely clean slate with the var set for both runs, both values were correct (no cache was
+ever written to go stale); deleting `__pycache__` between mutations was correct in every case.
+
+**And the pytest flag that looks adjacent is a different cache entirely.** `pytest -p
+no:cacheprovider` disables pytest's own `.pytest_cache` (last-failed, node-id caches); it has no
+effect on CPython's bytecode cache, so it neither causes nor prevents this. Reaching for it here
+buys nothing and reads, afterwards, like the cache was ruled out.
+
+So the working rule is **delete, then optionally suppress**: `find . -name __pycache__ -prune -exec
+rm -rf {} +` before the run that must be trusted, with `PYTHONDONTWRITEBYTECODE=1` exported for the
+*whole* loop if you want to keep it clean thereafter. Anywhere a harness generates edits
+programmatically, put the cache removal in the harness rather than in the operator's habits. And
+when a mutation "has no effect", check the cache before concluding the code path is dead — an
+unkilled mutant and an unloaded edit are indistinguishable from the output.

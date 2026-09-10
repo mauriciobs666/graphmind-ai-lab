@@ -3,6 +3,14 @@
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
 
+## 2026-09-10 — one `teco`-produced entry routed here, **one new section**: a null result that reads as a refutation (U45)
+
+- **What:** U45 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the final `teco` chunk (seventeen entries). One of them is a general static-review technique with no home in `teco`'s own files, so it landed here rather than in `teco.md`. Full disposition, including why it was promoted despite already appearing in two non-durable places, is in `claude/teco/kaizen/history.md` (2026-09-10, U45).
+- **`f0f56a09…` → new §*"When a claim and its evidence appear to contradict each other, check whether they measure the same quantity before judging either wrong"*.** An artifact states a rule and attaches evidence that reads as an argument against it; the reflex is a dilemma, and both horns can be false because the two sentences measure different quantities. Worked instance: a 173,472-combination sweep reporting **zero** differences between compose-then-clamp and clamp-then-compose, against a rule about **attribution** rather than printed numbers — the null says adopting the rule is *free*, not pointless.
+- **Extended past the entry:** "zero observed differences" has three readings that look identical in prose — unnecessary / free to adopt / **dead comparator** — and the third is not in the source entry. `data-scientist`'s passing controls (10,056 · 167,167 · 141,412 differences on three deliberately-different transforms, same loop, same data) went in as the technique's strongest form, because they are what excludes it.
+- **Placement:** immediately after §*"The reason attached to a rule is checked less than the rule"*, its true sibling — that one is a true rule with a false **reason**, this one a true rule with evidence that looks like a **refutation**.
+- **Budget:** `review-techniques.md` **13,419 → 13,904 w** (+485), sections **31 → 32**, **0 lines over 700 characters**. `analyst.md` unchanged — the KB is loaded on demand and its scope line already covers this technique, so no routing change was needed.
+
 ## 2026-09-09 — two more `architect`-produced entries routed here, **zero new sections**, both into grep-measurement discipline (U41)
 
 - **What:** U41 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `architect` chunk 2 of 2, the unit that closed that inbox. Two of its eight entries landed in `review-techniques.md`; full dispositions and edge arithmetic are in `claude/architect/kaizen/history.md` (same date). `analyst.md` was **not** opened.

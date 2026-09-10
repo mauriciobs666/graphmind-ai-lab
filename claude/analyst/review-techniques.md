@@ -1172,3 +1172,43 @@ for stability is chosen against the failure mode.
 Origin: `analyst` kaizen `8fe1fcc5…` (2026-09-09), gating v1.32 of `docs/plans/salesperson-ui.md`,
 whose S9 row had replaced an untestable "poll latency unaffected" clause with a two-sided median
 bound.
+
+## When a claim and its evidence appear to contradict each other, check whether they measure the same quantity before judging either wrong
+
+The sibling section above covers a true rule shipping a false *reason*. This is the adjacent
+failure on the *evidence* side, and it is easier to get wrong because the contradiction looks
+real: an artifact states a rule and attaches, as support, a measurement that reads as an argument
+*against* it. The reflex is to frame a dilemma — either the rule needs justification the evidence
+cannot supply, or the evidence is attached to the wrong claim — and both horns can be false at
+once, because **the two sentences are about different quantities and never met.**
+
+Worked instance, 2026-09-09. An entry paired a methodological rule — *compute the
+which-instrument-produced-this-number audit **before** any value-modifying post-transform* — with
+an exhaustive sweep over **173,472** parameter combinations reporting **zero** differences between
+compose-then-clamp and clamp-then-compose. Zero differences reads as *ordering does not matter*,
+i.e. the rule is unnecessary. Both halves are correct: the sweep measures **printed numbers**,
+while the rule is about **attribution**. Recomputed against a pinned revision, two arms at
+`-1.151432660868851` and `-1.1614378277661477` both clamp to `-1.0`, and the public accessor
+cannot recover which was the more conservative, because it clamps at source. The null says
+adopting the rule is **free**, not that it is pointless — and the evidence that actually supports
+the rule is a divergence the sweep never counted.
+
+**A null result is a shape worth naming on its own.** "Zero observed differences" is compatible
+with at least three readings — the rule is unnecessary; the rule is free to adopt; or the
+comparator is dead — and the sentence looks identical in all three. So before treating a null as
+refuting anything, ask what the null would have to have been measuring for it to refute the claim,
+and confirm the instrument could have produced a non-zero at all. (The strongest form of the
+latter, from the same worked instance: the sweep's author ran **passing controls** in the same
+loop over the same data — an asymmetric clamp, width-normalisation, a non-monotone transform —
+which returned 10,056 / 167,167 / 141,412 differences, so the uniform zero could not be read off a
+dead comparator.)
+
+**As a review move:** when an artifact's evidence seems to contradict its claim, write down the
+quantity each one measures as a separate noun phrase before writing the finding. If the two nouns
+differ, the artifact's real defect is usually a **reporting** defect — it recorded the null half
+and omitted the measurement that does support the rule — which is a much smaller finding than the
+contradiction it appeared to be, and lands on a different line of the document.
+
+Origin: `teco` kaizen `f0f56a09…` (2026-09-09), gating a distillation entry whose claim and
+evidence looked mutually contradictory; the sweep's own reproduction and controls are recorded in
+`claude/data-scientist/kaizen/history.md` (2026-09-09).

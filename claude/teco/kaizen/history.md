@@ -2,6 +2,378 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-09-10 — Kaizen distillation, U45 (seventeen entries, the final `teco` chunk)
+
+- **What:** U45 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled the
+  seventeen remaining `teco` `:KaizenEntry` nodes. Sized at seventeen rather than the standing ~12
+  on `aad72232`'s own cost argument (tested below, and it holds). **Two groups, judged
+  differently:** ten from other coordinations (Group A), and seven `teco` wrote the same day about
+  the units `cobb` had just run (Group B) — four of them written *because* `cobb` asked for them at
+  the U42 gate, two recording defects in `cobb`'s own work in this pass. Group B was judged as a
+  stranger's, with the over-general and self-serving halves named and dropped rather than shipped.
+- **Graph shape:** all seventeen current-shape (`author` null), `producedEdges = 1`,
+  `mentionEdges = 0` (`otherRemaining = 0`), each cleared with the full-node curator shape after
+  its disposition was on disk. Per-entry write → log → clear throughout, never batched.
+- **Platform failure #7** — this unit was killed by an HTTP 429 mid-promotion of P1, the first kill
+  in this pass to land mid-promotion of a *fresh* unit rather than mid-correction of an accepted
+  one. `97b8fc02`'s check ("do the artifact and its record agree?") was the right probe and
+  answered cleanly: the `teco.md` bullet was on disk, `history.md` had nothing, the graph was
+  unmoved at 17. Resumed in place; the landed text was confirmed rather than rewritten.
+
+**`7c4a1e93-…` + `3ad9c07e-…` — promoted, merged, into `teco.md`'s re-derivation bullet (L125).**
+Two mechanisms, one family, and they share an operational remedy, so they promote once.
+`7c4a1e93` is about an empty *result* (a re-derivation returning EMPTY is as likely a broken
+instrument as a real absence, and reads identically to the artifact being missing); `3ad9c07e` is
+about a vacuous *check* (the reach check asks what the widest set a sentence covers is, and a
+negative claim has no members for that probe to bite on, so it passes without testing anything).
+- **Verified.** `3ad9c07e` is self-demonstrating from this pass's own record — U44 shipped *the
+  `tasks/` view is gone* on four figures that all reproduced under `~/.claude/projects/`, where
+  `tasks/` has never lived. `7c4a1e93`'s own evidence (an awk/grep instrument reading a
+  whitespace-separated heredoc as pipe-delimited, returning 0 rows) is the same shape one level
+  down: the instrument, not the world, produced the absence.
+- **Why merged.** The bullet already carried *a re-derivation that comes out clean or stable is not
+  a refutation*. EMPTY is the missing third case in that same sentence, and the counter-question
+  `3ad9c07e` supplies — *where would this be if it did exist, and did I look there?* — is precisely
+  how you tell a broken instrument from a real absence. Splitting them would have put the defect in
+  one bullet and its remedy in another.
+- **Not routed to the curation section**, which already carries the adjacent rule (a scan proving a
+  negative must be unbounded; `find -maxdepth` filters as silently as `--include`). That one is
+  about the *scan*; this one is about the *claim* and the *check*, and it belongs where the other
+  verification instruments are.
+
+**`5c1e9a72-…` + `3c9ae64a-…` — promoted, merged, onto `teco.md`'s mutation-test bullet (L95).**
+Both say the same thing through different mechanisms: a unit's own **fixtures** are the half of the
+unit that nothing tests, and a complete mutation table is precisely the evidence that cannot see it.
+`5c1e9a72` is a validator keyed on `sampling.dataFile`, a key the implementer invented — 27 tests
+passing, 12 mutations all caught, and the route dead on every plan-conformant pack.
+`3c9ae64a` is an `aggregate >= sum(parts)` assertion satisfied by any single part because every
+stub `ChatResult` in the fixture carried `wallClockMs=5.0` or `0.0`.
+- **Verified independently, in the source.** `model-bench/modelbench/packs.py:450-472` now carries
+  the correction in its own docstring: *"**An earlier version of this function read
+  `sampling.dataFile` instead** — a key this module invented and no plan-conformant manifest ever
+  carries, which made the whole route silently unreachable on every real pack shape (S2 U73)."*
+- **The entry's remedy was too narrow, and the source says why.** `5c1e9a72` prescribes building
+  the probe from the spec literal, which addresses an *invented key* only. The same docstring
+  records that U73's own fix reintroduced the class one round later — `declares_scripts`
+  (`isinstance(scripts, int)`) skipped on `"scripts": "12"` exactly as it skipped on `scripts`
+  genuinely absent — caught at impl review Pass 12 as *"round three of the same class"*. The
+  unifying defect is not the invented name but **a check whose failure mode is silence**: it
+  returns `[]` both when the artifact is clean and when it cannot see the artifact. Promoted in
+  that wider form, with the spec-literal probe kept as one of two concrete tests.
+- **Same family as `7c4a1e93`/`3ad9c07e` above, deliberately promoted separately.** All three are
+  *absence is the least-checked result*, but the sites differ: those two are the coordinator's own
+  gate instruments (L125), this one is what to put in an implementer's brief (L95). Merging across
+  that boundary would have put the rule where the actor who needs it does not read it.
+
+**`97b8fc02-…` — promoted to `teco.md`'s abnormal-termination bullet (L109), and widened on this
+unit's own evidence.** The entry says a kill during a *correction* leaves the artifact fixed and the
+record stale, so the recovery question is not "was anything written" but "do the two now agree".
+- **Already published — and that is why it needed promoting, not why it did not.** The claim is
+  the fourth of the four rules in `## Six platform failures` of
+  `claude/docs/plans/kaizen-distillation2-coordination.md`, stated in full. But a coordination doc
+  is flipped to `Status: archived` at milestone close and read thereafter by lookup, while a prompt
+  is loaded every session. A durable harness fact whose only home is a document scheduled to freeze
+  is a fact with an expiry date. Promoted for that reason, and left in the coordination doc as the
+  incident record it properly is.
+- **Widened, because U45's own kill falsified the entry's scope.** `97b8fc02` frames the mode as
+  specific to corrections, on the evidence that *"the five earlier kills in the same pass all died
+  with the unit's own work incomplete"*. This unit was the seventh kill and the counterexample: it
+  died **mid-promotion of a fresh unit**, with `teco.md`'s P1 bullet fully written and
+  `teco/kaizen/history.md` untouched — artifact ahead of record, exactly the two-surface split, with
+  no correction anywhere in the picture. The operative condition is not *correction* but **a unit
+  that writes two surfaces**, which under the §5 write → log → clear discipline is every
+  distillation promotion. Promoted in that wider form; the probe is unchanged and generalized from
+  "the retracted figures" to "the content that should have moved".
+- **The check worked on the first try when `teco` ran it on this kill**, which is the entry
+  earning its promotion rather than merely surviving review.
+
+**`28104900-…` + `f2b6ae44-…` — promoted, merged, onto `teco.md` step 3's *Brief contents* bullet.**
+One finding at two grains. `28104900`: a coordinator brief is the only artifact in a coordination
+that no gate reads, so any figure stated in it as background is unreviewed by construction.
+`f2b6ae44`: the instance — a brief asserting a running statistic as settled fact invites the
+delegate to reproduce it rather than measure it.
+- **The headline was already published** — step 3 opens *"A brief is the one input no gate reads,
+  and an isolated delegate has no standing to doubt your premises"* — so what promoted is only the
+  increment neither the published clause nor the other entry carries alone: the published rule
+  governs **mandates** (state it, ask where it belongs), and says nothing about **figures**, which
+  is the half that actually failed twice. Added as one continuation, not a new bullet.
+- **Both entries record `teco` briefing against itself, and both were caught by the delegate, not
+  the gate** — U27's "4 × 6 = 24 grid points" against a true 173,472, and U43's *0 of 46* prior
+  which `cobb` drafted as *0 of 12* and then measured at *8 of 12*. Two independent instances of
+  the same mechanism is what carried it over the discard bar; either alone reads as carelessness.
+- **The remedy is stated as a structural one, deliberately.** `28104900` already makes this point
+  and it is the entry's best line: *"the defence is not coordinator care but a brief that instructs
+  the delegate to recompute"*. A brief no reviewer reads cannot be fixed by writing it more
+  carefully, so the promoted form pushes the check onto the delegate and keeps `f2b6ae44`'s tell
+  (a figure returned with more precision than the delegate could have derived).
+- **Note for this pass:** the U45 brief itself applied the rule — it quoted no running statistic
+  and framed `aad72232` as a prior to test. That is the first unit in the pass where the fix was
+  in place before the unit ran.
+
+**`b7c2e0f4-…` — promoted onto `teco.md`'s relay bullet (L112).** Relaying a finding from one
+in-flight unit to another destroys the independence of any later agreement between them; record
+which arrivals were relayed **at the moment of relay**, because by delivery time both read like
+independent agreement.
+- **It attaches to a rule that currently mandates the very act that causes the problem.** L112
+  already requires the immediate relay and closes *"the correction is cheap even when the sibling
+  reaches the same conclusion independently"* — which is precisely the sentence that makes the
+  corroboration look real. The entry supplies the missing second half rather than a new rule, so it
+  promoted as a continuation of that bullet and not as its own.
+- **Evidence is a near-miss, not a failure** — model-bench S2 U92/U94, where `teco` relayed a
+  `data-scientist` finding to the `architect` mid-write, both reported the same delete-the-duplicate
+  fix as their own reasoning, and `teco` *nearly* wrote it up as two independent arrivals before
+  checking the relay log. Kept because the counter-practice (a relay log consulted at write-up)
+  is what caught it, and that practice existed nowhere in the prompt.
+- **Adjacent but distinct from the published `Pause vs. proceed` line**, *"a view you relayed and
+  got back is one opinion wearing two hats"* — that governs `teco`'s **own** view going out to a
+  delegate; this governs one **delegate's** finding going to another. Same epistemics, different
+  actors, and the ledger consequence only exists in the second.
+
+**`f39d0c81-…` — promoted onto `teco.md`'s repeated-gate bullet (L158).** A repeated review gate
+converges or not on the **ratio** of findings that required judgement, never on the finding count;
+the classifying question is *would this still exist if the document were mechanically consistent
+with itself?*, and the stop/continue branch must be pre-stated before the next revision exists.
+- **Verified against the artifact it came from.** `docs/plans/small-model-benchmarking.md`'s header
+  block shows the sequence continuing exactly as the entry predicts: Pass 15 pre-registered a
+  branch, and v1.29's note records Pass 16 landing on *"branch 1"* with the previous reviewer's
+  pre-registered prediction (*≥ 6 findings, 0 class-D blockers, 0–1 class-D*) confirmed on all
+  three counts, and *"there is no Pass 17"*. The pre-stated branch did the deciding, not patience —
+  which is the entry's claim, executed.
+- **The count really was unreadable.** Passes 13–15 ran 10, 6, then 9 findings at 2, 1, 1 blockers.
+  Nothing in that series says "converged"; the 7-sweep-to-2-design split at Pass 15 does.
+- **Sharpens a published rule rather than replacing it.** L158 already had the stopping signal and
+  *"ask the reviewer for a falsifiable stopping condition"*; what it lacked was the **metric** to
+  make the condition falsifiable and the timing rule that stops it being fitted after the fact.
+- **One clause deliberately not promoted:** the entry's tail about *"the one class execution can
+  never catch — a rule stated for one consumer of a predicate and not its siblings"*. That is the
+  reach-versus-mechanism defect already carried by the very next clause of the same bullet, and
+  re-stating it would have been the prompt-waste the §7 lint exists to catch.
+
+**`0caa0751-…` + `026abcd5-…` — promoted, merged, onto `teco.md`'s commit-grant guardrail — with
+the instrument corrected.** `0caa0751` is the three-state ownership discriminator run before an
+integration commit; `026abcd5` is the structural reason it is mandatory (`claude/cobb/kaizen/`
+is shared by construction, not by accident, so serializing dispatches cannot partition it).
+- **Group B, and this is the one that most needed judging as a stranger's** — `teco` recording its
+  own check working. It survives on content, not on provenance: the published guardrails already
+  say to hold shared files out of a commit, but nowhere say **how you learn a file is shared**, and
+  that gap is real. The entry also costs `teco` work rather than excusing it.
+- **Correction: the entry names a weaker instrument than its own logic requires.** It prescribes a
+  *three-way word count*. A word count is a lossy proxy that can agree by coincidence — precisely
+  the failure `teco.md` L126 already warns about (*"an instrument that happens to agree with the
+  figure you were checking costs as much as one that contradicts it"*). The discriminator's logic
+  is about **content identity**, so it promoted as a three-way **diff**. Recording this because the
+  entry is otherwise sound and the substitution is easy to miss: it reasons correctly and then
+  reaches for the cheaper measurement.
+- **Correction: one of the three tells is weaker than stated.** The entry reads `NOW == HEAD` on a
+  file you expected dirty as meaning *your content was already committed by another session*. A
+  delegate that never wrote produces the same reading. Promoted as a signal to investigate rather
+  than a conclusion.
+- **`026abcd5` is demoted from a rule to a clause, correctly.** On its own it is an observation
+  about repo layout with no action attached; its whole operational content is *why the check is
+  mandatory when `cobb` is in the unit list*, which is one subordinate sentence of the rule it
+  supports. Promoting it separately would have created a standalone fact nobody acts on.
+
+**`5fc1dfea-…` — one of its three claims promoted (to `skills/agent-maintenance/SKILL.md` §5,
+refined), one **discarded as falsified**, one discarded as an unsupported causal claim.** This was
+lead 1, and it is a Group B entry written at `cobb`'s own prompting at the U42 gate — so it was
+judged hardest.
+- **Measured rather than reasoned about, as the dispatch asked.** Classified the 10 Group A entries
+  (from other coordinations, uncontaminated by the request that produced Group B) by trigger: about
+  **9 of 10** were surprise-triggered, and `f39d0c81` is arguably the lone success-capture. Group B
+  is confounded and was excluded from the count. **U43's *surprise* refinement is the true form and
+  it is what was promoted** — being wrong is the commonest kind of surprise, not the boundary. Two
+  entries in this very chunk prove the gap: `d4b7e102` and `aad72232` record no mistake at all, only
+  unexpected discoveries.
+- **The consequence survives and is sharper in the refined form.** It is not "successes are never
+  captured" — it is that the **unsurprising** success is never captured: the routine check that
+  held, the gate that worked as designed. That is the load-bearing half, and stating it as "wrong vs
+  right" (as the entry does) misses it, because a *surprising* success is captured routinely.
+- **Claim (b) discarded — falsified, not merely over-general.** The entry says a coordination
+  "never records ... any of the checks that worked under pressure". Checked against the graph rather
+  than argued: `cobb`'s `2e14550b…` is precisely a check that worked with no error involved (a census
+  delta can be *attributed* from the graph instead of guessed), and `tdd-engineer`'s `a41f3c62…` is a
+  working practice stated prescriptively. Both are captured, because both were surprising. What is
+  genuinely absent is the much weaker "the gate's own existence is not recorded as a mechanism" —
+  which is an observation about one coordination document, generalised from n=1, and was not
+  promoted.
+- **Claim (c) discarded — the causal link, not the observation.** "The defect keeps recurring
+  *because* the counter-practice is never written down" has n=1 and no counterfactual: nobody has
+  observed the recurrence rate with the practice written down. The observation that the
+  counter-practice is uncaptured stands and is folded into the promoted paragraph; the causal
+  "because" was cut.
+- **Routed to the skill, not to a prompt, against the entry's own `suggestedHome: knowledge base`
+  agreeing.** It changes how a *distiller* reads a store, which happens on demand during a
+  distillation pass and never in an ordinary session. It sits in §5 immediately after the paragraph
+  describing what agents capture, which is the point at which the reader forms the wrong assumption.
+- **Self-audit, since this is Group B and `cobb` asked for it.** The entry is not self-serving —
+  it costs the capture practice credibility rather than defending it, and it names a gap in work
+  `cobb` had just gated. But two of its three claims did not survive contact with the graph, which
+  is a fair rate for an entry written to order at a gate rather than at the moment of surprise. That
+  is itself the finding's own mechanism operating: the entry was *solicited*, not *surprising*.
+
+**`d4b7e102-…` — promoted, to `teco.md`'s `## Pause vs. proceed`, and it recurred live while being
+distilled.** The entry: a drain-to-empty close condition over a **shared** store is not reachable
+unilaterally while a second coordination writes to it; diagnose by content subject; the honest close
+becomes *"empty of everything this pass was scoped to"* with the remainder handed on — a stakeholder
+call, not the coordinator's.
+- **Lead 3 asked whether its home is a prompt at all. Answer: only one half of it is.** The
+  *reframing* is genuinely a stakeholder decision and cannot be encoded as a coordinator behaviour.
+  But *recognising that you have hit this class, and escalating instead of extending*, is exactly
+  what `## Pause vs. proceed` is for, and nothing else in the team catches it: no gate fires on a
+  pass that quietly runs longer, because every individual unit still passes. So the pause **trigger**
+  was promoted and the **decision** explicitly left with the stakeholder, which is what the entry
+  itself asks for.
+- **Correction: the entry names `PRODUCED.sessionId` as a co-equal instrument, and it is not.** All
+  four refill entries it cites had `sessionId` **null** — the content subject did every bit of the
+  attribution work. Measured across the whole graph rather than that one sample: **11 of 29** current
+  entries carry a null `sessionId`, including **4 of 4** of `coder`'s. So a null is uninformative and
+  must not read as "no second writer". Promoted with `sessionId` demoted to a supporting read, and
+  the null-rate stated so nobody re-derives it.
+- **Generalised past a learnings store on promotion.** The entry is written about `kaizen_team`. The
+  actual tell is a **done-condition phrased over the state of a thing you do not exclusively own** —
+  true of a shared branch, a shared tree, a shared queue — and the cheap fix is to phrase it over
+  your own scope *before* dispatching, not after the remainder refuses to shrink.
+- **It recurred against `teco`'s own inbox during this unit, which is as clean a confirmation as the
+  claim could get.** `teco`'s captures were frozen for this unit; nonetheless two new `teco` entries
+  appeared mid-run — `b7d4e1a9…` and `f3a1c9e2…`, both stamped session `session_01E1ZXJ4SGyphA92TyWojFEp`,
+  not this one — written by the concurrent `model-bench` coordination's `teco`. The entry predicted
+  exactly this and the prediction landed on the entry's own author. Both are **out of this unit's
+  scope** (the dispatch named seventeen ids) and were left untouched; they are reported below.
+
+**`3f8c21ad-…` — promoted onto `teco.md` step 3's brief-contents rule, but with its central claim
+**rejected**, not merely trimmed. This is the one entry in the seventeen I judge to be *wrong*
+rather than unpublishable, so it is reported as a finding per the dispatch's own instruction.** The
+entry says: a delegate editing a document follows that document's house style over an explicit
+contrary instruction in the brief, because *"every existing revision note in the file was a
+multi-hundred-word paragraph"*; therefore a style instruction only binds if the brief also names the
+existing instances as wrong.
+- **Measured, and the file does not support it.** Word-counting every revision note in
+  `docs/plans/small-model-benchmarking.md`: 170 / 104 / 1581 / 1459 / 907 / 581 / 667 / **150
+  (v1.24, the delivered note)** / 266 / 309 / 289 / 339 / 142 / 84. Two independent errors in the
+  entry's own figures — the delivered note is **150 words, not "~190"**, and v1.23 is **266 words,
+  not "~450"** — and, more damagingly, the premise fails: notes of **84, 104 and 142** words exist in
+  the same file, so there was no uniform multi-hundred-word precedent. The delivered note is the
+  **third shortest of fourteen** and shorter than the note directly above it. Whatever the delegate
+  was matching, it was not a house style that only permitted long notes.
+- **So the remedy the entry prescribes would have been the wrong instruction.** "Name the existing
+  instances as wrong and say not to match them" presumes uniform bad precedent; here it would have
+  pointed the delegate at a set that already contained the target shape. A false mechanism attached
+  to a real symptom is exactly the failure `analyst`'s *"the reason attached to a rule is checked
+  less than the rule"* describes — and this entry is a live instance of it.
+- **What actually happened, and what was promoted.** *"One dated line, not a narrative"* is two
+  instructions: one checkable and one not. The delegate satisfied the checkable half **exactly** —
+  150 words on a single physical line is one dated line — and the brief contained nothing that could
+  separate that from the intent. The entry itself notes every *fenced* constraint in the same brief
+  was followed precisely and the diff was 2 lines; that is not a careless delegate, it is an
+  unfalsifiable instruction. Promoted as: **a constraint stated as a negation is not a constraint —
+  give it a number**, plus the generalisation that when a delegate follows the letter you audit your
+  own wording before theorising about what else influenced it.
+- **Note for the coordinator:** the surviving half is *more* actionable than the entry's, and cheaper
+  — a threshold is one token in a brief, whereas "enumerate the counter-examples and forbid them" is
+  a research task per instruction. The entry reached for the expensive fix because it had already
+  accepted the wrong cause.
+
+**`f0f56a09-…` — promoted, to `claude/analyst/review-techniques.md` (a **different agent's**
+knowledge base), not to `teco.md`.** The entry: when an artifact's claim and its evidence appear
+to contradict each other, check whether the two measure the same quantity before judging either
+wrong — a null result can be the correct evidence for a rule while reading as an argument against
+it. Verified end to end: the U27 sweep, its 173,472 combinations, the zero-difference result, and
+the separating case (`-1.151432660868851` and `-1.1614378277661477` both clamping to `-1.0`) all
+reproduce from `claude/data-scientist/kaizen/history.md`'s independent reproduction.
+- **Reach check, run before promoting rather than after.** Grepping for the finding's own phrasing
+  across `claude/`, `skills/` and `docs/` found it in exactly two places: this pass's coordination
+  doc (`kaizen-distillation2-coordination.md` L816–825) and `data-scientist`'s history. Neither is
+  a durable consultable home — the coordination doc flips to `archived` at close, and a `history.md`
+  is a record of a promotion, not a technique anyone loads to use. So the finding is *published* and
+  still *unavailable*, which is precisely the case §5 promotion exists for. Same argument as
+  `97b8fc02` earlier in this unit.
+- **Routed out of `teco` deliberately.** The entry is `teco`'s and its context is a gate, but the
+  technique is general static-review methodology, and `analyst` owns the only knowledge base in the
+  team whose scope line covers it — 31 sections of exactly this shape. It lands next to *"The reason
+  attached to a rule is checked less than the rule"*, which is its true sibling and a genuinely
+  distinct claim: that one is a true rule with a false **reason**, this is a true rule with evidence
+  that looks like a refutation. Promoting it into `teco.md` instead would have hoarded a reviewer's
+  technique in a coordinator's always-loaded prompt.
+- **Extended on promotion, because the entry's own framing is narrower than its lesson.** The entry
+  says "check whether they measure different quantities". The durable half is that **"zero observed
+  differences" is a shape with at least three readings** — the rule is unnecessary, the rule is free
+  to adopt, or the comparator is dead — that look identical in prose. The dead-comparator reading is
+  not in the entry at all, and it is the dangerous one; `data-scientist`'s passing controls (10,056
+  / 167,167 / 141,412 differences on three deliberately-different transforms, same loop, same data)
+  are what excluded it there, so they went into the section as the technique's strongest form.
+- **The entry's honesty is worth recording.** It is `teco` writing down that it briefed a **false
+  dilemma** to a delegate and was wrong on both horns. That is the surprise-triggered capture
+  `5fc1dfea` describes, and it is the reason the entry is trustworthy enough to promote at all.
+
+**`c58f1d27-…` — promoted, to `skills/python-web-quirks/SKILL.md` as a new section, with the
+entry's stated remedy corrected because it does not work.** The entry: CPython's default
+timestamp-based `.pyc` invalidation validates on source **mtime (whole seconds) + size**, so a
+same-second edit that preserves the byte length is invisible and the stale bytecode is imported.
+- **Routed away from any prompt.** This is an environment trap consulted when a symptom appears
+  (*"the fix didn't take"*), not a rule that changes what an agent does in most sessions — the
+  knowledge-base/on-demand criterion exactly. `python-web-quirks` already carries the sibling
+  import-timing traps (env var set after import vs. an import-frozen constant), so it lands next to
+  the family a reader is already scanning. Its `description` gained one body clause and one trigger
+  phrase (*"an edit or scripted mutation that appears not to take effect"*) — the symptom is the
+  routing signal, and without it the fact is unfindable.
+- **Correction, verified rather than argued: of the entry's two remedies, only the second is
+  unconditionally sound.** It offers *"run each mutation under `PYTHONDONTWRITEBYTECODE=1`, **or**
+  clear `__pycache__` between mutations"* as equivalents. They are not. The env var suppresses
+  *writing* a `.pyc`, never *reading* one, so it works only when set before any cache exists and
+  fails silently when reached for as a cure. Four legs on Python 3.12.3: (A) pre-existing
+  stale cache + env var → still printed the **pre-edit** value; (B) clean slate, env var set for
+  both runs → correct both times (nothing was ever cached to go stale — which is why the entry's
+  author would have seen it "work"); (C) `rm -rf __pycache__` between mutations → correct; (D) a
+  byte-length-changing edit in the same second, as a control → invalidated correctly, confirming
+  size is the field doing the work. Promoted as **delete, then optionally suppress**.
+- **Why this correction is worth the words:** leg B is the trap. The prescribed remedy *appears*
+  to work whenever it is adopted early, and fails silently exactly when it is reached for as a
+  cure — the case where someone is already confused. An entry can be right about a mechanism and
+  wrong about its remedy, and the remedy is the half that gets executed.
+- **The entry's best half is the one that reads as an aside.** Its closing sentence — `pytest -p
+  no:cacheprovider` disables *pytest's* cache, not Python's bytecode cache — is the near-miss
+  remedy someone actually reaches for, and it was promoted with its own paragraph rather than as a
+  trailing clause: after you have tried it, it reads like the cache was ruled out.
+- **Generalisation added on promotion (not in the entry):** an unkilled mutant and an unloaded edit
+  are indistinguishable from the output. That connects this trap to the mutation-testing rule
+  promoted earlier this unit (P2) and is the reason it matters beyond an edit–run loop.
+
+**`aad72232-…` — promoted, onto `teco.md` step 3's dispatch-sizing bullet, as a *reconciliation*
+rather than a replacement — and the entry's own headline number is wrong in the direction that
+weakens it.** This was lead 2: the entry says dispatch cost is dominated by a per-run floor, so
+small batches are the expensive shape, while `teco.md` step 3 says a step table past ~3 steps /
+~5 files is a decomposition boundary. Both were asserted unqualified, so one had to give or they
+had to be about different things.
+- **Measured rather than reasoned about.** Extracted the Cost column and per-unit entry counts
+  from `claude/docs/plans/kaizen-distillation2-coordination.md`'s own ledger, excluding the
+  multi-run figures (U23/U26/U28) and the two code units (U32/U33), leaving 19 clean points, and
+  fit least squares: **floor ≈ 143.0k tokens, marginal ≈ 8.19k tokens/entry, R² = 0.846.** Per-n:
+  n=1 → 151.2k total (95% of it floor); n=5 → 184.0k (36.8k/entry); n=12 → 241.3k (20.1k/entry,
+  59% floor); n=17 → 282.3k (16.6k/entry, 51% floor). **A one-item dispatch costs 18.5× the
+  marginal item.** The qualitative claim is not just supported, it is strong.
+- **Finding: the entry's figure conflates the average with the marginal, and thereby understates
+  its own case.** It says "roughly 17k tokens per kaizen entry". That is the *average* at large n
+  (16.6k at n=17, 20.1k at n=12) — the marginal cost is **~8.2k**, less than half. Quoted as a
+  per-entry cost, 17k makes a batch look twice as expensive to extend as it is, which argues for
+  *smaller* batches — the opposite of what the entry concludes. The number was therefore corrected
+  on promotion, and stated as two numbers (floor + marginal) rather than one, because a single
+  per-entry figure is exactly the shape that hides the floor.
+- **Reconciled as different axes; neither rule yields.** The step-table rule governs
+  **sequentially dependent** work, and — read carefully — it was never a cost rule: it buys
+  checkpointability and guards scope drop, both of which a split genuinely delivers when step N's
+  output is step N+1's input, and a fresh floor is the correct price for that. A **batch of
+  independent items** already has checkpoint granularity *inside* the dispatch, provided each item
+  lands on disk as it completes, so the split buys nothing and costs a floor. The deciding variable
+  is therefore neither step count nor file count but **what a kill costs you — the run, or one
+  item** — and that is how it was written into the bullet.
+- **This pass is the evidence for the "provided each item lands" clause, and it is not
+  hypothetical.** Six kills across 45 units, **zero dispositions lost** — because of per-entry
+  write→log→clear, not because batches were small. U41 was killed at n=9 with nothing on disk and
+  lost everything; the fix that followed was per-entry landing, not smaller chunks. So the
+  independent-batch half of the rule is conditional on the discipline, and the bullet says so.
+- **Flag (K-030):** this is the eighth of this unit's promotions to land in `teco.md`, and it lands
+  there because `teco` owns no knowledge base — see the unit's closing note.
+
 ## 2026-09-10 — Kaizen distillation, U44 (twelve 2026-09-09 entries, the most foreign chunk)
 
 - **What:** U44 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled
