@@ -218,6 +218,15 @@ to the general fact here.
   parameter (`{code: $c}`, `params={"c": "x"*400}`) instead of trying to construct them
   in-query. Second-order trap: the **failed** `GRAPH.QUERY` still materializes the graph
   key, leaving a junk empty graph behind that has to be deleted by hand.
+- **A single-quoted string literal rejects the SQL-style doubled-single-quote escape (`''`) for
+  an embedded apostrophe — it's a parse error at the second quote (`"Invalid input mismatched
+  quote"`), not a silent misparse** (verified 2026-09-10, module `41811`, via the `cypher` MCP
+  tool against `kaizen_team`). Escape it with a backslash (`'it\'s a test'`) or just use a
+  double-quoted literal instead (`"it's a test"`, no escaping needed) — both confirmed to return
+  the correct string. Matters most for a free-text field value (a `KaizenEntry.fact`, a report
+  string) built with a contraction/possessive and spliced in as an inline literal: prefer
+  switching that one field to double quotes over trying to escape the apostrophe inside single
+  quotes.
 - **`redis-cli GRAPH.QUERY`'s `CYPHER` preamble needs Cypher *literals*, not bare
   `k=v` pairs** — `CYPHER key=$key ...` bound via `redis-cli`'s trailing `k=v` args
   (`... key=triage`) fails `Failed to parse query parameter 'key' value`; those trailing

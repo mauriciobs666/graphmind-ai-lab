@@ -3,6 +3,23 @@
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
 
+## 2026-09-10 — one `architect`-produced FalkorDB quoting gotcha added to `falkordb-quirks.md`
+
+- **What:** `cobb` distilled `architect`'s `kaizen_team` inbox (2 entries, both captured mid-writing
+  the out-of-scope K-030 plan). One entry routed here:
+  `b4f0e6a1-9d2c-4a5f-8b31-6e0c9a2d5f18` (2026-09-10, `suggestedHome: project docs`) —
+  **PROMOTED** into `claude/graph-dba/falkordb-quirks.md`, § *Cypher dialect & query behavior*,
+  sited beside the existing "no string-repetition operator" bullet.
+- **The fact:** a single-quoted Cypher string literal rejects the SQL-style doubled-single-quote
+  escape (`''`) for an embedded apostrophe — a parse error at the second quote
+  (`"Invalid input mismatched quote"`), not a silent misparse. Backslash-escape it or switch that
+  literal to double quotes instead. Re-derived live via the `cypher` MCP tool against `kaizen_team`
+  before promotion, not taken on the capture's word.
+- **Why here and not `architect`'s own artifacts:** a generic FalkorDB dialect fact, not specific
+  to `architect`'s domain or to the K-030 plan it was captured writing — this file is the
+  live-verified home for exactly this class of fact. Full disposition record:
+  `claude/architect/kaizen/history.md`, 2026-09-10.
+
 ## 2026-09-09 — one `cobb`-produced FalkorDB engine limit added to `falkordb-quirks.md` (U38)
 
 - **What:** `cobb` ran U38 of `claude/docs/plans/kaizen-distillation2-coordination.md` over its own

@@ -2,6 +2,57 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-09-10 — Kaizen distillation, `architect`'s inbox (2 entries, both captured mid-writing the out-of-scope K-030 plan): 1 promoted to `graph-dba`'s KB, 1 discarded as already captured more deeply in the K-030 plan itself
+
+- **What:** `cobb` distillation pass over `architect`'s produced inbox. Re-queried fresh: exactly 2
+  entries, both dated 2026-09-10, both captured while `architect` was writing
+  `claude/docs/plans/agent-knowledge-base-strategy.md` (K-030, out-of-scope, a separate concurrent
+  session's in-progress plan — read-only, never edited).
+
+- **`b4f0e6a1-9d2c-4a5f-8b31-6e0c9a2d5f18` (FalkorDB single-quoted string literals reject the
+  SQL-style doubled-single-quote escape for an apostrophe) — PROMOTED into
+  `claude/graph-dba/falkordb-quirks.md`, § *Cypher dialect & query behavior*.** Grepped
+  `falkordb-quirks.md`, `skills/agent-maintenance/SKILL.md` and `skills/agent-standards/*.md` for
+  "quote"/"apostrophe"/"escape" first — no prior coverage of this exact gotcha anywhere. Re-derived
+  live via the `cypher` MCP tool against `kaizen_team`: `RETURN 'it\'s a test' AS a, "it's a test"
+  AS b` both return the correct string; a `CREATE` using `''` inside a map-literal string value
+  fails with `"Invalid input mismatched quote"` at the second quote. This is a durable, live-verified
+  FalkorDB dialect fact any agent writing a free-text Cypher string literal benefits from, not
+  something specific to K-030 — added as a new bullet, sited beside the existing "no
+  string-repetition operator" entry (same "how string literals actually behave on this build"
+  family). Also logged in `claude/graph-dba/kaizen/history.md` per the cross-agent-KB-promotion
+  convention.
+
+- **`7c1e2f9a-4b6d-4e2a-9c3f-1a8d6e5b7c02` (falkor-chat's document-ingestion pipeline is
+  create-only — no `update_document`/`delete_document`/`list_documents` anywhere) — DISCARDED, no
+  edit, already captured more deeply at the document it was written for.** Read
+  `claude/docs/plans/agent-knowledge-base-strategy.md` §1 "The substrate fork — resolved, with
+  rationale" (`:51-121`) whole: it states the exact same CPG-confirmed absence
+  (`update_document`/`delete_document`/`list_documents` missing from
+  `falkorchat/{services,repository,mcp,api}.py`), the same non-idempotent-`create_document`
+  citation, and reaches the identical conclusion for Open question 1 (the substrate fork) — plus
+  goes further than the raw entry (tenancy/side-effect mismatch, the LLM-based entity/relationship
+  extraction machinery `ingest_document` would drag in). Same disposition shape U55/U56 already
+  established this pass for an entry captured mid-writing K-030 material: the plan doc is the
+  deeper, more authoritative treatment, so the raw capture is a compressed duplicate, not a new
+  fact. No project-docs edit made.
+
+- **Graph ops (per entry, write→log→clear, never batched):** both re-counted individually
+  immediately before clearing (`MATCH (k:KaizenEntry {entryId:'<id>'}) OPTIONAL MATCH
+  (:Agent)-[p:PRODUCED]->(k) OPTIONAL MATCH (k)-[m:MENTIONS]->(:Agent) RETURN count(DISTINCT p),
+  count(DISTINCT m)`), each returning `producedEdges=1, mentionEdges=0` ⇒ `otherRemaining = 0` ⇒
+  full-node `DETACH DELETE` for both. No `MENTIONS` tag added to either: neither is substantively
+  about a different agent (entry 1 is a generic FalkorDB dialect fact; entry 2 is about
+  falkor-chat, already fully covered by `architect`'s own in-flight K-030 plan).
+- **The `tico` orphan (`e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e`, `MENTIONS`→`tico`) was verified
+  untouched** — read-only check, not swept.
+- **Docs touched:** `claude/graph-dba/falkordb-quirks.md`, `claude/architect/kaizen/history.md`,
+  `claude/graph-dba/kaizen/history.md`.
+- **Why:** distillation of `architect`'s `kaizen_team` inbox, requested standalone (not part of a
+  numbered coordination unit this time). `architect` closes at 0 produced / 0 mentioned.
+- **Plan items:** none opened — both entries landed inside `cobb`'s write remit or were discarded;
+  nothing kept open.
+
 ## 2026-09-10 — Kaizen distillation, `architect`'s inbox (5 entries): 3 promoted (all generalized, 0 model-bench facts recorded), 1 discarded as already published, 1 discarded as superseded (U51)
 
 - **What:** U51 of `claude/docs/plans/kaizen-distillation2-coordination.md`. Re-queried at dispatch:
