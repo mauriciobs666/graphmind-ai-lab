@@ -23,9 +23,7 @@ neither do the timing carriers `results.py` has no declaration of yet — `CallT
 latency slots are unreachable. The `validate` and `run` commands are absent, and
 `tests/test_cli.py::test_s2s_remaining_commands_are_not_shipped_yet` asserts **those two** exit `2`,
 so that half of the stage boundary is checked rather than promised (`attest` shipped and left the
-assertion). And `packs.py` contains no `historyReplay`, `maxIterationsPerTurn` or `PromptConfig`:
-the manifest→`PromptConfig` route is unbuilt, the only construction of it in the tree is
-`tests/test_convo.py`'s fixture, so `drive` has no production caller.
+assertion).
 `docs/plans/small-model-benchmarking.md` §4 sequences S2–S8; `docs/HISTORY.md` carries the unit
 trail.
 

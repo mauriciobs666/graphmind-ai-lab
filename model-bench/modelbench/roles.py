@@ -33,6 +33,22 @@ UNIT_KIND_BY_ROLE: Mapping[str, str] = MappingProxyType(
 )
 
 
+#: §3.3 v1.26's third role-table column: whether a turn under this role is a bounded multi-call
+#: loop (`drive`'s `maxIterationsPerTurn` cap applies) or single-call by construction. `True` only
+#: for `tool-caller` — the four item-level roles score one call per item and carry no cap.
+#: `PromptConfig.maxIterationsPerTurn` is required *iff* this column is `True` for the pack's
+#: role, and forbidden otherwise (`packs.Pack.prompt_config`, impl review P17-5).
+MULTI_CALL_TURN_BY_ROLE: Mapping[str, bool] = MappingProxyType(
+    {
+        "tool-caller": True,
+        "guard-judge": False,
+        "nlq-generator": False,
+        "chat-responder": False,
+        "embedder": False,
+    }
+)
+
+
 class UnknownRole(ValueError):
     """A role outside FR-21's five. There is no sixth, and no default."""
 

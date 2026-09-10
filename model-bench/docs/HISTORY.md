@@ -2,6 +2,45 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-10 — P17-5: the manifest→`PromptConfig` route, closing the gap Pass 17 left to this unit
+
+**What:** the one Pass 17 finding explicitly left to `packs.py` — **P17-5**, that `validate_pack`
+had no route for the `prompt` block, so a manifest declaring a bad `historyReplay` value or
+violating `maxIterationsPerTurn`'s role-scoping rule (`-ml` §3.3 v1.26: required *iff*
+`roles.MULTI_CALL_TURN_BY_ROLE[role]`, forbidden otherwise) failed only inside `convo.assemble` /
+`convo.drive` at first use, never at validate time like every other pack defect. Three files:
+
+- `modelbench/roles.py` — the missing third role-table column, `MULTI_CALL_TURN_BY_ROLE: Mapping[str,
+  bool]`, `True` only for `tool-caller`; domain-pinned against `ROLES` the same way
+  `UNIT_KIND_BY_ROLE` already is (P14-2's shape).
+- `modelbench/packs.py` — `Pack.prompt_config() -> PromptConfig`, parsing the manifest's `prompt`
+  block and raising `PackConfigError` on a bad `historyReplay` (outside `convo._HISTORY_REPLAY_MODES`)
+  or a `maxIterationsPerTurn` that violates the role-scoping rule in either direction; wired into
+  `validate_pack` as its fifth axis via `_prompt_problems`, which treats an absent `prompt` block as
+  not its problem — same convention `_tool_module_problems` already uses for absent `tools.module`,
+  which is what keeps every pre-existing fixture (none of which carry a `prompt` block but `valid`)
+  green. `systemPrompt`/`toolSchemas` are carried through as the manifest's own declared paths, not
+  resolved content — resolution is explicitly left to whichever caller eventually drives a real turn
+  (the runner unit, not yet built), matching `convo.PromptConfig`'s own docstring.
+- `tests/test_roles.py`, `tests/test_packs.py` — the domain pin plus `tool-caller`-only assertion for
+  `MULTI_CALL_TURN_BY_ROLE`; three new fixture packs under `tests/fixtures/packs/` (a bad
+  `historyReplay`, a `tool-caller` missing the required cap, a `guard-judge` carrying the forbidden
+  one) each asserted by exact `validate_pack(pack) == [...]`; a happy-path test asserting the `valid`
+  fixture's `prompt_config()` result; and a no-`prompt`-block fixture asserting no spurious problem.
+
+**Every new guard was mutation-tested individually under `PYTHONDONTWRITEBYTECODE=1`, restored by
+file copy and verified with `diff -q` after each — never batched.** All seven mutations (the
+`MULTI_CALL_TURN_BY_ROLE` domain pin and its `tool-caller`-only value, the `historyReplay` membership
+check, both directions of the `maxIterationsPerTurn` role-scoping check, two happy-path field
+mappings, and the absent-`prompt`-block skip) were killed by the test written for that behavior; the
+absent-block skip mutation additionally reddened eleven pre-existing fixture tests, confirming that
+convention is what keeps them green today.
+
+**Verification:** `.venv/bin/python -m pytest -q` from `model-bench/` → **1027 passed, 3 deselected**
+(baseline before this unit: 1020 passed, 3 deselected). `.venv/bin/ruff check .` → `All checks
+passed!`. `AGENTS.md`'s "Current state" section had its `packs.py` gap clause removed now that the
+route is built; nothing else in the file was touched.
+
 ## 2026-09-10 — Impl review Pass 17 closed: the per-call trace contract, a name for a raising `dispatch`, and five coverage gaps whose names claimed the coverage
 
 **What:** the eight Pass 17 findings assigned to this unit — **P17-1, P17-2, P17-4** (majors),

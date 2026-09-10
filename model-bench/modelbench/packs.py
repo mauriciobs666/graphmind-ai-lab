@@ -42,6 +42,8 @@ from pathlib import Path
 from types import MappingProxyType, ModuleType
 from typing import Any, Mapping, NamedTuple
 
+from modelbench.convo import _HISTORY_REPLAY_MODES, PromptConfig
+from modelbench.roles import MULTI_CALL_TURN_BY_ROLE
 from modelbench.stats import ALPHA_FAMILY
 
 #: §3.3's plugin seam: a pack module may import stdlib and this one modelbench module — nothing
@@ -277,6 +279,57 @@ class Pack:
         """The §3.3 totality boundary: `contentHash` is never `None` on this path."""
         return _ref_from_manifest_fields(
             self.manifest, content_hash=self.contentHash, label=str(self.root)
+        )
+
+    def prompt_config(self) -> PromptConfig:
+        """The pack's `prompt` manifest block (§3.3), parsed into a `PromptConfig` — the
+        accessor `validate_pack` calls to catch a bad `prompt` block at validate time rather than
+        at `drive`'s first call (impl review Pass 17, P17-5), and what a future caller (the
+        runner unit, not yet built) reaches for instead of re-parsing the manifest itself.
+
+        Raises `PackConfigError` when `historyReplay` is outside `convo._HISTORY_REPLAY_MODES`,
+        or when `maxIterationsPerTurn` violates its role-scoping rule — required *iff*
+        `roles.MULTI_CALL_TURN_BY_ROLE[role]`, forbidden otherwise (§3.3, v1.26). Every other
+        `prompt` key is carried through as declared, unchecked: this route closes exactly the gap
+        P17-5 named, not a general schema check nobody asked for.
+
+        **`systemPrompt` and `toolSchemas` are carried through as the manifest's own declared
+        values — paths, not resolved content** — because resolving `prompt.*` paths against the
+        pack root, the way `Pack.data_path` does for `data.*`, is a separate concern from the one
+        this route closes, and `PromptConfig`'s own docstring assigns that resolution to whichever
+        caller eventually drives a real turn; no such caller exists in this tree yet.
+        """
+        prompt = self.manifest.get("prompt") or {}
+
+        history_replay = prompt.get("historyReplay")
+        if history_replay not in _HISTORY_REPLAY_MODES:
+            raise PackConfigError(
+                f"{self.packId}: prompt.historyReplay {history_replay!r} is not one of "
+                f"{sorted(_HISTORY_REPLAY_MODES)!r} (plan §3.3)"
+            )
+
+        multi_call = MULTI_CALL_TURN_BY_ROLE.get(self.role, False)
+        has_cap = "maxIterationsPerTurn" in prompt
+        if multi_call and not has_cap:
+            raise PackConfigError(
+                f"{self.packId}: prompt.maxIterationsPerTurn is absent; role {self.role!r} runs "
+                "a multi-call turn and the field is required (plan §3.3, v1.26)"
+            )
+        if not multi_call and has_cap:
+            raise PackConfigError(
+                f"{self.packId}: prompt.maxIterationsPerTurn is present but role {self.role!r} "
+                "is not multi-call, where the field is forbidden (plan §3.3, v1.26)"
+            )
+
+        return PromptConfig(
+            systemPrompt=prompt.get("systemPrompt"),
+            toolSchemas=prompt.get("toolSchemas") or (),
+            historyReplay=history_replay,
+            representToolSchemasEachTurn=prompt.get("representToolSchemasEachTurn"),
+            historyTurns=prompt.get("historyTurns"),
+            maxIterationsPerTurn=prompt.get("maxIterationsPerTurn"),
+            temperature=prompt.get("temperature"),
+            maxTokens=prompt.get("maxTokens"),
         )
 
 
@@ -654,10 +707,27 @@ def _tool_import_problems(pack: Pack) -> list[str]:
     return problems
 
 
+def _prompt_problems(pack: Pack) -> list[str]:
+    """`prompt.historyReplay` and `prompt.maxIterationsPerTurn`'s role scoping (§3.3, v1.26;
+    impl review P17-5), via `Pack.prompt_config`.
+
+    Absent `prompt` is not this function's problem — same convention as `_tool_module_problems`
+    for absent `tools.module`: a pack with no `prompt` block (every fixture but `valid`, today,
+    and every non-tool-caller role in the plan's own examples) is never asked to build one.
+    """
+    if "prompt" not in pack.manifest:
+        return []
+    try:
+        pack.prompt_config()
+    except PackConfigError as exc:
+        return [str(exc)]
+    return []
+
+
 def validate_pack(pack: Pack) -> list[str]:
     """§4 S2's pack-integrity checks. `[]` means valid, matching `Fingerprint.validate()`'s shape.
 
-    Four independent axes — a fixture can fail one, several, or none:
+    Five independent axes — a fixture can fail one, several, or none:
 
     * the `sampling` contract (§3.3): structural (`analysisUnit == pairingKey[0]`, via
       `check_sampling_contract`), the row-count identity, and `-ml` §3.4 Rule 6's
@@ -668,7 +738,10 @@ def validate_pack(pack: Pack) -> list[str]:
       Pass 12, P12-2 / P12-3(i));
     * the AST import allowlist over every `.py` file the pack ships (§3.3) — a coupling rule over
       each file's own `import` statements, not a sandbox (impl review P12-3(ii); see
-      `Pack.load_tool_module`'s docstring).
+      `Pack.load_tool_module`'s docstring);
+    * the `prompt` block's `historyReplay` and `maxIterationsPerTurn`'s role scoping, via
+      `Pack.prompt_config` — absent `prompt` is not a problem, same convention as absent
+      `tools.module` (§3.3, v1.26; impl review Pass 17, P17-5).
 
     **Not here:** the `callSurface`-versus-catalog-`type` cross-check and the tool-calling
     eligibility gate are `run`'s (§3.4.4a, §3.6) — this function has no model catalog to check
@@ -679,4 +752,5 @@ def validate_pack(pack: Pack) -> list[str]:
     problems.extend(_call_surface_problems(pack))
     problems.extend(_tool_module_problems(pack))
     problems.extend(_tool_import_problems(pack))
+    problems.extend(_prompt_problems(pack))
     return problems

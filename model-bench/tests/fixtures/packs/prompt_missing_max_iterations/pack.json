@@ -1,0 +1,24 @@
+{
+  "packId": "fixture-prompt-missing-max-iterations",
+  "packVersion": "1.0.0",
+  "role": "tool-caller",
+  "environment": {"requires": ["lmstudio-chat"]},
+  "prompt": {
+    "systemPrompt": null,
+    "toolSchemas": null,
+    "historyReplay": "structured",
+    "representToolSchemasEachTurn": true,
+    "historyTurns": 0,
+    "temperature": 0.0,
+    "maxTokens": 1024
+  },
+  "sampling": {
+    "seed": 20260909,
+    "pairingKey": ["scriptId"],
+    "analysisUnit": "scriptId"
+  },
+  "metrics": {
+    "verdictMetrics": ["cleanThroughTurnH"],
+    "headlineMetric": "cleanThroughTurnH"
+  }
+}

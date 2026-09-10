@@ -595,6 +595,70 @@ def test_validate_pack_accepts_the_valid_packs_tool_module_path() -> None:
 # --------------------------------------------------------------------------------------------
 
 
+# --------------------------------------------------------------------------------------------
+# validate_pack — the `prompt` block: `historyReplay` and `maxIterationsPerTurn`'s role scoping
+# (plan §3.3, v1.26; impl review Pass 17, P17-5)
+# --------------------------------------------------------------------------------------------
+
+
+def test_validate_pack_rejects_a_bad_history_replay_value() -> None:
+    """A `historyReplay` value outside `convo._HISTORY_REPLAY_MODES` must fail at validate time,
+    not only inside `convo.assemble` at first use (impl review P17-5)."""
+    pack = load_pack(pack_fixture("prompt_bad_history_replay"))
+    problems = validate_pack(pack)
+    assert problems == [
+        "fixture-prompt-bad-history-replay: prompt.historyReplay 'verbose' is not one of "
+        "['none', 'plaintext', 'structured', 'structured-replies-only'] (plan §3.3)"
+    ]
+
+
+def test_validate_pack_rejects_a_missing_required_max_iterations_per_turn() -> None:
+    """`tool-caller` is `roles.MULTI_CALL_TURN_BY_ROLE`'s one `True` member, so
+    `prompt.maxIterationsPerTurn` is required on this pack; omitting it must fail validation
+    rather than only `drive`'s own `None` refusal at first use."""
+    pack = load_pack(pack_fixture("prompt_missing_max_iterations"))
+    problems = validate_pack(pack)
+    assert problems == [
+        "fixture-prompt-missing-max-iterations: prompt.maxIterationsPerTurn is absent; role "
+        "'tool-caller' runs a multi-call turn and the field is required (plan §3.3, v1.26)"
+    ]
+
+
+def test_validate_pack_rejects_a_forbidden_max_iterations_per_turn() -> None:
+    """`guard-judge` is single-call by construction (`roles.MULTI_CALL_TURN_BY_ROLE['guard-judge']
+    is False`), so `prompt.maxIterationsPerTurn` is forbidden on this pack — the direction P17-5
+    named as untested alongside the missing-but-required one."""
+    pack = load_pack(pack_fixture("prompt_forbidden_max_iterations"))
+    problems = validate_pack(pack)
+    assert problems == [
+        "fixture-prompt-forbidden-max-iterations: prompt.maxIterationsPerTurn is present but "
+        "role 'guard-judge' is not multi-call, where the field is forbidden (plan §3.3, v1.26)"
+    ]
+
+
+def test_prompt_config_resolves_the_valid_packs_prompt_block() -> None:
+    """The happy path: a well-formed `prompt` block validates clean (already asserted by
+    `test_validate_pack_accepts_a_fully_valid_pack`) and the resulting `PromptConfig` is
+    available from `Pack.prompt_config()` — the accessor downstream code (a future runner unit)
+    reaches for rather than re-parsing the manifest itself."""
+    pack = load_pack(pack_fixture("valid"))
+    cfg = pack.prompt_config()
+    assert cfg.historyReplay == "structured"
+    assert cfg.representToolSchemasEachTurn is True
+    assert cfg.historyTurns == 0
+    assert cfg.maxIterationsPerTurn == 8
+    assert cfg.temperature == 0.0
+    assert cfg.maxTokens == 1024
+
+
+def test_prompt_config_is_not_this_route_when_the_manifest_has_no_prompt_block() -> None:
+    """A pack with no `prompt` key at all (every fixture but `valid`, today) must not collect a
+    spurious `prompt`-related problem — mirroring `_tool_module_problems`'s "absent is not this
+    function's problem" convention for `tools.module`."""
+    pack = load_pack(pack_fixture("call_surface_both"))
+    assert not any("prompt" in problem for problem in validate_pack(pack))
+
+
 def test_the_valid_fixtures_analysis_unit_is_scriptId_not_a_conversation_id() -> None:
     """§3.3: "the analysis unit is the *outermost* component of `pairingKey` … For the
     tool-caller that is `scriptId`, never a conversation id" — and the plan's own manifest literal

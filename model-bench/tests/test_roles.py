@@ -15,7 +15,29 @@ from __future__ import annotations
 
 import pytest
 
-from modelbench.roles import ROLES, UNIT_KIND_BY_ROLE, UnknownRole, unit_kind
+from modelbench.roles import (
+    MULTI_CALL_TURN_BY_ROLE,
+    ROLES,
+    UNIT_KIND_BY_ROLE,
+    UnknownRole,
+    unit_kind,
+)
+
+
+def test_multi_call_turn_by_role_domain_is_exactly_roles():
+    """Same shape as the unit-kind pin above (P14-2): both directions of drift between the two
+    declarations must redden, whichever side changed."""
+    assert set(MULTI_CALL_TURN_BY_ROLE) == set(ROLES)
+
+
+def test_multi_call_turn_by_role_is_true_for_tool_caller_only():
+    """§3.3 v1.26's third role-table column: `tool-caller` is the one role whose turn is a
+    bounded multi-call loop (`drive`'s `maxIterationsPerTurn` cap applies); the four item-level
+    roles score one call per item and are single-call by construction."""
+    assert MULTI_CALL_TURN_BY_ROLE["tool-caller"] is True
+    for role in ROLES:
+        if role != "tool-caller":
+            assert MULTI_CALL_TURN_BY_ROLE[role] is False
 
 
 def test_unit_kind_by_role_domain_is_exactly_roles():
