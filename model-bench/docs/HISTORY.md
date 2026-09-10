@@ -62,22 +62,33 @@ already the first half of the line: every such record printed as `unparseable: u
 colon now introduces the fields that failed, and with none to introduce the reason stands alone.
 Pinned from both sides, so removing the suffix outright reddens too.
 
+**6. P16-5 withdrawn — the last standing exception was not one, and it was the allowlist.** Pass
+16 ruled `packs._STDLIB_MODULE_NAMES` a constant the convention cannot govern: form (i) has no
+independent declaration to bind to, since binding it to `sys.stdlib_module_names` is the
+definition rather than a check, and form (ii) would be ~300 assertions. The first half is false,
+and measuring it is what showed that. **Binding a derived constant to its own source is circular
+against a *re-derivation* and not against an *augmentation*** — and the augmentation is the whole
+hazard: `frozenset(sys.stdlib_module_names) | {"requests"}` widens what every pack module is
+permitted to import and left the suite at 940 passed, refusing `not_an_allowed_package` in the
+two behavioural fixture tests exactly as before. One equality in `tests/test_packs.py` kills it.
+Measured on the delivered pin: the augmentation → 1 failed, that test alone; removing `"json"` →
+3 failed; and the re-derivation as an equivalent comprehension → 941 passed, green, which is
+correct and is the pin's stated bound. Of the two forms only the ~300-assertion half survives,
+and the convention is an *or*, so there is **no** standing exception — `AGENTS.md`'s clause says
+that positively rather than preserving an exemption for symmetry.
+
+Recorded because the shape recurs: the exception clause of a rule about stated reach exceeding
+implemented reach had itself stated a reach (*"nothing independent to bind to"*) that its own
+reasoning did not support, and it was found the way all thirteen before it were — by running it,
+not by reading it.
+
 **Verification.** Every pin mutated in both directions, one at a time, restored by file copy and
-`diff -q` after each: 36 distinct mutations, each re-run after a test it targets changed. Every
+`diff -q` after each: 39 distinct mutations, each re-run after a test it targets changed. Every
 previously-green widen now reddens, each named by the test written for it: `_DISCRIMINATORS`
 and `_RESIDENCY_FIELDS` widened by a bogus name are killed by exactly one test each, the new
 one. The coordinator's own mutation (`stats.Basis` − `"measured"`) reddens
-`test_the_basis_literal_is_exactly_the_ml_notes_vocabulary`. Suite `940 passed, 3 deselected`
-(from 920), `ruff check .` clean, `AGENTS.md` 2 255 words with no line over 700 characters.
-
-**One residual, and it is a finding rather than a deferral.** `_STDLIB_MODULE_NAMES` is carried by
-the convention line as its one standing exception, and the widen that makes it an exception is
-still green (`frozenset(sys.stdlib_module_names) | {"requests"}` → 940 passed, measured). Pass
-16 §6 P16-5's reasoning — that binding it to `sys.stdlib_module_names` is the definition rather
-than a check — holds for a *re-derivation* and not for an *augmentation*, which is the shape a
-hand-added non-stdlib name would take and the one that actually widens what a pack may import. A
-one-line equality would kill it. Not done here: the brief rules P16-5 a decided exception and says
-explicitly not to pin it, so this is routed rather than taken.
+`test_the_basis_literal_is_exactly_the_ml_notes_vocabulary`. Suite `941 passed, 3 deselected`
+(from 920), `ruff check .` clean, `AGENTS.md` 2 303 words with no line over 700 characters.
 
 ## 2026-09-09 — S2 precursor to the `drive` loop rework: `LMStudioCallFailed.status` and `convo.TURN_DISPOSITIONS`
 

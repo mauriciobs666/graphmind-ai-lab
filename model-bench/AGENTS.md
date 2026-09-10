@@ -172,10 +172,13 @@ imports it — which is why FR-17a's function is `models_with_stored_results`, n
   its widen stays inert until the second declaration is bound. **A table takes a third mutation:
   move a value to another key.** Its keys and its contents are two pins, and a value the test
   reads back out of the table is asserted against itself. Absent that, the docstring may not claim
-  a reach (*only*, *every*, *never a sixth*). The one standing exception is a constant built
-  wholesale from the runtime (`packs._STDLIB_MODULE_NAMES`): it has nothing independent to bind
-  to, and a per-member consequence would be ~300 assertions. Audits:
-  `docs/reviews/small-model-benchmarking-impl.md` Pass 14 and Pass 16.
+  a reach (*only*, *every*, *never a sixth*). **Nothing here is exempt, including a constant
+  built wholesale from the runtime** — that one binds to its own source, and the equality is not
+  circular: what it refuses is an **augmentation** (`<derived> | {extra}`, the shape a hand-added
+  exception takes), never a re-derivation, which is equivalent by construction and stays green
+  correctly. Audits: `docs/reviews/small-model-benchmarking-impl.md` Pass 14 and Pass 16 — whose
+  P16-5 standing exception is withdrawn: it kept `packs._STDLIB_MODULE_NAMES` unpinned, and one
+  name appended there silently widens what every pack may import.
 
 ## Commands
 

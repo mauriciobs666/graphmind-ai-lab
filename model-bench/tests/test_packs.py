@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -22,6 +23,7 @@ from conftest import pack_fixture
 
 from modelbench.packs import (
     _ROW_COUNT_IDENTITY_KEY_HINTS,
+    _STDLIB_MODULE_NAMES,
     ROW_COUNT_IDENTITY_EXEMPT_CELLS,
     ROW_COUNT_IDENTITY_KEYS,
     PackConfigError,
@@ -503,6 +505,27 @@ def test_validate_pack_accepts_a_pack_declaring_exactly_one_call_surface() -> No
 # --------------------------------------------------------------------------------------------
 # validate_pack — the AST import allowlist (§3.3)
 # --------------------------------------------------------------------------------------------
+
+
+def test_the_pack_import_allowlist_is_the_runtime_registry_with_nothing_added() -> None:
+    """`_STDLIB_MODULE_NAMES` is the allowlist half that decides what a pack module may import,
+    and it was the one constant this component held out as unpinnable (impl review Pass 16,
+    P16-5, now withdrawn). Measured before writing this: appending one name —
+    `frozenset(sys.stdlib_module_names) | {"requests"}` — silently widened what every pack is
+    permitted to import and left the suite at 940 passed.
+
+    **The equality is not circular, and that is the whole finding.** Binding a derived constant
+    to its own source looks tautological, and against a *re-derivation* it is: rewriting the
+    constant as an equivalent comprehension stays green, correctly, and should. What
+    it refuses is an **augmentation** — `<derived> | {extra}`, the shape a hand-added exception
+    takes — which no other assertion in this file can see, because the guard's behavioural tests
+    below refuse `not_an_allowed_package` just as happily with `requests` admitted, and a
+    per-member consequence would be one assertion per stdlib module, ~300 of them.
+
+    So the reach claim in the constant's own docstring — *"no hand-maintained list to fall out of
+    date"* — is asserted here as what it actually says: derived, and **only** derived.
+    """
+    assert _STDLIB_MODULE_NAMES == frozenset(sys.stdlib_module_names)
 
 
 def test_validate_pack_rejects_a_module_importing_outside_the_allowlist() -> None:
