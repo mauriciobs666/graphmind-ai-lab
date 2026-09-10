@@ -4,9 +4,11 @@
 
 ## Pass 1 — 2026-09-02
 
-*(Current verdict is **`## Pass 13`**'s, at the end of this document: **needs changes** on plan
+*(Current verdict is **`## Pass 14`**'s, at the end of this document: **needs changes** on plan
+**v1.26** (`2ec3026`) — 1 blocker, 2 majors, 3 minors, with plan-gate **P13-2** fenced out and open
+with `data-scientist`. `## Pass 13` was **needs changes** on plan
 **v1.25** (`5cbdf9e`) — 2 blockers, 4 majors, 4 minors, plus an explicit judgement on the four
-load-bearing claims the v1.25 amendment rests on. Passes 9–13 each gate a later version's delta;
+load-bearing claims the v1.25 amendment rests on. Passes 9–14 each gate a later version's delta;
 `## Pass 8 (narrow)` was **needs changes** on
 plan v1.14 / note v1.17 — 1 blocker, 2 majors, and an explicit answer on whether the plan is ready
 for implementation. Pass 8 is a **narrow** re-check of v1.14's delta, not a full gate; Pass 7 gated
@@ -3849,3 +3851,223 @@ which the current `pack.json` confirms.
    *wall clock per paired run* as a decision variable in its own right — rather than the script
    budget §4.5.3 makes binding — then the ~2–8× range is theirs to see, and this reviewer's call
    should be overridden rather than argued with.
+
+---
+
+## Pass 14 — 2026-09-09
+
+### Scope & verdict
+
+**Reviewed:** plan **v1.26** (`2ec3026`), the delta `5cbdf9e..2ec3026 -- docs/plans/small-model-benchmarking.md`
+(+334/−92) read in full, plus every section it lands in read whole — §3.3's two amended bullets,
+§3.8.4's four-row table and loop bullet, §4 S2's replay contract and the `10c` precursor bullet,
+§4 S5's disposition bullet and its **Done when** clause, the S2/S5 stage-split rows, §5 tests
+10/10b/10c/12, §6 R-3, and Appendix A's four amended rows. Code read at `2ec3026` via
+`git show` (no worktree touched): `modelbench/lmstudio.py`, `modelbench/convo.py`,
+`modelbench/tooling.py`.
+
+**Fenced out, by the coordinator:** **P13-2** (`ItemTiming`/`unexplainedMs` under the loop), open
+with `data-scientist`. v1.26 touches no latency, timing or withholding statement and carries two
+pointers to that seam; I verified the pointers exist and adjudicated nothing. Also out: the
+revision note's length and house style.
+
+**Verdict: needs changes.** **1 blocker**, 2 majors, 3 minors. All are closeable in this document
+today — none blocked on unbuilt work, none deferred by choice. Every Pass 13 finding in scope is
+**closed**; none was restated rather than fixed, and one was correctly overruled.
+
+**CPG:** considered, not relevant — no Code Property Graph is loaded for `model-bench`
+(`cpg_model_bench` answers with the loaded-graph list, which holds only `cpg_falkorchat` and
+`cpg_deprecated_salesperson`). Every claim below was established by reading the pinned tree.
+
+### The three commissioned questions, answered
+
+**Q1 — is `status: int | None` on a public exception the right place?** **Yes, and it is the best
+of the three options** — but the plan under-states the change by an order of magnitude, which is
+**P14-2**. The layering is correct and has direct in-file precedent: `LMStudioCallTimeout`'s own
+docstring already puts the censored-vs-missing split *"here, at the transport boundary, because
+this is the one place that knows which of the two actually happened"*, and `toolCallForm` is
+decided the same way. `status` is a **transport fact**, not a scoring category — the scoring
+distinction stays where the plan puts it (`drive` maps fact→mechanism, §3.8.4's table maps
+mechanism→count), so nothing was pushed down. The alternative the plan does not weigh is a
+subclass, `LMStudioServerRejected(LMStudioCallFailed)`; it is **worse**, because §3.6 deliberately
+gives all three causes one `withheldFor: "no_response"` and one counter, and a type split invites a
+second counter. Say that in one clause so the next reader does not re-open it.
+
+**Q2 — is the four-row table a partition? I refute your framing, and the defect is one column
+over.** The specific case you name **is** determined: the loop's continue-condition is *"while the
+response carries native `tool_calls` **and the cap is not reached**"*, so the cap is tested
+**before** the next call is issued, and a raise at the cap-th call happens while the cap has *not*
+been reached. Both plausible loop shapes yield `no-response`/`server-rejected`, and `cap-hit`'s own
+mechanism clause requires *"tool calls still being emitted"*, which a raising call does not do. So
+the four rows do partition the mechanism. **But column 4 is asserted as a function of column 1 and
+is not** — see **P14-1**, which is the blocker, and which is your suspicion arriving true through a
+different door. The precedence you could not find is genuinely unstated; that is **P14-5**, a minor.
+
+**Q3 — is the precursor unit buildable now, in isolation?** **Yes for two of its three legs, and
+the third is owed by nobody** — **P14-3**. `TurnDisposition` and `TURN_DISPOSITIONS` are pure plan
+data and need nothing that does not exist. The obstacle is not specification depth; it is that
+§5 test 10c and §4 S2's stage table **disagree about how many legs land now**, and S5's **Done
+when** clause never names completing the third. Dispatch the unit — the two-leg probe is real and
+reddens on the failure it exists to catch (a fifth member added by the rework unit) — but fix the
+ownership before S5, or the probe stays two-legged permanently.
+
+### Disposition of Pass 13's ten
+
+| # | Disposition | Rechecked |
+|---|---|---|
+| **P13-1** (blocker) | **Closed, and improved on the prescription** | The `iff` is not widened; `turnDisposition` is a separate field, `capHit` retired, `drive` catches `LMStudioError` and continues, `finalReplyText` pinned to `str(content or "")`. Both divergences are sound: `unrunnable` **is** `-ml` §4.1's scoring count and belongs in the mapping column, not the field — the vocabulary argument is right and I withdraw my token. The `status` premise verified at `40a9bc8`: `lmstudio.py:485` is rung 1 (`HTTPError`, `exc.code` available) and `:495` rung 3 (connection failed, none) — both line cites correct and both sha-scoped. Residual scope in **P14-1**, **P14-2**, **P14-4**, **P14-5** |
+| **P13-2** (blocker) | **Out of scope** — routed to `data-scientist`, pointers present at §3.8.4 and §4 S2's `wallClockMs` clause. Not adjudicated |
+| **P13-3** (major) | **Closed** | Identity restated as *replay policy*; all three omissions named (speaker prefix, `CONTEXT` block, `_append_turn` merging), each judged with a reason, and all three carried into R-3's candidate causes so a non-reproduction is not attributed to the scripts by elimination. The `THREAD_CONTEXT_WINDOW = 20` equivalence is stated as verified rather than assumed |
+| **P13-4** (major) | **Closed** | The breadcrumb equation is deleted from **both** §3.8.4 and R-3, not softened, and replaced with the honest "unknown at this replay shape". R-3 gains an explicit *what the bisect may not conclude* clause. Grepped the whole file: no third site survives |
+| **P13-5** (major) | **Closed** | Emission form is `-ml` §4.2's predicate over the dispatch trace; test 10b's pinning clause is rewritten to assert the discriminating case (all-undispatchable first iteration → `no_attempt`, never `native`) rather than the divergence |
+| **P13-6** (major) | **Closed, and held the way the convention requires** | `MULTI_CALL_TURN_BY_ROLE` as a third role column with a computed `set(...) == set(roles.ROLES)`, both refusals driven through `validate_pack` per role, `PromptConfig.maxIterationsPerTurn: int \| None` with `drive` **raising** on `None` rather than defaulting, and the fixture consequences named. The forbidden-elsewhere half is the part I did not ask for and is what stops the dead knob |
+| **P13-7** (minor) | **Closed** | Conclusion stands, justification narrowed to a floor bounded by `maxIterationsPerTurn`, sizing decision explicitly not reopened, §4.5.2's restatement routed to `data-scientist` rather than made here. The `8` is now cited to `proof_defs.py:415` in the plan itself |
+| **P13-8** (minor) | **Closed** | Two axes, named, with the bisect's inference rule ("moves one axis at a time") stated at R-3 where it is used |
+| **P13-9** (minor) | **Closed** | `structured`'s cap-hit rendering ruled, generalised to *any* non-`replied` disposition, and test 10(e) asserts the never-omitted property |
+| **P13-10** | **(a) Overruled, correctly — I concede it. (b) Closed** | I re-parsed the fixture at `2ec3026`: one top-level `_provenance.perEntry` map, seven ids, `set(perEntry) == {e["id"] for e in data}`. My "zero `_provenance` keys" was an entry-level probe reported as an artifact-level fact; the substance was already true and only v1.25's wording was wrong. The plan corrects in place rather than in the imperative, which is right, and adds the assertion that was actually missing. Method note below. (b): item 3 gains the U76 clause with the *do-not-re-fix* instruction |
+
+### Findings
+
+#### P14-1 (blocker) — §3.8.4's table is a partition, but its fourth column is not a function of its first: a `cap-hit` turn with `|E(t)| = 0` is laundered into *absent, not failed*
+
+*Evidence.* The `cap-hit` row asserts one scoring mapping — §4.2(f)'s `iteration_cap_hit_rate` and
+§4.2(g)'s `unscoreable` bucket, *"absent, not failed"*, **"and this row alone"** — and §4 S5 repeats
+it as the scorer's rule, with §3.8.4's table declared *"the only home of that mapping"*. The loop's
+continue-condition is *"while the response carries native `tool_calls`"*, **not** while a call was
+dispatched. So a model emitting a malformed tool call every iteration — `function.name` empty or
+absent, which `drive` skips (`convo.py`, `if not name: continue`, unchanged at `2ec3026`) and which
+the replay contract explicitly provides for — reaches the cap with `|E(t)| = 0`. That turn is then:
+`no_attempt` under §4.2(a) (a **failure** of FR-8(a)); **outside** §4.2(f)'s stopping denominator
+(*"turns with `|E(t)| ≥ 1`"*); and **outside** §4.2(g)'s denominator (*"turns with ≥1 dispatched
+call"*), so it cannot occupy (g)'s `unscoreable` bucket at all. The table nonetheless routes it to
+both, on the *absent-not-failed* side. This is P13-1's laundering direction re-entering one column
+over, in the fix for P13-1 — the twelfth instance of the class, exactly as you suspected, and the
+reason I rate it blocker rather than major is that the S5 scorer is being specified off this table
+now and the table calls itself the mapping's only home.
+
+*Fix.* Make the scoring column a function of the pair, not of the disposition alone. One row split:
+`cap-hit` with `|E(t)| ≥ 1` keeps today's mapping; `cap-hit` with `|E(t)| = 0` is §4.2(a)'s
+`no_attempt` and is **not** *absent-not-failed*, with only `iteration_cap_hit_rate` (which §4.2
+reports *"over all turns"*) applying. State in the table that `iteration_cap_hit_rate` is the one
+count keyed on the disposition alone and every other mapping is conditioned on `E(t)`. Then require
+the S5 synthetic-trace set to carry **that** case — a cap-hit turn with an empty dispatch trace —
+rather than a cap-hit turn generically; a list of four dispositions is not coverage over a
+two-dimensional mapping, which is how this one got in.
+
+#### P14-2 (major) — `status` is called *"a one-line adapter change"*; it is a field plus **eleven** construction sites, and with no required-no-default rule nine of them silently mean `no-response`
+
+*Evidence.* Counted at `2ec3026`: `LMStudioCallFailed` is constructed at eleven sites in
+`lmstudio.py` — `:258` (`_parse_json`), `:276`, `:281` (`_model_info_from_raw`), `:422`, `:426`
+(`catalog`), `:485`, `:495`, `:498`, `:500` (`_raw_post`'s rungs 1/3/4/5), `:528`, `:533` (`chat`),
+`:563` (`embed`). **Exactly one** of them has an HTTP status in hand (`:485`, `exc.code`); one more
+formats a status into its message but is `catalog`'s and never reaches `drive` (`:422`). Six are
+reachable from a scored `chat` call, of which one is status-bearing. If `status` is declared
+`int | None` **with a default**, every one of the other ten silently becomes `server-rejected`'s
+complement — and a *new* raise site added later inherits `no-response` by omission, which is the
+reach-exceeds-mechanism shape this ruling exists to close, arriving through the ruling's own field.
+
+*Fix.* `status` is **required at construction with no default**, exactly like `timeout_s`,
+`PackRef.seed` and `RunResult.designEffect` under the component's *"nothing that shapes a decision
+carries a default"* rule — the ten status-less sites pass `status=None` explicitly, which is a
+declaration rather than an omission. Hold it with a grep-pinned residual in the §4 S1e style:
+`grep -c 'LMStudioCallFailed(' modelbench/lmstudio.py` **→ 11**, and a test that every construction
+in the module passes `status` — cheapest form, an AST walk over the module asserting no
+`LMStudioCallFailed` call node lacks a `status` keyword, so an eleventh-plus site cannot arrive
+silently. Correct *"a one-line adapter change"* to name the site count, so the rework unit sizes it.
+
+#### P14-3 (major) — the three-way probe's third leg is owed by no done-condition, and §5 test 10c contradicts §4 S2's stage table about how many legs land now
+
+*Evidence.* §4 S2's stage-split row says the probe *"lands with `TURN_DISPOSITIONS` in the precursor
+unit asserting **two of its three** sets, and S5 completes it when the scorer exists"*. §5 test 10c
+says the opposite in the same breath — *"the `Literal`'s members, `TURN_DISPOSITIONS`, and the S5
+scorer's branch set, each asserted equal to a constant transcribed from §4 S2"* — with no mention
+that one leg is deferred. And §4 S5's **Done when** clause (read whole) names the outcome-vector
+comparison, the FR-8 counts, the laundering case, the funnel and `boundaryRule`, but **never** the
+third assertion; the only S5-side statement is a passive body sentence, *"the scorer's branch set is
+pinned by §4 S2's three-way probe"*, which describes a guarantee rather than commissioning it. A
+two-leg probe with a comment promising a third is the shape that stays two-legged.
+*Second half, on what the precursor actually buys.* The stated reason — *"two sets authored in one
+unit agree by construction and a probe that cannot redden is not a guard"* — over-reaches: the
+transcribed constant is **also** authored in the precursor unit, so in round 1 all three artifacts
+share one author and the probe cannot redden then either. What it genuinely buys is real and worth
+saying plainly: it reddens when the **rework unit** widens the enum, which is the failure mode that
+produced the two-state reading.
+
+*Fix.* Add the third assertion to §4 S5's **Done when** list as a named item, in the same sentence
+as the scorer's branch set, so it is gated rather than referenced. Make §5 test 10c say two legs now
+and one at S5, matching the stage table. And restate the precursor's rationale as cross-unit
+protection rather than same-round protection. Dispatch the unit against the corrected text — nothing
+here blocks it starting.
+
+#### P14-4 (minor) — the `no-response` row's mechanism clause is false for four of the raise sites it covers
+
+*Evidence.* The row reads *"the call did not complete: `LMStudioCallTimeout`, or
+`LMStudioCallFailed` carrying **no** HTTP status (dropped connection, socket or body error)"*. Four
+status-less sites are 200 responses that **did** complete: `:258` (`_parse_json`, unparseable body),
+`:426` (`catalog`, no `data` list), `:528`/`:533` (`chat`, no usable `choices` / no `message`),
+`:563` (`embed`). The parenthetical's *"body error"* covers them; the leading clause contradicts it,
+in a table the plan calls the mapping's only home.
+*Fix.* Lead with the discriminator rather than a paraphrase: *"the server did not answer, or
+answered unusably — no HTTP status is carried."* One clause, and it keeps the row's mapping intact.
+
+#### P14-5 (minor) — precedence when the cap-th call raises is determined by control flow but stated nowhere
+
+*Evidence.* Derivable, as above, from *"the cap is not reached"* being tested before the next call
+plus `cap-hit`'s *"with tool calls still being emitted"* — so the answer is
+`no-response`/`server-rejected`. But nothing in §3.8.4, the table or test 10c says so, and a reader
+who asks the question (you did) has to reconstruct the loop's evaluation order to answer it. A
+table that claims a turn ends in one of four ways owes the reader the tie-break it relies on.
+*Fix.* One sentence under the table: *the exception path is tested before the cap, so a call that
+raises at the cap-th iteration is `no-response`/`server-rejected`, never `cap-hit` — `cap-hit`
+requires a completed response still carrying tool calls.* Add it to test 10c as a fifth case, since
+it is one more stub-LLM script.
+
+#### P14-6 (minor) — `iterations` on a turn whose first call raised is unspecified, and `-ml` §4.2(f) reports a statistic over it
+
+*Evidence.* §4 S2 rules `chatResults` *"empty for a turn whose first call raised"* and says nothing
+about `iterations`; test 10c asserts the disposition and the trace count but not `I(t)`. `-ml`
+§4.2(f) reports *"mean and p95 of `I(t)`"*, so whether a failed turn contributes `0`, `1`, or is
+excluded from that summary changes a printed figure. Zero and one are both defensible (no iteration
+completed / one was attempted) and neither is derivable from the text.
+*Fix.* Rule it in §3.8.4's table as a fifth column or one clause — `iterations == len(chatResults)`
+is the reading consistent with *"empty when the first call raised"* and makes `I(t)` a count of
+**completed** iterations — and say whether a non-`replied` turn enters §4.2(f)'s `I(t)` summary at
+all. If the second half is the note's to rule, route it with P13-2 rather than deciding here.
+
+### A method note I owe on Pass 13 (P13-10(a))
+
+The finding was wrong and the correction is right. Worth naming because the failure was in my
+probe, not my reading: the plan said *"each carrying a per-entry `_provenance` citation"*, which is
+ambiguous between an entry-level key and a per-entry map; I tested only the first shape
+(`any('_provenance' in e for e in d['data'])`), got `False`, and reported it as *"zero `_provenance`
+keys"* — an artifact-level claim from a shape-specific query. **A negative result from a
+shape-specific probe is evidence about the shape, not about the substance.** The cheap counter,
+which I will apply from here: when a structural probe returns *absent*, dump the object's own
+top-level keys before reporting absence — one extra line, and it would have shown
+`_provenance.perEntry` immediately. This is the same discipline as the citation-scope rule
+(read every function a claim spans) applied to data rather than to code.
+
+### What's solid
+
+- **Both divergences from my prescription are improvements, and I withdraw the token I proposed.**
+  `unrunnable` is `-ml` §4.1's *count*, my set mixed a scoring word into a mechanism vocabulary, and
+  the two cited precedents (`BinaryMetric.unit`/`analysisUnit`, `unit_kind`/`analysis_unit_field`)
+  are the right ones — the second is this plan's own route (iii). Putting the count in a mapping
+  column rather than in the field name is better than what I asked for.
+- **The undecidability premise is real and correctly sha-scoped**, and I checked the two line cites
+  rather than taking them: `:485` rung 1 carries `exc.code`, `:495` rung 3 carries nothing, and the
+  class docstring folds status/connection/body into one disposition.
+- **P13-6's forbidden-elsewhere half** is the part I did not ask for and is what actually stops a
+  dead knob accreting inside four content hashes; `drive` raising on `None` rather than defaulting
+  keeps the no-default rule intact through a field four packs must not carry.
+- **The P13-2 fence is honoured**, not merely declared: grepped the whole file for `capHit`,
+  `unrunnable` and `three-way` — every surviving hit is either historical prose or the new mapping,
+  and no latency, timing or withholding statement moved.
+- **`capHit`'s retirement is complete.** The only surviving occurrences are the three that narrate
+  the retirement itself.
+
+### Open questions
+
+1. **P14-6's second half may be the note's.** Whether a non-`replied` turn enters `-ml` §4.2(f)'s
+   `I(t)` mean/p95 is a denominator question of exactly P13-2's kind. If you would rather it ride
+   with that routing than be ruled here, that is the cheaper sequencing and I have no objection.
