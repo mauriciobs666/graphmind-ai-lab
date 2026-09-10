@@ -1,6 +1,19 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.22
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.23
+
+2026-09-10 (v1.23, `data-scientist`) — folds this note's half of the raising-`dispatch` ruling
+(`docs/plans/small-model-benchmarking-ml-dispatch-failure.md`, accepted at `a65d288`): §4.1's
+`unrunnable` gains the **tool channel** beside the model channel; §4.3 rule 4 gains its row and the
+discriminator sentence (same *unattributable, no observation* argument, plus why the bucket is
+`unrunnable` and never *undispatchable* — the latter partitions as `no_attempt`, a failure charged
+to the model, more often for the weaker arm); rule 5 gains its one exception, **state**
+contamination reaching (a)–(g) and the `I(t)` summary where **history** contamination does not, so
+a conversation censored by a raise has no turns after `t` at all; and rule 3's funnel splits its
+`unrunnable` line by channel. **`ITERATION_SUMMARY_DISPOSITIONS`/`_EXCLUDED` and their union
+assertion are deliberately untouched**: the ruling adds no sixth `TurnDisposition` member — a
+dispatch raise is conversation-scoped and is carried as a conversation-level censoring marker — so
+the union against `convo.TURN_DISPOSITIONS` still binds five members and must not be widened.
 
 2026-09-10 (v1.22, `data-scientist`) — plan-gate Pass 15's blocker **P15-1**, plus plan v1.27's two
 `§7 rule 3` raises; all three ruled, and two of the three are against this note.
@@ -1814,10 +1827,18 @@ Per turn `t` of a scripted conversation, the pack supplies ground truth and the 
 full script.** A turn is never skipped because a previous turn failed. This is what the prior §8.2
 run did (turns 5–9 recorded after the turn-4 collapse) and it is what keeps the per-turn-position
 denominator equal to `n` conversations at every `t`, rather than a selection-conditioned subset.
-If a turn cannot be driven at all (LM Studio 400 / crash, as `gpt-oss-20b` produced), it is
-recorded as **`unrunnable`** and reported in its own count — never as a failure, never silently
-dropped. A model whose comparison rests on 8 runnable turns out of 64 is not comparable to one
-with 64, and the report must make that visible rather than averaging it away.
+If a turn cannot be driven at all it is recorded as **`unrunnable`** and reported in its own
+count — never as a failure, never silently dropped. **Two channels reach it, not one** *(v1.23)*.
+The **model channel**: LM Studio 400 / crash, as `gpt-oss-20b` produced — `D(t) ∈ {no-response,
+server-rejected}`. The **tool channel**: a pack's `ToolEnvironment.dispatch` raised, so the
+harness could not execute the call the model chose. The discriminator is rule 4's and is the same
+on both — the harness holds no observation of the model at that turn, and cannot attribute the
+failure — and the second channel is **not** a sixth `D(t)` member: a dispatch raise is
+conversation-scoped (it invalidates the environment, not just the turn), so it is carried as a
+conversation-level censoring marker and `D(t)` stays at five
+(`docs/plans/small-model-benchmarking-ml-dispatch-failure.md` §4(c)).
+A model whose comparison rests on 8 runnable turns out of 64 is not comparable to one with 64, and
+the report must make that visible rather than averaging it away.
 
 ### 4.2 The seven counts — exact denominators
 
@@ -1888,7 +1909,12 @@ which is exactly why "does a non-`replied` turn enter the `I(t)` summary?" had n
 text. Each figure now carries its own.)*
 
 - **`stopping_when_done`.** Denominator: turns with `|E(t)| ≥ 1`, less the two `unrunnable`
-  mechanisms (`no-response`, `server-rejected` — rule 4 below). Numerator: `D(t) == replied`
+  mechanisms (`no-response`, `server-rejected` — rule 4 below). *(v1.23: still **two**, and the
+  tool channel does not make it three. `D(t)` has five members and this bullet's three denominators
+  are all over turns that were driven; a turn lost to a raised `dispatch` is never driven to a
+  record at all, so it subtracts here by absence rather than by an exclusion clause. The same
+  reading carries to the two figures below and to `ITERATION_SUMMARY_EXCLUDED`, which stays at
+  three members.)* Numerator: `D(t) == replied`
   **and** no call dispatched after `R(t)` was fully satisfied. A `cap-hit` turn is **in** the
   denominator and fails it — that is the count's whole purpose. A `timed-out` turn is in it and
   fails it too: outcome `fail`, never `n_a`, per §3.6's third disposition and rule 4's
@@ -2018,7 +2044,8 @@ Five rules, all mandatory *(three until v1.21, four until v1.22)*:
 
 ```
 turns driven                  360
-  unrunnable (harness/server)   0
+  unrunnable (model channel)    0   -> no-response / server-rejected
+  unrunnable (tool channel)     0   -> dispatch raised; conversation censored at t
   R(t) = 0 (restraint turns)   40   -> restraint rate 38/40
   R(t) >= 1                   320
     native call emitted       142   -> (a)+(b) partition over 320
@@ -2059,6 +2086,22 @@ most likely way this harness lies, and the funnel is the fix.
    | **`timed-out`** | yes | outcome **`fail`**, never `n_a` — §3.6's third disposition, and the only non-completion that earns it. **Out of the `I(t)` summary** all the same (§4.2(f)): a budget bounds *how long*, not *how many* |
    | `no-response` (dropped connection, unparseable or unusable body) | **no** | §4.1's **`unrunnable`** count |
    | `server-rejected` (the server answered with a status and refused) | **no** | §4.1's **`unrunnable`** count |
+   | **a raised `dispatch`** (the pack's tool environment could not execute the model's call) — *not a `D(t)` member; see below* | **no** | §4.1's **`unrunnable`** count, and the conversation is censored from `t` (rule 5) |
+
+   **The tool channel takes the same discriminator, and the row above is where it lands**
+   *(v1.23, folding `docs/plans/small-model-benchmarking-ml-dispatch-failure.md`)*. A pack's
+   `dispatch` that raises is the model channel's argument one channel over: the trigger is
+   **partly model-chosen** — the model picks the arguments, so a weaker arm drives a sim into a
+   raise more often — and the harness cannot attribute the raise between *the model produced an
+   argument the sim did not anticipate* and *the sim is simply broken*, exactly as it cannot
+   attribute a `400` between a runaway message list and a malformed harness payload. So it is
+   `unrunnable`, and emphatically **not** *undispatchable*: an undispatchable call contributes
+   nothing to `E(t)`, so a turn whose only call landed there partitions as `no_attempt` under
+   §4.2(a) — **a failure charged to the model** — which would launder a harness fault into a
+   scored model failure, silently, and more often for the weaker arm. **The primary defence is
+   upstream and belongs to the pack**: `dispatch` is *total* over `(str, dict)`, every
+   input-shaped problem being a returned error value rather than a raise, so this row governs a
+   residual rather than a design path.
 
    **Three consequences, and the second and third are where the plan is currently wrong.**
 
@@ -2177,11 +2220,28 @@ most likely way this harness lies, and the funnel is the fix.
    those turns would discard most of the evidence on exactly the runs where behaviour is most in
    question, to remove a contamination whose effect on a *behavioural* rate this note has no basis
    to sign — and an exclusion whose direction is unknown is not conservative, it is just smaller.
-   It is **disclosed rather than assumed away**: the funnel (rule 3) prints, under its `unrunnable`
-   line, the count of turns scored **after** an `unrunnable` turn in the same conversation. One
+   It is **disclosed rather than assumed away**: the funnel (rule 3) prints, under its
+   **model-channel** `unrunnable` line, the count of turns scored **after** an `unrunnable` turn in
+   the same conversation — under the tool channel that count is `0` by construction (v1.23's
+   exception below leaves no such turns), which is what makes the two lines worth separating. One
    integer from the same pass, no gate and no second denominator. *(This asymmetry is the answer to
    "the same third state, or a different treatment?" — one predicate, three consumers, two
    mechanisms, and a fourth group deliberately untouched.)*
+
+   **One exception, and it is the tool channel's alone** *(v1.23)*. The carve-out above rests on
+   **history** contamination: a turn answered against a shortened replay is still an observation of
+   what the model does with the turn it was given, and excluding it would discard evidence to
+   remove a bias whose direction this note cannot sign. That reasoning does not survive **state**
+   contamination. After a raised `dispatch` the environment's state is unknown — the raise may have
+   mutated the cart, may have recorded a `DispatchRecord`, and `drive` cannot tell — so FR-10's
+   ground truth is itself unreliable from `t` onward, and the later turns of that conversation are
+   not observations of *anything*, behavioural or trajectory-level. **So for this cause, and only
+   this cause, the censoring reaches (a)–(g) and the `I(t)` summary too.** The implementation is
+   not an exclusion rule: those turns are **never driven**, the conversation ending at `t` with
+   turns `1 … t−1` kept, which is also what returns their inference budget (§4.5.2's binding
+   constraint). Discriminator, stated so the two are not collapsed: a conversation censored by
+   `no-response` at `t` still contributes turns `> t` to (a)–(g); one censored by a raised
+   `dispatch` at `t` has no turns `> t` at all.
 
    **The sweep, and its result — P15-1 asks for exhaustive rather than sampled.** Every occurrence
    of the token was read at v1.22 (`grep -ni clean docs/plans/small-model-benchmarking-ml.md`) and
