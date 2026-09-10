@@ -4423,3 +4423,310 @@ should not be another full re-read. It should be a **narrow pass over a closed, 
 enumerated before reading**: every predicate and rule v1.28 changes × every site in the plan, the
 note and the shipped tree that states it. That is Pass 13 §6's method at document scale, and it is
 the only scope under which "no findings" is evidence rather than fatigue.
+
+## Pass 16 (narrow, inventory-scoped) — 2026-09-10
+
+### Scope & verdict
+
+**This is not a re-read of the plan.** Pass 15 §6 scopes it to a **closed, sized inventory
+enumerated before judging**: every predicate v1.28 changes × every site that states it, across
+the plan, the `-ml` note and the shipped tree. The inventory is §1 below, written before any
+finding. Anything outside it was not swept, by design.
+
+**Reviewed:** plan **v1.28** (`ad9130b`), diffed against v1.27 (`d71c83e`) in full (+442/−113),
+against `-ml` **v1.22** (`551c946`) §4.3 rule 5, §4.3.1 item 11, §4.4, §11.4, §11.7 slots 2/6/7 and
+§11.9 ask 8. Shipped code read at **`ae3d71a`** (= `ad9130b` for `model-bench`; `git diff ae3d71a
+ad9130b -- model-bench` is empty) via `git show`/`git grep <sha>` only.
+**The working tree was never measured and must not be:** a `tdd-engineer` unit landed
+`modelbench/convo.py` and `tests/test_convo.py` edits *during* this pass — `git grep -F '"timed-out"'`
+returns **3** in the tree and **0** at `ae3d71a`, so a tree-measured pin would have reported the
+rework already done. Findings carry **`P16-*`**.
+
+**Not re-spent, per the commissioner:** P15-4's and P15-6's stated divergences (both verified by
+the commissioner; my independent re-check of the five pins is a disposition line in §3, not a
+finding); the revision note's length and house style; §6's two out-of-scope classes.
+
+**Verdict: needs changes.** **0 blockers**, 2 majors, 4 minors, 1 nit — **7 findings, 1 class-D
+(major), 6 class-S**. Nothing is deferred by choice; every residual's classification is in §5.
+v1.28's central moves all hold: rule 5 is transcribed accurately against the note's table, the
+`Y_calls`→`callAttemptedCount` correction is swept clean across all 46 `callCount` sites, and the
+P15-4 pin block reproduces exactly.
+
+**Branch: 1 — stop the gate.** 0 class-D blockers and exactly 1 class-D finding. Branch 3 is not
+reached (§4).
+
+**CPG:** considered, not relevant — no Code Property Graph is loaded for `model-bench`. Re-checked
+this pass rather than inherited: `cpg_model_bench` answers with the loaded-graph list, whose only
+CPGs are `cpg_falkorchat` and `cpg_deprecated_salesperson`.
+
+### 1. The inventory, enumerated and sized before judging
+
+**14 predicates v1.28 changes.** Site counts are statement sites I read and ruled on — matches
+pruned of incidental/unrelated hits, not raw grep totals.
+
+| # | Predicate v1.28 changes | plan | note | tree | verdict |
+|---|---|---|---|---|---|
+| 1 | `Y_calls` = attempt count = `callAttemptedCount = callCount + latencyWithheldForNoResponse`; `callCount` = **completed** calls and not `Y_calls` | 24 | 8 | 0 (unbuilt) | clean |
+| 2 | `callCount` per-role value — `I(t)` / **at most** `1` / `0` on a non-returning call / `0` on `deterministic` | 3 | 1 | 0 | **P16-3** |
+| 3 | Rule 5 — three consumers of *clean through `t−1`*; headline ternary, hazard + §4.4 censored from `t` onward | 8 | 4 | 0 | **P16-2**, **P16-4**, **P16-6** |
+| 4 | the scorer stores `f_t`, `r_t`, `c_t` per position, never a rate | 2 | 2 | 0 | clean |
+| 5 | P15-2 — a `timeout`/`no_response` item keeps the completed calls' `CallTiming`s; `calls == ()` **only** on a first-call raise | 8 | 1 | 0 | clean |
+| 6 | P15-3 — a failing disposition beats **both** load producers | 4 | 2 | 0 | **P16-1** |
+| 7 | P15-6 — `drive` narrows its catch to two classes; anything else propagates as §3.6 (iv) | 3 | 1 | 4 | clean |
+| 8 | P15-7 — §3.8.4's table owns the `finalReplyText`↔disposition mapping only | 3 | 0 | 1 | clean |
+| 9 | P15-8 — `asymmetry` only where **one** arm is affected | 3 | 1 | 0 | clean |
+| 10 | P15-9 — an `unrunnable` turn records `outcome: "n_a"`, `scoreable` `False`; column-4 header cites rule 4 | 3 | 0 | 0 | **P16-7** |
+| 11 | P15-4 — the shipped-code pin: 5 symbols / 4 files, 4 residual greps, 1 positive pin | 2 | 1 | 11 lines | **P16-5** |
+| 12 | P15-5 — trace (1) asserts **five** consequences | 1 | 1 | 0 | clean |
+| 13 | §7 raises (`R-1`…`R-3`) vs §6 risks (`R-1`…`R-15`) are two sequences | 3 | 0 | 0 | clean |
+| 14 | §5's stage table cites §4 S5 by item number instead of a hand-maintained count | 2 | 0 | 0 | clean |
+
+**Size: 14 predicates, 69 plan sites, 22 note sites, 16 tree sites — 107 sites.** Seven predicates
+came back clean; the seven findings below land on the other seven.
+
+### 2. Disposition of Pass 15's nine
+
+| # | Disposition | Rechecked |
+|---|---|---|
+| **P15-1** (blocker) | **Closed, and the fix is clean — I re-derived rather than inherited** | The plan's §3.8.4 transcription (`plan:2288-2320`, `:2343`) matches `-ml` §4.3 rule 5's three-consumer table clause for clause: headline ternary with the `t > H` half stated, hazard risk-set exit at `≥ t` with `1 … t−1` kept, §4.4's observed `n` with the structural one beside it and `n < 10` on the observed, §4.2(a)–(g) and `I(t)` untouched, funnel disclosure line, `c_t` selecting §4.6's bound. §4 S5 *Done when* **(3a)** gates the discriminating pair, both mutation directions and `f_t/r_t/c_t`. The one clause of rule 5's own sweep that did **not** land is **P16-2** |
+| **P15-2** (major) | **Closed; all five live sites scoped** | `plan:1587`, `:1613`, `:5194`, `:5936`, `:5948` all now read *"on a single-call item/fixture"*; `plan:2916-2930`'s `ItemTiming` comment reads *"EMPTY ONLY WHEN THE FIRST CALL RAISED"*; Appendix A's self-contradicting cell corrected; test 15b case **(d)** added. `grep -n 'only populated field'` → 5, every one scoped |
+| **P15-3** (major) | **Closed for the turn, and the clause does not reach the four single-call roles** — **P16-1** | The precedence is stated (`plan:1726-1745`) and reaches **both** producers, which is more than the finding asked. Its key is `turnDisposition` |
+| **P15-4** (major) | **Adopted; the gate's prescription refused on §6's own ruling, and the refusal is right.** All five pins reproduce | Re-run at `ae3d71a` **and** `ad9130b`, not inherited: `scores \|score it \`fail\`` → **3**, `four-row` → **5**, `home of the mapping` → **1**, `no-response.*LMStudioCallTimeout` → **2**, positive `"timed-out"` → **0**. The line-drift claim is exact (`test_lmstudio.py:1056` at `d5b549d` → `:1072` at `ae3d71a`). The two widening hazards reproduce (`\bfour\b` → 68 non-`four-row` lines; `agree by construction` and `fifth` both live elsewhere). The one defect is **P16-5**, in the symbol table rather than the pins |
+| **P15-5** (minor) | **Closed** | Trace (1) now asserts five consequences, both negatives added (`plan:5511-5564`) |
+| **P15-6** (minor) | **Closed, and the divergence is right** | `drive` narrows to the two classes; the stated fallback — any other `LMStudioError` propagates as §3.6 clause (iv)'s server-gone re-probe and exit `3` — is consistent with clause (iv) as written (`plan:1595-1599`), and is **not** §4.1's forbidden turn-skip. No test item, per §6 |
+| **P15-7** (minor) | **Closed at two sites, one of which no pass reached** | `plan:5059` qualified; Appendix A's `TurnTrace` row corrected (it was the worse copy — *scoring mappings*, and *four* members). The refusal of a plan-wide grep is correct: §3.8.4's deletion paragraph quotes the retired sentence to disown it (`plan:2442-2443`), so a residual over that text is unpassable |
+| **P15-8** (minor) | **Closed at two sites** | `plan:2285`, `:5548`, `:5600`; `plan:2250` was already correct |
+| **P15-9** (nit) | **Closed at §3.8.4; the field's own home is untouched** — **P16-7** | `plan:2470-2482` rules `n_a` + `scoreable False` + funnel head from `turnDisposition`; the column-4 header now carries rule 4's citation (`plan:2424`) |
+
+### 3. Findings
+
+#### P16-1 (major, **class-D**) — the P15-3 precedence is keyed on `turnDisposition`, which four of the five roles do not have, and rule (ii)'s fourth assertion cannot bind there
+
+*Evidence.* `plan:1734-1736`: *"on any `turnDisposition` other than `replied`/`cap-hit` the
+disposition sets `withheldFor`, and no load producer runs on that item"*. `turnDisposition` lives
+on `TurnTrace`, which `drive` produces — and `drive` runs only for `tool-caller`:
+`MULTI_CALL_TURN_BY_ROLE` is `True` there and `False` for *"the four item-level roles, which are
+single-call by construction"* (`plan:513-514`). The collision is reachable on those four: the
+residency guard fires on the item's **preceding** snapshot (`plan:1535-1537`, unconditional, no
+mention of `withheldFor`), the call then returns a 500, and rule (vi) admits one value. The plan
+answers it only obliquely — §3.6's fourth disposition says such an item *"does carry an `ItemTiming`
+carrying `withheldFor: "no_response"`"* and is counted in `latencyWithheldForNoResponse`
+(`plan:1612-1626`) — so a reader must **judge** that the specific ruling beats the generic guard.
+Worse, the enforcement the plan and `-ml` §11.4 both name — rule (ii)'s **fourth assertion**,
+`Σ_items (len(timing.calls) + [turnDisposition ∈ {timed-out, no-response, server-rejected}])`
+(`plan:5267-5270`), *"the two-route check that makes the precedence an enforced fact rather than a
+remembered one"* — has **no second route** on those four roles: the only per-item signal there is
+`timing.withheldFor`, which is exactly what `latencyWithheldForNoResponse` is summed from, so the
+check degenerates to a tautology. Consequence of a wrong flip: `callAttemptedCount` short by one per
+item, §11.6's gate taken against a shrunken `Y_calls` — the failure ask 8 just closed — plus §11.7
+slot 2's **model-load** cause on an item that never returned. Rule (iii) still balances, so nothing
+reddens. The note's own worked case (38 single-call items, 37 failing) is one of these roles.
+
+*Fix.* Two clauses, both closeable today. (1) Restate the precedence in a vocabulary every role has
+— *"an item whose only, or last, call did not return takes `withheldFor` from that failure and no
+load producer runs on it; on a `tool-caller` that condition is `turnDisposition ∉ {replied,
+cap-hit}`"* — in §3.6's withholding bullet where it already sits. (2) Give rule (ii)'s fourth
+assertion its single-call branch, which is genuinely independent and which Appendix A's own row
+already states in prose: **on any arm whose role has `MULTI_CALL_TURN_BY_ROLE == False`,
+`callAttemptedCount == latencyItemCount`**. I checked it is not a tautology and that it catches
+exactly this: a mis-filed item contributes `0` to `callCount` and `0` to
+`latencyWithheldForNoResponse`, so `callAttemptedCount` falls one below `latencyItemCount` and the
+assertion reddens. Test: a `guard-judge` fixture, one item preceded by a not-resident snapshot whose
+call then returns a 500, asserting `withheldFor == "no_response"`, absence from
+`latencyWithheldForLoad`, and `callAttemptedCount == latencyItemCount`.
+
+#### P16-2 (major, class-S) — rule 5's own sweep produced one report obligation the plan does not transcribe and no done-condition owns: **no cross-arm hazard difference may be printed**
+
+*Evidence.* `-ml` §4.3 rule 5 closes with *"One consequence the sweep turned up that is not a
+rewrite of anything: under censoring two arms' hazard curves are conditioned on **different risk
+sets**, so **no cross-arm hazard difference is printed** — the two curves go side by side, each with
+its own `c_t`, which is the discipline §11.7 slot 7 already applies to two arms' latency figures at
+unequal coverage."* (note `:2195-2199`; slot 7 exists and is that precedent, note `:4298`.) The
+plan's own contract for rule 5 is *"Rule 5 is the total map and this plan restates none of it; **what
+the plan owes is that the report and the record carry it**"* (`plan:2292-2296`) — and a *never print*
+rule is a report obligation. `grep -n 'cross-arm'` over the plan → **0**; the three rule-5 sub-bullets
+(`plan:2297-2320`) carry censoring, `f_t/r_t/c_t` and the funnel line and not this; §4 S5 *Done when*
+(3a) does not gate it. `report.py` is a two-arm comparison tool and §4 S5's prose done-condition
+already commissions *"the hazard curve"* (`plan:5535`), so the difference is the natural thing to
+render. Failure mode: a printed per-position hazard difference between two curves conditioned on
+different risk sets — a difference that is not one. Silent, and it is precisely §6's kept class: the
+rule was stated for the latency figures (slot 7) and not for its sibling.
+
+*Fix.* One clause in §3.8.4's rule-5 bullet — *"two arms' hazard curves are conditioned on different
+risk sets, so `report.py` prints them side by side with each arm's own `c_t` and **never** a
+cross-arm difference, exactly as §11.7 slot 7 already rules for latency at unequal coverage"* — and
+add it to §4 S5 *Done when* item (3a) by name, since that item exists because prose ownership is
+what P15-1 was. Test: a two-arm render where both arms have a censored conversation asserts that no
+difference string appears and that both `c_t` lines do.
+
+#### P16-3 (minor, class-S) — §3.3 says `callAttemptedCount` is *"exactly `1` per item on any model-calling arm"*, which is false on a `tool-caller`; Appendix A carries the qualifier and §3.3 does not
+
+*Evidence.* `plan:531-532`: *"that is the *attempt* count, `callAttemptedCount`, which is exactly `1`
+per item on **any model-calling arm**"*. Appendix A's new row (`plan:1787`) reads *"exactly `1` per
+item on any **single-call** model arm"* — the architect added the qualifier at one site and not the
+other. On a `tool-caller` item `callAttemptedCount = len(timing.calls) + [failed]`, i.e. `I(t)` or
+`I(t)+1`; `-ml` §11.10 (7d)'s own fixture gives `Y = 3`, `Y_calls = 7`. The sentence is transcribed
+from the note's ask 8, which carries the same slip (note `:4536-4537`) — but the plan is the
+document an implementer builds from, and it now states the false form and the true form 1 250 lines
+apart. *(Borderline against §6's out-of-scope class (i): rule (ii)'s fourth assertion reddens on a
+`tool-caller` run — though under **P16-1** it does not on the four roles where §3.3's sentence is
+accidentally true. Reported for the site inconsistency, not hunted.)*
+
+*Fix.* Sweep `plan:531-532` to Appendix A's wording. The note's ask-8 sentence is `data-scientist`'s
+and is worth a one-line raise under §7 rule 3 rather than a silent divergence.
+
+#### P16-4 (minor, class-S) — the funnel's new post-`unrunnable` line is owed by prose and by no done-condition, in the revision that invokes P14-3 to justify gating item (3a)
+
+*Evidence.* `plan:2312-2316` states a new report obligation: *"The funnel gains one line under its
+`unrunnable` count: turns scored **after** an `unrunnable` turn in the same conversation"* — it is
+one of `-ml` §4.3.1 item 11's plan-side consequences (note `:2317-2319`) and it is the **disclosure**
+that makes rule 5's deliberate non-exclusion of §4.2(a)–(g) honest rather than assumed away. §4 S5
+*Done when* item (3a) gates the hazard's censoring, §4.4's observed `n`, the discriminating pair,
+both mutation directions and `f_t/r_t/c_t` — and not this line. The prose done-condition says only
+*"the funnel table renders"* (`plan:5534`), which was true before v1.28. That is exactly P14-3's own
+finding — *a contract owed by no done-condition stays unbuilt* — inside the revision that cites
+P14-3 as the reason (3a) is gated by name. The plan's own *"no gate"* in that bullet means no
+**coverage** gate (the note's words too), not no done-condition.
+
+*Fix.* Add the line to §4 S5 *Done when* item (3a): the funnel prints, under its `unrunnable` count,
+the count of turns scored after an `unrunnable` turn in the same conversation, asserted on a fixture
+where that count is non-zero and the `unrunnable` count alone would not distinguish it.
+
+#### P16-5 (minor, class-S) — the P15-4 symbol table sends the rework unit at the wrong file: `modelbench/convo.py`'s `TURN_DISPOSITIONS` block already carries the corrected rationale, and the over-claim is in `tests/test_convo.py`, reached by no row and no residual
+
+*Evidence.* `plan:5088-5089`: *"The shipped module **docstring on `TURN_DISPOSITIONS`** carries the
+same over-claim in its own words; the rework unit corrects it in the same pass"*, and the symbol
+table's row 3 prescribes *"P14-3's corrected rationale (cross-unit protection — a probe authored
+beside its transcript cannot redden in round 1)"* for `modelbench/convo.py`. **False at `ae3d71a`**:
+that block (`convo.py:92-101`) already says *"a probe authored in the same step that introduces a
+member can never redden against it, so `TURN_DISPOSITIONS` lands in its own unit and the rework unit
+… consumes a constant it did not write"* — the corrected rationale, verbatim in substance. The
+over-claim lives at **`tests/test_convo.py:603`**: *"two sets authored in one unit agree by
+construction and a probe that cannot redden is not a guard"*, inside the **section banner**
+(`:596-610`), which row 4 does not cover (row 4 is scoped to *"the `#:` block above"*
+`_DISPOSITIONS_PER_PLAN_3_8_4`, i.e. `:612-617`) and which no residual reaches — `agree by
+construction` is the phrase the plan itself fences off as a widening hazard. So a faithful
+application of the pin rewrites a correct block and leaves the wrong one. *(§6 rules this class out
+of scope and I did not hunt it; it surfaced inside inventory row 11 and is a verified factual error
+about shipped code, so it is reported rather than dropped.)*
+
+*Fix.* Move row 3's rationale clause onto a new row for `tests/test_convo.py`'s **section banner**
+(`# TURN_DISPOSITIONS — plan §3.8.4's four-row …`, pinned by that heading text, which residual 2
+already reaches), and strike the *"shipped module docstring on `TURN_DISPOSITIONS`"* sentence — or
+correct it to name the test file. The count does not move: the banner is already residual 2's
+`test_convo.py:597`.
+
+#### P16-6 (minor, class-S) — §3.8.4's scorer-contract bullet still assigns §4.2's denominators to the per-turn-position output, which rule 5 has just made a different population from §4.4's
+
+*Evidence.* `plan:2229-2230` is the plan's only statement of what `scoring/toolcalls.py` produces
+per position: *"produces the FR-8 counts **per turn position**, with the exact denominators in `-ml`
+§4.2"*. Under rule 5 those two are now deliberately different populations: §4.2's turn-level counts
+(a)–(g) keep every turn after an `unrunnable` one (note `:2174-2184`), while §4.4's per-position `n`
+drops the conversation from `t` onward (note `:2380-2388`). The bullet was written when there was
+one population and was not swept. §4 S5 *Done when* (3a) gates the **printed `n`** and not the
+scorer's per-position numerator, so an implementer who reads `:2229` for the module contract and
+(3a) for the report can end with a numerator and a denominator drawn from different populations —
+green, and a rate that is not a rate.
+
+*Fix.* One clause at `:2229`: *"§4.2's denominators govern the pooled counts; the per-position slice
+additionally drops conversations censored by `-ml` §4.3 rule 5 at `t' ≤ t`, numerator and
+denominator alike (§4.4)"* — the *numerator and denominator alike* being what rule 5's table states
+for the hazard row and states for neither the per-position row nor here.
+
+#### P16-7 (nit, class-S) — P15-9's ruling lands at §3.8.4 and leaves `ItemResult.outcome`'s own definition untouched
+
+*Evidence.* `plan:2950`: `outcome: Literal["pass", "fail", "n_a", "parse_failure"]`, with no comment
+about the `unrunnable` case, while every neighbouring field in that dataclass carries its ruling
+inline (`scoreable`, `counts`, `timing`, `measures` all do). The ruling — `n_a` with `scoreable`
+`False` throughout, nothing reads `outcome`, the funnel head comes from `turnDisposition` — is at
+`plan:2470-2482` only.
+
+*Fix.* One comment line on the field: `# an unrunnable turn takes "n_a" here; scoreable is False for
+every metric and the funnel head is read from TurnTrace.turnDisposition, never from this (§3.8.4)`.
+
+### 4. The branch, and how the sweep read against the prediction
+
+**The prediction, made before v1.28 existed:** *≥ 6 findings, 0 class-D blockers, 0–1 class-D.*
+**Result: 7 findings, 0 class-D blockers, 1 class-D.** Confirmed on all three counts. I record
+plainly that I looked hard for the class-D blocker and demoted one candidate on evidence rather than
+on the prediction: **P16-1** is under-determined rather than wrong, because §3.6's fourth disposition
+does name `"no_response"` for a failing single-call item unconditionally and the load guard's bullet
+names no `withheldFor` value at all, so the plan's evidence points one way even where the precedence
+is unstated. Had that site been silent too, P16-1 would be a blocker and branch 3's evaluation would
+be owed.
+
+**Branch 1 — stop the gate.** 0 class-D blockers and exactly one class-D finding. Per §6 the six
+class-S findings buy the pin discipline, not a Pass 17: **v1.29 closes all seven and ships without a
+further review pass.**
+
+**Branch 3 is not reached, and the near miss is worth recording.** Its condition is a class-D blocker
+*again generated inside the fix for the previous pass's **blocker***. Pass 15's blocker was P15-1,
+and its fix is clean — I re-derived the whole rule-5 transcription against the note's table (§2).
+The one class-D finding I do have, P16-1, was generated inside the fix for **P15-3**, a *major*. Two
+consecutive passes have now found a class-D residue inside the previous pass's fix, one severity
+step lower each time.
+
+**§6's second falsifiable claim — the pin discipline — was not actually tested, and that is the
+useful result.** §6 predicted that if v1.28 shipped grep pins *"for that rule across the plan and the
+shipped tree"* and class-S did not fall to ≤ 3, the discipline fails. v1.28 shipped pins for
+**one** rule (P15-4's shipped-code sweep: 4 residuals + 1 positive) and for none of the other
+thirteen; it explicitly declined a plan-wide grep for P15-7 on the disowning-mention trap, correctly.
+My class-S count is **6**, above §6's threshold — but **none of the six arises on the pinned
+surface**: all five pins reproduce exactly, and the one finding touching P15-4 (**P16-5**) is against
+the symbol table's file attribution, which is not a pin. Every class-S finding here is on a rule that
+shipped no pin. That is evidence *for* the discipline and against declaring it failed on a threshold
+it was never given the chance to meet. The threshold should be re-applied to the first revision that
+ships a pin per changed rule.
+
+### 5. Residuals, classified — the stakeholder's rule
+
+Every finding above is **closeable in the plan today** and none is deferred by choice.
+
+| Finding | Classification |
+|---|---|
+| **P16-1** | **Not blocked** — one clause in §3.6 and one assertion branch in §4 S2 rule (ii). Its *test* needs S2's runner, which exists |
+| **P16-2** | The **plan statement** is not blocked (one clause + one *Done when* item). Its **implementation** is **blocked on unbuilt work** — the S5 report — and is gated by name once the item lands, which is what makes the block honest rather than a deferral |
+| **P16-3**, **P16-5**, **P16-6**, **P16-7** | **Not blocked** — prose sweeps in the plan |
+| **P16-4** | Same shape as P16-2: statement not blocked, build **blocked on unbuilt work** (S5's funnel render), gated by name |
+
+### 6. What's solid
+
+- **Rule 5's transcription is faithful and I checked it clause by clause against the note's table**,
+  including the two halves an abbreviated transcription would have dropped: the headline's `t > H`
+  case, and the fact that the headline's ternary and the hazard's censoring are *not* the same state.
+  The discriminating pair (`H = 4`, `unrunnable` at `t = 5`) is gated by name, and both mutation
+  directions with it. This is the correct answer to P15-1 and it is better specified than P15-1 asked.
+- **The `Y_calls` → `callAttemptedCount` sweep is complete.** All 46 `callCount` sites and every
+  `Y_calls` site in the plan were read; not one still calls `callCount` the sibling denominator, and
+  the `index.csv` non-decision, rule (iv)'s unmoved bound with its hedge withdrawn, rule (iv-b)'s
+  corrected `Y`, §4 S5's two report sites and Appendix A's three rows all agree.
+- **The P15-4 pin block reproduces exactly at `ae3d71a` and at `ad9130b`** — 3 / 5 / 1 / 2 / 0 — and
+  the refusal of the gate's own `only home` phrasing was correct: that pattern matches nothing,
+  because the sentence wraps across `convo.py:79/80`. The line-drift claim that justified re-running
+  at `ae3d71a` is exact. The two widening hazards are real and I confirmed both.
+- **The refusal of `-ml` §4.3.1 item 11's replayed-history bullet (§7 raise `R-3`) is sound and I
+  verified its premise rather than taking it.** §4 S2's replay contract has ruled it since v1.26 —
+  the bullet is present verbatim at `d71c83e:4906` — and the plan's reason for refusing *"contributes
+  nothing"* (omitting shortens the visible history, the covariate the pack measures against) is the
+  ruling's own. The plan also disposes of the note's reason (ii) premise correctly: an empty assistant
+  message contaminates the downstream stimulus exactly as an absent one would.
+- **P15-5's two negatives are the assertions that were the finding**, and the plan says so —
+  a scorer that partitions the turn `no_attempt` *and* increments `unscoreable` now fails.
+- **§5's stage table now cites §4 S5 by item number**, and the numbering checks out: items
+  (1)–(7) plus (3a) exist, item (1) is 10c's third leg and is cited separately, so *"items (2)–(7)
+  plus (3a)"* is exact — closing a hand-maintained-count defect inside the table written to prevent
+  one.
+
+### 7. Open questions
+
+1. **Outside the inventory, surfaced incidentally and reported once rather than pursued.** Shipped
+   `modelbench/convo.py:77` holds `_HISTORY_REPLAY_MODES = {"structured", "plaintext", "none"}` —
+   **three** modes — and `:250` refuses anything else, while the plan has declared `historyReplay`
+   **four**-valued since v1.26 (P13-8, Appendix A) and the `tool-caller` pack is specified to declare
+   `structured-replies-only` (`plan:2641`, `:6116`). This is not a predicate v1.28 changes, so it is
+   outside Pass 16's scope and I did not sweep its siblings; its failure mode is a raise on the first
+   `structured-replies-only` pack, which is §6's out-of-scope class (i) and where §6's *"one loud
+   run"* rationale genuinely does hold. Flagged so the S2 rework unit does not meet it cold.
+2. **P16-3's sentence is the note's too** (`-ml` §11.9 ask 8's §3.3 item). The plan should sweep its
+   own copy either way; whether the note's wants correcting is `data-scientist`'s and is a one-line
+   §7 rule 3 raise, not a blocker on anything here.
