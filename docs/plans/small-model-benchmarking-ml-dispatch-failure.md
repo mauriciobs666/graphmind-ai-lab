@@ -7,9 +7,12 @@
 `docs/reviews/small-model-benchmarking-impl.md` **P17-3** and its **§6 open question 1**: when a
 pack's `dispatch(name, arguments)` raises an unexpected exception, should `drive` abort (pack
 defect, fail closed) or record the call as *undispatchable* and drive past it (§4 S2's replay
-clause, `-ml` §4.1's never-skip-a-turn rule)? The decision blocks `tools/sim.py` (U106), because a
-sim author writes `raise KeyError` without thinking about it. Naming the exception is already in
-flight and is independent of this; what follows is a small addition on top of that naming.
+clause, `-ml` §4.1's never-skip-a-turn rule)? The decision blocks the future unit that writes
+`tools/sim.py` (not yet dispatched — a teco mislabeling in this unit's dispatch brief called it
+"U106," but that id is already assigned in the coordination ledger to a different, unrelated unit:
+`packs.py`'s manifest→`PromptConfig` validation route), because a sim author writes `raise KeyError`
+without thinking about it. Naming the exception is already in flight and is independent of this;
+what follows is a small addition on top of that naming.
 
 **Ruling, in one line: neither, as filed.** Record the failure, keep every observation already
 taken, and **end the conversation at that turn** — the conversation, not the turn and not the run —
@@ -93,7 +96,7 @@ conversation) and route the loss through machinery that already prices it.
   catalog file failed to load; an internal invariant broke).
 - One-line test the author can apply without re-deriving any of this: **if the model's arguments
   can change whether it raises, it must not raise.**
-- Corollary for U106 and for `drive`: **do not schema-validate arguments before dispatching.**
+- Corollary for `tools/sim.py`'s future author and for `drive`: **do not schema-validate arguments before dispatching.**
   `drive` dispatches anything that parses as a JSON object (`convo.py:_parse_tool_arguments`), and
   it must keep doing so — refusing a wrong-typed argument would make it *undispatchable*, hence
   `|E(t)| = 0`, hence `no_attempt`, which destroys FR-8(d)'s measurement of argument correctness.
