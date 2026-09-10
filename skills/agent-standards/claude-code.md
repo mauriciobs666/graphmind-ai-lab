@@ -688,11 +688,36 @@ the always-loaded project memory (`CLAUDE.md`).
   `ls -d …/*/tasks | wc -l` returns the **middle** one, which is exactly what makes a wrong
   per-session figure look checked. Spot-checking two known ids cannot detect any of this — both will
   usually resolve.
+  **Re-measured 2026-09-10 (CLI 2.1.267), and the 2026-09-09 reading above still holds in shape:**
+  **10** session directories exist under `/tmp/claude-<uid>/<slugified-cwd>/`, **6** carry a
+  `tasks/` subdirectory, and **107** `*.output` files sit across them — a count that moves while you
+  read it, because this session's own tool-results are landing there as they are written. Coverage
+  is still the reason to prefer `subagents/`, and it reproduces: this session's `tasks/` holds
+  **19** symlinks against **47** canonical transcripts (40%), against the 17-of-45 measured a day
+  earlier. **A second location now exists and does not replace this one:**
+  `~/.claude/projects/<slug>/<session>/tool-results/<id>.txt` (41 such directories) receives the same
+  persisted `Bash` tool-results as `tasks/<id>.output` — a **dual write, not a move**: `bi680mzav`
+  was written to both, byte-identical at 55,495 bytes, 11 ms apart, and 9 of this session's 10 plain
+  `tasks/` files have a twin (the tenth was written in the preceding minute). Both locations are
+  live. `tasks/` is a partial, mixed view — never an absent one.
   Three bounds worth stating: a prompt claiming *"you have no agent-enumeration tool"* is true of
   **tools** and false of the filesystem; the directory is keyed by the **parent** session, so this
   works from the coordinator and not from a sibling session; and an `agentId` still only *resolves*
   for `SendMessage` inside the session that spawned it (above) — what this recovers is the id, not a
   dead session's ability to use it.
+
+- **`subagents/agent-<agentId>.jsonl`'s mtime is the cheap live-vs-dead discriminator for a
+  dispatched subagent — an empty `git status` is not one.** Where the delegated procedure verifies a
+  whole batch before writing anything, a long stretch with nothing on disk is its normal mid-run
+  shape, not evidence that it died. Stat the transcript instead: a recent mtime, and a size that
+  grows between two reads, means it is working; a stale mtime plus an empty worktree means it died
+  before promoting anything. It is addressed by the `agentId` already recorded at dispatch, so the
+  check costs one `stat` and needs no enumeration. Measured 2026-09-10 with three of one
+  coordinator session's units side by side: the live one read **715,557 bytes at an mtime 1 second
+  old**, against **8** and **31** minutes stale for the two that had finished. Check it before
+  recording any unit as failed. Stat the canonical `subagents/` path above rather than the `tasks/`
+  view — both exist, but only the canonical one is complete, and a `tasks/` miss means *not
+  symlinked here*, never *dead*.
 
 - **The repo working tree is shared the same way, and a concurrent session can silently revert an
   `Edit` you already confirmed landed — not only at commit time.** Observed once, graphmind-ai-lab

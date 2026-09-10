@@ -66,6 +66,25 @@ consequences that decide whether an isolation attempt actually isolated anything
   worktree repo root republished a concurrent unit's uncommitted content into the shared
   `reference` graph under the wrong version label.
 
+- **A probe invoked as `python <script.py>` puts the *script file's own directory* on
+  `sys.path[0]` — not the cwd.** The two measurements above (`sys.path[0] == ''`) were taken under
+  `python -c` and `python -m`, and they do not carry over to the commonest way a review probe is
+  actually run. Re-derived 2026-09-10, Python 3.12: `python3 ../snap/probe.py` invoked from a
+  sibling directory reported `sys.path[0]` as `.../snap`, the script's directory, while `python3 -c`
+  from the same cwd reported `''`. **This is the same condition as the worktree bullet above, one
+  invocation form over:** a standalone probe isolates only when the script file sits in the
+  package's *parent* directory inside the snapshot. Keep the probe anywhere else — a scratch dir, or
+  the snapshot's repo root, one level above the package parent — and no cwd manipulation saves it:
+  nothing local matches, the editable install's absolute `MAPPING` (rule 3) wins, and the run
+  silently executes the **live working tree** while every appearance says snapshot.
+  **So `git archive` plus a `sitecustomize.py` that strips the editable finder is not sufficient on
+  its own.** Two additions make the recipe sound: put the snapshot **first on `PYTHONPATH`**, and
+  assert `<pkg>.__file__` **from inside the probe**, so the isolation is proved by the run rather
+  than by its setup. Cost of the omission, found at `model-bench` impl review Pass 14: five of Pass
+  13's standalone probes had resolved to the working tree rather than the snapshot. Pass 13's
+  findings survived — checked, not assumed, by an empty `git diff <base> <head>` over the two source
+  trees — and Pass 16 states both additions in its own scope line.
+
 The technique below never depends on that search order at all, which is why it is the robust
 route, with zero working-tree writes:
 ```python

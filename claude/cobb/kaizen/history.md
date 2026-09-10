@@ -3,6 +3,94 @@
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
 
+## 2026-09-10 — U44: `teco` chunk 3 of 4 (twelve 2026-09-09 entries) — the chunk with nothing to discard
+
+- **What:** unit U44 of `claude/docs/plans/kaizen-distillation2-coordination.md`. Twelve `teco`
+  entries dated 2026-09-09, all current-shape (`1 PRODUCED / 0 MENTIONS` each). **Result: 12
+  promoted in some form, 0 wholly discarded, 0 kept open, 0 `MENTIONS` tags** — three of the twelve
+  shipped as *halves*, with a named part rejected on evidence.
+- **Landing sites:** `claude/teco/teco.md` (+785 w) · `claude/AGENTS.md` (+62 w, a repair) ·
+  `skills/agent-standards/claude-code.md` (+333 w) · `claude/analyst/review-techniques.md`
+  (+269 w) · `claude/teco/kaizen/history.md` · this file · `claude/cobb/kaizen/plan.md`.
+  **Zero new sections in any of the four content files** (6/3/7/31, unchanged) — every promotion a
+  fold into existing prose.
+- **Zero discards is an outlier for this pass and has a legible cause.** U40 discarded 3 of 7, U41
+  3 of 9, U43 3 of 12. The brief framed this chunk's foreignness — seven of twelve from other
+  coordinations, six of them from the concurrent `model-bench` pass — as the hazard, and the
+  hazard is real for *ordering* (those six carry `createdAt` back-dated to exactly
+  `2026-09-09T00:00:00Z` and are invisible to recency). But foreignness cut the other way on
+  **content**: entries written inside a coordination this pass never narrated are not restatements
+  of our own prose, which is what the discards in U40/U41/U43 mostly were. The chunk was more novel
+  because it was more foreign, not less trustworthy.
+- **`suggestedHome` measured rather than assumed** (the U43 near-miss was drafting a tally from the
+  brief's asserted prior instead of counting): **12 of 12** carried `suggestedHome: 'prompt'`, and
+  **9** landed in an always-loaded agent prompt. The three that did not: `b1f4c2a7` → a repair to a
+  context file, `511f0797` → a progressively-disclosed skill, `d7a91e35` → another agent's on-demand
+  knowledge base. Routing was done from each receiving artifact's own scope line; the tally is a
+  post-hoc measurement and was not an input to any disposition.
+- **Two findings that changed what shipped, both from re-derivation rather than reading:**
+  1. **`b1f4c2a7` reproduced exactly and falsified the published framing.** `git diff --cached`
+     counted **1** appended section where the path-limited commit shipped **3**, working tree
+     untouched, index rewritten to match (git 2.43.0, scratch repo). The entry's own remedy — `git
+     add` then a no-pathspec `git commit` — was then run and **swept a concurrent session's
+     unrelated staged file into the same commit**, which is the exact race `claude/AGENTS.md`
+     forbids. So the remedy shipped inverted, and the paragraph's *"Never partial-stage a path you
+     then name in one"* heading was reframed to the unconditional rule it always rested on. U43's
+     `0e2a0bf5` disposition had named this defect and left it unrepaired; this entry is the incident
+     that proves it bites, because its index blob was never a partial stage of anything.
+  2. **`d9306096`'s headline is false against the ledger.** It claims U24 was *"the first unit of
+     the pass accepted with NO correction"*; `U22` (`a9a502324e0cf4ca5`) is recorded accepted with
+     no resume and no correction, two units earlier and before the accumulated lesson list existed.
+     The rule (brief concrete methods, not exhortation) was promoted; the word *measurably* and the
+     acceptance tally were not.
+- **`511f0797`'s rule held; my first draft of its promotion did not, and the gate caught it.** I
+  claimed the `tasks/` view had been removed outright, on four figures measured under
+  `~/.claude/projects/` — a tree `tasks/` has never lived in. It lives at
+  `/tmp/claude-<uid>/<slugified-cwd>/<session-id>/tasks/`, the path written in the U42 bullet two
+  paragraphs above the one I was editing. Re-measured there (CLI **2.1.267**): **10** session
+  directories, **6** with `tasks/`, **107** `*.output` files — and this unit's own transcript sits
+  there as a symlink written at 07:45, while the paragraph claimed the directory was gone. The
+  `tool-results/` half is a **dual write, not a move**: `bi680mzav` exists in both, byte-identical
+  at 55,495 bytes, 11 ms apart. Corrected before commit; no tombstone, since nothing shipped.
+  **What stands unchanged:** the mtime discriminator, demonstrated live (715,557 bytes at **1
+  second** old against 8 and 31 minutes stale), addressed by the `agentId` the ledger already
+  records, and `subagents/` preferred for U42's completeness reason — reproduced at **19** symlinks
+  against **47** transcripts (40%), against 17-of-45 a day earlier.
+- **The reach check passed vacuously on a negative claim, and that is the lesson worth keeping.** The
+  instrument asks *what is the widest set this sentence covers* and probes the second member. A
+  claim that something does **not exist** has an empty set, so there is no second member and the
+  check slides off. For a negative, the counter-question is **where would it be if it did exist, and
+  did I look there?** Third consecutive unit with a sound mechanism and an unsound reach claim, and
+  the first where the claim was negative — noted for the next pass's brief.
+- **One pair judged two findings, not one, before either was cleared.** `96848806` and `d41b7a92`
+  were flagged as possible near-twins with the warning that clearing both is the irreversible half.
+  They separate cleanly on the incident arc: `model-bench` review **Pass 15** falsified the
+  *criterion*, **Pass 16** falsified the *instrument* ("it ran shrink only"), and neither remedy
+  subsumes the other. Promoted once, in one bullet carrying both mechanisms, so clearing both loses
+  nothing.
+- **Reach check run on every promotion**, per U43's method — state the mechanism, state the widest
+  set the shipped sentence claims, point an instrument at the *second* one. It bounded three
+  sentences before they shipped: `c93a7e15`'s clause was worded to add a class of file rather than
+  relax the gated-document carve-out (its own surviving artefact was a gated document that survived
+  by being committed complete, not skeletoned); `b93f27d1`'s was worded to say *even when the
+  delegate reports a full table* rather than impugn delegate mutation tables; and `d9306096`'s was
+  checked against step 4's opposing *"send the question, never the finding as a premise"* rule and
+  shipped with the distinction (method vs. finding) stated in its own last clause.
+- **Not run: `model-bench`'s suite.** That coordination is executing against this tree with
+  `model-bench/tests/test_stats.py` dirty, so the 920/634/27 figures in three entries' evidence were
+  checked structurally (`stats.Basis` at `stats.py:67` referenced unbound at `:881`/`:1560`/`:1577`;
+  `continuous_verdict(` at `report.py:917`; the Bonferroni statement at `stats.py:1505`) and no
+  promoted sentence carries a figure that depends on them.
+- **Budgets, against `3804263`:** `teco.md` **8,278 → 9,063 w**, `>700`-char lines **27 → 31**,
+  `>1000` **14 → 17**, longest unchanged at **1,716** (`L98`). `claude/AGENTS.md` **2,491 → 2,553 w**
+  — **53 past its ~2,500 smell**, incurred by a repair rather than an addition; the compensating trim
+  is identified and filed (K-032), not taken here. `claude-code.md` **10,856 → 11,189 w**;
+  `review-techniques.md` **13,150 → 13,419 w**.
+- **Plan items:** K-030 updated with this unit's figures and the routing evidence; **K-031** opened
+  (shared-tree commit knowledge is fragmented **by audience**, not by topic); **K-032** opened (the
+  `claude/AGENTS.md` roster's knowledge-base topic enumerations duplicate `README.md` and have now
+  measurably diverged).
+
 ## 2026-09-10 — U43: `teco` chunk 2 of 4 (twelve 2026-09-08 entries) — the chunk that falsified a published measurement
 
 - **What:** unit U43 of `claude/docs/plans/kaizen-distillation2-coordination.md`. Unlike U42, most

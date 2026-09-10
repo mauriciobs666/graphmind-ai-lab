@@ -2,6 +2,419 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-09-10 — Kaizen distillation, U44 (twelve 2026-09-09 entries, the most foreign chunk)
+
+- **What:** U44 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled
+  twelve `teco` `:KaizenEntry` nodes dated 2026-09-09. Seven came from other coordinations: six
+  from `c7dd44c9-…` (the concurrent model-bench pass) and one from `018NnCEHvvYdHyqEatoYxLsY`.
+  The six model-bench entries all carry `createdAt` back-dated to exactly `2026-09-09T00:00:00Z`,
+  so recency ordering cannot see them — the hazard flagged at U42, biting here.
+- **Graph shape:** all twelve current-shape, `producedEdges = 1`, `mentionEdges = 0`
+  (`otherRemaining = 0`), each cleared with the full-node curator shape after its disposition was
+  on disk. Per-entry write-and-clear throughout, never batched.
+
+**`a90c5f31-7d24-4e68-b3af-1c8e02d97b45` — retired out-of-chunk, but *not* as a pure supersession:
+one sliver was unpublished and shipped.** Not one of U44's twelve; the brief instructed retiring it
+on sight as superseded by U42's `b9f27c04`, and it surfaced in this unit's census. Read whole
+(`fact` 635 chars, `evidence` 427) before ruling, per the standing complete-read rule.
+- **Superseded as claimed, for four of its five clauses.** `teco.md`'s *Editing the ledger* sentence
+  already carries: asserting the count is necessary and **not sufficient**; a document holding two
+  tables makes a header non-unique; anchor a row insertion on the **last data row** of the intended
+  table; and a cell-count check validates shape while being blind to location. The entry's own
+  incident — the U41 ledger row anchored on `| Unit | Died at | Actual state found | Recovery |` and
+  landing 56 lines below the table it belonged to, with `assert count==1` holding and `awk -F|`
+  reporting the correct 7 cells — is the incident that produced that sentence.
+- **The sliver: the published text names the blind spot but not the instrument that sees it.** It
+  ends *"a cell-count check validates shape and is blind to location"* and stops there, leaving the
+  reader with a named gap and no check to close it. The entry carries the check that actually caught
+  the defect — verify placement by **line number** afterwards, not by cell count — and the evidence
+  records it working (*"Caught only by grepping line numbers for `^| U40` and `^| U41` and seeing the
+  gap"*). Promoted as one clause on the same sentence; `L87` 582 → 713 characters.
+- **Reach check.** The added clause claims line-number confirmation catches *placement* — not that
+  it validates content or shape, which the cell-count check still does and which the same sentence
+  still says. Instrument pointed at that bound: in the entry's own incident the shape check passed
+  (7 cells, correct) while the placement was wrong by 56 lines, so the two checks are complementary
+  and the sentence now names both rather than replacing one with the other.
+- **Method note, recorded because it happened here.** This unit hit the neighbouring failure while
+  editing `claude/cobb/kaizen/plan.md`: an insertion anchored on `### K-030 —` asserted cleanly and
+  landed in the right document region but in the **wrong ordinal position**, putting K-031/K-032
+  ahead of K-030. Caught by re-listing the headings afterwards — the same
+  verify-placement-by-position discipline, one document kind over — and corrected before the file
+  was final.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`d9306096-b89d-4af8-bce9-46939fe8ebb5` — its rule promoted into `teco.md` (step 3, brief
+contents); its headline claim falsified and not shipped.** The entry: carrying the accumulated
+defect-lessons of earlier units forward into each later brief *measurably* converts correction
+round-trips into first-pass acceptances, the instruction that paid off being a concrete method
+rather than "be careful" — compute any load-bearing count under more than one definition and report
+the spread, and run a failure probe alongside a **passing control** so a uniform result cannot be
+misread as a working mechanism.
+- **The causal evidence does not survive re-derivation against the ledger.** The entry's evidence
+  states that U20, U21 and U23 each needed a correction round-trip and that **U24 was the first unit
+  of the pass accepted with NO correction**. The ledger says otherwise: `U22` (`a9a502324e0cf4ca5`)
+  carries no resume marker in its agent-id cell, and its gate cell reads *"teco re-derivation →
+  **accepted**, paired-control reproduction of the pipe finding"* — accepted clean, **two units
+  before** U24 and before the full accumulated lesson list existed. The three cited failures do
+  check out (U20 "resumed a second time", U21 "resumed twice", U23 "resumed once, for the AST
+  correction"), so the entry is accurate about its failures and wrong about its control.
+- **What that costs the claim.** With U22 clean without the lesson list, the sample supporting
+  *"measurably converts"* is one unit against a counterexample. The word **measurably** is exactly
+  the kind of end-of-run summary figure that `4e7a15c3` (U43) says to re-run rather than re-read,
+  and re-running it is what found this. Nothing quantitative shipped.
+- **What survives is worth the space, and it is the part the entry itself identified as load-bearing:**
+  *the specific instruction that paid off was not "be careful" but a concrete method*. That contrast
+  is independent of the acceptance tally — it is a claim about the **form** an instruction takes, and
+  the two named methods are separately corroborated: the several-definitions method is what made
+  U23's refutation safe (see `b62faad9` above, same batch), and the passing-control method has an
+  independent precedent in U22's own gate cell.
+- **Composition check against step 4, which says the opposite about a different object.** Step 4
+  already carries *"Send the **question** … never the other arc's finding as a premise"* for
+  transferring a defect class to an in-flight sibling. Read carelessly, the new text reads as
+  licensing exactly what that forbids. It does not, and the promoted sentence says why in its last
+  clause: a **method** constrains how a delegate checks its own work and carries no assertion about
+  the artifact, where a **finding** is a premise about the artifact and still travels as a question.
+  The two rules divide by object, not by situation.
+- **Reach check.** The shipped sentence claims methods transfer across briefs — it does **not** claim
+  the transfer produces first-pass acceptance, which is the falsified part. Instrument pointed at
+  that: U22 is in the file as the counterexample, and no acceptance rate appears in the promoted
+  text, so a later reader re-deriving the claim finds only what the ledger supports.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`c93a7e15-6b24-4f81-a0d7-2e5b9c1f8a44` — promoted as a *half* into `teco.md` (step 3, the *Brief
+for the kill* bullet); the rest discarded as already published there.** The claim: a delegate brief
+must order work persistence-before-progress — write artefacts and redirect command output to disk
+**before** running, and create the deliverable early as a skeleton filled in row by row — because a
+subagent killed mid-run loses everything held only in its context and a wiped scratchpad takes the
+rest, leaving the coordinator a completed-looking notification with nothing behind it.
+- **The brief asked me to check this against text I wrote myself at U42, and most of it is indeed
+  already there.** The *Brief for the kill* bullet already carries: land the deliverable on disk
+  incrementally so a kill costs the section in flight rather than the run; the durable artifact is
+  whatever **re-derives** the content, not the prose holding it; skeleton-first for prose; and the
+  refusal of skeleton-first in a gated document. The ledger rule the entry generalises from is
+  published too. Verbatim re-promotion would have been a restatement.
+- **What was genuinely absent is the delegate's own *working evidence*.** Every clause of the
+  published bullet is about the **deliverable** — the document or script the unit exists to produce.
+  The entry's incident is about everything else: `harness.py`, `probe1-6.py`, `server_launch.py` and
+  `baseline.txt` were all absent from the scratchpad after the kill, while the test plan survived
+  precisely because it had been written to disk and committed. The pass reported 28/30 test points
+  executed and passing, and the evidence for all of it was in context only. So a brief can satisfy
+  the published bullet completely — deliverable landed incrementally — and still lose the entire
+  basis on which the deliverable's claims rest.
+- **The second absent piece is the failure's shape at the coordinator's end**, which is what makes
+  it dangerous rather than merely wasteful: the notification reads as a completed unit. That
+  connects to step 4's existing stale-placeholder bullet, but that one describes a result that
+  *looks* unfinished; this one describes a result that looks finished and is hollow.
+- **Reach check.** The promoted clause claims the delegate's *working evidence* needs the same
+  persistence discipline as its deliverable — it does **not** widen skeleton-first, which the same
+  bullet still refuses for a gated document two sentences earlier. Instrument pointed at that second
+  claim: the entry's own surviving artefact was the test plan, a gated document, and it survived by
+  being **written and committed complete** after the first kill rather than by being skeletoned. So
+  the entry's evidence supports the existing carve-out rather than eroding it, and the promotion was
+  worded to add a class of file, not to relax the exception.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`c81e5b4f-6a72-4d38-b1e9-7f0c2a95d3b6` — promoted into `teco.md` (step 4, the abnormal-termination
+bullet).** The claim: a completed TDD red phase makes a killed unit cheap to re-dispatch fresh,
+because the tests move the design out of the agent's transcript and onto disk; resume to recover
+reasoning that exists only in a transcript, dispatch fresh once that reasoning is pinned by
+committed-to-disk assertions. This gives TDD routing a resilience property worth weighing for units
+likely to be interrupted.
+- **The general rule was the promotion; the TDD case is its illustration.** `teco.md` already had
+  two resume-vs-fresh rules and neither states the criterion. Step 4 says resume by `agentId` and
+  re-dispatch only on non-resolution — an *addressing* test. Step 5's exception says dispatch fresh
+  when the delegate carries a very large context and the follow-up is self-contained — a *cost*
+  test. Both are proxies for the same question the entry names outright: **what does the transcript
+  uniquely hold?** Promoted in that form, with the red phase as the worked case, so the rule covers
+  the situations neither proxy reaches.
+- **Verified from the entry's own recorded arc, which contains the controlled comparison.** The same
+  unit was killed twice. The first recovery resumed the agent to preserve an undocumented two-helper
+  decomposition (`_family_ci_levels`, `_support_clamp`) that existed only in its transcript — and
+  that resume never executed. The second recovery dispatched fresh and was correct, because by then
+  348 lines of red-phase tests pinned both helper signatures and behaviours, including an assertion
+  that `Fraction(0.05) != Fraction(1, 20)` so a `Fraction(alpha)` implementation cannot pass. Same
+  unit, same agent, opposite correct answers, and the thing that changed between them is exactly the
+  criterion the rule states.
+- **Reach check.** The sentence claims a completed **red phase** pins the design — not that TDD
+  units are generally cheap to restart, and not that any partially-written test file will do.
+  Instrument pointed at the second reading: the entry's own first kill had `modelbench/stats.py`
+  **untouched** and the tests already written, which is the state the rule calls pinned; had the kill
+  landed mid-red-phase the transcript would still have held the undocumented decomposition and the
+  resume would have been right. So the boundary is the *completed* phase, and the shipped wording
+  says so.
+- **Costs a line.** `L109` goes from 1,151 to 1,626 characters. Folded there anyway rather than
+  opened as a sibling, because it answers the question that bullet's last sentence provokes — you
+  have just diffed the tree, and the next decision is resume or respawn.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`b93f27d1-4c65-4e8a-a072-15c8d9e6f43b` — promoted into `teco.md` (step 3, the mutation-test
+bullet).** The claim: a delegate that mutation-tests its own diff still leaves the
+highest-consequence mutation untested, because it mutates the branches it *wrote* rather than the
+arguments it *passed*; at integration, mutate the single argument whose corruption would be silent —
+a parameter driving a statistical correction, a family size, a seed — even when the delegate reports
+a full mutation table.
+- **A third mutant class on a bullet that already names two.** The published text covers *deleting
+  the chosen mechanism* (proves the test reaches the code) and *re-implementing the rejected design*
+  (proves the decision was load-bearing). Both are **control-flow** mutants, which is exactly the
+  axis the entry says is over-covered. The argument mutant is the first data-plumbing one, so it
+  extends the bullet along the axis the bullet was blind to rather than adding a fourth variation of
+  what it already said.
+- **Mechanism checked structurally against the live source.** `modelbench/report.py:917` does call
+  `stats.continuous_verdict(`, and `stats.py:1505` states the correction the entry says vanishes —
+  *"An all-continuous `verdictMetrics` family with `k > 1` takes its Bonferroni correction …"* — so
+  collapsing the `family=` argument to a single metric drives `k` to 1 and removes the correction
+  without touching a branch. The shape holds: the mutation is invisible to a branch-coverage table
+  by construction.
+- **Not re-run: the 634-tests-pass figure.** The `model-bench` coordination is executing against this
+  tree with `tests/test_stats.py` dirty; a suite run here measures a moving target. The promoted
+  sentence carries no figure, so nothing shipped depends on it.
+- **Reach check.** The sentence claims delegate tables under-cover **arguments passed across a seam**
+  — not that delegate mutation testing is unreliable in general, which would undercut the bullet it
+  sits in. Instrument pointed at that second claim: the entry's own evidence records the delegate's
+  ten mutations as *all caught* and correctly covering every branch it added, so the table was
+  accurate about its own scope and wrong only about what that scope implied. The promoted text
+  therefore says *even when the delegate reports a full table with every mutation caught*, which
+  states the bound instead of impugning the table.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`b62faad9-d315-4917-9c61-d09aef0a4b11` and `ba410bab-cbd7-4d3b-a797-ce0e3cbeadb8` — promoted
+together as one new step-5 bullet in `teco.md`.** `b62faad9`: a verifier who rebuilds a delegate's
+measuring instrument tends to rebuild its bug, because the obvious implementation is the same wrong
+one; a gate false **negative** — a buggy instrument that happens to agree with the wrong figure —
+costs as much as a false positive and is far harder to notice, because agreement ends the inquiry.
+`ba410bab`: refuting part of a citation does not verify the rest — the refutation consumes the
+verification budget and the surviving figures inherit the original authority.
+- **Both are already-published territory, and both survive the check for a precise reason.** Step 5
+  carries *"A re-derivation that comes out clean or stable is not a refutation — it is as likely a
+  bug in your check"*. That covers the **null** result: your instrument found nothing. It does not
+  cover the **agreeing** result, which is the sharper case, because a clean re-derivation still
+  leaves you suspicious while an agreeing one closes the question. And U43 landed
+  `4e7a15c3` — *verify the citation attached to each claim, not the claim itself* — one unit ago;
+  `ba410bab` is the failure mode **of** that practice, and it is the one that actually fired.
+- **The incident is this pass's own, and it is on the record.** At U23, `cobb` correctly refuted a
+  kaizen entry's per-file AST breakdown (6/16/23), diagnosed exactly why it was wrong, and in the
+  same disposition passed the entry's headline figure of 68 through as *"exactly right"* without
+  re-deriving it. `teco`'s own re-derivation then read **79** using `ast.walk()` per `FunctionDef`,
+  which double-counts nodes inside nested functions — and `cobb` had independently made the same
+  error and reported **68**. Had `teco`'s buggy instrument returned 68, the two would have agreed
+  and confirmed a wrong figure. Enumerating five definitions (65/65/79/290/304) is what made the
+  refutation safe; both converged on **65** after fixing to single-visit parent-chain scoping.
+- **Promoted as one bullet, not two.** They are the same failure family — *the verification you
+  performed yourself is the one nothing downstream will check* — and a coordinator in the middle of
+  refuting a figure needs both sentences at once. Kept out of the two neighbouring bullets
+  deliberately: `L123` and `L125` are already 1,430 and 1,094 characters, and appending to either
+  would have bought the same content at a worse line.
+- **Reach check.** The bullet claims agreement is dangerous **when you rebuilt the instrument
+  yourself** — not that agreement between two parties is generally suspect, which would make every
+  corroboration worthless. Instrument pointed at that bound: the neighbouring published sentence
+  *"Corroboration needs independence of method, not a second agent — two agents running the same
+  grep are one check"* states the same restriction from the other side, so the new text is
+  consistent with it rather than widening it. The U23 incident is exactly two parties independently
+  writing the *same* wrong implementation, which is the case the bound describes.
+- **Graph:** each `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`,
+  cleared one at a time after this entry was on disk.
+
+**`96848806-8bae-4f3f-a054-a85f8d5950be` and `d41b7a92-3c58-4e17-9f2a-6b0e5c8d3417` — promoted
+together as one new Guardrails bullet in `teco.md`, and they are two findings, not one.** The brief
+flagged them as possible near-twins and warned that clearing both is the irreversible half, so this
+was settled before either was touched. `96848806`: a review pass audits an inventory against a
+stated criterion; the criterion is later found defective; the gaps get re-run and the **clears**
+silently do not, so the coordinator must dispatch a re-audit of the cleared set, resumed on the
+original reviewer. `d41b7a92`: an audit that mutates in **one direction only** (shrink a set)
+reports false clears, because a constant with no test at all still reddens when some other fixture
+happens to use the deleted member — so brief both directions, shrink and widen.
+- **Why they are separate.** They share a conclusion — *an audit's clears are its untrusted half* —
+  and one incident arc, which is what makes them look like twins. The mechanisms are different and
+  so are the remedies, and the arc itself separates them: at `model-bench` impl review, **Pass 15**
+  executed Pass 14's convention line against `convo._HISTORY_REPLAY_MODES` and found the *criterion*
+  tautological (`96848806`'s trigger), while **Pass 16** found the *instrument* one-directional
+  (`d41b7a92`'s trigger) and says so in its own words: *"Pass 14's instrument had a defect Pass 15
+  did not name: **it ran shrink only**."* Two passes, two defects, two remedies — one addressed by
+  re-dispatching a closed inventory, the other by writing a brief differently before the audit runs.
+  Neither subsumes the other: a both-directions instrument applied to a defective criterion still
+  clears the wrong things, and a corrected criterion re-run with a shrink-only instrument still
+  produces false clears.
+- **Promoted once, in one bullet, because they are the same *decision* for the reader.** Splitting
+  them across step 3 (the briefing duty) and step 5 (the re-dispatch duty) would put half the rule
+  where nobody hits the other half; a coordinator who has just learned an audit's criterion was
+  wrong needs both sentences in the same breath. Both mechanisms are stated in full, so clearing
+  both loses nothing.
+- **Verified against the review document, not the narration.** `docs/reviews/small-model-benchmarking-impl.md`
+  carries Pass 14 (`:3664`), Pass 15 (`:3924`) and Pass 16 (`:4291`). Pass 16 §1 confirms both the
+  re-audit and the resume-the-original-reviewer half — *"Reviewed: (A) my own Pass 14 audit, re-run
+  against Pass 15's corrected convention"* — and §2 states the shrink-only diagnosis and the
+  incidental-coverage mechanism verbatim. The structural half of `d41b7a92`'s live evidence checks
+  out too: `stats.Basis` is a `Literal` declared once at `stats.py:67` and referenced unbound at
+  `:881`, `:1560`, `:1577`, which is the shape that makes incidental coverage read as a pin.
+- **Not re-run: the suite figures** (920 passed, 27 mutations). The `model-bench` coordination is
+  executing against this tree right now with `model-bench/tests/test_stats.py` dirty, so a suite run
+  here would measure a moving target and prove nothing either way. Neither promoted sentence carries
+  a figure, so nothing shipped rests on them.
+- **Reach check.** The bullet claims clears go un-re-run **when the criterion or the instrument is
+  later found defective** — not that audit clears are generally untrustworthy, which would license
+  re-running everything forever. Instrument pointed at that bound: Pass 16 re-ran the cleared set
+  only because Pass 15 had falsified the criterion, and it pre-stated a stopping condition before
+  running, which is the existing neighbouring bullet doing its job. The new text sits directly
+  beneath that one and inherits it.
+- **Graph:** each `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`,
+  cleared one at a time after this entry was on disk.
+
+**`d7a91e35-2c48-4b06-9f13-8e2740ac5b6d` — promoted into `claude/analyst/review-techniques.md`
+(§ *Verifying an uncommitted diff without mutating the working tree*), not into `teco.md`.** The
+claim: the review-isolation recipe — `git archive` a snapshot plus a `sitecustomize.py` stripping
+the setuptools editable meta-path finder — is insufficient alone, because `python <script.py>` puts
+the **script file's** directory on `sys.path[0]` rather than the cwd, so a standalone probe run
+from inside a snapshot can still resolve an import through the installed editable `.pth` to the
+live working tree; the brief must additionally require the snapshot first on `PYTHONPATH` and an
+in-probe assertion on the module's `__file__`.
+- **Routed on merit, against `suggestedHome: prompt`.** This is not a coordination fact. It is a
+  review-methodology technique, and `analyst` both owns that discipline and is the party that found
+  the gap. `teco.md` never carried the isolation recipe at all, so there was nothing there to
+  amend; putting a Python import-resolution mechanism into an always-loaded coordinator prompt would
+  be paid for by every session that never runs a probe.
+- **Re-derived, and it lands on an existing section that had measured the *other* two invocation
+  forms.** That section already states `sys.path[0] == ''` under `python -c` **and** `python -m`,
+  and generalises from them to "the cwd entry". The script-file form breaks that generalisation:
+  `python3 ../snap/probe.py` run from a sibling directory reported `sys.path[0]` as `.../snap` — the
+  script's own directory — while `python3 -c` from the same cwd reported `''` (Python 3.12,
+  2026-09-10). So the entry is not a new hazard beside the published ones; it is the third member of
+  a set the section had closed over two.
+- **Folded rather than opened as a new section**, and unified with the bullet above it: the
+  condition is identical to the published `git worktree` case — isolation holds only when the
+  invocation puts the package's *parent* directory first — with the script file, not the cwd,
+  deciding it. Stating it that way makes one rule cover both, where a fourth standalone section
+  would have made three.
+- **Reach check.** The shipped bullet claims the script's directory wins **for the `python
+  <script.py>` form**, and it explicitly does not restate the `-c`/`-m` measurements as still
+  holding by inheritance — they are cited as separately measured. Instrument pointed at that second
+  claim rather than at the headline: `python3 -c` was re-run in the same cwd in the same session and
+  still returned `''`, so the two forms genuinely differ and the published measurement is not
+  silently contradicted by the new one.
+- **Citation checked, not assumed.** `docs/reviews/small-model-benchmarking-impl.md` Pass 16 §1
+  opens with `Snapshot `git archive ce811a8`, snapshot first on `PYTHONPATH`, `modelbench.__file__`
+  asserted from inside each probe (the correction Pass 14 §1 owed)` — the remedy is on the record as
+  adopted, not merely proposed. Pass 13's findings are recorded as unaffected and verified by an
+  empty source-tree diff rather than assumed, which the promotion repeats.
+- **No `MENTIONS` tag to `analyst`, deliberately.** The tag exists so an entry resurfaces in the
+  mentioned agent's own pass (FR-5); the content is being published into that agent's knowledge base
+  in this same pass, so the tag would only schedule a future unit to rediscover something already
+  shipped.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`511f0797-549e-40ed-bd3a-add911ec443b` — promoted in two places: the mechanism into
+`skills/agent-standards/claude-code.md`, one clause into `teco.md` (step 4).** The claim: an empty
+`git status` does not distinguish a live subagent from a dead one when the delegated procedure
+verifies a whole batch before writing anything — a long silent stretch is the normal mid-run shape;
+the cheap discriminator is the task transcript's mtime, and it should be checked before recording
+any unit as failed.
+- **Rule verified; the instrument is intact and the first draft said otherwise.** My first version
+  of this promotion claimed the `tasks/` view had been removed outright, on figures I had measured
+  in `~/.claude/projects/` — where `tasks/` has never lived. The gate caught it before commit. The
+  true location is `/tmp/claude-<uid>/<slugified-cwd>/<session-id>/tasks/`, which is the path
+  written in the U42 bullet two paragraphs above the one I was editing. Re-measured there, CLI
+  **2.1.267**, 2026-09-10: **10** session directories, **6** carrying a `tasks/` subdirectory, and
+  **107** `*.output` files — and this unit's **own** transcript,
+  `tasks/a8673e0e6bc9481d9.output`, is one of the symlinks, written at 07:45 while I was claiming
+  the directory did not exist. Nothing was removed between U42's reading and this one.
+- **What that leaves standing.** The *rule* was never in doubt and was demonstrated live. `subagents/`
+  is still the better instrument for U42's reason — completeness — and that reproduces on fresh
+  numbers: **19** symlinks against **47** canonical transcripts (40%), against 17-of-45 a day
+  earlier. The `tool-results/` observation is real but is a **dual write, not a move**: `bi680mzav`
+  exists as `tasks/bi680mzav.output` *and* `tool-results/bi680mzav.txt`, byte-identical at 55,495
+  bytes, 11 ms apart. Both locations live. The published paragraph now says exactly that, and no
+  tombstone was left, because the false version never shipped.
+- **Why my own reach check slid off it.** The instrument I have been running asks *what is the widest
+  set this sentence claims to cover* and points a probe at the second member. This sentence's set was
+  **empty** — a claim that something does not exist has no positive members to probe, so the check
+  had nothing to bite on and passed vacuously. The counter-question for a negative claim is a
+  different one: **where would it be if it did exist, and did I look there?** I had not; I searched
+  one directory tree and generalised to "anywhere". Recorded here because this is the third
+  consecutive unit whose mechanism was sound and whose reach claim was not, and the first where the
+  reach claim was a negative.
+- **The rule re-derived on the surviving surface, and the replacement is strictly better.** Three of
+  one coordinator session's units side by side: the live transcript
+  `subagents/agent-a8673e0e6bc9481d9.jsonl` read **715,557 bytes at an mtime 1 second old**, against
+  **8** and **31** minutes stale for the two finished units. Keyed by `agentId`, which the ledger row
+  already records at dispatch — where the entry's instrument needed an opaque task id nobody writes
+  down.
+- **The entry's own incident is on the record and reproduces the failure it warns about.** Under
+  U24, `teco` saw nothing on disk, concluded the unit had been killed, and wrote a host reboot that
+  had not yet happened into the ledger in the past tense; the stat showed it healthy and
+  mid-verification. Retracted at `a5251f4`.
+- **Reach check.** The promoted sentence claims mtime separates *working* from *died before
+  promoting* — not that a growing transcript proves useful progress. Instrument pointed at the
+  second claim: this unit's own transcript grew through a stretch in which it had written nothing to
+  the repo at all, which is the exact confound, and the sentence is bounded to liveness accordingly.
+  The `teco.md` clause is deliberately one sentence plus a pointer; the measurement lives in the
+  skill, which is loaded on demand rather than every session.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`b1f4c2a7-9e83-4d61-8f27-3a5c6d0e9b14` — its fact promoted as a *repair* to `claude/AGENTS.md`;
+its remedy discarded as actively wrong in this environment.** The claim: `git commit -F - -- <paths>`
+commits the WORKING TREE version of those paths and ignores the index entirely, so a pre-commit
+check with `git diff --cached` inspects a state the commit will not use; to commit a
+deliberately-staged blob you must `git add` then `git commit` with **no** pathspec.
+- **Re-derived from scratch in a scratch repo, git 2.43.0, not confirmed from the citation.** Built
+  the entry's exact shape — three appended sections in the working tree, a synthetic single-section
+  blob forced into the index with `git hash-object -w` + `git update-index --cacheinfo`.
+  `git diff --cached -- h.md | grep -c '^+##'` returned **1**; `git commit -F - -- h.md other.txt`
+  shipped **3** (`+## U79`, `+## U80`, `+## U81`); the working tree was untouched and the index was
+  rewritten to match, leaving `git diff --cached` empty. A second arm bounds it further: when the
+  worktree happens to equal `HEAD` and only the index differs, the pathspec commit reports
+  *"nothing to commit, working tree clean"* and creates no commit at all. So the index is ignored
+  for a named path unconditionally — not merely when a hunk was partially staged.
+- **That is what the published text got wrong.** `claude/AGENTS.md` already carried every element of
+  the fact, but under the heading **"Never partial-stage a path you then name in one"**, which reads
+  as conditional on partial-staging while the clause it rests on ("whole working-tree content") is
+  unconditional. U43's `0e2a0bf5` disposition named this exact defect and folded its own promotion
+  into `teco.md` instead, leaving the framing unrepaired. This entry is the incident that proves it
+  bites: the index blob here was **never** a partial stage of the working tree — it was content that
+  had never existed there — so a reader applying the published rule literally would not have seen
+  themselves in it. Reframed to *"A path-limited commit ignores the index for every path it names"*,
+  with the observed 1-vs-3 count as the one-clause evidence.
+- **The entry's remedy is discarded, and the discard is measured, not argued.** Ran it: `git add`
+  then a no-pathspec `git commit` does commit the staged blob (`a.md` → `A-STAGED`) — **and swept a
+  concurrent session's unrelated staged file into the same commit** (`z.md` → `Z-STAGED`). That is
+  precisely the shared-index race this same paragraph forbids. The remedy is correct git and wrong
+  here, so it ships inverted: never reach for the no-pathspec form to get the staged version.
+  Control arm, confirming the published claim it rests on: a pathspec commit naming only `a.md`
+  left `z.md` at `base` in `HEAD` and still staged — other paths' index entries do survive.
+- **Reach check.** The shipped sentence claims the index is ignored for **every path the commit
+  names**, in any state — wider than the entry's own partial-stage-flavoured telling. Instrument
+  pointed at the second member of that set: the never-in-the-worktree synthetic blob (arm 1) and the
+  no-op case (arm 2), neither of which is a partial stage. Both behave as the sentence says.
+- **Third entry in this family, and the reason the fragmentation question was asked.** `7c1f0a94`
+  (U42) established the index/worktree distinction, `0e2a0bf5` (U43) the disjointness condition,
+  this one the unconditional framing. See the unit's closing note.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
+**`9ba6b4f4-0d72-4da7-a160-5b8493381e68` — promoted into `teco.md` (Guardrails, a new sibling
+sub-bullet under the `Bash` grant).** The claim: holding a shared file out of commits to avoid
+sweeping in another session's uncommitted work has a rising cost and no natural end, because the
+other session's commit cadence is not observable; past two or three units the accumulated
+verified-but-uncommitted work outweighs the misattribution it prevents, so commit it with the
+foreign content identified in the message body.
+- **Verified against the artifact, not the narration.** `git show bd924b1` exists and its message
+  body carries the figures verbatim — `+1174 words over f5e8326, of which 1063 are this
+  coordination's`, and the remaining 111 words named as the concurrent session's
+  `Properties removed it did not perform` bullet, `committed here verbatim -- untouched,
+  unreflowed, unindented`. The practice was not proposed; it was executed and is on the record.
+- **Why it is a promotion and not a duplicate.** U43's `0e2a0bf5` landed the *hazard* in this same
+  bullet and ended it with an unbounded instruction — *"Leave that file uncommitted, record in the
+  ledger where the work is, and say so in your report — nothing is lost but attribution."* That
+  sentence has no stopping condition, and this entry is the measurement of what following it costs
+  over three units. The promotion bounds a rule the previous unit shipped open-ended.
+- **Reach check.** The sentence claims that *holding* accrues cost with no observable end, and that
+  releasing with in-body attribution is the cheaper trade — it does **not** claim the disjointness
+  hazard was wrong, which stays stated immediately above it. Instrument pointed at the second
+  claim: `bd924b1`'s body is the attribution, and nothing was lost — the foreign bullet survives
+  byte-identical in `claude/graph-dba/falkordb-quirks.md`, so the release did not corrupt the other
+  session's work, which is the only thing holding was protecting.
+- **Placed as its own sub-bullet rather than appended to the grant.** Appended, it took the grant
+  line from 1,305 to 1,790 characters — the longest line in the file, past `L98`'s 1,716. The
+  sibling sub-bullet is the same content at five wrapped lines and leaves the >700 count at 27.
+- **Graph:** `1 PRODUCED / 0 MENTIONS` ⇒ `otherRemaining = 0` ⇒ full-node `DETACH DELETE`.
+
 ## 2026-09-10 — Kaizen distillation, U43 (twelve 2026-09-08 entries, mostly foreign coordinations)
 
 - **What:** U43 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled
