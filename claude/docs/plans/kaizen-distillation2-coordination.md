@@ -108,7 +108,7 @@ the actual promotion targets — agent prompts, knowledge bases, project docs.
 | U46 | **`cobb`'s own inbox, second pass — 2 entries** (`2e14550b` census-delta attribution, `ceffe7e6` zero-row-is-an-ID-error), re-queried at dispatch. Same shape as U38 (`cobb` gates its own captures, no independent framing check) and the same stakeholder decision as U45's close applies: the pass keeps going indefinitely, small→large across the remaining producers — this is not a wind-down unit. K-030 explicitly out of scope here, left in the backlog per the stakeholder's call | `a603d3d66d7b728ee` | **accepted** (`b6b136b`) | `skills/agent-maintenance/SKILL.md` (+250 w, 0 new sections) · `skills/agent-standards/claude-code.md` (+14 lines, 2 new bullets) · `cobb/kaizen/history.md` (2 dated entries) | teco re-derivation → **both entries' promotions re-verified against the diff, both correctly reasoned** — `2e14550b` right to route past the coordination doc (pass-scoped, headed for archival) into a durable skill; `ceffe7e6`'s three bundled facts split correctly (one distillation-procedure caution, two host-environment facts). Full census reproduces exactly: `cobb` **0** (drained), `analyst` 10, `tdd-engineer` 6, `coder` 4, `architect` 4, `data-scientist` 4, `teco` 2, `qa-engineer` **1** (new, flagged below), orphan mentions 1 = 32 nodes | 142,613 tok / 47 tool uses / 17 min, no kill |
 | U47 | **`qa-engineer`'s inbox — 1 entry** (`a1c2e9d4`), re-derived live and found broader than stated: an unrecognized `model` id gets HTTP 400 only from a **cold start**; with anything already resident, the identical call silently returns 200 served by whatever's loaded — no catalog validation. Promoted the corrected, scope-explicit form (plus the QA consequence: assert on response body's `model`, not just status) to `data-scientist/lm-studio-model-notes.md`, not `qa-engineer`'s own KB — all three facts are server/API behavior. `suggestedHome` (`project docs`) overridden to KB. | `ac37e105af7b82e96` | **accepted** (`5e54603`) | `claude/data-scientist/{lm-studio-model-notes.md,kaizen/history.md}`, `claude/qa-engineer/kaizen/history.md` | self-verified: word count 2,323→2,660 (+337) reproduced exactly, diff content matches all 3 claimed facts verbatim, census confirms `qa-engineer` drained to 0 and 31 total (30 produced + 1 orphan) matching report exactly, `tico` orphan untouched | 181,990 tok / 36 tool uses / 14 min, no kill |
 | U48 | **`teco`'s inbox — 2 entries**, both promoted into `teco.md`, one widened one narrowed. `b7d4e1a9` (cd-failure masking a backup) re-derived by execution and found the real mechanism broader than stated: the harness's Bash tool never runs `set -e`, so *any* unchained command's failure is silently survivable, not a `cd`-specific case — promoted the general rule, `cd` kept as the illustrative example. `f3a1c9e2` (shared git tree wiping a delegate's edits) re-derived against the model-bench coordination's own ledger (read-only) and found the entry's flat causal claim overstated that source's own "most likely" hedge — promoted the narrower, epistemically honest form instead. | `a9a6a4a95fdadae88` | **accepted** (`4a9335d`) | `claude/teco/{teco.md,kaizen/history.md}` | self-verified: word count 10,445→10,612 (+167) reproduced exactly, diff content matches both dispositions verbatim, census confirms `teco` drained to 0 and 30 total (29 produced + 1 orphan, `architect`'s 4→5 confirmed concurrent-session refill not this unit's), `tico` orphan untouched | 158,860 tok / 34 tool uses / 14 min, no kill |
-| U49 | **`coder`'s inbox — 4 entries** (`7e2c1a4e`: `typing.Protocol` exposes declared method names as plain callables in `vars(cls)`; `e3f1c2a4`: `http.client.IncompleteRead` is not an `OSError` subclass, so an `except OSError` catch-all misses it; `312f05b6`: `urllib.error.HTTPError.read()` can fail independently of the connect-phase try/except since `HTTPError` is itself a response object; `c1e8f4b2`: disabling a CLI usage-validation guard mutant, with a fallback `input()` path, turns a clean assertion failure into a pytest stdin-capture `OSError`). Re-queried fresh immediately before dispatch. Likely routes mostly to `skills/python-web-quirks/SKILL.md`; cobb asked to judge each independently rather than batch-route. | `a114033bcce88b819` | in-flight | — | — → — | — |
+| U49 | **`coder`'s inbox — 4 entries**, all 4 re-derived by live execution and confirmed as-stated (none narrowed/widened/discarded): `typing.Protocol` methods derivable from `vars(cls)`; `http.client.IncompleteRead` not an `OSError` subclass, read-phase escapes a connect-only guard; `HTTPError.read()` fails independently of the connect-phase guard; `json.loads` parses bare NaN/Infinity; pytest's `DontReadFromInput` raises `OSError` on in-test `input()`. All 4 routed to `skills/python-web-quirks/SKILL.md` (grepped clean first), none into `coder`'s own prompt. | `a114033bcce88b819` | **accepted** (`0059ec5`) | `skills/python-web-quirks/SKILL.md`, `skills/README.md`, `claude/coder/kaizen/history.md` | self-verified: word/section count 8,377→9,218 (+841)/24→27 reproduced exactly, diff content matches all 4 dispositions verbatim, census confirms `coder` drained to 0, `tico` orphan untouched (`tdd-engineer`'s 6→7 confirmed further concurrent-session refill, not this unit's) | 170,560 tok / 64 tool uses / 16 min, no kill |
 
 ## The graph is live during this pass
 
@@ -493,20 +493,19 @@ list was written after U40, and item 2 has now moved four times.
    in U33. U32/U34/U35/U36 drained `devops`, `data-scientist`, `graph-dba`,
    `qa-engineer` and `tdd-engineer`.
 2. **The producers still holding entries.** All five `teco` chunks are done
-   (U42–U45, U48), `cobb`'s own inbox is done (U46, `b6b136b`), and
-   `qa-engineer`'s is done too (U47, `5e54603`) — all **drained to 0.**
-   Re-queried live at U48's close, **2026-09-10**: `analyst` **10**,
-   `tdd-engineer` **6**, `architect` **5** (refilled from 4 by a concurrent
-   session between U47 and U48's close — not this pass's own arrival, verify
-   fresh before dispatch), `coder` **4**, `data-scientist` **4**, plus the 1
-   orphan — **30** in the graph. Next, small → large:
-   `coder`/`data-scientist` (4 each, tied with `architect` on the figure
-   above but `architect`'s is unverified fresh and may have moved again),
-   then `tdd-engineer` (6), then `analyst` (10). The stakeholder decision
-   below keeps this open-ended rather than closing on any fixed list.
-   **Re-query at each dispatch; never dispatch against a figure recorded
-   here** — this list has been wrong at every single dispatch it has been
-   read at.
+   (U42–U45, U48), `cobb`'s own inbox is done (U46, `b6b136b`), `qa-engineer`'s
+   is done (U47, `5e54603`), and `coder`'s is done (U49, `0059ec5`) — all
+   **drained to 0.** Re-queried live at U49's close, **2026-09-10**: `analyst`
+   **10**, `tdd-engineer` **7** (up from 6 at U48's close — second consecutive
+   concurrent-session refill on this producer, confirm fresh before
+   dispatching it), `architect` **5**, `data-scientist` **4**, plus the 1
+   orphan — **27** in the graph. Next, small → large: `data-scientist` (4),
+   then `architect` (5, watch for further drift), then `tdd-engineer` (7 and
+   rising — dispatch it as a fresh count, not this one). The stakeholder
+   decision below keeps this open-ended rather than closing on any fixed
+   list. **Re-query at each dispatch; never dispatch against a figure
+   recorded here** — this list has been wrong at every single dispatch it
+   has been read at.
 3. **The one orphan is not a residue and must not be swept.**
    `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` is alive on its `tico` edge on
    purpose — it is the routing signal for `tico` K-016. A close pass that
