@@ -2,6 +2,70 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-10 — S2 U114: sampling-contract route (iii) — `roles.ANALYSIS_UNIT_FIELD_BY_ROLE` and `check_sampling_contract`'s role check
+
+**What:** the gap U113's runner-spec synthesis flagged (`docs/plans/small-model-benchmarking-
+runner-spec.md` §2.1) and plan §4 S2's own "Done when" names (`:5078-5082`, v1.25): `sampling`
+contract route (iii), `pairingKey[0] == roles.analysis_unit_field(role)`, was missing from both
+`roles.py` and `packs.py`. Routes (i) (`analysisUnit == pairingKey[0]`) and (ii) (the row-count
+identity) are both satisfied by any self-consistent naming — P12-7's own shipped positive control
+(`pairingKey: ["conversationId", ...]`, `analysisUnit: "conversationId"`, on a `tool-caller` pack)
+passed both while naming the wrong field for its role; route (iii) is the only one that catches
+that class of defect.
+
+`modelbench/roles.py` gains `ANALYSIS_UNIT_FIELD_BY_ROLE` (a second closed-role-table column,
+mirroring `UNIT_KIND_BY_ROLE`'s shape exactly) and `analysis_unit_field(role)`, both read from
+plan §3.3's table verbatim:
+
+| role | `analysis_unit_field` |
+|---|---|
+| `tool-caller` | `scriptId` |
+| `guard-judge` | `itemId` |
+| `nlq-generator` | `itemId` |
+| `chat-responder` | `itemId` |
+| `embedder` | `itemId` |
+
+`modelbench/packs.py`'s `check_sampling_contract` now runs route (iii) right after route (i):
+`pairingKey[0]` must equal `analysis_unit_field(ref.role)`, raising `PackConfigError` otherwise.
+Wired at this one call site — `_ref_from_manifest_fields` already calls `check_sampling_contract`
+for both `pack_ref_from_manifest` and `Pack.ref()`, so `validate_pack`'s existing
+`_sampling_problems` → `pack.ref()` path picks up route (iii) with no further change.
+
+**Tests, driven by execution, not by reading the constant back** (the plan's own emphasis,
+`:5081`): `tests/test_roles.py` pins `set(ANALYSIS_UNIT_FIELD_BY_ROLE) == set(ROLES)` and the
+table's exact values, and drives `analysis_unit_field` over all five roles plus the
+`UnknownRole` refusal. `tests/test_packs.py` adds a `PackRef`-level sweep — `pytest.mark.
+parametrize("role", ROLES)` — that calls `check_sampling_contract` directly with a `pairingKey[0]`
+that is self-consistent with route (i) (`analysisUnit == pairingKey[0]`) but wrong for route
+(iii): `"conversationId"` for `tool-caller` (P12-7's own historical fixture shape, named
+explicitly in the plan and asserted as its own isolated case, not folded anonymously into the
+sweep) and `"scriptId"` (a real row's value, borrowed from `tool-caller`) for the four item-level
+roles. A parallel positive-control sweep asserts each role's own `analysis_unit_field(role)` as
+`pairingKey[0]` returns `None` (no rejection).
+
+**Mutation-tested route (iii) specifically:** disabled just its `if` condition (`if False and
+...`), ran the suite scoped to files outside U115's concurrent `results.py`/`convo.py` edits — the
+6 targeted tests (the 5-role sweep plus the isolated `tool-caller` case) reddened, all 818 others
+stayed green. Restored via `cp` from a pre-mutation backup, `diff -q` confirmed byte-identical,
+under `PYTHONDONTWRITEBYTECODE=1`.
+
+**Fenced correctly around U115's concurrent work:** `modelbench/results.py` changed underneath
+this unit mid-session (U115, disjoint files, dispatched in parallel per the coordination doc) —
+`tests/test_results.py`, `tests/test_report.py` and `tests/test_cli.py` (all importing
+`results.py`) were red for a reason confirmed unrelated to this change (`ItemResult.__init__()`
+rejecting `latencyMs=`, U115's in-flight `timing=` conversion) before this unit touched anything,
+and stayed exactly as red after. Neither `results.py` nor `convo.py` was touched here, per this
+unit's fence.
+
+**Verification:** `.venv/bin/python -m pytest -q tests/test_roles.py tests/test_packs.py` → **72
+passed**. `.venv/bin/python -m pytest -q --ignore=tests/test_results.py --ignore=tests/test_
+report.py --ignore=tests/test_cli.py` (the scope unaffected by U115's concurrent edit) → **824
+passed, 3 deselected** (up from 813 before this unit, +11 — the new `test_packs.py` cases; the
+`test_roles.py` cases are already inside that baseline). `.venv/bin/ruff check modelbench/roles.py
+modelbench/packs.py tests/test_roles.py tests/test_packs.py` → `All checks passed!` (the full
+`ruff check .` reports 9 pre-existing `E501`s, all in U115's in-flight `tests/test_results.py`,
+none in this unit's files).
+
 ## 2026-09-10 — two `-m live` test-authoring defects fixed, both tests now pass for real
 
 **What:** the prior entry's two authoring defects in the `-m live` suite, both test-file-only:

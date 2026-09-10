@@ -43,7 +43,7 @@ from types import MappingProxyType, ModuleType
 from typing import Any, Mapping, NamedTuple
 
 from modelbench.convo import _HISTORY_REPLAY_MODES, PromptConfig
-from modelbench.roles import MULTI_CALL_TURN_BY_ROLE
+from modelbench.roles import MULTI_CALL_TURN_BY_ROLE, analysis_unit_field
 from modelbench.stats import ALPHA_FAMILY
 
 #: §3.3's plugin seam: a pack module may import stdlib and this one modelbench module — nothing
@@ -158,7 +158,16 @@ def metrics_from_manifest(block: Mapping[str, Any]) -> PackMetrics:
 
 
 def check_sampling_contract(ref: PackRef) -> None:
-    """§3.3's structural route: the analysis unit is `pairingKey[0]`, outermost → innermost."""
+    """§3.3's structural routes: the analysis unit is `pairingKey[0]`, outermost → innermost (i),
+    and that outermost component is the *role's own* canonical analysis-unit field (iii, v1.25).
+
+    Routes (i) and (ii) — the row-count identity, `_row_count_identity_problems`'s, not this
+    function's — are both satisfied by any *self-consistent* naming: a pack can declare
+    `analysisUnit == pairingKey[0]` and a matching row count while still naming the wrong field
+    for its role (`P12-7` shipped exactly this as a positive control before `U76`'s fix). Route
+    (iii) is the only one that catches that — `pairingKey[0]` must equal
+    `roles.analysis_unit_field(ref.role)`, never merely *some* self-consistent name (plan §3.3).
+    """
     if not ref.pairingKey:
         raise PackConfigError("sampling.pairingKey is empty")
     if ref.analysisUnit != ref.pairingKey[0]:
@@ -166,6 +175,12 @@ def check_sampling_contract(ref: PackRef) -> None:
             f"sampling.analysisUnit {ref.analysisUnit!r} is not pairingKey[0] "
             f"{ref.pairingKey[0]!r}; the analysis unit is the outermost component of the "
             "pairing key, by rule (plan §3.3)"
+        )
+    expected = analysis_unit_field(ref.role)
+    if ref.pairingKey[0] != expected:
+        raise PackConfigError(
+            f"pairingKey[0] {ref.pairingKey[0]!r} is not role {ref.role!r}'s own analysis-unit "
+            f"field {expected!r} (plan §3.3, route (iii), v1.25)"
         )
 
 

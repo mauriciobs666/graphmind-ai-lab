@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -27,14 +28,18 @@ from modelbench.packs import (
     ROW_COUNT_IDENTITY_EXEMPT_CELLS,
     ROW_COUNT_IDENTITY_KEYS,
     PackConfigError,
+    PackMetrics,
+    PackRef,
     _row_count_identity_field_valid,
     _row_count_identity_problems,
+    check_sampling_contract,
     content_hash,
     derive_call_surface,
     load_pack,
     pack_ref_from_manifest,
     validate_pack,
 )
+from modelbench.roles import ROLES, analysis_unit_field
 
 # --------------------------------------------------------------------------------------------
 # load_pack / Pack
@@ -443,6 +448,85 @@ def test_validate_pack_rejects_analysis_unit_outside_pairing_key_structurally() 
         "sampling.analysisUnit 'conversationId' is not pairingKey[0] 'scriptId'; the analysis "
         "unit is the outermost component of the pairing key, by rule (plan §3.3)"
     ]
+
+
+# --------------------------------------------------------------------------------------------
+# check_sampling_contract — route (iii): the role's own analysis-unit field (v1.25)
+#
+# Routes (i) and (ii) are both satisfied by any *self-consistent* naming (plan §3.3): a pack that
+# declares `analysisUnit == pairingKey[0]` and a row count that matches passes both while still
+# naming the wrong field for its role. Route (iii) is the only one that catches that — so it must
+# be driven by *executing* `check_sampling_contract`, never by reading
+# `roles.ANALYSIS_UNIT_FIELD_BY_ROLE` back (plan §4 S2 "Done when", `:5078-5082`).
+# --------------------------------------------------------------------------------------------
+
+#: Per role, a `pairingKey[0]` value that is self-consistent with route (i)
+#: (`analysisUnit == pairingKey[0]`) while violating route (iii) alone — the "consistently wrong
+#: id" that neither route (i) nor route (ii) can catch (plan §3.3). `tool-caller`'s is P12-7's own
+#: fixture shape (plan §4 S2 "Done when", `:5078-5082`): `"conversationId"`, the exact value that
+#: shipped as a positive control before U76's fix — not merely "some other role's field", since
+#: `"conversationId"` is not any role's own `analysis_unit_field` at all. Every other role borrows
+#: `"scriptId"` — `tool-caller`'s own field, a real row's value, never the borrowing role's own.
+_ROUTE_III_WRONG_PAIRING_KEY_HEAD: dict[str, str] = {
+    "tool-caller": "conversationId",
+    "guard-judge": "scriptId",
+    "nlq-generator": "scriptId",
+    "chat-responder": "scriptId",
+    "embedder": "scriptId",
+}
+
+
+def _sampling_ref(role: str, pairing_key_head: str) -> PackRef:
+    """A minimal `PackRef` isolating route (iii): `pairingKey`/`analysisUnit` agree with each
+    other, so route (i) passes, and `check_sampling_contract` never reads pack data at all, so
+    there is no row-count identity (route (ii)) in scope to fail or pass here — only route (iii)
+    is exercised (plan §3.3)."""
+    return PackRef(
+        packId=f"route-iii-{role}",
+        packVersion="1.0.0",
+        contentHash=None,
+        role=role,
+        metrics=PackMetrics(verdictMetrics=("m",), headlineMetric="m"),
+        pairingKey=(pairing_key_head,),
+        analysisUnit=pairing_key_head,
+        seed=20260909,
+    )
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_check_sampling_contract_rejects_a_pairing_key_head_outside_the_roles_own_field(
+    role,
+) -> None:
+    """Route (iii), v1.25: `pairingKey[0]` must equal `roles.analysis_unit_field(role)`, swept
+    over **every** member of `roles.ROLES` by actually calling `check_sampling_contract` — not by
+    reading `ANALYSIS_UNIT_FIELD_BY_ROLE` back (plan §4 S2 "Done when", `:5078-5082`)."""
+    wrong = _ROUTE_III_WRONG_PAIRING_KEY_HEAD[role]
+    assert wrong != analysis_unit_field(role), (
+        f"fixture bug: {wrong!r} is already role {role!r}'s own field, so this case would not "
+        "isolate route (iii)"
+    )
+    ref = _sampling_ref(role, wrong)
+    with pytest.raises(PackConfigError, match=re.escape(wrong)):
+        check_sampling_contract(ref)
+
+
+def test_check_sampling_contract_tool_caller_route_iii_case_is_p12_7s_fixture_shape() -> None:
+    """The `tool-caller` sweep case, named explicitly in the plan (`:5078-5082`):
+    `pairingKey[0] == "conversationId"` — P12-7's own historical defect fixture (corrected at
+    U76). It is self-consistent (`analysisUnit == pairingKey[0]`, route (i) passes) and is caught
+    only by route (iii), which this test isolates by name rather than folding it anonymously into
+    the sweep above."""
+    ref = _sampling_ref("tool-caller", "conversationId")
+    with pytest.raises(PackConfigError, match="analysis-unit field"):
+        check_sampling_contract(ref)
+
+
+@pytest.mark.parametrize("role", ROLES)
+def test_check_sampling_contract_accepts_the_roles_own_field(role) -> None:
+    """The positive control beside the sweep above: each role's own `analysis_unit_field(role)`
+    as `pairingKey[0]` must not trip route (iii)."""
+    ref = _sampling_ref(role, analysis_unit_field(role))
+    assert check_sampling_contract(ref) is None
 
 
 def test_validate_pack_rejects_replicates_per_script_greater_than_one() -> None:

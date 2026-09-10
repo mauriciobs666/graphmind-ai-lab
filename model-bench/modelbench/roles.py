@@ -49,6 +49,22 @@ MULTI_CALL_TURN_BY_ROLE: Mapping[str, bool] = MappingProxyType(
 )
 
 
+#: §3.3's route (iii) column (v1.25): the analysis unit is the *outermost* component of
+#: `sampling.pairingKey` — a `pairingKey` **component name**, never `UNIT_KIND_BY_ROLE`'s
+#: denominator *noun* (the embedder's row is `itemId` / `query`, and deriving either column from
+#: the other is wrong — plan §3.3). `check_sampling_contract` reads this through
+#: `analysis_unit_field(role)` and requires `pairingKey[0]` to equal it.
+ANALYSIS_UNIT_FIELD_BY_ROLE: Mapping[str, str] = MappingProxyType(
+    {
+        "tool-caller": "scriptId",
+        "guard-judge": "itemId",
+        "nlq-generator": "itemId",
+        "chat-responder": "itemId",
+        "embedder": "itemId",
+    }
+)
+
+
 class UnknownRole(ValueError):
     """A role outside FR-21's five. There is no sixth, and no default."""
 
@@ -56,5 +72,12 @@ class UnknownRole(ValueError):
 def unit_kind(role: str) -> str:
     try:
         return UNIT_KIND_BY_ROLE[role]
+    except KeyError:
+        raise UnknownRole(f"unknown role {role!r}; known roles are {', '.join(ROLES)}") from None
+
+
+def analysis_unit_field(role: str) -> str:
+    try:
+        return ANALYSIS_UNIT_FIELD_BY_ROLE[role]
     except KeyError:
         raise UnknownRole(f"unknown role {role!r}; known roles are {', '.join(ROLES)}") from None
