@@ -16,6 +16,19 @@ Stakeholder decisions, 2026-09-02:
 2. **Drive through S3** (first real end-to-end run against a live model), then check back. S4–S8
    are out of scope for this pass and are not queued below.
 
+**2026-09-10 — reversed: agents (this session and delegates) are now authorised to trigger a
+model load in LM Studio, so S3's live-model work can proceed autonomously rather than waiting on
+a human-run session.** Superseded standing constraint: *"Agents are not authorised to load a model
+in LM Studio,"* which had gated S3's done-condition 1, `-m live` tests (written-and-left-unrun by
+U72), R-1's probe and `loadedContextLength`. Mechanically nothing changes — LM Studio already runs
+with JIT auto-load (confirmed 2026-09-02, above), so "triggering a load" is just making a normal
+`chat`/`embed` request against a not-yet-resident model; no new capability needed, only the
+authorization to exercise the one the adapter already has. Still governed by the same care any
+resource-consuming action on the user's own machine warrants: no forcing multiple large models
+resident at once without need, and the constraint on agents never *unloading* or otherwise
+managing LM Studio's process itself is untouched — this is authorization to make requests, not to
+administer the application.
+
 ## Environment notes at dispatch
 
 - **CPG `cpg_falkorchat` is stale.** Built 2026-09-02T12:38:21Z at `4bb96e1` with
