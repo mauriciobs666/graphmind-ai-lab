@@ -18,10 +18,12 @@ a fake, the same pattern `falkorchat/transport.py` uses for the same reason.
 
 from __future__ import annotations
 
+import ast
 import http.client
 import io
 import json
 import time
+import traceback
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -30,6 +32,7 @@ from typing import Any
 
 import pytest
 
+from modelbench import lmstudio
 from modelbench.lmstudio import (
     _REQUIRED_MODEL_INFO_KEYS,
     ChatResult,
@@ -1049,6 +1052,165 @@ def test_warm_up_embeddings_surface_lands_in_the_taxonomy_on_every_reachable_cel
             timeout_s=5.0,
         )
 
+
+# --- `LMStudioCallFailed.status` — the partition plan §3.8.4's four-row table keys on ----------
+#
+# §3.8.4 splits a failed call two ways: `server-rejected` (the server answered and refused — an
+# HTTP status is in hand) and `no-response` (the call never completed — a dropped connection, a
+# socket error, or a body that could not be read as a response). Before this field both raised a
+# bare `LMStudioCallFailed`, so the two were indistinguishable to any caller: an HTTP 400 (`-ml`
+# §4.1's own example) and a dropped connection differed only in a message string. `status` is
+# what `drive` will partition on — `status is not None` iff `server-rejected` — so it is the
+# adapter's job, not a caller's, to get every raise site's side of that partition right.
+#
+# **A 2xx whose body is unusable carries `status=None`**, deliberately. The server did not
+# *refuse*: §3.8.4 files a "body error" under `no-response`, and reporting `200` here would make
+# `status is not None` read as a refusal that never happened. `status` is the *refusal* status,
+# not "the last status seen".
+#
+# The grid above pins which exception *class* each transport cell lands in; this table pins the
+# `status` of every `raise LMStudioCallFailed` in the module — all twelve, held to that by
+# `test_every_raise_site_of_lmstudio_call_failed_is_covered_here` below, which compares the raise
+# lines these scenarios actually reach against the raise lines the source actually contains.
+
+_MISSING_KEY_ENTRY: dict[str, Any] = {
+    k: v for k, v in _FULL_MODEL_INFO_RAW.items() if k != "arch"
+}
+
+
+def _catalog_returning(body: Any) -> Callable[[], Any]:
+    return lambda: client({"/api/v0/models": (200, _json_bytes(body))}).catalog()
+
+
+def _chat_over(make_outcome: Callable[[], Any]) -> Callable[[], Any]:
+    """Takes a *factory*, not an outcome, matching `_CONNECT_KINDS`/`_READ_KINDS` above and for
+    the same reason with teeth here: a `urllib.error.HTTPError` is single-use. `_raw_post` closes
+    it (`exc.close()`), so raising one prebuilt instance a second time — and the completeness pin
+    below re-runs every scenario — fails inside `tempfile` with "I/O operation on closed file"
+    rather than in the adapter. Each call builds its own."""
+
+    def trigger() -> Any:
+        return client({"/api/v0/chat/completions": make_outcome()}).chat(
+            [{"role": "user", "content": "hi"}],
+            model="m",
+            temperature=0.0,
+            max_tokens=10,
+            timeout_s=5.0,
+        )
+
+    return trigger
+
+
+def _http_error(status: int) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(
+        "http://localhost:1234/api/v0/chat/completions",
+        status,
+        "error",
+        None,
+        io.BytesIO(b"refused"),
+    )
+
+
+#: scenario name -> (trigger, the `status` that scenario's raise site must carry). Two scenarios
+#: share `_raw_post`'s rung 1 on purpose, with different statuses: one status value alone cannot
+#: tell "read from the response" from "hardcoded".
+_STATUS_SCENARIOS: dict[str, tuple[Callable[[], Any], int | None]] = {
+    "_parse_json: a 2xx body that is not JSON": (_chat_over(lambda: (200, b"not json{")), None),
+    "_model_info_from_raw: a catalog entry that is not an object": (
+        _catalog_returning({"data": [42]}),
+        None,
+    ),
+    "_model_info_from_raw: a catalog entry missing a required key": (
+        _catalog_returning({"data": [_MISSING_KEY_ENTRY]}),
+        None,
+    ),
+    "catalog: a non-2xx status — the server answered and refused": (
+        lambda: client({"/api/v0/models": (500, b"<html>nope</html>")}).catalog(),
+        500,
+    ),
+    "catalog: a 2xx body with no 'data' list": (_catalog_returning({"ok": True}), None),
+    "_raw_post rung 1: HTTP 400 — `-ml` §4.1's own example, and §8.4's six lost conversations": (
+        _chat_over(lambda: _http_error(400)),
+        400,
+    ),
+    "_raw_post rung 1: HTTP 503 — the same rung, a different status": (
+        _chat_over(lambda: _http_error(503)),
+        503,
+    ),
+    "_raw_post rung 3: a dropped connection (URLError)": (
+        _chat_over(lambda: urllib.error.URLError(ConnectionResetError("reset by peer"))),
+        None,
+    ),
+    "_raw_post rung 4: a truncated body (http.client.HTTPException)": (
+        _chat_over(lambda: _ReadFailsResponse(200, http.client.IncompleteRead(b"partial"))),
+        None,
+    ),
+    "_raw_post rung 5: a bare socket error (OSError)": (
+        _chat_over(lambda: OSError("host is unreachable")),
+        None,
+    ),
+    "chat: a 2xx body with no usable 'choices'": (
+        _chat_over(lambda: (200, _json_bytes({"choices": []}))),
+        None,
+    ),
+    "chat: a choice with no 'message'": (
+        _chat_over(lambda: (200, _json_bytes({"choices": [{"finish_reason": "stop"}]}))),
+        None,
+    ),
+    "embed: a 2xx body with no 'data' list": (
+        lambda: client({"/api/v0/embeddings": (200, _json_bytes({"ok": True}))}).embed(
+            ["hi"], model="m", timeout_s=5.0
+        ),
+        None,
+    ),
+}
+
+
+def _raise_line_of(trigger: Callable[[], Any]) -> int:
+    """Run a scenario and report the source line of the `raise` it reached — the last traceback
+    frame belongs to the raise statement itself, which is what lets the completeness pin below
+    compare scenarios to source without a hand-maintained line table drifting under either."""
+    try:
+        trigger()
+    except LMStudioCallFailed as exc:
+        return traceback.extract_tb(exc.__traceback__)[-1].lineno or -1
+    raise AssertionError("scenario did not raise LMStudioCallFailed")
+
+
+@pytest.mark.parametrize("name", sorted(_STATUS_SCENARIOS))
+def test_lmstudio_call_failed_carries_the_refusal_status_and_nothing_else(name):
+    trigger, expected_status = _STATUS_SCENARIOS[name]
+    with pytest.raises(LMStudioCallFailed) as caught:
+        trigger()
+    assert caught.value.status == expected_status
+
+
+def test_every_raise_site_of_lmstudio_call_failed_is_covered_here():
+    """The completeness pin, computed on both sides rather than transcribed: the set of source
+    lines the scenarios above actually reach must equal the set of lines the module actually
+    raises `LMStudioCallFailed` from. A thirteenth raise site added without a scenario reddens
+    here — the `status=` keyword being required already forces that site's author to *decide*,
+    and this is what forces the decision to be *tested*."""
+    source = Path(lmstudio.__file__).read_text()
+    raised_in_source = {
+        node.lineno
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Raise)
+        and isinstance(node.exc, ast.Call)
+        and isinstance(node.exc.func, ast.Name)
+        and node.exc.func.id == "LMStudioCallFailed"
+    }
+    covered = {_raise_line_of(trigger) for trigger, _ in _STATUS_SCENARIOS.values()}
+    assert covered == raised_in_source
+
+
+def test_lmstudio_call_failed_docstring_states_what_status_distinguishes():
+    """The class docstring used to fold "a non-2xx status, a dropped connection, or an
+    unparseable body" into one disposition, which is exactly the conflation §3.8.4 split. A
+    reader reaching for the class must find the partition named on it."""
+    doc = LMStudioCallFailed.__doc__ or ""
+    assert "server-rejected" in doc
+    assert "no-response" in doc
 
 # --- one -m live test, per §4 S2's done-condition. Written and NEVER run by this suite ---------
 # (`pyproject.toml`'s `addopts = '-ra -m "not live"'` deselects it by default; it needs a model

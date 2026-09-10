@@ -2,6 +2,71 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-09 — S2 precursor to the `drive` loop rework: `LMStudioCallFailed.status` and `convo.TURN_DISPOSITIONS`
+
+**What:** the two pieces plan v1.26 §3.8.4/§4 S2 require to exist *before* the unit that rewrites
+`convo.drive` into a bounded per-turn iteration loop — the adapter distinction that loop
+partitions on, and the disposition set it will consume. Deliberately its own round: a coverage
+probe authored in the step that introduces the values it must reject contains those values from
+birth, can never redden, and leaves the guard's name standing over no guard.
+
+**1. `LMStudioCallFailed` gains a required keyword-only `status: int | None`.** Verified at
+`2ec3026` before changing anything: the class had twelve raise sites and no way to tell them
+apart. An HTTP 400 (`-ml` §4.1's own example, and what cost §8.4 six `gpt-oss-20b` conversations)
+and a dropped connection both raised a bare `LMStudioCallFailed` — `_raw_post` rung 1 and rung 3,
+differing only in a message string — and the class docstring folded "a non-2xx status, a dropped
+connection, or an unparseable body" into one disposition. §3.8.4's four-row table splits exactly
+that: `server-rejected` (the server answered and refused) scores `-ml` §4.1's `unrunnable`,
+`no-response` (the call never completed) scores §3.6's `fail`. Every raise site was audited and
+now states its side:
+
+- **A status** — `catalog()`'s non-2xx check, and `_raw_post` rung 1 (`exc.code`, read from the
+  response, never hardcoded).
+- **`None`** — rungs 3/4/5 (URLError, `http.client.HTTPException`, bare `OSError`), and **every
+  2xx whose body is unusable**: unparseable JSON, a missing `choices`/`data` list, a malformed
+  catalog entry. The server did not *refuse* — §3.8.4 files a body error under `no-response` — so
+  the field is the refusal status, not "the last status seen". Reporting `200` there would make
+  `status is not None` read as a refusal that never happened, which is the laundering direction
+  P13-1 exists to block.
+- **Required, not defaulted.** A default would let a new raise site inherit `None` — i.e. score
+  `fail` — without anyone deciding. The keyword forces the decision; the completeness pin below
+  forces it to be tested.
+
+**2. `convo.TurnDisposition` and `convo.TURN_DISPOSITIONS`,** the four mechanisms as a `Literal`
+and as `frozenset[str]`, written out **separately rather than one derived from the other**: the
+probe binds each to a constant transcribed by hand from §3.8.4's table, so a member added to
+either declaration alone reddens. Nothing consumes them yet, which is the point — the rework unit
+consumes a constant it did not write.
+
+**The probe is two of §4 S2's three legs, and the third is named rather than omitted.** The S5
+scorer's branch set has no declaration to bind while `modelbench/scoring/` does not exist
+(**blocked on unbuilt work**, not deferred). `test_the_third_leg_of_the_disposition_probe_is_still_owed_by_s5`
+is the tripwire: it asserts that package's absence and fails, with instructions, the moment it
+appears. Its own limit is written into its docstring — a scorer landing outside that package
+would not fire it, and the leg would still be owed.
+
+**Verification.** Baseline before the change: `893 passed, 3 deselected`. After: `920 passed, 3
+deselected` (three other units were live in the tree concurrently and added the difference beyond
+this unit's 19 new tests); `ruff check .` clean. Mutation evidence, each restored by file copy and
+`diff -q`-verified: `_raw_post` rung 1 `status=exc.code` → `None` killed both rung-1 scenarios;
+a 2xx-body-shape site `None` → `200` killed its scenario; `catalog()`'s `status=status` → `None`
+killed its scenario; a thirteenth raise site added with no scenario killed the completeness pin;
+a fifth member added to the `Literal` alone, and to `TURN_DISPOSITIONS` alone, each killed exactly
+its own leg, as did removing `server-rejected` from each alone; re-deriving `TURN_DISPOSITIONS`
+from `get_args(TurnDisposition)` as a mutable `set` killed the immutability pin; creating
+`modelbench/scoring/` killed the tripwire.
+
+**One test-harness fact worth recording:** `urllib.error.HTTPError` is **single-use** as a stub
+outcome. `_raw_post` calls `exc.close()` on it, so raising one prebuilt instance a second time
+fails inside `tempfile` with `ValueError: I/O operation on closed file` rather than in the
+adapter — invisible until a test re-runs a scenario, which the completeness pin does. The new
+scenario table therefore takes outcome *factories*, matching `_CONNECT_KINDS`/`_READ_KINDS`.
+
+**Not done, deliberately:** no iteration loop, no `turnDisposition` field on `TurnTrace`, no
+change to `drive`, and no edit to `convo.py`'s module docstring (which still describes v1.24's
+one-call-per-turn design) — all of that is the rework unit's, and touching it here would
+reintroduce exactly the ordering problem this round exists to prevent.
+
 ## 2026-09-09 — S2 U82: closing impl review Pass 14's five guard-reach gaps (P14-1..5), and Pass 15's correction to the convention that closes them
 
 **What:** `docs/reviews/small-model-benchmarking-impl.md` Pass 14 audited every guard-reach

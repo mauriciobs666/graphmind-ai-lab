@@ -83,9 +83,31 @@ class LMStudioCallTimeout(LMStudioError):
 
 class LMStudioCallFailed(LMStudioError):
     """A `chat`/`embed`/`warm_up` call returned no usable response for a reason other than a
-    timeout: a non-2xx status, a dropped connection, or an unparseable body. This is plan §3.6's
-    fourth disposition, `"no_response"` — a *missing* observation, not a censored one, and the
-    runner is expected to score it `fail` and continue rather than treat it as a crash."""
+    timeout. This is plan §3.6's fourth disposition, `"no_response"` — a *missing* observation,
+    not a censored one, and the runner is expected to score it `fail` and continue rather than
+    treat it as a crash.
+
+    **`status` is what distinguishes the two mechanisms this class covers** (plan §3.8.4's
+    four-row `turnDisposition` table, v1.26): the HTTP status when the server answered and
+    refused — §3.8.4's `server-rejected`, `-ml` §4.1's `unrunnable` count — and `None` when the
+    call never completed: a dropped connection, a socket error, or a body that could not be read
+    as a response, which is §3.8.4's `no-response` and scores `fail`. The two used to be
+    indistinguishable to any caller (this docstring itself folded "a non-2xx status, a dropped
+    connection, or an unparseable body" into one disposition), and `drive` partitions on
+    `status is not None`, so the distinction is decided here, at the boundary that has the
+    evidence, exactly as `LMStudioCallTimeout` already is.
+
+    A **2xx whose body is unusable carries `None`**, deliberately: unparseable JSON, a missing
+    `choices`/`data` list, a malformed catalog entry. The server did not *refuse* — §3.8.4 files
+    a body error under `no-response` — so this is the refusal status, never "the last status
+    seen". `status` is a **required** keyword argument for the same reason: a new raise site must
+    decide which side of that partition it is on rather than inheriting a default that silently
+    scores `fail`.
+    """
+
+    def __init__(self, message: str, *, status: int | None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class ToolCallingIneligible(LMStudioError):
@@ -255,7 +277,9 @@ def _parse_json(raw: bytes, *, context: str) -> Any:
         text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
         return json.loads(text)
     except (UnicodeDecodeError, ValueError) as exc:
-        raise LMStudioCallFailed(f"{context}: response body is not valid JSON: {exc}") from exc
+        raise LMStudioCallFailed(
+            f"{context}: response body is not valid JSON: {exc}", status=None
+        ) from exc
 
 
 _REQUIRED_MODEL_INFO_KEYS = (
@@ -274,13 +298,14 @@ _REQUIRED_MODEL_INFO_KEYS = (
 def _model_info_from_raw(raw: Any, *, index: int) -> ModelInfo:
     if not isinstance(raw, Mapping):
         raise LMStudioCallFailed(
-            f"GET /api/v0/models: catalog entry [{index}] is not a JSON object"
+            f"GET /api/v0/models: catalog entry [{index}] is not a JSON object", status=None
         )
     missing = [k for k in _REQUIRED_MODEL_INFO_KEYS if k not in raw]
     if missing:
         raise LMStudioCallFailed(
             f"GET /api/v0/models: catalog entry [{index}] (id={raw.get('id')!r}) "
-            f"missing required key(s) {missing}"
+            f"missing required key(s) {missing}",
+            status=None,
         )
     capabilities = raw.get("capabilities")
     return ModelInfo(
@@ -419,11 +444,13 @@ class LMStudio:
             # Checked before parsing (Pass 12 P12-10): an error body is often not JSON at all
             # (an HTML error page, a proxy's plain-text response), and parsing it first reported
             # "not valid JSON" instead of the real HTTP status the operator actually needs.
-            raise LMStudioCallFailed(f"GET /api/v0/models: HTTP {status}")
+            raise LMStudioCallFailed(f"GET /api/v0/models: HTTP {status}", status=status)
         body = _parse_json(raw, context="GET /api/v0/models")
         entries = body.get("data") if isinstance(body, Mapping) else None
         if not isinstance(entries, list):
-            raise LMStudioCallFailed("GET /api/v0/models: response has no 'data' list")
+            raise LMStudioCallFailed(
+                "GET /api/v0/models: response has no 'data' list", status=None
+            )
         return [_model_info_from_raw(e, index=i) for i, e in enumerate(entries)]
 
     def residency(self) -> list[ResidentModel]:
@@ -483,7 +510,7 @@ class LMStudio:
             finally:
                 exc.close()
             raise LMStudioCallFailed(
-                f"POST {path}: HTTP {exc.code}: {_truncate(body)}"
+                f"POST {path}: HTTP {exc.code}: {_truncate(body)}", status=exc.code
             ) from exc
         except TimeoutError as exc:  # rung 2 — NOT a URLError; must be named explicitly. Covers
             # a connect-phase timeout and a read-phase one alike (`socket.timeout` has been an
@@ -492,12 +519,18 @@ class LMStudio:
         except urllib.error.URLError as exc:  # rung 3
             if isinstance(exc.reason, TimeoutError):
                 raise LMStudioCallTimeout(f"POST {path}: timed out after {timeout_s}s") from exc
-            raise LMStudioCallFailed(f"POST {path}: connection failed: {exc.reason}") from exc
+            raise LMStudioCallFailed(
+                f"POST {path}: connection failed: {exc.reason}", status=None
+            ) from exc
         except http.client.HTTPException as exc:  # rung 4 — a dropped/truncated body, e.g.
             # `IncompleteRead`; not an `OSError`, so the socket rung below would not catch it.
-            raise LMStudioCallFailed(f"POST {path}: {type(exc).__name__}: {exc}") from exc
+            raise LMStudioCallFailed(
+                f"POST {path}: {type(exc).__name__}: {exc}", status=None
+            ) from exc
         except OSError as exc:  # rung 5 — any other socket error, connect or read phase
-            raise LMStudioCallFailed(f"POST {path}: {type(exc).__name__}: {exc}") from exc
+            raise LMStudioCallFailed(
+                f"POST {path}: {type(exc).__name__}: {exc}", status=None
+            ) from exc
         wall_clock_ms = (time.monotonic() - start) * 1000.0
         return wall_clock_ms, raw
 
@@ -526,12 +559,12 @@ class LMStudio:
         choices = body.get("choices") if isinstance(body, Mapping) else None
         if not isinstance(choices, list) or not choices or not isinstance(choices[0], Mapping):
             raise LMStudioCallFailed(
-                "POST /api/v0/chat/completions: response has no usable 'choices'"
+                "POST /api/v0/chat/completions: response has no usable 'choices'", status=None
             )
         message = choices[0].get("message")
         if not isinstance(message, Mapping):
             raise LMStudioCallFailed(
-                "POST /api/v0/chat/completions: choice has no 'message'"
+                "POST /api/v0/chat/completions: choice has no 'message'", status=None
             )
         raw_tool_calls = message.get("tool_calls")
         tool_calls = tuple(raw_tool_calls) if isinstance(raw_tool_calls, list) else ()
@@ -560,7 +593,9 @@ class LMStudio:
         body = _parse_json(raw, context="POST /api/v0/embeddings")
         data = body.get("data") if isinstance(body, Mapping) else None
         if not isinstance(data, list):
-            raise LMStudioCallFailed("POST /api/v0/embeddings: response has no 'data' list")
+            raise LMStudioCallFailed(
+                "POST /api/v0/embeddings: response has no 'data' list", status=None
+            )
         vectors = tuple(
             tuple(entry["embedding"])
             for entry in data

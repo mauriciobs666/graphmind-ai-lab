@@ -12,10 +12,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from typing import Any
+from pathlib import Path
+from typing import Any, get_args
 
 import pytest
 
+from modelbench import convo
 from modelbench.convo import (
     ChatMessage,
     Conversation,
@@ -589,3 +591,65 @@ def test_drive_raises_type_error_before_any_llm_call_when_env_is_not_a_tool_envi
     with pytest.raises(TypeError, match="ToolEnvironment"):
         drive(_NotAnEnvironment(), script, llm, make_cfg(toolSchemas=()))
     assert llm.calls == []
+
+
+# --------------------------------------------------------------------------------------------
+# `TURN_DISPOSITIONS` — plan §3.8.4's four-row `turnDisposition` table, asserted (plan §4 S2)
+# --------------------------------------------------------------------------------------------
+#
+# §4 S2 requires a **three-way** probe: `set(get_args(TurnDisposition))`, the set of dispositions
+# the S5 scorer branches on, and `TURN_DISPOSITIONS` must **each** equal a constant transcribed
+# into this test from §3.8.4's table — each against the transcript, never against each other,
+# because two sets authored in one unit agree by construction and a probe that cannot redden is
+# not a guard (`AGENTS.md`, "A guard's reach lives in an asserted constant", form (i)).
+#
+# THE THIRD LEG IS ABSENT ON PURPOSE, AND IT IS OWED. The S5 scorer that branches on these
+# dispositions is not built yet — §4 S2 says this row splits across stages — so only two of the
+# three declarations exist today. The absence is *blocked on unbuilt work*, not a choice, and
+# `test_the_third_leg_of_the_disposition_probe_is_still_owed_by_s5` below is the tripwire that
+# refuses to let it be forgotten: it reddens the moment a scorer package appears.
+
+#: Transcribed by hand from plan §3.8.4's four-row table (v1.26), one row per mechanism:
+#: `replied` (a response with no tool calls ended the loop) · `cap-hit` (`maxIterationsPerTurn`
+#: reached) · `no-response` (the call did not complete — `LMStudioCallTimeout`, or
+#: `LMStudioCallFailed` with no HTTP status) · `server-rejected` (the server answered and
+#: refused — `LMStudioCallFailed` carrying an HTTP status). This literal is the *independent*
+#: declaration the module's two are each bound to; never derive it from either of them.
+_DISPOSITIONS_PER_PLAN_3_8_4 = {"replied", "cap-hit", "no-response", "server-rejected"}
+
+
+def test_turn_disposition_literal_is_exactly_the_plan_table() -> None:
+    """Leg 1 of §4 S2's three-way probe: the type annotation `TurnTrace.turnDisposition` will
+    carry, against the transcript above."""
+    assert set(get_args(convo.TurnDisposition)) == _DISPOSITIONS_PER_PLAN_3_8_4
+
+
+def test_turn_dispositions_constant_is_exactly_the_plan_table() -> None:
+    """Leg 2: the runtime constant a consumer validates against, against the same transcript.
+    Deliberately not asserted against leg 1 — the two module-level declarations are written out
+    separately so that a fifth member added to either one alone reddens here."""
+    assert convo.TURN_DISPOSITIONS == frozenset(_DISPOSITIONS_PER_PLAN_3_8_4)
+
+
+def test_turn_dispositions_is_an_immutable_frozenset() -> None:
+    """Appendix A types it `frozenset[str]`, and it is about to be imported by a module this one
+    does not own (S5's scorer, the rework unit's `drive`). A mutable set shared that way is a
+    constant only by convention."""
+    assert isinstance(convo.TURN_DISPOSITIONS, frozenset)
+
+
+def test_the_third_leg_of_the_disposition_probe_is_still_owed_by_s5() -> None:
+    """Not a test of `convo`, and deliberately so: it is the named placeholder for the leg that
+    cannot be written yet, so that its absence above cannot be read as an oversight.
+
+    §4 S2's probe is three-way. The third set — the dispositions S5's scorer actually branches on
+    — has no declaration to bind while `modelbench/scoring/` does not exist. When it does, this
+    test fails, and the fix is to add the third assertion against
+    `_DISPOSITIONS_PER_PLAN_3_8_4` above and delete this one. (If S5's scorer lands somewhere
+    other than that package, this tripwire will not fire and the leg is still owed — which is
+    why the reason is written out here rather than left to the assertion.)"""
+    scoring_pkg = Path(convo.__file__).parent / "scoring"
+    assert not scoring_pkg.exists(), (
+        f"{scoring_pkg} now exists: wire S5's branch set into this file as the third leg of "
+        "§4 S2's disposition probe, then delete this tripwire."
+    )

@@ -76,6 +76,33 @@ HistoryReplay = Literal["structured", "plaintext", "none"]
 
 _HISTORY_REPLAY_MODES: frozenset[str] = frozenset({"structured", "plaintext", "none"})
 
+#: How a turn ended — plan §3.8.4's four-row `turnDisposition` table (v1.26), which is the only
+#: home of the mapping from mechanism to what scores it: `replied` (a response carrying no tool
+#: calls terminated the turn's loop) · `cap-hit` (`maxIterationsPerTurn` reached with tool calls
+#: still being emitted) · `no-response` (the call did not complete — `LMStudioCallTimeout`, or
+#: `LMStudioCallFailed` carrying **no** HTTP status) · `server-rejected` (the server answered and
+#: refused — `LMStudioCallFailed` carrying one; `LMStudioCallFailed.status` is the field that
+#: partition reads, and the adapter, not a caller, decides it).
+#:
+#: The mechanism is recorded **separately from the reply field**: `finalReplyText is None` iff
+#: `turnDisposition != "replied"`, so no consumer keys §4 S5's *absent-not-failed* rule on the
+#: reply text and converts a §3.6 `fail` into an `n_a`.
+TurnDisposition = Literal["replied", "cap-hit", "no-response", "server-rejected"]
+
+#: The same four, as runtime data a consumer can validate against — Appendix A types it
+#: `frozenset[str]`. **Declared and gated ahead of every consumer, on purpose** (plan §4 S2): a
+#: probe authored in the same step that introduces a member can never redden against it, so
+#: `TURN_DISPOSITIONS` lands in its own unit and the rework unit that builds `drive`'s bounded
+#: per-turn loop consumes a constant it did not write. A fifth mechanism arriving later reddens
+#: `tests/test_convo.py`'s probe instead of silently joining the enum.
+#:
+#: Written out rather than derived from `TurnDisposition` for that same reason: the two are
+#: *independent* declarations, each bound in the probe to the plan table transcribed there, so a
+#: member added to either one alone is caught. Nothing in this module consumes it yet.
+TURN_DISPOSITIONS: frozenset[str] = frozenset(
+    {"replied", "cap-hit", "no-response", "server-rejected"}
+)
+
 
 @dataclass(frozen=True)
 class PromptConfig:
