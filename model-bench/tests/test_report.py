@@ -33,6 +33,7 @@ from modelbench.results import (
     DistributionSummary,
     InvalidRecord,
     ItemResult,
+    ItemTiming,
     RetrievalAggregates,
     RunResult,
 )
@@ -625,7 +626,7 @@ def _two_metric_arms(a_wins_first: int, a_wins_second: int, total: int = 40):
                         METRIC: 1 if i < first_correct else 0,
                         second: 1 if i < second_correct else 0,
                     },
-                    latencyMs=1300.0,
+                    timing=ItemTiming(wallClockMs=1300.0, calls=(), withheldFor=None),
                     detail={},
                 )
             )
@@ -739,7 +740,7 @@ def test_holm_is_applied_and_not_merely_printed() -> None:
                     itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",), outcome="pass",
                     scoreable={METRIC: True, second: True},
                     counts={METRIC: int(first_ok), second: int(second_ok)},
-                    latencyMs=1300.0, detail={},
+                    timing=ItemTiming(wallClockMs=1300.0, calls=(), withheldFor=None), detail={},
                 )
             )
         return built
@@ -777,7 +778,7 @@ def test_a_metric_past_the_holm_stop_is_rendered_as_not_tested() -> None:
                     itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",), outcome="pass",
                     scoreable={METRIC: True, second: True},
                     counts={METRIC: int(a_ok), second: int(a_ok)},
-                    latencyMs=1300.0, detail={},
+                    timing=ItemTiming(wallClockMs=1300.0, calls=(), withheldFor=None), detail={},
                 )
             )
         return built
@@ -819,7 +820,7 @@ def test_a_metric_past_the_holm_stop_never_carries_a_significance_claim() -> Non
                     itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",), outcome="pass",
                     scoreable={METRIC: True, second: True},
                     counts={METRIC: int(ok), second: int(ok)},
-                    latencyMs=1300.0, detail={},
+                    timing=ItemTiming(wallClockMs=1300.0, calls=(), withheldFor=None), detail={},
                 )
             )
         return built
@@ -1084,7 +1085,7 @@ def _bare(item_id: str, *, scoreable: dict, counts: dict) -> ItemResult:
         outcome="pass",
         scoreable=scoreable,
         counts=counts,
-        latencyMs=1300.0,
+        timing=ItemTiming(wallClockMs=1300.0, calls=(), withheldFor=None),
         detail={},
     )
 
@@ -1233,8 +1234,11 @@ def test_a_no_verdict_metric_is_named_as_such_in_the_family_table() -> None:
 
 def _ten_items_declaring_nothing_scoreable():
     return [
-        ItemResult(itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",), outcome="pass",
-                   scoreable={METRIC: False}, counts={}, latencyMs=1300.0, detail={})
+        ItemResult(
+            itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",), outcome="pass",
+            scoreable={METRIC: False}, counts={},
+            timing=ItemTiming(wallClockMs=1300.0, calls=(), withheldFor=None), detail={},
+        )
         for i in range(10)
     ]
 
@@ -1314,8 +1318,11 @@ def test_an_item_declaring_a_count_it_does_not_carry_is_a_mismatch_not_a_traceba
     good = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(10)]
     broken = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(9)]
     broken.append(
-        ItemResult(itemId="g09", pairingKey=("g09",), outcome="pass",
-                   scoreable={METRIC: True}, counts={}, latencyMs=1300.0, detail={})
+        ItemResult(
+            itemId="g09", pairingKey=("g09",), outcome="pass",
+            scoreable={METRIC: True}, counts={},
+            timing=ItemTiming(wallClockMs=1300.0, calls=(), withheldFor=None), detail={},
+        )
     )
     a = run("cand", items=good, aggregates=_agg_from(good),
             fingerprint_fields={**fields, "modelKey": "cand"})
@@ -1436,14 +1443,14 @@ def _embedder_pack(verdicts: tuple[str, ...] = ("mrr",), headline: str | None = 
     return PackRef(
         packId="embedder-graphrag-retrieval", packVersion="1.0.0", contentHash="e" * 64,
         role="embedder", metrics=PackMetrics(verdictMetrics=verdicts, headlineMetric=headline),
-        pairingKey=("queryId",), analysisUnit="queryId", seed=20260902,
+        pairingKey=("itemId",), analysisUnit="itemId", seed=20260902,
     )
 
 
 def _mrr_item(query_id: str, value: float) -> ItemResult:
     return ItemResult(
         itemId=query_id, pairingKey=(query_id,), outcome="pass", scoreable={"mrr": True},
-        counts={}, latencyMs=None, measures={"mrr": value}, detail={},
+        counts={}, timing=None, measures={"mrr": value}, detail={},
     )
 
 
@@ -1456,7 +1463,7 @@ def test_a_continuous_member_declaring_a_measure_it_does_not_carry_is_a_mismatch
     broken_items = [_mrr_item(f"q{i:02d}", 0.5) for i in range(9)]
     broken_items.append(
         ItemResult(itemId="q09", pairingKey=("q09",), outcome="pass", scoreable={"mrr": True},
-                   counts={}, latencyMs=None, measures={}, detail={})
+                   counts={}, timing=None, measures={}, detail={})
     )
     agg = RetrievalAggregates(mrr=ContinuousMetric(name="mrr", mean=0.5, n=10, support=(0.0, 1.0)))
     a = run("cand", role="embedder", call_surface="embeddings", items=good_items, aggregates=agg,
@@ -1479,7 +1486,7 @@ def test_a_kind_disagreement_continuous_aggregate_binary_items_is_the_same_misma
     good_items = [_mrr_item(f"q{i:02d}", 0.5) for i in range(10)]
     wrong_kind_items = [
         ItemResult(itemId=f"q{i:02d}", pairingKey=(f"q{i:02d}",), outcome="pass",
-                   scoreable={"mrr": True}, counts={"mrr": 1}, latencyMs=None, measures={},
+                   scoreable={"mrr": True}, counts={"mrr": 1}, timing=None, measures={},
                    detail={})
         for i in range(10)
     ]
@@ -1503,9 +1510,12 @@ def test_reverse_kind_disagreement_binary_aggregate_continuous_items_is_also_a_m
     fields = model_fields(packId=PACK_ID)
     good_items = [item(f"g{i:02d}", correct=True, metric=METRIC) for i in range(10)]
     wrong_kind_items = [
-        ItemResult(itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",), outcome="pass",
-                   scoreable={METRIC: True}, counts={}, latencyMs=1300.0,
-                   measures={METRIC: 1.0}, detail={})
+        ItemResult(
+            itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",), outcome="pass",
+            scoreable={METRIC: True}, counts={},
+            timing=ItemTiming(wallClockMs=1300.0, calls=(), withheldFor=None),
+            measures={METRIC: 1.0}, detail={},
+        )
         for i in range(10)
     ]
     a = run("cand", items=good_items, aggregates=_agg_from(good_items),
@@ -1583,7 +1593,7 @@ def test_a_continuous_verdict_member_with_zero_paired_units_prints_no_paired_dat
     pack = _embedder_pack()
     items_a = [_mrr_item("q1", 0.9)]
     items_b = [ItemResult(itemId="q1", pairingKey=("q1",), outcome="pass",
-                           scoreable={"mrr": False}, counts={}, latencyMs=None, measures={},
+                           scoreable={"mrr": False}, counts={}, timing=None, measures={},
                            detail={})]
     agg_a = RetrievalAggregates(mrr=ContinuousMetric(name="mrr", mean=0.9, n=1, support=(0.0, 1.0)))
     agg_b = RetrievalAggregates(mrr=ContinuousMetric(name="mrr", mean=0.0, n=0, support=(0.0, 1.0)))
@@ -1637,13 +1647,13 @@ def test_a_continuous_units_value_is_the_mean_over_its_items_not_a_flattened_poo
     pack = PackRef(
         packId="embedder-multi-chunk", packVersion="1.0.0", contentHash="f" * 64, role="embedder",
         metrics=PackMetrics(verdictMetrics=("mrr",), headlineMetric="mrr"),
-        pairingKey=("queryId", "chunk"), analysisUnit="queryId", seed=20260902,
+        pairingKey=("itemId", "chunk"), analysisUnit="itemId", seed=20260902,
     )
 
     def chunk_items(values: dict[str, list[float]]) -> list[ItemResult]:
         return [
             ItemResult(itemId=f"{q}-{i}", pairingKey=(q, str(i)), outcome="pass",
-                       scoreable={"mrr": True}, counts={}, latencyMs=None,
+                       scoreable={"mrr": True}, counts={}, timing=None,
                        measures={"mrr": v}, detail={})
             for q, vals in values.items()
             for i, v in enumerate(vals)
@@ -1677,7 +1687,7 @@ def _mixed_pack(
     return PackRef(
         packId="embedder-mixed-family", packVersion="1.0.0", contentHash="a" * 64, role="embedder",
         metrics=PackMetrics(verdictMetrics=verdicts, headlineMetric=headline),
-        pairingKey=("queryId",), analysisUnit="queryId", seed=20260902,
+        pairingKey=("itemId",), analysisUnit="itemId", seed=20260902,
     )
 
 
@@ -1685,7 +1695,7 @@ def _mixed_item(query_id: str, mrr_value: float, precision_hit: bool) -> ItemRes
     return ItemResult(
         itemId=query_id, pairingKey=(query_id,), outcome="pass",
         scoreable={"mrr": True, "precisionAt1": True},
-        counts={"precisionAt1": int(precision_hit)}, latencyMs=None,
+        counts={"precisionAt1": int(precision_hit)}, timing=None,
         measures={"mrr": mrr_value}, detail={},
     )
 
@@ -1763,7 +1773,7 @@ def test_an_all_continuous_family_takes_its_correction_in_the_interval_not_a_lad
     def dual_item(query_id: str, mrr_value: float, sepz_value: float) -> ItemResult:
         return ItemResult(
             itemId=query_id, pairingKey=(query_id,), outcome="pass",
-            scoreable={"mrr": True, "separationZ": True}, counts={}, latencyMs=None,
+            scoreable={"mrr": True, "separationZ": True}, counts={}, timing=None,
             measures={"mrr": mrr_value, "separationZ": sepz_value}, detail={},
         )
 
@@ -1819,14 +1829,14 @@ def test_continuous_verdict_receives_the_whole_family_not_just_the_metric() -> N
     def mrr_only_item(query_id: str, value: float) -> ItemResult:
         return ItemResult(
             itemId=query_id, pairingKey=(query_id,), outcome="pass",
-            scoreable={"mrr": True}, counts={}, latencyMs=None,
+            scoreable={"mrr": True}, counts={}, timing=None,
             measures={"mrr": value}, detail={},
         )
 
     def mrr_and_sepz_item(query_id: str, mrr_value: float, sepz_value: float) -> ItemResult:
         return ItemResult(
             itemId=query_id, pairingKey=(query_id,), outcome="pass",
-            scoreable={"mrr": True, "separationZ": True}, counts={}, latencyMs=None,
+            scoreable={"mrr": True, "separationZ": True}, counts={}, timing=None,
             measures={"mrr": mrr_value, "separationZ": sepz_value}, detail={},
         )
 
@@ -2203,9 +2213,12 @@ def _seed_arms(a_ok: list[bool], b_ok: list[bool]):
     (`basis="assumed"`) path so the seeded cluster bootstrap is what decides."""
     def arm(name, oks, correct):
         items = [
-            ItemResult(itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",),
-                       outcome="pass" if ok else "fail", scoreable={METRIC: True},
-                       counts={METRIC: 1 if ok else 0}, latencyMs=1300.0, detail={})
+            ItemResult(
+                itemId=f"g{i:02d}", pairingKey=(f"g{i:02d}",),
+                outcome="pass" if ok else "fail", scoreable={METRIC: True},
+                counts={METRIC: 1 if ok else 0},
+                timing=ItemTiming(wallClockMs=1300.0, calls=(), withheldFor=None), detail={},
+            )
             for i, ok in enumerate(oks)
         ]
         return run(name, items=items,

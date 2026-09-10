@@ -2,6 +2,23 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-10 — `tests/test_report.py`'s embedder fixtures corrected to `itemId` (route (iii) fallout)
+
+**What:** U114's sampling-contract route (iii) enforcement (`check_sampling_contract`, previous
+entry) is also called directly from `modelbench/report.py`'s `compare_report`, a second call site
+neither U113's synthesis, U114 nor U115 scoped. Three `role="embedder"` `PackRef` fixtures in
+`tests/test_report.py` (`_embedder_pack`, `_mixed_pack`, and the inline `PackRef` in
+`test_a_continuous_units_value_is_the_mean_over_its_items_not_a_flattened_pool`) had always used
+`pairingKey=("queryId", ...)`/`analysisUnit="queryId"` — self-consistent with routes (i)/(ii), so
+never caught before, but not the embedder role's own field (`itemId`, plan §3.3's table). Once
+U114 landed, these 11 tests failed for real via `report.py:687`'s `check_sampling_contract(pack)`
+call — exactly route (iii)'s job, catching a live instance in the suite itself.
+
+Fixed by renaming the three literal `"queryId"` occurrences to `"itemId"` — confirmed by grep to
+be the only three sites in the file, no assertion elsewhere checks for the string `"queryId"`.
+Test-fixture-only; no production code touched. Verified: full suite `1054 passed, 3 deselected`
+(up from 1043 passed / 11 failed), `ruff check .` clean.
+
 ## 2026-09-10 — S2 U115: `results.py`'s timing carriers, `RunResult.latency`/`attestationTripWire`, and `ToolDispatchFailed`'s censoring payload
 
 **What:** Step 0 of `docs/plans/small-model-benchmarking-runner-spec.md` §7 — the two genuine
