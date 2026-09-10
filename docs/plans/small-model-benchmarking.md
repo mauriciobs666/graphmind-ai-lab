@@ -1,6 +1,8 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.30 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.31 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+
+2026-09-10 — v1.31: **additions to unbuilt S5/runner scope plus one four-word deletion in a never-reached branch — the plan gate stays closed.** Implements `docs/plans/small-model-benchmarking-ml-dispatch-failure.md` §6's plan-side consequences of the ruling that a pack's raising `dispatch` censors the conversation at that turn rather than aborting the run or being driven past as undispatchable. §4 S2's replay clause drops "or the dispatch raised" (never replayed — the conversation ends at that turn). §3.3's `tools/sim.py` bullet gains the dispatch-totality contract. §3.8.4 gains the conversation-censoring ruling on top of `ToolDispatchFailed` (already shipped in `modelbench/convo.py`, P17-3's naming half): it carries the completed turns, the runner catches it, stores the conversation censored at `t`, and proceeds to the next script with a fresh `ToolEnvironment`. §3.6a's exit-code paragraph gains the artifacts-before-exit-`4` clause. §4 S5's *Done when* gains E1–E5 (totality, censoring wiring, the two independently-gated rules, the negative control, disclosure). §4 S2's *Done when* gains the per-conversation `ToolEnvironment` obligation `-ml-dispatch-failure.md` §7 names as a gap, plus its two gates. `TurnDisposition` stays at five members throughout — no sixth.
 
 2026-09-10 — v1.30: **Appendix A only, swept against the tree at `3286f26`; no design decision moves and the gate is not reopened.** Six rows corrected — `ConversationTrace`'s `shape`/`replicate`, `Conversation`'s shipped shape, `EmbedResult`'s five fields, `resolving_power()`'s real signature, the `separationRaw`/`separationZ` carrier now shipped rather than pending, and two rotted line-number citations replaced by symbol names — plus `ContinuousVerdict` added to the `stats` verbatim row. One divergence is **reported and deliberately not swept**: `stats.DecidedBy` ships two members where §4 S1 and §4 S1e Table D specify three, so by the appendix's own rule 4 the owning section is right and the code is out of spec.
 
@@ -803,6 +805,19 @@ Key decisions:
   keys reach the argv verbatim (`mistralai/ministral-3-3b`) and a `shell=True` slip is the only
   injection surface in the tool. Pack code is part of the content hash, so a behavior change to a
   simulated tool is a version change like any other.
+- **`dispatch(name, arguments)` is total over `(str, dict)` — it never raises on anything the
+  model's arguments can produce** (`docs/plans/small-model-benchmarking-ml-dispatch-failure.md`
+  §4(a), v1.31). Every input-shaped problem — an unknown tool name, a missing, extra or
+  wrong-typed argument, a value outside the catalog, a quantity of `0`, removing an item not in
+  the cart — is a **returned** `{"error": "<code>", ...}` value, recorded with a normal
+  `DispatchRecord` like any other call: a returned tool error is the thing the pack measures (does
+  the model recover?), never a harness failure. `raise` is reserved for a condition that does
+  **not** depend on the model's arguments at all — the catalog file failed to load, an internal
+  invariant broke. One-line test for the author: *if the model's arguments can change whether it
+  raises, it must not raise.* Corollary: **the sim does not schema-validate arguments before
+  dispatching** — `drive` dispatches anything that parses as a JSON object, and refusing a
+  wrong-typed one there would make the call undispatchable (`|E(t)| = 0`, hence `no_attempt`),
+  destroying FR-8(d)'s measurement of argument correctness.
 - **A pack declares its environment.** `environment.requires` lists capability tokens
   (`lmstudio-chat`, `lmstudio-embeddings`). A run against a pack whose requirements are unmet
   fails fast with a named reason. No pack in this delivery requires FalkorDB (§3.8).
@@ -1915,8 +1930,12 @@ out pass/fail gating and §1 states that the only non-zero exits are operational
 `2` bad arguments or usage · `3` LM Studio unreachable, reachable without its native `/api/v0`
 catalog (§3.4.4a's two messages share this code), not answering the warm-up within
 `--first-call-timeout`, or gone when re-probed after a scored call timed out (§3.6) · `4` invalid
-pack (`validate` failure, load error, unmet `environment.requires`, or a `callSurface` the model's
-catalog `type` contradicts — §3.4.4a) · `5` fingerprint incomplete or
+pack (`validate` failure, load error, unmet `environment.requires`, a `callSurface` the model's
+catalog `type` contradicts — §3.4.4a — or, **after `run`'s artifacts are already written** (v1.31),
+a `tool-caller` conversation censored by a dispatch raise (§3.8.4): a data-quality finding
+discovered only once a partial record exists, not an aborted run, so `results/runs/<runId>.json`
+and the funnel's disclosure land before the process reports `4`
+(`docs/plans/small-model-benchmarking-ml-dispatch-failure.md` §4(d))) · `5` fingerprint incomplete or
 `host.json` stale/absent. Nothing else. A `compare` that finds every stored record invalid still
 exits `0` and prints the `INVALID RESULTS EXCLUDED` block — that is a report, not an operational
 failure.
@@ -2470,6 +2489,22 @@ checks today.
   against `env`, append the assistant message and one `tool` message per call to the **in-turn**
   working list, and call again; stop when a response carries no tool calls — that response's text is
   the turn's final reply — or when `maxIterationsPerTurn` is reached.
+
+  **A `dispatch` that raises ends the conversation, never the turn, and is not a sixth
+  `turnDisposition` member** (`docs/plans/small-model-benchmarking-ml-dispatch-failure.md`
+  §4(b)–(c), v1.31 — the ruling on impl review P17-3's open record-versus-refuse question).
+  `tools/sim.py`'s `dispatch` is contracted total over `(str, dict)` (§3.3), so a raise is a
+  **pack** defect independent of the model's arguments — conversation-scoped, not turn-scoped, and
+  naming it as a sixth mechanism in the table below would be the two-vocabularies collision that
+  table already refuses. `drive` re-raises it as `ToolDispatchFailed` (`modelbench/convo.py`),
+  carrying the completed turns' `ConversationTrace`, the turn index, the tool name, the parsed
+  arguments and the original exception as `__cause__` — today it propagates bare and the whole
+  conversation is lost, which `ToolDispatchFailed`'s own docstring names as provisional pending
+  this decision. **The runner catches it, stores the conversation censored at turn `t`** — turns
+  `1 … t−1` kept, `t` and later absent — **and proceeds to the next script with a fresh
+  `ToolEnvironment`** (§4 S2). Scored via `-ml` §4.3 rule 4's `unrunnable`, on the **tool channel**
+  beside the table's `no-response`/`server-rejected` **model channel** below — the mapping is the
+  note's and is restated nowhere here.
 
   **A turn ends in one of five ways, and the *mechanism* is recorded as `TurnTrace.turnDisposition`,
   separately from the reply field** *(v1.26, P13-1: v1.25 wrote `finalReplyText is None` **iff**
@@ -5108,9 +5143,12 @@ tail; `0` replays all of it.
   `{"role": "tool", "tool_call_id": …, "name": …, "content": …}` per call in emission order, the
   content being that call's real `DispatchRecord.returnValue` JSON-encoded; then the turn's final
   assistant reply. **Every `tool_calls` entry gets exactly one `tool` message, without exception** —
-  for one that could not be dispatched (no name, or the dispatch raised) the content is a JSON
+  for one that could not be dispatched (no name) the content is a JSON
   object naming the failure. An unanswered tool call is rejected by OpenAI-shaped servers, so
   omitting it would convert a model failure into a transport failure at the next turn.
+  *(v1.31: "or the dispatch raised" is deleted — under §3.8.4's censoring ruling a raised dispatch
+  ends the conversation at that turn, so it is never replayed as a prior turn; the four words were
+  not merely stale, they were wrong.)*
 - **`structured-replies-only`** — `{"role": "user", …}` then one `{"role": "assistant", "content":
   <that turn's final reply text>}`. No `tool_calls`, no `tool` message, no breadcrumb.
 - **`plaintext`** — one `{"role": "user", …}` carrying a flattened transcript, `User: …` /
@@ -5600,6 +5638,19 @@ already makes** *(v1.9)*:
   §3.4.1's derivation would forbid it (§3.4.4a, plan-gate P4-10). Free either way — no embedder
   record exists before S3.
 
+**The runner constructs one `ToolEnvironment` per conversation, never one reused across a pack's
+items — a gap `-ml-dispatch-failure.md` §7 names and this plan never states** (v1.31): §3.8.4 calls
+the sim *"stateful within a conversation,"* and that sentence presupposes a boundary nothing before
+this revision draws. Reusing one environment across a `tool-caller` pack's twelve scripts would
+leak cart/order state script to script and falsify FR-10's ground truth on every conversation after
+the first, independently of the censoring ruling above. Two done-conditions, both offline against a
+stub `ToolEnvironment` (this stage's own pattern, no real pack required): **a runner test asserting
+twelve distinct `ToolEnvironment` instances** across one run of a twelve-conversation fixture pack,
+none shared across conversations; and **a test asserting conversation `k+1` opens with an empty
+cart** after conversation `k`'s script places an order — the stub records calls the way
+`StubEnvironment` already does in `tests/test_convo.py`, so the gate needs only a `place_order` call
+in script `k` and a `view_cart` first turn in script `k+1`, asserting an empty result.
+
 ### S3 — `embedder` pack + `refresh_golden.py` (first end-to-end result)
 
 **Create:** `model-bench/scripts/refresh_golden.py` (one-way, human-invoked importer),
@@ -5799,6 +5850,31 @@ S5 owes, stated as work rather than as a mapping:
   not `callCount` (v1.28, `-ml` v1.22 ask 8) — and the mean of `I(t)` are both printed and never
   substituted for one another** — the first is the unrestricted *cost* figure and the second the restricted
   *behaviour* figure, and they differ on any run with a non-`replied` turn.
+
+**The dispatch-raise ruling adds five done-conditions, gated by name for the same reason (3a) is**
+(`docs/plans/small-model-benchmarking-ml-dispatch-failure.md` §4–§5, v1.31; the fixture shapes and
+thresholds are the note's own §5 evaluation table and are not re-derived here):
+
+- **(E1)** `tools/sim.py`'s totality (§3.3): a property test over every tool in `schemas()` crossed
+  with a fixed adversarial-but-JSON-object argument set (absent key, extra key, wrong type per
+  declared field, `""`, `0`, `-1`, a large int, unicode, a nested object, `{}`) — **zero raises**,
+  one `DispatchRecord` per call. A totality claim, not a rate: one raise fails it outright, and a
+  small sweep is not a limitation of the gate.
+- **(E2)** Censoring is wired: a synthetic 9-turn script whose sim raises at `t = 4`, beside three
+  clean conversations, `H = 4` — `drive` raises `ToolDispatchFailed` carrying **3** completed
+  `TurnTrace`s; the stored conversation is censored at turn 4; the funnel prints **1** under a
+  second `unrunnable (tool channel)` line beside the five-row table's `unrunnable (model channel)`
+  line; the headline's denominator is **3** with 1 in its `n/a` tally; the hazard's risk set is 3
+  at `t ≥ 4` with `c_4 == 1`; and §4.2(a)–(g) receive turns 1–3 and nothing after.
+- **(E3)** Censoring is not the headline's `H`-turn rule: the same fixture with the raise moved to
+  `t = 5` is **in** `cleanThroughTurn4`'s denominator and **out** of the hazard from `t = 5` — item
+  (3a)'s discriminating pair, extended to this cause.
+- **(E4)** Negative control: the E2 fixture rendered beside one where turn 4 is an ordinary scored
+  failure rather than a raise — headline, hazard and per-position figures must **differ**; equal
+  figures mean the censoring is not wired and E2 passed on a tautology.
+- **(E5)** Disclosure survives storage: a stored run carrying at least one dispatch failure,
+  re-read by `compare`, prints the per-arm dispatch-failure count; `run` exited `4` (§3.6a); the
+  record is complete for turns `1 … t−1`.
 
 ### S6 — `tool-caller` pack, part 2: the conversation scripts (FR-22)
 
