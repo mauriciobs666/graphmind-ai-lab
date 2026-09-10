@@ -2,6 +2,63 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-10 — Distillation U50: 2 promoted (1 generalized, 1 routed to `analyst`), 2 discarded as superseded by the tree's own subsequent development
+
+- **What:** `cobb` distilled `data-scientist`'s 4-entry `kaizen_team` inbox, re-queried fresh at
+  dispatch (unchanged from the brief's list: `b3f1c0a4…`, `e09bd084…`, `e3e8ead6…`, `3f9c1e42…`,
+  all 2026-09-09/10). **model-bench has an active, unrelated, concurrent coordination running** —
+  nothing under `model-bench/` or `docs/plans/small-model-benchmarking*.md` was written; every
+  disposition below routed elsewhere or discarded outright, so the collision never had to be
+  resolved by keeping anything open.
+- **`b3f1c0a4…` (pack has two sizes: analysis-unit count vs. item count) — promoted, generalized,
+  and its model-bench-specific form discarded as already published.** The entry's own worked
+  example (roles.UNIT_KIND_BY_ROLE tool-caller = 12 vs. `len(run.items)` = 80, and a defect where
+  an `-ml` note had substituted one for the other in three places) is superseded: re-read at
+  `892433e`, `modelbench/roles.py` now carries a **second**, purpose-built table
+  (`ANALYSIS_UNIT_FIELD_BY_ROLE`) and `docs/plans/small-model-benchmarking.md` v1.29 discusses the
+  attempt-count-vs-item-count distinction at length (P16-3 et seq.) — the specific confusion the
+  entry flagged has long since been built around and re-documented in far more current detail than
+  the entry itself carries. The **general** insight underneath is durable and was not yet in this
+  agent's own prompt: in any repeated-measures benchmark, the analysis unit (what `n`/DEFF/a
+  paired test are computed over) is a different count than the raw per-turn/per-item count (the
+  right denominator for a coverage/latency rate), and a benchmark's own terminology invites
+  swapping them silently. Folded one clause onto the existing **Experiment design** bullet,
+  Classical ML & statistics (`data-scientist.md`, 2,569 → 2,661 w, +92).
+- **`e09bd084…` (a bare `file.py:NNN` cite rots; pin to a symbol+count or a sha) — promoted to
+  `claude/analyst/review-techniques.md`, not this agent's own knowledge base.** Re-derived: the
+  fact is a general review/plan-authoring hygiene practice with no ML-methodology content — it's
+  about citing *code*, durably, inside any docs/plans or review note, a concern this pass has
+  hit repeatedly (many units' own citations are pinned to a named sha for exactly this reason) but
+  had never written down as a rule anywhere. `claude/AGENTS.md`'s own citation convention covers
+  citing *other documents* by path, not code line numbers, and is an always-loaded file already at
+  its word budget — the wrong shelf for a technique, not a live constraint. Grepped
+  `review-techniques.md` clean first (no existing section on citation-drift specifically, despite
+  many sections that *use* the pinned-sha technique for a different purpose — verifying old code
+  behavior, not citing it in prose). New section, **13,904 → 14,129 w (+225)**, 32 → 33 sections.
+  No `MENTIONS` tag added — the entry is fully disposed of in this same pass, not deferred to a
+  future `analyst` pass.
+- **`e3e8ead6…` (`callCount` fixture collision risk) — discarded, superseded by the tree's own
+  development.** The entry's premise — `ItemTiming`/`LatencyBlock` are unbuilt, so `callCount`
+  exists only as an unrelated `tests/test_convo.py` fixture stub — is now false: re-derived at
+  `892433e`, `modelbench/results.py` now declares a real `callCount` property and field on
+  `ItemTiming`/`LatencyBlock` (`:233`, `:277`, `:285-287`, `:299`, `:317`), so grepping `callCount`
+  today finds the real field, not only the fixture. The false-positive risk the entry warned about
+  no longer exists.
+- **`3f9c1e42…` (undispatchable bucket silently charges harness/pack faults to the model) —
+  discarded, superseded — the exact hazard flagged has already been fixed in code.** Re-derived at
+  `892433e`: `modelbench/convo.py` now declares a distinct `ToolDispatchFailed(RuntimeError)`
+  (`:325`) that a raising `ToolEnvironment.dispatch` is re-raised as (`:758`), explicitly separate
+  from `_undispatchable_tool_content`'s three model-failure reasons
+  (missing-function-name/unparseable-arguments/no-dispatch-record, `:464/:466/:470`) — the class's
+  own docstring states the reason this class exists: "so the runner cannot confuse the two." The
+  entry's still-true half (the three named reasons *are* model failures) is unchanged and adds
+  nothing beyond what the code itself now states inline; nothing worth promoting survives once the
+  flagged hazard is fixed.
+- **Verified:** `bash claude/scripts/audit-team.sh` clean (not re-run this unit — no hook, catalog,
+  or roster change; only two prose edits to existing prompt/KB files).
+- **Docs touched:** `claude/data-scientist/{data-scientist.md,kaizen/history.md}` ·
+  `claude/analyst/review-techniques.md`.
+
 ## 2026-09-10 — `lm-studio-model-notes.md`: an unrecognized `model` id's outcome depends on residency, not the catalog; catalog reordering and single-model residency (inbound promotion from `qa-engineer`'s capture, U47)
 
 - **What:** `cobb`, distilling `qa-engineer`'s single `kaizen_team` entry (unit U47, entry

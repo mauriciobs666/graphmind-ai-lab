@@ -1212,3 +1212,20 @@ contradiction it appeared to be, and lands on a different line of the document.
 Origin: `teco` kaizen `f0f56a09…` (2026-09-09), gating a distillation entry whose claim and
 evidence looked mutually contradictory; the sweep's own reproduction and controls are recorded in
 `claude/data-scientist/kaizen/history.md` (2026-09-09).
+
+## A bare `file.py:NNN` code citation rots; pin it to a symbol + count, or an explicit sha
+
+A line-number citation to source code inside a docs/plans or review note is only as durable as the
+next edit to that file — an insertion, deletion, or symbol move silently invalidates it while the
+citation stays syntactically well-formed, so a reader has no signal it has gone stale. Measured
+2026-09-10 over one plan note's three unpinned `modelbench` line cites: two no longer resolved a
+few days later (one landed mid-docstring on the wrong symbol entirely, the other on a blank line)
+and the third resolved only by luck; the same note's two cites that *were* pinned to an explicit
+sha still landed exactly on their target lines even though the cited function had since been
+deleted from the working tree entirely.
+
+**As a review or plan-authoring move:** cite code one of two ways, never a bare `file.py:NNN`
+against a moving target. Either a symbol name plus an enumerating count (`grep -c` or equivalent)
+of how many hits it expects — a drifted count is itself the staleness signal — or a line number
+pinned to a named sha (`file.py:NNN` at `<sha>`), which stays exact regardless of what the working
+tree does afterward. A bare, unpinned line cite is a wasting asset from the moment it's written.
