@@ -4366,3 +4366,60 @@ story — which is, precisely, how the deleted column was read.
    `model-bench/AGENTS.md`). My counts are at the `d5b549d` snapshot and are stated as such; if the
    concurrent unit lands prose changes in those files, re-run the two greps before transcribing the
    site list rather than trusting my numbers.
+
+### 6. Stopping condition for the plan gate, pre-stated — written before v1.28 exists
+
+**The trend, with the real numbers rather than an impression.** Total findings 10 → 6 → 9
+(Passes 13/14/15); blockers 2 → 1 → 1; majors 4 → 2 → 3. **Fix rounds are not shrinking**, so the
+stakeholder's recorded tell has already fired once. What that tell does *not* settle is whether the
+residue is design or bookkeeping, and that is the only question worth another pass.
+
+**The split that decides it.** Classify every Pass 16 finding by one question: *would this finding
+still exist if the document were mechanically consistent with itself?*
+
+- **Class D (design)** — the rule the plan states is wrong, under-determined, or contradicted by
+  the co-equal note or by shipped behaviour. A reader had to **judge**. Pass 15: **P15-1, P15-3**.
+- **Class S (sweep)** — the rule is right and is stated correctly *somewhere*; the finding is that
+  site *N* of *M* does not carry it, or carries the superseded version. Findable by enumeration
+  once the rule is known. Pass 15: **P15-2, P15-4, P15-5, P15-6, P15-7, P15-8, P15-9** — **seven of
+  nine**.
+
+**The branch. Pass 16 gates v1.28 under Pass 15's discipline, then:**
+
+1. **Stop the gate** if Pass 16 returns **zero class-D blockers and ≤ 1 class-D finding at any
+   severity** — *however many class-S findings it carries*. A class-S residue does not buy a Pass
+   17; it buys the pin discipline below, run by the implementer.
+2. **Continue** only if Pass 16 returns **≥ 1 class-D blocker** — the plan still gets a *decision*
+   wrong, which is the only thing a reading buys that execution does not.
+3. **The gate is the defect** if Pass 16 returns ≥ 1 class-D blocker **and** it is again generated
+   inside the fix for the previous pass's blocker. That would be three consecutive passes whose
+   blocker is manufactured by its predecessor's fix — a random walk, not convergence — and the
+   answer is to stop specifying and let S2 execute, because the argument that already beat this
+   coordination once (*a residual is self-proving when run*) is then confirmed rather than
+   suspected.
+
+**My prediction, on the record before the data, so the branch cannot be fitted afterwards:** Pass
+16 comes in at ≥ 6 findings, **0 class-D blockers, 0–1 class-D**. If a class-D blocker lands, I was
+wrong and the gate is still earning its cost.
+
+**What replaces the gate for class S, and it is not a reading.** Every class-S finding in Passes
+13–15 is one shape — *stated reach exceeds implemented reach* — and the plan already owns the cure
+at the constant level (§4 S2's `LMStudioCallFailed(` count, §5's `latencyMs` grep). Apply it at the
+**document** level: a revision that changes a rule ships, in its own note, a **grep pin with a
+count on both sides** for that rule across the plan *and* the shipped tree. Falsifiable in turn —
+if v1.28 ships those pins and Pass 16's class-S count does not fall to **≤ 3**, the pin discipline
+does not work either and class S goes to execution wholesale.
+
+**Two classes should already leave the gate, and I say so plainly.** (i) Anything whose failure
+mode is a **crash or a tripped assertion when run** — P15-6's non-total exception map and its
+family. S2 finds those in one run, loudly, cheaper than a reading. (ii) Anything about **shipped
+comments and docstrings** — P15-4. The plan should stop enumerating those sites and state only the
+pin (*both greps return 0*); the diff review catches the rest.
+
+**One class must stay, and it is the reason Pass 16 exists at all:** *a rule stated for one
+consumer of a predicate and silently not for its siblings* — P15-1's shape. Execution cannot catch
+it, because the second consumer gets **built to the unstated rule and goes green**. So Pass 16
+should not be another full re-read. It should be a **narrow pass over a closed, sized inventory,
+enumerated before reading**: every predicate and rule v1.28 changes × every site in the plan, the
+note and the shipped tree that states it. That is Pass 13 §6's method at document scale, and it is
+the only scope under which "no findings" is evidence rather than fatigue.
