@@ -237,6 +237,19 @@ to the general fact here.
   — a `MERGE` with a changed endpoint creates a **second** edge rather than moving the first).
   Treat "a scalar returned beside `collect()` is constant across the fan-out" as a premise to
   verify against the schema's actual cardinality guarantee, not an engine property.
+- **`exists()` over a relationship pattern does not scope to an already-bound node — it evaluates
+  existentially against the whole graph** (verified 2026-09-10, module `41811`, live
+  `kaizen_team`). `MATCH (k:KaizenEntry {entryId:'<id>'}) RETURN
+  exists((:Agent)-[:PRODUCED]->(k)) AS hasProduced` returned `true` for a node with **zero**
+  `PRODUCED` edges, immediately contradicted in the same session by
+  `OPTIONAL MATCH (a:Agent)-[p:PRODUCED]->(k) RETURN a.agentId, count(p)` → `null, 0` on the
+  identical node. Re-derivation found the bug is **not** an artifact of leaving the source node
+  unbound: binding it directly in the pattern —
+  `MATCH (k:KaizenEntry {...}) RETURN exists((k)<-[:PRODUCED]-(:Agent))` — reproduces the same
+  false `true`. Treat `exists()` over any relationship pattern as unreliable for "does this
+  specific node have an edge" and use `OPTIONAL MATCH (...)-[r:REL]->(k) RETURN count(r)` instead
+  — the form `skills/agent-maintenance/SKILL.md` §5's clearing-query step already prescribes, for
+  exactly this reason.
 - **Cross-graph edges silently no-op** — no error, `MATCH` just returns 0 rows.
   There is nothing to catch.
 - **`(:A | :B)` union-label syntax** in a pattern is unverified on this build —

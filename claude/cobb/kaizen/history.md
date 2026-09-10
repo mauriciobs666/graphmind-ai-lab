@@ -2,6 +2,38 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-10 — U52: `cobb` inbox, self-produced entry (`f4a91cbe`) — `exists()`-over-relationship-pattern scoping bug promoted to `falkordb-quirks.md` + a sibling caution in §5
+
+- **What:** unit U52 of `claude/docs/plans/kaizen-distillation2-coordination.md`. Re-queried
+  `cobb`'s own inbox fresh: exactly the 1 entry briefed, `f4a91cbe-7d63-4b8f-9a2e-1c6d8f30ab72`
+  (2026-09-10, self-produced mid-U51). Re-derived by running the exact pattern myself against the
+  live `kaizen_team` graph, on the real `tico` orphan `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e`
+  (read-only, never mutated it): `MATCH (k:KaizenEntry {entryId:'e1a6c4d2…'})-[m:MENTIONS]->
+  (t:Agent) RETURN k.entryId, t.agentId, exists((:Agent)-[:PRODUCED]->(k)) AS hasProduced` →
+  `hasProduced=true`, while the immediate `OPTIONAL MATCH (a:Agent)-[p:PRODUCED]->(k) RETURN
+  a.agentId, count(p)` → `null, 0` on the identical node in the same session. Both reproduce
+  exactly as the entry described. **Went further than the entry**: also tried binding the source
+  node directly in the pattern — `MATCH (k:KaizenEntry {...}) RETURN
+  exists((k)<-[:PRODUCED]-(:Agent))` — which *still* returned `true`, so the bug is not an
+  artifact of leaving the far node unbound/unlabeled as the entry's own phrasing might suggest; it
+  is `exists()` over any relationship pattern, full stop. Routed to `claude/graph-dba/
+  falkordb-quirks.md`'s "Cypher dialect & query behavior" section (+132 w) — the established home
+  this pass has repeatedly used for FalkorDB/Cypher engine-correctness facts regardless of
+  producer, and the only one of the candidates that is a general engine quirk rather than
+  procedure-specific. **Also** added a one-sentence sibling caution in
+  `skills/agent-maintenance/SKILL.md` §5's count-and-decide step (+63 w, 0 new sections),
+  immediately beside the existing "zero-row entryId is an ID error before an absence" caution from
+  U46's `ceffe7e6` — both are traps in the exact same read this pass runs on every current-shape
+  clear, so a pointer there (citing the KB rather than re-narrating the fact — no third copy)
+  earns its keep even though the technical content lives in one place only. Node held one
+  `PRODUCED` edge and no `MENTIONS` edge (`otherRemaining == 0` after resolving it); cleared via
+  full-node `DETACH DELETE`.
+- **Why:** same §5 procedure as every unit in this pass — verify by re-deriving rather than
+  trusting the stored account, route to the fact's true home, log, clear. This one directly
+  threatens the correctness of the census/count-and-decide queries this pass runs dozens of times,
+  so it earned the extra re-derivation step (the bound-node variant) beyond just confirming the
+  entry's own cited evidence.
+- **Plan items:** —
 
 ## 2026-09-10 — U46: `cobb` inbox, entry 1 of 2 (`2e14550b`) — census-delta sessionId attribution promoted to §5
 

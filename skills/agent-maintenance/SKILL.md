@@ -592,7 +592,13 @@ distills — on request, and folded into every certification pass (§4):
         Before concluding the node was already cleared (by an earlier pass,
         or a concurrent session), re-list the producer/mentions edges for
         the entry you actually have in front of you and get the `entryId`
-        verbatim from that result, not from memory. Compute
+        verbatim from that result, not from memory. **A sibling trap in the
+        same read:** `exists()` over a relationship pattern does not
+        reliably scope to the bound node — it can read `true` for a node
+        with zero matching edges even when the node appears directly in the
+        pattern (`claude/graph-dba/falkordb-quirks.md`, "Cypher dialect &
+        query behavior"). Always use the `OPTIONAL MATCH` + `count()` form
+        above, never `exists()`, to check what edges remain. Compute
         `otherRemaining = producedEdges + mentionEdges - 1` (subtracting the
         one edge this pass is about to resolve), then either resolve just
         that one edge or clear the whole node:
