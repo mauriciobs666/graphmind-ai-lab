@@ -1243,7 +1243,9 @@ def test_live_catalog_and_chat_stats_against_a_real_lm_studio():
     c = LMStudio("http://localhost:1234")
     models = c.catalog()
     assert len(models) > 0
-    model_id = models[0].id
+    chat_capable = [m for m in models if m.type in ("llm", "vlm")]
+    assert chat_capable, "no chat-capable (llm/vlm) model in the LM Studio catalog"
+    model_id = chat_capable[0].id
     result = c.chat(
         [{"role": "user", "content": "Say hello in one word."}],
         model=model_id,

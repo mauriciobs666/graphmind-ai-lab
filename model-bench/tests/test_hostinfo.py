@@ -505,9 +505,11 @@ def test_live_loaded_catalog_entry_reveals_kv_cache_or_load_configuration():
     `docs/HISTORY.md` either way — if it does, `kvCacheSetting` moves from operator-attested to
     auto-captured (a `fingerprint.py`/`AGENTS.md` change, out of this unit's fences)."""
     client = LMStudio("http://localhost:1234")
+    chat_capable = [m for m in client.catalog() if m.type in ("llm", "vlm")]
+    assert chat_capable, "no chat-capable (llm/vlm) model in the LM Studio catalog"
     client.chat(
         [{"role": "user", "content": "Hello."}],
-        model="<a model already loaded by the operator>",
+        model=chat_capable[0].id,
         temperature=0.0,
         max_tokens=8,
         timeout_s=300.0,

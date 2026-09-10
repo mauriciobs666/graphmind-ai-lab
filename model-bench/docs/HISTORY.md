@@ -2,6 +2,48 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-10 — two `-m live` test-authoring defects fixed, both tests now pass for real
+
+**What:** the prior entry's two authoring defects in the `-m live` suite, both test-file-only:
+
+- `tests/test_hostinfo.py::test_live_loaded_catalog_entry_reveals_kv_cache_or_load_configuration`
+  called `client.chat()` with the literal placeholder string `"<a model already loaded by the
+  operator>"` as `model`, left over from when a human was expected to hand-edit it. Fixed by
+  filtering a live `client.catalog()` read to chat-capable `type`s (`llm`/`vlm`) and taking the
+  first match's `id`, with an assertion that fails clearly (not a raw 400) if the catalog holds no
+  such entry.
+- `tests/test_lmstudio.py::test_live_catalog_and_chat_stats_against_a_real_lm_studio` took
+  `catalog()[0]` as the chat target with no `type` filter — fragile, since LM Studio sorts a
+  just-loaded model first and that model can be non-chat-capable (e.g. `embeddings`-type). Fixed
+  with the same filter-then-assert-then-take-first pattern as above.
+
+Considered hardcoding a specific model id (the coordinating brief's suggested
+`google/gemma-4-e2b`, confirmed present) instead, but the catalog-filter approach is more robust
+to the local pack changing over time and reuses one pattern across both tests, so that's what both
+fixes use. No production code (`modelbench/*.py`) changed — the existing `ModelInfo.type` field
+already carries exactly this information; no new capability was needed.
+
+**How:** `.venv/bin/python -m pytest -m live -v` from `model-bench/`, against the real, locally
+reachable LM Studio (`http://localhost:1234`) — confirmed reachable via a direct
+`GET /api/v0/models` first, catalog showing `google/gemma-4-e2b` (`vlm`, already `loaded`) sorted
+first, so both fixed tests picked it as their chat target. All three `-m live` tests, run
+together:
+
+```
+tests/test_hostinfo.py::test_live_loaded_catalog_entry_reveals_kv_cache_or_load_configuration PASSED
+tests/test_hostinfo.py::test_live_loaded_context_length_on_a_loaded_embeddings_model PASSED
+tests/test_lmstudio.py::test_live_catalog_and_chat_stats_against_a_real_lm_studio PASSED
+
+3 passed, 1027 deselected in 11.89s
+```
+
+(The middle test was already verified live in the prior entry; included here to show the whole
+`-m live` suite is green together, not just the two fixed tests in isolation.)
+
+**Verification:** `.venv/bin/python -m pytest -q` (non-live) → **1027 passed, 3 deselected**,
+unchanged from the prior baseline — expected, since both fixes are inside `@pytest.mark.live`
+tests deselected by default. `.venv/bin/ruff check .` → `All checks passed!`.
+
 ## 2026-09-10 — `-m live` run against a real LM Studio: R-1 resolved (no), `loadedContextLength` confirmed on a loaded embeddings model
 
 **What:** the stakeholder's 2026-09-10 authorization to trigger a model load (coordination doc,
