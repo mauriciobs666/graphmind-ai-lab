@@ -112,7 +112,7 @@ the actual promotion targets — agent prompts, knowledge bases, project docs.
 | U50 | **`data-scientist`'s inbox — 4 entries**, 2 promoted 2 discarded — no model-bench collision (nothing needed a write there). `b3f1c0a4` generalized (analysis-unit vs. item count in a repeated-measures design) into `data-scientist.md`, its model-bench-specific example already superseded by `roles.py`'s own `ANALYSIS_UNIT_FIELD_BY_ROLE` table. `e09bd084` (bare `file.py:NNN` cites rot) promoted to `analyst/review-techniques.md` — general review hygiene, not ML content. `e3e8ead6` (`callCount` collision) and `3f9c1e42` (`undispatchable` bucket) both discarded — both hazards already fixed in the current tree (`results.py`'s real `callCount` field, `convo.py`'s `ToolDispatchFailed`), independently re-verified against HEAD. | `a53b342293ec835d3` | **accepted** (`40b0daf`) | `claude/data-scientist/{data-scientist.md,kaizen/history.md}`, `claude/analyst/review-techniques.md` | self-verified: word/section counts (2,569→2,661/+92; 13,904→14,129/+225, 32→33 sections) reproduced exactly, diff content matches both promotions verbatim, both "discarded as superseded" claims independently re-verified by grepping the actual code (exact line matches), census confirms `data-scientist` drained to 0 and 23 total matching report, `tico` orphan untouched | 168,754 tok / 43 tool uses / 5 min, no kill |
 | U51 | **`architect`'s inbox — 5 entries**, 3 promoted 1 discarded 1 superseded/generalized — no model-bench collision. `7c1f0a3e` (delete a duplicated wrong mapping cell, don't split the row) and `3f1c9e42` (a self-referential grep pin inflates its own count) promoted, one each into `architect.md`/`review-techniques.md`. `a4f1c2e8` discarded — already published, word-for-mechanism identical to an existing same-day-sharpened `review-techniques.md` section. `a2f6b6b0`/`a1e6f2b0` (model-bench-specific) both **re-derived TRUE at committed sha `41d82e9`**, unlike U50's precedent — but a concurrent session's *uncommitted* work is already fixing both, so only the generalized techniques were promoted, no current-state model-bench fact recorded. Also produced a new raw self-observation, `cobb`'s own `f4a91cbe` (a FalkorDB `exists()`-over-unbound-pattern query-correctness gotcha it hit and self-corrected mid-run) — left open in the graph, out of scope for this unit, folds into `cobb`'s own future chunk. | `afd27adaac9909928` | **accepted** (`fa7c906`) | `claude/architect/{architect.md,kaizen/history.md}`, `claude/analyst/review-techniques.md` | self-verified: word count deltas reproduced exactly (+276/+156; frontmatter explains a base-count discrepancy in cobb's own report, delta unaffected), diff content matches all 5 dispositions verbatim, the two "true at committed sha" claims independently re-verified directly against `41d82e9` (exact match both), census confirms `architect` drained to 0, `tico` orphan untouched, `model-bench/` untouched | 231,492 tok / 70 tool uses / 36 min, no kill |
 | U52 | **`cobb`'s inbox — 1 entry** (`f4a91cbe`), promoted. FalkorDB `exists()` over a relationship pattern does **not** scope to an already-bound node — evaluates existentially against the whole graph, confirmed by cobb (and independently reproduced by me directly against the `tico` orphan) even when the source node is bound directly in the pattern, not just when left unbound. Routed to `graph-dba/falkordb-quirks.md` (general engine quirk) plus a one-sentence sibling caution in `agent-maintenance/SKILL.md`'s §5 clearing step, next to the existing zero-row-entryId caution. | `a6fedd67c261557bf` | **accepted** (`75c0fd1`) | `claude/graph-dba/falkordb-quirks.md`, `skills/agent-maintenance/SKILL.md`, `claude/cobb/kaizen/history.md` | self-verified: word count deltas reproduced exactly (+132/+63, 0 new sections), diff content matches verbatim, **independently reproduced the FalkorDB bug myself** (ran the query directly against the known-zero-edges `tico` orphan, confirmed false `true` both bound and unbound), census confirms `cobb` drained to 0, `tico` orphan untouched, `model-bench/` untouched (a new `coder` 1-entry arrival is a fresh concurrent-session refill, not this unit's) | 130,015 tok / 27 tool uses / 12 min, no kill |
-| U53 | **`coder`'s second, fresh 1-entry chunk** (`a1e3c9d2`, arrived post-U49 from a different concurrent session): a full-suite failure while sharing a working tree with another concurrent agent can be pre-existing/unrelated to your own diff — diagnose by checking whether the failure predates your change. Possibly overlaps `teco.md`'s U48-promoted shared-tree-wipe fact; cobb asked to judge whether this is a distinct diagnostic angle or a duplicate. | `a6b0efe97e75b5053` | in-flight | — | — → — | — |
+| U53 | **`coder`'s second, fresh 1-entry chunk** (`a1e3c9d2`), promoted, judged **distinct** from `teco.md`'s U48 fact: that one is data-loss detection by the coordinator integrating results, this one is the implementer diagnosing a full-suite failure's cause (pre-existing/concurrent vs. self-caused) before ever reporting anything. Folded onto `coder.md` step 5's existing attributed-delta sentence, same shared-tree theme, distinct discipline (diagnosing causation vs. honest count reporting). | `a6b0efe97e75b5053` | **accepted** (`3d1f0a3`) | `claude/coder/{coder.md,kaizen/history.md}` | self-verified: word count 1,269→1,319 (+50) reproduced exactly, diff content matches verbatim, census confirms `coder` drained to 0 (18 total), `tico` orphan untouched (confirmed via direct `MENTIONS` query after my own combined-`OPTIONAL MATCH` query returned a false empty — an artifact of the query I just wrote, not a real change), `model-bench/` untouched (concurrent session has since committed its own work) | 118,345 tok / 24 tool uses / 10 min, no kill |
 
 ## The graph is live during this pass
 
@@ -497,22 +497,20 @@ list was written after U40, and item 2 has now moved four times.
    in U33. U32/U34/U35/U36 drained `devops`, `data-scientist`, `graph-dba`,
    `qa-engineer` and `tdd-engineer`.
 2. **The producers still holding entries.** All five `teco` chunks are done
-   (U42–U45, U48), `qa-engineer`'s is done (U47, `5e54603`), `coder`'s first
-   chunk is done (U49, `0059ec5`), `data-scientist`'s is done (U50,
-   `40b0daf`), `architect`'s is done (U51, `fa7c906`), and `cobb`'s
-   self-produced refill is done (U52, `75c0fd1`) — all **drained to 0.**
-   Re-queried live at U52's close, **2026-09-10**: `analyst` **10**,
-   `tdd-engineer` **7**, `coder` **1** (new — a fresh concurrent-session
-   arrival, not this pass's own; `coder` was drained to 0 at U49), plus the
-   1 orphan — **19** in the graph. Next, small → large: `coder` (1, its
-   *second* chunk this pass), then `tdd-engineer` (7), then `analyst` (10)
-   — but **re-verify every one of these fresh at dispatch**; every producer
-   count recorded in this pass has drifted from concurrent-session or the
-   pass's own refills at least once already, several producers (`teco`,
-   `cobb`, now `coder`) more than once. The stakeholder decision below keeps
-   this open-ended rather than closing on any fixed list. **Re-query at each
-   dispatch; never dispatch against a figure recorded here** — this list has
-   been wrong at every single dispatch it has been read at.
+   (U42–U45, U48), `qa-engineer`'s is done (U47, `5e54603`), `coder`'s two
+   chunks so far are done (U49 `0059ec5`, U53 `3d1f0a3`), `data-scientist`'s
+   is done (U50, `40b0daf`), `architect`'s is done (U51, `fa7c906`), and
+   `cobb`'s self-produced refill is done (U52, `75c0fd1`) — all **drained to
+   0.** Re-queried live at U53's close, **2026-09-10**: `analyst` **10**,
+   `tdd-engineer` **7**, plus the 1 orphan — **18** in the graph. Next,
+   small → large: `tdd-engineer` (7), then `analyst` (10) — but **re-verify
+   every one of these fresh at dispatch**; every producer count recorded in
+   this pass has drifted from concurrent-session or the pass's own refills
+   at least once already, several producers (`teco`, `cobb`, `coder`) more
+   than once. The stakeholder decision below keeps this open-ended rather
+   than closing on any fixed list. **Re-query at each dispatch; never
+   dispatch against a figure recorded here** — this list has been wrong at
+   every single dispatch it has been read at.
 3. **The one orphan is not a residue and must not be swept.**
    `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` is alive on its `tico` edge on
    purpose — it is the routing signal for `tico` K-016. A close pass that
