@@ -2,6 +2,54 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-09-10 — Kaizen distillation, U48 (teco's 2-entry inbox, self-produced)
+
+- **What:** U48 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled
+  `teco`'s two remaining `:KaizenEntry` nodes, both self-produced (`teco` wrote them, the entries
+  arriving from `teco`'s own observations while coordinating model-bench's U106) and both dated
+  2026-09-10, the same day as this pass's own U45–U47.
+- **Entry `b7d4e1a9-3f52-4c6b-8a91-7e0d3c5f9a12` — confirmed, then widened.** Fact as captured: in
+  one Bash tool call with several newline-separated command lines not all joined by `&&`, an early
+  `cd` that fails does not abort the call — later lines still run. Re-derived directly by executing
+  the exact shape (a `cd` into a non-existent subdirectory, using the harness's own Bash tool):
+  reproduced verbatim — the failed `cd` printed its error, the cwd stayed unchanged, and every
+  following line ran anyway. A second control (`false` with no `set -e`, followed by more commands)
+  confirmed the actual mechanism: the harness's Bash tool never sets `-e`, so *any* unchained
+  command's failure is silently survivable, not something specific to `cd`. That's broader than the
+  captured fact's framing (which reads as a `cd`-specific gotcha) — promoted the general mechanism,
+  with the `cd`-into-wrong-starting-directory case folded in as the illustrative example (it's
+  exactly what triggered the capture: a mutation-test backup script's `cd model-bench && cp …`
+  correctly no-op'd on the failed `cd`, but the next, unchained verification line ran regardless and
+  printed real content, which read as confirming a backup that never happened). Promoted into
+  `teco.md`'s mutation-test bullet, next to the existing "restore by copy" guidance it directly
+  extends (+~80 w).
+- **Entry `f3a1c9e2-6b4d-4e8a-9c7f-2d5b8a1e4f60` — confirmed as a real incident, narrowed on
+  mechanism.** Fact as captured states flatly that a shared git working tree "can silently wipe" a
+  concurrent delegate's uncommitted edits, framed as an established causal claim. Re-derived against
+  the model-bench coordination's own ledger (`docs/plans/small-model-benchmarking-coordination.md`,
+  U106 row, commit `4309007` — read, not edited, per this unit's constraints), which is closer to
+  the incident than this entry's own one-line summary: it independently confirms the loss (a
+  `tdd-engineer` delegate's edits to four files gone mid-run, none of the new symbols anywhere in
+  git history, ruling out being superseded by real work) but hedges the cause as **"most likely"** a
+  shared-tree collision with concurrent, unrelated churn (`claude/analyst/**`,
+  `skills/python-web-quirks/SKILL.md` modified in the same tree at the same time by activity outside
+  that coordination) — never confirmed. The captured entry's "just filesystem-level loss" phrasing
+  overstates that hedge into a flat mechanism claim. Promoted the narrower, epistemically honest
+  form — the incident is real and the report is credible, the mechanism is unconfirmed — paired with
+  the recovery discipline the source ledger describes as actually followed (redo from settled
+  design, snapshot to scratchpad, commit promptly under visible churn). Added as a new bullet in
+  `teco.md`'s "Track what's in flight" section, beside the existing platform-failure resilience
+  guidance it parallels (+~87 w).
+- **Why:** Same §5 procedure as every prior unit in this pass — re-derive, don't take the stored
+  `fact` at face value; this chunk specifically surfaced one narrowing (a hedge overstated into a
+  claim) and one widening (a specific illustration understating its own general mechanism), the
+  same "stated broader or narrower than re-derivation supports" pattern this pass keeps finding.
+  Grepped `teco.md`/`claude/AGENTS.md` first for existing coverage of both claims — neither existed,
+  so both are genuinely new, not duplicate promotions.
+- **Graph shape:** both current-shape (no `author` property), `producedEdges = 1`,
+  `mentionEdges = 0` for each (`otherRemaining = 0`), so each cleared via the full-node curator
+  shape once its disposition was on disk. Per-entry write → log → clear, not batched.
+
 ## 2026-09-10 — Kaizen distillation, U45 (seventeen entries, the final `teco` chunk)
 
 - **What:** U45 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled the
