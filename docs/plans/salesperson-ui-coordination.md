@@ -272,6 +272,68 @@ So the collision is on **two** axes, and only the first is visible in a diff:
 
 **What I did not do:** reach into the other coordination. I have no standing there, and its `teco` is the right owner of its own sequencing. This is recorded here so that whoever picks either coordination up sees the overlap from whichever side they arrive on.
 
+## Holding U64 for six days meant P7-4 needed no code (teco, 2026-09-10)
+
+U64 sat `queued` because U28 collided with it on the **claim**, not just the files. That call paid
+more than it cost. `cobb` came back with **P7-4 already closed** — the sibling arc's `48882d8`
+replaced `rq`'s error blacklist with a *positive* gate (last line must begin `Query internal
+execution time:`) and `printf`s the reply **before** returning 1, so the `FalkorDB rejected` branch
+now fires with `$STAMP_OUT` populated. I read `rq` at source and confirmed it. Pass 7's prescribed
+`echo` would have been a **duplicate**, and the eighth case it asked for **already existed**.
+
+Dispatched against `375af25` as originally briefed, a careful agent would have added a redundant
+line and a redundant case, and every gate would have approved them — a static reviewer reads the
+same stale revision. **The brief's licence to report a finding as already-closed is what made the
+correct answer reachable**, and it has to be written down, because "close the finding" and "make an
+edit" read as the same instruction otherwise.
+
+The unit still found work: **generation five** in the same place. The case pinned the branch
+*wording* and never the *reply text* — deleting the echo left the suite green, in all three
+branches. And it **judged Pass 7's own P7-1 prescription insufficient**: the two `must-contain`
+arguments kill `mA` but leave `mI` alive, because every asserted string came from `print_stamp`'s
+lead-in and nothing looked at the command the operator is actually told to run. A reviewer's
+suggested fix is a finding to judge — the fourth time in this coordination that judging it beat
+applying it.
+
+## My own instrument was the broken one, and it nearly refuted a correct figure (teco, 2026-09-10)
+
+Verifying U64's new claim that tombstone one is byte-identical across **seven** commits (Pass 7 said
+five), I grepped each revision for its closing phrase and got **three**. A disagreement that large
+reads as a refutation. It was my grep: `freshness.md` is **hard-wrapped**, the phrase spans a line
+break, and a line-based `grep` cannot see it. Normalising whitespace first returns **seven**,
+exactly as reported — and Pass 7's "five" was right for its time, since it stopped at `375af25`.
+
+This is the standing rule instantiated at my own expense: **a re-derivation that comes out clean,
+stable, or short is as likely a bug in the check as a defect in the claim.** The tell was that my
+answer disagreed with *both* the delegate's figure and the review's, which should have pointed at
+the one thing common to neither — my instrument.
+
+**The generalisable half:** any grep used as *evidence about a document* has to be run against
+whitespace-normalised text, because a prose file's line breaks are an artefact of the wrap width and
+carry no meaning. Every phrase-level sweep in this coordination that ran line-based has this blind
+spot, including the ones that came back empty — and an empty result is exactly where it hides,
+since a broken instrument and a real absence return the same thing.
+
+## The two surfaces disagreed, and that is what identified the defect (teco, 2026-09-10)
+
+U64's first leg reported the file at **294** lines and wrote **295** into `history.md`; it measures
+**293**. The useful signal was not that either was wrong — it was that they were **wrong
+differently**. A figure that is mis-measured is wrong *consistently* everywhere it appears; a figure
+that differs between the artifact and the report was written from memory on at least one of them.
+`cobb` confirmed it on inspection: both were **stale**, transcribed from a measurement taken before
+the final reflow and never re-run.
+
+So the cheap check, whenever a unit writes a number to disk **and** reports it, is to compare the
+two **against each other** before comparing either against the source. It costs one `grep` and it
+localises the failure to transcription rather than measurement.
+
+The fix generalised properly: the entry now states **all four boundaries** — tombstone block, the
+markdown list item, the sub-paragraph, and the whole file — because two figures were wrong while
+they carried no boundary. It also records that Pass 7's *"under ~30 lines"* target **states no
+boundary at all**, so it is 39 under one reading and 52 under the other, while the **delta is −89
+under both**. The delta is the checkable number; the target never was. All four reproduced exactly
+on my instrument.
+
 ## Standing decision — the deprecated CPG is ignored (stakeholder, 2026-09-02)
 
 **`cpg_deprecated_salesperson` is not maintained, not documented, and not rebuilt. No unit of this
@@ -492,7 +554,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U66** — close Pass 23 on the plan: P23-1 blocker, P23-2, P23-3's consequence, P23-5/6/7 → **v1.33, the last static plan touch** | `architect` | `a0cfb47caac4a8c3e` (resumed — its own review findings, same file, 193k tok) | **accepted — committed `6da8ec0`**, +64/−25. **Refused to narrow into a hole**: the assertion Pass 23 said already owned the request-thread design *did not exist*, so v1.33 adds it before narrowing onto it. **Rejected half of the blocker's proposed fix** with a number (a relative tail clause reddens on GC noise at a 3-4 ms idle median). **Rejected a third option neither the gate nor I raised**, verified at CPython source. **Resolved the provenance discrepancy I flagged** — both commits right, different questions. All four load-bearing claims teco-verified | `docs/plans/salesperson-ui.md` **v1.33** | **none — plan lane closes here** (see the stopping rule) | 256k tok / 29 tools |
 | **U68** — P23-5: `storefront_api.py` ~`:1494` says the `504` comes back "simply with no roster"; it ships `participants` present-and-null | `coder` | `a07aa43f407bafdab` (resumed — holds the false-absence context from U62/U67) | **accepted — committed `1918ac6`**. **The sweep found a second site nobody had cited**: `ResetStateUnknownError`'s own docstring (`storefront.py:164`) still said *"simply with no state body"* — D-3's exact claim, surviving in code after the plan text was fixed. Both mechanisms teco-verified at their construction sites. Docstrings only, 4/2 and 2/1 lines | `falkorchat/storefront_api.py`, `falkorchat/storefront.py`, `falkor-chat/docs/HISTORY.md` | folded into S9e's review → — | 166k tok / 16 tools |
 | **U67** — P23-4: S9f was **three sites, not one**; `config.py:216-224` still states the pre-S9 world | `coder` | `a07aa43f407bafdab` (resumed — its own S9f unit, holds D-1's readings) | **accepted — committed `3c23992`**. Site count **confirmed three** from Pass 19/22 directly, not from my brief. Fixed `config.py` (comments only, `30` untouched — teco-verified by diff); **read the third site and found it already true**, so no edit — I spot-checked `presenter_reset_all`'s docstring and its drain description is live and correct. Unfiltered sweep found no fourth. **Corrected its own HISTORY entry in place** to say its earlier closure claim was wrong | `falkorchat/config.py`, `falkor-chat/docs/HISTORY.md` | folded into S9e's review → — | 137k tok / 19 tools |
-| **U64** — close the CPG provenance arc: P7-1, P7-2, P7-4, delete P7-3's tombstone block. **No Pass 8** (stakeholder, 2026-09-09) | `cobb` (**fresh** — `abeeb0ea31b20e7cc` is from a dead session) | `a6a06e8fa1aee1a38` | **in-flight** (dispatched 2026-09-10) — **unblocked: U28's arc landed**, four commits `48882d8`→`682fbed`→`4df5e45`→`00bebdc` plus its own gate at `docs/reviews/rq-execution-gate.md`. Briefed to **re-derive P7-1/P7-4 against that range, not `375af25`**, and to close a finding the sibling arc already closed rather than manufacture an edit | `skills/joern-cpg/**`, `skills/cpg-analysis/references/freshness.md`, `claude/cobb/kaizen/{history,plan}.md` | **none — stakeholder stopped the gates** | — |
+| **U64** — close the CPG provenance arc: P7-1, P7-2, P7-4, delete P7-3's tombstone block. **No Pass 8** (stakeholder, 2026-09-09) | `cobb` (**fresh**) | `a6a06e8fa1aee1a38` | **accepted — committed `3c576cf`.** **P7-4 needed no code**: the sibling arc's `48882d8` replaced `rq`'s blacklist with a *positive* gate and `printf`s the reply before returning 1 — teco read `rq` at source and confirmed. **Refused to manufacture an edit**, and instead found **generation five**: the eighth case pinned the branch *wording* and never the *reply text*, so all three echoes were unguarded; closed together. **Judged Pass 7's own P7-1 prescription insufficient** — two `must-contain` args kill `mA` but leave `mI` alive, because every asserted string came from `print_stamp`'s lead-in and nothing read the command the operator is told to run. Caught two of its own defects in-run (a mutation that never landed on the semantic site; a bound wrong in both directions, then measured). **teco re-ran `mA` independently** (not its battery): 2 cases red, Pass 7's two, `pipeline.sh` restored byte-identical | `test-stamp-wiring.sh`, `SKILL.md` (**narrows** its own claim), `freshness.md`, `claude/cobb/kaizen/{history,plan}.md` | **none — stakeholder stopped the gates** | 242k tok / 90 tools (both legs) |
 
 ## Stakeholder decisions, 2026-09-02 (plan §8)
 
