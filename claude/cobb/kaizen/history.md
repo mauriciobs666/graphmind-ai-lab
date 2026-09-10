@@ -2,6 +2,32 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-10 — U57: distilled own inbox — 1 entry, promoted as a §5 method caution
+
+- **What:** Distilled `cobb`'s own single `kaizen_team` entry (`f3c8e1a2-4b6d-4e9f-8a1c-7d2e5f0b3a6c`,
+  self-logged from U56: "a kaizen entry captured mid-writing a still-open plan/method doc can be a
+  compressed duplicate of analysis that doc already contains in fuller, more authoritative form").
+  Re-derived against the full (untruncated) `evidence` field, the `kaizen-distillation2-
+  coordination.md` U56 ledger row, and `git show --stat 43e3c37` — confirmed accurate, not
+  exaggerated: two `data-scientist` entries captured while writing
+  `claude/docs/plans/agent-knowledge-base-strategy-ml.md` (K-030) were indeed compressed duplicates
+  of that doc's own Recommendation 1/2, one of them omitting the doc's explicit "defensible as-is"
+  disposition. Judged this a genuine (if so-far single-instance) generalization of this skill's own
+  §5 step 2 ("verify each entry"), not a one-off worth only a plan-item — it's a checkable signal
+  ("was the producer mid-writing an in-scope-adjacent doc on the same topic?") future distillation
+  passes can apply regardless of which agent produced the entry. Promoted to
+  `skills/agent-maintenance/SKILL.md` §5 step 2, inline after the existing "re-derive, don't trust"
+  caution (added ~90 words, no new section). Held nothing in a personal `cobb/*.md` notes file —
+  the method doc is the more authoritative home since it's what every future distillation pass
+  actually reads. Cleared the entry from `kaizen_team` (zero other edges — full `DETACH DELETE`).
+  Read-only checked `architect`'s inbox (2 entries: `b4f0e6a1…` FalkorDB string-escaping quirk,
+  `7c1e2f9a…` falkor-chat ingestion pipeline is create-only) and left it untouched for `teco` to
+  dispatch separately; confirmed the `tico` orphan (`e1a6c4d2…`) still carries exactly its one
+  `MENTIONS` edge.
+- **Why:** Routine distillation pass (`teco`-dispatched, same precedent as U52) over `cobb`'s own
+  producer inbox — `cobb` is both producer and distiller here.
+- **Plan items:** —
+
 ## 2026-09-10 — U52: `cobb` inbox, self-produced entry (`f4a91cbe`) — `exists()`-over-relationship-pattern scoping bug promoted to `falkordb-quirks.md` + a sibling caution in §5
 
 - **What:** unit U52 of `claude/docs/plans/kaizen-distillation2-coordination.md`. Re-queried

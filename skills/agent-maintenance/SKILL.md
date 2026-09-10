@@ -474,6 +474,15 @@ distills — on request, and folded into every certification pass (§4):
    conclusion still held, for a narrower reason than claimed, but a verbatim
    promotion would have shipped the wrong absolute claim into project docs).
    Unverifiable ≠ discard — date-stamp the doubt and keep or drop by value.
+   **Also check whether the entry was captured while its producing agent was
+   mid-writing a still-open plan/method doc on the same topic** — that
+   document can already hold a fuller, more authoritative treatment,
+   including a disposition (e.g. "defensible as-is", a scope bound) the raw
+   entry itself never states; a match there is usually grounds for
+   discard/generalize rather than a stop-and-ask fork (origin: 2026-09-10,
+   `data-scientist` U56 — two entries captured while writing
+   `agent-knowledge-base-strategy-ml.md` turned out to be compressed
+   duplicates of that doc's own recommendations; one instance so far).
 3. **Route each surviving entry to exactly one destination:**
    - **The agent's always-loaded prompt** — only if it changes behavior or
      routing in most sessions. Highest bar: every session pays tokens for it.
