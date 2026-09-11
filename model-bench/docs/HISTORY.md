@@ -2,6 +2,33 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-11 — Bug fix: `results.py`'s `_item_problems` quarantined every valid continuous-metric record
+
+**What was wrong:** `_item_problems` (the read-time half of `ItemResult.scored_outcome`'s
+contract) flagged a declared-`scoreable` metric `absent` whenever it was missing from
+`item.counts` — full stop, never checking `item.measures`. But `scored_outcome`/`scored_value`
+already establish, and enforce, a legitimate split: a metric's instrument lives in **either**
+`counts` (a boolean/binary metric) **or** `measures` (a continuous one, e.g. `mrr`,
+`separationRaw`, `separationZ`) — never both, and which one is a property of the metric's own
+kind. A record that correctly recorded a continuous metric's score in `measures` was still read
+back as if that metric's count were missing, so `load_history` classified the whole record
+`INVALID` and `compare` excluded it.
+
+**Why it was never caught before:** no pre-S3 role/pack declared a continuous `scoreable` metric
+through the real `store()` -> `load_history()` -> `compare_report()` round trip. S3's new
+`embedder` pack was the first — its `mrr`/`separationRaw`/`separationZ` all live in `measures` —
+and it surfaced the defect via a sibling unit's live end-to-end run against real stored data
+(`results/runs/embedder-graphrag-retrieval-*-2026-09-11T11:27:30Z.json`), not via this unit's own
+testing: both of that run's arms were classified `INVALID` (~114 "absent" field problems each,
+all naming `mrr`/`separationRaw`/`separationZ`) and `reports/embedder-graphrag-retrieval-20260911-01.md`
+rendered the `INVALID RESULTS EXCLUDED` block with no comparison.
+
+**The fix:** `_item_problems` now accepts either home — `metric not in item.counts and metric not
+in item.measures` — mirroring the split `scored_outcome`/`scored_value` already enforce, rather
+than checking `counts` alone. Re-running `compare` against the same stored session
+(`s3-step2-live-2026-09-11`) now renders both arms with no `INVALID` block
+(`reports/embedder-graphrag-retrieval-20260911-02.md`).
+
 ## 2026-09-11 — S3, Step 1: `scoring/retrieval.py` + the `runner.py`/`cli.py` wiring, offline throughout
 
 **What:** `docs/plans/small-model-benchmarking-s3-spec.md` §8 Step 1 — the embedder's `ItemScorer`

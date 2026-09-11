@@ -864,11 +864,18 @@ def _item_problems(run: RunResult) -> list[FieldProblem]:
     **The truthiness test is `scored_outcome`'s own**, not `is True`: that function reads
     `scoreable.get(metric, False)`, so a truthy non-bool declaration demands a count there and must
     demand one here, or the two disagree about which records are readable.
+
+    **The home is `counts` *or* `measures`, never `counts` alone**: `scored_outcome` and
+    `scored_value` already split instrument selection by the metric's own kind — a binary metric's
+    score lives in `counts`, a continuous one's (`mrr`, `separationRaw`, `separationZ`, ...) in
+    `measures` — and `ItemResult.__post_init__` makes the two maps disjoint, so whichever one a
+    declared metric actually appears in *is* its kind. Checking `counts` alone flagged every
+    correctly-recorded continuous metric `absent` and quarantined the whole record.
     """
     found: list[FieldProblem] = []
     for item in run.items:
         for metric, declared in item.scoreable.items():
-            if declared and metric not in item.counts:
+            if declared and metric not in item.counts and metric not in item.measures:
                 found.append(
                     FieldProblem(field=f"items[{item.itemId}].counts.{metric}", reason="absent")
                 )

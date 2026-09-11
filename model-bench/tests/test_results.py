@@ -479,6 +479,31 @@ def test_load_history_excludes_and_names_an_item_that_declares_a_count_it_does_n
     ]
 
 
+def test_load_history_accepts_a_scoreable_metric_recorded_in_measures(tmp_root) -> None:
+    """`_item_problems` is the read-time half of `scored_outcome`/`scored_value`'s contract (§4
+    S1e Table F): a declared-scoreable metric's instrument legitimately lives in **either**
+    `counts` (binary) or `measures` (continuous) — never both (`ItemResult.__post_init__`) — and
+    which one is a property of the metric's own kind, not a rule this function gets to impose by
+    checking only `counts`. A `mrr`-shaped item that correctly recorded its score in `measures`
+    must load as valid, not be quarantined as `absent` for a count it was never meant to carry.
+    """
+    store(
+        _run("cont", items=[
+            ItemResult(
+                itemId="i1", pairingKey=("i1",), outcome="pass",
+                scoreable={"mrr": True}, counts={},
+                timing=ItemTiming(wallClockMs=1.0, calls=(), withheldFor=None),
+                measures={"mrr": 0.5}, detail={},
+            ),
+        ]),
+        tmp_root,
+    )
+
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert [r.runId for r in valid] == ["cont"]
+    assert invalid == []
+
+
 # --- M-1 / m-1: which records the pack filter may drop, and which are findings ------------------
 
 
