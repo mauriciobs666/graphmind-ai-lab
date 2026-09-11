@@ -44,7 +44,7 @@ from modelbench.results import (
     rebuild_index,
     store,
 )
-from modelbench.runner import RunConfig, RunRefused, run_pack
+from modelbench.runner import RunConfig, RunRefused, _load_item_scorer, run_pack
 
 
 class UnknownModelKey(ValueError):
@@ -410,6 +410,26 @@ def _cmd_run(args: argparse.Namespace) -> int:
     path = store(run, root)  # raises InvalidFingerprint on a runner defect — no bypass anywhere
                               # (plan §3.4.5 point 1); deliberately uncaught here.
     print(f"stored: {path}")
+
+    # S3 spec §3.3/§7.2 — the deterministic-arm hook: `getattr`-guarded exactly like `prime`/
+    # `embed_text` (§3.2), so this is a no-op for any role whose scorer has no `deterministic_arm`
+    # (every role but `embedder`, today), and skipped outright for `tool-caller`, which resolves
+    # its scorer through `_load_conversation_scorer`, a different function this hook does not
+    # touch. `_load_item_scorer` itself is not expected to fail here in production — a non-
+    # `tool-caller` role's `run_pack` call above already resolved the same pack's scorer inside
+    # `_drive_single_call_items`, so `run_pack` would already have raised `RunRefused` and this
+    # line would never be reached — but this optional, additive step degrades to a no-op rather
+    # than crashing an already-successfully-stored `run` if it ever does.
+    if pack.role != "tool-caller":
+        try:
+            scorer = _load_item_scorer(pack)
+        except RunRefused:
+            scorer = None
+        deterministic_arm = getattr(scorer, "deterministic_arm", None)
+        if deterministic_arm is not None:
+            arm_run = deterministic_arm(pack=pack, session_id=cfg.sessionId)
+            arm_path = store(arm_run, root)
+            print(f"stored (deterministic arm): {arm_path}")
 
     if disclosures:
         print("PACK DISPATCH FAILURES")  # dispatch-failure note §4(d)'s funnel-head block

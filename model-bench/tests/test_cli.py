@@ -1037,3 +1037,105 @@ def test_run_stores_the_record_before_returning_exit_four_on_dispatch_failure_di
     assert "dispatch-fails" in out and "lookup_product_fact" in out
     # the load-bearing ordering claim: the record is on disk, not skipped because the run "failed"
     assert stored_path.exists()
+
+
+# ==================================================================================================
+# S3 spec §3.3/§7.2 — `_cmd_run`'s deterministic-arm hook: a real, on-disk `embedder` pack whose
+# `"scorer": "retrieval"` resolves to the real `modelbench.scoring.retrieval` module (so
+# `deterministic_arm()` runs for real, over a tiny fixture corpus/query set — offline throughout,
+# BM25 makes no live call). `run_pack` itself is faked (this file's own S2 convention), since this
+# step's job is `_cmd_run`'s sequencing around it, not `run_pack`'s own driving.
+# ==================================================================================================
+
+EMBEDDER_PACK = "embedder-run-fixture"
+EMBEDDER_PACK_MANIFEST = {
+    "packId": EMBEDDER_PACK,
+    "packVersion": "1.0.0",
+    "role": "embedder",
+    "schemaVersion": 1,
+    "scorer": "retrieval",
+    "environment": {"requires": ["lmstudio-embeddings"]},
+    "data": {
+        "items": "queries.jsonl",
+        "corpus": "corpus.jsonl",
+        "corpusEmbeddings": "corpus.embeddings.json",
+    },
+    "embedding": {
+        "queryPrefix": "",
+        "documentPrefix": "",
+        "bm25": {"k1": 1.2, "b": 0.75, "stopwordsFile": "bm25_stopwords.txt"},
+    },
+    "sampling": {"seed": 1, "pairingKey": ["itemId"], "analysisUnit": "itemId"},
+    "metrics": {"verdictMetrics": ["mrr"], "headlineMetric": "mrr", "recallAtK": {"ks": [1]}},
+}
+
+
+def _write_embedder_pack_fixture(root) -> None:
+    pack_dir = root / "packs" / EMBEDDER_PACK
+    pack_dir.mkdir(parents=True)
+    (pack_dir / "pack.json").write_text(json.dumps(EMBEDDER_PACK_MANIFEST))
+    corpus_rows = [
+        {"docId": "d1", "text": "apple banana"},
+        {"docId": "d2", "text": "car train"},
+    ]
+    (pack_dir / "corpus.jsonl").write_text(
+        "\n".join(json.dumps(r) for r in corpus_rows) + "\n", encoding="utf-8"
+    )
+    query_row = {"itemId": "q1", "query": "apple banana", "relevantDocIds": ["d1"]}
+    (pack_dir / "queries.jsonl").write_text(json.dumps(query_row) + "\n", encoding="utf-8")
+    (pack_dir / "bm25_stopwords.txt").write_text("the\na\n", encoding="utf-8")
+
+
+def test_cmd_run_stores_the_deterministic_arm_under_the_same_session_id(
+    run_workspace, monkeypatch, capsys
+) -> None:
+    _write_embedder_pack_fixture(run_workspace)
+    fake_result = run(
+        "cli-run-embedder",
+        role="embedder",
+        arm_kind="model",
+        call_surface="embeddings",
+        items=[],
+        session_id="sess-xyz",
+    )
+    monkeypatch.setattr(cli, "run_pack", lambda pack, cfg, *, lmstudio, root: (fake_result, ()))
+    _write_host_json(run_workspace)
+
+    code = main(
+        [
+            "run", "--root", str(run_workspace), "--pack", EMBEDDER_PACK, "--model", "m",
+            "--session", "sess-xyz",
+        ]
+    )
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert "stored (deterministic arm):" in out
+
+    # Asserted via store()'s own file output — the runs directory — not the in-memory RunResult:
+    # two distinct stored records, one `model`, one `deterministic`, sharing the given sessionId.
+    stored_files = sorted((run_workspace / "results" / "runs").glob("*.json"))
+    assert len(stored_files) == 2
+    bodies = [json.loads(p.read_text()) for p in stored_files]
+    assert {b["armKind"] for b in bodies} == {"model", "deterministic"}
+    assert {b["sessionId"] for b in bodies} == {"sess-xyz"}
+
+
+def test_cmd_run_skips_the_deterministic_arm_hook_for_tool_caller(
+    run_workspace, monkeypatch, capsys
+) -> None:
+    """`tool-caller` resolves its scorer through `_load_conversation_scorer`, a different
+    function this hook does not touch — never a `deterministic_arm` no-op path reached at all."""
+    fake_result = run(
+        "cli-run-toolcaller-only", role="tool-caller", items=[item("s0", correct=True)]
+    )
+    monkeypatch.setattr(cli, "run_pack", lambda pack, cfg, *, lmstudio, root: (fake_result, ()))
+    _write_host_json(run_workspace)
+
+    code = main(["run", "--root", str(run_workspace), "--pack", TOOL_CALLER_PACK, "--model", "m"])
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert "stored (deterministic arm):" not in out
+    stored_files = sorted((run_workspace / "results" / "runs").glob("*.json"))
+    assert len(stored_files) == 1

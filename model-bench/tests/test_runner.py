@@ -12,6 +12,7 @@ convention. Test 15b's full case list (`docs/plans/small-model-benchmarking.md:6
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import Any
 
@@ -771,10 +772,18 @@ def test_turn_timings_cap_hit_is_never_folded_into_incomplete():
 
 class FakeItemScorer:
     """Records every call; `score_item` returns a minimal `ItemResult` carrying the runner's
-    timing verbatim (§3.2: the scorer receives `timing` as an input, never invents it)."""
+    timing verbatim (§3.2: the scorer receives `timing` as an input, never invents it).
+
+    `embed_text` mirrors the pre-S3 hardcoded embeddings-branch text (`json.dumps(item_input,
+    sort_keys=True)`) — S3 spec §3.2 reaches it with no `getattr` guard on the embeddings branch,
+    unlike `prime`/`deterministic_arm`, which stay genuinely optional and are exercised by their
+    own `FakeItemScorer`-with-hooks fixture in the S3 wiring tests below."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[Any, Any, ItemTiming]] = []
+
+    def embed_text(self, item_input, *, pack):
+        return json.dumps(item_input, sort_keys=True)
 
     def score_item(self, item_input, result, timing, *, pack):
         self.calls.append((item_input, result, timing))
@@ -945,6 +954,149 @@ def test_drive_single_call_items_embeddings_surface_calls_embed_not_chat(monkeyp
     assert len(lms.embed_calls) == 1
     assert len(lms.chat_calls) == 0
     assert items[0].timing.withheldFor is None
+
+
+# ==================================================================================================
+# S3 spec §3.2/§8 Step 1 item 7 — the `prime`/`embed_text` wiring, and `_load_item_scorer`'s real
+# dynamic import (offline throughout; the live embedder scorer itself is
+# `test_scoring_retrieval.py`'s)
+# ==================================================================================================
+
+
+class FakeItemScorerWithHooks:
+    """A scorer that DOES define `prime`/`embed_text` — proves both are wired: `prime()` is
+    called once, before the per-item loop, with the runner's own arguments, and the embed call's
+    text is `embed_text`'s return value, never `json.dumps(item_input)`."""
+
+    def __init__(self) -> None:
+        self.prime_calls: list[dict[str, Any]] = []
+        self.embed_text_calls: list[Any] = []
+
+    def prime(self, *, lmstudio, model_info, call_surface, timeout_s, pack):
+        self.prime_calls.append(
+            {
+                "lmstudio": lmstudio,
+                "model_info": model_info,
+                "call_surface": call_surface,
+                "timeout_s": timeout_s,
+                "pack": pack,
+            }
+        )
+
+    def embed_text(self, item_input, *, pack):
+        self.embed_text_calls.append(item_input)
+        return f"EMBED::{item_input['id']}"
+
+    def score_item(self, item_input, result, timing, *, pack):
+        return ItemResult(
+            itemId=str(item_input.get("id")),
+            pairingKey=(str(item_input.get("id")),),
+            outcome="pass",
+            scoreable={},
+            counts={},
+            timing=timing,
+        )
+
+    def aggregate(self, items, *, pack):
+        return ClassificationAggregates(perClass=(), n=len(items))
+
+
+def test_drive_single_call_items_calls_prime_once_and_embeds_embed_texts_return_value(monkeypatch):
+    scorer = FakeItemScorerWithHooks()
+    monkeypatch.setattr("modelbench.runner._load_item_scorer", lambda pack: scorer)
+    pack = FakePack(
+        role="embedder", items=[{"id": "a"}, {"id": "b"}], prompt_cfg=make_prompt_cfg()
+    )
+    from modelbench.lmstudio import EmbedResult
+
+    embed_result = EmbedResult(
+        vectors=((0.1, 0.2),), dimension=2, model="text-embedding", usage=None, wallClockMs=15.0
+    )
+    lms = StubLMStudio(
+        embed_responses=[embed_result, embed_result],
+        residency_sequence=[resident("text-embedding"), resident("text-embedding")],
+    )
+    info = model_info(model_id="text-embedding", capabilities=None)
+    cfg = _cfg()
+
+    items, _, _ = _drive_single_call_items(
+        pack,
+        cfg,
+        lmstudio=lms,
+        model_info=info,
+        call_surface="embeddings",
+        baseline_residency=resident(),
+    )
+
+    # prime() called exactly once, before the loop, with the runner's own arguments.
+    assert len(scorer.prime_calls) == 1
+    call = scorer.prime_calls[0]
+    assert call["lmstudio"] is lms
+    assert call["model_info"] is info
+    assert call["call_surface"] == "embeddings"
+    assert call["timeout_s"] == cfg.requestTimeoutSeconds
+    assert call["pack"] is pack
+
+    # embed_text() called once per item, and its return value is what got embedded — not
+    # `json.dumps(item_input)` (the pre-S3 hardcoded text).
+    assert scorer.embed_text_calls == [{"id": "a"}, {"id": "b"}]
+    assert lms.embed_calls[0]["texts"] == ["EMBED::a"]
+    assert lms.embed_calls[1]["texts"] == ["EMBED::b"]
+    assert len(items) == 2
+
+
+def test_drive_single_call_items_chat_surface_never_calls_prime(monkeypatch):
+    """`prime` is `getattr`-guarded, but that alone would not catch a mutant that calls it
+    unconditionally on the wrong surface — pinned separately from the embeddings-surface test."""
+    scorer = FakeItemScorerWithHooks()
+    monkeypatch.setattr("modelbench.runner._load_item_scorer", lambda pack: scorer)
+    pack = FakePack(
+        role="guard-judge",
+        items=[{"id": "a"}],
+        prompt_cfg=make_prompt_cfg(maxIterationsPerTurn=None),
+    )
+    lms = StubLMStudio(
+        chat_responses=[chat_result_with_stats(wall_clock_ms=100.0)],
+        residency_sequence=[resident()],
+    )
+    _drive_single_call_items(
+        pack,
+        _cfg(),
+        lmstudio=lms,
+        model_info=model_info(),
+        call_surface="chat",
+        baseline_residency=resident(),
+    )
+    # `prime` is defined by this scorer, and must still be called — the guard is `getattr`
+    # existence-based, not surface-based; §3.2 does not scope `prime` to a call surface.
+    assert len(scorer.prime_calls) == 1
+
+
+def test_load_item_scorer_resolves_a_real_scorer_name_to_its_module():
+    from modelbench.runner import _load_item_scorer
+    from modelbench.scoring import retrieval
+
+    pack = FakePack(role="embedder", manifest={"scorer": "retrieval"})
+    scorer = _load_item_scorer(pack)
+    assert scorer is retrieval
+
+
+def test_load_item_scorer_raises_run_refused_exit_4_on_absent_scorer_key():
+    from modelbench.runner import RunRefused, _load_item_scorer
+
+    pack = FakePack(role="embedder", manifest={})
+    with pytest.raises(RunRefused) as excinfo:
+        _load_item_scorer(pack)
+    assert excinfo.value.exitCode == 4
+
+
+def test_load_item_scorer_raises_run_refused_exit_4_on_unresolvable_scorer_name():
+    from modelbench.runner import RunRefused, _load_item_scorer
+
+    pack = FakePack(role="embedder", manifest={"scorer": "no_such_scorer_module"})
+    with pytest.raises(RunRefused) as excinfo:
+        _load_item_scorer(pack)
+    assert excinfo.value.exitCode == 4
 
 
 def test_item_chat_messages_real_pack_with_no_prompt_block_does_not_crash():

@@ -42,6 +42,7 @@ because the spec's own §9 already asks that of the next reader:
 
 from __future__ import annotations
 
+import importlib
 import json
 import platform
 import time
@@ -173,6 +174,29 @@ class ItemScorer(Protocol):
 
     def aggregate(self, items: Sequence[ItemResult], *, pack: Pack) -> Aggregates: ...
 
+    def prime(
+        self,
+        *,
+        lmstudio: LMStudio,
+        model_info: ModelInfo,
+        call_surface: Literal["chat", "embeddings"],
+        timeout_s: float,
+        pack: Pack,
+    ) -> None:
+        """Called once, before the per-item loop, iff the scorer defines it (spec §3.2's own
+        extension to the shipped Protocol, S3). The one hook that gives a scorer model access
+        outside a scored item — the embedder's own use is embedding and caching the reference
+        corpus; no other role needs one yet. Optional: `getattr`-guarded at the one call site
+        (`_drive_single_call_items`), so a scorer that omits it is untouched."""
+        ...
+
+    def embed_text(self, item_input: Mapping[str, Any], *, pack: Pack) -> str:
+        """Called instead of the hardcoded `json.dumps(item_input, sort_keys=True)` on the
+        embeddings call branch (spec §3.2/§2.2). Required in practice for any embeddings-surface
+        role's scorer — reached with no `getattr` guard, since it is only ever called on the
+        embeddings branch, which today only the embedder ever declares."""
+        ...
+
 
 class ConversationScorer(Protocol):
     """`tool-caller`'s scorer — needs the whole (possibly censored) trace for cross-turn state
@@ -188,13 +212,23 @@ class ConversationScorer(Protocol):
 
 
 def _load_item_scorer(pack: Pack) -> ItemScorer:
-    """Resolve `pack.manifest["scorer"]` to a `modelbench.scoring.<name>` module (spec §3.2's own
-    naming choice). No scorer module ships before S3 — every role raises until then, which is
-    expected (spec §7 Step 1)."""
-    raise NotImplementedError(
-        f"no scorer module ships yet for role {pack.role!r} (pack {pack.packId!r}); "
-        "S2's runner ships the scorer seam only (spec §3.2) — the first concrete ItemScorer is S3's"
-    )
+    """Resolve `pack.manifest["scorer"]` to a `modelbench.scoring.<name>` module (S3 spec §7.1's
+    own naming choice, now wired) and return the module itself — a module satisfies `ItemScorer`
+    structurally (its `score_item`/`aggregate` module-level functions ARE the Protocol's methods;
+    never `isinstance`-checked). Raises `RunRefused(exitCode=4)` on an absent `"scorer"` key or an
+    unresolvable module name — a pack-config defect, not a programming-contract one (unlike
+    `embed_text`'s uncaught `AttributeError`, S3 spec §3.2)."""
+    name = pack.manifest.get("scorer")
+    if not name:
+        raise RunRefused(f"pack {pack.packId!r} declares no \"scorer\"", exitCode=4)
+    try:
+        return importlib.import_module(f"modelbench.scoring.{name}")
+    except ImportError as exc:
+        raise RunRefused(
+            f"pack {pack.packId!r} declares scorer {name!r}, which does not resolve to "
+            f"modelbench.scoring.{name}: {exc}",
+            exitCode=4,
+        ) from exc
 
 
 def _load_conversation_scorer(pack: Pack) -> ConversationScorer:
@@ -295,6 +329,15 @@ def _drive_single_call_items(
     item-unit role since none of them cluster observations — spec §4's own inference, not quoted
     per-role)."""
     scorer = _load_item_scorer(pack)
+    prime = getattr(scorer, "prime", None)
+    if prime is not None:  # NEW — S3 spec §3.2: the corpus-embedding hook, once before the loop
+        prime(
+            lmstudio=lmstudio,
+            model_info=model_info,
+            call_surface=call_surface,
+            timeout_s=cfg.requestTimeoutSeconds,
+            pack=pack,
+        )
     prompt_config = pack.prompt_config()
     resident = baseline_residency
     results: list[ItemResult] = []
@@ -310,8 +353,12 @@ def _drive_single_call_items(
                     timeout_s=cfg.requestTimeoutSeconds,
                 )
             else:
+                # NEW — S3 spec §3.2/§2.2: the pack's own `embed_text`, not a hardcoded dump of
+                # the whole item row. No `getattr` guard: reached only on the embeddings branch,
+                # which today only the embedder role ever declares.
+                embed_text = scorer.embed_text
                 call = lmstudio.embed(
-                    [json.dumps(item_input, sort_keys=True)],
+                    [embed_text(item_input, pack=pack)],
                     model=model_info.id,
                     timeout_s=cfg.requestTimeoutSeconds,
                 )

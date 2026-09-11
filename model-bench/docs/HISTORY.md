@@ -2,6 +2,64 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-11 — S3, Step 1: `scoring/retrieval.py` + the `runner.py`/`cli.py` wiring, offline throughout
+
+**What:** `docs/plans/small-model-benchmarking-s3-spec.md` §8 Step 1 — the embedder's `ItemScorer`
+in full (`modelbench/scoring/retrieval.py`, new): recall@k/MRR/precision@k, L2-normalize + brute-
+force cosine, score separation (raw and z, population `statistics.pstdev` per `-ml` v1.24), the
+BM25 reference-arm machinery (always-positive IDF, `-ml` §5.3), `prime`/`embed_text`/`score_item`/
+`aggregate` (§6.2), and `deterministic_arm` (§6.3). Plus the two required, additive edits to
+already-shipped S2 code the spec's §2.2/§3.2/§3.3 name: `runner.py`'s `_load_item_scorer` (a real
+`importlib.import_module("modelbench.scoring.<name>")`, `RunRefused(exitCode=4)` on an absent/
+unresolvable `"scorer"` key) and `_drive_single_call_items`'s two `getattr`-guarded lines
+(`prime()` once before the per-item loop, `embed_text()` replacing the old hardcoded
+`json.dumps(item_input)` on the embeddings branch); `ItemScorer` gains `prime`/`embed_text` as
+optional Protocol members. `cli.py`'s `_cmd_run` gains the deterministic-arm hook (§7.2): after
+`store(run, ...)`, for a non-`tool-caller` pack, resolves the scorer and calls its optional
+`deterministic_arm` if present, storing a second `RunResult` under the same `sessionId`.
+
+**The spec's own flagged ambiguity, resolved per the coordinating session's ruling (not
+re-litigated here):** `prime()`'s corpus raw-norm diagnostic runs unconditionally, on a cache HIT
+as well as a cache miss, and is stored durably in `_state["corpusNormDiagnostic"]` (not only
+logged) so a later Step-2 self-check report can read it back.
+
+**Two deviations found from the spec's own "no existing S2 test needs to change" claim (§2.2),
+both small and within this unit's own test-file scope:**
+1. `tests/test_runner.py`'s pre-existing `FakeItemScorer` (no `embed_text`) is used by an existing
+   S2 test with `call_surface="embeddings"`; since `embed_text` is reached with **no** `getattr`
+   guard (by design, §3.2), that test broke until `FakeItemScorer` gained an `embed_text` method
+   mirroring the old hardcoded text. No test's assertions changed.
+2. `cli.py`'s new deterministic-arm hook calls the real `_load_item_scorer(pack)` a second time,
+   after `store()`. In production this can never raise (a non-`tool-caller` pack's scorer is
+   already resolved once inside `run_pack` -> `_drive_single_call_items`, which would have raised
+   `RunRefused` earlier if it could not), but `tests/test_cli.py`'s existing S2 CLI tests fake
+   `run_pack` entirely, bypassing that internal resolution — exposing the real, scorer-less
+   `guard-judge` fixture pack to the hook's real call. Wrapped in `try/except RunRefused: scorer =
+   None` so this optional, additive step degrades to a no-op rather than crashing an
+   already-successfully-stored `run`, rather than editing the pre-existing fixture manifest.
+
+**`tests/test_convo.py::test_the_third_leg_of_the_disposition_probe_is_still_owed_by_s5` is now
+expected-red — working exactly as designed, not a Step 1 defect.** It is a pre-existing,
+deliberate tripwire keyed on the bare existence of `modelbench/scoring/`, which this unit is the
+first to create. Its own docstring anticipated and rejected narrowing the guard to a specific S5
+module path ("If S5's scorer lands somewhere other than that package, this tripwire will not fire
+and the leg is still owed") — the broad existence check is deliberate coarseness, not an oversight.
+Flagged to the coordinating session as a fork (touch `convo.py`/`test_convo.py`, outside this
+unit's fenced scope, vs. leave red); ruled: leave it red. The leg it names — wiring S5's
+`TurnDisposition` branch set into `convo.py`'s three-way disposition probe — stays blocked on S5
+(`tool-caller`'s scorer, out of scope here) until that stage lands.
+
+**Tests:** `tests/test_scoring_retrieval.py` (new, 60 cases: pure arithmetic against hand-built
+ranked lists; BM25 against a synthetic corpus with a hand-computed expected score; `prime`/
+`embed_text` cache-key match/mismatch with a stub `LMStudio`; `score_item`/`aggregate`, including
+the `-ml` v1.24 binarization ruling; `deterministic_arm`); `tests/test_metrics_agreement.py` (new,
+the 20 hand-transcribed cases plus 2 meta-tests); `tests/test_runner.py` and `tests/test_cli.py`
+gain the S3 wiring tests (§8 Step 1 item 7). Mutation-tested (restore-by-copy, `diff -q`-verified,
+`PYTHONDONTWRITEBYTECODE=1`, one mutation at a time): the `recall_at_k` binarization's `> 0` vs a
+stricter reading; the cache-key-mismatch branch actually re-embeds live rather than reusing stale
+committed vectors; `prime`/`embed_text` silently no-opping when a scorer defines them. All four
+mutants killed by name.
+
 ## 2026-09-10 — Bug fix: `Pack.prompt_config()` crashed every `validate`-clean, prompt-less
 item-level pack
 
