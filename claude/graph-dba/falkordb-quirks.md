@@ -616,6 +616,26 @@ to the general fact here.
   present and of the sentinel's type. Live use: `falkor-chat`'s `Repository.filter_products`,
   `falkor-chat/docs/QUERIES.md` §15.2.
 
+- **A multi-property `OR` — a genuinely different disjunct on each side, not the same property
+  repeated — DOES stay index-anchored per disjunct, unlike the single-property `IS NULL OR`
+  idiom above; don't conflate the two shapes** (verified 2026-09-11, module `41811`, disposable
+  `ws:docprobe2` graph). Setup: `Document.lshBand0..lshBand7`, eight separate plain RANGE
+  indexes (one per property, no composite), 10 `Document` nodes with distinct band values.
+  `WHERE d.lshBand0 = $band0 OR d.lshBand1 = $band1 OR ... OR d.lshBand7 = $band7` (8 disjuncts,
+  8 different properties, each equality-tested against its own bound parameter) plans a single
+  `Node By Index Scan | (d:Document)` with **no** `Node By Label Scan` anywhere in the plan, and
+  `Records produced` at that operator tracks the true match count exactly (2 for two planted
+  matches on different bands, 1 when only the *last* disjunct — `lshBand7` — matches [ruling out
+  "only the first disjunct gets an index"], 0 for an all-miss negative control) — i.e. the engine
+  unions per-disjunct index scans rather than falling back to a full scan and filtering. This is
+  a different shape from the `$param IS NULL OR prop = $param` "optional filter" entry above
+  (same property compared to a possibly-null parameter, which defeats the index even with a real
+  value bound) — that finding does **not** generalize to "any `OR` defeats an index on this
+  build"; a genuine multi-property disjunct, each side plain `prop = $param` with no `IS NULL`
+  guard, is safe and stays index-anchored. Surfaced verifying `falkor-chat`'s
+  `find_update_shortlist` band-equality candidate lookup,
+  `falkor-chat/docs/plans/document-ingestion2.md` §4 Stage D/§7.
+
 - **A function call wrapped around an indexed property forfeits the index — there are no
   expression/functional indexes on this build** (verified 2026-09-07, module `41811`).
   `MATCH (p:Product) WHERE toLower(p.categoryNormalized) = 'audio'` plans `Node By Label Scan` +
