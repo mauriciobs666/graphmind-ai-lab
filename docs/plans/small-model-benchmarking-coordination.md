@@ -2389,3 +2389,21 @@ discovered here:**
 
 **Next is S4** — out of this coordination's standing scope (*"drive model-bench through S3, then
 check back"*). This is the checkpoint.
+
+## S4-S8 authorized — 2026-09-11, "lets start s4-s8"
+
+Stakeholder scope extended past the S3 checkpoint to the full remaining plan (§4 S4-S8). Driving
+stage by stage, same discipline as S1-S3: a stage spec from `architect` (mirroring the
+`-s3-spec.md` precedent) → `analyst` plan gate → implementation → `analyst` code gate →
+`qa-engineer` acceptance → stage close, before the next stage's spec is drafted. **S6 (§4) states
+its own human-in-the-loop requirement — "Human verification of every turn's expectations
+(FR-19): each `expect` block is checked by a person against the simulated environment's actual
+behavior" — this coordination will surface that to the stakeholder when S6 is reached, not before;
+it does not block S4.** LM Studio model-load authorization (2026-09-02, above) stands unchanged.
+
+**CPG:** `cpg_model-bench` does not exist (checked live, 2026-09-11) — "no CPG found" for every S4
+unit; greenfield feature work on new files, no rebuild warranted.
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
+|---|---|---|---|---|---|---|
+| U129 | `architect` | — | queued | `docs/plans/small-model-benchmarking-s4-spec.md` | `analyst` → — | — |
