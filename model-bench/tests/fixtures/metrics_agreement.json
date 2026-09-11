@@ -1,0 +1,337 @@
+{
+  "sourcePath": "falkor-chat/server/tests/eval/test_metrics.py",
+  "sourceGitSha": "9650a3858b9d5c4e7e934f977839fc1a61c84b1b",
+  "sourceSha256": "119507565a2a95d89e18430e48ba4817e2fea298b4983ee44a49733749206ab9",
+  "copiedAt": "2026-09-11T01:48:46Z",
+  "transcribedBy": "coder (Claude Code subagent)",
+  "verifiedBy": null,
+  "excluded": [
+    {
+      "function": "check_regression",
+      "cases": [
+        "test_check_regression_recall_at_10_below_baseline_fires",
+        "test_check_regression_mrr_regression_within_tolerance_passes",
+        "test_check_regression_mrr_regression_beyond_tolerance_fires",
+        "test_check_regression_equal_to_baseline_passes",
+        "test_check_regression_both_metrics_regressing_reports_both_reasons",
+        "test_check_regression_improvement_over_baseline_passes"
+      ],
+      "reason": "model-bench deliberately does not implement a regression gate (the requirements put zero-tolerance gating out of scope, plan D1 point 2(a)) — there is nothing in model-bench to agree with these 6 cases about."
+    }
+  ],
+  "cases": [
+    {
+      "function": "recall_at_k",
+      "case": "full_hit_within_k_is_one",
+      "args": {
+        "retrieved": [
+          "a",
+          "b",
+          "c"
+        ],
+        "relevant": [
+          "a"
+        ],
+        "k": 10
+      },
+      "expected": 1.0
+    },
+    {
+      "function": "recall_at_k",
+      "case": "no_hit_is_zero",
+      "args": {
+        "retrieved": [
+          "x",
+          "y",
+          "z"
+        ],
+        "relevant": [
+          "a"
+        ],
+        "k": 10
+      },
+      "expected": 0.0
+    },
+    {
+      "function": "recall_at_k",
+      "case": "hit_counted_at_first_position",
+      "args": {
+        "retrieved": [
+          "a",
+          "x",
+          "y",
+          "z",
+          "w"
+        ],
+        "relevant": [
+          "a"
+        ],
+        "k": 10
+      },
+      "expected": 1.0
+    },
+    {
+      "function": "recall_at_k",
+      "case": "hit_counted_at_middle_position",
+      "args": {
+        "retrieved": [
+          "x",
+          "y",
+          "a",
+          "z",
+          "w"
+        ],
+        "relevant": [
+          "a"
+        ],
+        "k": 10
+      },
+      "expected": 1.0
+    },
+    {
+      "function": "recall_at_k",
+      "case": "hit_counted_at_last_position",
+      "args": {
+        "retrieved": [
+          "x",
+          "y",
+          "z",
+          "w",
+          "a"
+        ],
+        "relevant": [
+          "a"
+        ],
+        "k": 10
+      },
+      "expected": 1.0
+    },
+    {
+      "function": "recall_at_k",
+      "case": "hit_outside_top_k_window",
+      "args": {
+        "retrieved": [
+          "x",
+          "y",
+          "z",
+          "w",
+          "v",
+          "a"
+        ],
+        "relevant": [
+          "a"
+        ],
+        "k": 5
+      },
+      "expected": 0.0
+    },
+    {
+      "function": "recall_at_k",
+      "case": "hit_outside_top_k_window_included_at_larger_k",
+      "args": {
+        "retrieved": [
+          "x",
+          "y",
+          "z",
+          "w",
+          "v",
+          "a"
+        ],
+        "relevant": [
+          "a"
+        ],
+        "k": 10
+      },
+      "expected": 1.0
+    },
+    {
+      "function": "recall_at_k",
+      "case": "multi_relevant_partial_hit",
+      "args": {
+        "retrieved": [
+          "a",
+          "c",
+          "d"
+        ],
+        "relevant": [
+          "a",
+          "b"
+        ],
+        "k": 10
+      },
+      "expected": 0.5
+    },
+    {
+      "function": "recall_at_k",
+      "case": "multi_relevant_full_hit",
+      "args": {
+        "retrieved": [
+          "a",
+          "c",
+          "b",
+          "d"
+        ],
+        "relevant": [
+          "a",
+          "b"
+        ],
+        "k": 10
+      },
+      "expected": 1.0
+    },
+    {
+      "function": "recall_at_k",
+      "case": "retrieved_shorter_than_k_full_hit",
+      "args": {
+        "retrieved": [
+          "a"
+        ],
+        "relevant": [
+          "a"
+        ],
+        "k": 10
+      },
+      "expected": 1.0
+    },
+    {
+      "function": "recall_at_k",
+      "case": "retrieved_shorter_than_k_partial_hit",
+      "args": {
+        "retrieved": [
+          "a"
+        ],
+        "relevant": [
+          "a",
+          "b"
+        ],
+        "k": 10
+      },
+      "expected": 0.5
+    },
+    {
+      "function": "recall_at_k",
+      "case": "empty_retrieved_list",
+      "args": {
+        "retrieved": [],
+        "relevant": [
+          "a"
+        ],
+        "k": 10
+      },
+      "expected": 0.0
+    },
+    {
+      "function": "recall_at_k",
+      "case": "raises_on_empty_relevant_set",
+      "args": {
+        "retrieved": [
+          "a",
+          "b"
+        ],
+        "relevant": [],
+        "k": 10
+      },
+      "expectedError": "ValueError"
+    },
+    {
+      "function": "mrr",
+      "case": "reciprocal_rank_hit_at_rank_1",
+      "args": {
+        "retrieved": [
+          "a",
+          "x",
+          "y"
+        ],
+        "relevant": [
+          "a"
+        ]
+      },
+      "expected": 1.0
+    },
+    {
+      "function": "mrr",
+      "case": "reciprocal_rank_hit_at_rank_2",
+      "args": {
+        "retrieved": [
+          "x",
+          "a",
+          "y"
+        ],
+        "relevant": [
+          "a"
+        ]
+      },
+      "expected": 0.5
+    },
+    {
+      "function": "mrr",
+      "case": "reciprocal_rank_hit_at_rank_3",
+      "args": {
+        "retrieved": [
+          "x",
+          "y",
+          "a"
+        ],
+        "relevant": [
+          "a"
+        ]
+      },
+      "expected": 0.3333333333333333
+    },
+    {
+      "function": "mrr",
+      "case": "no_hit_is_zero",
+      "args": {
+        "retrieved": [
+          "x",
+          "y",
+          "z"
+        ],
+        "relevant": [
+          "a"
+        ]
+      },
+      "expected": 0.0
+    },
+    {
+      "function": "mrr",
+      "case": "empty_retrieved_list",
+      "args": {
+        "retrieved": [],
+        "relevant": [
+          "a"
+        ]
+      },
+      "expected": 0.0
+    },
+    {
+      "function": "mrr",
+      "case": "multi_relevant_uses_earliest_matching_rank",
+      "args": {
+        "retrieved": [
+          "x",
+          "b",
+          "a",
+          "y"
+        ],
+        "relevant": [
+          "a",
+          "b"
+        ]
+      },
+      "expected": 0.5
+    },
+    {
+      "function": "mrr",
+      "case": "raises_on_empty_relevant_set",
+      "args": {
+        "retrieved": [
+          "a",
+          "b"
+        ],
+        "relevant": []
+      },
+      "expectedError": "ValueError"
+    }
+  ]
+}

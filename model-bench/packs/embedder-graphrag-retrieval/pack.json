@@ -1,0 +1,32 @@
+{
+  "packId": "embedder-graphrag-retrieval",
+  "packVersion": "1.0.0",
+  "role": "embedder",
+  "schemaVersion": 1,
+  "description": "Exact brute-force cosine retrieval over the 121-message falkor-chat eval corpus (K-026), plus a BM25 reference arm.",
+  "scorer": "retrieval",
+  "environment": {"requires": ["lmstudio-embeddings"]},
+  "data": {
+    "items": "queries.jsonl",
+    "corpus": "corpus.jsonl",
+    "corpusEmbeddings": "corpus.embeddings.json",
+    "queryEmbeddingsFixture": "golden_retrieval.embeddings.json",
+    "baseline": "retrieval_baseline.json"
+  },
+  "embedding": {
+    "queryPrefix": "",
+    "documentPrefix": "",
+    "bm25": {"k1": 1.2, "b": 0.75, "stopwordsFile": "bm25_stopwords.txt"}
+  },
+  "sampling": {
+    "seed": 20260902,
+    "pairingKey": ["itemId"],
+    "analysisUnit": "itemId"
+  },
+  "metrics": {
+    "verdictMetrics": ["mrr"],
+    "headlineMetric": "mrr",
+    "recallAtK": {"ks": [5, 10]}
+  },
+  "provenance": "PROVENANCE.md"
+}
