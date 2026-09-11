@@ -2,6 +2,59 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-11 — S4 Step 0: the seam fix (`build_messages`, `prompt_config()` content resolution, `ExtractionAggregates`'s two new counts)
+
+**What:** `docs/plans/small-model-benchmarking-s4-spec.md` §4/§7 Step 0 — the seam fix ahead of
+S4's two packs, closing both gaps `docs/reviews/itemscorer-extension.md` found:
+
+1. **`ItemScorer.build_messages`** — a fourth optional method on the `runner.ItemScorer` Protocol,
+   `getattr`-guarded exactly like `prime`/`embed_text`. `_drive_single_call_items`'s chat branch now
+   calls it in preference to the generic `_item_chat_messages(pack, item_input)` when the scorer
+   defines it, falling back unchanged when it does not.
+2. **`Pack.prompt_config()` now resolves `prompt.systemPrompt`/`prompt.toolSchemas` to content**,
+   via two new private helpers, `_resolve_prompt_text`/`_resolve_tool_schemas` (`packs.py`) —
+   mirroring `data_path`'s resolution pattern. `systemPrompt` becomes the named file's text (`None`
+   stays `None`); `toolSchemas` becomes the parsed JSON array as a tuple (`None`/absent → `()`).
+   Both wrap a missing/unreadable file into `PackConfigError`; `_resolve_tool_schemas` additionally
+   rejects a non-array file. `prompt_config()`'s own docstring paragraph ("paths, not resolved
+   content... no such caller exists in this tree yet") is replaced with a note pointing at the two
+   helpers, reconciling it with `convo.PromptConfig`'s docstring, which already stated the true
+   contract and needed no change.
+3. **`ExtractionAggregates` gains two new defaulted integer fields**, `malformedSpecCount` and
+   `schemaViolationCount` (`results.py`) — scalar counts, never added to `named_metrics()`, matching
+   `parseFailures`'s own existing shape. The generic `_aggregates_to_dict`/`_aggregates_from_dict`
+   dispatch (already shipped, reflective over `vars()`/kwargs) needed no change to carry them.
+
+**Tests, red before green:** `tests/test_runner.py` gains `FakeItemScorerWithBuildMessages` plus
+two tests — the chat branch prefers `build_messages` when defined, and falls back to
+`_item_chat_messages` unchanged when absent (the regression check: all 19 pre-existing
+`call_surface="chat"` sites use `FakeItemScorer`/`FakeItemScorerWithHooks`, neither of which defines
+`build_messages`, and stayed green throughout). `tests/test_packs.py` gains two new assertions on
+the existing `"valid"` fixture (`cfg.systemPrompt` equals `prompts/system.md`'s real text,
+`cfg.toolSchemas == ()`), a new fixture pack `tests/fixtures/packs/prompt_tool_schemas/` asserting a
+non-empty `toolSchemas` array resolves to the matching tuple, and three additional `tmp_path`-built
+negative tests for the two new `PackConfigError` paths (missing `systemPrompt` file, missing
+`toolSchemas` file, `toolSchemas` file that parses but is not a JSON array). `tests/test_results.py`
+gains a `store()`/`load_history()` round trip for `ExtractionAggregates(malformedSpecCount=3,
+schemaViolationCount=5)` with non-default, mutually distinct values.
+
+**Verification:** baseline reproduced before any edit — `1254 passed, 1 failed (the pre-existing
+S5 tripwire, `test_convo.py::test_the_third_leg_of_the_disposition_probe_is_still_owed_by_s5`),
+3 deselected`. After this change: `1261 passed`, the same one pre-existing failure, `3 deselected`
+— 7 new tests, zero regressions. `ruff check .` clean. Mutation-tested the `build_messages` guard
+(removed it — 8 pre-existing tests reddened with `AttributeError`, as expected, since none of their
+fakes define `build_messages`) and both new `PackConfigError` paths in `_resolve_prompt_text`/
+`_resolve_tool_schemas` (stripped the `except OSError` wrap from each, and the non-array check from
+`_resolve_tool_schemas` — each mutant reddened its own targeted negative test); each mutation copied
+the file aside first and was restored immediately after, never batched with another.
+
+**Grep discrepancy, noted and closed:** the spec's own supporting comment claims `grep -rn
+"parseFailures" tests/ modelbench/` finds "six hits, all kwargs"; the actual count, reproduced
+independently before landing this, is 8 (5 keyword-construction sites under `tests/`, 3 field
+declarations in `results.py` — `ClassificationAggregates`, `ExtractionAggregates`,
+`GroundingAggregates` each declare one). Non-load-bearing: every construction site is keyword-only
+either way, so the two new defaulted fields are backward compatible regardless of the exact count.
+
 ## 2026-09-11 — `validate_pack`'s sixth axis: the `"scorer"` key's own resolution
 
 **What:** `packs.py`'s `validate_pack` did not check that a pack's declared `"scorer"` value

@@ -18,6 +18,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 from conftest import pack_fixture
@@ -733,6 +734,78 @@ def test_prompt_config_resolves_the_valid_packs_prompt_block() -> None:
     assert cfg.maxIterationsPerTurn == 8
     assert cfg.temperature == 0.0
     assert cfg.maxTokens == 1024
+    # S4 spec §4.2, closing itemscorer-extension.md finding 2: `systemPrompt`/`toolSchemas` are
+    # RESOLVED CONTENT, not the manifest's bare paths — `prompts/system.md`'s text, and the empty
+    # tuple `tools/schemas.json`'s empty JSON array resolves to.
+    assert cfg.systemPrompt == (pack_fixture("valid") / "prompts" / "system.md").read_text(
+        encoding="utf-8"
+    )
+    assert cfg.toolSchemas == ()
+
+
+def test_prompt_config_resolves_a_non_empty_tool_schemas_path_to_its_parsed_tuple() -> None:
+    """The regression check for finding 2's fix on the non-empty side: a `prompt.toolSchemas`
+    path naming a JSON array of JSON Schema objects resolves to that array, as a tuple."""
+    pack = load_pack(pack_fixture("prompt_tool_schemas"))
+    cfg = pack.prompt_config()
+    assert cfg.toolSchemas == (
+        {"name": "lookup", "parameters": {"type": "object", "properties": {}}},
+        {"name": "search", "parameters": {"type": "object", "properties": {}}},
+    )
+
+
+def _item_level_manifest(**prompt_overrides: Any) -> dict[str, Any]:
+    prompt = {
+        "systemPrompt": None,
+        "toolSchemas": None,
+        "historyReplay": None,
+        "representToolSchemasEachTurn": False,
+        "historyTurns": 0,
+        "temperature": 0.0,
+        "maxTokens": 1024,
+    }
+    prompt.update(prompt_overrides)
+    return {
+        "packId": "fixture-prompt-resolution-error",
+        "packVersion": "1.0.0",
+        "role": "guard-judge",
+        "prompt": prompt,
+    }
+
+
+def test_prompt_config_wraps_a_missing_system_prompt_file_in_pack_config_error(tmp_path) -> None:
+    """`_resolve_prompt_text` wraps a missing/unreadable `prompt.systemPrompt` file into
+    `PackConfigError` (S4 spec §4.2) rather than letting the raw `OSError` escape."""
+    (tmp_path / "pack.json").write_text(
+        json.dumps(_item_level_manifest(systemPrompt="prompts/missing.md")), encoding="utf-8"
+    )
+    pack = load_pack(tmp_path)
+    with pytest.raises(PackConfigError, match="prompt.systemPrompt"):
+        pack.prompt_config()
+
+
+def test_prompt_config_wraps_a_missing_tool_schemas_file_in_pack_config_error(tmp_path) -> None:
+    """`_resolve_tool_schemas` wraps a missing/unreadable `prompt.toolSchemas` file into
+    `PackConfigError` (S4 spec §4.2) rather than letting the raw `OSError` escape."""
+    (tmp_path / "pack.json").write_text(
+        json.dumps(_item_level_manifest(toolSchemas="tools/missing.json")), encoding="utf-8"
+    )
+    pack = load_pack(tmp_path)
+    with pytest.raises(PackConfigError, match="prompt.toolSchemas"):
+        pack.prompt_config()
+
+
+def test_prompt_config_rejects_a_tool_schemas_file_that_is_not_a_json_array(tmp_path) -> None:
+    """`_resolve_tool_schemas` raises `PackConfigError` when the named file parses but is not a
+    JSON array (S4 spec §4.2) — a single schema object, not the array `PromptConfig.toolSchemas`
+    requires."""
+    (tmp_path / "schemas.json").write_text(json.dumps({"name": "lookup"}), encoding="utf-8")
+    (tmp_path / "pack.json").write_text(
+        json.dumps(_item_level_manifest(toolSchemas="schemas.json")), encoding="utf-8"
+    )
+    pack = load_pack(tmp_path)
+    with pytest.raises(PackConfigError, match="is not a JSON array"):
+        pack.prompt_config()
 
 
 def test_prompt_config_is_not_this_route_when_the_manifest_has_no_prompt_block() -> None:

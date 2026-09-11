@@ -547,6 +547,12 @@ class ExtractionAggregates:
     exactMatch: BinaryMetric | None = None
     byShape: tuple[BinaryMetric, ...] = ()
     parseFailures: int = 0
+    #: NEW — S4 spec §4.3: Layer A structural-validation failures (§2.5), a scalar count never
+    #: metric-carrying — matching `parseFailures`'s own existing shape (never in `named_metrics`
+    #: either).
+    malformedSpecCount: int = 0
+    #: NEW — S4 spec §4.3: Layer B schema-bound-validation failures (§2.5), same shape as above.
+    schemaViolationCount: int = 0
 
     def named_metrics(self) -> tuple[MetricValue, ...]:
         found = [self.exactMatch] if self.exactMatch is not None else []

@@ -197,6 +197,17 @@ class ItemScorer(Protocol):
         embeddings branch, which today only the embedder ever declares."""
         ...
 
+    def build_messages(
+        self, item_input: Mapping[str, Any], *, pack: Pack,
+    ) -> list[ChatMessage]:
+        """Called instead of the generic, scorer-blind `_item_chat_messages` on the chat branch,
+        iff the scorer defines it (optional, `getattr`-guarded — S4 spec §4.1, closing
+        itemscorer-extension.md finding 1). `guard-judge`'s real prompt is a labelled multi-block
+        render, `nlq-generator`'s is a schema-filled structured-completion instruction set — neither
+        is a JSON dump of the item row. Falls back to `_item_chat_messages` when absent, so every
+        existing S1/S2 test (`FakeItemScorer`, which defines neither) is untouched."""
+        ...
+
 
 class ConversationScorer(Protocol):
     """`tool-caller`'s scorer — needs the whole (possibly censored) trace for cross-turn state
@@ -345,8 +356,14 @@ def _drive_single_call_items(
         resident = lmstudio.residency()  # between-item probe — never during a timed call
         try:
             if call_surface == "chat":
+                build_messages = getattr(scorer, "build_messages", None)  # NEW — S4 spec §4.1
+                messages = (
+                    build_messages(item_input, pack=pack)
+                    if build_messages is not None
+                    else _item_chat_messages(pack, item_input)
+                )
                 call: ChatResult | EmbedResult = lmstudio.chat(
-                    _item_chat_messages(pack, item_input),
+                    messages,
                     model=model_info.id,
                     temperature=prompt_config.temperature,
                     max_tokens=prompt_config.maxTokens,

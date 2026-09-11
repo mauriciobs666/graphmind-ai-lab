@@ -1,0 +1,15 @@
+{
+  "packId": "fixture-prompt-tool-schemas",
+  "packVersion": "1.0.0",
+  "role": "guard-judge",
+  "description": "S4 fixture pack for packs.py: prompt.toolSchemas resolves a non-empty JSON Schema array to a tuple.",
+  "prompt": {
+    "systemPrompt": null,
+    "toolSchemas": "schemas.json",
+    "historyReplay": null,
+    "representToolSchemasEachTurn": false,
+    "historyTurns": 0,
+    "temperature": 0.0,
+    "maxTokens": 1024
+  }
+}

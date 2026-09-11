@@ -363,11 +363,10 @@ class Pack:
         because on the pack's own role table the two conditions already coincide exactly — a role
         with turns to replay is, today, precisely the one role whose turn is a multi-call loop.
 
-        **`systemPrompt` and `toolSchemas` are carried through as the manifest's own declared
-        values — paths, not resolved content** — because resolving `prompt.*` paths against the
-        pack root, the way `Pack.data_path` does for `data.*`, is a separate concern from the one
-        this route closes, and `PromptConfig`'s own docstring assigns that resolution to whichever
-        caller eventually drives a real turn; no such caller exists in this tree yet.
+        **`systemPrompt` and `toolSchemas` are resolved to content**, via `_resolve_prompt_text`/
+        `_resolve_tool_schemas` below — matching `PromptConfig`'s own contract (convo.py:148-153)
+        that these two fields carry the resolved text/schema list, not the manifest's bare paths
+        (S4 spec §4.2, closing itemscorer-extension.md finding 2).
         """
         prompt = self.manifest.get("prompt") or {}
         multi_call = MULTI_CALL_TURN_BY_ROLE.get(self.role, False)
@@ -392,8 +391,8 @@ class Pack:
             )
 
         return PromptConfig(
-            systemPrompt=prompt.get("systemPrompt"),
-            toolSchemas=prompt.get("toolSchemas") or (),
+            systemPrompt=self._resolve_prompt_text(prompt.get("systemPrompt")),
+            toolSchemas=self._resolve_tool_schemas(prompt.get("toolSchemas")),
             historyReplay=history_replay,
             representToolSchemasEachTurn=prompt.get("representToolSchemasEachTurn"),
             historyTurns=prompt.get("historyTurns"),
@@ -401,6 +400,41 @@ class Pack:
             temperature=prompt.get("temperature"),
             maxTokens=prompt.get("maxTokens"),
         )
+
+    def _resolve_prompt_text(self, rel_path: str | None) -> str | None:
+        """Resolve a prompt.<key> manifest path to its file's TEXT content, read relative to
+        pack.root — mirrors data_path's resolution pattern but returns content, not a Path, because
+        PromptConfig's own contract (convo.py:148-153) is content (S4 spec §4.2, closing
+        itemscorer-extension.md finding 2). `None` in, `None` out: an absent systemPrompt stays
+        absent, never becomes an empty-file read. Wraps a missing/unreadable file into
+        PackConfigError — a pack-config defect, not a bare traceback."""
+        if rel_path is None:
+            return None
+        try:
+            return (self.root / rel_path).read_text(encoding="utf-8")
+        except OSError as exc:
+            raise PackConfigError(
+                f"{self.packId}: prompt.systemPrompt at {rel_path!r} could not be read: {exc}"
+            ) from exc
+
+    def _resolve_tool_schemas(self, rel_path: str | None) -> tuple[Mapping[str, Any], ...]:
+        """Resolve prompt.toolSchemas — a single path to a JSON file holding an ARRAY of JSON
+        Schema objects — to the tuple PromptConfig.toolSchemas actually declares (convo.py:165).
+        `None`/absent -> (). Raises PackConfigError on a non-array file or an unreadable/
+        unparseable one."""
+        if rel_path is None:
+            return ()
+        try:
+            data = json.loads((self.root / rel_path).read_text(encoding="utf-8"))
+        except OSError as exc:
+            raise PackConfigError(
+                f"{self.packId}: prompt.toolSchemas at {rel_path!r} could not be read: {exc}"
+            ) from exc
+        if not isinstance(data, list):
+            raise PackConfigError(
+                f"{self.packId}: prompt.toolSchemas at {rel_path!r} is not a JSON array"
+            )
+        return tuple(data)
 
 
 def _pack_relative_paths(root: Path) -> list[str]:

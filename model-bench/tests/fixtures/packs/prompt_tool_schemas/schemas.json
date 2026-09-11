@@ -1,0 +1,4 @@
+[
+  {"name": "lookup", "parameters": {"type": "object", "properties": {}}},
+  {"name": "search", "parameters": {"type": "object", "properties": {}}}
+]

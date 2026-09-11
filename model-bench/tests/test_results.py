@@ -847,6 +847,32 @@ def test_every_aggregate_kind_round_trips_through_load_history(tmp_root, cls) ->
     assert valid[0].aggregates == aggregates
 
 
+# --- S4 spec §4.3 Step 0 — ExtractionAggregates's two new failure-class counts -------------------
+
+
+def test_extraction_aggregates_round_trips_malformed_spec_and_schema_violation_counts(
+    tmp_root,
+) -> None:
+    """`malformedSpecCount`/`schemaViolationCount` (S4 spec §4.3) are additive, defaulted scalar
+    counts, matching `parseFailures`'s own existing shape — confirming the generic
+    `_aggregates_from_dict`/`_aggregates_to_dict` dispatch (already shipped, `results.py:805+`)
+    needs no change to carry the two new fields through a real `store()`/`load_history()` round
+    trip. Non-zero and mutually distinct values, not the `0` default every other round-trip test
+    above already exercises — a mutant that dropped one field, or swapped the two, would still
+    pass a defaults-only check."""
+    aggregates = ExtractionAggregates(
+        parseFailures=2, malformedSpecCount=3, schemaViolationCount=5
+    )
+    store(_run("r-extraction-failure-counts", aggregates=aggregates), tmp_root)
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert [r.reason for r in invalid] == []
+    assert len(valid) == 1
+    restored = valid[0].aggregates
+    assert restored.malformedSpecCount == 3
+    assert restored.schemaViolationCount == 5
+    assert restored == aggregates
+
+
 # --- m-7: `store()` names the reason instead of raising from pathlib ---------------------------
 
 

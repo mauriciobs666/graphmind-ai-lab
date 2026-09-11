@@ -1072,6 +1072,93 @@ def test_drive_single_call_items_chat_surface_never_calls_prime(monkeypatch):
     assert len(scorer.prime_calls) == 1
 
 
+# ==================================================================================================
+# S4 spec §4.1/§7 Step 0 — `ItemScorer.build_messages`, the chat-branch dispatch change
+# ==================================================================================================
+
+
+class FakeItemScorerWithBuildMessages:
+    """A scorer that DOES define `build_messages` — proves the chat branch calls it in preference
+    to `_item_chat_messages` when present (S4 spec §4.1, closing itemscorer-extension.md finding
+    1)."""
+
+    def __init__(self) -> None:
+        self.build_messages_calls: list[tuple[Any, Any]] = []
+
+    def build_messages(self, item_input, *, pack):
+        self.build_messages_calls.append((item_input, pack))
+        return [{"role": "user", "content": f"CUSTOM::{item_input['id']}"}]
+
+    def score_item(self, item_input, result, timing, *, pack):
+        return ItemResult(
+            itemId=str(item_input.get("id")),
+            pairingKey=(str(item_input.get("id")),),
+            outcome="pass",
+            scoreable={},
+            counts={},
+            timing=timing,
+        )
+
+    def aggregate(self, items, *, pack):
+        return ClassificationAggregates(perClass=(), n=len(items))
+
+
+def test_drive_single_call_items_chat_surface_prefers_build_messages_when_defined(monkeypatch):
+    scorer = FakeItemScorerWithBuildMessages()
+    monkeypatch.setattr("modelbench.runner._load_item_scorer", lambda pack: scorer)
+    pack = FakePack(
+        role="guard-judge",
+        items=[{"id": "a"}],
+        prompt_cfg=make_prompt_cfg(maxIterationsPerTurn=None),
+    )
+    lms = StubLMStudio(
+        chat_responses=[chat_result_with_stats(wall_clock_ms=100.0)],
+        residency_sequence=[resident()],
+    )
+    _drive_single_call_items(
+        pack,
+        _cfg(),
+        lmstudio=lms,
+        model_info=model_info(),
+        call_surface="chat",
+        baseline_residency=resident(),
+    )
+    # `build_messages` was called with the item and the pack, and ITS return value — not
+    # `_item_chat_messages`'s JSON dump — is what got sent to `lmstudio.chat`.
+    assert scorer.build_messages_calls == [({"id": "a"}, pack)]
+    assert lms.chat_calls[0]["messages"] == [{"role": "user", "content": "CUSTOM::a"}]
+
+
+def test_drive_single_call_items_chat_surface_falls_back_when_build_messages_absent(monkeypatch):
+    """`FakeItemScorer` defines no `build_messages` — the chat branch must fall back to
+    `_item_chat_messages`, unchanged (the regression check for finding 1's fix: every existing
+    `call_surface="chat"` test call site above uses `FakeItemScorer`/`FakeItemScorerWithHooks`,
+    neither of which defines `build_messages`, and must stay green untouched)."""
+    scorer = FakeItemScorer()
+    monkeypatch.setattr("modelbench.runner._load_item_scorer", lambda pack: scorer)
+    pack = FakePack(
+        role="guard-judge",
+        items=[{"id": "a"}],
+        prompt_cfg=make_prompt_cfg(maxIterationsPerTurn=None),
+    )
+    lms = StubLMStudio(
+        chat_responses=[chat_result_with_stats(wall_clock_ms=100.0)],
+        residency_sequence=[resident()],
+    )
+    _drive_single_call_items(
+        pack,
+        _cfg(),
+        lmstudio=lms,
+        model_info=model_info(),
+        call_surface="chat",
+        baseline_residency=resident(),
+    )
+    assert lms.chat_calls[0]["messages"] == [
+        {"role": "system", "content": "You are a helpful shop assistant."},
+        {"role": "user", "content": json.dumps({"id": "a"}, sort_keys=True)},
+    ]
+
+
 def test_load_item_scorer_resolves_a_real_scorer_name_to_its_module():
     from modelbench.runner import _load_item_scorer
     from modelbench.scoring import retrieval
