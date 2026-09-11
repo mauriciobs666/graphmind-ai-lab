@@ -18,6 +18,7 @@ document granularity changes that reasoning.
 |---|---|---|
 | `docs/plans/document-ingestion2-ml.md` | `data-scientist` | **Deterministic, uncalibrated-threshold-free detection at both tiers — no embeddings, no LLM, in v1.** Auto tier ("very-high confidence," FR-2/AC-1): exact equality of `Document.textNormalizedHash` (a hash of case-folded, whitespace-collapsed full text) against an existing `currentVersion` document — a definitional identity check, not a score, `confidence=1.0`. Suggested tier (FR-2/AC-2): shingled-Jaccard content-overlap (5-word shingles) over a cheaply-narrowed candidate shortlist, `confidence` = raw Jaccard ratio, stored as an explicitly non-probabilistic audit value with an implementer-tunable noise-floor cutoff. Candidate scope: workspace-wide among `currentVersion` documents only, **never** actor-scoped (would miss the motivating cross-actor-edit case). Pipeline placement: the auto tier runs **synchronously**, folded into one atomic write (mirrors `create_entity_with_auto_match`); the suggested tier runs **asynchronously** (cost/latency of the Jaccard computation over up to 500,000-char documents, not an embedding dependency — neither tier needs `Chunk.embedding`). A false auto-supersede is judged **more consequential** than a false entity auto-merge (it hides an independent document from default search, not just adds a spurious link) — reflected in an even narrower auto-tier criterion than the entity precedent's name+type match. Embeddings/LLM comparison both explicitly deferred to a scoped, evaluation-gated v2 (§6 of the note), for the same "zero calibration data" reason `document-ingestion-ml.md` gave for entity matching, sharpened by the larger blast-radius argument above. The note also recommends (§7) that the `SUPERSEDES` confirm/reject/recheck/list surface mirror `SAME_AS`'s **exactly**, including the OQ-3 reopen-on-corroboration/manual-recheck pattern — adopted below (§3.4), reversing this plan's own first-draft instinct to scope that out, because the edge already carries `resuggestCount`/`lastResuggestedAt` (per the note's F6) and leaving those fields permanently unused would be a design inconsistency, not a simplification. Two schema/RAM specifics (the `textNormalizedHash` index shape, and the suggested-tier candidate-generation index) were explicitly left to `graph-dba` to finalize — both now resolved by the live-verification pass below. |
 | `graph-dba` live-verification pass, 2026-09-11 (throwaway `ws:docprobe`, deleted after) | `graph-dba` | Dispatched by `teco` against this plan's design, not a separate written note. **4 of 5 items confirmed exactly as designed, no correction:** the unlabeled-`SUPERSEDES`-endpoint planner-trap discipline (§3.2, `GRAPH.PROFILE`-confirmed for the match+`SET` shape and the bare status-filter shape alike); the atomic auto-supersede write's concurrency fix (§3.4, `threading.Barrier` probe — exactly one confirmed edge, never zero/duplicated — plus one **technique note, folded in below**: build it as two separate `FOREACH`-guarded blocks sharing one `WITH`, not one `FOREACH` mixing `SET`+`CREATE`, the form actually verified and the closer mirror of `create_or_reopen_match`'s own idiom); the single-query delete shape (§3.5 — ran verbatim, succeeded outright; **the two-query fallback is dropped below**, no longer needed as a hedge); the `Document.textNormalizedHash` RANGE index (§7 — index-anchored, no constraint, exactly as designed); the `SUPERSEDES` DDL (§3.2/§4 Stage B — both indexes + the `UNIQUE RELATIONSHIP` constraint reach `OPERATIONAL`, duplicate-`matchId` rejection confirmed live). **One item needed a real redesign, folded into §3.4/§4.1/§6/§7 below:** a raw RediSearch fulltext index on `Document.text` at the plan's own 500,000-char ceiling measured **2-5x the raw text size in RAM** (0.27 MB/doc on a low-entropy 8k-token vocabulary probe, 2.45 MB/doc on a higher-entropy 60k-token one closer to real prose) — not negligible, stacking on the already-dominant `Chunk.embedding` line workspace-wide. Replaced with an app-side MinHash/LSH-banding fingerprint computed off the same shingle set `update_detection.shingles()` already builds — a handful of small indexed properties per document, negligible RAM, the standard technique for this exact near-duplicate-detection shape. `Document.title`'s fulltext index (unaffected by the RAM finding, stays as the cheap complementary booster it already was) and the K-049-family oversized-indexed-value crash risk (confirmed **not reachable** here — `RANGE`-only, no `UNIQUE` constraint on any of `Document.text`/`textNormalizedHash`, so the crash family this plan already avoided by design stays avoided) needed no change. This is an index-design correction on `graph-dba`'s own call, not a reversal of anything `data-scientist` recommended — the underlying deterministic-Jaccard technique is unchanged; only how candidates are cheaply narrowed changes. |
+| `graph-dba` second live-verification pass, 2026-09-11 (throwaway `ws:docprobe2`, deleted after) | `graph-dba` | Dispatched by `teco` to close the two items the first pass's plan-side follow-up (§7) named as still unverified. **Both confirmed exactly as designed, no corrections.** (1) `find_update_shortlist`'s 8-disjunct band-equality `OR` lookup (`WHERE d.lshBand0 = $band0 OR ... OR d.lshBand7 = $band7`) — `GRAPH.PROFILE` shows a single `Node By Index Scan | (d:Document)` with no label scan across every variant tested (mid-disjunct match, last-disjunct-only match, zero-match negative control); this is a genuinely different shape from the general "`OR`-as-scan-anchor" quirk `falkor-chat/AGENTS.md` already names (that one is the single-property `$param IS NULL OR prop = $param` optional-filter idiom, which *does* defeat the index) — `graph-dba` added a dated entry to `claude/graph-dba/falkordb-quirks.md` distinguishing the two shapes (already committed, not part of this plan). (2) `create_or_reopen_supersede_suggestion` at `Document`/`SUPERSEDES` granularity — the full create→no-op-on-re-derive→reject→reopen-to-`pending`-never-`confirmed` sequence exercised live, `resuggestCount` bumping correctly on the original `matchId`, the `UNIQUE RELATIONSHIP SUPERSEDES PROPERTIES 1 matchId` constraint holding as the backstop throughout; both endpoint lookups profile as `Node By Index Scan`, the unlabeled `SUPERSEDES` `OPTIONAL MATCH` as a cheap `Expand Into`, no label scan anywhere. §3.4's "gets this for free, zero new logic" claim holds at `Document` granularity exactly as it does at `Entity`/`SAME_AS`. This closes every Cypher/index design in this plan — no further live-verification items remain open. |
 | (future) `docs/plans/document-ingestion2-coordination.md` | `teco` | Sequencing/gating log once implementation starts — not authored here. |
 
 ---
@@ -535,14 +536,13 @@ still succeeds.
   `create_entity_with_auto_match`'s exact relationship); new `find_update_shortlist(ws, *, bands:
   list[str], title, limit=5) -> list[dict]` — an index-anchored `OR` across the `b` band-equality
   predicates (`WHERE d.lshBand0 = $band0 OR d.lshBand1 = $band1 OR ...`), unioned app-side with a
-  separate title-fuzzy full-text lookup, **not yet independently live-verified** (§7 — the general
-  "`OR`-as-scan-anchor" quirk category is already named in `falkor-chat/AGENTS.md`'s live-verified-
-  facts list, so this specific multi-property-`OR` shape needs its own check, not an assumption
-  that it behaves like the single-predicate cases already verified elsewhere in this plan);
+  separate title-fuzzy full-text lookup, **live-verified** (§0/§7 — `GRAPH.PROFILE`-confirmed as a
+  single `Node By Index Scan`, no label scan, and confirmed structurally distinct from the general
+  "`OR`-as-scan-anchor" quirk `falkor-chat/AGENTS.md` names, which does not apply to this shape);
   `create_or_reopen_supersede_suggestion(ws, *, new_document_id, candidate_document_id, match_id,
   status, confidence, technique, created_at) -> dict` (verbatim mirror of `create_or_reopen_match`,
-  also not yet independently live-verified at `Document` granularity, §7 — only the entity-level
-  original has been).
+  **live-verified** at `Document` granularity too, §0/§7 — the full create/no-op/reject/reopen
+  sequence and the `UNIQUE RELATIONSHIP` constraint's backstop role both confirmed).
 - `server/falkorchat/services.py` — `ingest_document`'s new flow (§3.4): compute the hash, call
   the atomic method, schedule suggested-tier detection only when not auto-superseded, return the
   extended receipt.
@@ -644,23 +644,20 @@ and searchable).
 
 ## 7. Risks & open questions
 
-- **Verification gap — largely closed by `graph-dba`'s live-verification pass (§0), narrowed to
-  what's actually left.** Four of this plan's five originally-by-analogy Cypher/index designs are
-  now **confirmed live** against a real FalkorDB instance (throwaway `ws:docprobe`): the unlabeled-
-  `SUPERSEDES`-endpoint planner-trap discipline (§3.2, for the match+`SET` shape *and* the
-  status-filter/list shape), the atomic auto-supersede write including its concurrency fix (§3.4),
-  the single-query delete (§3.5), the `Document.textNormalizedHash` index, and the `SUPERSEDES` DDL
-  (§4 Stage B). **What genuinely remains unverified, narrowed from the original broad hedge:** the
-  new `find_update_shortlist` band-equality `OR`-lookup (§4 Stage D — a brand-new query shape this
-  plan is introducing in response to item 4b's redesign, not yet run against a real instance; the
-  general "`OR`-as-scan-anchor" quirk category is already named in `falkor-chat/AGENTS.md`'s
-  live-verified-facts list, so this specific multi-property-`OR` shape should not be assumed to
-  behave like the single-predicate cases already confirmed elsewhere in this plan) and
-  `create_or_reopen_supersede_suggestion` (a verbatim mirror of `create_or_reopen_match`, which
-  *is* live-verified at entity granularity, but this plan's `Document`-granularity instance of it
-  has not independently been). **Recommend a second, narrower `graph-dba` (or `coder`-run)
-  live-verification pass covering just these two, before Stage D implementation** — not the full
-  Stage-0-sized gate the first pass already closed.
+- **Verification gap — fully closed, across two `graph-dba` passes (§0).** The first pass
+  confirmed the unlabeled-`SUPERSEDES`-endpoint planner-trap discipline (§3.2, for the match+`SET`
+  shape *and* the status-filter/list shape), the atomic auto-supersede write including its
+  concurrency fix (§3.4), the single-query delete (§3.5), the `Document.textNormalizedHash` index,
+  and the `SUPERSEDES` DDL (§4 Stage B). The second, narrower pass this bullet originally called for
+  closed the two items still open after the first: `find_update_shortlist`'s band-equality `OR`
+  lookup (`GRAPH.PROFILE`-confirmed as a single `Node By Index Scan`, no label scan, across every
+  match/no-match variant tested — and confirmed structurally distinct from the general
+  "`OR`-as-scan-anchor" quirk `falkor-chat/AGENTS.md` already names, which is the unrelated
+  single-property `$param IS NULL OR prop = $param` idiom) and `create_or_reopen_supersede_
+  suggestion` at `Document` granularity (the full create/no-op/reject/reopen sequence exercised
+  live, `resuggestCount` and the `UNIQUE RELATIONSHIP` constraint both behaving exactly as designed).
+  **No Cypher/index design in this plan remains unverified** — every shape named above has been run
+  against a real FalkorDB instance, not merely designed by analogy.
 - **The suggested tier's candidate-generation index — resolved, not merely flagged.** Originally
   left to `graph-dba` to finalize (per the ML note's §4.1/§7); now concretely redesigned as
   LSH/MinHash banding after the live RAM measurement ruled out a raw full-text index on
