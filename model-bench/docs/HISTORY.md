@@ -2,6 +2,41 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-11 — `validate_pack`'s sixth axis: the `"scorer"` key's own resolution
+
+**What:** `packs.py`'s `validate_pack` did not check that a pack's declared `"scorer"` value
+resolves to an importable `modelbench.scoring.<name>` module — a typo'd or nonexistent scorer
+validated clean and only failed one step later, at `run`, via `runner._load_item_scorer`'s
+`RunRefused(exitCode=4)`. New `_scorer_problems(pack)` mirrors that function's own
+`importlib.import_module` call, returning a problem string on `ImportError` instead of raising.
+Follows the same "absent key is not a problem" convention as `_tool_module_problems` (`tools.module`)
+and `_prompt_problems` (`prompt`): a pack with no `"scorer"` key validates clean on this axis, since
+most fixtures under `tests/fixtures/packs/*/pack.json` declare none.
+
+**Scoped by role, not just by key presence:** `runner.run_pack`'s own branch (`if pack.role ==
+"tool-caller"`) never reaches `_load_item_scorer` for that role — it calls `_drive_conversations`
+-> `_load_conversation_scorer` instead, which resolves a different, unbuilt `ConversationScorer`
+kind (S5's) and unconditionally raises `NotImplementedError` regardless of what `"scorer"` names.
+The first pass over this check mirrored `_load_item_scorer` without the role gate and broke the
+shared `tests/fixtures/packs/valid/` fixture (`"scorer": "toolcalls"`, tool-caller role, no such
+module ships yet) — a false positive against a role this axis was never meant to reach. Fixed by
+returning `[]` immediately for `pack.role == "tool-caller"`, same shape as the other "not this
+function's problem" early-outs.
+
+New fixture `tests/fixtures/packs/scorer_unresolvable/` (otherwise-valid `guard-judge` pack,
+`"scorer": "not_a_real_scorer_module"`) plus four new tests in `tests/test_packs.py`: the rejection,
+a no-`"scorer"`-key fixture staying clean, the real shipped `packs/embedder-graphrag-retrieval/`
+pack (`"scorer": "retrieval"`, which genuinely resolves) staying clean end to end, and the `valid`
+fixture's tool-caller `"scorer"` staying out of this axis's reach. `validate_pack`'s docstring
+updated from five to six axes.
+
+**Verification:** full suite `1254 passed` (up from `1250`), plus one pre-existing failure
+unrelated to this change (`test_convo.py::test_the_third_leg_of_the_disposition_probe_is_still_
+owed_by_s5`, a self-documented tripwire for S5's still-unbuilt scoring wiring, present before and
+after this change). `ruff check .` clean. Mutation-tested both new branches of `_scorer_problems`
+(neutralizing the `ImportError` handler; removing the `tool-caller` early return) — each killed its
+target test, then was restored.
+
 ## 2026-09-11 — S3, Step 2: the live end-to-end run (`--embed-corpus`, the harness self-check, `run`/`compare`) — S3 closed
 
 **What:** `docs/plans/small-model-benchmarking-s3-spec.md` §8 Step 2, all five done-conditions.

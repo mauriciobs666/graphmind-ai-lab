@@ -794,10 +794,45 @@ def _prompt_problems(pack: Pack) -> list[str]:
     return []
 
 
+def _scorer_problems(pack: Pack) -> list[str]:
+    """The `"scorer"` key's own resolution — `modelbench.scoring.<name>` — checked at validate
+    time instead of one step later at `run`, via `runner._load_item_scorer`'s
+    `RunRefused(exitCode=4)` (§3.2/§7.1). Mirrors that function's own `importlib.import_module`
+    call exactly, but returns a problem string here rather than raising.
+
+    `pack.role == "tool-caller"` is not this function's problem — `runner.run_pack`'s own role
+    branch never reaches `_load_item_scorer` for that role; it calls `_drive_conversations` ->
+    `_load_conversation_scorer` instead, which resolves a `ConversationScorer` (a different kind,
+    unrelated to `modelbench.scoring.<name>`) and today unconditionally raises
+    `NotImplementedError` regardless of what string `"scorer"` names, because S5 hasn't built one
+    yet. So a tool-caller pack's `"scorer"` value is not checked by this axis, same "not this
+    function's problem" shape as the others below, but scoped by role rather than by key absence.
+
+    Absent `"scorer"` is not this function's problem either — same convention as
+    `_tool_module_problems` for absent `tools.module` and `_prompt_problems` for absent `prompt`:
+    many fixtures under `tests/fixtures/packs/*/pack.json` have no `"scorer"` key at all (they
+    test other axes), and a pack with no `"scorer"` is `_load_item_scorer`'s own problem to raise
+    on, not this one's.
+    """
+    if pack.role == "tool-caller":
+        return []
+    name = pack.manifest.get("scorer")
+    if not name:
+        return []
+    try:
+        importlib.import_module(f"modelbench.scoring.{name}")
+    except ImportError as exc:
+        return [
+            f"{pack.packId}: scorer {name!r} does not resolve to modelbench.scoring.{name} "
+            f"({exc})"
+        ]
+    return []
+
+
 def validate_pack(pack: Pack) -> list[str]:
     """§4 S2's pack-integrity checks. `[]` means valid, matching `Fingerprint.validate()`'s shape.
 
-    Five independent axes — a fixture can fail one, several, or none:
+    Six independent axes — a fixture can fail one, several, or none:
 
     * the `sampling` contract (§3.3): structural (`analysisUnit == pairingKey[0]`, via
       `check_sampling_contract`), the row-count identity, and `-ml` §3.4 Rule 6's
@@ -811,7 +846,13 @@ def validate_pack(pack: Pack) -> list[str]:
       `Pack.load_tool_module`'s docstring);
     * the `prompt` block's `historyReplay` and `maxIterationsPerTurn`'s role scoping, via
       `Pack.prompt_config` — absent `prompt` is not a problem, same convention as absent
-      `tools.module` (§3.3, v1.26; impl review Pass 17, P17-5).
+      `tools.module` (§3.3, v1.26; impl review Pass 17, P17-5);
+    * the `"scorer"` key's own resolution to `modelbench.scoring.<name>` — absent `"scorer"` is
+      not a problem, same convention as absent `tools.module` / `prompt` (mirrors
+      `runner._load_item_scorer`, moving the failure from `run` time to validate time); scoped to
+      the four item-level roles — `tool-caller` resolves a different, unbuilt `ConversationScorer`
+      kind via `_load_conversation_scorer` instead, never through this path (`run_pack`'s own role
+      branch).
 
     **Not here:** the `callSurface`-versus-catalog-`type` cross-check and the tool-calling
     eligibility gate are `run`'s (§3.4.4a, §3.6) — this function has no model catalog to check
@@ -823,4 +864,5 @@ def validate_pack(pack: Pack) -> list[str]:
     problems.extend(_tool_module_problems(pack))
     problems.extend(_tool_import_problems(pack))
     problems.extend(_prompt_problems(pack))
+    problems.extend(_scorer_problems(pack))
     return problems

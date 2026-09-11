@@ -792,3 +792,64 @@ def test_the_valid_fixtures_analysis_unit_is_scriptId_not_a_conversation_id() ->
     ref = pack.ref()
     assert ref.analysisUnit == "scriptId"
     assert ref.pairingKey[0] == "scriptId"
+
+
+# --------------------------------------------------------------------------------------------
+# validate_pack — the `"scorer"` key's own resolution (mirrors `runner._load_item_scorer`,
+# checked at validate time instead of one step later at `run`)
+# --------------------------------------------------------------------------------------------
+
+
+def test_validate_pack_rejects_a_scorer_that_does_not_resolve() -> None:
+    """A `"scorer"` value with no `modelbench.scoring.<name>` module validated CLEAN before this
+    fix — `runner._load_item_scorer` only discovers the typo one step later, at `run`, via
+    `RunRefused(exitCode=4)`. The problem string must name both the pack and the unresolvable
+    scorer."""
+    pack = load_pack(pack_fixture("scorer_unresolvable"))
+    assert pack.manifest["scorer"] == "not_a_real_scorer_module"
+
+    problems = validate_pack(pack)
+
+    assert len(problems) == 1
+    assert "fixture-scorer-unresolvable" in problems[0]
+    assert "not_a_real_scorer_module" in problems[0]
+
+
+def test_validate_pack_does_not_require_a_scorer() -> None:
+    """Absent `"scorer"` is not this axis's problem — same convention as `_tool_module_problems`
+    for absent `tools.module` and `_prompt_problems` for absent `prompt`: most fixtures under
+    `tests/fixtures/packs/*/pack.json` declare no `"scorer"` at all, testing other axes, and must
+    keep validating clean on this new one. `tooling_import_allowed` is already asserted fully
+    `validate_pack`-clean elsewhere (`test_prompt_config_does_not_require_history_replay_for_an_
+    item_level_role`) and carries no `"scorer"` key."""
+    pack = load_pack(pack_fixture("tooling_import_allowed"))
+    assert "scorer" not in pack.manifest
+
+    assert validate_pack(pack) == []
+
+
+def test_validate_pack_accepts_the_real_shipped_retrieval_packs_scorer() -> None:
+    """The one real shipped pack (`packs/embedder-graphrag-retrieval/pack.json`) declares
+    `"scorer": "retrieval"`, and `modelbench.scoring.retrieval` genuinely exists — this must stay
+    `validate_pack`-clean end to end, not merely importable in isolation."""
+    real_pack_root = Path(__file__).parent.parent / "packs" / "embedder-graphrag-retrieval"
+    pack = load_pack(real_pack_root)
+    assert pack.manifest["scorer"] == "retrieval"
+
+    assert validate_pack(pack) == []
+
+
+def test_validate_pack_does_not_resolve_a_tool_callers_scorer() -> None:
+    """`runner.run_pack` never reaches `_load_item_scorer`'s `modelbench.scoring.<name>`
+    resolution for `pack.role == "tool-caller"` — that role's own branch (`run_pack`, `if
+    pack.role == "tool-caller"`) calls `_drive_conversations` -> `_load_conversation_scorer`
+    instead, which today unconditionally raises `NotImplementedError` regardless of what string
+    `"scorer"` names (S5's `ConversationScorer` is unbuilt). So a tool-caller pack's `"scorer"`
+    value is never checked against this axis, by design, not by accident — the `valid` fixture
+    itself declares `"scorer": "toolcalls"`, which does not resolve to
+    `modelbench.scoring.toolcalls` (no such module ships), and must still validate clean."""
+    pack = load_pack(pack_fixture("valid"))
+    assert pack.manifest["role"] == "tool-caller"
+    assert pack.manifest["scorer"] == "toolcalls"
+
+    assert validate_pack(pack) == []
