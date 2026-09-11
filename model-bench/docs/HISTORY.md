@@ -2,6 +2,71 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-11 — S4 Step 2: `guard-judge-understanding`, live half — the real 85-item pack run end to end
+
+**What:** `docs/plans/small-model-benchmarking-s4-spec.md` §7 Step 2 — the live proof run over
+Step 1's shipped pack (`5f82cb9`), plus `plan`'s S4 "Done when": "both packs run end to end against
+one model." LM Studio was reachable (`curl http://localhost:1234/v1/models`, 16 catalog entries, all
+`not-loaded` — JIT auto-load handles residency, per `lmstudio.py`'s `warm_up` docstring: "under JIT
+auto-load this call **is** the load," so no separate `lms load` step was needed).
+
+**Models used:** `qwen/qwen3-4b-2507` (primary proof run — a small, already-cataloged non-thinking
+chat model, a routine choice for a single-model proof run) and, once report inspection showed the
+`### Exploratory metrics`/`no significance claim` labelling and the `falseAdvanceRate`/
+`falseSuspendRate` side-by-side rendering live only in `compare_report`'s two-arm path (`report.py`
+`compare_report`: `_comparison_pair` returns the `"too-few-arms"` string with one stored arm, and the
+function returns before ever reaching the `### Exploratory metrics` block), a second model
+(`google/gemma-3-4b`) was run against the same pack/session so the done-condition's actual rendered
+labels could be inspected directly — not a benchmarking comparison, purely to exercise the report's
+real two-arm path the done-condition names.
+
+**Commands run, in order:**
+```
+./run.sh validate --pack packs/guard-judge-understanding
+./run.sh validate --pack packs/guard-judge-understanding --strict   # confirmed still NotImplementedError
+./run.sh run --pack guard-judge-understanding --model qwen/qwen3-4b-2507 --session s4-step2-live-2026-09-11
+./run.sh run --pack guard-judge-understanding --model google/gemma-3-4b --session s4-step2-live-2026-09-11
+./run.sh compare --pack guard-judge-understanding --session s4-step2-live-2026-09-11
+```
+Both `run` invocations stored successfully (`results/runs/guard-judge-understanding-qwen_qwen3-4b-2507-2026-09-11T22:16:37Z.json`,
+`results/runs/guard-judge-understanding-google_gemma-3-4b-2026-09-11T22:18:43Z.json`); `compare`
+wrote `reports/guard-judge-understanding-20260911-02.md` (the two-arm comparison; `-01.md` is the
+earlier single-arm inspection, left in place, showing the "fewer than two arms were selected"
+no-verdict case).
+
+**The rendered report confirms every item the done-condition names, read directly (not grepped):**
+- The two verdict metrics side by side in their own `### falseAdvanceRate` / `### falseSuspendRate`
+  sections under `## Verdicts`, each with a McNemar exact p, a Holm-adjusted threshold, and a
+  decision (`falseAdvanceRate`: p=1.000, "not tested (Holm stops here)"; `falseSuspendRate`: p=0.125,
+  "not distinguishable").
+- `advanceRecall` prints under `### Exploratory metrics` as `` `advanceRecall` — exploratory — no
+  significance claim `` — never in the Holm table, never carrying a verdict.
+- The boundary tier prints the same way: `` `falseAdvanceRateBoundary` — exploratory — no
+  significance claim ``.
+- All four path-split diagnostics print as exploratory, same label:
+  `falseAdvanceRateByUnderstanding`, `falseAdvanceRateByTurns`, `falseSuspendRateByUnderstanding`,
+  `falseSuspendRateByTurns`.
+- **No pooled 85-item figure anywhere.** Every `BinaryMetric`'s own `n` in the report is its named
+  subset's size (40, 30, 30, 15, 24, 16, 18, 12) — never 85. The only two places `85` appears in the
+  rendered file are the paired-asymmetry context lines ("paired n: 40 of 85 items", "paired n: 30 of
+  85 items") — the manifest-declared item-count backdrop the spec's own done-condition explicitly
+  carves out as not a violation, not a metric whose own `n` is 85.
+
+**`validate --strict` gap — confirmed still present, not this step's to fix:** `cli.py`'s
+`_cmd_validate` still raises `NotImplementedError` unconditionally on `--strict` (unchanged since
+Step 1's own note). Ran the substitution directly instead: `packs.validate_pack(load_pack(Path(
+"packs/guard-judge-understanding")))` returned `[]` — the pack validates clean.
+
+**Files touched (all left uncommitted, per this unit's own instruction — `teco` verifies and
+commits):** `results/runs/guard-judge-understanding-qwen_qwen3-4b-2507-2026-09-11T22:16:37Z.json`
+(new), `results/runs/guard-judge-understanding-google_gemma-3-4b-2026-09-11T22:18:43Z.json` (new),
+`reports/guard-judge-understanding-20260911-01.md` (new), `reports/guard-judge-understanding-20260911-02.md`
+(new), this entry.
+
+**CPG:** considered, not relevant — no `cpg_model-bench` graph loaded on this FalkorDB instance
+(checked live this session), and this is a live-run/verification step against already-shipped code,
+no CPG to consult.
+
 ## 2026-09-11 — S4 Step 1: `guard-judge-understanding`, offline half
 
 **What:** `docs/plans/small-model-benchmarking-s4-spec.md` §5.1/§6/§7 Step 1 — the first of S4's
