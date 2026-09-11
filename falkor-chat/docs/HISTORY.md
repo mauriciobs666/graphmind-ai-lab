@@ -5,6 +5,66 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-11 — salesperson-ui S9d: the per-participant record cache removed whole
+
+**What:** Deleted `Storefront`'s participant-record cache mechanism in full, per the plan's
+`docs/plans/salesperson-ui.md` v1.19 revision note: "S9 decides the per-participant record cache
+rather than carrying it as an open question: it is removed whole (`lookup`, `_records`,
+`cached_ids`, every `_cache_put`/`_cache_drop`), which dissolves the S7 gate's S7-2 instead of
+fixing it." No replacement caching mechanism was added.
+
+`falkorchat/storefront.py`: removed the `_records`/`_records_lock` fields and their
+initializing comment; removed `lookup`, `cached_ids`, `forget`, `forget_all`, `_cache_put`,
+`_cache_drop` and the section-header comment above them; removed the `_cache_put`/`_cache_drop`
+call sites at the unconditional end of `ensure_participant` (join), `resolve_token`'s unknown-row
+and success branches, `reset_participant`'s zero-row and success branches, and
+`_reset_state_unknown`; also removed `ParticipantRecord.without_token()`, dead weight left over
+from the cache once it was gone (its only caller was `_cache_put`, and grepping both
+`falkorchat/` and `tests/` afterward turned up nothing else that named it).
+Rewrote three docstrings/comments that reasoned about the now-gone mechanism —
+`ParticipantRecord`'s class docstring, `resolve_token`'s "re-reads the graph on every call"
+paragraph, and `reset_participant`'s "reading them back would cost a query" paragraph (the
+design reason for taking an already-resolved record survives; only the comparison against the
+cache was struck).
+
+`falkorchat/storefront_api.py`: rewrote the module docstring's "What this module deliberately
+does not hold" section and `get_participant`'s docstring, both of which justified never calling
+`.lookup(` by pointing at the cache's identical-return guarantee — now stated as "there is no
+participant-record cache at all, so there is no second path that could disagree with the graph."
+Removed both `shop.forget_all()` calls in the `reset_all` presenter route (each immediately
+followed by the unrelated `clear_all_turns()`, which stays — S9's turn-state map, not this
+cache) and updated the comment above the first call site that named `forget_all()` explicitly.
+
+**Tests deleted** (the cache mechanism was their only subject): `test_storefront.py` —
+`test_resolving_refreshes_the_cache_so_lookup_never_serves_a_stale_record`,
+`test_lookup_reads_through_on_a_cache_miss`, `test_forget_and_forget_all_drop_cached_records`,
+`test_the_cache_never_holds_a_raw_token`,
+`test_reset_refreshes_the_cached_record_so_lookup_never_serves_a_dead_thread`,
+`test_a_reset_that_finds_no_participant_evicts_the_cached_record`,
+`test_a_reset_that_times_out_evicts_the_cached_record` (parametrized over 2 cases — 2 test
+instances, plus its now-orphaned `@pytest.mark.parametrize("reread", …)` decorator removed from
+the following, unrelated test it would otherwise have applied to). `test_storefront_api.py` —
+`test_the_router_never_authenticates_through_the_record_cache` and
+`test_the_lookup_tripwire_catches_a_router_that_does_call_lookup`, plus their shared apparatus
+(`_lookup_call_sites` and the standalone source-guard assertion): the tripwire policed a
+`.lookup(` call site that can no longer exist anywhere in the codebase, so once the method is
+gone the guard checks for a syntax pattern that can never appear.
+
+**Tests trimmed** (otherwise-real tests carrying one incidental cache assertion each, in
+`test_storefront.py`): `test_a_deleted_participant_stops_resolving_immediately` — kept (it pins
+`resolve_token`'s graph-re-read invariant on reset), dropped the `cached_ids()` before/after
+assertions and rewrote the docstring's hypothetical-mutation description to no longer name the
+deleted `self._records` field. `test_a_rebuilt_storefront_resolves_a_token_minted_by_the_previous_instance`
+— kept (it pins restart survival via the graph, not in-process state), dropped the
+`cached_ids() == frozenset()` assertion and rewrote the docstring the same way.
+
+**Completeness sweep:** `grep -rn '\.lookup(\|_records_lock\|cached_ids\|\.forget(\|\.forget_all(\|_cache_put\|_cache_drop' falkorchat/ tests/ web/`
+returned no hits under any of those three directories.
+
+**Test count:** baseline (reproduced live before this unit) `2653 passed, 14 deselected`; after
+this unit (reproduced live) `2643 passed, 14 deselected` — a delta of exactly `-10`, matching the
+10 test instances removed above one-for-one (both trimmed tests still pass, unchanged in count).
+
 ## 2026-09-10 — salesperson-ui S9c: the dead-turn latch, `turn.lastTurn`
 
 **What:** Built §5.2's *dead-turn signal* the S9 row's own done-condition names: `turn.lastTurn:

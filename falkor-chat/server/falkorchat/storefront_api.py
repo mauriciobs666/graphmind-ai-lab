@@ -43,12 +43,10 @@ which is what keeps the seam itself honest.
 What this module deliberately does not hold
 -------------------------------------------
 No Cypher (`falkor-chat/AGENTS.md` rule 1) and no participant resolution of its
-own: authentication is `Storefront.resolve_token`, which re-reads the graph on
-every call. In particular this module **never calls `.lookup(`** — the
-read-through cache returns the identical `ParticipantRecord`, so a router
-authenticating through it would be indistinguishable from one authenticating
-against the graph (`docs/reviews/salesperson-ui-impl.md` `## Pass 6`). S9
-removes that cache outright, at which point the rule holds structurally.
+own: authentication is `Storefront.resolve_token`, the only way this module
+resolves a participant, and it always re-reads the graph. There is no
+participant-record cache anywhere in `Storefront` (S9 removed it outright), so
+there is no second path that could disagree with the graph.
 
 Steps that extend this module
 -----------------------------
@@ -892,10 +890,9 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
     ) -> ParticipantRecord:
         """Resolve `Bearer <participantId>.<token>` against the **graph**.
 
-        Never `.lookup(`: the read-through cache returns the identical record,
-        so authenticating through it would be indistinguishable from
-        authenticating against the registry — and a deleted participant would
-        keep resolving out of stale memory until the process restarted.
+        `resolve_token` is the only participant-resolution path there is — it
+        always re-reads the graph, so a deleted participant stops resolving
+        immediately rather than lingering out of stale memory.
 
         A *presenter* token presented here parses as participant id
         `"presenter"`, which no `User` carries, so it resolves to `None` and
@@ -1488,12 +1485,12 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
         """
         # **Outside the `try` below, and that is the decision** (P10-9, flagged
         # twice). Moving it in would not be a widening, it would be wrong: the
-        # `except` arm calls `forget_all()` + `clear_all_turns()`, which are
-        # correct only *after* a sweep that may have committed. Run before the
-        # drain they would discard the turn state of turns still running and
-        # never waited on — manufacturing the divergence the arm exists to
-        # report — and the "re-read" they attach to the response would be a
-        # re-read of nothing that happened.
+        # `except` arm calls `clear_all_turns()`, which is correct only *after*
+        # a sweep that may have committed. Run before the drain it would
+        # discard the turn state of turns still running and never waited
+        # on — manufacturing the divergence the arm exists to report — and
+        # the "re-read" it attaches to the response would be a re-read of
+        # nothing that happened.
         #
         # Left here, a timeout on this read reaches the typed handler and
         # answers `504 reset_state_unknown` on a `writes` route. That is
@@ -1520,7 +1517,6 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
             # against the same graph and is the *likelier* second fault — a
             # second timeout still answers `504`, with `participants` present
             # and `null` (§5.2 *Absent versus null on the wire*), never absent.
-            shop.forget_all()
             shop.clear_all_turns()
             try:
                 unresolved: list[dict[str, Any]] | None = [
@@ -1541,7 +1537,6 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
                 participants=unresolved,
             ) from exc
 
-        shop.forget_all()
         shop.clear_all_turns()
         body: dict[str, Any] = {"clearedParticipants": status["userCount"]}
         if status["unscopedCount"]:

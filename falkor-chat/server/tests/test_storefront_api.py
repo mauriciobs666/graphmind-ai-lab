@@ -2649,9 +2649,9 @@ def _subclasses(root: type) -> set[type]:
 def _caught_names(source: str) -> set[str]:
     """Every exception name an `except` clause in `source` catches.
 
-    Parsed, not grepped, for the reason the `.lookup(` tripwire is: prose that
-    quotes a name even to disown it is invisible to an AST walk and is not to a
-    substring search — and this file's own docstrings name most of the family.
+    Parsed, not grepped: prose that quotes a name even to disown it is
+    invisible to an AST walk and is not to a substring search — and this
+    file's own docstrings name most of the family.
     """
     names: set[str] = set()
     for node in ast.walk(ast.parse(source)):
@@ -2901,69 +2901,6 @@ def test_the_preflight_passes_on_a_correctly_seeded_workspace(client):
     """The positive control for the three refusals above: without it, a
     preflight that raised unconditionally would pass all of them."""
     assert client.app.state.storefront_preflight["products"] == 3
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Source tripwires carried from S6's gate
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-def test_the_router_never_authenticates_through_the_record_cache():
-    """`lookup` and `resolve_token` return the identical `ParticipantRecord`,
-    so a router authenticating through the read-through cache would be
-    indistinguishable from one authenticating against the graph — and a deleted
-    participant would keep resolving out of stale memory until the process
-    restarted (`docs/reviews/salesperson-ui-impl.md` `## Pass 6`).
-
-    **This tripwire goes vacuous at S9, and that is the correct end state**
-    (plan v1.19's S9 row): S9 removes the record cache whole, at which point
-    the rule it enforces holds structurally rather than by assertion. It is
-    written anyway because S8 is where it does its work.
-
-    **Checked on the parsed module, not on a `".lookup(" not in source` grep**,
-    and the substitution is a strict improvement rather than a liberty: the
-    grep trips on this very docstring — the same "a section quotes the wrong
-    spelling even to disown it" failure the plan's own `FALKORCHAT_…PRESENTER…`
-    check is worded around — while an AST walk sees calls and cannot be
-    defeated by whitespace either. `getattr(x, "lookup")` is covered too,
-    because that is the way round the first check that costs nothing to write.
-    The checker is proved non-vacuous by
-    `test_the_lookup_tripwire_catches_a_router_that_does_call_lookup`.
-    """
-    assert _lookup_call_sites(Path(storefront_api.__file__).read_text("utf-8")) == []
-    # the positive control — the router does authenticate, through the graph
-    assert "shop.resolve_token(" in Path(storefront_api.__file__).read_text("utf-8")
-
-
-def _lookup_call_sites(source: str) -> list[int]:
-    """Line numbers of every `.lookup(...)` call, and every `getattr(_,
-    "lookup")`, in `source`. Prose and comments are invisible to it."""
-    tree = ast.parse(source)
-    hits: list[int] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        func = node.func
-        if isinstance(func, ast.Attribute) and func.attr == "lookup":
-            hits.append(node.lineno)
-        if (
-            isinstance(func, ast.Name)
-            and func.id == "getattr"
-            and len(node.args) >= 2
-            and isinstance(node.args[1], ast.Constant)
-            and node.args[1].value == "lookup"
-        ):
-            hits.append(node.lineno)
-    return hits
-
-
-def test_the_lookup_tripwire_catches_a_router_that_does_call_lookup():
-    """The tripwire's own control. A source check that cannot be shown to fire
-    is a comment with a `def` in front of it."""
-    assert _lookup_call_sites("record = shop.lookup(participant_id)") == [1]
-    assert _lookup_call_sites('f = getattr(shop, "lookup")\n') == [1]
-    # ...and it is not merely matching the word anywhere
-    assert _lookup_call_sites("# never call .lookup( here\nx = 1\n") == []
 
 
 def test_the_router_is_the_only_thing_between_a_token_and_the_graph():

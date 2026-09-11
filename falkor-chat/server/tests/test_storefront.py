@@ -401,35 +401,30 @@ def test_a_non_participant_user_id_resolves_to_none(seeded, repo):
 
 
 def test_a_deleted_participant_stops_resolving_immediately(seeded, repo):
-    """**Mutation-tested.** Give `resolve_token` a cache-first branch — return
-    `self._records[participant_id]` when present, before the graph read — and
-    this test goes red: the record is cached by `join` and by the successful
-    resolve below, so the deleted participant keeps authenticating out of stale
+    """**Mutation-tested.** Give `resolve_token` a branch that returns a
+    previously resolved record without re-reading the graph, and this test
+    goes red: the deleted participant would keep authenticating out of stale
     memory. The graph read is the only thing that makes the reset real.
     """
     record = seeded.join("Ada", "en")
     assert seeded.resolve_token(_bearer(record)) is not None  # before
-    assert record.participant_id in seeded.cached_ids()  # and it *is* cached
 
     repo.reset_all_participants(WS)
 
     assert seeded.resolve_token(_bearer(record)) is None  # after
-    # The cache is evicted on the way past, so it cannot outlive the registry.
-    assert record.participant_id not in seeded.cached_ids()
 
 
 def test_a_rebuilt_storefront_resolves_a_token_minted_by_the_previous_instance(
     seeded, services
 ):
-    """Restart survival (§4.3) — **mutation-tested**. Make the registry
-    authoritative in-process (drop the graph read and answer `resolve_token`
-    from `self._records` alone) and this goes red: the second instance's map is
+    """Restart survival (§4.3) — **mutation-tested**. Make participant
+    resolution stateful in-process (answer from an in-memory map instead of
+    re-reading the graph) and this goes red: the second instance's map is
     empty, so every participant would be bounced to a fresh `participantId` and
     lose their cart and order, because `customerId == participantId`.
 
     The second `Storefront` is built on its own `Repository` over its own
-    connection and its cache is asserted empty *before* it answers, so the only
-    thing the two instances share is `ws:test` itself.
+    connection, so the only thing the two instances share is `ws:test` itself.
     """
     record = seeded.join("Ada", "pt-BR")
     bearer = _bearer(record)
@@ -437,7 +432,6 @@ def test_a_rebuilt_storefront_resolves_a_token_minted_by_the_previous_instance(
     restarted = _storefront(Services(Repository(db.connect())))
 
     assert restarted is not seeded
-    assert restarted.cached_ids() == frozenset()
     resolved = restarted.resolve_token(bearer)
     assert resolved is not None
     assert resolved.participant_id == record.participant_id
@@ -460,35 +454,6 @@ def test_resolve_token_reads_the_graph_on_every_call(seeded, repo):
     repo.set_participant_record(WS, participant_id=record.participant_id, language="es")
 
     assert seeded.resolve_token(_bearer(record)).language == "es"
-
-
-def test_resolving_refreshes_the_cache_so_lookup_never_serves_a_stale_record(
-    seeded, repo
-):
-    """The *other* half of the read-through cache: `resolve_token`'s `_cache_put`
-    is what keeps `lookup` fresh, and `lookup` is the only reader there is.
-
-    Written because the refresh was unpinned: deleting that one line passed all
-    2439 tests in the repository (`docs/reviews/salesperson-ui-impl.md` Pass 6,
-    S6-1), while `lookup` — the accessor S7/S9 are pointed at — went on serving
-    the join-time record forever. The observer here is therefore `lookup`, not
-    `resolve_token`: the test above already covers the read path, and it stays
-    green under the deletion this one catches.
-
-    `lookup` populates on a miss but never re-reads a hit, so nothing else in
-    the module can refresh the entry.
-    """
-    record = seeded.join("Ada", "en")
-    assert seeded.resolve_token(_bearer(record)) is not None
-    assert seeded.lookup(record.participant_id).language == "en"  # populated, fresh
-
-    repo.set_participant_record(WS, participant_id=record.participant_id, language="es")
-
-    # The cache is still holding the old value — `lookup` alone cannot notice.
-    assert seeded.lookup(record.participant_id).language == "en"
-    # …until the next authenticated request refreshes it as a side effect.
-    assert seeded.resolve_token(_bearer(record)).language == "es"
-    assert seeded.lookup(record.participant_id).language == "es"
 
 
 def test_the_token_comparison_goes_through_hmac_compare_digest(seeded, monkeypatch):
@@ -540,44 +505,6 @@ def test_resolve_token_never_compares_the_hash_with_an_operator():
 
 
 # ── the registry cache — read-through, and never an auth path ────────────────
-
-
-def test_lookup_reads_through_on_a_cache_miss(seeded, services):
-    record = seeded.join("Ada", "en")
-    fresh = _storefront(Services(Repository(db.connect())))
-    assert fresh.cached_ids() == frozenset()
-
-    found = fresh.lookup(record.participant_id)
-
-    assert found is not None
-    assert found.display_name == "Ada"
-    assert found.thread_id == record.thread_id
-    assert fresh.cached_ids() == frozenset({record.participant_id})
-    assert fresh.lookup("p-nobody") is None
-
-
-def test_forget_and_forget_all_drop_cached_records(seeded):
-    ada = seeded.join("Ada", "en")
-    bob = seeded.join("Bob", "en")
-    assert seeded.cached_ids() == frozenset({ada.participant_id, bob.participant_id})
-
-    seeded.forget(ada.participant_id)
-    assert seeded.cached_ids() == frozenset({bob.participant_id})
-
-    seeded.forget_all()
-    assert seeded.cached_ids() == frozenset()
-    # Forgetting is a cache operation, not a logout: the credential still works.
-    assert seeded.resolve_token(_bearer(bob)) is not None
-
-
-def test_the_cache_never_holds_a_raw_token(seeded):
-    """The raw credential exists in the participant's browser and in the record
-    `join` hands back once — not in the registry map."""
-    record = seeded.join("Ada", "en")
-
-    assert record.token is not None
-    assert seeded.lookup(record.participant_id).token is None
-    assert record.without_token().token is None
 
 
 # ── parse_bearer ─────────────────────────────────────────────────────────────
@@ -2469,26 +2396,6 @@ def test_reset_is_participant_disjoint(stocked, conn):
     assert stocked.resolve_token(_bearer(bob)) is not None
 
 
-def test_reset_refreshes_the_cached_record_so_lookup_never_serves_a_dead_thread(
-    stocked, conn
-):
-    """The cached record's `threadId` is stale the instant the reset returns,
-    and `lookup` never re-reads a hit (S6) — so the reset has to write the new
-    one through itself. Without that, S9's worker would post into a thread that
-    no longer exists and raise `ThreadNotFoundError`.
-    """
-    _seed_catalog(conn, _catalog_rows(2))
-    record, _ctx = _busy_participant(stocked, conn)
-    assert stocked.lookup(record.participant_id).thread_id == record.thread_id
-
-    result = stocked.reset_participant(record)
-
-    cached = stocked.lookup(record.participant_id)
-    assert cached.thread_id == result["threadId"]
-    assert cached.display_name == "Ada"
-    assert cached.token is None
-
-
 def test_resetting_a_non_participant_raises_rather_than_reporting_success(
     stocked, conn
 ):
@@ -2501,33 +2408,6 @@ def test_resetting_a_non_participant_raises_rather_than_reporting_success(
 
     with pytest.raises(UnknownParticipantError):
         stocked.reset_participant(ghost)
-
-
-def test_a_reset_that_finds_no_participant_evicts_the_cached_record(stocked, conn):
-    """The eviction on the zero-row branch, pinned.
-
-    Written because it was not: removing `self._cache_drop(participant_id)` from
-    that branch left all 79 tests green, while the success path's `_cache_put`
-    reddened its own test — the asymmetry is the finding (Pass 7, S7-2). The
-    cache must not outlive the registry entry it mirrors, and this is the branch
-    that says the entry is gone.
-
-    The participant is deleted out from under a cached record, which is what
-    `reset_all` does to everyone (S10) — so the record is live in the cache and
-    the reset then finds nothing, in that order.
-    """
-    _seed_catalog(conn, _catalog_rows(2))
-    record, _ctx = _busy_participant(stocked, conn)
-    pid = record.participant_id
-    assert pid in stocked.cached_ids()
-    db.workspace_graph(conn, WS).query(
-        "MATCH (u:User {userId: $pid}) DETACH DELETE u", {"pid": pid}
-    )
-
-    with pytest.raises(UnknownParticipantError):
-        stocked.reset_participant(record)
-
-    assert pid not in stocked.cached_ids()
 
 
 def test_an_unscoped_participant_is_an_alarm_never_a_success(stocked, conn):
@@ -3168,43 +3048,6 @@ def test_a_runtime_error_on_the_re_read_is_also_unknown_never_a_500(
     # subclass, so the discriminator is the type, not the class hierarchy.
     assert isinstance(exc.value, ResetStateUnknownError)
     assert "no actor on the state read" not in str(exc.value)
-
-
-@pytest.mark.parametrize("reread", ["succeeds", "times-out-too"])
-def test_a_reset_that_times_out_evicts_the_cached_record(
-    stocked, conn, monkeypatch, reread
-):
-    """The eviction on the F8/`504` branch — **the path where it matters most**,
-    and the one it was unpinned on (Pass 7, S7-2).
-
-    `_reset_state_unknown`'s own docstring gives the reason: the delete **may
-    have committed**, so the cached `threadId` is exactly as likely to be dead
-    as alive, and *unknown* is the one state in which serving a cached record is
-    a guess. Removing the `_cache_drop` left 79 tests green.
-
-    `resolve_token` refreshes on the participant's next authenticated request,
-    which bounds the damage — but the exposure is an S9 worker calling `lookup`
-    **between** the failed reset and that request, and this is the branch where
-    that window opens. Both orderings are parametrized because the eviction
-    happens before the re-read, so a re-read that also times out must not skip
-    it.
-    """
-    _seed_catalog(conn, _catalog_rows(2))
-    record, _ctx = _busy_participant(stocked, conn)
-    pid = record.participant_id
-    assert pid in stocked.cached_ids()
-
-    def timing_out(*args, **kwargs):
-        raise _Timeout("Timeout reading from socket")
-
-    monkeypatch.setattr(stocked._repo, "reset_participant", timing_out)
-    if reread == "times-out-too":
-        monkeypatch.setattr(stocked._repo, "get_profile", timing_out)
-
-    with pytest.raises(ResetStateUnknownError):
-        stocked.reset_participant(record)
-
-    assert pid not in stocked.cached_ids()
 
 
 def test_the_two_reset_failures_are_different_exceptions(stocked, conn, monkeypatch):

@@ -13,9 +13,9 @@ every graph touch goes through a `Repository`/`Services` method delivered by S4.
 
 The one invariant this module exists to hold
 --------------------------------------------
-**The graph is the participant registry. The in-process map is a cache.**
-`resolve_token` re-reads `User.tokenHash` from the workspace on *every* call and
-never consults the cache, which buys two properties the demo depends on:
+**The graph is the sole participant registry — nothing in this process holds
+a second copy of it.** `resolve_token` re-reads `User.tokenHash` from the
+workspace on *every* call, which buys two properties the demo depends on:
 
 1. **Restart survival.** A single file write under `falkor-chat/` restarts
    uvicorn under `--reload`; with an authoritative in-process map that restart
@@ -24,12 +24,14 @@ never consults the cache, which buys two properties the demo depends on:
    `customerId == participantId` (§4.3). With the graph authoritative, a restart
    is invisible.
 2. **A deleted participant stops resolving immediately.** "Reset everyone"
-   deletes participant `User` nodes; a cache-first `resolve_token` would keep
-   authenticating them out of stale memory until the process was restarted.
+   deletes participant `User` nodes; with no in-process record surviving that
+   delete, the very next `resolve_token` call sees the graph's current state
+   and returns `None` — there is nothing stale to keep authenticating from.
 
 Both properties are pinned by tests in `tests/test_storefront.py` that go red
-when `resolve_token` is made to answer from the cache — that mutation is the
-review this module was written against, not a hypothetical.
+when `resolve_token` is made to answer from an in-process map instead of
+re-reading the graph — that mutation is the review this module was written
+against, not a hypothetical.
 """
 
 from __future__ import annotations
@@ -266,8 +268,8 @@ class ParticipantRecord:
     `token` is the **raw credential**, populated only on the mint path (`join`)
     and only so the caller can hand it to the participant once. It is never
     populated by `resolve_token`, never read back from the graph (only its
-    `sha256` is stored), and never kept in the registry cache — so a record that
-    came from a graph read always carries `token is None`.
+    `sha256` is stored) — so a record that came from a graph read always
+    carries `token is None`.
     """
 
     participant_id: str
@@ -289,10 +291,6 @@ class ParticipantRecord:
             thread_id=row["threadId"],
             joined_at=row["joinedAt"],
         )
-
-    def without_token(self) -> ParticipantRecord:
-        """The cacheable form — identical but carrying no raw credential."""
-        return self if self.token is None else replace(self, token=None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -395,12 +393,14 @@ class Storefront:
     """The storefront's participant registry and turn-state map.
 
     One instance per process, built by `create_app` (S8) and shared by every
-    `/shop/api` route. All of its mutable state — the record cache and the turn
-    map — is per-instance and lock-guarded, never module-global: FastAPI runs
-    sync endpoints on a threadpool and the turn executor below runs on top of
-    that, so both maps are touched concurrently. Keeping them per-instance is
-    also what makes the restart-survival test in `tests/test_storefront.py` mean
-    anything — a second `Storefront` shares nothing with the first but the graph.
+    `/shop/api` route. Its mutable state — the turn-state map — is per-instance
+    and lock-guarded, never module-global: FastAPI runs sync endpoints on a
+    threadpool and the turn executor below runs on top of that, so the map is
+    touched concurrently. Participant identity itself is not held as mutable
+    state here at all — every resolution reads straight through to the graph —
+    which is what makes the restart-survival test in `tests/test_storefront.py`
+    mean anything: a second `Storefront` shares nothing with the first but the
+    graph.
     """
 
     def __init__(
@@ -462,10 +462,6 @@ class Storefront:
         self._storefront_dir = None if directory is None else Path(directory)
         self._clock = clock
         self._id = id_gen
-        # The read-through cache (§4.3). Keyed by `participantId`, holds
-        # token-free records, and is **never** consulted by `resolve_token`.
-        self._records: dict[str, ParticipantRecord] = {}
-        self._records_lock = threading.Lock()
         # The turn-state map (§4.4 measure 1). Absent key == idle.
         self._turns: dict[str, TurnState] = {}
         self._turns_lock = threading.Lock()
@@ -641,7 +637,6 @@ class Storefront:
             self.context_for(participant_id), name=display_name
         )
 
-        self._cache_put(record)
         return record
 
     # ── token verification (§4.3 — the graph answers, always) ───────────────
@@ -649,10 +644,9 @@ class Storefront:
     def resolve_token(self, bearer: str | None) -> ParticipantRecord | None:
         """Resolve `Bearer <participantId>.<token>` to a participant, or `None`.
 
-        **Re-reads the graph on every call.** The registry cache is not
-        consulted here and must never be: it is what would make a deleted
-        participant keep resolving and a restarted process stop resolving anyone
-        (see this module's docstring).
+        **Re-reads the graph on every call, full stop** — no caller, including
+        `resolve_token` itself, is ever handed a record older than the read it
+        just performed.
 
         `None` — never an exception, never a partial answer — for every failure:
         an absent, malformed or wrong-scheme header; an unknown participant id;
@@ -673,9 +667,6 @@ class Storefront:
             self._ws, participant_id=participant_id
         )
         if row is None:
-            # Unknown, or no longer a participant. Evict any cached record: the
-            # cache must not outlive the registry entry it mirrors.
-            self._cache_drop(participant_id)
             return None
 
         stored_hash = row.get("tokenHash")
@@ -685,74 +676,7 @@ class Storefront:
             return None
 
         record = ParticipantRecord.from_row(row)
-        # **This write is load-bearing — do not delete it as "the cache is never
-        # read here anyway".** It is the *refresh* half of the read-through
-        # cache, and the only one there is: `lookup` populates on a miss but
-        # never re-reads a hit, so without this line a record that changed in
-        # the graph after a participant's first `lookup` would be served stale
-        # to `lookup`'s callers indefinitely, while `resolve_token` itself kept
-        # returning the current one. Every authenticated request refreshes the
-        # entry as a side effect of the read it already performed, at no extra
-        # query. Pinned by
-        # `test_resolving_refreshes_the_cache_so_lookup_never_serves_a_stale_record`
-        # (review `docs/reviews/salesperson-ui-impl.md` Pass 6, S6-1 — deleting
-        # this line passed all 2439 tests before that test existed).
-        self._cache_put(record)
         return record
-
-    # ── the registry cache (read-through, never an auth path) ───────────────
-
-    def lookup(self, participant_id: str) -> ParticipantRecord | None:
-        """A participant's record by id — cache first, graph on miss.
-
-        **Not an authentication path.** It answers "who is `p-…`", not "is this
-        credential valid", and the caller must already have resolved that id
-        from a token (or from the presenter roster). Only `resolve_token`
-        decides whether a credential is good, and it never comes through here.
-
-        This is what the cache is *for*: a worker thread holding a
-        `participantId` (S9's turn queue, S7's post-reset profile re-write) needs
-        `displayName`/`threadId`/`language` without a graph round-trip per call.
-        """
-        with self._records_lock:
-            cached = self._records.get(participant_id)
-        if cached is not None:
-            return cached
-        row = self._repo.get_participant_record(
-            self._ws, participant_id=participant_id
-        )
-        if row is None:
-            return None
-        record = ParticipantRecord.from_row(row)
-        self._cache_put(record)
-        return record
-
-    def cached_ids(self) -> frozenset[str]:
-        """The ids currently cached — diagnostics and tests only. Never a
-        roster: the roster is `repository.list_participants`, which reads the
-        graph (S10)."""
-        with self._records_lock:
-            return frozenset(self._records)
-
-    def forget(self, participant_id: str) -> None:
-        """Drop one participant from the cache — for the reset paths (S7/S10),
-        which delete registry entries out from under it. Not required for
-        correctness of `resolve_token` (that re-reads regardless); it keeps the
-        cache from holding records for participants that no longer exist."""
-        self._cache_drop(participant_id)
-
-    def forget_all(self) -> None:
-        """Drop every cached record — "reset everyone" (S10)."""
-        with self._records_lock:
-            self._records.clear()
-
-    def _cache_put(self, record: ParticipantRecord) -> None:
-        with self._records_lock:
-            self._records[record.participant_id] = record.without_token()
-
-    def _cache_drop(self, participant_id: str) -> None:
-        with self._records_lock:
-            self._records.pop(participant_id, None)
 
     # ── the turn-state map (§4.4 measure 1) ─────────────────────────────────
 
@@ -1586,8 +1510,7 @@ class Storefront:
         this very request (`resolve_token` re-reads every time), and
         `displayName`/`language` are exactly the fields the reset does not
         touch. Reading them back afterwards would cost a query for the same
-        answer, and reading them from the registry cache would be worse — the
-        cached `threadId` is stale the instant this returns.
+        answer this record already carries.
 
         Returns `{"threadId": …, "language": …}` — §5.2's `200` body. Raises,
         for each of the four ways this can end other than success:
@@ -1658,7 +1581,6 @@ class Storefront:
             raise self._reset_state_unknown(ctx, participant_id) from exc
 
         if status is None:
-            self._cache_drop(participant_id)
             raise UnknownParticipantError(
                 f"{participant_id!r} is not a participant of ws:{self._ws}"
             )
@@ -1675,7 +1597,6 @@ class Storefront:
         # erase the notice either.
         self._clear_turn_failed(participant_id)
         self._services.save_profile(ctx, name=participant.display_name)
-        self._cache_put(replace(participant, thread_id=status["threadId"]))
         return {"threadId": status["threadId"], "language": participant.language}
 
     def _reset_state_unknown(
@@ -1683,9 +1604,8 @@ class Storefront:
     ) -> ResetStateUnknownError:
         """Build F8's `504` after a reset timed out on the way to FalkorDB.
 
-        Drops the cached record first — the delete may have committed, which
-        makes the cached `threadId` wrong — then re-reads state so the response
-        can report what the graph actually holds. A second `TimeoutError` from
+        Re-reads state so the response can report what the graph actually
+        holds — the delete may have committed. A second `TimeoutError` from
         that re-read, **or a `RuntimeError` out of `get_state`**, is swallowed
         into `state=None`: still a `504`, never a `500`, and never "nothing
         changed".
@@ -1704,7 +1624,6 @@ class Storefront:
         `get_state` is a bug this method has no reason to hide behind
         "unknown".
         """
-        self._cache_drop(participant_id)
         try:
             state: dict[str, Any] | None = self.get_state(ctx)
         except (redis_exceptions.TimeoutError, RuntimeError):
