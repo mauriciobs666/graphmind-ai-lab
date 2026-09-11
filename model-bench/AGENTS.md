@@ -9,23 +9,23 @@ for the full design.
 
 ## Current state
 
-**Stage S2, most of the way through — the outside world is reachable, but no run has ever been
-executed end to end.** `modelbench/` holds `fingerprint`, `results`, `stats`, `report`, `roles`,
-`cli`, `__main__` and — S2's — `packs` (the real loader: `load_pack`/`validate_pack`, content
-hashing, the AST import allowlist, the row-count identity), `lmstudio`, `hostinfo`, `tooling` and
-`convo` (`assemble` and the bounded per-turn `drive`); the CLI ships `compare` (with
-`--negative-control`), `index rebuild`, `models --tested` and `attest`.
+**Stage S2 is closed — the outside world is reachable, but no run has ever been executed end to
+end.** `modelbench/` holds `fingerprint`, `results`, `stats`, `report`, `roles`, `packs` (the real
+loader: `load_pack`/`validate_pack`, content hashing, the AST import allowlist, the row-count
+identity), `lmstudio`, `hostinfo`, `tooling`, `convo` (`assemble` and the bounded per-turn `drive`)
+and `runner` (`RunConfig`, `RunRefused`, the `ItemScorer`/`ConversationScorer` scorer-seam
+Protocols, `run_pack`'s ten-step capture order, both driving loops —
+`_drive_single_call_items` and `_drive_conversations`/`_turn_timings` — and `latency_block`'s
+`LatencyBlock` accumulation, satisfying spec §5's nine invariants). The CLI ships all six commands
+— `compare` (with `--negative-control`), `index rebuild`, `models --tested`, `attest`, `validate`
+and `run` — wired into `cli.py`'s `main()`.
 
-**What S2 still owes, and each one's live consequence.** `runner.py` does not exist yet
-(`docs/plans/small-model-benchmarking-runner-spec.md` is its spec). `results.py` carries the
-timing shapes it needs — `CallTiming`, `ItemTiming`, `ItemResult.timing` (`latencyMs` is now a
-derived `@property` over it), `LatencyBlock`, `RunResult.latency` and
-`RunResult.attestationTripWire` — but no code builds one yet: `latency_block()`'s accumulation
-pass is `runner.py`'s, so every stored/compared run still carries `latency=None` and `report.py`'s
-latency slots stay unreachable until it lands. The `validate` and `run` commands are absent, and
-`tests/test_cli.py::test_s2s_remaining_commands_are_not_shipped_yet` asserts **those two** exit `2`,
-so that half of the stage boundary is checked rather than promised (`attest` shipped and left the
-assertion).
+**What S3 owes.** `run` refuses every pack today: `_load_item_scorer`/`_load_conversation_scorer`
+(`runner.py`) raise `NotImplementedError` unconditionally, since no concrete `ItemScorer`/
+`ConversationScorer` ships before S3. The first real end-to-end run — the `embedder` pack,
+`modelbench/scoring/retrieval.py` and `scripts/refresh_golden.py` — is S3's own scope
+(`docs/plans/small-model-benchmarking.md` §4 S3). `validate --strict` also stays a deliberate
+`NotImplementedError` deferral (runner-spec §9) until the plan states a ruling.
 `docs/plans/small-model-benchmarking.md` §4 sequences S2–S8; `docs/HISTORY.md` carries the unit
 trail.
 

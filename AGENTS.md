@@ -54,9 +54,10 @@ and OpenCode artifacts).
   LM Studio: one model × one versioned task pack per run, stored with a full environment
   fingerprint, compared only within a role. Python 3.12, **zero runtime dependencies**; no CI hook,
   no pass/fail gate, no leaderboard, and no runtime read outside `model-bench/` (golden data is
-  copied in and versioned here). **Skeleton only so far** — stage S0 of
-  `docs/plans/small-model-benchmarking.md`, whose requirements and plan stay at the repo root. See
-  `model-bench/README.md` and `model-bench/AGENTS.md`.
+  copied in and versioned here). **Stage S2 is closed** — the adapter, pack loader, runner and full
+  CLI are built and wired, but no run has been executed against a real model yet. Requirements and
+  plan stay at the repo root, `docs/plans/small-model-benchmarking.md`. See `model-bench/README.md`
+  and `model-bench/AGENTS.md`.
 - `skills/` — **Agent Skills home** (`SKILL.md` packages, the open `agentskills.io` standard)
   for the repo's cross-tool / Claude-Code-oriented capabilities: `agent-maintenance` +
   `agent-standards` (cobb's machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern

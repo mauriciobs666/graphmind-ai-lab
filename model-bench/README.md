@@ -32,12 +32,15 @@ dependency.
 
 ## Status
 
-**Stage S1 — the harness core is built; nothing calls a model yet.** What exists is the part that
-decides whether a number may be printed: the environment fingerprint and its validation, the run
-store and its quarantine-on-read, the statistics module, the markdown comparison, and three
-commands. What does not exist yet is anything that produces a number: the LM Studio adapter, the
-pack loader and the five task packs are stages S2–S7 of
-`docs/plans/small-model-benchmarking.md` §4. The whole current suite runs offline.
+**Stage S2 is closed — the adapter, pack loader, runner and CLI are all built and wired; no run has
+been executed against a real model yet.** What exists now is both halves: the part that decides
+whether a number may be printed (the environment fingerprint and its validation, the run store and
+its quarantine-on-read, the statistics module, the markdown comparison) and the part that would
+produce one (the LM Studio adapter, the pack loader, the runner's capture-order orchestration, and
+all six CLI commands). What is still missing is a concrete scorer for any role — `run` refuses
+every pack today until the first one ships in stage S3 of
+`docs/plans/small-model-benchmarking.md` §4, which is also this tool's first real end-to-end run.
+The whole current suite runs offline.
 
 ## Quick start
 
@@ -58,6 +61,10 @@ other components' suites.
 ./run.sh compare --pack <pack-id> [--models a,b] [--session <id>] [--negative-control] [--out <path>]
 ./run.sh index rebuild            # regenerate results/index.csv from results/runs/
 ./run.sh models --tested          # models with stored results (never a deterministic arm)
+./run.sh attest [--api-base-url <url>] [--set key=value ...]   # write host.json
+./run.sh validate --pack <path> [--strict]   # structural pack check, no LM Studio needed
+./run.sh run --pack <id> --model <key> [--session <id>] [--reference <key>] [--warmup <n>]
+    [--first-call-timeout <s>] [--request-timeout <s>]   # one model x one pack, against live LM Studio
 ```
 
 `compare` reads `results/runs/`, renders the markdown comparison to `reports/` **and** stdout, and
@@ -70,7 +77,11 @@ arithmetic rather than a measurement. It proves the mode is wired and nothing mo
 it writes says so in a banner at the top — the real negative control is two *independent* runs of
 the same model, and that is an acceptance step.
 
-`attest`, `validate` and `run` are stage S2 and are deliberately not wired yet.
+`attest` writes the operator-attested half of the fingerprint (`host.json`). `validate` checks a
+pack's structural integrity with no LM Studio connection at all. `run` drives one model through one
+pack against a live LM Studio, following the fingerprint's capture order, and stores the result on
+success — but it refuses every pack today, since no concrete per-role scorer exists yet (stage
+S3's job).
 
 Python 3.12, matching every other component. **Zero runtime dependencies** — stdlib only, on
 purpose: a benchmarking tool whose own dependency tree can rot is a tool whose old results stop
