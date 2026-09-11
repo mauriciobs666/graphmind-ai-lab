@@ -1,6 +1,6 @@
 # The one salesperson UI — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (M<n> TBD)
+> **Status:** active · **Owner:** `teco` · **Tracks:** — (M<n> TBD) · **Extended by:** `docs/plans/salesperson-ui2-coordination.md`
 
 ## Goal
 
@@ -13,6 +13,17 @@ standalone `salesperson/` Streamlit app.
 **Definition of done:** AC-1…AC-11 verified; the old `salesperson/` app retired; documentation
 (root `AGENTS.md`, component READMEs, `HISTORY.md`, a `tico` user manual) reflects the delivered
 surface.
+
+## S9 closed this document out — all further work continues in `docs/plans/salesperson-ui2-coordination.md`
+
+**This document stays intact as the authoritative record for everything through S9's close** (all
+five sub-units accepted and committed). It is no longer being appended to — the coordination
+crossed the point where its size (dozens of retrospective sections plus the full U1-S9e ledger) made
+continuing to grow it costly for every future resume, and S9's close is a clean phase boundary (see
+the successor's "Why this document exists" section for the full reasoning, licensed by `AGENTS.md`'s
+doc-collision rule 5). **Do not add new ledger rows or RESUME HERE updates here — open the
+successor instead.** Everything below this point (the historical `RESUME HERE`, the ledger, and all
+the dated retrospective sections) remains exactly as it was, for citation.
 
 ## RESUME HERE — state as of 2026-09-11, **S9 fully closed** (all five sub-units accepted). Next: S9f (rides `qa-engineer`), S10 (presenter surface move), S11 (demo bring-up script) — the remaining backend tail before the frontend push (S12a-d/S13/S14). Pacing question still open with the stakeholder
 
