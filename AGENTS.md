@@ -1,12 +1,11 @@
 # graphmind-ai-lab
 
-A monorepo of independent, self-contained components — there is **no root-level build/test
-script**, and no root pytest config either, so run a component's suite **with that component as the
-working directory**: from the repo root, pytest sets `rootdir` to the monorepo, ignores the
-component's own `testpaths`, and walks into other components' tests. Each component carries its own
-docs and run instructions. Two themes run through the
-repo: **graph-backed AI apps** (FalkorDB + LLMs) and **agent/skill engineering** (Claude Code
-and OpenCode artifacts).
+A monorepo of independent, self-contained components, each carrying its own docs and run
+instructions. **No root-level build/test script and no root pytest config** — run a component's
+suite **with that component as the working directory**: from the repo root, pytest sets `rootdir`
+to the monorepo, ignores the component's own `testpaths`, and walks into other components' tests.
+Two themes run through the repo: **graph-backed AI apps** (FalkorDB + LLMs) and **agent/skill
+engineering** (Claude Code and OpenCode artifacts).
 
 ## Structure
 
@@ -14,69 +13,55 @@ and OpenCode artifacts).
   everything**: chat history, workspace/reference data, workflow definitions and execution
   traces. GraphRAG (in-graph vector + traversal) and graph-state-machine workflows. Design and
   query library are locked and live-verified. Milestone status is authoritative in
-  `falkor-chat/docs/BACKLOG.md`. See `falkor-chat/README.md` and `falkor-chat/AGENTS.md`.
-- `opencode/` — Personal OpenCode configuration: custom agents and OpenCode-only skills.
-  - `agents/` — `rpg`, `coding-senior`, and `severino/` (a full LM-Studio-backed local agent project).
-  - `skills/` — OpenCode-authored `SKILL.md` packages (`comparison-driver`, `python-coding`,
-    `skill-builder`, `user-preferences`, `write-tutorial`); OpenCode's global config symlinks here,
-    not to the repo's shared `skills/`. See `opencode/skills/README.md`.
-  - `local-llm.md` — notes on running OpenCode against a local LM Studio server.
+  `falkor-chat/docs/BACKLOG.md`.
+- `opencode/` — Personal OpenCode configuration: custom agents (`agents/` — `rpg`, `coding-senior`,
+  `severino/`, a full LM-Studio-backed local agent project) and OpenCode-only `SKILL.md` packages
+  (`skills/`; OpenCode's global config symlinks here, **not** to the repo's shared `skills/`).
+  `local-llm.md` covers running OpenCode against a local LM Studio server.
 - `cpg/` — Code-Property-Graph component code home: durable CPG reload artifacts
   (`.cpg-artifacts/`, gitignored) for the Joern-built graphs (`cpg_<component>`) loaded into
-  FalkorDB. The MCP server is **not** here — it is the top-level `cypher-mcp/` (below), a generic
-  Cypher-query tool rather than a CPG-specific one.
-- `cypher-mcp/` — the **`cypher` MCP server** (stdio, Python) exposing the single read-only tool
-  `mcp__cypher__query(graph, cypher)` over FalkorDB — generic (not limited to `cpg_*` graphs). It
-  **runs containerized** — the launch surface is `cypher-mcp/docker-run.sh`, whose image tag is a
-  **content hash of the build inputs**, so a stale image is unrepresentable;
-  `cypher-mcp/build.sh` is the supported build step. The container reaches FalkorDB over
-  the host's published port via `--add-host=host.docker.internal:host-gateway`, so it does **not**
-  touch the shared `falkordb-dev` container. The **host venv is retained** (`setup.sh`/`run.sh`)
-  as the fast test loop and the fallback. See `cypher-mcp/README.md`. The repo-root `.mcp.json`
-  that wires it is **Claude-Code-only** — OpenCode and Kiro configure MCP through their own files
-  and neither is wired (backlog C-310).
+  FalkorDB. The MCP server is **not** here — it's the top-level `cypher-mcp/`, generic rather than
+  CPG-specific.
+- `cypher-mcp/` — the **`cypher` MCP server** (stdio, Python): the single read-only tool
+  `mcp__cypher__query(graph, cypher)` over FalkorDB, generic (not `cpg_*`-only). **Runs
+  containerized** via `cypher-mcp/docker-run.sh` (built by `build.sh`); image tag is a **content
+  hash of the build inputs**, so a stale image is unrepresentable, and it reaches FalkorDB over the
+  host's published port rather than the shared `falkordb-dev` container. **Host venv retained**
+  (`setup.sh`/`run.sh`) as the fast test loop and fallback. Repo-root `.mcp.json` wiring is
+  **Claude-Code-only** — OpenCode/Kiro wire MCP their own way, neither wired yet (backlog C-310).
 - `claude/` — Custom Claude Code subagents (one folder per agent, each with a `kaizen/` plan +
-  history). Every agent's raw capture writes directly into one shared `kaizen_team` FalkorDB
-  graph, so one query reaches every agent's raw learnings; `cobb` distills it. See
-  `claude/README.md` (human catalog) and `claude/AGENTS.md` (agent context — including the
-  `:KaizenEntry` graph shape; `claude/CLAUDE.md` is a `@AGENTS.md` import stub).
-- `kiro/` — A checked-in Kiro CLI agent (`falkor-chat-demo`) that connects to `falkor-chat`'s MCP
-  server as a client, restricted to `send_message`/`read_messages`, for a live demo of
-  Kiro-to-falkor-chat MCP connectivity; plus a broader, still-Draft multi-agent Kiro vision in
-  `kiro/DESIGN.md`. See `kiro/README.md` and `kiro/DESIGN.md`.
+  history). Every agent's raw capture writes into one shared `kaizen_team` FalkorDB graph, so one
+  query reaches every agent's raw learnings; `cobb` distills it. `claude/AGENTS.md` carries the
+  agent context, incl. the `:KaizenEntry` graph shape; `claude/CLAUDE.md` is a `@AGENTS.md` import
+  stub.
+- `kiro/` — A checked-in Kiro CLI agent (`falkor-chat-demo`) connecting to `falkor-chat`'s MCP
+  server as a client, restricted to `send_message`/`read_messages`, demoing Kiro-to-falkor-chat MCP
+  connectivity; plus a broader, still-Draft multi-agent Kiro vision in `kiro/DESIGN.md`.
 - `mcp-monitor/` — Standalone, generic MCP tool-result watcher: polls a configured MCP tool on an
-  interval, matches its result against a regex, and launches a configured command line on match —
-  its own MCP *client*, Python 3.12 + `mcp` SDK, TOML config, one `asyncio.Task` per watch. The
-  driving scenario is auto-waking a headless agent CLI on an `@mention` in a `falkor-chat` thread
-  (zero falkor-chat-side changes needed), but genericity is proven against a second, purpose-built
-  fake MCP server too. See `mcp-monitor/README.md` and `mcp-monitor/AGENTS.md`.
+  interval, matches its result against a regex, and launches a command on match — its own MCP
+  *client*, Python 3.12 + `mcp` SDK, TOML config, one `asyncio.Task` per watch. Driven by
+  auto-waking a headless agent CLI on an `@mention` in a `falkor-chat` thread (zero
+  falkor-chat-side changes needed); also proven generic against a fake MCP server.
 - `model-bench/` — Standalone, human-started harness for benchmarking **small local LLMs** against
   LM Studio: one model × one versioned task pack per run, stored with a full environment
   fingerprint, compared only within a role. Python 3.12, **zero runtime dependencies**; no CI hook,
-  no pass/fail gate, no leaderboard, and no runtime read outside `model-bench/` (golden data is
-  copied in and versioned here). **Stage S2 is closed** — the adapter, pack loader, runner and full
-  CLI are built and wired, but no run has been executed against a real model yet. Requirements and
-  plan stay at the repo root, `docs/plans/small-model-benchmarking.md`. See `model-bench/README.md`
-  and `model-bench/AGENTS.md`.
-- `skills/` — **Agent Skills home** (`SKILL.md` packages, the open `agentskills.io` standard)
-  for the repo's cross-tool / Claude-Code-oriented capabilities: `agent-maintenance` +
-  `agent-standards` (cobb's machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern
-  CPG→FalkorDB pipeline), `cpg-analysis` (the consumer side), `python-web-quirks` (live-verified
-  asyncio/Starlette/FastAPI/pydantic gotchas — including test-harness ones — for
-  `coder`/`tdd-engineer`/`architect`/`analyst`/`qa-engineer`).
-  OpenCode-authored skills used only
-  by OpenCode agents live separately, in `opencode/skills/`. See `skills/README.md`. Format
-  ports across Claude Code/OpenCode/Kiro; tool-gating & activation behavior do not — verify per
-  tool.
-- `deprecated/` — **retired components, preserved but not maintained.** Nothing here gets bug
-  fixes, dependency upgrades or refactors, and nothing here is a precedent for new work — do
-  not copy its patterns or conventions out. It holds `deprecated/salesperson/`, the standalone
+  no pass/fail gate, no leaderboard, no runtime read outside `model-bench/` (golden data copied in
+  and versioned here). Requirements/plan live at the **repo root**, not `model-bench/docs/`;
+  current stage is in `model-bench/AGENTS.md`.
+- `skills/` — **Agent Skills home** (`SKILL.md` packages, the open `agentskills.io` standard) for
+  cross-tool / Claude-Code-oriented capabilities: `agent-maintenance` + `agent-standards` (cobb's
+  machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern CPG→FalkorDB pipeline),
+  `cpg-analysis` (the consumer side), `python-web-quirks` (live-verified asyncio/Starlette/
+  FastAPI/pydantic gotchas, incl. test-harness ones, for `coder`/`tdd-engineer`/`architect`/
+  `analyst`/`qa-engineer`). OpenCode-only skills live in `opencode/skills/`. Format ports across
+  Claude Code/OpenCode/Kiro; tool-gating & activation behavior do not — verify per tool.
+- `deprecated/` — **retired components, preserved but not maintained**: no bug fixes, upgrades, or
+  refactors, and no precedent for new work. Holds `deprecated/salesperson/`, the standalone
   Streamlit sales-assistant chatbot (its own `kg_pastel` FalkorDB graph + LangChain/LangGraph;
-  optional local LLM via LM Studio), retired because it talks to an older, separate backend
-  rather than falkor-chat's workflow engine. Its replacement — one business-facing UI for the
-  workflow-engine-backed `salesperson` agent — is specified in
-  `docs/requirements/salesperson-ui.md` and planned in `docs/plans/salesperson-ui.md`, but is
-  **not built yet**. See `deprecated/README.md`.
+  optional local LLM via LM Studio), retired because it talks to an older, separate backend rather
+  than falkor-chat's workflow engine. Its replacement — one business-facing UI for the
+  workflow-engine-backed `salesperson` agent — is specified in `docs/requirements/salesperson-ui.md`
+  and planned in `docs/plans/salesperson-ui.md`, but **not built yet**.
 
 ## Component docs (read before working in a component)
 
@@ -86,31 +71,29 @@ and OpenCode artifacts).
 | `opencode/` | `opencode/agents/severino/README.md` · `opencode/local-llm.md` · `opencode/skills/README.md` |
 | `cpg/` | `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
 | `cypher-mcp/` | `cypher-mcp/README.md` |
-| `claude/` | `claude/README.md` · `claude/AGENTS.md` (Claude Code reads it via the `claude/CLAUDE.md` import) |
-| `kiro/` | `kiro/README.md` · `kiro/docs/requirements/kiro-demo-agent.md` · `kiro/DESIGN.md` (Draft/vision, not the built system's spec) |
+| `claude/` | `claude/README.md` · `claude/AGENTS.md` |
+| `kiro/` | `kiro/README.md` · `kiro/docs/requirements/kiro-demo-agent.md` · `kiro/DESIGN.md` |
 | `mcp-monitor/` | `mcp-monitor/README.md` · `mcp-monitor/AGENTS.md` |
 | `model-bench/` | `model-bench/README.md` · `model-bench/AGENTS.md` · `docs/requirements/small-model-benchmarking.md` · `docs/plans/small-model-benchmarking.md` |
 | `skills/` | `skills/README.md` · `skills/*/SKILL.md` |
-| `deprecated/` | `deprecated/README.md` · `deprecated/salesperson/README.md` · `deprecated/salesperson/AGENTS.md` (retired — reference only) |
+| `deprecated/` | `deprecated/README.md` · `deprecated/salesperson/README.md` · `deprecated/salesperson/AGENTS.md` |
 
 ## Working in this repo
 
-- **FalkorDB chat platform** → `falkor-chat/`, follow `falkor-chat/AGENTS.md` (`falkor-chat/CLAUDE.md`
-  imports it). This is FalkorDB
-  OpenCypher (not Neo4j): no APOC/GDS, vector indexes via DDL, index-before-constraint. Keep the
-  query suite green (`./scripts/test_queries.sh`).
+- **FalkorDB chat platform** → `falkor-chat/`, follow `falkor-chat/AGENTS.md`
+  (`falkor-chat/CLAUDE.md` imports it) — FalkorDB OpenCypher (not Neo4j): no APOC/GDS, vector
+  indexes via DDL, index-before-constraint. Keep the query suite green
+  (`./scripts/test_queries.sh`).
 - **OpenCode agent tasks** → `opencode/`, follow the severino docs / `opencode/local-llm.md`.
 - **Skill tasks** → `skills/` for cross-tool/Claude-Code-oriented skills, `opencode/skills/` for
   OpenCode-only ones; follow each `<name>/SKILL.md` and the directory's `README.md`.
-- **Retired components** → `deprecated/`. Read them for reference; do not maintain, extend, or
-  copy from them. The retired Streamlit chatbot is `deprecated/salesperson/`; a request to work
-  on "the salesperson app" is almost certainly about its not-yet-built replacement
-  (`docs/requirements/salesperson-ui.md`), so confirm before touching anything under
-  `deprecated/`.
-- **Claude subagent / skill tasks** → `claude/` (agents) and `skills/` (skills), follow
-  `claude/AGENTS.md`. Adding/editing/renaming an agent or skill means updating its source, its
-  `kaizen/{plan,history}.md`, the relevant catalog (`claude/README.md` for agents,
-  `skills/README.md` for skills), and `claude/AGENTS.md` in the same change.
+- **Retired components** → `deprecated/` — read for reference only, never maintained, extended, or
+  copied from. The retired Streamlit chatbot is `deprecated/salesperson/`; "the salesperson app"
+  almost certainly means its not-yet-built replacement (`docs/requirements/salesperson-ui.md`) —
+  confirm before touching anything under `deprecated/`.
+- **Claude subagent / skill tasks** → `claude/` (agents) and `skills/` (skills); follow
+  `claude/AGENTS.md`, which also owns the add/edit/rename update rule (source, `kaizen/`, catalogs)
+  for agents and skills alike.
 - **Context-file convention** — an `AGENTS.md` / `CLAUDE.md` / `.kiro/steering/*.md` file is
   **always loaded, in full, into every session in its scope**, so it is the most expensive prose
   in the repo and the only documentation with a hard duty to stay small. It answers one question
@@ -118,33 +101,30 @@ and OpenCode artifacts).
   - **It is rewritten, not appended to.** The `docs/` rule below ("an open item is rewritten")
     applies here with more force: a context file never freezes, so it never sheds weight on its
     own. When a change makes an entry wrong, **replace the entry** — never add your version's
-    paragraph after the previous author's. The failure is silent and cumulative:
-    `falkor-chat/AGENTS.md`'s `seed_salesperson.sh` row reached **5,174 characters over seven
-    commits**, each appending one version's story, before anyone read it whole.
+    paragraph after the previous author's. The failure is silent and cumulative — precedent in
+    `claude/cobb/kaizen/history.md` (the `falkor-chat/AGENTS.md` `seed_salesperson.sh` row).
   - **History is not context, and never a third copy of it.** Version sequences, "as of K-0NN",
     "fixed on `<date>`", "now fails loudly", rationale for a settled decision — all belong to
-    `<module>/docs/HISTORY.md`, the design doc, or the docstring on the constant concerned; a
-    context file **cites** that home in a clause. A fact earns a place here only by being a
-    **live constraint** — something that changes what the reader does next. Duplicated prose
-    drifts, and the always-loaded copy is the one that drifts unnoticed.
+    `<module>/docs/HISTORY.md`, the design doc, or the docstring concerned; a context file
+    **cites** that home in a clause. Duplicated prose drifts, and the always-loaded copy is the
+    one that drifts unnoticed.
   - **The bar:** `awk 'length($0)>700{print FILENAME": "NR}' $(git ls-files '*AGENTS.md')` —
     a line past ~700 chars is a cell being used as a changelog. Whole file: **~2,500 words**.
     Smells, not gates.
-- **Module documentation convention** — all of a module's documentation lives under
-  `<module>/docs/`: `BACKLOG.md` (living backlog; `K-`numbered items), `HISTORY.md` (dated
-  change log — append an entry for every delivered change), plus `requirements/`, `plans/`,
-  `reviews/`, `test-plans/`, `test-reports/`, `manuals/`. `falkor-chat/` is the reference
-  implementation; other modules adopt the structure when they first need it. Modules do **not**
-  use `kaizen/` dirs — that convention exists only for agent folders (`claude/<agent>/kaizen/`).
-  - **`manuals/` is the one end-user-facing kind** — everything else in this list is engineering
-    process documentation (requirements/design/review/test artifacts for the people building the
-    system). A `manuals/<slug>.md` document explains how to *use* the shipped product: screens,
-    workflows, recovery from mistakes — never internal architecture or file layout. Owned by
-    `tico`, illustrated with Mermaid diagrams wherever a picture replaces a paragraph of
-    narration (`claude/tico/tico.md`, Mode 3). Unlike the other kinds, a manual doesn't have to
-    shadow one feature's topic slug — it's often broader (a whole workflow or subsystem from the
-    user's point of view); when a manual does document one feature end-to-end, it reuses that
-    feature's slug per the family rule below.
+- **Module documentation convention** — a module's documentation lives under `<module>/docs/`:
+  `BACKLOG.md` (living backlog; `K-`numbered items), `HISTORY.md` (dated change log — append an
+  entry per delivered change), plus `requirements/`, `plans/`, `reviews/`, `test-plans/`,
+  `test-reports/`, `manuals/`. `falkor-chat/` is the reference implementation; other modules adopt
+  it when first needed. Modules do **not** use `kaizen/` dirs — that's for agent folders only
+  (`claude/<agent>/kaizen/`).
+  - **`manuals/` is the one end-user-facing kind** — everything else here is engineering-process
+    documentation (requirements/design/review/test artifacts for the people building the system).
+    A `manuals/<slug>.md` explains how to *use* the shipped product — screens, workflows, recovery
+    from mistakes, never internal architecture or layout. Owned by `tico`, illustrated with Mermaid
+    diagrams wherever a picture replaces a paragraph (`claude/tico/tico.md`, Mode 3). Unlike other
+    kinds, a manual need not shadow one feature's topic slug — it's often broader (a whole workflow
+    or subsystem); when it does document one feature end-to-end, it reuses that slug per the
+    family rule below.
   - **A document that freezes does not move.** It gets `Status: archived` in its own header
     block and stays exactly where it is.
   - **A living document is compacted at milestone close, not only appended to.** A document read
