@@ -6846,3 +6846,142 @@ So the `504`'s evidence key on this route is `participants`, never `state`, and 
 `RuntimeError: cannot schedule new futures after shutdown`, `type(x) is RuntimeError` → `True`. A
 subclass-only mapping in the route therefore does not catch it, and `enqueue_turn`'s `except
 BaseException` re-raises it unchanged (`storefront.py:1020-1026`).
+
+## Pass 24 — 2026-09-10 (S9b: cancellation of a queued turn, in front of `_await_quiesce`)
+
+**Reviewed:** the uncommitted working-tree diff delivering S9b — `server/falkorchat/storefront.py`
+(+~200/−~10: `TurnState.future`, `_attach_turn_future`, `_cancel_queued_turn`, the `set_turn_state`
+`thinking`-flip now a `replace`, `enqueue_turn`/`reset_participant` call-site changes),
+`server/falkorchat/storefront_api.py` (docstring-only), `server/tests/test_storefront.py` (+6
+tests), `docs/SERVER.md` §1.3's `QUIESCE_S` row, `docs/HISTORY.md`. Baseline: `git diff HEAD`;
+nothing is committed. **Against:** §4.8's "Reset mine" bullet and §5.1's S9 row in
+`docs/plans/salesperson-ui.md`, `## Pass 7` Ruling 3 (this file), and the pre-existing
+`_await_quiesce`/`reserve_turn`/`release_turn`/`set_turn_state` invariants from S9a (`## Pass
+17`–`## Pass 21`). **Out of scope, per the coordinator's brief:** teco's own pre-verification
+(file-set contention, compilation, the 6 tests passing, teco's own ordering-mutation, the SERVER.md
+diff, the phrasing sweep) — not re-run; `skills/**`, `claude/**`, `model-bench/**`,
+`docs/requirements/document-ingestion*.md` — not touched.
+
+**Verdict: approve with suggestions.** The mechanism is sound: I constructed and ran three
+interleavings the design has to survive — concurrent double-cancel, `clear_all_turns()` landing
+mid-cancel, and a late `_attach_turn_future` racing across *two* intervening bookings, not just
+one — and all three held exactly as the docstrings claim (executed, §"Verified" below). The
+surviving mutation (M6) is genuinely inert: I applied it to a full copy of the delivered tree and
+ran the whole of `test_storefront.py` against it — 104/104 still pass, confirming the only
+consumer of `TurnState.future` (`_cancel_queued_turn`) cannot observe the difference. The delivered
+call-site ordering in `reset_participant` matches §4.8's bullet and Ruling 3 verbatim, not a
+paraphrase. Two minor findings and one nit, none of them load-bearing on correctness.
+
+**CPG: considered, not relevant — `cpg_falkorchat` is stale for these files by the coordinator's
+own account (10 commits behind on `falkor-chat/server`, 6 on `storefront.py`/`storefront_api.py`),
+so per the brief I read source directly and did not query it.**
+
+**Environment note.** I ran the full suite once (`.venv/bin/python -m pytest -q` from
+`falkor-chat/server`): **2648 passed, 14 deselected**, and `--collect-only` independently reads
+**2648/2662 collected** — both match `HISTORY.md`'s claimed "after" figures under two counting
+definitions. This run's teardown wipes the shared `reference` graph, per `falkor-chat/AGENTS.md`'s
+documented hazard — expected, not a finding, and I did not re-seed it (that is teco's to do, per
+the brief). All executed probes below ran against copies in the session scratchpad or against
+disposable `Future()`/`Storefront` objects with a dummy `services` collaborator (no `self._repo`
+calls reached), touching neither `reference` nor `ws:test` beyond the one full-suite run.
+
+### Verified (executed) — the three race questions the brief asked me to probe
+
+1. **Concurrent double-cancel is race-free.** Two threads calling `Storefront._cancel_queued_turn`
+   on the same never-run `Future()` concurrently: `results == [True, False]` every run, the future
+   ends `cancelled() is True`, and the entry is gone exactly once. This holds because CPython's
+   `Future.cancel()` is idempotent (`True` again once already `CANCELLED`) and `release_turn`'s
+   ownership check refuses the loser's redundant delete — the two mechanisms compose correctly
+   without either one being written to anticipate the other. Script:
+   `<scratchpad>/probe1_concurrent_cancel.py`.
+2. **`clear_all_turns()` landing between the lock-protected read and `future.cancel()` does not
+   corrupt the fresh booking.** Forced via a wrapped `Future.cancel` that calls `clear_all_turns()`
+   + a fresh `reserve_turn` before delegating to the real `cancel`: the orphan's future still ends
+   `cancelled() is True` (it will never run), `_cancel_queued_turn` itself returns `False`
+   (`release_turn`'s ownership check refuses the stranger's entry), and the fresh booking's live
+   entry is provably untouched (`turn_state("p1").booking == fresh_booking`). This is exactly
+   `_cancel_queued_turn`'s own documented case 3 ("the orphan is cancelled, the live entry
+   stands"), and it reproduces under an actual forced interleaving, not just the sequential-call
+   shape the delivered test `test_the_cancel_reaches_the_live_booking_and_never_the_orphan`
+   exercises. Script: `<scratchpad>/probe2_clear_race.py`.
+3. **`_attach_turn_future`'s ownership check refuses a stale attach across an arbitrary number of
+   intervening bookings, not just the one immediately following it** — the brief's "third booking"
+   concern. Booking1 finishes and clears; booking2 (a second, unrelated post) also finishes and
+   clears; booking3 is now live and queued. A late `_attach_turn_future("p1", booking1, future1)`
+   still returns `False` and booking3's entry (`booking`, `future`) is untouched. This is
+   unsurprising given `TurnBooking` equality is a plain dataclass field comparison with no memory
+   of history, but the brief asked for the interleaving to be constructed rather than assumed, so I
+   ran it. Script: `<scratchpad>/probe3_third_booking.py`.
+
+### M6 (the surviving mutation) — confirmed genuinely inert, not a hidden finding
+
+`grep -n '\.future\b'` across both source files shows exactly one read site of `TurnState.future`
+outside its own definition: `_cancel_queued_turn`'s `current.future is None` check and the
+`future, booking = current.future, ...` unpack. Nothing else — not `clear_all_turns`, not a second
+`enqueue_turn`, not `turn_payload` — ever reads the field, so M6's drop of `.future` on the
+`thinking` flip can only matter to that one call site. And there it cannot matter: whichever value
+`.future` holds after the flip, cancelling a *running* turn either short-circuits on `current.future
+is None` (mutant) or reaches `future.cancel()` and gets `False` (unmutated, since CPython transitions
+a `Future` from `PENDING` to `RUNNING` — refusing further `cancel()`s — under the same internal
+lock `_run_turn`'s own thread uses to enter, so the two paths can never race each other into a
+wrong answer). I did not take this on the docstring's word: I copied the whole delivered tree
+(`falkorchat/` + `tests/` + `pyproject.toml`, plus `scripts/` and `docs/SERVER.md` for fixture
+bootstrap) to a scratch location, applied the mutation, and ran `test_storefront.py` against it
+(stripping the venv's editable-install meta-path finder, which otherwise silently resolves `import
+falkorchat` back to the real tree regardless of `sys.path`/`PYTHONPATH` order — see the kaizen entry
+below). **104/104 pass**, including all 6 new S9b tests. M6 is correctly left surviving.
+
+### Findings
+
+**P24-1 — minor. `HISTORY.md`'s mutation-testing tally does not reproduce under execution, and its
+own arithmetic is one mutant short of the total reported upstream.** The entry's prose enumerates
+four mutation groups — rejected-design (1, "8 failures"), inverted-ordering (1, "1 failure"),
+corrupted-argument (2, "2 and 4 failures respectively"), implementation-specific (4, one surviving)
+— summing to **8** distinct mutants, one short of the "9 mutations" figure this review's own brief
+was given. More concretely: I reconstructed "drop the map entry as a stand-in instead of
+cancelling" two literal ways — confined to `_cancel_queued_turn` (guarded by the existing
+`future is None` early-return) and as an unconditional `self._turns.pop(participant_id, None)` — and
+ran both against `test_storefront.py` + `test_storefront_api.py` + `test_app.py`. They redden
+**5** and **10** tests respectively, bracketing but neither matching the claimed **8**. This does
+not touch the code's correctness (the delivered mechanism passes every test under both of my own
+mutants too, since neither mutant is what's shipped) — it means the mutation-count evidence trail
+in the delivered `HISTORY.md` entry cannot be independently regenerated from its own prose, in a
+coordination that otherwise holds itself to exactly that standard. **Suggested:** either name the
+exact mutated line/diff for the rejected-design mutant (so its failure count is checkable the way
+`test_a_cancel_that_loses_the_race_to_the_worker_leaves_the_slot_standing`'s forced-race mutant
+already is, being a real test in the suite), or drop the specific counts and keep only the
+qualitative claim ("8 tests reddened, all in the new S9b block"). Judge which fix fits; I only
+established that neither of my own reconstructions lands on 8, using two literal readings of the
+same English sentence.
+
+**P24-2 — nit. `_cancel_queued_turn`'s "What this does not reach" heading is one clause too strong
+for its own third case.** The paragraph's case 3 (`clear_all_turns()` + a fresh post) says "the
+orphan is cancelled" in the same sentence the heading calls "does not reach" — the method *does*
+reach (cancel) the orphan's `Future`; what it does not reach is the orphan's *map entry* (correctly
+left alone by `release_turn`'s ownership check, per probe 2 above). The body already disambiguates
+this correctly in the same breath, so no reader is actually misled, and it is not the reach-exceeds-
+mechanism shape this coordination has paid to catch before (that shape is a claim a reader could
+believe *without* reading the mechanism; this one corrects itself one clause later). **Suggested:**
+retitle to "what this cancels but cannot clear" for case 3, or split it out of the three-case list
+so the heading's "does not reach" claim covers only cases 1 and 2, which it does exactly.
+
+### What's solid
+
+The ordering itself (`_cancel_queued_turn` before `_await_quiesce`, never instead of it) matches
+§4.8's bullet and `## Pass 7` Ruling 3 by direct quotation, not paraphrase. `TurnState.future`'s
+placement — one map, not two — closes exactly the gap Ruling 3/P17-9 named, and every one of the
+four S9a-era entry states (never-turned, reserved-but-unsubmitted, submitted-and-attached,
+submitted-and-cleared) is correctly covered by `_cancel_queued_turn`'s early return, checked against
+`reserve_turn`'s and `release_turn`'s actual bodies rather than assumed from the docstring. The 6
+new tests separate "cancelled" from "ran and cleared up" via `trigger.ran`, which is exactly the
+distinction a map-only assertion would miss, and `test_a_cancel_that_loses_the_race_to_the_worker_leaves_the_slot_standing`
+forces the ordering race with a wrapped `Future.cancel` rather than hoping for it on timing.
+Documentation (`SERVER.md`'s `QUIESCE_S` row, the rewritten docstrings) is accurate against the
+delivered code everywhere I checked it, including the reset-everyone/reset-mine split, which I
+confirmed by grep (`clear_all_turns()` has exactly one caller-family, S10's; `_cancel_queued_turn`
+has exactly one, `reset_participant`).
+
+### Open questions
+
+None — this unit is otherwise ready to land as delivered, subject to P24-1's disposition (a
+documentation fix, not a code or test change).
