@@ -1,6 +1,6 @@
 # `model-bench` S3 — the `embedder` pack and `refresh_golden.py` — implementation spec
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Extends:** `docs/plans/small-model-benchmarking.md` (S3)
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — · **Extends:** `docs/plans/small-model-benchmarking.md` (S3)
 
 ## 1. Goal & scope
 

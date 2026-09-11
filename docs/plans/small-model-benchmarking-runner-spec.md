@@ -1,6 +1,6 @@
 # `model-bench` runner and CLI `validate`/`run` — implementation spec
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Extends:** `docs/plans/small-model-benchmarking.md` (S2)
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — · **Extends:** `docs/plans/small-model-benchmarking.md` (S2)
 
 ## 1. Goal & scope
 
