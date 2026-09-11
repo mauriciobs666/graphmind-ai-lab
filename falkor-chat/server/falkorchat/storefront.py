@@ -341,10 +341,32 @@ class TurnState:
     right (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-2,
     reproduced; `## Pass 20`, P20-3 for the "right at `turn_workers=1`" claim
     this replaces; `## Pass 21`, P21-7 for the bound on *when* they diverge).
+
+    **It does carry the turn's `Future`, and that placement is the plan's, not
+    a preference** — §5.1's S9 row: the booking token "is also the handle S9b's
+    cancellation hangs its `Future` on — **one map, not two**"
+    (`docs/reviews/salesperson-ui-impl.md` `## Pass 17`, P17-9). A second
+    `participantId → Future` dict beside `_turns` would need its own lock, its
+    own ownership rule and its own clear on all four of this map's exits
+    (`release_turn`, the `finally`, `clear_all_turns`, reset-mine's cancel),
+    and every one of those is a place the two could disagree — the disagreement
+    being precisely "the map says idle while a job is still queued", which is
+    what §4.8 forbids. Here the future cannot outlive its entry: it arrives on
+    the entry and leaves with it.
+
+    `None` is not "no turn" — it is **not cancellable through this map**, and
+    the two are different. An entry is created by `reserve_turn`, *before* the
+    message write and therefore before anything has been submitted, so a
+    `queued` entry with `future=None` is the ordinary state of a post still
+    inside `services.post_message`. `enqueue_turn` attaches the future after
+    `submit` returns. Nothing outside this module reads the field, and
+    `as_payload` deliberately does not carry it: it is a process-local handle,
+    not part of §5.2's `turn` block.
     """
 
     state: str = TURN_IDLE
     booking: TurnBooking | None = None
+    future: Future[None] | None = None
 
     @property
     def in_flight(self) -> bool:
@@ -844,9 +866,19 @@ class Storefront:
         turn's work item finally reached a worker.
 
         There is deliberately **no unconditional single-slot write left on this
-        class**: an entry is created by `reserve_turn`, changed here, removed
-        by `release_turn`, and dropped wholesale by the reset paths'
-        `clear_all_turns()`.
+        class**: an entry is created by `reserve_turn`, changed here and by
+        `_attach_turn_future`, removed by `release_turn`, and dropped wholesale
+        by the reset paths' `clear_all_turns()`.
+
+        **The flip is a `replace`, not a fresh `TurnState`, so it carries the
+        entry's `future` across** — this is the only state change an entry
+        undergoes while it lives, and rebuilding the entry here would drop the
+        handle on exactly the ordering where the worker started before
+        `enqueue_turn` got to attach it. Keeping it costs nothing and makes the
+        field mean one thing (*this booking's future, for as long as the entry
+        lives*) instead of two. It does not make a running turn cancellable:
+        `Future.cancel()` answers `False` once the work item is running, which
+        is what sends reset-mine to `_await_quiesce`.
         """
         if state == TURN_IDLE:
             return self.release_turn(participant_id, booking)
@@ -854,7 +886,35 @@ class Storefront:
             current = self._turns.get(participant_id)
             if current is None or current.booking != booking:
                 return False
-            self._turns[participant_id] = TurnState(state=state, booking=booking)
+            self._turns[participant_id] = replace(current, state=state)
+            return True
+
+    def _attach_turn_future(
+        self, participant_id: str, booking: TurnBooking, future: Future[None]
+    ) -> bool:
+        """Hang `booking`'s submitted `Future` on its map entry; `True` when the
+        write took effect (§5.1's S9 row — *one map, not two*).
+
+        Ownership-checked like every other write on this class, and for the
+        sharper of the two reasons: by the time `submit` has returned, the
+        worker may already have run the whole turn and cleared the slot in
+        `_run_turn`'s `finally`. An unconditional write here would **resurrect**
+        that entry — a `queued`/`thinking` turn nobody will ever clear, which
+        `409`-locks the participant for the life of the process and answers
+        every reset-mine of theirs `503`. That is P17-3's shape through a door
+        the release rule does not cover, since nothing was refused here.
+
+        Losing the write is harmless in both directions it can be lost. The turn
+        finished (no entry, or a later booking's) — nothing to cancel. Or
+        `clear_all_turns()` wiped the slot and a fresh post replaced it — the
+        orphaned turn is not this participant's current one and must not be
+        reachable through their slot.
+        """
+        with self._turns_lock:
+            current = self._turns.get(participant_id)
+            if current is None or current.booking != booking:
+                return False
+            self._turns[participant_id] = replace(current, future=future)
             return True
 
     def clear_all_turns(self) -> None:
@@ -1005,10 +1065,19 @@ class Storefront:
         on rediscovering that a leaked booking is bad — it is, and it is the
         lesser of the two.)*
 
+        **The `Future` is retained on the booking's map entry before it is
+        returned** (S9b), which is what gives reset-mine's cancellation
+        something to cancel — P17-9's gap, closed on the side the plan chose:
+        the handle hangs off the booking token, one map and not two
+        (§5.1's S9 row; `TurnState.future` for why). The attach is
+        ownership-checked and may legitimately find nothing, which is
+        `_attach_turn_future`'s own paragraph.
+
         Returns the `Future` so a caller can wait on the turn. Nothing in the
         request path does — the response is sent without it, which is the
-        point — and the map entry, not the future, is what the `409` gate and
-        both quiesce drains read.
+        point — and the map **entry** is still what the `409` gate and both
+        quiesce drains read: reset-mine reaches the future *through* the entry,
+        never instead of it.
         """
         if self._turns_shutdown:
             self.release_turn(participant.participant_id, booking)
@@ -1016,7 +1085,7 @@ class Storefront:
                 "cannot schedule new turns after shutdown_turns()"
             )
         try:
-            return self._executor.submit(
+            future = self._executor.submit(
                 self._run_turn, ctx, participant, posted, booking
             )
         except BaseException:
@@ -1026,6 +1095,8 @@ class Storefront:
                 participant.participant_id, booking.ordinal,
             )
             raise
+        self._attach_turn_future(participant.participant_id, booking, future)
+        return future
 
     def _run_turn(
         self,
@@ -1096,10 +1167,19 @@ class Storefront:
 
         Called from `create_app`'s lifespan after `yield`. `wait=True` with no
         `cancel_futures` is the whole contract: a queued turn has a message
-        written for it in the transcript, so dropping it at shutdown is the
+        written for it in the transcript, so dropping it **here** is the
         "message with no reply" §4.4 measure 1a refuses to create, one layer
         down. Idempotent — a second call on an already-shut-down executor
         returns immediately.
+
+        **The rule is about this path, not about cancelling as such**, and S9b
+        is why the distinction has to be written down. `_cancel_queued_turn`
+        drops a queued turn on purpose, and it does not contradict the sentence
+        above: it runs only inside reset-mine, where the participant has asked
+        for that message and its whole transcript to be deleted, so the reply
+        that will never be written has nothing left to be missing from. A
+        shutdown asked for no such thing — every participant's transcript
+        survives it — which is why the same act is right there and wrong here.
 
         **`_turns_shutdown` is set before the executor is told to stop, and
         that order is the contract.** `enqueue_turn` reads the flag *before*
@@ -1294,6 +1374,65 @@ class Storefront:
 
     # ── "reset mine" (§4.8, graph note §4/§7/§12) ───────────────────────────
 
+    def _cancel_queued_turn(self, participant_id: str) -> bool:
+        """Drop this participant's turn **if it is still sitting in the
+        executor's queue**; `True` only when a turn was actually cancelled *and*
+        its map entry cleared (§4.8, S9b).
+
+        **This runs in front of `_await_quiesce`, never in place of it**
+        (§5.1's S9 row; `docs/reviews/salesperson-ui-impl.md` `## Pass 7`,
+        Ruling 3). It buys **availability, not correctness**: the wait already
+        makes the result right, because a queued turn reaches a worker,
+        completes and clears its own entry. What the wait cannot do is finish
+        inside `quiesce_s` — 30 s against a 180 s agent timeout — so a slow
+        turn turns reset-mine into a `503` that resets nothing, exactly where
+        dropping work the LLM has not started yet would have let it succeed.
+
+        **The order is cancel-then-clear, and it is the whole design.**
+        `Future.cancel()` answers `False` once the work item is running, so a
+        `True` from it is the one moment at which the turn is provably never
+        going to run — and only then may its slot go. Clearing first would
+        report idle while the job was still queued and let the delete race the
+        very turn quiesce exists to prevent (§4.8; the `_await_quiesce`
+        docstring). Losing that race is ordinary and needs no repair: a turn
+        that started between the read below and the `cancel()` keeps its entry
+        and falls through to the wait.
+
+        **What falls through to the wait, stated because the `503` contract is
+        exactly its complement.** A turn already on a worker (`cancel()` →
+        `False`) does not reach cancellation at all. A turn *reserved but not
+        yet submitted* — the participant's own second tab still inside
+        `services.post_message` — has no future yet (`TurnState.future`) and so
+        is not reachable either. The third case is different in kind, not just
+        in name: a booking that lost its slot to `clear_all_turns()` plus a
+        fresh post *is* cancelled — its future really is `PENDING` and
+        `cancel()` really answers `True` — but `release_turn`'s ownership check
+        then declines to delete the **live** entry that replaced it, so the
+        clear never reaches the map. All three leave the participant's current
+        turn queued, which is what sends them to the wait below.
+
+        **Nothing is rolled back if the reset then fails.** A cancelled turn
+        stays cancelled through a `504`, and the participant is left with a
+        message and no reply. That is the same price §4.8 already accepts for
+        the turn whose transcript the reset deletes, and it is not new
+        exposure: reset-mine is the participant asking for that transcript to
+        go.
+
+        The lock is dropped before `cancel()` rather than held across it, for
+        the reason `enqueue_turn` gives for `submit`: an application lock held
+        underneath a `concurrent.futures` internal is a lock-ordering hazard
+        whose benignity is an implementation detail. Every write that follows
+        is ownership-checked, so the window buys nothing but a `False`.
+        """
+        with self._turns_lock:
+            current = self._turns.get(participant_id)
+            if current is None or current.future is None:
+                return False
+            future, booking = current.future, current.booking
+        if not future.cancel():
+            return False
+        return self.release_turn(participant_id, booking)
+
     def _await_quiesce(self, participant_id: str) -> bool:
         """Wait, bounded by `quiesce_s`, for this participant to have no turn in
         flight. `True` when they are idle, `False` on timeout.
@@ -1306,22 +1445,26 @@ class Storefront:
         nodes and silently no-op.
 
         §4.8 also has this path *cancel* the participant's queued turn to
-        shorten the wait. **Nothing cancels yet, and the wait is not weakened by
-        that**: a queued turn reaches a worker, completes, and clears its entry
-        here, so waiting subsumes cancelling for correctness and differs only in
-        latency. Dropping the turn-map entry as a stand-in would be actively
-        wrong: it would report idle while the job was still queued, and the
-        delete would then race exactly the turn this waits for. Cancellation
-        belongs in front of this wait, never in place of it — `enqueue_turn`
-        returns the `Future` it would have to cancel, and the map entry has to
-        be cleared *after* that cancel succeeds, since a future already running
-        cannot be cancelled and must fall through to this wait (§4.8;
-        `docs/reviews/salesperson-ui-impl.md` `## Pass 7`, Ruling 3).
+        shorten the wait. **`_cancel_queued_turn` now does that, in front of
+        this wait and never in place of it** (S9b) — read that method for what
+        it covers. The wait is **not weakened by it and not conditional on it**:
+        everything the cancel does not reach still arrives here, and a queued
+        turn that reaches a worker completes and clears its own entry, so
+        waiting subsumes cancelling for correctness and differs only in latency.
+        Dropping the turn-map entry as a stand-in would be actively wrong: it
+        would report idle while the job was still queued, and the delete would
+        then race exactly the turn this waits for. So the cancel clears the
+        entry only *after* `Future.cancel()` has answered `True`, since a future
+        already running cannot be cancelled and must fall through to this wait
+        (§4.8; `docs/reviews/salesperson-ui-impl.md` `## Pass 7`, Ruling 3).
 
         **What this wait now has to wait for.** Until the turn executor landed,
         nothing populated the turn map, so every drain passed on its first
         check; a turn is real work on a worker now, and this deadline is what
-        bounds it.
+        bounds it. With the cancel in front, what remains for this deadline is
+        the work that was **not cancellable at the instant reset-mine asked** —
+        a turn already on a worker, and a turn reserved but not yet submitted —
+        which is also the exact reach of the `503`.
         """
         deadline = time.monotonic() + self._quiesce_s
         while self.turn_in_flight(participant_id):
@@ -1331,7 +1474,8 @@ class Storefront:
         return True
 
     def reset_participant(self, participant: ParticipantRecord) -> dict[str, Any]:
-        """"Reset mine" — quiesce, then one atomic delete (§4.8, graph note §4).
+        """"Reset mine" — cancel what is only queued, quiesce the rest, then one
+        atomic delete (§4.8, graph note §4).
 
         The participant's **identity survives**: their `User` (token,
         `displayName`, `language`) and `Channel` stay, a fresh `Thread` is
@@ -1352,10 +1496,23 @@ class Storefront:
         Returns `{"threadId": …, "language": …}` — §5.2's `200` body. Raises,
         for each of the four ways this can end other than success:
 
-        * `QuiesceTimeoutError` → `503`, **nothing changed**.
+        * `QuiesceTimeoutError` → `503`, **nothing in the graph changed**.
         * `ResetStateUnknownError` → `504`, *unknown* — see F8 below.
         * `UnknownParticipantError` → `404`/`401`, zero rows.
         * `UnscopedParticipantError` → `409`, a guaranteed no-op.
+
+        **The `503` is "nothing was reset", and since S9b that is stated of the
+        graph rather than of the process.** `_cancel_queued_turn` runs first, so
+        on the ordinary path a `503` now means the turn was **not cancellable**
+        — already on a worker, or reserved by a second tab still inside its
+        message write — and that path cancels nothing. The one arrangement
+        where a `503` follows a successful cancel is the orphan: a booking
+        stranded by `clear_all_turns()` is cancelled, its slot is *not* cleared
+        (it belongs to the fresh post that replaced it), and the wait then times
+        out on that live turn. The graph is still untouched, which is what the
+        contract and §5.3 C9's "retry is safe" rest on; what the participant
+        loses is a reply to a message that — no reset having happened — stays in
+        their transcript.
 
         A `Thread` UNIQUE violation (`redis.exceptions.ResponseError`) from the
         duplicate-marker fail-safe is **not** caught: it propagates as a `5xx`
@@ -1382,6 +1539,12 @@ class Storefront:
         """
         participant_id = participant.participant_id
         ctx = self.context_for(participant_id)
+        # **In front of the wait, never in place of it** (§4.8, S9b). Its return
+        # value is deliberately unread: a cancel that succeeded leaves the slot
+        # empty and the wait below passes on its first check, and one that did
+        # not is precisely what the wait is for. Branching on it would give this
+        # path two shapes where it has one.
+        self._cancel_queued_turn(participant_id)
         if not self._await_quiesce(participant_id):
             raise QuiesceTimeoutError(
                 f"a turn for {participant_id!r} did not finish within "

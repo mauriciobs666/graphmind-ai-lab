@@ -820,7 +820,10 @@ negative assertion names `POST /shop/api/presenter/session` answering
 is S10's own content: the login's fixed per-attempt delay and observational
 attempt counter, and reset-everyone's **stop-intake** flag (which is
 `Storefront` state, and `storefront.py` is not S8's file). The drain below is
-the exact parallel of S7 shipping reset-mine's wait without S9's cancellation.
+the exact parallel of S7 shipping reset-mine's wait alone — a parallel that has
+since become a *precedent*: S9b gave reset-mine the cancellation in front of its
+wait (`Storefront._cancel_queued_turn`), and reset-everyone's stop-intake is
+still S10's.
 """
 
 
@@ -1200,6 +1203,13 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
         the `200` has been sent, and the participant's evidence is
         `GET /shop/api/state`'s `turn` block.
 
+        **The `Future` `enqueue_turn` returns is discarded here, and that is now
+        a deliberate no-op rather than a dropped handle** (P17-9). Waiting on it
+        would undo everything the paragraph above buys; retaining it is
+        `Storefront`'s job and `enqueue_turn` already does it, hanging the future
+        on the booking's own map entry so reset-mine can cancel a turn the pool
+        has not started (S9b). Nothing on this path needs a second copy.
+
         The gate and the `mentions` are here because both are properties of the
         *post*, not of the queue. **No `_safe_embed`** (§4.4 measure 3):
         the `salesperson` def has no `graphrag_retrieve`, so embedding a
@@ -1345,12 +1355,21 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
         },
     )
     def reset(who: ParticipantRecord = Depends(get_participant)) -> dict[str, Any]:
-        """"Reset mine" — quiesce, then one atomic delete (§4.8).
+        """"Reset mine" — cancel what is only queued, quiesce the rest, then one
+        atomic delete (§4.8).
 
         Takes the authenticated record rather than a bare id, so the profile
         re-write costs no second read: `resolve_token` has just read
         `displayName`/`language` from the graph on this same request, and those
         are exactly the fields the reset does not touch.
+
+        **The `503` above did not change meaning when S9b added the cancel**, and
+        C9's "retry is safe" is unaffected: the cancel runs in front of the wait,
+        never in place of it, so a `503` still means the graph was not touched —
+        it now additionally means the turn was **not cancellable** when the reset
+        asked (already on a worker, or reserved by a second tab still inside its
+        message write). `Storefront.reset_participant` carries the one exotic
+        case in which a cancel and a `503` coincide.
         """
         try:
             return shop.reset_participant(who)
@@ -1455,9 +1474,17 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
         reset-everyone stops intake first, then drains, then deletes; the flag
         is `Storefront` state and `storefront.py` is not S8's file. The drain
         below is therefore the exact parallel of S7 shipping reset-mine's wait
-        without S9's cancellation — it waits for what is in flight, which
-        subsumes stopping intake for *correctness* of the sweep and differs
-        only in whether a post that lands mid-drain extends the wait.
+        alone — it waits for what is in flight, which subsumes stopping intake
+        for *correctness* of the sweep and differs only in whether a post that
+        lands mid-drain extends the wait.
+
+        **That parallel now has a delivered other half, and this route does not
+        share it.** S9b added reset-mine's cancellation
+        (`Storefront._cancel_queued_turn`), which is *per participant* and is
+        reached only from `Storefront.reset_participant` — nothing on this path
+        calls it, so every queued turn in the roster below is still waited for
+        rather than dropped. Reset-everyone's own availability half is the
+        stop-intake flag above, and it is still S10's.
         """
         # **Outside the `try` below, and that is the decision** (P10-9, flagged
         # twice). Moving it in would not be a widening, it would be wrong: the

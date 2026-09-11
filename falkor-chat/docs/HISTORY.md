@@ -5,7 +5,62 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
-## 2026-09-09 — salesperson-ui S9f: `SERVER.md` §1.3 and `config.py`'s `QUIESCE_S` comment rewritten against the S9 acceptance pass
+## 2026-09-10 — salesperson-ui S9b: reset-mine cancels a *queued* turn in front of `_await_quiesce`
+
+**What:** Closed the half of §4.8's reset-mine contract S7 could not build and S9's own row
+deferred (P17-9): `Storefront.reset_participant` now calls a new `Storefront._cancel_queued_turn`
+before `_await_quiesce`, never in place of it — exactly the ordering `docs/reviews/salesperson-ui-impl.md`
+`## Pass 7` Ruling 3 and the plan's S9 row require. `_cancel_queued_turn` cancels the
+participant's `Future` only while it is still `PENDING` in the turn executor's queue and clears
+the map entry **only after** `Future.cancel()` answers `True`; a future already running answers
+`False` and the entry is left standing to fall through to the existing wait. Reset-everyone
+(`presenter_reset_all`) is unchanged — it still only drains, and its own stop-intake half is S10's.
+
+**Where the `Future` now lives:** `TurnState` gained a third field, `future: Future[None] | None`,
+rather than a second `participantId → Future` map — the plan's own call, "one map, not two"
+(§5.1's S9 row, Pass 17 P17-9). `enqueue_turn` attaches the future to the booking's entry
+(`_attach_turn_future`, ownership-checked like every other write on the map) immediately after
+`submit` returns; `set_turn_state`'s `thinking` flip now does `replace(current, state=state)`
+instead of rebuilding a fresh `TurnState`, so an entry's future survives its own state
+transitions rather than being dropped by the write that makes it un-cancellable anyway.
+
+**Tests:** six new cases in `tests/test_storefront.py` — the positive cancel path with a
+`trigger.ran` reading that proves the cancelled turn never reached the workflow layer; the race
+where `Future.cancel()` loses to the worker starting first (forced via a wrapped `Future.cancel`,
+not hoped for via timing), asserting the entry is left standing and the wait is what recovers it;
+the ownership-checked attach declining to resurrect an already-finished turn's entry; the same
+check reaching a fresh booking rather than an orphan stranded by `clear_all_turns()`; and two
+`reset_participant`-level tests showing a `quiesce_s=0` reset that used to `503` now succeeds once
+the only turn in the way is merely queued, keyed on the resetting participant's id and not a
+bystander's. Nine mutations total, restored by copy between each. Three were the mandated ones:
+the plan's own rejected design (drop the map entry as a stand-in instead of cancelling — 8
+failures), the inverted ordering (clear before cancel succeeds — 1 failure, the forced-race test),
+and a corrupted-argument cancel, counted as two variants (fixed/wrong `participantId` at the call
+site — 2 failures; the lookup itself ignoring `participant_id` — 4 failures) — 1 + 1 + 2 = 4
+mutations so far. The remaining five targeted the new attach/flip/guard/call-site logic this unit
+added on its own: the future never attached (5 failures), the attach unconditional and able to
+resurrect a finished turn's entry (10 failures), the cancel unguarded regardless of what
+`Future.cancel()` answered (1 failure), the reset never calling the cancel at all — S7's delivered
+behaviour (2 failures) — and a `thinking`-flip that drops the future via a rebuilt `TurnState`,
+which **survives**: correct and stated in the code, since a running turn is never cancellable
+regardless of whether its entry still carries the handle, so nothing behavioral depends on it
+(independently confirmed in `docs/reviews/salesperson-ui-impl.md` `## Pass 24`, which ran the real
+suite against this one mutant). 4 + 5 = 9 mutations, 8 reddened, 1 confirmed-inert survivor. Full
+suite: 2642 passed before, 2648
+after (both measured live, plus a second, independent count from `pytest --collect-only`: 2656 →
+2662 — both definitions agree on +6).
+
+**Docs:** `docs/SERVER.md` §1.3's `FALKORCHAT_STOREFRONT_QUIESCE_S` row now states that the budget
+no longer applies to a queued turn under reset-mine (cancelled instead) while still applying in
+full to a running turn, to a turn reserved but not yet submitted, and to every turn under
+reset-everyone. `storefront.py`'s `_await_quiesce` docstring (which had carried the exact sentence
+"nothing cancels yet" since S7) and `reset_participant`'s docstring were rewritten to describe the
+delivered mechanism instead of its absence; `storefront_api.py`'s module docstring, its
+`presenter_reset_all` and `reset` route docstrings, and the `post_message` route's discarded-
+`Future` paragraph were updated to state the new precedent accurately — reset-everyone's own
+stop-intake is unaffected and still S10's, which the rewritten prose says explicitly rather than
+by omission. An unfiltered `grep -rn` for cancel-related phrasing across both source files found
+no further stale claim.
 
 **What:** Closed the coordination's long-open item S9f, in two passes the same day. The first
 (committed `404c409`) rewrote `docs/SERVER.md` §1.3's `FALKORCHAT_STOREFRONT_QUIESCE_S` row, which

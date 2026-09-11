@@ -35,6 +35,7 @@ import logging
 import re
 import threading
 import time
+from concurrent.futures import Future
 from pathlib import Path
 
 import pytest
@@ -1031,6 +1032,60 @@ def _blocking_trigger():
             gate.wait(timeout=IMMEDIATE_S)
 
     return _Blocking(), entered, gate
+
+
+def _queue_holding_trigger():
+    """`_blocking_trigger`'s sibling for the S9b tests: it parks the **first**
+    turn on the worker, lets every later one run, and **records which turns
+    reached it at all**.
+
+    `(trigger, entered, gate, later, later_gate)`. With `turn_workers=1` the
+    parked turn is what makes a second post's work item provably `PENDING` in
+    the executor's queue rather than merely "probably not started yet" — the
+    only state `Future.cancel()` can act on. `trigger.ran` is the list of
+    `msg_id`s that reached the workflow layer, and it is the assertion that
+    separates a turn that was *cancelled* from one that ran and cleared up
+    quietly: a map entry can be gone either way.
+
+    `later` fires when a turn **after** the first reaches a worker, which is how
+    a test knows a future has left `PENDING`. `later_gate` starts **set**, so by
+    default those turns run straight through; a test that needs one held
+    *inside* the trigger clears it first and sets it when done.
+    """
+    entered = threading.Event()
+    gate = threading.Event()
+    later = threading.Event()
+    later_gate = threading.Event()
+    later_gate.set()
+
+    class _Holding:
+        def __init__(self) -> None:
+            self.ran: list[str] = []
+
+        def maybe_trigger(self, ctx, **kwargs):  # noqa: ANN001, ANN003, ARG002
+            self.ran.append(kwargs["msg_id"])
+            if entered.is_set():
+                later.set()
+                later_gate.wait(timeout=IMMEDIATE_S)
+                return
+            entered.set()
+            gate.wait(timeout=IMMEDIATE_S)
+
+    return _Holding(), entered, gate, later, later_gate
+
+
+def _posted(msg_id: str, thread_id: str):
+    """The shape `enqueue_turn` carries onto the worker, for the tests whose
+    subject is the queue rather than the graph write that fills it in."""
+    return {"msgId": msg_id, "threadId": thread_id, "text": "hi",
+            "role": "member", "mentions": [AGENT]}
+
+
+def _participant(pid: str) -> ParticipantRecord:
+    return ParticipantRecord(
+        participant_id=pid, display_name=pid, language="en",
+        channel_id=f"ch-{pid}", thread_id=f"th-{pid}", joined_at=1,
+    )
 
 
 def test_a_running_turn_holds_a_worker_and_the_one_behind_it_is_first_in_line(
@@ -2498,6 +2553,289 @@ def test_an_idle_participant_is_not_made_to_wait(stocked, conn):
     outcome = _call_bounded(shop.reset_participant, record)
 
     assert outcome["result"]["threadId"] != record.thread_id
+
+
+# ── cancelling a *queued* turn, in front of the wait (§4.8, S9b) ─────────────
+#
+# The wait above is unchanged and these tests do not weaken it: what S9b adds
+# runs **before** it, and everything the cancel cannot reach still arrives
+# there. Two properties have to be separated everywhere below, because a turn
+# that was cancelled and a turn that ran and cleared up leave the *same* empty
+# map entry behind:
+#
+#   * the `Future` is `cancelled()` — the executor will never run that item;
+#   * `trigger.ran` never names its `msg_id` — the workflow layer never saw it.
+#
+# An assertion on the map alone proves neither, which is exactly why the
+# rejected design (drop the entry, skip the wait) would pass one written that
+# way. `_queue_holding_trigger` exists to make the second reading possible.
+
+
+def test_a_queued_turn_is_cancelled_and_never_reaches_the_workflow_layer(services):
+    """The positive case, end to end at the map/queue layer.
+
+    `turn_workers=1` with the first turn parked on the worker makes the second
+    one's work item provably `PENDING`, which is the only state
+    `Future.cancel()` acts on. The three readings are the three things the
+    design claims: the handle really is on the map entry (*one map, not two*,
+    §5.1's S9 row), the future is really cancelled, and the slot is cleared —
+    in that order, since the clear is conditional on the cancel.
+
+    `trigger.ran` is what makes this more than a map assertion: the cancelled
+    turn never reached `maybe_trigger` at all, so no LLM call was spent and no
+    reply will land against a thread reset-mine is about to delete.
+    """
+    trigger, entered, gate, _later, _later_gate = _queue_holding_trigger()
+    shop = _storefront(services, trigger=trigger, turn_workers=1)
+    held = _enqueue(
+        shop, shop.context_for("p-hold"), _participant("p-hold"),
+        _posted("m-hold", "th-hold"),
+    )
+    assert entered.wait(timeout=IMMEDIATE_S), "the holding turn never ran"
+
+    queued = _enqueue(
+        shop, shop.context_for("p-ada"), _participant("p-ada"),
+        _posted("m-ada", "th-ada"),
+    )
+    assert shop.turn_state("p-ada").state == TURN_QUEUED
+    assert shop.turn_state("p-ada").future is queued
+
+    assert shop._cancel_queued_turn("p-ada") is True
+
+    assert queued.cancelled() is True
+    assert shop.turn_state("p-ada") == IDLE_TURN
+
+    gate.set()
+    held.result(timeout=IMMEDIATE_S)
+    assert trigger.ran == ["m-hold"]
+
+
+def test_a_cancel_that_loses_the_race_to_the_worker_leaves_the_slot_standing(
+    services, monkeypatch
+):
+    """**The race the ordering exists for**, forced rather than hoped for: the
+    future leaves `PENDING` *between* the map read and the `cancel()` call.
+
+    `Future.cancel` is wrapped so that, on the one future this test is about,
+    the worker is released and observed entering that very turn before the real
+    `cancel` runs. Nothing in the code under test is altered — the wrapper
+    delegates, so the `False` below is CPython's own answer for a running work
+    item, not a stub's.
+
+    What must then hold is the whole of the ordering rule: the entry is **still
+    there**, still owned by that booking, and reset-mine falls through to
+    `_await_quiesce`. A cancel that cleared the slot first would report idle
+    under a live turn and let the delete race it — the state §4.8 calls
+    *actively wrong*, and the one the map-only spelling of this file's other
+    quiesce tests cannot see.
+    """
+    trigger, entered, gate, later, later_gate = _queue_holding_trigger()
+    later_gate.clear()  # hold the racing turn *inside* the trigger
+    shop = _storefront(services, trigger=trigger, turn_workers=1)
+    held = _enqueue(
+        shop, shop.context_for("p-hold"), _participant("p-hold"),
+        _posted("m-hold", "th-hold"),
+    )
+    assert entered.wait(timeout=IMMEDIATE_S), "the holding turn never ran"
+    queued = _enqueue(
+        shop, shop.context_for("p-ada"), _participant("p-ada"),
+        _posted("m-ada", "th-ada"),
+    )
+    assert shop.turn_state("p-ada").state == TURN_QUEUED
+
+    real_cancel = Future.cancel
+
+    def racing_cancel(self):  # noqa: ANN001, ANN202
+        if self is queued:
+            gate.set()
+            assert later.wait(timeout=IMMEDIATE_S), "the racing turn never ran"
+        return real_cancel(self)
+
+    monkeypatch.setattr(Future, "cancel", racing_cancel)
+
+    assert shop._cancel_queued_turn("p-ada") is False
+
+    assert queued.cancelled() is False
+    assert shop.turn_in_flight("p-ada") is True
+    assert shop.turn_state("p-ada").state == TURN_THINKING
+
+    later_gate.set()
+    held.result(timeout=IMMEDIATE_S)
+    queued.result(timeout=IMMEDIATE_S)
+    assert trigger.ran == ["m-hold", "m-ada"]
+    assert shop.turn_in_flight("p-ada") is False
+
+
+def test_a_late_attach_never_resurrects_a_finished_turns_entry(services):
+    """`enqueue_turn` attaches the future *after* `submit` returns, by which
+    time the worker may have run the whole turn and cleared the slot.
+
+    An unconditional attach there would write the entry back — a `queued` turn
+    nobody will ever clear, which `409`-refuses that participant for the life of
+    the process and answers every reset-mine of theirs `503`. That is P17-3's
+    shape through a door the release rule does not cover, since nothing was
+    refused. The attach is therefore ownership-checked like every other write on
+    this class, and this drives the finished-turn ordering directly rather than
+    waiting for it to happen.
+    """
+    trigger = _RecordingTrigger()
+    shop = _storefront(services, trigger=trigger)
+    booking = shop.reserve_turn("p-ada")
+    future = shop.enqueue_turn(
+        shop.context_for("p-ada"), _participant("p-ada"),
+        _posted("m-1", "th-ada"), booking,
+    )
+    _drain(shop, future, trigger)
+    assert shop.turn_state("p-ada") == IDLE_TURN
+
+    assert shop._attach_turn_future("p-ada", booking, future) is False
+
+    assert shop.turn_state("p-ada") == IDLE_TURN
+    assert shop.turn_in_flight("p-ada") is False
+
+
+def test_the_cancel_reaches_the_live_booking_and_never_the_orphan(services):
+    """The `clear_all_turns()` arrangement, on the cancel path.
+
+    Reset-all empties the map under running workers and the participant can post
+    again, so two of their bookings exist and the map holds one slot. The rule
+    is the same one the `finally` and the release already obey: the entry
+    belongs to the booking that owns it, so the stale future must not overwrite
+    the fresh one's handle, and the cancel must reach the **fresh** turn.
+
+    The orphan is not abandoned by losing its slot — it was accepted, so it runs
+    to completion and only its bookkeeping is skipped, which the last two lines
+    read off the trigger rather than off the map.
+    """
+    trigger, entered, gate, _later, _later_gate = _queue_holding_trigger()
+    shop = _storefront(services, trigger=trigger, turn_workers=1)
+    held = _enqueue(
+        shop, shop.context_for("p-hold"), _participant("p-hold"),
+        _posted("m-hold", "th-hold"),
+    )
+    assert entered.wait(timeout=IMMEDIATE_S), "the holding turn never ran"
+
+    old = shop.reserve_turn("p-ada")
+    orphan = shop.enqueue_turn(
+        shop.context_for("p-ada"), _participant("p-ada"),
+        _posted("m-orphan", "th-ada"), old,
+    )
+    shop.clear_all_turns()
+    fresh = shop.reserve_turn("p-ada")
+    live = shop.enqueue_turn(
+        shop.context_for("p-ada"), _participant("p-ada"),
+        _posted("m-live", "th-ada"), fresh,
+    )
+
+    assert shop.turn_state("p-ada").booking == fresh
+    assert shop.turn_state("p-ada").future is live
+    assert shop._attach_turn_future("p-ada", old, orphan) is False
+
+    assert shop._cancel_queued_turn("p-ada") is True
+    assert live.cancelled() is True
+    assert orphan.cancelled() is False
+
+    gate.set()
+    held.result(timeout=IMMEDIATE_S)
+    orphan.result(timeout=IMMEDIATE_S)
+    assert trigger.ran == ["m-hold", "m-orphan"]
+
+
+def test_a_reset_cancels_a_queued_turn_where_it_used_to_refuse(stocked, conn):
+    """§4.8's availability half, at the reset itself: `quiesce_s=0` — the whole
+    budget — and the reset **succeeds**.
+
+    This is the arrangement S7 could only refuse. The wait is unchanged and
+    still has nothing to wait for at zero budget; what changed is that the turn
+    is gone from the queue before the wait is asked, so there is nothing left in
+    flight. Its neighbour
+    `test_a_quiesce_timeout_changes_nothing_and_leaves_the_turn_running` is the
+    control that keeps this from reading as "reset-mine stopped refusing": a
+    turn already on a worker still produces the `503`.
+
+    The `trigger.ran` reading is what separates this from the design §4.8
+    rejected — dropping the map entry as a stand-in produces the same `200` and
+    the same empty slot, with the turn still queued behind it.
+    """
+    _seed_catalog(conn, _catalog_rows(2))
+    trigger, entered, gate, _later, _later_gate = _queue_holding_trigger()
+    shop = _storefront(
+        stocked._services, quiesce_s=0, turn_workers=1, trigger=trigger
+    )
+    holder = shop.join("Grace", "en")
+    holder_ctx = shop.context_for(holder.participant_id)
+    held_post = shop._services.post_message(
+        holder_ctx, thread_id=holder.thread_id, text="hold the worker"
+    )
+    held = _enqueue(shop, holder_ctx, holder, held_post)
+    assert entered.wait(timeout=IMMEDIATE_S), "the holding turn never ran"
+
+    record, ctx = _busy_participant(shop, conn)
+    pid = record.participant_id
+    mine = shop._services.post_message(ctx, thread_id=record.thread_id, text="mine")
+    queued = _enqueue(shop, ctx, record, mine)
+    assert shop.turn_state(pid).state == TURN_QUEUED
+
+    outcome = _call_bounded(shop.reset_participant, record)
+
+    assert queued.cancelled() is True
+    assert shop.turn_in_flight(pid) is False
+    assert outcome["result"]["threadId"] != record.thread_id
+
+    gate.set()
+    held.result(timeout=IMMEDIATE_S)
+    assert trigger.ran == [held_post["msgId"]]
+
+
+def test_the_reset_cancels_only_the_resetting_participants_turn(stocked, conn):
+    """The cancel is keyed on **the participant being reset**, and nothing else.
+
+    Two queued turns behind one busy worker, one reset. A lookup keyed on a
+    fixed or wrong id satisfies every map assertion the other tests make —
+    something *was* cancelled and a slot *is* empty — and fails here on both
+    sides at once: the resetting participant's turn survives (so `quiesce_s=0`
+    refuses instead of resetting) and the bystander's is destroyed.
+
+    The two `msgId`s are the ones FalkorDB minted for the two posts, so the
+    reading below cannot pass on a value this test invented.
+    """
+    trigger, entered, gate, _later, _later_gate = _queue_holding_trigger()
+    shop = _storefront(
+        stocked._services, quiesce_s=0, turn_workers=1, trigger=trigger
+    )
+    holder = shop.join("Grace", "en")
+    holder_ctx = shop.context_for(holder.participant_id)
+    held_post = shop._services.post_message(
+        holder_ctx, thread_id=holder.thread_id, text="hold the worker"
+    )
+    held = _enqueue(shop, holder_ctx, holder, held_post)
+    assert entered.wait(timeout=IMMEDIATE_S), "the holding turn never ran"
+
+    mine_rec = shop.join("Ada", "en")
+    mine_ctx = shop.context_for(mine_rec.participant_id)
+    mine_post = shop._services.post_message(
+        mine_ctx, thread_id=mine_rec.thread_id, text="reset me"
+    )
+    mine = _enqueue(shop, mine_ctx, mine_rec, mine_post)
+
+    other_rec = shop.join("Bob", "en")
+    other_ctx = shop.context_for(other_rec.participant_id)
+    other_post = shop._services.post_message(
+        other_ctx, thread_id=other_rec.thread_id, text="leave me alone"
+    )
+    other = _enqueue(shop, other_ctx, other_rec, other_post)
+
+    outcome = _call_bounded(shop.reset_participant, mine_rec)
+
+    assert mine.cancelled() is True
+    assert other.cancelled() is False
+    assert shop.turn_state(other_rec.participant_id).state == TURN_QUEUED
+    assert outcome["result"]["threadId"] != mine_rec.thread_id
+
+    gate.set()
+    held.result(timeout=IMMEDIATE_S)
+    other.result(timeout=IMMEDIATE_S)
+    assert trigger.ran == [held_post["msgId"], other_post["msgId"]]
 
 
 def test_the_reset_leaves_no_dangling_cursor_owned_by_the_participant(stocked, conn):
