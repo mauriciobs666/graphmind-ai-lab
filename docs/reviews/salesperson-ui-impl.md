@@ -7140,3 +7140,153 @@ by line. Take or leave.
 ### Open questions
 
 None.
+
+## Pass 26 — 2026-09-11 (S9d: the per-participant record cache removed whole)
+
+**Reviewed:** the uncommitted working-tree diff delivering S9d — `server/falkorchat/storefront.py`
+(97 lines removed net: `_records`/`_records_lock` fields, `lookup`/`cached_ids`/`forget`/
+`forget_all`/`_cache_put`/`_cache_drop`, and every call site in `join`, `resolve_token`,
+`reset_participant`, `_reset_state_unknown`), `server/falkorchat/storefront_api.py` (module
+docstring + `get_participant` docstring rewritten, both `shop.forget_all()` calls dropped from the
+presenter `reset_all` route), `server/tests/test_storefront.py` and `test_storefront_api.py` (9
+tests deleted, 1 parametrized over 2 cases among them, 2 tests trimmed of their cache-only
+assertions), `falkor-chat/docs/HISTORY.md` (new 2026-09-11 entry). Baseline: `git diff` against
+`HEAD`; nothing committed. **Against:** `docs/plans/salesperson-ui.md` v1.19's revision note (the
+cache is removed whole, no replacement) and teco's brief for this pass, which supplies its own
+independently-verified structural sweep and test-count delta — I re-derived both rather than
+taking them on faith, and focused my own work on the semantic-completeness, docstring-truth, and
+mutation-shape checks the brief flagged as outside what a grep or a passing suite can see.
+
+**Verdict: approve with suggestions.** The removal is a correct, surgical subtraction with no
+incidental rewrites and no caller left silently depending on cache behavior — but it left three
+docstrings, more prominent than the three it did rewrite, asserting a mechanism that no longer
+exists in the file.
+
+**CPG: considered, not relevant — `cpg_falkorchat` is stamped from `85ddeed0` (`## Pass 22`'s
+note), predates S9a/S9a-fix/S9b/S9c and now S9d too, so its call-graph facts about `storefront.py`
+are five sub-units stale. This pass's call-site questions (who called the cache, does anything
+still expect it) were answered by direct `grep`/`Read` tracing and a live mutation probe, which
+the brief's own framing already pointed at — a stale graph would add nothing a fresher one could
+answer faster.**
+
+**Environment.** `.venv/bin/python -m pytest -q` from `falkor-chat/server`, reproduced live myself:
+**2643 passed, 14 deselected** — matches teco's figure exactly. I independently enumerated the
+removed test instances rather than trusting the count: 9 deleted test functions
+(`test_resolving_refreshes_the_cache_so_lookup_never_serves_a_stale_record`,
+`test_lookup_reads_through_on_a_cache_miss`, `test_forget_and_forget_all_drop_cached_records`,
+`test_the_cache_never_holds_a_raw_token`,
+`test_reset_refreshes_the_cached_record_so_lookup_never_serves_a_dead_thread`,
+`test_a_reset_that_finds_no_participant_evicts_the_cached_record`,
+`test_a_reset_that_times_out_evicts_the_cached_record` [parametrized `["succeeds",
+"times-out-too"]`, 2 instances], `test_the_router_never_authenticates_through_the_record_cache`,
+`test_the_lookup_tripwire_catches_a_router_that_does_call_lookup`) = 10 instances, matching the
+`-10` delta one-for-one. `grep -rn '\.lookup(\|_records_lock\|cached_ids\|\.forget(\|\.forget_all(\|_cache_put\|_cache_drop' falkorchat/ tests/ web/`
+reproduced zero hits myself; `ruff check` clean on all four touched files, reproduced myself.
+
+### Verified — semantic completeness at the call sites (not just the structural grep)
+
+Read every call site that used to touch the cache, in the code as it stands, not from the diff
+alone:
+
+- **`join`** (`storefront.py:558-640`): the single `_cache_put(record)` sat *after* the
+  `if status["created"] / else` branches merge (`git show HEAD:.../storefront.py:635`), applying
+  unconditionally to both the newly-created and replay paths — removing it is a clean subtraction;
+  the returned `record` is handed straight to the caller either way, which is what the route uses.
+- **`resolve_token`** (`:644-682`): both removed calls (`_cache_drop` on the unknown-row branch,
+  `_cache_put` on success) were the *only* consultation of `self._records` on this path to begin
+  with — `resolve_token` never read the cache, only wrote it — so removing the writes changes
+  nothing about what the method itself does.
+- **`reset_participant`** (`:1496-1600`) and **`_reset_state_unknown`** (`:1602-1631`): confirmed
+  by re-reading both methods end to end that every `raise`, the F8 `504` re-read, and the
+  success-path profile re-write are byte-for-byte the surrounding logic before the diff, minus
+  exactly the `_cache_drop`/`_cache_put` lines — a subtraction, not an incidental rewrite.
+- **`enqueue_turn`/`_run_turn`** (`:909-1113`): independently re-traced (not taking teco's trace on
+  faith, per the brief's own ask) — `enqueue_turn`'s own docstring states its reason 3 explicitly:
+  `participant` is handed in "precisely so the worker never resolves a `ParticipantRecord` of its
+  own," because the request thread already re-read it in `resolve_token`. `_run_turn` receives that
+  same object as a parameter; grepping the class for `.lookup(` (pre-removal semantics) confirms no
+  turn-queue code path ever called it. `lookup`'s own deleted docstring's stated rationale for the
+  cache's existence ("a worker thread holding a `participantId` … needs `displayName`/`threadId`/
+  `language` without a graph round-trip per call") was therefore aspirational, never wired — the
+  removal doesn't break anything that aspiration described.
+
+### Verified — the two rewritten docstrings' design claims
+
+- `resolve_token`'s **"Re-reads the graph on every call, full stop"** (`:646`): true of the code —
+  the method body has exactly one `self._repo.get_participant_record` call and no cache read
+  anywhere in the class after this diff.
+- `reset_participant`'s **"reading them back would cost a query for the same answer this record
+  already carries"** (`:1512-1513`): true — `participant.display_name` and `participant.language`
+  (the caller-supplied, already-resolved record) are used directly at `:1599-1600`, no graph read
+  for either field.
+
+### Verified — the two trimmed tests still assert something real
+
+`test_a_deleted_participant_stops_resolving_immediately`: after the trim it still joins, resolves
+successfully, deletes the participant via `reset_all_participants`, and asserts `resolve_token`
+now returns `None` — a real, non-trivial assertion about `resolve_token`'s own graph-re-read
+behavior, independent of whatever a cache would have done.
+`test_a_rebuilt_storefront_resolves_a_token_minted_by_the_previous_instance`: still builds a
+*second* `Storefront` over its own `Repository`/connection and asserts it resolves a token minted
+by the first — restart survival via the graph, not via any in-process state. Neither trimmed
+assertion was load-bearing only in combination with the removed cache assertion.
+
+### Verified (executed) — the deletion-shape mutation probe
+
+Reintroduced *only* `resolve_token`'s success-branch `self._cache_put(record)` call, with none of
+the removed machinery (`_records`, `_cache_put` method) restored — exactly the "half-removed
+cache" shape the brief asked for. Ran `.venv/bin/python -m pytest -q tests/test_storefront.py
+tests/test_storefront_api.py`: **59 failed, 182 passed** (`AttributeError` on `self._cache_put`,
+propagating through nearly every route that calls `resolve_token`). Nothing here would have
+silently tolerated a half-removed cache — the failure is loud and immediate, not a quiet pass.
+Restored by `cp` from a pre-mutation backup; `diff -q` against the backup reported no differences
+and `md5sum` matched the pre-mutation value (`3577f91ac63790423ea977154c251d97`) both before
+mutating and after restoring.
+
+### Findings
+
+**M-1 (major). Two docstrings more prominent than the three that were rewritten still assert the
+removed cache exists, and both statements are now false.** The module docstring
+(`storefront.py:1-33`) opens with "**The graph is the participant registry. The in-process map is
+a cache.**" and goes on to describe `resolve_token` as "never consult[ing] the cache" — there is no
+in-process map of any kind left in this file, so a maintainer reading this as the module's
+architecture summary gets a wrong model on the very first paragraph. The `Storefront` class
+docstring (`:394-404`) repeats it: "All of its mutable state — the record cache and the turn map —
+is per-instance… so both maps are touched concurrently" — there is one map, not two. HISTORY.md's
+entry claims three docstrings were rewritten "that reasoned about the now-gone mechanism," which is
+accurate as far as it goes but is not the complete set — these two were missed, and they are the
+two most likely to be read first (top-of-module, top-of-class). Suggested fix: rewrite the module
+docstring's opening to state the graph-is-authoritative invariant on its own terms (drop "the
+in-process map is a cache" and "never consult the cache," since there is nothing to contrast
+against); change the class docstring's "the record cache and the turn map" to "the turn map."
+
+**N-1 (minor). `ParticipantRecord.without_token`'s docstring — "The cacheable form — identical but
+carrying no raw credential" (`:293-295`) — is now an orphaned reference: there is no cache left for
+anything to be "cacheable" for.** Low stakes (the method's own behavior is unaffected and the
+phrase's plain meaning still roughly tracks "safe to hand around"), but it is the same class of
+residue as M-1 on a smaller scale. Suggested fix: "The token-free form — identical but carrying no
+raw credential."
+
+**N-2 (minor). `HISTORY.md`'s call-site list mischaracterizes one of the six removed sites.** It
+says a `_cache_put`/`_cache_drop` call was removed from "`ensure_participant`'s replay branch" —
+but `git show HEAD:falkor-chat/server/falkorchat/storefront.py:635` shows the single `_cache_put` in
+`join` sat *after* the `if status["created"] / else` branches had already merged, so it ran
+unconditionally on every `join` call (newly-created or replay), not only on the replay path. Not a
+functional issue — the removal itself is correct, one call site, cleanly deleted — just an
+inaccurate description in the change log. Suggested fix: reword to "`join`'s success path (after
+the newly-created/replay branches merge)."
+
+### What's solid
+
+The removal is exactly what the plan ordered: whole, no replacement mechanism, no orphaned field or
+lock left half-alive. Every call site that used to touch the cache was re-verified against its
+actual current need, not just against a clean diff — none of them silently depended on
+cache-populated freshness. The two trimmed tests keep real assertions; the two rewritten design-claim
+docstrings the brief singled out are literally true of the code as it stands. The mutation probe
+confirms the risk shape the brief named (leftover logic going undetected) does not apply here — a
+half-removed cache reddens loudly and immediately, not quietly.
+
+### Open questions
+
+None — both minors are one-line documentation fixes `coder` or a follow-up doc pass can take
+without further design input.
