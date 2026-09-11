@@ -1,6 +1,6 @@
 {
   "packId": "embedder-graphrag-retrieval",
-  "packVersion": "1.0.0",
+  "packVersion": "1.1.0",
   "role": "embedder",
   "schemaVersion": 1,
   "description": "Exact brute-force cosine retrieval over the 121-message falkor-chat eval corpus (K-026), plus a BM25 reference arm.",

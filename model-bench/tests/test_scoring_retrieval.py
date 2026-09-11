@@ -23,7 +23,7 @@ from typing import Any
 import pytest
 
 from modelbench.lmstudio import EmbedResult, ModelInfo
-from modelbench.packs import Pack
+from modelbench.packs import Pack, load_pack
 from modelbench.results import ItemTiming
 from modelbench.scoring import retrieval
 
@@ -785,3 +785,146 @@ class TestDeterministicArm:
             assert set(item.measures) == {"mrr", "separationRaw", "separationZ"}
             assert "precisionAt1" in item.counts
             assert "recallAt1" in item.counts and "recallAt2" in item.counts
+
+
+# ==================================================================================================
+# 6. Done-condition 4 (S3 spec §8 Step 2 item 2) — the offline ranking self-test against the REAL,
+# committed pack data: `corpus.embeddings.json` (written live by `refresh_golden.py --embed-corpus`,
+# once, against `text-embedding-qwen3-embedding-0.6b`) and `golden_retrieval.embeddings.json`
+# (copied verbatim at Step 0, itself embedded by the same underlying model via falkor-chat's own
+# pipeline). NO live embedding call anywhere in this class — `prime()` is driven with an
+# `_ExplodingLMStudio` that fails the test the instant `.embed()` is called, and every query vector
+# comes from the committed fixture, never from a fresh call. This isolates "is the ranking code
+# right" from "is the live embedding call right" (`-ml` §5.4's own stated purpose for shipping
+# `golden_retrieval.embeddings.json` at all) — the live self-check (done-condition 5, S3 Step 2 item
+# 3) is the counterpart that DOES make live calls, and is deliberately not duplicated here.
+# ==================================================================================================
+
+_REAL_PACK_ROOT = Path(__file__).resolve().parents[1] / "packs" / "embedder-graphrag-retrieval"
+
+#: The exact model identity `corpus.embeddings.json` was generated against (its own `cacheKey`
+#: header, read back and asserted below) — reproduced here rather than read from the file, so a
+#: cache-key regression in either `embed_corpus` or `prime()`'s own `_compute_cache_key` fails
+#: this test loudly (a HIT silently degrading to a live call would instead be caught by
+#: `_ExplodingLMStudio` raising).
+_REAL_MODEL_INFO = ModelInfo(
+    id="text-embedding-qwen3-embedding-0.6b",
+    object="model",
+    type="embeddings",
+    publisher="lmstudio",
+    arch="qwen3",
+    compatibility_type="gguf",
+    quantization="Q8_0",
+    state="loaded",
+    max_context_length=8192,
+    capabilities=None,
+    loaded_context_length=8192,
+)
+
+
+class _ExplodingLMStudioNoCorpusCall:
+    """Any call is a test failure — proves the offline self-test makes no live embedding call at
+    all (spec §8 Step 2 item 2: "with no live embedding call")."""
+
+    def embed(self, *args, **kwargs):
+        raise AssertionError("embed() must not be called — done-condition 4 is offline-only")
+
+
+def _score_all_golden_queries(pack: Pack, golden_vectors: dict[str, Any]):
+    """One pass over every `queries.jsonl` row, scoring against its own fixed vector from
+    `golden_retrieval.embeddings.json` — never a live call."""
+    items = []
+    for row in pack.iter_items():
+        vector = golden_vectors[row["itemId"]]["vector"]
+        embed_result = EmbedResult(
+            vectors=(tuple(vector),),
+            dimension=len(vector),
+            model=_REAL_MODEL_INFO.id,
+            usage=None,
+            wallClockMs=1.0,
+        )
+        timing = ItemTiming(wallClockMs=5.0, calls=(), withheldFor=None)
+        items.append(retrieval.score_item(row, embed_result, timing, pack=pack))
+    return retrieval.aggregate(tuple(items), pack=pack)
+
+
+@pytest.fixture
+def _real_pack() -> Pack:
+    if not (_REAL_PACK_ROOT / "corpus.embeddings.json").exists():
+        pytest.fail(
+            f"{_REAL_PACK_ROOT / 'corpus.embeddings.json'} does not exist — run "
+            "`refresh_golden.py --embed-corpus` (S3 spec §8 Step 2 item 1) before this test can "
+            "run; done-condition 4 needs the real artifact, not a synthetic one."
+        )
+    return load_pack(_REAL_PACK_ROOT)
+
+
+class TestOfflineRankingSelfTestAgainstTheRealPackData:
+    def test_prime_cache_hits_against_the_committed_corpus_embeddings_with_no_live_call(
+        self, _real_pack: Pack
+    ) -> None:
+        retrieval._state.clear()
+        retrieval.prime(
+            lmstudio=_ExplodingLMStudioNoCorpusCall(),
+            model_info=_REAL_MODEL_INFO,
+            call_surface="embeddings",
+            timeout_s=30.0,
+            pack=_real_pack,
+        )
+        assert len(retrieval._state["corpusVectors"]) == 121
+
+    def test_ranking_path_reproduces_identical_rankings_from_the_two_fixed_vector_files(
+        self, _real_pack: Pack
+    ) -> None:
+        """"the ranking path is shown to reproduce identical rankings from the two fixed vector
+        files with no live embedding call at all" (plan, cited S3 spec §8 Step 2 item 2) — proven
+        here as determinism: the same two fixed files, scored twice, must produce byte-identical
+        `RetrievalAggregates` and per-item rankings, since nothing in the path (cosine, sorting,
+        aggregation) has any source of non-determinism to reproduce identically from otherwise."""
+        golden_vectors = json.loads(
+            (_REAL_PACK_ROOT / "golden_retrieval.embeddings.json").read_text(encoding="utf-8")
+        )
+
+        retrieval._state.clear()
+        retrieval.prime(
+            lmstudio=_ExplodingLMStudioNoCorpusCall(),
+            model_info=_REAL_MODEL_INFO,
+            call_surface="embeddings",
+            timeout_s=30.0,
+            pack=_real_pack,
+        )
+        aggregates_a = _score_all_golden_queries(_real_pack, golden_vectors)
+        aggregates_b = _score_all_golden_queries(_real_pack, golden_vectors)
+
+        assert aggregates_a == aggregates_b
+
+    def test_aggregate_metrics_are_well_formed_over_all_38_golden_queries(
+        self, _real_pack: Pack
+    ) -> None:
+        """Sanity bounds only — NOT an assertion against `retrieval_baseline.json`'s pinned
+        figures. `-ml` §5.4 is explicit that exact-vs-ANN and vector-only-vs-hybrid push in
+        opposite directions, so a match OR a mismatch against that baseline is uninterpretable as
+        a correctness signal here; that comparison is the live self-check's own job (S3 Step 2
+        item 3, `docs/test-reports/embedder-self-check-report.md`), never this offline test's."""
+        golden_vectors = json.loads(
+            (_REAL_PACK_ROOT / "golden_retrieval.embeddings.json").read_text(encoding="utf-8")
+        )
+
+        retrieval._state.clear()
+        retrieval.prime(
+            lmstudio=_ExplodingLMStudioNoCorpusCall(),
+            model_info=_REAL_MODEL_INFO,
+            call_surface="embeddings",
+            timeout_s=30.0,
+            pack=_real_pack,
+        )
+        aggregates = _score_all_golden_queries(_real_pack, golden_vectors)
+
+        assert aggregates.mrr is not None
+        assert aggregates.mrr.n == 38
+        assert 0.0 <= aggregates.mrr.mean <= 1.0
+        for recall_metric in aggregates.recallAtK:
+            assert recall_metric.n == 38
+            assert 0 <= recall_metric.successes <= recall_metric.n
+        assert aggregates.precisionAt1 is not None
+        assert aggregates.precisionAt1.n == 38

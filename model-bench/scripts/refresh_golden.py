@@ -16,14 +16,16 @@ Three pairwise-exclusive CLI modes (spec §5's `main()`):
   violation). Never touches `corpus.embeddings.json` — that is `--embed-corpus`'s job alone.
 * **`--check-origins`** — read-only, no writes: re-hashes every tracked origin (all five, including
   `test_metrics.py`) and prints `unchanged`/`DRIFTED` per file; exit 0 iff none drifted.
-* **`--embed-corpus`** — the one live-LM-Studio mode (spec §8 Step 2). **Not built in this stage**:
-  `embed_corpus()` below raises `NotImplementedError` by design — it needs a reachable LM Studio
-  and a real `ModelInfo`, neither of which Step 0 (static pack data, no live call) touches.
+* **`--embed-corpus`** — the one live-LM-Studio mode (spec §8 Step 2, this stage's own build): one
+  batched `lmstudio.embed()` call over the pack's 121 documents, writing `corpus.embeddings.json`
+  with its cache-key header. Refuses under an unchanged `packVersion`, exactly like the default
+  mode (`_pack_version_gate`, shared verbatim between both write paths — spec §8 Step 2 item 1).
 
-The pure cache-key computation (`compute_cache_key`, `-ml` §5.5's four components) *is* built and
-tested here, offline, against a synthetic corpus/model fixture — it is what `--embed-corpus`
-(Step 2) will use to write `corpus.embeddings.json`'s header, and what `scoring/retrieval.py`'s
-`prime()` (Step 1) will use to decide cache hit/miss, but computing it needs no live call.
+The pure cache-key computation (`compute_cache_key`, `-ml` §5.5's four components) is built and
+tested here, offline, against a synthetic corpus/model fixture — `--embed-corpus` uses it to write
+`corpus.embeddings.json`'s header, and `scoring/retrieval.py`'s `prime()` independently recomputes
+the same shape (its own `_compute_cache_key`, deliberately not imported from here) to decide cache
+hit/miss.
 """
 
 from __future__ import annotations
@@ -39,6 +41,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Mapping, Sequence
+
+from modelbench.lmstudio import LMStudio, LMStudioError, ModelInfo
 
 # scripts/refresh_golden.py -> model-bench/ -> graphmind-ai-lab/ (the monorepo root, where every
 # `OriginSpec.originPath` below is rooted — confirmed against root AGENTS.md's own structure,
@@ -409,25 +413,73 @@ class CorpusEmbeddingsFile:
         )
 
 
+def _find_model_in_catalog(catalog: Sequence[ModelInfo], model_key: str) -> ModelInfo:
+    """The catalog-lookup-by-model-key logic `--embed-corpus` needs, mirroring
+    `runner._find_model`'s convention rather than inventing a new one (spec's own instruction: "LM
+    Studio has its own load/warm-up path the runner already uses elsewhere"): resolves `model_key`
+    against a live
+    `GET /api/v0/models` catalog. Never checks `state` — this is a lookup, not a residency check;
+    the caller loads the model via `LMStudio.warm_up()` afterwards, the same way `run_pack`'s own
+    step 4 does. Raises `RefreshGoldenError`, naming every id the catalog does have, if `model_key`
+    resolves to none of them — a live, actionable failure rather than a guess at why the batched
+    embed call would otherwise fail."""
+    for info in catalog:
+        if info.id == model_key:
+            return info
+    available = ", ".join(sorted(m.id for m in catalog)) or "(catalog is empty)"
+    raise RefreshGoldenError(
+        f"--embed-corpus: model {model_key!r} not found in LM Studio's catalog "
+        f"(GET /api/v0/models); available: {available}"
+    )
+
+
 def embed_corpus(
     corpus_rows: Sequence[Mapping[str, str]],
     *,
-    lmstudio: Any,
+    lmstudio: LMStudio,
     model_key: str,
+    quantization: str,
     document_prefix: str,
+    corpus_bytes: bytes,
     timeout_s: float,
 ) -> CorpusEmbeddingsFile:
     """Step 2's own live mode (`docs/plans/small-model-benchmarking-s3-spec.md` §8 Step 2, §5):
-    one batched `lmstudio.embed()` call over all 121 (prefixed) documents, writing RAW vectors
-    plus a `compute_cache_key` header.
+    one batched `lmstudio.embed()` call over all 121 (`document_prefix`-applied) documents — RAW
+    vectors, never pre-normalized at write time (spec §6.2/§9: `scoring/retrieval.py`'s ranking
+    function L2-normalizes at read time, and the whole point of this file existing is to let the
+    offline self-test and `prime()`'s own diagnostic observe the raw norm distribution too —
+    normalizing here would throw that away).
 
-    **Not built in this stage.** Step 0 (this file's own scope, spec §8) is "static pack data, no
-    live call" — `embed_corpus` needs a reachable LM Studio and a real `ModelInfo.quantization`,
-    neither of which any Step 0 test touches. Raises unconditionally so `--embed-corpus` fails
-    loudly rather than silently no-opping."""
-    raise NotImplementedError(
-        "embed_corpus: Step 2's own live mode "
-        "(docs/plans/small-model-benchmarking-s3-spec.md §8 Step 2) — not built in Step 0"
+    `quantization`/`corpus_bytes` are supplied by the caller (`main()`, which already reads
+    `corpus.jsonl`'s bytes to build `corpus_rows` and resolves the live `ModelInfo` via
+    `lmstudio.catalog()` + `_find_model_in_catalog`, spec §8 Step 2 item 1) rather than re-derived
+    here, so this function stays a pure request/response step with no catalog call or file read of
+    its own. `corpus_bytes` MUST be `corpus.jsonl`'s raw file bytes — not a re-serialization of
+    `corpus_rows` — because `compute_cache_key`'s `corpusSha256` component must match the SAME
+    hash `scoring/retrieval.py`'s own `_compute_cache_key` independently recomputes from
+    `pack.data_path("corpus").read_bytes()` at run time (`-ml` §5.5); any other byte sequence here
+    is a cache key that can never hit."""
+    texts = [document_prefix + row["text"] for row in corpus_rows]
+    embed_result = lmstudio.embed(texts, model=model_key, timeout_s=timeout_s)
+    if len(embed_result.vectors) != len(corpus_rows):
+        raise RefreshGoldenError(
+            f"--embed-corpus: lmstudio.embed returned {len(embed_result.vectors)} vectors for "
+            f"{len(corpus_rows)} documents — a truncated or malformed batch response"
+        )
+    vectors = {
+        row["docId"]: vector
+        for row, vector in zip(corpus_rows, embed_result.vectors, strict=True)
+    }
+    cache_key = compute_cache_key(
+        model=model_key,
+        quantization=quantization,
+        document_prefix=document_prefix,
+        corpus_bytes=corpus_bytes,
+    )
+    return CorpusEmbeddingsFile(
+        cacheKey=cache_key,
+        generatedAt=_utc_now_iso(),
+        vectors=vectors,
     )
 
 
@@ -502,11 +554,18 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--embed-corpus",
         action="store_true",
-        help="Step 2's live mode (not built in this stage)",
+        help="the one live-LM-Studio mode: embed corpus.jsonl and write corpus.embeddings.json",
     )
     parser.add_argument("--model", help="LM Studio model key (--embed-corpus only)")
     parser.add_argument(
         "--api-base-url", default="http://localhost:1234", help="--embed-corpus only"
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=300.0,
+        help="seconds allowed for the warm-up call and the batched embed call each "
+        "(--embed-corpus only; default 300.0, matching run's own firstCallTimeoutSeconds default)",
     )
     return parser
 
@@ -533,14 +592,70 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0 if all(r.status == "unchanged" for r in results) else 1
 
     if args.embed_corpus:
-        embed_corpus(
-            [],
-            lmstudio=None,
-            model_key=args.model or "",
-            document_prefix="",
-            timeout_s=120.0,
-        )
-        return 0  # unreachable — embed_corpus always raises in this stage
+        if not args.model:
+            print("refresh_golden.py: --embed-corpus requires --model", file=sys.stderr)
+            return 2
+
+        # Same content-hash-changing-write refusal as the default import mode, and the SAME
+        # function — corpus.embeddings.json is just as much this pack's own committed data as the
+        # four `_run_import` writes are (spec §8 Step 2 item 1: "packVersion must already be
+        # bumped"). Checked BEFORE any LM Studio contact, so a forgotten bump fails instantly and
+        # for free, never after a live call has already run.
+        provenance_path = pack_root / "PROVENANCE.md"
+        try:
+            _pack_version_gate(pack_root, provenance_path)
+        except RefreshGoldenError as exc:
+            print(f"refresh_golden.py: {exc}", file=sys.stderr)
+            return 1
+
+        manifest = json.loads((pack_root / "pack.json").read_text(encoding="utf-8"))
+        document_prefix = manifest["embedding"]["documentPrefix"]
+
+        corpus_path = pack_root / "corpus.jsonl"
+        corpus_bytes = corpus_path.read_bytes()
+        corpus_rows = [
+            json.loads(line)
+            for line in corpus_bytes.decode("utf-8").splitlines()
+            if line.strip()
+        ]
+
+        client = LMStudio(args.api_base_url)
+        try:
+            catalog = client.catalog()
+            model_info = _find_model_in_catalog(catalog, args.model)
+            # The mandatory warm-up (mirrors run_pack's own step 4, runner.py): never assume the
+            # model is already resident — LM Studio's own load path is a call landing on it, not
+            # something `catalog()` alone triggers. Its content is discarded, exactly like the
+            # runner's warm-up; the point is to isolate the cold-load cost from the real batched
+            # embed call below, not to time it.
+            resident_before = client.residency()
+            client.warm_up(
+                args.model,
+                call_surface="embeddings",
+                system_prompt=None,
+                was_resident_before=any(r.id == args.model for r in resident_before),
+                timeout_s=args.timeout,
+            )
+            result = embed_corpus(
+                corpus_rows,
+                lmstudio=client,
+                model_key=args.model,
+                quantization=model_info.quantization,
+                document_prefix=document_prefix,
+                corpus_bytes=corpus_bytes,
+                timeout_s=args.timeout,
+            )
+        except RefreshGoldenError as exc:
+            print(f"refresh_golden.py: {exc}", file=sys.stderr)
+            return 1
+        except LMStudioError as exc:
+            print(f"refresh_golden.py: --embed-corpus call failed: {exc}", file=sys.stderr)
+            return 1
+
+        dest_path = pack_root / "corpus.embeddings.json"
+        dest_path.write_text(json.dumps(result.to_dict(), indent=2) + "\n", encoding="utf-8")
+        print(f"wrote {dest_path}")
+        return 0
 
     try:
         _run_import(repo_root, pack_root)

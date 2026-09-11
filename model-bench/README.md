@@ -32,15 +32,18 @@ dependency.
 
 ## Status
 
-**Stage S2 is closed — the adapter, pack loader, runner and CLI are all built and wired; no run has
-been executed against a real model yet.** What exists now is both halves: the part that decides
-whether a number may be printed (the environment fingerprint and its validation, the run store and
-its quarantine-on-read, the statistics module, the markdown comparison) and the part that would
-produce one (the LM Studio adapter, the pack loader, the runner's capture-order orchestration, and
-all six CLI commands). What is still missing is a concrete scorer for any role — `run` refuses
-every pack today until the first one ships in stage S3 of
-`docs/plans/small-model-benchmarking.md` §4, which is also this tool's first real end-to-end run.
-The whole current suite runs offline.
+**Stage S3 is closed — the first real end-to-end run has executed.** `run --pack
+embedder-graphrag-retrieval --model text-embedding-qwen3-embedding-0.6b` produced a stored
+`RunResult` plus its BM25 deterministic reference arm, `compare` renders both with no exclusion,
+and the harness self-check read recall@10 = 37/38 = 0.974
+(`docs/test-reports/embedder-self-check-report.md`). What exists now is both halves: the part that
+decides whether a number may be printed (the environment fingerprint and its validation, the run
+store and its quarantine-on-read, the statistics module, the markdown comparison) and the part that
+produces one (the LM Studio adapter, the pack loader, the runner's capture-order orchestration, all
+six CLI commands, and the embedder's own `ItemScorer`). Four roles
+(`guard-judge`/`nlq-generator`/`chat-responder`/`tool-caller`) still have no scorer — S4 onward,
+`docs/plans/small-model-benchmarking.md` §4. The default suite (network-free) still runs offline;
+`pytest -m live` opts into the tests that need a reachable LM Studio.
 
 ## Quick start
 

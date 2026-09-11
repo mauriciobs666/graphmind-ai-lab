@@ -2,6 +2,51 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-11 — S3, Step 2: the live end-to-end run (`--embed-corpus`, the harness self-check, `run`/`compare`) — S3 closed
+
+**What:** `docs/plans/small-model-benchmarking-s3-spec.md` §8 Step 2, all five done-conditions.
+`scripts/refresh_golden.py` gained its real `--embed-corpus` mode: `main()`'s branch resolves a live
+`ModelInfo` via `LMStudio.catalog()` + a new `_find_model_in_catalog` (mirrors `runner._find_model`'s
+convention), warms the model up (mirrors `run_pack`'s own step 4) before one batched `embed_corpus()`
+call over the pack's 121 prefixed documents, and writes RAW vectors plus a `compute_cache_key` header
+to `corpus.embeddings.json`. Reuses `_pack_version_gate` verbatim for this write path — refuses
+under an unchanged `packVersion`, checked before any LM Studio contact. `pack.json`'s `packVersion`
+bumped `1.0.0` -> `1.1.0` (a new committed, content-hash-changing artifact).
+
+**The live run, in the spec's own order:**
+1. `--embed-corpus --model text-embedding-qwen3-embedding-0.6b` wrote the real
+   `corpus.embeddings.json` (121 x 1024 raw vectors, `normalized: false`).
+2. Done-condition 4 — the offline ranking self-test (`tests/test_scoring_retrieval.py`,
+   `TestOfflineRankingSelfTestAgainstTheRealPackData`): `prime()` cache-HITs against the just-written
+   file with an exploding stub `LMStudio` (no live call at all), scores all 38 golden queries against
+   `golden_retrieval.embeddings.json`'s fixed vectors, and asserts determinism (byte-identical
+   `RetrievalAggregates` across two runs) plus well-formed bounds — deliberately not asserted against
+   `retrieval_baseline.json`'s pinned figures (`-ml` §5.4: exact-vs-ANN and vector-only-vs-hybrid are
+   uninterpretable as a quality signal in either direction).
+3. Done-condition 5 — the harness self-check (live, 38 fresh query embed calls): **recall@10 =
+   0.9736842105263158 (37/38)**, identical to `retrieval_baseline.json`'s pinned figure; recall@5 and
+   MRR also close. Well above the `-ml` §5.4 ~0.85 floor, so the below-0.85 investigation (wrong
+   prefix, unnormalized vectors, truncated corpus) was not triggered. Write-up:
+   `docs/test-reports/embedder-self-check-report.md` — diagnostic only, never a gate, per the
+   2026-09-02 stakeholder ruling.
+4. `attest` (real `host.json`) then done-condition 1 — `run --pack embedder-graphrag-retrieval
+   --model text-embedding-qwen3-embedding-0.6b --session s3-step2-live-2026-09-11`: a real stored
+   `RunResult` (38 items, recall@10 37/38, MRR 0.6278).
+5. Done-condition 2 (storage half) — the already-wired `_cmd_run` deterministic-arm hook stored the
+   BM25 reference arm under the same `sessionId` in the same invocation.
+
+**A real, pre-existing defect surfaced mid-run, not caused by this unit's own code:** `compare
+--pack embedder-graphrag-retrieval --session s3-step2-live-2026-09-11` excluded both stored arms as
+`INVALID` — `results.py`'s `_item_problems` bug, dispatched separately and fixed (see the entry
+immediately below this one). Re-running `compare` against the same session after that fix now
+renders both arms with no exclusion, closing done-condition 2 in full.
+
+**S3 is now fully closed — all five done-conditions met.** Files touched (in-scope only; `results.py`
+was a separate unit): `scripts/refresh_golden.py`, `tests/test_refresh_golden.py`,
+`tests/test_scoring_retrieval.py`, `packs/embedder-graphrag-retrieval/pack.json` (`packVersion`),
+`packs/embedder-graphrag-retrieval/corpus.embeddings.json` (new),
+`docs/test-reports/embedder-self-check-report.md` (new), this entry, `README.md`, `AGENTS.md`.
+
 ## 2026-09-11 — Bug fix: `results.py`'s `_item_problems` quarantined every valid continuous-metric record
 
 **What was wrong:** `_item_problems` (the read-time half of `ItemResult.scored_outcome`'s

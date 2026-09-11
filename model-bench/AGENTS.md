@@ -9,25 +9,27 @@ for the full design.
 
 ## Current state
 
-**Stage S2 is closed — the outside world is reachable, but no run has ever been executed end to
-end.** `modelbench/` holds `fingerprint`, `results`, `stats`, `report`, `roles`, `packs` (the real
-loader: `load_pack`/`validate_pack`, content hashing, the AST import allowlist, the row-count
-identity), `lmstudio`, `hostinfo`, `tooling`, `convo` (`assemble` and the bounded per-turn `drive`)
-and `runner` (`RunConfig`, `RunRefused`, the `ItemScorer`/`ConversationScorer` scorer-seam
-Protocols, `run_pack`'s ten-step capture order, both driving loops —
-`_drive_single_call_items` and `_drive_conversations`/`_turn_timings` — and `latency_block`'s
-`LatencyBlock` accumulation, satisfying spec §5's nine invariants). The CLI ships all six commands
-— `compare` (with `--negative-control`), `index rebuild`, `models --tested`, `attest`, `validate`
-and `run` — wired into `cli.py`'s `main()`.
+**Stage S3 is closed — the first real end-to-end run has executed.** `modelbench/` holds
+`fingerprint`, `results`, `stats`, `report`, `roles`, `packs` (the real loader:
+`load_pack`/`validate_pack`, content hashing, the AST import allowlist, the row-count identity),
+`lmstudio`, `hostinfo`, `tooling`, `convo` (`assemble` and the bounded per-turn `drive`), `runner`
+(`RunConfig`, `RunRefused`, the `ItemScorer`/`ConversationScorer` scorer-seam Protocols, `run_pack`'s
+ten-step capture order, both driving loops — `_drive_single_call_items` and
+`_drive_conversations`/`_turn_timings` — and `latency_block`'s `LatencyBlock` accumulation,
+satisfying spec §5's nine invariants), and `scoring/retrieval.py` — the `embedder` role's own
+`ItemScorer` (recall@k/MRR/precision@k, BM25 reference arm, `prime`/`embed_text`/`deterministic_arm`).
+The CLI ships all six commands — `compare` (with `--negative-control`), `index rebuild`, `models
+--tested`, `attest`, `validate` and `run` — wired into `cli.py`'s `main()`. `run --pack
+embedder-graphrag-retrieval --model text-embedding-qwen3-embedding-0.6b` is a real, executed run:
+harness self-check recall@10 = 37/38 = 0.974 (`docs/test-reports/embedder-self-check-report.md`),
+`compare` renders the model arm against its BM25 deterministic reference arm with no exclusion.
 
-**What S3 owes.** `run` refuses every pack today: `_load_item_scorer`/`_load_conversation_scorer`
-(`runner.py`) raise `NotImplementedError` unconditionally, since no concrete `ItemScorer`/
-`ConversationScorer` ships before S3. The first real end-to-end run — the `embedder` pack,
-`modelbench/scoring/retrieval.py` and `scripts/refresh_golden.py` — is S3's own scope
-(`docs/plans/small-model-benchmarking.md` §4 S3). `validate --strict` also stays a deliberate
-`NotImplementedError` deferral (runner-spec §9) until the plan states a ruling.
-`docs/plans/small-model-benchmarking.md` §4 sequences S2–S8; `docs/HISTORY.md` carries the unit
-trail.
+**What S4+ owes.** `_load_conversation_scorer` (`runner.py`) still raises `NotImplementedError`
+unconditionally — no `ConversationScorer` ships before `tool-caller`'s own stage. Four roles
+(`guard-judge`/`nlq-generator`/`chat-responder`/`tool-caller`) have no scorer yet. `validate --strict`
+also stays a deliberate `NotImplementedError` deferral (runner-spec §9) until the plan states a
+ruling. `docs/plans/small-model-benchmarking.md` §4 sequences S2–S8; `docs/HISTORY.md` carries the
+unit trail.
 
 **The fingerprint has two discriminators and one derived key, and `ARM_KINDS` is deliberately not
 derived from the forbidden mapping.** `REQUIRED_BY_SCHEMA[schema]` and `FORBIDDEN_BY_ARM_PROFILE`

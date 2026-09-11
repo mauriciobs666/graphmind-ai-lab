@@ -17,8 +17,11 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
+
+from modelbench.lmstudio import EmbedResult, LMStudioUnreachable, ModelInfo
 
 _SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
@@ -140,15 +143,148 @@ def test_corpus_embeddings_file_round_trips_and_flags_unnormalized() -> None:
 
 
 # --------------------------------------------------------------------------------------------
-# `embed_corpus` — Step 2's live mode, deliberately NOT built in Step 0
+# `_find_model_in_catalog` — the catalog-lookup-by-model-key logic (spec §8 Step 2 item 1),
+# offline: a hand-built `ModelInfo` list, never a real catalog call.
 # --------------------------------------------------------------------------------------------
 
 
-def test_embed_corpus_is_not_implemented_in_this_stage() -> None:
-    with pytest.raises(NotImplementedError):
-        refresh_golden.embed_corpus(
-            [], lmstudio=None, model_key="m", document_prefix="", timeout_s=1.0
+def _model_info(*, model_id: str, quantization: str = "Q8_0") -> ModelInfo:
+    return ModelInfo(
+        id=model_id,
+        object="model",
+        type="embeddings",
+        publisher="pub",
+        arch="arch",
+        compatibility_type="gguf",
+        quantization=quantization,
+        state="not-loaded",
+        max_context_length=8192,
+        capabilities=None,
+        loaded_context_length=None,
+    )
+
+
+class TestFindModelInCatalog:
+    def test_finds_the_matching_entry_by_id(self) -> None:
+        catalog = [_model_info(model_id="a"), _model_info(model_id="b", quantization="Q4_0")]
+        found = refresh_golden._find_model_in_catalog(catalog, "b")
+        assert found.id == "b"
+        assert found.quantization == "Q4_0"
+
+    def test_raises_naming_every_available_id_when_key_is_not_in_the_catalog(self) -> None:
+        catalog = [_model_info(model_id="a"), _model_info(model_id="b")]
+        with pytest.raises(refresh_golden.RefreshGoldenError, match=r"a.*b|b.*a"):
+            refresh_golden._find_model_in_catalog(catalog, "c")
+
+    def test_raises_on_an_empty_catalog(self) -> None:
+        with pytest.raises(refresh_golden.RefreshGoldenError, match="empty"):
+            refresh_golden._find_model_in_catalog([], "c")
+
+    def test_never_matches_on_state_or_any_other_field_only_id(self) -> None:
+        """The lookup is `id`-only (spec: "never checks state") — a same-quantization entry
+        under a different id must not be picked up as a fallback."""
+        catalog = [_model_info(model_id="a", quantization="Q8_0")]
+        with pytest.raises(refresh_golden.RefreshGoldenError):
+            refresh_golden._find_model_in_catalog(catalog, "Q8_0")
+
+
+# --------------------------------------------------------------------------------------------
+# `embed_corpus` — Step 2's own live mode, driven with a stub LMStudio (no real network call)
+# --------------------------------------------------------------------------------------------
+
+
+class _StubEmbedLMStudio:
+    def __init__(self, *, vectors: list[tuple[float, ...]]) -> None:
+        self.embed_calls: list[dict[str, Any]] = []
+        self._vectors = vectors
+
+    def embed(self, texts, *, model, timeout_s):
+        self.embed_calls.append({"texts": list(texts), "model": model, "timeout_s": timeout_s})
+        return EmbedResult(
+            vectors=tuple(self._vectors),
+            dimension=len(self._vectors[0]) if self._vectors else None,
+            model=model,
+            usage=None,
+            wallClockMs=5.0,
         )
+
+
+class TestEmbedCorpus:
+    def test_batches_all_documents_in_one_call_with_the_document_prefix_applied(self) -> None:
+        rows = [{"docId": "d1", "text": "alpha"}, {"docId": "d2", "text": "beta"}]
+        stub = _StubEmbedLMStudio(vectors=[(1.0, 0.0), (0.0, 1.0)])
+
+        refresh_golden.embed_corpus(
+            rows,
+            lmstudio=stub,
+            model_key="m",
+            quantization="Q8_0",
+            document_prefix="doc: ",
+            corpus_bytes=b"corpus-bytes",
+            timeout_s=30.0,
+        )
+
+        assert len(stub.embed_calls) == 1
+        assert stub.embed_calls[0]["texts"] == ["doc: alpha", "doc: beta"]
+        assert stub.embed_calls[0]["model"] == "m"
+
+    def test_writes_raw_unnormalized_vectors_keyed_by_docid(self) -> None:
+        rows = [{"docId": "d1", "text": "alpha"}, {"docId": "d2", "text": "beta"}]
+        stub = _StubEmbedLMStudio(vectors=[(3.0, 4.0), (0.0, 2.0)])  # neither is unit-length
+
+        result = refresh_golden.embed_corpus(
+            rows,
+            lmstudio=stub,
+            model_key="m",
+            quantization="Q8_0",
+            document_prefix="",
+            corpus_bytes=b"corpus-bytes",
+            timeout_s=30.0,
+        )
+
+        assert result.vectors == {"d1": (3.0, 4.0), "d2": (0.0, 2.0)}  # RAW, not L2-normalized
+        assert result.to_dict()["normalized"] is False
+
+    def test_cache_key_matches_scoring_retrievals_own_independent_computation(self) -> None:
+        """The mutation-test target: this cache key MUST use the exact same four components, in
+        the same shapes, as `scoring/retrieval.py`'s own `_compute_cache_key` — a mismatch here
+        (wrong component, wrong hash input) makes every future cache comparison a permanent miss
+        with no visible trace (`-ml` §5.5)."""
+        rows = [{"docId": "d1", "text": "alpha"}]
+        stub = _StubEmbedLMStudio(vectors=[(1.0, 0.0)])
+
+        result = refresh_golden.embed_corpus(
+            rows,
+            lmstudio=stub,
+            model_key="text-embedding-qwen3-embedding-0.6b",
+            quantization="Q8_0",
+            document_prefix="passage: ",
+            corpus_bytes=b"the-real-corpus-jsonl-bytes",
+            timeout_s=30.0,
+        )
+
+        expected = refresh_golden.compute_cache_key(
+            model="text-embedding-qwen3-embedding-0.6b",
+            quantization="Q8_0",
+            document_prefix="passage: ",
+            corpus_bytes=b"the-real-corpus-jsonl-bytes",
+        )
+        assert result.cacheKey == expected
+
+    def test_raises_on_a_truncated_batch_response_rather_than_zipping_silently(self) -> None:
+        rows = [{"docId": "d1", "text": "alpha"}, {"docId": "d2", "text": "beta"}]
+        stub = _StubEmbedLMStudio(vectors=[(1.0, 0.0)])  # one vector for two documents
+
+        with pytest.raises(refresh_golden.RefreshGoldenError, match="truncated|malformed"):
+            refresh_golden.embed_corpus(
+                rows,
+                lmstudio=stub,
+                model_key="m",
+                quantization="Q8_0",
+                document_prefix="",
+                corpus_bytes=b"x",
+                timeout_s=30.0,
+            )
 
 
 # --------------------------------------------------------------------------------------------
@@ -373,9 +509,100 @@ def test_main_refuses_check_origins_and_embed_corpus_together(tmp_path: Path) ->
     assert exit_code == 2
 
 
-def test_main_embed_corpus_raises_rather_than_silently_no_opping(tmp_path: Path) -> None:
-    with pytest.raises(NotImplementedError):
-        refresh_golden.main(["--pack", str(tmp_path), "--embed-corpus"])
+def test_main_embed_corpus_requires_model(tmp_path: Path) -> None:
+    exit_code = refresh_golden.main(["--pack", str(tmp_path), "--embed-corpus"])
+    assert exit_code == 2
+
+
+def test_main_embed_corpus_refuses_under_an_unchanged_pack_version_before_any_lmstudio_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The packVersion gate on the `--embed-corpus` write path (spec §8 Step 2 item 1) — checked
+    BEFORE `LMStudio` is even constructed, so this is fully offline: a fake `LMStudio` that raises
+    on construction proves the gate short-circuits first."""
+    pack_root = tmp_path / "pack"
+    pack_root.mkdir()
+    (pack_root / "pack.json").write_text(json.dumps({"packVersion": "1.0.0"}))
+    refresh_golden._write_provenance(pack_root, "1.0.0", records=())  # last refresh was 1.0.0 too
+
+    class _LMStudioMustNotBeConstructed:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            raise AssertionError("LMStudio must not be constructed once the gate has refused")
+
+    monkeypatch.setattr(refresh_golden, "LMStudio", _LMStudioMustNotBeConstructed)
+
+    exit_code = refresh_golden.main(["--pack", str(pack_root), "--embed-corpus", "--model", "m"])
+    assert exit_code == 1
+
+
+def test_main_embed_corpus_proceeds_once_pack_version_is_bumped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pack_root = tmp_path / "pack"
+    pack_root.mkdir()
+    (pack_root / "pack.json").write_text(
+        json.dumps({"packVersion": "1.1.0", "embedding": {"documentPrefix": ""}})
+    )
+    refresh_golden._write_provenance(pack_root, "1.0.0", records=())  # recorded BEFORE the bump
+    (pack_root / "corpus.jsonl").write_text(
+        json.dumps({"docId": "d1", "text": "alpha"}) + "\n", encoding="utf-8"
+    )
+
+    class _FakeLMStudio:
+        def __init__(self, base_url: str) -> None:
+            self.base_url = base_url
+
+        def catalog(self):
+            return [_model_info(model_id="m")]
+
+        def residency(self):
+            return []
+
+        def warm_up(self, *args, **kwargs):
+            return None
+
+        def embed(self, texts, *, model, timeout_s):
+            return EmbedResult(
+                vectors=tuple((1.0, 0.0) for _ in texts),
+                dimension=2,
+                model=model,
+                usage=None,
+                wallClockMs=1.0,
+            )
+
+    monkeypatch.setattr(refresh_golden, "LMStudio", _FakeLMStudio)
+
+    exit_code = refresh_golden.main(["--pack", str(pack_root), "--embed-corpus", "--model", "m"])
+    assert exit_code == 0
+    written = json.loads((pack_root / "corpus.embeddings.json").read_text(encoding="utf-8"))
+    assert written["vectors"] == {"d1": [1.0, 0.0]}
+    assert written["normalized"] is False
+
+
+def test_main_embed_corpus_reports_unreachable_lmstudio_as_a_blocker_not_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pack_root = tmp_path / "pack"
+    pack_root.mkdir()
+    (pack_root / "pack.json").write_text(
+        json.dumps({"packVersion": "1.1.0", "embedding": {"documentPrefix": ""}})
+    )
+    refresh_golden._write_provenance(pack_root, "1.0.0", records=())
+    (pack_root / "corpus.jsonl").write_text(
+        json.dumps({"docId": "d1", "text": "alpha"}) + "\n", encoding="utf-8"
+    )
+
+    class _UnreachableLMStudio:
+        def __init__(self, base_url: str) -> None:
+            pass
+
+        def catalog(self):
+            raise LMStudioUnreachable("GET /api/v0/models: no response from http://nowhere")
+
+    monkeypatch.setattr(refresh_golden, "LMStudio", _UnreachableLMStudio)
+
+    exit_code = refresh_golden.main(["--pack", str(pack_root), "--embed-corpus", "--model", "m"])
+    assert exit_code == 1
 
 
 # --------------------------------------------------------------------------------------------

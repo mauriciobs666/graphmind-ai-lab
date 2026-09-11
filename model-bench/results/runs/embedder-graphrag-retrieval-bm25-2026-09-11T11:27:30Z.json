@@ -1,0 +1,1147 @@
+{
+  "aggregates": {
+    "kind": "retrieval",
+    "mrr": {
+      "mean": 0.5733851323374974,
+      "n": 38,
+      "name": "mrr",
+      "support": [
+        0.0,
+        1.0
+      ],
+      "type": "continuous"
+    },
+    "precisionAt1": {
+      "n": 38,
+      "name": "precisionAt1",
+      "successes": 15,
+      "type": "binary",
+      "unit": "query"
+    },
+    "recallAtK": [
+      {
+        "n": 38,
+        "name": "recallAt5",
+        "successes": 29,
+        "type": "binary",
+        "unit": "query"
+      },
+      {
+        "n": 38,
+        "name": "recallAt10",
+        "successes": 34,
+        "type": "binary",
+        "unit": "query"
+      }
+    ],
+    "separationRaw": {
+      "median": -2.157818377890319,
+      "n": 38,
+      "name": "separationRaw",
+      "p10": -16.07790001594599,
+      "support": [
+        -1.0,
+        1.0
+      ],
+      "type": "distribution",
+      "unit": "query"
+    },
+    "separationZ": {
+      "median": -0.9477660212233497,
+      "n": 38,
+      "name": "separationZ",
+      "p10": -6.597960427356295,
+      "support": null,
+      "type": "distribution",
+      "unit": "query"
+    }
+  },
+  "armKind": "deterministic",
+  "attestationTripWire": null,
+  "basis": "by-construction",
+  "designEffect": 1.0,
+  "fingerprint": {
+    "armId": "bm25",
+    "armKind": "deterministic",
+    "armParametersHash": "f6ee99cc798b29ab1c517d618ebd02743a0a42cbf644fdaf9ac17d0680601756",
+    "benchSchemaVersion": 1,
+    "benchVersion": "0.1.0",
+    "endedAt": "2026-09-11T11:27:30Z",
+    "hostOs": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "packContentHash": "1fbc53f951a7ccf288f5a50768eeec51be24e3f9cb0f47ef18ccd2e8530e4306",
+    "packId": "embedder-graphrag-retrieval",
+    "packVersion": "1.1.0",
+    "pythonVersion": "3.12.3",
+    "startedAt": "2026-09-11T11:27:30Z"
+  },
+  "items": [
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 0
+      },
+      "detail": {},
+      "itemId": "gr-01",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.125,
+        "separationRaw": -5.559035025809822,
+        "separationZ": -2.0839900660382544
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-01"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 0
+      },
+      "detail": {},
+      "itemId": "gr-02",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.1111111111111111,
+        "separationRaw": -6.167564363607331,
+        "separationZ": -2.8752161246918786
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-02"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 0
+      },
+      "detail": {},
+      "itemId": "gr-03",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.16666666666666666,
+        "separationRaw": -16.07790001594599,
+        "separationZ": -5.9927249959155695
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-03"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-04",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.39009884099960423,
+        "separationZ": 0.1287997648428602
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-04"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 0
+      },
+      "detail": {},
+      "itemId": "gr-05",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.1,
+        "separationRaw": -9.273159797090264,
+        "separationZ": -3.6682792442575103
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-05"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-06",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 2.656555710857443,
+        "separationZ": 1.006203589962266
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-06"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-07",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 6.184885303588468,
+        "separationZ": 2.421255677710141
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-07"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-08",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.9724008789118237,
+        "separationZ": 0.3558443755378007
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-08"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-09",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.3333333333333333,
+        "separationRaw": -5.672283181233298,
+        "separationZ": -3.674944933441597
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-09"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-10",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.3333333333333333,
+        "separationRaw": -3.5312440236709683,
+        "separationZ": -1.7028489148746455
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-10"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-11",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 5.89826508753944,
+        "separationZ": 4.461140531945984
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-11"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-12",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 4.154825399456268,
+        "separationZ": 1.2262741937853572
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-12"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-13",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -10.415073774372422,
+        "separationZ": -5.035934701812179
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-13"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-14",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 3.874525032613203,
+        "separationZ": 2.2432789307482355
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-14"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 2,
+        "recallAt5": 2
+      },
+      "detail": {},
+      "itemId": "gr-15",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 3.280678970977604,
+        "separationZ": 1.8595654475766423
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-15"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 0,
+        "recallAt5": 0
+      },
+      "detail": {},
+      "itemId": "gr-16",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.012658227848101266,
+        "separationRaw": -23.811349670109763,
+        "separationZ": -8.87226096704664
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-16"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-17",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 4.0911015474984715,
+        "separationZ": 1.9865392606002006
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-17"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-18",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -1.106748863580929,
+        "separationZ": -0.5166679904380335
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-18"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-19",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.6408861827484014,
+        "separationZ": 0.32420056278723774
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-19"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 0,
+        "recallAt5": 0
+      },
+      "detail": {},
+      "itemId": "gr-20",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.05555555555555555,
+        "separationRaw": -7.603723861227115,
+        "separationZ": -3.8123946309779213
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-20"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-21",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 5.907916404022437,
+        "separationZ": 3.570441876054224
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-21"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 0
+      },
+      "detail": {},
+      "itemId": "gr-22",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.14285714285714285,
+        "separationRaw": -21.23935276583461,
+        "separationZ": -8.054122655134282
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-22"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-23",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -0.4673887077955001,
+        "separationZ": -0.2476270981061473
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-23"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-24",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -6.538293314921283,
+        "separationZ": -3.169474965287375
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-24"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-25",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -4.409422531033445,
+        "separationZ": -2.841117209249724
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-25"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-26",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -1.168703017236595,
+        "separationZ": -0.5541304768895196
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-26"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-27",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -2.6860250723550827,
+        "separationZ": -0.9477660212233497
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-27"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-28",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -2.157818377890319,
+        "separationZ": -0.9866204134149222
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-28"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-29",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 2.9275682848279168,
+        "separationZ": 1.3773863079158513
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-29"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 0,
+        "recallAt5": 0
+      },
+      "detail": {},
+      "itemId": "gr-30",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.05555555555555555,
+        "separationRaw": -4.799253455448806,
+        "separationZ": -2.868186114895356
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-30"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 0,
+        "recallAt5": 0
+      },
+      "detail": {},
+      "itemId": "gr-31",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.019230769230769232,
+        "separationRaw": -8.74529787653923,
+        "separationZ": -6.597960427356295
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-31"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-32",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.3333333333333333,
+        "separationRaw": -3.075997976923949,
+        "separationZ": -1.489117106402398
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-32"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-33",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.3333333333333333,
+        "separationRaw": -9.331646275212819,
+        "separationZ": -4.167199057968669
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-33"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 2,
+        "recallAt5": 2
+      },
+      "detail": {},
+      "itemId": "gr-34",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.3333333333333333,
+        "separationRaw": -1.9850111268143777,
+        "separationZ": -0.7401210767148013
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-34"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-35",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 1.303295669485106,
+        "separationZ": 0.8994402470418204
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-35"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-36",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 0.3333333333333333,
+        "separationRaw": -24.092299313154413,
+        "separationZ": -7.406524764694181
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-36"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-37",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 9.740555612002112,
+        "separationZ": 4.490904676117014
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-37"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {},
+      "itemId": "gr-38",
+      "latencyMs": null,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.737635758514223,
+        "separationZ": 0.24876408112348797
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-38"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": null
+    }
+  ],
+  "latency": null,
+  "role": "embedder",
+  "runId": "embedder-graphrag-retrieval-bm25-2026-09-11T11:27:30Z",
+  "sessionId": "s3-step2-live-2026-09-11"
+}
