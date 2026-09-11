@@ -743,6 +743,42 @@ def test_prompt_config_is_not_this_route_when_the_manifest_has_no_prompt_block()
     assert not any("prompt" in problem for problem in validate_pack(pack))
 
 
+def test_prompt_config_does_not_require_history_replay_for_an_item_level_role() -> None:
+    """A `validate`-clean, prompt-less item-level pack must not crash `Pack.prompt_config()` —
+    the accessor `runner._drive_single_call_items`/`_item_chat_messages`/`run_pack` all call
+    unconditionally, uncaught, for every item-level role.
+
+    `_prompt_problems` already treats an absent `prompt` block as not its problem (own docstring
+    above), so `validate_pack` reports this fixture clean; `prompt_config()` disagreeing with its
+    own module's validator on the same pack is the contradiction this test pins. `historyReplay`
+    is consumed nowhere on this role's path — `convo.assemble`/`drive` (the only reader of
+    `PromptConfig.historyReplay`) is reached only from `runner._drive_conversations`, itself
+    `tool-caller`-only — so `prompt_config()` scopes the check exactly as it already scopes
+    `maxIterationsPerTurn` (`roles.MULTI_CALL_TURN_BY_ROLE`, v1.26): required *iff* the role runs
+    a multi-call turn, forbidden/unchecked otherwise. `guard-judge` is `False` on that column.
+    """
+    pack = load_pack(pack_fixture("tooling_import_allowed"))
+    assert pack.manifest["role"] == "guard-judge"
+    assert validate_pack(pack) == []
+
+    cfg = pack.prompt_config()
+
+    assert cfg.historyReplay is None
+    assert cfg.systemPrompt is None
+    assert cfg.maxIterationsPerTurn is None
+
+
+def test_prompt_config_still_requires_history_replay_for_tool_caller() -> None:
+    """`tool-caller` genuinely replays turns (`convo.assemble` reads `historyReplay` on every
+    call), so a prompt-less `tool-caller` pack must still fail closed at `prompt_config()` —
+    the role-scoping added for the item-level roles must not silently widen to this role too."""
+    pack = load_pack(pack_fixture("missing_data_conversations"))
+    assert pack.manifest["role"] == "tool-caller"
+
+    with pytest.raises(PackConfigError, match="historyReplay"):
+        pack.prompt_config()
+
+
 def test_the_valid_fixtures_analysis_unit_is_scriptId_not_a_conversation_id() -> None:
     """§3.3: "the analysis unit is the *outermost* component of `pairingKey` … For the
     tool-caller that is `scriptId`, never a conversation id" — and the plan's own manifest literal

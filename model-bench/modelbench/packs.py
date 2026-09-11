@@ -344,11 +344,24 @@ class Pack:
         at `drive`'s first call (impl review Pass 17, P17-5), and what a future caller (the
         runner unit, not yet built) reaches for instead of re-parsing the manifest itself.
 
-        Raises `PackConfigError` when `historyReplay` is outside `convo._HISTORY_REPLAY_MODES`,
-        or when `maxIterationsPerTurn` violates its role-scoping rule — required *iff*
-        `roles.MULTI_CALL_TURN_BY_ROLE[role]`, forbidden otherwise (§3.3, v1.26). Every other
-        `prompt` key is carried through as declared, unchecked: this route closes exactly the gap
-        P17-5 named, not a general schema check nobody asked for.
+        Raises `PackConfigError` when `historyReplay` is outside `convo._HISTORY_REPLAY_MODES` on
+        a role that replays turns, or when `maxIterationsPerTurn` violates its role-scoping rule —
+        required *iff* `roles.MULTI_CALL_TURN_BY_ROLE[role]`, forbidden otherwise (§3.3, v1.26).
+        Every other `prompt` key is carried through as declared, unchecked: this route closes
+        exactly the gap P17-5 named, not a general schema check nobody asked for.
+
+        **`historyReplay` is checked under the same `MULTI_CALL_TURN_BY_ROLE` role-scoping as
+        `maxIterationsPerTurn`, not unconditionally** (found live: a `validate`-clean, prompt-less
+        item-level pack crashed `runner.run_pack` with an uncaught `PackConfigError`, since
+        `prompt = self.manifest.get("prompt") or {}` defaults an absent `prompt` block to `{}`
+        and this check then ran regardless of role). `historyReplay` is consumed nowhere on an
+        item-level role's path: its one reader, `convo.assemble` (via `convo.drive`), is reached
+        only from `runner._drive_conversations`, itself `tool-caller`-only — the four item-level
+        roles are single-call by construction (`MULTI_CALL_TURN_BY_ROLE[role] is False`) and never
+        replay a turn. The plan states role-scoping for `maxIterationsPerTurn` by name (v1.26) but
+        not for `historyReplay`; this reuses that same column rather than inventing a second one,
+        because on the pack's own role table the two conditions already coincide exactly — a role
+        with turns to replay is, today, precisely the one role whose turn is a multi-call loop.
 
         **`systemPrompt` and `toolSchemas` are carried through as the manifest's own declared
         values — paths, not resolved content** — because resolving `prompt.*` paths against the
@@ -357,15 +370,15 @@ class Pack:
         caller eventually drives a real turn; no such caller exists in this tree yet.
         """
         prompt = self.manifest.get("prompt") or {}
+        multi_call = MULTI_CALL_TURN_BY_ROLE.get(self.role, False)
 
         history_replay = prompt.get("historyReplay")
-        if history_replay not in _HISTORY_REPLAY_MODES:
+        if multi_call and history_replay not in _HISTORY_REPLAY_MODES:
             raise PackConfigError(
                 f"{self.packId}: prompt.historyReplay {history_replay!r} is not one of "
                 f"{sorted(_HISTORY_REPLAY_MODES)!r} (plan §3.3)"
             )
 
-        multi_call = MULTI_CALL_TURN_BY_ROLE.get(self.role, False)
         has_cap = "maxIterationsPerTurn" in prompt
         if multi_call and not has_cap:
             raise PackConfigError(

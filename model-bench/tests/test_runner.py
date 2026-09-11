@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import pytest
+from conftest import pack_fixture
 
 from modelbench.convo import Conversation, ConversationTrace, Turn, TurnTrace
 from modelbench.lmstudio import (
@@ -25,6 +26,7 @@ from modelbench.lmstudio import (
     ModelInfo,
     ResidentModel,
 )
+from modelbench.packs import load_pack, validate_pack
 from modelbench.results import CallTiming, ClassificationAggregates, ItemResult, ItemTiming
 from modelbench.runner import (
     UNEXPLAINED_MS_THRESHOLD,
@@ -32,6 +34,7 @@ from modelbench.runner import (
     _drive_single_call_items,
     _gap_ms,
     _gap_withheld_for,
+    _item_chat_messages,
     _load_withheld_for,
     _turn_timings,
     latency_block,
@@ -942,6 +945,25 @@ def test_drive_single_call_items_embeddings_surface_calls_embed_not_chat(monkeyp
     assert len(lms.embed_calls) == 1
     assert len(lms.chat_calls) == 0
     assert items[0].timing.withheldFor is None
+
+
+def test_item_chat_messages_real_pack_with_no_prompt_block_does_not_crash():
+    """Reproduction, on the real driving path: `_item_chat_messages` (runner.py:275) calls
+    `pack.prompt_config()` unconditionally, uncaught, for every item-level role. A real, on-disk,
+    `validate`-clean item-level pack with no `prompt` manifest block at all
+    (`tooling_import_allowed` — `guard-judge`, `validate_pack(pack) == []`) must not crash it.
+
+    A `FakePack` (used by every other `_drive_single_call_items` test in this file) duck-types
+    `prompt_config()` to return an injected `PromptConfig` and so never exercises the real
+    manifest-parsing bug in `Pack.prompt_config()` — only a real, `load_pack`-loaded `Pack`
+    reaches it, which is why this one test loads the fixture from disk instead."""
+    pack = load_pack(pack_fixture("tooling_import_allowed"))
+    assert pack.manifest["role"] == "guard-judge"
+    assert validate_pack(pack) == []
+
+    messages = _item_chat_messages(pack, {"id": "a"})
+
+    assert messages == [{"role": "user", "content": '{"id": "a"}'}]
 
 
 # ==================================================================================================

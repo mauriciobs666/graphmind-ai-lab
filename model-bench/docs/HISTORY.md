@@ -2,6 +2,39 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-10 — Bug fix: `Pack.prompt_config()` crashed every `validate`-clean, prompt-less
+item-level pack
+
+**What:** found live building the CLI `run` command (previous entry, same day). `Pack.
+prompt_config()` (`modelbench/packs.py`) parsed the manifest's `prompt` block, defaulted an absent
+block to `{}`, and then unconditionally raised `PackConfigError` when `historyReplay` was outside
+`convo._HISTORY_REPLAY_MODES` — `None` whenever `prompt` was absent, **regardless of role**. But
+`_prompt_problems`/`validate_pack` (same module) already treats an absent `prompt` block as not a
+problem, on any role, so `validate` reported a prompt-less item-level pack (`guard-judge`,
+`nlq-generator`, `chat-responder`, `embedder`) clean while `runner.run_pack`,
+`_drive_single_call_items`, and `_item_chat_messages` — all four call `pack.prompt_config()`
+unconditionally and uncaught — crashed on the same pack with an uncaught `PackConfigError`,
+contradicting `validate`'s own verdict.
+
+**Fix:** `historyReplay`'s check is now scoped by `roles.MULTI_CALL_TURN_BY_ROLE[role]`, the same
+role table `maxIterationsPerTurn` was already scoped by (v1.26) — required *iff* `True` (currently
+`tool-caller` only), skipped otherwise. Chosen over introducing a narrower runner-side accessor:
+`convo.assemble`/`drive` (`historyReplay`'s only reader) is reached only from `runner.
+_drive_conversations`, itself `tool-caller`-only, so no item-level role has ever consumed the
+field, and reusing the existing column is a one-line, single-module fix rather than a signature
+change across four runner call sites. The plan doesn't state a role-scoping rule for `historyReplay`
+by name the way it does for `maxIterationsPerTurn`; the two conditions coincide exactly on the
+pack's current role table, so no plan-semantics question was raised.
+
+**Tests:** `tests/test_packs.py` gains a reproduction test (`Pack.prompt_config()` on the real,
+on-disk, `validate`-clean `tooling_import_allowed` fixture no longer raises, returns `historyReplay
+is None`) and a guard test (a prompt-less `tool-caller` fixture still raises `PackConfigError`
+mentioning `historyReplay` — the role that genuinely needs the field is unaffected).
+`tests/test_runner.py` gains a reproduction test driving the same real `Pack` (not `FakePack`,
+which duck-types `prompt_config()` and never touches the bug) through `_item_chat_messages`, the
+exact runner call site that used to crash. Mutation-tested: reverting the role guard to the old
+unconditional check reddens exactly these two new item-level tests, no more, no fewer.
+
 ## 2026-09-10 — S2, Step 2: CLI `validate`/`run` wiring, exit codes — closes S2
 
 **What:** `docs/plans/small-model-benchmarking-runner-spec.md` §7 Step 2, the last of the three
