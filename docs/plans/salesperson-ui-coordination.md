@@ -14,7 +14,7 @@ standalone `salesperson/` Streamlit app.
 (root `AGENTS.md`, component READMEs, `HISTORY.md`, a `tico` user manual) reflects the delivered
 surface.
 
-## RESUME HERE — state as of 2026-09-11, S9e delivered/teco-verified, `analyst` gate dispatched, last of the five S9 sub-units
+## RESUME HERE — state as of 2026-09-11, S9e committed (`dcec3f2`), Pass 28 re-gate in flight (`a960485f78f83cac6`), last of the five S9 sub-units — S9f/S10/S11 next
 
 **Read this section first. It is the entry point; the ledger below is the state of record.**
 Reconcile it against `git log` and `git status` before acting — if they disagree, they win.
