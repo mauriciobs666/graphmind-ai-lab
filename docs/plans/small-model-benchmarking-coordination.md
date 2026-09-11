@@ -2394,7 +2394,11 @@ check back"*). This is the checkpoint.
 
 Stakeholder scope extended past the S3 checkpoint to the full remaining plan (§4 S4-S8). Driving
 stage by stage, same discipline as S1-S3: a stage spec from `architect` (mirroring the
-`-s3-spec.md` precedent) → `analyst` plan gate → implementation → `analyst` code gate →
+`-s3-spec.md`/`-runner-spec.md` precedent) → `teco`-verified directly against source (the
+established precedent for a stage spec — U120/U113's own rows show neither went through a separate
+`analyst` plan gate; the top-level plan/`-ml` note that the stage spec derives from already carries
+6+ `analyst` passes, so the stage spec is a synthesis pass, not new ungated design) → implementation
+→ `analyst` code gate (mirroring `small-model-benchmarking-impl.md`'s per-stage passes) →
 `qa-engineer` acceptance → stage close, before the next stage's spec is drafted. **S6 (§4) states
 its own human-in-the-loop requirement — "Human verification of every turn's expectations
 (FR-19): each `expect` block is checked by a person against the simulated environment's actual
@@ -2406,4 +2410,5 @@ unit; greenfield feature work on new files, no rebuild warranted.
 
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
-| U129 | `architect` | — | queued | `docs/plans/small-model-benchmarking-s4-spec.md` | `analyst` → — | — |
+| U129 | `architect` | `a2d16b905ebdaca99` | **delivered — accepted, `teco`-verified.** 1225 lines, 4-step sequence (Step 0: seam fix; Step 1-2: guard-judge offline+live; Step 3-4: nlq-generator offline+live). Both review open questions ruled: `ItemScorer.build_messages` stays **optional, `getattr`-guarded** (a no-guard call would `AttributeError` on 19 existing chat-branch test call sites, confirmed by my own `grep -c 'call_surface="chat"' tests/test_runner.py` → 19, exact match); the prompt-path-resolution fix **folds into Step 0**, not a separate precursor (small, currently inert, same files one implementer already has open). One further gap resolved beyond the review's two: the `ws:nlq-eval` live snapshot is a **human-in-the-loop step**, not a new `falkordb` pip dependency, preserving the component's stdlib-only hard rule. **Independently verified against source, not accepted on report**: the `packs.py`/`convo.py` docstring contradiction quoted exactly (`packs.py:366-370` "paths, not resolved content" vs `convo.py:148-153` "resolved content", both re-read directly); `ClassificationAggregates`/`ExtractionAggregates`'s shipped shapes and `report.py:11-12`'s docstring quote confirmed byte-exact; `roles.py`'s `guard-judge`/`nlq-generator` rows confirmed. **One minor discrepancy caught, not load-bearing**: the spec claims "`parseFailures` — six hits, all kwargs" as its backward-compatibility check; my own `grep -rn "parseFailures" tests/ modelbench/` found 8 lines (5 keyword-construction sites in `tests/`, 3 field declarations in `results.py`), not 6 — flagged for the Step 0 implementer to re-confirm in passing, doesn't change the design (any of 5/6/8 is still "every existing construction site is keyword-only," the claim's actual point). Two self-flagged risks carried into Step 3-4's brief: `reference_specs.json`'s 40 entries are real hand-authored work, not derivable from `expected`; `_pack_version_gate`'s exact multi-write semantics need direct verification before Step 4 scripts two sequential live-adjacent writes | `docs/plans/small-model-benchmarking-s4-spec.md` | `teco` → accepted | 293k tok / 84 tools |
+| U130 | `tdd-engineer` | — | queued | Step 0 — the seam fix (`ItemScorer.build_messages`, `Pack.prompt_config()` path resolution, `ExtractionAggregates`'s two new fields) | `analyst` → — | — |
