@@ -69,6 +69,7 @@ from test_app import _FASTAPI_BUILTIN_PATHS, _route_entries
 from falkorchat import config, db, storefront, storefront_api
 from falkorchat import repository as repository_module
 from falkorchat import services as services_module
+from falkorchat import trigger as trigger_module
 from falkorchat.app import _register_error_handlers, create_app
 from falkorchat.config import CallContext
 from falkorchat.services import (
@@ -169,6 +170,17 @@ TABLE: dict[tuple[str, str], set[tuple[int, str]]] = {
         (503, "demo_not_seeded"),
         (503, "graph_unavailable"),          # [X]
         (504, "post_state_unknown"),         # [X] written but never enqueued
+        # `enqueue_turn`'s pre-`submit` flag read (§5.1's S9 row, §5.3 C14) —
+        # the message was written and no reply is coming. S9e (P23-2/P23-7).
+        (503, "turn_not_scheduled"),
+        # C13's residual: the other two `enqueue_turn`/`submit` refusals (a
+        # `shutdown_turns()` landing in the read→submit gap; thread
+        # exhaustion, which queues the item anyway) and any unmapped
+        # exception out of `services.post_message` (TP-011c) — deliberately
+        # untyped, or `turn_not_scheduled` would be a lie on the shape where
+        # the turn runs. Producer: `test_a_bare_runtime_error_out_of_submit_
+        # still_answers_an_unmapped_5xx`.
+        (500, "unhandled"),
     },
     ("GET", f"{API_PREFIX}/catalog"): {
         (200, "ok"),
@@ -2453,6 +2465,81 @@ def test_a_post_with_the_demo_agent_gone_is_503_demo_not_seeded(client, conn):
     assert "UnknownMemberError" not in response.text
 
 
+def test_a_post_in_the_shutdown_window_is_503_turn_not_scheduled_not_a_bare_500(
+    client,
+):
+    """C14, the armed-fault measurement at the response boundary (S9e,
+    P23-2/P23-7). `enqueue_turn`'s pre-`submit` flag read is the *only* shape
+    this token covers: the message is written (`services.post_message` runs
+    before `shop.enqueue_turn` in the route body) and the turn is never
+    scheduled, because `_turns_shutdown` is already `True` when this call
+    reads it.
+
+    Driven the same way `shutdown_turns()` sets the flag in production — the
+    real method, not a hand-set attribute — so this measures the actual
+    sequence rather than assuming it. Before S9e this was the bare `500
+    text/plain 'Internal Server Error'` `NON_FAMILY_RAISES` used to record.
+    """
+    session = _join(client, "Ada", "en")
+    shop = client.app.state.storefront
+    shop.shutdown_turns()
+
+    response = client.post(
+        f"{API_PREFIX}/messages", headers=_bearer(session), json={"text": "hi"}
+    )
+
+    assert response.status_code == 503, response.text
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["error"] == "turn_not_scheduled"
+
+    # the message really was written — "your message is in and no reply is
+    # coming" (§5.3 C14), never "nothing changed"
+    transcript = client.get(f"{API_PREFIX}/messages", headers=_bearer(session)).json()
+    assert any(m["text"] == "hi" for m in transcript)
+
+
+def test_a_bare_runtime_error_out_of_submit_still_answers_an_unmapped_5xx(client):
+    """The negative control for C14 (P23-2): only the pre-`submit` flag read is
+    typed. A refusal out of `submit` itself never reaches that check, so it
+    must stay untyped — mapping it to `turn_not_scheduled` would be a lie on
+    the thread-exhaustion shape, which queues the work item before it fails,
+    so the turn *does* run (§5.1's S9 row).
+
+    `shop._executor.submit` is monkeypatched to raise bare `RuntimeError`
+    directly, standing in for CPython's own exhaustion raise the way
+    `tests/test_storefront.py` substitutes a patched `threading.Thread.start`
+    for the same shape — deterministic, rather than actually starving the
+    pool over HTTP. `_turns_shutdown` is left `False`, so `enqueue_turn`
+    reaches `submit` at all — the shape this test targets is downstream of
+    the flag check, not the one C14 covers.
+    """
+    session = _join(client, "Ada", "en")
+    shop = client.app.state.storefront
+
+    def _boom(*args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ARG001
+        raise RuntimeError("can't start new thread")
+
+    shop._executor.submit = _boom  # noqa: SLF001 — stands in for exhaustion's raise
+
+    # `client` raises the server's exception by default (Starlette's own
+    # posture); flipped here, on the live transport, rather than opening a
+    # second `TestClient` over the same app — which would re-enter the
+    # lifespan and rebuild `app.state.storefront`, losing the patch above.
+    transport = client._transport  # noqa: SLF001
+    original = transport.raise_server_exceptions
+    transport.raise_server_exceptions = False
+    try:
+        response = client.post(
+            f"{API_PREFIX}/messages", headers=_bearer(session), json={"text": "hi"}
+        )
+    finally:
+        transport.raise_server_exceptions = original
+
+    assert response.status_code == 500, response.text
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "turn_not_scheduled" not in response.text
+
+
 class _PatchedMethodRepo:
     """A real repository with one method answering a fixed value.
 
@@ -3850,25 +3937,27 @@ def test_the_alias_reader_covers_every_binding_form_the_grammar_has():
 # out for the same reason `SERVICE_LAYER_REACH_TODAY` is: a `/shop/api` route
 # executes this module, so a `raise` added to it has to come back here.
 #
-# Seven of the eight are `StorefrontError` subclasses, and that is what makes
+# All eight are `StorefrontError` subclasses, and that is what makes
 # `INHERITED_HANDLERS`' excuses true of this file rather than merely stated for
 # it: `test_every_storefront_error_subclass_is_mapped_to_a_response` already
 # holds that every member of that family is caught by a route or answered by a
 # classified handler, so none of them can arrive at a handler this table
 # excuses — and none of them is a bare `HTTPException`.
 #
-# The eighth, `RuntimeError`, is the **one** class admitted to this file from
-# outside that family, and the guard below says so as an equality rather than
-# as a tolerance: it carries a written reason in `NON_FAMILY_RAISES`, and it is
-# pinned to `enqueue_turn` by site, because the name alone would leave a second
-# `raise RuntimeError` anywhere in this module invisible
-# (`docs/reviews/salesperson-ui-impl.md` `## Pass 21`, P21-1). It is
-# `Storefront.enqueue_turn`'s refusal on a set `_turns_shutdown`
-# (`docs/plans/salesperson-ui.md` v1.30 §5.1's S9 row), and it is **not a new
-# response**: the identical class reached the identical place out of
-# `concurrent.futures`' own `submit` before that flag existed. **This file is
-# not held to the same standard as the `Services` leg and that is deliberate**
-# — the history is in the comment on the assertion itself; do not level them.
+# **Through v1.32 an eighth, non-family `RuntimeError` sat here too** —
+# `Storefront.enqueue_turn`'s refusal on a set `_turns_shutdown`, admitted from
+# outside the family with its own written reason in `NON_FAMILY_RAISES` and
+# pinned to `enqueue_turn` by site (`docs/reviews/salesperson-ui-impl.md`
+# `## Pass 21`, P21-1). **S9e types that one raise** — `TurnNotScheduledError`,
+# `503 turn_not_scheduled` (§5.3 C14) — so it is a family member now and
+# `storefront.py` raises no bare `RuntimeError` at all; the two neighbouring
+# refusals `enqueue_turn` can still raise out of `submit` itself are bare
+# `RuntimeError` too, but neither is a `raise RuntimeError` **statement** in
+# this module — both are the caught `submit(...)` exception re-raised bare
+# (`except BaseException: ...; raise`), which this reader does not name (P23-2,
+# P23-3). Do not re-admit `"RuntimeError"` to this set on rediscovering that:
+# it would silently re-widen the equality below to tolerate a second bare
+# `raise RuntimeError` this module does not have.
 #
 # `ResetStateUnknownError` is here because the reader resolves the factory:
 # `reset_participant` writes `raise self._reset_state_unknown(...)`, and the
@@ -3877,7 +3966,7 @@ STOREFRONT_RAISES_TODAY = frozenset({
     "DemoNotSeededError", "QuiesceTimeoutError", "UnknownParticipantError",
     "UnscopedParticipantError", "ResetStateUnknownError",
     "UnknownOrderError", "OrderTransitionRefusedError",
-    "RuntimeError",
+    "TurnNotScheduledError",
 })
 
 
@@ -3931,32 +4020,32 @@ REPOSITORY_RAISES_TODAY = frozenset({"MemberIdCollisionError"})
 # "instead of silently shadowing it (DEF-1)".
 NON_FAMILY_RAISES: dict[str, str] = {
     "RuntimeError": (
-        "Raised in two of the three legs this dict governs, for two "
-        "different reasons, and neither is a participant-facing outcome — "
+        "Raised in one of the three legs this dict governs — "
         "`storefront_api.py`'s own wiring-time `RuntimeError` "
-        "(`register_storefront_error_handlers`, `:778`) is a third site, "
+        "(`register_storefront_error_handlers`, `:778`) is a second site, "
         "fenced separately by the module-wide assertion above rather than "
-        "here. (1) "
-        "`services._dispatch_write`'s two invariant alarms — an unrecognised "
-        "write-status row, and a retry loop that did not converge. Neither is "
+        "here — and it is not a participant-facing outcome: "
+        "`services._dispatch_write`'s two invariant alarms, an unrecognised "
+        "write-status row and a retry loop that did not converge. Neither is "
         "a state a request can put the write path into: both mean the "
         "repository returned a row shape the service layer's own contract "
-        "rules out, which is a defect report, not a response. (2) "
-        "`Storefront.enqueue_turn`'s refusal on a set `_turns_shutdown` — a "
-        "post that raced the lifespan's `shutdown_turns()`. That one **is** "
-        "request-reachable, and it is deliberately unchanged rather than "
-        "newly introduced: before the pre-submit flag existed the same class "
-        "reached the same place out of `concurrent.futures`' `submit` "
-        "(`cannot schedule new futures after shutdown`), uncaught by the "
-        "route, and plan v1.30's S9 row keeps it that way — *the shutdown "
-        "path raising exactly as it does today*. Measured through "
-        "`POST /shop/api/messages` with a `RuntimeError` out of "
-        "`enqueue_turn`: a bare `500 text/plain 'Internal Server Error'`, the "
-        "same answer it gave before the fix. What is pinned is the "
-        "bookkeeping, not the status — the booking is released and the raise "
-        "propagates "
-        "(`test_a_submit_refused_after_shutdown_releases_the_reservation`, "
-        "`tests/test_storefront.py`)"
+        "rules out, which is a defect report, not a response. **Through "
+        "v1.32 a second, request-reachable reason lived here too** — "
+        "`Storefront.enqueue_turn`'s refusal on a set `_turns_shutdown`, "
+        "measured through `POST /shop/api/messages` as a bare `500 "
+        "text/plain 'Internal Server Error'`. S9e types that raise "
+        "(`TurnNotScheduledError`, `503 turn_not_scheduled`, §5.3 C14), so "
+        "`storefront.py` no longer contributes a `RuntimeError` to this "
+        "dict at all (`STOREFRONT_RAISES_TODAY`, above) — this entry now "
+        "governs the `services` leg alone. The two refusals `enqueue_turn` "
+        "can still raise out of `submit` itself remain a bare `RuntimeError`, "
+        "deliberately: neither is a `raise RuntimeError` **statement** this "
+        "reader can see (both are the caught `submit(...)` exception "
+        "re-raised bare), and typing either would be dishonest on the "
+        "exhaustion shape, where the turn runs anyway "
+        "(`docs/reviews/salesperson-ui-impl.md` `## Pass 23`, P23-2) — "
+        "measured live by "
+        "`test_a_bare_runtime_error_out_of_submit_still_answers_an_unmapped_5xx`"
     ),
     "MemberIdCollisionError": (
         "`repository.ensure_participant`'s refusal to provision a participant "
@@ -4078,10 +4167,12 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
     Four scopes are pinned. Inside the router: exactly the two envelope
     classes. `storefront_api.py` whole: those two, plus the three raises that
     happen at wiring or boot time and can never be on a request path.
-    `storefront.py` whole: `STOREFRONT_RAISES_TODAY` — seven `StorefrontError`
-    subclasses plus `enqueue_turn`'s post-`shutdown_turns()` `RuntimeError`,
-    which is outside the family and therefore carries its own reason in
-    `NON_FAMILY_RAISES`. The reached-and-closed methods of the two
+    `storefront.py` whole: `STOREFRONT_RAISES_TODAY` — eight `StorefrontError`
+    subclasses, `TurnNotScheduledError` (§5.3 C14) among them since S9e types
+    `enqueue_turn`'s post-`shutdown_turns()` refusal; through v1.32 that raise
+    was a non-family `RuntimeError` carrying its own reason in
+    `NON_FAMILY_RAISES`, which now governs the `services` leg's `RuntimeError`
+    alone. The reached-and-closed methods of the two
     collaborators: `SERVICE_RAISES_TODAY` and `REPOSITORY_RAISES_TODAY`, whose
     members outside both families carry a written reason in
     `NON_FAMILY_RAISES` — asserted as an equality, so neither an extended
@@ -4144,10 +4235,15 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
     }
     service_family = {klass.__name__ for klass in _subclasses(ServiceError)}
     # ...the family half for `storefront.py`, which is an **equality on the
-    # exemption** rather than a subtraction: this file is held to family-only
-    # *plus one named class*, so admitting a second non-family class is a
-    # stop-and-decide here and not a reason string borrowed from another leg
-    # (`docs/reviews/salesperson-ui-impl.md` `## Pass 21`, P21-1).
+    # exemption** rather than a subtraction. Through v1.32 this file was held
+    # to family-only *plus one named class* (`RuntimeError`,
+    # `docs/reviews/salesperson-ui-impl.md` `## Pass 21`, P21-1) —
+    # `Storefront.enqueue_turn`'s pre-`submit` refusal, admitted from outside
+    # the family with its own written reason. **S9e types that one raise**
+    # (`TurnNotScheduledError`, §5.3 C14), so it is a family member now and
+    # this file is held to family-only, full stop: the difference below is
+    # empty, and a second non-family class showing up here again is a
+    # stop-and-decide, not a reason string borrowed from another leg.
     #
     # **`Services` is not a precedent for relaxing this, and the check has been
     # run** — the earlier version of this comment claimed it was, and that was
@@ -4165,30 +4261,31 @@ def test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume():
     # alone), and still wrote *this* assertion bare. So the asymmetry was
     # authored deliberately, with the counter-example in the same diff. What is
     # true instead: `Services` and `Repository` are read through a **reach**
-    # seed and carry non-family names under a written reason; `storefront.py` is
-    # read **whole** and is held tighter, and `RuntimeError` is the one name
-    # admitted to it. Do not level the two legs on rediscovering the history.
-    assert set(STOREFRONT_RAISES_TODAY) - storefront_family == frozenset({
-        "RuntimeError",
-    })
-    # ...and that one name is pinned to the one function that may raise it —
-    # by a **list**, not a set, so a second raise of it inside that same
-    # function cannot hide behind the first (`## Pass 22`, P22-2). Both
-    # assertions above compare class **names**, so with `RuntimeError`
-    # allowlisted a second, unrelated `raise RuntimeError` elsewhere in this
-    # module moves no set and reddens nothing — measured on `get_state`, one
-    # of `get_state`'s **two** call sites: the `GET /shop/api/state` handler
-    # body (`storefront_api.py:1103`) and, missed until `## Pass 22` (P22-4),
-    # `_reset_state_unknown` (`storefront.py:1426`) — both request-reachable,
-    # and an unmapped `RuntimeError` there would answer with an unmapped bare
-    # `500` (`## Pass 21`, P21-1, Appendix Q §1-3). Deliberately **not**
-    # generalised to the `Services` and `Repository` legs: those are read
-    # through a reach seed rather than whole-file, so the same blindness has a
-    # much smaller surface (`## Pass 21`, open question 1).
+    # seed and carry non-family names under a written reason; `storefront.py`
+    # is read **whole** and was held tighter by one named exception, now none.
+    # Do not level the two legs on rediscovering the history.
+    assert set(STOREFRONT_RAISES_TODAY) - storefront_family == frozenset()
+    # ...and no bare `raise RuntimeError` statement survives in this module at
+    # all. Through v1.32 the one admitted name was pinned to the one function
+    # that could raise it — by a **list**, not a set, so a second raise of it
+    # inside that same function could not hide behind the first (`## Pass 22`,
+    # P22-2) — because with a name allowlisted at all, a second, unrelated
+    # `raise RuntimeError` elsewhere in this module moved no set and reddened
+    # nothing: measured on `get_state`, reachable from two call sites (the
+    # `GET /shop/api/state` handler body, `storefront_api.py:1103`, and
+    # `_reset_state_unknown`, `storefront.py:1426`) that a hand-added
+    # `RuntimeError` there would have answered as an unmapped bare `500`
+    # without moving `storefront_raises` (`## Pass 21`, P21-1, Appendix Q
+    # §1-3). **S9e closes that blind spot rather than merely re-fencing it**:
+    # with no name admitted, `_raised_class_names(_storefront_source())`'s own
+    # equality against `STOREFRONT_RAISES_TODAY` (above) reddens on *any* new
+    # `raise RuntimeError` this module gains, `get_state`'s two call sites
+    # included — this assertion is now a redundant, sharper-grained check on
+    # the same fact rather than the only guard against it.
     assert [
         fn for fn, name in _raise_sites(_storefront_source())
         if name == "RuntimeError"
-    ] == ["enqueue_turn"]
+    ] == []
     # ...and an **equality**, not a subset, over all four scopes at once: a
     # raise outside both families has to carry its own reason, and a reason
     # left behind by a raise that is gone reddens the same assertion.
@@ -4498,6 +4595,63 @@ _RAISE_ROUTES: dict[str, tuple[str, bool]] = {
         "    def _other(self):\n"
         "        raise HTTPException(410)\n", False),
 }
+
+
+def _services_calls_in(source: str) -> set[str]:
+    """Every `self._services.<name>(...)` call anywhere in `source`, read by
+    AST rather than grepped or asserted in prose (P27-2). Takes source rather
+    than reading `trigger.py` itself, so the reader has its own positive
+    control against a synthetic snippet."""
+    calls: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Attribute)
+            and node.func.value.attr == "_services"
+        ):
+            calls.add(node.func.attr)
+    return calls
+
+
+def _trigger_source() -> str:
+    return Path(trigger_module.__file__).read_text(encoding="utf-8")
+
+
+def test_the_trigger_never_reads_a_workflow_def_so_that_excuse_stays_pinned():
+    """P27-2: `INHERITED_HANDLERS[WorkflowDefNotFoundError]`'s comment claims
+    its raise sites (`materialize_def`, `get_workflow_def_structure`,
+    `diff_def_snapshot`) are outside every call `trigger.maybe_trigger`
+    makes — unlike its three neighbours (measured by an armed-fault test
+    each), that claim was asserted in prose only. Pinned here the same way
+    `SERVICE_LAYER_REACH_TODAY`'s own comment says this call site sits
+    outside every scope either static guard walks (`trigger.py:82` — read
+    the reach seed there, not re-derived): those guards cannot see this, so
+    a source-level pin on `trigger.py` itself is the only mechanical check
+    available for it.
+
+    `trigger.py`'s own module docstring enumerates the §6 ordered rule's four
+    branches; only two call into `Services` at all (loop-guard and
+    fall-through do not). This asserts that pair names exactly
+    `find_waiting_run_for_thread`, `resume_workflow_run` and
+    `start_workflow_run` — none of which reads a def — so a future branch
+    reaching one of the three def-reading methods reddens here first, and the
+    negative control below proves the reader would actually catch it.
+    """
+    calls = _services_calls_in(_trigger_source())
+    assert calls == {
+        "find_waiting_run_for_thread", "resume_workflow_run", "start_workflow_run",
+    }
+
+    # the control: a call the reader must not silently miss
+    def_reading = {"materialize_def", "get_workflow_def_structure", "diff_def_snapshot"}
+    assert not (calls & def_reading)
+    synthetic = (
+        "class WorkflowTrigger:\n"
+        "    def maybe_trigger(self, ctx):\n"
+        "        return self._services.materialize_def(ctx)\n"
+    )
+    assert _services_calls_in(synthetic) & def_reading == {"materialize_def"}
 
 
 def test_the_raise_walk_reaches_every_route_from_a_reached_method_it_claims():
@@ -4853,6 +5007,129 @@ def _post(client, session, text="hello"):
 
 def _turn(client, session) -> dict:
     return client.get(f"{API_PREFIX}/state", headers=_bearer(session)).json()["turn"]
+
+
+def _wait_for_failed(client, session) -> dict:
+    """Poll `GET /shop/api/state` until the turn dies, the way
+    `test_a_dead_turn_is_reported_idle_and_failed_in_the_same_state_body`
+    does, factored out for the three armed-fault tests below."""
+    deadline = time.monotonic() + TURN_GATE_S
+    turn = _turn(client, session)
+    while turn["state"] != storefront.TURN_IDLE:
+        assert time.monotonic() < deadline, "the turn never finished dying"
+        time.sleep(0.01)
+        turn = _turn(client, session)
+    return turn
+
+
+class _StubExecutor:
+    """A `WorkflowExecutor` stand-in whose `run` is never reached — each of
+    the three tests below raises before `start_workflow_run` gets there, so
+    only `step_budget` (read unconditionally in `start_workflow_run` ahead of
+    the `started is None` check) needs to exist."""
+
+    step_budget = 8
+
+
+def test_an_unwired_executor_reached_via_the_trigger_isolates_and_reports_failed(
+    seeded,
+):
+    """Cluster B / §5.1's S9 row: the first of the three `INHERITED_HANDLERS`
+    reason strings S9's trigger falsified. `Services` here is built with no
+    executor at all (never `set_executor`), so `_require_executor`
+    raises `WorkflowEngineDisabledError` the moment
+    `trigger.maybe_trigger` reaches `start_workflow_run` — on the turn
+    worker, never on the request thread, which is what makes `POST
+    /shop/api/messages` still answer its ordinary `200` and the failure
+    surface only as `turn.lastTurn == "failed"`.
+
+    `INHERITED_HANDLERS[WorkflowEngineDisabledError]` used to read "raised by
+    the legacy `POST /workflow-runs`, which is not mounted here" — true of
+    the legacy surface, but no longer why this class is excused once the
+    storefront's own trigger can reach it too.
+    """
+    services = Services(seeded, clock=_ticking_clock())
+    trigger = WorkflowTrigger(
+        services, agent_id=AGENT,
+        def_key=config.TRIGGER_DEF_KEY, def_version=config.TRIGGER_DEF_VERSION,
+        responder=None,
+    )
+    app = create_app(
+        services, context_provider=CTX, mount_mcp=False, dev_surface=False,
+        storefront=True, trigger=trigger,
+    )
+    with TestClient(app) as client:
+        session = _join(client)
+        posted = _post(client, session, "hi")
+        assert posted.status_code == 200, posted.text
+
+        turn = _wait_for_failed(client, session)
+        assert turn == {
+            "state": storefront.TURN_IDLE, "queuePosition": 0, "lastTurn": "failed",
+        }
+
+
+def test_an_oversized_run_ctx_reached_via_the_trigger_isolates_and_reports_failed(
+    seeded, monkeypatch,
+):
+    """Cluster B: the second falsified reason string. `run_ctx={"language":
+    …}` (§4.5) is real but tiny; `MAX_CONFIG_LEN` is lowered here rather than
+    inflating the join payload, so `start_workflow_run`'s own bound is what
+    fires `WorkflowInputRejectedError` — a real condition, armed rather than
+    assumed. Reached the same way as the other two: through the trigger, on
+    the worker, after the `200`.
+    """
+    monkeypatch.setattr(services_module, "MAX_CONFIG_LEN", 1)
+    services = Services(seeded, clock=_ticking_clock())
+    services.set_executor(_StubExecutor())
+    trigger = WorkflowTrigger(
+        services, agent_id=AGENT,
+        def_key=config.TRIGGER_DEF_KEY, def_version=config.TRIGGER_DEF_VERSION,
+        responder=None,
+    )
+    app = create_app(
+        services, context_provider=CTX, mount_mcp=False, dev_surface=False,
+        storefront=True, trigger=trigger,
+    )
+    with TestClient(app) as client:
+        session = _join(client)
+        posted = _post(client, session, "hi")
+        assert posted.status_code == 200, posted.text
+
+        turn = _wait_for_failed(client, session)
+        assert turn == {
+            "state": storefront.TURN_IDLE, "queuePosition": 0, "lastTurn": "failed",
+        }
+
+
+def test_a_missing_start_snapshot_reached_via_the_trigger_isolates_and_reports_failed(
+    seeded,
+):
+    """Cluster B: the third falsified reason string. The trigger is wired to a
+    def key/version `seeded` never materialized, so `repo.start_run` finds no
+    `START` and `start_workflow_run` raises `WorkflowRunNotFoundError`
+    — a real miss, not a stub standing in for one.
+    """
+    services = Services(seeded, clock=_ticking_clock())
+    services.set_executor(_StubExecutor())
+    trigger = WorkflowTrigger(
+        services, agent_id=AGENT,
+        def_key="no-such-def", def_version="v1",
+        responder=None,
+    )
+    app = create_app(
+        services, context_provider=CTX, mount_mcp=False, dev_surface=False,
+        storefront=True, trigger=trigger,
+    )
+    with TestClient(app) as client:
+        session = _join(client)
+        posted = _post(client, session, "hi")
+        assert posted.status_code == 200, posted.text
+
+        turn = _wait_for_failed(client, session)
+        assert turn == {
+            "state": storefront.TURN_IDLE, "queuePosition": 0, "lastTurn": "failed",
+        }
 
 
 def test_three_participants_queue_behind_one_worker_and_complete_in_order(turn_app):

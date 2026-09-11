@@ -211,6 +211,26 @@ class OrderTransitionRefusedError(StorefrontError):
         self.status = status
 
 
+class TurnNotScheduledError(StorefrontError):
+    """`enqueue_turn`'s pre-`submit` refusal: the post landed in the shutdown
+    window and `_turns_shutdown` was already set at the read this method takes
+    *before* calling `submit` (§5.1's S9 row, §5.3 C14).
+
+    Maps to **`503 turn_not_scheduled`** — the one `503` that means *your
+    message is in and no reply is coming*: `services.post_message` already
+    wrote it, this turn will never run, and the process is stopping. **Covers
+    only this one shape.** The other two refusals `enqueue_turn` can raise out
+    of `submit` itself — a `shutdown_turns()` landing in the read→submit gap,
+    and a thread-exhaustion refusal that queues the work item before it
+    fails — stay a bare, untyped `RuntimeError` on purpose: on the exhaustion
+    shape the turn *does* run, so this token would be a lie there
+    (`docs/reviews/salesperson-ui-impl.md` `## Pass 23`, P23-2; both are C13's
+    residual, not this class's).
+    """
+
+    code = "turn_not_scheduled"
+
+
 def _default_clock() -> int:
     """Server clock in milliseconds since the epoch (matches `services`)."""
     return int(time.time() * 1000)
@@ -980,7 +1000,9 @@ class Storefront:
         **before** it calls `submit`; on a set flag it releases the booking —
         ownership-checked like every other map write, so it cannot delete a
         booking that replaced this one in the meantime — and raises
-        `RuntimeError`, having submitted nothing. That closes P17-3's shape:
+        `TurnNotScheduledError` (mapped by the route to `503
+        turn_not_scheduled`, §5.3 C14), having submitted nothing. That closes
+        P17-3's shape:
         a booking left behind by a post that raced `shutdown_turns()` would
         `409`-refuse that participant for the life of the process and answer
         every reset-mine of theirs `503 quiesce_timeout`
@@ -1059,7 +1081,7 @@ class Storefront:
         """
         if self._turns_shutdown:
             self.release_turn(participant.participant_id, booking)
-            raise RuntimeError(
+            raise TurnNotScheduledError(
                 "cannot schedule new turns after shutdown_turns()"
             )
         # **Cleared here — after the shutdown check, before `submit` — and

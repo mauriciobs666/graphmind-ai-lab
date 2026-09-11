@@ -5,6 +5,113 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-11 — salesperson-ui S9e: `turn_not_scheduled` typed (C14), three `INHERITED_HANDLERS` reason strings measured true
+
+**What:** Closed S9e, the last of five S9 sub-units, per `docs/plans/salesperson-ui.md` §5.1's S9
+row, §5.3 C14, and `docs/reviews/salesperson-ui-impl.md` `## Pass 23`'s P23-2/P23-3 findings.
+Two independent obligation clusters, both against `falkor-chat/server/`.
+
+**Cluster A — C14, the shutdown-window refusal typed.** `falkorchat/storefront.py` gained
+`class TurnNotScheduledError(StorefrontError)`, raised (in place of a bare `RuntimeError`) from
+`enqueue_turn`'s pre-`submit` `_turns_shutdown` check — the one shape where the message was
+already written and the flag was already set when this method read it. `falkorchat/storefront_api.py`
+wraps `shop.enqueue_turn(...)` in `POST /shop/api/messages` with a new
+`except TurnNotScheduledError as exc: raise StorefrontHTTPError(503, "turn_not_scheduled", ...)`,
+and the route's `responses={…}` gained both a `503 turn_not_scheduled` entry and a `500 unhandled`
+entry for the two neighbouring refusals that stay untyped on purpose. **Scope, per P23-2's finding
+and the plan's own C13 residual paragraph (already carrying it as of plan v1.33 — no plan edit
+needed here):** only the pre-`submit` flag read is typed. A `shutdown_turns()` landing in the
+read→submit gap, and a thread-exhaustion refusal that queues the work item before it fails (so the
+turn *does* run), both stay a bare, unmapped `RuntimeError` — widening the mapping to either would
+make `turn_not_scheduled` a lie. Both shapes are re-raises inside `enqueue_turn`'s
+`except BaseException: ...; raise` around `submit`, never a `raise RuntimeError` **statement** in
+that module, which is why closing C14 removed `storefront.py`'s only non-family raise rather than
+adding a second admitted name — I judged the residual note's best home was the plan's own C13
+paragraph (already present) rather than a new `storefront_api.py` comment block, since the plan
+already states it precisely and a second copy would drift.
+
+Three suite sites named by P23-3 as growing S9e's obligation from three to seven (found via
+`grep -n 'enqueue_turn' tests/test_storefront_api.py` and the completeness table's own row): the
+`TABLE` row for `(POST, /shop/api/messages)` gained `(503, "turn_not_scheduled")` and
+`(500, "unhandled")`; `STOREFRONT_RAISES_TODAY` swapped `"RuntimeError"` for
+`"TurnNotScheduledError"` (`storefront.py` now raises no bare `RuntimeError` at all, closing a
+blind spot P22-2's site-pinned check used to guard mechanically — any future `raise RuntimeError`
+anywhere in that module now reddens the family-equality assertion directly); and
+`NON_FAMILY_RAISES["RuntimeError"]`'s clause (2), which recorded the old bare-`500` measurement, was
+removed so the entry now reads as a complete, self-contained statement about `services._dispatch_write`'s
+two invariant alarms alone. Two dependent assertions and their comments (the
+`storefront_family`/`"RuntimeError"`-difference check, and the site-pinned-list check) were rewritten
+to match the new, tighter equality.
+
+New tests in `tests/test_storefront_api.py`:
+`test_a_post_in_the_shutdown_window_is_503_turn_not_scheduled_not_a_bare_500` (the armed-fault
+measurement — drives `shop.shutdown_turns()` for real, then posts, and asserts both the `503`
+response and that the message was actually written into the transcript) and
+`test_a_bare_runtime_error_out_of_submit_still_answers_an_unmapped_5xx` (the negative control —
+monkeypatches `shop._executor.submit` to raise bare `RuntimeError`, standing in for CPython's own
+thread-exhaustion raise the way `tests/test_storefront.py` substitutes a patched
+`threading.Thread.start` for the same shape, and asserts the response stays an unmapped, bare `500`).
+Mutation-tested: reverting `TurnNotScheduledError` to `RuntimeError` in `enqueue_turn` reddens the
+first test; restored by copy, `diff -q` clean.
+
+**Cluster B — three `INHERITED_HANDLERS` reason strings, falsified by S9's own trigger.** S9 wired
+the storefront's turn worker to call `trigger.maybe_trigger` → `services.start_workflow_run` /
+`resume_workflow_run` for the first time, which the plan's S9 row states makes three of
+`storefront_api.py`'s `INHERITED_HANDLERS` excuses ("no storefront route calls that layer") false as
+written, while remaining invisible to both static reach guards
+(`SERVICE_LAYER_REACH_TODAY`/the AST raise-walk) because the call site
+(`trigger.py:82`) sits outside every scope either one walks. **The three, confirmed against the
+plan's own armed-fault paragraph (which arms "executor unwired; a `run_ctx` over `MAX_CONFIG_LEN`;
+the snapshot absent") and against `services.py`'s own `start_workflow_run` docstring, rather than
+guessed — exact line numbers not cited here, since a concurrent, unrelated change was actively
+shifting them in this same file while this unit ran:** `WorkflowEngineDisabledError`
+(`_require_executor`), `WorkflowInputRejectedError` (the `run_ctx` size bound in
+`start_workflow_run`), and `WorkflowRunNotFoundError` (the absent start anchor in
+`start_workflow_run`, `started is None`). `WorkflowRunNotWaitingError` stays genuinely excused — nothing
+in the trigger's call set raises it. `WorkflowDefNotFoundError` stays excused too — its raise sites
+are outside every call the trigger makes.
+
+Each reason string in `falkorchat/storefront_api.py`'s `INHERITED_HANDLERS` was rewritten from "no
+storefront route calls that layer" to the measured fact: reached via `trigger.maybe_trigger` on the
+turn worker (§4.4), isolated by `_run_turn`'s own `except Exception` and surfaced as
+`turn.lastTurn == "failed"`, never a `(route, response)` pair since the `200` was already sent —
+each citing its own new armed-fault test by name, the same way the block already cites
+`test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume` for
+`StarletteHTTPException`. Three new tests in `tests/test_storefront_api.py`, each building a real
+`WorkflowTrigger` over a real `Services` and driving the full post → poll cycle:
+`test_an_unwired_executor_reached_via_the_trigger_isolates_and_reports_failed` (`Services` built
+with no executor at all), `test_an_oversized_run_ctx_reached_via_the_trigger_isolates_and_reports_failed`
+(`MAX_CONFIG_LEN` monkeypatched to `1` so §4.5's tiny `run_ctx` still exceeds it — a real bound, not
+a stub), and `test_a_missing_start_snapshot_reached_via_the_trigger_isolates_and_reports_failed`
+(the trigger wired to an unmaterialized `def_key`). Each asserts `POST /shop/api/messages` still
+answers `200` and the subsequent `GET /shop/api/state` reports
+`{state: "idle", queuePosition: 0, lastTurn: "failed"}`. Mutation-tested: temporarily disabling the
+`_mark_turn_failed(...)` call inside `_run_turn`'s `except Exception` reddens all three new tests
+(and the pre-existing `test_a_dead_turn_is_reported_idle_and_failed_in_the_same_state_body`);
+restored by copy, `diff -q` clean.
+
+No plan edit was needed for either cluster: `docs/plans/salesperson-ui.md` v1.33 already carries
+C14's qualified wording, C13's residual paragraph naming both untyped shapes, and the S9 row's own
+naming of the three `INHERITED_HANDLERS` classes and their armed-fault description — S9e implements
+against text already settled.
+
+**Suite:** verified self-contained — a clean patch of this unit's own hunks only, applied to a
+scratch `git worktree` at `HEAD` with its own venv (isolated from the shared, actively-edited live
+tree), passes this unit's 5 new tests plus every other `test_storefront.py`/`test_storefront_api.py`
+test, with the two pre-existing, unrelated failures noted below and none else. This is a **shared,
+concurrently-edited tree**: `document-ingestion2` Stage A landed at `HEAD` (`4a6186b`) with a new
+`DocumentNotFoundError` in `falkorchat/services.py`, and that commit's own message records that it
+*deliberately* excludes the `storefront_api.py`/`tests/test_storefront_api.py` hunk that would
+classify it (import + a `SERVICE_ERRORS_UNREACHABLE` entry + the `ServiceError`-family-count bumps
+from 10 to 11), leaving that registration for a later, separate change. Pending that registration,
+`test_every_service_error_subclass_is_mapped_or_declared_unreachable` and
+`test_the_service_error_map_resolves_through_the_class_tree` fail at `HEAD` on their own — not
+this unit's code, and not this unit's obligation to classify. **That exact hunk recurred twice in
+this unit's own working-tree diff** (the live tree being shared, not because this unit authored
+it) and was excluded from the patch both times, verified line-for-line against `git show
+4a6186b --stat` (the commit that introduces the class) and the commit's own message (which
+confirms the exclusion was intentional on the document-ingestion2 side too).
+
 ## 2026-09-11 — salesperson-ui S9d: the per-participant record cache removed whole
 
 **What:** Deleted `Storefront`'s participant-record cache mechanism in full, per the plan's

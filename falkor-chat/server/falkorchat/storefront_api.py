@@ -114,6 +114,7 @@ from .storefront import (
     QuiesceTimeoutError,
     ResetStateUnknownError,
     Storefront,
+    TurnNotScheduledError,
     UnknownOrderError,
     UnknownParticipantError,
     UnscopedParticipantError,
@@ -607,16 +608,57 @@ INHERITED_HANDLERS: dict[type[BaseException], str] = {
     ),
     # `app.py`'s `_register_error_handlers`, minus `ServiceError`. All eleven
     # belong to the legacy REST router, which `dev_surface=False` does not
-    # mount and which no storefront route calls into.
+    # mount and which no storefront route calls into — **except the three
+    # below**, which S9's trigger enqueue made reachable without moving the
+    # reach either guard walks (see this module's own S9 note, above, and
+    # `docs/plans/salesperson-ui.md` §5.1's S9 row). `WorkflowDefNotFoundError`
+    # is not one of the three: its raise sites (`materialize_def`,
+    # `get_workflow_def_structure`, `diff_def_snapshot`) are outside every call
+    # `trigger.maybe_trigger` makes, so its excuse stays true as written —
+    # pinned by `test_the_trigger_never_reads_a_workflow_def_so_that_excuse_stays_pinned`
+    # (P27-2), since neither static guard's walk reaches `trigger.py` at all.
     WorkflowDefSpecError: "workflow authoring; no storefront route publishes a def",
     WorkflowDefNotFoundError: "workflow authoring; no storefront route reads a def",
     WorkflowDefConflictError: "workflow authoring; no storefront route publishes a def",
-    WorkflowRunNotFoundError: "run control; no storefront route addresses a run",
+    # The three measured exemptions (S9, P23-3's growth of S9e's obligation):
+    # reached only through `trigger.maybe_trigger` → `services.start_workflow_run`
+    # / `resume_workflow_run` on the storefront's own turn worker, **after**
+    # `POST /shop/api/messages` has already answered its `200` — never a
+    # `(route, response)` pair, so no §5.2/§5.3 row, per the standard
+    # `WorkflowConfigError`'s row already sets (P11-1). `_run_turn`'s own
+    # `except Exception` (storefront.py) isolates whichever of the three fires
+    # and surfaces it as `turn.lastTurn == "failed"` on the participant's next
+    # `GET /shop/api/state` — measured at that response boundary, not at the
+    # raise, because the raise itself is invisible to both guards
+    # (`SERVICE_LAYER_REACH_TODAY`'s own comment names the call site,
+    # `trigger.py:82`, as outside all four scopes either walks).
+    WorkflowRunNotFoundError: (
+        "reached via `trigger.maybe_trigger` on the turn worker (§4.4) when "
+        "`start_workflow_run`'s snapshot/trigger-message anchor misses; "
+        "isolated by `_run_turn`'s own failure-handling and surfaced as "
+        "`turn.lastTurn == 'failed'`, never a `(route, response)` pair since "
+        "the `200` has already been sent — measured by "
+        "`test_a_missing_start_snapshot_reached_via_the_trigger_isolates_and_reports_failed`"
+    ),
     WorkflowRunNotWaitingError: "run control; no storefront route resumes a run",
-    WorkflowInputRejectedError: "run control; no storefront route submits run input",
+    WorkflowInputRejectedError: (
+        "reached via `trigger.maybe_trigger` on the turn worker (§4.4) when "
+        "`start_workflow_run`'s `run_ctx` (§4.5's `{\"language\": …}`) exceeds "
+        "`MAX_CONFIG_LEN`; isolated by `_run_turn`'s own failure-handling and "
+        "surfaced as `turn.lastTurn == 'failed'`, never a `(route, response)` "
+        "pair since the `200` has already been sent — measured by "
+        "`test_an_oversized_run_ctx_reached_via_the_trigger_isolates_and_reports_failed`"
+    ),
     WorkflowConfigError: "guard evaluation, inside the executor — off the request path",
     WorkflowEngineDisabledError: (
-        "raised by the legacy `POST /workflow-runs`, which is not mounted here"
+        "reached via `trigger.maybe_trigger` on the turn worker (§4.4) "
+        "whenever `Services._executor` is unwired; isolated by `_run_turn`'s "
+        "own failure-handling and surfaced as `turn.lastTurn == 'failed'`, "
+        "never a `(route, response)` pair since the `200` has already been "
+        "sent — measured by "
+        "`test_an_unwired_executor_reached_via_the_trigger_isolates_and_reports_failed`. "
+        "It is also raised by the legacy `POST /workflow-runs`, which is not "
+        "mounted here — but that is no longer why it is excused"
     ),
     SearchNotAvailableError: (
         "raised by `search_documents`, which no storefront route calls"
@@ -1158,6 +1200,31 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
                 "description": "`text` bounds (C11, user-supplied)",
                 "x-storefront-tokens": ["validation_failed"],
             },
+            503: {
+                "description": "the post landed in the shutdown window and "
+                               "`enqueue_turn` found the flag already set at "
+                               "its pre-`submit` read — the message is "
+                               "written, no reply is coming (§5.1's S9 row, "
+                               "C14). **Not** the same `503` as "
+                               "`demo_not_seeded`: that one means nothing "
+                               "changed, this one means something did",
+                "x-storefront-tokens": ["turn_not_scheduled"],
+            },
+            500: {
+                "description": "the two refusals `enqueue_turn` can still "
+                               "raise out of `submit` itself — a "
+                               "`shutdown_turns()` landing in the read→submit "
+                               "gap, or thread exhaustion, which queues the "
+                               "work item before it fails so the turn *does* "
+                               "run — plus any unmapped exception out of "
+                               "`services.post_message`. All three are C13's "
+                               "residual, deliberately untyped: widening "
+                               "`turn_not_scheduled` to cover the exhaustion "
+                               "shape would make the token a lie (§5.1's S9 "
+                               "row, `docs/reviews/salesperson-ui-impl.md` "
+                               "`## Pass 23`, P23-2)",
+                "x-storefront-tokens": ["unhandled"],
+            },
         },
     )
     def post_message(
@@ -1230,7 +1297,14 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
         except BaseException:
             shop.release_turn(who.participant_id, booking)
             raise
-        shop.enqueue_turn(ctx, who, posted, booking)
+        # `enqueue_turn` already released the booking on this branch (§5.1's
+        # S9 row) — this `except` only reshapes the exception, C14. The other
+        # two refusals `enqueue_turn` can raise out of `submit` itself stay a
+        # bare `RuntimeError`, uncaught here on purpose: C13's residual (P23-2).
+        try:
+            shop.enqueue_turn(ctx, who, posted, booking)
+        except TurnNotScheduledError as exc:
+            raise StorefrontHTTPError(503, "turn_not_scheduled", str(exc)) from exc
         return posted
 
     @router.get(
