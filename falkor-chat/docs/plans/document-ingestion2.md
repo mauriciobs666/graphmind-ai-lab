@@ -16,7 +16,8 @@ document granularity changes that reasoning.
 
 | Follow-on note | Owner | What it settled |
 |---|---|---|
-| `docs/plans/document-ingestion2-ml.md` | `data-scientist` | **Deterministic, uncalibrated-threshold-free detection at both tiers — no embeddings, no LLM, in v1.** Auto tier ("very-high confidence," FR-2/AC-1): exact equality of `Document.textNormalizedHash` (a hash of case-folded, whitespace-collapsed full text) against an existing `currentVersion` document — a definitional identity check, not a score, `confidence=1.0`. Suggested tier (FR-2/AC-2): shingled-Jaccard content-overlap (5-word shingles) over a cheaply-narrowed candidate shortlist, `confidence` = raw Jaccard ratio, stored as an explicitly non-probabilistic audit value with an implementer-tunable noise-floor cutoff. Candidate scope: workspace-wide among `currentVersion` documents only, **never** actor-scoped (would miss the motivating cross-actor-edit case). Pipeline placement: the auto tier runs **synchronously**, folded into one atomic write (mirrors `create_entity_with_auto_match`); the suggested tier runs **asynchronously** (cost/latency of the Jaccard computation over up to 500,000-char documents, not an embedding dependency — neither tier needs `Chunk.embedding`). A false auto-supersede is judged **more consequential** than a false entity auto-merge (it hides an independent document from default search, not just adds a spurious link) — reflected in an even narrower auto-tier criterion than the entity precedent's name+type match. Embeddings/LLM comparison both explicitly deferred to a scoped, evaluation-gated v2 (§6 of the note), for the same "zero calibration data" reason `document-ingestion-ml.md` gave for entity matching, sharpened by the larger blast-radius argument above. The note also recommends (§7) that the `SUPERSEDES` confirm/reject/recheck/list surface mirror `SAME_AS`'s **exactly**, including the OQ-3 reopen-on-corroboration/manual-recheck pattern — adopted below (§3.4), reversing this plan's own first-draft instinct to scope that out, because the edge already carries `resuggestCount`/`lastResuggestedAt` (per the note's F6) and leaving those fields permanently unused would be a design inconsistency, not a simplification. Two schema/RAM specifics (the `textNormalizedHash` index shape, and the suggested-tier candidate-generation index) are explicitly left to `graph-dba` to finalize — flagged in §7 below, not decided by this plan. |
+| `docs/plans/document-ingestion2-ml.md` | `data-scientist` | **Deterministic, uncalibrated-threshold-free detection at both tiers — no embeddings, no LLM, in v1.** Auto tier ("very-high confidence," FR-2/AC-1): exact equality of `Document.textNormalizedHash` (a hash of case-folded, whitespace-collapsed full text) against an existing `currentVersion` document — a definitional identity check, not a score, `confidence=1.0`. Suggested tier (FR-2/AC-2): shingled-Jaccard content-overlap (5-word shingles) over a cheaply-narrowed candidate shortlist, `confidence` = raw Jaccard ratio, stored as an explicitly non-probabilistic audit value with an implementer-tunable noise-floor cutoff. Candidate scope: workspace-wide among `currentVersion` documents only, **never** actor-scoped (would miss the motivating cross-actor-edit case). Pipeline placement: the auto tier runs **synchronously**, folded into one atomic write (mirrors `create_entity_with_auto_match`); the suggested tier runs **asynchronously** (cost/latency of the Jaccard computation over up to 500,000-char documents, not an embedding dependency — neither tier needs `Chunk.embedding`). A false auto-supersede is judged **more consequential** than a false entity auto-merge (it hides an independent document from default search, not just adds a spurious link) — reflected in an even narrower auto-tier criterion than the entity precedent's name+type match. Embeddings/LLM comparison both explicitly deferred to a scoped, evaluation-gated v2 (§6 of the note), for the same "zero calibration data" reason `document-ingestion-ml.md` gave for entity matching, sharpened by the larger blast-radius argument above. The note also recommends (§7) that the `SUPERSEDES` confirm/reject/recheck/list surface mirror `SAME_AS`'s **exactly**, including the OQ-3 reopen-on-corroboration/manual-recheck pattern — adopted below (§3.4), reversing this plan's own first-draft instinct to scope that out, because the edge already carries `resuggestCount`/`lastResuggestedAt` (per the note's F6) and leaving those fields permanently unused would be a design inconsistency, not a simplification. Two schema/RAM specifics (the `textNormalizedHash` index shape, and the suggested-tier candidate-generation index) were explicitly left to `graph-dba` to finalize — both now resolved by the live-verification pass below. |
+| `graph-dba` live-verification pass, 2026-09-11 (throwaway `ws:docprobe`, deleted after) | `graph-dba` | Dispatched by `teco` against this plan's design, not a separate written note. **4 of 5 items confirmed exactly as designed, no correction:** the unlabeled-`SUPERSEDES`-endpoint planner-trap discipline (§3.2, `GRAPH.PROFILE`-confirmed for the match+`SET` shape and the bare status-filter shape alike); the atomic auto-supersede write's concurrency fix (§3.4, `threading.Barrier` probe — exactly one confirmed edge, never zero/duplicated — plus one **technique note, folded in below**: build it as two separate `FOREACH`-guarded blocks sharing one `WITH`, not one `FOREACH` mixing `SET`+`CREATE`, the form actually verified and the closer mirror of `create_or_reopen_match`'s own idiom); the single-query delete shape (§3.5 — ran verbatim, succeeded outright; **the two-query fallback is dropped below**, no longer needed as a hedge); the `Document.textNormalizedHash` RANGE index (§7 — index-anchored, no constraint, exactly as designed); the `SUPERSEDES` DDL (§3.2/§4 Stage B — both indexes + the `UNIQUE RELATIONSHIP` constraint reach `OPERATIONAL`, duplicate-`matchId` rejection confirmed live). **One item needed a real redesign, folded into §3.4/§4.1/§6/§7 below:** a raw RediSearch fulltext index on `Document.text` at the plan's own 500,000-char ceiling measured **2-5x the raw text size in RAM** (0.27 MB/doc on a low-entropy 8k-token vocabulary probe, 2.45 MB/doc on a higher-entropy 60k-token one closer to real prose) — not negligible, stacking on the already-dominant `Chunk.embedding` line workspace-wide. Replaced with an app-side MinHash/LSH-banding fingerprint computed off the same shingle set `update_detection.shingles()` already builds — a handful of small indexed properties per document, negligible RAM, the standard technique for this exact near-duplicate-detection shape. `Document.title`'s fulltext index (unaffected by the RAM finding, stays as the cheap complementary booster it already was) and the K-049-family oversized-indexed-value crash risk (confirmed **not reachable** here — `RANGE`-only, no `UNIQUE` constraint on any of `Document.text`/`textNormalizedHash`, so the crash family this plan already avoided by design stays avoided) needed no change. This is an index-design correction on `graph-dba`'s own call, not a reversal of anything `data-scientist` recommended — the underlying deterministic-Jaccard technique is unchanged; only how candidates are cheaply narrowed changes. |
 | (future) `docs/plans/document-ingestion2-coordination.md` | `teco` | Sequencing/gating log once implementation starts — not authored here. |
 
 ---
@@ -211,15 +212,24 @@ def create_document_with_auto_supersede(
 ) -> dict:
     """One atomic GRAPH.QUERY: (1) OPTIONAL MATCH the existing currentVersion
     Document sharing textNormalizedHash, (2) CREATE the new Document + Chunks
-    (documentCurrent: true per chunk, currentVersion: true), (3) FOREACH-
-    conditional: flip the candidate's currentVersion to false + supersededAt/
-    supersededBy='system' + bulk-flip all its Chunks' documentCurrent to
-    false + CREATE a SUPERSEDES{status:'confirmed', decidedBy:'system',
+    (documentCurrent: true per chunk, currentVersion: true), (3) two SEPARATE
+    FOREACH-conditional blocks sharing one WITH — the exact shape graph-dba
+    live-verified (§0), not one FOREACH mixing SET+CREATE: block one flips
+    the candidate's currentVersion to false + supersededAt/supersededBy=
+    'system' + bulk-flips all its Chunks' documentCurrent to false; block two
+    CREATEs the SUPERSEDES{status:'confirmed', decidedBy:'system',
     confidence:1.0, technique:'exact_normalized_text_hash'} edge new->old.
-    Returns {documentId, chunkCount, autoSuperseded, supersededDocumentId,
-    matchId}.
+    This is the form that most closely mirrors create_or_reopen_match's own
+    idiom (separate guarded FOREACH blocks per concern, not one doing double
+    duty). Returns {documentId, chunkCount, autoSuperseded,
+    supersededDocumentId, matchId}.
     """
 ```
+
+**Live-verified** (`graph-dba`, §0): a `threading.Barrier` concurrency probe against this exact
+shape — two near-simultaneous calls sharing the same `textNormalizedHash` — produced exactly one
+confirmed `SUPERSEDES` edge, never zero, never duplicated, mirroring
+`test_create_entity_with_auto_match_concurrent_calls_produce_exactly_one_edge`'s own result.
 
 **Why one atomic write, not three round trips** — this is a *direct, deliberate* application of
 the lesson `document-ingestion.md` §3.4's concurrency note already paid for once: two
@@ -249,14 +259,27 @@ start** avoids reproducing that mistake and needing a second fix pass.
 reasoning:** a new background peer, `_safe_detect_update` (mirrors `_safe_extract`/
 `_safe_embed_chunk`'s try/except-log-never-raise discipline), scheduled once per document (not per
 chunk, unlike embed/extract) right after the synchronous write returns. It:
-1. Narrows candidates cheaply first — never an O(n) pairwise scan (per the ML note §4.1): a
-   full-text/fingerprint query against `Document.text` (index shape TBD by `graph-dba`, §7) plus a
-   title-fuzzy signal (RediSearch on `Document.title`, when non-empty — a cheap complementary
-   booster, not a replacement, since title alone is too often absent/generic per the note's F4),
-   bounded to a small shortlist (e.g. limit 5, mirroring the entity tier's own candidate cap),
-   scoped to `currentVersion` documents only, **never** actor-scoped (per the note §4.1).
-2. Computes `update_detection.jaccard(shingles, shingles)` in Python against the shortlist only
-   (bounded, since the shortlist is small even though individual documents can be large).
+1. Narrows candidates cheaply first — never an O(n) pairwise scan (per the ML note §4.1), via
+   **two unioned, independent candidate-generation signals**, each a small shortlist (e.g. limit
+   5, mirroring the entity tier's own candidate cap), scoped to `currentVersion` documents only,
+   **never** actor-scoped (per the note §4.1), de-duplicated before ranking:
+   - **LSH/MinHash-banding fingerprint match** (`graph-dba`-redesigned, §0/§7 — replaces this
+     plan's original raw-fulltext-on-`Document.text` recommendation, measured too RAM-heavy):
+     `update_detection.minhash_signature`/`lsh_bands` (below) turn the same shingle set the
+     Jaccard computation itself uses into a small, fixed number of banded fingerprint values,
+     each stored as its own short indexed `Document.lshBand0..bandB` property (§4 Stage D DDL).
+     Candidate generation becomes an index-anchored `OR` across those band-equality predicates —
+     orders of magnitude cheaper than a raw full-text scan of up to 500,000-char documents, the
+     standard technique for this exact near-duplicate-detection shape.
+   - **Title-fuzzy match** (RediSearch on `Document.title`, when non-empty) — a cheap
+     complementary booster, not a replacement for the fingerprint signal, since title alone is too
+     often absent/generic to carry candidate generation by itself (the note's F4). Unaffected by
+     the RAM finding above (titles are short, `MAX_NAME_LEN=200`).
+2. Computes `update_detection.jaccard(shingles, shingles)` in Python against the (unioned,
+   de-duplicated) shortlist only (bounded, since the shortlist is small even though individual
+   documents can be large) — the LSH bands only ever narrow *candidates*; the stored
+   `SUPERSEDES.confidence` is still the precise raw Jaccard ratio the ML note specifies (§0), not
+   an LSH estimate.
 3. For the top-ranked candidate above an implementer-tunable noise floor: calls
    `repository.create_or_reopen_supersede_suggestion(...)` — **the exact same idiom as
    `create_or_reopen_match`**, applied verbatim at `Document` granularity (guarded find-or-create-
@@ -319,13 +342,15 @@ CREATE (:DocumentDeletion {documentId: did, deletedBy: $deletedBy, deletedAt: $d
 RETURN did AS documentId
 ```
 
-**Honestly flagged as unverified** (§7): I have not live-run this exact multi-clause
-`DELETE`-then-`CREATE` shape against a real FalkorDB instance. If `graph-dba`/`coder` finds this
-particular combination unsupported or awkward on this build, an accepted fallback is **two
-sequential queries** (delete, then create the audit node) — acceptable because `delete_document`
-is a rare, deliberate, low-frequency action (not a hot write path the way entity fusion is), and
-the storefront reset's own §18.7 already establishes how to reason about a client-side-timeout
-failure boundary between two such steps ("re-read and report," never assume "nothing changed").
+**Live-verified** (`graph-dba`, §0): this exact single-query shape — `MATCH` → capture
+`documentId` via `WITH` → collect+`FOREACH`-delete the chunks → `DETACH DELETE d` → `CREATE` the
+`DocumentDeletion` audit node → `RETURN` — ran verbatim and succeeded outright, one round trip,
+`Document`+`Chunk`s confirmed gone and the audit node correct. **Build this single-query form
+directly — no two-query fallback is needed** (this plan's earlier draft hedged with one as an
+accepted degradation path; that hedge is now moot and dropped). If `delete_document` ever needed a
+second round trip for some unrelated reason, the storefront reset's own §18.7 still establishes how
+to reason about a client-side-timeout failure boundary between two such steps ("re-read and
+report," never assume "nothing changed") — noted for completeness, not because this plan needs it.
 
 `delete_document(ctx, document_id)` raises a new `DocumentNotFoundError` (added to `app.py`'s
 404-mapped tuple) when nothing matched — mirrors `MatchNotFoundError`'s existing shape/posture.
@@ -439,7 +464,7 @@ the ML note's conclusions (already landed, §0).
 - `server/falkorchat/repository.py` — `create_document` gains two baseline properties every
   document needs regardless of this feature's ML tiering: `currentVersion: true` on the `Document`
   `CREATE`, `documentCurrent: true` per `Chunk` in its `FOREACH`. New: `delete_document(ws, *,
-  document_id, deleted_by, deleted_at) -> bool` (the §3.5 query, or its two-query fallback);
+  document_id, deleted_by, deleted_at) -> bool` (the §3.5 query, live-verified single-query form);
   `get_document_deletion(ws, *, document_id) -> dict | None`; `list_documents(ws, *,
   current_only=True, limit=50) -> list[dict]` (§3.7).
 - `server/falkorchat/services.py` — `delete_document(ctx, *, document_id) -> dict` (raises
@@ -490,15 +515,34 @@ still succeeds.
   the shingling, per the ML note's own instruction not to write two independently-drifting
   normalizers, mirroring `extraction.normalize_name`'s existing "one shared helper" precedent);
   `content_hash(normalized_text) -> str`; `shingles(normalized_text, n=5) -> set[str]` (5-word
-  n-grams); `jaccard(a: set[str], b: set[str]) -> float`.
-- `server/falkorchat/repository.py` — new `create_document_with_auto_supersede` (§3.4, replaces
-  `create_document` at `ingest_document`'s call site only — `create_document` itself stays,
-  unmodified beyond Stage A's two baseline properties, as the underlying plain-create primitive,
-  mirroring `create_entity`/`create_entity_with_auto_match`'s exact relationship); new
-  `find_update_shortlist(ws, *, title, ...) -> list[dict]` (candidate generation, index shape
-  per `graph-dba`, §7); `create_or_reopen_supersede_suggestion(ws, *, new_document_id,
-  candidate_document_id, match_id, status, confidence, technique, created_at) -> dict` (verbatim
-  mirror of `create_or_reopen_match`).
+  n-grams); `jaccard(a: set[str], b: set[str]) -> float`. **Two additions per `graph-dba`'s
+  redesign of the candidate-generation index (§0/§3.4/§7):** `minhash_signature(shingles: set[str],
+  k: int = 32) -> list[int]` (a standard MinHash signature over the shingle set — the same set
+  `shingles()` already builds, no second document representation); `lsh_bands(signature: list[int],
+  b: int = 8) -> list[str]` (bands the signature into `b` short fingerprint strings, one per
+  `Document.lshBand<i>` property — `k`/`b` are an implementer-tunable RAM/recall trade-off,
+  mirroring this plan's existing posture toward heuristic constants like `MAX_DOCUMENT_CHARS`, not
+  load-bearing).
+- `scripts/bootstrap_schema.sh` — `CREATE INDEX FOR (n:Document) ON (n.lshBand<i>)` for each of the
+  `b` band properties (plain RANGE/equality indexes, per `graph-dba`'s recommendation, §0); `CALL
+  db.idx.fulltext.createNodeIndex('Document', 'title')` (new — titles are short, `MAX_NAME_LEN=200`,
+  unaffected by the fulltext-on-`text` RAM finding that ruled out the original candidate-index
+  design, §0).
+- `server/falkorchat/repository.py` — new `create_document_with_auto_supersede` (§3.4, two separate
+  `FOREACH`-guarded blocks per graph-dba's verified shape, replaces `create_document` at
+  `ingest_document`'s call site only — `create_document` itself stays, unmodified beyond Stage A's
+  two baseline properties, as the underlying plain-create primitive, mirroring `create_entity`/
+  `create_entity_with_auto_match`'s exact relationship); new `find_update_shortlist(ws, *, bands:
+  list[str], title, limit=5) -> list[dict]` — an index-anchored `OR` across the `b` band-equality
+  predicates (`WHERE d.lshBand0 = $band0 OR d.lshBand1 = $band1 OR ...`), unioned app-side with a
+  separate title-fuzzy full-text lookup, **not yet independently live-verified** (§7 — the general
+  "`OR`-as-scan-anchor" quirk category is already named in `falkor-chat/AGENTS.md`'s live-verified-
+  facts list, so this specific multi-property-`OR` shape needs its own check, not an assumption
+  that it behaves like the single-predicate cases already verified elsewhere in this plan);
+  `create_or_reopen_supersede_suggestion(ws, *, new_document_id, candidate_document_id, match_id,
+  status, confidence, technique, created_at) -> dict` (verbatim mirror of `create_or_reopen_match`,
+  also not yet independently live-verified at `Document` granularity, §7 — only the entity-level
+  original has been).
 - `server/falkorchat/services.py` — `ingest_document`'s new flow (§3.4): compute the hash, call
   the atomic method, schedule suggested-tier detection only when not auto-superseded, return the
   extended receipt.
@@ -581,9 +625,17 @@ and searchable).
   §1.2/§6 measured ~840 bytes/edge) — document-update volume is bounded by ingestion frequency, not
   extraction fan-out, so this line grows far more slowly than `Entity`/`SAME_AS` already does.
 - **`DocumentDeletion` nodes** — one small node per deletion, a deliberately rare action — negligible.
-- **The suggested tier's candidate-generation index (full-text or fingerprint on `Document.text`,
-  up to 500,000 chars/document)** is the one line with a real, undetermined RAM cost — explicitly
-  left to `graph-dba` (§7), same posture the ML note itself takes (§4.1/§7 of the note).
+- **The suggested tier's candidate-generation index — measured, not assumed, and redesigned as a
+  result (`graph-dba`, §0).** A raw RediSearch full-text index on `Document.text` at this plan's
+  own 500,000-char ceiling was live-measured at **2-5x the raw text size in RAM** (0.27 MB/doc on a
+  low-entropy 8k-token vocabulary, 2.45 MB/doc on a higher-entropy 60k-token one closer to real
+  prose) — a real, non-negligible line stacking on the already-dominant `Chunk.embedding` line,
+  workspace-wide. **Ruled out for that reason** and replaced with the LSH/MinHash-banding
+  fingerprint (§3.4/§4 Stage D): a handful of short indexed properties per `Document`
+  (`lshBand0..bandB`), each a small int/short string — negligible RAM, the standard technique for
+  this exact near-duplicate-detection shape. `Document.title`'s fulltext index (new, §4 Stage D) is
+  cheap and unaffected — titles are short (`MAX_NAME_LEN=200`), nowhere near the RAM-costly ceiling
+  that ruled out indexing `Document.text` directly.
 - **No new vector index of any kind** — the ML note's entire v1 recommendation is embedding-free at
   both tiers, so this feature adds zero vector-RAM growth, unlike the original feature's dominant
   `Chunk.embedding` line.
@@ -592,29 +644,38 @@ and searchable).
 
 ## 7. Risks & open questions
 
-- **Verification gap, named honestly.** The `SUPERSEDES`-anchored Cypher and the `DETACH
-  DELETE`-then-`CREATE` delete query are **designed by direct analogy** to already-live-verified
-  idioms in this same codebase (`SAME_AS`'s exact shape and planner-trap discipline, the storefront
-  reset's exact `DETACH DELETE` atomicity) — not independently reverified against a real FalkorDB
-  instance by this plan. High confidence they transfer, since the shapes are structurally
-  identical, but this is a designed-by-analogy claim, not a live-verified one. **Recommend a
-  `graph-dba` (or `coder`-run) live-verification pass against a throwaway `ws:<probe>` graph before
-  Stage A/D implementation**, mirroring the original feature's own Stage-0 gate — not silently
-  assumed.
-- **Two schema/RAM specifics are explicitly `graph-dba`'s to finalize, not this plan's** (per the
-  ML note's own §4.1/§7): the exact `Document.textNormalizedHash` indexing shape (RANGE, no
-  uniqueness constraint — two genuinely different documents could, vanishingly unlikely, share a
-  hash before either is superseded, so this deliberately does **not** follow the "every entity gets
-  a uniqueness constraint" convention `falkor-chat/AGENTS.md` states — `textNormalizedHash` is a
-  content fingerprint, not an identity property, so that convention doesn't apply to it, named here
-  so a reviewer doesn't mistake the omission for a violation) and the suggested tier's
-  candidate-generation index (full-text on `Document.text` vs. a lighter fingerprint/shingle-based
-  scheme, if `graph-dba` judges a raw full-text index on up to 500,000-char documents too
-  RAM-heavy). **Also worth `graph-dba` explicitly checking**: whether indexing a field up to
-  500,000 characters risks a variant of the K-049 oversized-indexed-property crash mode
-  (`docs/reviews/unique-constraint-oversized-value-crash-rca.md` — a different mechanism, a
-  UNIQUE constraint rather than a full-text index, but the same family of "oversized indexed
-  value" risk, worth a direct check rather than an assumption either way).
+- **Verification gap — largely closed by `graph-dba`'s live-verification pass (§0), narrowed to
+  what's actually left.** Four of this plan's five originally-by-analogy Cypher/index designs are
+  now **confirmed live** against a real FalkorDB instance (throwaway `ws:docprobe`): the unlabeled-
+  `SUPERSEDES`-endpoint planner-trap discipline (§3.2, for the match+`SET` shape *and* the
+  status-filter/list shape), the atomic auto-supersede write including its concurrency fix (§3.4),
+  the single-query delete (§3.5), the `Document.textNormalizedHash` index, and the `SUPERSEDES` DDL
+  (§4 Stage B). **What genuinely remains unverified, narrowed from the original broad hedge:** the
+  new `find_update_shortlist` band-equality `OR`-lookup (§4 Stage D — a brand-new query shape this
+  plan is introducing in response to item 4b's redesign, not yet run against a real instance; the
+  general "`OR`-as-scan-anchor" quirk category is already named in `falkor-chat/AGENTS.md`'s
+  live-verified-facts list, so this specific multi-property-`OR` shape should not be assumed to
+  behave like the single-predicate cases already confirmed elsewhere in this plan) and
+  `create_or_reopen_supersede_suggestion` (a verbatim mirror of `create_or_reopen_match`, which
+  *is* live-verified at entity granularity, but this plan's `Document`-granularity instance of it
+  has not independently been). **Recommend a second, narrower `graph-dba` (or `coder`-run)
+  live-verification pass covering just these two, before Stage D implementation** — not the full
+  Stage-0-sized gate the first pass already closed.
+- **The suggested tier's candidate-generation index — resolved, not merely flagged.** Originally
+  left to `graph-dba` to finalize (per the ML note's §4.1/§7); now concretely redesigned as
+  LSH/MinHash banding after the live RAM measurement ruled out a raw full-text index on
+  `Document.text` (§0/§6) — folded into §3.4/§4 Stage D above, not an open item anymore.
+  `Document.textNormalizedHash`'s indexing shape (RANGE, no uniqueness constraint — two genuinely
+  different documents could, vanishingly unlikely, share a hash before either is superseded, so
+  this deliberately does **not** follow the "every entity gets a uniqueness constraint" convention
+  `falkor-chat/AGENTS.md` states — `textNormalizedHash` is a content fingerprint, not an identity
+  property, so that convention doesn't apply to it, named here so a reviewer doesn't mistake the
+  omission for a violation) is confirmed as designed. The K-049-family oversized-indexed-property
+  crash concern this plan flagged for a direct check is **confirmed not reachable** (§0 — live
+  500,000-char writes into a `RANGE`-indexed, unconstrained field, zero crash; this plan already
+  proposed no `UNIQUE` constraint on either `Document.text` or `textNormalizedHash`, so that crash
+  family was never reachable here by construction, now empirically confirmed rather than merely
+  argued).
 - **A genuine new race, named (§2.1): delete racing an in-flight extraction can leave a rare,
   orphaned `Entity` node** with no `ABOUT` edge from any surviving chunk — `create_entity_with_
   auto_match` is an unconditional `CREATE`, not `MATCH`-anchored, so a chunk deleted between that
