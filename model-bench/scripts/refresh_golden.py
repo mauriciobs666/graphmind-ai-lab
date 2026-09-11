@@ -68,33 +68,70 @@ class OriginSpec:
     kind: Literal["copy", "jsonl-transform", "ast-literal", "check-only"]
 
 
-_TRACKED_ORIGINS: tuple[OriginSpec, ...] = (
-    OriginSpec(
-        "falkor-chat/server/tests/eval/golden_retrieval.jsonl",
-        "queries.jsonl",
-        "jsonl-transform",
+#: Per-pack tracked origins, keyed by `packId` (S4 spec §6) — generalized from a single
+#: module-level constant because the shipped one-pack shape was embedder-only despite `--pack`
+#: already being a required, generic-looking flag: running the old constant against a
+#: non-embedder `--pack` path would silently write the wrong origins to the wrong destination.
+#: `_origins_for_pack_id`/`_read_pack_id` below are the two resolvers `main()` uses; `_run_import`
+#: and `_check_origins` take an already-resolved `origins` tuple rather than reading this mapping
+#: themselves, so they stay testable against a synthetic origin list with no `pack.json` at all
+#: (the same shape their own tests used before this generalization).
+_TRACKED_ORIGINS_BY_PACK_ID: dict[str, tuple[OriginSpec, ...]] = {
+    "embedder-graphrag-retrieval": (
+        OriginSpec(
+            "falkor-chat/server/tests/eval/golden_retrieval.jsonl",
+            "queries.jsonl",
+            "jsonl-transform",
+        ),
+        OriginSpec("falkor-chat/scripts/seed_eval_corpus.py", "corpus.jsonl", "ast-literal"),
+        OriginSpec(
+            "falkor-chat/server/tests/eval/retrieval_baseline.json",
+            "retrieval_baseline.json",
+            "copy",
+        ),
+        OriginSpec(
+            "falkor-chat/server/tests/eval/golden_retrieval.embeddings.json",
+            "golden_retrieval.embeddings.json",
+            "copy",
+        ),
+        # Tracked for --check-origins drift detection only — this script never writes this
+        # file's CONTENT (the 20 cases are hand-transcribed, not extracted, spec §3.1 point 2).
+        # It reads the fixture's own recorded `sourceSha256` header and reports drift against a
+        # fresh hash of `test_metrics.py`.
+        OriginSpec(
+            "falkor-chat/server/tests/eval/test_metrics.py",
+            "../../tests/fixtures/metrics_agreement.json",
+            "check-only",
+        ),
     ),
-    OriginSpec("falkor-chat/scripts/seed_eval_corpus.py", "corpus.jsonl", "ast-literal"),
-    OriginSpec(
-        "falkor-chat/server/tests/eval/retrieval_baseline.json",
-        "retrieval_baseline.json",
-        "copy",
+    "guard-judge-understanding": (
+        # `id` -> `itemId` rename only; every other field carried through unchanged (S4 spec
+        # §5.1.2/§6) — see `_items_rows_from_golden_guards`.
+        OriginSpec(
+            "falkor-chat/server/tests/eval/golden_guards.jsonl", "items.jsonl", "jsonl-transform",
+        ),
     ),
-    OriginSpec(
-        "falkor-chat/server/tests/eval/golden_retrieval.embeddings.json",
-        "golden_retrieval.embeddings.json",
-        "copy",
-    ),
-    # Tracked for --check-origins drift detection only — this script never writes this file's
-    # CONTENT (the 20 cases are hand-transcribed, not extracted, spec §3.1 point 2). It reads the
-    # fixture's own recorded `sourceSha256` header and reports drift against a fresh hash of
-    # `test_metrics.py`.
-    OriginSpec(
-        "falkor-chat/server/tests/eval/test_metrics.py",
-        "../../tests/fixtures/metrics_agreement.json",
-        "check-only",
-    ),
-)
+}
+
+def _origins_for_pack_id(pack_id: str) -> tuple[OriginSpec, ...]:
+    """Resolve `pack_id` against `_TRACKED_ORIGINS_BY_PACK_ID` (S4 spec §6). Raises
+    `RefreshGoldenError`, naming every known pack, on an unregistered one — a silent `{}.get(...,
+    ())` would re-open exactly the "wrong origins for the wrong pack" latent bug this
+    generalization exists to close."""
+    try:
+        return _TRACKED_ORIGINS_BY_PACK_ID[pack_id]
+    except KeyError:
+        known = ", ".join(sorted(_TRACKED_ORIGINS_BY_PACK_ID))
+        raise RefreshGoldenError(
+            f"no tracked origins registered for pack {pack_id!r}; known packs: {known}"
+        ) from None
+
+
+def _read_pack_id(pack_root: Path) -> str:
+    """The target `--pack`'s own declared `packId`, read from its `pack.json` — the key
+    `_origins_for_pack_id` resolves against (S4 spec §6)."""
+    manifest = json.loads((pack_root / "pack.json").read_text(encoding="utf-8"))
+    return manifest["packId"]
 
 
 # --------------------------------------------------------------------------------------------
@@ -291,6 +328,29 @@ def _queries_rows_from_golden_retrieval(lines: Sequence[str]) -> list[dict[str, 
     return rows
 
 
+def _items_rows_from_golden_guards(lines: Sequence[str]) -> list[dict[str, Any]]:
+    """One row per `golden_guards.jsonl` line — `id` -> `itemId` rename ONLY (matches
+    `ANALYSIS_UNIT_FIELD_BY_ROLE["guard-judge"]`); every other field carried through unchanged
+    (S4 spec §5.1.2/§6, D1: "data, not derived")."""
+    rows: list[dict[str, Any]] = []
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        row = json.loads(line)
+        rows.append({("itemId" if key == "id" else key): value for key, value in row.items()})
+    return rows
+
+
+#: Which pure row-transform function a `"jsonl-transform"` origin runs, keyed by the OWNING
+#: pack's `packId` — each pack in `_TRACKED_ORIGINS_BY_PACK_ID` declares at most one
+#: `"jsonl-transform"` origin today, so one function per pack is unambiguous.
+_JSONL_TRANSFORM_BY_PACK_ID: Mapping[str, Any] = {
+    "embedder-graphrag-retrieval": _queries_rows_from_golden_retrieval,
+    "guard-judge-understanding": _items_rows_from_golden_guards,
+}
+
+
 def _write_jsonl(dest_path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     with dest_path.open("w", encoding="utf-8") as f:
         for row in rows:
@@ -321,18 +381,23 @@ def _fixture_source_sha256(fixture_path: Path) -> str | None:
     return data.get("sourceSha256")
 
 
-def _check_origins(repo_root: Path, pack_root: Path) -> list[OriginCheckResult]:
-    """Re-hashes every `_TRACKED_ORIGINS` entry's current `originPath` bytes and compares against
-    the matching recorded hash: `PROVENANCE.md`'s table for the four copied/transformed files,
-    `metrics_agreement.json`'s own header for `test_metrics.py` (spec §3.1 point 2(c)). Read-only;
-    never mutates either side."""
+def _check_origins(
+    repo_root: Path, pack_root: Path, origins: Sequence[OriginSpec]
+) -> list[OriginCheckResult]:
+    """Re-hashes every entry of `origins`' current `originPath` bytes and compares against the
+    matching recorded hash: `PROVENANCE.md`'s table for the copied/transformed files,
+    `metrics_agreement.json`'s own header for a `check-only` origin (spec §3.1 point 2(c)).
+    Read-only; never mutates either side. `origins` is the caller's already-resolved tuple (`main`
+    resolves it from the target pack's own `packId` via `_origins_for_pack_id`, S4 spec §6) —
+    kept as an explicit parameter rather than read from the module mapping directly so this stays
+    testable against a synthetic origin list with no `pack.json` on disk at all."""
     provenance_path = pack_root / "PROVENANCE.md"
     recorded_provenance = (
         _read_provenance_records(provenance_path) if provenance_path.exists() else {}
     )
 
     results: list[OriginCheckResult] = []
-    for origin in _TRACKED_ORIGINS:
+    for origin in origins:
         origin_path = repo_root / origin.originPath
         current_sha = _sha256_bytes(origin_path.read_bytes())
 
@@ -488,13 +553,15 @@ def embed_corpus(
 # --------------------------------------------------------------------------------------------
 
 
-def _run_import(repo_root: Path, pack_root: Path) -> None:
+def _run_import(
+    repo_root: Path, pack_root: Path, pack_id: str, origins: Sequence[OriginSpec]
+) -> None:
     provenance_path = pack_root / "PROVENANCE.md"
     _pack_version_gate(pack_root, provenance_path)
 
     now = _utc_now_iso()
     records: list[ProvenanceRecord] = []
-    for origin in _TRACKED_ORIGINS:
+    for origin in origins:
         if origin.kind == "check-only":
             continue
 
@@ -506,7 +573,7 @@ def _run_import(repo_root: Path, pack_root: Path) -> None:
             dest_path.write_bytes(origin_bytes)
         elif origin.kind == "jsonl-transform":
             lines = origin_bytes.decode("utf-8").splitlines()
-            rows = _queries_rows_from_golden_retrieval(lines)
+            rows = _JSONL_TRANSFORM_BY_PACK_ID[pack_id](lines)
             _write_jsonl(dest_path, rows)
         elif origin.kind == "ast-literal":
             corpus = _read_corpus_literal(origin_bytes.decode("utf-8"))
@@ -586,7 +653,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     pack_root = Path(args.pack).resolve()
 
     if args.check_origins:
-        results = _check_origins(repo_root, pack_root)
+        try:
+            origins = _origins_for_pack_id(_read_pack_id(pack_root))
+        except RefreshGoldenError as exc:
+            print(f"refresh_golden.py: {exc}", file=sys.stderr)
+            return 1
+        results = _check_origins(repo_root, pack_root, origins)
         for result in results:
             print(f"{result.status}: {result.originPath}")
         return 0 if all(r.status == "unchanged" for r in results) else 1
@@ -658,7 +730,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     try:
-        _run_import(repo_root, pack_root)
+        pack_id = _read_pack_id(pack_root)
+        origins = _origins_for_pack_id(pack_id)
+        _run_import(repo_root, pack_root, pack_id, origins)
     except RefreshGoldenError as exc:
         print(f"refresh_golden.py: {exc}", file=sys.stderr)
         return 1

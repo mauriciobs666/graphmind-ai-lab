@@ -359,6 +359,90 @@ def test_queries_rows_from_golden_retrieval_renames_fields_per_pack_convention()
 
 
 # --------------------------------------------------------------------------------------------
+# `_items_rows_from_golden_guards` — the jsonl-transform path for guard-judge-understanding
+# (S4 spec §5.1.2/§6: `id` -> `itemId` rename only, every other field carried through unchanged)
+# --------------------------------------------------------------------------------------------
+
+
+def test_items_rows_from_golden_guards_renames_only_id_to_item_id() -> None:
+    line = json.dumps(
+        {
+            "id": "ca-01",
+            "tier": "clear_advance",
+            "path": "understanding",
+            "r1_probe": True,
+            "condition": "the user has provided enough information",
+            "understanding": {"request": "x", "known": [], "missing": []},
+            "turns": [],
+            "expected": True,
+            "label_rationale": "because",
+        }
+    )
+    rows = refresh_golden._items_rows_from_golden_guards([line, "", "   "])
+    assert rows == [
+        {
+            "itemId": "ca-01",
+            "tier": "clear_advance",
+            "path": "understanding",
+            "r1_probe": True,
+            "condition": "the user has provided enough information",
+            "understanding": {"request": "x", "known": [], "missing": []},
+            "turns": [],
+            "expected": True,
+            "label_rationale": "because",
+        }
+    ]
+
+
+def test_items_rows_from_golden_guards_never_carries_a_bare_id_key() -> None:
+    """The mutation-test target: a transform that forgot the rename would leave `id` present
+    alongside (or instead of) `itemId` — every downstream consumer keys off `itemId` only."""
+    line = json.dumps({"id": "tn-01", "tier": "boundary"})
+    rows = refresh_golden._items_rows_from_golden_guards([line])
+    assert "id" not in rows[0]
+    assert rows[0]["itemId"] == "tn-01"
+
+
+# --------------------------------------------------------------------------------------------
+# `_TRACKED_ORIGINS_BY_PACK_ID` — the per-pack mapping (S4 spec §6), and its two resolvers
+# --------------------------------------------------------------------------------------------
+
+
+def test_tracked_origins_by_pack_id_has_exactly_the_two_known_packs() -> None:
+    """Shrink/widen guard (root AGENTS.md's "a guard's reach lives in an asserted constant"
+    convention): the S3 embedder pack's four-plus-check-only origins are unmoved, and S4's
+    guard-judge-understanding pack owns exactly its one `jsonl-transform` origin."""
+    assert set(refresh_golden._TRACKED_ORIGINS_BY_PACK_ID) == {
+        "embedder-graphrag-retrieval",
+        "guard-judge-understanding",
+    }
+    assert len(refresh_golden._TRACKED_ORIGINS_BY_PACK_ID["embedder-graphrag-retrieval"]) == 5
+    guard_origins = refresh_golden._TRACKED_ORIGINS_BY_PACK_ID["guard-judge-understanding"]
+    assert guard_origins == (
+        refresh_golden.OriginSpec(
+            "falkor-chat/server/tests/eval/golden_guards.jsonl", "items.jsonl", "jsonl-transform",
+        ),
+    )
+
+
+def test_read_pack_id_reads_the_manifests_own_packid(tmp_path: Path) -> None:
+    pack_root = tmp_path / "pack"
+    pack_root.mkdir()
+    (pack_root / "pack.json").write_text(json.dumps({"packId": "some-pack"}))
+    assert refresh_golden._read_pack_id(pack_root) == "some-pack"
+
+
+def test_origins_for_pack_id_resolves_a_known_pack() -> None:
+    origins = refresh_golden._origins_for_pack_id("guard-judge-understanding")
+    assert origins == refresh_golden._TRACKED_ORIGINS_BY_PACK_ID["guard-judge-understanding"]
+
+
+def test_origins_for_pack_id_raises_naming_the_known_packs_for_an_unknown_one() -> None:
+    with pytest.raises(refresh_golden.RefreshGoldenError, match="unknown-pack"):
+        refresh_golden._origins_for_pack_id("unknown-pack")
+
+
+# --------------------------------------------------------------------------------------------
 # `_pack_version_gate` — AC-3's "bump packVersion first" refusal, synthetic tmp_path pack
 # --------------------------------------------------------------------------------------------
 
@@ -422,16 +506,12 @@ def test_check_origins_reports_unchanged_when_hashes_match(
     origin_file = repo_root / "origin" / "a.txt"
     origin_file.write_bytes(b"stable content")
 
-    monkeypatch.setattr(
-        refresh_golden,
-        "_TRACKED_ORIGINS",
-        (refresh_golden.OriginSpec("origin/a.txt", "a.copy", "copy"),),
-    )
+    origins = (refresh_golden.OriginSpec("origin/a.txt", "a.copy", "copy"),)
     _write_synthetic_provenance(
         pack_root, origin_path="origin/a.txt", dest_path="a.copy", source_bytes=b"stable content"
     )
 
-    results = refresh_golden._check_origins(repo_root, pack_root)
+    results = refresh_golden._check_origins(repo_root, pack_root, origins)
     assert len(results) == 1
     assert results[0].status == "unchanged"
 
@@ -446,11 +526,7 @@ def test_check_origins_reports_drifted_when_the_origin_changed_since_the_last_im
     origin_file = repo_root / "origin" / "a.txt"
     origin_file.write_bytes(b"original content")
 
-    monkeypatch.setattr(
-        refresh_golden,
-        "_TRACKED_ORIGINS",
-        (refresh_golden.OriginSpec("origin/a.txt", "a.copy", "copy"),),
-    )
+    origins = (refresh_golden.OriginSpec("origin/a.txt", "a.copy", "copy"),)
     _write_synthetic_provenance(
         pack_root,
         origin_path="origin/a.txt",
@@ -459,7 +535,7 @@ def test_check_origins_reports_drifted_when_the_origin_changed_since_the_last_im
     )
 
     origin_file.write_bytes(b"drifted content")
-    results = refresh_golden._check_origins(repo_root, pack_root)
+    results = refresh_golden._check_origins(repo_root, pack_root, origins)
     assert results[0].status == "DRIFTED"
 
 
@@ -480,20 +556,14 @@ def test_check_origins_reads_the_check_only_originss_hash_from_the_fixtures_own_
         json.dumps({"sourceSha256": refresh_golden._sha256_bytes(b"def f(): pass\n")})
     )
 
-    monkeypatch.setattr(
-        refresh_golden,
-        "_TRACKED_ORIGINS",
-        (
-            refresh_golden.OriginSpec(
-                "origin/check_me.py", "fixtures/agreement.json", "check-only"
-            ),
-        ),
+    origins = (
+        refresh_golden.OriginSpec("origin/check_me.py", "fixtures/agreement.json", "check-only"),
     )
-    results = refresh_golden._check_origins(repo_root, pack_root)
+    results = refresh_golden._check_origins(repo_root, pack_root, origins)
     assert results[0].status == "unchanged"
 
     fixture_path.write_text(json.dumps({"sourceSha256": "0" * 64}))
-    results = refresh_golden._check_origins(repo_root, pack_root)
+    results = refresh_golden._check_origins(repo_root, pack_root, origins)
     assert results[0].status == "DRIFTED"
 
 

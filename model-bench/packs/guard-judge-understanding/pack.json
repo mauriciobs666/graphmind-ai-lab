@@ -1,0 +1,26 @@
+{
+  "packId": "guard-judge-understanding",
+  "packVersion": "1.0.0",
+  "role": "guard-judge",
+  "schemaVersion": 1,
+  "description": "The production fuzzy-guard judge's understanding/turns evidence tiers, scored class-conditionally (falseAdvanceRate / falseSuspendRate), no headline.",
+  "scorer": "classification",
+  "environment": {"requires": ["lmstudio-chat"]},
+  "prompt": {
+    "systemPrompt": "prompts/judge.md",
+    "toolSchemas": null,
+    "temperature": 0.0,
+    "maxTokens": 256
+  },
+  "data": {"items": "items.jsonl"},
+  "sampling": {
+    "seed": 20260911,
+    "pairingKey": ["itemId"],
+    "analysisUnit": "itemId"
+  },
+  "metrics": {
+    "verdictMetrics": ["falseAdvanceRate", "falseSuspendRate"],
+    "headlineMetric": null
+  },
+  "provenance": "PROVENANCE.md"
+}

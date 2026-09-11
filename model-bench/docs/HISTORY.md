@@ -2,6 +2,98 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-11 — S4 Step 1: `guard-judge-understanding`, offline half
+
+**What:** `docs/plans/small-model-benchmarking-s4-spec.md` §5.1/§6/§7 Step 1 — the first of S4's
+two concrete packs, built entirely offline on top of Step 0's already-merged seam fix
+(`ItemScorer.build_messages`, `Pack.prompt_config()`'s content resolution).
+
+1. **`packs/guard-judge-understanding/{pack.json, prompts/judge.md, PROVENANCE.md, items.jsonl}`**
+   — the pack itself. `prompts/judge.md` is `falkorchat.app._JUDGE_SYSTEM_PROMPT` transcribed
+   verbatim (confirmed byte-identical via an independent AST literal-eval of the live source, not
+   hand-typed and eyeballed). `items.jsonl` is the real 85-row `golden_guards.jsonl`, `id`→`itemId`
+   renamed with every other field carried through unchanged (confirmed byte-identical to the
+   renamed original, all 85 rows, by direct comparison) — produced by actually running
+   `scripts/refresh_golden.py --pack packs/guard-judge-understanding` against the real,
+   still-present `falkor-chat` tree, not hand-written.
+2. **`modelbench/scoring/classification.py`** (new) — guard-judge's `ItemScorer`, a module per
+   `scoring/retrieval.py`'s own precedent: `_normalize_turns` (transcribed from
+   `guards._recent_turns`, filter-non-empty-text-before-slicing-to-last-6, verified against the
+   live source directly), `_render_judge_user` (the CONDITION/CURRENT STATE/RECENT TURNS
+   three-block render with the 6000-char oldest-evicted-first truncation), `extract_own_line_json_
+   object` (the conservative own-line JSON parser, `llm.py`'s), `build_messages` (never reads
+   `expected`/`label_rationale`/`r1_probe`), `score_item` (the same `{"decision": False, ...}`
+   fallback the real judge applies on an unparseable reply; `result is None` → `"fail"`/
+   `"unrunnable"` per `timing.withheldFor`, mirroring `scoring/retrieval.py`'s own precedent), and
+   `aggregate` (builds a `ClassificationAggregates` whose `perClass` carries `falseAdvanceRate`
+   (n=40)/`falseSuspendRate` (n=30) — the two verdict metrics — plus `advanceRecall`,
+   `falseAdvanceRateBoundary` (n=15) and the four path-split diagnostics, every one at its own
+   named subset's `n`, never the run's 85).
+3. **`scripts/refresh_golden.py`** — generalized `_TRACKED_ORIGINS` (a single module-level
+   constant, embedder-only) into `_TRACKED_ORIGINS_BY_PACK_ID`, keyed by `packId`, with two new
+   resolvers (`_read_pack_id`, `_origins_for_pack_id`) and a `_JSONL_TRANSFORM_BY_PACK_ID` dispatch
+   for the per-pack `jsonl-transform` row function. `_run_import`/`_check_origins` now take an
+   already-resolved `origins` tuple as an explicit parameter rather than reading the module mapping
+   themselves, so both stay testable against a synthetic origin list with no `pack.json` on disk —
+   the same shape their own pre-existing tests used, now passing `origins=` explicitly instead of
+   monkeypatching a module constant. Added `guard-judge-understanding`'s one `jsonl-transform`
+   origin (`golden_guards.jsonl` → `items.jsonl`) and `_items_rows_from_golden_guards` (the
+   `id`→`itemId`-only rename). `nlq-structured-query`'s three origins, `--check-tables-shape` and
+   `--stamp-answerability` are S4 Step 3/4's, not built here.
+
+**Tests, red before green, in the spec's own order (§7 Step 1 items 1-6):**
+`tests/test_scoring_classification.py` (new, 57 tests) — `_normalize_turns`/`_render_judge_user`
+against hand-built rows, including the eviction-by-suffix truncation at a synthetic char budget and
+the raw-message-shape input (`msgId`/`displayName`, no `speaker` key — the exact defect §2.3
+finding 2 exists to catch, re-exercised at `build_messages`'s own seam against the real `tn-01`
+item); `extract_own_line_json_object` against vectors reused from falkor-chat's own
+`test_app.py`/`eval/test_judge.py` (bare/fenced object, quoted-mid-sentence rejection, two-
+candidate-objects rejection, the own-line-vs-inline array-wrapped asymmetry); `build_messages`
+against real `ca-01`/`tn-01` items (system message equals `prompts/judge.md`'s file content
+exactly; user message matches a hand-computed `_render_judge_user` expectation) plus the
+delete-three-keys-first "must not raise `KeyError`" gold-field-leak guard; `score_item`'s
+parse-failure fallback, timeout/no-response branches, and one clean case per tier; `aggregate` over
+a synthetic 22-item (10/8/4-per-tier) fixture asserting the path-split metrics sum back to their
+parent tier and `advanceRecall` is `falseSuspendRate`'s exact complement, plus a real-85-item
+sanity check confirming the spec's own cited n=40/30/15; `packs.validate_pack` on the real, shipped
+pack. `tests/test_refresh_golden.py` gains 6 new tests (`_items_rows_from_golden_guards`'s rename
+rule and its own "never leaves a bare `id` key" mutation-test target, `_TRACKED_ORIGINS_BY_PACK_ID`
+shrink/widen guard, `_read_pack_id`/`_origins_for_pack_id`) and adapts its three pre-existing
+`_check_origins` tests from monkeypatching `_TRACKED_ORIGINS` to passing `origins=` explicitly.
+
+**Verification:** baseline reproduced before any edit — `1261 passed, 1 failed (the pre-existing
+S5 tripwire), 3 deselected`. After this change: `1324 passed`, the same one pre-existing failure,
+`3 deselected` — 63 new tests, zero regressions. `ruff check .` clean. `./run.sh validate --pack
+packs/guard-judge-understanding` prints `guard-judge-understanding 1.0.0 (guard-judge): valid`,
+exit 0; `packs.validate_pack` on the loaded pack returns `[]`. `refresh_golden.py --pack
+packs/guard-judge-understanding --check-origins` reports `unchanged` and exit 0, and re-running it
+against `embedder-graphrag-retrieval` afterward reports all five origins `unchanged` too — the
+generalization touched nothing under that pack.
+
+**`validate --strict` discrepancy, noted and not closed here:** the spec's own §7 Step 1 item 6 and
+Step 3 Pass C item 8 both name `validate --pack <id> --strict`, but `cli.py`'s `_cmd_validate`
+raises `NotImplementedError` unconditionally on `--strict` — a pre-existing, deliberate S2-era
+deferral (runner-spec §9: "`--strict`'s semantics are never given anywhere in the plan"),
+unaffected by this pack and out of this step's own scope (§1's "in scope" list names neither
+`cli.py` nor `--strict`). This step's own "passes clean" done-condition is satisfied against
+`packs.validate_pack` directly instead — the check `--strict` would still have to call underneath,
+once someone builds it. Flagged for whoever executes S4 Step 3, whose own item 8 needs `--strict`
+to actually run (fail on an unstamped `nlq-structured-query` fixture, pass once stamped) and cannot
+be satisfied without resolving this gap first.
+
+**Mutation-tested three consequential branches** (each: copy the file aside, mutate, confirm the
+targeted test(s) redden, restore by copy, never batched): the parse-failure bias-to-suspend
+fallback (`advanced = False` → `True` on an unparseable reply) reddened the targeted fallback test
+plus two downstream `aggregate` tests; the `_METRIC_BY_TIER` tier→metric mapping (swapped
+`clear_suspend`/`clear_advance`'s metric assignments) reddened 8 tests across `score_item` and
+`aggregate`, including the real-85-item sanity check; the "never reads the gold label" guarantee
+(added a `item_input["expected"]` read inside `build_messages`) reddened the targeted delete-keys
+guard with a `KeyError`, exactly as designed. Each mutant's diff against the restored file was
+confirmed `IDENTICAL` before continuing.
+
+**CPG:** considered, not relevant — no `cpg_model-bench` graph loaded on this FalkorDB instance
+(checked live this session), and this is greenfield code-level work with no CPG to consult.
+
 ## 2026-09-11 — S4 Step 0: the seam fix (`build_messages`, `prompt_config()` content resolution, `ExtractionAggregates`'s two new counts)
 
 **What:** `docs/plans/small-model-benchmarking-s4-spec.md` §4/§7 Step 0 — the seam fix ahead of
