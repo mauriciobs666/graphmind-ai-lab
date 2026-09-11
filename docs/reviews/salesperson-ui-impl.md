@@ -7290,3 +7290,279 @@ half-removed cache reddens loudly and immediately, not quietly.
 
 None — both minors are one-line documentation fixes `coder` or a follow-up doc pass can take
 without further design input.
+
+## Pass 27 — 2026-09-11 (S9e: `turn_not_scheduled` typed (C14), three `INHERITED_HANDLERS` reason strings, closing S9)
+
+**Reviewed:** the uncommitted working-tree diff delivering S9e, the last of five S9 sub-units —
+`falkor-chat/server/falkorchat/storefront.py`, `falkorchat/storefront_api.py`,
+`tests/test_storefront_api.py`, and `falkor-chat/docs/HISTORY.md`'s new 2026-09-11 entry.
+**Against:** `docs/plans/salesperson-ui.md` v1.33 §5.1's S9 row and §5.3 C14/C13/C9; `## Pass 23`
+(P23-2, P23-3) and `## Pass 15`'s `INHERITED_HANDLERS` falsification finding; and teco's own
+pre-verification (import/compile clean, 5 new tests pass solo and together, a reverted
+out-of-scope `DocumentNotFoundError` hunk, a mutation probe on Cluster B). I re-derived every
+factual claim rather than taking teco's or `HISTORY.md`'s account on faith, per the brief. **Out of
+scope, per the brief:** every other file `git status`/`git diff --stat` shows changed — a
+concurrent, unrelated `document-ingestion2` coordination is live-editing
+`falkorchat/services.py`/`api.py`/`mcp.py`/`repository.py` and their test files in the same shared
+tree.
+
+**Verdict: needs changes** — **1 blocker**, 0 majors, 1 minor, 0 nits. The blocker is a
+commit-hygiene/shared-tree problem, not a defect in S9e's own design: **Cluster A (C14's typed
+refusal) and Cluster B (the three `INHERITED_HANDLERS` reason strings) are both correct, both
+genuinely tested, and both match the plan's decided text exactly.** But two of the four files in
+scope — `storefront_api.py` and `tests/test_storefront_api.py` — currently carry hunks that belong
+to `document-ingestion2`, not to S9e, and `HISTORY.md`'s own account of having caught and reverted
+exactly this problem is, as of this review, false for one of the two files it should have covered.
+
+**CPG: considered, not relevant — `cpg_falkorchat` is ~10+ commits behind `HEAD` on
+`falkor-chat/server` (the brief's own staleness note), and every claim below comes from direct
+`git diff`/`Read`/`grep`, from three self-run mutation probes restored by copy, and from running
+the suite myself — none of it needed a call-graph query.**
+
+### Blocker
+
+**P27-1 — blocker. The diff for `storefront_api.py` and `tests/test_storefront_api.py` is not
+self-contained to S9e: both files carry live hunks from the concurrent `document-ingestion2`
+coordination, and `HISTORY.md`'s claim to have caught and reverted this is false for one of the
+two.** `HISTORY.md`'s new entry states: *"A `storefront_api.py` hunk classifying
+`DocumentNotFoundError` (import + a `SERVICE_ERRORS_UNREACHABLE` entry) briefly landed in this diff
+and was reverted on review … Left for the document-ingestion2 session to land as its own change."*
+Measured at the time of this review (`git diff falkorchat/storefront_api.py`, re-checked twice,
+byte-identical both times): the import (`from .services import (… DocumentNotFoundError, …`) and the
+`SERVICE_ERRORS_UNREACHABLE` entry (`DocumentNotFoundError: ("document-ingestion2 hard delete
+(Stage A); no storefront route deletes a document")`) are **both still present**, not reverted.
+Independently, `tests/test_storefront_api.py`'s diff carries **four more hunks** on the exact same
+axis, which `HISTORY.md` never mentions at all: `_subclasses`'s comment and
+`test_every_service_error_subclass_is_mapped_or_declared_unreachable`'s `assert len(family) == 11`
+(current file `:2721`, `:2793`), `test_the_only_behavioural_unreachability_claim_is_pinned_to_its_
+producer`'s docstring bump from "six of the seven"/"seven" to "seven of the eight"/"eighth"
+(`:2804`), and `test_the_service_error_map_resolves_through_the_class_tree`'s matching `== 11`
+(`:2841`) — all four are `ServiceError`-family bookkeeping for the same `DocumentNotFoundError`,
+and none of it is reachable from Cluster A (`TurnNotScheduledError` extends `StorefrontError`, a
+disjoint family with its own, unchanged count) or Cluster B (prose-only, no counts). Confirmed by
+running the file myself: **146 passed, 0 failed** just now, against teco's reported **145
+passed / 1 failed** — consistent with the classification hunk having been re-added to
+`storefront_api.py` *after* teco's check, which reconciles the count against the test file's
+already-present `"eleven"` assertions. **Why this is a blocker rather than a note for the record:**
+`DocumentNotFoundError` does not exist in `services.py` at `HEAD` — only in the concurrent
+session's own uncommitted working copy — so a commit built by staging these two files wholesale
+would introduce a reference to an undefined name (`storefront_api.py`) and an unsatisfiable
+equality (`test_storefront_api.py`'s `== 11` against a `HEAD`-relative family of 10), exactly the
+"non-self-contained against `HEAD`" property `HISTORY.md` says it cared about and believed it had
+preserved. **Suggested fix:** stage S9e by hunk, not by file — `git add -p` (or an equivalent
+hand-built patch) on `storefront_api.py` and `tests/test_storefront_api.py`, excluding the six
+hunks named above; coordinate with whoever owns `document-ingestion2` to land its own
+`services.py` + `storefront_api.py` + `test_storefront_api.py` slice as one atomic commit, not
+interleaved with S9e's. Separately, `HISTORY.md`'s sentence needs a correction pass once the actual
+landing state is known — right now it reports a clean revert that isn't one.
+
+### Verified — Cluster A (C14) is correctly scoped and correctly tested
+
+Read `storefront.py`'s diff directly (not from `HISTORY.md`'s paraphrase): `TurnNotScheduledError`
+is raised **only** at the pre-`submit` `_turns_shutdown` read (`:1082-1085`); the `except
+BaseException: …; raise` around `submit` itself (`:1124-1130`, unchanged by this diff) re-raises
+bare, so the two neighbouring refusals (`shutdown_turns()` landing in the read→submit gap; thread
+exhaustion, which queues the item first) stay untyped exactly as the plan's S9 row and C13's
+residual paragraph require — the mapping was **qualified, not widened**, which is what P23-2 asked
+for. `StorefrontHTTPError(503, "turn_not_scheduled", str(exc)) from exc` at
+`storefront_api.py:1310` matches the two other `enqueue_turn`-adjacent call sites' shape exactly
+(`:1125` `demo_not_seeded`, `:1451` `quiesce_timeout`). `Storefront.enqueue_turn` still has exactly
+one caller in `falkorchat/` (`storefront_api.py:1308`), so C14's "exactly one `(route, response)`
+pair" claim still holds after this diff. The new `(500, "unhandled")` `TABLE` row for the two
+remaining bare-refusal shapes plus any unmapped `services.post_message` exception (TP-011c) is
+**not** the "one row spans two meanings" defect the plan's S9 row warns against — that warning was
+about conflating C14's own, now wire-distinguishable `503 turn_not_scheduled` with the generic bare
+500, and the two are now separate rows; grouping the *other* three producers under one
+`(500, "unhandled")` row matches the pre-existing convention already used for `/reset` and
+`/presenter/reset-all`'s own Thread-UNIQUE-violation rows (`tests/test_storefront_api.py:120-122`),
+because all three producers are wire-**identical** (bare Starlette `text/plain` 500, no token) even
+though they are source-**distinct** — the table's granularity is what the client can observe, not
+how many internal causes produce it.
+
+**Independently mutation-tested** (two mutants beyond teco's own, both on byte-copies, both
+restored and `md5sum`-verified afterward):
+- Deleted the route's `except TurnNotScheduledError` handling (letting the typed exception
+  propagate raw) → `test_a_post_in_the_shutdown_window_is_503_turn_not_scheduled_not_a_bare_500`
+  reddens (unhandled `TurnNotScheduledError` traceback). Restored; `storefront_api.py` md5 back to
+  `dc73b65d…`.
+- Disabled the pre-`submit` flag check (`if False and self._turns_shutdown:`) → the same test
+  reddens, and the captured traceback is CPython's own `RuntimeError('cannot schedule new futures
+  after shutdown')` at `thread.py:170` — reproducing Pass 23's Appendix S §3 finding live, not
+  reusing its transcript. Restored; `storefront.py` md5 back to `8964e408…`.
+
+### Verified — Cluster B's three tests exercise the real fault, not a stand-in for one
+
+Read `services.py`'s `start_workflow_run`/`_require_executor` (out-of-scope file, read-only, to
+verify the in-scope tests' claims) and `trigger.py`'s `maybe_trigger`: `_require_executor()` runs
+first (raises `WorkflowEngineDisabledError` if unwired) → reserved-key check → `MAX_CONFIG_LEN`
+bound on the caller's `run_ctx` (raises `WorkflowInputRejectedError`) → `executor.step_budget` read
+unconditionally → `repo.start_run`/`start_run_untriggered`, raising `WorkflowRunNotFoundError` when
+`started is None`. All three of `test_an_unwired_executor_…`, `test_an_oversized_run_ctx_…` and
+`test_a_missing_start_snapshot_…` arm a **real** condition against this sequence (an executorless
+`Services`, a monkeypatched `MAX_CONFIG_LEN=1` against the real tiny `run_ctx`, and an
+un-materialized `def_key`) rather than stubbing the raise directly, and `_StubExecutor.step_budget`
+is exactly the one attribute the unconditional read needs. `maybe_trigger` wraps none of its three
+calls in a `try`, so the exception reaches `_run_turn`'s `except Exception` unmodified; confirmed
+the storefront route's `mentions=[agent_id]` (`storefront_api.py:1298`) and `WorkflowTrigger(agent_id
+=AGENT, …)` both resolve to `config.AGENT_ID`'s default (`"assistant"`), so step 3 of the §6 ordered
+rule (not step 2's resume, not step 4's fall-through) is the one that actually fires — the tests
+reach `start_workflow_run` by the real dispatch, not by construction. Confirmed the "never a
+`(route, response)` pair" claim directly: `enqueue_turn` calls `executor.submit(self._run_turn, …)`
+and returns before `_run_turn` runs at all — the worker thread the trigger executes on is
+decoupled from the request/response cycle, so there is no code path on which
+`WorkflowEngineDisabledError`/`WorkflowInputRejectedError`/`WorkflowRunNotFoundError` can reach the
+`POST /shop/api/messages` response synchronously.
+
+**Independently mutation-tested** (a different mutant from teco's own `_mark_turn_failed`-disable):
+narrowed `_run_turn`'s `except Exception:` to `except ValueError:` on a byte-copy → all three new
+Cluster B tests reddened (each on `_wait_for_failed`'s own final assertion, `lastTurn: None` instead
+of `"failed"`, since the now-uncaught exception is silently swallowed by the bare `ThreadPoolExecutor`
+worker rather than reaching the latch). Restored; `storefront.py` md5 back to `8964e408…`.
+
+### Verified — no plan obligation is left open
+
+Checked `HISTORY.md`'s claim that "no plan edit was needed": v1.33's own changelog entry already
+carries C14's qualified wording, C13's residual paragraph naming both untyped shapes, and the S9
+row's own naming of the three `INHERITED_HANDLERS` classes and their armed-fault description — S9e
+implements against text already settled, and I found no clause either cluster leaves unclosed.
+`## Pass 23`'s other obligations are correctly not S9e's: **P23-1** (the poll-latency bound) is a
+different S9 sub-unit's done-condition, already fixed at the plan-doc level per v1.33's changelog
+and not touched by this diff, which is correct — S9e's scope is the response boundary, not the
+concurrency core. **P23-4** (`config.py:216-224`'s stale docstring) and **P23-5**
+(`presenter_reset_all`'s false-absence comment, `storefront_api.py:1595-1596`) are both already
+fixed in the current tree — verified by reading both — but by an *earlier* S9 sub-unit, not by this
+diff; the plan named P23-5 an S9e obligation and it's not in this diff, so either an earlier unit
+absorbed it or the assignment was recorded loosely — not worth a finding, since the outcome is
+already correct. **P23-6** (the discriminator's "only thing" gloss) and **P23-7** (the ordering
+hazard's missing S10 clause) are plan-doc-only and S10-only respectively, neither S9e's.
+
+### Minor
+
+**P27-2 — minor. `INHERITED_HANDLERS`'s rewritten comment preamble
+(`storefront_api.py:26-32`) asserts `WorkflowDefNotFoundError`'s excuse "stays true as written"
+without citing where that claim is checked**, unlike the three reason strings it sits beside, each
+of which now names its own armed-fault test. The claim is correct (`WorkflowDefNotFoundError`'s
+raise sites — `materialize_def`, `get_workflow_def_structure`, `diff_def_snapshot` — are indeed
+outside every call `trigger.maybe_trigger` makes, confirmed by reading `trigger.py`'s three call
+sites against `services.py`'s definitions), but it is asserted rather than pinned to a test the way
+its three neighbours are. Low stakes — it is a negative claim about a much smaller call surface
+than the three that were verified, and Pass 15 already accepted an unpinned negative claim of this
+same shape for a sibling class. Suggested fix: a one-clause citation to
+`test_the_raises_a_route_can_reach_are_exactly_what_the_exemptions_assume`'s existing trigger-scope
+enumeration, if a future pass wants this pinned as tightly as the other three.
+
+### What's solid
+
+* **Both clusters land exactly the plan's own decided text**, not a paraphrase of it — C14's
+  docstring, the `responses={…}` declarations, and the `INHERITED_HANDLERS` reason strings all
+  quote or closely track v1.33's own wording, including the citations back to specific Pass numbers.
+* **The scope boundary is exactly right and is the harder call, not the easier one.** Typing only
+  the pre-`submit` flag-set shape (and not the two neighbouring bare `RuntimeError`s) is the one
+  choice that keeps `turn_not_scheduled` truthful; widening it would have been the more obvious,
+  more wrong fix, and this diff explicitly declines it with the plan's own argument.
+* **The two `STOREFRONT_RAISES_TODAY`/raise-site equality assertions are now genuinely tighter, not
+  just re-worded**: with no bare `RuntimeError` name admitted at all, a future stray
+  `raise RuntimeError` anywhere in `storefront.py` reddens the family equality directly, closing a
+  blind spot `## Pass 21`/P22-2 could previously only narrow.
+* **Cluster B's three tests are the real thing** — a real `WorkflowTrigger` over a real `Services`,
+  armed-fault by construction rather than by exception-injection, and each one's assertion is on
+  the participant-visible outcome (`turn.lastTurn`) rather than on the raise itself.
+
+### Open questions
+
+1. **Is P27-1's remedy teco's to execute alone, or does it need the `document-ingestion2` session's
+   own coordinator in the loop before any hunk is excluded?** My recommendation: the latter — 
+   silently dropping hunks another live session is depending on (its own test-suite green state
+   rides on the `storefront_api.py` classification) could break that session's own in-progress work
+   without their knowledge.
+2. **Does `HISTORY.md`'s entry get corrected now, or held until the shared-tree state settles?** My
+   recommendation: hold the correction until after P27-1's remedy lands, so it is written once
+   against the final state rather than twice.
+
+## Pass 28 — 2026-09-11 (S9e committed at `dcec3f2`: confirming both Pass 27 findings against the commit)
+
+**Reviewed:** commit **`dcec3f2`** (`git show`, not the live working tree, which teco's brief
+correctly flags as a moving target under continued `document-ingestion2` edits) —
+`falkor-chat/server/falkorchat/storefront.py`, `falkorchat/storefront_api.py`,
+`tests/test_storefront_api.py`, `falkor-chat/docs/HISTORY.md`. **Against:** `## Pass 27`'s P27-1
+(blocker) and P27-2 (minor), and teco's account of how the commit was staged — `git apply --cached`
+from a patch built and verified in an isolated worktree, independent of the live tree's then-current
+contamination. I re-derived both findings' resolution from the commit and from a fresh, disposable
+worktree at `dcec3f2` rather than taking the account on faith.
+
+**Verdict: approve.** Both Pass 27 findings are resolved. **This closes S9**, the last of its five
+sub-units.
+
+**CPG: considered, not relevant — same staleness note as `## Pass 27`; nothing below needed a
+call-graph query, only `git show`, a disposable worktree, a live suite run and one mutation probe.**
+
+### P27-1 (blocker) — resolved, confirmed against the commit
+
+`git show dcec3f2 -- falkor-chat/server/falkorchat/storefront_api.py
+falkor-chat/server/tests/test_storefront_api.py`, grepped for every string this finding named:
+**zero** hits for `DocumentNotFoundError`, `family) == 11`, `_subclasses(ServiceError)) == 11`,
+`seven of the eight`, or `eighth is different` anywhere in the diff body (the strings appear only
+in the **commit message**'s own account of the contamination, never in the changed files
+themselves). `storefront_api.py`'s diffstat dropped from the live tree's contaminated **87 lines**
+(`## Pass 27`'s count) to **84** in the commit — consistent with exactly the import line and the
+`SERVICE_ERRORS_UNREACHABLE` entry being gone and nothing else moving.
+
+**Independently re-verified in a disposable worktree** (`git worktree add --detach … dcec3f2`,
+removed after use — nothing written to the live tree): `grep` confirms both
+`falkorchat/storefront_api.py` and `tests/test_storefront_api.py` are clean at the source level (no
+`DocumentNotFoundError`, family assertions read `== 10`, not `11`); the full `test_storefront_api.py`
+suite gives **145 passed, 2 failed** — `test_every_service_error_subclass_is_mapped_or_declared_
+unreachable` and `test_the_service_error_map_resolves_through_the_class_tree`, both on the identical
+`AssertionError: assert 11 == 10` shape, both because `falkorchat.services.DocumentNotFoundError`
+**is now a real, landed class** — `4a6186b` ("document-ingestion2 Stage A — delete/list/deletion-
+audit") is a confirmed ancestor of `dcec3f2` (`git merge-base --is-ancestor 4a6186b dcec3f2` → true),
+so the class exists in history, unclassified, exactly as that commit's own message defers. This
+matches teco's account exactly: two pre-existing failures, both `document-ingestion2`'s own open
+gap, nothing S9e touches or should fix. All 6 of S9e's own tests (2 Cluster A, 3 Cluster B, the new
+P27-2 pin) pass, both individually and together, in this same clean worktree.
+
+### P27-2 (minor) — resolved, and the new pin is sound within its stated purpose
+
+`test_the_trigger_never_reads_a_workflow_def_so_that_excuse_stays_pinned`
+(`tests/test_storefront_api.py:4621` in the commit) is a small AST reader over `trigger.py`'s own
+source: it collects every `<expr>._services.<method>(...)` call and asserts the set is exactly
+`{find_waiting_run_for_thread, resume_workflow_run, start_workflow_run}` — which matches
+`maybe_trigger`'s body read directly (`## Pass 27`'s own trace). Its built-in negative control
+(a synthetic `self._services.materialize_def(ctx)` snippet) proves the reader actually classifies a
+def-reading call rather than passing vacuously. **I mutated `trigger.py` itself** (a byte-copy,
+restored and `git diff --stat` re-confirmed clean afterward): adding
+`self._services.materialize_def(ctx)` at the top of `maybe_trigger` reddens this test immediately
+(`AssertionError`, extra item `'materialize_def'`) — a live, non-vacuous guard, not an assertion
+that only looks like one.
+
+**One residual limitation, noted but not a new finding.** The reader matches on the literal spelling
+`<expr>._services.<name>` and does not resolve aliases (`svc = self._services; svc.materialize_def(
+...)` would not be seen) — the same *value-axis* gap `## Pass 15` found in the unrelated
+`storefront_api.py` reach guard, generically. It does not change this verdict: `trigger.py` is a
+tiny, single-purpose module with zero aliasing precedent anywhere in `falkorchat/` (`## Pass 15`'s
+own probe 3 measured **0** such bindings package-wide, and `maybe_trigger`'s four branches, read in
+full for `## Pass 27`, use none), and `## Pass 15`'s own closing ruling already established that a
+guard of this class is a **tripwire**, not a completeness proof — "a narrow, true one" is the bar,
+not exhaustive alias resolution. This pin clears that bar for the one claim it exists to pin.
+
+### What's solid
+
+* **The staging discipline is exactly right for a shared, actively-contaminated tree**: building
+  and verifying the patch in an isolated worktree, then `git apply --cached` straight into the
+  index rather than trusting the live checkout's current content, is the correct way to commit one
+  unit's work out of a tree another session keeps touching — and it is independently checkable, which
+  I did, rather than merely plausible.
+* **The commit message names the contamination and its cause honestly** (`document-ingestion2`'s own
+  deferred registration hunk recurring in the shared file), which is what let this pass verify the
+  fix in minutes instead of re-deriving the whole shared-tree story from scratch.
+* **P27-2's fix is proportionate**: one small, purpose-built, mutation-tested reader over the one
+  file (`trigger.py`) whose call set actually decides the claim, rather than widening either of the
+  two existing, much heavier static guards to reach a file they were never scoped to walk.
+
+### Open questions
+
+None — both Pass 27 findings are closed and nothing new surfaced. `HISTORY.md`'s correction
+(`## Pass 27`'s open question 2) is now moot: the commit message itself carries the accurate account
+of the contamination and the staging workaround, and the working `HISTORY.md` entry it accompanies
+was never the thing that was wrong — the live *tree's* file contents were, and the commit's own
+content is clean.
