@@ -1369,7 +1369,7 @@ def test_state_carries_profile_cart_order_and_turn(client, seeded):
     assert set(state) == {"profile", "cart", "order", "turn"}
     assert state["profile"]["name"] == "Ada"
     assert state["order"]["status"] == "placed"
-    assert state["turn"] == {"state": "idle", "queuePosition": 0}
+    assert state["turn"] == {"state": "idle", "queuePosition": 0, "lastTurn": None}
 
 
 def test_state_without_a_credential_is_401(client):
@@ -4840,6 +4840,52 @@ def turn_app(seeded, monkeypatch):
     stack.close()
 
 
+class _FailingExecutor:
+    """A `WorkflowExecutor` stand-in whose `run` always raises — no gate, no
+    recording, just the one shape `test_a_dead_turn_is_reported_idle_and_failed_
+    in_the_same_state_body` needs: a turn that dies on the worker, driven for
+    real through `services.start_workflow_run`.
+    """
+
+    step_budget = 8
+
+    def run(self, ctx, *, run_id):  # noqa: ANN001, ARG002 — the executor's shape
+        raise RuntimeError("the LLM endpoint is down")
+
+
+def test_a_dead_turn_is_reported_idle_and_failed_in_the_same_state_body(seeded):
+    """§5.1's S9 row's own acceptance shape, and its own words for why a route
+    test rather than a `Storefront` one earns a place here too: the claim is
+    about *what the participant would see*, driving the full
+    post → poll cycle rather than calling `get_state` on the object directly.
+
+    "The silent `finally: clear_turn` implementation" — every earlier
+    revision of this route, and every deployment predating S9c — passes the
+    `state` half of this assertion and fails the `lastTurn` half, because
+    nothing before S9c ever wrote that field. Both are asserted **in the same
+    body**, which is the row's own point: an idle composer with no failure
+    notice is what silently re-enabling without a reply looks like from here.
+    """
+    with TestClient(_build_turn_app(seeded, _FailingExecutor())) as client:
+        session = _join(client)
+        posted = client.post(
+            f"{API_PREFIX}/messages", headers=_bearer(session), json={"text": "hi"}
+        )
+        assert posted.status_code == 200, posted.text
+
+        deadline = time.monotonic() + TURN_GATE_S
+        state = client.get(f"{API_PREFIX}/state", headers=_bearer(session)).json()
+        while state["turn"]["state"] != storefront.TURN_IDLE:
+            assert time.monotonic() < deadline, "the turn never finished dying"
+            time.sleep(0.01)
+            state = client.get(f"{API_PREFIX}/state", headers=_bearer(session)).json()
+
+        assert state["turn"] == {
+            "state": storefront.TURN_IDLE, "queuePosition": 0,
+            "lastTurn": "failed",
+        }
+
+
 def _thread_of(conn, participant_id: str) -> str:
     row = db.workspace_graph(conn, WS).ro_query(
         "MATCH (u:User {userId: $pid}) RETURN u.threadId",
@@ -4919,6 +4965,7 @@ def test_three_participants_queue_behind_one_worker_and_complete_in_order(turn_a
     assert _turn(client, sessions[1])["state"] == storefront.TURN_THINKING
     assert _turn(client, sessions[2]) == {
         "state": storefront.TURN_QUEUED, "queuePosition": 0,
+        "lastTurn": None,
     }
 
     executor.open()
@@ -4966,10 +5013,11 @@ def test_a_fifth_arrival_behind_four_running_turns_is_first_in_line(turn_app):
     executor.wait_for("started", 4)
 
     assert [_turn(client, s) for s in sessions[:4]] == [
-        {"state": storefront.TURN_THINKING, "queuePosition": 0}
+        {"state": storefront.TURN_THINKING, "queuePosition": 0, "lastTurn": None}
     ] * 4
     assert _turn(client, sessions[4]) == {
         "state": storefront.TURN_QUEUED, "queuePosition": 0,
+        "lastTurn": None,
     }
 
     executor.open()
@@ -5058,6 +5106,7 @@ def test_a_poll_answers_immediately_while_the_turn_queue_is_full(turn_app):
     assert elapsed < POLL_BUDGET_S, f"the poll took {elapsed:.3f}s behind a full queue"
     assert response.json()["turn"] == {
         "state": storefront.TURN_QUEUED, "queuePosition": 1,
+        "lastTurn": None,
     }
     executor.open()
 
@@ -5214,6 +5263,7 @@ def test_a_write_that_fails_releases_the_reservation(turn_app, monkeypatch, conn
     assert response.json()["error"] == "post_state_unknown"
     assert _turn(client, session) == {
         "state": storefront.TURN_IDLE, "queuePosition": 0,
+        "lastTurn": None,
     }
     assert _post(client, session, "second").status_code == 200
     executor.wait_for("started", 1)

@@ -379,9 +379,11 @@ class TurnState:
         return self.state != TURN_IDLE
 
     def as_payload(self, queue_position: int) -> dict[str, Any]:
-        """§5.2's `turn` block. `queue_position` is handed in by
-        `Storefront.turn_payload`, the only scope that can see the rest of the
-        line — an entry cannot know its own place in it.
+        """§5.2's `turn` block, minus `lastTurn`. `queue_position` is handed in
+        by `Storefront.turn_payload`, the only scope that can see the rest of
+        the line — an entry cannot know its own place in it. `lastTurn` is
+        merged in by that same caller, from a latch this class does not hold —
+        an entry cannot report on a turn that already deleted it, either.
         """
         return {"state": self.state, "queuePosition": queue_position}
 
@@ -496,6 +498,18 @@ class Storefront:
         # jobs would make reset-all refuse turns permanently
         # (`docs/plans/salesperson-ui.md` §5.1's S9 row).
         self._turns_shutdown = False
+        # The dead-turn latch (§5.2 *The dead-turn signal*, §5.1's S9 row).
+        # A **separate** per-participant set — deliberately not a field on
+        # `TurnState` — because `set_turn_state(idle)` deletes the `_turns`
+        # entry by delivered design, which would wipe the signal at the exact
+        # instant it is earned. Membership means "that participant's last
+        # completed turn died without a reply"; composed into `turn_payload`
+        # alongside (not inside) the `_turns` lookup. Its own lock rather than
+        # `_turns_lock`, since it is written from the worker's failure-isolation
+        # block (`_run_turn`, holding no turn-map lock at that point) and read
+        # by every poll.
+        self._last_turn_failed: set[str] = set()
+        self._last_turn_failed_lock = threading.Lock()
         # The product-image manifest (§4.7), built from the served directory
         # **once** — `None` until then. See `build_image_manifest`.
         self._image_manifest: dict[str, str] | None = None
@@ -778,20 +792,52 @@ class Storefront:
         `clear_all_turns()` empties the map under workers that are still
         running, so for at most one turn's duration a fresh arrival can read
         `queued`/`0` while every worker is busy (§5.2 *One bound*).
+
+        **`lastTurn` is composed in here too, and it is a separate read** —
+        `self._last_turn_failed`, guarded by its own lock, never the `_turns`
+        entry above. The two are independent questions (*is a turn running
+        now* versus *did the last one die without a reply*), and composing
+        them here rather than inside `TurnState.as_payload` is what keeps the
+        latch out of the map entry `set_turn_state(idle)` deletes.
         """
         with self._turns_lock:
             turn = self._turns.get(participant_id)
             if turn is None:
-                return IDLE_TURN.as_payload(0)
-            if turn.state != TURN_QUEUED:
-                return turn.as_payload(0)
-            ordinal = turn.booking.ordinal
-            ahead = sum(
-                1
-                for other in self._turns.values()
-                if other.state == TURN_QUEUED and other.booking.ordinal < ordinal
-            )
-            return turn.as_payload(ahead)
+                payload = IDLE_TURN.as_payload(0)
+            elif turn.state != TURN_QUEUED:
+                payload = turn.as_payload(0)
+            else:
+                ordinal = turn.booking.ordinal
+                ahead = sum(
+                    1
+                    for other in self._turns.values()
+                    if other.state == TURN_QUEUED and other.booking.ordinal < ordinal
+                )
+                payload = turn.as_payload(ahead)
+        payload["lastTurn"] = self._last_turn(participant_id)
+        return payload
+
+    def _last_turn(self, participant_id: str) -> str | None:
+        """§5.2's `lastTurn`: `"failed"` while the latch is set, `None`
+        otherwise. Read-only; see `_mark_turn_failed`/`_clear_turn_failed`.
+        """
+        with self._last_turn_failed_lock:
+            return "failed" if participant_id in self._last_turn_failed else None
+
+    def _mark_turn_failed(self, participant_id: str) -> None:
+        """Set the dead-turn latch. Called only from `_run_turn`'s own
+        failure-isolation block, on the same turn whose exception it logs —
+        never from the request thread.
+        """
+        with self._last_turn_failed_lock:
+            self._last_turn_failed.add(participant_id)
+
+    def _clear_turn_failed(self, participant_id: str) -> None:
+        """Clear the dead-turn latch. `set.discard` — a no-op when it was
+        already clear, which is the ordinary case (most turns do not fail).
+        """
+        with self._last_turn_failed_lock:
+            self._last_turn_failed.discard(participant_id)
 
     def reserve_turn(self, participant_id: str) -> TurnBooking | None:
         """**The `409` check and the booking as one indivisible step** (§4.4
@@ -918,9 +964,17 @@ class Storefront:
             return True
 
     def clear_all_turns(self) -> None:
-        """Drop every turn entry — the reset paths, after quiesce (S7/S10)."""
+        """Drop every turn entry — the reset paths, after quiesce (S7/S10).
+
+        **Also drops every dead-turn latch** (§5.1's S9 row): reset-everyone
+        deletes every participant's transcript, so the notice a latch refers
+        to no longer names anything that survives — a stale `lastTurn:
+        "failed"` after a reset-everyone would point at a turn nobody can see.
+        """
         with self._turns_lock:
             self._turns.clear()
+        with self._last_turn_failed_lock:
+            self._last_turn_failed.clear()
 
     def turn_in_flight(self, participant_id: str) -> bool:
         """Whether this participant already has a turn queued or running."""
@@ -1084,6 +1138,40 @@ class Storefront:
             raise RuntimeError(
                 "cannot schedule new turns after shutdown_turns()"
             )
+        # **Cleared here — after the shutdown check, before `submit` — and
+        # only here** (§5.1's S9 row, carried forward from
+        # `docs/reviews/salesperson-ui-impl.md` `## Pass 20`). `reserve_turn`
+        # is too early: a booking whose `services.post_message` then raises
+        # never reaches this method at all, and clearing at reservation would
+        # drop the prior failure's notice from under a post that itself
+        # failed to queue anything. The pre-submit `_turns_shutdown` branch
+        # above raises before this line, so a refusal there leaves the latch
+        # untouched too.
+        #
+        # **Strictly before `submit`, never after it returns — measured, not
+        # assumed.** This clear and this turn's own possible failure share one
+        # participant's latch, and `submit` starts the worker asynchronously:
+        # a clear placed after a successful `submit` races the very turn it
+        # just queued, and the worker can win. Reproduced in this revision —
+        # of 200 single-turn runs with the clear placed after `submit`, 8
+        # ended with `lastTurn: None` on a turn that had in fact just failed,
+        # because `_run_turn` reached its `except` and called
+        # `_mark_turn_failed` on its worker thread before the request thread
+        # came back from `submit` to call this line. Placed before `submit`,
+        # the clear always happens-before anything the worker for *this*
+        # booking can do, so it can no longer race that worker's own mark.
+        #
+        # **The residual, named rather than hidden**: on the rare `submit`
+        # refusal that queues nothing at all (the three guarded raises this
+        # method's own docstring derives from `thread.py:164-180` —
+        # `BrokenThreadPool`, either `_shutdown`, or a `MemoryError` on the two
+        # allocations) the latch has already been cleared for a turn that
+        # never ran. Moving the clear after `submit` to close this would
+        # reopen the race measured above on the ordinary path, which is the
+        # trade this file already makes elsewhere for the same three raises
+        # (`release_turn`'s own booking-leak residual, below): the two shapes
+        # cannot both be avoided.
+        self._clear_turn_failed(participant.participant_id)
         try:
             future = self._executor.submit(
                 self._run_turn, ctx, participant, posted, booking
@@ -1126,9 +1214,13 @@ class Storefront:
 
         The `finally` releases the map entry **when this booking still owns
         it**, which is what re-opens the composer and releases the `409` gate;
-        the paragraph below is why that condition is there. A turn that died
-        without a reply is indistinguishable here from one that completed; the
-        dead-turn signal §5.2 specifies (`turn.lastTurn`) is not built yet.
+        the paragraph below is why that condition is there. **A turn that dies
+        here sets the dead-turn latch first** — `_mark_turn_failed`, in this
+        same `except`, the one place §5.2's `lastTurn` is written — so it stays
+        distinguishable from one that completed even after the `finally` below
+        deletes the entry the exception happened on (§5.1's S9 row). A
+        `self._trigger is None` no-op turn is not a failure and does not touch
+        the latch: nothing ran, so nothing died.
 
         **Both map writes name this booking and take effect only while it still
         owns the slot** — the `thinking` flip as much as the `finally`.
@@ -1159,6 +1251,7 @@ class Storefront:
                 "storefront turn failed (participantId=%s, msgId=%s)",
                 participant_id, posted.get("msgId"),
             )
+            self._mark_turn_failed(participant_id)
         finally:
             self.release_turn(participant_id, booking)
 
@@ -1211,7 +1304,10 @@ class Storefront:
           route's own view.
         * `turn` — this participant's entry in the in-process turn map,
           with §5.2's `queuePosition` **derived here** from the rest of the map
-          rather than read off the entry (`turn_payload`).
+          rather than read off the entry, and `lastTurn: 'failed' | null` — the
+          dead-turn latch, composed *alongside* the entry rather than read off
+          it, since it must survive the very `set_turn_state(idle)` call that
+          deletes that entry (`turn_payload`).
 
         `ctx.actor` is the participant id and also their `customerId`, so all
         three graph reads are scoped structurally rather than by a filter
@@ -1571,6 +1667,13 @@ class Storefront:
                 f"{participant_id!r} has no owned channel — nothing was reset"
             )
 
+        # **Cleared here, on the success path only** (§5.1's S9 row) — the
+        # delete above just committed, and the dead-turn latch refers to a
+        # transcript that is now gone. Every earlier `raise` in this method
+        # (quiesce timeout, F8's `504`, unknown/unscoped participant) leaves
+        # this line unreached, so a `503`/`504` that reset nothing does not
+        # erase the notice either.
+        self._clear_turn_failed(participant_id)
         self._services.save_profile(ctx, name=participant.display_name)
         self._cache_put(replace(participant, thread_id=status["threadId"]))
         return {"threadId": status["threadId"], "language": participant.language}

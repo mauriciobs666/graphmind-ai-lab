@@ -629,6 +629,7 @@ def test_turn_state_defaults_to_idle(seeded):
     assert seeded.turn_state("p-nobody") == IDLE_TURN
     assert seeded.turn_payload("p-nobody") == {
         "state": TURN_IDLE, "queuePosition": 0,
+        "lastTurn": None,
     }
     assert seeded.turn_in_flight("p-nobody") is False
 
@@ -647,6 +648,7 @@ def test_a_reservation_is_queued_first_in_line_and_gates_a_second_post(seeded):
     assert booking is not None
     assert seeded.turn_payload("p-a") == {
         "state": TURN_QUEUED, "queuePosition": 0,
+        "lastTurn": None,
     }
     assert seeded.turn_in_flight("p-a") is True
 
@@ -656,6 +658,7 @@ def test_a_reservation_is_queued_first_in_line_and_gates_a_second_post(seeded):
     assert seeded.set_turn_state("p-a", TURN_THINKING, booking=booking) is True
     assert seeded.turn_payload("p-a") == {
         "state": TURN_THINKING, "queuePosition": 0,
+        "lastTurn": None,
     }
     assert seeded.turn_in_flight("p-a") is True
 
@@ -677,7 +680,7 @@ def test_the_queue_position_is_the_waiting_line_index_and_counts_down(seeded):
     waiting = [seeded.reserve_turn(f"p-wait-{i}") for i in range(3)]
 
     assert [seeded.turn_payload(f"p-run-{i}") for i in range(4)] == [
-        {"state": TURN_THINKING, "queuePosition": 0}
+        {"state": TURN_THINKING, "queuePosition": 0, "lastTurn": None}
     ] * 4
     assert [
         seeded.turn_payload(f"p-wait-{i}")["queuePosition"] for i in range(3)
@@ -712,9 +715,11 @@ def test_a_running_turn_reports_zero_even_with_an_earlier_turn_still_queued(seed
 
     assert seeded.turn_payload("p-second") == {
         "state": TURN_THINKING, "queuePosition": 0,
+        "lastTurn": None,
     }
     assert seeded.turn_payload("p-first") == {
         "state": TURN_QUEUED, "queuePosition": 0,
+        "lastTurn": None,
     }
 
 
@@ -740,6 +745,22 @@ def test_turn_state_is_per_participant(seeded):
     seeded.clear_all_turns()
     assert seeded.turn_in_flight("p-a") is False
     assert seeded.turn_in_flight("p-b") is False
+
+
+def test_clear_all_turns_also_clears_every_dead_turn_latch(seeded):
+    """§5.1's S9 row: reset-everyone deletes every participant's transcript,
+    so a `lastTurn: "failed"` surviving it would point at a turn nobody can
+    see any more — `clear_all_turns()` drops both maps in one call.
+    """
+    seeded._mark_turn_failed("p-a")  # noqa: SLF001 — stands in for a died turn
+    seeded._mark_turn_failed("p-b")  # noqa: SLF001
+    assert seeded.turn_payload("p-a")["lastTurn"] == "failed"
+    assert seeded.turn_payload("p-b")["lastTurn"] == "failed"
+
+    seeded.clear_all_turns()
+
+    assert seeded.turn_payload("p-a")["lastTurn"] is None
+    assert seeded.turn_payload("p-b")["lastTurn"] is None
 
 
 def test_no_map_write_takes_effect_once_its_booking_has_lost_the_slot(seeded):
@@ -922,8 +943,8 @@ def test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate(
     unable to retry the thing that failed. The dominant cause is ordinary — an
     LLM endpoint that is down, or the 180 s agent timeout.
 
-    **And "logged" is asserted, not assumed.** Until `turn.lastTurn` lands
-    (S9c) this record is the *only* evidence anywhere that a turn died — the
+    **And "logged" is asserted, not assumed.** Before `turn.lastTurn` (S9c)
+    this record was the *only* evidence anywhere that a turn died — the
     participant sees their message, no reply, and a composer that quietly
     re-enables. Replacing the `_log.exception(...)` with `pass` left the whole
     suite green at **280 passed** (`docs/reviews/salesperson-ui-impl.md`
@@ -931,6 +952,11 @@ def test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate(
     make the swallow observable: one record, at `ERROR`, carrying the
     traceback, naming both the participant and the message the operator would
     need to find the turn.
+
+    **The participant now has a second, participant-facing source of the same
+    fact** — `turn.lastTurn == "failed"`, asserted below *after* the entry the
+    exception happened on is gone (`turn_state` reads `IDLE_TURN`), which is
+    exactly the ordering the latch exists to survive.
     """
     caplog.set_level(logging.DEBUG, logger="falkorchat.storefront")
     trigger = _RecordingTrigger(explode=True)
@@ -948,6 +974,10 @@ def test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate(
     assert future.exception(timeout=IMMEDIATE_S) is None
     assert shop.turn_in_flight("p-ada") is False
     assert shop.turn_state("p-ada") == IDLE_TURN
+    # the dead-turn latch survives the very call that deleted the entry above
+    assert shop.turn_payload("p-ada") == {
+        "state": TURN_IDLE, "queuePosition": 0, "lastTurn": "failed",
+    }
 
     logged = [r for r in caplog.records if r.name == "falkorchat.storefront"]
     assert len(logged) == 1
@@ -1002,6 +1032,119 @@ def test_a_storefront_with_no_trigger_still_queues_and_clears_the_turn(
     # …and released by the worker that did nothing with it
     assert shop.turn_in_flight("p-ada") is False
     assert [r for r in caplog.records if r.name == "falkorchat.storefront"] == []
+    # a no-op turn did not die, so it must not set the latch either
+    assert shop.turn_payload("p-ada")["lastTurn"] is None
+
+
+class _FailOnceTrigger:
+    """A `WorkflowTrigger` seam whose **first** call dies and whose second
+    completes — the fixture the dead-turn latch's lifecycle tests need: one
+    failed turn to set the latch, then a second, ordinary turn from the same
+    participant to exercise what clears it.
+    """
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.done = threading.Event()
+
+    def maybe_trigger(self, ctx, **kwargs):  # noqa: ANN001, ANN003
+        self.calls += 1
+        try:
+            if self.calls == 1:
+                raise RuntimeError("the LLM endpoint is down")
+        finally:
+            self.done.set()
+
+
+def test_the_dead_turn_latchs_lifecycle_set_postable_and_cleared_by_the_next_enqueue(
+    services,
+):
+    """§5.1's S9 row's own lifecycle claim, in one test: *a participant whose
+    latch is set can still post at all* (`in_flight` untouched, no `409` from
+    the latch itself), *the next accepted post clears it while a `409`-refused
+    post does not*.
+
+    **Two refusal shapes are exercised on purpose, because they read the latch
+    at two different moments and both must leave it standing.** A `409` is
+    `reserve_turn` itself refusing — nothing about the dead turn changes when
+    nothing is booked. A reservation that *is* granted but whose write then
+    fails before `enqueue_turn` is ever called — `services.post_message`
+    raising, in the real route — is the shape Pass 20 named explicitly: the
+    booking is released, but nothing reached a worker, so the notice must
+    survive that release too. Only the third post, which reaches
+    `enqueue_turn` and a real `submit`, may clear it.
+    """
+    trigger = _FailOnceTrigger()
+    shop = _storefront(services, trigger=trigger)
+    record = ParticipantRecord(
+        participant_id="p-ada", display_name="Ada", language="en",
+        channel_id="ch-ada", thread_id="th-ada", joined_at=1,
+    )
+    posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
+              "role": "member", "mentions": [AGENT]}
+    ctx = shop.context_for("p-ada")
+
+    # first turn dies, sets the latch
+    first = _enqueue(shop, ctx, record, posted)
+    _drain(shop, first, trigger)
+    assert shop.turn_payload("p-ada")["lastTurn"] == "failed"
+
+    # the latch does not itself gate anything — postable at once
+    assert shop.turn_in_flight("p-ada") is False
+
+    # a concurrent second tab's reservation is refused (the `409`) — untouched
+    concurrent = shop.reserve_turn("p-ada")
+    assert concurrent is not None
+    assert shop.reserve_turn("p-ada") is None
+    assert shop.turn_payload("p-ada")["lastTurn"] == "failed"
+
+    # that reservation's write then fails and releases it, never reaching
+    # `enqueue_turn` — still untouched, which is Pass 20's own named case
+    assert shop.release_turn("p-ada", concurrent) is True
+    assert shop.turn_payload("p-ada")["lastTurn"] == "failed"
+
+    # the next post is accepted and reaches the worker — *now* it clears
+    second = _enqueue(shop, ctx, record, {**posted, "msgId": "m-2"})
+    _drain(shop, second, trigger)
+    assert second.exception(timeout=IMMEDIATE_S) is None
+    assert shop.turn_payload("p-ada")["lastTurn"] is None
+
+
+def test_a_write_failure_after_a_grant_reservation_leaves_the_latch_standing(
+    services,
+):
+    """The narrower, single-purpose form of the case above — reserve
+    succeeds, the write never happens, `enqueue_turn` is never called — kept
+    as its own test because it is the exact shape
+    `docs/plans/salesperson-ui.md` §5.1's S9 row names for the ordering
+    mutant: clearing in `reserve_turn` instead of `enqueue_turn` passes the
+    lifecycle test above right up to this one line, because that test's
+    `reserve_turn` calls happen on a *different* participant's booking. Here
+    the same participant whose latch is already set reserves again — under
+    the wrong placement that reservation alone would wipe the notice, before
+    anything is known about whether the write it is for will even succeed.
+    """
+    trigger = _RecordingTrigger(explode=True)
+    shop = _storefront(services, trigger=trigger)
+    record = ParticipantRecord(
+        participant_id="p-ada", display_name="Ada", language="en",
+        channel_id="ch-ada", thread_id="th-ada", joined_at=1,
+    )
+    posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
+              "role": "member", "mentions": [AGENT]}
+    ctx = shop.context_for("p-ada")
+
+    _drain(shop, _enqueue(shop, ctx, record, posted), trigger)
+    assert shop.turn_payload("p-ada")["lastTurn"] == "failed"
+
+    # reserve again for the same participant — as far as the write knows this
+    # is about to fail (`services.post_message` raising in the real route)
+    booking = shop.reserve_turn("p-ada")
+    assert booking is not None
+    # …and the write fails, releasing it without ever calling `enqueue_turn`
+    assert shop.release_turn("p-ada", booking) is True
+
+    assert shop.turn_payload("p-ada")["lastTurn"] == "failed"
 
 
 def _refuses_to_start(self):  # noqa: ANN001, ANN201, ARG001
@@ -1123,6 +1266,7 @@ def test_a_running_turn_holds_a_worker_and_the_one_behind_it_is_first_in_line(
     first_booking = shop.reserve_turn("p-a")
     assert shop.turn_payload("p-a") == {
         "state": TURN_QUEUED, "queuePosition": 0,
+        "lastTurn": None,
     }
     first = shop.enqueue_turn(
         shop.context_for("p-a"), record("p-a"), posted, first_booking
@@ -1137,9 +1281,11 @@ def test_a_running_turn_holds_a_worker_and_the_one_behind_it_is_first_in_line(
     assert second_booking.ordinal > first_booking.ordinal
     assert shop.turn_payload("p-a") == {
         "state": TURN_THINKING, "queuePosition": 0,
+        "lastTurn": None,
     }
     assert shop.turn_payload("p-b") == {
         "state": TURN_QUEUED, "queuePosition": 0,
+        "lastTurn": None,
     }
 
     gate.set()
@@ -1674,7 +1820,7 @@ def test_get_state_reports_profile_cart_order_and_turn(stocked, conn):
     ]
     assert state["cart"]["total"] == pytest.approx(11.0 * 2 + 12.0)
     assert state["order"] is None
-    assert state["turn"] == {"state": TURN_QUEUED, "queuePosition": 2}
+    assert state["turn"] == {"state": TURN_QUEUED, "queuePosition": 2, "lastTurn": None}
 
 
 def test_get_state_of_a_fresh_participant_is_the_join_shape(stocked, conn):
@@ -1693,7 +1839,7 @@ def test_get_state_of_a_fresh_participant_is_the_join_shape(stocked, conn):
         "profile": {"name": "Ada", "deliveryAddress": None},
         "cart": {"items": [], "total": 0},
         "order": None,
-        "turn": {"state": TURN_IDLE, "queuePosition": 0},
+        "turn": {"state": TURN_IDLE, "queuePosition": 0, "lastTurn": None},
     }
 
 
@@ -1749,7 +1895,7 @@ def test_get_state_is_scoped_to_the_calling_participant(stocked, conn):
     assert bob_state["profile"] == {"name": "Bob", "deliveryAddress": None}
     assert bob_state["cart"] == {"items": [], "total": 0}
     assert bob_state["order"] is None
-    assert bob_state["turn"] == {"state": TURN_IDLE, "queuePosition": 0}
+    assert bob_state["turn"] == {"state": TURN_IDLE, "queuePosition": 0, "lastTurn": None}
     # …while Ada's own state is unaffected by having been read past.
     assert stocked.get_state(ada_ctx)["order"]["total"] == pytest.approx(44.0)
 
@@ -2281,10 +2427,35 @@ def test_the_profile_name_is_back_after_a_self_reset_not_an_em_dash(stocked, con
     }
 
 
+def test_a_self_reset_clears_the_dead_turn_latch(stocked, conn):
+    """§5.1's S9 row: reset-mine's own clear path, alongside
+    `clear_all_turns()`'s — because the transcript the notice refers to is
+    gone once the reset commits.
+
+    The latch is set directly (`_mark_turn_failed`) rather than by driving a
+    real failing turn: `stocked` carries no trigger, and this test's whole
+    subject is the reset's own clear, not how the latch got there — the
+    trigger-driven path is `test_a_turn_whose_trigger_raises_is_isolated_and_
+    still_clears_the_gate` and `test_a_dead_turn_is_reported_idle_and_failed_
+    in_the_same_state_body`'s job.
+    """
+    _seed_catalog(conn, _catalog_rows(1))
+    record, ctx = _busy_participant(stocked, conn)
+    stocked._mark_turn_failed(record.participant_id)  # noqa: SLF001
+    assert stocked.get_state(ctx)["turn"]["lastTurn"] == "failed"
+
+    stocked.reset_participant(record)
+
+    assert stocked.get_state(ctx)["turn"]["lastTurn"] is None
+
+
 def test_reset_is_participant_disjoint(stocked, conn):
     _seed_catalog(conn, _catalog_rows(2))
     ada, _ada_ctx = _busy_participant(stocked, conn, "Ada")
     bob, bob_ctx = _busy_participant(stocked, conn, "Bob")
+    # Bob's own dead-turn latch is not Ada's reset's business either — §5.1's
+    # S9 row: the clear names its own participant, never the whole map.
+    stocked._mark_turn_failed(bob.participant_id)  # noqa: SLF001
 
     stocked.reset_participant(ada)
 
@@ -2294,6 +2465,7 @@ def test_reset_is_participant_disjoint(stocked, conn):
     assert state["profile"] == {"name": "Bob", "deliveryAddress": "12 Rua das Flores"}
     assert state["order"] is not None
     assert state["cart"]["items"] != []
+    assert state["turn"]["lastTurn"] == "failed"
     assert stocked.resolve_token(_bearer(bob)) is not None
 
 

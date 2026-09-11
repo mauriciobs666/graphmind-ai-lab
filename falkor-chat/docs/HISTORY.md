@@ -5,6 +5,72 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-10 — salesperson-ui S9c: the dead-turn latch, `turn.lastTurn`
+
+**What:** Built §5.2's *dead-turn signal* the S9 row's own done-condition names: `turn.lastTurn:
+'failed' | null`, composed into `GET /shop/api/state`'s `turn` block alongside `state`/
+`queuePosition`, never a fourth `state` value. Stored as a **separate** per-participant latch
+(`Storefront._last_turn_failed`, its own lock) rather than a field on `TurnState`, because
+`set_turn_state(idle)` deletes the `_turns` entry by delivered design and would wipe the signal at
+the exact instant it is earned. `_run_turn`'s existing failure-isolation block now calls
+`_mark_turn_failed` in the same `except` that logs the exception (a `self._trigger is None` no-op
+turn does not touch it — nothing ran, so nothing died). Cleared in `enqueue_turn`, never in
+`reserve_turn` — the explicit standing instruction from `docs/reviews/salesperson-ui-impl.md`
+`## Pass 20`, carried forward for this unit — and cleared wherever a reset clears turns:
+`clear_all_turns()` (reset-everyone, every participant) and `reset_participant`'s own success path
+(reset-mine, that participant only, after the graph delete commits).
+
+**The one placement decision this unit made beyond the plan's own wording:** clearing in
+`enqueue_turn` had to mean *strictly before* `executor.submit(...)`, not merely *somewhere in that
+method*. Measured in this revision: with the clear placed **after** a successful `submit` (still
+inside `enqueue_turn`, still never in `reserve_turn`), 200 single-turn runs against a trigger that
+fails on its first call produced 8 that read back `lastTurn: None` on a turn that had in fact just
+failed — the worker thread reached `_run_turn`'s `except` and called `_mark_turn_failed` before the
+request thread returned from `submit` to run the clear, so the clear raced the very turn it had
+just queued and sometimes won. Moved to run before `submit` is called (after the pre-submit
+`_turns_shutdown` check, so a shutdown refusal still leaves the latch untouched), the clear always
+happens-before anything the worker for that booking can do, and 200/200 reran clean. The accepted
+residual: on the rare `submit` refusal that queues nothing at all (`BrokenThreadPool`, either
+`_shutdown`, or a `MemoryError` on the two allocations `submit` makes before queuing) the latch is
+cleared for a turn that never ran — the same three raises `release_turn`'s own documented
+booking-leak residual already accepts elsewhere in this file, for the same reason: closing this one
+would reopen the race on the ordinary path.
+
+**Tests:** `tests/test_storefront.py` — the plan's own named idle-survival test
+(`test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate`, extended with a
+`turn_payload` assertion taken *after* `turn_state` already reads `IDLE_TURN`), a companion
+assertion that a no-op (`trigger=None`) turn leaves the latch untouched, a full lifecycle test
+covering postable-while-set / a `409` refusal leaving it standing / a granted-then-released
+reservation leaving it standing / the next turn that actually reaches the worker clearing it, a
+narrower single-purpose version of the release-without-enqueue case (the exact shape the ordering
+mutant targets), a `clear_all_turns()` test, a `reset_participant` test, and a `lastTurn`
+assertion added to the existing `test_reset_is_participant_disjoint` (a bystander's latch survives
+someone else's reset-mine). `tests/test_storefront_api.py` — one end-to-end route-level test
+driving `POST /shop/api/messages` → poll `GET /shop/api/state` against a stub `WorkflowExecutor`
+that always raises, asserting `state == "idle"` **and** `lastTurn == "failed"` in the same response
+body — the plan's own acceptance shape, since the claim is about what the participant would see.
+Every pre-existing exact-dict assertion on the `turn` payload across both files (18 sites) was
+updated to include `"lastTurn": None`, the payload having gained a key. Three mandated mutations,
+restored by copy between each: the plan's own rejected design — the latch as a field on
+`TurnState`/inside the `_turns` entry instead of a separate map — reddened the idle-survival test
+exactly as its own docstring predicts; the rejected ordering — clearing in `reserve_turn` instead
+of `enqueue_turn` — reddened both the lifecycle test and its narrower companion; an
+argument-corruption mutant on `reset_participant`'s clear (sweeping every participant's latch
+instead of naming its own) reddened the extended `test_reset_is_participant_disjoint`. Full suite:
+2648 passed before, 2653 after (both counts from a live run; 14 deselected, unchanged, in both).
+
+**Docs:** `docs/SERVER.md` §1.3's `FALKORCHAT_STOREFRONT_QUIESCE_S` row's example `GET
+/shop/api/state` body now carries `"lastTurn": null` and a clause on what the field is and when it
+is `"failed"` — it was accurate as far as it went but silently incomplete once the payload gained
+the key. `storefront.py` docstrings updated: `get_state` (names `lastTurn` as the fourth thing the
+`turn` block carries and why it is composed rather than read off the entry), `TurnState.as_payload`
+(states that `lastTurn` is merged in by the caller from a latch this class does not hold),
+`clear_all_turns` (states the added latch-clear and why), `_run_turn` (the dead-turn signal is no
+longer future work; states which branch sets it and which deliberately does not), `enqueue_turn`
+(the placement argument and the measured residual above), and `reset_participant` (states the
+added clear and why it runs only on the success path). No API/schema doc changes were needed
+beyond the one `SERVER.md` row — the turn payload is a raw dict with no `response_model`.
+
 ## 2026-09-10 — salesperson-ui S9b: reset-mine cancels a *queued* turn in front of `_await_quiesce`
 
 **What:** Closed the half of §4.8's reset-mine contract S7 could not build and S9's own row
