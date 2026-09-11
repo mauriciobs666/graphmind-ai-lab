@@ -1,6 +1,39 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.23
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.24
+
+2026-09-10 (v1.24, `data-scientist`) — rules the s3-spec's (`docs/plans/small-model-benchmarking-
+s3-spec.md` §9) two open questions, both disambiguations of formulas this note already states
+rather than new methodology. **§5.1: `recall_at_k`/`precision_at_k` binarize into `BinaryMetric`'s
+`counts[metric]` as "at least one relevant doc in top k" (`recall_at_k(...) > 0`), not "all relevant
+docs found" (`== 1.0`)** — matches this note's own §5.2 precedent (`sep_raw(q) > 0 ⟺ P@1 = 1`, the
+one place this note already turns a continuous per-query quantity into a discrete success), matches
+the standard IR reduction of recall@k to a binary outcome (Hit-Rate@k/Success@k; `== 1.0` has no
+standard name and is strictly more conservative), and keeps recall@10's stated role (§7.4: "harness
+sanity floor... and regression detector, not a comparison metric") from getting more trigger-happy
+on exactly the 2 items where the two readings disagree. **Recommend storing the raw hit count**
+(`|top-k ∩ R|`, an int in `[0, |R|]`) in `counts[metric]` rather than a pre-binarized 0/1 flag —
+`ItemResult.scored_outcome` already reads `counts[metric] > 0` generically (`results.py:416`), so
+the aggregate is identical either way, and the raw count is free provenance a flattened flag
+discards. **New honesty-line requirement: model-bench's reported recall@10 is not the same
+statistic as falkor-chat's `retrieval_baseline.json`/FR-12's quoted 0.974** — that figure is
+`sum(recall_at_k(...) for each item) / n` (`falkor-chat/server/tests/eval/test_retrieval_eval.py:
+134`, a mean of the continuous fraction), and no binarization of a `BinaryMetric` reproduces a
+continuous mean in general (only coincidentally when every item's fraction is already 0 or 1, which
+is why the two readings agree on the pinned 37/38 baseline but need not agree on a future run with a
+genuinely partial-credit multi-relevant item). Report this footnote alongside the existing
+precision@k one. **§5.2: `sd({cos(q, d) : d in corpus})` is the population standard deviation**
+(`statistics.pstdev`), confirming the s3-spec's own draft reasoning: the 121-doc corpus is
+enumerated in full and scored exactly for every query — it is not a sample used to estimate an
+unknown, larger population's spread, which is the condition that would call for Bessel's correction
+(sample stdev, `ddof=1`). This is a different statistical object from §7.4's `sd_d` (the sample
+stdev of per-query MRR *differences*, legitimately estimating variability for inference over the
+38-query sample) — no contradiction between the two uses. At n=121 the two estimators differ by
+`sqrt(121/120) ≈ 1.004`, immaterial to any reported figure, but the estimator is still part of the
+published claim and is now pinned rather than left to `sd`'s ambiguity. Ruled here, in place,
+rather than in a new `-ml`-role sibling file: both questions disambiguate formulas §5.1/§5.2 already
+state, not new methodology, matching this note's own revision precedent (e.g. v1.22/v1.23 folding
+in rulings raised elsewhere).
 
 2026-09-10 (v1.23, `data-scientist`) — folds this note's half of the raising-`dispatch` ruling
 (`docs/plans/small-model-benchmarking-ml-dispatch-failure.md`, accepted at `a65d288`): §4.1's
@@ -2674,6 +2707,31 @@ adds no discriminating information on this pack`, and treat **P@1** (= "is the t
 as the informative member of the family. *Reversal trigger:* extend the golden set with genuinely
 multi-relevant items (|R| ≥ 3) and precision@k becomes informative again.
 
+**Binarizing `recall_at_k`/`precision_at_k` into a `BinaryMetric`'s per-item count (v1.24).**
+`recall_at_k`/`precision_at_k` are continuous fractions — genuinely fractional only on the golden
+set's 2 multi-relevant items (`|R| = 2`; §5.1 above). A per-item success flag is **"at least one
+relevant doc retrieved in the top k"** (`recall_at_k(...) > 0`), not "every relevant doc retrieved"
+(`== 1.0`). Rationale: (1) it matches §5.2's own precedent below, the one place this note already
+collapses a continuous per-query quantity to a discrete success (`sep_raw(q) > 0 ⟺ P@1 = 1`); (2)
+it is the standard IR reduction of recall@k to a binary outcome (Hit-Rate@k / Success@k); a
+`== 1.0` threshold has no standard name and is strictly more conservative, i.e. a subset of `> 0`'s
+successes; (3) it keeps recall@10 in its stated role (§7.4: harness sanity floor and regression
+detector, never a comparison metric) from becoming more trigger-happy on exactly the 2 items where
+the two readings can disagree. **Store the raw hit count** `|top-k ∩ R|` (an int in `[0, |R|]`) in
+`counts[metric]`, not a pre-binarized 0/1 flag: `ItemResult.scored_outcome` already reads
+`counts[metric] > 0` generically, so the aggregate `BinaryMetric` is identical either way, and the
+raw count is free provenance a flattened flag would discard. **Honesty line, required alongside the
+precision@k footnote above:** model-bench's reported `recall@10` is **not the same statistic** as
+falkor-chat's `retrieval_baseline.json` / FR-12's quoted `0.974` — that figure is `sum(recall_at_k(
+...) for each item) / n` (`falkor-chat/server/tests/eval/test_retrieval_eval.py:134`, a mean of the
+continuous fraction), and no `BinaryMetric` binarization reproduces a continuous mean in general.
+The two happen to agree on the pinned `37/38` baseline only because that particular run's two
+multi-relevant items land at exactly 0 or 1 each (verified: `retrieval_baseline.json`'s
+`recall_at_10 = 0.9736842105263158` is exactly `37/38`, and the 36 single-relevant items can only
+contribute integers, so the 2 multi-relevant items' fractions must already sum to an integer here) —
+a future run with a genuinely partial-credit multi-relevant item (one of two relevant docs found)
+will diverge between the two statistics, and the report must not imply they are the same number.
+
 ### 5.2 Score separation
 
 **Per query, over the full corpus (brute force gives every score anyway, so no top-k truncation):**
@@ -2695,6 +2753,15 @@ from one model and 0.15 from another are not comparable quantities. Report both:
 ```
 sep_z(q) = sep_raw(q) / sd({cos(q, d) : d in corpus})
 ```
+
+**`sd` is the population standard deviation** (`statistics.pstdev`, v1.24 ruling). The 121-doc
+corpus is enumerated in full and scored exactly for every query — it is not a sample drawn from
+some larger, unobserved population whose spread is being estimated, which is the condition that
+calls for Bessel's correction (sample stdev, `ddof=1`). This is a different statistical object from
+§7.4's `sd_d` (the sample stdev of per-query MRR *differences*, legitimately estimating variability
+for inference over the 38-query sample used to compute a margin of error) — no contradiction between
+the two. At n=121 the two estimators differ by `sqrt(121/120) ≈ 1.004`, immaterial to any reported
+figure, but the estimator is now pinned rather than left to `sd`'s ambiguity.
 
 Per-query z-scoring against that query's own similarity distribution over the 121-doc corpus.
 Scale- and offset-free, so it is the **cross-model comparable** number; `sep_raw` stays as the
