@@ -6985,3 +6985,158 @@ has exactly one, `reset_participant`).
 
 None — this unit is otherwise ready to land as delivered, subject to P24-1's disposition (a
 documentation fix, not a code or test change).
+
+## Pass 25 — 2026-09-11 (S9c: the dead-turn latch, `turn.lastTurn`)
+
+**Reviewed:** the uncommitted working-tree diff delivering S9c — `server/falkorchat/storefront.py`
+(+121/−18: `Storefront._last_turn_failed`/`_last_turn_failed_lock`, `_last_turn`/
+`_mark_turn_failed`/`_clear_turn_failed`, `turn_payload`'s composition, the two clear call sites in
+`enqueue_turn` and `reset_participant`, `clear_all_turns`'s added drop), `server/tests/test_storefront.py`
+(+184/−1: 6 new tests, 12 exact-dict sites gaining `lastTurn`), `server/tests/test_storefront_api.py`
+(+54: 1 new route-level test, 6 exact-dict sites gaining `lastTurn`), `falkor-chat/docs/HISTORY.md`
+(new 2026-09-10 entry), `falkor-chat/docs/SERVER.md` §1.3's `QUIESCE_S` row. Baseline: `git diff` against
+`HEAD`; nothing committed. **Against:** `docs/plans/salesperson-ui.md` v1.33 §5.1's S9 row (the
+dead-turn-signal clauses) and §5.2 *The dead-turn signal*, restricted to the **S9c** sub-unit — third
+of five, serialized behind S9a/S9b on `storefront.py`. **This coordination's own accumulated defect
+lessons, applied rather than a generic pass:** the plan's own prescribed mutation test (latch stored
+in the `_turns` entry), `## Pass 20`'s clear-placement rule (`enqueue_turn`, never `reserve_turn`), the
+implementer's claimed same-turn race fix (clear strictly before `submit`), both reset paths' clear
+scope, and the 18 exact-dict payload sites.
+
+**Verdict: approve.** Every one of the six focus areas the brief named checked out against the code
+as delivered, not against the implementer's account of it — four separate mutations constructed and
+run by hand (not taken from the `HISTORY.md` report), all four reddening exactly the test the
+implementer's own write-up says they would, all four restored to the delivered md5
+(`71dea6f38c4fb09d5ddbc1127f702722`) immediately after. No blockers, no majors, one minor
+(documentation-adjacent, not a code defect), one nit.
+
+**CPG: considered, not relevant — `cpg_falkorchat` is stamped from `85ddeed0` (`## Pass 22`'s own
+note, this file); `falkor-chat/server`'s `storefront.py` has had three S9 sub-units land since (S9a,
+S9a-fix, S9b, now S9c), so its call-graph and reach facts about this file predate the entire
+concurrency core, not just this diff. Read source directly.**
+
+**Environment.** `.venv/bin/python -m pytest -q` from `falkor-chat/server`: **2653 passed, 14
+deselected** — matches `HISTORY.md`'s claimed "after" figure exactly, and its claimed "before" (2648)
+matches S9b's own Pass 24 "after" figure, so the chain is internally consistent across two
+independent review sessions. `ruff check` clean on all three touched Python files. This run's
+teardown wipes the shared `reference` graph per `falkor-chat/AGENTS.md`'s documented hazard —
+expected, not a finding, and I did not re-seed it (teco's to do). My four mutation probes below ran
+against a byte-copy backup restored after each one (verified `test -s` before mutating, one
+mutation at a time, never batched) plus one probe against a disposable in-process `Storefront` built
+with a fake `services` collaborator (`_repo = None`, never called) and no `trigger` route to the
+graph — none of my own work touched `reference` or `ws:test`.
+
+### Verified (executed) — the four mutations the brief asked me to construct myself
+
+1. **The plan's own prescribed mutation: store the latch's *visibility* behind the `_turns` entry's
+   presence, simulating "stored in the entry `set_turn_state(idle)` deletes."** Gated `_last_turn`'s
+   read on `participant_id in self._turns` before consulting the separate set. Ran
+   `test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate` (the plan's own named
+   idle-survival test, extended by this delivery with the `turn_payload` assertion taken after
+   `turn_state` already reads `IDLE_TURN`) — **red**, `{'lastTurn': None} != {'lastTurn': 'failed'}`,
+   exactly the clause the plan's S9 row predicts. Restored; md5 unchanged.
+2. **`## Pass 20`'s clear-placement rule, inverted: moved the clear from `enqueue_turn` into
+   `reserve_turn`'s success path.** Ran
+   `test_the_dead_turn_latchs_lifecycle_set_postable_and_cleared_by_the_next_enqueue` and
+   `test_a_write_failure_after_a_grant_reservation_leaves_the_latch_standing` — **both red**
+   (`assert None == 'failed'` in both), confirming both are actual discriminators for this exact
+   mutation, not merely present in the suite. Restored; md5 unchanged.
+3. **The implementer's claimed same-turn race (clear moved from before to after `executor.submit`).**
+   This one is inherently timing-dependent, so rather than taking the "8 of 200" measurement in
+   `HISTORY.md` on report, I forced the losing interleaving deterministically: patched
+   `_mark_turn_failed`/`_clear_turn_failed` so the clear blocks on an `Event` the mark sets, applied
+   the after-`submit` mutation, and drove one turn end-to-end against a disposable `Storefront` with
+   an always-raising trigger. **Result: `lastTurn` read `None` after a turn that had, in fact, just
+   failed** — the exact mechanism the docstring (`storefront.py:1150-1161`) and `HISTORY.md` describe,
+   reproduced by construction rather than by luck. This also served as the second check the brief
+   asked for: the delivered code's actual clear call (`storefront.py:1174`) sits **before** the
+   `try: future = self._executor.submit(...)` at `:1176`, not after — read directly, not inferred from
+   the docstring. Script: `<scratchpad>/probe_p3_race.py`. Restored; md5 unchanged.
+4. **The argument-corruption mutant on `reset_participant`'s clear** — swapped
+   `self._clear_turn_failed(participant_id)` for an unconditional `self._last_turn_failed.clear()`.
+   Ran `test_reset_is_participant_disjoint` (extended by this delivery to plant Bob's own latch ahead
+   of Ada's reset) — **red**, `assert None == 'failed'` on Bob's bystander state. Restored; md5
+   unchanged.
+
+Every one of the four restores checksums back to `71dea6f38c4fb09d5ddbc1127f702722`
+(`md5sum falkorchat/storefront.py`, matching the pre-mutation baseline taken before probe 1), and
+`git status --porcelain falkor-chat/` shows only the five files the delivery itself touched — no
+residue from any probe.
+
+### The clear-on-reset sites, both read directly
+
+`clear_all_turns()` (`storefront.py:967-977`) drops `self._last_turn_failed` whole under its own
+lock, unconditionally — correct for reset-everyone, which deletes every participant's transcript.
+`reset_participant` (`:1670-1676`) calls `_clear_turn_failed(participant_id)` **after** the graph
+delete (`self._repo.reset_participant(...)`) has already returned successfully and **after** every
+one of the method's four `raise` sites (quiesce timeout, F8's `504`, `UnknownParticipantError`,
+`UnscopedParticipantError`) — traced by reading the method's control flow directly, not from its
+docstring's claim of the same ordering. `test_a_self_reset_clears_the_dead_turn_latch` covers the
+success path; `test_reset_is_participant_disjoint`'s extension (mutation 4, above) is the test that
+would catch the wrong scope, and it does.
+
+### The 18 exact-dict payload sites
+
+Counted directly by grepping `"lastTurn"` in both files and excluding the new tests' own
+assertions, not taken from `HISTORY.md`'s count: **12** pre-existing sites in `test_storefront.py`
+(`:632, :651, :661, :683, :718, :722, :1269, :1284, :1288, :1823, :1842, :1898`) and **6** in
+`test_storefront_api.py` (`:1372, :4968, :5016, :5020, :5109, :5266`) — **18**, matching the report
+exactly. Spot-checked the 9 multi-line sites by reading the line immediately after the matched
+`"queuePosition"` line (or, for the 3 single-line dicts, the same line): every one carries
+`"lastTurn": None`, none loosened to a partial/subset match. No unhandled pre-existing exact-dict
+assertion was found — a miss here would have failed loudly (the payload gaining an unasserted key
+breaks `==` on a full dict), and none did.
+
+### Findings
+
+**P25-1 — minor. `HISTORY.md`'s residual-window prose names three raise shapes shared with
+`release_turn`'s own documented booking-leak residual, but the shared citation is one level removed
+from where a reader would look for it.** The entry says the accepted latch-cleared-too-early residual
+is "the same three raises `release_turn`'s own documented booking-leak residual already accepts
+elsewhere in this file" — true, and I traced `enqueue_turn`'s docstring (`storefront.py:1088-1100`)
+to confirm the three raises (`BrokenThreadPool`, `_shutdown`, the two `MemoryError` sites) are the
+same ones named there — but neither `HISTORY.md` nor the `enqueue_turn` docstring's residual
+paragraph gives `release_turn`'s docstring a line number or a quoted clause, so verifying "already
+accepts elsewhere" costs a `grep` rather than a citation. Not a factual error — I confirmed the claim
+holds — just a paper cut for the next reader. **Suggested:** one parenthetical file:line citation to
+`release_turn`'s residual paragraph, in either `HISTORY.md` or the docstring. I'd weigh this as a nit
+rather than a minor if someone else owned the call — nothing here is wrong, only under-cited.
+
+**P25-2 — nit. `TurnState.as_payload`'s docstring says `lastTurn` is "merged in by that same caller,
+from a latch this class does not hold" — true, but "that same caller" now resolves to `turn_payload`
+across two different call shapes inside it** (the `turn is None` branch reads `IDLE_TURN.as_payload(0)`
+directly; the other two branches go through the local `turn` variable), and a reader diffing this
+docstring against the method that actually merges `lastTurn` (`turn_payload`, one scope down) has to
+re-derive that all three branches converge on the one `payload["lastTurn"] = self._last_turn(...)`
+line after the `with` block closes. Cosmetic — the merge point is correct and single, just not named
+by line. Take or leave.
+
+### What's solid
+
+* **The four focus areas that most invited "correct reasoning, unverified mechanism" all survived
+  construction, not just re-reading.** The same-turn race (P3 in the brief) is the one this
+  coordination has lost to before in exactly this shape — reasoning sound, mechanism undemonstrated —
+  and here the mechanism is both stated with a line-accurate call order (`:1174` before `:1176`) and
+  independently reproducible by forcing the interleaving rather than trusting the "8 of 200" figure.
+* **The latch's independence from `_turns` is real, not just declared.** Its own lock
+  (`_last_turn_failed_lock`), its own container (`set[str]`), and the one composition point
+  (`turn_payload`) that reads both under separate acquisitions — verified by the mutation that made
+  visibility depend on `_turns` membership, which is the one change that would collapse the
+  independence, and it reddened the exact test the plan names for that collapse.
+  `TurnState.as_payload` never grew a field for it.
+* **The residual is named, not hidden, and correctly one-directional.** The docstring states
+  plainly that the rare `submit`-refusal-that-queued-nothing shape leaves the latch cleared for a
+  turn that never ran, and that closing it would reopen the ordinary-path race — the same trade
+  `release_turn`'s own residual makes for the same three raises. This is the discipline `## Pass
+  20`/`## Pass 21`/`## Pass 24` have been holding this coordination to, applied here without being
+  asked twice.
+* **Every reset path's scope is exactly as wide as its own reset, and both directions are tested**
+  (`test_clear_all_turns_also_clears_every_dead_turn_latch` for the sweep,
+  `test_reset_is_participant_disjoint`'s extension for the bystander).
+* **Suite and lint independently reproduced, matching the delivered report's own numbers exactly**
+  (2653 passed / 14 deselected; clean `ruff`), and the "before" figure chains correctly back to Pass
+  24's "after" figure across two separate review sessions three units apart.
+
+### Open questions
+
+None.
