@@ -2,6 +2,74 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-10 — S2, Step 2: CLI `validate`/`run` wiring, exit codes — closes S2
+
+**What:** `docs/plans/small-model-benchmarking-runner-spec.md` §7 Step 2, the last of the three
+dispatchable steps and the last unit of S2. `modelbench/cli.py` gains `_cmd_validate` and
+`_cmd_run`, wired into `_build_parser()`/`main()` following the existing `attest` pattern:
+`validate --pack <path> [--strict]` wraps `packs.load_pack`/`packs.validate_pack` (structural only,
+no LM Studio, no model catalog); `run --pack <id> --model <key> [--session] [--reference]
+[--warmup] [--first-call-timeout] [--request-timeout]` resolves the pack under `--root/packs/<id>`
+(`_pack_root`, the `run`-side counterpart to `_cmd_compare`'s inline manifest lookup), validates it,
+builds `LMStudio` from `host.json`'s own `apiBaseUrl` (read directly — `run` takes no
+`--api-base-url` of its own), and calls `runner.run_pack`, mapping `RunRefused.exitCode` and the
+dispatch-failure funnel onto §3.6a's exit codes. The module docstring's exit-4 line and its
+"`validate` and `run` ... deliberately still absent" sentence are both corrected — S2 now ships all
+three of `attest`/`validate`/`run`.
+
+**`--strict`'s semantics**, per the spec's own explicit routing (§6.1/§9: "a genuine gap, not merely
+scattered" — the plan names the flag with no elaboration anywhere): `_cmd_validate` raises
+`NotImplementedError` the moment `--strict` is set, with a message and docstring citing the spec
+section to resolve it against. Deliberate and documented, not a silently-accepted no-op — the one
+option the spec rules out — and matches `runner.py`'s own established precedent for an inert seam
+(`_load_item_scorer`/`_load_conversation_scorer`, Step 1).
+
+**Store-before-exit-4 ordering** (dispatch-failure note §4(d)): `_cmd_run` calls `store()` and
+prints `"stored: <path>"` *before* checking `disclosures`, so a `tool-caller` conversation censored
+by a dispatch raise still lands `results/runs/<runId>.json` on disk before the process reports exit
+`4` — never an aborted run.
+
+**Tests:** `tests/test_cli.py` gains 18 tests (net +17 after `test_s2s_remaining_commands_are_not_
+shipped_yet` — which pinned `validate`/`run` as *unrecognized*, `main([cmd]) == 2` — was rewritten,
+not deleted, since its own premise went false: `test_validate_and_run_are_now_recognized_commands`
+reads `--help`'s subcommand list instead of a bare exit code, since a recognized command missing
+its own required `--pack` exits `2` too — the same code an unrecognized command exits with).
+`validate`: exit 0 on a structurally valid pack, exit 4 on a load error and on a `validate_pack`
+problem, `--strict`'s deferral, and that omitting `--strict` runs normally. `run`: exit 4 on a pack
+load error and a `validate_pack` failure; exit 5 on `host.json` absent and on schema-invalid;
+exit 3 on each of `probe()`'s two distinct negative outcomes (`unreachable`/`v1-only`) and on a
+warm-up timeout; exit 4 on the `callSurface`-versus-catalog-`type` contradiction and, separately, on
+the tool-calling eligibility gate (`tool-caller` role only); exit 5 on a stale attestation
+trip-wire; the clean exit-0 path stores and prints the path; and the store-before-exit-4 ordering
+test itself. The refusal-path tests drive the real `run_pack` against a minimal on-disk pack (no
+`data`/`tools`/`prompt` content needed — every refusal exercised fires before `run_pack` ever reads
+one) and a hand-built `_StubLMStudioForRun` (`cli.LMStudio` monkeypatched, mirroring `attest`'s own
+`_patch_lmstudio`); the exit-0 and store-before-exit-4 tests fake `cli.run_pack` directly, since
+past that point it is `_cmd_run`'s own sequencing under test, not `run_pack`'s (already
+`tests/test_runner.py`'s, Step 1) — matching spec §7 Step 2's own scope statement ("this step's job
+is the `run`-level wiring *around* them, not re-testing the adapter itself"), entirely offline, no
+`-m live` marker needed.
+
+**Mutation-tested** (source restored by copy after each, `diff -q` verified clean,
+`PYTHONDONTWRITEBYTECODE=1`): (1) the store-before-exit-4 ordering — moving the disclosure check
+and its early `return EXIT_BAD_PACK` ahead of `store()` reddened exactly
+`test_run_stores_the_record_before_returning_exit_four_on_dispatch_failure_disclosures` (1 failed,
+5 passed among the dispatch/exit-zero tests) and no other; (2) the `RunRefused` exit-code
+passthrough — hardcoding `return EXIT_LMSTUDIO_UNREACHABLE` in place of `return exc.exitCode`
+reddened exactly the three `run`-exit-code tests whose refusal is genuinely a `RunRefused` carrying
+a *different* code (`callSurface`/type contradiction and the tool-calling gate, both exit 4; the
+stale attestation, exit 5 — 3 failed, 8 passed among the `test_run_exits_*` tests) while leaving the
+two genuine exit-3 tests (`unreachable`/`v1-only`, which already expect 3) and the exit-4/5 tests
+that route through a different code path entirely (pack load/validate failure, `host.json`
+absent/invalid, which never reach this line) green — proving the tests discriminate the exact code
+`_cmd_run` forwards, not merely "non-zero".
+
+**Verified:** full suite `1126 passed, 3 deselected` (up from `1109 passed, 3 deselected`),
+`ruff check .` clean.
+
+CPG: considered, not relevant — `cpg_model-bench` is not a loaded graph on this FalkorDB instance;
+a code-level task in a component with no CPG built, not a task without a code-level component.
+
 ## 2026-09-10 — S2, Step 1: `runner.py`'s core — capture order, `LatencyBlock` accumulation, both driving loops
 
 **What:** `docs/plans/small-model-benchmarking-runner-spec.md` §7 Step 1, built directly on Step

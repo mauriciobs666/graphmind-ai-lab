@@ -1,6 +1,6 @@
-"""S1's three commands (`compare`, `index rebuild`, `models --tested`) plus S2's `attest`
-(plan §3.6a). `validate` and `run` are a later S2 unit's and must not exist yet — asserted, so the
-stage boundary is a test rather than a promise. Exit codes are §3.6a's closed set.
+"""S1's three commands (`compare`, `index rebuild`, `models --tested`) plus S2's `attest`,
+`validate`, and `run` (plan §3.6a) — the runner-spec's §7 Step 2, the last S2 unit. Exit codes are
+§3.6a's closed set, amended by the dispatch-failure note's §4(d) artifacts-before-exit-4 clause.
 """
 
 from __future__ import annotations
@@ -12,7 +12,9 @@ from conftest import classification_aggregates, item, model_fields, run
 
 from modelbench import cli, hostinfo
 from modelbench.cli import main
+from modelbench.lmstudio import LMStudioCallTimeout, LoadResult, ModelInfo
 from modelbench.results import ItemResult, ItemTiming, store
+from modelbench.runner import DispatchFailureDisclosure
 
 PACK = "guard-judge-understanding"
 
@@ -244,12 +246,19 @@ def test_models_tested_filters_by_pack(workspace, capsys) -> None:
     assert "cand" not in capsys.readouterr().out
 
 
-def test_s2s_remaining_commands_are_not_shipped_yet(capsys) -> None:
-    """Plan §3.6a assigns `attest`, `validate` and `run` to S2. `attest` has since shipped (this
-    unit); `validate` and `run` are a later S2 unit's and the boundary stays a test rather than a
-    promise — asserted here so either one silently starting to work reddens this."""
-    for command in ("validate", "run"):
-        assert main([command]) == 2
+def test_validate_and_run_are_now_recognized_commands(capsys) -> None:
+    """Runner-spec §7 Step 2: `validate` and `run` graduate from "a later S2 unit's, deliberately
+    still absent" to real commands, closing S2. Read from `--help`'s command list rather than a
+    bare `main(["validate"])`/`main(["run"])` exit code: **both** an unrecognized command and a
+    recognized one missing its own required `--pack` exit `2`, so the exit code alone cannot tell
+    "not shipped" from "shipped but called wrong" apart — only the parser's own subcommand list
+    can (this is also `test_bad_arguments_exit_two`'s `main(["nosuchcommand"])` case, still exit 2,
+    still meaning "unrecognized")."""
+    main(["--help"])
+    out = capsys.readouterr().out
+    assert "{compare,index,models,attest,validate,run}" in out
+    assert main(["validate"]) == 2  # recognized, but --pack is required — still exit 2, usage
+    assert main(["run"]) == 2  # recognized, but --pack/--model are required — still exit 2
 
 
 def test_module_entrypoint_exists() -> None:
@@ -651,3 +660,380 @@ def test_attest_other_resident_workloads_empty_string_is_an_empty_list(
     )
     data = json.loads((workspace / "host.json").read_text())
     assert data["attested"]["otherResidentWorkloads"] == []
+
+
+# --- validate (runner-spec §6.1) ------------------------------------------------------------------
+#
+# Structural only — no LM Studio connection, no model catalog. `load_pack`/`validate_pack`'s own
+# axes are `packs.py`'s tested surface (`tests/test_packs.py`); this only confirms `_cmd_validate`
+# wires them and maps their outcomes onto §3.6a's exit codes.
+
+VALIDATE_MANIFEST = {
+    "packId": "validate-fixture",
+    "packVersion": "1.0.0",
+    "role": "guard-judge",
+    "schemaVersion": 1,
+    "environment": {"requires": ["lmstudio-chat"]},
+    "sampling": {"seed": 20260902, "pairingKey": ["itemId"], "analysisUnit": "itemId"},
+    "metrics": {"verdictMetrics": ["falseAdvanceRate"], "headlineMetric": "falseAdvanceRate"},
+}
+
+
+@pytest.fixture()
+def valid_pack_dir(tmp_path):
+    pack_dir = tmp_path / "a-pack"
+    pack_dir.mkdir()
+    (pack_dir / "pack.json").write_text(json.dumps(VALIDATE_MANIFEST))
+    return pack_dir
+
+
+def test_validate_exits_zero_on_a_structurally_valid_pack(valid_pack_dir, capsys) -> None:
+    code = main(["validate", "--pack", str(valid_pack_dir)])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "validate-fixture 1.0.0 (guard-judge): valid" in out
+
+
+def test_validate_exits_four_on_a_pack_load_error(tmp_path, capsys) -> None:
+    missing = tmp_path / "nope"
+    code = main(["validate", "--pack", str(missing)])
+    err = capsys.readouterr().err
+    assert code == 4
+    assert "nope" in err
+
+
+def test_validate_exits_four_when_validate_pack_reports_problems(valid_pack_dir, capsys) -> None:
+    manifest = json.loads((valid_pack_dir / "pack.json").read_text())
+    del manifest["environment"]
+    (valid_pack_dir / "pack.json").write_text(json.dumps(manifest))
+    code = main(["validate", "--pack", str(valid_pack_dir)])
+    err = capsys.readouterr().err
+    assert code == 4
+    assert "environment.requires" in err
+
+
+def test_validate_strict_is_a_deliberate_deferral_not_a_silent_no_op(valid_pack_dir) -> None:
+    """Runner-spec §9: `--strict`'s semantics are never stated anywhere in the plan, and the spec
+    names a `NotImplementedError` + citing comment as the sanctioned way to leave that open rather
+    than accept the flag as a no-op. `main()` catches only `SystemExit`, so this propagates."""
+    with pytest.raises(NotImplementedError, match="strict"):
+        main(["validate", "--pack", str(valid_pack_dir), "--strict"])
+
+
+def test_validate_without_strict_still_runs_normally(valid_pack_dir, capsys) -> None:
+    """The negative of the above: omitting `--strict` entirely must not somehow trip the deferral
+    (`args.strict` defaults `False` via `action="store_true"`)."""
+    code = main(["validate", "--pack", str(valid_pack_dir)])
+    assert code == 0
+
+
+# --- run (runner-spec §6.2) -----------------------------------------------------------------------
+#
+# `run`'s own refusal points before any item/conversation is ever driven (LM Studio unreachable,
+# the callSurface/catalog-type cross-check, the tool-calling eligibility gate, a stale attestation)
+# are exercised through the real `run_pack` against a minimal on-disk pack and a stub `LMStudio`
+# (`cli.LMStudio` monkeypatched, mirroring `_patch_lmstudio` above) — `run_pack`'s own capture-order
+# discrimination is already `tests/test_runner.py`'s (offline, no live LM Studio needed here
+# either). The success path and the dispatch-failure store-before-exit-4 ordering are exercised by
+# faking `cli.run_pack` directly, since by that point it is `_cmd_run`'s own sequencing being
+# tested, not `run_pack`'s.
+
+ITEM_PACK = "guard-judge-run-fixture"
+ITEM_PACK_MANIFEST = {
+    "packId": ITEM_PACK,
+    "packVersion": "1.0.0",
+    "role": "guard-judge",
+    "schemaVersion": 1,
+    "environment": {"requires": ["lmstudio-chat"]},
+    "prompt": {"historyReplay": "none"},
+    "sampling": {"seed": 20260902, "pairingKey": ["itemId"], "analysisUnit": "itemId"},
+    "metrics": {"verdictMetrics": ["falseAdvanceRate"], "headlineMetric": "falseAdvanceRate"},
+}
+
+TOOL_CALLER_PACK = "tool-caller-run-fixture"
+TOOL_CALLER_PACK_MANIFEST = {
+    "packId": TOOL_CALLER_PACK,
+    "packVersion": "1.0.0",
+    "role": "tool-caller",
+    "schemaVersion": 1,
+    "environment": {"requires": ["lmstudio-chat"]},
+    "sampling": {"seed": 20260909, "pairingKey": ["scriptId"], "analysisUnit": "scriptId"},
+    "metrics": {"verdictMetrics": ["cleanThroughTurnH"], "headlineMetric": "cleanThroughTurnH"},
+}
+
+
+@pytest.fixture()
+def run_workspace(tmp_path):
+    for pack_id, manifest in (
+        (ITEM_PACK, ITEM_PACK_MANIFEST),
+        (TOOL_CALLER_PACK, TOOL_CALLER_PACK_MANIFEST),
+    ):
+        pack_dir = tmp_path / "packs" / pack_id
+        pack_dir.mkdir(parents=True)
+        (pack_dir / "pack.json").write_text(json.dumps(manifest))
+    return tmp_path
+
+
+def _model_info(*, model_type: str = "llm", capabilities: tuple[str, ...] | None = ("tool_use",)):
+    return ModelInfo(
+        id="qwen/qwen3-4b-2507",
+        object="model",
+        type=model_type,
+        publisher="qwen",
+        arch="qwen3",
+        compatibility_type="gguf",
+        quantization="Q4_K_M",
+        state="loaded",
+        max_context_length=262144,
+        capabilities=capabilities,
+        loaded_context_length=8192,
+    )
+
+
+class _StubLMStudioForRun:
+    """A minimal `LMStudio`-shaped stub for `run`-level CLI tests — only what `run_pack`'s
+    capture-order refusal paths touch before any item/conversation is ever driven (`probe`,
+    `catalog`, `residency`, `warm_up`). `run`'s actual item/tool-caller driving is `runner.py`'s
+    own already-tested surface (`tests/test_runner.py`); re-testing it here is out of this step's
+    scope (runner-spec §7 Step 2)."""
+
+    def __init__(
+        self,
+        base_url: str,
+        *,
+        probe_result: str = "api-v0",
+        catalog_result: list[ModelInfo] | None = None,
+        warm_up_error: Exception | None = None,
+    ) -> None:
+        self.base_url = base_url
+        self._probe_result = probe_result
+        self._catalog_result = list(catalog_result or [])
+        self._warm_up_error = warm_up_error
+
+    def probe(self) -> str:
+        return self._probe_result
+
+    def catalog(self) -> list[ModelInfo]:
+        return list(self._catalog_result)
+
+    def residency(self):
+        return []
+
+    def warm_up(self, model_key, *, call_surface, system_prompt, was_resident_before, timeout_s):
+        if self._warm_up_error is not None:
+            raise self._warm_up_error
+        return LoadResult(
+            wallClockMs=500.0,
+            wasResidentBefore=was_resident_before,
+            runtime={"name": "llama.cpp", "version": "1.52.0"} if call_surface == "chat" else None,
+            stats=None,
+        )
+
+
+def _patch_run_lmstudio(monkeypatch, **kwargs) -> None:
+    monkeypatch.setattr(cli, "LMStudio", lambda base_url: _StubLMStudioForRun(base_url, **kwargs))
+
+
+def _write_host_json(root, *, runtime_name="llama.cpp", runtime_version="1.52.0") -> None:
+    hostinfo.write_host_info(
+        root,
+        {
+            "schemaVersion": 1,
+            "apiBaseUrl": "http://localhost:1234",
+            "attested": {
+                "lmStudioAppVersion": "0.3.31",
+                "kvCacheSetting": "f16",
+                "hostRamGb": 16,
+                "otherResidentWorkloads": [],
+            },
+            "attestedAt": "2026-09-10T00:00:00Z",
+            "observedAtAttestation": {
+                "residencySource": "lmstudio-api-v0",
+                "runtimeName": runtime_name,
+                "runtimeVersion": runtime_version,
+                "runtimeObservedAt": "2026-09-10T00:00:00Z",
+            },
+        },
+    )
+
+
+def test_run_exits_four_on_a_pack_load_error(run_workspace, capsys) -> None:
+    code = main(
+        ["run", "--root", str(run_workspace), "--pack", "no-such-pack", "--model", "m"]
+    )
+    err = capsys.readouterr().err
+    assert code == 4
+    assert "no-such-pack" in err
+
+
+def test_run_exits_four_when_validate_pack_reports_problems(run_workspace, capsys) -> None:
+    manifest_path = run_workspace / "packs" / ITEM_PACK / "pack.json"
+    manifest = json.loads(manifest_path.read_text())
+    del manifest["environment"]
+    manifest_path.write_text(json.dumps(manifest))
+    code = main(["run", "--root", str(run_workspace), "--pack", ITEM_PACK, "--model", "m"])
+    err = capsys.readouterr().err
+    assert code == 4
+    assert "environment.requires" in err
+
+
+def test_run_exits_five_when_host_json_is_absent(run_workspace, capsys) -> None:
+    """§3.6a's `5`: `host.json` absent. Reached before `run_pack` even opens a connection —
+    `_cmd_run` reads `host.json` itself to get `apiBaseUrl` before constructing `LMStudio`."""
+    code = main(["run", "--root", str(run_workspace), "--pack", ITEM_PACK, "--model", "m"])
+    err = capsys.readouterr().err
+    assert code == 5
+    assert "host.json" in err
+    assert not (run_workspace / "results").exists()  # refused before anything was ever written
+
+
+def test_run_exits_five_when_host_json_fails_schema_validation(run_workspace, capsys) -> None:
+    (run_workspace / "host.json").write_text(json.dumps({"schemaVersion": 1}))
+    code = main(["run", "--root", str(run_workspace), "--pack", ITEM_PACK, "--model", "m"])
+    err = capsys.readouterr().err
+    assert code == 5
+    assert "fails schema validation" in err
+
+
+def test_run_exits_three_when_lm_studio_is_unreachable(run_workspace, capsys, monkeypatch) -> None:
+    """§3.6a's `3`, the first of `probe()`'s two distinct negative outcomes."""
+    _write_host_json(run_workspace)
+    _patch_run_lmstudio(monkeypatch, probe_result="unreachable")
+    code = main(
+        ["run", "--root", str(run_workspace), "--pack", ITEM_PACK,
+         "--model", "qwen/qwen3-4b-2507"]
+    )
+    err = capsys.readouterr().err
+    assert code == 3
+    assert "not reachable" in err
+
+
+def test_run_exits_three_when_lm_studio_is_v1_only(run_workspace, capsys, monkeypatch) -> None:
+    """§3.6a's `3`, the second of `probe()`'s two distinct negative outcomes — a different message
+    from plain unreachability, sharing the code (§3.4.4a)."""
+    _write_host_json(run_workspace)
+    _patch_run_lmstudio(monkeypatch, probe_result="v1-only")
+    code = main(
+        ["run", "--root", str(run_workspace), "--pack", ITEM_PACK,
+         "--model", "qwen/qwen3-4b-2507"]
+    )
+    err = capsys.readouterr().err
+    assert code == 3
+    assert "/api/v0" in err
+
+
+def test_run_exits_four_on_call_surface_versus_catalog_type_contradiction(
+    run_workspace, capsys, monkeypatch
+) -> None:
+    """§3.4.4a: the pack declares `callSurface=chat` but the catalog says `type=embeddings`."""
+    _write_host_json(run_workspace)
+    embeddings_model = _model_info(model_type="embeddings", capabilities=None)
+    _patch_run_lmstudio(monkeypatch, catalog_result=[embeddings_model])
+    code = main(
+        ["run", "--root", str(run_workspace), "--pack", ITEM_PACK,
+         "--model", "qwen/qwen3-4b-2507"]
+    )
+    err = capsys.readouterr().err
+    assert code == 4
+    assert "callSurface" in err
+
+
+def test_run_exits_four_on_the_tool_calling_eligibility_gate(
+    run_workspace, capsys, monkeypatch
+) -> None:
+    """§3.6: a `tool-caller` pack against a catalog model that is `llm`-typed but lacks
+    `tool_use` — a DIFFERENT exit-4 trigger from the callSurface/type contradiction above, and the
+    gate that only runs at all for a `tool-caller` role."""
+    _write_host_json(run_workspace)
+    ineligible_model = _model_info(capabilities=())
+    _patch_run_lmstudio(monkeypatch, catalog_result=[ineligible_model])
+    code = main(
+        ["run", "--root", str(run_workspace), "--pack", TOOL_CALLER_PACK,
+         "--model", "qwen/qwen3-4b-2507"]
+    )
+    err = capsys.readouterr().err
+    assert code == 4
+    assert "not eligible" in err
+
+
+def test_run_exits_three_when_warm_up_times_out(run_workspace, capsys, monkeypatch) -> None:
+    _write_host_json(run_workspace)
+    _patch_run_lmstudio(
+        monkeypatch, catalog_result=[_model_info()], warm_up_error=LMStudioCallTimeout("timed out")
+    )
+    code = main(
+        ["run", "--root", str(run_workspace), "--pack", ITEM_PACK,
+         "--model", "qwen/qwen3-4b-2507"]
+    )
+    err = capsys.readouterr().err
+    assert code == 3
+    assert "first-call-timeout" in err
+
+
+def test_run_exits_five_when_attestation_trip_wire_is_stale(
+    run_workspace, capsys, monkeypatch
+) -> None:
+    """§3.6a's `5`, the second trigger: `host.json` attested `runtimeVersion=1.51.0`, the warm-up
+    observes `1.52.0` — a mismatch on the `"compared"` outcome (step 6)."""
+    _write_host_json(run_workspace, runtime_name="llama.cpp", runtime_version="1.51.0")
+    _patch_run_lmstudio(monkeypatch, catalog_result=[_model_info()])
+    code = main(
+        ["run", "--root", str(run_workspace), "--pack", ITEM_PACK,
+         "--model", "qwen/qwen3-4b-2507"]
+    )
+    err = capsys.readouterr().err
+    assert code == 5
+    assert "re-check the app version" in err
+
+
+def test_run_exits_zero_and_stores_the_record_on_a_full_success(
+    run_workspace, monkeypatch, capsys
+) -> None:
+    """`_cmd_run`'s own sequencing on the clean path — `run_pack`'s actual driving is faked here,
+    since this step's job is the wiring around it, not `run_pack` itself."""
+    fake_result = run("cli-run-happy", items=[item("g00", correct=True)])
+    monkeypatch.setattr(cli, "run_pack", lambda pack, cfg, *, lmstudio, root: (fake_result, ()))
+    _write_host_json(run_workspace)
+
+    code = main(
+        ["run", "--root", str(run_workspace), "--pack", ITEM_PACK, "--model", "m"]
+    )
+    out = capsys.readouterr().out
+    stored_path = run_workspace / "results" / "runs" / "cli-run-happy.json"
+
+    assert code == 0
+    assert f"stored: {stored_path}" in out
+    assert stored_path.exists()
+    assert "PACK DISPATCH FAILURES" not in out
+
+
+def test_run_stores_the_record_before_returning_exit_four_on_dispatch_failure_disclosures(
+    run_workspace, monkeypatch, capsys
+) -> None:
+    """Dispatch-failure note §4(d): "the record is written, then run exits 4" — a data-quality
+    finding discovered only once a partial record exists, never an aborted run. `run_pack`'s own
+    production of a disclosure is already `test_runner.py`'s (E2); this is `_cmd_run`'s own
+    ordering obligation, isolated by faking `run_pack`'s return so only the CLI's own sequencing
+    is under test.
+    """
+    fake_result = run("cli-dispatch-failure", items=[item("s0", correct=False)])
+    disclosure = DispatchFailureDisclosure(
+        scriptId="dispatch-fails", turn=3, tool="lookup_product_fact",
+        reason="RuntimeError: lookup_product_fact is broken",
+    )
+    monkeypatch.setattr(
+        cli, "run_pack", lambda pack, cfg, *, lmstudio, root: (fake_result, (disclosure,))
+    )
+    _write_host_json(run_workspace)
+
+    code = main(
+        ["run", "--root", str(run_workspace), "--pack", TOOL_CALLER_PACK, "--model", "m"]
+    )
+    out = capsys.readouterr().out
+    stored_path = run_workspace / "results" / "runs" / "cli-dispatch-failure.json"
+
+    assert code == 4
+    assert "PACK DISPATCH FAILURES" in out
+    assert "dispatch-fails" in out and "lookup_product_fact" in out
+    # the load-bearing ordering claim: the record is on disk, not skipped because the run "failed"
+    assert stored_path.exists()

@@ -1,14 +1,28 @@
 """The command surface. Plan §3.6a is the table this implements.
 
 S1 shipped `compare` (including `--negative-control`), `index rebuild`, and the stored-records
-half of `models --tested`. S2 adds `attest`; `validate` and `run` are a later S2 unit's and are
-deliberately still absent.
+half of `models --tested`. S2 adds `attest`, `validate`, and `run` — the runner-spec's own three
+steps (`docs/plans/small-model-benchmarking-runner-spec.md` §7), of which this is the last:
+`validate` and `run` wrap already-shipped machinery (`packs.validate_pack`, `runner.run_pack`) and
+reimplement no check of their own. This closes S2.
 
-**Exit codes are a closed set** (§3.6a): `0` whenever the tool ran and reported, *whatever the
-scores* — the requirements rule out pass/fail gating, so a comparison that finds every stored
-record invalid still exits `0` and prints the exclusion block. Non-zero is operational only:
-`2` bad arguments · `3` LM Studio unreachable · `4` invalid pack · `5` fingerprint incomplete
-or `host.json` stale.
+**Exit codes are a closed set** (§3.6a, amended by the dispatch-failure note's §4(d)): `0`
+whenever the tool ran and reported, *whatever the scores* — the requirements rule out pass/fail
+gating, so a comparison that finds every stored record invalid still exits `0` and prints the
+exclusion block. Non-zero is operational only: `2` bad arguments · `3` LM Studio unreachable ·
+`4` invalid pack (`validate` failure, pack load error, the `callSurface`-versus-catalog-`type`
+contradiction, the tool-calling eligibility gate — or, **after `run`'s artifacts are already
+written**, a `tool-caller` conversation censored by a dispatch raise: `results/runs/<runId>.json`
+and the `PACK DISPATCH FAILURES` disclosure land on disk *before* the process reports `4`, never
+an aborted run, dispatch-failure note §4(d)) · `5` fingerprint incomplete, or `host.json`
+absent/invalid/stale.
+
+`validate --strict` is accepted but deliberately unimplemented (`_cmd_validate` raises
+`NotImplementedError`): the runner-spec (§9) states plainly that `--strict`'s semantics are never
+given anywhere in the plan, and names a `NotImplementedError` + citing `TODO` as the sanctioned way
+to leave a genuinely open question open — an accepted flag that silently no-ops is explicitly ruled
+out as a third option. Resolve or replace this per
+`docs/plans/small-model-benchmarking-runner-spec.md` §9 once the plan states a ruling.
 """
 
 from __future__ import annotations
@@ -21,9 +35,16 @@ from typing import Any, Sequence
 
 from modelbench import hostinfo
 from modelbench.lmstudio import LMStudio
-from modelbench.packs import PackConfigError, pack_ref_from_manifest
+from modelbench.packs import PackConfigError, load_pack, pack_ref_from_manifest, validate_pack
 from modelbench.report import compare_report
-from modelbench.results import RunResult, load_history, models_with_stored_results, rebuild_index
+from modelbench.results import (
+    RunResult,
+    load_history,
+    models_with_stored_results,
+    rebuild_index,
+    store,
+)
+from modelbench.runner import RunConfig, RunRefused, run_pack
 
 
 class UnknownModelKey(ValueError):
@@ -95,6 +116,28 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"one of {', '.join(hostinfo.ATTESTED_FIELD_NAMES)}, repeatable; unset fields are "
         "prompted for interactively",
     )
+
+    validate = sub.add_parser(
+        "validate", help="structural pack integrity — no LM Studio connection, no model catalog"
+    )
+    validate.add_argument("--pack", required=True, help="path to the pack directory")
+    validate.add_argument(
+        "--strict",
+        action="store_true",
+        help="not yet implemented (runner-spec §9) — raises NotImplementedError rather than "
+        "silently no-op",
+    )
+
+    run = with_root(
+        sub.add_parser("run", help="one model x one pack; validates first and fails closed")
+    )
+    run.add_argument("--pack", required=True, help="pack id under packs/ (plan §3.3 convention)")
+    run.add_argument("--model", required=True)
+    run.add_argument("--session")
+    run.add_argument("--reference")
+    run.add_argument("--warmup", type=int, help="extra untimed warm-up calls, additive")
+    run.add_argument("--first-call-timeout", type=float)
+    run.add_argument("--request-timeout", type=float)
 
     return parser
 
@@ -285,6 +328,97 @@ def _cmd_attest(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _cmd_validate(args: argparse.Namespace) -> int:
+    """plan §3.6a's `validate` row: structural only — no LM Studio connection, no model catalog
+    (`validate_pack`'s own docstring already states this scope, `packs.py` `:735-737`).
+
+    `--strict` is named in §3.6a's table with no elaboration anywhere in the plan (runner-spec §9:
+    "a genuine gap, not merely scattered"). Silently accepting it as a no-op is the one option the
+    spec rules out, so it is a deliberate, documented deferral instead: raise, don't pretend.
+    """
+    if args.strict:
+        raise NotImplementedError(
+            "validate --strict: semantics are not decided anywhere in the plan (runner-spec §9, "
+            "docs/plans/small-model-benchmarking-runner-spec.md §6.1/§9) — deliberately deferred "
+            "rather than accepted as a silent no-op"
+        )
+    try:
+        pack = load_pack(Path(args.pack))
+    except (OSError, PackConfigError) as exc:
+        print(f"model-bench: cannot load pack at {args.pack}: {exc}", file=sys.stderr)
+        return EXIT_BAD_PACK
+    problems = validate_pack(pack)
+    if problems:
+        for p in problems:
+            print(p, file=sys.stderr)
+        return EXIT_BAD_PACK
+    print(f"{pack.packId} {pack.packVersion} ({pack.role}): valid")
+    return EXIT_OK
+
+
+def _pack_root(root: Path, pack_id: str) -> Path:
+    """`packs/<pack-id>/` under `--root` (§3.3's `packs/<pack-id>/` convention) — `run`'s own
+    resolution of a bare `--pack <id>`, the counterpart to `_cmd_compare`'s inline
+    `root / "packs" / args.pack / "pack.json"` lookup one level up (manifest read vs. full load)."""
+    return root / "packs" / pack_id
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    """plan §3.6a's `run` row (`:1918`): "calls validate first and fails closed" (spec §6.2).
+
+    Every deeper refusal — LM Studio unreachable, the `callSurface`/catalog-`type` cross-check, the
+    tool-calling eligibility gate, a stale attestation — is `run_pack`'s own capture-order logic
+    (`runner.py`, already covered by its own offline suite); this wraps it: load the pack, validate
+    it, build the `LMStudio` client from `host.json`'s own `apiBaseUrl` (`run` takes no
+    `--api-base-url` of its own — §3.6a's flag list has none), and map `RunRefused` plus the
+    dispatch-failure funnel onto §3.6a's exit codes.
+    """
+    root = Path(args.root)
+    try:
+        pack = load_pack(_pack_root(root, args.pack))
+    except (OSError, PackConfigError) as exc:
+        print(f"model-bench: cannot load pack {args.pack}: {exc}", file=sys.stderr)
+        return EXIT_BAD_PACK
+
+    problems = validate_pack(pack)
+    if problems:
+        for p in problems:
+            print(p, file=sys.stderr)
+        return EXIT_BAD_PACK
+
+    try:
+        host = hostinfo.read_host_info(root)
+    except hostinfo.HostInfoError as exc:
+        print(f"model-bench: {exc}", file=sys.stderr)
+        return EXIT_FINGERPRINT
+
+    lmstudio = LMStudio(host["apiBaseUrl"])
+    cfg = RunConfig(
+        modelKey=args.model,
+        sessionId=args.session,
+        referenceKey=args.reference,
+        warmupExtra=args.warmup or 0,
+        firstCallTimeoutSeconds=args.first_call_timeout or 300.0,
+        requestTimeoutSeconds=args.request_timeout or 120.0,
+    )
+    try:
+        run, disclosures = run_pack(pack, cfg, lmstudio=lmstudio, root=root)
+    except RunRefused as exc:
+        print(f"model-bench: {exc}", file=sys.stderr)
+        return exc.exitCode
+
+    path = store(run, root)  # raises InvalidFingerprint on a runner defect — no bypass anywhere
+                              # (plan §3.4.5 point 1); deliberately uncaught here.
+    print(f"stored: {path}")
+
+    if disclosures:
+        print("PACK DISPATCH FAILURES")  # dispatch-failure note §4(d)'s funnel-head block
+        for d in disclosures:
+            print(f"  {d.scriptId} turn {d.turn}: {d.tool} — {d.reason}")
+        return EXIT_BAD_PACK  # exit 4, AFTER store() has already written the record
+    return EXIT_OK
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     try:
@@ -300,4 +434,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_models(args)
     if args.command == "attest":
         return _cmd_attest(args)
+    if args.command == "validate":
+        return _cmd_validate(args)
+    if args.command == "run":
+        return _cmd_run(args)
     return EXIT_USAGE  # pragma: no cover - argparse rejects unknown commands first
