@@ -66,6 +66,7 @@ def test_tool_discovery_lists_all_tools(repo):
         "send_message", "read_messages", "create_thread",
         "search_messages", "create_channel", "list_channels", "list_threads",
         "ingest_document", "ingest_documents", "get_document", "search_documents",
+        "delete_document", "list_documents", "get_document_deletion",
         "list_pending_matches", "list_matches", "confirm_match",
         "reject_match", "recheck_match",
     }
@@ -254,6 +255,83 @@ def test_get_document_missing_returns_none(repo):
 
     got = _unwrap(asyncio.run(
         mcp_mod.mcp.call_tool("get_document", {"document_id": "nope"})
+    ))
+    assert got is None
+
+
+# ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ────────────
+
+
+def test_list_documents_tool(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _configure(repo)
+
+    async def scenario():
+        posted = _unwrap(await mcp_mod.mcp.call_tool(
+            "ingest_document", {"text": "hello"}
+        ))
+        rows = _unwrap(await mcp_mod.mcp.call_tool("list_documents", {}))
+        return posted, rows
+
+    posted, rows = asyncio.run(scenario())
+    assert posted["documentId"] in [d["documentId"] for d in rows]
+
+
+def test_delete_document_tool_removes_content(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _configure(repo)
+
+    async def scenario():
+        posted = _unwrap(await mcp_mod.mcp.call_tool(
+            "ingest_document", {"text": "hello"}
+        ))
+        await mcp_mod.mcp.call_tool(
+            "delete_document", {"document_id": posted["documentId"]}
+        )
+        got = _unwrap(await mcp_mod.mcp.call_tool(
+            "get_document", {"document_id": posted["documentId"]}
+        ))
+        return got
+
+    got = asyncio.run(scenario())
+    assert got is None
+
+
+def test_delete_document_tool_errors_for_unknown_document_id(repo):
+    _configure(repo)
+
+    with pytest.raises(Exception):
+        asyncio.run(
+            mcp_mod.mcp.call_tool("delete_document", {"document_id": "nope"})
+        )
+
+
+def test_get_document_deletion_tool_after_delete(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _configure(repo)
+
+    async def scenario():
+        posted = _unwrap(await mcp_mod.mcp.call_tool(
+            "ingest_document", {"text": "hello"}
+        ))
+        await mcp_mod.mcp.call_tool(
+            "delete_document", {"document_id": posted["documentId"]}
+        )
+        deletion = _unwrap(await mcp_mod.mcp.call_tool(
+            "get_document_deletion", {"document_id": posted["documentId"]}
+        ))
+        return posted, deletion
+
+    posted, deletion = asyncio.run(scenario())
+    assert deletion["documentId"] == posted["documentId"]
+    assert deletion["deletedBy"] == "u1"
+
+
+def test_get_document_deletion_tool_none_when_never_deleted(repo):
+    _configure(repo)
+
+    got = _unwrap(asyncio.run(
+        mcp_mod.mcp.call_tool("get_document_deletion", {"document_id": "nope"})
     ))
     assert got is None
 

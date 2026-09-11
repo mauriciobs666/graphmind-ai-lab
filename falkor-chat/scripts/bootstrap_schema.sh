@@ -131,8 +131,21 @@ bootstrap_workspace() {
   echo "[index] Document.documentId"
   gquery "$g" "CREATE INDEX FOR (n:Document) ON (n.documentId)"
 
+  # document-ingestion2 Stage A (K-050 M5 follow-on): the version-lifecycle axis
+  # (plan §3.1) — `true` at creation, flipped `false` only when superseded (a
+  # later stage). A plain RANGE index, no uniqueness constraint (many Documents
+  # legitimately share `currentVersion: true`).
+  echo "[index] Document.currentVersion"
+  gquery "$g" "CREATE INDEX FOR (n:Document) ON (n.currentVersion)"
+
   echo "[index] Chunk.chunkId"
   gquery "$g" "CREATE INDEX FOR (n:Chunk) ON (n.chunkId)"
+
+  # document-ingestion2 Stage A (FR-8/AC-8): the hard-delete audit trail — a
+  # standalone node (nothing can point at a DETACH DELETEd Document), keyed by
+  # the now-gone documentId value, not a graph reference (plan §3.5).
+  echo "[index] DocumentDeletion.documentId"
+  gquery "$g" "CREATE INDEX FOR (n:DocumentDeletion) ON (n.documentId)"
 
   echo "[index] Entity.entityId"
   gquery "$g" "CREATE INDEX FOR (n:Entity) ON (n.entityId)"
@@ -257,6 +270,9 @@ bootstrap_workspace() {
 
   echo "[constraint] Chunk unique {chunkId}"
   gconstraint "$g" UNIQUE NODE Chunk PROPERTIES 1 chunkId
+
+  echo "[constraint] DocumentDeletion unique {documentId}"
+  gconstraint "$g" UNIQUE NODE DocumentDeletion PROPERTIES 1 documentId
 
   echo "[constraint] Entity unique {entityId}"
   gconstraint "$g" UNIQUE NODE Entity PROPERTIES 1 entityId

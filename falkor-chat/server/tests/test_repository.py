@@ -927,6 +927,161 @@ def test_start_document_progress_zero_total_jobs_does_not_revert_an_already_fail
     assert repo.get_document("test", document_id="d1")["status"] == "failed"
 
 
+# ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ─────────────
+
+
+def test_create_document_seeds_currentVersion_true_on_document_and_chunks(repo, conn):
+    """§3.1/§4 Stage A's baseline properties — every document/chunk starts
+    on the "current" side of the version-lifecycle axis, regardless of
+    whether anything ever supersedes it."""
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+
+    [[doc_flag]] = _probe(
+        conn, "MATCH (d:Document {documentId:'d1'}) RETURN d.currentVersion"
+    )
+    [[chunk_flag]] = _probe(
+        conn, "MATCH (c:Chunk {chunkId:'c0'}) RETURN c.documentCurrent"
+    )
+    assert doc_flag is True
+    assert chunk_flag is True
+
+
+def test_delete_document_removes_document_and_its_chunks(repo, conn):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+
+    deleted = repo.delete_document(
+        "test", document_id="d1", deleted_by="u1", deleted_at=500
+    )
+
+    assert deleted is True
+    assert repo.get_document("test", document_id="d1") is None
+    [[doc_count]] = _probe(conn, "MATCH (d:Document {documentId:'d1'}) RETURN count(d)")
+    [[chunk_count]] = _probe(conn, "MATCH (c:Chunk {chunkId:'c0'}) RETURN count(c)")
+    assert doc_count == 0
+    assert chunk_count == 0
+
+
+def test_delete_document_writes_audit_node(repo, conn):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+
+    repo.delete_document("test", document_id="d1", deleted_by="u1", deleted_at=500)
+
+    rows = _probe(
+        conn,
+        "MATCH (dd:DocumentDeletion {documentId:'d1'}) "
+        "RETURN dd.documentId, dd.deletedBy, dd.deletedAt",
+    )
+    assert rows == [["d1", "u1", 500]]
+
+
+def test_delete_document_returns_false_for_unknown_document_id(repo):
+    assert repo.delete_document(
+        "test", document_id="nope", deleted_by="u1", deleted_at=500
+    ) is False
+
+
+def test_delete_document_unknown_document_id_writes_no_audit_node(repo, conn):
+    repo.delete_document("test", document_id="nope", deleted_by="u1", deleted_at=500)
+
+    rows = _probe(conn, "MATCH (dd:DocumentDeletion) RETURN count(dd)")
+    assert rows == [[0]]
+
+
+def test_delete_document_leaves_entities_and_relates_to_untouched(repo, conn):
+    """Open Question 1 (§3.6) regression: a hard delete cascades to nothing
+    at the entity/relationship level — only the Chunk->ABOUT edge dies,
+    because it hangs off the deleted Chunk itself."""
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+    repo.create_entity(
+        "test", entity_id="e1", name="Acme", name_normalized="acme",
+        type="Organization", created_at=100,
+    )
+    repo.link_chunk_about_entity("test", chunk_id="c0", entity_id="e1")
+
+    repo.delete_document("test", document_id="d1", deleted_by="u1", deleted_at=500)
+
+    [[entity_count]] = _probe(conn, "MATCH (e:Entity {entityId:'e1'}) RETURN count(e)")
+    assert entity_count == 1
+
+
+def test_get_document_deletion_returns_audit_record_after_delete(repo):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+    repo.delete_document("test", document_id="d1", deleted_by="u1", deleted_at=500)
+
+    deletion = repo.get_document_deletion("test", document_id="d1")
+
+    assert deletion == {"documentId": "d1", "deletedBy": "u1", "deletedAt": 500}
+
+
+def test_get_document_deletion_none_when_never_deleted(repo):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+
+    assert repo.get_document_deletion("test", document_id="d1") is None
+
+
+def test_get_document_deletion_none_for_unknown_document_id(repo):
+    assert repo.get_document_deletion("test", document_id="nope") is None
+
+
+def test_list_documents_current_only_excludes_deleted_and_includes_current(repo):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+    _document_with_chunk(repo, document_id="d2", chunk_id="c1")
+    repo.delete_document("test", document_id="d2", deleted_by="u1", deleted_at=500)
+
+    rows = repo.list_documents("test", current_only=True, limit=50)
+
+    assert [r["documentId"] for r in rows] == ["d1"]
+    assert rows[0]["currentVersion"] is True
+
+
+def test_list_documents_unfiltered_still_excludes_hard_deleted(repo):
+    """A hard delete is not a filterable state — the node is gone, not
+    merely flagged — so `current_only=False` cannot resurrect it either."""
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+    _document_with_chunk(repo, document_id="d2", chunk_id="c1")
+    repo.delete_document("test", document_id="d2", deleted_by="u1", deleted_at=500)
+
+    rows = repo.list_documents("test", current_only=False, limit=50)
+
+    assert [r["documentId"] for r in rows] == ["d1"]
+
+
+def test_list_documents_orders_by_createdAt_oldest_first(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    repo.create_document(
+        "test", document_id="d2", title="second", text="x",
+        source_format="text", ingested_by="u1", created_at=200,
+        chunks=[{"chunkId": "c2", "text": "x", "seq": 0}],
+    )
+    repo.create_document(
+        "test", document_id="d1", title="first", text="x",
+        source_format="text", ingested_by="u1", created_at=100,
+        chunks=[{"chunkId": "c1", "text": "x", "seq": 0}],
+    )
+
+    rows = repo.list_documents("test", limit=50)
+
+    assert [r["documentId"] for r in rows] == ["d1", "d2"]
+
+
+def test_list_documents_respects_limit(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    for i in range(3):
+        repo.create_document(
+            "test", document_id=f"d{i}", title=f"t{i}", text="x",
+            source_format="text", ingested_by="u1", created_at=100 + i,
+            chunks=[{"chunkId": f"c{i}", "text": "x", "seq": 0}],
+        )
+
+    rows = repo.list_documents("test", limit=2)
+
+    assert len(rows) == 2
+
+
+def test_list_documents_empty_when_none(repo):
+    assert repo.list_documents("test") == []
+
+
 # ── §14.5 Entities & RELATES_TO (K-050 M5 Stage 3) ────────────────────────────
 
 

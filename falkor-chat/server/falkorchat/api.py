@@ -238,6 +238,40 @@ def build_router(
             raise HTTPException(status_code=404, detail="document not found")
         return doc
 
+    # ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ─────────
+    # `DocumentNotFoundError` maps to 404 via the generic `ServiceError` handler
+    # (app.py). `GET /documents` (list) is a distinct literal path from `GET
+    # /documents/{document_id}` — no registration-order concern either way
+    # (plan §3.8). `DELETE /documents/{document_id}` is a different HTTP verb
+    # from the existing `GET` on the same path — no ordering concern.
+    # `/documents/{document_id}/deletion` is two segments past the one-segment
+    # `{document_id}` route — no collision.
+
+    @router.get("/documents")
+    def list_documents(
+        current_only: bool = Query(True),
+        limit: int = Query(50, ge=1, le=200),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.list_documents(ctx, current_only=current_only, limit=limit)
+
+    @router.delete("/documents/{document_id}")
+    def delete_document(
+        document_id: str = Path(..., min_length=1, max_length=MAX_ID_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.delete_document(ctx, document_id=document_id)
+
+    @router.get("/documents/{document_id}/deletion")
+    def get_document_deletion(
+        document_id: str = Path(..., min_length=1, max_length=MAX_ID_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        deletion = services.get_document_deletion(ctx, document_id=document_id)
+        if deletion is None:
+            raise HTTPException(status_code=404, detail="document deletion not found")
+        return deletion
+
     # ── §14.6 Entity fusion review surface (K-050 M5 Stage 4, FR-10/OQ-2) ─────
     # `MatchNotFoundError` maps to 404 via the generic `ServiceError` handler.
     # Registered BEFORE `/matches/{match_id}/...`: no ambiguity here (no

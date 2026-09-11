@@ -198,6 +198,62 @@ def test_ingest_documents_batch_route_not_shadowed_by_document_id_route(client):
     assert r.status_code == 201
 
 
+# ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ────────────
+
+
+def test_list_documents_route(client):
+    doc_id = client.post("/documents", json={"text": "hello"}).json()["documentId"]
+
+    r = client.get("/documents")
+
+    assert r.status_code == 200
+    assert doc_id in [d["documentId"] for d in r.json()]
+
+
+def test_delete_document_route_removes_content(client):
+    doc_id = client.post("/documents", json={"text": "hello"}).json()["documentId"]
+
+    r = client.delete(f"/documents/{doc_id}")
+    assert r.status_code == 200
+
+    got = client.get(f"/documents/{doc_id}")
+    assert got.status_code == 404
+
+
+def test_delete_document_route_excludes_it_from_list(client):
+    doc_id = client.post("/documents", json={"text": "hello"}).json()["documentId"]
+    client.delete(f"/documents/{doc_id}")
+
+    r = client.get("/documents")
+
+    assert doc_id not in [d["documentId"] for d in r.json()]
+
+
+def test_delete_document_route_404_for_unknown_document_id(client):
+    r = client.delete("/documents/nope")
+    assert r.status_code == 404
+
+
+def test_get_document_deletion_route_after_delete(client):
+    doc_id = client.post("/documents", json={"text": "hello"}).json()["documentId"]
+    client.delete(f"/documents/{doc_id}")
+
+    r = client.get(f"/documents/{doc_id}/deletion")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["documentId"] == doc_id
+    assert body["deletedBy"] == "u1"
+
+
+def test_get_document_deletion_route_404_when_never_deleted(client):
+    doc_id = client.post("/documents", json={"text": "hello"}).json()["documentId"]
+
+    r = client.get(f"/documents/{doc_id}/deletion")
+
+    assert r.status_code == 404
+
+
 # ── §14.6 Entity fusion — SAME_AS review surface (K-050 M5 Stage 4) ──────────
 
 

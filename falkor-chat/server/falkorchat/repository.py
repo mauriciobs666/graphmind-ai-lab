@@ -1027,6 +1027,12 @@ class Repository:
         posture, matching the channel/thread-creation precedent). `chunks` is
         a list of `{chunkId, text, seq}` maps, pre-split app-side
         (`chunking.split_into_chunks`).
+
+        `currentVersion: true` (`Document`) and `documentCurrent: true` (per
+        `Chunk`) are the version-lifecycle axis's baseline properties
+        (`document-ingestion2.md` §3.1/§4 Stage A) — every document needs
+        them regardless of whether anything ever supersedes it; a later stage
+        flips them, this stage only ever seeds them `true`.
         """
         res = self._graph(ws).query(
             "OPTIONAL MATCH (u:User  {userId:  $ingestedBy}) "
@@ -1037,12 +1043,14 @@ class Repository:
             "    documentId: $documentId, title: $title, text: $text, "
             "    sourceFormat: $sourceFormat, "
             "    sourceKind: CASE WHEN u IS NOT NULL THEN 'document' ELSE 'agent' END, "
-            "    status: 'processing', pendingJobs: 0, createdAt: $createdAt"
+            "    status: 'processing', pendingJobs: 0, createdAt: $createdAt, "
+            "    currentVersion: true"
             "  }) "
             "  CREATE (d)-[:INGESTED_BY]->(ingestor) "
             "  FOREACH (ch IN $chunks | "
             "    CREATE (d)-[:HAS_CHUNK]->(:Chunk {"
-            "      chunkId: ch.chunkId, text: ch.text, seq: ch.seq, documentId: $documentId"
+            "      chunkId: ch.chunkId, text: ch.text, seq: ch.seq, documentId: $documentId, "
+            "      documentCurrent: true"
             "    })"
             "  )"
             ") "
@@ -1233,6 +1241,119 @@ class Repository:
             {
                 "chunkId": row[0], "text": row[1], "documentId": row[2],
                 "seq": row[3], "score": row[4],
+            }
+            for row in res.result_set
+        ]
+
+    # ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ─────────────
+
+    def delete_document(
+        self, ws: str, *, document_id: str, deleted_by: str, deleted_at: int,
+    ) -> bool:
+        """Hard-delete a `Document` + its `Chunk`s, one atomic write, with an
+        audit trail (FR-4/FR-8, plan §3.5). **Live-verified single-query
+        shape** (`graph-dba`, plan §0/§3.5) — capture `documentId` into a
+        plain scalar via `WITH` *before* the delete (nothing can reference
+        the node afterward), collect+`FOREACH`-delete the chunks, `DETACH
+        DELETE` the `Document`, then `CREATE` the audit node off the captured
+        scalar. One `GRAPH.QUERY`, one round trip.
+
+        Structurally leaves `Entity`/`RELATES_TO` completely untouched
+        (§3.6) — only `Chunk`->`ABOUT`->`Entity` edges disappear, and only
+        because they hang off the deleted `Chunk`s themselves, not because of
+        any policy decision at this level.
+
+        Returns True if a `Document` matched (and was deleted + audited),
+        False if `document_id` was already absent — a true no-op, no audit
+        node written (mirrors `recheck_match`'s "the initial anchor missing
+        makes everything downstream vacuous" shape: the leading `MATCH`
+        yields zero rows, so the trailing `CREATE` never fires either).
+        """
+        res = self._graph(ws).query(
+            "MATCH (d:Document {documentId: $documentId}) "
+            "WITH d, d.documentId AS did "
+            "OPTIONAL MATCH (d)-[:HAS_CHUNK]->(c:Chunk) "
+            "WITH d, did, collect(c) AS chunks "
+            "FOREACH (ch IN chunks | DETACH DELETE ch) "
+            "DETACH DELETE d "
+            "CREATE (:DocumentDeletion {"
+            "  documentId: did, deletedBy: $deletedBy, deletedAt: $deletedAt"
+            "}) "
+            "RETURN did AS documentId",
+            {
+                "documentId": document_id, "deletedBy": deleted_by,
+                "deletedAt": deleted_at,
+            },
+        )
+        return bool(res.result_set)
+
+    def get_document_deletion(
+        self, ws: str, *, document_id: str
+    ) -> dict[str, Any] | None:
+        """FR-8/AC-8 — the audit record for a hard-deleted document (§3.5).
+
+        Keyed by the (now-gone) `documentId` *value*, not a graph reference —
+        nothing can point at a node `delete_document` already `DETACH
+        DELETE`d. Returns `None` if `document_id` was never deleted (this
+        call cannot and does not need to distinguish "still exists" from
+        "never existed" — both are equally "no deletion record").
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (dd:DocumentDeletion {documentId: $documentId}) "
+            "RETURN dd.documentId AS documentId, dd.deletedBy AS deletedBy, "
+            "dd.deletedAt AS deletedAt",
+            {"documentId": document_id},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"documentId": row[0], "deletedBy": row[1], "deletedAt": row[2]}
+
+    def list_documents(
+        self, ws: str, *, current_only: bool = True, limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """§3.7 supporting capability — document summaries, oldest first,
+        mirrors `list_matches`'s `ORDER BY createdAt`/`LIMIT` shape.
+
+        **Two separate query strings, not a null-guarded `WHERE`** for the
+        `current_only` toggle — the same live-verified, index-preserving
+        idiom `list_matches` already uses for `status` (a `$currentOnly IS
+        NULL OR d.currentVersion = true`-style guard silently drops the
+        `Document.currentVersion` index even when the parameter is bound).
+        """
+        if current_only:
+            res = self._graph(ws).ro_query(
+                "MATCH (d:Document {currentVersion: true}) "
+                "OPTIONAL MATCH (d)-[:INGESTED_BY]->(actor) "
+                "RETURN d.documentId AS documentId, d.title AS title, "
+                "d.sourceFormat AS sourceFormat, d.sourceKind AS sourceKind, "
+                "d.status AS status, d.currentVersion AS currentVersion, "
+                "d.createdAt AS createdAt, "
+                "labels(actor)[0] AS ingestedByKind, "
+                "coalesce(actor.userId, actor.agentId) AS ingestedById "
+                "ORDER BY d.createdAt "
+                "LIMIT $limit",
+                {"limit": limit},
+            )
+        else:
+            res = self._graph(ws).ro_query(
+                "MATCH (d:Document) "
+                "OPTIONAL MATCH (d)-[:INGESTED_BY]->(actor) "
+                "RETURN d.documentId AS documentId, d.title AS title, "
+                "d.sourceFormat AS sourceFormat, d.sourceKind AS sourceKind, "
+                "d.status AS status, d.currentVersion AS currentVersion, "
+                "d.createdAt AS createdAt, "
+                "labels(actor)[0] AS ingestedByKind, "
+                "coalesce(actor.userId, actor.agentId) AS ingestedById "
+                "ORDER BY d.createdAt "
+                "LIMIT $limit",
+                {"limit": limit},
+            )
+        return [
+            {
+                "documentId": row[0], "title": row[1], "sourceFormat": row[2],
+                "sourceKind": row[3], "status": row[4], "currentVersion": row[5],
+                "createdAt": row[6], "ingestedByKind": row[7], "ingestedById": row[8],
             }
             for row in res.result_set
         ]

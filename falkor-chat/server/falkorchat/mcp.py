@@ -362,6 +362,38 @@ def search_documents(query: str, limit: int = 20) -> list[dict[str, Any]]:
     return _svc().search_documents(ctx, query=query, limit=limit)
 
 
+# ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ────────────
+
+
+@mcp.tool()
+def delete_document(document_id: str) -> dict[str, Any]:
+    """Hard-delete a document (FR-4) — explicit id only, never automatic.
+    Its chunks are gone too (`get_document` on this id then returns `None`);
+    the deletion itself stays auditable via `get_document_deletion`. Errors
+    if `document_id` is unknown or already deleted."""
+    ctx = _get_context()
+    return _svc().delete_document(ctx, document_id=document_id)
+
+
+@mcp.tool()
+def list_documents(
+    current_only: bool = True, limit: int = 50
+) -> list[dict[str, Any]]:
+    """List ingested documents, oldest first (§3.7's discoverability surface
+    for FR-4/FR-5/FR-8). `current_only=True` (default) excludes superseded
+    versions — inert in this stage, since nothing supersedes anything yet."""
+    ctx = _get_context()
+    return _svc().list_documents(ctx, current_only=current_only, limit=limit)
+
+
+@mcp.tool()
+def get_document_deletion(document_id: str) -> dict[str, Any] | None:
+    """FR-8 — the audit record for a hard-deleted document (`deletedBy`,
+    `deletedAt`), or `None` if `document_id` was never deleted."""
+    ctx = _get_context()
+    return _svc().get_document_deletion(ctx, document_id=document_id)
+
+
 # ── §14.6 Entity fusion review surface (K-050 M5 Stage 4, FR-10/OQ-2) ────────
 
 

@@ -224,6 +224,15 @@ class MatchNotFoundError(ServiceError):
     """
 
 
+class DocumentNotFoundError(ServiceError):
+    """Raised when `delete_document` is given a `document_id` with no
+    matching `Document` (document-ingestion2 plan §3.5/§4 Stage A, FR-4).
+
+    Mirrors `MatchNotFoundError`'s shape/posture exactly — an explicit-id
+    lookup/action that found nothing maps to 404, not a silent no-op.
+    """
+
+
 class EmptyDocumentError(ServiceError):
     """Raised when `ingest_document`'s text is empty or whitespace-only.
 
@@ -1253,6 +1262,36 @@ class Services:
         q_vec = embedder.embed(query)
         return self._repo.search_chunks(
             ctx.ws, q_vec=q_vec, k=limit, limit=limit, timeout=RAG_QUERY_TIMEOUT_MS,
+        )
+
+    # ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ─────────────
+
+    def delete_document(self, ctx: CallContext, *, document_id: str) -> dict[str, Any]:
+        """FR-4 — real hard delete, explicit-id only (plan §3.5). Raises
+        `DocumentNotFoundError` when nothing matched (unknown id, or already
+        deleted) — mirrors `MatchNotFoundError`'s existing 404 posture."""
+        deleted = self._repo.delete_document(
+            ctx.ws, document_id=document_id, deleted_by=ctx.actor,
+            deleted_at=self._clock(),
+        )
+        if not deleted:
+            raise DocumentNotFoundError(document_id)
+        return {"documentId": document_id, "deleted": True}
+
+    def get_document_deletion(
+        self, ctx: CallContext, *, document_id: str
+    ) -> dict[str, Any] | None:
+        """FR-8 — the audit record for a hard-deleted document. Returns
+        `None` if `document_id` was never deleted (cannot and does not need
+        to distinguish "still exists" from "never existed")."""
+        return self._repo.get_document_deletion(ctx.ws, document_id=document_id)
+
+    def list_documents(
+        self, ctx: CallContext, *, current_only: bool = True, limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """§3.7 supporting capability — document summaries, thin passthrough."""
+        return self._repo.list_documents(
+            ctx.ws, current_only=current_only, limit=limit
         )
 
     # ── §14.6 Entity fusion — SAME_AS review surface (K-050 M5 Stage 4) ──────────

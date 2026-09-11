@@ -1633,6 +1633,45 @@ assert_contains "§17.1 still exactly one Customer node after partial update #2"
 # cleanup this section's fixture
 gq "$WS" "MATCH (n:Customer) DETACH DELETE n" > /dev/null
 
+# ── §14.7 delete_document (document-ingestion2 Stage A, FR-4/FR-8) ───────────
+
+echo ""
+echo "▶ §14.7 delete_document (document-ingestion2 Stage A)"
+
+# Seed one Document + Chunk directly (raw writes — repository.create_document's
+# own §14.1 write path has no test_queries.sh harness yet; only the delete
+# query itself is Stage A's scope here). currentVersion/documentCurrent are
+# Stage A's baseline properties (repository.py create_document, plan §4).
+gq "$WS" "CREATE (d:Document {documentId:'doc1', title:'t', text:'hello', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:true})-[:HAS_CHUNK]->(:Chunk {chunkId:'ck1', text:'hello', seq:0, documentId:'doc1', documentCurrent:true})" > /dev/null
+
+# graph-dba's live-verified single-query delete shape (document-ingestion2.md
+# §3.5) — capture documentId into a scalar via WITH before the delete (nothing
+# can reference the node afterward), collect+FOREACH-delete the chunks, DETACH
+# DELETE the Document, then CREATE the DocumentDeletion audit node.
+DELETE_DOCUMENT='MATCH (d:Document {documentId: $documentId}) WITH d, d.documentId AS did OPTIONAL MATCH (d)-[:HAS_CHUNK]->(c:Chunk) WITH d, did, collect(c) AS chunks FOREACH (ch IN chunks | DETACH DELETE ch) DETACH DELETE d CREATE (:DocumentDeletion {documentId: did, deletedBy: $deletedBy, deletedAt: $deletedAt}) RETURN did AS documentId'
+
+out=$(gq "$WS" "CYPHER documentId='doc1' deletedBy='du1' deletedAt=500 $DELETE_DOCUMENT")
+assert_contains "§14.7 delete_document returns the deleted documentId" "doc1" "$out"
+
+out=$(rq "$WS" "MATCH (d:Document {documentId:'doc1'}) RETURN count(d)")
+assert_contains "§14.7 Document node is gone" "0" "$out"
+
+out=$(rq "$WS" "MATCH (c:Chunk {chunkId:'ck1'}) RETURN count(c)")
+assert_contains "§14.7 Chunk node is gone too (FOREACH-collected delete)" "0" "$out"
+
+out=$(rq "$WS" "MATCH (dd:DocumentDeletion {documentId:'doc1'}) RETURN dd.documentId, dd.deletedBy, dd.deletedAt")
+assert_contains "§14.7 DocumentDeletion audit node recorded (deletedBy)" "du1" "$out"
+assert_contains "§14.7 DocumentDeletion audit node recorded (deletedAt)" "500" "$out"
+
+# Re-running delete_document against the now-gone documentId is a true no-op —
+# the leading MATCH yields zero rows, so the trailing CREATE never fires either
+# (no second DocumentDeletion node, no error).
+out=$(gq "$WS" "CYPHER documentId='doc1' deletedBy='du1' deletedAt=999 $DELETE_DOCUMENT")
+assert_no_data_row "§14.7 delete_document is a no-op for an already-deleted id" "documentId" "$out"
+
+out=$(rq "$WS" "MATCH (dd:DocumentDeletion {documentId:'doc1'}) RETURN count(dd)")
+assert_contains "§14.7 exactly one DocumentDeletion node after a repeat delete attempt" "1" "$out"
+
 # ── teardown ─────────────────────────────────────────────────────────────────
 
 echo ""

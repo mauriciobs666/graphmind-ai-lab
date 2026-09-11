@@ -39,6 +39,7 @@ from .repository import Repository
 from .services import (
     DEFAULT_SWEEP_LIMIT,
     ChannelNotFoundError,
+    DocumentNotFoundError,
     MatchNotFoundError,
     SearchNotAvailableError,
     ServiceError,
@@ -83,7 +84,11 @@ def _register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ServiceError)
     async def _handle_service_error(_request, exc: ServiceError):  # noqa: ANN001
         not_found = isinstance(
-            exc, (ChannelNotFoundError, ThreadNotFoundError, MatchNotFoundError)
+            exc,
+            (
+                ChannelNotFoundError, ThreadNotFoundError, MatchNotFoundError,
+                DocumentNotFoundError,
+            ),
         )
         return JSONResponse(
             status_code=404 if not_found else 400,

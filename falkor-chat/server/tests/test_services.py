@@ -31,6 +31,7 @@ from falkorchat.services import (
     RESERVED_CTX_KEYS,
     BatchTooLargeError,
     ChannelNotFoundError,
+    DocumentNotFoundError,
     DocumentTooLargeError,
     EmptyDocumentError,
     InvalidSearchQueryError,
@@ -101,6 +102,7 @@ class FakeRepo:
         self.participants: dict[str, list[dict]] = {}  # threadId -> raw participant rows
         self.post_success_result = _UNSET  # override to script read_recent_post_success (§12.15)
         self.documents: dict[str, dict] = {}  # documentId -> created_document (K-050)
+        self.deletions: dict[str, dict] = {}  # documentId -> deletion audit record
         # `hybrid_search`/`search_chunks` return `since_rows` by default (back-
         # compat with pre-Stage-5 tests exercising just one of the two pools);
         # set either explicitly to drive `services.hybrid_search`'s merge with
@@ -260,6 +262,32 @@ class FakeRepo:
     def search_chunks(self, ws, *, q_vec, k, limit, timeout=None):
         self.calls.append(("search_chunks", ws, tuple(q_vec), k, limit, timeout))
         return self.since_rows if self.chunk_rows is None else self.chunk_rows
+
+    # ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ─────────────
+
+    def delete_document(self, ws, *, document_id, deleted_by, deleted_at):
+        self.calls.append(("delete_document", ws, document_id, deleted_by, deleted_at))
+        if document_id not in self.documents:
+            return False
+        del self.documents[document_id]
+        self.deletions[document_id] = {
+            "documentId": document_id, "deletedBy": deleted_by,
+            "deletedAt": deleted_at,
+        }
+        return True
+
+    def get_document_deletion(self, ws, *, document_id):
+        self.calls.append(("get_document_deletion", ws, document_id))
+        return self.deletions.get(document_id)
+
+    def list_documents(self, ws, *, current_only=True, limit=50):
+        self.calls.append(("list_documents", ws, current_only, limit))
+        rows = [
+            {k: v for k, v in doc.items() if k != "chunks"}
+            for doc in self.documents.values()
+            if not current_only or doc.get("currentVersion", True)
+        ]
+        return rows[:limit]
 
     # ── §14.6 Entity fusion — SAME_AS (K-050 M5 Stage 4) ──────────────────────────
     # matchId -> {"status", "entityA", "entityB", ...} — seed via `self.matches`
@@ -1085,6 +1113,87 @@ def test_search_documents_raises_when_no_models_wired():
         svc.search_documents(CTX, query="hello")
 
     assert repo.calls == []  # never reaches search_chunks
+
+
+# ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ────────────────
+
+
+def _seed_service_document(repo, *, document_id="d1", current_version=True):
+    repo.documents[document_id] = {
+        "documentId": document_id, "title": "t", "text": "x",
+        "sourceFormat": "text", "sourceKind": "document", "status": "ready",
+        "createdAt": 100, "ingestedByKind": "User", "ingestedById": "u1",
+        "currentVersion": current_version, "chunks": [],
+    }
+
+
+def test_delete_document_stamps_the_calling_actor_and_clock():
+    repo = FakeRepo()
+    _seed_service_document(repo, document_id="d1")
+    svc = make_service(repo, now=555)
+
+    result = svc.delete_document(CTX, document_id="d1")
+
+    assert result == {"documentId": "d1", "deleted": True}
+    assert repo.calls[-1] == ("delete_document", "test", "d1", CTX.actor, 555)
+
+
+def test_delete_document_raises_not_found_for_an_unknown_document_id():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    with pytest.raises(DocumentNotFoundError):
+        svc.delete_document(CTX, document_id="nope")
+
+
+def test_get_document_deletion_passes_through_the_audit_record():
+    repo = FakeRepo()
+    _seed_service_document(repo, document_id="d1")
+    svc = make_service(repo, now=555)
+    svc.delete_document(CTX, document_id="d1")
+
+    deletion = svc.get_document_deletion(CTX, document_id="d1")
+
+    assert deletion == {"documentId": "d1", "deletedBy": CTX.actor, "deletedAt": 555}
+
+
+def test_get_document_deletion_none_when_never_deleted():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    assert svc.get_document_deletion(CTX, document_id="d1") is None
+
+
+def test_list_documents_passes_current_only_and_limit_through():
+    repo = FakeRepo()
+    _seed_service_document(repo, document_id="d1", current_version=True)
+    _seed_service_document(repo, document_id="d2", current_version=False)
+    svc = make_service(repo)
+
+    rows = svc.list_documents(CTX, current_only=True, limit=25)
+
+    assert [r["documentId"] for r in rows] == ["d1"]
+    assert repo.calls[-1] == ("list_documents", "test", True, 25)
+
+
+def test_list_documents_defaults_current_only_true_and_limit_50():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    svc.list_documents(CTX)
+
+    assert repo.calls[-1] == ("list_documents", "test", True, 50)
+
+
+def test_list_documents_current_only_false_includes_every_document():
+    repo = FakeRepo()
+    _seed_service_document(repo, document_id="d1", current_version=True)
+    _seed_service_document(repo, document_id="d2", current_version=False)
+    svc = make_service(repo)
+
+    rows = svc.list_documents(CTX, current_only=False)
+
+    assert {r["documentId"] for r in rows} == {"d1", "d2"}
 
 
 # ── §14.6 Entity fusion — SAME_AS review surface (K-050 M5 Stage 4) ─────────────
