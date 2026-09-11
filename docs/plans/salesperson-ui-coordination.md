@@ -14,7 +14,7 @@ standalone `salesperson/` Streamlit app.
 (root `AGENTS.md`, component READMEs, `HISTORY.md`, a `tico` user manual) reflects the delivered
 surface.
 
-## RESUME HERE — state as of 2026-09-10, S9c in flight
+## RESUME HERE — state as of 2026-09-11, Pass 25 in flight on S9c
 
 **Read this section first. It is the entry point; the ledger below is the state of record.**
 Reconcile it against `git log` and `git status` before acting — if they disagree, they win.
@@ -31,11 +31,30 @@ through either.
 suggestions, both follow-ups taken and independently re-verified). Full arc including a rate-limit
 kill/resume cycle is in its ledger row.
 
-**In flight as of 2026-09-10: S9c** (`coder`, `a55c29ae54289d9dd`) — the dead-turn latch
-`turn.lastTurn` and its lifecycle. Serialized behind S9b on `storefront.py`; S9d/S9e remain queued
-behind S9c. Brief carried the plan's own prescribed mutation test (store the latch in the `_turns`
-entry instead of a separate map, confirm the idle-survival test reddens) and Pass 20's standing
-instruction to clear the latch in `enqueue_turn`, never `reserve_turn`.
+**S9c delivered, teco-verified, gate in flight.** `coder` (`a55c29ae54289d9dd`) built the latch as
+a separate per-participant map (`Storefront._last_turn_failed`), never a `_turns`/`TurnState`
+field; cleared in `enqueue_turn` only, never `reserve_turn`; cleared on both reset paths
+(`clear_all_turns()` for everyone, `reset_participant`'s success path for one). It found and fixed
+a real race itself: clearing *after* a successful `submit()` (still inside `enqueue_turn`) could
+race the worker's own failure-mark and silently erase a just-earned notice — 8/200 in its own
+repro — fixed by moving the clear to strictly before `submit()`, reran 0/200. Three mandated
+mutations reported, each restored by copy.
+
+**teco independently verified before gating, not taken on report**: compiled clean, no
+mutation/TODO residue; full suite re-run live — **2653 passed, 14 deselected** (matches the
+report's before/after exactly, 2648→2653); read the actual call sites for the clear-placement fix
+rather than trusting the docstring account of it; and **independently re-authored the
+clear-placement mutation** (moved the clear into `reserve_turn`'s success path, own phrasing, not
+copied from the delegate's) — it reddened both the lifecycle test and its narrower companion,
+restored byte-identical (`md5sum` unchanged). `HISTORY.md`'s stated figures (200/8 race repro,
+2648/2653 suite counts) all reproduce from what I actually ran, not fabricated.
+
+Dispatched **Pass 25** (`analyst`, `a22da77c5ce8adf0d`) to gate the diff — briefed on all four of
+the above load-bearing claims plus the exact-dict payload assertion sweep (18 sites) and this
+coordination's recurring "correct reasoning, unverified mechanism" defect class, named explicitly
+so the reviewer checks the race-fix's actual call order rather than its docstring's account of it.
+Nothing committed yet — the diff is still uncommitted in the working tree, pending Pass 25's
+verdict. S9d/S9e remain queued behind S9c.
 
 **U64's blocker cleared.** The other session's U28 landed and then some: `48882d8` → `682fbed` →
 `4df5e45` → `00bebdc`, gated at `docs/reviews/rq-execution-gate.md` Passes 1-3. `skills/**` is
@@ -526,7 +545,7 @@ citation. Trimming that citation is a one-line edit if preferred.
 | **U52** — P20-2: three delivered documents state the inverse of measured behaviour about `turn_workers` and `queuePosition`. Prose-only; **measure before writing**, because this sentence position has now been wrong twice | `coder` | `a9d876aa92c41d005` | **delivered — content committed, attribution lost.** Landed inside the concurrent session's `f9d23fb`, which swept my staged index; my own commit found nothing to make. Content verified byte-identical to what I reviewed (`git diff HEAD` clean). **Numbers re-measured by me, not taken on report** — 3 / 2 / 0 at `turn_workers` 1 / 2 / 4, real-executor arm agreeing with the staged-map arm; `config.py` verified comment-only | `SERVER.md`, `config.py`, `HISTORY.md` | `analyst` Pass 21 | 98k tok / 34 tools |
 | **S9f** — `STOREFRONT_QUIESCE_S`'s docs describe a quiesce that S9a made live | `tico`/`coder` (tbd) | — | queued (held behind Pass 17) | `config.py` + `docs/SERVER.md` prose | `analyst` (fold into Pass 17 re-check) | — |
 | **S9b** — cancellation of a *queued* turn, in front of `_await_quiesce` | `coder` (**fresh**) | `a44bf8a80492995ea` | **delivered, gated. Resumed cleanly after the platform kill — the helper it was mid-edit on was consistent on disk.** Killed by a session rate limit mid-way through a test-helper edit ("update the helper to return the 5-tuple with a pre-set `later_gate`"), **not by anything in its own run** — the completion notification's `<result>` was a stale mid-task line, not an answer. teco verified before waking it: `storefront.py`/`storefront_api.py`/`test_storefront.py` compile clean, `_cancel_queued_turn` exists (`:1377`) and is wired into `reset_participant` (`:1543`), no mutation/TODO residue in source, **6 tests already on disk**. Resumed by `SendMessage`, not respawned — told to re-orient from the file, not from memory, since a helper mid-signature-change can compile while inconsistent. **Two unrelated files also dirty in the tree** (`falkor-chat/docs/requirements/document-ingestion{,2}.md`) — a concurrent `tico` session, confirmed **not S9b's** by mtime (written 1 minute before the kill notification) and left untouched | `storefront.py`, `storefront_api.py`, tests, `HISTORY.md`, `SERVER.md` §1.3 if reached | `analyst` Pass 24 (`adfa8b614cfb3f1bd`) → **approve with suggestions** (1 minor, 1 nit). **Three forced interleavings executed, not reasoned**: concurrent double-cancel, `clear_all_turns()` mid-cancel, a stale attach across two intervening bookings — all held. M6 confirmed genuinely inert by running the real suite against a mutated copy (104/104). **P24-1: the `HISTORY.md` tally is short one mutant** — teco independently traced it to the exact gap (M8 "reset never calls cancel" missing from the write-up entirely, from the delivery's own 9-row table, not the review's reconstruction) and sent it back for a fix. P24-2 (nit) left to the implementer's judgment. **Both taken**: HISTORY.md's tally now includes M8 and reproduces its own arithmetic; the docstring clause rewritten to distinguish by kind rather than blanket "does not reach." **Accepted — committed `11b1753`** (S9b) **and `cab0487`** (Pass 24) | 428k tok / 106 tools (across all legs) | **teco independently re-mutated the ordering inversion** (own clear-then-cancel variant, not the implementer's phrasing) and it reddened the same test the implementer's did; file restored byte-identical. **Found `reference` graph empty at 0 nodes** contrary to the delivered report — re-seeded via the project's own `seed_{catalog,workflows,salesperson}.sh` (additive, idempotent, not this coordination's to withhold) and all three `verify_*.sh` confirm `OK`, 34 nodes.
-| **S9c** — the dead-turn latch `turn.lastTurn` and its lifecycle | `coder` | `a55c29ae54289d9dd` | in-flight | `storefront.py`, `storefront_api.py`, tests | `analyst` | — |
+| **S9c** — the dead-turn latch `turn.lastTurn` and its lifecycle | `coder` | `a55c29ae54289d9dd` | gated | `storefront.py`, tests, `HISTORY.md`, `SERVER.md` (uncommitted, pending gate) | `analyst` Pass 25 (`a22da77c5ce8adf0d`) → — | 266k tok / 145 tools |
 | **S9d** — remove the per-participant record cache whole | `coder` | — | queued (behind S9c) | `storefront.py`, tests | `analyst` | — |
 | **S9e** — the three `INHERITED_HANDLERS` reason strings + armed-fault measurements | `coder` | — | queued (behind S9d) | `storefront_api.py`, tests | `analyst` | — |
 | **U30** — P14-3: settle the plan/code exception-name mismatch and the falsifiability **mapping** | `architect` (**fresh**) | `af0b1eb6551aa85e9` | **accepted — committed `a3f681e`** (3/2, one file). **Ruled the plan wrong and the code right** — `services.py:2085`'s `WorkflowRunNotFoundError` is a *workspace snapshot/trigger-anchor* miss, already documented in `start_workflow_run`'s own docstring, while `WorkflowDefNotFoundError` is a *`reference`-graph* condition whose three raise sites are unreachable from the S9 path. Two conditions, only one reachable; the row named the reachable one with the unreachable one's class. **No code change implied.** Introduced the **two-gate** framing (does the method enter the walked set / is the raise in its own body or one call further in) that the plan had collapsed | `docs/plans/salesperson-ui.md` **v1.24** | teco-verified | 107k tok / 44 tools |
