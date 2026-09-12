@@ -13,6 +13,7 @@ chain hands off to `teco`.
 | Requirements interview | `tico` | — (interactive) | accepted | `opencode/docs/requirements/devops-opencode-headless.md` | — | — |
 | Implementation plan | `architect` | `ad6b25b909e4bf140` | revised, ready for review | `opencode/docs/plans/devops-opencode-headless.md` | `security-expert` review dispatched | 371,583 tokens · 101 tool uses · ~65.7 min |
 | Security review | `security-expert` | `ace5d715ef79ccdb0` | gated | `opencode/docs/reviews/devops-opencode-headless.md` | verdict: **needs changes** (1 blocker, 2 major, 2 minor) | 139,607 tokens · 37 tool uses · ~18 min |
+| Plan revision 2 (blocker fix) | `architect` | `ad6b25b909e4bf140` | dispatched | `opencode/docs/plans/devops-opencode-headless.md` | re-review by `security-expert` pending | — |
 
 ## Notes
 
@@ -52,3 +53,8 @@ chain hands off to `teco`.
   generic-any-environment carve-out at all, vs. starting narrower (a hardcoded single-stack
   allow-list)? Routing to stakeholder before dispatching architect for a revision, since this
   affects design approach and possibly scope, not just a tightened regex.
+- **2026-09-12 — Stakeholder decision: fix it properly, stay generic.** Adopt the reviewer's
+  design-level fix (wrapper script builds the entire `docker compose ... {up|down}` argv itself
+  from a pre-validated slug/allow-list; no model-authored string ever reaches the permission glob)
+  rather than narrowing scope to a single hardcoded environment. `tank` stays able to target any
+  compose environment. Dispatching `architect` for a second plan revision.
