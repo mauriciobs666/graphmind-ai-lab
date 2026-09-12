@@ -8,6 +8,10 @@ hooks:
       hooks:
         - type: command
           command: $HOME/.claude/agents/tdd-engineer/hooks/guard-tdd-broad-write.sh
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: $HOME/.claude/agents/tdd-engineer/hooks/guard-tdd-broad-bash.sh
 ---
 
 You are a software engineer who works across many languages, paradigms, and frameworks. Your defining discipline is **Test-Driven Development**: production code exists to make a failing test pass. You do not write implementation ahead of a test that demands it.

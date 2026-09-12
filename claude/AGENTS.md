@@ -62,7 +62,7 @@ approval every time) ·
 
 ## Hook machinery
 
-**Four shared cores**, all under `scripts/`, all thin-wrapped per agent via frontmatter
+**Five shared cores**, all under `scripts/`, all thin-wrapped per agent via frontmatter
 `hooks:` → `$HOME/.claude/agents/<name>/hooks/<script>.sh` (resolves through the deployment
 symlink):
 
@@ -93,14 +93,31 @@ symlink):
   folder/kind to allowlist. Allow everything except a small set of paths KNOWN to belong to a
   *different* specialist's documented deliverable-path convention (every other agent's doc kind,
   `claude/`/`skills/`-rooted agent-standards paths, and `docs/BACKLOG.md` — the last one
-  deliberately kept escalating rather than resolved either way). One wrapper today:
-  `tdd-engineer/hooks/guard-tdd-broad-write.sh`.
+  deliberately kept escalating rather than resolved either way). Two wrappers today:
+  `tdd-engineer/hooks/guard-tdd-broad-write.sh` and `coder/hooks/guard-coder-broad-write.sh`
+  (added 2026-08-28), deny-lists kept in lockstep between the two.
+- **`scripts/guard-broad-bash.sh`** (added 2026-09-11) — the Bash counterpart to
+  `guard-broad-write.sh`, for the same two broad-implementer agents. Closes a gap the Write/Edit
+  guard alone didn't: `permissionMode: acceptEdits` auto-approves in-working-directory file edits
+  but has no effect on Bash, so a hook-free Bash call still hits the plain confirm prompt on every
+  invocation — moving the friction from Write/Edit onto Bash rather than removing it (observed
+  live, 2026-09-11). Rather than duplicating `guard-destructive-ops.sh`'s destructive-command
+  catalog, this core pipes the same stdin JSON through that script (same `<agent-name>` arg) and
+  relays its `"ask"` decision on a match; when it stays silent (no destructive pattern matched),
+  this core emits an explicit `"allow"` instead of leaving the command to whatever ambient
+  permission mode governs. Two wrappers: `tdd-engineer/hooks/guard-tdd-broad-bash.sh` and
+  `coder/hooks/guard-coder-broad-bash.sh`. Same caveat as the Write/Edit guard: this only closes
+  the friction for a session not governed by the auto-mode classifier — a Task/`Agent`-delegated
+  subagent's Bash call is reviewed by that classifier independently of this hook's decision, the
+  same settled, permanent limitation `guard-broad-write.sh` already carries (root-caused
+  2026-08-24, `skills/agent-standards/claude-code.md`) — not something this guard can fix.
 - **`scripts/guard-destructive-ops.sh`** — thin-wrapped by the three destructive-ops guards
   (`devops`, `graph-dba`, `qa-engineer`; each passes its agent name; the core matches Bash command
   patterns — `GRAPH.DELETE`, `FLUSHALL`/`FLUSHDB`, volume wipes, `docker rm -f`, and
   `pipeline.sh ... --reset` — a wrapper invocation matched ad hoc because the
   script runs `GRAPH.DELETE` internally, where the literal string never reaches the guard — not
-  write paths). Unlike the two cores above it is **`ask`-only, with no allow branch**.
+  write paths). Unlike the three cores above it is **`ask`-only, with no allow branch** — it's
+  `guard-broad-bash.sh` that adds the allow branch on top of it for `tdd-engineer`/`coder`.
 - **`scripts/guard-agent-dispatch.sh`** — thin-wrapped by two `Agent|Task` dispatch guards
   (`teco`, `tico`; each passes its agent name) that escalate any `Agent` dispatch missing
   `subagent_type` — an omitted field silently spawns a `general-purpose` delegate with none of
@@ -131,7 +148,10 @@ exploitation-shaped agent is ever added (`security-expert/kaizen/plan.md` K-003)
 carries two: its `Bash` destructive-ops guard alongside the `Write|Edit` doc-write guard above.
 `teco` and `tico` each also carry two: alongside their `Write|Edit` wrapper, an `Agent|Task`
 dispatch guard (`teco/hooks/guard-agent-dispatch.sh`, `tico/hooks/guard-tico-agent-dispatch.sh`)
-thin-wrapping the shared `scripts/guard-agent-dispatch.sh` core described above.
+thin-wrapping the shared `scripts/guard-agent-dispatch.sh` core described above. `tdd-engineer`
+and `coder` also carry two each (since 2026-09-11): their `Write|Edit` `guard-broad-write.sh`
+wrapper, alongside a `Bash` `guard-broad-bash.sh` wrapper closing the gap where `acceptEdits`
+covers file edits but not Bash.
 
 **Git-commit authority is prompt-level, not hook-enforced.** No `PreToolUse` hook matches `git
 commit` (the destructive-ops guards match Bash command patterns like `GRAPH.DELETE`, not

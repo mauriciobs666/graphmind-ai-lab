@@ -2,6 +2,25 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-09-11 — Added a `Bash` guard (`guard-tdd-broad-bash.sh`) — closes the Bash confirmation gap `acceptEdits` never covered
+
+- **What:** `cobb` added a second `PreToolUse` hook to `tdd-engineer.md` (`matcher: Bash`,
+  alongside the existing `Write|Edit` guard): `tdd-engineer/hooks/guard-tdd-broad-bash.sh`, a thin
+  wrapper over the new shared `claude/scripts/guard-broad-bash.sh` core. `permissionMode:
+  acceptEdits` auto-approves file edits but has no effect on Bash, so every test-run command still
+  hit the plain confirm prompt even after the Write/Edit guard shipped (2026-08-21) — user-reported
+  live 2026-09-11 ("i tried accept edits but then any command ask so we just moved the problem
+  around"), and the red-green-refactor loop's own rhythm (a test run after nearly every step) makes
+  this compound worse here than for most other agents. The new guard reuses
+  `guard-destructive-ops.sh`'s own destructive-pattern matching (piping the same stdin through it)
+  rather than duplicating the catalog: a genuinely destructive/shared-state command still escalates
+  to `ask`, everything else gets an explicit `allow`.
+- **Why:** Direct user-reported friction; closes a real gap in this agent's own hook wiring, not
+  the settled Task/`Agent`-delegation classifier limitation (that one is unaffected by this fix and
+  remains permanent). Full design/verification detail in `claude/cobb/kaizen/history.md`,
+  2026-09-11.
+- **Plan items:** —
+
 ## 2026-09-10 — U54: 7-entry inbox drained, all re-derived and promoted, none discarded outright
 
 `claude/docs/plans/kaizen-distillation2-coordination.md` U54. All 7 entries (2026-09-09/10,

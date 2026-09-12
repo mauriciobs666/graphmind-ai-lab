@@ -36,6 +36,27 @@
 # Same stdin/stdout contract, jq->python3 extraction, and fail-open behavior
 # as guard-doc-writes.sh (contract verified 2026-08-21 against
 # code.claude.com/docs/en/hooks).
+#
+# Tracing (debug only, opt-in): if $GUARD_BROAD_WRITE_TRACE names a file, every
+# invocation appends one line per checkpoint (timestamp, wrapper args, raw
+# stdin, extracted path, matched glob if any, and the final decision emitted)
+# to that file. Unset/empty (the default) → zero tracing overhead, nothing
+# written. Never write elsewhere and never fail the guard's own decision if
+# the trace write fails (e.g. the directory doesn't exist) — tracing is
+# strictly observational. NOTE (from the 2026-08-24 root-cause finding in
+# cobb/kaizen/history.md, promoted to skills/agent-standards/claude-code.md):
+# a subagent-delegated write can still hit a human confirmation prompt AFTER
+# this guard emits "allow" — the auto-mode classifier reviews
+# Task/Agent-delegated tool calls independently of PreToolUse hook output.
+# A trace showing "decision: allow" is proof the guard did its job; it is
+# not proof the human won't still be asked.
+
+trace_file="${GUARD_BROAD_WRITE_TRACE:-}"
+
+_trace() {
+  [ -n "$trace_file" ] || return 0
+  printf '[%s] %s\n' "$(date -Iseconds 2>/dev/null || date)" "$*" >>"$trace_file" 2>/dev/null || true
+}
 
 set -uo pipefail
 set -f
@@ -43,7 +64,10 @@ set -f
 denied_globs="${1:?usage: guard-broad-write.sh '<globs>' '<message template>'}"
 msg_template="${2:?usage: guard-broad-write.sh '<globs>' '<message template>'}"
 
+_trace "invoked; denied_globs=${denied_globs}"
+
 input="$(cat)"
+_trace "stdin: ${input}"
 
 path=""
 if command -v jq >/dev/null 2>&1; then
@@ -53,9 +77,13 @@ elif command -v python3 >/dev/null 2>&1; then
 try: print(json.load(sys.stdin).get("tool_input",{}).get("file_path",""))
 except Exception: pass' 2>/dev/null || true)"
 fi
+_trace "extracted path: ${path:-<empty>}"
 
 # Fail-open: no extractable path, let it through (prompt guardrail backstops).
-[ -z "$path" ] && exit 0
+if [ -z "$path" ]; then
+  _trace "decision: allow (fail-open — no path extracted)"
+  exit 0
+fi
 
 IFS='|'
 for glob in $denied_globs; do
@@ -64,6 +92,7 @@ for glob in $denied_globs; do
       esc_path="$(printf '%s' "$path" | sed 's/\\/\\\\/g; s/"/\\"/g')"
       shopt -u patsub_replacement 2>/dev/null || true
       msg="${msg_template//__PATH__/$esc_path}"
+      _trace "matched glob: ${glob}; decision: ask; message: ${msg}"
       printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"%s"}}\n' "$msg"
       exit 0
       ;;
@@ -71,5 +100,6 @@ for glob in $denied_globs; do
 done
 unset IFS
 
+_trace "decision: allow (in-remit implementer write — no glob matched)"
 printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"in-remit implementer write — auto-approved by guard"}}\n'
 exit 0

@@ -2,6 +2,23 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-09-11 — Added a `Bash` guard (`guard-coder-broad-bash.sh`) — closes the Bash confirmation gap `acceptEdits` never covered
+
+- **What:** `cobb` added a second `PreToolUse` hook to `coder.md` (`matcher: Bash`, alongside the
+  existing `Write|Edit` guard): `coder/hooks/guard-coder-broad-bash.sh`, a thin wrapper over the
+  new shared `claude/scripts/guard-broad-bash.sh` core. `permissionMode: acceptEdits` auto-approves
+  file edits but has no effect on Bash, so every `pytest`/`git`/`npm` call still hit the plain
+  confirm prompt even after the Write/Edit guard shipped (2026-08-28) — user-reported live
+  2026-09-11 ("i tried accept edits but then any command ask so we just moved the problem
+  around"). The new guard reuses `guard-destructive-ops.sh`'s own destructive-pattern matching
+  (piping the same stdin through it) rather than duplicating the catalog: a genuinely destructive/
+  shared-state command still escalates to `ask`, everything else gets an explicit `allow`.
+- **Why:** Direct user-reported friction; closes a real gap in this agent's own hook wiring, not
+  the settled Task/`Agent`-delegation classifier limitation (that one is unaffected by this fix and
+  remains permanent). Full design/verification detail in `claude/cobb/kaizen/history.md`,
+  2026-09-11.
+- **Plan items:** —
+
 ## 2026-09-10 — `kaizen_team` distillation pass 2, unit U53 (`coder`'s second, fresh 1-entry chunk): 1 promoted, 0 discarded, 0 kept open — cleared, **folded into `coder.md` itself**
 
 - **What:** `cobb` ran `agent-maintenance` §5 over `coder`'s one fresh `PRODUCED` entry
