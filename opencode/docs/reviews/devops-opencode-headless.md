@@ -302,3 +302,107 @@ Commands run, target, and result — full detail folded into the BLOCKER finding
 6. Cleaned up: `docker compose down -v` on the in-repo stand-in, `docker volume rm` on the orphaned
    victim volume, `docker ps -a`/`docker volume ls` re-checked clean, all scratch directories
    removed. No residual state left on the host beyond this written report.
+
+## Pass 2 — 2026-09-12
+
+**Re-reviewed:** Version 3 of `opencode/docs/plans/devops-opencode-headless.md` (`architect`'s
+revision responding to Pass 1, chosen over narrowing scope — wrapper scripts +
+`environments.json` allow-list, per the stakeholder's direction).
+
+**Updated verdict: approve with suggestions.** The blocker is fixed architecturally, and I
+independently re-verified the fix **live**, with the same reproduction technique that broke the
+original design, not by re-reading the plan's own mock. Both majors are fixed by construction. No
+new blocker or major found. What's left is two judgment calls (both resolved below, in the plan's
+favor) and two nits that don't change the verdict.
+
+### Disposition of Pass 1 findings
+
+- **BLOCKER (glob-smuggling): fixed, independently re-verified live** — see "New verification this
+  pass" below; the exact original payload now denies, and the redesigned wrapper-script path holds
+  under direct attack.
+- **MAJOR (marker basename collision): fixed.** Confirmed by reading §3.3 — the slug is now
+  `environments.json`'s literal, human-reviewed key, never derived from a path; no runtime
+  collision surface left to test.
+- **MAJOR (no tamper/freshness check): fixed.** Freshness bound + provenance fields added (§3.3);
+  the plan's own framing (a staleness safeguard, not a cryptographic guarantee) is accurate and
+  proportionate to the threat model — a design-logic property, not one needing live reproduction.
+- **MINOR (`up*` more permissive than `down`): fixed.** Both now go through identical
+  wrapper-script fixed-argv construction (confirmed live below); no bare glob asymmetry remains.
+- **MINOR (write:`state/*` traversal, previously unconfirmed): resolved by elimination, verified —
+  see judgment below**, not just taken on trust.
+
+### New verification this pass (live, not inspection-only)
+
+Rebuilt the plan's exact new `permission.bash` table (three tiers: default deny → read-only
+hygiene + the three wrapper-script exact-path allow entries → destructive-catalog +
+repeated-scoping-flag net + metacharacter net) against a disposable fixture repo, plus faithful
+implementations of `compose-up.sh`/`compose-down.sh` matching §3.2/§3.3's described logic
+(argc-must-equal-1, exact-match `environments.json` lookup via key equality, fixed-argv `docker
+compose` construction, plain-file marker I/O) — then drove all of it through the same live
+`opencode debug agent tank --tool bash --params '{"command":"..."}'` technique Pass 1 used (real
+permission classifier, real execution on allow), which is a materially stronger check than the
+plan's own §2.5, whose mock never invoked OpenCode at all. Disposable fixtures only; `docker ps
+-a`/`docker volume ls` diffed before/after every phase; full cleanup afterward; nothing of this
+lab's own touched — same discipline as Pass 1's §5.
+
+1. **The exact Pass-1 blocker payload** (raw `docker compose -f ... --project-directory ... -f
+   ... --project-directory ... down`) — now classifies **deny** (no allow pattern's literal prefix
+   matches a bare `docker compose` invocation any more; falls through the default catch-all).
+   Confirmed.
+2. **The same smuggling shape retargeted at the wrapper script**
+   (`compose-down.sh falkor-chat -f <out-of-repo-file> --project-directory <out-of-repo-dir>`,
+   unquoted, 5 shell tokens) — permission layer correctly **allows** the call (matches the
+   wrapper's exact-path-plus-trailing-`*` pattern, exactly as the plan says it should — "can this
+   script be reached" is *all* the permission table is supposed to decide here), but the script
+   itself refused before touching `docker`: `REFUSED: compose-down.sh takes exactly one
+   argument..., got 5`.
+3. **Quoted single-argument smuggle** (one shell token:
+   `compose-down.sh 'falkor-chat -f <out> --project-directory <out>'`) — allowed at the permission
+   layer, refused by the script's exact-match lookup (`'...' is not a known environment`).
+4. **Path-traversal-shaped slug** (`compose-down.sh ../../../etc/passwd`) — allowed at the
+   permission layer, refused by the script's lookup.
+5. **Chaining appended to a wrapper-script call**
+   (`compose-down.sh falkor-chat; touch /tmp/pwned-marker`) — correctly **denied** at the
+   permission layer by the metacharacter net (`*;*`); confirmed the marker file was never created.
+6. **Full live end-to-end run, beyond what §2.5 did:** brought up the disposable fixture for real
+   via `compose-up.sh` through the OpenCode harness (container came up; marker written, containing
+   no compose-path fields, matching §3.3's revised schema); then, **against the actually-running
+   environment**, attempted the unquoted-smuggle teardown from case 2 — confirmed the container and
+   marker were completely unaffected (still running, marker unchanged) after the refusal; then ran
+   the legitimate `compose-down.sh falkor-chat` — container and network removed, volume untouched
+   (no `-v` reachable at all, structurally, since the script's fixed argv never includes it),
+   marker deleted.
+
+No new bypass of this design was found. The fix holds under the same reproduction technique that
+broke the original.
+
+### Judgment on the two open items `architect` flagged
+
+- **Repeated-scoping-flag deny net (tier 3): keep it.** Confirmed non-load-bearing today (grepped
+  the resolved permission list for the substring `docker compose` in any allow entry — none), but
+  also confirmed free: no legitimate call shape (any read-only command, or either wrapper script
+  invoked correctly) is accidentally caught by it. Costs nothing, remains one line of defense
+  against a future regression. Reasonable to drop it instead — this is a judgment call, not a
+  finding — but I'd lean toward keeping cheap insurance over re-deriving a closed bug later.
+- **"Eliminated, not verified" for the write-traversal question: accept as resolved, fully closed.**
+  Re-confirmed live (`opencode debug agent`) that `tools.write`/`tools.edit` resolve to `false`,
+  and traced the `bash` allow-list for any substitute write primitive (redirection, `cp`/`mv`/
+  `tee`) — none exists, and the metacharacter net still denies `>` generally. There is no residual
+  write surface for `tank` itself, so elimination is at least as strong an answer as a passing
+  traversal test would have been, and there is nothing left for me to test. Closed, not merely
+  accepted on trust.
+
+### New observations this pass (nits — do not change the verdict)
+
+- The wrapper-script allow pattern's trailing `*` (`compose-down.sh *`) is unavoidably broad by
+  design (the script does the real validation) — worth a one-line comment in the shipped
+  `opencode.json` explaining *why* a trailing wildcard is safe here, unlike Pass 1's raw-compose
+  patterns, so a future editor doesn't "simplify" the wrapper scripts on the mistaken assumption
+  the permission table already validates arguments.
+- The design now puts all the weight on `resolve_slug`'s lookup being **true key equality**, never
+  a substring/prefix/grep match — a careless reimplementation could silently reopen the quoted-
+  smuggle case tested above. Worth an explicit unit test asserting this when the real scripts are
+  written (§4 step 5); a design review can't verify code that doesn't exist yet, so flagging this
+  for whoever builds it (`coder`/`tdd-engineer`, checked by `qa-engineer`).
+- Confirmed no regression in the untouched read-only allow-list or the pre-existing metacharacter
+  net — both behave identically to Pass 1.
