@@ -1082,9 +1082,6 @@ def test_list_documents_empty_when_none(repo):
     assert repo.list_documents("test") == []
 
 
-# ── §14.5 Entities & RELATES_TO (K-050 M5 Stage 3) ────────────────────────────
-
-
 def _document_with_chunk(repo, *, document_id="d1", chunk_id="c0"):
     repo.ensure_user("test", user_id="u1", display_name="Alice")
     repo.create_document(
@@ -1092,6 +1089,384 @@ def _document_with_chunk(repo, *, document_id="d1", chunk_id="c0"):
         source_format="text", ingested_by="u1", created_at=100,
         chunks=[{"chunkId": chunk_id, "text": "x", "seq": 0}],
     )
+
+
+# ── §14.8 SUPERSEDES version history + confirm/reject/recheck ────────────────
+# (document-ingestion2 Stage B) — every test here seeds its own SUPERSEDES
+# edge via `create_or_reopen_supersede_suggestion` (a directly-injected
+# matchId, mirroring `_seeded_match`'s use of `create_or_reopen_match` below,
+# since detection — Stage D — does not exist yet).
+
+
+def test_create_or_reopen_supersede_suggestion_creates_a_pending_edge(repo, conn):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+    _document_with_chunk(repo, document_id="d2", chunk_id="c1")
+
+    result = repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d1", candidate_document_id="d2", match_id="m1",
+        status="pending", confidence=0.8, technique="shingled_jaccard", created_at=100,
+    )
+
+    assert result == {"created": True, "reopened": False, "matchId": "m1", "status": "pending"}
+    rows = _probe(
+        conn,
+        "MATCH (:Document{documentId:'d1'})-[r:SUPERSEDES {matchId:'m1'}]->"
+        "(:Document{documentId:'d2'}) "
+        "RETURN r.status, r.confidence, r.technique, r.decidedBy, r.decidedAt",
+    )
+    assert rows == [["pending", 0.8, "shingled_jaccard", None, None]]
+
+
+def test_create_or_reopen_supersede_suggestion_is_idempotent_for_the_same_pair(repo):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+    _document_with_chunk(repo, document_id="d2", chunk_id="c1")
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d1", candidate_document_id="d2", match_id="m1",
+        status="pending", confidence=0.8, technique="shingled_jaccard", created_at=100,
+    )
+
+    result = repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d1", candidate_document_id="d2", match_id="m2",
+        status="pending", confidence=0.9, technique="shingled_jaccard", created_at=200,
+    )
+
+    assert result == {"created": False, "reopened": False, "matchId": "m1", "status": "pending"}
+
+
+def test_create_or_reopen_supersede_suggestion_finds_the_pair_regardless_of_argument_order(
+    repo,
+):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+    _document_with_chunk(repo, document_id="d2", chunk_id="c1")
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d1", candidate_document_id="d2", match_id="m1",
+        status="pending", confidence=0.8, technique="shingled_jaccard", created_at=100,
+    )
+
+    # swapped argument order (candidate discovered "first" this time)
+    result = repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d2", candidate_document_id="d1", match_id="m2",
+        status="pending", confidence=0.9, technique="shingled_jaccard", created_at=200,
+    )
+
+    assert result == {"created": False, "reopened": False, "matchId": "m1", "status": "pending"}
+
+
+def test_create_or_reopen_supersede_suggestion_reopens_a_rejected_edge(repo, conn):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+    _document_with_chunk(repo, document_id="d2", chunk_id="c1")
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d1", candidate_document_id="d2", match_id="m1",
+        status="pending", confidence=0.8, technique="shingled_jaccard", created_at=100,
+    )
+    repo.reject_document_update("test", match_id="m1", decided_by="u1", decided_at=150)
+
+    result = repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d1", candidate_document_id="d2", match_id="m2",
+        status="pending", confidence=0.9, technique="shingled_jaccard", created_at=200,
+    )
+
+    # never straight back to confirmed — reopen always lands on pending
+    assert result == {"created": False, "reopened": True, "matchId": "m1", "status": "pending"}
+    rows = _probe(
+        conn,
+        "MATCH ()-[r:SUPERSEDES {matchId:'m1'}]->() "
+        "RETURN r.status, r.resuggestCount, r.lastResuggestedAt",
+    )
+    assert rows == [["pending", 1, 200]]
+    [[count]] = _probe(conn, "MATCH ()-[r:SUPERSEDES]->() RETURN count(r)")
+    assert count == 1  # no duplicate edge
+
+
+def _seeded_document_update(repo, *, status="pending"):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+    _document_with_chunk(repo, document_id="d2", chunk_id="c1")
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d1", candidate_document_id="d2", match_id="m1",
+        status=status, confidence=0.8, technique="shingled_jaccard", created_at=100,
+    )
+
+
+def test_confirm_document_update_flips_status_and_stamps_audit_fields(repo, conn):
+    _seeded_document_update(repo)
+
+    result = repo.confirm_document_update(
+        "test", match_id="m1", decided_by="u1", decided_at=500
+    )
+
+    assert result == {
+        "matchId": "m1", "status": "confirmed", "documentA": "d1", "documentB": "d2",
+    }
+    rows = _probe(
+        conn, "MATCH ()-[r:SUPERSEDES {matchId:'m1'}]->() RETURN r.decidedBy, r.decidedAt",
+    )
+    assert rows == [["u1", 500]]
+
+
+def test_confirm_document_update_supersedes_the_old_document_and_its_chunks(repo, conn):
+    _seeded_document_update(repo)
+
+    repo.confirm_document_update("test", match_id="m1", decided_by="u1", decided_at=500)
+
+    [[old_current, superseded_at, superseded_by]] = _probe(
+        conn,
+        "MATCH (d:Document {documentId:'d2'}) "
+        "RETURN d.currentVersion, d.supersededAt, d.supersededBy",
+    )
+    assert old_current is False
+    assert superseded_at == 500
+    assert superseded_by == "u1"
+    [[chunk_current]] = _probe(
+        conn, "MATCH (c:Chunk {chunkId:'c1'}) RETURN c.documentCurrent"
+    )
+    assert chunk_current is False
+    # the NEW document is untouched
+    [[new_current]] = _probe(
+        conn, "MATCH (d:Document {documentId:'d1'}) RETURN d.currentVersion"
+    )
+    assert new_current is True
+
+
+def test_confirm_document_update_returns_none_for_unknown_match_id(repo):
+    assert repo.confirm_document_update(
+        "test", match_id="nope", decided_by="u1", decided_at=500
+    ) is None
+
+
+def test_reject_document_update_flips_status_and_stamps_audit_fields(repo, conn):
+    _seeded_document_update(repo)
+
+    result = repo.reject_document_update(
+        "test", match_id="m1", decided_by="u1", decided_at=500
+    )
+
+    assert result == {
+        "matchId": "m1", "status": "rejected", "documentA": "d1", "documentB": "d2",
+    }
+    rows = _probe(conn, "MATCH ()-[r:SUPERSEDES {matchId:'m1'}]->() RETURN r.status")
+    assert rows == [["rejected"]]
+
+
+def test_reject_document_update_leaves_both_documents_current_and_untouched(repo, conn):
+    _seeded_document_update(repo)
+
+    repo.reject_document_update("test", match_id="m1", decided_by="u1", decided_at=500)
+
+    [[old_current]] = _probe(
+        conn, "MATCH (d:Document {documentId:'d2'}) RETURN d.currentVersion"
+    )
+    [[chunk_current]] = _probe(
+        conn, "MATCH (c:Chunk {chunkId:'c1'}) RETURN c.documentCurrent"
+    )
+    assert old_current is True
+    assert chunk_current is True
+
+
+def test_reject_document_update_returns_none_for_unknown_match_id(repo):
+    assert repo.reject_document_update(
+        "test", match_id="nope", decided_by="u1", decided_at=500
+    ) is None
+
+
+def test_recheck_document_update_flips_a_rejected_edge_back_to_pending(repo, conn):
+    _seeded_document_update(repo)
+    repo.reject_document_update("test", match_id="m1", decided_by="u1", decided_at=200)
+
+    result = repo.recheck_document_update("test", match_id="m1", at=300)
+
+    assert result == {
+        "matchId": "m1", "status": "pending", "documentA": "d1", "documentB": "d2",
+    }
+    rows = _probe(
+        conn,
+        "MATCH ()-[r:SUPERSEDES {matchId:'m1'}]->() "
+        "RETURN r.status, r.resuggestCount, r.lastResuggestedAt",
+    )
+    assert rows == [["pending", 1, 300]]
+
+
+def test_recheck_document_update_is_a_noop_for_a_pending_update(repo):
+    _seeded_document_update(repo, status="pending")
+
+    assert repo.recheck_document_update("test", match_id="m1", at=300) is None
+
+
+def test_recheck_document_update_is_a_noop_for_an_unknown_match_id(repo):
+    assert repo.recheck_document_update("test", match_id="nope", at=300) is None
+
+
+def test_list_pending_document_updates_returns_only_pending_oldest_first(repo):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+    _document_with_chunk(repo, document_id="d2", chunk_id="c1")
+    _document_with_chunk(repo, document_id="d3", chunk_id="c2")
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d1", candidate_document_id="d2", match_id="m2",
+        status="pending", confidence=0.8, technique="shingled_jaccard", created_at=200,
+    )
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d1", candidate_document_id="d3", match_id="m1",
+        status="pending", confidence=0.8, technique="shingled_jaccard", created_at=100,
+    )
+    # a confirmed edge must never show up in the pending-only listing
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d2", candidate_document_id="d3", match_id="m3",
+        status="confirmed", confidence=1.0, technique="exact_normalized_text_hash",
+        created_at=300,
+    )
+
+    rows = repo.list_pending_document_updates("test", limit=50)
+
+    assert [r["matchId"] for r in rows] == ["m1", "m2"]  # oldest first
+
+
+def test_list_document_updates_filtered_by_status(repo):
+    _seeded_document_update(repo)  # m1, pending
+    _document_with_chunk(repo, document_id="d3", chunk_id="c2")
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d3", candidate_document_id="d1", match_id="m4",
+        status="confirmed", confidence=1.0, technique="exact_normalized_text_hash",
+        created_at=300,
+    )
+
+    pending = repo.list_document_updates("test", status="pending", limit=50)
+    confirmed = repo.list_document_updates("test", status="confirmed", limit=50)
+
+    assert [r["matchId"] for r in pending] == ["m1"]
+    assert [r["matchId"] for r in confirmed] == ["m4"]
+
+
+def test_list_document_updates_unfiltered_includes_every_status(repo):
+    _seeded_document_update(repo)  # m1, pending
+    repo.reject_document_update("test", match_id="m1", decided_by="u1", decided_at=200)
+    _document_with_chunk(repo, document_id="d3", chunk_id="c2")
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d3", candidate_document_id="d1", match_id="m4",
+        status="confirmed", confidence=1.0, technique="exact_normalized_text_hash",
+        created_at=300,
+    )
+
+    rows = repo.list_document_updates("test", limit=50)
+
+    assert {r["matchId"] for r in rows} == {"m1", "m4"}
+    statuses = {r["matchId"]: r["status"] for r in rows}
+    assert statuses == {"m1": "rejected", "m4": "confirmed"}
+
+
+def test_list_document_updates_respects_limit(repo):
+    _document_with_chunk(repo, document_id="d0", chunk_id="c0")
+    for i in range(3):
+        did = f"cand{i}"
+        _document_with_chunk(repo, document_id=did, chunk_id=f"cc{i}")
+        repo.create_or_reopen_supersede_suggestion(
+            "test", new_document_id="d0", candidate_document_id=did,
+            match_id=f"m{i}", status="pending", confidence=0.8,
+            technique="shingled_jaccard", created_at=100 + i,
+        )
+
+    rows = repo.list_document_updates("test", limit=2)
+
+    assert len(rows) == 2
+
+
+def test_list_document_updates_empty_when_none(repo):
+    assert repo.list_document_updates("test") == []
+
+
+# ── get_document_history (FR-5) ───────────────────────────────────────────────
+
+
+def _chain_v1_v2_v3(repo):
+    """v1 -> v2 -> v3, each confirmed SUPERSEDES against its predecessor
+    (direction new -> old), exactly what `confirm_document_update` produces.
+    """
+    _document_with_chunk(repo, document_id="v1", chunk_id="c1")
+    _document_with_chunk(repo, document_id="v2", chunk_id="c2")
+    _document_with_chunk(repo, document_id="v3", chunk_id="c3")
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="v2", candidate_document_id="v1", match_id="m12",
+        status="pending", confidence=1.0, technique="exact_normalized_text_hash",
+        created_at=100,
+    )
+    repo.confirm_document_update("test", match_id="m12", decided_by="u1", decided_at=100)
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="v3", candidate_document_id="v2", match_id="m23",
+        status="pending", confidence=1.0, technique="exact_normalized_text_hash",
+        created_at=200,
+    )
+    repo.confirm_document_update("test", match_id="m23", decided_by="u1", decided_at=200)
+
+
+def test_get_document_history_returns_full_chain_oldest_first_from_the_tip(repo):
+    _chain_v1_v2_v3(repo)
+
+    rows = repo.get_document_history("test", document_id="v3")
+
+    assert [r["documentId"] for r in rows] == ["v1", "v2", "v3"]
+
+
+def test_get_document_history_works_from_a_middle_version_not_just_the_tip(repo):
+    _chain_v1_v2_v3(repo)
+
+    rows = repo.get_document_history("test", document_id="v2")
+
+    assert [r["documentId"] for r in rows] == ["v1", "v2", "v3"]
+
+
+def test_get_document_history_works_from_the_oldest_version(repo):
+    _chain_v1_v2_v3(repo)
+
+    rows = repo.get_document_history("test", document_id="v1")
+
+    assert [r["documentId"] for r in rows] == ["v1", "v2", "v3"]
+
+
+def test_get_document_history_reports_currentVersion_and_supersession_fields(repo):
+    _chain_v1_v2_v3(repo)
+
+    rows = repo.get_document_history("test", document_id="v1")
+    by_id = {r["documentId"]: r for r in rows}
+
+    assert by_id["v1"]["currentVersion"] is False
+    assert by_id["v1"]["supersededBy"] == "u1"
+    assert by_id["v2"]["currentVersion"] is False
+    assert by_id["v3"]["currentVersion"] is True
+    assert by_id["v3"]["supersededAt"] is None
+
+
+def test_get_document_history_excludes_pending_and_rejected_suggestions(repo):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+    _document_with_chunk(repo, document_id="d2", chunk_id="c1")
+    _document_with_chunk(repo, document_id="d3", chunk_id="c2")
+    # d2 pending-supersedes d1 — not history
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d2", candidate_document_id="d1", match_id="mp",
+        status="pending", confidence=0.8, technique="shingled_jaccard", created_at=100,
+    )
+    # d3 rejected-supersedes d1 — not history either
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d3", candidate_document_id="d1", match_id="mr",
+        status="pending", confidence=0.8, technique="shingled_jaccard", created_at=100,
+    )
+    repo.reject_document_update("test", match_id="mr", decided_by="u1", decided_at=150)
+
+    rows = repo.get_document_history("test", document_id="d1")
+
+    assert [r["documentId"] for r in rows] == ["d1"]
+
+
+def test_get_document_history_empty_for_unknown_document_id(repo):
+    assert repo.get_document_history("test", document_id="nope") == []
+
+
+def test_get_document_history_single_version_with_no_supersession(repo):
+    _document_with_chunk(repo, document_id="d1", chunk_id="c0")
+
+    rows = repo.get_document_history("test", document_id="d1")
+
+    assert [r["documentId"] for r in rows] == ["d1"]
+
+
+# ── §14.5 Entities & RELATES_TO (K-050 M5 Stage 3) ────────────────────────────
 
 
 def test_create_entity_writes_all_fields(repo, conn):

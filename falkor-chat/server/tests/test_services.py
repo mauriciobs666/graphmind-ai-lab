@@ -33,6 +33,7 @@ from falkorchat.services import (
     ChannelNotFoundError,
     DocumentNotFoundError,
     DocumentTooLargeError,
+    DocumentUpdateNotFoundError,
     EmptyDocumentError,
     InvalidSearchQueryError,
     MatchNotFoundError,
@@ -110,6 +111,12 @@ class FakeRepo:
         self.hybrid_rows: list[dict] | None = None
         self.chunk_rows: list[dict] | None = None
         self.matches: dict[str, dict] = {}  # matchId -> match state (K-050 M5 Stage 4)
+        # document_updates: matchId -> SUPERSEDES state (document-ingestion2
+        # Stage B); document_histories: documentId -> scripted history rows
+        # (Services.get_document_history is a thin passthrough, so this fake
+        # just returns whatever a test seeds under the queried id).
+        self.document_updates: dict[str, dict] = {}
+        self.document_histories: dict[str, list[dict]] = {}
         # §15 product catalog (K-052 M6) — keyed by nameNormalized for lookup_product;
         # `products` (a flat list of {name, category, price} dicts) backs filter_products.
         self.products_by_name: dict[str, dict] = {}
@@ -286,6 +293,79 @@ class FakeRepo:
             {k: v for k, v in doc.items() if k != "chunks"}
             for doc in self.documents.values()
             if not current_only or doc.get("currentVersion", True)
+        ]
+        return rows[:limit]
+
+    # ── §14.8 SUPERSEDES version history + confirm/reject/recheck ─────────────────
+    # (document-ingestion2 Stage B) — matchId -> {"status", "documentA",
+    # "documentB", ...}, seed via `self.document_updates` directly in a test,
+    # mirroring `self.matches`'s dict-of-state idiom below.
+
+    def get_document_history(self, ws, *, document_id):
+        self.calls.append(("get_document_history", ws, document_id))
+        return self.document_histories.get(document_id, [])
+
+    def confirm_document_update(self, ws, *, match_id, decided_by, decided_at):
+        self.calls.append(("confirm_document_update", ws, match_id, decided_by, decided_at))
+        update = self.document_updates.get(match_id)
+        if update is None:
+            return None
+        update["status"] = "confirmed"
+        update["decidedBy"] = decided_by
+        update["decidedAt"] = decided_at
+        return {
+            "matchId": match_id, "status": "confirmed",
+            "documentA": update["documentA"], "documentB": update["documentB"],
+        }
+
+    def reject_document_update(self, ws, *, match_id, decided_by, decided_at):
+        self.calls.append(("reject_document_update", ws, match_id, decided_by, decided_at))
+        update = self.document_updates.get(match_id)
+        if update is None:
+            return None
+        update["status"] = "rejected"
+        update["decidedBy"] = decided_by
+        update["decidedAt"] = decided_at
+        return {
+            "matchId": match_id, "status": "rejected",
+            "documentA": update["documentA"], "documentB": update["documentB"],
+        }
+
+    def recheck_document_update(self, ws, *, match_id, at):
+        self.calls.append(("recheck_document_update", ws, match_id, at))
+        update = self.document_updates.get(match_id)
+        if update is None or update["status"] != "rejected":
+            return None
+        update["status"] = "pending"
+        return {
+            "matchId": match_id, "status": "pending",
+            "documentA": update["documentA"], "documentB": update["documentB"],
+        }
+
+    def _document_update_row(self, match_id):
+        u = self.document_updates[match_id]
+        return {
+            "matchId": match_id, "documentA": u["documentA"],
+            "titleA": u.get("titleA", ""), "documentB": u["documentB"],
+            "titleB": u.get("titleB", ""), "status": u["status"],
+            "confidence": u.get("confidence", 1.0),
+            "technique": u.get("technique", "exact"),
+            "createdAt": u.get("createdAt", 0),
+        }
+
+    def list_pending_document_updates(self, ws, *, limit=50):
+        self.calls.append(("list_pending_document_updates", ws, limit))
+        rows = [
+            self._document_update_row(mid) for mid, u in self.document_updates.items()
+            if u["status"] == "pending"
+        ]
+        return rows[:limit]
+
+    def list_document_updates(self, ws, *, status=None, limit=50):
+        self.calls.append(("list_document_updates", ws, status, limit))
+        rows = [
+            self._document_update_row(mid) for mid, u in self.document_updates.items()
+            if status is None or u["status"] == status
         ]
         return rows[:limit]
 
@@ -1194,6 +1274,136 @@ def test_list_documents_current_only_false_includes_every_document():
     rows = svc.list_documents(CTX, current_only=False)
 
     assert {r["documentId"] for r in rows} == {"d1", "d2"}
+
+
+# ── §14.8 SUPERSEDES version history + confirm/reject/recheck ───────────────────
+# (document-ingestion2 Stage B)
+
+
+def test_get_document_history_passes_through_the_repository_rows():
+    repo = FakeRepo()
+    repo.document_histories["d3"] = [
+        {"documentId": "d1", "title": "t", "createdAt": 100, "currentVersion": False,
+         "supersededAt": 200, "supersededBy": "u1"},
+        {"documentId": "d3", "title": "t", "createdAt": 200, "currentVersion": True,
+         "supersededAt": None, "supersededBy": None},
+    ]
+    svc = make_service(repo)
+
+    rows = svc.get_document_history(CTX, document_id="d3")
+
+    assert [r["documentId"] for r in rows] == ["d1", "d3"]
+    assert repo.calls[-1] == ("get_document_history", "test", "d3")
+
+
+def _seed_service_document_update(repo, *, match_id="m1", status="pending"):
+    repo.document_updates[match_id] = {
+        "status": status, "documentA": "d1", "documentB": "d2",
+        "titleA": "new", "titleB": "old", "confidence": 0.8,
+        "technique": "shingled_jaccard", "createdAt": 100,
+    }
+
+
+def test_confirm_document_update_stamps_the_calling_actor_never_system():
+    repo = FakeRepo()
+    _seed_service_document_update(repo)
+    svc = make_service(repo, now=555)
+
+    result = svc.confirm_document_update(CTX, match_id="m1")
+
+    assert result["status"] == "confirmed"
+    assert repo.calls[-1] == ("confirm_document_update", "test", "m1", CTX.actor, 555)
+
+
+def test_confirm_document_update_raises_not_found_for_an_unknown_match_id():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    with pytest.raises(DocumentUpdateNotFoundError):
+        svc.confirm_document_update(CTX, match_id="nope")
+
+
+def test_reject_document_update_stamps_the_calling_actor():
+    repo = FakeRepo()
+    _seed_service_document_update(repo)
+    svc = make_service(repo, now=555)
+
+    result = svc.reject_document_update(CTX, match_id="m1")
+
+    assert result["status"] == "rejected"
+    assert repo.calls[-1] == ("reject_document_update", "test", "m1", CTX.actor, 555)
+
+
+def test_reject_document_update_raises_not_found_for_an_unknown_match_id():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    with pytest.raises(DocumentUpdateNotFoundError):
+        svc.reject_document_update(CTX, match_id="nope")
+
+
+def test_recheck_document_update_flips_a_rejected_update_back_to_pending():
+    repo = FakeRepo()
+    _seed_service_document_update(repo, status="rejected")
+    svc = make_service(repo, now=999)
+
+    result = svc.recheck_document_update(CTX, match_id="m1")
+
+    assert result == {
+        "matchId": "m1", "status": "pending", "documentA": "d1", "documentB": "d2",
+    }
+
+
+def test_recheck_document_update_returns_none_instead_of_raising_for_a_pending_update():
+    # Mirrors the repository's own inability to distinguish "unknown matchId"
+    # from "exists but isn't rejected" — the service does not raise either way.
+    repo = FakeRepo()
+    _seed_service_document_update(repo, status="pending")
+    svc = make_service(repo)
+
+    assert svc.recheck_document_update(CTX, match_id="m1") is None
+
+
+def test_recheck_document_update_returns_none_for_an_unknown_match_id():
+    repo = FakeRepo()
+    svc = make_service(repo)
+
+    assert svc.recheck_document_update(CTX, match_id="nope") is None
+
+
+def test_list_pending_document_updates_passes_through_the_repository_rows():
+    repo = FakeRepo()
+    _seed_service_document_update(repo, match_id="m1", status="pending")
+    _seed_service_document_update(repo, match_id="m2", status="confirmed")
+    svc = make_service(repo)
+
+    rows = svc.list_pending_document_updates(CTX, limit=10)
+
+    assert [r["matchId"] for r in rows] == ["m1"]
+    assert repo.calls[-1] == ("list_pending_document_updates", "test", 10)
+
+
+def test_list_document_updates_passes_status_and_limit_through():
+    repo = FakeRepo()
+    _seed_service_document_update(repo, match_id="m1", status="confirmed")
+    svc = make_service(repo)
+
+    rows = svc.list_document_updates(CTX, status="confirmed", limit=25)
+
+    assert [r["matchId"] for r in rows] == ["m1"]
+    assert repo.calls[-1] == ("list_document_updates", "test", "confirmed", 25)
+
+
+def test_list_document_updates_with_no_status_lists_every_tier():
+    repo = FakeRepo()
+    _seed_service_document_update(repo, match_id="m1", status="pending")
+    _seed_service_document_update(repo, match_id="m2", status="confirmed")
+    svc = make_service(repo)
+
+    rows = svc.list_document_updates(CTX)
+
+    assert {r["matchId"] for r in rows} == {"m1", "m2"}
+    assert repo.calls[-1] == ("list_document_updates", "test", None, 50)
 
 
 # ── §14.6 Entity fusion — SAME_AS review surface (K-050 M5 Stage 4) ─────────────

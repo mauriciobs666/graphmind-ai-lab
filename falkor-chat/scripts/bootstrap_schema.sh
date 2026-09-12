@@ -171,6 +171,16 @@ bootstrap_workspace() {
   echo "[index] SAME_AS.status"
   gquery "$g" "CREATE INDEX FOR ()-[r:SAME_AS]-() ON (r.status)"
 
+  # document-ingestion2 Stage B (FR-3/FR-5, plan §3.2/§4 Stage B): the
+  # SUPERSEDES version-lifecycle edge — same relationship-scoped
+  # index-before-constraint ordering and the same unlabeled-endpoint
+  # discipline as SAME_AS above (live-verified, plan §0).
+  echo "[index] SUPERSEDES.matchId"
+  gquery "$g" "CREATE INDEX FOR ()-[r:SUPERSEDES]-() ON (r.matchId)"
+
+  echo "[index] SUPERSEDES.status"
+  gquery "$g" "CREATE INDEX FOR ()-[r:SUPERSEDES]-() ON (r.status)"
+
   # Materialized snapshot steps land in the workspace graph too (K-021), so the
   # same Step identity DDL as the reference graph applies here.
   # Step.key: display/traversal anchor only, no constraint (§7.1).
@@ -279,6 +289,9 @@ bootstrap_workspace() {
 
   echo "[constraint] SAME_AS unique {matchId}"
   gconstraint "$g" UNIQUE RELATIONSHIP SAME_AS PROPERTIES 1 matchId
+
+  echo "[constraint] SUPERSEDES unique {matchId}"
+  gconstraint "$g" UNIQUE RELATIONSHIP SUPERSEDES PROPERTIES 1 matchId
 
   echo "[constraint] Step unique {stepUid}"
   gconstraint "$g" UNIQUE NODE Step PROPERTIES 1 stepUid

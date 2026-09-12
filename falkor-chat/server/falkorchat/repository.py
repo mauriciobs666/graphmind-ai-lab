@@ -1358,6 +1358,344 @@ class Repository:
             for row in res.result_set
         ]
 
+    # ── §14.8 SUPERSEDES version history + confirm/reject/recheck ────────────────
+    # (document-ingestion2 Stage B, FR-3/FR-5, plan §3.2/§3.4/§3.7) — zero
+    # dependency on detection (Stage D not landed yet): every write below is
+    # exercised via a directly-injected matchId in tests, exactly as the
+    # plan's own Stage B "Done" condition requires.
+    #
+    # Every SUPERSEDES-anchored query below matches its endpoints UNLABELED
+    # (`(a)`/`(b)`, never `(a:Document)`) — the identical planner-trap
+    # discipline `SAME_AS` queries already follow (§14.6 above, plan §3.2):
+    # a bare label on either endpoint of a relationship-index-anchored query
+    # forces a full `Node By Label Scan` on this build even though the
+    # relationship-property scan alone is fully selective. Direction is
+    # `new -> old` (mirrors `SAME_AS`'s `new -> existing` convention, plan §3.2).
+
+    def create_or_reopen_supersede_suggestion(
+        self, ws: str, *, new_document_id: str, candidate_document_id: str,
+        match_id: str, status: str, confidence: float, technique: str,
+        created_at: int,
+    ) -> dict[str, Any]:
+        """The suggested tier's (and any future non-atomic tier's) find-or-
+        create-or-reopen write — verbatim mirror of `create_or_reopen_match`
+        at `Document` granularity (plan §3.4/§4 Stage B, OQ-3's "reuse by
+        pair, reopen if rejected" contract, live-verified at this granularity
+        too, plan §0 second `graph-dba` pass).
+
+        **Implemented in Stage B, not Stage D** (plan §4 Stage B lists it
+        under Stage D's file inventory only because that's where the
+        detection pipeline first *calls* it) — its logic has zero detection
+        dependency, and Stage B's own "Done" condition requires exercising
+        confirm/reject/recheck end-to-end with an organically-reopenable
+        suggestion, which is unsatisfiable without this primitive. Stage D
+        will simply consume it, not re-create it.
+
+        Write direction is a convention, not a semantic claim (always
+        `new -> candidate`); the `OPTIONAL MATCH` lookup is undirected, so a
+        suggestion already written in the opposite discovery order on an
+        earlier detection run is still found, never duplicated. Not a bare
+        `MERGE` — a direction-fixed `MERGE` would miss that opposite-order
+        case (same reasoning as `create_or_reopen_match`'s own docstring).
+
+        Returns `{created, reopened, matchId, status}`. `matchId`/
+        `confidence`/`technique`/`created_at` are consumed only when a fresh
+        edge is actually created; a reopened edge keeps its **original**
+        `matchId` and bumps `resuggestCount`/`lastResuggestedAt` instead.
+        """
+        res = self._graph(ws).query(
+            "MATCH (a:Document {documentId: $newDocumentId}) "
+            "MATCH (b:Document {documentId: $candidateDocumentId}) "
+            "OPTIONAL MATCH (a)-[existing:SUPERSEDES]-(b) "
+            "WITH a, b, existing, "
+            "     (existing IS NULL) AS isNew, "
+            "     (existing IS NOT NULL AND existing.status = 'rejected') AS reopen "
+            "FOREACH (_ IN CASE WHEN isNew THEN [1] ELSE [] END | "
+            "  CREATE (a)-[:SUPERSEDES {"
+            "    matchId: $matchId, status: $status, confidence: $confidence, "
+            "    technique: $technique, createdAt: $createdAt, "
+            "    decidedAt: CASE WHEN $status = 'confirmed' THEN $createdAt ELSE null END, "
+            "    decidedBy: CASE WHEN $status = 'confirmed' THEN 'system' ELSE null END, "
+            "    resuggestCount: 0, lastResuggestedAt: null"
+            "  }]->(b) "
+            ") "
+            "FOREACH (_ IN CASE WHEN reopen THEN [1] ELSE [] END | "
+            "  SET existing.status = 'pending', "
+            "      existing.resuggestCount = coalesce(existing.resuggestCount, 0) + 1, "
+            "      existing.lastResuggestedAt = $createdAt "
+            ") "
+            "RETURN isNew AS created, reopen AS reopened, "
+            "       coalesce(existing.matchId, $matchId) AS matchId, "
+            "       coalesce(existing.status, $status)   AS status",
+            {
+                "newDocumentId": new_document_id,
+                "candidateDocumentId": candidate_document_id,
+                "matchId": match_id, "status": status, "confidence": confidence,
+                "technique": technique, "createdAt": created_at,
+            },
+        )
+        row = res.result_set[0]
+        return {"created": row[0], "reopened": row[1], "matchId": row[2], "status": row[3]}
+
+    def confirm_document_update(
+        self, ws: str, *, match_id: str, decided_by: str, decided_at: int,
+    ) -> dict[str, Any] | None:
+        """FR-3/AC-3 — confirm a `pending` (or previously `rejected`)
+        `SUPERSEDES` suggestion (plan §3.4, full `SAME_AS`-lifecycle
+        parity). `decided_by` is a real `User`/`Agent` id here, never
+        `'system'` — this path is only ever reached by a human/agent
+        decision (the auto tier's `'system'` stamp only ever happens inside
+        `create_document_with_auto_supersede`, Stage D).
+
+        Unlike `confirm_match` (entities are never physically merged, so
+        nothing else changes), confirming a `SUPERSEDES` edge has a real
+        side effect on the graph: the old document (`b`, the supersede
+        target) flips `currentVersion: false` + `supersededAt`/
+        `supersededBy`, and all of its `Chunk`s bulk-flip `documentCurrent:
+        false` — the exact same effect `create_document_with_auto_supersede`
+        (Stage D) produces for an auto-superseded document, so a confirmed
+        suggestion is indistinguishable from an auto-supersede once decided
+        (plan §3.4). One `GRAPH.QUERY`.
+
+        Returns `{matchId, status, documentA, documentB}` (`documentA` =
+        the new/superseding document, `documentB` = the old/superseded
+        one), or `None` if no `SUPERSEDES` edge has this `matchId`.
+        """
+        res = self._graph(ws).query(
+            "MATCH (a)-[r:SUPERSEDES {matchId: $matchId}]->(b) "
+            "SET r.status = 'confirmed', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy "
+            "SET b.currentVersion = false, b.supersededAt = $decidedAt, "
+            "    b.supersededBy = $decidedBy "
+            "WITH a, b, r "
+            "OPTIONAL MATCH (b)-[:HAS_CHUNK]->(c:Chunk) "
+            "WITH a, b, r, collect(c) AS chunks "
+            "FOREACH (ch IN chunks | SET ch.documentCurrent = false) "
+            "RETURN r.matchId AS matchId, r.status AS status, "
+            "       a.documentId AS documentA, b.documentId AS documentB",
+            {"matchId": match_id, "decidedAt": decided_at, "decidedBy": decided_by},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"matchId": row[0], "status": row[1], "documentA": row[2], "documentB": row[3]}
+
+    def reject_document_update(
+        self, ws: str, *, match_id: str, decided_by: str, decided_at: int,
+    ) -> dict[str, Any] | None:
+        """FR-3/AC-3 — reject a `SUPERSEDES` suggestion (plan §3.4). Never
+        deletes the edge (OQ-3 parity — the `rejected` record is what makes
+        automatic re-open on corroboration, or `recheck_document_update` on
+        demand, answerable with no second mechanism). Leaves **both**
+        documents independent, current, and searchable — nothing about
+        either `Document`/`Chunk` changes (AC-3's own wording).
+
+        Returns `{matchId, status, documentA, documentB}`, or `None` if no
+        `SUPERSEDES` edge has this `matchId`.
+        """
+        res = self._graph(ws).query(
+            "MATCH (a)-[r:SUPERSEDES {matchId: $matchId}]->(b) "
+            "SET r.status = 'rejected', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy "
+            "RETURN r.matchId AS matchId, r.status AS status, "
+            "       a.documentId AS documentA, b.documentId AS documentB",
+            {"matchId": match_id, "decidedAt": decided_at, "decidedBy": decided_by},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"matchId": row[0], "status": row[1], "documentA": row[2], "documentB": row[3]}
+
+    def recheck_document_update(
+        self, ws: str, *, match_id: str, at: int
+    ) -> dict[str, Any] | None:
+        """§3.4's reversed scope call (the ML note's §7 recommendation) —
+        manually reopen a `rejected` `SUPERSEDES` edge back to `pending`,
+        bumping `resuggestCount`/`lastResuggestedAt` (verbatim mirror of
+        `recheck_match`). A no-op for any other current status (including
+        "no such matchId") — both cases return zero rows indistinguishably;
+        the caller cannot and does not need to tell them apart.
+
+        Returns `{matchId, status, documentA, documentB}`, or `None` on the
+        no-op.
+        """
+        res = self._graph(ws).query(
+            "MATCH (a)-[r:SUPERSEDES {matchId: $matchId}]->(b) "
+            "WHERE r.status = 'rejected' "
+            "SET r.status = 'pending', "
+            "    r.resuggestCount = coalesce(r.resuggestCount, 0) + 1, "
+            "    r.lastResuggestedAt = $at "
+            "RETURN r.matchId AS matchId, r.status AS status, "
+            "       a.documentId AS documentA, b.documentId AS documentB",
+            {"matchId": match_id, "at": at},
+        )
+        if not res.result_set:
+            return None
+        row = res.result_set[0]
+        return {"matchId": row[0], "status": row[1], "documentA": row[2], "documentB": row[3]}
+
+    def list_pending_document_updates(
+        self, ws: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """OQ-3's review surface (reused from the original feature's OQ-2
+        answer, plan §3.8) — `status='pending'` `SUPERSEDES` edges, oldest
+        first. Directed (matches the canonical write direction) — no
+        undirected-doubling risk.
+        """
+        res = self._graph(ws).ro_query(
+            "MATCH (a)-[r:SUPERSEDES {status: 'pending'}]->(b) "
+            "RETURN r.matchId AS matchId, "
+            "       a.documentId AS documentA, a.title AS titleA, "
+            "       b.documentId AS documentB, b.title AS titleB, "
+            "       r.confidence AS confidence, r.technique AS technique, "
+            "       r.createdAt AS createdAt "
+            "ORDER BY r.createdAt "
+            "LIMIT $limit",
+            {"limit": limit},
+        )
+        return [
+            {
+                "matchId": row[0], "documentA": row[1], "titleA": row[2],
+                "documentB": row[3], "titleB": row[4], "confidence": row[5],
+                "technique": row[6], "createdAt": row[7],
+            }
+            for row in res.result_set
+        ]
+
+    def list_document_updates(
+        self, ws: str, *, status: str | None = None, limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Status-filterable (or unfiltered) `SUPERSEDES` listing — audit
+        parity with `list_matches` (plan §3.8), the only way to discover the
+        auto-superseded (`status='confirmed', decidedBy='system'`) tier once
+        Stage D lands.
+
+        **Two separate query strings, not one `WHERE $status IS NULL OR
+        r.status = $status` null-guard** — the same live-verified,
+        index-preserving idiom `list_matches` already uses (a null-guarded
+        `WHERE` silently discards the `SUPERSEDES.status` index even when
+        `$status` is bound to a real value). The unfiltered branch is a
+        genuinely unavoidable full scan on this build (no relationship-
+        type-only scan operator exists) — `limit` bounds the *result* size,
+        not the *scan* cost; reasonable for an infrequent admin/audit call.
+        """
+        if status is not None:
+            res = self._graph(ws).ro_query(
+                "MATCH (a)-[r:SUPERSEDES {status: $status}]->(b) "
+                "RETURN r.matchId AS matchId, "
+                "       a.documentId AS documentA, a.title AS titleA, "
+                "       b.documentId AS documentB, b.title AS titleB, "
+                "       r.status AS status, r.confidence AS confidence, "
+                "       r.technique AS technique, r.createdAt AS createdAt "
+                "ORDER BY r.createdAt "
+                "LIMIT $limit",
+                {"status": status, "limit": limit},
+            )
+        else:
+            res = self._graph(ws).ro_query(
+                "MATCH (a)-[r:SUPERSEDES]->(b) "
+                "RETURN r.matchId AS matchId, "
+                "       a.documentId AS documentA, a.title AS titleA, "
+                "       b.documentId AS documentB, b.title AS titleB, "
+                "       r.status AS status, r.confidence AS confidence, "
+                "       r.technique AS technique, r.createdAt AS createdAt "
+                "ORDER BY r.createdAt "
+                "LIMIT $limit",
+                {"limit": limit},
+            )
+        return [
+            {
+                "matchId": row[0], "documentA": row[1], "titleA": row[2],
+                "documentB": row[3], "titleB": row[4], "status": row[5],
+                "confidence": row[6], "technique": row[7], "createdAt": row[8],
+            }
+            for row in res.result_set
+        ]
+
+    def get_document_history(
+        self, ws: str, *, document_id: str
+    ) -> list[dict[str, Any]]:
+        """§3.7 supporting capability (FR-5) — every version in the
+        **confirmed** `SUPERSEDES` chain containing `document_id`, oldest to
+        newest. Works from **any** version's id in the chain, not only the
+        current tip. A `pending`/`rejected` suggestion never appears — only
+        a resolved supersession is "history" (plan §3.7's own wording).
+
+        Returns `[]` if `document_id` doesn't exist at all (no assertion
+        needed beyond "nothing to show").
+
+        **Implementation note (not itself a `graph-dba`-live-verified
+        shape, unlike the two items plan §0's second pass closed):**
+        walked one hop at a time in each direction with plain, single-hop
+        queries, each still anchored on `Document.documentId`'s own unique
+        index — deliberately **not** a variable-length `[:SUPERSEDES*]`
+        pattern with an inline relationship-property filter, whose planner
+        behavior on this build is untested. A `SUPERSEDES` chain is short
+        (bounded by real edit history, not fan-out), so the extra round
+        trips are cheap; a cycle guard (`seen`) protects against a
+        structurally-impossible but defensively-cheap-to-guard loop. Ties
+        (more than one confirmed edge into/out of the same document, which
+        the schema does not structurally forbid) resolve to the oldest
+        candidate, `ORDER BY r.createdAt ASC LIMIT 1` — the same tie-break
+        `create_entity_with_auto_match` uses.
+        """
+        self_res = self._graph(ws).ro_query(
+            "MATCH (d:Document {documentId: $documentId}) "
+            "RETURN d.documentId AS documentId, d.title AS title, "
+            "d.createdAt AS createdAt, d.currentVersion AS currentVersion, "
+            "d.supersededAt AS supersededAt, d.supersededBy AS supersededBy",
+            {"documentId": document_id},
+        )
+        if not self_res.result_set:
+            return []
+
+        def _row_to_dict(row: list[Any]) -> dict[str, Any]:
+            return {
+                "documentId": row[0], "title": row[1], "createdAt": row[2],
+                "currentVersion": row[3], "supersededAt": row[4],
+                "supersededBy": row[5],
+            }
+
+        older: list[dict[str, Any]] = []
+        seen = {document_id}
+        current = document_id
+        while True:
+            res = self._graph(ws).ro_query(
+                "MATCH (a:Document {documentId: $documentId}) "
+                "MATCH (a)-[r:SUPERSEDES {status: 'confirmed'}]->(b) "
+                "RETURN b.documentId AS documentId, b.title AS title, "
+                "b.createdAt AS createdAt, b.currentVersion AS currentVersion, "
+                "b.supersededAt AS supersededAt, b.supersededBy AS supersededBy "
+                "ORDER BY r.createdAt ASC LIMIT 1",
+                {"documentId": current},
+            )
+            if not res.result_set or res.result_set[0][0] in seen:
+                break
+            row = res.result_set[0]
+            older.append(_row_to_dict(row))
+            seen.add(row[0])
+            current = row[0]
+        older.reverse()
+
+        newer: list[dict[str, Any]] = []
+        current = document_id
+        while True:
+            res = self._graph(ws).ro_query(
+                "MATCH (b:Document {documentId: $documentId}) "
+                "MATCH (a)-[r:SUPERSEDES {status: 'confirmed'}]->(b) "
+                "RETURN a.documentId AS documentId, a.title AS title, "
+                "a.createdAt AS createdAt, a.currentVersion AS currentVersion, "
+                "a.supersededAt AS supersededAt, a.supersededBy AS supersededBy "
+                "ORDER BY r.createdAt ASC LIMIT 1",
+                {"documentId": current},
+            )
+            if not res.result_set or res.result_set[0][0] in seen:
+                break
+            row = res.result_set[0]
+            newer.append(_row_to_dict(row))
+            seen.add(row[0])
+            current = row[0]
+
+        return older + [_row_to_dict(self_res.result_set[0])] + newer
+
     # ── §14.5 Entities & RELATES_TO (K-050 M5 Stage 3, FR-7a) ─────────────────────
 
     def create_entity(

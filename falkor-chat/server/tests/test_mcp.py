@@ -67,6 +67,9 @@ def test_tool_discovery_lists_all_tools(repo):
         "search_messages", "create_channel", "list_channels", "list_threads",
         "ingest_document", "ingest_documents", "get_document", "search_documents",
         "delete_document", "list_documents", "get_document_deletion",
+        "get_document_history", "list_pending_document_updates",
+        "list_document_updates", "confirm_document_update",
+        "reject_document_update", "recheck_document_update",
         "list_pending_matches", "list_matches", "confirm_match",
         "reject_match", "recheck_match",
     }
@@ -334,6 +337,107 @@ def test_get_document_deletion_tool_none_when_never_deleted(repo):
         mcp_mod.mcp.call_tool("get_document_deletion", {"document_id": "nope"})
     ))
     assert got is None
+
+
+# ── §14.8 SUPERSEDES review surface (document-ingestion2 Stage B) ───────────
+
+
+def _seed_document_update(repo, *, status="pending"):
+    repo.ensure_user("test", user_id="u2", display_name="Bob")
+    repo.create_document(
+        "test", document_id="d1", title="new", text="hello v2",
+        source_format="text", ingested_by="u2", created_at=100,
+        chunks=[{"chunkId": "dc1", "text": "hello v2", "seq": 0}],
+    )
+    repo.create_document(
+        "test", document_id="d2", title="old", text="hello v1",
+        source_format="text", ingested_by="u2", created_at=50,
+        chunks=[{"chunkId": "dc2", "text": "hello v1", "seq": 0}],
+    )
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d1", candidate_document_id="d2", match_id="dm1",
+        status=status, confidence=0.8, technique="shingled_jaccard", created_at=100,
+    )
+
+
+def test_list_pending_document_updates_tool(repo):
+    _seed_document_update(repo, status="pending")
+    _configure(repo)
+
+    rows = _unwrap(asyncio.run(
+        mcp_mod.mcp.call_tool("list_pending_document_updates", {})
+    ))
+
+    assert [m["matchId"] for m in rows] == ["dm1"]
+
+
+def test_list_document_updates_tool_filters_by_status(repo):
+    _seed_document_update(repo, status="pending")
+    _configure(repo)
+
+    pending = _unwrap(asyncio.run(
+        mcp_mod.mcp.call_tool("list_document_updates", {"status": "pending"})
+    ))
+    confirmed = _unwrap(asyncio.run(
+        mcp_mod.mcp.call_tool("list_document_updates", {"status": "confirmed"})
+    ))
+
+    assert [m["matchId"] for m in pending] == ["dm1"]
+    assert confirmed == []
+
+
+def test_confirm_document_update_tool(repo):
+    _seed_document_update(repo, status="pending")
+    _configure(repo)
+
+    result = _unwrap(asyncio.run(
+        mcp_mod.mcp.call_tool("confirm_document_update", {"match_id": "dm1"})
+    ))
+
+    assert result["status"] == "confirmed"
+
+
+def test_confirm_document_update_tool_errors_for_unknown_match_id(repo):
+    _configure(repo)
+
+    with pytest.raises(Exception):
+        asyncio.run(
+            mcp_mod.mcp.call_tool("confirm_document_update", {"match_id": "nope"})
+        )
+
+
+def test_reject_then_recheck_document_update_tool_round_trips(repo):
+    _seed_document_update(repo, status="pending")
+    _configure(repo)
+
+    async def scenario():
+        rejected = _unwrap(await mcp_mod.mcp.call_tool(
+            "reject_document_update", {"match_id": "dm1"}
+        ))
+        rechecked = _unwrap(await mcp_mod.mcp.call_tool(
+            "recheck_document_update", {"match_id": "dm1"}
+        ))
+        return rejected, rechecked
+
+    rejected, rechecked = asyncio.run(scenario())
+    assert rejected["status"] == "rejected"
+    assert rechecked["status"] == "pending"
+
+
+def test_get_document_history_tool_after_confirm(repo):
+    _seed_document_update(repo, status="pending")
+    _configure(repo)
+
+    async def scenario():
+        await mcp_mod.mcp.call_tool(
+            "confirm_document_update", {"match_id": "dm1"}
+        )
+        return _unwrap(await mcp_mod.mcp.call_tool(
+            "get_document_history", {"document_id": "d1"}
+        ))
+
+    rows = asyncio.run(scenario())
+    assert [row["documentId"] for row in rows] == ["d2", "d1"]
 
 
 # ── §14.6 Entity fusion — SAME_AS review surface (K-050 M5 Stage 4) ──────────

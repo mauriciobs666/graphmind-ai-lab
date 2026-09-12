@@ -394,6 +394,66 @@ def get_document_deletion(document_id: str) -> dict[str, Any] | None:
     return _svc().get_document_deletion(ctx, document_id=document_id)
 
 
+@mcp.tool()
+def get_document_history(document_id: str) -> list[dict[str, Any]]:
+    """FR-5 — every version in the confirmed `SUPERSEDES` chain containing
+    `document_id`, oldest to newest. Works from any version's id in the
+    chain, not only the current tip. A pending/rejected suggestion never
+    appears — only a resolved supersession is "history"."""
+    ctx = _get_context()
+    return _svc().get_document_history(ctx, document_id=document_id)
+
+
+# ── §14.8 SUPERSEDES review surface (document-ingestion2 Stage B, FR-3/OQ-3) ─
+
+
+@mcp.tool()
+def list_pending_document_updates(limit: int = 50) -> list[dict[str, Any]]:
+    """List `SUPERSEDES` suggestions awaiting confirm/reject (OQ-3's review
+    surface) — oldest first, each carrying both documents' id + title."""
+    ctx = _get_context()
+    return _svc().list_pending_document_updates(ctx, limit=limit)
+
+
+@mcp.tool()
+def list_document_updates(
+    status: str | None = None, limit: int = 50
+) -> list[dict[str, Any]]:
+    """List `SUPERSEDES` document updates, optionally filtered by `status`
+    (`pending` / `confirmed` / `rejected`) — with no filter, includes the
+    auto-superseded tier (`status='confirmed', decidedBy='system'`),
+    otherwise undiscoverable."""
+    ctx = _get_context()
+    return _svc().list_document_updates(ctx, status=status, limit=limit)
+
+
+@mcp.tool()
+def confirm_document_update(match_id: str) -> dict[str, Any]:
+    """Confirm a `SUPERSEDES` suggestion (FR-3/AC-3) — the old document
+    flips non-current and its chunks stop being searchable by default."""
+    ctx = _get_context()
+    return _svc().confirm_document_update(ctx, match_id=match_id)
+
+
+@mcp.tool()
+def reject_document_update(match_id: str) -> dict[str, Any]:
+    """Reject a `SUPERSEDES` suggestion (FR-3/AC-3) — the edge stays as a
+    `rejected` record, reversible via `recheck_document_update` or automatic
+    re-derivation; both documents stay independent, current, and
+    searchable."""
+    ctx = _get_context()
+    return _svc().reject_document_update(ctx, match_id=match_id)
+
+
+@mcp.tool()
+def recheck_document_update(match_id: str) -> dict[str, Any] | None:
+    """Manually reopen a `rejected` `SUPERSEDES` suggestion back to
+    `pending`. A no-op (returns `None`) if `match_id` is unknown or not
+    `rejected`."""
+    ctx = _get_context()
+    return _svc().recheck_document_update(ctx, match_id=match_id)
+
+
 # ── §14.6 Entity fusion review surface (K-050 M5 Stage 4, FR-10/OQ-2) ────────
 
 

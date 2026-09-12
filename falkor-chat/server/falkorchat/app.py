@@ -40,6 +40,7 @@ from .services import (
     DEFAULT_SWEEP_LIMIT,
     ChannelNotFoundError,
     DocumentNotFoundError,
+    DocumentUpdateNotFoundError,
     MatchNotFoundError,
     SearchNotAvailableError,
     ServiceError,
@@ -87,7 +88,7 @@ def _register_error_handlers(app: FastAPI) -> None:
             exc,
             (
                 ChannelNotFoundError, ThreadNotFoundError, MatchNotFoundError,
-                DocumentNotFoundError,
+                DocumentNotFoundError, DocumentUpdateNotFoundError,
             ),
         )
         return JSONResponse(

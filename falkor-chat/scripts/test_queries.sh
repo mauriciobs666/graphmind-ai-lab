@@ -1672,6 +1672,95 @@ assert_no_data_row "§14.7 delete_document is a no-op for an already-deleted id"
 out=$(rq "$WS" "MATCH (dd:DocumentDeletion {documentId:'doc1'}) RETURN count(dd)")
 assert_contains "§14.7 exactly one DocumentDeletion node after a repeat delete attempt" "1" "$out"
 
+# ── §14.8 SUPERSEDES version history + confirm/reject/recheck (document-ingestion2
+# Stage B) ─────────────────────────────────────────────────────────────────────
+
+echo ""
+echo "▶ §14.8 SUPERSEDES (document-ingestion2 Stage B)"
+
+# Seed two Documents + Chunks directly (raw writes, same posture as §14.7 above —
+# only the SUPERSEDES shapes themselves are this section's scope).
+gq "$WS" "CREATE (d:Document {documentId:'sd1', title:'new', text:'hello v2', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:200, currentVersion:true})-[:HAS_CHUNK]->(:Chunk {chunkId:'sc1', text:'hello v2', seq:0, documentId:'sd1', documentCurrent:true})" > /dev/null
+gq "$WS" "CREATE (d:Document {documentId:'sd2', title:'old', text:'hello v1', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:true})-[:HAS_CHUNK]->(:Chunk {chunkId:'sc2', text:'hello v1', seq:0, documentId:'sd2', documentCurrent:true})" > /dev/null
+
+# create_or_reopen_supersede_suggestion's write shape — verbatim mirror of
+# create_or_reopen_match, Document/SUPERSEDES in place of Entity/SAME_AS
+# (plan §3.4/§4 Stage B, live-verified at this granularity — plan §0 second pass).
+CREATE_OR_REOPEN_SUPERSEDE='MATCH (a:Document {documentId: $newDocumentId}) MATCH (b:Document {documentId: $candidateDocumentId}) OPTIONAL MATCH (a)-[existing:SUPERSEDES]-(b) WITH a, b, existing, (existing IS NULL) AS isNew, (existing IS NOT NULL AND existing.status = '"'"'rejected'"'"') AS reopen FOREACH (_ IN CASE WHEN isNew THEN [1] ELSE [] END | CREATE (a)-[:SUPERSEDES {matchId: $matchId, status: $status, confidence: $confidence, technique: $technique, createdAt: $createdAt, decidedAt: CASE WHEN $status = '"'"'confirmed'"'"' THEN $createdAt ELSE null END, decidedBy: CASE WHEN $status = '"'"'confirmed'"'"' THEN '"'"'system'"'"' ELSE null END, resuggestCount: 0, lastResuggestedAt: null}]->(b)) FOREACH (_ IN CASE WHEN reopen THEN [1] ELSE [] END | SET existing.status = '"'"'pending'"'"', existing.resuggestCount = coalesce(existing.resuggestCount, 0) + 1, existing.lastResuggestedAt = $createdAt) RETURN isNew AS created, reopen AS reopened, coalesce(existing.matchId, $matchId) AS matchId, coalesce(existing.status, $status) AS status'
+
+out=$(gq "$WS" "CYPHER newDocumentId='sd1' candidateDocumentId='sd2' matchId='sm1' status='pending' confidence=0.8 technique='shingled_jaccard' createdAt=300 $CREATE_OR_REOPEN_SUPERSEDE")
+assert_contains "§14.8 create_or_reopen_supersede_suggestion creates a pending edge" "true" "$out"
+
+prof=$(gp "$WS" "MATCH (a)-[r:SUPERSEDES {matchId: 'sm1'}]->(b) RETURN r.status")
+assert_index_scan "§14.8 SUPERSEDES.matchId lookup (unlabeled endpoints) uses the relationship index, no label scan" "$prof"
+
+# list_pending_document_updates' shape
+out=$(rq "$WS" "MATCH (a)-[r:SUPERSEDES {status: 'pending'}]->(b) RETURN r.matchId, a.documentId, b.documentId ORDER BY r.createdAt")
+assert_contains "§14.8 list_pending_document_updates shows the pending suggestion" "sm1" "$out"
+
+# confirm_document_update's shape — flips the edge AND supersedes the old
+# document + bulk-flips its chunks, one GRAPH.QUERY (plan §3.4).
+CONFIRM_DOCUMENT_UPDATE='MATCH (a)-[r:SUPERSEDES {matchId: $matchId}]->(b) SET r.status = '"'"'confirmed'"'"', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy SET b.currentVersion = false, b.supersededAt = $decidedAt, b.supersededBy = $decidedBy WITH a, b, r OPTIONAL MATCH (b)-[:HAS_CHUNK]->(c:Chunk) WITH a, b, r, collect(c) AS chunks FOREACH (ch IN chunks | SET ch.documentCurrent = false) RETURN r.matchId AS matchId, r.status AS status, a.documentId AS documentA, b.documentId AS documentB'
+
+out=$(gq "$WS" "CYPHER matchId='sm1' decidedBy='u1' decidedAt=400 $CONFIRM_DOCUMENT_UPDATE")
+assert_contains "§14.8 confirm_document_update returns the confirmed matchId" "sm1" "$out"
+
+out=$(rq "$WS" "MATCH (d:Document {documentId:'sd2'}) RETURN d.currentVersion, d.supersededBy")
+assert_contains "§14.8 confirm_document_update flips the old document non-current" "false" "$out"
+assert_contains "§14.8 confirm_document_update stamps supersededBy on the old document" "u1" "$out"
+
+out=$(rq "$WS" "MATCH (c:Chunk {chunkId:'sc2'}) RETURN c.documentCurrent")
+assert_contains "§14.8 confirm_document_update bulk-flips the old document's chunks" "false" "$out"
+
+out=$(rq "$WS" "MATCH (d:Document {documentId:'sd1'}) RETURN d.currentVersion")
+assert_contains "§14.8 confirm_document_update leaves the NEW document untouched" "true" "$out"
+
+# reject_document_update's shape — a second pair, so this section's reopen
+# test below has a clean rejected edge to reopen.
+gq "$WS" "CREATE (d:Document {documentId:'sd3', title:'new2', text:'hello v2b', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:250, currentVersion:true})-[:HAS_CHUNK]->(:Chunk {chunkId:'sc3', text:'hello v2b', seq:0, documentId:'sd3', documentCurrent:true})" > /dev/null
+gq "$WS" "CREATE (d:Document {documentId:'sd4', title:'old2', text:'hello v1b', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:150, currentVersion:true})-[:HAS_CHUNK]->(:Chunk {chunkId:'sc4', text:'hello v1b', seq:0, documentId:'sd4', documentCurrent:true})" > /dev/null
+gq "$WS" "CYPHER newDocumentId='sd3' candidateDocumentId='sd4' matchId='sm2' status='pending' confidence=0.7 technique='shingled_jaccard' createdAt=300 $CREATE_OR_REOPEN_SUPERSEDE" > /dev/null
+
+REJECT_DOCUMENT_UPDATE='MATCH (a)-[r:SUPERSEDES {matchId: $matchId}]->(b) SET r.status = '"'"'rejected'"'"', r.decidedAt = $decidedAt, r.decidedBy = $decidedBy RETURN r.matchId AS matchId, r.status AS status, a.documentId AS documentA, b.documentId AS documentB'
+
+out=$(gq "$WS" "CYPHER matchId='sm2' decidedBy='u1' decidedAt=350 $REJECT_DOCUMENT_UPDATE")
+assert_contains "§14.8 reject_document_update flips status to rejected" "rejected" "$out"
+
+out=$(rq "$WS" "MATCH (d:Document {documentId:'sd4'}) RETURN d.currentVersion")
+assert_contains "§14.8 reject_document_update leaves the old document current" "true" "$out"
+
+# reopen-on-corroboration — re-derive the SAME pair after rejecting it; must
+# reopen to pending (never straight to confirmed), bump resuggestCount on the
+# ORIGINAL matchId, never duplicate the edge (OQ-3 parity, plan §3.4/§7).
+out=$(gq "$WS" "CYPHER newDocumentId='sd3' candidateDocumentId='sd4' matchId='sm3' status='pending' confidence=0.9 technique='shingled_jaccard' createdAt=500 $CREATE_OR_REOPEN_SUPERSEDE")
+assert_contains "§14.8 re-deriving a rejected pair reopens (created=false)" "false" "$out"
+assert_contains "§14.8 re-deriving a rejected pair reopens to pending, never confirmed" "pending" "$out"
+
+out=$(rq "$WS" "MATCH ()-[r:SUPERSEDES {matchId:'sm2'}]->() RETURN r.status, r.resuggestCount")
+assert_contains "§14.8 reopen bumps resuggestCount on the ORIGINAL matchId" "1" "$out"
+
+out=$(rq "$WS" "MATCH (a:Document {documentId:'sd3'}) MATCH (b:Document {documentId:'sd4'}) MATCH (a)-[r:SUPERSEDES]->(b) RETURN count(r)")
+assert_contains "§14.8 reopen never creates a duplicate edge for the same pair" "1" "$out"
+
+# get_document_history's traversal shape — confirmed edges only, one hop at a
+# time, anchored on Document.documentId's own unique index each step (plan §3.7).
+OLDER_STEP='MATCH (a:Document {documentId: $documentId}) MATCH (a)-[r:SUPERSEDES {status: '"'"'confirmed'"'"'}]->(b) RETURN b.documentId AS documentId ORDER BY r.createdAt ASC LIMIT 1'
+NEWER_STEP='MATCH (b:Document {documentId: $documentId}) MATCH (a)-[r:SUPERSEDES {status: '"'"'confirmed'"'"'}]->(b) RETURN a.documentId AS documentId ORDER BY r.createdAt ASC LIMIT 1'
+
+out=$(rq "$WS" "CYPHER documentId='sd1' $OLDER_STEP")
+assert_contains "§14.8 get_document_history's older-direction step finds the confirmed predecessor" "sd2" "$out"
+
+out=$(rq "$WS" "CYPHER documentId='sd2' $NEWER_STEP")
+assert_contains "§14.8 get_document_history's newer-direction step finds the confirmed successor" "sd1" "$out"
+
+# a pending/rejected suggestion must never surface as "history"
+out=$(rq "$WS" "CYPHER documentId='sd4' $OLDER_STEP")
+assert_no_data_row "§14.8 get_document_history's older step ignores a pending suggestion (sd4 has none confirmed)" "documentId" "$out"
+
+# cleanup this section's fixture (SUPERSEDES edges die with their endpoints)
+gq "$WS" "MATCH (n:Document) WHERE n.documentId IN ['sd1','sd2','sd3','sd4'] DETACH DELETE n" > /dev/null
+gq "$WS" "MATCH (c:Chunk) WHERE c.documentId IN ['sd1','sd2','sd3','sd4'] DETACH DELETE c" > /dev/null
+
 # ── teardown ─────────────────────────────────────────────────────────────────
 
 echo ""

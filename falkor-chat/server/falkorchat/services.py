@@ -233,6 +233,20 @@ class DocumentNotFoundError(ServiceError):
     """
 
 
+class DocumentUpdateNotFoundError(ServiceError):
+    """Raised when `confirm_document_update`/`reject_document_update` is
+    given a `match_id` with no `SUPERSEDES` edge (document-ingestion2 plan
+    §3.4/§3.8/§4 Stage B, FR-3/AC-3).
+
+    A **distinct class from `MatchNotFoundError`**, not reused — that
+    class's message says "match," a confusing/wrong term for a
+    document-update suggestion (plan §3.8). `recheck_document_update` does
+    NOT raise this, for the same reason `recheck_match` doesn't: its
+    repository read cannot distinguish "no such matchId" from "exists but
+    isn't `rejected`," and both are equally a no-op there.
+    """
+
+
 class EmptyDocumentError(ServiceError):
     """Raised when `ingest_document`'s text is empty or whitespace-only.
 
@@ -1292,6 +1306,76 @@ class Services:
         """§3.7 supporting capability — document summaries, thin passthrough."""
         return self._repo.list_documents(
             ctx.ws, current_only=current_only, limit=limit
+        )
+
+    # ── §14.8 SUPERSEDES version history + confirm/reject/recheck ────────────────
+    # (document-ingestion2 Stage B, FR-3/FR-5, plan §3.4/§3.7/§3.8) — thin
+    # passthroughs, same shape as the §14.6 SAME_AS review-surface methods
+    # below. `decidedBy=ctx.actor`, never `'system'`, on this human/agent-
+    # driven path (the auto tier's `'system'` stamp is Stage D's, folded
+    # into `create_document_with_auto_supersede` itself).
+
+    def get_document_history(
+        self, ctx: CallContext, *, document_id: str
+    ) -> list[dict[str, Any]]:
+        """FR-5 — every version in the confirmed `SUPERSEDES` chain
+        containing `document_id`, oldest to newest. Thin passthrough."""
+        return self._repo.get_document_history(ctx.ws, document_id=document_id)
+
+    def list_pending_document_updates(
+        self, ctx: CallContext, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """OQ-3's dedicated review surface — `status='pending'` document-
+        update suggestions only."""
+        return self._repo.list_pending_document_updates(ctx.ws, limit=limit)
+
+    def list_document_updates(
+        self, ctx: CallContext, *, status: str | None = None, limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Status-filterable (or unfiltered) `SUPERSEDES` listing — audit
+        parity with `list_matches`, the only way to discover the
+        auto-superseded (`status='confirmed', decidedBy='system'`) tier
+        once Stage D lands."""
+        return self._repo.list_document_updates(ctx.ws, status=status, limit=limit)
+
+    def confirm_document_update(
+        self, ctx: CallContext, *, match_id: str
+    ) -> dict[str, Any]:
+        """FR-3/AC-3 — confirm a `pending` (or previously `rejected`)
+        document-update suggestion. `decidedBy` is stamped from the calling
+        actor, never `'system'`."""
+        result = self._repo.confirm_document_update(
+            ctx.ws, match_id=match_id, decided_by=ctx.actor, decided_at=self._clock(),
+        )
+        if result is None:
+            raise DocumentUpdateNotFoundError(match_id)
+        return result
+
+    def reject_document_update(
+        self, ctx: CallContext, *, match_id: str
+    ) -> dict[str, Any]:
+        """FR-3/AC-3 — reject a document-update suggestion. Never deletes
+        the `SUPERSEDES` edge (OQ-3 parity)."""
+        result = self._repo.reject_document_update(
+            ctx.ws, match_id=match_id, decided_by=ctx.actor, decided_at=self._clock(),
+        )
+        if result is None:
+            raise DocumentUpdateNotFoundError(match_id)
+        return result
+
+    def recheck_document_update(
+        self, ctx: CallContext, *, match_id: str
+    ) -> dict[str, Any] | None:
+        """§3.4's reversed scope call — manually reopen a `rejected`
+        document-update suggestion back to `pending`.
+
+        Returns `None` on a no-op (no such `matchId`, or it isn't currently
+        `rejected`) rather than raising — mirrors
+        `Repository.recheck_document_update`'s own inability to distinguish
+        the two cases.
+        """
+        return self._repo.recheck_document_update(
+            ctx.ws, match_id=match_id, at=self._clock()
         )
 
     # ── §14.6 Entity fusion — SAME_AS review surface (K-050 M5 Stage 4) ──────────

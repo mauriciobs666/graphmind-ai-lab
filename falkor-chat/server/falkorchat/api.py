@@ -272,6 +272,58 @@ def build_router(
             raise HTTPException(status_code=404, detail="document deletion not found")
         return deletion
 
+    # `/documents/{document_id}/history` is two segments past the one-segment
+    # `{document_id}` route — no collision, same posture as `/deletion` above.
+    @router.get("/documents/{document_id}/history")
+    def get_document_history(
+        document_id: str = Path(..., min_length=1, max_length=MAX_ID_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.get_document_history(ctx, document_id=document_id)
+
+    # ── §14.8 SUPERSEDES review surface (document-ingestion2 Stage B) ─────────
+    # `DocumentUpdateNotFoundError` maps to 404 via the generic `ServiceError`
+    # handler. Registered BEFORE `/document-updates/{match_id}/...`: no
+    # ambiguity here (no `/document-updates/search`-shaped route exists), but
+    # kept adjacent for readability, same static-then-scoped grouping as
+    # `/matches` above.
+
+    @router.get("/document-updates/pending")
+    def list_pending_document_updates(
+        limit: int = Query(50, ge=1, le=200),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.list_pending_document_updates(ctx, limit=limit)
+
+    @router.get("/document-updates")
+    def list_document_updates(
+        status: str | None = Query(None),
+        limit: int = Query(50, ge=1, le=200),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.list_document_updates(ctx, status=status, limit=limit)
+
+    @router.post("/document-updates/{match_id}/confirm")
+    def confirm_document_update(
+        match_id: str = Path(..., min_length=1, max_length=MAX_ID_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.confirm_document_update(ctx, match_id=match_id)
+
+    @router.post("/document-updates/{match_id}/reject")
+    def reject_document_update(
+        match_id: str = Path(..., min_length=1, max_length=MAX_ID_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.reject_document_update(ctx, match_id=match_id)
+
+    @router.post("/document-updates/{match_id}/recheck")
+    def recheck_document_update(
+        match_id: str = Path(..., min_length=1, max_length=MAX_ID_LEN),
+        ctx: CallContext = Depends(get_context),
+    ):
+        return services.recheck_document_update(ctx, match_id=match_id)
+
     # ── §14.6 Entity fusion review surface (K-050 M5 Stage 4, FR-10/OQ-2) ─────
     # `MatchNotFoundError` maps to 404 via the generic `ServiceError` handler.
     # Registered BEFORE `/matches/{match_id}/...`: no ambiguity here (no

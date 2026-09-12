@@ -254,6 +254,118 @@ def test_get_document_deletion_route_404_when_never_deleted(client):
     assert r.status_code == 404
 
 
+# ── §14.8 SUPERSEDES review surface (document-ingestion2 Stage B) ───────────
+
+
+def _seed_document_update(conn, *, status="pending"):
+    """Writes two documents + one SUPERSEDES edge directly via the
+    repository — a document-update suggestion is a side effect of the
+    (not-yet-built, Stage D) detection pipeline, not a REST-reachable write,
+    so this seeds state below the API layer, mirroring `_seed_match` below.
+    """
+    repo = Repository(conn)
+    repo.ensure_user("test", user_id="u2", display_name="Bob")
+    repo.create_document(
+        "test", document_id="d1", title="new", text="hello v2",
+        source_format="text", ingested_by="u2", created_at=100,
+        chunks=[{"chunkId": "dc1", "text": "hello v2", "seq": 0}],
+    )
+    repo.create_document(
+        "test", document_id="d2", title="old", text="hello v1",
+        source_format="text", ingested_by="u2", created_at=50,
+        chunks=[{"chunkId": "dc2", "text": "hello v1", "seq": 0}],
+    )
+    repo.create_or_reopen_supersede_suggestion(
+        "test", new_document_id="d1", candidate_document_id="d2", match_id="dm1",
+        status=status, confidence=0.8, technique="shingled_jaccard", created_at=100,
+    )
+
+
+def test_list_pending_document_updates_route(client, conn):
+    _seed_document_update(conn, status="pending")
+
+    r = client.get("/document-updates/pending")
+
+    assert r.status_code == 200
+    assert [m["matchId"] for m in r.json()] == ["dm1"]
+
+
+def test_list_document_updates_route_filters_by_status(client, conn):
+    _seed_document_update(conn, status="pending")
+
+    pending = client.get("/document-updates", params={"status": "pending"})
+    confirmed = client.get("/document-updates", params={"status": "confirmed"})
+
+    assert [m["matchId"] for m in pending.json()] == ["dm1"]
+    assert confirmed.json() == []
+
+
+def test_confirm_document_update_route(client, conn):
+    _seed_document_update(conn, status="pending")
+
+    r = client.post("/document-updates/dm1/confirm")
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "confirmed"
+
+    old = client.get("/documents/d2")
+    assert old.status_code == 200  # direct lookup still succeeds (§3.3)
+
+
+def test_confirm_document_update_route_404_for_unknown_match_id(client):
+    r = client.post("/document-updates/nope/confirm")
+    assert r.status_code == 404
+
+
+def test_reject_document_update_route(client, conn):
+    _seed_document_update(conn, status="pending")
+
+    r = client.post("/document-updates/dm1/reject")
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "rejected"
+
+
+def test_reject_document_update_route_404_for_unknown_match_id(client):
+    r = client.post("/document-updates/nope/reject")
+    assert r.status_code == 404
+
+
+def test_recheck_document_update_route_reopens_a_rejected_update(client, conn):
+    _seed_document_update(conn, status="pending")
+    client.post("/document-updates/dm1/reject")
+
+    r = client.post("/document-updates/dm1/recheck")
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "pending"
+
+
+def test_recheck_document_update_route_is_a_noop_for_an_unknown_match_id(client):
+    r = client.post("/document-updates/nope/recheck")
+    assert r.status_code == 200
+    assert r.json() is None
+
+
+def test_get_document_history_route_after_confirm(client, conn):
+    _seed_document_update(conn, status="pending")
+    client.post("/document-updates/dm1/confirm")
+
+    r = client.get("/documents/d1/history")
+
+    assert r.status_code == 200
+    assert [row["documentId"] for row in r.json()] == ["d2", "d1"]
+
+
+def test_get_document_history_route_excludes_pending_suggestions(client, conn):
+    _seed_document_update(conn, status="pending")
+
+    r = client.get("/documents/d1/history")
+
+    assert r.status_code == 200
+    assert [row["documentId"] for row in r.json()] == ["d1"]
+
+
 # ── §14.6 Entity fusion — SAME_AS review surface (K-050 M5 Stage 4) ──────────
 
 
