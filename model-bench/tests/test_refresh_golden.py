@@ -1221,3 +1221,81 @@ def test_run_stamp_answerability_stamps_answerable_true_false_and_not_found_by_c
 
     # Every other field on each row is carried through unchanged.
     assert by_id["nlq-01"]["question"] == "q1"
+
+
+# --------------------------------------------------------------------------------------------
+# `main()` CLI wiring for `--check-tables-shape`/`--stamp-answerability` (S4 spec §6/§7 Step 4) —
+# `run_check_tables_shape`/`run_stamp_answerability` are already exercised directly above; these
+# cover the CLI surface itself: flag parsing, and blockers surfacing as an exit code, not a
+# traceback (mirrors the existing `--embed-corpus` CLI tests' own shape).
+# --------------------------------------------------------------------------------------------
+
+
+def test_main_check_tables_shape_requires_source_git_sha(tmp_path: Path) -> None:
+    exit_code = refresh_golden.main(["--pack", str(tmp_path), "--check-tables-shape"])
+    assert exit_code == 2
+
+
+def test_main_check_tables_shape_reports_a_shape_violation_as_a_blocker_not_a_traceback(
+    tmp_path: Path,
+) -> None:
+    pack_root = tmp_path / "pack"
+    pack_root.mkdir()
+    (pack_root / "pack.json").write_text(json.dumps({"packVersion": "1.0.0"}))
+    (pack_root / "schema.json").write_text(json.dumps({"knowledge_base": _SCHEMA_KB}))
+    (pack_root / "tables.json").write_text(
+        json.dumps({"knowledge_base": {"Entity": [{"entityId": "e1"}]}})  # missing "type"
+    )
+    exit_code = refresh_golden.main(
+        ["--pack", str(pack_root), "--check-tables-shape", "--source-git-sha", "deadbeef"]
+    )
+    assert exit_code == 1
+
+
+def test_main_check_tables_shape_writes_provenance_and_prints_row_counts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pack_root = tmp_path / "pack"
+    pack_root.mkdir()
+    (pack_root / "pack.json").write_text(json.dumps({"packVersion": "1.0.0"}))
+    (pack_root / "schema.json").write_text(json.dumps({"knowledge_base": _SCHEMA_KB}))
+    (pack_root / "tables.json").write_text(
+        json.dumps({"knowledge_base": {"Entity": [{"entityId": "e1", "type": "Person"}]}})
+    )
+    exit_code = refresh_golden.main(
+        ["--pack", str(pack_root), "--check-tables-shape", "--source-git-sha", "deadbeef"]
+    )
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Entity=1" in out
+    provenance = (pack_root / "PROVENANCE.md").read_text(encoding="utf-8")
+    assert "deadbeef" in provenance
+
+
+def test_main_stamp_answerability_refuses_on_a_non_nlq_pack_as_a_blocker_not_a_traceback(
+    tmp_path: Path,
+) -> None:
+    pack_root = tmp_path / "some-other-pack"
+    pack_root.mkdir()
+    (pack_root / "pack.json").write_text(json.dumps({"packId": "guard-judge-understanding"}))
+    exit_code = refresh_golden.main(["--pack", str(pack_root), "--stamp-answerability"])
+    assert exit_code == 1
+
+
+def test_main_stamp_answerability_stamps_items_and_prints_counts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pack_root = tmp_path / "nlq-pack"
+    _write_minimal_nlq_pack(pack_root)
+    exit_code = refresh_golden.main(["--pack", str(pack_root), "--stamp-answerability"])
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "answerable=2" in out
+    assert "unanswerable=1" in out
+    items = [
+        json.loads(line)
+        for line in (pack_root / "items.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    by_id = {row["itemId"]: row for row in items}
+    assert by_id["nlq-01"]["answerable"] is True

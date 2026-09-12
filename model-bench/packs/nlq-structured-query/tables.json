@@ -107,5 +107,517 @@
         "price": 89.99
       }
     ]
+  },
+  "knowledge_base": {
+    "Entity": [
+      {
+        "entityId": "ef4d025a392449ffa0e8f7f71841bdbf",
+        "name": "Elena Ferro",
+        "nameNormalized": "elena ferro",
+        "type": "Person"
+      },
+      {
+        "entityId": "fe959ac5d01c42a396efa5892d3c0af2",
+        "name": "Marlowe Robotics",
+        "nameNormalized": "marlowe robotics",
+        "type": "Organization"
+      },
+      {
+        "entityId": "93b11161964b4ef886560338763f11e1",
+        "name": "Austin",
+        "nameNormalized": "austin",
+        "type": "Location"
+      },
+      {
+        "entityId": "78b6eec6e10f457984e26e998521b240",
+        "name": "Texas",
+        "nameNormalized": "texas",
+        "type": "Location"
+      },
+      {
+        "entityId": "47b5269089fb4d4fb5b10ce0411077c0",
+        "name": "Devon Cole",
+        "nameNormalized": "devon cole",
+        "type": "Person"
+      },
+      {
+        "entityId": "af855167cfcc428d83485c8de8ce5e0c",
+        "name": "Chief Technology Officer",
+        "nameNormalized": "chief technology officer",
+        "type": "Concept"
+      },
+      {
+        "entityId": "a6e3c7aacf48440fb2dd37854cf5b148",
+        "name": "2019",
+        "nameNormalized": "2019",
+        "type": "Other"
+      },
+      {
+        "entityId": "4b891a390fd24dd39faef6f3e6bcc6d0",
+        "name": "Marlowe Robotics",
+        "nameNormalized": "marlowe robotics",
+        "type": "Organization"
+      },
+      {
+        "entityId": "462547f310ab40499db882f265c6abe6",
+        "name": "Atlas-7",
+        "nameNormalized": "atlas-7",
+        "type": "Product"
+      },
+      {
+        "entityId": "d75266b695764edf9f548827b89ac34a",
+        "name": "April 14, 2025",
+        "nameNormalized": "april 14, 2025",
+        "type": "Event"
+      },
+      {
+        "entityId": "3fe3ecd121ef4082bd43e9e2580791f9",
+        "name": "800 kilograms",
+        "nameNormalized": "800 kilograms",
+        "type": "Concept"
+      },
+      {
+        "entityId": "cfe5f5edbb884d6e9f603513def0b9c2",
+        "name": "80",
+        "nameNormalized": "80",
+        "type": "Other"
+      },
+      {
+        "entityId": "fd8e530793db439e90f485b76e288d0e",
+        "name": "Marlowe Robotics",
+        "nameNormalized": "marlowe robotics",
+        "type": "Organization"
+      },
+      {
+        "entityId": "a213bc324aaf4be2bb5bebf1d7b61283",
+        "name": "Atlas-7",
+        "nameNormalized": "atlas-7",
+        "type": "Product"
+      },
+      {
+        "entityId": "dfefab87ae544c51a3e05fc30554679c",
+        "name": "RoboWorks Summit 2025",
+        "nameNormalized": "roboworks summit 2025",
+        "type": "Event"
+      },
+      {
+        "entityId": "0bd9f44362a849cdbc782099cbaa95b6",
+        "name": "Denver",
+        "nameNormalized": "denver",
+        "type": "Location"
+      },
+      {
+        "entityId": "5c5005b15b884d1bbf10cfa2cf83d838",
+        "name": "Colorado",
+        "nameNormalized": "colorado",
+        "type": "Location"
+      },
+      {
+        "entityId": "101f83988a5b46da99a543619312cce3",
+        "name": "Devon Cole",
+        "nameNormalized": "devon cole",
+        "type": "Person"
+      },
+      {
+        "entityId": "77ca6dabbe134d4393406144fd52edd2",
+        "name": "keynote demonstration",
+        "nameNormalized": "keynote demonstration",
+        "type": "Other"
+      },
+      {
+        "entityId": "9c9f028768a9415cb16fe0a3253f5b97",
+        "name": "Marlowe Robotics",
+        "nameNormalized": "marlowe robotics",
+        "type": "Organization"
+      },
+      {
+        "entityId": "3aefa6c720654068845eb5353bc71da7",
+        "name": "Cascade Logistics",
+        "nameNormalized": "cascade logistics",
+        "type": "Organization"
+      },
+      {
+        "entityId": "434eff95094f44ed88db431eb36801ba",
+        "name": "Atlas-7",
+        "nameNormalized": "atlas-7",
+        "type": "Product"
+      },
+      {
+        "entityId": "7aaa282d77604dfb8ab504514097e161",
+        "name": "Denver",
+        "nameNormalized": "denver",
+        "type": "Location"
+      },
+      {
+        "entityId": "95513808172f4fc78bdbc366f9d86159",
+        "name": "Colorado",
+        "nameNormalized": "colorado",
+        "type": "Location"
+      },
+      {
+        "entityId": "3131f33b07024baab3a56918d794e259",
+        "name": "June 2025",
+        "nameNormalized": "june 2025",
+        "type": "Event"
+      },
+      {
+        "entityId": "f312c93586f84a54a7949b915501f387",
+        "name": "Thornfield Ventures",
+        "nameNormalized": "thornfield ventures",
+        "type": "Organization"
+      },
+      {
+        "entityId": "f00d81e89de04e18874968e8fbd85e59",
+        "name": "Marlowe Robotics",
+        "nameNormalized": "marlowe robotics",
+        "type": "Organization"
+      },
+      {
+        "entityId": "fd86ddefccd6498e86c0d16dc7a34fec",
+        "name": "Series B",
+        "nameNormalized": "series b",
+        "type": "Event"
+      },
+      {
+        "entityId": "bfad1aea45074a0e803600a42e5ce8ba",
+        "name": "January 2026",
+        "nameNormalized": "january 2026",
+        "type": "Event"
+      },
+      {
+        "entityId": "1e9d76a4df7d47708ff1cc9c5a40ad1b",
+        "name": "18 million dollars",
+        "nameNormalized": "18 million dollars",
+        "type": "Product"
+      },
+      {
+        "entityId": "80c2cce82de843e7a6ff3048434f7b07",
+        "name": "January 1026",
+        "nameNormalized": "january 1026",
+        "type": "Other"
+      },
+      {
+        "entityId": "a439df3526a84d38b5a7980b3717552f",
+        "name": "Marlowe Robotics",
+        "nameNormalized": "marlowe robotics",
+        "type": "Organization"
+      },
+      {
+        "entityId": "9fe671aa0c2047e9a8cce232d6b9c8f4",
+        "name": "Brightline Systems",
+        "nameNormalized": "brightline systems",
+        "type": "Organization"
+      },
+      {
+        "entityId": "36a14f97903d42feadf4bfbde03ab52a",
+        "name": "Boulder",
+        "nameNormalized": "boulder",
+        "type": "Location"
+      },
+      {
+        "entityId": "d5b19f0c9a974e85a3bc88ef90b3cb85",
+        "name": "Colorado",
+        "nameNormalized": "colorado",
+        "type": "Location"
+      },
+      {
+        "entityId": "0a795850e05a4593985b29bf1ee56039",
+        "name": "March 2026",
+        "nameNormalized": "march 2026",
+        "type": "Event"
+      },
+      {
+        "entityId": "af31686a25ab4e93889b27a56e011476",
+        "name": "acquisition",
+        "nameNormalized": "acquisition",
+        "type": "Other"
+      },
+      {
+        "entityId": "c140b78aa4fc49108360471ba07ed7a9",
+        "name": "Marlowe Robotics",
+        "nameNormalized": "marlowe robotics",
+        "type": "Organization"
+      },
+      {
+        "entityId": "d0464decca6d44b9b01037448a62f74b",
+        "name": "62",
+        "nameNormalized": "62",
+        "type": "Other"
+      },
+      {
+        "entityId": "4e28d474fc0f4afdb4705146deed8d24",
+        "name": "Marlowe Robotics",
+        "nameNormalized": "marlowe robotics",
+        "type": "Organization"
+      },
+      {
+        "entityId": "802e1d06ee9e4dafaa9568e978328b55",
+        "name": "Brightline Systems",
+        "nameNormalized": "brightline systems",
+        "type": "Organization"
+      },
+      {
+        "entityId": "8bd8bbdb3a9e4352ac674aa8577fa43d",
+        "name": "March 2026",
+        "nameNormalized": "march 2026",
+        "type": "Event"
+      },
+      {
+        "entityId": "6974fc08ed2f48e4966adae1c0d87dcd",
+        "name": "140 employees",
+        "nameNormalized": "140 employees",
+        "type": "Other"
+      },
+      {
+        "entityId": "01fdf5d324604c459ba6b77925ebb99b",
+        "name": "Marlowe Robotics having 140 employees",
+        "nameNormalized": "marlowe robotics having 140 employees",
+        "type": "Other"
+      },
+      {
+        "entityId": "4f55bfb747b64b4ab70a0a417ccb9e42",
+        "name": "Marlowe Robotics",
+        "nameNormalized": "marlowe robotics",
+        "type": "Organization"
+      },
+      {
+        "entityId": "640ad028e9f24c3d94243ae24be9200f",
+        "name": "swarm coordination",
+        "nameNormalized": "swarm coordination",
+        "type": "Concept"
+      },
+      {
+        "entityId": "eff6e5f6a8d349afbfebe57e3d8862b6",
+        "name": "Atlas-7",
+        "nameNormalized": "atlas-7",
+        "type": "Product"
+      },
+      {
+        "entityId": "d93d0ec5163b496099a69238b38e4bec",
+        "name": "warehouse",
+        "nameNormalized": "warehouse",
+        "type": "Location"
+      },
+      {
+        "entityId": "2fe37a9318744e01b04b4bfb9a3b16b1",
+        "name": "Marlowe Robotics",
+        "nameNormalized": "marlowe robotics",
+        "type": "Organization"
+      },
+      {
+        "entityId": "87049c7b08b944adb7a75c8d2181adf7",
+        "name": "Vantage Automation",
+        "nameNormalized": "vantage automation",
+        "type": "Organization"
+      },
+      {
+        "entityId": "87d828f5362846d19889ac7ec9c31cce",
+        "name": "Seattle",
+        "nameNormalized": "seattle",
+        "type": "Location"
+      },
+      {
+        "entityId": "181207bc46eb45c8a9d65baa27cfc066",
+        "name": "Washington",
+        "nameNormalized": "washington",
+        "type": "Location"
+      },
+      {
+        "entityId": "ba290ec6c93c4e00ac828f007066fd2c",
+        "name": "Marlowe Robotics",
+        "nameNormalized": "marlowe robotics",
+        "type": "Organization"
+      },
+      {
+        "entityId": "79ef019c448e4622b78fa823385a59f4",
+        "name": "NovaGrid",
+        "nameNormalized": "novagrid",
+        "type": "Product"
+      },
+      {
+        "entityId": "d9f9892646854ebeb1765e761d16a2f8",
+        "name": "Atlas-7",
+        "nameNormalized": "atlas-7",
+        "type": "Product"
+      },
+      {
+        "entityId": "3627f2f0c236497fba87b014170a1134",
+        "name": "September 2025",
+        "nameNormalized": "september 2025",
+        "type": "Event"
+      },
+      {
+        "entityId": "5776bd2fbc0d4ea196f061716e7632a1",
+        "name": "September than",
+        "nameNormalized": "september than",
+        "type": "Other"
+      },
+      {
+        "entityId": "5dc8b15e12be4f859ccc647d08ec61e7",
+        "name": "Devon Cole",
+        "nameNormalized": "devon cole",
+        "type": "Person"
+      },
+      {
+        "entityId": "4e4e158da2a1491b9d2b03b55b124fc7",
+        "name": "Priya Nandakumar",
+        "nameNormalized": "priya nandakumar",
+        "type": "Person"
+      },
+      {
+        "entityId": "020e2155276d46468f94ae1b901c4300",
+        "name": "Marlowe Robotics",
+        "nameNormalized": "marlowe robotics",
+        "type": "Organization"
+      },
+      {
+        "entityId": "46fa5cb7ccb84e77ace0d7dde95d7d65",
+        "name": "Chief Operating Officer",
+        "nameNormalized": "chief operating officer",
+        "type": "Other"
+      },
+      {
+        "entityId": "498e4d9b4e9d4b68a27d7bc6215de2b3",
+        "name": "Chief Technology Officer",
+        "nameNormalized": "chief technology officer",
+        "type": "Other"
+      }
+    ],
+    "Document": [
+      {
+        "documentId": "fbcf1a1f87a249f484c0a8e351ca1e93",
+        "sourceFormat": "text",
+        "title": "NLQ-EVAL-01: Marlowe Robotics Founding"
+      },
+      {
+        "documentId": "bf4033b2f59e4c558d1b33f312a74905",
+        "sourceFormat": "text",
+        "title": "NLQ-EVAL-02: Atlas-7 Product Launch"
+      },
+      {
+        "documentId": "1d28673ef55a4e2ca321338a22155c90",
+        "sourceFormat": "text",
+        "title": "NLQ-EVAL-03: RoboWorks Summit Presentation"
+      },
+      {
+        "documentId": "fd0ce90250694febbf9a74ac245c8536",
+        "sourceFormat": "text",
+        "title": "NLQ-EVAL-04: Cascade Logistics Partnership"
+      },
+      {
+        "documentId": "bad1941b46844fc8a36afeb0b59ea6b7",
+        "sourceFormat": "text",
+        "title": "NLQ-EVAL-05: Thornfield Ventures Investment"
+      },
+      {
+        "documentId": "ceb295aac0a94092be5ce5d0765df38d",
+        "sourceFormat": "text",
+        "title": "NLQ-EVAL-06: Brightline Systems Acquisition"
+      },
+      {
+        "documentId": "0832036c407d4784a30e002649a98650",
+        "sourceFormat": "text",
+        "title": "NLQ-EVAL-07: Marlowe Robotics Employee Count (A)"
+      },
+      {
+        "documentId": "35474077b0f84679a4197df46f296d90",
+        "sourceFormat": "text",
+        "title": "NLQ-EVAL-08: Marlowe Robotics Employee Count (B)"
+      },
+      {
+        "documentId": "1bbad12c8ae14e108b98219288b721bd",
+        "sourceFormat": "text",
+        "title": "NLQ-EVAL-09: Swarm Coordination Research"
+      },
+      {
+        "documentId": "4ca9da64dfe845979e4e6c46c4f342aa",
+        "sourceFormat": "text",
+        "title": "NLQ-EVAL-10: Competitor Landscape"
+      },
+      {
+        "documentId": "47bc1eafbf0e4607aba4fb6d957276a5",
+        "sourceFormat": "text",
+        "title": "NLQ-EVAL-11: NovaGrid Software Platform"
+      },
+      {
+        "documentId": "290dd4a876a849f683ab3af391cd7446",
+        "sourceFormat": "text",
+        "title": "NLQ-EVAL-12: Leadership Update"
+      }
+    ],
+    "Chunk": [
+      {
+        "chunkId": "96c17d02741b4032a458ac3dddf2e8ec",
+        "documentId": "fbcf1a1f87a249f484c0a8e351ca1e93",
+        "seq": 0,
+        "text": "Elena Ferro founded Marlowe Robotics in Austin, Texas in 2019. Devon Cole joined as co-founder and Chief Technology Officer three months later."
+      },
+      {
+        "chunkId": "3daa5cd552c34f8181e16c77588204a8",
+        "documentId": "bf4033b2f59e4c558d1b33f312a74905",
+        "seq": 0,
+        "text": "Marlowe Robotics launched the Atlas-7 warehouse robot on April 14, 2025. The Atlas-7 can lift pallets weighing up to 800 kilograms."
+      },
+      {
+        "chunkId": "65a63812724f4883a78a29dd117b0674",
+        "documentId": "1d28673ef55a4e2ca321338a22155c90",
+        "seq": 0,
+        "text": "Marlowe Robotics presented the Atlas-7 at the RoboWorks Summit 2025, held in Denver, Colorado. Devon Cole delivered the keynote demonstration."
+      },
+      {
+        "chunkId": "a98bf0371aba4c17b93b760372ce7005",
+        "documentId": "fd0ce90250694febbf9a74ac245c8536",
+        "seq": 0,
+        "text": "Marlowe Robotics partnered with Cascade Logistics in June 2025 to deploy Atlas-7 robots across Cascade Logistics' Denver distribution centers. Cascade Logistics is headquartered in Denver, Colorado."
+      },
+      {
+        "chunkId": "b5e8157a7bd04fd8bdd47bf74e995cf4",
+        "documentId": "bad1941b46844fc8a36afeb0b59ea6b7",
+        "seq": 0,
+        "text": "Thornfield Ventures led a Series B funding round for Marlowe Robotics in January 2026, investing 18 million dollars."
+      },
+      {
+        "chunkId": "20da53614d284db08a7bc7d4c23f6f10",
+        "documentId": "ceb295aac0a94092be5ce5d0765df38d",
+        "seq": 0,
+        "text": "Marlowe Robotics acquired Brightline Systems, a smaller robotics-software startup based in Boulder, Colorado, in March 2026."
+      },
+      {
+        "chunkId": "5cb448b275c2436c8b5fee5115eb1737",
+        "documentId": "0832036c407d4784a30e002649a98650",
+        "seq": 0,
+        "text": "As of March 2026, Marlowe Robotics has 62 employees."
+      },
+      {
+        "chunkId": "c01a434de5d94ec98ad6ff524d43c8ca",
+        "documentId": "35474077b0f84679a4197df46f296d90",
+        "seq": 0,
+        "text": "As of March 2026, Marlowe Robotics has 140 employees, following the Brightline Systems acquisition."
+      },
+      {
+        "chunkId": "994467dcef8447258426db360b8d8c4c",
+        "documentId": "1bbad12c8ae14e108b98219288b721bd",
+        "seq": 0,
+        "text": "Marlowe Robotics researches swarm coordination, a concept in decentralized robotics control that lets multiple Atlas-7 units navigate a warehouse without central routing."
+      },
+      {
+        "chunkId": "38372997ff954b22a01c054ee7343300",
+        "documentId": "4ca9da64dfe845979e4e6c46c4f342aa",
+        "seq": 0,
+        "text": "Marlowe Robotics competes with Vantage Automation in the warehouse-robotics market. Vantage Automation is headquartered in Seattle, Washington."
+      },
+      {
+        "chunkId": "dccd2e483a0c416f94ff19454e6da9dc",
+        "documentId": "47bc1eafbf0e4607aba4fb6d957276a5",
+        "seq": 0,
+        "text": "Marlowe Robotics develops NovaGrid, a fleet-management software platform that coordinates Atlas-7 robots in real time. NovaGrid was released in September 2025."
+      },
+      {
+        "chunkId": "e899dd2bd9ec46399230a1247981c2f6",
+        "documentId": "290dd4a876a849f683ab3af391cd7446",
+        "seq": 0,
+        "text": "In February 2026, Devon Cole was promoted from Chief Technology Officer to Chief Operating Officer at Marlowe Robotics. Priya Nandakumar joined Marlowe Robotics as the new Chief Technology Officer."
+      }
+    ]
   }
 }

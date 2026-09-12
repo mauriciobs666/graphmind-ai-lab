@@ -1,6 +1,6 @@
 {
   "packId": "nlq-structured-query",
-  "packVersion": "1.0.0",
+  "packVersion": "1.2.0",
   "role": "nlq-generator",
   "schemaVersion": 1,
   "description": "Structured NL-to-query generation over the catalog/knowledge_base datasets, scored by Layer-1 exact match after canonicalization.",

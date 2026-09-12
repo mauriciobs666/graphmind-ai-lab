@@ -1000,6 +1000,24 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="the one live-LM-Studio mode: embed corpus.jsonl and write corpus.embeddings.json",
     )
+    parser.add_argument(
+        "--check-tables-shape",
+        action="store_true",
+        help="local-only (nlq-structured-query): validate an already-produced tables.json's "
+        "knowledge_base half against schema.json and write PROVENANCE.md's snapshot row "
+        "(--source-git-sha required)",
+    )
+    parser.add_argument(
+        "--source-git-sha",
+        help="the falkor-chat commit the operator read the live ws:nlq-eval graph at "
+        "(--check-tables-shape only)",
+    )
+    parser.add_argument(
+        "--stamp-answerability",
+        action="store_true",
+        help="nlq-structured-query only: run reference_specs.json's specs through tools/exec.py "
+        "and stamp items.jsonl's answerable field",
+    )
     parser.add_argument("--model", help="LM Studio model key (--embed-corpus only)")
     parser.add_argument(
         "--api-base-url", default="http://localhost:1234", help="--embed-corpus only"
@@ -1039,6 +1057,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         for result in results:
             print(f"{result.status}: {result.originPath}")
         return 0 if all(r.status == "unchanged" for r in results) else 1
+
+    if args.check_tables_shape:
+        if not args.source_git_sha:
+            print(
+                "refresh_golden.py: --check-tables-shape requires --source-git-sha",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            counts = run_check_tables_shape(pack_root, source_git_sha=args.source_git_sha)
+        except RefreshGoldenError as exc:
+            print(f"refresh_golden.py: {exc}", file=sys.stderr)
+            return 1
+        print(", ".join(counts))
+        return 0
+
+    if args.stamp_answerability:
+        try:
+            counts = run_stamp_answerability(pack_root)
+        except RefreshGoldenError as exc:
+            print(f"refresh_golden.py: {exc}", file=sys.stderr)
+            return 1
+        print(", ".join(f"{key}={value}" for key, value in sorted(counts.items())))
+        return 0
 
     if args.embed_corpus:
         if not args.model:

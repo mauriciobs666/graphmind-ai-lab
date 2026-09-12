@@ -2,6 +2,116 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-12 — S4 Step 4: `nlq-structured-query`, live half — S4 closed
+
+**What:** `docs/plans/small-model-benchmarking-s4-spec.md` §7 Step 4 — the last piece of S4's
+second pack, and S4's own second "Done when" half ("both packs run end to end against one
+model"; Step 2 already closed the first half for `guard-judge-understanding`).
+
+1. **`scripts/refresh_golden.py` CLI wiring for `--check-tables-shape`/`--stamp-answerability`
+   (new, TDD'd here)** — Step 3 built and unit-tested `run_check_tables_shape`/
+   `run_stamp_answerability` directly, but never wired the two flags (nor `--source-git-sha`)
+   into `_build_parser()`/`main()`; running either from the command line as the spec's own §7
+   Step 4 text instructs failed with `unrecognized arguments`. Added both flags plus
+   `--source-git-sha`, and the two `main()` branches (blocker exceptions surface as an exit code
+   and a `refresh_golden.py: ...` stderr line, matching `--embed-corpus`'s own precedent — never a
+   traceback). Five new `tests/test_refresh_golden.py` tests (red against the unwired parser,
+   green after): `--check-tables-shape` requires `--source-git-sha` (exit 2), a shape violation
+   and a non-`nlq-structured-query` `--stamp-answerability` call each surface as exit 1, and one
+   success-path test per mode asserting the printed counts and the on-disk write. Mutation-tested
+   the `--source-git-sha` requirement (removed the check — the targeted test reddened, for a
+   `FileNotFoundError` one level down rather than the usage message, but reddened all the same);
+   restored by copy, confirmed identical.
+2. **`packs/nlq-structured-query/tables.json`'s `"knowledge_base"` half** — written from the
+   fresh live `ws:nlq-eval` snapshot (62 `Entity` / 12 `Document` / 12 `Chunk` rows, taken via
+   `mcp__cypher__query` ahead of this unit per §2.6's human/agent-in-the-loop resolution; every
+   row's keys matched `schema.json`'s declared allowlist exactly, confirmed before running the
+   check). `packVersion` bumped `1.0.0` → `1.1.0` first (`_pack_version_gate`'s own requirement);
+   `./run.sh` isn't this script's entry point, so it was run directly:
+   `.venv/bin/python scripts/refresh_golden.py --pack packs/nlq-structured-query
+   --check-tables-shape --source-git-sha 0dcba6361cd841f3b394ce1030c0f84302a11693` → printed
+   `Chunk=12, Document=12, Entity=62`, exit 0.
+3. **`--source-git-sha`'s honest value:** a live Cypher read has no single tracked source commit
+   the way the three file-copy origins do — there is no file whose bytes the row's SHA-256 hashes.
+   Used this monorepo's own HEAD commit at snapshot time
+   (`0dcba6361cd841f3b394ce1030c0f84302a11693`) as the closest honest proxy for "when", not a claim
+   that a `falkor-chat/` file was copied. Recorded as a hand-appended note in
+   `packs/nlq-structured-query/PROVENANCE.md`, immediately below the machine-written table
+   `run_check_tables_shape` regenerates — the same place the prior "Pending (Step 4...)" note
+   lived (now removed, since it is resolved).
+4. **`--stamp-answerability`** — `packVersion` bumped again, `1.1.0` → `1.2.0` (a second
+   content-hash-changing write needs its own bump). `.venv/bin/python scripts/refresh_golden.py
+   --pack packs/nlq-structured-query --stamp-answerability` → `answerable=34, unanswerable=6`.
+   The six stamped `false` are exactly `nlq-34`..`nlq-37` (`relationship-traversal`) and
+   `nlq-38`/`nlq-39` (`conflicting-facts`) — reproducing Step 3's own finding and the accepted
+   `docs/reviews/nlq-conflicting-facts-answerability-ml.md` ruling against the real snapshot, not
+   a synthetic one. No new information: no other item stamped `false`, neither `conflicting-facts`
+   item stamped `true`.
+5. **`tests/test_scoring_extraction.py`'s Step-3-era tripwire updated, not just re-run:**
+   `test_the_real_shipped_pack_validates_clean_except_for_the_still_pending_answerability_stamp`
+   asserted the real pack's only `validate_pack` problems were the still-missing `answerable` keys
+   — true through Step 3, false now that both live-adjacent actions above have run. Renamed to
+   `..._now_that_step_4_has_stamped_it` and rewritten to assert `problems == []`, with a docstring
+   explaining the supersession (the same tripwire-update discipline `test_convo.py`'s still-open
+   S5 placeholder documents for its own future trigger). Confirmed red before the rewrite
+   (`AssertionError: expected the still-pending answerability stamp to be flagged`, because there
+   were none) and green after.
+6. **The live proof run:** LM Studio reachable (`curl http://localhost:1234/api/v0/models`,
+   `qwen/qwen3-4b-2507` cataloged, `not-loaded` — JIT auto-load handles residency). `./run.sh run
+   --pack nlq-structured-query --model qwen/qwen3-4b-2507` stored
+   `results/runs/nlq-structured-query-qwen_qwen3-4b-2507-2026-09-12T02:10:01Z.json`; `./run.sh
+   compare --pack nlq-structured-query` wrote `reports/nlq-structured-query-20260911-01.md`.
+
+**The rendered/stored output confirms every item the done-condition names, read directly:**
+- `layer1ExactMatchRate` — 34/34 this run — is the pack's declared `headlineMetric`
+  (`pack.json`) and is the first row of the `## Arms` table; the verbose `**Headline (...):**`
+  line itself is part of `## Verdicts`, which needs two arms (`compare_report`'s
+  `_comparison_pair`) — with one model run it correctly renders "fewer than two arms were
+  selected, so there is nothing to compare", the same no-verdict case Step 2's `-01.md` inspection
+  already established. S4's own done-condition is one model, not two (Step 2's second model was
+  named "extra, not required" for the same reason) — not repeated here.
+- `byShape` prints per-shape in both the stored aggregates and the rendered `## Arms` table,
+  **including** `exactMatchByRelationshipTraversal` (0/3) and `exactMatchByConflictingFacts`
+  (0/1) — both real, non-zero-`n` rows now, exactly the A3 correction's own claim (previously
+  absent, since no item of either shape was ever answerable before this stage).
+- `unanswerableAbstainRate` prints as its own separate row (1/4), never folded into
+  `layer1ExactMatchRate`.
+- The stored aggregates carry `parseFailures=0`, `malformedSpecCount=0`, `schemaViolationCount=2`,
+  `luckyPassCount=0` — three distinct fields, never pooled into one count. (2 of the 6
+  unanswerable items' own model replies failed Layer B on this run, which is why
+  `unanswerableAbstainRate`/the two exploratory shapes sum to 4 items, not 6 — `schemaViolationCount=2`
+  accounts for the other two, and the arithmetic is exact: 6 − 2 = 4.) `report.py` itself renders
+  none of the four scalar fields anywhere (confirmed: `grep -n "parseFailures"
+  modelbench/report.py` is still zero hits) — the same already-documented, already-accepted,
+  explicitly-out-of-scope gap §4.3 named for `luckyPassCount` specifically, now confirmed to cover
+  its three siblings too. "Print distinguishably" is satisfied at the level report.py actually
+  supports today: the stored `RunResult` JSON, which any downstream reader (including a future
+  `report.py` rendering pass) already finds correctly separated.
+
+**`validate --strict` gap — confirmed still present, not this unit's to fix (same as Step 1/2's
+own notes):** `cli.py`'s `_cmd_validate` still raises `NotImplementedError` unconditionally on
+`--strict`. Ran `./run.sh validate --pack packs/nlq-structured-query` (no `--strict`) instead —
+prints `nlq-structured-query 1.2.0 (nlq-generator): valid`, exit 0 — which does exercise the
+actual check the spec's own §6/§7 language is about (`_answerability_stamp_problems`, part of
+`validate_pack`'s normal path); confirmed directly via `packs.validate_pack`, returns `[]`.
+
+**Verification:** baseline before this unit — `1450 passed` was not yet the state; reproduced
+`1445 passed, 1 pre-existing failure (the S5 tripwire), 3 deselected` before any edit. After the
+CLI-wiring TDD cycle: `1450 passed`, same one pre-existing failure. After stamping the real pack
+and updating the Step-3 tripwire: still `1450 passed`, same one pre-existing failure, `3
+deselected` — net zero test-count change (5 new CLI tests, one pre-existing test rewritten in
+place, both wash out against the suite total by coincidence). `ruff check .` clean.
+
+**Files touched (all left uncommitted, per this unit's own instruction — `teco` verifies and
+commits):** `scripts/refresh_golden.py`, `tests/test_refresh_golden.py`,
+`tests/test_scoring_extraction.py`, `packs/nlq-structured-query/{pack.json, tables.json,
+items.jsonl, PROVENANCE.md}`, `results/runs/nlq-structured-query-qwen_qwen3-4b-2507-2026-09-12T02:10:01Z.json`
+(new), `reports/nlq-structured-query-20260911-01.md` (new), this entry.
+
+**CPG:** not applicable — no `cpg_model-bench` graph loaded, and this is data/config work plus
+running already-implemented code (the CLI-wiring gap closed here is thin argparse glue over
+already-tested functions), not structural code analysis.
+
 ## 2026-09-12 — S4 correction (A3): unanswerable ≠ unscored, `luckyPassCount`
 
 **What:** `docs/plans/small-model-benchmarking-s4-spec.md`'s dated correction note (following

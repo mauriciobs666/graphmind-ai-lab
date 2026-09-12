@@ -836,13 +836,13 @@ def test_validate_pack_passes_once_every_row_is_stamped(tmp_path: Path):
     assert not any("answerable" in p for p in problems)
 
 
-def test_the_real_shipped_pack_validates_clean_except_for_the_still_pending_answerability_stamp():
-    """S4 Step 3's own scope boundary (§7 Step 3's "Done when" / §6): the real shipped
-    `items.jsonl` is NOT yet stamped with `answerable` — that is Step 4's `--stamp-answerability`
-    run, which needs the real, human-snapshotted `tables.json` this step does not write. So the
-    real pack is expected to show EXACTLY the missing-answerable-key problems and nothing else —
-    proving the pack is otherwise fully valid."""
+def test_the_real_shipped_pack_validates_clean_now_that_step_4_has_stamped_it():
+    """Was `..._except_for_the_still_pending_answerability_stamp` through S4 Step 3 (§7 Step 3's
+    own scope boundary): `items.jsonl` was deliberately unstamped there, since stamping needs the
+    real, human-snapshotted `tables.json` Step 3 does not write. Step 4 (§7 Step 4) has now run
+    both `--check-tables-shape` (writing `tables.json`'s `knowledge_base` half from the live
+    `ws:nlq-eval` snapshot) and `--stamp-answerability` against it, so the real pack is fully valid
+    with no problems at all — not just "the same problems minus the answerable ones"."""
     pack = load_pack(_REAL_PACK_ROOT)
     problems = validate_pack(pack)
-    assert problems, "expected the still-pending answerability stamp to be flagged"
-    assert all("answerable" in p for p in problems), problems
+    assert problems == []
