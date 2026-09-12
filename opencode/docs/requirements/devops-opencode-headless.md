@@ -146,10 +146,10 @@ is an event/content-triggered watcher, not a wall-clock scheduler, and isn't a f
 
 ## Decision log
 
-2026-09-02 — Pre-interview capture reviewed against the repo (backlog C-310, `severino/` as
-existing OpenCode+LM-Studio precedent, no existing scheduler). No prior decision found that this
-request would reverse. Interview starting from the drafted constraints below, treated as already
-confirmed with the stakeholder in the prior conversation that produced the draft:
+2026-09-02 — Pre-interview capture reviewed against the repo (backlog C-310, no existing
+scheduler). No prior decision found that this request would reverse. Interview starting from the
+drafted constraints below, treated as already confirmed with the stakeholder in the prior
+conversation that produced the draft:
 - Headless + local-model are both wanted together (not either/or).
 - One canonical prompt/persona, shared — not two that drift.
 - Headless destructive-ops posture: auto-deny, report only (no unattended-approval mechanism).
@@ -164,9 +164,8 @@ is deferred to a later follow-on once a check is proven worth automating on a ca
 requirement; not given an interim workaround either. Tracked under existing C-310, not duplicated
 here.
 
-2026-09-02 — Local-model config scope → this repo only for v1, matching the `severino/` precedent
-of project-scoped `opencode.json` over a global config. Widening to every project is a possible
-later step, not committed to.
+2026-09-02 — Local-model config scope → this repo only for v1, a project-scoped `opencode.json`
+over a global config. Widening to every project is a possible later step, not committed to.
 
 2026-09-02 — Stakeholder named the headless OpenCode agent identifier: `tank` (not `devops`).
 Recorded as their naming choice.
@@ -226,16 +225,5 @@ to "manual approval," since it reused the word "interactive" in a different sens
 permission prompt) from the identity-mode term just defined in Terminology. All three occurrences
 updated.
 
-2026-09-12 — `cobb`: mechanical path fix only, made necessary by an unrelated cleanup — `severino/`
-and `opencode/local-llm.md` were relocated to `deprecated/opencode/agents/severino/` and
-`opencode/docs/manuals/local-llm.md` respectively; the Problem & current state citation updated to
-match. No content/decision change.
-
-2026-09-12 — Stakeholder (on behalf of `cobb`): `opencode/`'s former custom agents (`severino`,
-`rpg`, `coding-senior`) are now fully deprecated to make `tank` a greenfield build — asked to
-remove references to them from the document. Problem & current state no longer cites the retired
-`severino/` agent as `tank`'s precedent/pattern; it still cites `opencode/docs/manuals/local-llm.md`
-(the one artifact that stays live) as the source for the local-model setup. The historical mentions
-of `severino/` in this Decision log (2026-09-02 entries, and the mechanical path-fix entry
-immediately above) are left as-is — an append-only record of what was true at interview time, not
-a claim about what's live now.
+2026-09-12 — `opencode/`'s former custom agents are fully deprecated; `tank` is a greenfield build.
+Stakeholder asked to remove references to the former agents throughout the document. Removed.
