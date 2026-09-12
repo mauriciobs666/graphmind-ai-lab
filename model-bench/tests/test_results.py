@@ -873,6 +873,29 @@ def test_extraction_aggregates_round_trips_malformed_spec_and_schema_violation_c
     assert restored == aggregates
 
 
+def test_extraction_aggregates_round_trips_lucky_pass_count(tmp_root) -> None:
+    """`luckyPassCount` (S4 spec §4.3/§5.2.4 correction, A3 —
+    `docs/reviews/nlq-conflicting-facts-answerability-ml.md` Q2/F-1) follows the same established
+    precedent as `malformedSpecCount`/`schemaViolationCount`: additive, defaulted, scalar, never
+    folded into `named_metrics()`, and needing no special-case in `_aggregates_to_dict`/
+    `_aggregates_from_dict`'s generic dispatch to survive a real `store()`/`load_history()` round
+    trip. A non-zero, distinct-from-its-siblings value, not the `0` default every other round-trip
+    test above already exercises."""
+    aggregates = ExtractionAggregates(
+        parseFailures=2, malformedSpecCount=3, schemaViolationCount=5, luckyPassCount=7
+    )
+    store(_run("r-extraction-lucky-pass-count", aggregates=aggregates), tmp_root)
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert [r.reason for r in invalid] == []
+    assert len(valid) == 1
+    restored = valid[0].aggregates
+    assert restored.luckyPassCount == 7
+    assert restored == aggregates
+    # Never folded into named_metrics() — matching malformedSpecCount/schemaViolationCount's own
+    # precedent exactly.
+    assert not any(getattr(m, "name", None) == "luckyPassCount" for m in restored.named_metrics())
+
+
 # --- m-7: `store()` names the reason instead of raising from pathlib ---------------------------
 
 

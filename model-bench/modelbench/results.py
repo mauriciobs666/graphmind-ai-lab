@@ -553,6 +553,12 @@ class ExtractionAggregates:
     malformedSpecCount: int = 0
     #: NEW — S4 spec §4.3: Layer B schema-bound-validation failures (§2.5), same shape as above.
     schemaViolationCount: int = 0
+    #: NEW — S4 spec §4.3/§5.2.4 correction (A3, `docs/reviews/nlq-conflicting-facts-
+    #: answerability-ml.md` Q2/F-1): an item stamped `answerable: false` whose exploratory
+    #: `score_pair` call nonetheless scored correct (F-4's degenerate-spec class of outcome).
+    #: Same defaulted-scalar shape as the two counts above — never folded into
+    #: `layer1ExactMatchRate` or any `exactMatchBy{Shape}` success silently.
+    luckyPassCount: int = 0
 
     def named_metrics(self) -> tuple[MetricValue, ...]:
         found = [self.exactMatch] if self.exactMatch is not None else []

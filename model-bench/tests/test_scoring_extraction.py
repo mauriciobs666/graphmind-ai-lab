@@ -517,8 +517,16 @@ class TestScoreItem:
         item = _item_input(answerable=False, shape="relationship-traversal")
         result = extraction.score_item(item, reply, _timing(), pack=synthetic_pack)
         assert result.outcome == "pass"
-        assert result.scoreable == {"unanswerableAbstainRate": True}
-        assert result.counts == {"unanswerableAbstainRate": 1}
+        # Correction A3 (`docs/reviews/nlq-conflicting-facts-answerability-ml.md` Q2/F-1):
+        # unanswerable ≠ unscored — the exploratory score_pair call also runs, but scores
+        # incorrect here (a scalar shape can't extract from an empty result), so no luckyPass.
+        assert result.scoreable == {
+            "unanswerableAbstainRate": True, "exactMatchByRelationshipTraversal": True,
+        }
+        assert result.counts == {
+            "unanswerableAbstainRate": 1, "exactMatchByRelationshipTraversal": 0,
+        }
+        assert "luckyPass" not in result.detail
         # Never scored toward layer1ExactMatchRate at all.
         assert "layer1ExactMatchRate" not in result.scoreable
 
@@ -528,7 +536,31 @@ class TestScoreItem:
         reply = _chat_result(_SPEC_ALL_ROWS)  # executes to a NON-empty result
         item = _item_input(answerable=False, shape="relationship-traversal")
         result = extraction.score_item(item, reply, _timing(), pack=synthetic_pack)
-        assert result.counts == {"unanswerableAbstainRate": 0}
+        assert result.counts == {
+            "unanswerableAbstainRate": 0, "exactMatchByRelationshipTraversal": 0,
+        }
+        assert "luckyPass" not in result.detail
+
+    def test_unanswerable_conflicting_facts_lucky_pass_is_flagged(self, synthetic_pack):
+        """F-4's degenerate-spec class of outcome: an unfiltered/broad spec (`_SPEC_ALL_ROWS`
+        returns every product name) happens to satisfy `conflicting-facts`'s subset-containment
+        rule even though it is not a faithful answer. The unanswerable branch's exploratory
+        `score_pair` call now runs against production-shaped data, so this is a real, reachable
+        outcome — `detail["luckyPass"]` names it rather than letting it read as an ordinary win."""
+        reply = _chat_result(_SPEC_ALL_ROWS)  # returns {"Widget", "Extra"} — a superset
+        item = _item_input(
+            answerable=False, shape="conflicting-facts",
+            expected={"type": "set", "values": ["Widget"]},
+        )
+        result = extraction.score_item(item, reply, _timing(), pack=synthetic_pack)
+        assert result.scoreable == {
+            "unanswerableAbstainRate": True, "exactMatchByConflictingFacts": True,
+        }
+        # Fabricated (non-empty), so an incorrect abstain — independent of the lucky pass below.
+        assert result.counts == {
+            "unanswerableAbstainRate": 0, "exactMatchByConflictingFacts": 1,
+        }
+        assert result.detail["luckyPass"] is True
 
 
 # ==================================================================================================
@@ -671,6 +703,66 @@ class TestAggregate:
         aggregates = extraction.aggregate(items, pack=synthetic_pack)
         assert aggregates.exactMatch.unit == "item"
         assert all(m.unit == "item" for m in aggregates.byShape)
+
+    def test_by_shape_pools_answerable_and_unanswerable_scores_of_the_same_shape(
+        self, synthetic_pack
+    ):
+        """Correction A3: `byShape`'s per-shape pooling is computed by filtering on each item's
+        own `exactMatchBy{Shape}` scoreable flag, never by gating on `layer1ExactMatchRate`
+        (the pre-correction approach). Today's real pack never mixes an answerable and an
+        unanswerable item on the same shape, but the aggregation code must not special-case that
+        away — this fixture proves it by mixing them directly on a hypothetical shape."""
+        items = [
+            extraction.score_item(
+                _item_input(
+                    itemId="rt-hyp", answerable=True, shape="relationship-traversal",
+                    expected={"type": "scalar", "value": 10.0},
+                ),
+                _chat_result(_SPEC_WIDGET_PRICE), _timing(), pack=synthetic_pack,
+            ),  # hypothetical answerable member of this shape — correct
+            extraction.score_item(
+                _item_input(
+                    itemId="rt-1", answerable=False, shape="relationship-traversal",
+                    expected={"type": "scalar", "value": 10.0},
+                ),
+                _chat_result(_SPEC_NO_MATCH), _timing(), pack=synthetic_pack,
+            ),  # unanswerable-path member — exploratory score incorrect
+        ]
+        aggregates = extraction.aggregate(items, pack=synthetic_pack)
+        by_name = {m.name: m for m in aggregates.byShape}
+        pooled = by_name["exactMatchByRelationshipTraversal"]
+        assert pooled.n == 2
+        assert pooled.successes == 1
+        # The unanswerable member never contributes to the headline denominator.
+        assert aggregates.exactMatch.n == 1
+        assert aggregates.exactMatch.successes == 1
+
+    def test_lucky_pass_count_is_additive_with_its_shape_metric_not_an_alternative(
+        self, synthetic_pack
+    ):
+        items = [
+            extraction.score_item(
+                _item_input(
+                    itemId="cx-lucky", answerable=False, shape="conflicting-facts",
+                    expected={"type": "set", "values": ["Widget"]},
+                ),
+                _chat_result(_SPEC_ALL_ROWS), _timing(), pack=synthetic_pack,
+            ),  # F-4 degenerate spec — scores correct by accident
+            extraction.score_item(
+                _item_input(
+                    itemId="cx-ordinary", answerable=False, shape="conflicting-facts",
+                    expected={"type": "set", "values": ["Widget"]},
+                ),
+                _chat_result(_SPEC_NO_MATCH), _timing(), pack=synthetic_pack,
+            ),  # ordinary incorrect case
+        ]
+        aggregates = extraction.aggregate(items, pack=synthetic_pack)
+        assert aggregates.luckyPassCount == 1
+        by_name = {m.name: m for m in aggregates.byShape}
+        pooled = by_name["exactMatchByConflictingFacts"]
+        assert pooled.n == 2
+        # The lucky pass's success is counted here too — additive, not an alternative accounting.
+        assert pooled.successes == 1
 
 
 # ==================================================================================================

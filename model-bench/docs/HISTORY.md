@@ -2,6 +2,74 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-12 — S4 correction (A3): unanswerable ≠ unscored, `luckyPassCount`
+
+**What:** `docs/plans/small-model-benchmarking-s4-spec.md`'s dated correction note (following
+`docs/reviews/nlq-conflicting-facts-answerability-ml.md`, accepted) — the `nlq-structured-query`
+pack's answerability count was stale at "4 unanswerable" (a regression of an already-settled,
+already-gated upstream ruling); the real count is 6 of 40 (4 `relationship-traversal` + 2
+`conflicting-facts`), and the review's Q2/F-1 amendment additionally requires that an
+unanswerable item still be SCORED (excluded from the accuracy denominator only), with a correct
+result on one flagged as a *lucky pass* rather than read as an ordinary win.
+
+1. **`modelbench/scoring/extraction.py`** — `score_item`'s `item_input["answerable"] is False`
+   branch now also calls `score_pair(item_input["expected"], item_input["shape"], tool_result)`
+   (every golden item, answerable or not, carries `expected`/`shape`) and sets the same
+   `exactMatchBy{Shape}` exploratory metric the answerable path uses, alongside (never instead of)
+   `unanswerableAbstainRate`; a correct exploratory score sets `detail["luckyPass"] = True`.
+   `aggregate()`'s `byShape` pooling is now computed by filtering on each item's own
+   `exactMatchBy{Shape}` scoreable flag rather than gating on `layer1ExactMatchRate` — the
+   pre-correction gate silently dropped every unanswerable-path contribution — so a shape with
+   only unanswerable members (`relationship-traversal`, `conflicting-facts`, today) now gets a
+   real per-shape metric instead of being absent. `aggregate()` also computes
+   `luckyPassCount = sum(1 for it in items if it.detail.get("luckyPass") is True)`.
+2. **`modelbench/results.py`** — `ExtractionAggregates` gained `luckyPassCount: int = 0`, the same
+   defaulted-scalar shape as `malformedSpecCount`/`schemaViolationCount`, never folded into
+   `named_metrics()`; needed no change to `_aggregates_to_dict`/`_aggregates_from_dict`'s generic
+   `vars()`-driven dispatch to round-trip through `store()`/`load_history()`.
+3. Tests: two existing `score_item` unanswerable-branch tests updated for the new
+   `exactMatchBy{Shape}` scoreable/counts (no `luckyPass` key, the ordinary case); one new
+   `score_item` test for the F-4 degenerate-spec class of outcome (an unfiltered
+   `conflicting-facts` reply satisfying subset containment) asserting `detail["luckyPass"] is
+   True`; two new `aggregate` tests — one proving the pooling code mixes an answerable and an
+   unanswerable member of the same (hypothetical) shape into one `BinaryMetric` rather than
+   special-casing today's real data (which never mixes the two), one proving `luckyPassCount` is
+   additive with, not an alternative to, its shape metric's success count; one new
+   `results.py` round-trip test for `luckyPassCount` mirroring the existing
+   `malformedSpecCount`/`schemaViolationCount` test exactly.
+
+**Verification:** baseline — `1441 passed, 1 pre-existing failure (S5 tripwire, unrelated), 3
+deselected`. After — `1445 passed`, same one pre-existing failure, same 3 deselected. `ruff check
+.` clean.
+
+**Mutation-tested two branches** (copy aside, mutate, confirm red, restore by copy immediately,
+never batched): inverting the `luckyPass` condition (`if correct` → `if not correct`) reddened
+all three of the branch's tests; reverting the `byShape` pooling gate back to the pre-correction
+`layer1ExactMatchRate` filter reddened both new pooling/`luckyPassCount` tests.
+
+**Real-pack verification, not just the unit fixtures:** ran the shipped
+`packs/nlq-structured-query` pack's 40 real `reference_specs.json` entries through the corrected
+`score_item`/`aggregate` path. The 21 real `catalog` items went through the full production
+pipeline (reference spec standing in as the model's own reply) against the real
+`tables.json`/`schema.json` — all 21 score correct, `luckyPassCount = 0`. `tables.json`'s
+`knowledge_base` half is still Step 4's pending live snapshot (not this unit's job), so the 6
+unanswerable knowledge-base items were instead scored from `falkor-chat/server/tests/eval/
+nlq_eval_results.json`'s real recorded execution — the same evidence the accepted review cites as
+its own F-2 — through `score_pair` directly: **`luckyPassCount = 0` on this real data**, each of
+`nlq-34..37` (`relationship-traversal`) and `nlq-38`/`nlq-39` (`conflicting-facts`) now gets a
+real, non-absent `exactMatchBy{Shape}` entry (`exactMatchByRelationshipTraversal` n=4/0,
+`exactMatchByConflictingFacts` n=2/0), and `unanswerableAbstainRate.n = 6` (not 4). Separately
+confirmed, against the real `schema.json`, that all 6 reference specs for these items raise
+`SchemaViolationError` (unregistered property — `acquired`/`founder`/`partner`/`location`/
+`employeeCount`), each filtered on the question's own subject entity (`name = "Marlowe
+Robotics"`) rather than F-4's degenerate zero-filter shape — no lucky pass is latent in the real
+reference specs themselves either. The 13 knowledge-base items that stamp answerable remain
+untestable against real data until Step 4's live snapshot lands; `exactMatch.n` on real data today
+is 21 (catalog only), not yet 34.
+
+**CPG:** considered, not relevant — no `cpg_model-bench` graph loaded, code-level work on
+already-existing files.
+
 ## 2026-09-12 — S4 Step 3: nlq-structured-query, offline half
 
 **What:** `docs/plans/small-model-benchmarking-s4-spec.md` §7 Step 3 — the second and larger of

@@ -195,11 +195,23 @@ def score_item(
     own denominator, which only ever counts items that reached execution).
 
     Otherwise `tools_exec.compile_and_execute(...)` executes. `item_input["answerable"] is False`
-    -> scores ONLY `unanswerableAbstainRate` (`1` iff the executed result is empty, correctly
+    -> scores `unanswerableAbstainRate` (`1` iff the executed result is empty, correctly
     abstaining; `0` if it fabricated an answer) — never `layer1ExactMatchRate`. An answerable item
     is scored via `score_pair(item_input["expected"], item_input["shape"], tool_result)` into BOTH
     `layer1ExactMatchRate` (scoreable=True always, even on a wrong answer) and a per-shape
     exploratory metric `f"exactMatchBy{shape}"`.
+
+    **Correction (A3, `docs/reviews/nlq-conflicting-facts-answerability-ml.md` Q2/F-1): excluded
+    from the denominator does not mean unscored.** The unanswerable branch ALSO calls
+    `score_pair(item_input["expected"], item_input["shape"], tool_result)` — every golden item,
+    answerable or not, carries `expected`/`shape` — and sets the SAME per-shape exploratory metric
+    `f"exactMatchBy{shape}"`, alongside `unanswerableAbstainRate`, never instead of it. This is why
+    `relationship-traversal`/`conflicting-facts` now get a real `exactMatchBy{Shape}` entry
+    (previously absent, since no item of either shape was ever answerable). If that exploratory
+    call scores correct — F-4's degenerate-spec class of outcome, real now that the branch
+    executes against production data — `detail["luckyPass"] = True` is also set, so `aggregate()`
+    can count it distinctly rather than let it read as an ordinary win. `layer1ExactMatchRate`
+    itself is untouched by this: the unanswerable branch still never sets it scoreable.
 
     `result is None` -> `outcome="fail"` (timeout) / `"unrunnable"` (no_response), per
     `timing.withheldFor`, mirroring `classification.py`/`retrieval.py`'s own precedent —
@@ -255,12 +267,24 @@ def score_item(
         )
 
     if item_input["answerable"] is False:
+        # Correction A3 (`docs/reviews/nlq-conflicting-facts-answerability-ml.md` Q2/F-1):
+        # excluded from `layer1ExactMatchRate`'s denominator does NOT mean unscored. Every golden
+        # item, answerable or not, carries `expected`/`shape`, so the exploratory score_pair call
+        # runs here too, alongside (never instead of) `unanswerableAbstainRate`. A correct result
+        # is F-4's degenerate-spec class of outcome — a lucky pass, named as such rather than
+        # left to read as an ordinary win.
         abstained = not tool_result.get("items")
+        shape = item_input["shape"]
+        correct, _reason = score_pair(item_input["expected"], shape, tool_result)
+        shape_metric = f"exactMatchBy{_title_shape(shape)}"
+        detail: dict[str, Any] = {"dataset": dataset, "shape": shape}
+        if correct:
+            detail["luckyPass"] = True
         return ItemResult(
             itemId=item_id, pairingKey=(item_id,), outcome="pass",
-            scoreable={"unanswerableAbstainRate": True},
-            counts={"unanswerableAbstainRate": int(abstained)},
-            timing=timing, detail={"dataset": dataset},
+            scoreable={"unanswerableAbstainRate": True, shape_metric: True},
+            counts={"unanswerableAbstainRate": int(abstained), shape_metric: int(correct)},
+            timing=timing, detail=detail,
         )
 
     shape = item_input["shape"]
@@ -279,14 +303,32 @@ def score_item(
 
 def aggregate(items: Sequence[ItemResult], *, pack: Pack) -> ExtractionAggregates:
     """`exactMatch` = `BinaryMetric("layer1ExactMatchRate", ...)` over ONLY the items that
-    DECLARED it scoreable — i.e. the answerable items that reached execution (S4 spec §5.2.4: "n
-    = 36, the 40 minus the 4 stamped unanswerable" describes the expected/ideal case; this
+    DECLARED it scoreable — i.e. the answerable items that reached execution (S4 spec §5.2.4,
+    corrected per `docs/reviews/nlq-conflicting-facts-answerability-ml.md` A1: **n = 34, the 40
+    minus the 6 stamped unanswerable** — 4 `relationship-traversal` + 2 `conflicting-facts`; this
     function itself is fully data-driven off each item's own `scoreable` map, never a hardcoded
-    count). `byShape` carries one `BinaryMetric` per shape actually seen among the scored
-    answerable items, PLUS `unanswerableAbstainRate` (S4 spec's own stated shape: `byShape` is
-    "everything besides the headline metric", not literally shape-only). `parseFailures`/
-    `malformedSpecCount`/`schemaViolationCount` are each a `sum(1 for it in items if
-    it.detail.get("failureClass") == ...)` over the three named classes — the three counts the
+    count, so the correction lives in this docstring and the plan text, not in the arithmetic).
+
+    `byShape` carries one `BinaryMetric` per shape name, **pooling BOTH the answerable items
+    scored through `layer1ExactMatchRate`'s own `exactMatchBy{Shape}` AND the unanswerable items'
+    exploratory `exactMatchBy{Shape}` (`score_item`'s A3 correction)** — computed by filtering
+    `items` on each item's own `exactMatchBy{Shape}` scoreable flag, never by gating on
+    `layer1ExactMatchRate` the way the pre-correction version did, because a shape's per-shape
+    score is real and reported every run regardless of whether the shape counts toward the
+    headline denominator. Concretely: `single-fact`/`filter-list`/`compound-filter`/`not-found`/
+    `aggregation` each have only answerable-path members; `relationship-traversal`/
+    `conflicting-facts` have ONLY exploratory-path members today, since no item of either shape is
+    ever answerable — this is not a special case in the aggregation code, it falls out of which
+    items declare the metric scoreable. PLUS `unanswerableAbstainRate` (n = 6 in the real pack,
+    all six structurally-unanswerable items, not 4).
+
+    `luckyPassCount` = `sum(1 for it in items if it.detail.get("luckyPass") is True)` — an item
+    counted here is ALSO counted in its `exactMatchBy{Shape}` metric's successes; the two are
+    additive, never alternatives, and any future `report.py` rendering of `luckyPassCount` must
+    not let the shape rate stand alone unlabelled.
+
+    `parseFailures`/`malformedSpecCount`/`schemaViolationCount` are each a `sum(1 for it in items
+    if it.detail.get("failureClass") == ...)` over the three named classes — the three counts the
     plan's cost note requires, never pooled into one."""
 
     def declaring(name: str) -> list[ItemResult]:
@@ -300,20 +342,27 @@ def aggregate(items: Sequence[ItemResult], *, pack: Pack) -> ExtractionAggregate
         unit="item",
     )
 
-    shapes_seen = sorted({it.detail["shape"] for it in exact_items})
-    by_shape = tuple(
-        BinaryMetric(
-            name=f"exactMatchBy{_title_shape(shape)}",
-            successes=sum(
-                it.counts.get("layer1ExactMatchRate", 0)
-                for it in exact_items
-                if it.detail.get("shape") == shape
-            ),
-            n=sum(1 for it in exact_items if it.detail.get("shape") == shape),
-            unit="item",
+    # Correction A3 (`docs/reviews/nlq-conflicting-facts-answerability-ml.md` Q2/F-1): pool BOTH
+    # the answerable items' `exactMatchBy{Shape}` contributions AND the unanswerable items' now-
+    # added exploratory ones into the SAME per-shape metric — filtering on each item's own
+    # `exactMatchBy{Shape}` scoreable flag, never on `layer1ExactMatchRate` (the pre-correction
+    # gate, which silently dropped every unanswerable-path contribution).
+    shapes_seen = sorted({it.detail["shape"] for it in items if "shape" in it.detail})
+    by_shape_metrics = []
+    for shape in shapes_seen:
+        metric_name = f"exactMatchBy{_title_shape(shape)}"
+        contributing = declaring(metric_name)
+        if not contributing:
+            continue
+        by_shape_metrics.append(
+            BinaryMetric(
+                name=metric_name,
+                successes=sum(it.counts.get(metric_name, 0) for it in contributing),
+                n=len(contributing),
+                unit="item",
+            )
         )
-        for shape in shapes_seen
-    )
+    by_shape = tuple(by_shape_metrics)
 
     unanswerable_items = declaring("unanswerableAbstainRate")
     unanswerable = BinaryMetric(
@@ -330,6 +379,9 @@ def aggregate(items: Sequence[ItemResult], *, pack: Pack) -> ExtractionAggregate
     schema_violation_count = sum(
         1 for it in items if it.detail.get("failureClass") == "schema_violation"
     )
+    # (§4.3/§5.2.4 correction, A3) — additive with, never an alternative to, the item's own
+    # `exactMatchBy{Shape}` success counted above.
+    lucky_pass_count = sum(1 for it in items if it.detail.get("luckyPass") is True)
 
     return ExtractionAggregates(
         exactMatch=exact_match,
@@ -337,4 +389,5 @@ def aggregate(items: Sequence[ItemResult], *, pack: Pack) -> ExtractionAggregate
         parseFailures=parse_failures,
         malformedSpecCount=malformed_spec_count,
         schemaViolationCount=schema_violation_count,
+        luckyPassCount=lucky_pass_count,
     )
