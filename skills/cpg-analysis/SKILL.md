@@ -1,9 +1,9 @@
 ---
 name: cpg-analysis
 description: >-
-  Query an already-loaded Joern Code Property Graph (CPG) in FalkorDB with read-only
-  Cypher — through the mcp__cypher__query MCP tool in Claude Code, or redis-cli
-  GRAPH.QUERY as the documented fallback — to answer structured code questions
+  Query an already-loaded Joern Code Property Graph (CPG) in FalkorDB with Cypher
+  (read-only for CPG graphs) — through the mcp__cypher__query MCP tool in Claude Code,
+  or redis-cli GRAPH.QUERY as the documented fallback — to answer structured code questions
   without reading files: impact analysis (callers/callees + transitive reach),
   root-cause analysis (data-flow slices + cross-file symbol def/ref), code review
   (input to risky-sink taint), and test-gap analysis (prod code no test reaches).
@@ -48,10 +48,16 @@ mcp__cypher__query(
 )
 ```
 
-- **The tool is read-only** (`GRAPH.RO_QUERY`): FalkorDB rejects a write
-  server-side, and a mistyped graph name cannot silently create an empty graph.
-  All recipes here are `MATCH … RETURN` anyway — never issue `CREATE`/`SET`/
-  `DELETE` against a shared analysis graph.
+- **Reads run through `GRAPH.RO_QUERY`**, so a mistyped graph name cannot
+  silently create an empty graph. The tool as a whole has since grown a narrow
+  write path, gated to 6 shapes scoped to the `:KaizenEntry`/`:Agent` labels
+  behind the team's `kaizen_team` working memory — see `cypher-mcp/README.md`'s
+  "Writing through this tool" section for that mechanism; it is not repeated
+  here. None of those shapes can ever match a `cpg_*` graph query, so **for CPG
+  analysis specifically the tool is still read-only in effect**: a write
+  attempt against a CPG graph is rejected the same as before. All recipes here
+  are `MATCH … RETURN` anyway — never issue `CREATE`/`SET`/`DELETE` against a
+  shared analysis graph.
 - **Finding the graph name.** It comes from whoever loaded the CPG. There is
   deliberately **no `list_graphs` tool** (the surface is one tool, two
   parameters). Before falling back to discovery, try a **first guess**: a
