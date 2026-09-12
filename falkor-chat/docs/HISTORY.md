@@ -5,6 +5,41 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-11 — salesperson-ui S10: presenter surface moved onto `Storefront`
+
+**What:** Closed S10 per `docs/plans/salesperson-ui.md` §5.1's S10 row. The three presenter
+operations (`presenter_login`, `list_participants`, `reset_all`) — already answering correctly in
+`storefront_api.py` since S8 — moved onto `Storefront` itself (`falkorchat/storefront.py`), per the
+exact inventory `_STEP_10_INTERIM` recorded (now removed, replaced by a tombstone comment).
+`storefront_api.py`'s three presenter routes are thin call-and-map wrappers again. Landed alongside
+the move, because it's `Storefront` state and not `storefront_api.py`'s to own: the login's fixed
+per-attempt delay + an observational-only failure counter (`presenter_login_failures`) — never a
+lockout, `docs/reviews/salesperson-ui.md` `## Pass 7` P7-5 having already rejected that design as a
+self-DoS against the single shared presenter key — and reset-everyone's `_intake_stopped`
+stop-intake flag, wired into `reserve_turn`'s existing `409 turn_in_progress` gate so a post
+accepted after the pre-drain roster read can't extend the drain. New config var
+`STOREFRONT_PRESENTER_LOGIN_DELAY_S`, documented in `docs/SERVER.md` §1.3 and covered by the
+existing env-var cross-check test.
+
+**Review:** `docs/reviews/salesperson-ui-s10.md`, two passes. Pass 1 — approve with suggestions: one
+major (the four-key roster narrowing on `reset_all`'s F8-timeout re-read path had no test pinning
+it — verified real via mutation: pass the raw six-key rows through unnarrowed, full suite still
+green) and one minor (an ambiguous `(Pass 7, P7-5)` citation, unnamed, that could resolve to either
+of two documents' own `## Pass 7`). Both fixed and mutation-verified; Pass 2 — approve. One
+non-blocking nit from Pass 2's own follow-up mutation (narrow correctly for the roster's first row
+only, leak the rest): survives today only because the exercising test joins a single participant,
+not because of any per-row branch in the actual code — recorded as a fixture-completeness follow-up
+rather than re-dispatched.
+
+**Verified independently, not taken on report:** full suite reran twice (post-implementation and
+post-follow-up) at **2737 passed, 14 deselected, 0 failed**; every file diff read directly; both
+citation fixes and the new assertion confirmed present at the exact lines claimed. Two side effects
+of that verification, both repaired: the global `reference` graph was wiped twice by the offline
+suite's own documented teardown behavior (`falkor-chat/AGENTS.md`) and restored each time via
+`seed_workflows.sh acme` / `seed_catalog.sh` / `seed_salesperson.sh demo`, re-verified `OK`.
+
+**Committed:** `ec829d9`.
+
 ## 2026-09-11 — salesperson-ui S11: demo bring-up script
 
 **What:** Closed S11 per `docs/plans/salesperson-ui.md` §5.1's S11 row. New
