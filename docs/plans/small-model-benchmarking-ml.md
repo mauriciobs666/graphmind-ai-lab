@@ -1,6 +1,26 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.24
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.25
+
+2026-09-11 (v1.25, `data-scientist`) — corrects this note's `nlq-generator` **analysis-unit count**,
+which was the raw item count rather than the scoring denominator. Plan §3.8.3 excludes
+structurally-unanswerable items from `layer1ExactMatchRate`'s denominator, and
+`model-bench/docs/reviews/nlq-conflicting-facts-answerability-ml.md` establishes that the excluded
+set is **6 of 40** (4 `relationship-traversal` + 2 `conflicting-facts`), not the plan's stated 4 —
+restoring the ruling `falkor-chat/docs/plans/workflow-nl-query-generation-ml.md` §5 already made
+over this same golden file. So **`n_eff = 34`, not 40**: §7.2's row and §7.1's table are corrected
+(**floor 15.0 → 17.6 pp, MDD₈₀ 19.1 → 22.3 pp**), and §3's composition fact gains the
+answerable/unanswerable split. **The adequacy verdict does not move** — the reference effects this
+lab has needed to resolve (97.5-vs-0 pp; ~30 pp) both still clear 22.3 pp. **No power is lost by the
+exclusion, and the note should not be read as if it were:** an item both arms score 0 on is a
+*concordant* pair contributing to neither `b` nor `c`, so McNemar's exact p and the 6-net-discordant-
+wins count floor are **identical** at 34 and at 40 — the change is a re-expression of the same test
+in units that describe the metric beside it. **Two denominators, both correct, neither
+interchangeable:** `n_eff = 34` governs every inferential bound, while `Y = 40` — the executed-item
+count — governs §11.6's latency-coverage census and the `Y ≤ 21` reach bound, and is **unchanged**.
+§7.1's discordance-mix sensitivity table is indexed by `n` generically rather than by pack; its
+n=40 column no longer corresponds to a declared pack, and `nlq-generator` now reads between its
+n=30 and n=40 columns.
 
 2026-09-10 (v1.24, `data-scientist`) — rules the s3-spec's (`docs/plans/small-model-benchmarking-
 s3-spec.md` §9) two open questions, both disambiguations of formulas this note already states
@@ -416,7 +436,7 @@ committed artifacts, none quoted from memory):
 | Pinned baseline | recall@10 = 0.9737 (37/38), recall@5 = 0.8947 (34/38), MRR = 0.6259, n=38 | `retrieval_baseline.json` |
 | Corpus | 121 messages, 12 topics, `text-embedding-qwen3-embedding-0.6b`, dim 1024 | `corpus_provenance.json` |
 | Guard set composition | `clear_suspend` 40 · `clear_advance` 30 · `boundary` 15; `expected=False` 55, `expected=True` 30 — **every boundary item is an expected-suspend** | counted from `golden_guards.jsonl` |
-| NLQ set composition | 40 items; 21 scalar / 13 set / 6 not_found across 7 shapes | counted from `nlq_golden_set.jsonl` |
+| NLQ set composition | **40 items** (21 scalar / 13 set / 6 not_found across 7 shapes) — of which **34 answerable** (17 scalar / 11 set / 6 not_found across 5 shapes; 21 catalog / 13 knowledge_base) and **6 structurally unanswerable** (4 `relationship-traversal` + 2 `conflicting-facts`, plan §3.8.3). **`n_eff = 34`** for every inferential bound (§7.1, §7.2); **`Y = 40`** for the executed-item counts §11.6's latency coverage and the `Y ≤ 21` reach bound use — different denominators, both correct *(v1.25)* | counted from `nlq_golden_set.jsonl`; exclusion per `model-bench/docs/reviews/nlq-conflicting-facts-answerability-ml.md` |
 | Judge calibration, faithfulness | raw agreement 9/10 = 0.90, Wilson95 [0.596, 0.982], **Cohen's κ = 0.833** | recomputed from `judge_calibration.json` |
 | Judge calibration, relevance | raw agreement 7/10 = 0.70, Wilson95 [0.397, 0.892], **Cohen's κ = 0.211**; false-positive rate (judge says relevant when gold says not) **2/3** | recomputed from `judge_calibration.json` |
 | Judge conflict of interest | `"sameModelAsAgentUnderTest": true` — judge and agent-under-test were both `qwen/qwen3-4b-2507` | `judge_calibration.json` |
@@ -3039,6 +3059,7 @@ exactly `6/n_eff`, truncated with the caller's own expression (Rule 3a's bin-edg
 | 15 | 40.0 pp | 47.6 pp | 47.559 | 54.2 pp |
 | 20 | 30.0 pp | 36.7 pp | 36.646 | — |
 | 30 | 20.0 pp | 25.1 pp | 25.075 | 28.7 pp |
+| **34** | **17.6 pp** | **22.3 pp** | 22.258 | — |
 | 38 | 15.7 pp | 20.1 pp | 20.009 | — |
 | 40 | 15.0 pp | 19.1 pp | 19.046 | 21.9 pp |
 | 48 | 12.5 pp | 16.0 pp | 15.972 | — |
@@ -3121,7 +3142,7 @@ the 15–50 pp band at this sample size.
 |---|---|---|---|---|---|---|
 | **tool-caller** | **12** (3 shapes × 4 distinct scripts × **1 run**) | **conversation ≡ script**, one observation per cluster, **DEFF 1.00 by construction** | McNemar exact on `cleanThroughTurn4` — **valid at this design**, plus one-level cluster bootstrap over the 12 conversations for any turn-pooled count | **50.0 pp** | **57.8 pp** | **No — must be built (FR-22/FR-22a).** 12 distinct human-verified scripts; §4.5 is the sizing and §4.5.3 the honest consequence. |
 | **guard-judge** | 85 total, but the decision is **class-conditional** and the family has **two verdict metrics** (MDD at α=0.025; floor at the unadjusted α=0.05) | item | McNemar per class, Holm across the two | see below | see below | **Partly** — see §7.3 |
-| **nlq-generator** | 40 | item | McNemar on Layer-1 exact match | 15.0 pp | 19.1 pp | **Yes, marginally.** Answers "clearly better" only. |
+| **nlq-generator** | **34** (40 items less the 6 structurally unanswerable — §3, plan §3.8.3; `Y = 40` still governs latency coverage) | item | McNemar on Layer-1 exact match | **17.6 pp** | **22.3 pp** | **Yes, marginally.** Answers "clearly better" only. *(v1.25: n corrected from the raw item count to the scoring denominator. The verdict is unchanged — both reference effects still clear 22.3 pp — and no power is lost, because the 6 excluded items are concordant-incorrect pairs that never entered `b` or `c`.)* |
 | **chat-responder** | 30 (new) | item | McNemar on checklist pass | 20.0 pp | 25.1 pp | **No — does not exist** (§6.2) |
 | **embedder** | 38 queries | query | paired bootstrap on per-query MRR | n/a (continuous) | see §7.4 | **Yes for MRR; no for recall@k** — see §7.4 |
 
