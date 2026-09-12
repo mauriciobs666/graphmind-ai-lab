@@ -231,3 +231,8 @@ Stakeholder asked to remove references to the former agents throughout the docum
 2026-09-12 — Stakeholder confirmed the full readback (Terminology, Intent, Problem & current
 state, FRs, Out of scope, Acceptance criteria) with no open questions remaining. `Status` flipped
 back to **Ready for design**.
+
+2026-09-12 — `architect`'s plan asked which concrete environment FR-5a/5b's "demo/dev environment"
+means. Clarified: any environment — `falkor-chat` is the current practical example, not an
+exclusivity constraint. FR-5a/5b wording already said "a demo/dev environment" generically, so no
+FR text changed; recorded here for traceability since the plan had assumed otherwise.
