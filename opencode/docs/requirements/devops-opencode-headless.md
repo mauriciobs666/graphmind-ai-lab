@@ -43,8 +43,10 @@ is no way to get a routine check (health/hygiene, disk usage, container status, 
 without a human present, and no way to route that kind of lower-stakes, routine work away from
 frontier-model spend. OpenCode's non-interactive `opencode run --agent <name>` invocation is
 confirmed working in this repo as the mechanism, and OpenCode's LM Studio provider support is the
-confirmed local-model path (precedent: `deprecated/opencode/agents/severino/`, now retired but
-still the worked example in `opencode/docs/manuals/local-llm.md`).
+confirmed local-model path, documented in `opencode/docs/manuals/local-llm.md`. `tank` is being
+built greenfield: `opencode/`'s former custom agents are retired (`deprecated/opencode/`, preserved
+for reference only, never a pattern to extend or copy from), so `tank` isn't built on or modeled
+after any surviving OpenCode agent — only on the still-live LM Studio setup the manual documents.
 
 No scheduler (cron, systemd timer, or similar) exists anywhere in this repo today, and building
 one is explicitly **not** part of this requirement (see Out of scope) — `mcp-monitor` exists but
@@ -228,3 +230,12 @@ updated.
 and `opencode/local-llm.md` were relocated to `deprecated/opencode/agents/severino/` and
 `opencode/docs/manuals/local-llm.md` respectively; the Problem & current state citation updated to
 match. No content/decision change.
+
+2026-09-12 — Stakeholder (on behalf of `cobb`): `opencode/`'s former custom agents (`severino`,
+`rpg`, `coding-senior`) are now fully deprecated to make `tank` a greenfield build — asked to
+remove references to them from the document. Problem & current state no longer cites the retired
+`severino/` agent as `tank`'s precedent/pattern; it still cites `opencode/docs/manuals/local-llm.md`
+(the one artifact that stays live) as the source for the local-model setup. The historical mentions
+of `severino/` in this Decision log (2026-09-02 entries, and the mechanical path-fix entry
+immediately above) are left as-is — an append-only record of what was true at interview time, not
+a claim about what's live now.
