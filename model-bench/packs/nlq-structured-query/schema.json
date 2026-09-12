@@ -1,0 +1,33 @@
+{
+  "catalog": {
+    "labels": {
+      "Product": {
+        "category": "str",
+        "name": "str",
+        "nameNormalized": "str",
+        "price": "float"
+      }
+    }
+  },
+  "knowledge_base": {
+    "labels": {
+      "Chunk": {
+        "chunkId": "str",
+        "documentId": "str",
+        "seq": "int",
+        "text": "str"
+      },
+      "Document": {
+        "documentId": "str",
+        "sourceFormat": "str",
+        "title": "str"
+      },
+      "Entity": {
+        "entityId": "str",
+        "name": "str",
+        "nameNormalized": "str",
+        "type": "str"
+      }
+    }
+  }
+}

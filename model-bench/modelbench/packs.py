@@ -863,10 +863,30 @@ def _scorer_problems(pack: Pack) -> list[str]:
     return []
 
 
+def _answerability_stamp_problems(pack: Pack) -> list[str]:
+    """S4 spec §6: `validate` fails a `nlq-structured-query` pack whose `items.jsonl` has any row
+    missing the `"answerable"` key — the plan's own stated rule ("`validate` fails a pack that has
+    unstamped items"), a small, additive, role-scoped check mirroring `_prompt_problems`'s/
+    `_scorer_problems`'s existing role-scoping shape. Scoped to `role == "nlq-generator"` only —
+    every other role's `items.jsonl` never carries (or needs) an `"answerable"` key at all."""
+    if pack.role != "nlq-generator":
+        return []
+    problems: list[str] = []
+    for row in pack.iter_items():
+        if "answerable" not in row:
+            item_id = row.get("itemId", "<unknown>")
+            problems.append(
+                f"{pack.packId}: items.jsonl row {item_id!r} is missing \"answerable\" — "
+                "run `refresh_golden.py --pack <this pack> --stamp-answerability` first (plan "
+                "§3.8.3)"
+            )
+    return problems
+
+
 def validate_pack(pack: Pack) -> list[str]:
     """§4 S2's pack-integrity checks. `[]` means valid, matching `Fingerprint.validate()`'s shape.
 
-    Six independent axes — a fixture can fail one, several, or none:
+    Seven independent axes — a fixture can fail one, several, or none:
 
     * the `sampling` contract (§3.3): structural (`analysisUnit == pairingKey[0]`, via
       `check_sampling_contract`), the row-count identity, and `-ml` §3.4 Rule 6's
@@ -886,7 +906,10 @@ def validate_pack(pack: Pack) -> list[str]:
       `runner._load_item_scorer`, moving the failure from `run` time to validate time); scoped to
       the four item-level roles — `tool-caller` resolves a different, unbuilt `ConversationScorer`
       kind via `_load_conversation_scorer` instead, never through this path (`run_pack`'s own role
-      branch).
+      branch);
+    * (S4 spec §6) `items.jsonl`'s `"answerable"` stamp, scoped to `role == "nlq-generator"` only
+      — `refresh_golden.py --stamp-answerability` writes it, and a pack shipped before that step
+      runs fails validation rather than silently running with an incomplete accuracy denominator.
 
     **Not here:** the `callSurface`-versus-catalog-`type` cross-check and the tool-calling
     eligibility gate are `run`'s (§3.4.4a, §3.6) — this function has no model catalog to check
@@ -899,4 +922,5 @@ def validate_pack(pack: Pack) -> list[str]:
     problems.extend(_tool_import_problems(pack))
     problems.extend(_prompt_problems(pack))
     problems.extend(_scorer_problems(pack))
+    problems.extend(_answerability_stamp_problems(pack))
     return problems

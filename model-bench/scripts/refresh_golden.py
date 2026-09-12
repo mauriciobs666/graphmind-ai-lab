@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any, Literal, Mapping, Sequence
 
 from modelbench.lmstudio import LMStudio, LMStudioError, ModelInfo
+from modelbench.packs import load_pack
 
 # scripts/refresh_golden.py -> model-bench/ -> graphmind-ai-lab/ (the monorepo root, where every
 # `OriginSpec.originPath` below is rooted — confirmed against root AGENTS.md's own structure,
@@ -64,8 +65,10 @@ class RefreshGoldenError(RuntimeError):
 @dataclass(frozen=True)
 class OriginSpec:
     originPath: str  # repo-root-relative
-    destPath: str  # pack-root-relative (or, for "check-only", relative to the pack dir)
-    kind: Literal["copy", "jsonl-transform", "ast-literal", "check-only"]
+    destPath: str  # pack-root-relative (or, for "check-only", relative to the pack dir); a
+    # "#"-suffixed fragment (`"tables.json#catalog"`) means "JSON-merge this key into that file",
+    # never a literal filename (S4 spec §6)
+    kind: Literal["copy", "jsonl-transform", "ast-literal", "schema-literal", "check-only"]
 
 
 #: Per-pack tracked origins, keyed by `packId` (S4 spec §6) — generalized from a single
@@ -109,6 +112,25 @@ _TRACKED_ORIGINS_BY_PACK_ID: dict[str, tuple[OriginSpec, ...]] = {
         # §5.1.2/§6) — see `_items_rows_from_golden_guards`.
         OriginSpec(
             "falkor-chat/server/tests/eval/golden_guards.jsonl", "items.jsonl", "jsonl-transform",
+        ),
+    ),
+    "nlq-structured-query": (
+        # `id` -> `itemId` rename; `answerable` is NOT written here — `--stamp-answerability`
+        # does that, once `reference_specs.json` exists (S4 spec §6).
+        OriginSpec(
+            "falkor-chat/server/tests/eval/nlq_golden_set.jsonl", "items.jsonl", "jsonl-transform",
+        ),
+        # AST-parses the CATALOG heredoc (same technique as seed_eval_corpus.py's _CORPUS, S3
+        # spec §3.4), computes nameNormalized/categoryNormalized via the transcribed
+        # normalize_name (§2.6), and merges into tables.json's "catalog" key — never touches
+        # "knowledge_base" (that half is `--check-tables-shape`'s, from the human-in-the-loop
+        # live snapshot).
+        OriginSpec("falkor-chat/scripts/seed_catalog.sh", "tables.json#catalog", "ast-literal"),
+        # AST-extracts CATALOG_SCHEMA/KNOWLEDGE_BASE_SCHEMA's `labels` dict literals the same
+        # execute-nothing way `_read_corpus_literal` does, mapping each Python type name
+        # (str/int/float) to its JSON token.
+        OriginSpec(
+            "falkor-chat/server/falkorchat/querygen.py", "schema.json", "schema-literal",
         ),
     ),
 }
@@ -227,6 +249,19 @@ def _read_provenance_records(provenance_path: Path) -> dict[str, str]:
     return out
 
 
+def _read_provenance_records_full(provenance_path: Path) -> list[ProvenanceRecord]:
+    """Every row of `PROVENANCE.md`'s own table, parsed back into `ProvenanceRecord`s (the read
+    half of `_write_provenance`'s write) — used by `run_check_tables_shape` to ADD its one new
+    row without clobbering the rows a prior default-import run already wrote (S4 spec §6)."""
+    records: list[ProvenanceRecord] = []
+    for line in provenance_path.read_text(encoding="utf-8").splitlines():
+        match = _PROVENANCE_ROW_RE.match(line)
+        if match:
+            origin_path, dest_path, git_sha, sha256, copied_at = match.groups()
+            records.append(ProvenanceRecord(origin_path, dest_path, git_sha, sha256, copied_at))
+    return records
+
+
 def _pack_version_gate(pack_root: Path, provenance_path: Path) -> None:
     """Refuses a re-run when `PROVENANCE.md` already exists and its own recorded `packVersion`
     equals `pack.json`'s current one — bumping `packVersion` by hand first is the caller's
@@ -342,12 +377,29 @@ def _items_rows_from_golden_guards(lines: Sequence[str]) -> list[dict[str, Any]]
     return rows
 
 
+def _items_rows_from_nlq_golden_set(lines: Sequence[str]) -> list[dict[str, Any]]:
+    """One row per `nlq_golden_set.jsonl` line — `id` -> `itemId` rename ONLY (matches
+    `ANALYSIS_UNIT_FIELD_BY_ROLE["nlq-generator"]`); every other field (`dataset`/`question`/
+    `shape`/`expected`/`rationale`) carried through unchanged (S4 spec §6, D1: "data, not
+    derived"). `answerable` is deliberately absent here — `--stamp-answerability` writes it,
+    separately, once `reference_specs.json` exists."""
+    rows: list[dict[str, Any]] = []
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        row = json.loads(line)
+        rows.append({("itemId" if key == "id" else key): value for key, value in row.items()})
+    return rows
+
+
 #: Which pure row-transform function a `"jsonl-transform"` origin runs, keyed by the OWNING
 #: pack's `packId` — each pack in `_TRACKED_ORIGINS_BY_PACK_ID` declares at most one
 #: `"jsonl-transform"` origin today, so one function per pack is unambiguous.
 _JSONL_TRANSFORM_BY_PACK_ID: Mapping[str, Any] = {
     "embedder-graphrag-retrieval": _queries_rows_from_golden_retrieval,
     "guard-judge-understanding": _items_rows_from_golden_guards,
+    "nlq-structured-query": _items_rows_from_nlq_golden_set,
 }
 
 
@@ -356,6 +408,194 @@ def _write_jsonl(dest_path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False))
             f.write("\n")
+
+
+def _split_dest_fragment(dest_path_str: str) -> tuple[str, str | None]:
+    """`"tables.json#catalog"` -> `("tables.json", "catalog")`; a plain path -> `(path, None)`
+    (S4 spec §6 — the `#`-fragment convention for a JSON-merge write)."""
+    if "#" in dest_path_str:
+        file_part, key = dest_path_str.split("#", 1)
+        return file_part, key
+    return dest_path_str, None
+
+
+def _write_json_merge_key(dest_path: Path, key: str, value: Any) -> None:
+    """Merges `value` into `dest_path`'s JSON object under `key`, preserving every other
+    top-level key already there (S4 spec §6: the catalog half of `tables.json` must never
+    clobber a `"knowledge_base"` half written separately by `--check-tables-shape`)."""
+    data: dict[str, Any] = {}
+    if dest_path.exists():
+        data = json.loads(dest_path.read_text(encoding="utf-8"))
+    data[key] = value
+    dest_path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+# --------------------------------------------------------------------------------------------
+# `ast-literal` (nlq-structured-query's catalog) — reading `CATALOG` out of `seed_catalog.sh`'s
+# embedded Python heredoc TEXT, never by importing or running it
+# --------------------------------------------------------------------------------------------
+
+
+def _extract_python_heredoc(text: str, marker: str = "PY") -> str:
+    """Isolates the Python body of a `"$VENV_PY" - <<'PY' ... PY` bash heredoc — `ast.parse`
+    cannot run on the surrounding bash syntax directly (S4 spec §6, extending S3's
+    `_read_corpus_literal` technique from a plain `.py` file to a shell-embedded one)."""
+    lines = text.splitlines()
+    start: int | None = None
+    end: int | None = None
+    for i, line in enumerate(lines):
+        if start is None and line.rstrip().endswith(f"<<'{marker}'"):
+            start = i + 1
+            continue
+        if start is not None and line.strip() == marker:
+            end = i
+            break
+    if start is None or end is None:
+        raise RefreshGoldenError(f"no <<'{marker}' ... {marker} heredoc found in the origin text")
+    return "\n".join(lines[start:end])
+
+
+def _read_catalog_literal(seed_script_text: str) -> list[tuple[str, str, float]]:
+    """AST-parses `seed_catalog.sh`'s embedded heredoc for the one `CATALOG = [...]` assignment
+    (a plain `ast.Assign`, unlike `seed_eval_corpus.py`'s annotated `_CORPUS`) — never
+    `exec`/`import`. Raises `RefreshGoldenError` if no such assignment exists."""
+    heredoc = _extract_python_heredoc(seed_script_text)
+    tree = ast.parse(heredoc)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name) and target.id == "CATALOG":
+                literal = ast.literal_eval(node.value)
+                if not isinstance(literal, list):
+                    raise RefreshGoldenError(
+                        f"CATALOG did not literal-eval to a list (got {type(literal).__name__})"
+                    )
+                return literal
+    raise RefreshGoldenError(
+        "no `CATALOG = [...]` assignment found in seed_catalog.sh's heredoc text — the origin's "
+        "own shape changed"
+    )
+
+
+def _normalize_name_for_refresh(value: str) -> str:
+    """Two-line transcription of `extraction.normalize_name` (`extraction.py:67-78`) — whitespace-
+    collapse + casefold. No import (D1/FR-23): this maintenance script reaches outside stdlib for
+    nothing, and this is the same transcription `tools/exec.py`'s own `_normalize_name` carries."""
+    return re.sub(r"\s+", " ", value.strip()).casefold()
+
+
+def _catalog_rows_from_literal(
+    catalog: Sequence[tuple[str, str, float]]
+) -> dict[str, list[dict[str, Any]]]:
+    """`{"Product": [...]}` — one row per `(name, category, price)` triple, computing
+    `nameNormalized`/`categoryNormalized` (S4 spec §2.6/§6), matching `seed_catalog.sh`'s own
+    live-write shape (which also stores a `productId` slug this pack's `schema.json` never
+    exposes — a curated query-facing allowlist, not every property that exists on the node, same
+    discipline `querygen.DatasetSchema`'s own docstring states). Keyed by label (`"Product"`,
+    catalog's only one) rather than returned as a bare row list — `tables.json["catalog"]` must
+    mirror `schema.json["catalog"]["labels"]`'s own per-label shape, the same `tables[label]`
+    indexing `tools/exec.py`'s `compile_and_execute` does at run time."""
+    rows = [
+        {
+            "name": name,
+            "nameNormalized": _normalize_name_for_refresh(name),
+            "category": category,
+            "categoryNormalized": _normalize_name_for_refresh(category),
+            "price": price,
+        }
+        for name, category, price in catalog
+    ]
+    return {"Product": rows}
+
+
+# --------------------------------------------------------------------------------------------
+# `schema-literal` (nlq-structured-query's schema.json) — AST-extracting
+# CATALOG_SCHEMA/KNOWLEDGE_BASE_SCHEMA's `labels` dicts out of querygen.py's TEXT
+# --------------------------------------------------------------------------------------------
+
+#: Source variable name -> this pack's own dataset key (schema.json's two top-level keys).
+_TARGET_SCHEMA_VARS: Mapping[str, str] = {
+    "CATALOG_SCHEMA": "catalog",
+    "KNOWLEDGE_BASE_SCHEMA": "knowledge_base",
+}
+
+#: The only property-type tokens `tools/exec.py`'s Layer B coercion switches on (§5.2.3) — a
+#: schema literal naming any other bare type (e.g. `bool`, not used anywhere today) is the
+#: origin's own shape changing in a way this script does not know how to carry forward silently.
+_KNOWN_TYPE_TOKENS = frozenset({"str", "int", "float"})
+
+
+def _labels_dict_from_dataset_schema_call(call: ast.Call) -> dict[str, dict[str, str]]:
+    labels_node: ast.expr | None = None
+    for kw in call.keywords:
+        if kw.arg == "labels":
+            labels_node = kw.value
+            break
+    if labels_node is None or not isinstance(labels_node, ast.Dict):
+        raise RefreshGoldenError("DatasetSchema(...) call has no `labels={...}` keyword argument")
+
+    labels: dict[str, dict[str, str]] = {}
+    for key_node, value_node in zip(labels_node.keys, labels_node.values):
+        if key_node is None:
+            raise RefreshGoldenError("labels={...} contains a `**`-unpacked entry, not a literal")
+        label = ast.literal_eval(key_node)
+        if not isinstance(value_node, ast.Dict):
+            raise RefreshGoldenError(f"label {label!r}'s properties are not a dict literal")
+        props: dict[str, str] = {}
+        for prop_key_node, prop_value_node in zip(value_node.keys, value_node.values):
+            if prop_key_node is None:
+                raise RefreshGoldenError(f"label {label!r} contains a `**`-unpacked entry")
+            prop = ast.literal_eval(prop_key_node)
+            is_known_type = (
+                isinstance(prop_value_node, ast.Name) and prop_value_node.id in _KNOWN_TYPE_TOKENS
+            )
+            if not is_known_type:
+                raise RefreshGoldenError(
+                    f"property {prop!r} on label {label!r} does not carry a known bare type name "
+                    f"(str/int/float) — the origin's own shape changed"
+                )
+            props[prop] = prop_value_node.id
+        labels[label] = props
+    return labels
+
+
+def _read_schema_literal(querygen_source_text: str) -> dict[str, dict[str, Any]]:
+    """AST-parses `querygen.py`'s text and extracts `CATALOG_SCHEMA`/`KNOWLEDGE_BASE_SCHEMA`'s
+    `labels={...}` keyword argument into `schema.json`'s own shape (§5.2.3) — never
+    `exec`/`import`. Raises `RefreshGoldenError` naming whichever assignment is missing."""
+    tree = ast.parse(querygen_source_text)
+    found: dict[str, dict[str, Any]] = {}
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id in _TARGET_SCHEMA_VARS
+            and isinstance(node.value, ast.Call)
+        ):
+            dataset_key = _TARGET_SCHEMA_VARS[node.targets[0].id]
+            found[dataset_key] = {"labels": _labels_dict_from_dataset_schema_call(node.value)}
+
+    missing = set(_TARGET_SCHEMA_VARS.values()) - set(found)
+    if missing:
+        raise RefreshGoldenError(
+            f"could not find assignment(s) for {sorted(missing)!r} in querygen.py's text — the "
+            "origin's own shape changed"
+        )
+    return found
+
+
+#: Which pure `origin text -> rows` function an `"ast-literal"` origin runs, keyed by the OWNING
+#: pack's `packId` — mirrors `_JSONL_TRANSFORM_BY_PACK_ID`'s own per-pack dispatch shape. Each
+#: entry composes that pack's own `_read_*_literal` (the AST read) with its own `_*_rows_from_
+#: literal` (the row-shape transform), since the two packs read different origin shapes
+#: (an annotated `_CORPUS` list-of-dicts vs. a plain `CATALOG` list-of-tuples).
+_AST_LITERAL_ROWS_BY_PACK_ID: Mapping[str, Any] = {
+    "embedder-graphrag-retrieval": (
+        lambda text: _corpus_rows_from_literal(_read_corpus_literal(text))
+    ),
+    "nlq-structured-query": lambda text: _catalog_rows_from_literal(_read_catalog_literal(text)),
+}
 
 
 # --------------------------------------------------------------------------------------------
@@ -567,7 +807,8 @@ def _run_import(
 
         origin_path = repo_root / origin.originPath
         origin_bytes = origin_path.read_bytes()
-        dest_path = pack_root / origin.destPath
+        dest_file, dest_key = _split_dest_fragment(origin.destPath)
+        dest_path = pack_root / dest_file
 
         if origin.kind == "copy":
             dest_path.write_bytes(origin_bytes)
@@ -576,9 +817,16 @@ def _run_import(
             rows = _JSONL_TRANSFORM_BY_PACK_ID[pack_id](lines)
             _write_jsonl(dest_path, rows)
         elif origin.kind == "ast-literal":
-            corpus = _read_corpus_literal(origin_bytes.decode("utf-8"))
-            rows = _corpus_rows_from_literal(corpus)
-            _write_jsonl(dest_path, rows)
+            rows = _AST_LITERAL_ROWS_BY_PACK_ID[pack_id](origin_bytes.decode("utf-8"))
+            if dest_key is not None:
+                _write_json_merge_key(dest_path, dest_key, rows)
+            else:
+                _write_jsonl(dest_path, rows)
+        elif origin.kind == "schema-literal":
+            schema = _read_schema_literal(origin_bytes.decode("utf-8"))
+            dest_path.write_text(
+                json.dumps(schema, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
         else:  # pragma: no cover - exhaustive over OriginSpec.kind's Literal
             raise AssertionError(f"unhandled OriginSpec kind {origin.kind!r}")
 
@@ -594,6 +842,135 @@ def _run_import(
 
     manifest = json.loads((pack_root / "pack.json").read_text(encoding="utf-8"))
     _write_provenance(pack_root, manifest["packVersion"], records)
+
+
+# --------------------------------------------------------------------------------------------
+# `--check-tables-shape` (S4 spec §2.6/§6) — local-only, never opens a network socket. Validates
+# an ALREADY-PRODUCED `tables.json` (the operator hand-wrote/merged its "knowledge_base" half
+# from a live, human-run `ws:nlq-eval` snapshot, §2.6) and writes PROVENANCE.md's entry for it.
+# --------------------------------------------------------------------------------------------
+
+
+def _tables_shape_problems(
+    tables_kb: Mapping[str, list[dict[str, Any]]], schema_kb: Mapping[str, Any]
+) -> list[str]:
+    """Every `tables.json["knowledge_base"]` row under each of `schema_kb["labels"]`'s labels
+    (`Entity`/`Document`/`Chunk`) must carry EXACTLY that label's declared properties — no more,
+    no fewer (`querygen.DatasetSchema`'s own "curated allowlist" discipline, S4 spec §6)."""
+    problems: list[str] = []
+    labels = schema_kb.get("labels", {})
+    for label, declared_props in labels.items():
+        expected_keys = set(declared_props)
+        for i, row in enumerate(tables_kb.get(label, [])):
+            actual_keys = set(row)
+            if actual_keys == expected_keys:
+                continue
+            missing = sorted(expected_keys - actual_keys)
+            extra = sorted(actual_keys - expected_keys)
+            parts = []
+            if missing:
+                parts.append(f"missing {missing!r}")
+            if extra:
+                parts.append(f"extra {extra!r}")
+            problems.append(f"knowledge_base.{label}[{i}]: {' and '.join(parts)}")
+    return problems
+
+
+def run_check_tables_shape(pack_root: Path, *, source_git_sha: str) -> list[str]:
+    """Validates `tables.json`'s `"knowledge_base"` half against `schema.json`'s own declared
+    properties and, on success, ADDS one `PROVENANCE.md` row for the live snapshot (never
+    clobbering the rows a prior default-import run already wrote). Refuses under an unchanged
+    `packVersion`, the same `_pack_version_gate` `--embed-corpus` already shares (S4 spec §6).
+    Returns the row counts it just counted, one entry per label."""
+    provenance_path = pack_root / "PROVENANCE.md"
+    _pack_version_gate(pack_root, provenance_path)
+
+    manifest = json.loads((pack_root / "pack.json").read_text(encoding="utf-8"))
+    schema = json.loads((pack_root / "schema.json").read_text(encoding="utf-8"))
+    tables = json.loads((pack_root / "tables.json").read_text(encoding="utf-8"))
+    tables_kb = tables.get("knowledge_base", {})
+
+    problems = _tables_shape_problems(tables_kb, schema["knowledge_base"])
+    if problems:
+        raise RefreshGoldenError(
+            "tables.json's knowledge_base shape does not match schema.json:\n"
+            + "\n".join(problems)
+        )
+
+    counts = {label: len(rows) for label, rows in tables_kb.items()}
+    existing = _read_provenance_records_full(provenance_path) if provenance_path.exists() else []
+    new_record = ProvenanceRecord(
+        originPath="ws:nlq-eval (live FalkorDB snapshot)",
+        destPath="tables.json#knowledge_base",
+        sourceGitSha=source_git_sha,
+        sourceSha256=_sha256_bytes(
+            json.dumps(tables_kb, sort_keys=True).encode("utf-8")
+        ),
+        copiedAt=_utc_now_iso(),
+    )
+    _write_provenance(pack_root, manifest["packVersion"], [*existing, new_record])
+    return [f"{label}={n}" for label, n in sorted(counts.items())]
+
+
+# --------------------------------------------------------------------------------------------
+# `--stamp-answerability` (S4 spec §6) — nlq-structured-query only. Runs `reference_specs.json`'s
+# hand-authored specs through the pack's own `tools/exec.py` and stamps `items.jsonl`.
+# --------------------------------------------------------------------------------------------
+
+
+def run_stamp_answerability(pack_root: Path) -> dict[str, int]:
+    """Reads `reference_specs.json` (`itemId` -> a `QueryRequest`-shaped spec), runs each item's
+    own reference spec through the pack's declared `tools.entrypoint`
+    (`tools_exec.compile_and_execute`) against `tables.json`/`schema.json`, and stamps
+    `items.jsonl`'s matching row `"answerable": true` iff the reference spec compiles, executes,
+    and its result is non-empty when `expected.type != "not_found"` — a `not_found`-shaped item
+    is answerable by construction (the correct answer IS an empty result); `false` otherwise (the
+    reference spec itself fails Layer A/B, or executes to empty against a non-`not_found`
+    expectation). Refuses on any pack other than `nlq-structured-query` and under an unchanged
+    `packVersion`, the same `_pack_version_gate` every other write mode shares."""
+    manifest = json.loads((pack_root / "pack.json").read_text(encoding="utf-8"))
+    if manifest.get("packId") != "nlq-structured-query":
+        raise RefreshGoldenError(
+            f"--stamp-answerability is nlq-structured-query-only; refusing on pack "
+            f"{manifest.get('packId')!r}"
+        )
+    provenance_path = pack_root / "PROVENANCE.md"
+    _pack_version_gate(pack_root, provenance_path)
+
+    pack = load_pack(pack_root)
+    tool_module = pack.load_tool_module()
+    entrypoint = getattr(tool_module, manifest["tools"]["entrypoint"])
+
+    schema = json.loads((pack_root / "schema.json").read_text(encoding="utf-8"))
+    tables = json.loads((pack_root / "tables.json").read_text(encoding="utf-8"))
+    reference_specs = json.loads((pack_root / "reference_specs.json").read_text(encoding="utf-8"))
+
+    items_path = pack_root / "items.jsonl"
+    items = [
+        json.loads(line)
+        for line in items_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+    counts = {"answerable": 0, "unanswerable": 0}
+    stamped: list[dict[str, Any]] = []
+    for item in items:
+        spec = reference_specs.get(item["itemId"])
+        dataset = item["dataset"]
+        answerable = False
+        if spec is not None and dataset in tables and dataset in schema:
+            try:
+                result = entrypoint(spec, tables=tables[dataset], schema=schema[dataset])
+            except (tool_module.MalformedSpecError, tool_module.SchemaViolationError):
+                answerable = False
+            else:
+                non_empty = bool(result.get("items"))
+                answerable = non_empty or item["expected"]["type"] == "not_found"
+        stamped.append({**item, "answerable": answerable})
+        counts["answerable" if answerable else "unanswerable"] += 1
+
+    _write_jsonl(items_path, stamped)
+    return counts
 
 
 # --------------------------------------------------------------------------------------------

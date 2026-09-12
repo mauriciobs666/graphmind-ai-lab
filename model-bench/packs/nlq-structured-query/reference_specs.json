@@ -1,0 +1,739 @@
+{
+  "nlq-01": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Wireless Charging Pad"
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.price"
+    ]
+  },
+  "nlq-02": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Portable SSD 1TB"
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.category"
+    ]
+  },
+  "nlq-03": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Smartwatch Series 5"
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.price"
+    ]
+  },
+  "nlq-04": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Action Camera 4K"
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.category"
+    ]
+  },
+  "nlq-05": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "27-inch 4K Monitor"
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.price"
+    ]
+  },
+  "nlq-06": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "category",
+            "value": "Peripherals"
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.name"
+    ]
+  },
+  "nlq-07": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "category",
+            "value": "Wearables"
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.name"
+    ]
+  },
+  "nlq-08": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "<",
+            "property": "price",
+            "value": 50
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.name"
+    ]
+  },
+  "nlq-09": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "category",
+            "value": "Audio"
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.name"
+    ]
+  },
+  "nlq-10": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "category",
+            "value": "Peripherals"
+          },
+          {
+            "op": "<",
+            "property": "price",
+            "value": 50
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.name"
+    ]
+  },
+  "nlq-11": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "category",
+            "value": "Accessories"
+          },
+          {
+            "op": ">",
+            "property": "price",
+            "value": 30
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.name"
+    ]
+  },
+  "nlq-12": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "category",
+            "value": "Wearables"
+          },
+          {
+            "op": "<",
+            "property": "price",
+            "value": 200
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.name"
+    ]
+  },
+  "nlq-13": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Bluetooth Speaker Max"
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.price"
+    ]
+  },
+  "nlq-14": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Wireless Earbuds Pro"
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.category"
+    ]
+  },
+  "nlq-15": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Gaming Keyboard RGB"
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.price"
+    ]
+  },
+  "nlq-16": {
+    "limit": 1,
+    "matches": [
+      {
+        "filters": [],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "order_by": "p.price",
+    "order_dir": "ASC",
+    "returns": [
+      "p.name"
+    ]
+  },
+  "nlq-17": {
+    "limit": 1,
+    "matches": [
+      {
+        "filters": [],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "order_by": "p.price",
+    "order_dir": "DESC",
+    "returns": [
+      "p.name"
+    ]
+  },
+  "nlq-18": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "<",
+            "property": "price",
+            "value": 100
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "count(p)"
+    ]
+  },
+  "nlq-19": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "category",
+            "value": "Peripherals"
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "count(p)"
+    ]
+  },
+  "nlq-20": {
+    "limit": 1,
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "category",
+            "value": "Wearables"
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "order_by": "p.price",
+    "order_dir": "ASC",
+    "returns": [
+      "p.name"
+    ]
+  },
+  "nlq-21": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Marlowe Robotics"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.type"
+    ]
+  },
+  "nlq-22": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Atlas-7"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.type"
+    ]
+  },
+  "nlq-23": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Devon Cole"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.type"
+    ]
+  },
+  "nlq-24": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "NovaGrid"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.type"
+    ]
+  },
+  "nlq-25": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "type",
+            "value": "Location"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.name"
+    ]
+  },
+  "nlq-26": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "type",
+            "value": "Person"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.name"
+    ]
+  },
+  "nlq-27": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "type",
+            "value": "Product"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.name"
+    ]
+  },
+  "nlq-28": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Solstice Robotics"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.type"
+    ]
+  },
+  "nlq-29": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Griffin Aerospace"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.type"
+    ]
+  },
+  "nlq-30": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Helio Dynamics"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.type"
+    ]
+  },
+  "nlq-31": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "type",
+            "value": "Organization"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "count(e)"
+    ]
+  },
+  "nlq-32": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "type",
+            "value": "Person"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "count(e)"
+    ]
+  },
+  "nlq-33": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "type",
+            "value": "Concept"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "count(e)"
+    ]
+  },
+  "nlq-34": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Marlowe Robotics"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.acquired"
+    ]
+  },
+  "nlq-35": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Marlowe Robotics"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.founder"
+    ]
+  },
+  "nlq-36": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Marlowe Robotics"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.partner"
+    ]
+  },
+  "nlq-37": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Marlowe Robotics"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.location"
+    ]
+  },
+  "nlq-38": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Marlowe Robotics"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.employeeCount"
+    ]
+  },
+  "nlq-39": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "name",
+            "value": "Marlowe Robotics"
+          }
+        ],
+        "label": "Entity",
+        "var": "e"
+      }
+    ],
+    "returns": [
+      "e.employeeCount"
+    ]
+  },
+  "nlq-40": {
+    "matches": [
+      {
+        "filters": [
+          {
+            "op": "=",
+            "property": "category",
+            "value": "Peripherals"
+          },
+          {
+            "op": "<",
+            "property": "price",
+            "value": 60
+          }
+        ],
+        "label": "Product",
+        "var": "p"
+      }
+    ],
+    "returns": [
+      "p.name"
+    ]
+  }
+}

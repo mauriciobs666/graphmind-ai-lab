@@ -1,0 +1,27 @@
+{
+  "packId": "nlq-structured-query",
+  "packVersion": "1.0.0",
+  "role": "nlq-generator",
+  "schemaVersion": 1,
+  "description": "Structured NL-to-query generation over the catalog/knowledge_base datasets, scored by Layer-1 exact match after canonicalization.",
+  "scorer": "extraction",
+  "environment": {"requires": ["lmstudio-chat"]},
+  "prompt": {
+    "systemPrompt": null,
+    "toolSchemas": null,
+    "temperature": 0.0,
+    "maxTokens": 512
+  },
+  "data": {"items": "items.jsonl", "tables": "tables.json", "schema": "schema.json"},
+  "tools": {"module": "tools/exec.py", "entrypoint": "compile_and_execute"},
+  "sampling": {
+    "seed": 20260911,
+    "pairingKey": ["itemId"],
+    "analysisUnit": "itemId"
+  },
+  "metrics": {
+    "verdictMetrics": ["layer1ExactMatchRate"],
+    "headlineMetric": "layer1ExactMatchRate"
+  },
+  "provenance": "PROVENANCE.md"
+}

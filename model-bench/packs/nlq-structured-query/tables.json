@@ -1,0 +1,111 @@
+{
+  "catalog": {
+    "Product": [
+      {
+        "category": "Peripherals",
+        "categoryNormalized": "peripherals",
+        "name": "Wireless Mouse Pro",
+        "nameNormalized": "wireless mouse pro",
+        "price": 29.99
+      },
+      {
+        "category": "Peripherals",
+        "categoryNormalized": "peripherals",
+        "name": "Mechanical Keyboard K200",
+        "nameNormalized": "mechanical keyboard k200",
+        "price": 89.99
+      },
+      {
+        "category": "Peripherals",
+        "categoryNormalized": "peripherals",
+        "name": "Gaming Mouse Pad XL",
+        "nameNormalized": "gaming mouse pad xl",
+        "price": 19.99
+      },
+      {
+        "category": "Peripherals",
+        "categoryNormalized": "peripherals",
+        "name": "Webcam HD 1080p",
+        "nameNormalized": "webcam hd 1080p",
+        "price": 59.99
+      },
+      {
+        "category": "Displays",
+        "categoryNormalized": "displays",
+        "name": "27-inch 4K Monitor",
+        "nameNormalized": "27-inch 4k monitor",
+        "price": 349.99
+      },
+      {
+        "category": "Accessories",
+        "categoryNormalized": "accessories",
+        "name": "USB-C Hub 7-in-1",
+        "nameNormalized": "usb-c hub 7-in-1",
+        "price": 39.99
+      },
+      {
+        "category": "Accessories",
+        "categoryNormalized": "accessories",
+        "name": "Laptop Stand Aluminum",
+        "nameNormalized": "laptop stand aluminum",
+        "price": 34.99
+      },
+      {
+        "category": "Accessories",
+        "categoryNormalized": "accessories",
+        "name": "Wireless Charging Pad",
+        "nameNormalized": "wireless charging pad",
+        "price": 24.99
+      },
+      {
+        "category": "Audio",
+        "categoryNormalized": "audio",
+        "name": "Noise Cancelling Headphones X3",
+        "nameNormalized": "noise cancelling headphones x3",
+        "price": 199.99
+      },
+      {
+        "category": "Audio",
+        "categoryNormalized": "audio",
+        "name": "Bluetooth Speaker Mini",
+        "nameNormalized": "bluetooth speaker mini",
+        "price": 49.99
+      },
+      {
+        "category": "Storage",
+        "categoryNormalized": "storage",
+        "name": "Portable SSD 1TB",
+        "nameNormalized": "portable ssd 1tb",
+        "price": 109.99
+      },
+      {
+        "category": "Wearables",
+        "categoryNormalized": "wearables",
+        "name": "Smartwatch Series 5",
+        "nameNormalized": "smartwatch series 5",
+        "price": 249.99
+      },
+      {
+        "category": "Wearables",
+        "categoryNormalized": "wearables",
+        "name": "Fitness Tracker Band",
+        "nameNormalized": "fitness tracker band",
+        "price": 79.99
+      },
+      {
+        "category": "Cameras",
+        "categoryNormalized": "cameras",
+        "name": "Action Camera 4K",
+        "nameNormalized": "action camera 4k",
+        "price": 179.99
+      },
+      {
+        "category": "Smart Home",
+        "categoryNormalized": "smart home",
+        "name": "Smart Home Hub",
+        "nameNormalized": "smart home hub",
+        "price": 89.99
+      }
+    ]
+  }
+}

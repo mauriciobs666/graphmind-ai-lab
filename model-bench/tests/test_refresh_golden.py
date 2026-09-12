@@ -408,19 +408,33 @@ def test_items_rows_from_golden_guards_never_carries_a_bare_id_key() -> None:
 # --------------------------------------------------------------------------------------------
 
 
-def test_tracked_origins_by_pack_id_has_exactly_the_two_known_packs() -> None:
+def test_tracked_origins_by_pack_id_has_exactly_the_three_known_packs() -> None:
     """Shrink/widen guard (root AGENTS.md's "a guard's reach lives in an asserted constant"
-    convention): the S3 embedder pack's four-plus-check-only origins are unmoved, and S4's
-    guard-judge-understanding pack owns exactly its one `jsonl-transform` origin."""
+    convention): the S3 embedder pack's four-plus-check-only origins are unmoved, S4's
+    guard-judge-understanding pack owns exactly its one `jsonl-transform` origin, and S4's second
+    pack (nlq-structured-query) owns exactly its three origins (§6)."""
     assert set(refresh_golden._TRACKED_ORIGINS_BY_PACK_ID) == {
         "embedder-graphrag-retrieval",
         "guard-judge-understanding",
+        "nlq-structured-query",
     }
     assert len(refresh_golden._TRACKED_ORIGINS_BY_PACK_ID["embedder-graphrag-retrieval"]) == 5
     guard_origins = refresh_golden._TRACKED_ORIGINS_BY_PACK_ID["guard-judge-understanding"]
     assert guard_origins == (
         refresh_golden.OriginSpec(
             "falkor-chat/server/tests/eval/golden_guards.jsonl", "items.jsonl", "jsonl-transform",
+        ),
+    )
+    nlq_origins = refresh_golden._TRACKED_ORIGINS_BY_PACK_ID["nlq-structured-query"]
+    assert nlq_origins == (
+        refresh_golden.OriginSpec(
+            "falkor-chat/server/tests/eval/nlq_golden_set.jsonl", "items.jsonl", "jsonl-transform",
+        ),
+        refresh_golden.OriginSpec(
+            "falkor-chat/scripts/seed_catalog.sh", "tables.json#catalog", "ast-literal",
+        ),
+        refresh_golden.OriginSpec(
+            "falkor-chat/server/falkorchat/querygen.py", "schema.json", "schema-literal",
         ),
     )
 
@@ -705,3 +719,505 @@ def test_shipped_pack_every_relevant_doc_id_resolves_inside_the_shipped_corpus()
 
     assert relevant_doc_ids <= corpus_doc_ids
     assert relevant_doc_ids - corpus_doc_ids == set()
+
+
+# ==================================================================================================
+# S4 spec §6 — `nlq-structured-query`'s three new origins, `--check-tables-shape`, and
+# `--stamp-answerability`
+# ==================================================================================================
+
+_NLQ_PACK_ROOT = Path(__file__).resolve().parents[1] / "packs" / "nlq-structured-query"
+
+
+# --------------------------------------------------------------------------------------------
+# `_items_rows_from_nlq_golden_set` — the jsonl-transform path (`id` -> `itemId` rename only;
+# `answerable` is NOT written here — `--stamp-answerability` does that, separately)
+# --------------------------------------------------------------------------------------------
+
+
+def test_items_rows_from_nlq_golden_set_renames_only_id_to_item_id() -> None:
+    line = json.dumps(
+        {
+            "id": "nlq-01",
+            "dataset": "catalog",
+            "question": "How much does the Widget cost?",
+            "shape": "single-fact",
+            "expected": {"type": "scalar", "value": 9.99},
+            "rationale": "because",
+        }
+    )
+    rows = refresh_golden._items_rows_from_nlq_golden_set([line, "", "  "])
+    assert rows == [
+        {
+            "itemId": "nlq-01",
+            "dataset": "catalog",
+            "question": "How much does the Widget cost?",
+            "shape": "single-fact",
+            "expected": {"type": "scalar", "value": 9.99},
+            "rationale": "because",
+        }
+    ]
+    assert "id" not in rows[0]
+    assert "answerable" not in rows[0]
+
+
+# --------------------------------------------------------------------------------------------
+# `_read_catalog_literal` / `_catalog_rows_from_literal` — the `ast-literal` origin for
+# `seed_catalog.sh`'s embedded `CATALOG = [...]` heredoc
+# --------------------------------------------------------------------------------------------
+
+_SYNTHETIC_SEED_CATALOG_SH = """#!/usr/bin/env bash
+set -euo pipefail
+"$VENV_PY" - <<'PY'
+CATALOG = [
+    ("Widget A", "Tools", 10.0),
+    ("Gizmo B", "Gadgets", 25.5),
+]
+rows = [{"name": n} for n, c, p in CATALOG]
+PY
+echo done
+"""
+
+
+def test_read_catalog_literal_extracts_the_heredocs_catalog_assignment() -> None:
+    catalog = refresh_golden._read_catalog_literal(_SYNTHETIC_SEED_CATALOG_SH)
+    assert catalog == [("Widget A", "Tools", 10.0), ("Gizmo B", "Gadgets", 25.5)]
+
+
+def test_read_catalog_literal_raises_when_no_catalog_assignment_exists() -> None:
+    with pytest.raises(refresh_golden.RefreshGoldenError):
+        refresh_golden._read_catalog_literal("echo hello\n")
+
+
+def test_catalog_rows_from_literal_computes_normalized_fields() -> None:
+    """Returns `{"Product": [...]}`, mirroring `schema.json["catalog"]["labels"]`'s own
+    per-label shape — the same `tables[label]` indexing `compile_and_execute` does at run time,
+    never a bare row list (a real defect this exact assertion caught: `tables.json["catalog"]`
+    written as a bare list broke `compile_and_execute`'s own `tables.get(label, [])`)."""
+    rows = refresh_golden._catalog_rows_from_literal(
+        [("Widget  A", "Tools", 10.0), ("Gizmo B", "Gadgets", 25.5)]
+    )
+    assert rows == {
+        "Product": [
+            {
+                "name": "Widget  A", "nameNormalized": "widget a",
+                "category": "Tools", "categoryNormalized": "tools", "price": 10.0,
+            },
+            {
+                "name": "Gizmo B", "nameNormalized": "gizmo b",
+                "category": "Gadgets", "categoryNormalized": "gadgets", "price": 25.5,
+            },
+        ]
+    }
+
+
+def test_read_catalog_literal_handles_the_real_seed_catalog_script() -> None:
+    """Live-verified against the real `falkor-chat/scripts/seed_catalog.sh` — the fixed ~15-item
+    consumer-electronics catalog (S4 spec §2.6/§6)."""
+    text = (
+        Path(__file__).resolve().parents[2] / "falkor-chat" / "scripts" / "seed_catalog.sh"
+    ).read_text(encoding="utf-8")
+    catalog = refresh_golden._read_catalog_literal(text)
+    assert len(catalog) == 15
+    assert ("Wireless Charging Pad", "Accessories", 24.99) in catalog
+
+
+# --------------------------------------------------------------------------------------------
+# `_read_schema_literal` — the new `"schema-literal"` origin kind
+# --------------------------------------------------------------------------------------------
+
+_SYNTHETIC_QUERYGEN_SOURCE = '''
+CATALOG_SCHEMA = DatasetSchema(
+    graph_key="reference",
+    labels={
+        "Product": {"name": str, "price": float, "qty": int},
+    },
+)
+
+KNOWLEDGE_BASE_SCHEMA = DatasetSchema(
+    graph_key=None,
+    labels={
+        "Entity": {"entityId": str, "type": str},
+    },
+)
+'''
+
+
+def test_read_schema_literal_extracts_both_dataset_schemas() -> None:
+    schema = refresh_golden._read_schema_literal(_SYNTHETIC_QUERYGEN_SOURCE)
+    assert schema == {
+        "catalog": {"labels": {"Product": {"name": "str", "price": "float", "qty": "int"}}},
+        "knowledge_base": {"labels": {"Entity": {"entityId": "str", "type": "str"}}},
+    }
+
+
+def test_read_schema_literal_raises_when_a_schema_assignment_is_missing() -> None:
+    with pytest.raises(refresh_golden.RefreshGoldenError):
+        refresh_golden._read_schema_literal("CATALOG_SCHEMA = DatasetSchema(labels={})\n")
+
+
+def test_read_schema_literal_handles_the_real_querygen_module() -> None:
+    """Live-verified against the real `falkor-chat/server/falkorchat/querygen.py` — matches this
+    pack's own hand-written `schema.json` exactly (S4 spec §5.2.3/§6)."""
+    text = (
+        Path(__file__).resolve().parents[2]
+        / "falkor-chat" / "server" / "falkorchat" / "querygen.py"
+    ).read_text(encoding="utf-8")
+    schema = refresh_golden._read_schema_literal(text)
+    shipped = json.loads((_NLQ_PACK_ROOT / "schema.json").read_text(encoding="utf-8"))
+    assert schema == shipped
+
+
+# --------------------------------------------------------------------------------------------
+# `_run_import`'s dispatch for the two new destination shapes: a `#`-fragment JSON-merge write
+# (`tables.json#catalog`) and a whole-file `schema-literal` write (`schema.json`)
+# --------------------------------------------------------------------------------------------
+
+
+def test_run_import_for_nlq_pack_writes_items_tables_catalog_and_schema(tmp_path: Path) -> None:
+    pack_root = tmp_path / "nlq-pack"
+    pack_root.mkdir()
+    (pack_root / "pack.json").write_text(
+        json.dumps({"packId": "nlq-structured-query", "packVersion": "1.0.0"})
+    )
+
+    repo_root = tmp_path / "repo"
+    (repo_root / "falkor-chat" / "server" / "tests" / "eval").mkdir(parents=True)
+    (repo_root / "falkor-chat" / "scripts").mkdir(parents=True)
+    (repo_root / "falkor-chat" / "server" / "falkorchat").mkdir(parents=True)
+
+    golden_path = repo_root / "falkor-chat" / "server" / "tests" / "eval" / "nlq_golden_set.jsonl"
+    golden_path.write_text(
+        json.dumps(
+            {
+                "id": "nlq-01", "dataset": "catalog", "question": "q?", "shape": "single-fact",
+                "expected": {"type": "scalar", "value": 1}, "rationale": "r",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (repo_root / "falkor-chat" / "scripts" / "seed_catalog.sh").write_text(
+        _SYNTHETIC_SEED_CATALOG_SH, encoding="utf-8"
+    )
+    (repo_root / "falkor-chat" / "server" / "falkorchat" / "querygen.py").write_text(
+        _SYNTHETIC_QUERYGEN_SOURCE, encoding="utf-8"
+    )
+
+    import subprocess as _subprocess
+
+    class _FakeCompleted:
+        stdout = "deadbeef\n"
+
+    def _fake_run(*args, **kwargs):
+        return _FakeCompleted()
+
+    orig_run = _subprocess.run
+    _subprocess.run = _fake_run  # type: ignore[assignment]
+    try:
+        origins = refresh_golden._origins_for_pack_id("nlq-structured-query")
+        refresh_golden._run_import(repo_root, pack_root, "nlq-structured-query", origins)
+    finally:
+        _subprocess.run = orig_run  # type: ignore[assignment]
+
+    items = [
+        json.loads(line)
+        for line in (pack_root / "items.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert items == [
+        {
+            "itemId": "nlq-01", "dataset": "catalog", "question": "q?", "shape": "single-fact",
+            "expected": {"type": "scalar", "value": 1}, "rationale": "r",
+        }
+    ]
+
+    tables = json.loads((pack_root / "tables.json").read_text(encoding="utf-8"))
+    assert set(tables) == {"catalog"}  # "knowledge_base" is never touched by this import
+    assert set(tables["catalog"]) == {"Product"}
+    assert tables["catalog"]["Product"] == [
+        {
+            "name": "Widget A", "nameNormalized": "widget a",
+            "category": "Tools", "categoryNormalized": "tools", "price": 10.0,
+        },
+        {
+            "name": "Gizmo B", "nameNormalized": "gizmo b",
+            "category": "Gadgets", "categoryNormalized": "gadgets", "price": 25.5,
+        },
+    ]
+
+    schema = json.loads((pack_root / "schema.json").read_text(encoding="utf-8"))
+    assert schema == {
+        "catalog": {"labels": {"Product": {"name": "str", "price": "float", "qty": "int"}}},
+        "knowledge_base": {"labels": {"Entity": {"entityId": "str", "type": "str"}}},
+    }
+
+    assert (pack_root / "PROVENANCE.md").exists()
+
+
+def test_run_import_for_nlq_pack_merges_catalog_into_an_existing_tables_json(
+    tmp_path: Path,
+) -> None:
+    """A re-run of the default import (e.g. after a `packVersion` bump) merges the fresh
+    `"catalog"` key into whatever `tables.json` already has — it must never clobber a
+    `"knowledge_base"` half written separately by `--check-tables-shape` (S4 spec §2.6/§6)."""
+    pack_root = tmp_path / "nlq-pack"
+    pack_root.mkdir()
+    (pack_root / "pack.json").write_text(
+        json.dumps({"packId": "nlq-structured-query", "packVersion": "1.0.0"})
+    )
+    (pack_root / "tables.json").write_text(
+        json.dumps({"knowledge_base": {"Entity": [{"entityId": "e1"}]}}), encoding="utf-8"
+    )
+
+    repo_root = tmp_path / "repo"
+    (repo_root / "falkor-chat" / "server" / "tests" / "eval").mkdir(parents=True)
+    (repo_root / "falkor-chat" / "scripts").mkdir(parents=True)
+    (repo_root / "falkor-chat" / "server" / "falkorchat").mkdir(parents=True)
+    (repo_root / "falkor-chat" / "server" / "tests" / "eval" / "nlq_golden_set.jsonl").write_text(
+        "", encoding="utf-8"
+    )
+    (repo_root / "falkor-chat" / "scripts" / "seed_catalog.sh").write_text(
+        _SYNTHETIC_SEED_CATALOG_SH, encoding="utf-8"
+    )
+    (repo_root / "falkor-chat" / "server" / "falkorchat" / "querygen.py").write_text(
+        _SYNTHETIC_QUERYGEN_SOURCE, encoding="utf-8"
+    )
+
+    import subprocess as _subprocess
+
+    class _FakeCompleted:
+        stdout = "deadbeef\n"
+
+    def _fake_run(*args, **kwargs):
+        return _FakeCompleted()
+
+    orig_run = _subprocess.run
+    _subprocess.run = _fake_run  # type: ignore[assignment]
+    try:
+        origins = refresh_golden._origins_for_pack_id("nlq-structured-query")
+        refresh_golden._run_import(repo_root, pack_root, "nlq-structured-query", origins)
+    finally:
+        _subprocess.run = orig_run  # type: ignore[assignment]
+
+    tables = json.loads((pack_root / "tables.json").read_text(encoding="utf-8"))
+    assert tables["knowledge_base"] == {"Entity": [{"entityId": "e1"}]}  # untouched
+    assert len(tables["catalog"]["Product"]) == 2  # freshly (re)written
+
+
+# --------------------------------------------------------------------------------------------
+# `_tables_shape_problems` / `run_check_tables_shape` — §6's "curated allowlist" shape check
+# --------------------------------------------------------------------------------------------
+
+_SCHEMA_KB = {"labels": {"Entity": {"entityId": "str", "type": "str"}}}
+
+
+def test_tables_shape_problems_empty_when_every_row_matches_exactly() -> None:
+    tables_kb = {"Entity": [{"entityId": "e1", "type": "Person"}]}
+    assert refresh_golden._tables_shape_problems(tables_kb, _SCHEMA_KB) == []
+
+
+def test_tables_shape_problems_flags_a_missing_property() -> None:
+    tables_kb = {"Entity": [{"entityId": "e1"}]}
+    problems = refresh_golden._tables_shape_problems(tables_kb, _SCHEMA_KB)
+    assert len(problems) == 1
+    assert "type" in problems[0]
+
+
+def test_tables_shape_problems_flags_an_extra_property() -> None:
+    """The curated-allowlist discipline (`querygen.DatasetSchema`'s own docstring): a raw
+    property the live snapshot carried but `schema.json` never declared must be flagged too, not
+    silently passed through."""
+    tables_kb = {"Entity": [{"entityId": "e1", "type": "Person", "createdAt": "2026-01-01"}]}
+    problems = refresh_golden._tables_shape_problems(tables_kb, _SCHEMA_KB)
+    assert len(problems) == 1
+    assert "createdAt" in problems[0]
+
+
+def test_run_check_tables_shape_refuses_under_an_unchanged_pack_version(tmp_path: Path) -> None:
+    pack_root = tmp_path / "pack"
+    pack_root.mkdir()
+    (pack_root / "pack.json").write_text(json.dumps({"packVersion": "1.0.0"}))
+    (pack_root / "PROVENANCE.md").write_text("> **Pack version:** 1.0.0 · **Generated:** x\n")
+    with pytest.raises(refresh_golden.RefreshGoldenError, match="packVersion"):
+        refresh_golden.run_check_tables_shape(pack_root, source_git_sha="deadbeef")
+
+
+def test_run_check_tables_shape_raises_on_a_shape_violation(tmp_path: Path) -> None:
+    pack_root = tmp_path / "pack"
+    pack_root.mkdir()
+    (pack_root / "pack.json").write_text(json.dumps({"packVersion": "1.0.0"}))
+    (pack_root / "schema.json").write_text(json.dumps({"knowledge_base": _SCHEMA_KB}))
+    (pack_root / "tables.json").write_text(
+        json.dumps({"knowledge_base": {"Entity": [{"entityId": "e1"}]}})  # missing "type"
+    )
+    with pytest.raises(refresh_golden.RefreshGoldenError):
+        refresh_golden.run_check_tables_shape(pack_root, source_git_sha="deadbeef")
+
+
+def test_run_check_tables_shape_writes_a_provenance_row_on_success(tmp_path: Path) -> None:
+    pack_root = tmp_path / "pack"
+    pack_root.mkdir()
+    (pack_root / "pack.json").write_text(json.dumps({"packVersion": "1.0.0"}))
+    (pack_root / "schema.json").write_text(json.dumps({"knowledge_base": _SCHEMA_KB}))
+    (pack_root / "tables.json").write_text(
+        json.dumps({"knowledge_base": {"Entity": [{"entityId": "e1", "type": "Person"}]}})
+    )
+    refresh_golden.run_check_tables_shape(pack_root, source_git_sha="deadbeef")
+    provenance = (pack_root / "PROVENANCE.md").read_text(encoding="utf-8")
+    assert "deadbeef" in provenance
+    assert "ws:nlq-eval" in provenance
+
+
+def test_run_check_tables_shape_appends_to_existing_provenance_rows(tmp_path: Path) -> None:
+    """A prior default-import run already wrote `PROVENANCE.md`'s three file-origin rows —
+    `--check-tables-shape` must ADD its own row, never clobber those (S4 spec §6)."""
+    pack_root = tmp_path / "pack"
+    pack_root.mkdir()
+    (pack_root / "pack.json").write_text(json.dumps({"packVersion": "1.0.0"}))
+    (pack_root / "schema.json").write_text(json.dumps({"knowledge_base": _SCHEMA_KB}))
+    (pack_root / "tables.json").write_text(
+        json.dumps({"knowledge_base": {"Entity": [{"entityId": "e1", "type": "Person"}]}})
+    )
+    refresh_golden._write_provenance(
+        pack_root,
+        "1.0.0",
+        [
+            refresh_golden.ProvenanceRecord(
+                "falkor-chat/x.jsonl", "items.jsonl", "sha1", "sha256a", "2026-01-01T00:00:00Z",
+            )
+        ],
+    )
+    # `_pack_version_gate`'s real, verified semantics (S4 spec §9's own risk note): it refuses a
+    # SECOND content-hash-changing write under the SAME `packVersion` a prior write already
+    # recorded — so the (real) operator bumps `packVersion` between the default import and this
+    # step, exactly as §9 flags. Simulated here rather than left unverified.
+    (pack_root / "pack.json").write_text(json.dumps({"packVersion": "1.0.1"}))
+    refresh_golden.run_check_tables_shape(pack_root, source_git_sha="deadbeef")
+    provenance = (pack_root / "PROVENANCE.md").read_text(encoding="utf-8")
+    assert "falkor-chat/x.jsonl" in provenance  # the earlier row survives
+    assert "ws:nlq-eval" in provenance  # the new row is added
+
+
+# --------------------------------------------------------------------------------------------
+# `run_stamp_answerability` — gated to `nlq-structured-query` only
+# --------------------------------------------------------------------------------------------
+
+
+def _write_minimal_nlq_pack(pack_root: Path) -> None:
+    pack_root.mkdir(parents=True, exist_ok=True)
+    (pack_root / "tools").mkdir(exist_ok=True)
+    (pack_root / "pack.json").write_text(
+        json.dumps(
+            {
+                "packId": "nlq-structured-query", "packVersion": "1.0.0", "role": "nlq-generator",
+                "scorer": "extraction", "environment": {"requires": ["lmstudio-chat"]},
+                "data": {"items": "items.jsonl", "tables": "tables.json", "schema": "schema.json"},
+                "tools": {"module": "tools/exec.py", "entrypoint": "compile_and_execute"},
+                "sampling": {"seed": 1, "pairingKey": ["itemId"], "analysisUnit": "itemId"},
+                "metrics": {
+                    "verdictMetrics": ["layer1ExactMatchRate"],
+                    "headlineMetric": "layer1ExactMatchRate",
+                },
+            }
+        )
+    )
+    (pack_root / "tools" / "exec.py").write_text(
+        (_NLQ_PACK_ROOT / "tools" / "exec.py").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (pack_root / "schema.json").write_text(
+        json.dumps({"catalog": {"labels": {"Product": {"name": "str", "price": "float"}}}})
+    )
+    (pack_root / "tables.json").write_text(
+        json.dumps(
+            {
+                "catalog": {
+                    "Product": [
+                        {"name": "Widget", "price": 10.0},
+                    ]
+                }
+            }
+        )
+    )
+    items = [
+        {
+            "itemId": "nlq-01", "dataset": "catalog", "question": "q1",
+            "expected": {"type": "scalar", "value": 10.0},
+        },
+        {
+            "itemId": "nlq-02", "dataset": "catalog", "question": "q2 (unanswerable)",
+            "expected": {"type": "scalar", "value": "nope"},
+        },
+        {
+            "itemId": "nlq-03", "dataset": "catalog", "question": "q3 (not-found, answerable)",
+            "expected": {"type": "not_found"},
+        },
+    ]
+    with (pack_root / "items.jsonl").open("w", encoding="utf-8") as f:
+        for row in items:
+            f.write(json.dumps(row) + "\n")
+    reference_specs = {
+        "nlq-01": {
+            "matches": [{"var": "p", "label": "Product", "filters": []}],
+            "returns": ["p.price"],
+        },
+        "nlq-02": {
+            # A structurally valid spec that executes to EMPTY against a non-not_found
+            # expectation — the exact shape a relationship-traversal item's reference spec has.
+            "matches": [
+                {
+                    "var": "p", "label": "Product",
+                    "filters": [{"property": "name", "op": "=", "value": "Does Not Exist"}],
+                }
+            ],
+            "returns": ["p.price"],
+        },
+        "nlq-03": {
+            "matches": [
+                {
+                    "var": "p", "label": "Product",
+                    "filters": [{"property": "name", "op": "=", "value": "Does Not Exist"}],
+                }
+            ],
+            "returns": ["p.price"],
+        },
+    }
+    (pack_root / "reference_specs.json").write_text(json.dumps(reference_specs))
+
+
+def test_run_stamp_answerability_refuses_on_a_non_nlq_pack(tmp_path: Path) -> None:
+    pack_root = tmp_path / "some-other-pack"
+    pack_root.mkdir()
+    (pack_root / "pack.json").write_text(json.dumps({"packId": "guard-judge-understanding"}))
+    with pytest.raises(refresh_golden.RefreshGoldenError, match="nlq-structured-query"):
+        refresh_golden.run_stamp_answerability(pack_root)
+
+
+def test_run_stamp_answerability_refuses_under_an_unchanged_pack_version(tmp_path: Path) -> None:
+    pack_root = tmp_path / "nlq-pack"
+    _write_minimal_nlq_pack(pack_root)
+    (pack_root / "PROVENANCE.md").write_text("> **Pack version:** 1.0.0 · **Generated:** x\n")
+    with pytest.raises(refresh_golden.RefreshGoldenError, match="packVersion"):
+        refresh_golden.run_stamp_answerability(pack_root)
+
+
+def test_run_stamp_answerability_stamps_answerable_true_false_and_not_found_by_construction(
+    tmp_path: Path,
+) -> None:
+    pack_root = tmp_path / "nlq-pack"
+    _write_minimal_nlq_pack(pack_root)
+    counts = refresh_golden.run_stamp_answerability(pack_root)
+
+    items = [
+        json.loads(line)
+        for line in (pack_root / "items.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    by_id = {row["itemId"]: row for row in items}
+    assert by_id["nlq-01"]["answerable"] is True  # compiles, executes, non-empty
+    assert by_id["nlq-02"]["answerable"] is False  # executes to empty, non-not_found expectation
+    assert by_id["nlq-03"]["answerable"] is True  # not_found-shaped -> answerable by construction
+    assert counts == {"answerable": 2, "unanswerable": 1}
+
+    # Every other field on each row is carried through unchanged.
+    assert by_id["nlq-01"]["question"] == "q1"
