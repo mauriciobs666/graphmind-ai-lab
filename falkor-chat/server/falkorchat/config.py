@@ -228,6 +228,20 @@ STOREFRONT_TURN_WORKERS: int = int(os.environ.get("FALKORCHAT_STOREFRONT_TURN_WO
 # the reset past the point where the presenter gives up on it.
 STOREFRONT_QUIESCE_S: float = float(os.environ.get("FALKORCHAT_STOREFRONT_QUIESCE_S", "30"))
 
+# S10's presenter-login rate limiter: a fixed delay `Storefront.presenter_login`
+# sleeps on **every** attempt, wrong key or right, so response timing cannot
+# distinguish the two any more than `hmac.compare_digest` already refuses to.
+# Decided rather than left open (`docs/reviews/salesperson-ui.md` `## Pass 7`,
+# P7-5): the rejected alternative is a lockout after N failed attempts, which
+# — with exactly one shared presenter key (§4.3) — is a self-DoS: anyone on
+# the LAN could lock the presenter out of their own demo mid-show. So the
+# counter this delay pairs with
+# (`Storefront.presenter_login_failures`) is logged and exposed to the operator
+# and never changes what a login attempt answers.
+STOREFRONT_PRESENTER_LOGIN_DELAY_S: float = float(
+    os.environ.get("FALKORCHAT_STOREFRONT_PRESENTER_LOGIN_DELAY_S", "1.0")
+)
+
 # The languages a participant may join in (FR-3/AC-9) — the enum `POST
 # /shop/api/session` validates against and the set the SPA ships bundles for
 # (S12c). Comma-separated; order is the UI's offer order.

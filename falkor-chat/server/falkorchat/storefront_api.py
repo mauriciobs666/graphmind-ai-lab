@@ -54,22 +54,20 @@ Steps that extend this module
   (delivered); the trigger runs on `Storefront`'s own turn worker, so this
   module's service-layer reach is unchanged by it and the guard below stays
   green rather than being bumped.
-* **S10** — the three presenter operations move onto `Storefront` itself
+* **S10** — the three presenter operations now live on `Storefront` itself
   (`presenter_login`, `list_participants`, `reset_all`), together with the
-  login rate-limiter and reset-everyone's stop-intake-then-drain quiesce. They
-  are implemented here, against the delivered core, only because S8's gate is
-  evaluated over **all eleven** routes and cannot be run on a partial surface;
-  see `_STEP_10_INTERIM` below for every line S10 takes with it.
+  login rate-limiter and reset-everyone's stop-intake-then-drain quiesce
+  (delivered). This module's three presenter routes are thin again — each
+  calls one `Storefront` method and maps its raises — which is why S8 could
+  build them against the delivered core in the first place: S8's gate is
+  evaluated over **all eleven** routes and cannot be run on a partial surface,
+  so the routes existed here first and the core caught up at S10.
 """
 
 from __future__ import annotations
 
-import hmac
 import inspect
 import logging
-import secrets
-import threading
-import time
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
@@ -88,7 +86,9 @@ from .guards import WorkflowConfigError
 from .services import (
     BatchTooLargeError,
     ChannelNotFoundError,
+    DocumentNotFoundError,
     DocumentTooLargeError,
+    DocumentUpdateNotFoundError,
     EmptyDocumentError,
     InvalidSearchQueryError,
     MatchNotFoundError,
@@ -107,11 +107,12 @@ from .services import (
     WorkflowRunNotWaitingError,
 )
 from .storefront import (
-    QUIESCE_POLL_S,
+    BadPresenterKeyError,
     DemoNotSeededError,
     OrderTransitionRefusedError,
     ParticipantRecord,
     QuiesceTimeoutError,
+    ResetAllStateUnknownError,
     ResetStateUnknownError,
     Storefront,
     TurnNotScheduledError,
@@ -711,6 +712,10 @@ SERVICE_ERRORS_UNREACHABLE: dict[type[ServiceError], str] = {
     DocumentTooLargeError: "document ingestion; no storefront route ingests",
     BatchTooLargeError: "document ingestion; no storefront route ingests",
     MatchNotFoundError: "entity-match confirmation; no storefront route touches it",
+    DocumentNotFoundError: "document deletion; no storefront route deletes documents",
+    DocumentUpdateNotFoundError: (
+        "document-update confirmation; no storefront route touches it"
+    ),
     UnknownOrderTransitionError: (
         "`services.advance_order`'s guard on an unknown transition string — "
         "`AdvanceOrderIn.transition` is a `Literal` of exactly the three it "
@@ -833,71 +838,15 @@ def register_storefront_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(redis_exceptions.TimeoutError, _handle_graph_timeout)
 
 
-# ── the presenter session store (S10 interim — see the module docstring) ─────
-
-_STEP_10_INTERIM = """
-Everything below that S10 takes with it, listed once so the move is mechanical:
-
-* `_PresenterSessions` and the `presenter/session` route body  -> `Storefront.presenter_login`
-* `presenter/participants`' `repo.list_participants` call      -> `Storefront.list_participants`
-* the `presenter/reset-all` route body                          -> `Storefront.reset_all`
-* **two of the four** private reads in `build_storefront_router` -> deleted with
-  them: `repo` (read only at the three presenter routes and reset-all's re-read)
-  and `presenter_key` (read only by `presenter_session`).
-  **`services` and `agent_id` stay** — `services` is used by `GET /messages`,
-  `POST /messages` and `/order/advance`, and `agent_id` by `POST /messages`;
-  neither S9's row nor S10's moves `read_messages` or `get_current_order` onto
-  `Storefront`, so nothing in either step deletes their last use
-  (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`, P10-6 — the earlier
-  wording said "the three private reads", which was wrong on both the count and
-  the ownership).
-
-S8 implements them here because its gate is evaluated over **all eleven**
-routes (`{declared} ∪ {handler-produced} == §5.3's table`, read off
-`app.routes`) and cannot be run on a partial surface, and because §5.3's
-negative assertion names `POST /shop/api/presenter/session` answering
-`200`/`403`/`422` by name. What S8 deliberately does **not** build, because it
-is S10's own content: the login's fixed per-attempt delay and observational
-attempt counter, and reset-everyone's **stop-intake** flag (which is
-`Storefront` state, and `storefront.py` is not S8's file). The drain below is
-the exact parallel of S7 shipping reset-mine's wait alone — a parallel that has
-since become a *precedent*: S9b gave reset-mine the cancellation in front of its
-wait (`Storefront._cancel_queued_turn`), and reset-everyone's stop-intake is
-still S10's.
-"""
-
-
-class _PresenterSessions:
-    """The presenter tokens minted in this process.
-
-    In-process by design and unrelated to the graph: the presenter is not a
-    `User` (§4.3), so there is nothing durable to read. A restart invalidates
-    them, which is correct — and `reset-all` deliberately does **not** touch
-    them (§4.8: the presenter keeps driving the demo through the sweep).
-    """
-
-    def __init__(self) -> None:
-        self._tokens: set[str] = set()
-        self._lock = threading.Lock()
-
-    def mint(self) -> str:
-        token = secrets.token_urlsafe(32)
-        with self._lock:
-            self._tokens.add(token)
-        return token
-
-    def verify(self, token: str) -> bool:
-        with self._lock:
-            candidates = tuple(self._tokens)
-        # `compare_digest` per candidate rather than a set membership test, so
-        # **each comparison** costs the same time whatever prefix the presented
-        # token shares with a live one — the same posture `resolve_token`
-        # takes. Per *call* it is not constant time and does not claim to be:
-        # `any()` short-circuits on the match, so a valid token costs fewer
-        # comparisons than an invalid one. Harmless — the response already
-        # reveals validity — and stated rather than overclaimed
-        # (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`, P10-10).
-        return any(hmac.compare_digest(known, token) for known in candidates)
+# ── S10 tombstone ─────────────────────────────────────────────────────────────
+#
+# Through S8/S9 this section held `_STEP_10_INTERIM` (the move's inventory) and
+# `_PresenterSessions` (the presenter's in-process token store). Both moved to
+# `storefront.py` at S10: the store is now `Storefront`'s own
+# `_presenter_sessions`, minted and verified by `presenter_login`/
+# `verify_presenter_token`, and the router below calls those instead of
+# holding either piece itself. See `storefront.py`'s module docstring for the
+# delivered shape.
 
 
 # ── the router ───────────────────────────────────────────────────────────────
@@ -912,18 +861,16 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
     the route object, so the second half of S8's gate reads them back off
     `app.routes` instead of reading this file.
     """
-    # One documented coupling instead of four scattered ones, the same posture
-    # `Storefront.__init__` takes towards `Services._repo` and for the same
-    # reason: `Storefront` exposes no accessor for these four. **Two of them go
-    # with S10** (`repo`, `presenter_key`); `services` and `agent_id` stay —
-    # see `_STEP_10_INTERIM` for which and why. Read once, here.
-    repo = shop._repo  # noqa: SLF001 — see above
+    # One documented coupling instead of several scattered ones, the same
+    # posture `Storefront.__init__` takes towards `Services._repo` and for the
+    # same reason: `Storefront` exposes no accessor for these two. `repo` and
+    # `presenter_key` — the two private reads S10 needed here — are gone: both
+    # moved onto `Storefront` with the presenter routes' bodies
+    # (`presenter_login`, `list_participants`, `reset_all`).
     services = shop._services  # noqa: SLF001 — the post/read/order service calls
     agent_id = shop._agent_id  # noqa: SLF001 — the mention every post carries
-    presenter_key = shop._presenter_key  # noqa: SLF001 — moves to S10's login
 
     router = APIRouter()
-    presenter_sessions = _PresenterSessions()
 
     # ── the two credential dependencies (§5.3's credentials table) ───────────
 
@@ -978,7 +925,7 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
             raise StorefrontHTTPError(
                 403, "wrong_credential_type", "not a presenter credential"
             )
-        if not presenter_sessions.verify(token):
+        if not shop.verify_presenter_token(token):
             raise StorefrontHTTPError(
                 401, "presenter_session_gone", "presenter session not recognised"
             )
@@ -1037,27 +984,17 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
         },
     )
     def presenter_session(body: PresenterSessionIn) -> dict[str, Any]:
-        """Key -> token, **entirely in-process** (§5.3's `no graph access`).
-
-        `presenter_configured` is checked *before* any comparison, because
-        `hmac.compare_digest("", "")` is `True` — an unconfigured deployment
-        would otherwise hand the reset-everyone button to whoever posts an
-        empty key first. A deployment with no key configured therefore answers
-        the same `403` as a wrong key, deliberately: the two meanings differ,
-        but telling the LAN that no key is configured is worse than telling it
-        the key was wrong, and the client's action is identical (§5.3 C2). The
-        operator's signal is this log line, not the response.
+        """Key -> token, **entirely in-process** (§5.3's `no graph access`) —
+        `Storefront.presenter_login` (S10) owns the check, the fixed
+        per-attempt delay and the observational failure count; this route
+        only maps its one refusal.
         """
-        if not shop.presenter_configured:
-            _log.warning(
-                "presenter login refused: FALKORCHAT_STOREFRONT_PRESENTER_KEY "
-                "is not set, so no key can ever authenticate"
-            )
-            raise StorefrontHTTPError(403, "bad_presenter_key", "presenter key rejected")
-        if not hmac.compare_digest(presenter_key, body.key):
-            _log.warning("presenter login refused: wrong key")
-            raise StorefrontHTTPError(403, "bad_presenter_key", "presenter key rejected")
-        return {"token": presenter_sessions.mint()}
+        try:
+            return {"token": shop.presenter_login(body.key)}
+        except BadPresenterKeyError as exc:
+            raise StorefrontHTTPError(
+                403, BadPresenterKeyError.code, str(exc)
+            ) from exc
 
     # ── the participant surface ─────────────────────────────────────────────
 
@@ -1457,7 +1394,7 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
                 504, ResetStateUnknownError.code, str(exc), state=exc.state
             ) from exc
 
-    # ── the presenter surface (S10 interim — `_STEP_10_INTERIM`) ────────────
+    # ── the presenter surface (S10) ──────────────────────────────────────────
 
     @router.get(
         "/presenter/participants",
@@ -1481,11 +1418,12 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
     def presenter_participants() -> list[dict[str, Any]]:
         """§5.2's four keys and nothing more.
 
-        `list_participants` projects six — `channelId` and `threadId` are
-        server-side ids no client needs (§4.3), so they are dropped here rather
-        than narrowed in the query, which both resets also anchor on. **No
-        activity stats**: composing them per participant would be ~150 extra
-        graph queries per presenter poll at 50 participants (S10).
+        `Storefront.list_participants` (S10) projects six — `channelId` and
+        `threadId` are server-side ids no client needs (§4.3), so they are
+        dropped here rather than narrowed in the query, which both resets
+        also anchor on. **No activity stats**: composing them per participant
+        would be ~150 extra graph queries per presenter poll at 50
+        participants.
         """
         return [
             {
@@ -1494,7 +1432,7 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
                 "language": row["language"],
                 "joinedAt": row["joinedAt"],
             }
-            for row in repo.list_participants(shop.ws)
+            for row in shop.list_participants()
         ]
 
     @router.post(
@@ -1534,92 +1472,25 @@ def build_storefront_router(shop: Storefront) -> APIRouter:
         dependencies=[Depends(get_presenter)],
     )
     def presenter_reset_all() -> dict[str, Any]:
-        """"Reset everyone" — drain, then one atomic sweep (§4.8).
+        """"Reset everyone" — stop intake, drain, then one atomic sweep
+        (§4.8). `Storefront.reset_all` (S10) owns the whole sequence,
+        including the stop-intake flag S8 deliberately left out of this
+        module; this route only maps its two raises.
 
         Every participant token is invalidated; the presenter's own is not, so
         they keep driving the demo through the reset. Their *participant* poll
         starts `401`-ing within one tick, which is §5.3 C3's headline scenario
         and C5's evidence.
-
-        **What S10 adds and this does not have: the stop-intake flag.** §4.8's
-        reset-everyone stops intake first, then drains, then deletes; the flag
-        is `Storefront` state and `storefront.py` is not S8's file. The drain
-        below is therefore the exact parallel of S7 shipping reset-mine's wait
-        alone — it waits for what is in flight, which subsumes stopping intake
-        for *correctness* of the sweep and differs only in whether a post that
-        lands mid-drain extends the wait.
-
-        **That parallel now has a delivered other half, and this route does not
-        share it.** S9b added reset-mine's cancellation
-        (`Storefront._cancel_queued_turn`), which is *per participant* and is
-        reached only from `Storefront.reset_participant` — nothing on this path
-        calls it, so every queued turn in the roster below is still waited for
-        rather than dropped. Reset-everyone's own availability half is the
-        stop-intake flag above, and it is still S10's.
         """
-        # **Outside the `try` below, and that is the decision** (P10-9, flagged
-        # twice). Moving it in would not be a widening, it would be wrong: the
-        # `except` arm calls `clear_all_turns()`, which is correct only *after*
-        # a sweep that may have committed. Run before the drain it would
-        # discard the turn state of turns still running and never waited
-        # on — manufacturing the divergence the arm exists to report — and
-        # the "re-read" it attaches to the response would be a re-read of
-        # nothing that happened.
-        #
-        # Left here, a timeout on this read reaches the typed handler and
-        # answers `504 reset_state_unknown` on a `writes` route. That is
-        # honest, and it is the *conservative* of the two responses §5.3 gives
-        # this route rather than the exactly-true one — the argument is made
-        # once, at `_TIMEOUT` in `tests/test_storefront_api.py`, and pinned by
-        # `test_a_reset_all_whose_pre_drain_roster_read_times_out_never_enters_the_sweep`.
-        roster = repo.list_participants(shop.ws)
-        deadline = time.monotonic() + shop.quiesce_s
-        while any(shop.turn_in_flight(row["participantId"]) for row in roster):
-            if time.monotonic() >= deadline:
-                raise StorefrontHTTPError(
-                    503, "quiesce_timeout",
-                    f"a turn did not finish within {shop.quiesce_s}s — "
-                    "nothing was reset",
-                )
-            time.sleep(QUIESCE_POLL_S)
-
         try:
-            status = repo.reset_all_participants(shop.ws)
-        except redis_exceptions.TimeoutError as exc:
-            # F8, both orderings: the sweep may have committed, so this is
-            # *unknown*, never the quiesce `503`. The re-read is another query
-            # against the same graph and is the *likelier* second fault — a
-            # second timeout still answers `504`, with `participants` present
-            # and `null` (§5.2 *Absent versus null on the wire*), never absent.
-            shop.clear_all_turns()
-            try:
-                unresolved: list[dict[str, Any]] | None = [
-                    {
-                        "participantId": row["participantId"],
-                        "displayName": row["displayName"],
-                        "language": row["language"],
-                        "joinedAt": row["joinedAt"],
-                    }
-                    for row in repo.list_participants(shop.ws)
-                ]
-            except redis_exceptions.TimeoutError:
-                unresolved = None
+            return shop.reset_all()
+        except QuiesceTimeoutError as exc:
+            raise StorefrontHTTPError(503, "quiesce_timeout", str(exc)) from exc
+        except ResetAllStateUnknownError as exc:
             raise StorefrontHTTPError(
-                504, ResetStateUnknownError.code,
-                "the sweep timed out on the way to FalkorDB and may have "
-                "committed",
-                participants=unresolved,
+                504, ResetAllStateUnknownError.code, str(exc),
+                participants=exc.participants,
             ) from exc
-
-        shop.clear_all_turns()
-        body: dict[str, Any] = {"clearedParticipants": status["userCount"]}
-        if status["unscopedCount"]:
-            # Not an error — the sweep did everything it could — but it must
-            # not read as clean (§5.2). `unscopedCount == 0` returns no
-            # `incomplete` field **at all**, never `incomplete: false`.
-            body["incomplete"] = True
-            body["unresolved"] = list(status["unscopedIds"])
-        return body
 
     return router
 

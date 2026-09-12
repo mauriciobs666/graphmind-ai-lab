@@ -231,6 +231,51 @@ class TurnNotScheduledError(StorefrontError):
     code = "turn_not_scheduled"
 
 
+class BadPresenterKeyError(StorefrontError):
+    """`presenter_login` refused: either no key is configured at all, or the
+    submitted key does not match (§4.3, §5.3 C2).
+
+    Maps to **`403`**, the same response either way — the operator's signal is
+    the log line naming which, not the response (`presenter_configured` is
+    checked before any comparison; see `presenter_login`). **Never `429`/
+    `423`, and never a `403` that quietly means *throttled* rather than *wrong
+    key*** (`docs/reviews/salesperson-ui.md` `## Pass 7`, P7-5): the rejected
+    alternative was a lockout after N attempts, which with exactly one shared
+    presenter key is a self-DoS.
+    `presenter_login`'s fixed delay and its observational
+    `presenter_login_failures` counter are the whole of this route's rate
+    limiting, and neither changes this response.
+    """
+
+    code = "bad_presenter_key"
+
+
+class ResetAllStateUnknownError(StorefrontError):
+    """`reset_all`'s sweep — or its F8 re-read — crossed
+    `FALKORDB_SOCKET_TIMEOUT` on the way to FalkorDB, so **the delete may well
+    have committed** (§4.8 F8, `docs/QUERIES.md` §18.7).
+
+    The reset-mine sibling of this is `ResetStateUnknownError`; they are two
+    classes because the two `504` bodies differ in what they carry — this one
+    `participants` (the presenter's own re-readable roster), that one `state`
+    (a participant's own poll) — which is what the surviving credential can
+    still reach after each kind of sweep.
+
+    Maps to **`504`**, never the quiesce `503`. `participants` is `None` when
+    the re-read itself timed out too — present and `null`, never absent
+    (§5.2 *Absent versus null on the wire*, matching `state` on the
+    reset-mine route's own second-timeout case).
+    """
+
+    code = "reset_state_unknown"
+
+    def __init__(self, participants: list[dict[str, Any]] | None) -> None:
+        super().__init__(
+            "the sweep timed out on the way to FalkorDB and may have committed"
+        )
+        self.participants = participants
+
+
 def _default_clock() -> int:
     """Server clock in milliseconds since the epoch (matches `services`)."""
     return int(time.time() * 1000)
@@ -409,6 +454,40 @@ class TurnState:
 IDLE_TURN = TurnState()
 
 
+class _PresenterSessions:
+    """The presenter tokens minted in this process (S10, moved here from
+    `storefront_api.py`'s S8 interim — see `Storefront.presenter_login`).
+
+    In-process by design and unrelated to the graph: the presenter is not a
+    `User` (§4.3), so there is nothing durable to read. A restart invalidates
+    them, which is correct — and `reset_all` deliberately does **not** touch
+    them (§4.8: the presenter keeps driving the demo through the sweep).
+    """
+
+    def __init__(self) -> None:
+        self._tokens: set[str] = set()
+        self._lock = threading.Lock()
+
+    def mint(self) -> str:
+        token = secrets.token_urlsafe(32)
+        with self._lock:
+            self._tokens.add(token)
+        return token
+
+    def verify(self, token: str) -> bool:
+        with self._lock:
+            candidates = tuple(self._tokens)
+        # `compare_digest` per candidate rather than a set membership test, so
+        # **each comparison** costs the same time whatever prefix the presented
+        # token shares with a live one — the same posture `resolve_token`
+        # takes. Per *call* it is not constant time and does not claim to be:
+        # `any()` short-circuits on the match, so a valid token costs fewer
+        # comparisons than an invalid one. Harmless — the response already
+        # reveals validity — and stated rather than overclaimed
+        # (`docs/reviews/salesperson-ui-impl.md` `## Pass 10`, P10-10).
+        return any(hmac.compare_digest(known, token) for known in candidates)
+
+
 class Storefront:
     """The storefront's participant registry and turn-state map.
 
@@ -430,6 +509,7 @@ class Storefront:
         presenter_key: str,
         turn_workers: int,
         quiesce_s: float,
+        login_delay_s: float | None = None,
         ws: str | None = None,
         agent_id: str | None = None,
         locales: tuple[str, ...] | None = None,
@@ -463,6 +543,14 @@ class Storefront:
         occupies its queue slot: the `409` gate, the queue accounting and the
         quiesce wait are properties of the *post*, not of the engine, so they
         must not switch off with it.
+
+        `login_delay_s` (S10) is `presenter_login`'s fixed per-attempt delay.
+        `None` — the default — resolves to
+        `config.STOREFRONT_PRESENTER_LOGIN_DELAY_S`, the same optional-knob
+        posture as `ws`/`agent_id`/`locales`/`storefront_dir`: unlike
+        `presenter_key`/`turn_workers`/`quiesce_s`, no caller has to name it to
+        get the production value, and the suite can still pin it to keep the
+        login tests fast.
         """
         self._services = services
         # The repository is reached through `Services`, which owns it. S4 put the
@@ -475,6 +563,10 @@ class Storefront:
         self._presenter_key = presenter_key
         self._turn_workers = turn_workers
         self._quiesce_s = quiesce_s
+        self._login_delay_s = (
+            config.STOREFRONT_PRESENTER_LOGIN_DELAY_S
+            if login_delay_s is None else login_delay_s
+        )
         self._ws = config.WS_ID if ws is None else ws
         self._agent_id = config.AGENT_ID if agent_id is None else agent_id
         self._locales = config.STOREFRONT_LOCALES if locales is None else locales
@@ -529,6 +621,25 @@ class Storefront:
         # The product-image manifest (§4.7), built from the served directory
         # **once** — `None` until then. See `build_image_manifest`.
         self._image_manifest: dict[str, str] | None = None
+        # The presenter's own session store (S10) — in-process, unrelated to
+        # the graph, and never touched by `reset_all` (see `_PresenterSessions`).
+        self._presenter_sessions = _PresenterSessions()
+        # `presenter_login`'s observational failure counter (S10,
+        # `docs/reviews/salesperson-ui.md` `## Pass 7`, P7-5) — logged and
+        # exposed via `presenter_login_failures`, and never read by
+        # `presenter_login` itself to change what it answers. Its own
+        # lock rather than any of the turn-map locks: unrelated state, touched
+        # from a request thread that holds none of them.
+        self._login_failures = 0
+        self._login_failures_lock = threading.Lock()
+        # Reset-everyone's stop-intake gate (§4.8, graph note §7 item 2, S10).
+        # Goes up at the start of `reset_all` and back down when it returns or
+        # raises, **never staying up** — the one-way `_turns_shutdown` above is
+        # a different attribute for exactly that reason (see its own comment).
+        # No lock: `reserve_turn` already reads it under `_turns_lock`, and a
+        # plain `bool` write from the one thread running `reset_all` needs
+        # nothing more than that read's ordering.
+        self._intake_stopped = False
 
     # ── configuration readers (S7/S9/S10 wiring) ────────────────────────────
 
@@ -572,6 +683,80 @@ class Storefront:
         than filtered.
         """
         return CallContext(ws=self._ws, actor=participant_id)
+
+    # ── the presenter surface — login (§4.3 OQ-5, S10) ───────────────────────
+
+    @property
+    def presenter_login_failures(self) -> int:
+        """`presenter_login`'s observational-only failure count
+        (`docs/reviews/salesperson-ui.md` `## Pass 7`, P7-5).
+
+        Logged on every refusal and exposed here for the operator; nothing in
+        `presenter_login` ever reads this back to change what it answers —
+        that is the whole difference between this and the rejected
+        lockout-after-N-attempts design.
+        """
+        with self._login_failures_lock:
+            return self._login_failures
+
+    def presenter_login(self, key: str) -> str:
+        """Key -> presenter token (S10), entirely in-process (§5.3 `no graph
+        access`) and rate-limited by a fixed delay plus an observational
+        failure count — never a lockout.
+
+        `presenter_configured` is checked **before** any comparison, because
+        `hmac.compare_digest("", "")` is `True` — an unconfigured deployment
+        would otherwise hand the reset-everyone button to whoever posts an
+        empty key first. Both refusals raise the same `BadPresenterKeyError`
+        (`403`); the operator's signal is the log line naming which, not the
+        response.
+
+        **The delay is fixed and unconditional** — `time.sleep(self.
+        _login_delay_s)` runs before either check, so it bounds a brute-force
+        script's guess rate the same way whether the key was right or wrong,
+        and it never lengthens on repeated failures.
+
+        **Decided rather than left open (`docs/reviews/salesperson-ui.md`
+        `## Pass 7`, P7-5): no lockout.** The
+        rejected alternative was refusing the key after N failed attempts;
+        with exactly one shared presenter key (§4.3) that is a self-DoS —
+        anyone on the LAN could lock the presenter out of their own demo
+        mid-show — and it would add an unlisted response (`429`/`423`, or a
+        `403` that silently changes meaning from *wrong key* to *throttled*)
+        that C2's action cannot tell apart from an ordinary wrong key. So
+        `presenter_login_failures` only counts and logs: the Nth wrong key in
+        a row answers exactly like the first, and the right key still
+        succeeds afterward.
+        """
+        time.sleep(self._login_delay_s)
+        if not self.presenter_configured:
+            with self._login_failures_lock:
+                self._login_failures += 1
+                failures = self._login_failures
+            _log.warning(
+                "presenter login refused: FALKORCHAT_STOREFRONT_PRESENTER_KEY "
+                "is not set, so no key can ever authenticate "
+                "(failed attempts: %d)", failures,
+            )
+            raise BadPresenterKeyError("presenter key rejected")
+        if not hmac.compare_digest(self._presenter_key, key):
+            with self._login_failures_lock:
+                self._login_failures += 1
+                failures = self._login_failures
+            _log.warning(
+                "presenter login refused: wrong key (failed attempts: %d)",
+                failures,
+            )
+            raise BadPresenterKeyError("presenter key rejected")
+        return self._presenter_sessions.mint()
+
+    def verify_presenter_token(self, token: str) -> bool:
+        """Whether `token` is a live presenter session this process minted
+        (S10). `get_presenter` (`storefront_api.py`) is the sole caller — a
+        participant token never reaches here, since it fails
+        `PRESENTER_PRINCIPAL` parsing first (§5.3 C2).
+        """
+        return self._presenter_sessions.verify(token)
 
     # ── join (§4.3 provisioning + §4.10 the profile name) ───────────────────
 
@@ -806,8 +991,19 @@ class Storefront:
         decide **wrongly** rather than merely lose information, since
         `turn.state !== 'idle'` parks that client in *wait, as normal* forever
         for a turn nobody will run (`## Pass 18`, question 2).
+
+        **`None` is also reset-everyone's stop-intake answer** (§4.8, graph
+        note §7 item 2, S10): while `_intake_stopped` is set, every
+        participant reads as if a turn were already in flight, so every post
+        refuses here, before the message write, with the same `409
+        turn_in_progress` a busy participant already gets — no new response,
+        exactly the posture C2 already gives the client no lever to act on
+        differently. That is what lets `reset_all`'s drain shrink
+        monotonically instead of racing a post that lands mid-sweep.
         """
         with self._turns_lock:
+            if self._intake_stopped:
+                return None
             if self._turns.get(participant_id, IDLE_TURN).in_flight:
                 return None
             booking = TurnBooking(ordinal=next(self._turn_ordinals))
@@ -1651,3 +1847,98 @@ class Storefront:
         except (redis_exceptions.TimeoutError, RuntimeError):
             state = None
         return ResetStateUnknownError(participant_id, state=state)
+
+    # ── the presenter surface — roster + "reset everyone" (§4.8, S10) ───────
+
+    def list_participants(self) -> list[dict[str, Any]]:
+        """The presenter roster, straight off the repository (S10) — six keys.
+
+        `storefront_api.py`'s `GET /shop/api/presenter/participants` route
+        narrows this to §5.2's four for the wire, and `reset_all` below
+        narrows it to the same four for its own `participants` evidence
+        block — this method itself does neither, so both callers share the
+        one query.
+        """
+        return self._repo.list_participants(self._ws)
+
+    def reset_all(self) -> dict[str, Any]:
+        """"Reset everyone" — stop intake, drain, then one atomic sweep (§4.8,
+        graph note §7 (a)-(d), S10).
+
+        Every participant token is invalidated; the presenter's own is not, so
+        they keep driving the demo through the reset. Their *participant* poll
+        starts `401`-ing within one tick, which is §5.3 C3's headline scenario
+        and C5's evidence.
+
+        **Stop intake, then drain, then delete — in that order, and the order
+        is the whole of what S10 adds.** `_intake_stopped` goes up before the
+        pre-drain roster read below and comes back down in every exit from
+        this method, success or failure alike (`finally`) — a failed sweep
+        must not lock the demo out of posting until the process restarts. With
+        it up, `reserve_turn` refuses every participant's post with the same
+        `409 turn_in_progress` a busy participant already gets (see its own
+        docstring), so the roster read below is the **last** point at which a
+        brand-new turn can start: nothing accepted after it can extend the
+        drain, which is the one difference from reset-mine's wait (S7) that
+        `storefront_api.py`'s old interim body did not have.
+
+        **The pre-drain roster read sits outside every `try` below, and that
+        is a decision, not an oversight (P10-9).** The `except` arm's
+        `clear_all_turns()` is correct only *after* a sweep that may have
+        committed; running it before the drain would discard the turn state
+        of turns still running and never waited on. A timeout on this read
+        therefore reaches the caller untyped and answers the typed handler's
+        `504 reset_state_unknown` with no `participants` key — the
+        conservative of the two responses §5.3 gives a `writes` route, on a
+        read that changed nothing.
+
+        **F8, both orderings** (§4.8, `docs/QUERIES.md` §18.7): a FalkorDB
+        socket `TimeoutError` out of the sweep itself means *unknown*, never
+        the quiesce `503` — the delete may have committed. The re-read is
+        another query against the same graph and is the *likelier* second
+        fault, not the exotic one; a second timeout there still answers `504`,
+        carrying `participants: null` rather than omitting the key (§5.2
+        *Absent versus null on the wire*).
+
+        `unscopedCount == 0` returns no `incomplete` field at all, never
+        `incomplete: false` — not an error, but the sweep did everything it
+        could and the response must not read as clean regardless.
+        """
+        self._intake_stopped = True
+        try:
+            roster = self.list_participants()
+            deadline = time.monotonic() + self._quiesce_s
+            while any(self.turn_in_flight(row["participantId"]) for row in roster):
+                if time.monotonic() >= deadline:
+                    raise QuiesceTimeoutError(
+                        f"a turn did not finish within {self._quiesce_s}s — "
+                        "nothing was reset"
+                    )
+                time.sleep(QUIESCE_POLL_S)
+
+            try:
+                status = self._repo.reset_all_participants(self._ws)
+            except redis_exceptions.TimeoutError as exc:
+                self.clear_all_turns()
+                try:
+                    unresolved: list[dict[str, Any]] | None = [
+                        {
+                            "participantId": row["participantId"],
+                            "displayName": row["displayName"],
+                            "language": row["language"],
+                            "joinedAt": row["joinedAt"],
+                        }
+                        for row in self.list_participants()
+                    ]
+                except redis_exceptions.TimeoutError:
+                    unresolved = None
+                raise ResetAllStateUnknownError(unresolved) from exc
+
+            self.clear_all_turns()
+            body: dict[str, Any] = {"clearedParticipants": status["userCount"]}
+            if status["unscopedCount"]:
+                body["incomplete"] = True
+                body["unresolved"] = list(status["unscopedIds"])
+            return body
+        finally:
+            self._intake_stopped = False

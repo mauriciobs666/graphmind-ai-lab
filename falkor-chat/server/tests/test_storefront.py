@@ -1531,6 +1531,7 @@ def test_config_reads_exactly_the_documented_storefront_env_vars():
         "FALKORCHAT_STOREFRONT_PRESENTER_KEY",
         "FALKORCHAT_STOREFRONT_TURN_WORKERS",
         "FALKORCHAT_STOREFRONT_QUIESCE_S",
+        "FALKORCHAT_STOREFRONT_PRESENTER_LOGIN_DELAY_S",
         "FALKORCHAT_STOREFRONT_LOCALES",
     }
     read = set(re.findall(r'"(FALKORCHAT_[A-Z_]+)"', _CONFIG_SOURCE))

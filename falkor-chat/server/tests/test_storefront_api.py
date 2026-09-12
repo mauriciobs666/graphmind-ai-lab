@@ -643,6 +643,12 @@ def storefront_config(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "STOREFRONT_PRESENTER_KEY", PRESENTER_KEY)
     monkeypatch.setattr(config, "STOREFRONT_QUIESCE_S", QUIESCE_S)
     monkeypatch.setattr(config, "STOREFRONT_TURN_WORKERS", 2)
+    # `presenter_login`'s fixed delay (S10) pinned to near-zero here, the same
+    # "minus the waits" posture `QUIESCE_S` already takes — the two dedicated
+    # timing tests (`test_presenter_login_has_a_fixed_per_attempt_delay` and
+    # its wrong-key sibling) override this back up for the one measurement
+    # that needs a real duration.
+    monkeypatch.setattr(config, "STOREFRONT_PRESENTER_LOGIN_DELAY_S", 0.001)
     # Pointed at a real but empty directory rather than left unset: an unset
     # `config.STOREFRONT_DIR` would let a `create_app` that reads config instead
     # of forwarding its parameter pass the image-wiring test with `null` URLs.
@@ -1656,8 +1662,10 @@ def test_a_blank_presenter_key_is_a_422_naming_key(client):
 
 
 class _CompareDigestSpy:
-    """Stands in for the `hmac` module inside `storefront_api`, recording every
-    `compare_digest` call and forwarding to the real one.
+    """Stands in for the `hmac` module inside `storefront` (S10 moved both
+    `compare_digest` sites there — `presenter_login` and
+    `_PresenterSessions.verify` — from this file's S8 interim), recording
+    every `compare_digest` call and forwarding to the real one.
 
     A spy at the **comparison seam** rather than an assertion on the status
     code, because the status code cannot tell the two implementations apart:
@@ -1689,7 +1697,7 @@ def test_an_unset_presenter_key_never_reaches_the_comparison(seeded, monkeypatch
     """
     monkeypatch.setattr(config, "STOREFRONT_PRESENTER_KEY", "")
     spy = _CompareDigestSpy()
-    monkeypatch.setattr(storefront_api, "hmac", spy)
+    monkeypatch.setattr(storefront, "hmac", spy)
 
     with TestClient(_build_app(seeded)) as unkeyed:
         # a blank key is refused by the model before it reaches the route
@@ -1710,13 +1718,133 @@ def test_a_configured_presenter_key_is_compared_once_in_constant_time(
     never compared anything at all would pass it — and S6's constant-time
     tripwire extended to the second `compare_digest` site in this codebase."""
     spy = _CompareDigestSpy()
-    monkeypatch.setattr(storefront_api, "hmac", spy)
+    monkeypatch.setattr(storefront, "hmac", spy)
 
     with TestClient(_build_app(seeded)) as client:
         assert client.post(f"{API_PREFIX}/presenter/session",
                            json={"key": PRESENTER_KEY}).status_code == 200
 
     assert spy.calls == [(PRESENTER_KEY, PRESENTER_KEY)]
+
+
+def test_presenter_login_has_a_fixed_delay_on_every_attempt(seeded, monkeypatch):
+    """S10's rate limiter is a fixed per-attempt delay, applied **before**
+    either check inside `presenter_login` — so it bounds a brute-force
+    script's guess rate the same way whichever branch answers.
+
+    `storefront_config` pins `STOREFRONT_PRESENTER_LOGIN_DELAY_S` to
+    near-zero everywhere else in this file for speed; this test and its
+    wrong-key sibling below override it back up to a duration a wall-clock
+    measurement can actually see.
+    """
+    monkeypatch.setattr(config, "STOREFRONT_PRESENTER_LOGIN_DELAY_S", 0.2)
+    with TestClient(_build_app(seeded)) as client:
+        started = time.monotonic()
+        response = client.post(f"{API_PREFIX}/presenter/session",
+                               json={"key": PRESENTER_KEY})
+        elapsed = time.monotonic() - started
+    assert response.status_code == 200
+    assert elapsed >= 0.2
+
+
+def test_presenter_login_delay_applies_to_a_wrong_key_too(seeded, monkeypatch):
+    """The same delay on the other branch — timing must not tell a wrong key
+    apart from a right one any better than `hmac.compare_digest` already
+    refuses to (§5.3 C2's whole basis for answering both the same `403`)."""
+    monkeypatch.setattr(config, "STOREFRONT_PRESENTER_LOGIN_DELAY_S", 0.2)
+    with TestClient(_build_app(seeded)) as client:
+        started = time.monotonic()
+        response = client.post(f"{API_PREFIX}/presenter/session",
+                               json={"key": "nope"})
+        elapsed = time.monotonic() - started
+    assert response.status_code == 403
+    assert elapsed >= 0.2
+
+
+def test_presenter_login_never_locks_out_after_repeated_failures(client):
+    """**The tripwire for Pass 7's rejected alternative (P7-5).** The plan
+    considered, and explicitly rejected, refusing the key after N failed
+    attempts: with exactly one shared presenter key (§4.3) that is a
+    self-DoS, and it would add an unlisted response the client cannot tell
+    apart from an ordinary wrong key (`429`/`423`, or a `403` that silently
+    means *throttled*). So this asserts the actual behaviour a lockout would
+    change: the Nth wrong key in a row answers exactly like the first — same
+    status, same token — and the right key still succeeds immediately after.
+
+    The observational counter is asserted alongside, since it is the one
+    thing that is allowed to change here — it counts every failure and never
+    gates anything.
+    """
+    shop = client.app.state.storefront
+    before = shop.presenter_login_failures
+    responses = [
+        client.post(f"{API_PREFIX}/presenter/session", json={"key": "nope"})
+        for _ in range(8)
+    ]
+    for response in responses:
+        assert response.status_code == 403
+        assert response.json()["error"] == "bad_presenter_key"
+    assert shop.presenter_login_failures == before + 8
+
+    # no lockout: the right key succeeds immediately after eight failures
+    ok = client.post(f"{API_PREFIX}/presenter/session", json={"key": PRESENTER_KEY})
+    assert ok.status_code == 200
+    assert ok.json()["token"]
+
+
+def test_reset_everyone_stops_intake_before_it_drains(seeded, monkeypatch):
+    """§4.8 / graph note §7 item 2, S10: reset-everyone stops intake **before**
+    it drains, so a post from an unrelated, otherwise-idle participant is
+    refused while the sweep is waiting on someone else's turn — not merely
+    once the sweep is over.
+
+    A wide `quiesce_s` gives the background reset-all call room to be
+    provably mid-drain (Ada is pinned `thinking` and never released here)
+    while the foreground thread posts as Bob, an idle bystander the drain's
+    own roster-based wait has no reason to block on. Mutation-checked by
+    deleting the `_intake_stopped` check from `reserve_turn`: Bob's post then
+    succeeds (`200`, a message written) instead of answering the same `409
+    turn_in_progress` a busy participant already gets.
+    """
+    monkeypatch.setattr(config, "STOREFRONT_QUIESCE_S", 2.0)
+    with TestClient(_build_app(seeded)) as client:
+        ada = _join(client, "Ada", "en")
+        bob = _join(client, "Bob", "es")
+        presenter = _presenter(client)
+        booking = _pin_thinking(client, ada["participantId"])
+        shop = client.app.state.storefront
+
+        result: dict = {}
+
+        def do_reset() -> None:
+            result["response"] = client.post(
+                f"{API_PREFIX}/presenter/reset-all", headers=presenter
+            )
+
+        reset_thread = threading.Thread(target=do_reset)
+        reset_thread.start()
+        try:
+            deadline = time.monotonic() + 1.0
+            while not shop._intake_stopped and time.monotonic() < deadline:  # noqa: SLF001
+                time.sleep(0.01)
+            assert shop._intake_stopped is True, (  # noqa: SLF001
+                "reset-all never set the stop-intake flag — this probe proves "
+                "nothing about the drain"
+            )
+
+            response = client.post(
+                f"{API_PREFIX}/messages", headers=_bearer(bob),
+                json={"text": "hi"},
+            )
+        finally:
+            # release Ada's turn so the reset can finish and the thread joins
+            shop.release_turn(ada["participantId"], booking)
+            reset_thread.join(timeout=5)
+
+    assert response.status_code == 409
+    assert response.json()["error"] == "turn_in_progress"
+    assert result["response"].status_code == 200
+    assert result["response"].json() == {"clearedParticipants": 2}
 
 
 def test_the_roster_carries_exactly_the_four_keys_and_no_non_participants(client):
@@ -2136,16 +2264,17 @@ def test_presenter_token_verification_compares_every_candidate_in_constant_time(
     measurement of anything** (P11-4). With one minted token, replacing the
     loop with `compare_digest(candidates[0], token)` — the mutation this test
     names — leaves it green, and dies only incidentally in the `ServiceError`
-    sweep, whose helper happens to log in twice. The property is real and about
-    to move: a presenter who logs in twice must not be locked out of the first
-    session, and S10 relocates this code to `Storefront.presenter_login`.
+    sweep, whose helper happens to log in twice. The property is real: a
+    presenter who logs in twice must not be locked out of the first session —
+    and S10 relocated this class to `Storefront`, reached now through
+    `Storefront.verify_presenter_token`.
 
     `self._tokens` is a `set`, so candidate order is arbitrary. The assertions
     are written not to depend on it: each token verifies, and the *rejection*
     of a non-member is what proves every candidate was compared, since that is
     the path `any()` cannot short-circuit.
     """
-    sessions = storefront_api._PresenterSessions()
+    sessions = storefront._PresenterSessions()
     first, second = sessions.mint(), sessions.mint()
     assert first != second
     seen: list[tuple[str, str]] = []
@@ -2156,7 +2285,7 @@ def test_presenter_token_verification_compares_every_candidate_in_constant_time(
             seen.append((a, b))
             return hmac.compare_digest(a, b)
 
-    monkeypatch.setattr(storefront_api, "hmac", _Hmac)
+    monkeypatch.setattr(storefront, "hmac", _Hmac)
 
     # both live sessions verify, whichever order the set yields them in
     for token in (first, second):
@@ -2230,7 +2359,16 @@ def test_a_reset_all_that_times_out_is_504_unknown_and_is_never_retried(seeded):
     credential is already dead, so `/state` would answer `401` rather than
     state, while the roster is what the surviving presenter credential can
     still reach — and is the thing that actually says whether the sweep
-    happened."""
+    happened.
+
+    **Also pins the four-key narrowing on this specific path** (S10 review
+    finding): `reset_all`'s F8 re-read projects `list_participants`' six keys
+    down to §5.2's four, the same narrowing `presenter_participants` does, but
+    nothing asserted it *here* — a regression that leaked `channelId`/
+    `threadId` into a `504`'s `participants` block would have shipped silently
+    (`docs/reviews/salesperson-ui-s10.md`). Mutation-checked below by removing
+    the narrowing in `reset_all`'s `except` arm.
+    """
     repo = _FailingMethodRepo(
         seeded, "reset_all_participants", redis_exceptions.TimeoutError("timed out")
     )
@@ -2243,6 +2381,8 @@ def test_a_reset_all_that_times_out_is_504_unknown_and_is_never_retried(seeded):
     body = response.json()
     assert body["error"] == "reset_state_unknown"
     assert [row["displayName"] for row in body["participants"]] == ["Ada"]
+    for row in body["participants"]:
+        assert set(row) == {"participantId", "displayName", "language", "joinedAt"}
     assert repo.calls == 1
 
 
@@ -2719,7 +2859,7 @@ def _subclasses(root: type) -> set[type]:
     The package filter is what makes the family a property of the shipped code
     rather than of what has been imported: a test that mints a synthetic
     subclass to exercise a mapping would otherwise enter the live class tree
-    and make the two "the family is exactly ten" assertions depend on garbage
+    and make the two "the family is exactly twelve" assertions depend on garbage
     collection reclaiming it in time (`docs/reviews/salesperson-ui-impl.md`
     `## Pass 12`, P12-4). It costs nothing real — every production subclass of
     both families is in this package by construction, and one added outside it
@@ -2791,7 +2931,7 @@ def test_every_service_error_subclass_is_mapped_or_declared_unreachable():
     """
     family = _subclasses(ServiceError)
     mapped, unreachable = set(SERVICE_ERROR_RESPONSES), set(SERVICE_ERRORS_UNREACHABLE)
-    assert len(family) == 10, sorted(k.__name__ for k in family)
+    assert len(family) == 12, sorted(k.__name__ for k in family)
     assert family - (mapped | unreachable) == set()
     assert not mapped & unreachable
     assert (mapped | unreachable) - family == set()
@@ -2802,10 +2942,10 @@ def test_every_service_error_subclass_is_mapped_or_declared_unreachable():
 
 
 def test_the_only_behavioural_unreachability_claim_is_pinned_to_its_producer():
-    """**P11-6** — six of the seven "unreachable" reasons say *no storefront
+    """**P11-6** — eight of the nine "unreachable" reasons say *no storefront
     route calls that layer*, which
     `test_the_routers_service_layer_reach_is_exactly_what_the_exemptions_assume`
-    now checks. The seventh is different in kind: it argues that
+    now checks. The ninth is different in kind: it argues that
     `UnknownOrderTransitionError` cannot be reached **because a `422` answers
     first**, which is a claim about two declarations agreeing — and nothing
     held them together. Widening `AdvanceOrderIn.transition`'s `Literal` by one
@@ -2835,11 +2975,11 @@ def test_the_service_error_map_resolves_through_the_class_tree():
     assert service_error_response(derived("gone")) == (401, "invalid_token")
 
     # ...and minting it did not disturb the family the two partition tests
-    # assert is exactly ten. This used to need `del` + `gc.collect()` and so
+    # assert is exactly twelve. This used to need `del` + `gc.collect()` and so
     # rested on reclaim timing; `_subclasses` now filters on the defining
     # package, which holds while the subclass is still alive (P12-4)
     assert derived in ThreadNotFoundError.__subclasses__()
-    assert len(_subclasses(ServiceError)) == 10
+    assert len(_subclasses(ServiceError)) == 12
     assert derived not in _subclasses(ServiceError)
 
     # ...and it agrees with the partition: nothing declared unreachable
@@ -3937,12 +4077,18 @@ def test_the_alias_reader_covers_every_binding_form_the_grammar_has():
 # out for the same reason `SERVICE_LAYER_REACH_TODAY` is: a `/shop/api` route
 # executes this module, so a `raise` added to it has to come back here.
 #
-# All eight are `StorefrontError` subclasses, and that is what makes
+# All ten are `StorefrontError` subclasses, and that is what makes
 # `INHERITED_HANDLERS`' excuses true of this file rather than merely stated for
 # it: `test_every_storefront_error_subclass_is_mapped_to_a_response` already
 # holds that every member of that family is caught by a route or answered by a
 # classified handler, so none of them can arrive at a handler this table
 # excuses — and none of them is a bare `HTTPException`.
+#
+# **S10 adds the ninth and tenth** — `BadPresenterKeyError` (`presenter_login`'s
+# one refusal, `403`) and `ResetAllStateUnknownError` (`reset_all`'s F8 `504`,
+# the reset-mine-sibling of `ResetStateUnknownError` with its own `participants`
+# payload rather than `state`) — moved here from `storefront_api.py`'s S8
+# interim body along with the methods that raise them.
 #
 # **Through v1.32 an eighth, non-family `RuntimeError` sat here too** —
 # `Storefront.enqueue_turn`'s refusal on a set `_turns_shutdown`, admitted from
@@ -3966,7 +4112,7 @@ STOREFRONT_RAISES_TODAY = frozenset({
     "DemoNotSeededError", "QuiesceTimeoutError", "UnknownParticipantError",
     "UnscopedParticipantError", "ResetStateUnknownError",
     "UnknownOrderError", "OrderTransitionRefusedError",
-    "TurnNotScheduledError",
+    "TurnNotScheduledError", "BadPresenterKeyError", "ResetAllStateUnknownError",
 })
 
 
