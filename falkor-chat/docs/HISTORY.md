@@ -5,6 +5,37 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-11 — salesperson-ui S11: demo bring-up script
+
+**What:** Closed S11 per `docs/plans/salesperson-ui.md` §5.1's S11 row. New
+`scripts/start_demo.sh`: from a cold box, starts FalkorDB (if not already running), bootstraps
+schema for `ws:demo` (`EMBEDDING_DIM=1024`), seeds the demo agent/channel-thread, product catalog,
+and the `salesperson@v7`/`order-fulfillment@v1` defs, preflight-verifies the catalog and both defs,
+builds the SPA (`salesperson/build.sh`), and launches uvicorn as the **storefront** deployment
+(`FALKORCHAT_STOREFRONT_ENABLED=1`, trigger pinned to `salesperson@v7`, responder fall-through off,
+`--reload` off via a non-empty `UVICORN_ARGS`, defaulted to `--host 0.0.0.0` per §4.3/R6's accepted
+LAN-exposure risk). `seed_workflows.sh` deliberately not run — this demo needs neither `triage` nor
+`access-request`. Pins `FALKORCHAT_WS_ID=demo`, never `config.py`'s `"acme"` default (the repo's
+populated dev/demo workspace), asserted in the startup banner. Added the script's row to
+`falkor-chat/AGENTS.md`'s script table.
+
+**Verified live**, not just read: a full cold-box run against a genuinely nonexistent `ws:demo`
+reached a working `/shop`, a working join, and a working first agent turn (a real reply quoting
+seeded-catalog products). 5 of 6 named failure modes (FalkorDB unreachable, Node missing, bundle
+missing, a def missing, the demo Agent missing) were each triggered on purpose and confirmed to
+fail loudly with a specific message and exit 1; the sixth (catalog missing) was reasoned rather
+than reproduced live — catalog seeding has no per-workspace scope, so the throwaway-workspace
+technique used for the others doesn't transfer, and `verify_catalog.sh`'s own failure contract is
+already proven elsewhere. Review: `docs/reviews/salesperson-ui-s11.md` (approve with suggestions,
+no blockers) — confirmed the `--host 0.0.0.0` default and the untested sixth failure mode both hold
+up; flagged two follow-ups, neither blocking: the script's seed/verify ordering interleaves rather
+than clustering the two preflight checks at the end (fail-fast locality, not a done-condition
+violation), and the Agent-existence check's `CYPHER key=val` preamble splices in a trusted config
+value by shell interpolation rather than a structural bind (inert today, worth not copying where
+the value is untrusted).
+
+**Committed:** `25a3219`.
+
 ## 2026-09-11 — salesperson-ui S9e: `turn_not_scheduled` typed (C14), three `INHERITED_HANDLERS` reason strings measured true
 
 **What:** Closed S9e, the last of five S9 sub-units, per `docs/plans/salesperson-ui.md` §5.1's S9
