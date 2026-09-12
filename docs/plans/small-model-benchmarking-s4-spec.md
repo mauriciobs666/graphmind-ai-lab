@@ -2,6 +2,22 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** — · **Extends:** `docs/plans/small-model-benchmarking.md` (S4)
 
+2026-09-11 — **correction, adopting `docs/reviews/nlq-conflicting-facts-answerability-ml.md`'s
+A1-A3 (verdict: needs changes)**: while authoring `reference_specs.json`'s 40 entries (§7 Step 3),
+2 more items than this document assumed (`nlq-38`/`nlq-39`, both `conflicting-facts`) turned out
+structurally unanswerable alongside the 4 `relationship-traversal` items — **6 of 40, not 4** — a
+regression of an already-settled, already-gated upstream ruling (`falkor-chat/docs/plans/workflow-
+nl-query-generation-ml.md` §5, Version 2, 2026-08-30), not a new judgment call. §2.5, §4.3, §5.2.4,
+§6 and §7 below are corrected in place to the 6-item/34-answerable framing (A1), the answerability
+stamp gains a faithfulness authoring rule (A2), and unanswerable items are now scored exploratorily
+rather than silently unscored (A3). `docs/plans/small-model-benchmarking.md` §3.8.3 itself is left
+untouched — it has been executed against for S1-S3 and transcribed verbatim into this document
+(§2.7), so per root `AGENTS.md`'s doc-collision rule 5 the correction lands here, the document that
+`Extends` it and is still being actively executed against for S4, rather than as a silent rewrite of
+an already-executed-against section of the top-level plan. `docs/plans/small-model-benchmarking-ml.md`
+§7.2/§3's own stale `n=40`/`n=36` figures are a separate correction (review finding F-6, amendment
+A4), owned by `data-scientist`, not made here.
+
 ## 1. Goal & scope
 
 `docs/plans/small-model-benchmarking.md` (the "plan") assigns `guard-judge-understanding` and
@@ -270,12 +286,29 @@ build S4's scorers and neither previously named:
     re-implementation (`extraction.py`, §5.2) applicable unchanged.
 - **Answerability is not assumed — the declared schema exposes properties only, no relationship
   types**, so the golden set's 4 `relationship-traversal` items ("Who did Marlowe Robotics
-  acquire?") have no valid spec against `tables.json`/`schema.json` at all — confirmed independently
-  this session: `querygen.KNOWLEDGE_BASE_SCHEMA.labels` (`querygen.py:213-220`) declares `Entity`/
-  `Document`/`Chunk` node properties only, and falkor-chat's own stored `nlq_eval_results.json`
-  scores `nlq-34` (a relationship-traversal item) `{"items": [], "finding": "no matching data
-  found"}` — an empirical confirmation, not a derivation from this component's own code. §6 below
-  specifies the stamping step that makes this a stated fact per item rather than an assumption.
+  acquire?") **and 2 `conflicting-facts` items** (`nlq-38`/`nlq-39` — "How many employees does
+  Marlowe Robotics have?", whose ground truth is two conflicting values reachable only via
+  `RELATES_TO{label:"has"}` edges to standalone value-entities, not an `Entity` property) have no
+  valid spec against `tables.json`/`schema.json` at all — **6 items, both structurally out of scope
+  for the same reason**: `querygen.KNOWLEDGE_BASE_SCHEMA.labels` (`querygen.py:213-220`) declares
+  `Entity`/`Document`/`Chunk` node properties only, and `QueryRequest.matches` is a single-label,
+  single-hop pattern with no traversal, so neither shape's ground truth is reachable by any valid
+  spec. Confirmed independently this session against both the live graph and falkor-chat's own
+  stored `nlq_eval_results.json`, which scores all three items incorrect against the executed
+  result — `nlq-34` (relationship-traversal) `{"items": [], "finding": "no matching data found"}`;
+  `nlq-38` (conflicting-facts) `{"items": [{"count(e.entityId)": 12}]}`, `layer1Reason`: `"missing
+  ['140 employees', '62'] from ['12']"`; `nlq-39` (conflicting-facts) `{"items": [], "finding": "no
+  matching data found"}`, `layer1Reason`: `"missing ['140 employees', '62'] from []"` — the same
+  class of empirical evidence for all three, not a derivation from this component's own code. This
+  6-item exclusion is not a new judgment call: it matches, exactly, the already-settled, already-
+  gated ruling in `falkor-chat/docs/plans/workflow-nl-query-generation-ml.md` §5's *"Exclusion rule
+  for structurally out-of-scope shapes"* (added 2026-08-30, correcting an RCA-diagnosed unattainable-
+  gate defect, and executed against — `falkor-chat/docs/test-reports/workflow-nl-query-generation-
+  report.md` reports the corrected denominator's `33/33 = 100.0%` with `relationship-traversal`/
+  `conflicting-facts` scoring `0/4`/`0/2` as the expected, correct outcome). §6 below specifies the
+  stamping step that makes this a stated fact per item rather than an assumption, and the
+  faithfulness rule (§6) that keeps the stamp from being gameable by a schema-valid but unfaithful
+  reference spec.
 
 ### 2.6 The `tables.json` snapshot — resolved without adding model-bench's first external dependency
 
@@ -461,7 +494,7 @@ claimed as an S4 done-condition (S4 owns no `tool-caller` behavior).
 ### 4.3 `ExtractionAggregates`'s small, additive extension
 
 ```python
-# results.py — two new defaulted fields; confirmed backward compatible against every existing
+# results.py — three new defaulted fields; confirmed backward compatible against every existing
 # keyword-only construction site (grep -rn "parseFailures" tests/ modelbench/ → six hits, all kwargs).
 
 @dataclass(frozen=True)
@@ -472,13 +505,31 @@ class ExtractionAggregates:
     parseFailures: int = 0               # unchanged — "no JSON object found at all" (outcome="parse_failure")
     malformedSpecCount: int = 0          # NEW — Layer A structural-validation failures (§2.5)
     schemaViolationCount: int = 0        # NEW — Layer B schema-bound-validation failures (§2.5)
+    luckyPassCount: int = 0              # NEW (§5.2.4/§6 correction, A3) — an item stamped
+                                          # `answerable: false` whose exploratory score_pair call
+                                          # nonetheless scored correct (F-4's degenerate-spec class
+                                          # of outcome, real once score_pair runs against production
+                                          # data). Never folded into layer1ExactMatchRate or any
+                                          # exactMatchBy{Shape} success silently — see §5.2.4.
 
     def named_metrics(self) -> tuple[MetricValue, ...]:
         found = [self.exactMatch] if self.exactMatch is not None else []
-        return tuple([*found, *self.byShape])   # unchanged — the two new fields are scalar counts,
+        return tuple([*found, *self.byShape])   # unchanged — the three scalar-count fields are
                                                   # never metric-carrying, matching parseFailures's
                                                   # own existing shape (never in named_metrics either)
 ```
+
+**`luckyPassCount` follows the same already-established precedent as its three siblings: computed
+by `aggregate()`, carried on the stored run record, and — like `parseFailures`/`malformedSpecCount`/
+`schemaViolationCount` today — not yet rendered by `report.py`** (confirmed this session: `grep -n
+"parseFailures" modelbench/report.py` returns zero hits; §1's "Out of scope: any change to
+`report.py`" line is accurate as written and needs no correction). This is one pre-existing,
+already-named gap growing a fourth member, not a new one `luckyPassCount` introduces. **Whenever
+that rendering pass is built** (in a later S4 unit or a future stage), it owes `luckyPassCount` a
+specific, literal presentation, not a bare number: the review's finding m-1 requires the count be
+labelled *"lucky pass on a structurally unanswerable item"* wherever it prints, so a reader does not
+reconcile a `conflicting-facts` per-shape rate that doesn't match the unanswerable bucket by
+assuming one of the two is a bug.
 
 ### 4.4 Alternatives considered and rejected
 
@@ -874,21 +925,52 @@ def score_item(
     answerable item that reaches execution is scored via `score_pair(item_input["expected"],
     item_input["shape"], tool_result)` into `layer1ExactMatchRate` (scoreable=True always, even on
     a wrong answer) AND into a per-shape exploratory metric `f"exactMatchBy{shape.title()...}"`
-    (one of the seven declared shapes)."""
+    (one of the seven declared shapes).
+
+    **Correction (A3, `docs/reviews/nlq-conflicting-facts-answerability-ml.md` Q2/F-1): excluded
+    from the denominator does not mean unscored.** The unanswerable branch ALSO calls
+    `score_pair(item_input["expected"], item_input["shape"], tool_result)` — every golden item,
+    answerable or not, carries `expected`/`shape` (confirmed against `nlq_golden_set.jsonl`'s
+    `nlq-34`/`nlq-38`/`nlq-39` rows directly) — and sets the SAME per-shape exploratory metric name
+    `f"exactMatchBy{shape.title()...}"` scoreable/counted from that result, alongside
+    `unanswerableAbstainRate`, never instead of it. This is why `relationship-traversal` and
+    `conflicting-facts` now have a real `exactMatchBy{Shape}` entry (previously absent, since no
+    item of either shape was ever answerable) — the upstream note's own convention (`falkor-chat`
+    `-ml` note §5's shape-breakdown row: "this row still reports their real per-shape score every
+    run, at whatever it actually is"). If that exploratory `score_pair` call scores correct — F-4's
+    degenerate-spec class of outcome, real now that the branch executes against production data —
+    `detail["luckyPass"] = True` is also set, so `aggregate()` can count it distinctly rather than
+    let it read as an ordinary win. `layer1ExactMatchRate` itself is untouched by this: the
+    unanswerable branch still never sets it scoreable."""
     ...
 
 
 def aggregate(items: Sequence[ItemResult], *, pack: Pack) -> ExtractionAggregates:
     """`exactMatch` = BinaryMetric("layer1ExactMatchRate", ..., unit="item") over ONLY the
-    answerable items reaching execution (n = 36, the 40 minus the 4 stamped unanswerable — plan
-    §3.8.3: "the report puts unanswerable items in a separate, named bucket excluded from the
-    accuracy denominator"). `byShape` carries: one BinaryMetric per shape among the answerable items
-    (single-fact, filter-list, compound-filter, not-found, aggregation, conflicting-facts —
-    relationship-traversal is entirely unanswerable, so it has no answerable-bucket entry, only the
-    unanswerable one below) plus `unanswerableAbstainRate` (n = 4, the relationship-traversal
-    items). `parseFailures` / `malformedSpecCount` / `schemaViolationCount` are each a `sum(1 for
-    it in items if it.detail.get("failureClass") == ...)` over the three named classes (§2.3/§4.3) —
-    the three counts §3.8.3's cost note requires, never pooled into `parseFailures` alone."""
+    answerable items reaching execution (**n = 34, the 40 minus the 6 stamped unanswerable** — 4
+    `relationship-traversal` + 2 `conflicting-facts`, corrected per `docs/reviews/nlq-conflicting-
+    facts-answerability-ml.md` A1; this function is fully data-driven off each item's own
+    `scoreable` map, never a hardcoded count, so the correction is in this docstring and the plan
+    text, not in the arithmetic). `byShape` carries one BinaryMetric per shape name, **pooling BOTH
+    the answerable items scored through `layer1ExactMatchRate`'s own `exactMatchBy{Shape}` AND the
+    unanswerable items' now-added exploratory `exactMatchBy{Shape}` (§5.2.4's `score_item`
+    correction, A3)** — computed by filtering `items` on `it.scoreable.get(f"exactMatchBy
+    {_title_shape(it.detail['shape'])}")` rather than gating on `layer1ExactMatchRate` the way the
+    pre-correction version did, because a shape's per-shape score is real and reported every run
+    regardless of whether the shape counts toward the headline denominator (the same upstream
+    convention `score_item`'s docstring cites). Concretely: `single-fact`/`filter-list`/
+    `compound-filter`/`not-found`/`aggregation` each have only answerable-path members (n sums to
+    34 across the five); `relationship-traversal` (n=4) and `conflicting-facts` (n=2) have ONLY
+    exploratory-path members, since no item of either shape is ever answerable today — this is not
+    a special case in the aggregation code, it falls out of which items declare the metric
+    scoreable. PLUS `unanswerableAbstainRate` (n = 6, all six structurally-unanswerable items, not
+    4). `luckyPassCount` = `sum(1 for it in items if it.detail.get("luckyPass") is True)` (§4.3) —
+    an item counted here is ALSO counted in its `exactMatchBy{Shape}` metric's successes; the two
+    are not alternatives, and `report.py`'s future rendering of `luckyPassCount` must not let the
+    shape rate stand alone unlabelled (§4.3's own note). `parseFailures` / `malformedSpecCount` /
+    `schemaViolationCount` are each a `sum(1 for it in items if it.detail.get("failureClass") ==
+    ...)` over the three named classes (§2.3/§4.3) — the three counts §3.8.3's cost note requires,
+    never pooled into `parseFailures` alone."""
     ...
 ```
 
@@ -947,11 +1029,37 @@ matching row `"answerable": true` iff the reference spec compiles, executes, and
 non-empty when `expected.type != "not_found"` (a `not_found`-shaped item is answerable by
 construction — the correct answer IS an empty result); `false` otherwise (the reference spec itself
 fails Layer A/B, or executes to empty against a non-`not_found` expectation — the relationship-
-traversal items' actual failure mode, confirmed §2.5). Refuses under an unchanged `packVersion`, same
-gate. `validate_pack` (existing, `packs.py`, needs one new check) fails a `nlq-structured-query`
-pack whose `items.jsonl` has any row missing the `answerable` key — plan §3.8.3's own stated rule
-("`validate` fails a pack that has unstamped items"), a small, additive, role-scoped
-`_answerability_stamp_problems` check mirroring `_prompt_problems`'s existing role-scoping shape.
+traversal **and conflicting-facts** items' actual failure mode, confirmed §2.5: a faithful spec for
+either shape either fails Layer B directly, because no declared property carries the needed value,
+or compiles but reaches nothing). Refuses under an unchanged `packVersion`, same gate. `validate_pack`
+(existing, `packs.py`, needs one new check) fails a `nlq-structured-query` pack whose `items.jsonl`
+has any row missing the `answerable` key — plan §3.8.3's own stated rule ("`validate` fails a pack
+that has unstamped items"), a small, additive, role-scoped `_answerability_stamp_problems` check
+mirroring `_prompt_problems`'s existing role-scoping shape.
+
+**A2 (`docs/reviews/nlq-conflicting-facts-answerability-ml.md` F-4/A2) — the mechanical rule above is
+necessary but not sufficient; `reference_specs.json`'s authors owe a faithfulness rule too, checked
+by review, not by this mode's code.** `QueryMatch.filters` (`max_length=4`, zero filters is a valid
+length) makes the mechanical "compiles, executes, non-empty" test gameable on a `set`-shaped item:
+`score_pair`'s `conflicting-facts` branch is subset containment
+(`expected_set.issubset(actual_set)`), so a schema-valid but unfiltered-or-broadly-filtered spec
+(e.g. `Entity` filtered only on `type = "Other"`, returning `e.name`) can return a large, unrelated
+slice of the table and still stamp `nlq-38`/`nlq-39` `answerable: true` by accident — not because the
+question is answerable, but because the scorer's containment check does not require the spec to have
+tried to answer it. **The authoring contract**: a reference spec is not a valid answerability witness
+unless it is the query a competent author would write for that question — `matches[0].filters` must
+constrain to the entity or predicate the question names; a spec with zero filters, or whose filters
+do not reference the question's own subject, does not count, however it happens to score. **No code
+change is needed for S4**: `reference_specs.json`'s 40 entries are hand-authored (§7 Step 3's own
+"real, non-mechanical work" note already applies), and the humans writing them write the faithful
+query, not the degenerate one — this is a stated contract for this authoring pass and any future
+golden-set refresh, checkable by reading `reference_specs.json` at review time. **Reversal trigger,
+named and not built (review m-2, minor today because both real `conflicting-facts` items are
+unanswerable so the loophole has no live target):** if a future refresh ever makes a
+`conflicting-facts` item answerable, `score_pair`'s containment branch goes live again, and at that
+point this mode should gain an actual code-level guard — require `matches[0].filters` to reference
+the item's own subject entity, or bound `len(actual_set)` at a small multiple of `len(expected_set)`
+— before that item's `answerable: true` stamp is trusted unattended.
 
 ## 7. Step sequence for implementation
 
@@ -1073,11 +1181,25 @@ new origin entries plus `--check-tables-shape`/`--stamp-answerability`.
    Layer-B-failing reply (`outcome="fail"`, `detail.failureClass=="schema_violation"`), a clean
    reply scoring correct and one scoring incorrect (`outcome="pass"` both), and the unanswerable-
    item branch (`item_input["answerable"] is False`) scoring `unanswerableAbstainRate` correctly on
-   both an abstained (`items: []`) and a fabricated (`items: [...]`) synthetic reply.
+   both an abstained (`items: []`) and a fabricated (`items: [...]`) synthetic reply. **New (A3,
+   `docs/reviews/nlq-conflicting-facts-answerability-ml.md`):** the same unanswerable branch also
+   sets `exactMatchBy{Shape}` — one case where the exploratory `score_pair` call scores incorrect
+   (the ordinary case, `detail` carries no `luckyPass` key) and one synthetic case where it scores
+   correct (F-4's degenerate-spec shape: a `conflicting-facts` fixture whose `tool_result` happens
+   to satisfy subset containment) and `detail["luckyPass"] is True` is asserted — proving the branch
+   is live rather than vestigial, per the review's Q2 concern that an unexercised branch is not
+   actually built.
 7. `aggregate` unit tests over a small synthetic fixture spanning all seven shapes plus the
-   unanswerable bucket: `exactMatch.n` excludes the unanswerable items; `byShape` sums back
-   consistently; `parseFailures`/`malformedSpecCount`/`schemaViolationCount` each count only their
-   own `detail.failureClass`, never each other's.
+   unanswerable bucket: `exactMatch.n` excludes the unanswerable items (**n = 34 in the fixture that
+   mirrors the real pack, not 36**); `byShape` sums back consistently, **including a case that pools
+   an unanswerable item's exploratory score into the same `exactMatchBy{Shape}` BinaryMetric a
+   hypothetical answerable item of that shape would also contribute to** (§5.2.4's aggregate
+   correction — the real `nlq-structured-query` data never mixes the two on one shape today, but the
+   aggregation code must not special-case that); `luckyPassCount` counts exactly the items carrying
+   `detail["luckyPass"] is True`, and a lucky-pass item's success is asserted to also be counted in
+   its `exactMatchBy{Shape}` metric (the two are additive, not alternatives — §4.3);
+   `parseFailures`/`malformedSpecCount`/`schemaViolationCount` each count only their own
+   `detail.failureClass`, never each other's.
 8. `validate --pack packs/nlq-structured-query --strict` **fails** on a deliberately-unstamped
    fixture (one `items.jsonl` row missing `answerable`) and **passes** once every row is stamped —
    the plan's own explicit done-condition (§6's `_answerability_stamp_problems`).
@@ -1098,11 +1220,13 @@ Two live-adjacent actions, neither needing LM Studio:
    --source-git-sha <sha>` validates the shape and writes `PROVENANCE.md`.
 2. `refresh_golden.py --pack packs/nlq-structured-query --stamp-answerability` — runs
    `reference_specs.json`'s 40 specs through `tools.exec.compile_and_execute`, stamps `answerable`
-   per item, confirms the 4 `relationship-traversal` items stamp `false` and every other item stamps
-   `true` (a positive expectation from §2.5's independent confirmation against
-   `nlq_eval_results.json` — if any *other* item also stamps `false`, that is new information about
-   this pack's own tables/schema, not a bug to silently accept, and must be investigated before Step
-   5).
+   per item, confirms the 6 items across both structurally-out-of-scope shapes — the 4
+   `relationship-traversal` items AND the 2 `conflicting-facts` items (`nlq-38`/`nlq-39`) — stamp
+   `false`, and every other item stamps `true` (a positive expectation from §2.5's independent
+   confirmation against `nlq_eval_results.json` and the upstream `-ml` note's own §5 ruling — if any
+   *other* item also stamps `false`, or either `conflicting-facts` item stamps `true`, that is new
+   information about this pack's own tables/schema or `reference_specs.json`'s authoring (§6's A2
+   faithfulness rule) — not a bug to silently accept, and must be investigated before Step 5).
 
 Then, `-m live`: `run --pack nlq-structured-query --model <key>` end to end — S4's second half of its
 "both packs run end to end" done-condition. `compare`/report inspection confirms `layer1ExactMatchRate`
