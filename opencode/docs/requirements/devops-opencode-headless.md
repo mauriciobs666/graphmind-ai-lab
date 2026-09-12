@@ -1,6 +1,6 @@
 # DevOps: headless, local-model OpenCode variant
 
-> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-09-12
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-09-12
 
 ## Terminology
 
@@ -227,3 +227,7 @@ updated.
 
 2026-09-12 — `opencode/`'s former custom agents are fully deprecated; `tank` is a greenfield build.
 Stakeholder asked to remove references to the former agents throughout the document. Removed.
+
+2026-09-12 — Stakeholder confirmed the full readback (Terminology, Intent, Problem & current
+state, FRs, Out of scope, Acceptance criteria) with no open questions remaining. `Status` flipped
+back to **Ready for design**.
