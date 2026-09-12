@@ -12,7 +12,7 @@ chain hands off to `teco`.
 |---|---|---|---|---|---|---|
 | Requirements interview | `tico` | — (interactive) | accepted | `opencode/docs/requirements/devops-opencode-headless.md` | — | — |
 | Implementation plan | `architect` | `ad6b25b909e4bf140` | revised, ready for review | `opencode/docs/plans/devops-opencode-headless.md` | `security-expert` review dispatched | 371,583 tokens · 101 tool uses · ~65.7 min |
-| Security review | `security-expert` | `ace5d715ef79ccdb0` | dispatched | `opencode/docs/reviews/devops-opencode-headless.md` | pending | — |
+| Security review | `security-expert` | `ace5d715ef79ccdb0` | gated | `opencode/docs/reviews/devops-opencode-headless.md` | verdict: **needs changes** (1 blocker, 2 major, 2 minor) | 139,607 tokens · 37 tool uses · ~18 min |
 
 ## Notes
 
@@ -38,3 +38,17 @@ chain hands off to `teco`.
   filename), bring-up/teardown scripts taking the target environment as an argument, and new
   genericity + repo-root-scoping tests in §5. No requirements-doc change needed. Dispatching
   `security-expert` next on the plan's permission-table glob-smuggling risk.
+- **2026-09-12 — Security review returned: needs changes.** Blocker, live-reproduced (not
+  theoretical): a second, smuggled `-f`/`--project-directory` pair inside the already-allowed
+  compose `down`/`up*` glob's own wildcard span retargets the command at an out-of-repo-scope
+  stack — defeats FR-8's repo-scoping and the ownership-marker mechanism's entire premise
+  simultaneously, no shell metacharacters or model compromise needed. Two major findings compound
+  it: the marker slug is basename-only (collides across environments sharing a leaf dirname with
+  no attacker input needed) and the marker has no tamper/freshness/provenance check (any
+  filesystem writer, or a stale leftover, can make `tank` believe it owns something it didn't
+  start). Two minor findings (asymmetric `up*` wildcard permissiveness vs. `down`'s exact-match;
+  an unconfirmed but likely-shared path-traversal gap on `write: state/*`). Reviewer also raised an
+  open question for the stakeholder: does the blocker change the risk calculus on shipping the
+  generic-any-environment carve-out at all, vs. starting narrower (a hardcoded single-stack
+  allow-list)? Routing to stakeholder before dispatching architect for a revision, since this
+  affects design approach and possibly scope, not just a tightened regex.
