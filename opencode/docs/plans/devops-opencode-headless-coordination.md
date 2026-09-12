@@ -11,8 +11,8 @@ chain hands off to `teco`.
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
 | Requirements interview | `tico` | — (interactive) | accepted | `opencode/docs/requirements/devops-opencode-headless.md` | — | — |
-| Implementation plan | `architect` | `ad6b25b909e4bf140` | revision requested (environment-scope correction) | `opencode/docs/plans/devops-opencode-headless.md` | `security-expert` review pending | 168,120 tokens · 44 tool uses · ~22.6 min |
-| Security review | `security-expert` | — | not yet dispatched | `opencode/docs/reviews/devops-opencode-headless.md` | — | — |
+| Implementation plan | `architect` | `ad6b25b909e4bf140` | revised, ready for review | `opencode/docs/plans/devops-opencode-headless.md` | `security-expert` review dispatched | 371,583 tokens · 101 tool uses · ~65.7 min |
+| Security review | `security-expert` | `ace5d715ef79ccdb0` | dispatched | `opencode/docs/reviews/devops-opencode-headless.md` | pending | — |
 
 ## Notes
 
@@ -32,3 +32,9 @@ chain hands off to `teco`.
 - **2026-09-12 — Security review gate accepted.** Stakeholder agreed to the `security-expert`
   advisory pass architect recommended, on the permission-table's glob-pattern smuggling risk.
   Dispatching once the plan's environment-scope revision lands.
+- **2026-09-12 — Plan revised.** `architect` generalized FR-5a/5b's design off `falkor-chat`
+  specifically: repo-root-scoped compose globs instead of a literal `falkor-chat/compose.yaml`
+  path, a state marker keyed to the requested environment's `--project-directory` (not a fixed
+  filename), bring-up/teardown scripts taking the target environment as an argument, and new
+  genericity + repo-root-scoping tests in §5. No requirements-doc change needed. Dispatching
+  `security-expert` next on the plan's permission-table glob-smuggling risk.
