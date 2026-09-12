@@ -1035,7 +1035,7 @@ def _seed_embedded_document(repo, *, chunk_id, vec, document_id="d1", text="chun
     )
 
 
-def test_graphrag_retrieve_returns_near_seed_live(repo):
+def test_graphrag_retrieve_returns_near_seed_live(repo, fresh_vector_index):
     _seed_embedded_thread(repo)
     # A Chunk seed near the query too — the BLOCKER regression this pins: before
     # the fix, a Chunk row ranking within τ crashed with KeyError('msgId') instead
@@ -1055,7 +1055,7 @@ def test_graphrag_retrieve_returns_near_seed_live(repo):
     assert msg_seed["documentId"] is None
 
 
-def test_graphrag_retrieve_abstains_when_all_seeds_distant_live(repo):
+def test_graphrag_retrieve_abstains_when_all_seeds_distant_live(repo, fresh_vector_index):
     _seed_embedded_thread(repo)
     # A Chunk in the workspace too, also distant — abstention must still fire
     # correctly with a Chunk pool present, not just when it's empty.

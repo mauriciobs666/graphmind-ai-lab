@@ -19,6 +19,14 @@ from falkorchat.repository import EmbeddingDimensionError
 
 WS = "test"
 
+# Every test in this module writes an embedding and then asserts ANN *recall*
+# against it (`hybrid_search`/`search_chunks`, mostly at small k) — exactly the
+# shape that degrades as cumulative session churn on `ws:test`'s vector index
+# grows (docs/reviews/document-ingestion2-rca.md). `fresh_vector_index` rebuilds
+# that index right before each test here, so this module's own (small) internal
+# churn is the only churn any assertion in it is ever exposed to.
+pytestmark = pytest.mark.usefixtures("fresh_vector_index")
+
 
 def _pad(head: list[float]) -> list[float]:
     """A TEST_EMBEDDING_DIM vector from a leading fragment (zero-padded)."""

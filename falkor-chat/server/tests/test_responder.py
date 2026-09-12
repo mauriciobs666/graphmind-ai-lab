@@ -368,7 +368,9 @@ def _pad(head: list[float]) -> list[float]:
     return (head + [0.0] * TEST_EMBEDDING_DIM)[:TEST_EMBEDDING_DIM]
 
 
-def test_ac5_document_grounded_answer_provenance_resolves_to_chunk_and_document(repo):
+def test_ac5_document_grounded_answer_provenance_resolves_to_chunk_and_document(
+    repo, fresh_vector_index,
+):
     ws = "test"
     doc_ctx = CallContext(ws=ws, actor="u1")
 

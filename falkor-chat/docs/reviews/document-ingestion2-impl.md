@@ -293,3 +293,302 @@ creep.
 ### Open questions
 
 None beyond Pass 1's still-open ledger-path item (unrelated to this pass).
+
+## Pass 3 — Stage C (commit `6443365`)
+
+**Scope.** Diff-scoped review of commit `6443365` ("document-ingestion2 Stage C — default-search
+current-chunk filtering") against `falkor-chat/docs/plans/document-ingestion2.md` §3.3/§4 Stage C.
+Baseline: `git show 6443365` (repository.py's `search_chunks` gains `WHERE seed.documentCurrent =
+true` post-`YIELD`; services.py's `search_documents` gains `SEARCH_DOCUMENTS_OVERFETCH = 3`;
+`test_queries.sh` §14.9 plus a real fix to a Pass 2-flagged tautology; new tests in
+`test_graphrag.py`/`test_api.py`/`test_services.py`). Per the brief, `docs/reviews/document-
+ingestion2-rca.md` (the ANN-recall-flakiness RCA, already independently spot-checked by the
+dispatching coordinator) is accepted as settled and **not re-litigated** — this pass judges the
+Stage C mechanism itself (filter placement, over-fetch math, test coverage, blast radius), which
+the RCA did not examine.
+
+**Verdict: needs changes.** Two blockers below are both live/verified, not hypothetical.
+
+**CPG: used `cpg_falkorchat`** (`cpg/.cpg-artifacts/MANIFEST.txt`, built at `b795f4c`, predates this
+commit but not `search_chunks` itself, added 2026-08-24) — ran a call-graph query for every `CALL`
+node named `search_chunks` to independently corroborate Blocker 2's "exactly two production
+callers, only one over-fetches" claim beyond grep; it agreed exactly (see Finding 2).
+
+### What I verified
+
+- Read `git show 6443365` in full (all 7 files, not just the stat), plus the plan's §3.3 and §4
+  Stage C sections directly (not the brief's paraphrase).
+- Read the accepted RCA (`document-ingestion2-rca.md`) in full and the coordination ledger's Stage
+  C notes — confirmed the RCA's independent spot-check happened (coordinator re-ran the exact repro
+  and got the identical `4 failed, 739 passed`) before treating it as settled.
+- Traced `Repository.search_chunks`'s current source (`repository.py:1209-1261`) — the `WHERE`
+  clause is correctly post-`YIELD`, before `ORDER BY`/`LIMIT`, matching the plan's §3.3 shape
+  verbatim; compared against `hybrid_search` (`:826-866`) for idiom consistency.
+- Grepped every call site of `repository.search_chunks` in the whole codebase (`grep -n
+  "\.search_chunks(" server/falkorchat/*.py`) — exactly two, `services.py:1096`
+  (`Services.hybrid_search`) and `services.py:1300` (`Services.search_documents`) — then
+  cross-checked via `cpg_falkorchat`'s `CALL` nodes named `search_chunks`, which independently
+  confirmed the same two production call sites (plus 4 test-file calls), agreeing on file/shape.
+- Ran `bash -n falkor-chat/scripts/test_queries.sh` (syntax-only, per the brief — not executed live
+  against the shared `reference` graph) — clean. Read the new §14.9 section and the Pass 2
+  tautology fix line-by-line: `sd3` (the fixed anchor) does have an outgoing `pending`-status
+  `SUPERSEDES` edge in the fixture at that point (verified against the surrounding `sd3`/`sd4` setup
+  and the reopen-on-corroboration step above it) — the fix is genuine, not a second tautology.
+- Ran read-only (`GRAPH.RO_QUERY`) probes against the live, shared FalkorDB instance to check
+  Finding 1's "pre-existing chunk with `documentCurrent` unset" scenario against real data, not a
+  synthetic one — see Finding 1 for the exact queries/output. No writes issued.
+- Compared `repository.py:1013` (pre-plan `create_document`, per the plan's own §2.1 inventory:
+  `Document{documentId,title,text,sourceFormat,sourceKind,status,pendingJobs,createdAt}` +
+  `HAS_CHUNK → Chunk{chunkId,text,seq,documentId}` — no version fields) against the current
+  `create_document`, which only gained `currentVersion`/`documentCurrent` in Stage A (`4a6186b`,
+  2026-09-11) — established the exact commit boundary before which any ingested `Document`/`Chunk`
+  has neither property at all.
+- Checked `services.search_documents`'s over-fetch math against its API-layer `limit` bounds
+  (`api.py:229`, `Query(20, ge=1, le=200)`) — `k` ranges 3..600, no known `db.idx.vector.queryNodes`
+  max-`k` ceiling in `claude/graph-dba/falkordb-quirks.md`; not a concern.
+
+### Findings
+
+**Blocker — every `Document`/`Chunk` ingested before Stage A landed has no `currentVersion`/
+`documentCurrent` property at all, and the new `WHERE seed.documentCurrent = true` filter silently
+excludes all of them, forever, from `search_chunks`/`search_documents` — already live, not
+hypothetical.** `create_document` only started setting these two properties in Stage A (`4a6186b`,
+2026‑09‑11); the original K‑050 M5 feature (landed 2026‑08‑23/24) and at least one later seed script
+(`scripts/seed_nlq_eval_corpus.py`, commit `c88688b`, 2026‑08‑29) ingested real documents through the
+old `create_document` shape 13+ days before Stage A. Verified live, read-only, against the shared
+instance:
+```
+GRAPH.RO_QUERY ws:acme     "MATCH (d:Document) RETURN count(d), count(d.currentVersion)"   → 29, 0
+GRAPH.RO_QUERY ws:nlq-eval "MATCH (d:Document) RETURN count(d), count(d.currentVersion)"   → 12, 0
+# unfiltered ANN on ws:acme's real Chunk data: 20 rows. With the new WHERE added: 0 rows.
+```
+A missing property makes `seed.documentCurrent = true` evaluate to `NULL` (falsy), so `GET
+/documents/search`, the `search_documents` MCP tool, and `Services.search_documents` now return
+**zero results for every query** against `ws:acme` and `ws:nlq-eval` — a full, silent regression of
+FR-3 in exactly the two workspaces that had real content before this commit. No test in the diff
+exercises this axis: every fixture (`_seed_document`, `client.post("/documents", ...)`, the raw
+`_mark_document_superseded[_raw]` helpers) goes through the *current* `create_document`, which
+always sets the property, so a chunk with the property **absent** (not `false`) is structurally
+untested. Suggested fix: a backfill migration for every already-populated workspace (mirrors this
+codebase's own precedent for exactly this shape, `scripts/backfill_thread_ids.sh` — see
+`falkor-chat/AGENTS.md`'s table entry) — `MATCH (d:Document) WHERE d.currentVersion IS NULL SET
+d.currentVersion = true` / `MATCH (c:Chunk) WHERE c.documentCurrent IS NULL SET c.documentCurrent =
+true` — run against `ws:acme` and `ws:nlq-eval` at minimum, plus a regression test that creates a
+`Chunk` via a raw fixture write that never sets `documentCurrent` and asserts it is still found
+(covering the "pre-migration data" axis directly, not a list of already-current/already-superseded
+shapes). Alternative: make the filter itself null-tolerant (`WHERE seed.documentCurrent <> false`)
+as a no-migration fix, but that is a deliberate semantic choice (treat "never touched by this
+feature" as "current") that should be stated, not silently substituted for the plan's own "plain
+equality" wording.
+
+**Blocker — the over-fetch fix was applied to only one of `repository.search_chunks`'s two
+production callers, leaving the agent chat-grounding retrieval path exposed to the exact under-fill
+defect this diff exists to prevent.** `services.py` has exactly two callers of
+`self._repo.search_chunks(...)`: `Services.search_documents` (`:1300`, fixed — `k = limit *
+SEARCH_DOCUMENTS_OVERFETCH`) and `Services.hybrid_search` (`:1096`, **unfixed** — still `k=k,
+limit=limit`, unchanged since before this commit). `Services.hybrid_search` is the merge behind
+`GraphragRetrieveTool`/`AgentResponder`'s chat-grounding retrieval (`tools.py:358`,
+`responder.py:104`) — its `chunk_hits` half now runs through the same filtered `search_chunks`, so
+whenever superseded chunks rank ahead of current ones in the ANN pool, the merged grounding result
+can under-fill on `Chunk`-sourced hits exactly as `search_documents` could before this diff's own
+fix (plan §3.3's stated rationale — "once a post-filter can discard rows... must over-fetch" —
+applies verbatim here too). Verified via two independent methods: `grep -n "\.search_chunks("
+server/falkorchat/*.py` (2 hits) and a `cpg_falkorchat` `CALL`-node query for `search_chunks`,
+which independently confirmed the same two production sites (plus test-only calls) and showed both
+used `k=limit`/`k=k` in the pre-Stage-C snapshot — consistent with the diff touching only one.
+Suggested fix: apply the same `SEARCH_DOCUMENTS_OVERFETCH`-style multiplier (or a shared
+constant/helper, since the ratio is now duplicated reasoning) to `Services.hybrid_search`'s
+`search_chunks` call, and add a hard-negative test mirroring
+`test_search_documents_overfetch_prevents_under_fill_when_superseded_chunks_rank_first` but through
+`hybrid_search`'s merge path.
+
+**Minor — no evidence of mutation testing on the new mechanism.** The coordination ledger names
+mutation testing for the concurrent Stage B-fix unit ("confirmed via mutation test") but the Stage
+C row and commit message carry no such note. Note for calibration: a mutation pass on the touched
+lines (the `WHERE` clause, the `SEARCH_DOCUMENTS_OVERFETCH` constant/multiplication) would **not**
+have caught either blocker above — Blocker 1 is a live-data-state issue, and Blocker 2 is an
+omitted call site, both invisible to mutating code that exists. Flagging only because the brief
+asked, not because it would have prevented what's actually wrong here.
+
+**Nit — `services.search_documents`'s docstring analogy is slightly overstated.** It says over-
+fetching is "the same idiom `hybrid_search` already uses for its own scope filtering," but
+`repository.hybrid_search`'s `OPTIONAL MATCH`-based scope join never discards a seed row (it's a
+left join, not an exclusion filter), so it never had an under-fill risk to over-fetch against in
+the first place — unlike `search_chunks`'s new `WHERE`. Not consequential on its own, but worth
+correcting alongside Blocker 2's fix so the next reader doesn't infer `hybrid_search` was already
+handling this correctly.
+
+### What's solid
+
+- **Filter placement and semantics are exactly per plan where data has the property.**
+  `repository.py`'s `WHERE seed.documentCurrent = true` sits post-`YIELD`, pre-`LIMIT`, a plain
+  equality (not `exists()`) — `GRAPH.PROFILE` in the accepted RCA already confirmed `Filter` runs
+  strictly after `ProcedureCall` with no label scan, and this pass's own live probe against
+  `ws:acme` confirms the same shape end-to-end on real data (20 unfiltered vs. 0 filtered, for the
+  reason in Blocker 1 — not a planner defect).
+- **The over-fetch idea itself is sound and well-tested where it was applied.**
+  `SEARCH_DOCUMENTS_OVERFETCH = 3`'s math is verified correct in `test_services.py`'s call-tuple
+  assertions and in the genuinely deterministic hard-negative test
+  (`test_search_documents_overfetch_prevents_under_fill_when_superseded_chunks_rank_first`, via
+  `_RankedChunkRepo`) — a real unit test of the `k`-vs-`limit` interaction, not just a smoke test.
+- **The dropped live-E2E over-fetch attempt is honestly documented**, with a specific, checkable
+  reason (`test_api.py`'s comment: small-corpus ANN recall isn't a simple function of `k` on this
+  build) rather than silently skipped.
+- **The Pass 2 tautology fix is a real fix, verified by tracing the fixture.** `sd3`'s outgoing
+  `SUPERSEDES` edge is genuinely `pending` at the point `OLDER_STEP` now anchors on it, so the
+  assertion exercises the status filter it claims to.
+- **AC-5 parity (direct lookup unaffected by search filtering) is asserted at all three altitudes**
+  (`test_queries.sh` §14.9, `test_graphrag.py`, `test_api.py`) — consistent, not just repeated.
+- **Scope/RCA discipline.** The commit correctly carries no code change in response to the accepted
+  RCA, and this pass independently re-confirms that conclusion still holds for the flakiness
+  question — nothing here reopens it.
+
+### Open questions
+
+- Whether the Blocker 1 backfill should block Stage D's dispatch (Stage D adds more document
+  ingestion, compounding the affected surface if left open) or land as a fast, narrow follow-up unit
+  before Stage D — the caller's/`teco`'s call on sequencing, not diagnosed here.
+- Whether any other already-populated workspace beyond `ws:acme`/`ws:nlq-eval` exists outside this
+  FalkorDB instance (e.g., a different environment) and needs the same backfill — out of this pass's
+  reach (checked only the one live instance available here).
+
+## Pass 4 — Stage C-testinfra (uncommitted, "vector-index churn" fix)
+
+**Scope.** Diff-scoped review of the currently uncommitted working-tree diff fixing the
+test-infrastructure defect root-caused in `document-ingestion2-rca.md` (already independently
+spot-checked by the coordinator per the coordination ledger) — **not** a re-review of the RCA
+itself, and not Stage C's application code (Pass 3, above, `needs changes` for unrelated reasons,
+out of scope here). Touched: `falkor-chat/server/tests/conftest.py` (new
+`rebuild_vector_indexes`/`fresh_vector_index`), `test_api.py`, `test_graphrag.py`, `test_mcp.py`,
+`test_responder.py`, `test_tools.py` (fixture applied to every real-ANN test), and the new
+`test_vector_index_churn_guard.py`. Baseline: `git diff -- <those six files>` plus the new file's
+full contents read directly, not any prior summary.
+
+**Verdict: approve.**
+
+**CPG: used `cpg_falkorchat`** (`cpg/.cpg-artifacts/MANIFEST.txt`, includes `tests/` per its
+`--verify-prefix`) — ran a call-graph query for every `CALL` node named `search_chunks`/
+`hybrid_search`/`set_chunk_embedding`/`set_embedding`, joined to its enclosing `METHOD` for
+`FILENAME` (`CALL.FILENAME` is empty — a documented trap, `skills/joern-cpg/references/
+cpg-model.md:138`) to independently corroborate the audit's completeness beyond grep — it surfaced
+two production callers in `tests/eval/` that a `tests/*.py`-scoped grep alone would have missed
+(see Finding 1/What I verified).
+
+### What I verified
+
+- Read every hunk of `git diff -- conftest.py test_api.py test_graphrag.py test_mcp.py
+  test_responder.py test_tools.py` and the full new `test_vector_index_churn_guard.py`, not a
+  summary of them.
+- **Audit completeness (brief item 1).** Grepped `tests/*.py` for
+  `queryNodes|search_chunks|search_documents|hybrid_search|vecf32` — confirms `test_repository.py`
+  has zero embedding-related tokens at all, and `test_services.py`'s only hits are through its
+  module-local `FakeRepo`/`SpyRepo`-style doubles (`class FakeRepo`, `def search_chunks`/`def
+  hybrid_search` on the fake itself), never a real `conn`/`repo` fixture — confirmed by reading the
+  file's fixtures directly, not inferring from the grep. Then cross-checked with `cpg_falkorchat`
+  (query above): the only test-file callers of `search_chunks`/`hybrid_search` are
+  `test_graphrag.py` (11 hits, all covered by the module's new `pytestmark`),
+  `test_services.py` (7 hits, all inside `FakeRepo`-backed unit tests, corroborating the grep), and
+  two hits in `tests/eval/` my plain `tests/*.py` grep glob had missed entirely:
+  `test_judge_live.py` (`pytest.mark.live`, deselected by default — confirmed via its own
+  `pytestmark = pytest.mark.live` line) and `test_retrieval_eval.py::_aggregate_metrics` (runs
+  unconditionally, but against `ws:eval`, whose own `tests/eval/conftest.py` docstring states the
+  fixture is deliberately "probe-only... never writes" — read directly, confirms this module
+  contributes zero embedding-write churn to any index, `ws:test`'s or its own). Also grepped
+  `test_background.py` (the other file the tool-independent grep flagged): its one `hybrid_search`
+  reference is a raising stub asserting the method is *never* reached, not a live call. No gap.
+- **Rebuild correctness (item 2).** `rebuild_vector_indexes`'s `CREATE VECTOR INDEX` statement is
+  character-for-character the same shape as `scripts/bootstrap_schema.sh:358,361`
+  (`dimension:${dim}, similarityFunction:'cosine'`), parameterized by `TEST_EMBEDDING_DIM`
+  (matches `conftest.py`'s existing constant, used by `_schema` too) — same index, same params, not
+  a look-alike. Order relative to `conn`'s node wipe is safe regardless of fixture-resolution order
+  between `repo`/`fresh_vector_index` in a test signature: `conn`'s body already runs `MATCH (n)
+  DETACH DELETE n` before returning, and drop+recreate of an index touches no node data, so there
+  is never a real ordering hazard here.
+- **Determinism (item 3).** Ran `tests/test_vector_index_churn_guard.py` alone four times
+  (`-v` once, plain three more) — `2 passed` every time, ~0.35s each. Read both tests: test 1 pins
+  the phenomenon with an assertion that k=4 recall is *reliable* at low churn (10/200 cumulative)
+  and *broken* at 300, plus k=50 staying reliable throughout the same churn — not tautological,
+  since a broken/no-op churn simulation would make the low-churn assertions fail too, not just the
+  high-churn one. Test 2 is the actual fix-guard: asserts a churn state that just broke k=4, then
+  calls `rebuild_vector_indexes` and asserts recall recovers — this is exactly the "monotonic-in-
+  churn regression test" the RCA's §5 asked for, not a fixed-k bump.
+- **RCA repro + full suite (item 4).** Ran `pytest -q tests/test_repository.py tests/test_services.py
+  tests/test_api.py tests/test_mcp.py tests/test_graphrag.py` twice — **743 passed, 0 failed**,
+  both times, against the live, shared FalkorDB instance (`redis-cli -p 6379 ping` → `PONG`). Ran
+  the full suite (`pytest -q`) — **2744 passed, 14 deselected, 0 failed**, 30.93s wall time. To
+  sanity-check the runtime-delta claim, stashed the six touched test files (moving the new guard
+  file out of `tests/` first so it doesn't fail to import `conftest.rebuild_vector_indexes`) and
+  re-ran the full suite on the unmodified baseline: **6 failed** (the churn phenomenon reproducing
+  live, as expected — 3 in `test_graphrag.py`, 1 in `test_responder.py`, 2 in `test_tools.py`, more
+  than the RCA's original 4 because the suite has grown since), **30.88s**. Popped the stash to
+  restore the working tree exactly. Delta is ~0.05s over the whole suite, not the ~1-1.5s the
+  delegate's report apparently claimed (Finding 1, minor) — but the direction is right (negligible,
+  not concerning) and no module shows a runtime outlier in `--durations=15` on the ANN-heavy
+  modules (`test_graphrag.py`'s worst case: 0.29s one-time fixture setup, not per-test).
+- **Untouched-file guarantee (item 5).** `git diff --stat -- falkorchat/repository.py
+  falkorchat/services.py falkorchat/storefront_api.py tests/test_storefront_api.py
+  falkorchat/storefront.py falkorchat/config.py` — empty output, confirmed clean against the
+  concurrent salesperson-ui coordination's files.
+- **Fixture granularity (item 6).** Function-scoped-per-ANN-test (module-wide `pytestmark` in
+  `test_graphrag.py`, since every test there is a live-ANN integration test — confirmed by reading
+  all 19 test signatures, all take `repo`/`conn`) is more conservative than the RCA's own suggested
+  module-or-function boundary, at negligible measured cost (above). No test class or indirect-
+  fixture-import path found in any of the six touched files or their siblings that bypasses it —
+  the CPG cross-check (item 1) was the check most likely to surface a missed indirect caller, and
+  it didn't.
+- **Mutation-test claim (item 7).** Independently reproduced the underlying claim myself rather
+  than merely judging its plausibility: stashing the fix (above) and re-running the RCA's exact
+  5-file repro command reproduced **the identical `4 failed, 739 passed`, same 4 test names**, byte
+  for byte against the RCA's own reported output — this is direct evidence the fix (not some
+  unrelated suite change) is what closes those 4 failures, which is what a "revert the fix, watch
+  it fail the same way" mutation test is meant to show. Did not additionally edit
+  `rebuild_vector_indexes` itself to a no-op, since this independent stash-based reproduction
+  already settles the claim without needing to.
+
+### Findings
+
+**Minor — the coordination ledger's reported runtime-delta figure (~1-1.5s) doesn't match what
+this pass measured (~0.05s over the full 2744-test suite).** Not consequential — the actual number
+is smaller, not larger, than claimed, so it isn't hiding a regression — but worth a one-line
+correction in the ledger so a future reader doesn't budget suite-runtime headroom against a
+overstated number. See "What I verified" above for the stash-based before/after measurement.
+
+**Nit — the `("Message", "Chunk")` label tuple is duplicated** between `conftest.rebuild_vector_indexes`
+and `test_vector_index_churn_guard.py`'s `probe_conn` fixture (which only creates, never drops,
+since its graph starts empty). Two lines, low stakes, but a third label added to one and not the
+other would silently under-cover. Suggested: export the tuple as a small constant next to
+`TEST_EMBEDDING_DIM` in `conftest.py` and import it in the guard-test file.
+
+### What's solid
+
+- **The audit is complete**, verified two independent ways (grep + CPG call-graph), including a
+  gap the grep-only method would have missed (`tests/eval/`) that turned out not to be a real gap
+  once read — `test_judge_live.py` is `live`-marked/deselected, `test_retrieval_eval.py` runs
+  against `ws:eval`, which the codebase's own `tests/eval/conftest.py` already documents as
+  deliberately never written to by tests.
+- **The rebuild helper is a genuine fix, not a no-op or partial reset** — same DDL shape as
+  `bootstrap_schema.sh`, at the right dimension, and directly proven to restore recall after heavy
+  churn by `test_vector_index_churn_guard.py`'s second test (run live, passed deterministically
+  across four runs).
+- **The regression guard is a real, non-tautological pin of the phenomenon**, not just of one
+  fixed-k assertion — it separately asserts low-churn reliability, high-churn failure, and
+  large-k reliability throughout, so a broken churn simulation (not just a broken fix) would also
+  be caught.
+- **All target ANN-touching modules are covered, nothing is over-broad**: `test_services.py`/
+  `test_repository.py` are correctly left alone (no live ANN in either), confirmed independently of
+  the delegate's own claim.
+- **The fix is genuinely isolated** — `git diff --stat` confirms zero overlap with the concurrent
+  salesperson-ui coordination's files, and the working tree was left exactly as found after this
+  pass's own stash-based before/after measurement (`git stash pop`, verified via `git status`
+  immediately after).
+- **The mutation-test claim holds up** — independently reproduced (not merely judged plausible)
+  via a direct stash-and-rerun that matches the RCA's own byte-for-byte failure signature.
+
+### Open questions
+
+- `ws:eval`'s own vector index (`tests/eval/test_retrieval_eval.py`) is architecturally insulated
+  from *this* defect (the suite never writes to it), but nothing found here rules out the same
+  HNSW-churn-degradation mechanism affecting it over its own lifetime from periodic corpus reseeds
+  (`scripts/seed_eval_corpus.sh`, run outside pytest) — not diagnosed here, and out of this fix's
+  scope, but worth a `graph-dba`/`data-scientist` note if `test_retrieval_eval.py`'s baseline ever
+  starts drifting unexplainably.

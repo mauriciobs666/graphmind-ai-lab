@@ -1033,12 +1033,16 @@ class _StubEmbeddingGateway:
 
 
 @pytest.fixture()
-def search_client(conn):
+def search_client(conn, fresh_vector_index):
     """App wired with a stub `ModelGateway` so `search_documents` can embed a
     query — the other fixtures above never wire `models=` (K-050 M5 Stage 2 is
     the first REST surface that needs it). Returns `(client, repo)` — the repo
     is used to write a chunk embedding directly, since this fixture has no
     `embed_worker` (the search path itself is what's under test).
+
+    `fresh_vector_index`: every test using this fixture writes a chunk
+    embedding and then asserts ANN recall against it via `/documents/search`
+    — see `conftest.rebuild_vector_indexes`.
     """
     repo = Repository(conn)
     repo.ensure_user("test", user_id="u1", display_name="Alice")

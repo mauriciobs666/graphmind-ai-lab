@@ -815,7 +815,7 @@ class _StubEmbeddingGateway:
         return _StubQueryEmbedder()
 
 
-def test_search_documents_tool_returns_ranked_chunks(repo):
+def test_search_documents_tool_returns_ranked_chunks(repo, fresh_vector_index):
     repo.ensure_user("test", user_id="u1", display_name="Alice")
     svc = _configure(repo, models=_StubEmbeddingGateway())
 

@@ -91,6 +91,44 @@ def conn(_schema):
     return connection
 
 
+def rebuild_vector_indexes(connection, *, ws: str = TEST_WS, dim: int = TEST_EMBEDDING_DIM) -> None:
+    """Drop and recreate the `Message`/`Chunk` vector indexes on `ws:{ws}` fresh.
+
+    `_schema` rebuilds `ws:test`'s whole schema (including these indexes) only
+    **once per session**; every embedding-writing test since then has added
+    create/delete churn to the same never-mid-session-rebuilt HNSW index, and
+    this FalkorDB build's ANN recall for small `k` degrades monotonically with
+    that cumulative churn — confirmed on the live instance, not just a
+    hypothesis: churning ~100-200 create/delete cycles against a fresh dim-4
+    index reliably drops a `k=4` exact-match query, and continued churn later
+    also claims `k=10` (`docs/reviews/document-ingestion2-rca.md` §2/Appendix B;
+    `tests/test_vector_index_churn_guard.py` pins this behavior directly).
+
+    Cheap on purpose — two `DROP VECTOR INDEX` + two `CREATE VECTOR INDEX`
+    statements, no subprocess, no full schema/constraint rebuild (unlike
+    `_schema`) — safe to call once per test. Call this (or request the
+    `fresh_vector_index` fixture below) from any test whose assertion depends
+    on ANN *recall*, not merely on writing/reading a `Message`/`Chunk` node.
+    """
+    graph = db.workspace_graph(connection, ws)
+    for label in ("Message", "Chunk"):
+        graph.query(f"DROP VECTOR INDEX FOR (n:{label}) ON (n.embedding)")
+        graph.query(
+            f"CREATE VECTOR INDEX FOR (n:{label}) ON (n.embedding) "
+            f"OPTIONS {{dimension:{dim}, similarityFunction:'cosine'}}"
+        )
+
+
+@pytest.fixture()
+def fresh_vector_index(conn):
+    """Rebuild `ws:test`'s vector indexes immediately before a test that
+    depends on ANN recall — bounds this test's HNSW churn exposure to only the
+    churn it contributes itself, independent of every earlier test in the
+    session. See `rebuild_vector_indexes` above for why this exists.
+    """
+    rebuild_vector_indexes(conn)
+
+
 @pytest.fixture()
 def repo(conn) -> Repository:
     """A Repository over a freshly-wiped `ws:test` graph."""
