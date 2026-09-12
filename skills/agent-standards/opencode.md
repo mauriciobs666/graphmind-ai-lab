@@ -165,9 +165,13 @@ server is wired for Claude Code only (repo-root `.mcp.json`); `cpg-analysis` kee
 `redis-cli GRAPH.QUERY` for exactly that reason, and OpenCode/Kiro wiring is
 tracked as backlog **C-310**.
 
-## Severino gotchas (local LM-Studio agent in this repo)
+## Severino gotchas (retired local LM-Studio agent — kept for the config-schema lesson)
+
+`severino` itself is retired (`deprecated/opencode/agents/severino/`), but the schema pitfalls it
+surfaced still apply to any OpenCode agent using an LM Studio provider:
 
 - Top-level config key is **`agent`** (singular), **no `name`** field on the agent.
 - Model id form `lmstudio/<model-id>`; LM Studio context **≥16K** or OpenCode's
   system prompt overflows (`n_keep >= n_ctx`).
-- See `opencode/agents/severino/AGENTS.md` (its `CLAUDE.md` is a `@AGENTS.md` import stub).
+- See `deprecated/opencode/agents/severino/AGENTS.md` (its `CLAUDE.md` is a `@AGENTS.md` import
+  stub) and `opencode/docs/manuals/local-llm.md` for the live walkthrough.

@@ -1,6 +1,17 @@
 # Creating an OpenCode Agent
 
-A running tutorial on configuring custom agents in OpenCode.
+> **Status:** active · **Owner:** `tico` · **Tracks:** —
+
+A running tutorial on configuring custom agents in OpenCode. Relocated 2026-09-12 from
+`opencode/local-llm.md` to this `docs/manuals/` home per the repo's module-documentation
+convention (`AGENTS.md`) — no content change beyond this note and the one below.
+
+> **Severino, the worked example below, has been retired** to
+> `deprecated/opencode/agents/severino/` along with all of `opencode/`'s other agents and skills.
+> The pattern this tutorial teaches (project-scoped `opencode.json`, LM Studio provider config,
+> model picking, troubleshooting) is still current and is what the new `tank` headless agent
+> (`opencode/docs/requirements/devops-opencode-headless.md`) builds on — only the concrete
+> `severino/` example directory has moved.
 
 ## Project layout
 

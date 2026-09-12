@@ -1,4 +1,8 @@
-# RPG Agent
+# RPG Agent (retired)
+
+> **Retired and unmaintained.** Moved to `deprecated/opencode/agents/` — preserved for reference
+> only, no fixes or upgrades. See `deprecated/README.md`. Its `user-preferences` skill moved
+> alongside it to `deprecated/opencode/skills/`.
 
 A friendly, conversational AI agent that loves chatting with users and remembers their personal preferences.
 
@@ -28,6 +32,6 @@ Reference the skill's documentation for detailed procedures.
 - Use the user-preferences skill to add or update preferences when user shares new info
 
 ## Tools
-- read, write (for skill storage: opencode/skills/user-preferences/storage/)
+- read, write (for skill storage: deprecated/opencode/skills/user-preferences/storage/)
 - grep (for searching preferences)
 - chat tools as needed

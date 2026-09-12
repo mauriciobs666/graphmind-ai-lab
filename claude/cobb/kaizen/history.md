@@ -2,6 +2,52 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-12 — Deprecated all of `opencode/`'s prior agents and skills; relocated `local-llm.md` to a manual
+
+User asked to deprecate the current OpenCode agents and skills. Clarified scope first (severino —
+a full sub-project, not just the two one-file agents — included; `local-llm.md` explicitly kept
+live) and confirmed this clears the way for the new headless `tank` agent
+(`opencode/docs/requirements/devops-opencode-headless.md`, `tico` mid-interview, uncommitted at
+the time — unrelated file, left untouched except one mechanical path fix below).
+
+- **Moved** (via `git mv`, history preserved): `opencode/agents/{rpg.md,coding-senior.md,
+  severino/}` and `opencode/skills/` (5 packages) → `deprecated/opencode/agents/` and
+  `deprecated/opencode/skills/`. Added a retirement banner to each entry doc
+  (`severino/README.md`, `rpg.md`, `coding-senior.md`, `skills/README.md`) and fixed every
+  relative link the move broke (severino's 3 links to the manual; the skills README's 3 links to
+  root `skills/` and `AGENTS.md`; `rpg.md`'s literal storage path).
+- **Relocated** `opencode/local-llm.md` → `opencode/docs/manuals/local-llm.md` per the
+  `<component>/docs/<kind>/<slug>.md` convention (user caught this mid-turn — it's a manual, not a
+  loose file) — added the header block (`Status: active · Owner: tico`) and a note that its
+  worked example (severino) is now the retired one.
+- **Updated catalogs/context**: root `AGENTS.md` (structure bullets ×3, component-docs table row,
+  Working-in-this-repo bullets ×2), `deprecated/README.md` (new catalog row), `skills/README.md`
+  (stale "moved to opencode/skills/" pointer + Deployment section — OpenCode's symlink is no
+  longer in the shared-skills table), `claude/README.md` (one line wrongly implied OpenCode
+  symlinked the root `skills/` home; corrected).
+- **My own artifacts**: fixed two now-stale `opencode/agents/severino/...` example paths in
+  `skills/agent-standards/opencode.md` and `claude/cobb/TESTING.md` (both still cite severino as
+  the worked example for a still-valid pattern — config-schema gotchas, eval/bless harness — just
+  at its new path).
+- **One out-of-remit, minimal edit**: `opencode/docs/requirements/devops-opencode-headless.md`
+  (owned by `tico`, active) cited the pre-move severino/local-llm.md paths in its "Problem &
+  current state" section — fixed the citation only, added a dated one-line history note
+  attributing the edit to `cobb`, touched nothing else.
+- **Local machine state** (not repo-tracked): `~/.config/opencode/{agents,skills}` symlinked the
+  moved directories and would have dangled; recreated both pointing at the now-empty
+  `opencode/{agents,skills}/` so they self-heal whenever `tank` populates them, rather than
+  removing them.
+- **Left alone, deliberately**: `docs/plans/doc-reference-convention.md` (an `architect`-owned,
+  already-executed audit finding citing the old severino path — historical evidence, not mine to
+  edit) and several `falkor-chat/docs/{plans,reviews,test-plans,test-reports}/llm-provider-
+  config*.md` files whose severino-path citations describe a specific past test run against the
+  file as it existed then (lookup-only docs, not living references) — plus every other agent's
+  own `kaizen/history.md` mentioning the old paths (historical log, never rewritten).
+- **Noted, not fixed**: `deprecated/opencode/agents/severino/.claude/settings.local.json`
+  contains the maintainer's absolute home path — pre-existing, already in git history before this
+  move, and out of scope for a banner-plus-path-fix-only deprecation edit; flagged to the user
+  rather than silently scrubbed.
+
 ## 2026-09-11 — Live-run "test" of the new guards was invalid: validated the scratchpad exemption, not the fix; real dispatch reproduced the already-closed background-dispatch bug
 
 - **What:** After shipping `guard-broad-bash.sh` (below) and adding tracing, ran four live

@@ -24,26 +24,32 @@ catalog.
 
 The five OpenCode-authored skills previously cataloged here (`comparison-driver`,
 `python-coding`, `skill-builder`, `user-preferences`, `write-tutorial`) moved to
-[`opencode/skills/`](../opencode/skills/README.md).
+`opencode/skills/` and have since been retired along with the OpenCode agents that used them —
+see [`deprecated/opencode/skills/README.md`](../deprecated/opencode/skills/README.md) and
+`deprecated/README.md`.
 
 ## Deployment
 
 Skills live here, version-controlled, and are surfaced to Claude Code and Kiro via a whole-dir
 symlink from each tool's global config — so **every tool sees every skill in this directory** and
-edits here are picked up live. OpenCode instead symlinks to
-[`opencode/skills/`](../opencode/skills/), which holds its own (disjoint) set:
+edits here are picked up live.
 
 | Tool | Symlink |
 |---|---|
 | Claude Code | `~/.claude/skills` → `skills/` |
-| OpenCode | `~/.config/opencode/skills` → `opencode/skills/` |
 | Kiro | `~/.kiro/skills` → `skills/` |
 
-Recreate on a new machine with `ln -s <repo>/skills <target>` (Claude Code, Kiro) or
-`ln -s <repo>/opencode/skills <target>` (OpenCode). Skills are progressively-disclosed (only the
-`description` is always-on), so exposing every skill in a tool's directory costs ~nothing; unused
-ones simply never activate. If you later want per-tool scoping within this directory, switch a
-tool to per-skill symlinks (the pattern the `claude/` agents use) instead of the whole-dir link.
+Recreate on a new machine with `ln -s <repo>/skills <target>`. Skills are progressively-disclosed
+(only the `description` is always-on), so exposing every skill in a tool's directory costs
+~nothing; unused ones simply never activate. If you later want per-tool scoping within this
+directory, switch a tool to per-skill symlinks (the pattern the `claude/` agents use) instead of
+the whole-dir link.
+
+**OpenCode** separately symlinks `~/.config/opencode/skills` → `opencode/skills/`, previously a
+disjoint set of five OpenCode-only packages. That set is now retired
+(`deprecated/opencode/skills/`, `deprecated/README.md`); `opencode/skills/` is empty pending
+whatever the new `tank` agent needs (`opencode/docs/requirements/devops-opencode-headless.md`) —
+the symlink itself stays, just pointed at nothing for now.
 
 ### Portability notes (verified 2026-07-25)
 

@@ -14,10 +14,10 @@ engineering** (Claude Code and OpenCode artifacts).
   traces. GraphRAG (in-graph vector + traversal) and graph-state-machine workflows. Design and
   query library are locked and live-verified. Milestone status is authoritative in
   `falkor-chat/docs/BACKLOG.md`.
-- `opencode/` — Personal OpenCode configuration: custom agents (`agents/` — `rpg`, `coding-senior`,
-  `severino/`, a full LM-Studio-backed local agent project) and OpenCode-only `SKILL.md` packages
-  (`skills/`; OpenCode's global config symlinks here, **not** to the repo's shared `skills/`).
-  `local-llm.md` covers running OpenCode against a local LM Studio server.
+- `opencode/` — Personal OpenCode configuration. Its former custom agents and OpenCode-only
+  `SKILL.md` packages are retired (`deprecated/opencode/` — see that row in `deprecated/README.md`);
+  the manual covering local LM Studio setup, `opencode/docs/manuals/local-llm.md`, stays live and is
+  what the new headless `tank` agent builds on (`opencode/docs/requirements/`).
 - `cpg/` — Code-Property-Graph component code home: durable CPG reload artifacts
   (`.cpg-artifacts/`, gitignored) for the Joern-built graphs (`cpg_<component>`) loaded into
   FalkorDB. The MCP server is **not** here — it's the top-level `cypher-mcp/`, generic rather than
@@ -53,22 +53,26 @@ engineering** (Claude Code and OpenCode artifacts).
   machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern CPG→FalkorDB pipeline),
   `cpg-analysis` (the consumer side), `python-web-quirks` (live-verified asyncio/Starlette/
   FastAPI/pydantic gotchas, incl. test-harness ones, for `coder`/`tdd-engineer`/`architect`/
-  `analyst`/`qa-engineer`). OpenCode-only skills live in `opencode/skills/`. Format ports across
-  Claude Code/OpenCode/Kiro; tool-gating & activation behavior do not — verify per tool.
+  `analyst`/`qa-engineer`). OpenCode-only skills go in `opencode/skills/` (currently empty — the
+  prior set is retired, `deprecated/opencode/skills/`). Format ports across Claude Code/OpenCode/
+  Kiro; tool-gating & activation behavior do not — verify per tool.
 - `deprecated/` — **retired components, preserved but not maintained**: no bug fixes, upgrades, or
   refactors, and no precedent for new work. Holds `deprecated/salesperson/`, the standalone
   Streamlit sales-assistant chatbot (its own `kg_pastel` FalkorDB graph + LangChain/LangGraph;
   optional local LLM via LM Studio), retired because it talks to an older, separate backend rather
   than falkor-chat's workflow engine. Its replacement — one business-facing UI for the
   workflow-engine-backed `salesperson` agent — is specified in `docs/requirements/salesperson-ui.md`
-  and planned in `docs/plans/salesperson-ui.md`, but **not built yet**.
+  and planned in `docs/plans/salesperson-ui.md`, but **not built yet**. Also holds
+  `deprecated/opencode/`, `opencode/`'s former custom agents (`rpg`, `coding-senior`, `severino/`)
+  and OpenCode-only `SKILL.md` packages, retired to clear the way for the new headless `tank` agent
+  (`opencode/docs/requirements/devops-opencode-headless.md`).
 
 ## Component docs (read before working in a component)
 
 | Component | Entry doc(s) |
 |---|---|
 | `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · `falkor-chat/docs/DESIGN.md` (graph) · `falkor-chat/docs/SERVER.md` (server process) · `falkor-chat/docs/QUERIES.md` |
-| `opencode/` | `opencode/agents/severino/README.md` · `opencode/local-llm.md` · `opencode/skills/README.md` |
+| `opencode/` | `opencode/docs/manuals/local-llm.md` · `opencode/docs/requirements/devops-opencode-headless.md` |
 | `cpg/` | `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
 | `cypher-mcp/` | `cypher-mcp/README.md` |
 | `claude/` | `claude/README.md` · `claude/AGENTS.md` |
@@ -76,7 +80,7 @@ engineering** (Claude Code and OpenCode artifacts).
 | `mcp-monitor/` | `mcp-monitor/README.md` · `mcp-monitor/AGENTS.md` |
 | `model-bench/` | `model-bench/README.md` · `model-bench/AGENTS.md` · `docs/requirements/small-model-benchmarking.md` · `docs/plans/small-model-benchmarking.md` |
 | `skills/` | `skills/README.md` · `skills/*/SKILL.md` |
-| `deprecated/` | `deprecated/README.md` · `deprecated/salesperson/README.md` · `deprecated/salesperson/AGENTS.md` |
+| `deprecated/` | `deprecated/README.md` · `deprecated/salesperson/README.md` · `deprecated/salesperson/AGENTS.md` · `deprecated/opencode/agents/severino/README.md` |
 
 ## Working in this repo
 
@@ -84,9 +88,12 @@ engineering** (Claude Code and OpenCode artifacts).
   (`falkor-chat/CLAUDE.md` imports it) — FalkorDB OpenCypher (not Neo4j): no APOC/GDS, vector
   indexes via DDL, index-before-constraint. Keep the query suite green
   (`./scripts/test_queries.sh`).
-- **OpenCode agent tasks** → `opencode/`, follow the severino docs / `opencode/local-llm.md`.
-- **Skill tasks** → `skills/` for cross-tool/Claude-Code-oriented skills, `opencode/skills/` for
-  OpenCode-only ones; follow each `<name>/SKILL.md` and the directory's `README.md`.
+- **OpenCode agent tasks** → `opencode/` — no live custom agent today (the former ones are
+  retired, `deprecated/opencode/agents/`); follow `opencode/docs/manuals/local-llm.md` for local
+  LM Studio setup and `opencode/docs/requirements/` for the in-flight `tank` agent.
+- **Skill tasks** → `skills/` for cross-tool/Claude-Code-oriented skills; OpenCode-only ones are
+  retired (`deprecated/opencode/skills/`) — a new one goes in `opencode/skills/` fresh. Follow
+  each `<name>/SKILL.md` and the directory's `README.md`.
 - **Retired components** → `deprecated/` — read for reference only, never maintained, extended, or
   copied from. The retired Streamlit chatbot is `deprecated/salesperson/`; "the salesperson app"
   almost certainly means its not-yet-built replacement (`docs/requirements/salesperson-ui.md`) —

@@ -43,7 +43,8 @@ is no way to get a routine check (health/hygiene, disk usage, container status, 
 without a human present, and no way to route that kind of lower-stakes, routine work away from
 frontier-model spend. OpenCode's non-interactive `opencode run --agent <name>` invocation is
 confirmed working in this repo as the mechanism, and OpenCode's LM Studio provider support is the
-confirmed local-model path (precedent: `severino/`, `opencode/local-llm.md`).
+confirmed local-model path (precedent: `deprecated/opencode/agents/severino/`, now retired but
+still the worked example in `opencode/docs/manuals/local-llm.md`).
 
 No scheduler (cron, systemd timer, or similar) exists anywhere in this repo today, and building
 one is explicitly **not** part of this requirement (see Out of scope) — `mcp-monitor` exists but
@@ -222,3 +223,8 @@ Intent, Problem & current state, FR-3/4/8, Out of scope, and the acceptance crit
 to "manual approval," since it reused the word "interactive" in a different sense (a live
 permission prompt) from the identity-mode term just defined in Terminology. All three occurrences
 updated.
+
+2026-09-12 — `cobb`: mechanical path fix only, made necessary by an unrelated cleanup — `severino/`
+and `opencode/local-llm.md` were relocated to `deprecated/opencode/agents/severino/` and
+`opencode/docs/manuals/local-llm.md` respectively; the Problem & current state citation updated to
+match. No content/decision change.

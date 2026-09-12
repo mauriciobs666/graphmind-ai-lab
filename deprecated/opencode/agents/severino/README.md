@@ -1,4 +1,10 @@
-# Severino
+# Severino (retired)
+
+> **Retired and unmaintained.** This OpenCode agent project was moved to
+> `deprecated/opencode/agents/severino/` and is preserved for reference only — no fixes, no
+> upgrades, and no guarantee it still runs. See `deprecated/README.md` for what `deprecated/`
+> means. The instructions below are kept as they were at retirement; the general LM-Studio
+> walkthrough they cite still lives at `opencode/docs/manuals/local-llm.md`.
 
 A local OpenCode agent powered by [LM Studio](https://lmstudio.ai/). Currently configured as a **read-only coding advisor** — reads, reviews, explains, and debugs code, proposing changes as snippets/diffs for you to apply (he can't modify files himself). See [Customizing Severino](#customizing-severino) to repurpose him.
 
@@ -11,7 +17,7 @@ A local OpenCode agent powered by [LM Studio](https://lmstudio.ai/). Currently c
 
 ### 1. Load a model and start the LM Studio server
 
-Follow the general walkthrough in [`opencode/local-llm.md`](../../local-llm.md)
+Follow the general walkthrough in [`opencode/docs/manuals/local-llm.md`](../../../../opencode/docs/manuals/local-llm.md)
 (§ *Connecting to a local LM Studio*, steps 1–2): load a model **with Context
 Length ≥ 16384** (32K recommended), then start the local server at
 `http://localhost:1234/v1`. Severino-specific deltas:
@@ -57,13 +63,13 @@ See [`opencode.json`](opencode.json). Key pieces:
 
 ## Choosing a model
 
-What makes a GGUF OpenCode-friendly (handles the `system` role, non-reasoning, 3B–9B size) is covered in [`opencode/local-llm.md`](../../local-llm.md) § *Picking a model*.
+What makes a GGUF OpenCode-friendly (handles the `system` role, non-reasoning, 3B–9B size) is covered in [`opencode/docs/manuals/local-llm.md`](../../../../opencode/docs/manuals/local-llm.md) § *Picking a model*.
 
 Default for this project: **`nvidia/nemotron-3-nano-4b`** — small, fast, handles `system` messages, and in practice noticeably better than Ministral 3B at following the persona prompt and reasoning about code coherently. Ministral 3B (`mistralai/ministral-3-3b`) is kept in `opencode.json` as an alternate; swap by changing the agent's `model` field.
 
 ## Troubleshooting
 
-The general LM-Studio-with-OpenCode symptoms (`Unrecognized key: agents`, `Agent not found`, `API key required`, `Connection refused`, `Model not found`, `n_keep >= n_ctx`, `Only user and assistant roles are supported`, slow reasoning models, slow JIT-loaded first response) are covered in [`opencode/local-llm.md`](../../local-llm.md) § *Troubleshooting*. Severino-specific:
+The general LM-Studio-with-OpenCode symptoms (`Unrecognized key: agents`, `Agent not found`, `API key required`, `Connection refused`, `Model not found`, `n_keep >= n_ctx`, `Only user and assistant roles are supported`, slow reasoning models, slow JIT-loaded first response) are covered in [`opencode/docs/manuals/local-llm.md`](../../../../opencode/docs/manuals/local-llm.md) § *Troubleshooting*. Severino-specific:
 
 | Symptom                                                       | Cause / Fix                                                                                                                                                                                                |
 | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
