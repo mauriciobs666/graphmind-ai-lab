@@ -2,6 +2,74 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-12 — S4 Step 3: nlq-structured-query, offline half
+
+**What:** `docs/plans/small-model-benchmarking-s4-spec.md` §7 Step 3 — the second and larger of
+S4's two concrete packs, built entirely offline.
+
+1. **`packs/nlq-structured-query/{pack.json, schema.json, prompts/querygen.md, items.jsonl,
+   tables.json, reference_specs.json, PROVENANCE.md}`** — the pack itself. `items.jsonl` is 40
+   rows carried through with no `answerable` stamp yet (Step 4's job). `tables.json` ships only
+   its catalog half — 15 products under `{"Product": [...]}` — the `knowledge_base` half depends
+   on Step 4's live `ws:nlq-eval` snapshot. `reference_specs.json` holds 40 hand-authored
+   `QueryRequest`-shaped specs, one per item. `prompts/querygen.md` was confirmed byte-identical
+   to `falkor-chat/server/falkorchat/tools.py`'s `_QUERY_REQUEST_INSTRUCTIONS` via an independent
+   AST `literal_eval` of the live source — unformatted, since the `{dataset_schema}` placeholder
+   is intentionally left unfilled and resolved per-item at runtime.
+2. **`packs/nlq-structured-query/tools/exec.py`** (new) — Layer A (`validate_structure`) and
+   Layer B (`validate_against_schema`) validation plus `compile_and_execute`, transcribed from
+   `falkor-chat/server/falkorchat/querygen.py`.
+3. **`modelbench/scoring/extraction.py`** (new) — the pack's `ItemScorer`: `_canon_str`/
+   `_scalar_equal`/`score_pair` (Layer 1 comparison, including the `conflicting-facts` subset-
+   containment exception), `_describe_dataset_schema`/`build_messages`, and `score_item`/
+   `aggregate`.
+4. **`modelbench/packs.py`** gained `_answerability_stamp_problems`, a new `validate_pack` axis.
+5. **`scripts/refresh_golden.py`** gained three new origins for this pack, a new
+   `"schema-literal"` `OriginSpec.kind`, and (built and unit-tested against synthetic fixtures
+   only — not yet run against the real pack) `--check-tables-shape`/`--stamp-answerability`
+   modes.
+
+**Verification:** baseline before this change — `1324 passed, 1 pre-existing failure, 3
+deselected`. After: `1441 passed` (117 new tests), the same one pre-existing failure (the S5
+tripwire; confirmed unrelated by stashing this unit's files and reproducing the failure on the
+untouched tree), `3 deselected`. `ruff check .` clean.
+
+**Mutation-tested three branches** (copy aside, mutate, confirm red, restore by copy
+immediately, never batched): removing the `conflicting-facts` subset-containment exception
+(forcing set-equality) reddened the targeted test; collapsing the schema-violation failure class
+into `"malformed_spec"` reddened two tests, including the three-failure-counts-never-pooled
+test; removing the not-found-by-construction clause in `run_stamp_answerability` reddened its
+targeted test.
+
+**A real defect caught only by end-to-end verification, not the unit suite:**
+`_catalog_rows_from_literal` originally returned a bare row list merged straight into
+`tables.json["catalog"]`; every offline unit test passed because they hand-built the correct
+`{"Product": [...]}` shape as fixtures directly. Running `compile_and_execute` against the
+actually-generated `tables.json` from a real `refresh_golden.py` run raised `AttributeError:
+'list' object has no attribute 'get'`. Fixed; tests updated; `tables.json` regenerated correctly
+(confirmed: 15 products under `{"Product": [...]}`). Logged as a kaizen entry.
+
+**The substantive open finding, not resolved here:** authoring and end-to-end-verifying all 40
+`reference_specs.json` entries against the real `falkor-chat` catalog and the real `ws:nlq-eval`
+live snapshot (62 Entity/12 Document/12 Chunk rows) found that **6 of 40 items fail Layer B
+schema validation, not the plan's stated 4**: the 4 `relationship-traversal` items
+(`nlq-34`..`nlq-37`) plus `nlq-38`/`nlq-39` (`conflicting-facts`). Each of the two additional
+failing specs is honest, not engineered to dead-end — the golden set's own `rationale` field for
+`nlq-38`/`nlq-39` states verbatim "STRUCTURALLY UNANSWERABLE by the shipped v1 mechanism," the
+identical disposition and root cause as the relationship-traversal items, directly contradicting
+`docs/plans/small-model-benchmarking.md` §3.8.3's assumption that conflicting-facts items are
+answerable. Routed to `data-scientist` for a methodology opinion (a plan-level design-validity
+question, not a code defect) before Step 4 finalizes the answerability stamp — see
+`packs/nlq-structured-query/PROVENANCE.md`'s own "Pending (Step 4...)" note for the detailed
+record.
+
+**Left for Step 4 (unchanged by this step):** `tables.json`'s official `"knowledge_base"` write
+and its `PROVENANCE.md` row, `--check-tables-shape`/`--stamp-answerability`'s real runs, the live
+`-m live` proof run.
+
+**CPG:** considered, not relevant — no `cpg_model-bench` graph loaded, greenfield code-level
+work.
+
 ## 2026-09-11 — S4 Step 2: `guard-judge-understanding`, live half — the real 85-item pack run end to end
 
 **What:** `docs/plans/small-model-benchmarking-s4-spec.md` §7 Step 2 — the live proof run over
