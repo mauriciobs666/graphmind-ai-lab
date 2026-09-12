@@ -155,6 +155,19 @@ class SearchNotAvailableError(RuntimeError):
 # while the deployment keeps `TIMEOUT_MAX=0`.
 RAG_QUERY_TIMEOUT_MS = 5000
 
+# ── document-ingestion2 Stage C (plan §3.3): `search_documents` over-fetch ──────
+# `repository.search_chunks` now excludes superseded-document chunks
+# post-`YIELD` (AC-4), so requesting only `k=limit` ANN candidates — this
+# method's original posture, when "there is no downstream scope traversal to
+# over-fetch for" still held — can under-fill below `limit` in a workspace
+# with many superseded chunks ranking highly. `3` is an implementer-tunable
+# RAM/recall trade-off, not load-bearing (mirrors this plan's own posture
+# toward similar constants, e.g. `MAX_DOCUMENT_CHARS`) — picked over the
+# plan's own `2` example for a bit more headroom against a heavily-superseded
+# corpus, at negligible extra ANN cost (`k` bounds the candidate scan, not the
+# response size).
+SEARCH_DOCUMENTS_OVERFETCH = 3
+
 # ── K-039 item 3: readiness "recent triage post-success" sample size ────────────
 # Last-N terminal runs of the `@mention`-triggered def sampled by
 # `check_demo_readiness`'s `postSuccess` field (repository.read_recent_post_success,
@@ -1258,9 +1271,19 @@ class Services:
         Embeds `query` through the injected `ModelGateway` first — mirrors
         `GraphragRetrieveTool`/`AgentResponder`'s own text→`q_vec` step
         (`tools.py`/`responder.py`), since `repository.search_chunks` (like
-        `hybrid_search`) takes a vector, not text. `k`/`limit` are the same
-        value here (unlike `hybrid_search`, there is no downstream scope
-        traversal to over-fetch for — the ANN fan-out IS the result set).
+        `hybrid_search`) takes a vector, not text.
+
+        **Over-fetches `k` (document-ingestion2 Stage C, plan §3.3):**
+        `repository.search_chunks` now excludes superseded-document chunks
+        post-`YIELD`, so `k=limit` alone (this method's original posture, when
+        "there is no downstream scope traversal to over-fetch for" still
+        held) can under-fill below `limit`. `k = limit *
+        SEARCH_DOCUMENTS_OVERFETCH` requests a larger bounded ANN candidate
+        pool while `limit` still caps the final response — the same
+        "over-fetch a bounded `k`, then let a post-`YIELD` filter and a
+        separate `limit` do the rest" idiom `hybrid_search` already uses for
+        its own scope filtering (independently-tunable `k`/`limit` params on
+        one query).
 
         Raises `SearchNotAvailableError` when no gateway is wired (`Services`
         built with `models=None`, e.g. `FALKORCHAT_ENABLE_AGENT` off) — mirrors
@@ -1275,7 +1298,8 @@ class Services:
         embedder = self._models.embedder("embedding", ws=ctx.ws)
         q_vec = embedder.embed(query)
         return self._repo.search_chunks(
-            ctx.ws, q_vec=q_vec, k=limit, limit=limit, timeout=RAG_QUERY_TIMEOUT_MS,
+            ctx.ws, q_vec=q_vec, k=limit * SEARCH_DOCUMENTS_OVERFETCH,
+            limit=limit, timeout=RAG_QUERY_TIMEOUT_MS,
         )
 
     # ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ─────────────

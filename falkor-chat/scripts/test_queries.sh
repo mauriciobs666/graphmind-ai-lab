@@ -1753,13 +1753,65 @@ assert_contains "§14.8 get_document_history's older-direction step finds the co
 out=$(rq "$WS" "CYPHER documentId='sd2' $NEWER_STEP")
 assert_contains "§14.8 get_document_history's newer-direction step finds the confirmed successor" "sd1" "$out"
 
-# a pending/rejected suggestion must never surface as "history"
-out=$(rq "$WS" "CYPHER documentId='sd4' $OLDER_STEP")
-assert_no_data_row "§14.8 get_document_history's older step ignores a pending suggestion (sd4 has none confirmed)" "documentId" "$out"
+# a pending/rejected suggestion must never surface as "history" — anchored on
+# sd3 (the edge's real SOURCE, sd3->sd4, currently 'pending' after the
+# reopen-on-corroboration step above), not sd4: sd4 has no OUTGOING SUPERSEDES
+# edge at all, so anchoring OLDER_STEP there would return zero rows
+# regardless of the sd3->sd4 edge's status — a tautology, not a check of the
+# status filter (analyst review Pass 2, docs/reviews/document-ingestion2-impl.md).
+out=$(rq "$WS" "CYPHER documentId='sd3' $OLDER_STEP")
+assert_no_data_row "§14.8 get_document_history's older step ignores a pending suggestion (sd3->sd4 is pending, not confirmed)" "documentId" "$out"
 
 # cleanup this section's fixture (SUPERSEDES edges die with their endpoints)
 gq "$WS" "MATCH (n:Document) WHERE n.documentId IN ['sd1','sd2','sd3','sd4'] DETACH DELETE n" > /dev/null
 gq "$WS" "MATCH (c:Chunk) WHERE c.documentId IN ['sd1','sd2','sd3','sd4'] DETACH DELETE c" > /dev/null
+
+# ── §14.9 default-search filtering: documentCurrent (document-ingestion2 ────
+# Stage C, AC-4, plan §3.3) ──────────────────────────────────────────────────
+
+echo ""
+echo "▶ §14.9 search_chunks documentCurrent filter (document-ingestion2 Stage C)"
+
+# Two documents, one chunk each, an identical embedding — cd2 is then marked
+# superseded via a raw fixture write (Stage D auto-supersede detection doesn't
+# exist yet; same raw-fixture posture as this section's own plan §4 Stage C
+# done-condition, mirroring confirm_document_update's write shape from §14.8
+# above without needing a real SUPERSEDES edge).
+gq "$WS" "CREATE (d:Document {documentId:'cd1', title:'current', text:'hello current', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:true})-[:HAS_CHUNK]->(:Chunk {chunkId:'cc1', text:'hello current', seq:0, documentId:'cd1', documentCurrent:true})" > /dev/null
+gq "$WS" "CREATE (d:Document {documentId:'cd2', title:'superseded', text:'hello old', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:50, currentVersion:true})-[:HAS_CHUNK]->(:Chunk {chunkId:'cc2', text:'hello old', seq:0, documentId:'cd2', documentCurrent:true})" > /dev/null
+
+gq "$WS" "MATCH (c:Chunk {chunkId:'cc1'}) SET c.embedding = vecf32([1.0, 0.0, 0.0, 0.0])" > /dev/null
+gq "$WS" "MATCH (c:Chunk {chunkId:'cc2'}) SET c.embedding = vecf32([1.0, 0.0, 0.0, 0.0])" > /dev/null
+
+gq "$WS" "MATCH (d:Document {documentId:'cd2'}) SET d.currentVersion = false WITH d MATCH (d)-[:HAS_CHUNK]->(c:Chunk) SET c.documentCurrent = false" > /dev/null
+
+# search_chunks' new shape (repository.py): a post-YIELD WHERE on the
+# already-ANN-yielded rows — plain property equality, not exists() (flagged
+# buggy on this build, claude/graph-dba/falkordb-quirks.md) and not a
+# pre-filter (no pre-filter predicate support demonstrated for this index).
+SEARCH_CHUNKS_FILTERED="CALL db.idx.vector.queryNodes('Chunk', 'embedding', 5, vecf32([1.0, 0.0, 0.0, 0.0])) YIELD node AS seed, score WHERE seed.documentCurrent = true RETURN seed.chunkId AS chunkId, seed.documentId AS documentId, seed.seq AS seq, score ORDER BY score ASC LIMIT 5"
+
+out=$(rq "$WS" "$SEARCH_CHUNKS_FILTERED")
+assert_contains "§14.9 search_chunks includes the current-version chunk" "cc1" "$out"
+assert_not_contains "§14.9 search_chunks excludes the superseded chunk" "cc2" "$out"
+
+# PROFILE: the post-YIELD WHERE stays a plain filter on the already-ANN-yielded
+# rows — the ANN retrieval itself must still anchor on the vector index
+# (ProcedureCall), never a whole-graph Chunk scan.
+prof=$(gp "$WS" "$SEARCH_CHUNKS_FILTERED")
+assert_contains     "§14.9 filtered search_chunks still uses the vector index (ProcedureCall)" "ProcedureCall" "$prof"
+assert_not_contains "§14.9 filtered search_chunks has no All Node Scan"                        "All Node Scan" "$prof"
+
+# AC-5/§3.3 parity: direct-by-id lookup is unaffected by the filter — a
+# superseded document's text is still fully readable outside search ("Only
+# default search excludes non-current content, never direct lookup").
+out=$(rq "$WS" "MATCH (d:Document {documentId:'cd2'}) RETURN d.text, d.currentVersion")
+assert_contains "§14.9 direct lookup still returns the superseded document's text" "hello old" "$out"
+assert_contains "§14.9 ...and reports currentVersion=false (excluded from search only)" "false" "$out"
+
+# cleanup this section's fixture
+gq "$WS" "MATCH (n:Document) WHERE n.documentId IN ['cd1','cd2'] DETACH DELETE n" > /dev/null
+gq "$WS" "MATCH (c:Chunk) WHERE c.documentId IN ['cd1','cd2'] DETACH DELETE c" > /dev/null
 
 # ── teardown ─────────────────────────────────────────────────────────────────
 

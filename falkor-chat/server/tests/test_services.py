@@ -29,6 +29,7 @@ from falkorchat.services import (
     POST_SUCCESS_SAMPLE_SIZE,
     RAG_QUERY_TIMEOUT_MS,
     RESERVED_CTX_KEYS,
+    SEARCH_DOCUMENTS_OVERFETCH,
     BatchTooLargeError,
     ChannelNotFoundError,
     DocumentNotFoundError,
@@ -1171,7 +1172,14 @@ def test_search_documents_embeds_the_query_then_searches_chunks():
     assert models.embedded == ["hello"]
     assert models.embedder_calls == [("embedding", "test")]
     call = next(c for c in repo.calls if c[0] == "search_chunks")
-    assert call == ("search_chunks", "test", (1.0, 0.0), 5, 5, RAG_QUERY_TIMEOUT_MS)
+    # document-ingestion2 Stage C (plan §3.3): `k` over-fetches
+    # (`limit * SEARCH_DOCUMENTS_OVERFETCH`) so `search_chunks`'s new
+    # `documentCurrent` post-filter can discard rows without under-filling
+    # below `limit`; the final response is still capped at `limit`.
+    assert call == (
+        "search_chunks", "test", (1.0, 0.0),
+        5 * SEARCH_DOCUMENTS_OVERFETCH, 5, RAG_QUERY_TIMEOUT_MS,
+    )
 
 
 def test_search_documents_defaults_limit_to_20():
@@ -1182,7 +1190,8 @@ def test_search_documents_defaults_limit_to_20():
     svc.search_documents(CTX, query="hello")
 
     call = next(c for c in repo.calls if c[0] == "search_chunks")
-    assert call[3:5] == (20, 20)  # k, limit both default to 20
+    # k over-fetches (Stage C, plan §3.3); limit still caps the response.
+    assert call[3:5] == (20 * SEARCH_DOCUMENTS_OVERFETCH, 20)
 
 
 def test_search_documents_raises_when_no_models_wired():
@@ -1193,6 +1202,48 @@ def test_search_documents_raises_when_no_models_wired():
         svc.search_documents(CTX, query="hello")
 
     assert repo.calls == []  # never reaches search_chunks
+
+
+class _RankedChunkRepo(FakeRepo):
+    """Simulates `search_chunks`'s real "over-fetch `k` ANN candidates, drop
+    non-`documentCurrent` rows post-`YIELD`, then cap at `limit`" semantics
+    deterministically — `k` genuinely bounds how deep into `ranked_pool`
+    (ordered most-similar-first, like real `score ASC` rows) the filter gets
+    to look. The real ANN engine's own recall behavior is a live-FalkorDB
+    integration concern (`test_graphrag.py`/`test_api.py` prove the actual
+    `documentCurrent` filter against a real vector index); this fake isolates
+    just the `k`-vs-`limit` interaction the Stage C over-fetch fix depends on,
+    which a live ANN index cannot pin down deterministically at unit-test
+    scale (see the note in `test_api.py` by the dropped end-to-end attempt).
+    """
+
+    def __init__(self, ranked_pool):
+        super().__init__()
+        self._ranked_pool = ranked_pool
+
+    def search_chunks(self, ws, *, q_vec, k, limit, timeout=None):
+        self.calls.append(("search_chunks", ws, tuple(q_vec), k, limit, timeout))
+        candidates = self._ranked_pool[:k]
+        return [row for row in candidates if row["documentCurrent"]][:limit]
+
+
+def test_search_documents_overfetch_prevents_under_fill_when_superseded_chunks_rank_first():
+    # Hard negative for the Stage C over-fetch fix (plan §3.3): 5 superseded
+    # chunks rank ahead of 3 current ones in the ANN pool. `k=limit` alone (no
+    # over-fetch) would only ever see superseded candidates and under-fill to
+    # zero; `k = limit * SEARCH_DOCUMENTS_OVERFETCH` must reach deep enough
+    # into the pool to surface all 3 current chunks.
+    pool = (
+        [{"chunkId": f"oc{i}", "documentCurrent": False} for i in range(5)]
+        + [{"chunkId": f"nc{i}", "documentCurrent": True} for i in range(3)]
+    )
+    repo = _RankedChunkRepo(pool)
+    models = FakeEmbeddingGateway([1.0])
+    svc = make_service(repo, models=models)
+
+    rows = svc.search_documents(CTX, query="hello", limit=3)
+
+    assert [r["chunkId"] for r in rows] == ["nc0", "nc1", "nc2"]
 
 
 # ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ────────────────

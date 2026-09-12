@@ -1091,6 +1091,81 @@ def test_search_documents_route_not_shadowed_by_document_id_route(search_client)
     assert isinstance(r.json(), list)
 
 
+# ── document-ingestion2 Stage C: default-search filtering (AC-4, plan §3.3) ────
+#
+# Stage D (auto-supersede detection) doesn't exist yet, so these mark a
+# document superseded with a raw fixture write — exactly the plan's own §4
+# Stage C done-condition ("AC-4 provable with a raw test fixture that flips
+# one document's currentVersion to false directly ... before any detection
+# code exists to produce one organically").
+
+
+def _mark_document_superseded_raw(conn, *, document_id):
+    """Test-only raw write: flips `Document.currentVersion` false and
+    bulk-flips every one of its `Chunk`s' `documentCurrent` false — mirrors
+    what `confirm_document_update`/`create_document_with_auto_supersede`
+    (Stage B/D) do atomically in production, with no `SUPERSEDES` edge
+    needed."""
+    db.workspace_graph(conn, "test").query(
+        "MATCH (d:Document {documentId: $documentId}) SET d.currentVersion = false "
+        "WITH d MATCH (d)-[:HAS_CHUNK]->(c:Chunk) SET c.documentCurrent = false",
+        {"documentId": document_id},
+    )
+
+
+def test_search_documents_excludes_a_superseded_documents_chunks(search_client, conn):
+    client, repo = search_client
+    r = client.post("/documents", json={"text": "about cats", "title": "Old"})
+    old_id = r.json()["documentId"]
+    old_chunk_id = repo.list_document_chunks("test", document_id=old_id)[0]["chunkId"]
+    repo.set_chunk_embedding(
+        "test", chunk_id=old_chunk_id,
+        embedding=[1.0] + [0.0] * (TEST_EMBEDDING_DIM - 1),
+        expected_dim=TEST_EMBEDDING_DIM,
+    )
+    r2 = client.post("/documents", json={"text": "about cats too", "title": "New"})
+    new_id = r2.json()["documentId"]
+    new_chunk_id = repo.list_document_chunks("test", document_id=new_id)[0]["chunkId"]
+    repo.set_chunk_embedding(
+        "test", chunk_id=new_chunk_id,
+        embedding=[1.0] + [0.0] * (TEST_EMBEDDING_DIM - 1),
+        expected_dim=TEST_EMBEDDING_DIM,
+    )
+    _mark_document_superseded_raw(conn, document_id=old_id)
+
+    hits = client.get("/documents/search", params={"q": "cats"})
+
+    assert hits.status_code == 200
+    ids = [h["chunkId"] for h in hits.json()]
+    assert old_chunk_id not in ids
+    assert new_chunk_id in ids
+
+    # §3.3's own note: "Only default search excludes non-current content,
+    # never direct lookup" — direct-by-id GET on the superseded doc still 200s.
+    direct = client.get(f"/documents/{old_id}")
+    assert direct.status_code == 200
+    assert direct.json()["text"] == "about cats"
+
+
+# The over-fetch multiplier's own hard-negative (a ranked pool where
+# superseded chunks outrank current ones, proving `k=limit` alone would
+# under-fill) is a `Services`-layer unit test against a fake, deterministic
+# ranked repo — `test_services.py::
+# test_search_documents_overfetch_prevents_under_fill_when_superseded_chunks_rank_first`.
+# A real end-to-end version against live `db.idx.vector.queryNodes` was tried
+# here first and dropped: on a tiny (single-digit-chunk) corpus this build's
+# HNSW ANN recall is **not** a simple function of `k` — probed live
+# (`GRAPH.RO_QUERY`, `ws:probe_stage_c`/`ws:probe_stage_c2`), `k` values many
+# times the true node count still returned zero or partial rows for some
+# ranked-second clusters, so no small fixed `k`-vs-`limit*multiplier` pairing
+# reliably reproduces the under-fill/over-fetch contrast — see
+# `claude/graph-dba/falkordb-quirks.md` before relying on ANN result *counts*
+# at small scale again. `test_search_documents_excludes_a_superseded_documents_
+# chunks` above already proves the real filter end-to-end with real embeddings
+# (membership, not exact counts) — reliable because it never depends on ANN
+# recall hitting a precise row count.
+
+
 # ── §11 Workflow definitions & snapshots REST surface (M3 Slice 1) ──────────────
 
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 from conftest import TEST_EMBEDDING_DIM
 
+from falkorchat import db
 from falkorchat.repository import EmbeddingDimensionError
 
 WS = "test"
@@ -297,3 +298,69 @@ def test_search_chunks_never_returns_a_message_seed(repo):
     )
     rows = repo.search_chunks(WS, q_vec=_pad([1.0]), k=4, limit=5)
     assert rows == []
+
+
+# ── documentCurrent default-search filtering (document-ingestion2 Stage C, ────
+# AC-4, plan §3.3). Stage D (auto-supersede detection) doesn't exist yet, so
+# these use a raw fixture write to flip `currentVersion`/`documentCurrent`
+# directly — exactly the plan's own §4 Stage C done-condition ("AC-4 provable
+# with a raw test fixture that flips one document's currentVersion to false
+# directly ... before any detection code exists to produce one organically").
+
+
+def _mark_document_superseded(conn, *, document_id):
+    """Test-only raw write: flips `Document.currentVersion` false and
+    bulk-flips every one of its `Chunk`s' `documentCurrent` false — mirrors
+    exactly what `confirm_document_update` (Stage B) and
+    `create_document_with_auto_supersede` (Stage D, not built yet) both do
+    atomically in production. No `SUPERSEDES` edge/`matchId` needed."""
+    db.workspace_graph(conn, WS).query(
+        "MATCH (d:Document {documentId: $documentId}) SET d.currentVersion = false "
+        "WITH d MATCH (d)-[:HAS_CHUNK]->(c:Chunk) SET c.documentCurrent = false",
+        {"documentId": document_id},
+    )
+
+
+def test_search_chunks_excludes_chunks_of_a_superseded_document(repo, conn):
+    _seed_document(
+        repo, document_id="d1", chunks=[("c1", "about cats", _pad([1.0]))],
+    )
+    _mark_document_superseded(conn, document_id="d1")
+
+    rows = repo.search_chunks(WS, q_vec=_pad([1.0]), k=4, limit=5)
+
+    assert rows == []
+
+
+def test_search_chunks_still_returns_current_chunks_alongside_a_superseded_one(
+    repo, conn,
+):
+    _seed_document(
+        repo, document_id="old", chunks=[("c1", "old version", _pad([1.0]))],
+    )
+    _mark_document_superseded(conn, document_id="old")
+    _seed_document(
+        repo, document_id="new", chunks=[("c2", "new version", _pad([1.0]))],
+    )
+
+    rows = repo.search_chunks(WS, q_vec=_pad([1.0]), k=4, limit=5)
+
+    assert [r["chunkId"] for r in rows] == ["c2"]
+
+
+def test_get_document_still_returns_a_superseded_document_directly(repo, conn):
+    # §3.3's own note: "Only default search excludes non-current content,
+    # never direct lookup" — `get_document` is unchanged (AC-5 parity).
+    _seed_document(
+        repo, document_id="d1", chunks=[("c1", "about cats", _pad([1.0]))],
+    )
+    _mark_document_superseded(conn, document_id="d1")
+
+    doc = repo.get_document(WS, document_id="d1")
+
+    assert doc is not None
+    assert doc["text"] == "about cats"
+    [[current]] = db.workspace_graph(conn, WS).ro_query(
+        "MATCH (d:Document {documentId: 'd1'}) RETURN d.currentVersion"
+    ).result_set
+    assert current is False

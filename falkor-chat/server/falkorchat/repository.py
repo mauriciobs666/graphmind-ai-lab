@@ -1226,10 +1226,25 @@ class Repository:
         `ORDER BY score ASC` (most similar first), same convention as
         `hybrid_search`; do not re-sort. `timeout` (ms) is a per-query client
         override, same posture as `hybrid_search`'s.
+
+        **Default-search filtering (document-ingestion2 Stage C, AC-4, plan
+        §3.3):** a post-`YIELD` `WHERE seed.documentCurrent = true` excludes
+        chunks belonging to a superseded `Document` version, evaluated only
+        on the already-ANN-yielded (bounded, `k`-sized) rows — a plain
+        property-equality filter, deliberately **not** an `exists()` pattern
+        (unreliable over relationship patterns on this build, and here it
+        would just be the wrong tool for a boolean-equality check anyway —
+        `claude/graph-dba/falkordb-quirks.md`) and **not** a pre-filter (this
+        build's vector index has no pre-filter predicate support demonstrated
+        anywhere in this codebase). Because this filter can now discard
+        ANN-yielded rows before `LIMIT`, a caller that needs a full `limit`
+        worth of results after filtering must over-fetch via `k` — see
+        `services.search_documents`'s docstring for the concrete idiom.
         """
         res = self._graph(ws).ro_query(
             "CALL db.idx.vector.queryNodes('Chunk', 'embedding', $k, vecf32($qVec)) "
             "YIELD node AS seed, score "
+            "WHERE seed.documentCurrent = true "
             "RETURN seed.chunkId AS chunkId, seed.text AS text, "
             "seed.documentId AS documentId, seed.seq AS seq, score "
             "ORDER BY score ASC "
