@@ -13,7 +13,8 @@ chain hands off to `teco`.
 | Requirements interview | `tico` | — (interactive) | accepted | `opencode/docs/requirements/devops-opencode-headless.md` | — | — |
 | Implementation plan | `architect` | `ad6b25b909e4bf140` | revised, ready for review | `opencode/docs/plans/devops-opencode-headless.md` | `security-expert` review dispatched | 371,583 tokens · 101 tool uses · ~65.7 min |
 | Security review | `security-expert` | `ace5d715ef79ccdb0` | gated | `opencode/docs/reviews/devops-opencode-headless.md` | verdict: **needs changes** (1 blocker, 2 major, 2 minor) | 139,607 tokens · 37 tool uses · ~18 min |
-| Plan revision 2 (blocker fix) | `architect` | `ad6b25b909e4bf140` | dispatched | `opencode/docs/plans/devops-opencode-headless.md` | re-review by `security-expert` pending | — |
+| Plan revision 2 (blocker fix) | `architect` | `ad6b25b909e4bf140` | revised (v3), ready for re-review | `opencode/docs/plans/devops-opencode-headless.md` | re-review by `security-expert` dispatched | 314,917 tokens · 30 tool uses · ~206 min |
+| Security re-review (Pass 2) | `security-expert` | `ace5d715ef79ccdb0` | dispatched | `opencode/docs/reviews/devops-opencode-headless.md` | pending | — |
 
 ## Notes
 
@@ -58,3 +59,16 @@ chain hands off to `teco`.
   from a pre-validated slug/allow-list; no model-authored string ever reaches the permission glob)
   rather than narrowing scope to a single hardcoded environment. `tank` stays able to target any
   compose environment. Dispatching `architect` for a second plan revision.
+- **2026-09-12 — Plan revised to v3, blocker fixed architecturally.** `architect` removed every
+  raw `docker compose` glob pattern; added a repo-committed `environments.json` allow-list
+  (slug → compose file/project directory, exact-match only) plus three fixed wrapper scripts that
+  build the compose argv themselves in code — `tank`'s `permission.bash` now only allows invoking
+  those scripts by exact path, eliminating the vulnerable pattern class rather than tightening it.
+  Marker slug now the human-assigned `environments.json` key (collision requires a caught-at-review
+  authoring mistake, not a runtime hazard); added a freshness bound + provenance fields to the
+  marker; `up`/`down` now share identical wrapper discipline; `tools.write`/`.edit` set to `false`
+  entirely (eliminates the write-traversal surface rather than verifying it, flagged explicitly for
+  the re-reviewer to judge). Architect sanity-checked the new logic against a bash mock but did
+  **not** re-run the reviewer's live tear-down reproduction against the new config — explicitly
+  left for the re-review pass. Dispatching `security-expert` (same agent/thread) for Pass 2,
+  continuing the same review document per the reviews/ family convention.
