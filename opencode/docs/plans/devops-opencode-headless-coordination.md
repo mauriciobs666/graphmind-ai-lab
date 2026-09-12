@@ -2,6 +2,9 @@
 
 > **Status:** active · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-09-12
 
+**Chain complete: plan approved with suggestions, nothing blocking.** Handoff to implementation
+(needs `coder`/`tdd-engineer` — out of `tico`'s coordination scope; see Notes) is the next step.
+
 Coordinates the requirements → plan → review chain for the `tank` headless OpenCode agent. No
 unit in this chain touches source, tests, or config — the moment one does, the whole remaining
 chain hands off to `teco`.
@@ -14,7 +17,7 @@ chain hands off to `teco`.
 | Implementation plan | `architect` | `ad6b25b909e4bf140` | revised, ready for review | `opencode/docs/plans/devops-opencode-headless.md` | `security-expert` review dispatched | 371,583 tokens · 101 tool uses · ~65.7 min |
 | Security review | `security-expert` | `ace5d715ef79ccdb0` | gated | `opencode/docs/reviews/devops-opencode-headless.md` | verdict: **needs changes** (1 blocker, 2 major, 2 minor) | 139,607 tokens · 37 tool uses · ~18 min |
 | Plan revision 2 (blocker fix) | `architect` | `ad6b25b909e4bf140` | revised (v3), ready for re-review | `opencode/docs/plans/devops-opencode-headless.md` | re-review by `security-expert` dispatched | 314,917 tokens · 30 tool uses · ~206 min |
-| Security re-review (Pass 2) | `security-expert` | `ace5d715ef79ccdb0` | dispatched | `opencode/docs/reviews/devops-opencode-headless.md` | pending | — |
+| Security re-review (Pass 2) | `security-expert` | `ace5d715ef79ccdb0` | accepted | `opencode/docs/reviews/devops-opencode-headless.md` | verdict: **approve with suggestions**, no blocker/major remaining | 198,234 tokens · 14 tool uses · ~6.6 min |
 
 ## Notes
 
@@ -72,3 +75,18 @@ chain hands off to `teco`.
   **not** re-run the reviewer's live tear-down reproduction against the new config — explicitly
   left for the re-review pass. Dispatching `security-expert` (same agent/thread) for Pass 2,
   continuing the same review document per the reviews/ family convention.
+- **2026-09-12 — Pass 2 complete: approve with suggestions.** `security-expert` independently
+  rebuilt v3's permission table and wrapper-script logic, then re-ran the *exact* live reproduction
+  technique that found the original blocker (not architect's bash-only mock) — the original payload
+  now denies, and five further live attack attempts against the new wrapper-script design (unquoted
+  smuggling at the script boundary, quoted single-token smuggling, a path-traversal-shaped slug,
+  chaining, and a full up→attempted-smuggle→legitimate-teardown cycle against a real running
+  fixture) were all correctly refused, with no new bypass found. Both majors confirmed fixed by
+  construction; both minors resolved (write-traversal closed by elimination, independently
+  re-verified — no substitute write primitive exists in the bash allow-list). Both of architect's
+  open judgment calls resolved in the plan's favor: keep the now-non-load-bearing defense-in-depth
+  deny net (free, costs nothing), and treat "eliminated, not verified" as a fully closed answer.
+  Two non-blocking nits recorded for implementation time (a comment explaining the wrapper allow
+  pattern's trailing wildcard is safe; a unit test asserting `resolve_slug` is exact-key-equality,
+  never substring/prefix). Plan (v3) and the Pass 2 review both committed. **Chain complete** —
+  requirements → plan → security review, all three units accepted, nothing blocking.
