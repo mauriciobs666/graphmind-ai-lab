@@ -86,9 +86,10 @@ class FakeGraph:
 
 
 class FakeClient:
-    def __init__(self, *, graphs=(), **graph_kwargs):
+    def __init__(self, *, graphs=(), list_graphs_error=None, **graph_kwargs):
         self.calls: list[tuple] = []
         self._graphs = list(graphs)
+        self._list_graphs_error = list_graphs_error
         self.graph = FakeGraph(self.calls, **graph_kwargs)
 
     def select_graph(self, name):
@@ -97,6 +98,8 @@ class FakeClient:
 
     def list_graphs(self):
         self.calls.append(("list_graphs",))
+        if self._list_graphs_error is not None:
+            raise self._list_graphs_error
         return list(self._graphs)
 
 
@@ -221,6 +224,18 @@ def test_server_instructions_are_present_and_bounded():
         ("PROFILEDATA MATCH (n) RETURN n", "query", "PROFILEDATA MATCH (n) RETURN n"),
         # EXPLAIN( is a directive — `(` is a word boundary
         ("EXPLAIN(MATCH (n) RETURN n)", "explain", "(MATCH (n) RETURN n)"),
+        # GRAPHS directive
+        ("GRAPHS", "graphs", ""),
+        ("graphs", "graphs", ""),
+        ("  GrApHs  \n", "graphs", ""),
+        ("/* c */ GRAPHS", "graphs", ""),
+        ("// c\nGRAPHS", "graphs", ""),
+        # standalone only — real text after it is NOT the directive
+        ("GRAPHS MATCH (n) RETURN n", "query", "GRAPHS MATCH (n) RETURN n"),
+        # \b boundary decoy, same protection class as EXPLAIN_ME/PROFILER
+        ("GRAPHS_LIST", "query", "GRAPHS_LIST"),
+        # singular is deliberately NOT the directive
+        ("GRAPH", "query", "GRAPH"),
     ],
 )
 def test_split_directive_classification(cypher, kind, to_send):
@@ -717,6 +732,42 @@ def test_profile_still_refused_regardless_of_agent(fake_client):
     out = server.run_query("g", "PROFILE MATCH (n) RETURN n", "graph-dba")
     assert out == server.PROFILE_REFUSAL
     assert client.calls == []
+
+
+def test_graphs_directive_lists_loaded_graphs_sorted_and_ignores_graph_param(fake_client):
+    """New — the `GRAPHS` directive lists every graph, sorted, and never reads
+    `graph` at all (AC-1's "no deliberately-wrong graph name" guarantee,
+    verified structurally: `select_graph` is never called)."""
+    client = fake_client(graphs=["ws:acme", "cpg_falkorchat", "kaizen_team"])
+    out = server.run_query("this-value-is-ignored", "GRAPHS")
+    assert out == "graphs=3\ncpg_falkorchat\nkaizen_team\nws:acme"
+    assert client.calls == [("list_graphs",)]
+
+
+def test_graphs_directive_reports_zero_when_none_loaded(fake_client):
+    fake_client(graphs=[])
+    assert server.run_query("", "GRAPHS") == "graphs=0\n(none loaded)"
+
+
+def test_graphs_directive_is_case_insensitive_through_run_query(fake_client):
+    """One representative case through the full `run_query` path, not just
+    `split_directive`, so the integration is pinned once end-to-end, not only
+    at the classifier."""
+    client = fake_client(graphs=["b", "a"])
+    out = server.run_query("ignored", "  GrApHs  ")
+    assert out == "graphs=2\na\nb"
+    assert client.calls == [("list_graphs",)]
+
+
+def test_graphs_directive_reports_unreachable_when_list_graphs_fails(fake_client):
+    """Proves the `"graphs"` branch needs no bespoke error handling — a
+    `list_graphs()` failure propagates to the same outer `except Exception` /
+    `explain_error()` path every other failure mode already uses."""
+    from redis.exceptions import ConnectionError as RedisConnectionError
+
+    fake_client(list_graphs_error=RedisConnectionError("Error 111 connecting"))
+    out = server.run_query("", "GRAPHS")
+    assert out.startswith("FalkorDB unreachable at")
 
 
 def test_explain_still_works_on_write_cypher(fake_client):
@@ -1475,6 +1526,16 @@ def test_live_missing_graph_does_not_materialise_a_key(live_graph):
         assert f"Graph '{absent}' does not exist." in out
         assert "graph-dba agent" in out
     assert set(client.list_graphs()) == before
+
+
+@pytest.mark.live
+def test_live_graphs_directive_matches_list_graphs(live_graph):
+    client = server.get_client()
+    expected = sorted(client.list_graphs())
+    out = server.run_query("ignored", "GRAPHS")
+    lines = out.splitlines()
+    assert lines[0] == f"graphs={len(expected)}"
+    assert lines[1:] == expected
 
 
 @pytest.mark.live

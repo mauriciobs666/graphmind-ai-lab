@@ -1,5 +1,5 @@
 # Cypher MCP tool surface — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M?) · **Last updated:** 2026-09-12
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — (M?) · **Last updated:** 2026-09-12
 >
 > **Revisits:** [`cpg-query-access.md`](./cpg-query-access.md) FR-2 ("a single tool taking exactly
 > two parameters — no second tool, no per-recipe tools") and the build-vs-buy call in

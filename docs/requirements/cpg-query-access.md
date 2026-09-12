@@ -5,8 +5,11 @@
 >
 > **Note:** the "Non-CPG graphs / general agent access to FalkorDB" and "Authentication, per-user
 > grants, and read-only enforcement" lines below are widened by
-> [`generic-cypher-mcp.md`](./generic-cypher-mcp.md) FR-1 — read that document for the current
-> scope; this archived document's body is left exactly as originally written.
+> [`generic-cypher-mcp.md`](./generic-cypher-mcp.md) FR-1, and FR-2's "a single tool taking exactly
+> two parameters" is revisited — without adding a required parameter or a second tool — by
+> [`cypher-mcp-tool-surface.md`](./cypher-mcp-tool-surface.md) — read whichever document matches
+> your question for the current scope/mechanism; this archived document's body is left exactly as
+> originally written.
 
 ## Intent
 Agents that read a loaded Joern CPG in FalkorDB should be able to ask the graph a

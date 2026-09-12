@@ -1,6 +1,6 @@
 # Cypher MCP tool surface — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** C-901, C-902 (M9)
+> **Status:** archived · **Owner:** `architect` · **Tracks:** C-901, C-902 (M9)
 >
 > Design for **direct, in-tool FalkorDB graph discovery** on the `cypher` MCP server's existing
 > single tool, `mcp__cypher__query`. Requirements:

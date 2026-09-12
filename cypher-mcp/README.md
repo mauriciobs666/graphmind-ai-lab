@@ -310,8 +310,29 @@ otherwise materialise a key for a mistyped name.
 
 ### Graph discovery
 
-There is no `list_graphs` tool (FR-2: one tool). To discover graph names, either query a name that
-does not exist — the error lists every loaded graph — or use `redis-cli -p 6379 GRAPH.LIST`.
+Send exactly `GRAPHS` as the `cypher` text (case-insensitive, comment-blind, surrounding whitespace
+tolerated — the same leading-trivia scan `EXPLAIN`/`PROFILE` use) to list every graph currently
+loaded on the instance, directly — no need to mistype a graph name first, no shell command. `graph`
+plays no role for this call; pass an empty string by convention. Send exactly `GRAPHS` and nothing
+else — a trailing comment (`GRAPHS // note`) is **not** tolerated (only leading trivia is stripped)
+and is sent to FalkorDB as an ordinary, invalid query. Output:
+
+```
+graphs=3
+cpg_falkorchat
+kaizen_team
+ws:acme
+```
+
+(names sorted for a deterministic reading order — `GRAPH.LIST`'s own order is not documented as
+stable). Same blast radius as everything else this tool already exposes: the full, unfiltered
+instance-wide list (`client.list_graphs()`), identical to what a "graph not found" error already
+lists — not narrower, not broader
+([`../docs/plans/cypher-mcp-tool-surface.md`](../docs/plans/cypher-mcp-tool-surface.md) FR-3).
+Nothing loaded → `graphs=0` and `(none loaded)`.
+
+The two older paths still work, unaffected: query a name that does not exist (the error still lists
+every loaded graph), or `redis-cli -p 6379 GRAPH.LIST` directly.
 
 ### Result format and truncation
 
@@ -618,9 +639,9 @@ host counts minus that module, not a different suite.
 
 ```bash
 cypher-mcp/build.sh                                    # precondition: both targets, immediately first
-docker run --rm cypher-mcp:test python -m pytest tests -q                    # 74 passed, 7 deselected
+docker run --rm cypher-mcp:test python -m pytest tests -q                    # 116 passed, 11 deselected
 docker run --rm --add-host=host.docker.internal:host-gateway \
-  cypher-mcp:test python -m pytest tests -q -m live                          # 7 passed, 74 deselected
+  cypher-mcp:test python -m pytest tests -q -m live                          # 11 passed, 116 deselected
 redis-cli -p 6379 GRAPH.LIST                        # done-condition: no _cypher_mcp_selftest_* residue
 ```
 

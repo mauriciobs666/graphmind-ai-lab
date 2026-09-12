@@ -5,6 +5,27 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-09-12 — M9: Cypher MCP tool surface — direct in-tool graph discovery (C-901, C-902) ✅
+
+`mcp__cypher__query` gains a fourth directive, `GRAPHS` (alongside `EXPLAIN`/`PROFILE`), that lists
+every FalkorDB graph on the instance directly — no deliberately-wrong graph name, no `redis-cli`.
+No new parameter; `graph`/`cypher` stay the only two required ones. Same blast radius as what the
+"graph not found" error already leaked (`client.list_graphs()`, unfiltered). `docs/requirements/
+cpg-query-access.md` FR-2 gains a header-pointer annotation to `docs/plans/
+cypher-mcp-tool-surface.md`, alongside its existing `generic-cypher-mcp.md` FR-1 pointer.
+AC-1…AC-3 verified: offline unit suite (host venv) 125 passed/11 deselected, including the two
+frozen-shape regression pins (`test_input_schema_has_two_required_params_and_one_optional_agent`,
+`test_exactly_one_tool_named_query`) run explicitly and passing unedited; host `-m live` suite (real
+FalkorDB) 11 passed/125 deselected, including `test_live_graphs_directive_matches_list_graphs`
+(AC-2, direct comparison against `client.list_graphs()`); in-container gate rebuilt at the new
+content hash — `docker run cypher-mcp:test pytest tests -q` 116 passed/11 deselected,
+`-m live` 11 passed/116 deselected — followed by `redis-cli GRAPH.LIST`, confirming no
+`_cypher_mcp_selftest_*` residue. `cypher-mcp/README.md` and `docs/requirements/cpg-query-access.md`
+re-read after the edits and confirmed to agree (AC-3). Mutation-killed both the `\s*\Z`-anchoring
+decision (dropping the anchor made the new `"GRAPHS MATCH (n) RETURN n"` test fail as expected) and
+the `"graphs"` branch in `run_query()` (deleting it failed all 4 new offline tests), then restored
+and reconfirmed green.
+
 ## 2026-08-22 — M8: Kaizen agent/learning-note ontology — delivery & gate closure (S0…S6) ✅
 
 `:KaizenEntry`'s plain `author` string property (M5/M7) is replaced, for entries created from this

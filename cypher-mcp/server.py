@@ -35,6 +35,9 @@ short version:
   offered at all. The ``EXPLAIN`` path is preceded by a ``GRAPH.LIST`` check
   because ``GRAPH.EXPLAIN`` is not a read-only command and would otherwise
   materialise a key for a mistyped graph name.
+* **A fourth directive, ``GRAPHS``, lists every graph on the instance directly** — no ``graph``/
+  ``cypher`` round trip, no "mistype a name to trigger the error" workaround. ``graph`` plays no role
+  for this one call. See ``docs/plans/cypher-mcp-tool-surface.md``.
 * **Display-only truncation.** The full result set is materialised before
   formatting; the caps below shape the *rendering*, so the reported row count is
   exact below FalkorDB's ``RESULTSET_SIZE`` (default 10000), at or above which
@@ -129,7 +132,9 @@ TOOL_DESCRIPTION = (
     "(a CREATE map literal with a matching `author:` value), a curator MENTIONS-write, two "
     "curator edge-resolve shapes (PRODUCED/MENTIONS), or a curator full-node clear by `entryId` "
     "— every other write is rejected. Prefix "
-    "EXPLAIN for a query plan; PROFILE is not supported (it executes the query). FalkorDB "
+    "EXPLAIN for a query plan; PROFILE is not supported (it executes the query). Send exactly "
+    "GRAPHS (graph parameter ignored) to list every loaded graph directly, instead of "
+    "triggering the not-found error. FalkorDB "
     "is OpenCypher: no APOC, no GDS. CPG schema: "
     "skills/joern-cpg/references/cpg-model.md."
 )
@@ -142,7 +147,8 @@ SERVER_INSTRUCTIONS = (
     "Use it to answer call-graph, data-flow, impact-analysis and test-gap questions about a "
     "codebase without reading files, or to read/write the team's kaizen entries. Graph names are "
     "always supplied by the caller; a query against an unknown graph answers with the list of "
-    "loaded graphs. Reads need no `agent` and are unrestricted. A write additionally requires "
+    "loaded graphs. Sending exactly `GRAPHS` (graph parameter ignored) lists them directly. "
+    "Reads need no `agent` and are unrestricted. A write additionally requires "
     "`agent` (the caller's agent slug) and is authorized only in 6 shapes: any agent's own "
     "producer-write (MERGE (:Agent {agentId:...}) + CREATE (...)-[:PRODUCED]->(...:KaizenEntry "
     "{...})), the legacy author-write (a CREATE map literal with a matching `author:` value), or "
@@ -174,6 +180,17 @@ _WHITESPACE = " \t\r\n\f\v"
 #: identifiers and must classify as plain queries, while ``EXPLAIN(``,
 #: ``EXPLAIN\n`` and ``explain\tMATCH`` are directives.
 _DIRECTIVE_RE = re.compile(r"(EXPLAIN|PROFILE)\b", re.IGNORECASE)
+
+#: `GRAPHS` is a *standalone* directive, not a prefix in front of a further
+#: statement like EXPLAIN/PROFILE — there is no "rest of the query" to send
+#: anywhere. It must be the *entire* trivia-stripped input (trailing
+#: whitespace aside); anything else after it falls through to plain `"query"`
+#: classification and gets FalkorDB's own syntax error, the same fail-safe
+#: default `_scan_leading_trivia` already uses for a malformed block comment.
+#: Note this tolerates only *leading* trivia (via `_scan_leading_trivia`), not
+#: trailing: `"GRAPHS // note"` is real text after the word, so it falls
+#: through to `"query"` too — send exactly `GRAPHS`, nothing else.
+_GRAPHS_DIRECTIVE_RE = re.compile(r"GRAPHS\b\s*\Z", re.IGNORECASE)
 
 
 def _scan_leading_trivia(cypher: str) -> int:
@@ -209,7 +226,8 @@ def _scan_leading_trivia(cypher: str) -> int:
 
 
 def split_directive(cypher: str) -> tuple[str, str]:
-    """Classify a statement as ``"query"``, ``"explain"`` or ``"profile"``.
+    """Classify a statement as ``"query"``, ``"explain"``, ``"profile"`` or
+    ``"graphs"``.
 
     Returns ``(kind, cypher_to_send)``:
 
@@ -220,8 +238,14 @@ def split_directive(cypher: str) -> tuple[str, str]:
     * ``"explain"`` — the text after the keyword, left-stripped. The consumed
       leading trivia is dropped; it cannot change a plan.
     * ``"profile"`` — the empty string. Nothing is ever sent.
+    * ``"graphs"`` — the empty string. Nothing is ever sent, and `graph` is
+      never read either: this directive lists every graph on the instance,
+      which has nothing to do with any one graph's name
+      (`docs/plans/cypher-mcp-tool-surface.md`).
     """
     start = _scan_leading_trivia(cypher)
+    if _GRAPHS_DIRECTIVE_RE.match(cypher, start):
+        return "graphs", ""
     match = _DIRECTIVE_RE.match(cypher, start)
     if match is None:
         return "query", cypher
@@ -791,6 +815,18 @@ def format_plan(graph: str, plan: object) -> str:
     return f"graph={graph} · EXPLAIN (plan only — nothing was executed)\n{plan}"
 
 
+def format_graph_list(graphs: list[str]) -> str:
+    """Render the `GRAPHS` directive's result: every graph name currently
+    loaded on the instance, sorted for a deterministic reading order
+    (`GRAPH.LIST`'s own order is not documented as stable). Same blast radius
+    as `graph_not_found_message()`'s "Loaded graphs" line — both read
+    `client.list_graphs()` unfiltered (FR-3, `cypher-mcp-tool-surface.md`).
+    """
+    if not graphs:
+        return "graphs=0\n(none loaded)"
+    return "\n".join([f"graphs={len(graphs)}", *sorted(graphs)])
+
+
 #: ``QueryResult`` mutation-counter properties, verified against the pinned
 #: client's own source (``falkordb`` 1.6.2, ``falkordb/query_result.py``) —
 #: each one an ``int`` parsed from FalkorDB's stats line, 0 when nothing of
@@ -948,6 +984,16 @@ def run_query(graph: str, cypher: str, agent: str | None = None) -> str:
     """
     try:
         kind, to_send = split_directive(cypher)
+
+        if kind == "graphs":
+            # `graph` plays no role here (split_directive's docstring) — list
+            # every graph on the instance, unfiltered, the same list
+            # `graph_not_found_message()` already leaks (FR-3: identical
+            # blast radius, never narrower or broader). A connection failure
+            # here falls straight to the outer `except`, which curates it via
+            # the existing `explain_error()` unreachable-DB branch — no new
+            # error handling needed.
+            return format_graph_list(list(get_client().list_graphs()))
 
         # Refused before any server call: FalkorDB would silently ignore the
         # prefix and return results, which is a wrong answer, not an error.
