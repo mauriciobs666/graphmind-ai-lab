@@ -1,18 +1,44 @@
 # DevOps: headless, local-model OpenCode variant
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-09-02
+> **Status:** Interviewing · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-09-12
+
+## Terminology
+
+Four related ideas that this document deliberately keeps distinct:
+
+- **devops** — the role/capability itself (routine operational checks, environment management),
+  independent of how it's run. Outlives any one implementation.
+- **`claude devops`** — today's specific implementation: the interactive, Claude-Code-based agent
+  at `claude/devops/devops.md`. This is the identity the long-term direction eventually retires.
+- **`tank`** — the new, OpenCode-based implementation this requirement delivers (headless-only for
+  this version); long-term, the one identity meant to absorb `claude devops` entirely.
+- **interactive** — a human is actually present, steering turn by turn.
+- **subagent** — runs inside a live Claude Code session, dispatched by another agent, with no
+  human present. This is how `claude devops` can already run today (see Problem & current state) —
+  neither "interactive" nor "headless."
+- **headless** — no live Claude Code session at all; this version's `opencode run --agent tank`
+  invocation.
 
 ## Intent
 
-Give the `devops` role a second way to run — headless (no live Claude Code session, no human
-present) and routed to a cheaper/local model — so a routine, lower-stakes devops check can happen
-without a human opening a session, without spending frontier-model budget on work that doesn't
-need it. Both properties (headless + local-model) are wanted together, not either/or.
+Give the `devops` role a way to run headless (no live Claude Code session, no human present) and
+routed to a cheaper/local model — so a routine, lower-stakes devops check can happen without a
+human opening a session, without spending frontier-model budget on work that doesn't need it. Both
+properties (headless + local-model) are wanted together, not either/or, **for this initial
+version**.
+
+**Long-term direction (not this version's scope):** headless is a scope constraint on the *first*
+implementation, not a permanent defining trait of `tank`. The stakeholder's intent is for `tank` to
+become the **one identity** for the devops role — covering interactive and subagent use as well as
+headless — with today's `claude devops` agent eventually retired and fully absorbed into `tank`.
+This version delivers only the headless slice; interactive/subagent use by `tank`, and the actual
+retirement of `claude devops`, are out of scope here (see Out of scope) but recorded so the design
+doesn't foreclose the merge later.
 
 ## Problem & current state
 
-The `devops` agent (`claude/devops/devops.md`) today only runs interactively or as a delegated
-Claude Code subagent — always inside a live session, always against a metered cloud model. There
+The `claude devops` agent (`claude/devops/devops.md`) today only runs interactively or as a
+subagent — always inside a live Claude Code session, always against a metered cloud model. There
 is no way to get a routine check (health/hygiene, disk usage, container status, etc.) done
 without a human present, and no way to route that kind of lower-stakes, routine work away from
 frontier-model spend. OpenCode's non-interactive `opencode run --agent <name>` invocation is
@@ -35,11 +61,12 @@ is an event/content-triggered watcher, not a wall-clock scheduler, and isn't a f
 - **FR-1.** The `devops` role must be runnable headlessly, via OpenCode's non-interactive
   `opencode run` invocation — without a live Claude Code session or a human present.
 - **FR-2.** The headless run must be routed to a local model (via OpenCode's LM Studio provider
-  support) rather than the metered cloud model used by the interactive form.
-- **FR-3.** There is one canonical `devops` prompt/persona, shared by both the interactive and
-  headless forms — not two independently maintained copies.
+  support) rather than the metered cloud model used by `claude devops` today.
+- **FR-3.** There is one canonical prompt/persona for the devops role — currently the
+  `claude devops` prompt (`claude/devops/devops.md`) — shared across the interactive, subagent, and
+  headless (`tank`) forms, not independently maintained copies.
 - **FR-4.** The headless variant's OpenCode agent identifier is `tank` (stakeholder's naming
-  choice, not `devops`).
+  choice, not `claude devops`).
 - **FR-5.** The first headless check is read-only: it inspects and reports (container/service
   status, disk usage, dangling images/volumes, stale build cache, and similar hygiene signals) and
   attempts no changes on its own initiative.
@@ -52,20 +79,24 @@ is an event/content-triggered watcher, not a wall-clock scheduler, and isn't a f
   shared-state operation — a volume wipe, a FalkorDB flush, removing something it didn't start
   itself — is not covered by this carve-out and stays auto-denied and reported per FR-6/7.
 - **FR-6.** When a headless run encounters a destructive or shared-state operation (the same class
-  the interactive form approval-gates today via `guard-destructive-ops.sh`), it must refuse the
-  action automatically and report what it would have done — never attempt any form of unattended
+  `claude devops` approval-gates today via `guard-destructive-ops.sh`), it must refuse the action
+  automatically and report what it would have done — never attempt any form of unattended
   approval.
 - **FR-7.** The destructive-ops safety net is deny-by-default on ambiguity: if a command can't be
   confidently classified as safe, the headless run refuses and reports it rather than proceeding.
   This applies generally, not only to the read-only first check — a future headless task that
   isn't purely read-only inherits the same net.
 - **FR-8.** The local-model routing config is scoped to this repo (`graphmind-ai-lab`) for this
-  version, not global to every project the interactive `devops` agent reaches.
+  version, not global to every project the interactive `claude devops` agent reaches.
 - **FR-9.** The headless run is not required to write to the shared `kaizen_team` learning graph
   in this version (see Out of scope).
 
 ## Out of scope
 
+- **The actual retirement/merge of `claude devops` into `tank`.** This version delivers only the
+  headless slice. Full replacement (one identity across interactive, subagent, and headless use) is
+  the long-term direction (see Intent) but not something this version's design needs to complete —
+  only to avoid foreclosing.
 - **A wall-clock scheduler (cron, systemd timer, or similar).** This requirement delivers the
   headless + local-model *capability*; actually triggering it on a cadence is deferred until
   there's a proven check worth scheduling.
@@ -85,7 +116,7 @@ is an event/content-triggered watcher, not a wall-clock scheduler, and isn't a f
 
 - Given OpenCode is configured for this repo, when `opencode run --agent tank` is invoked with no
   live Claude Code session and no human present, then it completes and produces a health/hygiene
-  report without requiring any interactive approval.
+  report without requiring any manual approval.
 - Given the same invocation, when the local LM Studio provider is reachable, then the run uses the
   local model, not a metered cloud model.
 - Given a destructive or shared-state operation would otherwise be attempted (e.g. a volume wipe,
@@ -94,16 +125,17 @@ is an event/content-triggered watcher, not a wall-clock scheduler, and isn't a f
 - Given a command the safety net cannot confidently classify as safe, when it's encountered during
   a headless run, then the run refuses and reports it rather than proceeding.
 - Given a request to bring up a demo/dev environment, when made to a headless `tank` run, then it
-  brings the environment up without requiring interactive approval (bring-up is not
+  brings the environment up without requiring manual approval (bring-up is not
   destructive-shaped).
 - Given `tank` brought an environment up itself in a headless run, when asked to shut it down /
-  release its resources, then it does so without requiring interactive approval (the one carved-out
+  release its resources, then it does so without requiring manual approval (the one carved-out
   destructive action, FR-5b).
 - Given a request to tear down or otherwise destructively act on something `tank` did not itself
   bring up, when made to a headless `tank` run, then it refuses automatically and reports what it
   would have done, same as any other destructive op.
-- Given the `devops` prompt is later edited, when the change lands, then both the interactive and
-  headless (`tank`) forms reflect it — there is exactly one source of truth for the persona.
+- Given the `claude devops` prompt is later edited, when the change lands, then the interactive,
+  subagent, and headless (`tank`) forms all reflect it — there is exactly one source of truth for
+  the persona.
 
 ## Open questions
 
@@ -156,3 +188,37 @@ destructive/shared-state op, is unaffected and still auto-denies + reports.
 
 2026-09-02 — Stakeholder confirmed the full readback (intent, FRs, out of scope, acceptance
 criteria) with no open questions remaining. `Status` flipped to **Ready for design**.
+
+2026-09-12 — Stakeholder asked to reopen the document. No `architect` plan exists yet, so nothing
+downstream has consumed it. `Status` flipped back to **Interviewing**; awaiting the stakeholder's
+change.
+
+2026-09-12 — Stakeholder clarified intent: headless + non-interactive are scope constraints on
+this *first* version, not permanent traits of `tank`. Long-term, `tank` is meant to **replace**
+today's interactive `devops` agent, not run alongside it forever as a second mode. Intent section
+rewritten to carry this; exact shape of "replace" was an open question.
+
+2026-09-12 — "Replace" means one agent identity for both modes: `tank` eventually absorbs
+interactive use too, and the `devops` identity is retired. Not two identities coexisting
+indefinitely. Intent and Out of scope updated; the actual merge/retirement stays out of scope for
+this version, recorded only so this version's design doesn't foreclose it.
+
+2026-09-12 — No concrete trigger for moving toward the full merge — open-ended, revisit once this
+first headless/local-model slice is proven out. No further action needed on this point.
+
+2026-09-12 — Stakeholder flagged that mixing "interactive"/"headless" with "devops"/"tank" was
+becoming ambiguous, given the newly-recorded long-term merge direction. Terminology settled and a
+new **Terminology** section added: **devops** = the role/capability (outlives any one
+implementation); **`claude devops`** = today's specific interactive/subagent Claude-Code identity
+at `claude/devops/devops.md` (the one being retired); **`tank`** = the new/eventual identity;
+**interactive** = a human actually present, turn by turn; **subagent** = a live Claude Code
+session with no human present (how `claude devops` can already run today, distinct from both
+interactive and headless); **headless** = no live Claude Code session at all. Every ambiguous
+bare "devops" referring to the specific identity was rewritten to "`claude devops`" throughout
+Intent, Problem & current state, FR-3/4/8, Out of scope, and the acceptance criteria; bare
+"devops" referring to the role/capability was left as-is.
+
+2026-09-12 — Stakeholder also asked to rename "interactive approval" (in the acceptance criteria)
+to "manual approval," since it reused the word "interactive" in a different sense (a live
+permission prompt) from the identity-mode term just defined in Terminology. All three occurrences
+updated.
