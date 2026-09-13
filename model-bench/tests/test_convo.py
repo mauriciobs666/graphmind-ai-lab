@@ -18,7 +18,6 @@ from __future__ import annotations
 import dataclasses
 import json
 from collections.abc import Mapping
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, get_args
 
@@ -1813,11 +1812,13 @@ def test_drive_replays_a_failed_prior_turn_into_the_next_turns_context() -> None
 # transcript behind — which is what the `timed-out` split did, on the round after this guard
 # landed, and is the whole return on having built it early.
 #
-# THE THIRD LEG IS ABSENT ON PURPOSE, AND IT IS OWED. The S5 scorer that branches on these
-# dispositions is not built yet — §4 S2 says this row splits across stages — so only two of the
-# three declarations exist today. The absence is *blocked on unbuilt work*, not a choice, and
-# `test_the_third_leg_of_the_disposition_probe_is_still_owed_by_s5` below is the tripwire that
-# refuses to let it be forgotten: it reddens the moment a scorer package appears.
+# THE THIRD LEG landed at S5 Step 0 (`docs/plans/small-model-benchmarking-s5-spec.md` §5 Step 0,
+# plan `:5796-5799`, §4 S5 *Done when* item (4)): `modelbench/scoring/toolcalls.py`'s two scoring
+# constants, `ITERATION_SUMMARY_DISPOSITIONS`/`ITERATION_SUMMARY_EXCLUDED`, are bound here to
+# their **cross-module union** against `convo.TURN_DISPOSITIONS`, with disjointness — not against
+# the same hand-transcribed literal legs 1 and 2 use, since item (4)'s own text binds the two
+# module declarations directly to each other, which is what makes this a *cross-module* rather
+# than a *cross-declaration* check.
 
 #: Transcribed by hand from plan §3.8.4's five-row table (v1.27), one row per mechanism:
 #:
@@ -1861,18 +1862,27 @@ def test_turn_dispositions_is_an_immutable_frozenset() -> None:
     assert isinstance(convo.TURN_DISPOSITIONS, frozenset)
 
 
-def test_the_third_leg_of_the_disposition_probe_is_still_owed_by_s5() -> None:
-    """Not a test of `convo`, and deliberately so: it is the named placeholder for the leg that
-    cannot be written yet, so that its absence above cannot be read as an oversight.
+def test_turn_dispositions_scoring_branch_set_is_exactly_the_plan_table() -> None:
+    """Leg 3 of §4 S2's three-way probe (S5 spec §5 Step 0, plan `:5796-5799`): the scoring
+    vocabulary `modelbench/scoring/toolcalls.py` branches on, bound to `TURN_DISPOSITIONS` by
+    cross-module union and disjointness — **not** against `_DISPOSITIONS_PER_PLAN_3_8_4` above,
+    since item (4)'s own text binds the two module declarations to each other directly (plan
+    `:5796-5799`: "binding two independently authored declarations across two modules"), which is
+    a stronger, cross-module claim than checking each against a same-unit transcript would be.
 
-    §4 S2's probe is three-way. The third set — the dispositions S5's scorer actually branches on
-    — has no declaration to bind while `modelbench/scoring/` does not exist. When it does, this
-    test fails, and the fix is to add the third assertion against
-    `_DISPOSITIONS_PER_PLAN_3_8_4` above and delete this one. (If S5's scorer lands somewhere
-    other than that package, this tripwire will not fire and the leg is still owed — which is
-    why the reason is written out here rather than left to the assertion.)"""
-    scoring_pkg = Path(convo.__file__).parent / "scoring"
-    assert not scoring_pkg.exists(), (
-        f"{scoring_pkg} now exists: wire S5's branch set into this file as the third leg of "
-        "§4 S2's disposition probe, then delete this tripwire."
+    This duplicates the assertion `modelbench/scoring/toolcalls.py` already makes at import time
+    (S5 spec §3.4's "module-level assertion") — deliberately: a test that only imports the module
+    and trusts its own internal assertion never independently exercises the failure mode this
+    probe exists for, and a member moved out of `TURN_DISPOSITIONS`'s own reach (widened without a
+    matching scoring-side update) reddens exactly the same way here as it would if the module-level
+    assertion alone were relied on. Keeping both means a future refactor that ever removes the
+    module-level assertion (e.g. under `python -O`, which strips bare `assert` statements) still
+    has this test as a backstop.
+    """
+    from modelbench.scoring import toolcalls
+
+    assert (
+        toolcalls.ITERATION_SUMMARY_DISPOSITIONS | toolcalls.ITERATION_SUMMARY_EXCLUDED
+        == convo.TURN_DISPOSITIONS
     )
+    assert not (toolcalls.ITERATION_SUMMARY_DISPOSITIONS & toolcalls.ITERATION_SUMMARY_EXCLUDED)

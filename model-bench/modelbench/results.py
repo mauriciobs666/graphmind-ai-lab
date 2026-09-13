@@ -151,6 +151,19 @@ class TurnPositionRate:
     metric: BinaryMetric
 
 
+@dataclass(frozen=True)
+class HazardPoint:
+    """`-ml` §4.3.1 item 11's per-position hazard triple, stored as three integers per position —
+    never a rate (rule 5). `metric.successes = f_t` (failures at this position), `metric.n = r_t`
+    (risk-set size), `metric.unit = "conversation"`; `censored = c_t`, the count newly censored at
+    this exact position (not cumulative). Mirrors `TurnPositionRate`'s own shape one field
+    further (S5 spec §3.1)."""
+
+    turnIndex: int
+    metric: BinaryMetric
+    censored: int
+
+
 # --- timing --------------------------------------------------------------------------------
 # `docs/plans/small-model-benchmarking-runner-spec.md` §5, plan §4 S1 `:2985-3025`/Appendix A
 # `:7826-7828`. Shapes only here (Step 0) — the accumulation pass that builds a `LatencyBlock`
@@ -509,15 +522,40 @@ class RetrievalAggregates:
 
 
 @dataclass(frozen=True)
+class FunnelCounts:
+    """§4.3 rule 3's funnel-head, one integer per line of the illustrated table, in order. Never a
+    rate — `report.py`'s dedicated funnel renderer computes a "-> k/n" annotation for the lines
+    that have one (restraint, the (a)+(b) partition) by cross-referencing `restraint`/`funnel`,
+    never by storing a second, derivable copy here (§7 rule 4, S5 spec §3.1)."""
+
+    turnsDriven: int
+    unrunnableModelChannel: int  # D(t) in {no-response, server-rejected}
+    unrunnableToolChannel: int  # a censored-by-ToolDispatchFailed conversation count
+    turnsScoredAfterUnrunnable: int  # rule 5's disclosure line (3a-ii); 0 by construction for
+    # the tool channel (dispatch-failure note §4(b))
+    restraintTurns: int  # R(t) = 0
+    requiredCallTurns: int  # R(t) >= 1
+    nativeCallEmitted: int
+    prosePseudoCall: int
+    noAttempt: int
+    turnsWithAnyCall: int  # |E(t)| >= 1 — denominator for (c), (e), (f)
+    dispatchedCalls: int  # denominator for (d); calls, not turns
+    factBearingReturns: int  # denominator for (g)
+    unscoreableReturns: int
+
+
+@dataclass(frozen=True)
 class ToolCallAggregates:
     """No blended "tool-calling accuracy" field exists here, deliberately (§3.5, AC-1)."""
 
     kind: Literal["toolcalls"] = "toolcalls"
     cleanThroughTurn: BinaryMetric | None = None
     perTurnPosition: tuple[TurnPositionRate, ...] = ()
-    funnel: tuple[BinaryMetric, ...] = ()
+    funnel: tuple[BinaryMetric, ...] = ()  # FR-8 (a)-(g) RATE metrics only (§2.5) — unchanged type
+    funnelCounts: FunnelCounts | None = None  # the funnel-head's own structural counts
     restraint: BinaryMetric | None = None
-    hazard: tuple[BinaryMetric, ...] = ()
+    hazard: tuple[HazardPoint, ...] = ()  # CHANGED from tuple[BinaryMetric, ...] (S5 spec §2.4)
+    determinismProbe: Mapping[str, Any] | None = None  # plan `:2262-2264`'s exact shape
 
     def named_metrics(self) -> tuple[MetricValue, ...]:
         found = []
@@ -525,7 +563,9 @@ class ToolCallAggregates:
             found.append(self.cleanThroughTurn)
         if self.restraint is not None:
             found.append(self.restraint)
-        return tuple([*found, *self.funnel, *self.hazard])
+        # `hazard`/`funnelCounts`/`perTurnPosition` are all excluded — each gets its own
+        # report.py renderer rather than the generic Arms table (S5 spec §2.5).
+        return tuple([*found, *self.funnel])
 
 
 @dataclass(frozen=True)
@@ -791,8 +831,16 @@ def _metric_from_dict(d: Mapping[str, Any]) -> MetricValue:
 def _encode(value: Any) -> Any:
     if isinstance(value, (BinaryMetric, ContinuousMetric, DistributionSummary)):
         return _metric_to_dict(value)
+    if isinstance(value, HazardPoint):
+        return {
+            "turnIndex": value.turnIndex,
+            "metric": _metric_to_dict(value.metric),
+            "censored": value.censored,
+        }
     if isinstance(value, TurnPositionRate):
         return {"turnIndex": value.turnIndex, "metric": _metric_to_dict(value.metric)}
+    if isinstance(value, FunnelCounts):
+        return dict(vars(value))
     if isinstance(value, tuple):
         return [_encode(v) for v in value]
     return value
@@ -803,10 +851,22 @@ def _decode(value: Any) -> Any:
         return tuple(_decode(v) for v in value)
     if isinstance(value, dict) and "type" in value:
         return _metric_from_dict(value)
+    # `HazardPoint`'s dict carries a "censored" key `TurnPositionRate`'s never does — checked
+    # BEFORE the "turnIndex" branch below, since both dicts carry `turnIndex` (S5 spec §3.1).
+    if isinstance(value, dict) and "censored" in value:
+        return HazardPoint(
+            turnIndex=value["turnIndex"],
+            metric=_metric_from_dict(value["metric"]),
+            censored=value["censored"],
+        )
     if isinstance(value, dict) and "turnIndex" in value:
         return TurnPositionRate(
             turnIndex=value["turnIndex"], metric=_metric_from_dict(value["metric"])
         )
+    # `FunnelCounts`'s dict is distinguished by its own distinguishing key, per S5 spec §3.1 —
+    # checked last since it carries no `type`/`turnIndex`/`censored` key any other branch reads.
+    if isinstance(value, dict) and "turnsDriven" in value:
+        return FunnelCounts(**value)
     return value
 
 

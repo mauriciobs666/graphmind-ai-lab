@@ -28,7 +28,9 @@ from modelbench.results import (
     ContinuousMetric,
     DistributionSummary,
     ExtractionAggregates,
+    FunnelCounts,
     GroundingAggregates,
+    HazardPoint,
     IncompleteItemRecord,
     InvalidFingerprint,
     ItemResult,
@@ -39,6 +41,7 @@ from modelbench.results import (
     RetrievalAggregates,
     RunResult,
     ToolCallAggregates,
+    TurnPositionRate,
     _metric_from_dict,
     _metric_to_dict,
     load_history,
@@ -894,6 +897,121 @@ def test_extraction_aggregates_round_trips_lucky_pass_count(tmp_root) -> None:
     # Never folded into named_metrics() — matching malformedSpecCount/schemaViolationCount's own
     # precedent exactly.
     assert not any(getattr(m, "name", None) == "luckyPassCount" for m in restored.named_metrics())
+
+
+# --- S5 spec §3.1/§5 Step 0: `ToolCallAggregates`'s three additive extensions -------------------
+
+
+def test_tool_call_aggregates_round_trips_funnel_counts(tmp_root) -> None:
+    """`FunnelCounts` (S5 spec §2.5/§3.1) is a new, additive field on `ToolCallAggregates` —
+    every one of its thirteen fields distinct and non-zero, so a mutant that dropped or transposed
+    one would not coincidentally still match."""
+    funnel_counts = FunnelCounts(
+        turnsDriven=13,
+        unrunnableModelChannel=1,
+        unrunnableToolChannel=2,
+        turnsScoredAfterUnrunnable=3,
+        restraintTurns=4,
+        requiredCallTurns=5,
+        nativeCallEmitted=6,
+        prosePseudoCall=7,
+        noAttempt=8,
+        turnsWithAnyCall=9,
+        dispatchedCalls=10,
+        factBearingReturns=11,
+        unscoreableReturns=12,
+    )
+    aggregates = ToolCallAggregates(funnelCounts=funnel_counts)
+    store(_run("r-tool-call-funnel-counts", aggregates=aggregates), tmp_root)
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert [r.reason for r in invalid] == []
+    assert len(valid) == 1
+    restored = valid[0].aggregates
+    assert restored.funnelCounts == funnel_counts
+    # Never a rate, never reaching the generic Arms table (S5 spec §2.5).
+    assert restored.named_metrics() == ()
+
+
+def test_tool_call_aggregates_round_trips_hazard_points_with_censored_count(tmp_root) -> None:
+    """`hazard` changes type from `tuple[BinaryMetric, ...]` to `tuple[HazardPoint, ...]` (S5 spec
+    §2.4) so the censored count `c_t` has a home. `_decode` must recognise the `"censored"` key
+    BEFORE the `"turnIndex"` key both `HazardPoint` and `TurnPositionRate` dicts carry — if the
+    order were swapped, this would round-trip as a `TurnPositionRate` (silently dropping
+    `censored`) instead of a `HazardPoint`, and the dataclass-equality assertion below would catch
+    that mismatch even though no exception is raised."""
+    hazard = (
+        HazardPoint(
+            turnIndex=0,
+            metric=BinaryMetric(name="hazard", successes=1, n=12, unit="conversation"),
+            censored=0,
+        ),
+        HazardPoint(
+            turnIndex=4,
+            metric=BinaryMetric(name="hazard", successes=2, n=8, unit="conversation"),
+            censored=3,
+        ),
+    )
+    aggregates = ToolCallAggregates(hazard=hazard)
+    store(_run("r-tool-call-hazard-points", aggregates=aggregates), tmp_root)
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert [r.reason for r in invalid] == []
+    assert len(valid) == 1
+    restored = valid[0].aggregates
+    assert restored.hazard == hazard
+    # Excluded from named_metrics() — a naive successes/n reading is exactly the rate rule 5 says
+    # never to compute from these numbers directly (S5 spec §2.5).
+    assert restored.named_metrics() == ()
+
+
+def test_tool_call_aggregates_round_trips_determinism_probe(tmp_root) -> None:
+    """`determinismProbe` (S5 spec §2.4, plan `:2262-2264`'s exact shape) is a plain JSON-native
+    mapping — no special-case `_encode`/`_decode` branch, round-tripping through the same generic
+    `vars(agg).items()` dispatch every other field already uses."""
+    probe = {
+        "scriptIds": ["A-01", "B-01"],
+        "ran": True,
+        "identical": False,
+        "differingTurns": [2],
+    }
+    aggregates = ToolCallAggregates(determinismProbe=probe)
+    store(_run("r-tool-call-determinism-probe", aggregates=aggregates), tmp_root)
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert [r.reason for r in invalid] == []
+    assert len(valid) == 1
+    restored = valid[0].aggregates
+    assert restored.determinismProbe == probe
+
+
+def test_tool_call_aggregates_named_metrics_excludes_hazard_funnel_counts_and_per_turn_position(
+    tmp_root,
+) -> None:
+    """§2.5's fix: `named_metrics()` used to fold `funnel` **and** `hazard` into the generic Arms
+    table wholesale. The FR-8 rate metrics in `funnel` (a `tuple[BinaryMetric, ...]`) still belong
+    there; `hazard`, `funnelCounts`, and `perTurnPosition` must not — each gets its own `report.py`
+    renderer instead. Every field populated at once so a mutant that forgot to exclude any one of
+    them cannot hide behind the others being empty."""
+    rate_metric = BinaryMetric(name="native", successes=3, n=5, unit="turn")
+    aggregates = ToolCallAggregates(
+        funnel=(rate_metric,),
+        funnelCounts=FunnelCounts(
+            turnsDriven=1,
+            unrunnableModelChannel=0,
+            unrunnableToolChannel=0,
+            turnsScoredAfterUnrunnable=0,
+            restraintTurns=0,
+            requiredCallTurns=0,
+            nativeCallEmitted=0,
+            prosePseudoCall=0,
+            noAttempt=0,
+            turnsWithAnyCall=0,
+            dispatchedCalls=0,
+            factBearingReturns=0,
+            unscoreableReturns=0,
+        ),
+        hazard=(HazardPoint(turnIndex=0, metric=rate_metric, censored=1),),
+        perTurnPosition=(TurnPositionRate(turnIndex=0, metric=rate_metric),),
+    )
+    assert aggregates.named_metrics() == (rate_metric,)
 
 
 # --- m-7: `store()` names the reason instead of raising from pathlib ---------------------------
