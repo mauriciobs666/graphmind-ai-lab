@@ -2,6 +2,45 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-09-13 — Persona split for cross-tool sharing with OpenCode's `tank` (U2, `devops-opencode-headless-coordination.md`)
+
+- **What:** `cobb` (U2 of the `tank`-headless-agent coordination, plan
+  `opencode/docs/plans/devops-opencode-headless.md` v3 §3.1/§4 steps 1-3) split `devops.md`'s body
+  into `claude/devops/devops-persona.md` (new, no frontmatter — the canonical, runtime-agnostic
+  persona: identity, "Orient yourself" minus the Claude-specific memory-hierarchy-order
+  parenthetical, "Core expertise", all seven domain subsections, "Operating principles" minus the
+  `PreToolUse`-hook parenthetical and the "Interactive-mode commit" bullet, "How you work",
+  "Boundaries & handoffs" minus the `tico`-handoff bullet and the closing subagent line) and
+  `claude/devops/scripts/sync-persona.sh` (new, idempotent — splices `devops-persona.md` between
+  `<!-- SHARED-PERSONA:BEGIN/END -->` markers in `devops.md`, fails loudly on a missing or
+  duplicated marker). `devops.md` keeps its frontmatter unchanged; its body is now the marked
+  byte-for-byte copy plus the four dropped Claude-only pieces restated under a new "Claude Code
+  specifics" heading, then the unchanged "Learning capture" section. Net behavior for `devops`
+  itself is unchanged — this is a source-file reorganization, not a prompt-content edit (only the
+  two prose trims specified by the plan actually changed any wording, and both are restored,
+  verbatim, in `devops.md`'s Claude-only tail).
+- **Why:** FR-3 of the `tank` plan ("one canonical persona, shared mechanically") needs a
+  runtime-agnostic source file OpenCode's headless `tank` agent (built in the sequenced-after U3
+  unit, `opencode/agents/tank/`) can live-include via `{file:...}`, while `devops.md` stays the
+  literal Claude Code subagent prompt (no `@import` expansion for subagent bodies) kept in lockstep
+  by regeneration rather than a live include.
+- **Verification:** `sync-persona.sh` run twice — the first run against the hand-authored
+  `devops.md` was already a no-op diff (md5 unchanged), and a second run against its own prior
+  output was confirmed byte-identical, proving idempotency per the plan's §5 test for this piece.
+  Also exercised the three failure paths (no markers, duplicated `BEGIN`, `END` before `BEGIN`)
+  against scratch copies — all three fail loudly with a clear message and non-zero exit, none
+  touched the real files.
+- **Docs touched:** `claude/devops/{devops.md,devops-persona.md,scripts/sync-persona.sh,
+  kaizen/history.md}` · `claude/README.md` (new sentence in the kaizen-section addendum block
+  pointing at the split and the sync script). `claude/AGENTS.md`'s roster/Layout bullets and the
+  root `AGENTS.md` needed no change — `devops`'s catalog description, tools, and handoffs are
+  unchanged; only its own directory grew two files, the same class of per-agent addendum
+  `graph-dba`'s and `cobb`'s extra files already are. `claude/docs/HISTORY.md` does not exist in
+  this repo (checked: `claude/docs/` holds only `manuals/`, `plans/`, `requirements/`, `reviews/`),
+  so no module-level history entry exists to extend — this agent-folder `kaizen/history.md` entry
+  is the record.
+- **Plan items:** none opened.
+
 ## 2026-09-09 — `ops-quirks.md`: a `git worktree` does not isolate an editable install (inbound `MENTIONS` promotion, U31)
 
 - **What:** U31 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the **orphan-backlog** unit, the first shaped by *edge* rather than by producer. The 11 nodes it covers carry **0 `PRODUCED` edges** and are alive only on `MENTIONS`; every earlier unit was organised by producer, so none of them could ever have been reached. `devops` carried one of the 12 edges.
