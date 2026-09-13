@@ -254,6 +254,56 @@ class FakeRepo:
         }
         return DocumentWriteStatus(written=True, ingestor_found=True)
 
+    def create_document_with_auto_supersede(
+        self, ws, *, document_id, title, text, text_normalized_hash,
+        source_format, ingested_by, created_at, chunks, match_id,
+    ):
+        """Mirrors `create_document` above, plus the FR-2/AC-1 auto-tier: a
+        `currentVersion` document already sharing `text_normalized_hash` is
+        auto-superseded in the same call (document-ingestion2 Stage D)."""
+        self.calls.append((
+            "create_document_with_auto_supersede", ws, document_id, ingested_by,
+            text_normalized_hash, chunks, match_id,
+        ))
+        if ingested_by in self.agents:
+            kind, actor_label = "agent", "Agent"
+        elif ingested_by in self.members:
+            kind, actor_label = "document", "User"
+        else:
+            return {
+                "documentId": document_id, "chunkCount": len(chunks),
+                "autoSuperseded": False, "supersededDocumentId": None,
+                "matchId": None, "ingestorFound": False,
+            }
+        candidate_id = next(
+            (
+                doc_id for doc_id, doc in self.documents.items()
+                if doc.get("textNormalizedHash") == text_normalized_hash
+                and doc.get("currentVersion", True)
+            ),
+            None,
+        )
+        self.documents[document_id] = {
+            "documentId": document_id, "title": title, "text": text,
+            "sourceFormat": source_format, "sourceKind": kind,
+            "status": "processing", "createdAt": created_at,
+            "ingestedByKind": actor_label, "ingestedById": ingested_by,
+            "chunks": chunks, "textNormalizedHash": text_normalized_hash,
+            "currentVersion": True,
+        }
+        auto_superseded = candidate_id is not None
+        if auto_superseded:
+            self.documents[candidate_id]["currentVersion"] = False
+            self.documents[candidate_id]["supersededAt"] = created_at
+            self.documents[candidate_id]["supersededBy"] = "system"
+        return {
+            "documentId": document_id, "chunkCount": len(chunks),
+            "autoSuperseded": auto_superseded,
+            "supersededDocumentId": candidate_id,
+            "matchId": match_id if auto_superseded else None,
+            "ingestorFound": True,
+        }
+
     def get_document(self, ws, *, document_id):
         doc = self.documents.get(document_id)
         if doc is None:
@@ -818,7 +868,10 @@ def test_ingest_document_mints_id_splits_and_returns_processing_status():
 
     result = svc.ingest_document(CTX, text="hello world", title="My Doc")
 
-    assert result == {"documentId": "id1", "chunkCount": 1, "status": "processing"}
+    assert result == {
+        "documentId": "id1", "chunkCount": 1, "status": "processing",
+        "autoSuperseded": False, "supersededDocumentId": None,
+    }
     doc = repo.documents["id1"]
     assert doc["title"] == "My Doc"
     assert doc["text"] == "hello world"
@@ -855,6 +908,37 @@ def test_ingest_document_defaults_title_to_source_label_then_empty():
 
     with_neither = svc.ingest_document(CTX, text="x")
     assert repo.documents[with_neither["documentId"]]["title"] == ""
+
+
+def test_ingest_document_byte_identical_modulo_whitespace_auto_supersedes():
+    """AC-1, at the service layer: `ingest_document` itself computes
+    `update_detection.content_hash(update_detection.normalize_text(text))`
+    (document-ingestion2 Stage D, plan §3.4) — this pins that wiring
+    independent of the real Cypher (covered separately in test_repository.py
+    and the REST/MCP integration tests)."""
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    first = svc.ingest_document(CTX, text="Hello   World\nSame content.")
+    assert first["autoSuperseded"] is False
+    assert first["supersededDocumentId"] is None
+
+    second = svc.ingest_document(CTX, text="hello world\nsame content.")
+    assert second["autoSuperseded"] is True
+    assert second["supersededDocumentId"] == first["documentId"]
+
+
+def test_ingest_document_genuinely_different_content_never_auto_supersedes():
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    svc.ingest_document(CTX, text="Hello World")
+    second = svc.ingest_document(CTX, text="Something completely different")
+
+    assert second["autoSuperseded"] is False
+    assert second["supersededDocumentId"] is None
 
 
 def test_ingest_document_rejects_whitespace_only_text():

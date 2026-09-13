@@ -1711,6 +1711,200 @@ class Repository:
 
         return older + [_row_to_dict(self_res.result_set[0])] + newer
 
+    # ── §14.9 Auto-tier update detection (document-ingestion2 Stage D, FR-2/AC-1) ─
+    # Every SUPERSEDES-anchored write below follows the same unlabeled-endpoint
+    # discipline as §14.8 above (plan §3.2).
+
+    def create_document_with_auto_supersede(
+        self, ws: str, *, document_id: str, title: str, text: str,
+        text_normalized_hash: str, source_format: str, ingested_by: str,
+        created_at: int, chunks: list[dict[str, Any]], match_id: str,
+    ) -> dict[str, Any]:
+        """FR-2/AC-1 auto-tier update detection, folded into document creation
+        itself — mirrors `create_entity_with_auto_match`'s concurrency-fix
+        precedent one hop over (plan §3.4, live-verified `graph-dba`, §0): a
+        batch resubmitting the same content twice, or two concurrent
+        `ingest_document` calls for the same edited file, could otherwise each
+        run the hash-equality lookup before either sibling's `Document`
+        commits, silently defeating the auto tier's "no confirmation needed"
+        guarantee — the identical race shape `create_entity_with_auto_match`
+        was built to close, one hop over. FalkorDB/Redis serializes
+        `GRAPH.QUERY` execution, so folding the lookup + create + conditional
+        supersede into one round trip closes it by construction.
+
+        One atomic `GRAPH.QUERY`: (1) resolve `ingested_by` against `User`/
+        `Agent` (same `coalesce`-guarded `FOREACH` shape `create_document`
+        already uses — an unresolvable actor means nothing is written at all,
+        `ingestorFound=False`, mirroring `create_document`'s own contract),
+        (2) `OPTIONAL MATCH` the oldest pre-existing `currentVersion`
+        `Document` sharing `text_normalized_hash` — binds strictly before the
+        new `Document`'s `CREATE`, so the new document can never appear as its
+        own candidate (same live-verified ordering guarantee as the entity
+        precedent), (3) `CREATE` the new `Document` + `Chunk`s, guarded on
+        actor validity.
+
+        **Then a re-`MATCH` of the just-created document by its own unique
+        `documentId`, before the two live-verified `FOREACH` blocks** (plan
+        §0/§3.4 — not itself part of the live-verified shape, but a necessary
+        elaboration of it): a node `CREATE`d *inside* a `FOREACH` is not
+        referenceable outside that `FOREACH` — Cypher's own scoping rule, not
+        a FalkorDB quirk — so this is the only way to hold `d` for the steps
+        below. A cheap indexed lookup (`documentId` carries a `UNIQUE`
+        constraint), not a scan.
+
+        **Two separate `FOREACH`-guarded blocks sharing one `WITH`** (the
+        exact shape `graph-dba` live-verified, plan §0 — not one `FOREACH`
+        mixing `SET`+`CREATE`): block one flips the candidate's
+        `currentVersion` to `false` + stamps `supersededAt`/`supersededBy`;
+        its `Chunk`s are bulk-flipped in between via their own
+        `OPTIONAL MATCH`+`collect`+`FOREACH` step (a `FOREACH` body cannot
+        itself contain a `MATCH`, so this cannot be folded into either
+        guarded block — mirrors `confirm_document_update`'s own chunk-bulk-
+        flip shape verbatim); block two `CREATE`s the `SUPERSEDES{
+        status:'confirmed', decidedBy:'system', confidence:1.0}` edge
+        new -> old. Every conditional step is guarded on `doSupersede`
+        (`ingestor found AND a candidate exists`), not on `candidate IS NOT
+        NULL` alone — an unresolvable actor must leave every existing
+        document untouched, even in the vanishingly rare case a hash-
+        colliding candidate also exists.
+
+        Returns `{documentId, chunkCount, autoSuperseded, supersededDocumentId,
+        matchId, ingestorFound}`. `ingestorFound=False` means nothing was
+        written at all (the caller raises `UnknownActorError`, mirroring
+        `create_document`'s own `ingestor_found` contract).
+        `supersededDocumentId`/`matchId` are `None` when `autoSuperseded` is
+        `False`. `chunkCount` is computed app-side from `len(chunks)` — no
+        extra aggregation needed in the query.
+        """
+        res = self._graph(ws).query(
+            "OPTIONAL MATCH (u:User  {userId:  $ingestedBy}) "
+            "OPTIONAL MATCH (a:Agent {agentId: $ingestedBy}) "
+            "WITH u, a, coalesce(u, a) AS ingestor, (coalesce(u, a) IS NOT NULL) AS ok "
+            "OPTIONAL MATCH (candidate:Document {"
+            "  textNormalizedHash: $textNormalizedHash, currentVersion: true"
+            "}) "
+            "WITH u, a, ingestor, ok, candidate "
+            "ORDER BY candidate.createdAt ASC "
+            "LIMIT 1 "
+            "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
+            "  CREATE (d:Document {"
+            "    documentId: $documentId, title: $title, text: $text, "
+            "    sourceFormat: $sourceFormat, "
+            "    sourceKind: CASE WHEN u IS NOT NULL THEN 'document' ELSE 'agent' END, "
+            "    status: 'processing', pendingJobs: 0, createdAt: $createdAt, "
+            "    currentVersion: true, textNormalizedHash: $textNormalizedHash"
+            "  }) "
+            "  CREATE (d)-[:INGESTED_BY]->(ingestor) "
+            "  FOREACH (ch IN $chunks | "
+            "    CREATE (d)-[:HAS_CHUNK]->(:Chunk {"
+            "      chunkId: ch.chunkId, text: ch.text, seq: ch.seq, documentId: $documentId, "
+            "      documentCurrent: true"
+            "    })"
+            "  )"
+            ") "
+            "WITH ok, candidate "
+            "OPTIONAL MATCH (d:Document {documentId: $documentId}) "
+            "WITH ok, d, candidate, (ok AND candidate IS NOT NULL) AS doSupersede "
+            "FOREACH (_ IN CASE WHEN doSupersede THEN [1] ELSE [] END | "
+            "  SET candidate.currentVersion = false, candidate.supersededAt = $createdAt, "
+            "      candidate.supersededBy = 'system' "
+            ") "
+            "WITH ok, d, candidate, doSupersede "
+            "OPTIONAL MATCH (candidate)-[:HAS_CHUNK]->(c:Chunk) "
+            "WITH ok, d, candidate, doSupersede, collect(c) AS candidateChunks "
+            "FOREACH (ch IN CASE WHEN doSupersede THEN candidateChunks ELSE [] END | "
+            "  SET ch.documentCurrent = false"
+            ") "
+            "WITH ok, d, candidate, doSupersede "
+            "FOREACH (_ IN CASE WHEN doSupersede THEN [1] ELSE [] END | "
+            "  CREATE (d)-[:SUPERSEDES {"
+            "    matchId: $matchId, status: 'confirmed', confidence: 1.0, "
+            "    technique: 'exact_normalized_text_hash', createdAt: $createdAt, "
+            "    decidedAt: $createdAt, decidedBy: 'system', "
+            "    resuggestCount: 0, lastResuggestedAt: null"
+            "  }]->(candidate) "
+            ") "
+            "RETURN ok AS ingestorFound, d.documentId AS documentId, "
+            "       doSupersede AS autoSuperseded, "
+            "       CASE WHEN doSupersede THEN candidate.documentId ELSE null END "
+            "         AS supersededDocumentId, "
+            "       CASE WHEN doSupersede THEN $matchId ELSE null END AS matchId",
+            {
+                "documentId": document_id, "title": title, "text": text,
+                "textNormalizedHash": text_normalized_hash,
+                "sourceFormat": source_format, "ingestedBy": ingested_by,
+                "createdAt": created_at, "chunks": chunks, "matchId": match_id,
+            },
+        )
+        row = res.result_set[0]
+        return {
+            "documentId": row[1], "chunkCount": len(chunks),
+            "autoSuperseded": bool(row[2]), "supersededDocumentId": row[3],
+            "matchId": row[4], "ingestorFound": bool(row[0]),
+        }
+
+    def find_update_shortlist(
+        self, ws: str, *, bands: list[str], title: str, limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Suggested-tier candidate generation (plan §3.4/§4 Stage D, ML note
+        §4.1) — two unioned, de-duplicated signals, both scoped to
+        `currentVersion` documents only (never actor-scoped — the ML note's
+        own "never miss the cross-actor-edit case" instruction, §4.1):
+
+        1. An index-anchored `OR` across the `b` LSH band-equality predicates
+           (`WHERE d.lshBand0 = $band0 OR d.lshBand1 = $band1 OR ...`) —
+           **live-verified** (plan §0 second `graph-dba` pass) as a single
+           `Node By Index Scan`, no label scan, confirmed structurally
+           distinct from the general "`OR`-as-scan-anchor" quirk
+           `falkor-chat/AGENTS.md` already names (that one is the unrelated
+           single-property `$param IS NULL OR prop = $param` optional-filter
+           idiom).
+        2. A separate title-fuzzy full-text lookup (RediSearch on
+           `Document.title`) — skipped entirely when `title` is empty (an
+           empty-string RediSearch fulltext query is a caller error, not "no
+           candidates," same defensive posture `fusion._fuzzy_query` already
+           uses for entity names). One `%token%` fuzzy term per title word,
+           built the same way `fusion._fuzzy_query` builds one for entity
+           names — title is short (`MAX_NAME_LEN=200`), so this stays cheap.
+
+        Unioned + de-duplicated by `documentId` in Python (a document
+        matching both signals is returned once). Returns `{documentId, title,
+        text}` rows — `text` is needed by the caller
+        (`background._safe_detect_update`) to compute the precise Jaccard
+        ratio against this (small, bounded) shortlist; the LSH bands only
+        ever narrow candidates, never substitute for the exact metric (plan
+        §3.4 step 2).
+        """
+        params: dict[str, Any] = {f"band{i}": band for i, band in enumerate(bands)}
+        params["limit"] = limit
+        where_clause = " OR ".join(f"d.lshBand{i} = $band{i}" for i in range(len(bands)))
+        band_res = self._graph(ws).ro_query(
+            f"MATCH (d:Document {{currentVersion: true}}) "
+            f"WHERE {where_clause} "
+            "RETURN d.documentId AS documentId, d.title AS title, d.text AS text "
+            "LIMIT $limit",
+            params,
+        )
+        candidates: dict[str, dict[str, Any]] = {
+            row[0]: {"documentId": row[0], "title": row[1], "text": row[2]}
+            for row in band_res.result_set
+        }
+        if title:
+            fuzzy_query = " ".join(f"%{tok}%" for tok in title.split())
+            title_res = self._graph(ws).ro_query(
+                "CALL db.idx.fulltext.queryNodes('Document', $fuzzyQuery) "
+                "YIELD node AS d "
+                "WHERE d.currentVersion = true "
+                "RETURN d.documentId AS documentId, d.title AS title, d.text AS text "
+                "LIMIT $limit",
+                {"fuzzyQuery": fuzzy_query, "limit": limit},
+            )
+            for row in title_res.result_set:
+                candidates.setdefault(
+                    row[0], {"documentId": row[0], "title": row[1], "text": row[2]}
+                )
+        return list(candidates.values())
+
     # ── §14.5 Entities & RELATES_TO (K-050 M5 Stage 3, FR-7a) ─────────────────────
 
     def create_entity(

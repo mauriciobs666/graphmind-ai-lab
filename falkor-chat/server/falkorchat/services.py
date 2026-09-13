@@ -22,7 +22,7 @@ from typing import Any
 
 from redis.exceptions import ResponseError
 
-from . import chunking, config, extraction, pricing, proof_defs
+from . import chunking, config, extraction, pricing, proof_defs, update_detection
 from .config import CallContext
 from .guards import CMP_KINDS, WorkflowConfigError, validate_cmp
 from .modelconfig import ModelConfigError, ModelResolutionError
@@ -1150,6 +1150,25 @@ class Services:
         `Document.title` has no other natural default. `Document.status`
         starts `'processing'`; nothing in this stage flips it to `'ready'`
         (that's a later stage's background pipeline, plan §3.6).
+
+        **FR-2/AC-1 auto-tier update detection (document-ingestion2 Stage D,
+        plan §3.4):** computes `text_normalized_hash =
+        update_detection.content_hash(update_detection.normalize_text(text))`
+        app-side (mirrors how `nameNormalized` is computed app-side by the
+        caller, not inside `repository.py`) and writes the document via
+        `repository.create_document_with_auto_supersede` — the atomic call
+        that also resolves the exact-identity auto tier and, when a
+        `currentVersion` document shares the same hash, auto-supersedes it
+        in the same round trip (`decidedBy='system'`, no confirmation
+        needed). The receipt is extended with `autoSuperseded`/
+        `supersededDocumentId` so a caller sees immediately, in the same
+        response, when their ingest just superseded something. The
+        suggested tier (FR-2/AC-2) is **not** triggered here — it is a
+        background job (`background._safe_detect_update`) the transport
+        layer (`api.py`/`mcp.py`) schedules only when `autoSuperseded` is
+        `False`, alongside the existing per-chunk embed/extract scheduling
+        (plan §3.4's "not touched by this job" scope note — detection has no
+        place on this synchronous write path).
         """
         if not text.strip():
             raise EmptyDocumentError("document text must not be empty or whitespace-only")
@@ -1165,16 +1184,22 @@ class Services:
             {"chunkId": self._id(), "text": chunk_text, "seq": seq}
             for seq, chunk_text in enumerate(chunk_texts)
         ]
-        status = self._repo.create_document(
-            ctx.ws, document_id=document_id, title=title or source_label or "",
-            text=text, source_format=source_format, ingested_by=ctx.actor,
-            created_at=now, chunks=chunks,
+        text_normalized_hash = update_detection.content_hash(
+            update_detection.normalize_text(text)
         )
-        if not status.ingestor_found:
+        result = self._repo.create_document_with_auto_supersede(
+            ctx.ws, document_id=document_id, title=title or source_label or "",
+            text=text, text_normalized_hash=text_normalized_hash,
+            source_format=source_format, ingested_by=ctx.actor,
+            created_at=now, chunks=chunks, match_id=self._id(),
+        )
+        if not result["ingestorFound"]:
             raise UnknownActorError(ctx.actor)
         return {
             "documentId": document_id, "chunkCount": len(chunks),
             "status": "processing",
+            "autoSuperseded": result["autoSuperseded"],
+            "supersededDocumentId": result["supersededDocumentId"],
         }
 
     def ingest_documents(

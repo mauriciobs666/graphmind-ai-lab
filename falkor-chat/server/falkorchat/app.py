@@ -345,6 +345,19 @@ def create_app(
             # the first caller.
         )
 
+    # document-ingestion2 Stage D: `_safe_detect_update` needs only plain
+    # repository methods (no LLM/embedding), so it reuses whichever of
+    # `embed_worker`/`ingestion_pipeline` is wired — both are constructed
+    # against the SAME `Repository` instance in production (`_build_default_
+    # app`'s own docstring example) — rather than adding a third top-level
+    # `repo=` parameter here. Mirrors `background._schedule_chunk_
+    # processing`'s own `getattr(..., "repo", None)` repo-sourcing idiom
+    # exactly. `None` when neither is wired (or a test fake carries no
+    # `.repo`) — `_schedule_update_detection` already no-ops on that.
+    repo_for_detection = getattr(embed_worker, "repo", None) or getattr(
+        ingestion_pipeline, "repo", None
+    )
+
     if mount_mcp:
         mcp_mod.configure(
             services,
@@ -353,6 +366,7 @@ def create_app(
             embed_worker=embed_worker,
             trigger=trigger,
             ingestion_pipeline=ingestion_pipeline,
+            repo=repo_for_detection,
         )
         mcp_app = mcp_mod.mcp.streamable_http_app()
         # Forward the MCP app's lifespan or the session manager never inits
@@ -430,6 +444,7 @@ def create_app(
             api.build_router(
                 services, responder=responder, embed_worker=embed_worker,
                 trigger=trigger, ingestion_pipeline=ingestion_pipeline,
+                repo=repo_for_detection,
             )
         )
     else:

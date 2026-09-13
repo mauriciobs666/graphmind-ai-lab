@@ -1466,6 +1466,358 @@ def test_get_document_history_single_version_with_no_supersession(repo):
     assert [r["documentId"] for r in rows] == ["d1"]
 
 
+# ── §14.9 Auto-tier update detection (document-ingestion2 Stage D, FR-2/AC-1) ──
+
+
+def _auto_supersede(
+    repo, *, document_id, text_normalized_hash, match_id, created_at=100,
+    ingested_by="u1", title="t", text="x", chunks=None,
+):
+    return repo.create_document_with_auto_supersede(
+        "test", document_id=document_id, title=title, text=text,
+        text_normalized_hash=text_normalized_hash, source_format="text",
+        ingested_by=ingested_by, created_at=created_at,
+        chunks=chunks if chunks is not None else [
+            {"chunkId": f"{document_id}-c0", "text": text, "seq": 0}
+        ],
+        match_id=match_id,
+    )
+
+
+def test_create_document_with_auto_supersede_no_candidate_writes_plain_document(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+
+    result = _auto_supersede(
+        repo, document_id="d1", text_normalized_hash="hash-a", match_id="m1",
+    )
+
+    assert result["ingestorFound"] is True
+    assert result["autoSuperseded"] is False
+    assert result["supersededDocumentId"] is None
+    assert result["matchId"] is None
+    assert result["documentId"] == "d1"
+    assert result["chunkCount"] == 1
+    doc = repo.get_document("test", document_id="d1")
+    assert doc["text"] == "x"
+    assert doc["title"] == "t"
+
+
+def test_create_document_with_auto_supersede_unknown_actor_nothing_written(repo):
+    result = _auto_supersede(
+        repo, document_id="d1", text_normalized_hash="hash-a", match_id="m1",
+        ingested_by="ghost",
+    )
+
+    assert result["ingestorFound"] is False
+    assert result["autoSuperseded"] is False
+    assert repo.get_document("test", document_id="d1") is None
+
+
+def test_create_document_with_auto_supersede_unknown_actor_leaves_hash_colliding_candidate_untouched(
+    repo, conn,
+):
+    """The compound edge case the guard must get right: an unresolvable
+    actor must leave EVERY existing document untouched, even in the
+    vanishingly rare case a hash-colliding candidate also exists — a
+    subtly-wrong implementation that guards the supersede purely on
+    `candidate IS NOT NULL` (dropping the `ok AND` half) would still pass
+    every other test in this file, since none of them combine an unknown
+    actor with a real candidate."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _auto_supersede(
+        repo, document_id="d1", text_normalized_hash="hash-a", match_id="m1",
+        created_at=100,
+    )
+
+    result = _auto_supersede(
+        repo, document_id="d2", text_normalized_hash="hash-a", match_id="m2",
+        created_at=200, ingested_by="ghost",
+    )
+
+    assert result["ingestorFound"] is False
+    assert result["autoSuperseded"] is False
+    assert repo.get_document("test", document_id="d2") is None  # nothing created
+    [[d1_current, d1_superseded_at]] = _probe(
+        conn,
+        "MATCH (d:Document {documentId:'d1'}) "
+        "RETURN d.currentVersion, d.supersededAt",
+    )
+    assert d1_current is True  # d1 must stay untouched
+    assert d1_superseded_at is None
+    [[edge_count]] = _probe(conn, "MATCH ()-[r:SUPERSEDES]->() RETURN count(r)")
+    assert edge_count == 0
+
+
+def test_create_document_with_auto_supersede_matching_hash_auto_supersedes(repo, conn):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _auto_supersede(
+        repo, document_id="d1", text_normalized_hash="hash-a", match_id="m1",
+        created_at=100,
+    )
+
+    result = _auto_supersede(
+        repo, document_id="d2", text_normalized_hash="hash-a", match_id="m2",
+        created_at=200,
+    )
+
+    assert result["autoSuperseded"] is True
+    assert result["supersededDocumentId"] == "d1"
+    assert result["matchId"] == "m2"
+    rows = _probe(
+        conn,
+        "MATCH (:Document{documentId:'d2'})-[r:SUPERSEDES {matchId:'m2'}]->"
+        "(:Document{documentId:'d1'}) "
+        "RETURN r.status, r.confidence, r.technique, r.decidedBy, r.decidedAt",
+    )
+    assert rows == [["confirmed", 1.0, "exact_normalized_text_hash", "system", 200]]
+
+
+def test_create_document_with_auto_supersede_flips_old_document_and_its_chunks(repo, conn):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _auto_supersede(
+        repo, document_id="d1", text_normalized_hash="hash-a", match_id="m1",
+        created_at=100,
+    )
+
+    _auto_supersede(
+        repo, document_id="d2", text_normalized_hash="hash-a", match_id="m2",
+        created_at=200,
+    )
+
+    [[old_current, superseded_at, superseded_by]] = _probe(
+        conn,
+        "MATCH (d:Document {documentId:'d1'}) "
+        "RETURN d.currentVersion, d.supersededAt, d.supersededBy",
+    )
+    assert old_current is False
+    assert superseded_at == 200
+    assert superseded_by == "system"
+    [[chunk_current]] = _probe(
+        conn, "MATCH (c:Chunk {chunkId:'d1-c0'}) RETURN c.documentCurrent"
+    )
+    assert chunk_current is False
+    [[new_current]] = _probe(
+        conn, "MATCH (d:Document {documentId:'d2'}) RETURN d.currentVersion"
+    )
+    assert new_current is True
+
+
+def test_create_document_with_auto_supersede_different_hash_no_supersede(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _auto_supersede(
+        repo, document_id="d1", text_normalized_hash="hash-a", match_id="m1",
+    )
+
+    result = _auto_supersede(
+        repo, document_id="d2", text_normalized_hash="hash-b", match_id="m2",
+    )
+
+    assert result["autoSuperseded"] is False
+    assert result["supersededDocumentId"] is None
+    assert repo.get_document("test", document_id="d1")["status"] == "processing"
+    assert repo.get_document("test", document_id="d1")["title"] == "t"  # untouched
+
+
+def test_create_document_with_auto_supersede_only_matches_currentVersion_candidates(
+    repo, conn,
+):
+    """A candidate that's already been superseded (currentVersion=false)
+    must never be re-matched — ML note §4.1's "never compare against an
+    already-superseded document" instruction, applied to the auto tier
+    itself, not just suggested-tier candidate generation."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _auto_supersede(
+        repo, document_id="d1", text_normalized_hash="hash-a", match_id="m1",
+        created_at=100,
+    )
+    _auto_supersede(
+        repo, document_id="d2", text_normalized_hash="hash-a", match_id="m2",
+        created_at=200,
+    )  # d1 is now superseded (currentVersion=false)
+
+    result = _auto_supersede(
+        repo, document_id="d3", text_normalized_hash="hash-a", match_id="m3",
+        created_at=300,
+    )
+
+    assert result["autoSuperseded"] is True
+    assert result["supersededDocumentId"] == "d2"  # the current one, not d1
+
+
+def test_create_document_with_auto_supersede_picks_oldest_candidate_on_ties(repo):
+    """Mirrors `create_entity_with_auto_match`'s own tie-break test — if more
+    than one currentVersion document somehow shares a hash, the oldest wins,
+    not creation order."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    # Both start as independent, unsuperseded documents with the SAME hash —
+    # an edge case (duplicate ingests before either was ever compared), not
+    # reachable through the atomic write's own normal one-candidate-at-a-time
+    # operation, but the ORDER BY tie-break must still behave predictably.
+    result_a = _auto_supersede(
+        repo, document_id="d1", text_normalized_hash="hash-a", match_id="m1",
+        created_at=300,
+    )
+    assert result_a["autoSuperseded"] is False
+
+    result_c = _auto_supersede(
+        repo, document_id="d3", text_normalized_hash="hash-a", match_id="m3",
+        created_at=500,
+    )
+    assert result_c["autoSuperseded"] is True
+    assert result_c["supersededDocumentId"] == "d1"
+
+
+def test_create_document_with_auto_supersede_concurrent_calls_produce_exactly_one_edge(
+    repo, conn,
+):
+    """The plan-gate concurrency regression (plan §0/§5) — two near-
+    simultaneous `create_document_with_auto_supersede` calls sharing the
+    same `textNormalizedHash`, on separate connections/threads, must produce
+    exactly one confirmed `SUPERSEDES` edge — never zero (both calls missing
+    each other's not-yet-committed sibling) and never duplicated. Mirrors
+    `test_create_entity_with_auto_match_concurrent_calls_produce_exactly_one_edge`
+    exactly."""
+    import threading
+
+    from falkorchat import db
+
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    barrier = threading.Barrier(2)
+    errors: list[Exception] = []
+
+    def _create(document_id, created_at, match_id):
+        try:
+            barrier.wait(timeout=5)  # force both threads to fire together
+            thread_repo = Repository(db.connect())
+            thread_repo.create_document_with_auto_supersede(
+                "test", document_id=document_id, title="t", text="same content",
+                text_normalized_hash="hash-race", source_format="text",
+                ingested_by="u1", created_at=created_at,
+                chunks=[{"chunkId": f"{document_id}-c0", "text": "same content", "seq": 0}],
+                match_id=match_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - surfaced via `errors` below
+            errors.append(exc)
+
+    t1 = threading.Thread(target=_create, args=("d1", 100, "m1"))
+    t2 = threading.Thread(target=_create, args=("d2", 200, "m2"))
+    t1.start()
+    t2.start()
+    t1.join(timeout=10)
+    t2.join(timeout=10)
+
+    assert errors == []
+    [[doc_count]] = _probe(
+        conn, "MATCH (d:Document {textNormalizedHash:'hash-race'}) RETURN count(d)"
+    )
+    assert doc_count == 2
+    [[edge_count]] = _probe(
+        conn, "MATCH ()-[r:SUPERSEDES {status:'confirmed'}]->() RETURN count(r)",
+    )
+    assert edge_count == 1  # never zero (the race), never duplicated
+
+
+def _document_with_lsh(
+    repo, *, document_id, text, title="", created_at=100, ingested_by="u1",
+):
+    """Seed a document via `create_document_with_auto_supersede` (a fresh
+    hash each time, since `find_update_shortlist` tests want independent
+    documents, not auto-superseding siblings), then stamp its LSH bands the
+    way `background._safe_detect_update` would (computed app-side off
+    `update_detection`, written directly here since `create_document_with_
+    auto_supersede` itself has no LSH-band-writing responsibility — that's
+    a suggested-tier concern, entirely orthogonal to the auto tier's atomic
+    write)."""
+    from falkorchat import update_detection as ud
+
+    result = repo.create_document_with_auto_supersede(
+        "test", document_id=document_id, title=title, text=text,
+        text_normalized_hash=f"hash-{document_id}", source_format="text",
+        ingested_by=ingested_by, created_at=created_at,
+        chunks=[{"chunkId": f"{document_id}-c0", "text": text, "seq": 0}],
+        match_id=f"m-{document_id}",
+    )
+    bands = ud.lsh_bands(ud.minhash_signature(ud.shingles(ud.normalize_text(text))))
+    set_clause = ", ".join(f"d.lshBand{i} = $band{i}" for i in range(len(bands)))
+    params = {f"band{i}": b for i, b in enumerate(bands)}
+    params["documentId"] = document_id
+    repo._graph("test").query(
+        f"MATCH (d:Document {{documentId: $documentId}}) SET {set_clause}", params,
+    )
+    return result, bands
+
+
+def test_find_update_shortlist_finds_a_band_matching_candidate(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    base_text = " ".join(f"word{i}" for i in range(100))
+    _document_with_lsh(repo, document_id="d1", text=base_text)
+    # A near-duplicate edit (one sentence appended) — should collide on at
+    # least one LSH band with d1.
+    from falkorchat import update_detection as ud
+
+    edited_text = base_text + " one small addition at the end"
+    edited_signature = ud.minhash_signature(ud.shingles(ud.normalize_text(edited_text)))
+    edited_bands = ud.lsh_bands(edited_signature)
+
+    candidates = repo.find_update_shortlist("test", bands=edited_bands, title="")
+
+    assert any(c["documentId"] == "d1" for c in candidates)
+    d1 = next(c for c in candidates if c["documentId"] == "d1")
+    assert d1["text"] == base_text
+
+
+def test_find_update_shortlist_finds_a_title_fuzzy_candidate_even_with_no_band_match(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _document_with_lsh(
+        repo, document_id="d1", text="completely unrelated filler content here",
+        title="Quarterly Report",
+    )
+
+    # Deliberately unrelated LSH bands (as if computed from very different
+    # text) but a fuzzy-matching title.
+    candidates = repo.find_update_shortlist(
+        "test", bands=["zzzzzzzzzzzzzzzz"] * 8, title="Quarterly Report",
+    )
+
+    assert any(c["documentId"] == "d1" for c in candidates)
+
+
+def test_find_update_shortlist_excludes_noncurrent_documents(repo, conn):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _, bands = _document_with_lsh(repo, document_id="d1", text="some content here")
+    # Supersede d1 so it's no longer currentVersion.
+    repo._graph("test").query(
+        "MATCH (d:Document {documentId:'d1'}) SET d.currentVersion = false"
+    )
+
+    candidates = repo.find_update_shortlist("test", bands=bands, title="")
+
+    assert all(c["documentId"] != "d1" for c in candidates)
+
+
+def test_find_update_shortlist_empty_title_skips_title_lookup(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _document_with_lsh(repo, document_id="d1", text="alpha beta gamma", title="")
+
+    # Bands that will not match d1's real bands — with an empty title, no
+    # fuzzy fallback should surface it either.
+    candidates = repo.find_update_shortlist(
+        "test", bands=["zzzzzzzzzzzzzzzz"] * 8, title="",
+    )
+
+    assert candidates == []
+
+
+def test_find_update_shortlist_deduplicates_a_document_matching_both_signals(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    text = " ".join(f"word{i}" for i in range(100))
+    _, bands = _document_with_lsh(repo, document_id="d1", text=text, title="My Title")
+
+    candidates = repo.find_update_shortlist("test", bands=bands, title="My Title")
+
+    assert [c["documentId"] for c in candidates].count("d1") == 1
+
+
 # ── §14.5 Entities & RELATES_TO (K-050 M5 Stage 3) ────────────────────────────
 
 

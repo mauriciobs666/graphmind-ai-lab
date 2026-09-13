@@ -990,6 +990,87 @@ def test_ingest_document_background_completion_reaches_ready(wired_real_ingestio
     assert doc["status"] == "ready"
 
 
+# ── document-ingestion2 Stage D (FR-2/AC-1/AC-2) — update detection ─────────
+
+
+def test_ingest_document_byte_identical_modulo_whitespace_auto_supersedes(
+    wired_real_ingestion,
+):
+    """AC-1, provable synchronously: two ingests of byte-identical-modulo-
+    whitespace content auto-supersede, no confirmation needed, in the SAME
+    response that returns the second ingest's receipt — no background job
+    involved at all for the auto tier."""
+    client, _repo = wired_real_ingestion
+
+    first = client.post(
+        "/documents", json={"text": "Hello   World\nThis is the content.", "title": "Doc"}
+    )
+    assert first.status_code == 201
+    old_id = first.json()["documentId"]
+
+    second = client.post(
+        "/documents",
+        json={"text": "hello world\nthis is the content.", "title": "Doc v2"},
+    )
+    assert second.status_code == 201
+    body = second.json()
+    assert body["autoSuperseded"] is True
+    assert body["supersededDocumentId"] == old_id
+
+    # the old document still exists (retained, not destroyed — FR-1) but is
+    # no longer 'current' — excluded from the default (current_only=True) list.
+    current_ids = [d["documentId"] for d in client.get("/documents").json()]
+    assert old_id not in current_ids
+    assert body["documentId"] in current_ids
+    # direct-by-id lookup is unaffected (AC-5's own posture — only default
+    # search excludes non-current content, never direct lookup)
+    assert client.get(f"/documents/{old_id}").status_code == 200
+
+    # the SUPERSEDES edge itself is discoverable/audited
+    updates = client.get("/document-updates").json()
+    match = next(u for u in updates if u["documentB"] == old_id)
+    assert match["status"] == "confirmed"
+    assert match["confidence"] == 1.0
+    assert match["technique"] == "exact_normalized_text_hash"
+
+
+def test_ingest_document_plausible_edit_produces_pending_suggestion_via_background_job(
+    wired_real_ingestion,
+):
+    """AC-2, provable once the background job runs (synchronous here — REST
+    `BackgroundTasks` already run before `TestClient` returns, per this
+    file's own `wired`/`_poll_document_until_terminal` docstrings): a
+    plausible-but-not-identical edit produces a pending `SUPERSEDES`
+    suggestion; the old document stays `currentVersion` and searchable."""
+    client, _repo = wired_real_ingestion
+    base_text = " ".join(f"paragraph{i} about the quarterly report" for i in range(60))
+
+    first = client.post("/documents", json={"text": base_text, "title": "Report"})
+    assert first.status_code == 201
+    old_id = first.json()["documentId"]
+
+    edited_text = base_text + " with one new closing sentence added at the very end"
+    second = client.post("/documents", json={"text": edited_text, "title": "Report"})
+    assert second.status_code == 201
+    body = second.json()
+    assert body["autoSuperseded"] is False  # not byte-identical — never auto tier
+    new_id = body["documentId"]
+
+    pending = client.get("/document-updates/pending").json()
+    match = next(
+        (u for u in pending if u["documentA"] == new_id and u["documentB"] == old_id),
+        None,
+    )
+    assert match is not None, f"expected a pending suggestion, got {pending}"
+    assert match["technique"] == "shingled_jaccard_overlap"
+    assert 0.0 < match["confidence"] < 1.0
+
+    # old document is untouched — still current and directly readable
+    current_ids = [d["documentId"] for d in client.get("/documents").json()]
+    assert old_id in current_ids
+    assert client.get(f"/documents/{old_id}").status_code == 200
+
+
 def test_ingest_document_background_embed_failure_reaches_failed(conn):
     # Only embed_worker wired, deliberately mismatched dim: the embedder
     # returns a vector one dimension too long, so every embed job for this

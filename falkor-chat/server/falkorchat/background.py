@@ -13,12 +13,34 @@ once here instead of drifting between two copies.
 from __future__ import annotations
 
 import logging
+import time
+import uuid
 from collections.abc import Callable
 from typing import Any
 
+from . import update_detection
 from .config import CallContext
 
 _log = logging.getLogger(__name__)
+
+# Suggested-tier noise floor (document-ingestion2 Stage D, ML note §3.2/§5):
+# an implementer-tunable minimum Jaccard ratio below which a candidate never
+# reaches the pending queue at all — a usability floor against alert fatigue,
+# not a correctness gate (mirrors `MAX_DOCUMENT_CHARS`'s "implementer-tunable,
+# not load-bearing" posture). NOT the same knob as `create_or_reopen_
+# supersede_suggestion`'s own semantics — this only decides whether to call
+# it at all.
+_UPDATE_DETECTION_NOISE_FLOOR = 0.1
+
+
+def _default_id() -> str:
+    return uuid.uuid4().hex
+
+
+def _default_clock() -> int:
+    """Server clock in milliseconds since the epoch — mirrors `ingestion.
+    _default_clock`/`services._default_clock`'s identical shape."""
+    return int(time.time() * 1000)
 
 
 def _safe_embed(embed_worker: Any, ws: str, msg_id: str, text: str) -> None:
@@ -199,6 +221,96 @@ def _schedule_chunk_processing(
                 _safe_extract, ingestion_pipeline, ws,
                 chunk["chunkId"], document_id, chunk["text"],
             )
+
+
+def _safe_detect_update(repo: Any, ws: str, document_id: str) -> None:
+    """FR-2/AC-2 suggested-tier update detection for a just-ingested document
+    that was NOT auto-superseded (document-ingestion2 Stage D, plan §3.4) —
+    mirrors `_safe_extract`'s try/except-log-never-raise isolation
+    discipline, but **deliberately without `_report_document_job`**: per the
+    ML note's own scope note, a detection failure is a *soft* failure (the
+    document is still valid and independently searchable) and must never
+    flip `Document.status` to `'failed'` the way an extraction/embedding
+    failure does — detection's completion signal is simply the presence/
+    absence of a pending `SUPERSEDES` edge, never folded into `pendingJobs`.
+
+    Re-fetches the document's own `title`/`text` via `repo.get_document`
+    rather than having every call site thread them through — both transports
+    already have them at the point they'd schedule this, but re-deriving the
+    *effective* title (the `title or source_label or ""` fallback
+    `services.ingest_document` applies) would duplicate that logic in two
+    transport layers; a single indexed-`documentId` lookup is cheap and
+    avoids that drift risk. Returns silently (no-op) if the document is
+    already gone by the time this runs (a delete raced the background job —
+    same "MATCH-anchored, degrades safely" posture as every other background
+    write in this module, §2.1 of the plan).
+
+    Narrows candidates via `repo.find_update_shortlist` (two unioned
+    signals — LSH/MinHash band-equality + title-fuzzy full text, both
+    already scoped to `currentVersion` documents only inside that method),
+    then computes the precise `update_detection.jaccard` ratio in Python
+    against the (small, bounded) shortlist only — the bands only ever narrow
+    *candidates*, never substitute for the exact metric (plan §3.4 step 2).
+    For the top-ranked candidate above `_UPDATE_DETECTION_NOISE_FLOOR`:
+    records a `pending` suggestion via `repo.create_or_reopen_supersede_
+    suggestion` — the exact `create_or_reopen_match` idiom, ML note §7 — which
+    gets OQ-3's reopen-on-corroboration behavior for free, zero new logic.
+    """
+    try:
+        document = repo.get_document(ws, document_id=document_id)
+        if document is None:
+            return  # deleted before this job ran — nothing to detect
+        text = document.get("text") or ""
+        title = document.get("title") or ""
+        doc_shingles = update_detection.shingles(update_detection.normalize_text(text))
+        signature = update_detection.minhash_signature(doc_shingles)
+        bands = update_detection.lsh_bands(signature)
+        candidates = repo.find_update_shortlist(ws, bands=bands, title=title)
+
+        best_ratio = 0.0
+        best_candidate_id: str | None = None
+        for candidate in candidates:
+            if candidate["documentId"] == document_id:
+                continue  # never a candidate for itself
+            candidate_shingles = update_detection.shingles(
+                update_detection.normalize_text(candidate.get("text") or "")
+            )
+            ratio = update_detection.jaccard(doc_shingles, candidate_shingles)
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_candidate_id = candidate["documentId"]
+
+        if best_candidate_id is None or best_ratio < _UPDATE_DETECTION_NOISE_FLOOR:
+            return
+
+        repo.create_or_reopen_supersede_suggestion(
+            ws, new_document_id=document_id, candidate_document_id=best_candidate_id,
+            match_id=_default_id(), status="pending", confidence=best_ratio,
+            technique="shingled_jaccard_overlap", created_at=_default_clock(),
+        )
+    except Exception:  # noqa: BLE001 — background isolation: log, never propagate
+        _log.exception("background update-detection failed (documentId=%s)", document_id)
+
+
+def _schedule_update_detection(
+    schedule: Callable[..., None], repo: Any, ws: str, document_id: str,
+) -> None:
+    """Schedule the suggested-tier update-detection job for one just-ingested
+    document (document-ingestion2 Stage D, plan §3.4) — a **separate**
+    scheduling call from `_schedule_chunk_processing`, since detection is
+    per-*document*, not per-chunk, and must never touch `Document.status`/
+    `pendingJobs` (that counter belongs solely to the embed/extract jobs).
+    `repo` is the same `Repository` instance already threaded through
+    `app.py` — independently optional, same posture as `embed_worker`/
+    `ingestion_pipeline`: a deployment with no repository reference wired
+    for this purpose (should not happen in practice, since `repo` always
+    exists once the app is built, but mirrors the other schedulers'
+    defensive `is None` guard for symmetry and testability) schedules
+    nothing.
+    """
+    if repo is None:
+        return
+    schedule(_safe_detect_update, repo, ws, document_id)
 
 
 def _safe_fuse(

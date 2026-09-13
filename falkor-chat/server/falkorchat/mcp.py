@@ -21,6 +21,7 @@ from .background import (
     _safe_respond,
     _safe_run_workflow,
     _schedule_chunk_processing,
+    _schedule_update_detection,
 )
 from .config import CallContext
 from .services import Services
@@ -46,6 +47,7 @@ _responder: Any | None = None
 _embed_worker: Any | None = None
 _trigger: Any | None = None
 _ingestion_pipeline: Any | None = None
+_repo: Any | None = None
 
 
 def _default_schedule(fn: Callable[..., None], *args: Any) -> None:
@@ -147,16 +149,21 @@ def configure(
     embed_worker: Any | None = None,
     trigger: Any | None = None,
     ingestion_pipeline: Any | None = None,
+    repo: Any | None = None,
 ) -> FastMCP:
     """Wire the MCP tools to a `Services` instance (and optional context seam).
 
-    `responder`/`embed_worker`/`trigger`/`ingestion_pipeline` mirror
+    `responder`/`embed_worker`/`trigger`/`ingestion_pipeline`/`repo` mirror
     `api.build_router`'s same-named parameters (K-041) — pass the exact same
     objects `create_app` wires into the REST router so both transports run
-    the identical post-message policy.
+    the identical post-message policy. `repo` (document-ingestion2 Stage D)
+    is the same `Repository` instance `embed_worker`/`ingestion_pipeline`
+    already wrap — passed here directly (not via either of those objects)
+    because `_safe_detect_update` needs only plain repository methods, no
+    LLM/embedding access.
     """
     global _services, _get_context, _responder, _embed_worker, _trigger
-    global _ingestion_pipeline
+    global _ingestion_pipeline, _repo
     _services = services
     if context_provider is not None:
         _get_context = context_provider
@@ -164,6 +171,7 @@ def configure(
     _embed_worker = embed_worker
     _trigger = trigger
     _ingestion_pipeline = ingestion_pipeline
+    _repo = repo
     return mcp
 
 
@@ -304,6 +312,10 @@ def ingest_document(
             _schedule, ctx.ws, receipt["documentId"], chunks,
             embed_worker=_embed_worker, ingestion_pipeline=_ingestion_pipeline,
         )
+    # document-ingestion2 Stage D (FR-2/AC-2): the suggested tier only runs
+    # when the synchronous auto tier did NOT already resolve this ingest.
+    if not receipt.get("autoSuperseded"):
+        _schedule_update_detection(_schedule, _repo, ctx.ws, receipt["documentId"])
     return receipt
 
 
@@ -327,16 +339,20 @@ def ingest_documents(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     ctx = _get_context()
     receipts = _svc().ingest_documents(ctx, documents=items)
-    if _embed_worker is not None or _ingestion_pipeline is not None:
-        for receipt in receipts:
-            if receipt.get("status") != "processing":
-                continue  # this item errored — nothing to schedule for it
+    for receipt in receipts:
+        if receipt.get("status") != "processing":
+            continue  # this item errored — nothing to schedule for it
+        if _embed_worker is not None or _ingestion_pipeline is not None:
             chunks = _svc().list_document_chunks(
                 ctx, document_id=receipt["documentId"]
             )
             _schedule_chunk_processing(
                 _schedule, ctx.ws, receipt["documentId"], chunks,
                 embed_worker=_embed_worker, ingestion_pipeline=_ingestion_pipeline,
+            )
+        if not receipt.get("autoSuperseded"):
+            _schedule_update_detection(
+                _schedule, _repo, ctx.ws, receipt["documentId"]
             )
     return receipts
 

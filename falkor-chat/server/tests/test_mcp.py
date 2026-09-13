@@ -24,8 +24,18 @@ TEST_CTX = CallContext(ws="test", actor="u1")
 
 def _configure(
     repo, *, actor="u1", responder=None, embed_worker=None, trigger=None,
-    models=None, ingestion_pipeline=None,
+    models=None, ingestion_pipeline=None, detection_repo=None,
 ):
+    """`detection_repo` (document-ingestion2 Stage D) is a SEPARATE opt-in
+    from the real `repo` this helper's callers already pass for `Services` —
+    most existing tests wire fake `embed_worker`/`ingestion_pipeline` objects
+    with no real repo behind them and never call `ingest_document`, so wiring
+    `_safe_detect_update`'s repo by default here would schedule a real
+    background thread touching `ws:test` in tests that don't expect it. Pass
+    `detection_repo=repo` explicitly in a test that actually wants the
+    suggested-tier job to run (mirrors `api.py`'s `wired_real_ingestion`
+    fixture, which only ever wires a real repo through `create_app`'s own
+    `embed_worker.repo`/`ingestion_pipeline.repo` derivation)."""
     clock = itertools.count(1000)
     ids = (f"id{n}" for n in itertools.count(1))
     svc = Services(
@@ -38,6 +48,7 @@ def _configure(
         embed_worker=embed_worker,
         trigger=trigger,
         ingestion_pipeline=ingestion_pipeline,
+        repo=detection_repo,
     )
     return svc
 
@@ -676,6 +687,97 @@ def test_ingest_document_with_no_ingestion_pipeline_schedules_nothing(repo):
         "ingest_document", {"text": "hello"}
     )))
     assert posted["status"] == "processing"  # succeeds; nothing to assert-not-crash on
+
+
+# ── document-ingestion2 Stage D (FR-2/AC-1/AC-2) — update detection ─────────
+# MCP-side parity for the REST integration tests in test_api.py
+# (`wired_real_ingestion`) — same scenarios, same assertions, via `call_tool`.
+
+
+def test_ingest_document_tool_byte_identical_modulo_whitespace_auto_supersedes(repo):
+    """AC-1 via MCP — provable synchronously, no scheduling override needed
+    at all (the auto tier is folded into the synchronous write, not a
+    background job)."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _configure(repo)
+
+    async def scenario():
+        first = _unwrap(await mcp_mod.mcp.call_tool(
+            "ingest_document",
+            {"text": "Hello   World\nThis is the content.", "title": "Doc"},
+        ))
+        second = _unwrap(await mcp_mod.mcp.call_tool(
+            "ingest_document",
+            {"text": "hello world\nthis is the content.", "title": "Doc v2"},
+        ))
+        updates = _unwrap(await mcp_mod.mcp.call_tool("list_document_updates", {}))
+        return first, second, updates
+
+    first, second, updates = asyncio.run(scenario())
+    assert second["autoSuperseded"] is True
+    assert second["supersededDocumentId"] == first["documentId"]
+    match = next(u for u in updates if u["documentB"] == first["documentId"])
+    assert match["status"] == "confirmed"
+    assert match["confidence"] == 1.0
+
+
+def test_ingest_document_tool_plausible_edit_produces_pending_suggestion(repo):
+    """AC-2 via MCP — the suggested-tier background job, run synchronously
+    via the `mcp_mod._schedule` override (mirrors `test_ingest_document_
+    schedules_every_chunk_for_extraction`'s own override pattern)."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    base_text = " ".join(f"paragraph{i} about the quarterly report" for i in range(60))
+    original = mcp_mod._schedule
+    mcp_mod._schedule = lambda fn, *args: fn(*args)  # synchronous
+    try:
+        _configure(repo, detection_repo=repo)
+
+        async def scenario():
+            first = _unwrap(await mcp_mod.mcp.call_tool(
+                "ingest_document", {"text": base_text, "title": "Report"}
+            ))
+            edited_text = (
+                base_text + " with one new closing sentence added at the very end"
+            )
+            second = _unwrap(await mcp_mod.mcp.call_tool(
+                "ingest_document", {"text": edited_text, "title": "Report"}
+            ))
+            pending = _unwrap(await mcp_mod.mcp.call_tool(
+                "list_pending_document_updates", {}
+            ))
+            return first, second, pending
+
+        first, second, pending = asyncio.run(scenario())
+    finally:
+        mcp_mod._schedule = original
+
+    assert second["autoSuperseded"] is False
+    match = next(
+        (
+            u for u in pending
+            if u["documentA"] == second["documentId"]
+            and u["documentB"] == first["documentId"]
+        ),
+        None,
+    )
+    assert match is not None, f"expected a pending suggestion, got {pending}"
+    assert match["technique"] == "shingled_jaccard_overlap"
+
+
+def test_ingest_document_tool_with_no_detection_repo_schedules_nothing(repo):
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    original = mcp_mod._schedule
+    mcp_mod._schedule = lambda fn, *args: fn(*args)  # synchronous
+    try:
+        _configure(repo)  # detection_repo defaults to None
+
+        posted = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
+            "ingest_document", {"text": "hello there general text"}
+        )))
+    finally:
+        mcp_mod._schedule = original
+
+    assert posted["status"] == "processing"  # succeeds; nothing scheduled to crash on
 
 
 # ── K-050 M5 Stage 6a: bulk ingestion (FR-11) ────────────────────────────────────

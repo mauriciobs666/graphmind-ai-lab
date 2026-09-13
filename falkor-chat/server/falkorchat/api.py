@@ -17,6 +17,7 @@ from .background import (
     _safe_respond,
     _safe_run_workflow,
     _schedule_chunk_processing,
+    _schedule_update_detection,
 )
 from .config import CallContext
 from .config import get_context as _resolve_context
@@ -48,7 +49,7 @@ def get_context() -> CallContext:
 def build_router(
     services: Services, *, responder: Any | None = None,
     embed_worker: Any | None = None, trigger: Any | None = None,
-    ingestion_pipeline: Any | None = None,
+    ingestion_pipeline: Any | None = None, repo: Any | None = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -181,6 +182,15 @@ def build_router(
                 background.add_task, ctx.ws, receipt["documentId"], chunks,
                 embed_worker=embed_worker, ingestion_pipeline=ingestion_pipeline,
             )
+        # document-ingestion2 Stage D (FR-2/AC-2): the suggested tier only
+        # runs when the synchronous auto tier did NOT already resolve this
+        # ingest — an auto-superseded document needs no suggestion, it's
+        # already decided. A SEPARATE scheduling call from the chunk
+        # processing above (detection is per-document, not per-chunk).
+        if not receipt.get("autoSuperseded"):
+            _schedule_update_detection(
+                background.add_task, repo, ctx.ws, receipt["documentId"],
+            )
         return receipt
 
     # K-050 M5 Stage 6a (FR-11): bulk variant of the route above — loops the
@@ -206,16 +216,20 @@ def build_router(
                 for item in body.documents
             ],
         )
-        if embed_worker is not None or ingestion_pipeline is not None:
-            for receipt in receipts:
-                if receipt.get("status") != "processing":
-                    continue  # this item errored — nothing to schedule for it
+        for receipt in receipts:
+            if receipt.get("status") != "processing":
+                continue  # this item errored — nothing to schedule for it
+            if embed_worker is not None or ingestion_pipeline is not None:
                 chunks = services.list_document_chunks(
                     ctx, document_id=receipt["documentId"]
                 )
                 _schedule_chunk_processing(
                     background.add_task, ctx.ws, receipt["documentId"], chunks,
                     embed_worker=embed_worker, ingestion_pipeline=ingestion_pipeline,
+                )
+            if not receipt.get("autoSuperseded"):
+                _schedule_update_detection(
+                    background.add_task, repo, ctx.ws, receipt["documentId"],
                 )
         return receipts
 

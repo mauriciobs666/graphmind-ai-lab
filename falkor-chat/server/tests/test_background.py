@@ -14,11 +14,13 @@ from __future__ import annotations
 import logging
 
 from falkorchat.background import (
+    _safe_detect_update,
     _safe_embed_chunk,
     _safe_extract,
     _safe_fuse,
     _safe_respond,
     _schedule_chunk_processing,
+    _schedule_update_detection,
 )
 from falkorchat.config import CallContext
 from falkorchat.modelconfig import ModelResolutionError
@@ -377,3 +379,200 @@ def test_schedule_chunk_processing_with_no_repo_on_either_worker_does_not_raise(
         _noop_schedule, "test", "d1", chunks,
         embed_worker=embed_worker, ingestion_pipeline=pipeline,
     )
+
+
+# ── _safe_detect_update / _schedule_update_detection (document-ingestion2
+# Stage D, FR-2/AC-2) ─────────────────────────────────────────────────────
+#
+# Mirrors `_safe_extract`'s failure-isolation contract, but deliberately
+# WITHOUT any `_report_document_job` interaction (a detection failure is a
+# soft failure, never flips `Document.status`) — so there is no repo.repo
+# accessor here at all, just a plain fake repository exposing the three
+# methods `_safe_detect_update` actually calls.
+
+
+class _RecordingUpdateRepo:
+    def __init__(self, *, document=None, shortlist=None):
+        self.document = document
+        self.shortlist = shortlist if shortlist is not None else []
+        self.suggestion_calls: list[dict] = []
+        self.shortlist_calls: list[dict] = []
+
+    def get_document(self, ws, *, document_id):
+        return self.document
+
+    def find_update_shortlist(self, ws, *, bands, title, limit=5):
+        self.shortlist_calls.append({"ws": ws, "bands": bands, "title": title})
+        return self.shortlist
+
+    def create_or_reopen_supersede_suggestion(
+        self, ws, *, new_document_id, candidate_document_id, match_id,
+        status, confidence, technique, created_at,
+    ):
+        self.suggestion_calls.append({
+            "ws": ws, "new_document_id": new_document_id,
+            "candidate_document_id": candidate_document_id, "status": status,
+            "confidence": confidence, "technique": technique,
+        })
+        return {"created": True, "reopened": False, "matchId": match_id, "status": status}
+
+
+def test_safe_detect_update_no_document_is_a_noop(caplog):
+    repo = _RecordingUpdateRepo(document=None)
+
+    with caplog.at_level(logging.ERROR):
+        _safe_detect_update(repo, "test", "d1")  # must not raise
+
+    assert repo.suggestion_calls == []
+    assert [r for r in caplog.records if r.levelno == logging.ERROR] == []
+
+
+def test_safe_detect_update_no_candidates_writes_no_suggestion():
+    repo = _RecordingUpdateRepo(
+        document={"documentId": "d1", "title": "t", "text": "hello world"},
+        shortlist=[],
+    )
+
+    _safe_detect_update(repo, "test", "d1")
+
+    assert repo.suggestion_calls == []
+
+
+def test_safe_detect_update_skips_the_document_itself_as_a_candidate():
+    text = "one two three four five six seven"
+    repo = _RecordingUpdateRepo(
+        document={"documentId": "d1", "title": "t", "text": text},
+        shortlist=[{"documentId": "d1", "title": "t", "text": text}],
+    )
+
+    _safe_detect_update(repo, "test", "d1")
+
+    assert repo.suggestion_calls == []  # d1 can't be its own candidate
+
+
+def test_safe_detect_update_writes_a_pending_suggestion_for_the_best_candidate():
+    text = " ".join(f"word{i}" for i in range(50))
+    near_duplicate = text + " one extra trailing word"
+    unrelated = "completely different content that shares nothing at all"
+    repo = _RecordingUpdateRepo(
+        document={"documentId": "d1", "title": "t", "text": text},
+        shortlist=[
+            {"documentId": "d2", "title": "t2", "text": unrelated},
+            {"documentId": "d3", "title": "t3", "text": near_duplicate},
+        ],
+    )
+
+    _safe_detect_update(repo, "test", "d1")
+
+    assert len(repo.suggestion_calls) == 1
+    call = repo.suggestion_calls[0]
+    assert call["new_document_id"] == "d1"
+    assert call["candidate_document_id"] == "d3"  # the near-duplicate, not the unrelated one
+    assert call["status"] == "pending"
+    assert call["technique"] == "shingled_jaccard_overlap"
+    assert 0.0 < call["confidence"] <= 1.0
+
+
+def test_safe_detect_update_below_noise_floor_writes_no_suggestion():
+    repo = _RecordingUpdateRepo(
+        document={"documentId": "d1", "title": "t", "text": "alpha beta gamma delta epsilon"},
+        shortlist=[
+            {"documentId": "d2", "title": "t2", "text": "zulu yankee xray whiskey victor"},
+        ],
+    )
+
+    _safe_detect_update(repo, "test", "d1")
+
+    assert repo.suggestion_calls == []  # zero overlap — well below the noise floor
+
+
+def test_safe_detect_update_passes_lsh_bands_and_title_to_the_shortlist_lookup():
+    repo = _RecordingUpdateRepo(
+        document={"documentId": "d1", "title": "My Title", "text": "some content"},
+        shortlist=[],
+    )
+
+    _safe_detect_update(repo, "test", "d1")
+
+    assert len(repo.shortlist_calls) == 1
+    assert repo.shortlist_calls[0]["ws"] == "test"
+    assert repo.shortlist_calls[0]["title"] == "My Title"
+    assert isinstance(repo.shortlist_calls[0]["bands"], list)
+    assert len(repo.shortlist_calls[0]["bands"]) == 8
+
+
+def test_safe_detect_update_swallows_get_document_failure_logs_error_never_raises(caplog):
+    class _FailingRepo:
+        def get_document(self, ws, *, document_id):
+            raise RuntimeError(f"boom fetching {document_id}")
+
+    with caplog.at_level(logging.ERROR):
+        _safe_detect_update(_FailingRepo(), "test", "d1")  # must not raise
+
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) == 1
+    assert "background update-detection failed" in error_records[0].getMessage()
+    assert "d1" in error_records[0].getMessage()
+    assert error_records[0].exc_info is not None
+    assert "boom fetching d1" in str(error_records[0].exc_info[1])
+
+
+def test_safe_detect_update_swallows_shortlist_failure_logs_error_never_raises(caplog):
+    class _FailingShortlistRepo(_RecordingUpdateRepo):
+        def find_update_shortlist(self, ws, *, bands, title, limit=5):
+            raise RuntimeError("boom shortlisting")
+
+    repo = _FailingShortlistRepo(
+        document={"documentId": "d1", "title": "t", "text": "some content"}
+    )
+
+    with caplog.at_level(logging.ERROR):
+        _safe_detect_update(repo, "test", "d1")  # must not raise
+
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) == 1
+    assert "background update-detection failed" in error_records[0].getMessage()
+
+
+def test_safe_detect_update_swallows_suggestion_write_failure_logs_error_never_raises(caplog):
+    text = " ".join(f"word{i}" for i in range(50))
+
+    class _FailingSuggestionRepo(_RecordingUpdateRepo):
+        def create_or_reopen_supersede_suggestion(self, *a, **kw):
+            raise RuntimeError("boom writing suggestion")
+
+    repo = _FailingSuggestionRepo(
+        document={"documentId": "d1", "title": "t", "text": text},
+        shortlist=[{"documentId": "d2", "title": "t2", "text": text}],
+    )
+
+    with caplog.at_level(logging.ERROR):
+        _safe_detect_update(repo, "test", "d1")  # must not raise
+
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) == 1
+    assert "background update-detection failed" in error_records[0].getMessage()
+
+
+def test_schedule_update_detection_schedules_safe_detect_update_with_repo():
+    scheduled: list[tuple] = []
+
+    def _recording_schedule(fn, *args):
+        scheduled.append((fn, args))
+
+    repo = _RecordingUpdateRepo(document=None)
+
+    _schedule_update_detection(_recording_schedule, repo, "test", "d1")
+
+    assert scheduled == [(_safe_detect_update, (repo, "test", "d1"))]
+
+
+def test_schedule_update_detection_with_no_repo_schedules_nothing():
+    scheduled: list[tuple] = []
+
+    def _recording_schedule(fn, *args):
+        scheduled.append((fn, args))
+
+    _schedule_update_detection(_recording_schedule, None, "test", "d1")
+
+    assert scheduled == []

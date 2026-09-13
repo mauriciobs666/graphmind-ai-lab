@@ -753,3 +753,236 @@ wrong — flagging now while it's cheap to fix in the same diff that authored it
   out of `hybrid_search`'s `msg_hits` pool exactly like a pre-migration chunk did before Blocker 1's
   fix) is live in any current workspace — not checked here, out of this diff's scope, and distinct
   from both of Pass 3's blockers (neither of which concerned the `Message` pool).
+
+## Pass 6 — Stage D (uncommitted, "update-detection" FR-2/AC-1/AC-2)
+
+**Scope.** Diff-scoped review of the currently uncommitted working-tree diff implementing Stage D
+(document-ingestion2 §4 Stage D) against `falkor-chat/docs/plans/document-ingestion2.md` §3.4/§4
+Stage D and `falkor-chat/docs/plans/document-ingestion2-ml.md` §3/§4.1. Touched: new
+`server/falkorchat/update_detection.py` + `server/tests/test_update_detection.py`; changed
+`repository.py` (`create_document_with_auto_supersede`, `find_update_shortlist`), `services.py`
+(`ingest_document`'s new flow), `background.py` (`_safe_detect_update`/
+`_schedule_update_detection`), `api.py`/`mcp.py`/`app.py` (transport wiring), `bootstrap_schema.sh`
+(the `lshBand0..7`/`textNormalizedHash` indexes + `Document.title` fulltext), and the corresponding
+test files. Baseline: `git diff` in `falkor-chat/` scoped to exactly the file list in the dispatch
+brief (confirmed empty diff on every other tracked/untracked path via `git status --short`).
+`docs/plans/document-ingestion2-coordination.md`'s Stage D entry (the dispatching coordinator's own
+independent spot-check — full-suite re-run, concurrency-probe re-run, direct Cypher read) is
+accepted as already corroborated per the brief; re-verified two of its specific claims directly
+below rather than re-running the whole thing blind.
+
+**Verdict: approve with suggestions.** No blockers. Four minor findings, none load-bearing on
+correctness — the core mechanism (atomic auto-supersede, soft-failure background detection,
+transport wiring, pure-function detection math) is sound and well-tested; the findings are gaps in
+test/verification coverage and one plan-mandated deliverable (`test_queries.sh`) left for a
+follow-up.
+
+**CPG: considered, not relevant** — matches the plan's own §2 scoping (new-code design, read
+directly) and Pass 1/2's disposition for the same feature; also `cpg_falkorchat` predates this
+uncommitted diff entirely (unlike Pass 3/4, which had a pre-existing graph to query against). Direct
+reading of `update_detection.py`, the two new/changed `repository.py` methods, and `EXPLAIN`
+probes against the live `ws:test` graph (below) were the right tools for this diff's actual
+questions.
+
+### What I verified
+
+- Read the plan (§0, §2.1, §3.4, §4 Stage D, §5, §7), the ML note in full (§3/§4.1/§4.2), and Pass
+  1–5 of this file (Pass 3/Pass 5 for calibration on scrutiny level, per the brief).
+- Read every hunk of `git diff` across all 13 target files (both new files in full, not excerpts).
+- **The atomic auto-tier write** (`repository.create_document_with_auto_supersede`,
+  `repository.py:1714-1911`): traced the Cypher clause by clause. (a) The `OPTIONAL MATCH` for
+  `candidate` is bound in the same first `WITH`/`FOREACH` block that `CREATE`s the new `Document`,
+  strictly before that `CREATE` — the new document can never match itself. (b) The guard is
+  `(ok AND candidate IS NOT NULL) AS doSupersede`, not `candidate IS NOT NULL` alone — read
+  directly, matching the coordination ledger's own independent read. (c) Two genuinely separate
+  `FOREACH`-guarded blocks (one `SET`s the candidate + stamps `supersededAt`/`supersededBy`, a
+  second later block `CREATE`s the `SUPERSEDES` edge), sharing intermediate `WITH`s — not one
+  `FOREACH` mixing `SET`+`CREATE`, the form the plan explicitly says is wrong even though
+  equivalent-looking. (d) Chunks are bulk-flipped via their own `OPTIONAL MATCH`+`collect`+`FOREACH`
+  step between the two guarded blocks (a `FOREACH` body can't itself contain a `MATCH`), verified
+  correct via `test_create_document_with_auto_supersede_flips_old_document_and_its_chunks`.
+- **Mutation-tested the compound guard myself**, independent of the coordinator's read-only check:
+  copied `repository.py` to `/tmp` (md5-recorded), changed `(ok AND candidate IS NOT NULL)` to
+  `(candidate IS NOT NULL)`, ran `pytest tests/test_repository.py -k auto_supersede` — **1 failed,
+  8 passed**, the failure landing exactly on
+  `test_create_document_with_auto_supersede_unknown_actor_leaves_hash_colliding_candidate_untouched`
+  (as a FalkorDB `ResponseError: Failed to create relationship; endpoint was not found`, since the
+  mutated guard lets `doSupersede` go true with `d` never created — a different failure *shape*
+  than a clean assertion failure, but still a hard failure any CI run would catch). Restored from
+  the `/tmp` copy; md5 confirmed byte-identical. Re-ran the full scoped suite after restore — clean
+  (below).
+- **`find_update_shortlist`'s index-anchored `OR`** (`repository.py:1913-1968`): the query is
+  `MATCH (d:Document {currentVersion: true}) WHERE d.lshBand0 = $band0 OR ... OR d.lshBand7 =
+  $band7 ...` — functionally scoped correctly (never actor-scoped, `currentVersion`-only per ML note
+  §4.1, confirmed both by reading and by
+  `test_find_update_shortlist_excludes_noncurrent_documents`). See Finding 1 below on the one gap
+  this surfaced: this literal shape (inline `{currentVersion: true}` on the `MATCH` pattern) is not
+  byte-identical to what `graph-dba`'s second live-verification pass profiled (`MATCH (d:Document)
+  WHERE d.lshBand0 = $band0 OR ...`, no `currentVersion` predicate) or to the shape
+  `claude/graph-dba/falkordb-quirks.md`'s dated 2026-09-11 entry documents.
+- **The unlabeled-endpoint planner-trap discipline**: grepped the full diff for `SUPERSEDES` —
+  exactly one occurrence outside prose/comments, the `CREATE` inside
+  `create_document_with_auto_supersede` (no `MATCH` of an existing `SUPERSEDES` edge anywhere in
+  this diff). `find_update_shortlist` never touches `SUPERSEDES` at all (`Document`-only). This
+  confirms the coordination ledger's "the discipline literally doesn't apply to this new code"
+  claim directly, not by re-trusting it.
+- **The background job's soft-failure discipline** (`background._safe_detect_update`,
+  `background.py:226-296`): read the function in full — no `_report_document_job` call anywhere in
+  it or on any path it reaches, no write to `Document.status`/`pendingJobs`. `test_background.py`
+  independently pins this with three dedicated failure-injection tests
+  (`get_document`/`find_update_shortlist`/`create_or_reopen_supersede_suggestion` each raising),
+  each asserting the exception is logged and swallowed, never propagated — genuine regression
+  coverage of the docstring's claim, not just the claim itself.
+- **AC-1/AC-2 test coverage, at the right altitude**: `test_api.py::wired_real_ingestion` and
+  `test_mcp.py`'s real-`repo` `_configure(..., detection_repo=repo)` path both run AC-1
+  (`test_ingest_document_byte_identical_modulo_whitespace_auto_supersedes[_tool]`) and AC-2
+  (`test_ingest_document_plausible_edit_produces_pending_suggestion...`) against a real FalkorDB
+  connection (`conn` fixture), not `FakeRepo` — confirmed by reading the fixtures, not assuming from
+  the name. These would fail if the real Cypher/wiring were broken, unlike a mock-level test.
+  `test_services.py`'s parallel `FakeRepo`-based tests are a legitimate additional unit-level pin
+  (this file's own documented "review-safe subset" posture, `falkor-chat/AGENTS.md`), not a
+  substitute for the above.
+- **Wiring completeness**: read `api.py`'s two ingest routes and `mcp.py`'s two tools — both gate
+  `_schedule_update_detection` on `if not receipt.get("autoSuperseded")`/`if not
+  receipt.get("autoSuperseded")`, a genuinely separate scheduling call from chunk
+  processing, matching the plan exactly. See Finding 2 below for what a regression here would (and
+  wouldn't) be caught by.
+- **The known v1 limitation** (ML note §4.1/§7): read `update_detection.py`/`find_update_shortlist`
+  in full for any undiscussed heuristic that might silently close this gap (e.g. a text-only
+  fallback ignoring title, or a wider candidate net) — found none; the two-signal (LSH-band + title-
+  fuzzy) shortlist is exactly as designed, the gap stands as an accepted, unaddressed limitation.
+- **Mutation-test claims** (coordination ledger, delegate's reported 3 mutations): independently
+  reproduced one (the compound-guard weakening, above) rather than just judging it plausible. Did
+  not independently reproduce the other two (the two-round-trip-race split, the shortlist-scoping
+  bug) — the coordinator's own independent live re-run of the concurrency probe
+  (`test_create_document_with_auto_supersede_concurrent_calls_produce_exactly_one_edge`, passing)
+  and this pass's own reading of `find_update_shortlist`'s scoping (confirmed correct, above, via
+  both source and `test_find_update_shortlist_excludes_noncurrent_documents`) are accepted as
+  sufficient corroboration for those two without re-running the mutations myself.
+- **Full suite**: ran the scoped set (`test_repository.py`, `test_services.py`,
+  `test_background.py`, `test_api.py`, `test_mcp.py`, `test_update_detection.py`) after restoring
+  the mutation — **805 passed**, live, against the shared FalkorDB instance (`redis-cli -p 6379
+  ping` → `PONG`). Did not re-run the full 2812-test suite (accepted the coordinator's own
+  independent re-run per the brief).
+- **`EXPLAIN` probes against `ws:test`** (which already carries every Stage D index, from the
+  delegate's own test runs) to check Finding 1: `MATCH (d:Document {currentVersion: true}) WHERE
+  d.lshBand0 = 'a' OR ... OR d.lshBand7 = 'h' ...` plans as `Limit → Project → Node By Index Scan |
+  (d:Document)` — no `Filter`, no `Node By Label Scan`. As a control, the same query with a
+  genuinely unindexed property instead of `currentVersion` correctly plans `Filter → Node By Label
+  Scan`, confirming `EXPLAIN` does surface a residual `Filter`/label-scan when one is actually
+  present, so its absence here is meaningful. `PROFILE` (which would show real `Records produced`
+  per operator, the only way to know *which* index actually anchored the scan) isn't available
+  through the `cypher` MCP tool — see Finding 1 for why this doesn't fully close the question.
+
+### Findings
+
+**Minor — `find_update_shortlist`'s live Cypher (`repository.py:1913-1968`) is not the literal
+shape `graph-dba` profiled, and the difference is exactly the kind this build's planner is known to
+be sensitive to.** The plan's §0/§7 and `claude/graph-dba/falkordb-quirks.md`'s dated 2026-09-11
+entry both live-verify `MATCH (d:Document) WHERE d.lshBand0 = $band0 OR ... OR d.lshBand7 =
+$band7 ...` — no `currentVersion` predicate anywhere in the profiled shape. The shipped query adds
+`{currentVersion: true}` as an inline pattern-property on the same `MATCH`, to satisfy the ML
+note's "never compare against an already-superseded document" requirement (§4.1) — functionally
+correct (confirmed by `test_find_update_shortlist_excludes_noncurrent_documents`) but a materially
+different query for the planner, not the byte-identical string that earned the "single `Node By
+Index Scan`, no label scan" guarantee. My own `EXPLAIN` check (What I verified, above) is
+consistent with the combination still folding cleanly into one index scan — matching the pattern
+`falkordb-quirks.md` separately documents for "two independently-indexed predicates fold into ONE
+scan, both evaluated inside it" (lines 689-706) and "a guarded-CAS `WHERE` on a second indexed
+property folds into the scan" (lines 679-687) — but `EXPLAIN` alone cannot show *which* index
+actually anchors the scan or real `Records produced` counts the way `PROFILE` with planted probe
+rows can, and this specific combination (a pattern-property equality plus an 8-way cross-property
+`OR`) was never the literal shape live-verified. Suggested fix: a short `graph-dba` follow-up —
+`GRAPH.PROFILE` the exact shipped query against a disposable probe workspace with planted rows (a
+document matching only on `currentVersion` but no band, a document matching one band but
+`currentVersion: false`, per the existing `ws:docprobe2` methodology) to confirm `Records produced`
+tracks true selectivity rather than falling back to a `currentVersion`-anchored near-label-scan —
+then fold the result into `falkordb-quirks.md` as a dated addendum to the existing entry, the same
+way the entry itself was added.
+
+**Minor — the `autoSuperseded` gate that skips scheduling `_safe_detect_update` after a synchronous
+auto-supersede (`api.py`/`mcp.py`, `if not receipt.get("autoSuperseded")`) has no direct regression
+test, and the existing AC-1 end-to-end tests cannot catch its accidental removal.** Confirmed by
+tracing what would happen if the guard were deleted: in every AC-1 test's fixture, the only
+document sharing content with the just-auto-superseded pair is the old version itself, which
+`find_update_shortlist` already excludes via its own `currentVersion` scope — so an errantly-
+scheduled detection job would run, find no candidates, and write nothing, leaving every current
+assertion green. This is exactly the "harmless but real" shape the dispatch brief asked to check
+for, and the guard is genuinely present (confirmed by reading), but a future accidental removal
+would silently reintroduce wasted background work (and, in a workspace with an unrelated
+lexically-similar document also present, a spurious pending suggestion against a document that just
+got auto-decided) with no test failure to flag it. Suggested fix: one spy-based unit test in
+`test_api.py`/`test_mcp.py` (or `test_background.py`, monkeypatching `_schedule_update_detection`)
+asserting it is *not* called when `ingest_document` returns `autoSuperseded: True`, mirroring the
+existing spy pattern already used for the chunk-processing scheduler
+(`test_schedule_chunk_processing_with_no_repo_on_either_worker_does_not_raise`'s general shape).
+
+**Minor — Stage D adds two genuinely new Cypher shapes (the atomic auto-supersede write, the
+LSH-band shortlist lookup) but `scripts/test_queries.sh` is untouched by this diff**, despite the
+plan's own §5 test-strategy explicitly naming it: "every new Cypher shape... raises the enumerated
+baseline — exact queries are `graph-dba`'s to author/verify, not enumerated here." Every prior
+stage's gate (Pass 1's delete query, Pass 2's `SUPERSEDES` confirm/reject/reopen queries, Pass 3/5's
+search filter) landed its `test_queries.sh` section in the same commit; this stage's repository/
+service/API/MCP coverage is thorough on its own (confirmed above), so this is not a functional gap,
+but it is a plan-mandated deliverable left open. Suggested fix: a fast `graph-dba` follow-up unit
+(or fold into the Finding 1 follow-up above, since both need the same disposable-probe-workspace
+methodology) adding the auto-supersede write and the shortlist `OR` lookup to `test_queries.sh`
+before Stage E closes.
+
+**Nit — AC-1's own test-strategy wording ("search returns only the new version") is proven by
+combining two independently-tested mechanisms, never by one test exercising both through the real
+auto-supersede write path.** `test_create_document_with_auto_supersede_flips_old_document_and_its_
+chunks` (Stage D, this diff) proves `Chunk.documentCurrent` flips correctly on a real
+auto-supersede; `test_search_documents_excludes_a_superseded_documents_chunks` (pre-existing, Stage
+C/Pass 3-5) proves `search_chunks`'s filter honors `documentCurrent` — but that test flips the
+property via `_mark_document_superseded_raw` (a raw fixture write), not by calling
+`create_document_with_auto_supersede`/`POST /documents` twice. Both halves are solid and share the
+exact same property, so the combined risk is low — flagging only because the AC-1 row's literal
+wording asks for the combination and no single test currently proves it end to end. Suggested fix:
+extend `test_ingest_document_byte_identical_modulo_whitespace_auto_supersedes` (or its MCP twin)
+with one more assertion — a `client.get("/documents/search", params={"q": ...})` call (with a real
+embedded chunk, mirroring `search_client`'s setup) confirming the old document's chunk is excluded.
+
+### What's solid
+
+- **The atomic write is exactly the live-verified shape**, confirmed by direct clause-by-clause
+  reading and by independently reproducing the one mutation this pass had time to run myself (the
+  compound-guard weakening) — caught, and the restore was verified byte-identical via md5.
+- **The soft-failure discipline is real, not just documented.** `_safe_detect_update` touches
+  nothing but `repo.get_document`/`find_update_shortlist`/`create_or_reopen_supersede_suggestion`,
+  and three dedicated failure-injection tests independently pin that a failure at any of those three
+  steps is logged and swallowed, never touching `Document.status`/`pendingJobs`.
+- **AC-1/AC-2 both have genuine end-to-end coverage against a real FalkorDB connection**, on both
+  REST and MCP, not mocked at a level that would pass with broken wiring — confirmed by reading the
+  fixtures, not the test names.
+- **The known v1 candidate-generation gap is left exactly as designed**, no undiscussed heuristic
+  papering over it — confirmed by reading `find_update_shortlist`/`update_detection.py` in full.
+- **The unlabeled-`SUPERSEDES`-endpoint discipline needed no new application here** — verified
+  directly (grep + read), not re-trusted from the coordination ledger's own claim.
+- **Pure-function coverage in `test_update_detection.py` mirrors the ML note's own named cases**
+  (empty text, whitespace-only variance, case/whitespace-identical pairs, the shared-boilerplate
+  hard negative) plus the MinHash/LSH additions `graph-dba`'s redesign introduced — genuinely
+  thorough, not a token smoke test.
+- **Transport wiring is symmetric and correctly gated** — both `api.py` routes and both `mcp.py`
+  tools schedule `_safe_detect_update` via the identical `if not
+  receipt.get("autoSuperseded")`/`_schedule_update_detection` pattern, sourcing `repo` through the
+  same `getattr(embed_worker, "repo", None) or getattr(ingestion_pipeline, "repo", None)` idiom
+  `_schedule_chunk_processing` already established.
+- **The `ingest_documents` malformed-item defense (the docstring's self-flagged fix)** is a genuine,
+  correctly-scoped defensive improvement — validated `isinstance` checks before dispatch, widened
+  `except` clause, and the batch-loop restructuring needed to let update-detection scheduling run
+  independently of whether `embed_worker`/`ingestion_pipeline` are wired — read directly, not just
+  from the docstring's own claim.
+
+### Open questions
+
+- Whether Finding 1's `PROFILE`-with-planted-probe-rows follow-up should block Stage E's dispatch
+  (a genuine planner-behavior question on the suggested tier's cost characteristics) or land as a
+  fast, narrow `graph-dba` unit alongside the Finding 3 `test_queries.sh` follow-up — both need the
+  same disposable-workspace methodology, so bundling them is likely the efficient sequencing, but
+  that's `teco`'s call.
+- Whether the `_UPDATE_DETECTION_NOISE_FLOOR = 0.1` constant (`background.py`) should be documented
+  anywhere more discoverable than its own module comment — it's exactly the "implementer-tunable,
+  not load-bearing" posture the plan explicitly sanctions (§3.2/§5), so not a defect, just flagging
+  in case `qa-engineer`'s Stage E test plan wants to name it explicitly as a known tuning knob when
+  writing the "plausible-but-not-identical" acceptance scenario.

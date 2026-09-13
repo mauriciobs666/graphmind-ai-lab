@@ -181,6 +181,33 @@ bootstrap_workspace() {
   echo "[index] SUPERSEDES.status"
   gquery "$g" "CREATE INDEX FOR ()-[r:SUPERSEDES]-() ON (r.status)"
 
+  # document-ingestion2 Stage D (FR-2/AC-1, plan §3.4/§7): the auto tier's
+  # exact-identity lookup — a hash of case-folded, whitespace-collapsed full
+  # text (`update_detection.content_hash`). Plain RANGE index, NO uniqueness
+  # constraint (deliberate — two genuinely different documents could, in
+  # principle if vanishingly unlikely, share a hash before either is
+  # superseded; this is a content fingerprint, not an identity property, so
+  # the "every entity gets a uniqueness constraint" convention does not apply
+  # here, plan §7). Live-verified: 500,000-char writes into this index, zero
+  # crash (K-049-family oversized-indexed-property risk confirmed NOT
+  # reachable, since no UNIQUE constraint sits on it).
+  echo "[index] Document.textNormalizedHash"
+  gquery "$g" "CREATE INDEX FOR (n:Document) ON (n.textNormalizedHash)"
+
+  # document-ingestion2 Stage D (FR-2/AC-2, plan §3.4/§4/§7): the suggested
+  # tier's candidate-generation fingerprint — `graph-dba`'s LSH/MinHash-
+  # banding redesign, replacing a RAM-heavy raw full-text index on
+  # `Document.text` (measured 2-5x the raw text size in RAM at this plan's
+  # 500,000-char ceiling). 8 bands (`update_detection.lsh_bands`'s default
+  # `b=8`) — each a short indexed property, negligible RAM per document.
+  # `find_update_shortlist`'s 8-disjunct `OR` lookup across these is
+  # live-verified as a single `Node By Index Scan`, no label scan (plan §0
+  # second pass).
+  echo "[index] Document.lshBand0..7"
+  for i in 0 1 2 3 4 5 6 7; do
+    gquery "$g" "CREATE INDEX FOR (n:Document) ON (n.lshBand${i})"
+  done
+
   # Materialized snapshot steps land in the workspace graph too (K-021), so the
   # same Step identity DDL as the reference graph applies here.
   # Step.key: display/traversal anchor only, no constraint (§7.1).
@@ -335,6 +362,15 @@ bootstrap_workspace() {
   # Chunk scaffolding demonstrated (`document-ingestion-graph.md` §2.3/§5).
   echo "[fulltext] Entity.name"
   gquery "$g" "CALL db.idx.fulltext.createNodeIndex('Entity', 'name')"
+
+  # document-ingestion2 Stage D (FR-2/AC-2, plan §3.4/§4/§7): the suggested
+  # tier's cheap complementary title-fuzzy booster — unaffected by the
+  # RAM finding that ruled out a fulltext index on `Document.text` (titles
+  # are short, MAX_NAME_LEN=200). Not a replacement for the LSH-band signal
+  # above — title is frequently absent/generic (ML note F4), too weak to
+  # carry candidate generation alone.
+  echo "[fulltext] Document.title"
+  gquery "$g" "CALL db.idx.fulltext.createNodeIndex('Document', 'title')"
 
   # ── vector indexes ───────────────────────────────────────────
   # Dimension must match the embedding model and is FIXED at index creation —
