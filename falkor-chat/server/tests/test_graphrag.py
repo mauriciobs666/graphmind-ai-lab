@@ -11,8 +11,10 @@ on a nearly-empty index (kNN may return fewer than k) — assert *ordering* and
 
 from __future__ import annotations
 
+import subprocess
+
 import pytest
-from conftest import TEST_EMBEDDING_DIM
+from conftest import _REPO_ROOT, TEST_EMBEDDING_DIM
 
 from falkorchat import db
 from falkorchat.repository import EmbeddingDimensionError
@@ -372,3 +374,143 @@ def test_get_document_still_returns_a_superseded_document_directly(repo, conn):
         "MATCH (d:Document {documentId: 'd1'}) RETURN d.currentVersion"
     ).result_set
     assert current is False
+
+
+# ── documentCurrent backfill for pre-Stage-A data (document-ingestion2 ─────────
+# Stage C-fix Blocker 1, docs/reviews/document-ingestion2-impl.md Pass 3). Every
+# Document/Chunk ingested before Stage A (commit 4a6186b, 2026-09-11) has NEITHER
+# `currentVersion` nor `documentCurrent` set at all — genuinely absent, not
+# `false` — because the old `create_document` shape never wrote either property.
+# `WHERE seed.documentCurrent = true` evaluates a missing property to NULL
+# (falsy), so such a chunk is silently unfindable until
+# `scripts/backfill_document_current.sh` runs. No existing fixture exercises
+# this axis: every one of them (`_seed_document` above included) always goes
+# through the *current* `create_document`, which always sets the property.
+
+
+def _strip_document_current(conn, *, document_id):
+    """Test-only raw write: REMOVEs (not sets false) `Document.currentVersion`
+    and every one of `document_id`'s `Chunk.documentCurrent` — simulates a
+    document ingested before Stage A ever existed, genuinely never touched by
+    this feature, as opposed to `_mark_document_superseded`'s "touched, then
+    explicitly superseded" shape above."""
+    db.workspace_graph(conn, WS).query(
+        "MATCH (d:Document {documentId: $documentId}) REMOVE d.currentVersion "
+        "WITH d MATCH (d)-[:HAS_CHUNK]->(c:Chunk) REMOVE c.documentCurrent",
+        {"documentId": document_id},
+    )
+
+
+def _run_document_current_backfill(ws: str = WS) -> None:
+    """Runs the real, shipped `scripts/backfill_document_current.sh` against
+    `ws:{ws}` — invoked as a subprocess (mirrors `conftest.py`'s own `_schema`
+    fixture invoking `bootstrap_schema.sh` the same way) rather than a Cypher
+    string duplicated inline here, so a regression in the shipped script
+    itself — not just in a copy of its intent — is what these tests pin."""
+    subprocess.run(
+        ["bash", str(_REPO_ROOT / "scripts" / "backfill_document_current.sh"), ws],
+        check=True, capture_output=True, text=True,
+    )
+
+
+def test_search_chunks_excludes_pre_migration_chunk_whose_documentCurrent_is_absent(
+    repo, conn,
+):
+    # Pins the bug's baseline (Blocker 1): a chunk with the property genuinely
+    # absent is excluded exactly like a superseded one, until backfilled.
+    _seed_document(
+        repo, document_id="d1", chunks=[("c1", "about cats", _pad([1.0]))],
+    )
+    _strip_document_current(conn, document_id="d1")
+
+    rows = repo.search_chunks(WS, q_vec=_pad([1.0]), k=4, limit=5)
+
+    assert rows == []
+
+
+def test_search_chunks_finds_pre_migration_chunk_after_documentCurrent_backfill(
+    repo, conn,
+):
+    # Pins the fix: after `backfill_document_current.sh` runs, the same
+    # previously-absent-property chunk is found again.
+    _seed_document(
+        repo, document_id="d1", chunks=[("c1", "about cats", _pad([1.0]))],
+    )
+    _strip_document_current(conn, document_id="d1")
+
+    _run_document_current_backfill()
+    rows = repo.search_chunks(WS, q_vec=_pad([1.0]), k=4, limit=5)
+
+    assert [r["chunkId"] for r in rows] == ["c1"]
+
+
+def test_document_current_backfill_never_reopens_a_genuinely_superseded_document(
+    repo, conn,
+):
+    # The backfill must only stamp rows where the property is missing
+    # entirely — never touch a document that was already explicitly
+    # superseded (`currentVersion`/`documentCurrent` present and `false`).
+    # Asserted via direct property reads, not `search_chunks`'s ANN scan:
+    # this is a property-level correctness guarantee, and this build's
+    # small-corpus ANN recall is not reliable enough to pin an exact-member
+    # claim across two documents sharing one tiny vector index (churn from
+    # the *other* document's own property writes can drop either one from
+    # the ANN candidate set — `docs/reviews/document-ingestion2-rca.md`; the
+    # single-document tests above already prove real end-to-end
+    # discoverability through `search_chunks` itself).
+    _seed_document(
+        repo, document_id="old", chunks=[("c1", "old version", _pad([1.0]))],
+    )
+    _mark_document_superseded(conn, document_id="old")
+    _seed_document(
+        repo, document_id="pre", chunks=[("c2", "pre-migration", _pad([1.0]))],
+    )
+    _strip_document_current(conn, document_id="pre")
+
+    _run_document_current_backfill()
+
+    graph = db.workspace_graph(conn, WS)
+    [[old_doc_current]] = graph.ro_query(
+        "MATCH (d:Document {documentId: 'old'}) RETURN d.currentVersion"
+    ).result_set
+    [[old_chunk_current]] = graph.ro_query(
+        "MATCH (c:Chunk {chunkId: 'c1'}) RETURN c.documentCurrent"
+    ).result_set
+    [[pre_doc_current]] = graph.ro_query(
+        "MATCH (d:Document {documentId: 'pre'}) RETURN d.currentVersion"
+    ).result_set
+    [[pre_chunk_current]] = graph.ro_query(
+        "MATCH (c:Chunk {chunkId: 'c2'}) RETURN c.documentCurrent"
+    ).result_set
+
+    assert (old_doc_current, old_chunk_current) == (False, False)
+    assert (pre_doc_current, pre_chunk_current) == (True, True)
+
+
+def test_document_current_backfill_is_idempotent(repo, conn):
+    # A second run must touch nothing — both counts of "property still
+    # missing" go to zero after the first run and stay there.
+    _seed_document(
+        repo, document_id="pre", chunks=[("c2", "pre-migration", _pad([1.0]))],
+    )
+    _strip_document_current(conn, document_id="pre")
+    graph = db.workspace_graph(conn, WS)
+
+    _run_document_current_backfill()
+    [[after_first]] = graph.ro_query(
+        "MATCH (c:Chunk {chunkId: 'c2'}) RETURN c.documentCurrent"
+    ).result_set
+    assert after_first is True
+
+    _run_document_current_backfill()  # idempotent — must report/produce 0
+
+    [[missing_docs]] = graph.ro_query(
+        "MATCH (d:Document) WHERE d.currentVersion IS NULL RETURN count(d)"
+    ).result_set
+    [[missing_chunks]] = graph.ro_query(
+        "MATCH (c:Chunk) WHERE c.documentCurrent IS NULL RETURN count(c)"
+    ).result_set
+    [[after_second]] = graph.ro_query(
+        "MATCH (c:Chunk {chunkId: 'c2'}) RETURN c.documentCurrent"
+    ).result_set
+    assert (missing_docs, missing_chunks, after_second) == (0, 0, True)

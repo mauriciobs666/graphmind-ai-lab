@@ -1911,9 +1911,13 @@ def test_hybrid_search_applies_rag_timeout_constant():
     assert call[3] == 10 and call[4] == 5
     assert call[5] is None
     assert call[6] == RAG_QUERY_TIMEOUT_MS
-    # Chunk pool is queried with the same q_vec/k/timeout, no channel scope
+    # Chunk pool is queried with the same q_vec/timeout, no channel scope —
+    # but k over-fetches (Stage C-fix Blocker 2, plan §3.3); limit does not.
     chunk_call = next(c for c in repo.calls if c[0] == "search_chunks")
-    assert chunk_call == ("search_chunks", "test", (1.0, 0.0), 10, 5, RAG_QUERY_TIMEOUT_MS)
+    assert chunk_call == (
+        "search_chunks", "test", (1.0, 0.0), 10 * SEARCH_DOCUMENTS_OVERFETCH, 5,
+        RAG_QUERY_TIMEOUT_MS,
+    )
 
 
 def test_hybrid_search_forwards_channel_scope_to_message_pool_only():
@@ -1928,9 +1932,12 @@ def test_hybrid_search_forwards_channel_scope_to_message_pool_only():
     assert call[5] == "c1"
     # search_chunks has no channel_id parameter at all — the Chunk pool is
     # never scoped, confirming the documented "unscoped even when the
-    # Message pool is channel-scoped" behavior.
+    # Message pool is channel-scoped" behavior. k over-fetches (Blocker 2).
     chunk_call = next(c for c in repo.calls if c[0] == "search_chunks")
-    assert chunk_call == ("search_chunks", "test", (1.0,), 3, 3, RAG_QUERY_TIMEOUT_MS)
+    assert chunk_call == (
+        "search_chunks", "test", (1.0,), 3 * SEARCH_DOCUMENTS_OVERFETCH, 3,
+        RAG_QUERY_TIMEOUT_MS,
+    )
 
 
 def test_hybrid_search_merges_message_and_chunk_pools_by_score_ascending():
@@ -2013,6 +2020,32 @@ def test_hybrid_search_all_message_results_when_chunk_ann_empty():
     assert len(hits) == 1
     assert hits[0]["seedKind"] == "Message"
     assert hits[0]["msgId"] == "m1"
+
+
+def test_hybrid_search_overfetch_prevents_under_fill_when_superseded_chunks_rank_first():
+    # Hard negative for Stage C-fix Blocker 2 (docs/reviews/document-ingestion2-
+    # impl.md Pass 3): `hybrid_search`'s `chunk_hits` half is exposed to the
+    # identical under-fill defect `search_documents` had before Stage C's own
+    # fix (`test_search_documents_overfetch_prevents_under_fill_...` above) —
+    # 5 superseded chunks rank ahead of 3 current ones in the ANN pool. Passing
+    # `k=k` unmultiplied to `search_chunks` (the pre-fix posture) would only
+    # ever see superseded candidates and under-fill the merged result to zero
+    # Chunk hits; over-fetching by `SEARCH_DOCUMENTS_OVERFETCH` must reach deep
+    # enough into the pool to surface all 3 current chunks.
+    pool = (
+        [{"chunkId": f"oc{i}", "documentCurrent": False, "score": 0.1 * i}
+         for i in range(5)]
+        + [{"chunkId": f"nc{i}", "documentCurrent": True, "score": 0.5 + 0.1 * i}
+           for i in range(3)]
+    )
+    repo = _RankedChunkRepo(pool)
+    repo.hybrid_rows = []  # isolate: no Message pool noise
+    svc = make_service(repo)
+
+    hits = svc.hybrid_search(CTX, q_vec=[1.0], k=3, limit=3)
+
+    assert [h["chunkId"] for h in hits] == ["nc0", "nc1", "nc2"]
+    assert all(h["seedKind"] == "Chunk" for h in hits)
 
 
 # ── post_agent_answer: agent-authored answer + EMITTED provenance (K-013) ───────

@@ -592,3 +592,164 @@ other would silently under-cover. Suggested: export the tuple as a small constan
   (`scripts/seed_eval_corpus.sh`, run outside pytest) — not diagnosed here, and out of this fix's
   scope, but worth a `graph-dba`/`data-scientist` note if `test_retrieval_eval.py`'s baseline ever
   starts drifting unexplainably.
+
+## Pass 5 — Stage C-fix (uncommitted, both Pass 3 blockers)
+
+**Scope.** Diff-scoped review of the currently uncommitted working-tree diff fixing Pass 3's two
+blockers — Blocker 1 (pre-Stage-A `Document`/`Chunk` rows have no `currentVersion`/
+`documentCurrent` property, silently zeroing search results) and Blocker 2 (`Services.
+hybrid_search`'s `search_chunks` call was exposed to the same under-fill defect `search_documents`
+was already fixed for). Touched: `server/falkorchat/services.py`, `server/tests/test_graphrag.py`,
+`server/tests/test_services.py`, plus new `scripts/backfill_document_current.sh`. Baseline: `git
+diff`/`git status --short` in `falkor-chat/` (repository.py confirmed untouched, matching the
+coordination ledger's own file-list claim). The coordinator's independent live re-probe of
+`ws:acme`/`ws:nlq-eval` backfill counts (29/29, 87/87, 12/12, 12/12) is accepted as already
+corroborated and not re-run here, per the brief.
+
+**Verdict: approve with suggestions.** No blockers; one minor finding (a docstring accuracy issue
+that traces back to this review's own Pass 3 nit, not an implementer error).
+
+**CPG: considered, not relevant** — the diff modifies arguments to two already-known, already-
+enumerated call sites (Pass 3 exhaustively confirmed the caller set for `search_chunks`, corroborated
+independently via `cpg_falkorchat`'s `CALL`-node index at the time); it adds no new caller, no new
+symbol, and no new edge for a call-graph query to find. Direct reading (repository.py's Cypher,
+QUERIES.md §6) was the faster and more precise tool for this diff's one CPG-shaped question
+(finding 1, below).
+
+### What I verified
+
+- Read the full diff of all three changed files plus the new script's full contents directly (not
+  a summary).
+- **Blocker 1 — script vs. precedent.** Diffed `scripts/backfill_document_current.sh` against
+  `scripts/backfill_thread_ids.sh` side by side: identical shape (header block, env vars, `PING`
+  check, per-workspace loop, `GRAPH.QUERY`/`sed -n '2p'` count extraction, idempotency framing).
+  Cypher matches Pass 3's exact suggested fix (`WHERE …IS NULL SET … = true`, two independent
+  statements, no shared `MATCH`) and only touches rows where the property is genuinely absent —
+  confirmed by reading, not inferring.
+  - Ran the shipped script live against the throwaway `ws:test` workspace as part of the new
+    `test_graphrag.py` tests (below) — this is the same live-execution path the new tests exercise,
+    not a separate manual run.
+  - Accepted the coordinator's independent `ws:acme`/`ws:nlq-eval` count re-probe per the brief;
+    did not re-run it.
+- **Blocker 1 — test coverage of the "property absent" axis.** Read
+  `_strip_document_current`/`_run_document_current_backfill`/all four new tests in
+  `test_graphrag.py` in full: `_strip_document_current` does a raw `REMOVE` (not `SET … = false`),
+  genuinely simulating "never touched by Stage A," distinct from `_mark_document_superseded`'s
+  "touched, then explicitly superseded" shape. `_run_document_current_backfill` invokes the real
+  shipped script as a subprocess (mirrors `conftest.py`'s own `bootstrap_schema.sh` invocation
+  pattern) rather than a duplicated inline Cypher string, so these tests pin the shipped script
+  itself. Four tests cover: baseline exclusion (absent ⇒ invisible), post-backfill discoverability,
+  non-reopening of a genuinely-superseded document (asserted via direct property reads, with a
+  documented and correct reason for not using `search_chunks` for that one — small-corpus ANN
+  recall isn't reliable enough to pin an exact-membership claim across two documents sharing one
+  tiny index, per the accepted RCA), and idempotency (second run touches nothing, verified via a
+  workspace-wide `count()` after `conn`'s per-test `DETACH DELETE n` wipe, not just the one seeded
+  row). Ran `tests/test_graphrag.py tests/test_services.py`: **288 passed**, live, against the
+  shared FalkorDB instance.
+- **Blocker 2 — fix placement and math.** `services.py`'s `hybrid_search` now passes `k = k *
+  SEARCH_DOCUMENTS_OVERFETCH` to `chunk_hits`'s `search_chunks` call, `msg_hits`'s
+  `repo.hybrid_search` call left unchanged (`k=k`) — the right call site, matching Pass 3's Finding
+  2 exactly. Confirmed the base variable is correct for this call site: `hybrid_search` has two
+  independently-tunable `k`/`limit` params (unlike `search_documents`, which only has `limit`), so
+  multiplying `k` (ANN candidate depth) rather than `limit` (final cap, left untouched on both the
+  `search_chunks` call and the outer `merged[:limit]` truncation) preserves the existing
+  independent-tunability contract — not a behavior change beyond fixing the under-fill.
+- **Same-revision-fixes interaction check.** Read both fixes together for any interaction: they
+  touch the same file but different call sites and different downstream consumers (`search_chunks`
+  called with `limit=limit` internally in both cases — unchanged by this diff, only `k` changed), so
+  there is no double-counting — increasing `k` only deepens the pre-filter ANN candidate pool, it
+  does not change how many rows either call site or the outer merge ultimately returns. Checked
+  `self._k`'s callers (`tools.py:358` `GraphragRetrieveTool`, `responder.py:104`
+  `AgentResponder`) — both pass a small constructor-time constant (`DEFAULT_RETRIEVE_K`, not an
+  open-ended user-supplied value like `search_documents`'s REST `limit` (`ge=1, le=200`)), so the
+  `k * 3` scaling here has no pathological-size exposure.
+- **Test-update genuineness.** Ran the two pre-existing `hybrid_search` call-tuple tests
+  (`test_hybrid_search_applies_rag_timeout_constant`,
+  `test_hybrid_search_forwards_channel_scope_to_message_pool_only`) and the new hard-negative
+  (`test_hybrid_search_overfetch_prevents_under_fill_when_superseded_chunks_rank_first`) — all
+  green against the current diff. Checked the updated assertions do the arithmetic themselves
+  (`10 * SEARCH_DOCUMENTS_OVERFETCH`, `3 * SEARCH_DOCUMENTS_OVERFETCH`) rather than loosening to a
+  range or removing the check — genuine updates, not weakened ones.
+- **Mutation-test verification — reproduced independently, not just judged plausible.** Copied
+  `services.py` and `scripts/backfill_document_current.sh` to `/tmp` first (md5-recorded), then:
+  - Mutated the backfill script's two `IS NULL` → `IS NOT NULL` (sed, both occurrences) and ran
+    `pytest tests/test_graphrag.py -k "backfill or pre_migration or idempotent"`: **3 failed, 1
+    passed** — `test_search_chunks_finds_pre_migration_chunk_after_documentCurrent_backfill`,
+    `test_document_current_backfill_never_reopens_a_genuinely_superseded_document`,
+    `test_document_current_backfill_is_idempotent` all failed (the baseline-exclusion test, which
+    doesn't call the script, stayed green as expected). Matches the delegate's claimed "3 tests"
+    exactly. Restored from the `/tmp` copy; md5 confirmed byte-identical to pre-mutation.
+  - Mutated `hybrid_search`'s `chunk_hits` call back to unmultiplied `k=k` and ran `pytest
+    tests/test_services.py -k hybrid_search`: **3 failed, 5 passed** —
+    `test_hybrid_search_applies_rag_timeout_constant`,
+    `test_hybrid_search_forwards_channel_scope_to_message_pool_only`,
+    `test_hybrid_search_overfetch_prevents_under_fill_when_superseded_chunks_rank_first` all
+    failed. Matches the delegate's claimed "3 tests" exactly. Restored from the `/tmp` copy; md5
+    confirmed byte-identical.
+  - Re-ran `tests/test_graphrag.py tests/test_services.py` after both restores: **288 passed**,
+    confirming the working tree was left exactly as found.
+- **Docstring nit (Pass 3) correction — reasoning check against the actual Cypher (brief item).**
+  Read `repository.hybrid_search`'s full Cypher (`repository.py:826-874`) and its canonical copy
+  (`docs/QUERIES.md` §6, lines 447-463) side by side against the new docstring text in both
+  `services.search_documents` and `services.hybrid_search`. Result in Finding 1 below — the
+  specific mechanism claimed does not hold as stated, though I did not find evidence the underlying
+  conclusion (no over-fetch needed for `msg_hits`) is wrong for the two production-relevant cases.
+
+### Findings
+
+**Minor — the corrected docstring's claim that `repository.hybrid_search`'s "scope join" is an
+`OPTIONAL MATCH`, and therefore "never discards a seed row," is not accurate against the actual
+Cypher.** `repository.py:850-863` (= `docs/QUERIES.md` §6 verbatim) has exactly one `OPTIONAL
+MATCH` — the `(seed)-[:MENTIONS]->(e:Entity)<-[:MENTIONS]-(related:Message)` co-occurrence
+expansion that feeds `relatedContext`. The actual "scope join" is two plain, required `MATCH`
+clauses: `MATCH (t:Thread)-[:HEAD|NEXT*0..]->(seed)` (always) and, when `channel_id` is given,
+`MATCH (c:Channel {channelId: $channelId})-[:HAS_THREAD]->(t)` — both of which *can* discard a
+seed row, structurally the same "post-YIELD, pre-`LIMIT` exclusion" shape as `search_chunks`'s new
+`WHERE`, not a left join. This claim originates verbatim in this review's own Pass 3 nit ("the
+`OPTIONAL MATCH`-based scope join never discards a seed row… it's a left join, not an exclusion
+filter") — the implementer faithfully transcribed Pass 3's suggested correction rather than
+introducing the error independently, so this is on me, not the delegate. That said, I found no
+evidence the *conclusion* is currently wrong: the channel-scoped case is caller-requested, intended
+narrowing (not an unpredictable staleness exclusion analogous to Blocker 2), and the unscoped
+`Thread` traversal is guaranteed to match for any message inserted via this codebase's own
+self-guarding HEAD/NEXT write paths — the one case where it would legitimately discard a live ANN
+candidate is an orphaned message "unreachable from a HEAD," which `scripts/backfill_thread_ids.sh`'s
+own header comment documents as residue of pre-v2 write defects, not a live, systemic gap like
+Blocker 1's 100%-of-pre-Stage-A-data finding. Suggested fix: replace "that join is an `OPTIONAL
+MATCH` (never discards a seed row)" with the accurate mechanism — e.g., "that join's `Thread`/
+`Channel` matches are required, not optional, but (a) the `Thread` match holds for any message
+reachable via this codebase's self-guarding HEAD/NEXT write paths, and (b) a channel-scoped match
+narrowing to fewer results is the caller's own intended scope, not a staleness exclusion — so
+neither currently has Blocker 2's 'silently drops rows the caller didn't ask to exclude' shape." If
+a future change makes messages orphan-prone again, or the docstring's confident wording is relied
+on to skip over-fetching `msg_hits` without re-checking, this claim would then be the thing that's
+wrong — flagging now while it's cheap to fix in the same diff that authored it.
+
+### What's solid
+
+- **Blocker 1's script is a faithful, idempotent mirror of an established precedent**
+  (`backfill_thread_ids.sh`), touches only rows with a genuinely absent property (never reopens an
+  explicitly-superseded row — proven by a dedicated test, not just claimed), and its live effect
+  was independently re-probed by the coordinator against both real affected workspaces before this
+  gate.
+- **Blocker 1's regression tests genuinely close the coverage gap Pass 3 found** — a raw `REMOVE`
+  fixture (not a `SET … = false` stand-in) exercises the "property absent" axis that every prior
+  fixture missed, and the tests run the real shipped script as a subprocess rather than a
+  duplicated Cypher string, so a regression in the script itself is what they'd catch.
+- **Blocker 2's fix lands on the correct call site, with the correct base variable, and no
+  interaction hazard with Blocker 1's fix** — verified by reading `self._k`'s two production
+  callers (bounded constructor-time constants, not open-ended user input) and by tracing that only
+  `k` (candidate depth) changed, never `limit` (response cap).
+- **Both mutation-test claims reproduced independently, byte-for-byte matching the delegate's
+  reported "3 tests" each**, with the working tree restored and md5-verified clean afterward.
+- **The two updated call-tuple assertions are genuine, arithmetic-checking updates**, not loosened
+  ones — confirmed by reading and by the second mutation (removing the multiplier) failing exactly
+  those two tests plus the new hard-negative.
+
+### Open questions
+
+- Whether the orphaned-message edge case surfaced while checking Finding 1 (a message unreachable
+  from any `Thread` HEAD, per `backfill_thread_ids.sh`'s own documented caveat, would silently drop
+  out of `hybrid_search`'s `msg_hits` pool exactly like a pre-migration chunk did before Blocker 1's
+  fix) is live in any current workspace — not checked here, out of this diff's scope, and distinct
+  from both of Pass 3's blockers (neither of which concerned the `Message` pool).

@@ -155,17 +155,23 @@ class SearchNotAvailableError(RuntimeError):
 # while the deployment keeps `TIMEOUT_MAX=0`.
 RAG_QUERY_TIMEOUT_MS = 5000
 
-# ── document-ingestion2 Stage C (plan §3.3): `search_documents` over-fetch ──────
+# ── document-ingestion2 Stage C (plan §3.3): `search_chunks` caller over-fetch ──
 # `repository.search_chunks` now excludes superseded-document chunks
-# post-`YIELD` (AC-4), so requesting only `k=limit` ANN candidates — this
-# method's original posture, when "there is no downstream scope traversal to
-# over-fetch for" still held — can under-fill below `limit` in a workspace
-# with many superseded chunks ranking highly. `3` is an implementer-tunable
-# RAM/recall trade-off, not load-bearing (mirrors this plan's own posture
-# toward similar constants, e.g. `MAX_DOCUMENT_CHARS`) — picked over the
-# plan's own `2` example for a bit more headroom against a heavily-superseded
-# corpus, at negligible extra ANN cost (`k` bounds the candidate scan, not the
-# response size).
+# post-`YIELD` (AC-4), so requesting only `k=limit` ANN candidates — the
+# posture both callers below originally had, when "there is no downstream
+# scope traversal to over-fetch for" still held — can under-fill below
+# `limit` in a workspace with many superseded chunks ranking highly. `3` is
+# an implementer-tunable RAM/recall trade-off, not load-bearing (mirrors this
+# plan's own posture toward similar constants, e.g. `MAX_DOCUMENT_CHARS`) —
+# picked over the plan's own `2` example for a bit more headroom against a
+# heavily-superseded corpus, at negligible extra ANN cost (`k` bounds the
+# candidate scan, not the response size).
+#
+# Shared, deliberately, by both of `search_chunks`'s production callers —
+# `search_documents` below and `hybrid_search`'s `chunk_hits` pool (Stage
+# C-fix Blocker 2, docs/reviews/document-ingestion2-impl.md Pass 3): both
+# face the identical under-fill defect for the identical reason, so a fix to
+# one without the other just moves the bug rather than closing it.
 SEARCH_DOCUMENTS_OVERFETCH = 3
 
 # ── K-039 item 3: readiness "recent triage post-success" sample size ────────────
@@ -1093,8 +1099,21 @@ class Services:
             ctx.ws, q_vec=q_vec, k=k, limit=limit, channel_id=channel_id,
             timeout=RAG_QUERY_TIMEOUT_MS,
         )
+        # `search_chunks` over-fetches by SEARCH_DOCUMENTS_OVERFETCH too (Stage
+        # C-fix Blocker 2, plan §3.3 rationale applied here as well): its post-
+        # `YIELD` `documentCurrent` filter can discard rows from this pool
+        # exactly like it can for `search_documents`, so `k` alone would
+        # under-fill `chunk_hits` whenever superseded chunks rank first in the
+        # ANN pool. `msg_hits` above needs no such treatment — `repository.
+        # hybrid_search`'s `Thread`/`Channel` scope matches are required, not
+        # optional, but (a) the `Thread` match holds for any message reachable
+        # via this codebase's self-guarding HEAD/NEXT write paths, and (b) a
+        # channel-scoped match narrowing to fewer results is the caller's own
+        # intended scope, not a staleness exclusion — so neither currently has
+        # this under-fill shape.
         chunk_hits = self._repo.search_chunks(
-            ctx.ws, q_vec=q_vec, k=k, limit=limit, timeout=RAG_QUERY_TIMEOUT_MS,
+            ctx.ws, q_vec=q_vec, k=k * SEARCH_DOCUMENTS_OVERFETCH, limit=limit,
+            timeout=RAG_QUERY_TIMEOUT_MS,
         )
         # Message pool concatenated first — see the tie-break note above.
         merged = (
@@ -1279,11 +1298,18 @@ class Services:
         "there is no downstream scope traversal to over-fetch for" still
         held) can under-fill below `limit`. `k = limit *
         SEARCH_DOCUMENTS_OVERFETCH` requests a larger bounded ANN candidate
-        pool while `limit` still caps the final response — the same
-        "over-fetch a bounded `k`, then let a post-`YIELD` filter and a
-        separate `limit` do the rest" idiom `hybrid_search` already uses for
-        its own scope filtering (independently-tunable `k`/`limit` params on
-        one query).
+        pool while `limit` still caps the final response. `Services.
+        hybrid_search`'s `chunk_hits` pool applies the identical
+        `SEARCH_DOCUMENTS_OVERFETCH` treatment to the same underlying
+        `repository.search_chunks` call, for the same reason — **not**,
+        despite the similar-sounding "over-fetch, then filter, then cap at a
+        separate `limit`" shape, the idiom `repository.hybrid_search` itself
+        uses for its own scope join: that join's `Thread`/`Channel` matches
+        are required, not optional, but (a) the `Thread` match holds for any
+        message reachable via this codebase's self-guarding HEAD/NEXT write
+        paths, and (b) a channel-scoped match narrowing to fewer results is
+        the caller's own intended scope, not a staleness exclusion — so
+        neither currently has this under-fill risk to over-fetch against.
 
         Raises `SearchNotAvailableError` when no gateway is wired (`Services`
         built with `models=None`, e.g. `FALKORCHAT_ENABLE_AGENT` off) — mirrors
