@@ -32,9 +32,9 @@ for the coordination.
 | Stage A | `coder` | `a9d89d22889116f71` | accepted | commit `4a6186b` | `analyst` (`a6e97e7a616f4e17d`) → approve (`reviews/document-ingestion2-impl.md` Pass 1, commit `609f5e2`) | 292883 tok / 169 tools |
 | Stage B | `coder` | `a9f6e53aab977e853` | accepted | commit `aa1c9be` | `analyst` (`a439cd511546da526`) → approve (Pass 2, commit `f61d193`) | 284816 tok / 128 tools |
 | Stage B-fix | `coder` | `aeae785dc198f920c` | delivered, commit held | not committed — see Notes | — → — | 132737 tok / 42 tools |
-| Stage C | `coder` | `aac114c8aba5b13b3` | gated | commit `6443365` (+ RCA doc) | `analyst` (RCA, `ac32535b34417b58f` → root-cause; diff gate, `a4b85a78a0b012216`) → **needs changes** (`document-ingestion2-impl.md` Pass 3) | 232999 tok / 114 tools |
+| Stage C | `coder` | `aac114c8aba5b13b3` | accepted (closed via Stage C-fix) | commit `6443365` (+ RCA doc) | `analyst` (RCA, `ac32535b34417b58f` → root-cause; diff gate, `a4b85a78a0b012216`) → needs changes (Pass 3), superseded by Pass 5 approval | 232999 tok / 114 tools |
 | Stage C-testinfra | `tdd-engineer` | `a86e9ffd7e45830fb` | accepted | commit `bedae6f` | `analyst` (`a2ddb8f16f010aa2d`) → approve (Pass 4, minor+nit only) | 181930 tok / 61 tools |
-| Stage C-fix | `tdd-engineer` | — | queued (after Stage C-testinfra gate) | — | `analyst` → — | — |
+| Stage C-fix | `tdd-engineer` | `ae7d3fff734c8f6f9` | accepted | commits `b9c4b66` + `f64b3c4` | `analyst` (`a3018e15374301a62`) → approve with suggestions (Pass 5) | 191189 tok / 84 tools (+125848 tok / 56 tools review) |
 | Stage D | `coder` | — | queued | — | `analyst` → — | — |
 | Stage E | `qa-engineer` | — | queued | — | — | — |
 
@@ -172,3 +172,58 @@ for the coordination.
   and gets its own review pass. Next session should pick up by dispatching Stage C-fix
   (`tdd-engineer`) per the Notes entry above ("Decision (mine...): backfill, not a null-tolerant
   filter..."), then re-gate, then proceed to Stage D/E.
+- **Resumed 2026-09-13.** Verified environment (FalkorDB `PONG`, tree clean, `HEAD` at `bedae6f`)
+  and re-confirmed both Pass 3 blockers still live in the current tree (`services.py:1096`
+  `hybrid_search` still unfixed `k=k`; `services.py:1300` `search_documents` still fixed) before
+  dispatching. **Stage C-fix dispatch was blocked by the auto-mode permission classifier**
+  ("Modify Shared Resources") — the brief asks the delegate to run a live backfill write against
+  the shared `ws:acme`/`ws:nlq-eval` FalkorDB workspaces. Escalated to the user rather than
+  substituting my own judgment (this is exactly the "write the harness itself gates behind human
+  approval" case) — user chose **"approve the live backfill now"**. Re-dispatched
+  `tdd-engineer` (`ae7d3fff734c8f6f9`) with the same brief, now carrying explicit user approval
+  for the write against those two named workspaces specifically (not a blanket approval — a third
+  workspace surfacing mid-run is flagged in the brief as a stop-and-ask fork, not an extension of
+  this approval).
+- **Stage C-fix delivered, both blockers fixed, independently re-verified before gating.**
+  `git diff --stat` matches the delegate's own file list exactly (`services.py`,
+  `test_graphrag.py`, `test_services.py` + new `scripts/backfill_document_current.sh`;
+  `repository.py` untouched). Full suite re-run by me independently: `2749 passed, 14 deselected`
+  — identical to the delegate's reported figure. Live backfill counts re-probed by me via
+  read-only `mcp__cypher__query` against both workspaces (not taken on the delegate's word):
+  `ws:acme` 29/29 documents with `currentVersion`, 87/87 chunks with `documentCurrent`;
+  `ws:nlq-eval` 12/12 documents, 12/12 chunks — both match the delegate's reported before/after
+  table exactly. Read the actual `services.py` diff directly (not just the summary): Blocker 2's
+  fix reuses `SEARCH_DOCUMENTS_OVERFETCH` at `hybrid_search`'s `chunk_hits` call with a comment
+  explaining the shared reasoning, and the docstring nit is corrected — matches the report.
+  Confirmed the delegate's `kaizen_team` write landed (`tdd-engineer` → new entry dated
+  2026-09-13, ANN-recall-on-non-embedding-property-write finding). **Non-blocking side note:**
+  my own independent full-suite re-run reproduced the documented `reference`-graph wipe hazard
+  (`docs/SERVER.md` §1.7) — `./scripts/verify_workflows.sh acme` now reports both defs `MISSING`
+  from `reference`. The standard remedy (`./scripts/seed_workflows.sh acme`) was blocked by the
+  same auto-mode classifier as the backfill write; not re-escalating for this — it's a
+  pre-existing, well-documented hazard triggered by *any* pytest run (every prior stage's runs
+  did this too), not specific to Stage C-fix, and doesn't affect any of the counts/tests verified
+  above. Flagging as a standing, low-priority follow-up (re-seed `reference` next time a script
+  write is approved) rather than blocking this gate on it.
+  Dispatching `analyst` for the Pass 5 diff-gate re-review of both blockers now.
+- **Pass 5 returned approve with suggestions** (no blockers). Independently reproduced both
+  mutation-test claims (file-copy + md5-verified restore) and the same-revision-fixes interaction
+  check (no double-counting between the two blockers' fixes). One Minor: the docstring correction
+  added by Stage C-fix (itself transcribing this same review's own Pass 3 nit) mischaracterized
+  `repository.hybrid_search`'s scope join as an `OPTIONAL MATCH` — it's actually two required
+  `MATCH`es; the underlying conclusion (no over-fetch currently needed there) still holds for a
+  different, correct reason. I independently re-verified this against `repository.py:826-874`
+  myself before accepting the finding (confirmed only the `Entity` co-occurrence expansion is
+  `OPTIONAL MATCH`) — genuinely trivial, single-file docstring correction, fixed directly rather
+  than routed to a specialist, using the reviewer's own suggested replacement wording (verified,
+  not applied blind). Full targeted suite re-run after the fix: 288 passed.
+  **Stage C-fix committed as `b9c4b66`** (code + tests + docstring fix + Pass 5 review doc)
+  **+ `f64b3c4`** (the backfill script — a separate commit because `git add` on the new script
+  file alone was denied by the auto-mode classifier as "Self-Modification"; escalated to the user,
+  who granted it, then the add/commit succeeded). Live backfill counts re-verified via read-only
+  `mcp__cypher__query` before either commit (`ws:acme` 29/29 docs, 87/87 chunks; `ws:nlq-eval`
+  12/12 docs, 12/12 chunks). **Stage C is now fully closed** — Pass 3's `needs changes` is
+  superseded by Pass 5's approval of the fix that closes both its blockers.
+  **Non-blocking follow-up still open:** the `reference`-graph pytest-wipe hygiene item noted
+  above (re-run `seed_workflows.sh acme` next time such a write is approved).
+  **Next: Stage D (`coder`), then Stage E (`qa-engineer`).**
