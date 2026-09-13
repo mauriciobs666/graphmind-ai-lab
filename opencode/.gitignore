@@ -1,0 +1,4 @@
+# Ownership markers tank writes at runtime (opencode/docs/plans/devops-opencode-headless.md §3.3)
+# — bookkeeping, not a deliverable. Never write here yourself; compose-up.sh/compose-down.sh own it.
+agents/tank/state/*
+!agents/tank/state/.gitkeep

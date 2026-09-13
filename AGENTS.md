@@ -14,10 +14,12 @@ engineering** (Claude Code and OpenCode artifacts).
   traces. GraphRAG (in-graph vector + traversal) and graph-state-machine workflows. Design and
   query library are locked and live-verified. Milestone status is authoritative in
   `falkor-chat/docs/BACKLOG.md`.
-- `opencode/` — Personal OpenCode configuration. Its former custom agents and OpenCode-only
-  `SKILL.md` packages are retired (`deprecated/opencode/` — see that row in `deprecated/README.md`);
-  the manual covering local LM Studio setup, `opencode/docs/manuals/local-llm.md`, stays live and is
-  what the new headless `tank` agent builds on (`opencode/docs/requirements/`).
+- `opencode/` — Personal OpenCode configuration. **`agents/tank/`** is the one live agent: a
+  headless, local-model DevOps variant that runs a read-only health/hygiene check by default and
+  can bring up/tear down one Docker-Compose environment it itself started
+  (`opencode/agents/tank/README.md`). Former custom agents and OpenCode-only `SKILL.md` packages
+  are retired (`deprecated/opencode/` — see that row in `deprecated/README.md`). The manual
+  covering local LM Studio setup, `opencode/docs/manuals/local-llm.md`, is what `tank` builds on.
 - `cpg/` — Code-Property-Graph component code home: durable CPG reload artifacts
   (`.cpg-artifacts/`, gitignored) for the Joern-built graphs (`cpg_<component>`) loaded into
   FalkorDB. The MCP server is **not** here — it's the top-level `cypher-mcp/`, generic rather than
@@ -64,15 +66,15 @@ engineering** (Claude Code and OpenCode artifacts).
   workflow-engine-backed `salesperson` agent — is specified in `docs/requirements/salesperson-ui.md`
   and planned in `docs/plans/salesperson-ui.md`, but **not built yet**. Also holds
   `deprecated/opencode/`, `opencode/`'s former custom agents (`rpg`, `coding-senior`, `severino/`)
-  and OpenCode-only `SKILL.md` packages, retired to clear the way for the new headless `tank` agent
-  (`opencode/docs/requirements/devops-opencode-headless.md`).
+  and OpenCode-only `SKILL.md` packages, retired to clear the way for the headless `tank` agent
+  (see the `opencode/` bullet above).
 
 ## Component docs (read before working in a component)
 
 | Component | Entry doc(s) |
 |---|---|
 | `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · `falkor-chat/docs/DESIGN.md` (graph) · `falkor-chat/docs/SERVER.md` (server process) · `falkor-chat/docs/QUERIES.md` |
-| `opencode/` | `opencode/docs/manuals/local-llm.md` · `opencode/docs/requirements/devops-opencode-headless.md` |
+| `opencode/` | `opencode/AGENTS.md` · `opencode/docs/manuals/local-llm.md` · `opencode/agents/tank/README.md` |
 | `cpg/` | `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
 | `cypher-mcp/` | `cypher-mcp/README.md` |
 | `claude/` | `claude/README.md` · `claude/AGENTS.md` |
@@ -88,9 +90,10 @@ engineering** (Claude Code and OpenCode artifacts).
   (`falkor-chat/CLAUDE.md` imports it) — FalkorDB OpenCypher (not Neo4j): no APOC/GDS, vector
   indexes via DDL, index-before-constraint. Keep the query suite green
   (`./scripts/test_queries.sh`).
-- **OpenCode agent tasks** → `opencode/` — no live custom agent today (the former ones are
-  retired, `deprecated/opencode/agents/`); follow `opencode/docs/manuals/local-llm.md` for local
-  LM Studio setup and `opencode/docs/requirements/` for the in-flight `tank` agent.
+- **OpenCode agent tasks** → `opencode/` — `agents/tank/` is the one live agent (former ones are
+  retired, `deprecated/opencode/agents/`); follow `opencode/AGENTS.md` and
+  `opencode/agents/tank/README.md` for setup/run, `opencode/docs/manuals/local-llm.md` for local
+  LM Studio setup.
 - **Skill tasks** → `skills/` for cross-tool/Claude-Code-oriented skills; OpenCode-only ones are
   retired (`deprecated/opencode/skills/`) — a new one goes in `opencode/skills/` fresh. Follow
   each `<name>/SKILL.md` and the directory's `README.md`.
