@@ -9,27 +9,34 @@ for the full design.
 
 ## Current state
 
-**Stage S3 is closed — the first real end-to-end run has executed.** `modelbench/` holds
+**Stage S4 is closed — both new packs have run end to end against one model each.** `modelbench/` holds
 `fingerprint`, `results`, `stats`, `report`, `roles`, `packs` (the real loader:
 `load_pack`/`validate_pack`, content hashing, the AST import allowlist, the row-count identity),
 `lmstudio`, `hostinfo`, `tooling`, `convo` (`assemble` and the bounded per-turn `drive`), `runner`
 (`RunConfig`, `RunRefused`, the `ItemScorer`/`ConversationScorer` scorer-seam Protocols, `run_pack`'s
 ten-step capture order, both driving loops — `_drive_single_call_items` and
 `_drive_conversations`/`_turn_timings` — and `latency_block`'s `LatencyBlock` accumulation,
-satisfying spec §5's nine invariants), and `scoring/retrieval.py` — the `embedder` role's own
-`ItemScorer` (recall@k/MRR/precision@k, BM25 reference arm, `prime`/`embed_text`/`deterministic_arm`).
-The CLI ships all six commands — `compare` (with `--negative-control`), `index rebuild`, `models
---tested`, `attest`, `validate` and `run` — wired into `cli.py`'s `main()`. `run --pack
-embedder-graphrag-retrieval --model text-embedding-qwen3-embedding-0.6b` is a real, executed run:
-harness self-check recall@10 = 37/38 = 0.974 (`docs/test-reports/embedder-self-check-report.md`),
-`compare` renders the model arm against its BM25 deterministic reference arm with no exclusion.
+satisfying spec §5's nine invariants), and two `ItemScorer` implementations: `scoring/retrieval.py`
+for `embedder` (recall@k/MRR/precision@k, BM25 reference arm, `prime`/`embed_text`/`deterministic_arm`);
+`scoring/classification.py` for `guard-judge` (parse-conservative judge reply, `falseAdvanceRate`/`falseSuspendRate`,
+boundary and four path-split diagnostics); and `scoring/extraction.py` for `nlq-structured-query`
+(`layer1ExactMatchRate`, per-shape extraction scores, `unanswerableAbstainRate`, answerability-stamped
+40-item corpus split 34/6 answerable/unanswerable). The CLI ships all six commands — `compare` (with `--negative-control`),
+`index rebuild`, `models --tested`, `attest`, `validate` and `run` — plus three new `scripts/refresh_golden.py`
+flags (`--check-tables-shape`, `--stamp-answerability`, `--source-git-sha`) wired into `main()`. Proof runs:
+`run --pack embedder-graphrag-retrieval --model text-embedding-qwen3-embedding-0.6b` (S3 closure; recall@10 = 37/38,
+`docs/test-reports/embedder-self-check-report.md`); `run --pack guard-judge-understanding --model qwen/qwen3-4b-2507`
+(85 items, S4 closure; both verdict metrics side by side in `reports/guard-judge-understanding-20260911-02.md`);
+`run --pack nlq-structured-query --model qwen/qwen3-4b-2507` (40 items with live `knowledge_base`, S4 closure;
+`layer1ExactMatchRate` 34/34 this run, `reports/nlq-structured-query-20260911-01.md`).
 
-**What S4+ owes.** `_load_conversation_scorer` (`runner.py`) still raises `NotImplementedError`
-unconditionally — no `ConversationScorer` ships before `tool-caller`'s own stage. Four roles
-(`guard-judge`/`nlq-generator`/`chat-responder`/`tool-caller`) have no scorer yet. `validate --strict`
-also stays a deliberate `NotImplementedError` deferral (runner-spec §9) until the plan states a
-ruling. `docs/plans/small-model-benchmarking.md` §4 sequences S2–S8; `docs/HISTORY.md` carries the
-unit trail.
+**What S5+ owes.** `_load_conversation_scorer` (`runner.py`) still raises `NotImplementedError`
+unconditionally — no `ConversationScorer` ships before `tool-caller`'s own stage. Two roles
+(`tool-caller`, S5-S6; `chat-responder`, S7) still have no scorer. `validate --strict` also stays a deliberate `NotImplementedError`
+deferral (runner-spec §9) until the plan states a ruling. S5 creates `packs/tool-caller-shop-assistant/`
+and `modelbench/scoring/toolcalls.py` with synthetic-trace-validated environment, scoring, and the
+third leg of the disposition probe. `docs/plans/small-model-benchmarking.md` §4 sequences S2–S8;
+`docs/HISTORY.md` carries the unit trail.
 
 **The fingerprint has two discriminators and one derived key, and `ARM_KINDS` is deliberately not
 derived from the forbidden mapping.** `REQUIRED_BY_SCHEMA[schema]` and `FORBIDDEN_BY_ARM_PROFILE`

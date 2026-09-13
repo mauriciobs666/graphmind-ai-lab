@@ -2,6 +2,24 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-13 — U137 — sync stale S4-status prose across AGENTS.md and README.md
+
+**What:** Post-S4-closure doc-sync (same kind of task as U119's S2→S3 sync, `33fbe87` — that unit
+didn't add its own `HISTORY.md` entry; this one does). AGENTS.md's
+`## Current state` and README.md's `## Status` both still said "Stage S3 is closed," never updated
+for S4's completion. Rewritten both in place to say "Stage S4 is closed," naming the two new packs
+(`guard-judge-understanding`, `nlq-structured-query`), the three scorer modules
+(`scoring/classification.py`, `scoring/extraction.py`, plus existing `scoring/retrieval.py`), the
+CLI flag additions (`--check-tables-shape`, `--stamp-answerability`, `--source-git-sha`), the
+answerability split (34/6), and proof-run references. Updated the forward-looking section
+(`What S4+ owes` → `What S5+ owes`) to name S5's deliverables (`packs/tool-caller-shop-assistant/`,
+`modelbench/scoring/toolcalls.py`) and the disposition-probe third leg.
+
+**Files touched:** `model-bench/AGENTS.md`, `model-bench/README.md`, this entry.
+
+**Verification:** `model-bench/ $ .venv/bin/python -m pytest -q` — `1450 passed, 1 pre-existing
+failure (S5 tripwire), 3 deselected`. `.venv/bin/ruff check .` — clean.
+
 ## 2026-09-12 — S4 Step 4: `nlq-structured-query`, live half — S4 closed
 
 **What:** `docs/plans/small-model-benchmarking-s4-spec.md` §7 Step 4 — the last piece of S4's
