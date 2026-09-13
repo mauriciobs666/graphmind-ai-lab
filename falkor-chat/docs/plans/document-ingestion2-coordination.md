@@ -35,7 +35,8 @@ for the coordination.
 | Stage C | `coder` | `aac114c8aba5b13b3` | accepted (closed via Stage C-fix) | commit `6443365` (+ RCA doc) | `analyst` (RCA, `ac32535b34417b58f` → root-cause; diff gate, `a4b85a78a0b012216`) → needs changes (Pass 3), superseded by Pass 5 approval | 232999 tok / 114 tools |
 | Stage C-testinfra | `tdd-engineer` | `a86e9ffd7e45830fb` | accepted | commit `bedae6f` | `analyst` (`a2ddb8f16f010aa2d`) → approve (Pass 4, minor+nit only) | 181930 tok / 61 tools |
 | Stage C-fix | `tdd-engineer` | `ae7d3fff734c8f6f9` | accepted | commits `b9c4b66` + `f64b3c4` | `analyst` (`a3018e15374301a62`) → approve with suggestions (Pass 5) | 191189 tok / 84 tools (+125848 tok / 56 tools review) |
-| Stage D | `coder` | — | queued | — | `analyst` → — | — |
+| Stage D | `coder` | `a82458d12eeedad41` | accepted | commit `0c0fa4a` | `analyst` (`af1c21373dcf0a02d`) → approve with suggestions (Pass 6) | 409851 tok / 138 tools (+211974 tok / 54 tools review) |
+| Stage D-fix | TBD | — | queued | — | `analyst` → — | — |
 | Stage E | `qa-engineer` | — | queued | — | — | — |
 
 ## Notes
@@ -227,3 +228,44 @@ for the coordination.
   **Non-blocking follow-up still open:** the `reference`-graph pytest-wipe hygiene item noted
   above (re-run `seed_workflows.sh acme` next time such a write is approved).
   **Next: Stage D (`coder`), then Stage E (`qa-engineer`).**
+- **Stage D delivered, independently spot-checked before gating.** `git diff 5f71231 HEAD --stat`
+  on every Stage D target file is empty (no concurrent-session drift). Two unrelated, currently-
+  running concurrent sessions are active in the same shared tree on disjoint files
+  (`salesperson/` — a `salesperson-ui2` coordination — and `model-bench/` commits) — left entirely
+  untouched, not part of this dispatch or this commit. Full suite re-run by me independently:
+  `2812 passed, 14 deselected`, identical to the delegate's own figure (net +63 over the Stage
+  C-fix baseline of 2749). Re-ran the concurrency probe alone
+  (`test_create_document_with_auto_supersede_concurrent_calls_produce_exactly_one_edge`): passes.
+  Read `create_document_with_auto_supersede`'s actual Cypher directly (not just the delegate's
+  summary): matches the plan's two-separate-`FOREACH`-blocks shape exactly, `doSupersede = ok AND
+  candidate IS NOT NULL` (not `candidate IS NOT NULL` alone, per the plan's own actor-safety
+  note), re-`MATCH`-by-`documentId` before the guarded blocks (a Cypher scoping necessity the
+  delegate documented rather than silently working around). Noted deviation, judged reasonable:
+  the delegate substituted a different real mutation target for the "unlabeled-endpoint
+  discipline" mutation test, since `create_document_with_auto_supersede` only `CREATE`s
+  `SUPERSEDES` (never `MATCH`es one) — the discipline literally doesn't apply to this new code;
+  Stage B's existing `MATCH`-based `SUPERSEDES` reads are unchanged. Dispatching `analyst` for the
+  Stage D diff-gate review (Pass 6) now.
+- **Pass 6 returned approve with suggestions** (no blockers). Reviewer independently re-mutation-
+  tested the compound guard itself (not just judged plausible) and ran `EXPLAIN` live against
+  `ws:test` for `find_update_shortlist`'s actual query. Three Minor findings, none blocking:
+  (1) the shipped `find_update_shortlist` Cypher includes a `currentVersion` predicate that
+  wasn't in the literal shape `graph-dba` profiled in the plan's §0 pass — `EXPLAIN` still shows a
+  single `Node By Index Scan`, no label scan, but `EXPLAIN` can't confirm real selectivity the way
+  `GRAPH.PROFILE` with planted probe rows can — recommends a `graph-dba` follow-up; (2) the
+  "skip suggested-tier scheduling when already auto-superseded" guard is present (verified by
+  reading) but has no direct regression test distinguishing "guard present" from "guard silently
+  removed"; (3) `scripts/test_queries.sh` — which plan §5 explicitly calls for updating with every
+  new Cypher shape this stage adds — is untouched, a real plan-mandated-deliverable gap (not a
+  functional defect: `EXPLAIN`/pytest already prove the shapes work, this is the standing
+  live-instance regression-guard layer specifically). **Stage D committed as `0c0fa4a`**
+  (code + tests + Pass 6 review doc) — none of the three findings are correctness blockers, and
+  Stage D's own AC-1/AC-2 coverage is solid per both the delegate's and reviewer's independent
+  verification. **Opened Stage D-fix** to close all three before Stage E, since Stage E's QA
+  acceptance pass benefits from a complete `test_queries.sh` baseline and a fully-closed review.
+  Not yet dispatched — next session (or continuation) picks up: (a) `graph-dba` quick consult,
+  `GRAPH.PROFILE` with planted current/non-current documents sharing an LSH band, to confirm
+  finding 1 for real; (b) a small `coder`/`tdd-engineer` follow-up for the missing scheduling-guard
+  regression test + the `test_queries.sh` §14.10 additions (mirroring the existing §14.7/§14.8/
+  §14.9 per-stage pattern) — route fresh (not resumed) given Stage D's delegate is already at
+  ~410k tokens, well past the resume-vs-fresh threshold for self-contained follow-up work.
