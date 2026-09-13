@@ -1,6 +1,6 @@
 # DevOps: headless, local-model OpenCode variant (`tank`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (M0) · **Version:** 3
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — (M0) · **Version:** 3
 
 **Revision notes** (one dated line each):
 - 2026-09-12 — Generalized FR-5a/5b from a `falkor-chat`-only design to any compose-based
