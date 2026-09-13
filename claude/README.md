@@ -112,6 +112,7 @@ Plans and histories:
 
 `cobb` additionally maintains [`cobb/TESTING.md`](./cobb/TESTING.md) (agent testing standards).
 `graph-dba` additionally maintains two on-demand knowledge bases kept out of the always-loaded prompt: [`graph-dba/falkordb-quirks.md`](./graph-dba/falkordb-quirks.md) — dated, live-verified quirks of this lab's pinned FalkorDB build (quirks win on conflict) — and [`graph-dba/falkordb-reference.md`](./graph-dba/falkordb-reference.md) — its general FalkorDB practice playbook (modeling patterns, Cypher surface, DDL, `algo.*`, config, ops).
+`devops`'s prompt body is split: [`devops/devops-persona.md`](./devops/devops-persona.md) (no frontmatter) is the canonical, runtime-agnostic persona text — the single source of truth shared mechanically with OpenCode's headless `tank` agent (`opencode/agents/tank/`, which reads it live via `{file:...}`); `devops/devops.md` wraps a generated, byte-identical copy of it between `<!-- SHARED-PERSONA:BEGIN/END -->` markers plus a handful of Claude-Code-only additions. **Edit `devops-persona.md`, never the marked span in `devops.md` directly**, then run [`devops/scripts/sync-persona.sh`](./devops/scripts/sync-persona.sh) to regenerate it (idempotent; fails loudly if the markers are missing/duplicated).
 
 ## Skills
 
