@@ -14,6 +14,7 @@ import pytest
 from conftest import TEST_EMBEDDING_DIM
 from fastapi.testclient import TestClient
 
+from falkorchat import api as api_mod
 from falkorchat import config, db
 from falkorchat.app import create_app
 from falkorchat.config import CallContext
@@ -1032,6 +1033,54 @@ def test_ingest_document_byte_identical_modulo_whitespace_auto_supersedes(
     assert match["status"] == "confirmed"
     assert match["confidence"] == 1.0
     assert match["technique"] == "exact_normalized_text_hash"
+
+
+def test_ingest_document_auto_supersede_skips_scheduling_update_detection(
+    wired_real_ingestion, monkeypatch,
+):
+    """Pass 6 review Finding 2 (`document-ingestion2-impl.md`): the
+    `if not receipt.get("autoSuperseded")` guard in `api.ingest_document`
+    must actually SKIP scheduling `_schedule_update_detection` for a
+    document that the synchronous auto tier already resolved — it's already
+    decided, no suggestion needed. The existing AC-1 test above can't catch
+    an accidental removal of this guard: in that test's fixture the only
+    content-sharing document is the old version itself, which
+    `find_update_shortlist` already excludes via its own `currentVersion`
+    scope, so an errantly-scheduled job would just find no candidates and
+    every existing assertion would stay green regardless. Spy directly on
+    `api._schedule_update_detection` (module-level, bound by `from .background
+    import _schedule_update_detection` in api.py) instead of relying on an
+    end-to-end side effect."""
+    client, _repo = wired_real_ingestion
+
+    scheduled_for = []
+    monkeypatch.setattr(
+        api_mod, "_schedule_update_detection",
+        lambda *args, **kwargs: scheduled_for.append(args[3]),
+    )
+
+    first = client.post(
+        "/documents", json={"text": "Hello   World\nThis is the content.", "title": "Doc"}
+    )
+    assert first.status_code == 201
+    old_id = first.json()["documentId"]
+    # the FIRST ingest is never auto-superseded (nothing to collide with yet)
+    # — the guard schedules detection for it, confirming the spy itself works.
+    assert scheduled_for == [old_id]
+
+    second = client.post(
+        "/documents",
+        json={"text": "hello world\nthis is the content.", "title": "Doc v2"},
+    )
+    assert second.status_code == 201
+    body = second.json()
+    assert body["autoSuperseded"] is True
+    new_id = body["documentId"]
+
+    # the guard must have skipped scheduling for the auto-superseded ingest —
+    # no new entry appended for `new_id`.
+    assert scheduled_for == [old_id]
+    assert new_id not in scheduled_for
 
 
 def test_ingest_document_plausible_edit_produces_pending_suggestion_via_background_job(

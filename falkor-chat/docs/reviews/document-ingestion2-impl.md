@@ -986,3 +986,111 @@ embedded chunk, mirroring `search_client`'s setup) confirming the old document's
   not load-bearing" posture the plan explicitly sanctions (§3.2/§5), so not a defect, just flagging
   in case `qa-engineer`'s Stage E test plan wants to name it explicitly as a known tuning knob when
   writing the "plausible-but-not-identical" acceptance scenario.
+
+## Pass 7 — Stage D-fix (uncommitted, Pass 6 Findings 2+3), 2026-09-13
+
+**Scope.** Diff-scoped re-check of the currently uncommitted working-tree diff closing Pass 6's
+Finding 2 (no regression test for the `autoSuperseded` scheduling-skip guard) and Finding 3 (no
+`test_queries.sh` coverage of Stage D's two new Cypher shapes). Touched: `server/tests/test_api.py`
+(one new test, `test_ingest_document_auto_supersede_skips_scheduling_update_detection`) and
+`scripts/test_queries.sh` (new `§14.10` section). Pass 6's Finding 1 (`find_update_shortlist`'s
+live shape vs. the profiled shape) was closed separately by a `graph-dba` diagnostic consult,
+already committed (`19ad080`) — not re-examined here. Baseline: `git diff -- falkor-chat/server/
+tests/test_api.py falkor-chat/scripts/test_queries.sh`. This is a re-check of two already-reported
+findings, not a fresh full review — see the disposition lines below rather than re-argued analysis.
+
+**Verdict: approve.** Both findings closed; no new findings.
+
+**CPG: considered, not relevant** — same disposition as Pass 5/6 for this feature: the diff adds
+test-only assertions against two already-enumerated symbols/shapes (Pass 6 already traced
+`create_document_with_auto_supersede`/`find_update_shortlist` clause by clause and confirmed the
+`_schedule_update_detection` import/call site), no new caller, no new symbol. Direct reading plus
+a live `test_queries.sh` run were the right tools for this diff's actual questions.
+
+### Finding 2 — disposition: fixed
+
+Verified `test_ingest_document_auto_supersede_skips_scheduling_update_detection`
+(`server/tests/test_api.py:1038-1082`) genuinely exercises both branches of the
+`if not receipt.get("autoSuperseded"):` guard (`api.py:190`), not just the happy path:
+
+- **Wiring is correct.** `api.py:17-21` imports `_schedule_update_detection` by name
+  (`from .background import ... _schedule_update_detection`) into its own module namespace, and the
+  route body calls the unqualified name — so `monkeypatch.setattr(api_mod,
+  "_schedule_update_detection", ...)` patches exactly the reference `ingest_document` resolves at
+  call time (the standard "patch where used" shape, confirmed by reading both files, not assumed).
+- **Args-indexing is correct against the real signature.** `background._schedule_update_detection(
+  schedule, repo, ws, document_id)` (`background.py:295-296`) is called from `api.py:191-193` as
+  `_schedule_update_detection(background.add_task, repo, ctx.ws, receipt["documentId"])` — so
+  `args[3]` in the spy lambda is `document_id`, matching what the test asserts against
+  (`scheduled_for.append(args[3])`).
+- **Both branches are genuinely exercised.** The first ingest (nothing to collide with) asserts
+  `scheduled_for == [old_id]`, proving the spy itself fires on the non-auto-superseded path before
+  the interesting assertion; the second, byte-identical-modulo-whitespace ingest asserts
+  `autoSuperseded is True` and then `scheduled_for == [old_id]` again (unchanged) plus `new_id not
+  in scheduled_for` — proving the skip branch.
+- **Mutation-tested myself, independent of the delegate's own claim.** Copied `falkorchat/api.py`
+  to `/tmp` (md5-recorded), replaced the guard at line 190 with `if True:` (scoped to the single-
+  document route only, not the `/documents/batch` guard at line 230 — a different, untouched code
+  path), and re-ran the new test: **1 failed**, exactly at the second `assert scheduled_for ==
+  [old_id]` (`AssertionError: … Left contains one more item: '<new_id>'`) — the guard's removal is
+  caught, not silently absorbed. Restored `api.py` from the `/tmp` copy; `md5sum` confirmed
+  byte-identical to the pre-mutation file before and after. Re-ran the un-mutated test afterward —
+  green (`1 passed`).
+
+### Finding 3 — disposition: fixed
+
+Verified the new `§14.10` section (`scripts/test_queries.sh:1816-1907`) covers both Stage D Cypher
+shapes named in the plan (§3.4), with assertions that would fail on a real regression, not just
+smoke checks:
+
+- **`create_document_with_auto_supersede`'s atomic write.** The section's `CREATE_DOC_WITH_AUTO_
+  SUPERSEDE` variable is byte-identical to the shipped query (`repository.py:1779-1831`, diffed
+  clause by clause) and the assertions exercise the full atomic behavior in one call: the old
+  document flips `currentVersion=false` + gets `supersededAt`/`supersededBy` stamped, its `Chunk`
+  bulk-flips `documentCurrent=false`, the new document is current, and the `SUPERSEDES{status:
+  'confirmed', decidedBy:'system', confidence:1.0}` edge is created — six independent property/edge
+  assertions, not one "it returned 200"-style check. A separate probe (`asd3`, fresh content with
+  no real candidate) asserts `autoSuperseded=false` and zero `SUPERSEDES` edges, closing the
+  self-match axis the query's `OPTIONAL MATCH`-before-`CREATE` ordering is meant to guarantee.
+- **`find_update_shortlist`'s two signals.** Both `FIND_SHORTLIST_BANDS` and
+  `FIND_SHORTLIST_TITLE` are byte-identical to the shipped queries (`repository.py:1881-1901`). The
+  band-OR fixture (`lsd1`/`lsd2` sharing `lshBand3`, differing only in `currentVersion`) and the
+  title-fuzzy fixture (`lsd3`/`lsd4` both fuzzy-matching `%Quarterly%`, differing only in
+  `currentVersion`) are genuinely discriminating, not tautological — each asserts the current
+  match is included AND the non-current match sharing the exact same signal is excluded, so a
+  regression that dropped the `currentVersion` scoping from either query would fail the
+  corresponding `assert_not_contains`, not just leave a `assert_contains` vacuously true. `lsd5`
+  (matches neither signal) is a third, independent negative control. The band-OR shape is also
+  checked with `assert_index_scan` (`GRAPH.PROFILE`) — live-confirmed `Node By Index Scan`, no
+  label scan — closing the "is this still the live-verified shape" half of Pass 6 Finding 1's
+  concern for the band query specifically (the title-fuzzy query, a `CALL db.idx.fulltext.
+  queryNodes` + post-`YIELD` filter, isn't a scan-anchoring question the same way).
+
+### What I verified beyond the two findings
+
+- Ran `./scripts/test_queries.sh` live against the up FalkorDB instance: **458/459 passed**. The
+  one failure is `§14.8 SUPERSEDES.matchId lookup … uses the relationship index, no label scan`
+  (`Edge By Index Scan` vs. the helper's `Node By Index Scan` string) — the pre-existing,
+  already-logged `assert_index_scan` helper gap named in the brief, unrelated to this diff and not
+  re-flagged as new. All 20 `§14.10` assertions passed.
+- Ran the full Python suite: `cd falkor-chat/server && .venv/bin/python -m pytest -q` — **2813
+  passed, 14 deselected, 0 failed** (2813 = Pass 6's 2812-and-accepted-unrun baseline + this pass's
+  one new test).
+- Confirmed no other file changed: `git status --short` shows exactly the two target files as
+  modified in this unit (plus unrelated concurrent working-tree state called out in the brief as
+  out of scope).
+
+### Operational note (not a finding)
+
+`test_queries.sh`'s teardown deletes the shared `reference` graph, as documented
+(`falkor-chat/AGENTS.md`'s script table); this run did so. `reference` currently holds a sparse
+leftover (1 `WorkflowDef` + 4 `Step` nodes, not a full re-seed) — most likely residual from a
+different concurrent session's own test activity in the few seconds since this run's teardown, not
+something this pass's diff or verification steps left behind deliberately. Re-seeding
+(`bootstrap_schema.sh` → `seed_demo.sh` → `seed_workflows.sh`, per the same table) is out of this
+review's scope and is the coordinator's/next session's call, same as any other run of this script.
+
+### Open questions
+
+None beyond Pass 6's still-open items (Finding 1's `graph-dba` `PROFILE`-with-planted-probe-rows
+follow-up, already dispatched separately per the brief and not re-litigated here).
