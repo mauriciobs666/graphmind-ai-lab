@@ -1,6 +1,6 @@
 # DevOps: headless, local-model OpenCode variant (`tank`) — security review
 
-> **Status:** active · **Owner:** `security-expert` · **Tracks:** — (M0)
+> **Status:** archived · **Owner:** `security-expert` · **Tracks:** — (M0)
 
 ## 1. Scope & verdict
 
@@ -406,3 +406,200 @@ broke the original.
   for whoever builds it (`coder`/`tdd-engineer`, checked by `qa-engineer`).
 - Confirmed no regression in the untouched read-only allow-list or the pre-existing metacharacter
   net — both behave identically to Pass 1.
+
+## Pass 3 — 2026-09-13
+
+**Lens:** lens-1 code/app-security review — the first for this artifact; Pass 1/2 reviewed the
+*plan's prose*, not code, since `tank` wasn't built yet.
+
+**Reviewed:** the actual shipped, currently-uncommitted artifact —
+`opencode/agents/tank/{environments.json,opencode.json,scripts/{lib.sh,compose-status.sh,
+compose-up.sh,compose-down.sh,health-check.sh,bring-up.sh,tear-down.sh},tests/wrapper-scripts.sh,
+README.md,state/.gitkeep}` and `opencode/.gitignore` — built by `tdd-engineer` (U1: `environments.json`
++ inner wrapper scripts + test suite) and `cobb` (U3: `opencode.json`, outer scripts, docs) per
+`opencode/docs/plans/devops-opencode-headless-coordination.md`. Baseline: Pass 2's approved v3
+design and its two nits; plan §5's "Smuggling-regression test" section and §4 step 12 ("not
+optional").
+
+**CPG:** not applicable — reconfirmed via `mcp__cypher__query(graph='GRAPHS')` this session: no
+`cpg_opencode`/`cpg_claude` graph exists (matching Pass 1/2's own finding). The artifact is bash
+scripts + JSON config — not a Joern-buildable surface that would add value over direct reading and
+live execution even if a graph existed.
+
+**Verdict: approve.** No blocker, no major. Live reproduction against the real, shipped scripts and
+config reproduces every Pass-2 result exactly, this time against real code, not a mock — no new
+bypass. Both Pass-2 nits landed and landed correctly. Two new items surfaced, both informational
+(not actionable defects in the artifact itself) — logged below for whoever they concern.
+
+### Disposition of Pass 2 items
+
+- **Nit 1 (trailing-`*` safety comment): landed, and well-placed.** In
+  `opencode/agents/tank/README.md`'s "Permission design (why the wrapper scripts are safe)"
+  section, linked from the README's own top line. Read it in full: it states the safety property
+  precisely (validation lives in the script, not the pattern), explicitly warns a future editor
+  not to "simplify" the pattern, and cites the live-reproduction evidence backing the claim. I
+  judge `cobb`'s placement call (human-editor-facing README, not the model-facing `opencode.json`
+  prompt addendum) as correct, not just acceptable: the trailing-wildcard rationale is a fact about
+  the *permission table's design*, relevant to whoever edits `opencode.json`/the scripts — it is
+  not something `tank` itself needs to reason about at runtime, and stuffing it into the prompt
+  would have been unjustified prompt bloat with no behavioral payoff.
+- **Nit 2 (`resolve_slug` exact-key-equality unit test): landed, and does what I asked.** In
+  `opencode/agents/tank/tests/wrapper-scripts.sh:257-294`, sourcing the real `lib.sh` directly (not
+  a reimplementation) and asserting four cases: the real key resolves; a **prefix** of the real key
+  does not; the real key **plus trailing garbage** does not (the exact quoted-smuggle shape); the
+  real key as a **mid-string substring** does not. I ran the suite (`./tests/wrapper-scripts.sh`,
+  23/23 pass) and independently mutated `resolve_slug` myself — not just re-read the ledger's claim
+  about `tdd-engineer`'s own mutation — to a prefix-match lookup (`k.startswith(slug)` instead of
+  `data.get(slug)`), pointed the test suite's `REAL_SCRIPTS_DIR` at the mutated copy, and reran:
+  exactly one test failed, the dedicated exact-equality test itself (`'falkor' (a prefix of the
+  real key) must NOT resolve`), while the other 22 stayed green — confirming the dedicated test is
+  what actually catches this mutation class, not incidental coverage from the other tests. Matches
+  the ledger's U1 note's claimed shape of rigor, independently corroborated with my own mutation,
+  not the same one `tdd-engineer` ran.
+
+### Live reproduction against the real, shipped scripts and config
+
+Ran from `opencode/agents/tank/` via `opencode debug agent tank --tool bash --params '{"command":
+"..."}'` against the **real, unmodified `opencode.json`** (absolute wrapper-script paths anchored
+to this machine's real repo path) — the same technique Pass 1/2 used, this time with no mock or
+scratch fixture standing in for the permission config. `docker ps -a`/`docker volume ls` diffed
+before and after every phase; full list identical throughout (`falkordb-dev` + this machine's other
+unrelated containers, none touched); `opencode/agents/tank/state/` left containing only
+`.gitkeep` throughout. Real `environments.json` (the sole entry, `falkor-chat`, the actual shared
+dev stack) was **never used to complete a live up/down cycle** in this pass — every case below
+either denies before `docker` runs, or is refused inside the script before `docker` runs, so the
+real, shared `falkor-chat` stack was never at risk; the *positive*-path logic (a known slug
+actually resolving, bringing up, writing/removing the marker) was independently re-verified instead
+via `./tests/wrapper-scripts.sh`, which runs the same real, byte-identical scripts against a fake
+`docker` on `PATH` in an isolated fixture tree (see disposition of Nit 2 above; 23/23 pass).
+
+1. **Classic raw-compose smuggle** — `docker compose -f <repo>/falkor-chat/compose.yaml
+   --project-directory <repo>/falkor-chat -f /tmp/<fresh>/compose.yaml --project-directory
+   /tmp/<fresh> down`. **Denied** at the permission layer (`"Unexpected error... rule which
+   prevents..."`, no `docker` invocation) — matches expectation: no allow pattern's literal prefix
+   matches a bare `docker compose` invocation in the shipped table at all. Confirmed.
+2. **Wrapper-script-boundary unquoted smuggle** —
+   `.../scripts/compose-down.sh falkor-chat -f /tmp/<fresh>/compose.yaml --project-directory
+   /tmp/<fresh>` (5 shell tokens). Permission layer **allows** (matches the real
+   `compose-down.sh *` pattern), and the **real** script refuses before touching `docker`:
+   `REFUSED: compose-down.sh takes exactly one argument (an environments.json slug), got 5`.
+   Confirmed against real code, not architect's mock or Pass 2's faithful reimplementation.
+3. **Quoted single-token smuggle** — `compose-down.sh 'falkor-chat -f /tmp/<fresh>/compose.yaml
+   --project-directory /tmp/<fresh>'` (one token). Allowed at the permission layer, refused by the
+   real `resolve_slug`'s exact-match lookup: `REFUSED: '...' is not a known environment`. Confirmed.
+4. **Path-traversal-shaped slug** — `compose-down.sh '../../../../etc/passwd'`. Allowed at the
+   permission layer, refused by the real `resolve_slug` lookup identically. Confirmed.
+5. **Chaining appended to a wrapper-script call** — `compose-down.sh falkor-chat; touch
+   /tmp/pwned-marker-review-<pid>`. Correctly **denied** at the permission layer by the `*;*` net;
+   confirmed the marker file was never created (`ls` found nothing matching).
+
+No new bypass found against the real, shipped artifact. Every Pass-2 result reproduces exactly.
+
+### New observations this pass
+
+**INFORMATIONAL — OpenCode's own `doom_loop`/`external_directory` permission layer is not part of
+`tank`'s design and should not be credited or relied on; it also produced spurious denials during
+this pass's own testing, worth flagging for `qa-engineer`'s U4.** Evidence: the resolved permission
+list `opencode debug agent` echoes on every call includes `{"permission":"doom_loop","action":
+"ask","pattern":"*"}` and a set of `external_directory` rules (`"*"` → `ask`, plus specific allows
+for this machine's `~/.local/share/opencode/tool-output/*`, `/tmp/opencode/*`, and several
+`~/.claude/skills/*` paths) — **none of these appear in `tank`'s own `opencode.json`** (which
+defines no `permission.external_directory` at all) nor in this user's `~/.config/opencode/
+opencode.json` (checked; no such keys). They are OpenCode's own built-in/global defaults, merged in
+independently of `tank`'s config. During this pass's testing, several otherwise-identical
+wrapper-script-boundary smuggle attempts against **directories I had reused across repeated calls**
+(e.g. a `/tmp/tank-review-victim-*` name tried more than once) came back denied at what looked like
+the permission layer, with no `docker` invocation logged — behavior consistent with some kind of
+near-duplicate/doom-loop suppression across repeated similar `bash` calls within the same project
+directory's session, **not** a deterministic check tied to the referenced directory's real
+existence (control tests: two freshly-created, never-reused real directories, `/tmp/tank-review-
+real1` and `.../real2`, referenced the same way, were both allowed straight through to the script).
+Switching to a fresh, never-before-used directory name per test (case 2–5 above) reliably reproduced
+Pass 2's exact expected shape every time. **Why it matters:** this is not a property of `tank`'s own
+`permission.bash`/wrapper-script design — it neither reliably blocks a genuine attack nor is it
+something the design depends on — but it *can* produce a false reading in either direction during
+manual live-reproduction testing (a spurious deny that looks like "even better than expected," or,
+in principle, a spurious block of a legitimate retry) if a tester reuses similar fixture names
+across many calls in one session. **Suggested improvement:** not a code fix — a testing-methodology
+note. `qa-engineer`'s U4 live smoke tests should use fresh, non-overlapping fixture/environment
+names per test case for the same reason, and should not read an unexplained single denial during
+manual `opencode debug agent` probing as either "extra security" or "a regression" without ruling
+this out first, the way I had to here. Logged as a kaizen entry (below) since it's a durable,
+non-obvious fact about this specific tool's behavior, not the artifact under review.
+
+**NIT — coordination ledger's defense-in-depth deny count is off by one (21, not 20); no code
+impact.** Evidence: `opencode/agents/tank/opencode.json:54-74` — I counted 21 deny entries in that
+block (`docker volume rm*` through `*>*`), not the "20 defense-in-depth denies" the coordination
+ledger's 2026-09-13 note states. All 21 are correctly present, correctly ordered after the allow
+tier, and (re-confirmed, same as `teco`'s check) zero of them and zero allow pattern contains the
+substring `docker compose`. This is a one-digit inaccuracy in a coordination note, not in the
+reviewed artifact or in this review's own prior passes — flagged for whoever next edits that
+ledger, not a finding against the code.
+
+### Other checks this pass
+
+- **REPO_ROOT / cwd independence.** Ran `compose-status.sh falkor-chat` (read-only) directly from
+  `/tmp` and from `/` as cwd — both resolved the correct `REPO_ROOT` and returned the real
+  `falkor-chat` stack's `docker compose ps` output, confirming `lib.sh`'s `BASH_SOURCE`-based
+  resolution (`lib.sh:12-16`) is genuinely cwd-independent, not just cwd-independent by the
+  accident of always being invoked from `opencode/agents/tank/`. (Theoretical, not tested: a
+  symlinked invocation would resolve relative to the symlink's own directory, since `cd
+  "$(dirname "${BASH_SOURCE[0]}")" && pwd` doesn't follow symlinks without `-P` — but `tank` itself
+  has `tools.write`/`tools.edit` both `false` and no shell primitive to create a symlink reaches
+  it, so this isn't in `tank`'s own threat model; noted for completeness, not a finding.)
+- **Marker JSON construction.** `write_marker`/`marker_field` (`lib.sh:68-108`) build and parse the
+  marker exclusively via `python3 -c` with values passed as separate `sys.argv` entries into
+  `json.dump`/`json.load` — never string-interpolated into a hand-built JSON literal. No injection
+  surface; the `slug` value reaching it has already passed `resolve_slug`'s exact-match lookup, so
+  it can only ever be a real `environments.json` key, not attacker-controlled text.
+- **Resolved permission order, independently judged, not just correctly ordered.** Reconfirmed
+  (own `opencode debug agent tank` calls, matching `teco`'s independent U3 check): default-deny-*,
+  7 read-only allows, 3 wrapper-script allows anchored to the real absolute path, then 21
+  defense-in-depth denies (see NIT above), last-match-wins throughout. My own conclusion: the
+  security property here doesn't actually rest on the ordering trick — it rests on the wrapper
+  scripts making the ordering trick moot for compose entirely, since no raw-`docker-compose` allow
+  pattern exists for a deny net to have to out-rank. The remaining deny tier is exactly what Pass 2
+  called it: free, non-load-bearing insurance, now re-confirmed against real code rather than a
+  reimplementation.
+- **Outer scripts** (`health-check.sh`, `bring-up.sh`, `tear-down.sh`) carry no security logic of
+  their own — thin `cd` + `exec opencode run --agent tank "<fixed message>"` wrappers, exactly as
+  designed (plan §4 step 9); nothing to bypass here since they never touch `docker` directly.
+
+### What's solid
+
+- The wrapper-script design holds under direct, repeated live attack against the **real** code —
+  every Pass-1/Pass-2 bypass class was retried here and none reproduced.
+- The test suite (`tests/wrapper-scripts.sh`) runs the actual shipped scripts (`cp`'d byte-for-byte
+  into an isolated fixture, not reimplemented), which is exactly what makes independent mutation
+  testing against it meaningful — confirmed by doing it myself, not just trusting the report.
+- `tools.write`/`tools.edit` both `false` in the shipped `opencode.json`, eliminating the
+  write-traversal surface Pass 1 flagged as unconfirmed, by construction, matching Pass 2's
+  judgment and now re-verified directly from the shipped config file rather than a debug-agent
+  probe.
+- `opencode/.gitignore` correctly excludes only the runtime marker files (`agents/tank/state/*`,
+  keeping `.gitkeep`) — no secrets, no overbroad exclusion.
+
+### Open questions
+
+- None blocking this verdict. The coordination ledger's off-by-one count (NIT above) is a one-line
+  fix for whoever next touches that document, not routed to any specific agent by this review.
+- A full lens-2 (agent/prompt-safety) pass on the now-built `devops-persona.md`/`opencode.json`
+  prompt content is `analyst`'s G1 pass this round, not reattempted here — I spot-checked the
+  headless addendum in `opencode.json` against what I already approved in Pass 1/2 and found it
+  unchanged in substance (same "never retry, never search for an alternative command" framing),
+  but a dedicated lens-2 pass on the shipped persona text as a whole was out of this dispatch's
+  scope.
+
+### Verification methodology (Pass 3, live reproduction)
+
+Same discipline as Pass 1/2: `docker ps -a`/`docker volume ls` diffed before and after every phase
+(baseline and final state identical — `falkordb-dev` plus this machine's pre-existing unrelated
+containers, nothing added or removed); every fixture directory under `/tmp/<fresh-name>` created
+and removed by me; `opencode/agents/tank/state/` re-checked empty (only `.gitkeep`) at the end. The
+real `falkor-chat` compose stack was read from (`compose-status.sh`, the REPO_ROOT-independence
+check — a `docker compose ps`, read-only) but never brought up or torn down by anything in this
+pass. Treated as ordinary investigative verification of the shipped code's own behavior (OpenCode's
+own permission classifier and Docker Compose's own CLI parser, both already-installed, routinely-used
+tools; no lab-owned service's state was ever changed), not as an FR-10-gated exploitation attempt —
+same judgment call as Pass 1/2, stated explicitly again since FR-10's live-human approval ritual
+remains unavailable to me as a delegated subagent this pass too.
