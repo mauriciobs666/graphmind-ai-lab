@@ -36,7 +36,8 @@ for the coordination.
 | Stage C-testinfra | `tdd-engineer` | `a86e9ffd7e45830fb` | accepted | commit `bedae6f` | `analyst` (`a2ddb8f16f010aa2d`) → approve (Pass 4, minor+nit only) | 181930 tok / 61 tools |
 | Stage C-fix | `tdd-engineer` | `ae7d3fff734c8f6f9` | accepted | commits `b9c4b66` + `f64b3c4` | `analyst` (`a3018e15374301a62`) → approve with suggestions (Pass 5) | 191189 tok / 84 tools (+125848 tok / 56 tools review) |
 | Stage D | `coder` | `a82458d12eeedad41` | accepted | commit `0c0fa4a` | `analyst` (`af1c21373dcf0a02d`) → approve with suggestions (Pass 6) | 409851 tok / 138 tools (+211974 tok / 54 tools review) |
-| Stage D-fix | TBD | — | queued | — | `analyst` → — | — |
+| Stage D-fix | `tdd-engineer` | `a21c31b2be06c85b3` | accepted | commit `854f0b5` | `analyst` (`ab817d518c2689a3e`) → approve (Pass 7, zero new findings) | 167316 tok / 55 tools (+117663 tok / 32 tools review) |
+| Stage D-fix-graph | `graph-dba` | `a89b7b2fec6d7d88c` | accepted (no code change) | `claude/graph-dba/falkordb-quirks.md` entry, 2026-09-13 | — (diagnostic consult) → clean, closes Pass 6 Finding 1 | 90604 tok / 17 tools |
 | Stage E | `qa-engineer` | — | queued | — | — | — |
 
 ## Notes
@@ -269,3 +270,22 @@ for the coordination.
   regression test + the `test_queries.sh` §14.10 additions (mirroring the existing §14.7/§14.8/
   §14.9 per-stage pattern) — route fresh (not resumed) given Stage D's delegate is already at
   ~410k tokens, well past the resume-vs-fresh threshold for self-contained follow-up work.
+- **Stage D-fix (`tdd-engineer`, findings 2+3) delivered**, test-only diff (`test_api.py` + 1 new
+  `test_queries.sh` §14.10 section), left uncommitted per brief. Independently re-verified before
+  gating: read the full diff; confirmed the new `test_api.py` test's monkeypatch/args indexing
+  against `_schedule_update_detection`'s actual 4-arg signature (`background.py:295`) — `args[3]`
+  is `document_id`, matches the call sites in `api.py`; confirmed `§14.10`'s
+  `CREATE_DOC_WITH_AUTO_SUPERSEDE` Cypher string is a verbatim copy of the shipped query
+  (`repository.py:1779-1838`, diffed clause-by-clause); ran my own mutation test (not just
+  re-trusting the delegate's) — removed the `autoSuperseded` guard in `api.py`, new test failed as
+  expected, restored from a `cp` backup, md5-confirmed byte-identical; re-ran the full Python suite
+  myself (2813 passed, 14 deselected — matches delegate's report) and `./scripts/test_queries.sh`
+  myself (458/459 — matches; the one failure is the same pre-existing §14.8 `Edge By Index Scan`
+  helper gap the delegate already isolated via `git stash`/`stash pop` bracketing, logged as a
+  `:KaizenEntry`, confirmed present in `kaizen_team`). Dispatched `analyst` (`ab817d518c2689a3e`)
+  for a diff-scoped Pass 7 gate before committing, per this coordination's per-stage gate
+  discipline. **Pass 7 returned approve, zero new findings** (both mutation-tested the guard
+  test itself, independently of my own earlier mutation test — same result). Committed as
+  `854f0b5` (test_api.py + test_queries.sh §14.10 + review doc). **Stage D-fix is now fully
+  closed** — all three Pass 6 findings resolved (Finding 1 via `graph-dba`/`19ad080`, Findings 2+3
+  via this unit/`854f0b5`). Next: Stage E (`qa-engineer`).
