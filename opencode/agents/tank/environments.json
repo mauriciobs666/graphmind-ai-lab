@@ -1,0 +1,7 @@
+{
+  "falkor-chat": {
+    "composeFile": "falkor-chat/compose.yaml",
+    "projectDirectory": "falkor-chat",
+    "label": "falkor-chat dev stack (FalkorDB + M1 server)"
+  }
+}
