@@ -18,6 +18,11 @@
       "Bash(*down --volumes*)",
       "Bash(*pipeline.sh*--reset*)",
       "Edit(**/docs/BACKLOG.md)"
+    ],
+    "deny": [
+      "Bash(git commit*claude.ai/code/session_*)",
+      "Bash(gh pr create*claude.ai/code/session_*)",
+      "Bash(gh pr edit*claude.ai/code/session_*)"
     ]
   }
 }

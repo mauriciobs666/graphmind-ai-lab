@@ -588,6 +588,26 @@ the always-loaded project memory (`CLAUDE.md`).
   `settings.local.json` is untracked only because the maintainer's *global* ignore file matches it
   (`git check-ignore -v` resolves to `~/.config/git/ignore`); the repo's own `.gitignore` has no
   entry, so a fresh clone elsewhere would leave it as an ordinary, committable untracked file.
+- **For an unconditional, no-exceptions Bash policy, prefer a native `permissions.deny` rule over a
+  `PreToolUse` hook — it sidesteps the Auto Mode "ask"-hook reliability gap above entirely, by
+  design, not by luck.** Verified 2026-09-13 against `code.claude.com/docs/en/permissions`: "Bash
+  rules match the whole command text, with `*` standing in for any text" (so `Bash(git commit*TOKEN*)`
+  matches a token appearing anywhere later in the command, including inside a heredoc/command-
+  substitution body — deny/ask rules are explicitly stated to apply "when any subcommand matches
+  them, including a command nested inside a subshell [or] a command substitution"); and "Hook
+  decisions don't bypass permission rules... a matching deny rule blocks the call" regardless of
+  what any `PreToolUse` hook returns, "including deny rules set in managed settings" — i.e. a
+  settings-level deny is evaluated ahead of both hooks and the auto-mode classifier, an
+  independent, doc-confirmed mechanism from the hook layer the K-019-class gap above is about. Real
+  usage: `graphmind-ai-lab`'s no-attribution-footer enforcement (`.claude/settings.json`:
+  `Bash(git commit*claude.ai/code/session_*)` and two `gh pr` siblings) — chosen over a hook
+  specifically because the policy has no legitimate exception, and a whole-command-text substring
+  match denies any Bash call containing the trigger text, including a prose mention of it (e.g. a
+  commit message that describes the rule itself) — the same accepted over-match tradeoff every
+  `guard-*.sh` core already takes, not a new one. **Where this doesn't fit:** a policy that needs a
+  human-reviewable exception path wants `"ask"` (subject to the reliability gap above) or a hook
+  with a custom `permissionDecisionReason`, not `deny` — a settings deny has no override short of
+  editing the settings file itself.
 
 ## Bash tool environment
 

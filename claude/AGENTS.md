@@ -153,10 +153,11 @@ and `coder` also carry two each (since 2026-09-11): their `Write|Edit` `guard-br
 wrapper, alongside a `Bash` `guard-broad-bash.sh` wrapper closing the gap where `acceptEdits`
 covers file edits but not Bash.
 
-**Git-commit authority is prompt-level, not hook-enforced.** No `PreToolUse` hook matches `git
+**Git-commit authority is prompt-level, not hook-enforced — except the no-footer rule below,
+which is a native settings.json deny rule, not a hook.** No `PreToolUse` hook matches `git
 commit` (the destructive-ops guards match Bash command patterns like `GRAPH.DELETE`, not
-versioning commands), so this is entirely self-discipline, backstopped only by
-`scripts/audit-team.sh` check 8. The policy has two layers:
+versioning commands), so the staging/grant/race discipline below is entirely self-discipline,
+backstopped only by `scripts/audit-team.sh` check 8. The policy has two layers:
 
 - **Standing broad grants — `tico` and `teco` only, unconditioned on invocation mode.** `teco` may
   commit any coordinated specialist's already-verified deliverable **by explicit path** (its
@@ -208,11 +209,36 @@ grants stand exactly as documented above, and this still isn't a delegation of *
 an agent running interactively still only commits what it itself verified, never another agent's
 in-flight work.
 
-**No attribution footer on a commit or PR.** The `Claude-Session:` guidance that arrives as a
-harness `system-reminder` is a platform default with no knowledge of this user's settings,
-memory or repo docs — all three of which forbid the footer. `includeCoAuthoredBy: false` is
-already set and does **not** suppress that injection, so its recurrence every session is not
-evidence the preference changed. Write a clean message; this is not a conflict to escalate.
+**A docs-only coordination chain commits once, at its terminal state — not per gate round.**
+Settled 2026-09-13 (`docs/requirements/commit-granularity.md`): a chain where no unit touches
+source, tests, or config (requirements → plan → review → revision → re-review; ledger-tracked or
+conversation-held; `teco`- or `tico`-run) stages and commits every constituent document together,
+by explicit path, only once the chain reaches its terminal state (accepted / gated-closed /
+handed off) — never one commit per intermediate round. A chain paused mid-way (e.g. awaiting a
+review) across a session boundary leaves its pending documents uncommitted; that's expected, not
+a sign of missed work — the coordination ledger's `Status`/Notes (or the conversation itself, for
+one held without a ledger) is the record of what's pending and why. A **code-implementation**
+chain (any unit touching source/tests/config) is unaffected — it keeps today's per-verified-unit
+commit granularity. Staging discipline is unchanged either way: explicit path only, never
+`git add -A`, for the same index-race reason as above.
+
+**No attribution footer on a commit or PR — mechanically enforced.** The `Claude-Session:`
+guidance that arrives as a harness `system-reminder` is a platform default with no knowledge of
+this user's settings, memory or repo docs — all three of which forbid the footer.
+`includeCoAuthoredBy: false` is already set and does **not** suppress that injection, so its
+recurrence every session is not evidence the preference changed. Write a clean message; this is
+not a conflict to escalate.
+
+`.claude/settings.json`'s `permissions.deny` carries three entries —
+`Bash(git commit*claude.ai/code/session_*)`, `Bash(gh pr create*claude.ai/code/session_*)`,
+`Bash(gh pr edit*claude.ai/code/session_*)` — blocking any matching call outright. This is a
+**native settings deny rule, not a `PreToolUse` hook**: a settings deny resolves ahead of both
+hooks and the auto-mode classifier (`skills/agent-standards/claude-code.md`, Hooks). It matches
+on the whole Bash command text, so it also fires on a prose mention of the trigger substring
+(e.g. a commit message that describes this rule) — describe the pattern rather than spelling it
+verbatim if that bites. Doesn't cover `Write`/`Edit`, and doesn't extend to the rest of
+git-commit authority (grants, staging, the index race) below, which stays self-discipline-only.
+History and rationale: `claude/cobb/kaizen/history.md`, 2026-09-13.
 
 **`git add` then `git commit` is not atomic against a concurrent process sharing the same working
 tree.** A staged file sits in the shared git index until the commit actually runs — a second

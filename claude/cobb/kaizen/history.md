@@ -2,6 +2,94 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-13 — Docs-only coordination chains now commit once, at terminal state, not per round
+
+`tico` ran a requirements interview after a stakeholder git-hygiene complaint (hundreds of commits
+across the team read as noisy); landed at `docs/requirements/commit-granularity.md`, Ready for
+design, handed to `cobb` for the HOW. Settled scope (see that doc's decision log): a docs-only
+coordination chain (requirements → plan → review → revision → re-review; ledger-tracked or
+conversation-held; `teco`- or `tico`-run) now stages and commits every constituent document
+together, by explicit path, once, when the chain reaches its terminal state — not one commit per
+gate round. A chain paused mid-way legitimately leaves the tree dirty across a session boundary.
+Code-implementation chains (any unit touching source/tests/config) are explicitly out of scope —
+current per-verified-unit granularity there is unchanged. Applies going forward only.
+
+- **What:** Added one new paragraph to `claude/AGENTS.md`'s git-commit-authority section stating
+  the rule and citing the requirements doc. Updated `claude/teco/teco.md` in two places: the
+  "Commit what you verified" integration-step bullet (now branches on chain kind — immediate
+  per-unit for code-implementation, batched-at-terminal-state for purely docs-only) and "The
+  grant" bullet (the "never more than one coherent unit's files per commit" rule now carries the
+  same code-implementation/docs-only branch, rather than being universal). Updated
+  `claude/tico/tico.md` in four places: the review-shaped-consult bullet (a consult's returned
+  deliverable no longer commits the moment it lands — it holds uncommitted and commits together
+  with the document it checked, at that document's own commit point); "Coordinating a docs-only
+  chain"'s Integrating bullet (same terminal-state batching as teco's, simpler since every unit
+  under this mechanism is docs-only by construction — it hands off to `teco` the instant code is
+  needed); "Commit at document boundaries" (added the one exception a review-shaped consult's
+  artifact now needs, so it doesn't fall under "never fold two different documents into one");
+  and the Bash-grant bullet (replaced the blanket "never bundle more than one deliverable per
+  commit" with a pointer to the same timing rule, since (a)/(b)/(d) now deliberately group).
+- **Why these specific edits and no others:** grepped both prompts for `commit` first — every hit
+  is listed above; nothing else in either file states or implies per-round/per-document commit
+  timing for docs-only work. `claude/README.md` was checked and carries no restatement to update
+  (it already only points at `claude/AGENTS.md`'s "Git-commit authority" by name, per the DRY
+  convention).
+- **Two corrections mid-flight, both stakeholder-caught, both about narrative bleeding into an
+  always-loaded prompt file — logging so the pattern is visible, not just the fixes.** (1) My
+  first `claude/AGENTS.md` pass (the no-footer paragraph, same session, previous entry) stuffed a
+  dated incident narrative — two specific commit hashes, a "verified `<date>` against `<url>`,
+  quote" trail, the hook-vs-deny-rule reasoning — into the context file itself, directly against
+  root `AGENTS.md`'s own "history is not context ... a context file cites that home in a clause"
+  rule. Rewritten down to the current-state fact plus a one-clause citation to this history file;
+  the full narrative lives in that entry, not repeated here. (2) A first draft of this unit's
+  `teco.md` edit left "(unchanged)" as a parenthetical after the code-implementation-chain clause
+  — diff-review commentary with no meaning to a fresh read of the file, same category of leak.
+  Dropped. **Neither was caught by my own pass; both needed a second set of eyes reading the
+  actual diff against the file's own stated convention** — worth remembering next time I edit a
+  context/prompt file under time pressure: check "would this sentence make sense to someone who
+  never saw the diff" before calling a context-file edit done, not after being asked.
+- **Verification:** re-read both edited prompts end to end for internal consistency (no leftover
+  contradicting "one commit per unit" phrasing); confirmed `claude/AGENTS.md`,
+  `claude/teco/teco.md` line-length budget still clean (`awk length>700`, zero hits) and word
+  count only marginally up net (see `plan.md` K-033). Did not live-test the behavior (there is
+  nothing to execute — this is a coordination-practice rule, not a mechanism) — confidence rests
+  on cross-reading the three files together, not a live run.
+- **Plan items:** none opened beyond the K-033 word-count note (see `plan.md`).
+
+## 2026-09-13 — No-attribution-footer rule: mechanically enforced via a settings.json deny rule
+
+`teco` reported the no-footer rule (`claude/AGENTS.md`, added 2026-09-02) slipping in practice —
+two commits dated 2026-09-12, well after the rule was documented, still carried the harness's
+`Claude-Session:` footer (`5334f6d`, `dfdc0ae`). Stakeholder approved building real enforcement
+after an initial consult recommended a deny-and-force-retry approach.
+
+- **What:** Added three `permissions.deny` entries to the tracked `.claude/settings.json`:
+  `Bash(git commit*claude.ai/code/session_*)`, `Bash(gh pr create*claude.ai/code/session_*)`,
+  `Bash(gh pr edit*claude.ai/code/session_*)`. Updated `claude/AGENTS.md`'s git-commit-authority
+  section to (a) scope the existing "prompt-level, not hook-enforced" claim to exclude this one
+  rule, and (b) document the mechanism, its verification basis, and its known over-match tradeoff
+  under "No attribution footer on a commit or PR."
+- **Why a settings deny rule, not a `PreToolUse` hook (the shape I first floated in the consult):**
+  re-reading `skills/agent-standards/claude-code.md`'s own 2026-08-21 entries (K-019) before
+  building surfaced a live-reproduced, upstream-filed gap — a hook's `"ask"` decision does not
+  reliably fire under Auto Mode, on any matcher, in any execution context tested. Rather than
+  build on a documented-unreliable mechanism, I re-verified `code.claude.com/docs/en/permissions`
+  fresh (2026-09-13) and confirmed a native `permissions.deny` rule is evaluated ahead of both
+  `PreToolUse` hooks and the auto-mode classifier ("Hook decisions don't bypass permission rules
+  ... a matching deny rule blocks the call") and needs no script at all — strictly stronger and
+  simpler than what I'd initially recommended. The consult's other two rejected options (a native
+  `.git/hooks/commit-msg` hook, and a silent auto-strip) stand as originally reasoned.
+- **Known tradeoff, documented rather than hidden:** the pattern matches on the whole Bash command
+  text, so a commit that legitimately needs to spell the trigger substring in prose (e.g. a future
+  commit message describing this very rule) will also be denied — same over-match acceptance every
+  other guard in `claude/AGENTS.md`'s Hook machinery section already takes.
+- **Verification:** validated `.claude/settings.json` parses (`python3 -m json.tool`); did not
+  live-fire the deny rule (would require an actual `git commit`/`gh pr create` call carrying the
+  footer, which is exactly the thing being prevented) — the confidence rests on the doc citation
+  above, not a live repro. Flagging this as the one unverified link in the chain.
+- **Plan items:** none opened for this — narrow, closed change. Noted the added word-count pressure
+  on `claude/AGENTS.md` (already past its ~2,500-word smell per K-031/K-032) in `plan.md`.
+
 ## 2026-09-12 — Deprecated all of `opencode/`'s prior agents and skills; relocated `local-llm.md` to a manual
 
 User asked to deprecate the current OpenCode agents and skills. Clarified scope first (severino —
