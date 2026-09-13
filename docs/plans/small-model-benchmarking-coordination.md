@@ -2465,3 +2465,9 @@ driving unbuilt work off it. The top-level plan and `-ml.md` stay `active` — S
 standing S4-S8 authorization (2026-09-11, "lets start s4-s8"). No stakeholder checkpoint needed
 before drafting the S5 spec; same discipline as S4 — spec (`architect`) → `teco`-verified directly
 → implementation → `analyst` code gate → `qa-engineer` acceptance → stage close.
+
+## S5 spec dispatched — 2026-09-13
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
+|---|---|---|---|---|---|---|
+| U138 | `architect` | `a1a119b62daab1012` | in-flight — dispatched. S5 synthesis spec — unlike S1-S4, the plan's own "### S5" prose is already close to a full design (many done-conditions cited by exact fixture shape/review-finding id), so the job is turning already-decided prose into a concrete file/module layout + sized step sequence, not inventing design. Told to confirm whether `tests/test_convo.py::test_the_third_leg_of_the_disposition_probe_is_still_owed_by_s5` is already red now that `scoring/` exists (S4 created the package) — if so, that's S5's own unavoidable Step 0 finding, mirroring S4's own seam-fix precedent | `docs/plans/small-model-benchmarking-s5-spec.md` | `teco` (direct verification) → — | — |
