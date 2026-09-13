@@ -18,6 +18,18 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   *better* one on recall (plan §3.8.1; the report prints this as a standing honesty line). Lifting
   the ceiling means new queries, several with |R| ≥ 3, each human-verified per FR-19 — new golden
   data, which is why it is not in first delivery.
+- **`report.py` never renders `luckyPassCount`/`parseFailures`/`malformedSpecCount`/`schemaViolationCount`.**
+  Flagged in the S4 code gate (`docs/reviews/small-model-benchmarking-s4.md`) — currently harmless
+  (`luckyPassCount=0` on the only live run), but a future non-zero `luckyPassCount` would surface
+  in a shape's raw `k/n` with no visual distinction from a genuine pass. Whoever wires this
+  rendering must add a footnote/asterisk on a shape's `k/n` line whenever that shape's
+  `luckyPassCount` contribution is non-zero, per `extraction.py:325-328`'s own docstring obligation.
+- **`tools/exec.py`'s `order_by` sort has no defensive handling for a `None`-valued sort key.**
+  Flagged in the S4 code gate (`docs/reviews/small-model-benchmarking-s4.md`) — not reachable by
+  any shipped golden item today (every `order_by` item sorts on a never-null `Product.price`), but
+  a future sparse property in `tables.json`'s catalog half would raise an uncaught `TypeError`
+  instead of a graceful `SchemaViolationError`. Needs a one-line guard plus a regression test the
+  next time that file is touched.
 
 ## Note
 
