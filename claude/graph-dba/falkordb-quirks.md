@@ -636,6 +636,21 @@ to the general fact here.
   `find_update_shortlist` band-equality candidate lookup,
   `falkor-chat/docs/plans/document-ingestion2.md` §4 Stage D/§7.
 
+  **Refinement — adding a `{prop: true}` pattern-property anchor on the SAME label folds into
+  this shape too, with no leak of excluded rows** (verified 2026-09-13, module `41811`,
+  disposable `ws:docprobe3` graph). The shipped query is actually `MATCH (d:Document
+  {currentVersion: true}) WHERE d.lshBand0 = $band0 OR ... OR d.lshBand7 = $band7 ...` — a
+  pattern-property equality *combined with* the 8-disjunct band `OR`, not the bare `OR` this
+  entry originally verified. `GRAPH.PROFILE`/`GRAPH.EXPLAIN` still show a single `Node By Index
+  Scan | (d:Document)`, no label scan, no residual `Filter` operator, across every variant:
+  mixed-position disjunct matches (first/mid/last band), an all-miss negative control, and —
+  the case that actually matters here — a row sharing a matched band but with
+  `currentVersion: false`, planted both alone and alongside a `currentVersion: true` row sharing
+  the *same* band value. The false-version row never appeared in results in any variant,
+  confirming the exclusion happens inside the scan (same folding behavior as the CAS entry
+  below, `Run.status` guarded read), not via a downstream filter that could mask a scan-level
+  leak. Closes Finding 1 of `falkor-chat/docs/reviews/document-ingestion2-impl.md` Pass 6.
+
 - **A function call wrapped around an indexed property forfeits the index — there are no
   expression/functional indexes on this build** (verified 2026-09-07, module `41811`).
   `MATCH (p:Product) WHERE toLower(p.categoryNormalized) = 'audio'` plans `Node By Label Scan` +
