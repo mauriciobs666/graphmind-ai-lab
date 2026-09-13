@@ -286,6 +286,18 @@ one site, write the reason **per-site** and pin each site the way the key set is
 already does exactly this for the site list. A reason a guard cannot check is documentation: it needs
 a reviewer on every change to the sites it names, not a test.
 
+**A bare-existence tripwire is the narrowest form of this same gap — its own docstring can name a
+future owner the check does not verify.** A wiring tripwire written as "this package/module must
+not exist yet — it's owed by stage N" checks existence alone (`pkg.exists()`), while its docstring
+frames the check as specific to stage N's own deliverable. The check reddens the moment **any**
+stage creates that path, not only the one named — a sibling stage building unrelated groundwork in
+the same location trips a tripwire whose prose reads as if only the named stage could.
+
+Origin: `model-bench`'s `tests/test_convo.py::test_the_third_leg_of_the_disposition_probe_is_still_owed_by_s5`
+reddened the moment `modelbench/scoring/` was first created for an S3 (embedder) module, even
+though the docstring framed the check as owed specifically by S5 (the tool-caller scorer) — the
+guard checks bare package existence, not which scorer landed.
+
 ## A raise-site completeness pin can be computed on both sides instead of hand-maintained
 
 A black-box test suite's "every raise site of exception class X is covered by some scenario" claim

@@ -2,6 +2,42 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-09-13 — standing distillation pass: 7-entry `tdd-engineer` inbox (6 expected, 1 fresh), 2 promoted, 1 routed to devops, 4 discarded
+
+- **What:** `cobb` ran the standing kaizen-graph distillation over `tdd-engineer`'s inbox — 7
+  entries at fresh read (dated 2026-09-10 through 2026-09-13; one, `a3f1c8e2…`, postdates the
+  dispatch snapshot of 6 and was processed too, per the standing instruction to read fresh).
+- **Promoted (2):**
+  - `a1f3c8b2…` → `guard-testing-techniques.md`, folded into the existing §*"When the docstring
+    states SEMANTIC reach and the body does a SYNTACTIC match…"* as a new paragraph: a bare-
+    existence tripwire is the narrowest form of the same gap (checks existence alone; docstring
+    names one specific future owner).
+  - `212236c0…` → new `tdd-engineer.md` Principles bullet: a spec-mandated CLI mode can be fully
+    unit-tested by calling its function directly while the `argparse` wiring that exposes it is
+    silently skipped — drive the literal command line a spec names, at least once.
+- **Routed to `devops` (1):** `a3f1c8e2…` (`jq` absent on this dev box; use `python3 -c` with
+  `json.load()`/`dict.get()` for exact-match JSON lookups in Bash scripts) is a host-toolchain fact
+  for `devops`'s `ops-quirks.md`, not tdd-engineer's own domain — captured while building
+  `opencode/agents/tank/scripts/lib.sh`, a devops-owned artifact. Tagged `MENTIONS`→`devops`,
+  `tdd-engineer`'s own `PRODUCED` edge resolved, node left alive for `devops`'s own pass.
+- **Discarded (4):**
+  - `e76587ef…` (`Pack.prompt_config()` crashes every prompt-less pack at `run`, not `validate`) —
+    already published: `model-bench/docs/HISTORY.md:626`, "Bug fix: `Pack.prompt_config()` crashed
+    every `validate`-clean, prompt-less…", fixed the same session it was captured in.
+  - `a3f6e2d4…` (`validate --strict` unconditionally `NotImplementedError`, S4 spec doesn't flag
+    it) — already tracked repeatedly in `model-bench/docs/HISTORY.md` ("confirmed still present,
+    not this unit's/step's to fix", recorded at three separate points).
+  - `a3f0f2b0…` (disjoint-map sibling validator checks only one side) — the model-bench instance is
+    already published (`HISTORY.md:543-563`); the general lesson has no clean KB home (see
+    `plan.md` parking lot).
+  - `e3a2f1c4…` (bare-list vs. label-keyed-dict producer/consumer shape mismatch) — the model-bench
+    instance is already published (`HISTORY.md:223`); the general lesson has no clean KB home (see
+    `plan.md` parking lot).
+- **Graph:** 6 of 7 entries fully cleared (`DETACH DELETE`). `a3f1c8e2…` had only its `PRODUCED`
+  edge resolved (alive on `MENTIONS`→`devops`). `tdd-engineer` producer count after this pass: **0**.
+- **Docs touched:** `claude/tdd-engineer/{tdd-engineer.md,guard-testing-techniques.md,
+  kaizen/history.md,kaizen/plan.md}`.
+
 ## 2026-09-11 — Added a `Bash` guard (`guard-tdd-broad-bash.sh`) — closes the Bash confirmation gap `acceptEdits` never covered
 
 - **What:** `cobb` added a second `PreToolUse` hook to `tdd-engineer.md` (`matcher: Bash`,

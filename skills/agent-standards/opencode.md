@@ -23,7 +23,10 @@ Defined **two ways**:
 - `mode` — `"primary"` | `"subagent"` | `"all"` (**default `"all"`**).
 - `model` — `provider/model-id` (e.g. `anthropic/claude-...`, `lmstudio/<id>`); overrides global.
 - `temperature` — `0.0`–`1.0` (defaults model-specific). `top_p` — alt diversity control.
-- `prompt` — system-prompt file ref, form `{file:./prompts/build.txt}`.
+- `prompt` — system-prompt file ref, form `{file:./prompts/build.txt}`. **Verified 2026-09-12:**
+  a `{file:./path}` reference and literal text can be mixed in one string
+  (`{file:./persona.txt}\n\nsome literal text`) — the file's content and the literal text are
+  concatenated, so a shared persona file can be live-included without a build/generation step.
 - `permission` — granular tool gating (see below) — **the current way to gate tools.**
 - `tools` — ⚠️ **DEPRECATED** (`{tool: true/false}` enable map). **Use `permission` instead.**
 - `disable` — `true` to disable the agent.
@@ -48,6 +51,32 @@ subagents**), `external_directory`, `lsp`, `skill`, `todowrite`, `webfetch`,
   overrides/merges over global**, agent winning on conflict.
 - **Defaults:** most keys default to **`allow`**; `doom_loop` and
   `external_directory` default to **`ask`**; **reading `.env` defaults to `deny`.**
+- **`"ask" hangs a headless run forever (verified v1.18.30).** A `permission.bash`/`write`/`edit`
+  rule set to `"ask"` with no human present hangs `opencode run` indefinitely (confirmed by
+  timeout — no fallback, no auto-deny). `"deny"` instead lets the tool call fail gracefully: the
+  run completes with a narrated refusal, exit 0. Any headless/unattended agent config must avoid
+  `"ask"` on a path the run can actually reach.
+- **Glob `"*"` matches across a command's own flag/argument boundaries, not just within one path
+  segment (verified v1.18.30) — a security-relevant gotcha for any `bash` allow pattern gating a
+  multi-flag command.** For a command with a repeatable, last-value-wins scoping flag (e.g.
+  `docker compose -f`/`--project-directory`), a pattern like
+  `"docker compose -f <dir>/* --project-directory <dir>/* down"` can be satisfied by a string that
+  *also* contains a second, fully-formed `-f`/`--project-directory` pair inside the wildcard span —
+  Compose then executes against the last (attacker-chosen) `--project-directory`, not the one the
+  pattern text appears to scope to. No shell metacharacter is involved, so a metacharacter-chaining
+  deny net (`&&`, `;`, `|`, `` ` ``, `$(`, `>`) does not catch it. **The fix that actually closes
+  it:** never let `permission.bash` glob-match a model-authored string for this class of command at
+  all — route it through a fixed wrapper script that looks up a caller-provided slug against a
+  small, code-reviewed allow-list and constructs the full argv itself, and scope the agent's `bash`
+  permission to only the wrapper script's own absolute path (live-reproduced and closed:
+  `opencode/docs/reviews/devops-opencode-headless.md`, `opencode/docs/plans/devops-opencode-headless.md`).
+- **A live-testing gotcha for `opencode debug agent --tool bash --params` probes (verified
+  2026-09-13): reusing a fixture path/name across repeated probe calls in the same project cwd can
+  spuriously DENY an otherwise-allowed command**, via OpenCode's internal `doom_loop`/
+  `external_directory` permission layers rather than the agent config actually under test — a false
+  negative that looks exactly like the permission rule under test doing its job. Use a fresh,
+  never-reused fixture name for each probe to avoid the false reading; confirmed by re-running an
+  identical smuggling shape against a never-reused path immediately after a reused one was denied.
 
 ### Primary vs. subagent (verified 2026-06-20)
 

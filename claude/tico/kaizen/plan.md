@@ -177,6 +177,16 @@
   `otherRemaining` reaches 0) only once the clause is published.
 
 ## Parking lot / ideas
+- **Whether a `PreToolUse` hook should intercept `git commit` to strip/reject a `Claude-Session:`
+  attribution footer (noted 2026-09-13, kaizen entry `b3e1f2a4…`, discarded — not a promotable
+  fact, just evidence).** `claude/AGENTS.md`'s "No attribution footer" rule (added 2026-09-02) is
+  prompt-level self-discipline only — no hook matches `git commit` — and a log scan found two
+  2026-09-12 commits that still carried the footer despite the rule's existing since 09-02,
+  confirming it can slip. This is already fully documented as a known gap
+  (`claude/AGENTS.md`'s "Git-commit authority is prompt-level, not hook-enforced" section,
+  `teco.md` line ~163); the only new information is a second confirmed slip. Not promoted to any
+  prompt — it's an idea for a possible future hook (design decision, not this pass's to make), not
+  a fact. Revisit if a third slip turns up.
 - **`tico.md`'s two `git add <path>` then `git commit` parentheticals now trail the team rule.**
   `claude/AGENTS.md`'s concurrent-write paragraph was rewritten 2026-09-07 to lead with the
   path-limited form (`git commit -F - -- <path>…`), which never touches the shared index; the Mode 1

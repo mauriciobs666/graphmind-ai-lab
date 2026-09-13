@@ -2,6 +2,32 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-09-13 — standing distillation pass: 2 of 3 entries resolved, 1 left deliberately open (pre-existing K-016)
+
+- **What:** `cobb` ran the standing kaizen-graph distillation over `tico`'s inbox: 2 own entries
+  plus `e1a6c4d2…`, alive on its long-standing `MENTIONS`→`tico` edge.
+- **`e1a6c4d2…` — untouched, not a new disposition.** Re-read fresh and confirmed it is the exact
+  same entry already tracked in full as this agent's own K-016 (`plan.md`) and as `data-scientist`
+  K-003 (the origin record) — both correctly instruct leaving the graph node alive until the
+  target clause is actually published in `falkor-chat/docs/manuals/llm-provider-config.md`, which
+  has not happened. No new information; left exactly as K-016 specifies.
+- **Discarded (2):**
+  - `c4f2a3b5…` (a stakeholder can't tell a legitimately-gated pending file from a missed commit;
+    say so plainly) — **already covered, word for word**, by `tico.md`'s existing "Session close
+    is your responsibility" Guardrails bullet ("Anything left dirty that isn't yours to commit:
+    say so plainly to the stakeholder — what it is, why it's not yours, and who owns it next…
+    never close over it silently"). A confirming instance of the rule working as designed, not a
+    new gap.
+  - `b3e1f2a4…` (the no-attribution-footer rule is prompt-level only, not hook-enforced; two
+    2026-09-12 commits still carried the footer) — the underlying fact is already fully documented
+    (`claude/AGENTS.md`'s "Git-commit authority is prompt-level" section, `teco.md`). Logged as a
+    parking-lot idea (`plan.md`) — whether a `PreToolUse` hook should intercept this — rather than
+    promoted, since it's a design question, not a fact to state in a prompt.
+- **Graph:** `c4f2a3b5…` and `b3e1f2a4…` fully cleared (`DETACH DELETE`, sole `PRODUCED` edge
+  each). `e1a6c4d2…` deliberately left alive (`MENTIONS`→`tico`, no `PRODUCED` edge — orphaned
+  under the pre-M8 shape). `tico` producer count after this pass: **0**.
+- **Docs touched:** `claude/tico/kaizen/{history.md,plan.md}`.
+
 ## 2026-09-09 — orphan-backlog entry `e1a6c4d2` **kept open** and re-homed onto this agent's plan as K-016 (U31)
 
 - **What:** U31 of `claude/docs/plans/kaizen-distillation2-coordination.md` — the **orphan-backlog** unit, the first shaped by *edge* rather than by producer. The 11 nodes it covers carry **0 `PRODUCED` edges** and are alive only on `MENTIONS`; every earlier unit was organised by producer, so none of them could ever have been reached. `tico` carried one of the 12 edges, tagged by `data-scientist`'s U14 because the fact's proposed home is a **`tico`-owned document**.

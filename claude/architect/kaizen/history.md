@@ -2,6 +2,50 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-09-13 — standing distillation pass: 9-entry `architect` inbox, 4 promoted, 3 discarded, 1 routed to teco, 1 routed to agent-standards
+
+- **What:** `cobb` ran the standing kaizen-graph distillation over all 9 `architect`-produced
+  `kaizen_team` entries dated 2026-09-10/09-11/09-12 (full inbox at dispatch).
+- **Promoted (4) → `architect.md`, new Guardrails bullets:**
+  - `b3f1c9a2…` — a plan row's own word count is not a proxy for how specified the unit is; judge
+    completeness by resolving the citation, not the row's length.
+  - `b7f3a1d0…` — generalized security-design principle: when a permission/allow-list design is
+    found bypassable via pattern-matching, fix it architecturally (wrapper + allow-list lookup),
+    not by tightening the same matcher class.
+  - `a1f2c3d4…` — generalized past its model-bench origin: a component's own stated hard
+    constraint applies to every proposal in that component, including a human-invoked one-off
+    never on a run path.
+- **Promoted (2, one entry split across two facts) → `skills/agent-standards/opencode.md`
+  (Permissions + `prompt` field sections), dated inline as verified 2026-09-12 / OpenCode
+  v1.18.30:**
+  - `7a3f2b1c…` — `"ask"` hangs a headless `opencode run` forever (no fallback); `"deny"` fails
+    gracefully, exit 0; and the `prompt` field's `{file:...}` form can be mixed with literal text
+    in one string (concatenated).
+  - `e1d4c8a2…` — `permission.bash` glob `"*"` matches across a command's own flag/argument
+    boundaries, not just within one path segment — the docker-compose `-f`/`--project-directory`
+    smuggling mechanism and its wrapper-script closure (already shipped in
+    `opencode/docs/plans/devops-opencode-headless.md`).
+- **Discarded (3):**
+  - `a3f0c8b2…` (model-bench `ItemScorer` seam gap) — the entry's own text states the module's
+    docstring already flags this seam as inert/unreviewed; self-documented at the point of use.
+  - `b3f1a6b0…` (route a correction into the still-active extending spec doc rather than the
+    already-executed top-level plan) — a direct logical corollary of root `AGENTS.md`'s existing
+    collision rule 5 (executed-against doc stays intact; the still-active one revises in place),
+    not new information.
+  - `a1b2c3d4…` (`BACKLOG.md` is forward-looking-only, `HISTORY.md` gets the milestone row
+    directly) — already stated near-verbatim in root `AGENTS.md`'s `docs/` conventions.
+- **Routed outward (1), not tracked here:** `a7f3c9e2…` (teco's precedent of dispatching pure
+  text-consistency doc-staleness sweeps to architect for direct execution, verified directly
+  rather than analyst-gated) is substantively about `teco`'s own coordination/routing behavior,
+  not architect's. Tagged `MENTIONS`→`teco`; `architect`'s `PRODUCED` edge resolved, node left
+  alive for `teco`'s own pass (processed later in this same distillation run — see
+  `claude/teco/kaizen/history.md`, 2026-09-13).
+- **Graph:** 8 of 9 entries fully cleared (`DETACH DELETE`). `a7f3c9e2…` had only its `PRODUCED`
+  edge resolved; node stays alive on `MENTIONS`→`teco`. `architect` producer count after this
+  pass: **0**.
+- **Docs touched:** `claude/architect/{architect.md,kaizen/history.md}`,
+  `skills/agent-standards/opencode.md`.
+
 ## 2026-09-10 — Kaizen distillation, `architect`'s inbox (2 entries, both captured mid-writing the out-of-scope K-030 plan): 1 promoted to `graph-dba`'s KB, 1 discarded as already captured more deeply in the K-030 plan itself
 
 - **What:** `cobb` distillation pass over `architect`'s produced inbox. Re-queried fresh: exactly 2

@@ -2,6 +2,33 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-09-13 — standing distillation pass: 3-entry `teco` inbox (2 own + 1 `MENTIONS`-tagged from `architect`), 2 promoted, 1 discarded
+
+- **What:** `cobb` ran the standing kaizen-graph distillation over `teco`'s inbox: its own 2
+  produced entries plus `a7f3c9e2…`, tagged `MENTIONS`→`teco` earlier in this same pass when
+  `architect`'s own inbox was processed (see `claude/architect/kaizen/history.md`, 2026-09-13).
+- **Promoted (2), both folded into the existing `teco.md` "Work ships independently reviewed"
+  Guardrails bullet and its sibling "repeated gate" bullet:**
+  - `a7f3c9e2…` → new clause: a pure text-consistency doc-staleness sweep (a stage-claim
+    correction, no design decision) is the worked example of "genuinely trivial, low-risk" —
+    dispatch it to the document's owning specialist for direct execution and verify directly,
+    rather than routing through `analyst`. Reuses the existing "would this still exist if the
+    document were mechanically consistent with itself?" test already stated in the neighboring
+    repeated-gate bullet, rather than introducing new vocabulary.
+  - `c3f6a2e1…` → new clause generalizing the existing "a green offline suite is not [a live]
+    proof run" sentence past LLM-output-dependent behavior: the same gap hides behind a purely
+    deterministic pipeline when every offline test drives an intermediate stage directly with
+    hand-built objects and none drives the real producer→store→load→consumer round trip — treat
+    the first live end-to-end run through the actual pipeline as a genuine proof point.
+- **Discarded (1):** `f1a7b3c2…` (model-bench `report.py` `compare_report` renders no
+  verdict/exploratory sections with only one stored arm) — already published in
+  `model-bench/docs/HISTORY.md` (lines 69, 263, 1387).
+- **Graph:** `c3f6a2e1…` and `f1a7b3c2…` fully cleared (`DETACH DELETE`, sole `PRODUCED` edge
+  each). `a7f3c9e2…`: `otherRemaining` was 0 once its `MENTIONS`→`teco` edge (the only edge left
+  after `architect` resolved its own `PRODUCED` edge earlier in this pass) was accounted for —
+  full-node `DETACH DELETE`. `teco` producer count after this pass: **0**.
+- **Docs touched:** `claude/teco/{teco.md,kaizen/history.md}`.
+
 ## 2026-09-10 — Kaizen distillation, U48 (teco's 2-entry inbox, self-produced)
 
 - **What:** U48 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `cobb` distilled

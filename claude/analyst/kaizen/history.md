@@ -2,6 +2,59 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-09-13 — standing distillation pass: 12-entry `analyst` inbox, 9 promoted, 3 discarded
+
+- **What:** `cobb` ran the standing kaizen-graph distillation over all 12 `analyst`-produced
+  `kaizen_team` entries dated 2026-09-10/09-11/09-12 (full inbox at dispatch). Dedup checked
+  against `review-techniques.md` and root `AGENTS.md` by targeted grep before each disposition.
+  `analyst.md` untouched — every promotion landed in `review-techniques.md`.
+- **Promoted (9), all into `review-techniques.md`:**
+  - `b3f1c8e2…` → new §*"A repo-wide smell check can flag a pre-existing violation the diff never
+    touched"* (the AGENTS.md `awk` line-length false-positive).
+  - `b6e2a9d4…` → new §*"A `WHERE prop = true` filter added on a property an earlier stage started
+    stamping going-forward silently drops every pre-existing row"*.
+  - `e3a1c9d4…` → new §*"A structural grep for a removed identifier can pass clean while a
+    docstring still describes the removed mechanism in prose"*.
+  - `a3f1e6d2…` → new §*"A race condition can be too rare to demonstrate empirically — a failed
+    repro is not proof the removed lock was harmless"*.
+  - `e3a2c1f4…` → new §*"Verify a statistically-claimed race deterministically by forcing the
+    interleaving, not by repeating the timing"* (own `suggestedHome` named this file directly).
+  - `a3f1c2e4…` → new §*"In this monorepo, `git diff <old> <new> -- <dir>` can pull in unrelated
+    concurrent commits despite a pathspec"*.
+  - `f3e6a1d2…` → folded into existing §*"A parallel implementer can move HEAD and dirty the
+    tracked tree mid-review"* as a new paragraph: the same hazard applied to a narrative "I
+    reverted it" claim rather than a grep pin, plus the finding that a full-suite green run does
+    not surface a silently re-added hunk.
+  - `a1e6c8b4…` → folded into existing §*"A pasted grep result is the same kind of claim…"*'s
+    origin note as a fourth instance: a copied test pass/deselect count (`cypher-mcp-tool-surface`
+    plan/README, 74/7 vs. actual 113/10) is the same citation-decay shape as a pasted grep result.
+  - `a1c2e3f4…` **split in two.** Review-technique half (fresh venv + editable install must be
+    built *inside* a worktree to actually isolate it; `PYTHONPATH` doesn't) folded into the
+    existing §*"Verifying an uncommitted diff…"* worktree bullet. FalkorDB-domain half (HNSW
+    recall on a small `k` degrading monotonically with unrebuilt create/delete churn) is
+    `graph-dba`'s knowledge base, not `analyst`'s — tagged `MENTIONS`→`graph-dba` and left alive
+    on that edge (`analyst`'s own `PRODUCED` edge resolved); `graph-dba`'s own future pass will
+    pick it up.
+- **Discarded (3):**
+  - `a1e6f3d2…` — **already published, and the entry's own headline mechanism is backwards** (the
+    third such occurrence this file has now caught: 2026-09-10's U55 entry already documents two
+    prior instances of exactly this "meta-path beats sys.path" reversal). The published mechanism
+    (`review-techniques.md`, "Verifying an uncommitted diff…", bullet 1) is that an appended
+    `_EditableFinder` loses to `sys.path`-based `PathFinder`, and what actually defeats a
+    `PYTHONPATH` shadow attempt is **cwd precedence** — which this entry's own evidence text
+    admits in its "beware sys.path[0]..." clause, contradicting its own headline claim.
+  - `b7e1a2c4…` (model-bench `Pack.prompt_config()` docstring/consumer mismatch) — **already
+    delivered as the review's own MAJOR finding**: `model-bench/docs/reviews/itemscorer-extension.md:79`
+    states the identical finding in more detail. A project-specific review finding's home is the
+    review doc itself, not a general technique.
+  - `e6a1a5f2…` (staged-coordination review target is `<slug>-impl.md`, not per-stage files) —
+    **already documented**: root `AGENTS.md`'s doc-family collision rule 5 states the `reviews/`
+    exception (revise in place, dated `## Pass N`) and the closed role set already names `-impl`.
+- **Graph:** 11 of 12 entries fully cleared (`DETACH DELETE`, `otherRemaining == 0` throughout —
+  each held exactly one `PRODUCED` edge and no `MENTIONS`). `a1c2e3f4…` had its `PRODUCED` edge
+  resolved (`analyst`'s own pass) but the node stays alive on its new `MENTIONS`→`graph-dba` edge.
+  `analyst` producer count after this pass: **0**.
+- **Docs touched:** `claude/analyst/{review-techniques.md,kaizen/history.md}`.
 
 ## 2026-09-10 — analyst's own inbox drained, ten entries, **five new sections** (U55)
 

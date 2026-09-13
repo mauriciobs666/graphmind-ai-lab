@@ -2,6 +2,50 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-09-13 — standing distillation pass: 9-entry `coder` inbox, 4 promoted, 1 routed outward, 1 routed to graph-dba, 3 discarded
+
+- **What:** `cobb` ran the standing kaizen-graph distillation over all 9 `coder`-produced
+  `kaizen_team` entries dated 2026-09-10/09-11/09-12.
+- **Promoted (4), all into `skills/python-web-quirks/SKILL.md`, plus one `coder.md` guardrail:**
+  - `e6f1a2b3…` → new §*"A flag cleared right after `ThreadPoolExecutor.submit()` returns races
+    the task it just submitted"*.
+  - `c1f3a7b2…` → new §*"To force a `TestClient` response to surface an uncaught exception instead
+    of re-raising it, flip the flag on the live client — don't build a second `TestClient`"*.
+  - `a3f5e6c2…` → new §*"Deleting a parametrized test's `def` body leaves its
+    `@pytest.mark.parametrize` decorator attached to the NEXT function in the file"*.
+  - `f4b7d1a0…` → new `coder.md` Guardrails bullet: a concurrent session can silently rewrite the
+    exact file you just edited on this shared dev tree; re-check before relying on it, especially
+    near a suite run.
+- **Routed outward (1), logged as a new row in the existing K-006 table (plan.md)** —
+  `a1e6c1f4…` (the AST-based collaborator-reach guard in `falkor-chat/server/tests/
+  test_storefront_api.py` auto-adapting to a router→method move) is a `falkor-chat` test-file fact
+  outside `cobb`'s write remit; target is that guard's own docstring, following the file's
+  established self-documentation convention (per `claude/analyst/review-techniques.md`'s citation
+  of the same file's `:3107`/`:3158` docstrings).
+- **Routed to `graph-dba` (1):** `c1f3a9e2…` (FalkorDB `db.idx.vector.queryNodes` ANN recall on a
+  tiny corpus is non-monotonic in `k`, worse with near-duplicate vectors) is graph-dba's knowledge
+  base, not coder's. Tagged `MENTIONS`→`graph-dba`, `coder`'s own `PRODUCED` edge resolved, node
+  left alive for `graph-dba`'s own pass.
+- **Discarded (3):**
+  - `a3f1c9e2…` (`ast.Assign` misses `ast.AnnAssign`) — **already published**, generalized past
+    its model-bench origin, in `claude/analyst/review-techniques.md`'s AST subsection ("harvesting
+    `ast.Assign` alone under-reaches on ordinary code, not exotic code").
+  - `a1e3c9d2…` (falkor-chat pytest suite wipes shared `reference` graph) — **already published**:
+    `falkor-chat/docs/SERVER.md` §1.7 documents the `wf_repo` wipe and re-seed remedy, and
+    `falkor-chat/AGENTS.md`'s "Key scripts" table documents the three re-seed scripts by name. The
+    gap this entry describes (noted absent by `analyst` in an earlier pass) has since been closed.
+  - `a1f3c9d2…` (claimed docker-run.sh has no auto-build on a miss) — **the entry's fact is wrong,
+    contradicted by the current codebase**: `cypher-mcp/docker-run.sh` DOES auto-build on a miss
+    (calls `build.sh --runtime-only` itself, gated only by `CYPHER_MCP_NO_AUTOBUILD=1`), and
+    `cypher-mcp/README.md`'s "The image tag is a content hash" section already documents this
+    correctly ("miss → build, then run"). Not promoted forward per distillation duty item 5.
+- **Graph:** 7 of 9 entries fully cleared (`DETACH DELETE`). `c1f3a9e2…` had only its `PRODUCED`
+  edge resolved (alive on `MENTIONS`→`graph-dba`). `a1e6c1f4…` fully cleared — its disposition is
+  recorded in `plan.md`'s K-006 table, not left as a live node. `coder` producer count after this
+  pass: **0**.
+- **Docs touched:** `claude/coder/{coder.md,kaizen/history.md,kaizen/plan.md}`,
+  `skills/python-web-quirks/SKILL.md`.
+
 ## 2026-09-11 — Added a `Bash` guard (`guard-coder-broad-bash.sh`) — closes the Bash confirmation gap `acceptEdits` never covered
 
 - **What:** `cobb` added a second `PreToolUse` hook to `coder.md` (`matcher: Bash`, alongside the

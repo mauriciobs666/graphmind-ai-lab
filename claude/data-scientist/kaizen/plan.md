@@ -12,6 +12,7 @@
 | K-002 | 2026-07-09 | low | 🔵 | Perishable model/embedding landscape reference (skill or resource file) |
 | K-003 | 2026-09-07 | low | 🔵 | Route the eager-provider-resolution trap to `falkor-chat`'s provider-config manual (owner: `tico`) |
 | K-004 | 2026-09-07 | med | 🔵 | Correct a committed arithmetic error: the pinned `_Z_95` is **two** ULPs from `inv_cdf(0.975)`, not one (owner: `teco` to route) |
+| K-005 | 2026-09-13 | low | 🔵 | Note in model-bench docs that `recall@10=37/38` is a MEAN of continuous fractions, not a binary hit-rate (owner: `teco` to route) |
 
 ### K-001 — First-run shakedown: a real method note + a real methodology review
 - **Status:** 🔵 proposed
@@ -78,6 +79,27 @@
   so that one can be fixed by this agent directly; the two `model-bench/` files belong to whoever
   is delivering that component. No `MENTIONS` tag was added in the graph — tagging would misdirect
   a correction that is half this agent's own and half a human routing decision.
+
+### K-005 — Note that `recall@10=37/38` is a MEAN of continuous fractions, not a binary hit-rate
+- **Status:** 🔵 proposed
+- **Priority:** low
+- **Origin:** kaizen entry `b3f2c1a4-6e7d-4a1b-9c3e-2f8a5d0b7c91` (2026-09-10), discarded from the
+  graph in the 2026-09-13 distillation pass — see `history.md` that date.
+- **Rationale:** `falkor-chat`'s `retrieval_baseline.json` `recall_at_10=0.9736842105263158`
+  (=37/38) is a **mean** of continuous per-query `recall_at_k` fractions
+  (`test_retrieval_eval.py:134`, `sum/n`), not a binary hit-rate — a `model-bench` `BinaryMetric`
+  binarization of the same metric only coincidentally reproduces this exact value because only 2
+  of the 38 golden items are multi-relevant (`gr-15`, `gr-34`; confirmed
+  `0.9736842105263158*38=37.0` exactly). The figure `37/38` is used pervasively across
+  `model-bench/docs/BACKLOG.md`, `HISTORY.md` and `test-reports/embedder-self-check-report.md`, but
+  nowhere does a note flag that its apparent "binary" reading (37 hits of 38) is an artifact of the
+  golden set's low multi-relevance count, not a property of the metric.
+- **Proposed change:** one clarifying note wherever `recall@10=37/38` is first introduced as a
+  ceiling (`model-bench/docs/BACKLOG.md`'s "+22 harder retrieval queries" item is the natural
+  anchor) — this fact is entirely outside `cobb`'s write remit (`model-bench/docs/**`).
+- **Notes:** no `MENTIONS` tag added — no agent in this team owns `model-bench/docs/` the way
+  `tico` owns `manuals/`, so tagging would misdirect rather than route; `teco` assigns it on its
+  next pass through that component.
 
 ## Parking lot / ideas
 

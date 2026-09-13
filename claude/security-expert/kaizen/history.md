@@ -2,6 +2,34 @@
 
 > Dated log of actual changes to the `security-expert` agent. Most recent first.
 
+## 2026-09-13 — standing distillation pass: 2-entry `security-expert` inbox, 1 promoted, 1 discarded as duplicate
+
+- **What:** `cobb` ran the standing kaizen-graph distillation over both `security-expert`-produced
+  `kaizen_team` entries (2026-09-12, the tank/devops-opencode-headless Pass 2 re-review).
+- **Promoted (1):** `c26a6cc1…` → new `security-expert.md` Guardrails bullet: verifying a fix's
+  closure on a re-review pass means re-running the exact original bypass live (both the now-denied
+  raw payload and the fixed path with the same smuggled args), plus one full live cycle where one
+  exists — not inspecting the diff or trusting a bash-only mock of the permission layer alone.
+- **Discarded (1):** `62aa32d1…` (OpenCode `permission.bash` glob `"*"` matches across a command's
+  flag/argument boundaries, docker-compose `-f`/`--project-directory` smuggling) — **already
+  published this same pass**: `architect`'s twin entry `e1d4c8a2…` (identical finding, same
+  live-reproduction) was promoted to `skills/agent-standards/opencode.md` earlier in this
+  distillation run (see `claude/architect/kaizen/history.md`, 2026-09-13).
+- **Graph:** both entries fully cleared (`DETACH DELETE`, `otherRemaining == 0`). `security-expert`
+  producer count after this pass: **0**.
+- **Docs touched:** `claude/security-expert/{security-expert.md,kaizen/history.md}`.
+
+**Addendum, same pass — a third entry appeared mid-run (fresh read, not the dispatch snapshot):**
+`091c3b92…` (2026-09-13) — `opencode debug agent --tool bash --params` live-classification probes
+can spuriously **deny** an otherwise-allowed command when a fixture path/name is reused across
+repeated calls in the same project cwd, via OpenCode's internal `doom_loop`/`external_directory`
+permission layers rather than the tested agent config — a false negative indistinguishable from
+the rule under test actually firing. Fix: use a fresh, never-reused fixture name per probe.
+**Promoted** → `skills/agent-standards/opencode.md`, folded into the Permissions section right
+after the glob-flag-boundary bullet — a testing-tool-behavior fact any agent using `opencode debug
+agent` needs, not specific to security review. Cleared (`DETACH DELETE`, sole `PRODUCED` edge).
+`security-expert` producer count re-confirmed **0** after this addendum.
+
 ## 2026-09-06 — `kaizen_team` distillation, U2: both current-shape entries promoted and cleared
 
 - **What:** `cobb` ran the `agent-maintenance` §5 pass over this agent's two raw `:KaizenEntry`

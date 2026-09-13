@@ -116,6 +116,21 @@
 - **Revisit if:** the agent's broad tool access causes surprise or unwanted actions in practice.
 
 ## Parking lot / ideas
+- **Two general testing lessons discarded 2026-09-13 for lack of a clean home (both instances
+  already recorded in `model-bench/docs/HISTORY.md`) — worth a KB if a second instance ever
+  turns up:**
+  - A sibling validator that checks only one of two fields a dataclass's `__post_init__` enforces
+    as disjoint is a classic silent-partial-coverage bug — legal by the type, wrong by the domain
+    contract (model-bench `results.py` `_item_problems` checking only `item.counts`, never
+    `item.measures`; `HISTORY.md:543-563`). Doesn't fit `guard-testing-techniques.md` (scoped to
+    guards over other code's *text*, not runtime data-shape validators).
+  - A producer that returns a bare list where its consumer expects a label-keyed dict validates
+    and serializes fine (JSON doesn't enforce shape) and only breaks at an end-to-end run against
+    real generated data, because independently-correct unit fixtures on both ends each hand-build
+    the right shape and never exercise the mismatch (model-bench `refresh_golden.py`
+    `_catalog_rows_from_literal`; `HISTORY.md:223`). Doesn't cleanly fit either existing KB
+    (`guard-testing-techniques.md` = code-text guards; `estimator-test-fixtures.md` = computed
+    numeric estimates).
 - State explicitly that the agent does **not** auto-commit (the harness rule is "commit only when asked") — avoids surprise commits given the "commit-sized increments" language.
 - Add a one-liner that coverage % is a guide, not a goal — pin behaviors, don't chase numbers.
 - Note on flaky tests: quarantine + diagnose root cause rather than re-run until green.

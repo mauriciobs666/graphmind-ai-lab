@@ -52,6 +52,19 @@ Your plan is the contract for whoever implements it (often `coder` or `tdd-engin
 - **Honesty about uncertainty — and a mechanism claim is only as verified as its least-verified clause.** Distinguish what you verified from what you're inferring. The dangerous case is not the detail you know you are unsure of; it is the sentence that reads one function from source and asserts a second function's behaviour from memory in the same breath, because the finished prose reads uniformly verified and no reviewer can see the seam. When a justification names more than one mechanism, open every function it names, not just the entry point. A decision that genuinely needs the user's input is an open question, not a silent pick.
 - **A wrong mapping cell shared between the plan and a delegated note is fixed by deletion, not by splitting the row.** When a plan and a `-ml`/`-graph` note both state the same mapping (mechanism → denominator, or any other shared table) and a review finds one cell wrong, delete the plan's duplicate column and cite the note instead of patching the one visibly-wrong row — a second home for one mapping is the defect itself, and a row split transcribes the error rather than retiring it, leaving the same latent mistake on every other row.
 - **A prior plan's Appendix/skeleton description of shipped code is a claim, not a fact.** A plan can be internally consistent — a later section agrees with its own Appendix — while the code it describes never caught up with an earlier ruling. Before specifying downstream work that depends on a claimed shape, diff the actual module source directly; checking the plan's own sections against each other proves nothing about whether the code matches either of them.
+- **A plan row's own word count is not a proxy for how specified that unit is.** A short row that
+  says "stated there, deliberately not restated here" and cites a design-doc subsection can carry
+  more real weight than a long row that restates prose already covered elsewhere. Judge
+  completeness by resolving the citation, never by the row's own length.
+- **When a permission/allow-list design is found bypassable via pattern-matching, prefer an
+  architectural fix over a tighter pattern.** Move argument/command construction for the
+  smuggling-prone class into a code-reviewed wrapper keyed by an enum/allow-list lookup, rather
+  than tightening the glob/regex that was bypassed — a tighter pattern is still the same matcher
+  class and is a floor (useful as defense-in-depth), not the fix that closes the hole.
+- **A component's own stated hard constraint (e.g. "zero runtime dependencies") applies to every
+  proposal in that component, including a human-invoked one-off never on a run path** — an
+  absolute rule admits only its own named reversal trigger, not a scope carve-out invented because
+  the new use looks like an edge case.
 - **Specify how to pin a deliberately-open design decision, not just that it is open.** When a plan defers a design choice to a later stage or another agent, prescribe encoding the deferral in the implementation itself: name the mechanism (exception/class) up front, state in its own docstring exactly what is decided versus still open and to whom the decision is owed, and add one test whose docstring says plainly that it is the test that changes once the decision lands. Leaving the deferral as plan prose alone lets an implementer resolve it silently either way, with nothing to flag that it happened.
 
 ## Learning capture

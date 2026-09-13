@@ -2,6 +2,32 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-13 — standing distillation pass: 3-entry `data-scientist` inbox, 0 promoted, 1 kept open (K-005), 2 discarded
+
+- **What:** `cobb` ran the standing kaizen-graph distillation over all 3 `data-scientist`-produced
+  `kaizen_team` entries, dated 2026-09-10/09-11.
+- **Discarded (2), both the exact "captured mid-writing a still-open method/review doc" shape
+  `agent-maintenance` §5 warns about:**
+  - `e6f8b2c4…` (falkor-chat has no whole-Document embedding, only async per-`Chunk`) — already
+    published verbatim in `falkor-chat/docs/plans/document-ingestion2-ml.md` (lines 20/44/52),
+    the exact doc this entry's own context says it was captured while writing.
+  - `f3c9a1e2…` (NLQ conflicting-facts subset-containment branch gameable by a broad-filter spec,
+    `QueryMatch.filters` `default_factory=list` with no `min_length`) — already published, in more
+    depth including the exact "11 rows" figure and the explicit remedy ("subset containment is
+    gameable on `set` items and should carry a guard when it is ever live"), in
+    `model-bench/docs/reviews/nlq-conflicting-facts-answerability-ml.md` (lines 86, 173) — the
+    review this entry's context names as the very task it surfaced during.
+- **Kept open (1), new `plan.md` K-005:** `b3f2c1a4…` (`recall@10=37/38` is a MEAN of continuous
+  per-query fractions, not a binary hit-rate — a `model-bench` `BinaryMetric` binarization only
+  coincidentally reproduces it because just 2 of 38 golden items are multi-relevant) is true,
+  durable, and genuinely unpublished — grepped `model-bench/docs/**` for
+  "MEAN"/"binary hit-rate"/"continuous per-query"/"multi-relevant" and the adjacent `s3-spec.md`
+  §9 area: no hit, despite the raw `37/38` figure being used pervasively. Outside `cobb`'s write
+  remit (`model-bench/docs/**`); routed via `teco`.
+- **Graph:** all 3 entries fully cleared (`DETACH DELETE`, `otherRemaining == 0` — none carried a
+  `MENTIONS` edge). `data-scientist` producer count after this pass: **0**.
+- **Docs touched:** `claude/data-scientist/kaizen/{history.md,plan.md}`.
+
 ## 2026-09-10 — Distillation U56: a fresh 2-entry chunk, 1 promoted to the knowledge base, 1 discarded as already captured by an in-flight, out-of-scope plan doc
 
 - **What:** `cobb` distilled `data-scientist`'s newly-refilled 2-entry `kaizen_team` chunk

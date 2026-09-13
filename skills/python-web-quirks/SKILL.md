@@ -545,6 +545,23 @@ marker-deselected tests from `defined` yourself** if the project's `addopts` car
 itself on every default run and switch the check off permanently — visible in the skip reason, but
 off.
 
+## Deleting a parametrized test's `def` body leaves its `@pytest.mark.parametrize` decorator attached to the NEXT function in the file
+
+`@pytest.mark.parametrize` sits immediately above the `def` line it decorates. Deleting only the
+function body (removing the `def ...:` line and everything under it while leaving the decorator
+line behind — an easy slip in a manual or scripted edit) leaves the decorator attached to
+whichever function now follows it in the file. Because that next function almost certainly doesn't
+declare the fixture argument the parametrize supplies, it silently breaks — collection either
+errors or the test fails with an unexpected-argument message that doesn't mention the deletion at
+all, unless the next test already fails loudly for an unrelated reason and masks it further.
+Always delete a parametrized test's decorator line together with its `def`, and re-run collection
+(`pytest --collect-only`) after any test deletion to catch a decorator left orphaned this way.
+
+Origin: `falkor-chat/server/tests/test_storefront.py` — deleting
+`test_a_reset_that_times_out_evicts_the_cached_record` (decorated with
+`@pytest.mark.parametrize("reread", [...])`) left the decorator attached to the next function,
+`test_the_two_reset_failures_are_different_exceptions`, which does not accept a `reread` parameter.
+
 ## A function-LOCAL `from .module import name` re-resolves fresh on every call — a function-DEFAULT bound to the same name does not
 
 A deferred import placed as the first statement *inside* a function body (not module-level —
@@ -678,6 +695,25 @@ bound method at build time (`post = shop._services.post_message`): nothing patch
 Read which of the three the router does before choosing where to patch; reproduced end to end in the
 probe above (`app.state.thing.hit = …` inside the block changed the response body).
 
+## To force a `TestClient` response to surface an uncaught exception instead of re-raising it, flip the flag on the live client — don't build a second `TestClient`
+
+Once a test already has a working `TestClient(app)` with the lifespan entered (and, often, an
+object-level monkeypatch already applied through it), the tempting fix for "I need
+`raise_server_exceptions=False` for just this one assertion" is
+`TestClient(app, raise_server_exceptions=False)` over the same `app` object. That constructs a
+**second** client, which re-enters the ASGI lifespan and rebuilds `app.state` from scratch —
+silently discarding any object-level monkeypatch applied after the *first* client entered (e.g. a
+patched `_executor.submit`), for the same reason the `app.state` section above describes. Instead,
+mutate the flag on the already-entered client: `client._transport.raise_server_exceptions = False`
+(and restore it afterward) gets the uncaught-exception-as-500 behavior without touching the
+lifespan or `app.state` at all.
+
+Origin: `falkor-chat/server` — building a second `TestClient` around `client.app` to get
+`raise_server_exceptions=False` lost a monkeypatched `Storefront._executor.submit` because the
+lifespan reran and rebuilt `app.state.storefront`; setting `client._transport.raise_server_exceptions
+= False` on the existing client (restored after) preserved the patch and produced the same
+unmapped-5xx observation the test needed.
+
 ## Holding an application lock across `ThreadPoolExecutor.submit()` does **not** deadlock at interpreter exit — it delays exit for exactly as long as the lock is held
 
 Verified against CPython 3.12.3. `_python_exit` (`concurrent/futures/thread.py:23-31`) takes
@@ -755,6 +791,22 @@ and it ran ahead of the item that revived the pool. The consequence for the comp
 "any worker already running picks it up" holds only where a worker exists, so the identical refusal
 is a delayed execution on a warm pool and a silent drop on a cold one, and the exception discriminates
 neither.
+
+## A flag cleared right *after* `ThreadPoolExecutor.submit()` returns races the task it just submitted
+
+A per-caller boolean or flag that the calling code clears immediately after `submit()` returns is
+racing the very task it just submitted, not sequencing before it: the worker thread can dequeue and
+run to completion — including setting that same flag itself — before the caller resumes execution
+past the `submit()` call. A set-then-clear ordering that looks safe in the source (the clear reads
+as "after the enqueue, so before the work") can invert at runtime. The fix is to place the clear
+**strictly before** the `submit()` call, not merely earlier in the same calling method: nothing on
+the worker side can touch the flag until `submit()` has even been entered, which a placement merely
+"earlier in the method" does not guarantee if anything else happens between the clear and the call.
+
+Origin: `falkor-chat/server` — a dead-turn latch cleared on the request thread right after
+`Storefront.enqueue_turn`'s `ThreadPoolExecutor.submit()` returned raced the worker marking the
+same latch, producing a wrongly-cleared latch in roughly 8 of 200 runs; moving the clear to
+immediately before the `submit()` call removed the race.
 
 ## Bounding a call whose deadline the code under test computes: a daemon thread, not an elapsed-time assert — and stamp the start instant *inside* the thread body
 

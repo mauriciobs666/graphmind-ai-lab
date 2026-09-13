@@ -65,6 +65,15 @@ consequences that decide whether an isolation attempt actually isolated anything
   source while looking isolated. Observed cost of getting this wrong: a seed script invoked from a
   worktree repo root republished a concurrent unit's uncommitted content into the shared
   `reference` graph under the wrong version label.
+- **The worktree itself needs its own fresh venv + editable install to actually isolate an
+  editable-install package — cwd alone is not enough for a baseline reproduction.** Rule (3)'s
+  `MAPPING` is an *absolute* path baked in at `pip install -e` time, so a worktree that never ran
+  its own `python3 -m venv` + `pip install -e .[dev]` still resolves back to whichever tree the
+  install was originally made from; a `PYTHONPATH` override does not fix this either, for the same
+  reason. The valid way to get a pre-diff baseline for an editable-install package is `git worktree
+  add --detach` **plus** a fresh venv installed inside it. Verified reproducing an RCA baseline:
+  2 of 4 failing `falkor-chat` pytest tests already failed identically on the pre-diff commit once
+  the worktree carried its own editable install.
 
 - **A probe invoked as `python <script.py>` puts the *script file's own directory* on
   `sys.path[0]` — not the cwd.** The two measurements above (`sys.path[0] == ''`) were taken under
@@ -434,7 +443,14 @@ field because "this schema has zero `RELATIONSHIP`-type constraints (`grep -n RE
 scripts/bootstrap_schema.sh` → no matches)". True when run on 2026-08-21; falsified three days
 later by commit `8d7dcfb` (K-050 fusion), which added `gconstraint … UNIQUE RELATIONSHIP SAME_AS
 PROPERTIES 1 matchId`; the doc, written 2026-08-26, repeated it verbatim and **still carries it**
-(`:205`, re-checked 2026-09-08 against `scripts/bootstrap_schema.sh:265`).
+(`:205`, re-checked 2026-09-08 against `scripts/bootstrap_schema.sh:265`). (4) An exact test
+pass/deselect count copied from a component's `README.md` into a plan as "verified current fact"
+can already be stale by 50%+, because tests landed in an intervening milestone after the doc was
+last recounted: `docs/plans/cypher-mcp-tool-surface.md` §2 and `cypher-mcp/README.md` both stated
+74 passed / 7 deselected offline (7 passed / 74 deselected live); running
+`cypher-mcp/.venv/bin/pytest tests -q` (and `-m live`) gave 113 passed / 10 deselected (10 passed /
+113 deselected live) instead. A copied test-run count is exactly the same kind of claim as a
+pasted grep result — re-run it, never cite it from a doc.
 
 ## A grep that finds a name has found a REFERENCE, not a definition — and `bash -n` is not evidence a script works
 
@@ -462,6 +478,20 @@ function, an unset variable, or any other name-resolution failure — so a commi
 it does not test. `analyst.md` already pairs `bash -n` **with direct execution**; this is the
 reason the pairing is not decoration, and re-running `bash -n` on the *pre-fix* file — which still
 passes — is the cheapest way to show a reviewer that the credential was empty.
+
+## A structural grep for a removed identifier can pass clean while a docstring still describes the removed mechanism in prose
+
+For a "removed whole mechanism" deletion unit, grepping for the deleted identifiers
+(function/variable names) can return zero hits while a module- or class-level docstring still
+asserts the mechanism in prose ("the in-process map is a cache", "both maps") — words that never
+matched the identifier sweep because they describe behavior, not name it. Read the surviving
+docstrings directly; do not trust an identifier grep to cover prose.
+
+Origin: `salesperson-ui` S9d review (per-participant record cache removal) — a grep for
+`lookup(`/`_records_lock`/`cached_ids`/`forget(`/`forget_all(`/`_cache_put`/`_cache_drop` returned
+zero hits and three docstrings had been rewritten, but `storefront.py`'s module docstring and its
+`Storefront` class docstring still asserted the in-process map is a cache/the record cache and the
+turn map, after the cache mechanism had been fully removed.
 
 ## A document that adds a member to its own taxonomy is swept table-by-table, not changelog-by-changelog
 
@@ -601,6 +631,23 @@ constant, and its header comment states the blindness explicitly.
 
 Origin: 2026-09-02, `salesperson-ui` S1 review findings F-1/F-8; distilled 2026-09-07 and
 re-derived against the shipped script and `services.diff_def_snapshot`.
+
+## A `WHERE prop = true` filter added on a property an earlier stage started stamping going-forward silently drops every pre-existing row
+
+When a plan stage adds a query-side filter on a property that a *different, earlier* stage began
+setting only at write time (no backfill), every row created before that earlier stage lands
+lands outside the filter forever — and no test suite catches it, because every fixture is created
+fresh through current write-path code and so always carries the property. The gap is invisible
+unless you check the property against data that predates the earlier stage.
+
+Origin: `falkor-chat` document-ingestion2 Stage C added `WHERE seed.documentCurrent = true` to
+`repository.search_chunks`; Stage A, 13+ days earlier, was the first commit to make
+`create_document` set `documentCurrent`/`currentVersion` at all. Live `GRAPH.RO_QUERY` against the
+shared instance showed `ws:acme` (29 Documents) and `ws:nlq-eval` (12 Documents) with
+`count(d.currentVersion)=0`; an unfiltered ANN probe returned 20 rows, the same query with the new
+`WHERE` returned 0. **The check:** when a plan stage filters on a property another stage stamps
+only going forward, query live data for rows predating the stamping stage before trusting the
+filtered result set.
 
 ## Mutating a class-level constant via a pytest plugin proves a guard is load-bearing without touching source
 
@@ -883,6 +930,38 @@ range** is honest.
 is not a defect in either until you know whether either pinned anything. A single-seed *survived*
 is not a coverage gap; a single-seed *killed by three tests* is not redundancy.
 
+## A race condition can be too rare to demonstrate empirically — a failed repro is not proof the removed lock was harmless
+
+Some mutations remove a genuine concurrency guard (a lock around a plain `+= 1` counter
+increment) whose race window is real but narrow enough that heavy synthetic pressure still won't
+reliably trigger it. A failed reproduction attempt under such a mutation is **weak evidence**,
+not a refutation — report it as a theoretically-real coverage gap the mutation-testing pass
+could not demonstrate, and reach for a different, cleanly-reproducible gap to actually close the
+review, rather than concluding the removed guard was provably unnecessary.
+
+Origin: `salesperson-ui` S10 review — removed `Storefront._login_failures_lock` around the
+`presenter_login` counter increment (`self._counter += 1` under a `threading.Lock`), drove 300
+threads through a `threading.Barrier`-synchronized release at N=300 × 30 trials and again at
+`sys.setswitchinterval(1e-6)`, N=500: 0/30 (and the second sweep) ever showed a lost update.
+Abandoned as the demonstrated mutation-testing finding for this unit and used a different,
+cleanly reproducible gap instead (a four-key read narrowing that did survive 251/251 tests when
+removed).
+
+## Verify a statistically-claimed race deterministically by forcing the interleaving, not by repeating the timing
+
+A HISTORY.md entry claiming a race "reproduced 8 of 200 runs" is a real measurement, but its
+count is not something a reviewer should try to reproduce by repetition — timing-dependent reruns
+are slow and can plausibly fail to redden even when the fix is wrong. Instead, monkeypatch the two
+racing methods so the *losing* side blocks on a `threading.Event` that the *winning* side sets,
+then drive exactly **one** execution. This forces the exact interleaving the claim depends on
+rather than hoping raw timing reproduces it, and a single run is decisive either way.
+
+Origin: `salesperson-ui` S9c review (`turn.lastTurn` dead-turn latch) — forced the
+clear-after-submit vs. worker-mark race in `Storefront.enqueue_turn` deterministically via a
+patched `_mark_turn_failed`/`_clear_turn_failed` pair gated on an `Event`, reproducing the claimed
+`lastTurn`-wiped-to-`None` outcome on the first and only run — verifying the implementer's fix
+without trusting the reported 8/200 measurement.
+
 ## A shared, read-mutating fixture can couple two "logically independent" mutation-tested checks
 
 When two production checks are mutation-tested against a **stateful** fixture whose read method
@@ -1063,6 +1142,18 @@ reported **0** where the answer was **2** for `def [A-Za-z_]*(percentile|quantil
 helper used `grep -rn` where the residuals are `-rEn`. And do not park pending markers in the
 authoritative document while you re-measure: a coordinator committing by explicit path commits the
 placeholder.
+
+## A repo-wide smell check can flag a pre-existing violation the diff never touched
+
+A convention check that scans a whole file or tree (an `AGENTS.md` line-length `awk`, a
+repo-wide grep count) answers "does this file violate the rule anywhere", not "did this unit's
+diff introduce a violation." A hit is not evidence against the reviewed unit until you check it
+against `git diff` — the flagged row may predate the change entirely.
+
+Origin: `falkor-chat/AGENTS.md`'s `awk length($0)>700` smell check flagged a 980-character
+`verify_salesperson.sh` row while reviewing S11 (`start_demo.sh`); `git diff` showed only a new
+row (the `start_demo.sh` one, itself under the bar) was added by the reviewed unit — the flagged
+row was pre-existing and out of scope.
 
 ## What a change silently stopped enforcing: execute the pre-image, diff the collected test IDs
 
@@ -1364,6 +1455,19 @@ Origin: `teco` kaizen `f0f56a09…` (2026-09-09), gating a distillation entry wh
 evidence looked mutually contradictory; the sweep's own reproduction and controls are recorded in
 `claude/data-scientist/kaizen/history.md` (2026-09-09).
 
+## In this monorepo, `git diff <old-commit> <new-commit> -- <dir>` can pull in unrelated concurrent commits despite a pathspec
+
+Scoping a staged-implementation diff review to "everything between the previous stage's commit and
+this one" via `git diff <old> <new> -- <path>` is not safe here: this repo runs heavy same-tree
+concurrent churn from other `teco`-coordinated sessions, and an intervening, unrelated commit that
+also touches the pathspec'd directory lands in the diff alongside the reviewed stage's actual
+changes. `git show <target-commit>` — the single commit actually under review — is the reliable
+way to scope a diff to exactly the reviewed unit.
+
+Origin: reviewing `falkor-chat` document-ingestion2 Stage B (commit `aa1c9be`) — `git show aa1c9be`
+showed 11 files, matching the commit's own stat; `git diff 4a6186b aa1c9be -- falkor-chat/` additionally
+showed an `AGENTS.md` hunk from an unrelated, concurrently-landed S11 demo-bring-up commit.
+
 ## A bare `file.py:NNN` code citation rots; pin it to a symbol + count, or an explicit sha
 
 A line-number citation to source code inside a docs/plans or review note is only as durable as the
@@ -1404,3 +1508,16 @@ already have diverged by the time you check.
 
 Origin: 2026-09-10, model-bench plan gate Pass 16, verifying a plan-stated grep pin over shipped
 code while a `tdd-engineer` unit edited the same files concurrently.
+
+**The same hazard applies to a narrative claim, not just a grep pin — and a green suite does not
+catch it.** A coordinator's or implementer's HISTORY.md claim of "found an out-of-scope hunk and
+reverted it" must be re-verified live at review time, never trusted from the prose: a concurrent
+session sharing the tree can silently re-add the same hunk, or a parallel one (in a different
+file, e.g. the corresponding test file), after the claimed revert. A full-suite green run does not
+surface this, because the reverted class or hunk still exists in another session's uncommitted
+files and the suite simply exercises it as intended.
+
+Origin: `salesperson-ui` S9e review (Pass 27) — `teco` reported `storefront_api.py`'s
+`DocumentNotFoundError` hunk reverted, with 145 passed / 1 failed; at review time `git diff` showed
+the hunk back, plus four more `ServiceError`-family-count hunks in `test_storefront_api.py` that
+HISTORY.md never mentioned, and the suite by then read 146 passed / 0 failed.
