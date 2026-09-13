@@ -2423,3 +2423,45 @@ unit; greenfield feature work on new files, no rebuild warranted.
 | U135 | `analyst` | `ab2336185dcf7f36f` | **delivered — accepted, `teco`-verified. Verdict: approve** (0 blocker, 0 major, 2 minor, 0 nit). Closes the deferred gate for U131/U133/U133d/U134. Confirmed the U133→U133d→U134 cross-unit interaction (34/6 pooling + `luckyPass` additivity) is exercised by dedicated tests, not just each unit's isolated fixture; confirmed no stray "4-unanswerable" reversion anywhere via an unfiltered grep (the one surviving old-framing instance, top-level plan §3.8.3, is U133b's already-disclosed deliberate non-edit, not a fresh defect); `cli.py --strict` and the S5 tripwire both confirmed unchanged. **Independently re-verified, not accepted on report**: suite reproduced myself (`1450 passed`, same named S5 tripwire, `3 deselected`), `ruff check .` clean — exact match; `items.jsonl`'s 34/6 answerable split recomputed directly (`nlq-34..39` unanswerable); `grep -n "luckyPassCount\|parseFailures" modelbench/report.py` reproduced myself, zero hits, confirming minor finding 1; `tools/exec.py:376-377`'s unguarded `order_by` sort read directly, confirmed real and confirmed unreachable by today's `reference_specs.json` (all three `order_by` items sort on non-null `Product.price`), confirming minor finding 2. Both minors logged as `docs/BACKLOG.md` follow-ups (`teco`, trivial single-file addition, not independently gated) rather than left to be rediscovered | `model-bench/docs/reviews/small-model-benchmarking-s4.md` | `analyst` → approve | 143k tok / 45 tools |
 | U136 | `qa-engineer` | `ab2811f84aeddbda9` | **delivered — accepted, `teco`-verified. Verdict: ACCEPT** (TP-000..TP-006, all pass, 0 defects). Drove the live CLI directly rather than re-reading the diff: fresh live runs of both packs against a model neither had seen (`qwen2.5-3b-instruct`); plain `validate`/`--strict` on both packs; a standalone read-only script re-deriving the 34/6 answerability stamp straight from `tools/exec.py` (zero mismatches) plus a live `--stamp-answerability` re-run (byte-identical, zero diff); hand-crafted probes for the three-way validation split and the `conflicting-facts` subset-containment exception (with a `filter-list` negative control proving the exception is shape-scoped); a fresh `compare` report read end to end by eye for DC6. **Independently re-verified, not accepted on report**: suite reproduced myself (`1450 passed`, same named S5 tripwire, `3 deselected`); read the fresh `reports/guard-judge-understanding-20260913-01.md` in full myself — confirms the "no headline metric" line, both verdict metrics rendered side by side, every "85" occurrence a denominator note (`40 of 85`, `30 of 85`), never a pooled figure; confirmed the kaizen entry for the `host.json` staleness/`attest` quirk written (`kaizen_team`, `d31967e9-…`). Four new live-run artifacts (2 `results/runs/*`, 2 `reports/*`) produced as evidence, left uncommitted for `teco` to disposition | `model-bench/docs/test-plans/small-model-benchmarking-s4.md`, `model-bench/docs/test-reports/small-model-benchmarking-s4-report.md` | `qa-engineer` → ACCEPT | 173k tok / 48 tools |
 | U137 | `coder` | `ac8bcb4b32cf0c542` | **delivered — accepted with correction, `teco`-verified.** `AGENTS.md`/`README.md` rewritten in place (not appended) to "Stage S4 is closed," naming both new packs, all three scorer modules, the three new `refresh_golden.py` CLI flags, and the corrected 34/6 answerability split; "what S4+ owes" retargeted to S5+. **Two real defects found, not accepted on report — fixed directly by `teco` (trivial, single-fact corrections, no design judgment)**: (1) both files claimed "one role (`tool-caller`) has no scorer yet" — independently checked against `modelbench/roles.py`'s `ROLES` list and the plan's own S5/S7 section headers (`grep -n "### S5 —|### S7 —"` `docs/plans/small-model-benchmarking.md`): **two** roles remain unscored, `tool-caller` (S5-S6) *and* `chat-responder` (S7) — the delegate's own summarization dropped one, not observed in any source it read; (2) the delegate's `HISTORY.md` entry fabricated a unit id, "U140" (never given one in the brief), and mis-cited U119 as having its own `HISTORY.md` entry when `33fbe87`'s actual diff shows it didn't touch `HISTORY.md` at all — corrected to `U137` and the citation reworded to state that fact accurately. **Independently re-verified after correction**: suite reproduced myself (`1450 passed`, same named S5 tripwire, `3 deselected`), ruff clean; `awk` line-length sweep clean; `model-bench/AGENTS.md` word count 2,475 (within its own ~2,500-word budget); every cited report/test-report path confirmed to exist on disk | `model-bench/{AGENTS.md,README.md,docs/HISTORY.md}` | `teco` → accepted | 78k tok / 19 tools |
+
+## S4 is closed — 2026-09-13
+
+**All six plan-stated done-conditions (§4 S4) met, verified three separate times over — code
+review, black-box acceptance, and `teco`'s own independent spot-checks — never taken on a single
+party's word.** `analyst`'s cumulative code+methodology gate (U135, `docs/reviews/small-model-
+benchmarking-s4.md`): **approve**, 0 blockers/majors, 2 minors. `qa-engineer`'s black-box
+acceptance (U136, `docs/test-reports/small-model-benchmarking-s4-report.md`): **ACCEPT**, all six
+done-conditions driven live against fresh evidence (a model neither pack had run against before),
+0 defects. `AGENTS.md`/`README.md` doc sync (U137) closes the stage's context-file obligation.
+
+**Two real defects found and fixed during the stage itself, neither carried forward:** the
+mid-stage answerability-count regression (U133 → U133a → U133b/U133c/U133d) — the plan's stale
+"4 unanswerable" claim was a **regression of an already-settled, already-gated upstream ruling**
+(`falkor-chat/docs/plans/workflow-nl-query-generation-ml.md` §5 v2), caught by the implementer's
+own data-authoring work rather than assumed correct, routed to `data-scientist` for a binding
+methodology ruling (6/34, not 4/36) before the code was allowed to finalize; and, at this stage's
+very last step (U137), a doc-sync delegate's own summarization undercounting the roles still
+needing a scorer (said one, meant two) plus a fabricated `HISTORY.md` unit id — both caught by
+independent verification against `roles.py`/the plan/`git show`, not accepted on report.
+
+**Two minor, non-blocking findings from `analyst`'s gate logged to `docs/BACKLOG.md`** rather than
+left to be rediscovered: `report.py` never renders `luckyPassCount`/`parseFailures`/
+`malformedSpecCount`/`schemaViolationCount`; `tools/exec.py`'s `order_by` sort has no defensive
+handling for a `None`-valued sort key (unreachable by today's shipped data).
+
+**Milestone-close list** (`teco`-applied, mechanical `Status:` flip only): `docs/plans/small-model-
+benchmarking-s4-spec.md` flipped `active` → `archived` — fully executed against, nothing left
+driving unbuilt work off it. The top-level plan and `-ml.md` stay `active` — S5-S8 still read them.
+
+**Open, and owed to other units — none blocking S5:**
+- `docs/BACKLOG.md`'s three open follow-ups (the two new minors above, plus `validate_pack`'s
+  scorer-resolution check, carried open and now finally logged there rather than only narrated in
+  this coordination doc — open since S3's close, still nobody's).
+- S6 (§4) states its own human-in-the-loop requirement ("Human verification of every turn's
+  expectations," FR-19) — not yet surfaced to the stakeholder; this coordination will do so when
+  S6 is actually reached, per the 2026-09-11 S4-S8 authorization note. Does not block S5.
+
+**Next is S5** — `tool-caller-shop-assistant` pack, part 1 (environment + scoring), out of the
+standing S4-S8 authorization (2026-09-11, "lets start s4-s8"). No stakeholder checkpoint needed
+before drafting the S5 spec; same discipline as S4 — spec (`architect`) → `teco`-verified directly
+→ implementation → `analyst` code gate → `qa-engineer` acceptance → stage close.

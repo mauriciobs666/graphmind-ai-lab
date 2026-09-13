@@ -1,6 +1,6 @@
 # `model-bench` S4 — the `guard-judge` and `nlq-generator` packs — implementation spec
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Extends:** `docs/plans/small-model-benchmarking.md` (S4)
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — · **Extends:** `docs/plans/small-model-benchmarking.md` (S4)
 
 2026-09-11 — **correction, adopting `docs/reviews/nlq-conflicting-facts-answerability-ml.md`'s
 A1-A3 (verdict: needs changes)**: while authoring `reference_specs.json`'s 40 entries (§7 Step 3),

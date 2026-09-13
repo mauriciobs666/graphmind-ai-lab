@@ -31,6 +31,13 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   instead of a graceful `SchemaViolationError`. Needs a one-line guard plus a regression test the
   next time that file is touched.
 
+- **`validate_pack` doesn't check that a pack's declared `"scorer"` name resolves to an importable
+  module** (named as a possible follow-up in `docs/plans/small-model-benchmarking-s3-spec.md` §9,
+  carried open since S3's close, still nobody's). A typo'd scorer name fails at `run`'s
+  `_load_item_scorer` import instead of at `validate` — a `RunRefused` (exit 4), the correct exit
+  code, just one step later than a pre-flight check would catch it. Low risk, not blocking any
+  stage.
+
 ## Note
 
 Stage S8 of `docs/plans/small-model-benchmarking.md` re-checks this list at close and adds whatever
