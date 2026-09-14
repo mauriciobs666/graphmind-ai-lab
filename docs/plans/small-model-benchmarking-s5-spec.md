@@ -2,6 +2,29 @@
 
 > **Status:** active · **Owner:** `architect` · **Tracks:** — · **Extends:** `docs/plans/small-model-benchmarking.md` (S5)
 
+2026-09-14 — **correction, adopting `model-bench/docs/reviews/small-model-benchmarking-s5.md`'s
+Finding 3 (verdict: needs changes), resolved as option (a), wire it now**: `argument_correctness`
+(Step 3) correctly computes and unit-tests `-ml` §4.2(d)'s per-argument failure decomposition
+(`omittedRequired`/`wrongValue`/`boundaryUnit`), but `_score_one_conversation` (Step 5) reads only
+`correctness.allCorrect` from it — the three tuples were discarded on every call, so the shipped
+report can never print `-ml` §4.2(d)'s required `wrong_value: 12, of which boundary/unit: 7` line.
+Confirmed by the review as a genuine `-ml` requirement gap in this document, not a pure
+implementation miss: §3.1's `FunnelCounts` allocated no field for the decomposition and §4.4's
+renderer list named no line for it. Chosen over deferral because the fix is cheap, additive, and
+non-destructive — three new, *defaulted* `FunnelCounts` fields (no dataclass reordering, no
+`_encode`/`_decode` change needed, §3.1 below), accumulated at the exact site `correctness` is
+already computed (`toolcalls.py:788-795`), rendered via a cross-reference annotation directly
+analogous to `_render_funnel`'s existing restraint/native-call "-> k/n" lines — there is no design
+uncertainty left to justify carrying this forward as a tracked deferral instead of just closing it.
+§3.1, §3.4, and §4.4 below are corrected in place; Step 5's and Step 6's own `Done when` clauses and
+§6's test-strategy table gain one line each naming the added test obligation, without reopening
+either step's own already-gated, already-shipped scope beyond that. **This correction specifies the
+fix; it does not implement it** — implementation is a separate, already-scoped follow-up unit against
+`modelbench/scoring/toolcalls.py`'s `_Tally`/`_score_one_conversation` and
+`modelbench/report.py`'s `_render_funnel`, with no file overlap with the parallel restraint/
+iteration-summary fix-round unit (the same review's Findings 1-2) already in flight against
+`toolcalls.py`'s own restraint/iteration-summary logic and tests.
+
 ## 1. Goal & scope
 
 Build the pieces `docs/plans/small-model-benchmarking.md`'s "### S5 — `tool-caller` pack, part 1:
@@ -248,6 +271,25 @@ class FunnelCounts:
     dispatchedCalls: int                 # denominator for (d); calls, not turns
     factBearingReturns: int              # denominator for (g)
     unscoreableReturns: int
+    # --- 2026-09-14 correction (review small-model-benchmarking-s5.md Finding 3, option (a)) ---
+    # `-ml` §4.2(d)'s required per-argument failure decomposition, pooled over exactly the same
+    # calls `allArgsCorrect` (`ToolCallAggregates.funnel`) counts as its own denominator — dispatched
+    # calls whose TOOL NAME is already correct (`_Tally.argsCorrectTotal`, i.e. `matching_calls` in
+    # `_score_one_conversation`, `toolcalls.py:786-795`). Declared with a `= 0` DEFAULT and placed
+    # after the 13 pre-existing, non-defaulted fields above (a Python dataclass requirement — fields
+    # with a default cannot precede one without) rather than inline after `dispatchedCalls`; this
+    # does NOT change the rendered table's line order, which `report.py`'s `_render_funnel` already
+    # controls by an explicit, hand-written line list rather than by iterating `vars(fc)` (§4.4
+    # below). No `_encode`/`_decode` change is needed: both already treat `FunnelCounts` generically
+    # (`dict(vars(value))` / `FunnelCounts(**value)`), and the `= 0` default makes that constructor
+    # call succeed even against an older, already-serialized dict missing these three keys.
+    argsOmittedRequired: int = 0         # count of REQUIRED arguments absent from a call in the
+                                          # `allArgsCorrect` denominator (per argument, not per call)
+    argsWrongValue: int = 0              # count of arguments present but != expected after
+                                          # canonicalization (same denominator, same per-argument unit)
+    argsBoundaryUnit: int = 0            # a NAMED SUBSET of argsWrongValue, never a sibling bucket:
+                                          # an argument counted here is also counted in argsWrongValue
+                                          # (mirrors `ArgumentCorrectness.boundaryUnit`'s own docstring)
 
 
 @dataclass(frozen=True)
@@ -495,6 +537,22 @@ isolation against hand-built `TurnTrace`/`ConversationTrace` fixtures, none need
   `hazard`/`perTurnPosition` tuples, `restraint`, `cleanThroughTurn`, and `determinismProbe` (comparing
   each `probes` entry against its same-`scriptId` counterpart in `scored` via
   `outcome_vectors_differ`, setting `ran`/`identical`/`differingTurns` per plan `:2262-2264`'s shape).
+  **2026-09-14 correction (review Finding 3, option (a)):** `_Tally` (the accumulator
+  `score_conversations`/`_score_one_conversation` build `FunnelCounts` from) gains three matching
+  `int` accumulators, `argsOmittedRequired`/`argsWrongValue`/`argsBoundaryUnit`, initialized to `0`
+  alongside its existing `argsCorrectTotal`/`argsCorrectSuccesses`. `_score_one_conversation`'s
+  existing loop over `matching_calls` — the one that already computes `correctness =
+  argument_correctness(...)` per call — adds three lines immediately after that call, reading the
+  three tuples it already discards today:
+  ```python
+  tally.argsOmittedRequired += len(correctness.omittedRequired)
+  tally.argsWrongValue += len(correctness.wrongValue)
+  tally.argsBoundaryUnit += len(correctness.boundaryUnit)
+  ```
+  `_Tally.funnel_counts()` passes the three new accumulators through as the matching new
+  `FunnelCounts` kwargs. No other function in this module changes — `argument_correctness` itself
+  (Step 3) is untouched, exactly as the review found it: correctly built, only never read past
+  `.allCorrect` before this correction.
 
 ### 3.5 `packs/tool-caller-shop-assistant/prompts/system.md`
 
@@ -533,6 +591,27 @@ Inserted into `compare_report`, gated on `pack.role == "tool-caller"` (equivalen
    `run.aggregates.funnelCounts` for the raw hierarchy and cross-referencing `.restraint`/`.funnel`
    for the "-> k/n" annotations shown in the plan's own illustration (`:2098-2111`) — no duplicate
    storage of a derivable rate (§7 rule 4).
+
+   **2026-09-14 correction (review Finding 3, option (a)):** two new lines, nested at the same
+   4-space indent as the existing "native call emitted"/"prose pseudo-call"/"no attempt" lines
+   (i.e. one level under a 2-space parent — here, "dispatched calls", since this decomposition is
+   (d)'s own further breakdown), inserted immediately after the existing "dispatched calls" line and
+   before "fact-bearing returns". Denominator for the cross-reference annotation is read off
+   `run.aggregates.funnel`'s own `allArgsCorrect` `BinaryMetric` (already populated whenever
+   `funnelCounts` is not `None`, since both come from the same `_Tally` pass) — never a second,
+   derivable copy stored on `FunnelCounts` itself (§7 rule 4, same discipline the restraint
+   cross-reference already uses two lines above it):
+   ```python
+   args_correct_n = next((m.n for m in run.aggregates.funnel if m.name == "allArgsCorrect"), 0)
+   ...
+   f"    args omitted required       {fc.argsOmittedRequired}   "
+   f"-> per-argument split of (d)'s {args_correct_n} calls w/ correct tool",
+   f"    args wrong value            {fc.argsWrongValue}   "
+   f"-> of which boundary/unit: {fc.argsBoundaryUnit}",
+   ```
+   The second line's exact wording deliberately reproduces `-ml` §4.2(d)'s own literal illustration
+   ("Report it as `wrong_value: 12, of which boundary/unit: 7`") rather than paraphrasing it.
+
 2. **`_render_per_turn_position(pack, runs) -> list[str]`** — §4.4's Wilson-per-position table, one
    column per arm, `n` = the **observed** count (`TurnPositionRate.metric.n`, already censoring-aware
    per §3.4's `per_turn_position`), the **structural** `n` (12/8/4 by position under the real pack)
@@ -643,7 +722,11 @@ to `t=5`, asserting it is **in** `cleanThroughTurn4`'s denominator and **out** o
 `t=5`. **E4** — the E2 fixture rendered beside one where turn 4 is an ordinary scored failure rather
 than a raise, asserting the headline/hazard/per-position figures **differ**. **Done when:** all three
 pass and the laundering test (a trace that collapses at turn 2 must not out-score one that reaches
-turn 8 on any conditional count, plan item 7) is green.
+turn 8 on any conditional count, plan item 7) is green. **2026-09-14 correction (review Finding 3,
+option (a)):** also add a synthetic-fixture test asserting `_Tally`/`FunnelCounts`'s new
+`argsOmittedRequired`/`argsWrongValue`/`argsBoundaryUnit` counters (§3.4) move correctly off a turn
+carrying a known omitted-required argument, a known wrong-value argument, and a known
+boundary-confused argument, and stay at `0` on an all-correct fixture.
 
 ### Step 6 — `report.py` renderers + `runner.py` wiring + E5 + full integration (offline)
 
@@ -658,7 +741,12 @@ producing a `RunResult` that `store()`/`load_history()`/`compare_report()` accep
 error — the first point in this stage where every new piece runs together. **Done when:** the full
 suite is green, `ruff check .` is clean, and the funnel table / per-turn-position table / hazard curve
 all render on this synthetic integration run's own output (visually confirmed in the test, not merely
-"did not raise").
+"did not raise"). **2026-09-14 correction (review Finding 3, option (a)):** also add (i) a
+`test_results.py` round-trip test for `FunnelCounts`'s three new defaulted fields (encode a populated
+value, decode it back, and separately decode a dict missing the three keys to confirm the `= 0`
+default absorbs it), and (ii) a `test_report.py` test asserting `_render_funnel` prints both new lines
+with the correct values and the `allArgsCorrect`-derived denominator annotation, extending the
+existing funnel-rendering test fixture rather than adding a new one.
 
 ## 6. Test strategy
 
@@ -747,3 +835,10 @@ design rulings, not left open: the per-arm dispatch-failure count's persistence 
 confirmation, none blocking: the determinism-probe script-id placeholders, the `boundaryRule` JSON
 shape, and the outcome-vector comparator's exact field set — all cheap to revise later since none has
 a downstream consumer yet beyond this stage's own tests.
+
+2026-09-14 — **post-execution correction** (review Finding 3, option (a)): `FunnelCounts` gains three
+defaulted fields (`argsOmittedRequired`/`argsWrongValue`/`argsBoundaryUnit`, §3.1), wired from
+`argument_correctness`'s already-computed, previously-discarded tuples at Step 5's own accumulation
+site (§3.4) and rendered as two new `_render_funnel` lines at Step 6's own renderer (§4.4) — closing
+`-ml` §4.2(d)'s failure-decomposition reporting requirement. Implementation is a separate follow-up
+unit against already-shipped code, not part of this document's own execution history above.
