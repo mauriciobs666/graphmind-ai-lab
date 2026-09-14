@@ -338,7 +338,7 @@ export type UseJoinResult = UseMutationResult<JoinResponse, ApiError, JoinReques
 };
 
 export function useJoin(): UseJoinResult {
-  const { setParticipant, setPendingLanguageStep } = useSession();
+  const { setParticipant, setPendingLanguageStep, setWelcomeMessage } = useSession();
   const dispatch = useErrorEffects();
   const [action, setAction] = useState<ErrorAction | null>(null);
 
@@ -354,6 +354,11 @@ export function useJoin(): UseJoinResult {
         displayName: data.displayName,
         language: data.language,
       });
+      // §4.12 (v1.37) — the join response's one-shot `welcome` line; not
+      // part of `ParticipantSession`/`storage.ts` (§5.2/§5.3), so it rides
+      // this ephemeral context field instead. `ChatView.tsx` is the only
+      // clearing site.
+      setWelcomeMessage(data.welcome);
     },
     onError: (error) => {
       // C4's join row: the token that would carry a credential is what was

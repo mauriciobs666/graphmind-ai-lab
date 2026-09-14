@@ -12,6 +12,7 @@
 import { useEffect, useRef } from 'react';
 import type { MessageRow } from '../../api/endpoints';
 import { MessageBubble } from './MessageBubble';
+import { WELCOME_ROW_ID } from './welcome';
 
 const AT_BOTTOM_PX = 40;
 
@@ -60,7 +61,12 @@ export function Transcript({
         </li>
       )}
       {rows.map((row) => (
-        <MessageBubble key={row.msgId} row={row} />
+        <MessageBubble
+          key={row.msgId}
+          row={row}
+          // §4.12 — the welcome turn carries no real wire `createdAt`.
+          showTimestamp={row.msgId !== WELCOME_ROW_ID}
+        />
       ))}
       {pendingText && (
         <MessageBubble

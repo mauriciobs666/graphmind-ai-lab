@@ -11,10 +11,16 @@ import type { MessageRow } from '../../api/endpoints';
 export function MessageBubble({
   row,
   pending = false,
+  showTimestamp = true,
 }: {
   row: Pick<MessageRow, 'msgId' | 'text' | 'role' | 'createdAt'>;
   /** The optimistic "sending" echo — not yet confirmed by the server. */
   pending?: boolean;
+  /** The welcome turn (§4.12) carries no real `createdAt` (it is minted
+   * client-side from the join response, not a transcript row with a wire
+   * timestamp) — `false` there, so the caption doesn't show a misleading
+   * clock time for "epoch 0". */
+  showTimestamp?: boolean;
 }) {
   const { locale } = useLocale();
   const isOwn = row.role !== 'assistant';
@@ -33,13 +39,15 @@ export function MessageBubble({
         } ${pending ? 'opacity-60' : ''}`}
       >
         <p className="whitespace-pre-wrap break-words">{row.text}</p>
-        <p
-          className={`mt-1 text-[11px] ${
-            isOwn ? 'text-slate-300 dark:text-slate-600' : 'text-slate-400 dark:text-slate-500'
-          }`}
-        >
-          {pending ? 'Sending…' : formatDate(row.createdAt, locale, { timeStyle: 'short' })}
-        </p>
+        {(pending || showTimestamp) && (
+          <p
+            className={`mt-1 text-[11px] ${
+              isOwn ? 'text-slate-300 dark:text-slate-600' : 'text-slate-400 dark:text-slate-500'
+            }`}
+          >
+            {pending ? 'Sending…' : formatDate(row.createdAt, locale, { timeStyle: 'short' })}
+          </p>
+        )}
       </div>
     </li>
   );

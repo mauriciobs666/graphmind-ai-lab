@@ -53,4 +53,23 @@ describe('MessageBubble', () => {
     );
     expect(screen.getByText('Sending…')).toBeInTheDocument();
   });
+
+  // §4.12 — the welcome turn has no real wire `createdAt`; `Transcript.tsx`
+  // passes `showTimestamp={false}` for it rather than formatting "epoch 0"
+  // into a misleading clock time.
+  it('renders no caption at all when showTimestamp is false', () => {
+    render(
+      <ul>
+        <MessageBubble
+          row={{ msgId: '__welcome__', text: 'Welcome to the store, Ada.', role: 'assistant', createdAt: 0 }}
+          showTimestamp={false}
+        />
+      </ul>,
+    );
+    expect(screen.getByText('Welcome to the store, Ada.')).toBeInTheDocument();
+    expect(screen.queryByText('Sending…')).not.toBeInTheDocument();
+    // No formatted-time caption either — the message bubble carries only
+    // its text, nothing else.
+    expect(screen.getByText('Welcome to the store, Ada.').parentElement?.children).toHaveLength(1);
+  });
 });

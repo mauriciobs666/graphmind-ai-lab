@@ -37,6 +37,14 @@ interface SessionContextValue {
    * session goes straight back to the ordinary chat/join render). */
   pendingLanguageStep: string | null;
   setPendingLanguageStep: (language: string | null) => void;
+  /** §4.12 (v1.37) — the join response's one-shot `welcome` line (§5.2 *The
+   * join greeting*). Mirrors `pendingLanguageStep` exactly: plain React
+   * state, never persisted (`storage.ts` never sees it, `ParticipantSession`
+   * never carries it), so a reload always starts this `null`. Set once by
+   * `api/hooks.ts`'s `useJoin()` `onSuccess`; cleared once, by `ChatView.tsx`
+   * after it has rendered the line — the only clearing site. */
+  welcomeMessage: string | null;
+  setWelcomeMessage: (message: string | null) => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -49,6 +57,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     () => loadPresenterSession(),
   );
   const [pendingLanguageStep, setPendingLanguageStep] = useState<string | null>(null);
+  const [welcomeMessage, setWelcomeMessage] = useState<string | null>(null);
 
   const setParticipant = useCallback((session: ParticipantSession) => {
     saveParticipantSession(session);
@@ -80,6 +89,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       clearPresenter,
       pendingLanguageStep,
       setPendingLanguageStep,
+      welcomeMessage,
+      setWelcomeMessage,
     }),
     [
       participant,
@@ -89,6 +100,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setPresenter,
       clearPresenter,
       pendingLanguageStep,
+      welcomeMessage,
     ],
   );
 

@@ -5,13 +5,15 @@
 // `TurnIndicator.test.tsx` already prove each rule in isolation; these tests
 // prove the wiring — the S13 row's own done-conditions
 // (docs/plans/salesperson-ui.md §5.1).
+import { type ReactElement, useState } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MessageRow, StateResponse } from '../api/endpoints';
-import { SessionProvider } from '../session/SessionContext';
+import { useJoin } from '../api/hooks';
+import { SessionProvider, useSession } from '../session/SessionContext';
 import { saveParticipantSession } from '../session/storage';
 import { ChatView } from './ChatView';
 
@@ -62,6 +64,79 @@ function renderChatView(client: QueryClient) {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+}
+
+// §4.12's welcome-turn tests need a real `useJoin()` call in the loop — the
+// context field is only ever set from inside its `onSuccess`, never
+// injectable from outside `SessionProvider` the way a persisted
+// `ParticipantSession` is via `saveParticipantSession`. This harness
+// reproduces just enough of `routes.tsx`'s `ParticipantRoute` (join screen
+// vs. chat, switched purely on `participant`) to exercise that real path,
+// without touching `routes.tsx` itself — out of this fix's scope.
+function JoinThenChat() {
+  const { participant } = useSession();
+  const join = useJoin();
+  if (!participant) {
+    return (
+      <button type="button" onClick={() => join.mutate({ displayName: 'Ada', language: 'en' })}>
+        Join
+      </button>
+    );
+  }
+  return <ChatView />;
+}
+
+// Toggles `ChatView` out of and back into the tree while `SessionProvider`
+// (and therefore the session context, including `welcomeMessage`) stays
+// mounted throughout — proving "does not reappear on a second `ChatView`
+// mount within the same join" against a genuine unmount/remount, not a
+// same-instance re-render.
+function JoinThenToggleChat() {
+  const { participant } = useSession();
+  const join = useJoin();
+  const [showChat, setShowChat] = useState(true);
+  if (!participant) {
+    return (
+      <button type="button" onClick={() => join.mutate({ displayName: 'Ada', language: 'en' })}>
+        Join
+      </button>
+    );
+  }
+  return (
+    <>
+      <button type="button" onClick={() => setShowChat((s) => !s)}>
+        Toggle chat
+      </button>
+      {showChat ? <ChatView /> : <div>elsewhere</div>}
+    </>
+  );
+}
+
+function renderWithHarness(client: QueryClient, Harness: () => ReactElement) {
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={['/shop/join']}>
+        <SessionProvider>
+          <Harness />
+        </SessionProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+function mockJoinAndPollFetch(welcome: string) {
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const method = (init?.method ?? 'GET').toUpperCase();
+    if (method === 'POST' && url.includes('/shop/api/session')) {
+      return jsonResponse(200, {
+        participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'en', welcome,
+      });
+    }
+    if (url.includes('/shop/api/messages')) return jsonResponse(200, []);
+    if (url.includes('/shop/api/state')) return jsonResponse(200, baseState());
+    throw new Error(`unexpected fetch: ${method} ${url}`);
+  });
 }
 
 beforeEach(() => {
@@ -259,5 +334,62 @@ describe('ChatView — C4 reread: the in-between "checking…" state before reco
     expect(
       await screen.findByText('Your message was not sent. Please try again.'),
     ).toBeInTheDocument();
+  });
+});
+
+// §4.12 (v1.37) — the welcome turn's own done-conditions, added to the S13
+// row's set.
+describe('ChatView — the welcome turn (§4.12, v1.37)', () => {
+  it("a fresh join's welcome line renders once in the chat view before anything is sent", async () => {
+    vi.stubGlobal('fetch', mockJoinAndPollFetch('Welcome to the store, Ada.'));
+    const user = userEvent.setup();
+    renderWithHarness(makeClient(), JoinThenChat);
+
+    await user.click(screen.getByRole('button', { name: 'Join' }));
+
+    expect(await screen.findByText('Welcome to the store, Ada.')).toBeInTheDocument();
+    // Nothing sent yet — the composer is still empty.
+    expect(screen.getByLabelText('Message')).toHaveValue('');
+  });
+
+  it('a persisted session that did not just join (no `useJoin()` call) never shows a welcome line — `welcomeMessage` starts `null`', async () => {
+    // Mirrors a page reload: `ParticipantSession` survives in storage
+    // (`saveParticipantSession`), but `SessionProvider` itself has just
+    // mounted fresh and no `useJoin()` call has run in this session.
+    saveParticipantSession({ participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'en' });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/shop/api/messages')) return jsonResponse(200, []);
+      if (url.includes('/shop/api/state')) return jsonResponse(200, baseState());
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatView(makeClient());
+
+    // The transcript renders its ordinary empty state, not a welcome turn —
+    // proving `welcomeMessage` came up `null` rather than stale/leaked.
+    expect(await screen.findByText(/no messages yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/welcome to the store/i)).not.toBeInTheDocument();
+  });
+
+  it('does not reappear on a second ChatView mount within the same join', async () => {
+    vi.stubGlobal('fetch', mockJoinAndPollFetch('Welcome to the store, Ada.'));
+    const user = userEvent.setup();
+    renderWithHarness(makeClient(), JoinThenToggleChat);
+
+    await user.click(screen.getByRole('button', { name: 'Join' }));
+    expect(await screen.findByText('Welcome to the store, Ada.')).toBeInTheDocument();
+
+    // Unmount ChatView, then remount it — `SessionProvider` (and therefore
+    // the already-cleared `welcomeMessage`) never itself remounts.
+    await user.click(screen.getByRole('button', { name: 'Toggle chat' }));
+    expect(screen.getByText('elsewhere')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Toggle chat' }));
+
+    // The second mount renders normally (the composer is back)…
+    expect(await screen.findByLabelText('Message')).toBeInTheDocument();
+    // …but the welcome line does not return.
+    expect(screen.queryByText('Welcome to the store, Ada.')).not.toBeInTheDocument();
   });
 });

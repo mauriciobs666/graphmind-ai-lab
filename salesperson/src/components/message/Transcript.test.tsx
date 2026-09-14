@@ -9,6 +9,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { MessageRow } from '../../api/endpoints';
 import { Transcript } from './Transcript';
+import { WELCOME_ROW_ID } from './welcome';
 
 function row(msgId: string, text: string): MessageRow {
   return { msgId, threadId: 't', authorId: 'p', text, role: 'user', createdAt: 1, mentions: [] };
@@ -34,6 +35,24 @@ describe('Transcript', () => {
     expect(screen.getByText('hi')).toBeInTheDocument();
     expect(screen.getByText('on its way')).toBeInTheDocument();
     expect(screen.getByText('Sending…')).toBeInTheDocument();
+  });
+
+  // §4.12 — the welcome turn (identified by `WELCOME_ROW_ID`) carries no
+  // real wire timestamp; `Transcript` must suppress the caption for that one
+  // row without touching any other row's.
+  it('suppresses the timestamp caption for the welcome row only', () => {
+    const welcomeRow: MessageRow = {
+      msgId: WELCOME_ROW_ID, threadId: '', authorId: 'agent',
+      text: 'Welcome to the store, Ada.', role: 'assistant', createdAt: 0, mentions: [],
+    };
+    render(<Transcript rows={[welcomeRow, row('1', 'hi')]} />);
+    expect(screen.getByText('Welcome to the store, Ada.')).toBeInTheDocument();
+    // The ordinary row still gets its caption…
+    const ordinaryBubble = screen.getByText('hi').parentElement;
+    expect(ordinaryBubble?.children.length).toBe(2);
+    // …the welcome row's does not.
+    const welcomeBubble = screen.getByText('Welcome to the store, Ada.').parentElement;
+    expect(welcomeBubble?.children.length).toBe(1);
   });
 
   it('scrolls to the bottom on a new row when the viewer was already there', () => {
