@@ -11,16 +11,8 @@ import { type FormEvent, useState } from 'react';
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 import { LanguageChooser } from './i18n/LanguageChooser';
 import { LayoutShell } from './layout/Shell';
-import {
-  useHealth,
-  useJoin,
-  useMessages,
-  usePostMessage,
-  usePresenterLogin,
-  usePresenterParticipants,
-  useResetMine,
-  useShopState,
-} from './api/hooks';
+import { ChatView } from './views/ChatView';
+import { useHealth, useJoin, usePresenterLogin, usePresenterParticipants } from './api/hooks';
 import { APP_PATHS } from './routePaths';
 import { useSession } from './session/SessionContext';
 
@@ -100,98 +92,12 @@ function JoinScreen() {
   );
 }
 
-function ChatScreen() {
-  const { participant } = useSession();
-  const shopState = useShopState();
-  const messages = useMessages();
-  const postMessage = usePostMessage();
-  const resetMine = useResetMine();
-  const [text, setText] = useState('');
-
-  const turnState = shopState.data?.turn.state ?? 'idle';
-  const composerDisabled = turnState !== 'idle' || postMessage.isPending;
-
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    postMessage.mutate(trimmed, {
-      onSuccess: () => setText(''),
-      // C6a — a 409 retains the composer text; do not clear it here.
-    });
-  }
-
-  return (
-    <main className="mx-auto flex min-h-svh max-w-lg flex-col gap-4 px-4 py-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Signed in as</p>
-          <p className="font-medium text-slate-900 dark:text-slate-50">
-            {participant?.displayName}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            if (window.confirm('Reset your session? This clears your cart and chat.')) {
-              resetMine.mutate();
-            }
-          }}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-600 dark:border-slate-600 dark:text-slate-300"
-        >
-          Reset
-        </button>
-      </header>
-
-      {shopState.deadTurnNotice && (
-        <p role="status" className="rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900">
-          The reply never arrived — send again.
-        </p>
-      )}
-      {postMessage.action?.kind === 'turnInProgressRetain' && (
-        <p role="status" className="text-xs text-slate-500">
-          Still working on the last message…
-        </p>
-      )}
-
-      <ul className="flex-1 space-y-2 overflow-y-auto" aria-label="Transcript">
-        {(messages.data ?? []).map((row) => (
-          <li
-            key={row.msgId}
-            className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-          >
-            {row.text}
-          </li>
-        ))}
-      </ul>
-
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-base outline-none focus:border-slate-500 dark:border-slate-600 dark:bg-slate-900"
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          maxLength={2000}
-          placeholder="Type a message…"
-          disabled={composerDisabled}
-        />
-        <button
-          type="submit"
-          disabled={composerDisabled || text.trim().length === 0}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
-        >
-          Send
-        </button>
-      </form>
-    </main>
-  );
-}
-
 function ParticipantRoute() {
   const { participant, pendingLanguageStep } = useSession();
   if (!participant || pendingLanguageStep !== null) {
     return <JoinScreen />;
   }
-  return <ChatScreen />;
+  return <ChatView />;
 }
 
 function PresenterKeyScreen() {
