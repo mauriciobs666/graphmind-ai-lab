@@ -1,6 +1,6 @@
 # The one salesperson UI — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (M<n> TBD) · **Version:** 1.37 · **Reviews:** `docs/reviews/salesperson-ui.md`, `docs/reviews/salesperson-ui-impl.md`, `falkor-chat/docs/reviews/salesperson-ui-s12a.md`, `falkor-chat/docs/reviews/salesperson-ui-s12c.md`, `falkor-chat/docs/reviews/salesperson-ui-s12b.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — (M<n> TBD) · **Version:** 1.39 · **Reviews:** `docs/reviews/salesperson-ui.md`, `docs/reviews/salesperson-ui-impl.md`, `falkor-chat/docs/reviews/salesperson-ui-s12a.md`, `falkor-chat/docs/reviews/salesperson-ui-s12c.md`, `falkor-chat/docs/reviews/salesperson-ui-s12b.md`, `falkor-chat/docs/reviews/salesperson-ui-s13.md`, `falkor-chat/docs/reviews/salesperson-ui-s17.md`
 
 *2026-09-02 — v1.1: revised against `docs/reviews/salesperson-ui.md` (4 blockers, 9 majors, 15 minors) and the stakeholder's OQ-1…OQ-6 answers; the client component takes the `salesperson/` name and the retired app moves to `deprecated/salesperson/`.*
 *2026-09-02 — v1.2: revised against that review's `## Pass 2` (approve with suggestions) — N1 pins `FALKORCHAT_WS_ID=demo` and adds a non-label survivor clause plus a positive non-participant survivor test, N2 assigns the SPA's shared entry files to S12a, N3 re-keys the route-table assertion onto the `storefront` parameter, plus both nits; `teco`'s `deprecated/` move is recorded as landed.*
@@ -39,6 +39,30 @@
 *2026-09-13 — v1.35: `falkor-chat/docs/reviews/salesperson-ui-s12c.md`'s Major finding — v1.34's `routes.tsx` fix closed `falkor-chat/docs/reviews/salesperson-ui-s12a.md`'s ownership gap for S13/S12d but missed the structurally identical third case: S12c's own §5.1 row always committed to the join-screen language chooser, which lives in `routes.tsx`, not in S12c's owned subtree, and its edit there (one import, one inline `<label>`/`<select>` block swapped for `<LanguageChooser .../>`, nothing else) has already landed and been reviewed/accepted (`42686fe`). §5.0's `routes.tsx` row now names S12c between "builds it" and "S13, S12d," and its ordering note is corrected: S12c's swap landed *before* S13's/S12d's, so the file S13 and S12d receive at their own future dispatch is the delivered, S12c-inclusive `routes.tsx` — their diffs are taken against that file, not against S12a's original (`bbd9eb7`). §5.1's S12c row gains the file cell and the same "edits no shared entry file, except one narrow swap" framing S13/S12d already carry, phrased in the past tense their own edit earns. No other row assumed a fixed edit count on this file that the sweep found unabsorbed.*
 *2026-09-13 — v1.36: `falkor-chat/docs/reviews/salesperson-ui-s12b.md`'s Major finding — `App.tsx`'s fixed composition nests `<LayoutShell>` **outside** `<QueryClientProvider>`/`<SessionProvider>`/`<RouterProvider>`, so nothing `layout/**`/`components/sheets/**` renders (and, per §5.0's v1.34 seed row, nothing S14 will mount inside those same sheets) can reach `useSession()`, `useQuery()`/`useMutation()`, or `useNavigate()`/`useLocation()` — is closed by a new §4.11: `App.tsx`'s three providers now wrap a **pathless layout route** (`element: <LayoutShell/>`, the three existing routes as its `children`, `LayoutShell` rendering `<Outlet/>` instead of `{children}`), traced against `RouterProvider`'s own type (`RouterProviderProps` takes no `children`, so a bare provider-order swap cannot reach the router half of the fix at all) and against the current react-router v7 layout-route API. **S12b** — not yet accepted ("needs changes" on the same review, and already due back for its own Blocker fix in `ResetControl.tsx`) — gains one narrow, additive edit right on each of `App.tsx` and `routes.tsx` (§5.0's rows) to land this, folded into the same revision that fixes the Blocker: `ResetControl` is simplified to call `useResetMine()` directly, which closes both the Blocker (full §5.3 C1–C14 dispatch, not just 503) and the review's Minor (post-reset cache invalidation) as a consequence rather than a separate patch, and `layout/sessionBridge.ts`/`layout/injectBridge.tsx`/`layout/injectBridge.test.tsx` are deleted. §5.1's S12b row is swept to cite this.*
 *2026-09-14 — v1.37: closes the gap S13's delivered `ChatView.tsx` flagged directly in its own comment (own lines 12–22 — not a review finding; S13 is still under its `analyst` gate as this lands) — the welcome turn (§5.1's S13 row; §5.2 *The join greeting*) has no path from `routes.tsx`'s `useJoin()` call to this row's views, because both `JoinScreen` and `useJoin()` sit in S12a's `session/**`/`api/**`, closed to later edits by default, and `useJoin()`'s `onSuccess` discards `data.welcome` right after `setParticipant()`. New §4.12 grants **S13** one narrow, additive edit on two named files only: `session/SessionContext.tsx` gains a `welcomeMessage`/`setWelcomeMessage` pair that mirrors the existing `pendingLanguageStep` field's shape exactly (React state only — never written to `storage.ts`, never added to `ParticipantSession`, so `session/types.ts`'s own comment stays true and a reload always starts it `null`), set once in `hooks.ts`'s `useJoin()` `onSuccess` and cleared by `ChatView.tsx` — already S13's own, unrestricted file — once it has rendered the line, so the greeting shows exactly once per join. No edit to `routes.tsx` is needed or granted: `ParticipantRoute` already switches purely on context fields (`participant`, `pendingLanguageStep`) with no `navigate()`/router-state involved, so the new field slots into the same mechanism rather than opening a second one. §5.0 gains a dedicated row for the two named files; §5.1's S13 row is swept to cite it.*
+*2026-09-14 — v1.38: `falkor-chat/docs/reviews/salesperson-ui-s13.md`'s Minor/open-question finding, put to the stakeholder and confirmed in scope 2026-09-14 — §4.5's "the UI's own chrome is localised independently with `react-i18next`" was never assigned to any step's done-condition, so every chrome string in S12b's/S13's/S14's delivered subtrees (`layout/**`, `components/sheets/**`, `views/Chat*`, `components/message/**`, `views/{Cart,Order,Profile,Catalog}*`) is a hardcoded English literal outside the join screen's already-wired `LanguageChooser` — and AC-9's own wording ("the customer-facing copy appears in the language they chose") is broader than what any delivered step, or §6.3's existing live-pass item, verifies. New §4.13 designs one new step, **S17**: one narrow, additive edit right on those five subtrees plus the two already-populated locale bundles (`locales/{en,pt-BR,es}.json`) — no other file, no behavioural change — states the key-namespacing convention (`chat`/`layout`/`cart`/`order`/`profile`/`catalog`, one top-level namespace per feature area, mirroring the shipped `join.*`) and `composerNotice.ts`'s `t`-threading (a `TFunction` parameter, mirroring how it already takes `action`/`reconciliation` as plain args, since the file is deliberately outside the React tree). S12d's own not-yet-built presenter view is deliberately left out of S17's sweep — its own future dispatch commits to `t()` from the start instead, its §5.1 row swept to say so — and `routes.tsx`'s `JoinScreen` chrome is explicitly out of scope, both reasoned in §4.13 and recorded as new risk **R13**. §5.0 gains a new dedicated row for S17's grant (plus a locale-file coda for S12d's later, disjoint `presenter.*` addition); §5.1 gains S17's own row (after S14, before S15) and S12d's row is swept; §6.3's AC-9 live pass (#7) gains an **AC-9c** chrome-switch check and §10's AC-9 row cites S17.*
+*2026-09-14 — v1.39: `falkor-chat/docs/reviews/salesperson-ui-s17.md`'s plan-gate review (needs
+changes — 3 blockers, 1 major, 2 minor), every finding closed here — **two of §4.13's own tables
+were incomplete despite the "derived, not sampled" claim**: `composerNotice.ts:53`'s
+`nothingCommitted` branch (already tested, `composerNotice.test.ts:31-35`) gains
+`chat.notice.messageNotSent`, and `Transcript.tsx:53`'s `aria-label="Transcript"` gains
+`chat.transcript.label` — both blockers, since Layer 1/Layer 2 are keyed off these same tables and
+neither key would otherwise ever surface as missing. §4.13's Layer 3 residual-check regex is
+corrected (real multiline matching via `grep -Pzo`, no longer requiring a bare letter immediately
+before `<`) after the reviewer ran the original single-line pattern verbatim and it matched only 4
+of ~40 JSX-text-child table rows; the section now states plainly what even the corrected pattern
+structurally cannot see (a string built into a JS variable/ternary/template before reaching `{…}}`
+— `TurnIndicator.tsx`'s `firstInLine`/`aheadOfYou_*` pair, all of `composerNotice.ts`'s own values)
+and that Layer 2's committed tests, not this hand-run aid, are the sole reliable completeness
+proof. Layer 2's negative-assertion pattern (`queryByText(<English>)` absent under `pt-BR`) gains a
+named exception for cognates/brand names it would otherwise fail on **correct** code —
+`cart.total`/`order.total` (`"Total"`, the same word in all three shipped locales) and
+`layout.header.brand` (`"Storefront"`, a plausible untranslated brand name), verified by Layer 1
+only. The file count (§4.13's tables in fact name **seventeen** files, not thirteen — the review's
+own independently-confirmed count) is corrected everywhere it appeared, and §5.1's S17 row's
+Done-condition column now **cites** §4.13's test design instead of restating it, closing the drift
+this review found at its root rather than only at the one place it surfaced; one explicit sentence
+names `ChatView.test.tsx`'s new `useTranslation()`-import obligation, which the generic Layer 2
+rule already covered but no table row names since `ChatView.tsx` owns no key of its own.*
 
 ## 1. Goal & scope
 
@@ -1217,6 +1241,276 @@ correctly excludes `welcome` already, and stays that way), `session/storage.ts`,
 §5.0 and §5.1's S13 row state the file-touch grant this section licenses; nothing here widens it
 further.
 
+### 4.13 Chrome i18n sweep — S12b/S13/S14 routed through `t()` (new step S17, v1.38)
+
+**The gap, confirmed real, not merely suspected.** §4.5 states plainly: "The UI's **own** chrome is
+localised independently with `react-i18next` (one JSON bundle per locale)." `falkor-chat/docs/
+reviews/salesperson-ui-s13.md`'s Minor/open-question finding confirmed that the only populated
+bundle key anywhere in the delivered tree is `join.languageLabel`/`join.languageHint`
+(`locales/en.json`), consumed by S12c's own `i18n/LanguageChooser.tsx` — every other user-facing
+string in S12b's (`layout/**`, `components/sheets/**`), S13's (`views/Chat*`, `components/
+message/**`) and S14's (`views/{Cart,Order,Profile,Catalog}*`) delivered subtrees is a hardcoded
+English literal, not a `t()` call, confirmed by direct reading of all seventeen files below. No
+step's §5.1 row ever named "route this view's copy through `t()`" as a done-condition — §4.5's
+chrome sentence was a design-level statement with no step assigned to execute it. This is also not
+merely a design-decision gap: **AC-9's own wording is broader than what any delivered step
+verifies** — `docs/requirements/salesperson-ui.md`'s AC-9 reads "the **customer-facing copy**
+appears in the language they chose," and §6.3 #7's live pass measures only agent-reply adherence
+(§4.5's `run_ctx` language sentence), never the SPA's own chrome. Put to the choice of whether to
+treat this as in-scope work, the stakeholder chose, 2026-09-14, to add a follow-up unit — this
+section designs it as **S17**, a single new step. §5.0 and §5.1 are swept to carry it.
+
+**Scope of the sweep — three delivered subtrees, not five.** S17 touches exactly the files S12b,
+S13 and S14 already own (`layout/**`, `components/sheets/**`, `views/Chat*`, `components/
+message/**`, `views/{Cart,Order,Profile,Catalog}*`) plus the two already-populated locale bundles
+(`i18n/**`'s config is untouched; `locales/{en,pt-BR,es}.json` gain new top-level keys) — S12c's
+own subtree, already committed. Two adjacent surfaces are deliberately **excluded**:
+
+- **S12d's presenter view (`views/Presenter*`) is not swept — it doesn't exist yet.** Retrofitting
+  a view is strictly more work than building it right the first time, and S12d's own dispatch is
+  still queued (coordination doc, `## RESUME HERE`), so there is nothing to retrofit today. §5.1's
+  S12d row (below) is swept instead: it now commits to `t()` from S12d's first line of code,
+  citing this section's namespacing convention (a new `presenter.*` namespace), so S12d never
+  produces a sixth hardcoded-chrome subtree for a future S17-shaped follow-up to find. This is
+  cheaper than adding S12d to S17's scope pre-emptively against code that isn't written, which
+  would force this section to guess at strings no implementer has written yet.
+- **`routes.tsx`'s `JoinScreen` chrome (a handful of strings — "Please enter a name.", the
+  presenter-key-entry screen's own copy) is explicitly out of scope for S17.** Two reasons, not
+  one: (a) it is genuinely small residual, not the bulk of the gap the review flagged, which was
+  about S12b/S13/S14's subtrees by name; (b) `routes.tsx` already carries the most heavily
+  sequenced ownership chain in this plan — S12a builds it, then S12c, then S12b, then S13 and
+  S12d each land one narrow, additive swap (§5.0's `routes.tsx` row) — and every one of those
+  grants is deliberately scoped to "one swap, nothing else" precisely so five steps can share the
+  file without collision. Adding a sixth grant here, for a change that isn't a swap but a sweep of
+  existing `JoinScreen` markup, would be the first crack in that discipline for a gain this
+  section judges not worth it. **Reversal trigger:** if `routes.tsx`'s `JoinScreen` is ever
+  revised for an unrelated reason (e.g. a design pass), route its chrome through `t()` in the same
+  change, using this section's `join.*` namespace precedent — but that is a future step's call to
+  make against its own diff, not a grant carved out here against a file nobody is touching.
+
+**Key-namespacing convention — one top-level namespace per feature area, mirroring the shipped
+`join.*` precedent.** Not one namespace per plan step (a step is an implementation-scheduling
+fact, not a design axis, and a future refactor that moves a file between subtrees shouldn't force
+a key rename) and not one flat namespace (`join.languageLabel` already proves the convention is
+per-area, and a flat bundle would make S17's own five-subtree sweep produce naming collisions this
+table exists to prevent). Six new top-level keys: `chat` (S13), `layout` (S12b), `cart`, `order`,
+`profile`, `catalog` (S14, one namespace per panel — not one shared `shop.*`, because each panel
+already reads as an independent screen with its own vocabulary, and splitting keeps a future
+per-panel edit's diff inside one namespace). The table below is the full key set — derived by
+reading every one of the seventeen files, not sampled — the value column is the **existing English
+literal**, unchanged (the sweep is a pure extraction, no copy is being rewritten); `pt-BR`/`es`
+values are S17's own translation work, not specified here, except where noted.
+
+*`chat.*` — `views/ChatView.tsx`'s subtree (S13):*
+
+| File | Key | English value (unchanged) |
+|---|---|---|
+| `components/message/Composer.tsx` | `chat.composer.messageLabel` | `"Message"` (sr-only label) |
+| | `chat.composer.placeholder` | `"Type a message…"` |
+| | `chat.composer.send` | `"Send"` (aria-label) |
+| `components/message/Transcript.tsx` | `chat.transcript.label` | `"Transcript"` (aria-label, `Transcript.tsx:53`) |
+| | `chat.transcript.empty` | `"No messages yet — say hello."` |
+| `components/message/TurnIndicator.tsx` | `chat.turn.thinking` | `"Thinking…"` |
+| | `chat.turn.firstInLine` | `"You're first in line — thinking starts shortly."` |
+| | `chat.turn.aheadOfYou_one` / `chat.turn.aheadOfYou_other` | `"{{count}} person ahead of you."` / `"{{count}} people ahead of you."` — i18next's CLDR plural-suffix convention (verified live against the installed `i18next@^26.4.1`: `t(key, {count})` selects `_one`/`_other` automatically per locale, and `count` must be present in the call or there is no fallback to the bare key) |
+| `components/message/DeadTurnNotice.tsx` | `chat.deadTurn.notice` | `"The reply never arrived — send again."` |
+| `components/message/MessageBubble.tsx` | `chat.message.sending` | `"Sending…"` |
+| `components/message/composerNotice.ts` | `chat.notice.turnInProgress` | `"Still working on your last message…"` |
+| | `chat.notice.messageTooLong` | `"That message is too long. Please shorten it and send again."` |
+| | `chat.notice.sendFailedRetry` | `"Something went wrong and your message was not sent. Please try again."` |
+| | `chat.notice.messageNotSent` | `"Your message was not sent. Please try again."` — `composerNotice.ts:53`, the `reread`-switch's `nothingCommitted` case, already tested (`composerNotice.test.ts:31-35`) |
+| | `chat.notice.sentAwaitingReply` | `"Your message was sent — a reply is on its way."` |
+| | `chat.notice.replyUnconfirmed` | `"We couldn't confirm a reply arrived. Sending again will add a new line to the chat."` |
+| | `chat.notice.checkingDelivery` | `"We couldn't confirm your message went through — checking…"` — **the exact branch `falkor-chat/docs/reviews/salesperson-ui-s13.md`'s Major finding covers**; S17 must land after that fix-back's own commit (already true — see file-ownership below) so this key's extraction targets settled code, not a moving target |
+| | `chat.notice.messageSentNoReply` | `"Your message was sent, but no reply will be generated right now. Please send it again shortly."` |
+| | `chat.notice.sessionUnscoped` | `"Your session is no longer scoped to this store. Reload the page to continue."` |
+| | `chat.notice.unexpectedStatus` | `"Unexpected response from the server (status {{status}}). Please try again."` |
+
+*`layout.*` — `layout/**` + `components/sheets/**` (S12b):*
+
+| File | Key | English value (unchanged) |
+|---|---|---|
+| `layout/Header.tsx` | `layout.header.brand` | `"Storefront"` |
+| | `layout.header.nav` | `"Shop"` (aria-label) |
+| | `layout.header.icon.catalog` | `"Browse catalog"` |
+| | `layout.header.icon.cart` | `"Cart"` |
+| | `layout.header.icon.order` | `"Order status"` |
+| | `layout.header.icon.profile` | `"Profile"` |
+| `components/sheets/BottomSheet.tsx` | `layout.sheet.close` | `"Close"` (aria-label; both close controls share this one key) |
+| `components/sheets/CartSheet.tsx` | `layout.sheet.title.cart` | `"Cart"` |
+| `components/sheets/CatalogSheet.tsx` | `layout.sheet.title.catalog` | `"Catalog"` |
+| `components/sheets/OrderSheet.tsx` | `layout.sheet.title.order` | `"Order status"` |
+| `components/sheets/ProfileSheet.tsx` | `layout.sheet.title.profile` | `"Profile"` |
+| `components/sheets/ResetControl.tsx` | `layout.reset.joinPrompt` | `"Join the store to manage your session."` |
+| | `layout.reset.heading` | `"Session controls"` |
+| | `layout.reset.cta` | `"Reset my session"` |
+| | `layout.reset.confirmBody` | `"This clears your cart, order and chat. This cannot be undone."` |
+| | `layout.reset.cancel` | `"Cancel"` |
+| | `layout.reset.confirm` | `"Yes, reset"` |
+| | `layout.reset.confirming` | `"Resetting…"` |
+| | `layout.reset.error.reread` | `"We couldn't confirm whether that worked — check your cart/order before trying again."` |
+| | `layout.reset.error.nothingChanged` | `"Something went wrong and nothing was reset. Please try again."` |
+| | `layout.reset.error.unscopedAlarm` | `"Your session is no longer scoped to this store. Reload the page to continue."` |
+| | `layout.reset.error.unhandled` | `"Unexpected response from the server (status {{status}}). Please try again."` |
+
+`layout.header.icon.cart`/`layout.sheet.title.cart` (and `layout.reset.error.unscopedAlarm`/
+`chat.notice.sessionUnscoped`) happen to share English text today — kept as **separate** keys:
+an icon's accessible name and a sheet's visible heading are different UI roles that could diverge
+independently, and collapsing them into one shared key buys nothing today while coupling two
+surfaces a later edit might need to change independently.
+
+*`cart.*`/`order.*`/`profile.*`/`catalog.*` — `views/{Cart,Order,Profile,Catalog}Panel.tsx` (S14):*
+
+| File | Key | English value (unchanged) |
+|---|---|---|
+| `views/CartPanel.tsx` | `cart.loadError` | `"Couldn't load your cart. Retrying automatically…"` |
+| | `cart.loading` | `"Loading your cart…"` |
+| | `cart.empty` | `"Your cart is empty."` |
+| | `cart.staleNotice` | `"Showing the last known cart — reconnecting…"` |
+| | `cart.total` | `"Total"` |
+| `views/OrderPanel.tsx` | `order.loadError` | `"Couldn't load your order. Retrying automatically…"` |
+| | `order.loading` | `"Loading your order…"` |
+| | `order.empty` | `"You don't have an order yet. Browse the catalog and chat with us to place one."` |
+| | `order.staleNotice` | `"Showing the last known order — reconnecting…"` |
+| | `order.idLabel` | `"Order #{{orderId}}"` |
+| | `order.total` | `"Total"` |
+| | `order.cancel` | `"Cancel order"` |
+| | `order.status.placed` / `.fulfilled` / `.delivered` / `.cancelled` | `"Placed"` / `"Fulfilled"` / `"Delivered"` / `"Cancelled"` — replaces `statusLabel()`'s runtime capitalize hack; call as `t(\`order.status.${order.status}\`, statusLabel(order.status))`, i18next's `t(key, defaultValue)` shorthand, so a status value with no key (a future server-side addition this UI hasn't caught up to) still renders something readable instead of the bare key, preserving `statusLabel()`'s original total-function property rather than dropping it |
+| | `order.demoControls.label` | `"Demo controls — warehouse simulation"` |
+| | `order.demoControls.description` | `"These stand in for warehouse staff. A real customer never fulfils or delivers their own order — they're here only so this demo can show the full lifecycle."` |
+| | `order.demoControls.fulfill` | `"Simulate: mark fulfilled"` |
+| | `order.demoControls.deliver` | `"Simulate: mark delivered"` |
+| | `order.error.staleOrderRefresh` | `"That didn't go through — the order above now reflects its current status."` |
+| | `order.error.reread` | `"We couldn't confirm whether that worked — the order above reflects the latest we could read."` |
+| | `order.error.unhandled` | `"Unexpected response from the server (status {{status}}). Please try again."` |
+| `views/ProfilePanel.tsx` | `profile.loadError` | `"Couldn't load your profile. Retrying automatically…"` |
+| | `profile.loading` | `"Loading your profile…"` |
+| | `profile.staleNotice` | `"Showing the last known profile — reconnecting…"` |
+| | `profile.nameLabel` | `"Name"` |
+| | `profile.addressLabel` | `"Delivery address"` |
+| `views/CatalogPanel.tsx` | `catalog.loadError` | `"Couldn't load the catalog. Please try again shortly."` |
+| | `catalog.loading` | `"Loading the catalog…"` |
+| | `catalog.empty` | `"No products to show yet."` |
+| | `catalog.noPhoto` | `"No photo available"` |
+
+**Explicitly not swept, by design, inside these same four files** — `ProfilePanel.tsx`'s
+`EM_DASH` placeholder (`'—'`, not language-bearing text) and every piece of **server-sourced
+data** rendered verbatim: `CatalogPanel.tsx`'s `product.category`/`product.name`, `OrderPanel.tsx`'s
+`line.name`, `order.orderId`'s own digits, and every `formatCurrency`/`formatDate` call (already
+locale-aware via `Intl`, S12c's `i18n/format.ts`, untouched by this section). §4.5's distinction
+between "the UI's own chrome" and content that originates server-side is what draws this line —
+the catalog's product names are data FR-2 says this UI shows "as the agent actually has," not
+copy this sweep owns.
+
+**`composerNotice.ts`'s access to `t()` — a threaded parameter, not a hook.** The file is
+deliberately outside the React tree (its own comment: kept apart from `ChatView.tsx` so mutation-
+testing it stays cheap, no fetch/DOM/React tree in the loop) and already takes `action`/
+`reconciliation` as plain arguments — `t` joins them as a third:
+
+```ts
+import type { TFunction } from 'i18next';
+
+export function composerNoticeFor(
+  action: ErrorAction | null,
+  reconciliation: PostMessageReconciliation | null,
+  t: TFunction,
+): ComposerNotice | null
+```
+
+`views/ChatView.tsx` (already S13's own file) is the only call site: `const { t } = useTranslation();
+… composerNoticeFor(postMessage.action, postMessage.reconciliation, t)`. **Rejected alternative —
+import the `i18n` singleton directly inside `composerNotice.ts`** (`import i18n from
+'../../i18n/config'; i18n.t(...)`), avoiding a signature change. Rejected: it would make the
+function's locale an ambient global instead of an explicit input, which is exactly the coupling
+the plain-function design was chosen to avoid, and it would make a locale-parameterised unit test
+(rendering the same action under two languages) reach around the function's own signature into a
+singleton instead of calling it twice with two `t`s — strictly worse for the mutation-testing
+property this file's whole existence protects.
+
+**Test / done-condition design.** Three layers, chosen so the check can fail, not merely read as
+satisfied:
+
+1. **Key-coverage** — `i18n/locales.test.ts` already exists (S12c) and generically flattens every
+   bundle to its key set, failing if any of the three bundles is missing a key another carries. It
+   needs **no plan-level change**: every new key S17 adds is covered by it automatically. Cited,
+   not re-specified.
+2. **Per-component locale-switch tests — the completeness proof.** For every file in the three
+   tables above, add (or extend an existing) test that renders the component under `'en'`,
+   asserts each of that file's own keys renders its exact English value, then
+   `await i18n.changeLanguage('pt-BR')` and asserts each renders its exact `pt-BR` bundle value —
+   **and** that the original English literal is no longer present
+   (`expect(screen.queryByText(<original literal>)).not.toBeInTheDocument()`). This exact pattern
+   is not invented here: it is `i18n/LanguageChooser.test.tsx`'s own third test ("switches its own
+   visible copy immediately when a language is picked"), extended from one component to all
+   seventeen. The negative assertion is what makes this check unsatisfiable by construction — a
+   delegate who leaves a string hardcoded, or who "wraps" it in `t('some-key')` without adding a
+   real `pt-BR` translation (which the config's `fallbackLng: 'en'` would silently paper over),
+   fails this test: the English literal is still on screen under the `pt-BR` locale either way.
+   **Exception — cognates and brand names, verified by Layer 1 only.** `cart.total`/`order.total`
+   (`"Total"`) is the same word in Portuguese and Spanish, and `layout.header.brand`
+   (`"Storefront"`) is a plausible brand name to leave untranslated in all three locales — a
+   delegate who translates either **correctly** would fail the negative assertion against fully
+   correct code, since the literal is genuinely on screen from the `pt-BR` bundle, not from
+   `fallbackLng`. These two keys (and any other cognate an implementer hits — flag it the same way)
+   are proven only by Layer 1 (the key exists, in all three bundles, and the component's own call
+   site references it) — no `queryByText`-absent assertion is written for them. `es` is exercised
+   only by the key-coverage test (#1) — proving a translation exists — not by a third redundant
+   locale-switch pass, since the pt-BR pass already proves "sourced from the bundle, not
+   hardcoded," and a third locale would not strengthen that specific proof, nor would it change
+   which keys are cognate exceptions (the `es` values for `cart.total`/`order.total` are also
+   `"Total"`). **Every test file that renders a component newly calling `useTranslation()`/`t()` in
+   isolation must import `i18n/config` (directly or transitively) before `render()`** — mirroring
+   `LanguageChooser.test.tsx`'s own `import i18n from './config'` — so `react-i18next`'s global
+   instance is registered; `CartPanel.tsx`/`OrderPanel.tsx`/`CatalogPanel.tsx`/`MessageBubble.tsx`
+   already get this for free via their existing `useLocale()` import, every other swept file does
+   not and needs the import added to its test — **including `views/ChatView.test.tsx`**, which
+   currently has no `i18n`/`useTranslation` import at all: `ChatView.tsx` itself gains a
+   `useTranslation()` call (to obtain `t` for `composerNoticeFor`, above) even though it owns no
+   key of its own in any table, so it does not appear as a table row, but this import rule still
+   binds it.
+3. **One-time static residual check, run by hand, not committed — a best-effort aid, not a proof.**
+   Before declaring the sweep complete, run, against the **pre-sweep** tree:
+   `grep -Pzo '>[^<>{}]*[A-Za-z][^<>{}]*<' <file>` per file (real multiline matching via `-z`'s
+   NUL-separated mode, and no longer requiring a bare letter immediately before `<` — the original
+   single-line, letter-anchored pattern this layer once specified was run verbatim against this
+   tree during review and matched only 4 of the roughly 40 JSX-text-child table rows, since most of this
+   codebase's chrome text sits on its own line, separate from the surrounding tags, and most of it
+   ends in punctuation; re-verified here, the corrected pattern surfaces the large majority of
+   them), plus the three chrome-bearing props unchanged (`aria-label="[A-Za-z]`,
+   `placeholder="[A-Za-z]`, `title="[A-Za-z]`). **This is not a complete detector and is not claimed
+   to be one**: a string assigned to a JS variable/ternary/template before being rendered via `{…}`
+   is not a JSX text child at all, so it is structurally invisible to this pattern regardless of
+   fix — `TurnIndicator.tsx`'s `firstInLine`/`aheadOfYou_*` pair (built into a local `text` const
+   first) and every one of `composerNotice.ts`'s own values (plain TypeScript, no JSX in that file
+   at all) are real, necessary keys that this check will never surface, swept or not — and it can
+   produce false-positive noise from a nearby comment. Run again post-sweep as a hand-eyeballed
+   sanity pass, not a pass/fail gate: **Layer 2 is the sole reliable, committed completeness proof
+   for this sweep — this layer only catches an obvious miss early, cheaply, before Layer 2 is even
+   written.** Not committed as a permanent vitest test for the same reason as before: a regex keyed
+   to today's fixed seventeen-file list would go stale — silently passing — the moment a new file
+   is added later.
+
+**File ownership — one unit, not three.** S12b's/S13's/S14's subtrees are disjoint from each
+other, so nothing stops three parallel `frontend-engineer` dispatches on that axis alone. The
+reason to prefer **one** unit anyway is the file neither subtree owns: **all three would write the
+same three `locales/*.json` files**, adding disjoint top-level keys to each — mechanically safe if
+sequenced (the same "disjoint sections, sequenced, nil collision risk" reasoning §5.0 already
+applies to `QUERIES.md`), but three live dispatches editing the same three files needs the same
+kind of serialization discipline `routes.tsx`'s narrow swaps needed, for a follow-up whose total
+size (seventeen files, most under 250 lines, per §4.13's own reading above) is well inside what a
+single `frontend-engineer` unit already handled in this coordination (S13 alone built an entire
+view from nothing for ~280k tokens; a string-extraction sweep over already-working code is
+mechanically simpler per line). A single implementer also cannot disagree with itself on the
+namespacing convention the way three independently-briefed delegates could — collapsing
+`chat.notice.*` vs `chat.notices.*`, or re-deriving a different English-string-as-key shortcut, is
+exactly the drift a single stated convention (above) exists to prevent. **Recommendation: one
+unit, dispatched as S17, touching all five
+locations (three subtrees + the two locale files) in one pass.** The wall-clock cost of not
+splitting is small: S17 already sits behind two other pending units on the same file
+(`ChatView.tsx`/`composerNotice.ts` — S13's own fix-back, then the welcome-turn follow-up, per the
+coordination doc's `## RESUME HERE`), so S12b's and S14's portions gain no real parallelism by
+starting early; the critical path is set by that chain regardless of how S17 itself is split.
+
 ---
 
 ## 5. Step-by-step implementation
@@ -1270,10 +1564,11 @@ regenerated mechanically from §5.1's Files column — it is what dispatch is ga
 | `salesperson/playwright.config.ts` | S5, S12b | **S5 → S12b** · **single-owner after S12b**: S12d's `presenter.spec.ts` runs under the project S12b defines. If it needs its own project or viewport, that edit is **S12b's** to make — S12d never touches the config |
 | **`salesperson/src/{main.tsx,index.css}`** — the SPA's shared entry/style files | S5 (scaffold), **S12a** (owns thereafter) | **S5 → S12a, and no later step edits them** |
 | **`salesperson/src/App.tsx`** | S5 (scaffold), **S12a** (lands the provider/layout **mount slots** so S12b and S12c never need to), **S12b** (v1.36, §4.11: reorders the three providers to wrap the layout-shell slot instead of the reverse — one narrow, structural edit, nothing else) | **S5 → S12a → S12b, and no step edits it after** — closes `falkor-chat/docs/reviews/salesperson-ui-s12b.md`'s Major; §4.11 has the full trace and the rejected-alternative rationale |
-| `salesperson/src/**` (everything else) — `api/`+`session/` (S12a) · `layout/`+`components/sheets/` (S12b) · `i18n/`+`locales/` (S12c) · `views/Chat*`+`components/message/` (S13) · `views/{Cart,Order,Profile,Catalog}*` (S14) · `views/Presenter*` (S12d) | S12a, S12b, S12c, S13, S14, S12d | **S12a first**, then S12b ‖ S12c, then S13 ‖ S14 ‖ S12d — the six subtrees named at left are disjoint, which is what makes the three parallel groups safe. The files that fall *outside* all six are the collision the S12 split would otherwise reintroduce, and `api/`+`session/` stay assigned to S12a for exactly that reason, **except two named files pulled into their own row below** (`session/SessionContext.tsx`, `api/hooks.ts` — v1.37, §4.12): every other file in those two subtrees remains S12a-only. `routes.tsx` is pulled out of this row and given its own below — as of v1.34 it is no longer single-owner |
+| `salesperson/src/**` (everything else) — `api/`+`session/` (S12a) · `layout/`+`components/sheets/` (S12b) · `i18n/`+`locales/` (S12c) · `views/Chat*`+`components/message/` (S13) · `views/{Cart,Order,Profile,Catalog}*` (S14) · `views/Presenter*` (S12d) | S12a, S12b, S12c, S13, S14, S12d | **S12a first**, then S12b ‖ S12c, then S13 ‖ S14 ‖ S12d — the six subtrees named at left are disjoint, which is what makes the three parallel groups safe. The files that fall *outside* all six are the collision the S12 split would otherwise reintroduce, and `api/`+`session/` stay assigned to S12a for exactly that reason, **except two named files pulled into their own row below** (`session/SessionContext.tsx`, `api/hooks.ts` — v1.37, §4.12): every other file in those two subtrees remains S12a-only. `routes.tsx` is pulled out of this row and given its own below — as of v1.34 it is no longer single-owner. **`layout/**`+`components/sheets/**`, `views/Chat*`+`components/message/**`, and `views/{Cart,Order,Profile,Catalog}*` each gain one later, one-time additive grant to `S17`** (v1.38, §4.13) — its own row below |
 | `salesperson/src/session/SessionContext.tsx`, `salesperson/src/api/hooks.ts` | S12a (builds them), then **S13** (§4.12, v1.37) | **S12a → S13**, one narrow, additive grant only: `SessionContext.tsx` gains the `welcomeMessage`/`setWelcomeMessage` field-and-setter pair (mirrors `pendingLanguageStep`'s existing shape), and `hooks.ts` gains one line in `useJoin()`'s `onSuccess` — no other hook in `hooks.ts`, and no other field or export in `SessionContext.tsx`, is touched by this grant. `views/ChatView.tsx`'s consumption of the new field needs no grant here — it is already inside S13's own unrestricted `views/Chat*` subtree (row below) |
+| `salesperson/src/layout/**`, `salesperson/src/components/sheets/**`, `salesperson/src/views/Chat*`, `salesperson/src/components/message/**`, `salesperson/src/views/{Cart,Order,Profile,Catalog}*`, `salesperson/src/locales/{en,pt-BR,es}.json` | S12b/S13/S14 (build the first three groups, already committed), S12c (builds the locale files, already committed), then **S17** (§4.13, v1.38), then, **for the locale files only**, **S12d** (its own `presenter.*` namespace — §5.1's S12d row) | **S12b/S13/S14/S12c → S17 → S12d**, single-owner on the first five locations while in flight, and sequenced behind `views/ChatView.tsx`'s/`components/message/composerNotice.ts`'s two other pending grants (S13's own Major fix-back, then the welcome-turn follow-up — coordination doc `## RESUME HERE`) so S17's diff lands against settled code. One narrow, additive pass only: every JSX chrome string in the first three groups routes through `t()`, and the locale files gain the new top-level namespaces §4.13 names (`chat`/`layout`/`cart`/`order`/`profile`/`catalog`) — no structural or behavioural change, no file outside this row's five locations. **The locale files alone stay open one step longer**: S12d (dispatched after S17 per the coordination doc's own ordering) adds its own disjoint `presenter.*` section to the same three JSON files — the same "disjoint sections, sequenced, nil collision risk" reasoning this map already applies to `QUERIES.md`. No step edits `layout/**`/`components/sheets/**`/`views/Chat*`/`components/message/**`/`views/{Cart,Order,Profile,Catalog}*` after S17, and none edits the locale files after S12d |
 | `salesperson/src/routes.tsx` | S12a (builds it), then **S12c** (`falkor-chat/docs/reviews/salesperson-ui-s12c.md`'s Major finding; v1.35), then **S12b** (§4.11, v1.36), then **S13**, **S12d** (`falkor-chat/docs/reviews/salesperson-ui-s12a.md`'s Major finding; v1.34) | **S12c**'s swap has already landed — committed (`42686fe`), reviewed and accepted (`falkor-chat/docs/reviews/salesperson-ui-s12c.md`) — one import added, the join screen's inline language `<label>`/`<select>` block swapped for `<LanguageChooser .../>`, nothing else touched. **S12b** (v1.36) wraps the existing three route entries (`APP_PATHS.participant`, `APP_PATHS.presenter`, the `*` catch-all) in one new pathless parent route object (`element: <LayoutShell />, children: [...]`) — a structural nesting only, no route's own `path`/`element` line changes, so it neither collides with S12c's already-landed edit nor pre-empts S13's/S12d's pending ones (§4.11) — and lands **before** S13/S12d dispatch, consistent with the existing schedule (§5.1: both already wait on S12b). **S13** and **S12d** each still get one narrow, additive edit of their own — swap their own inline placeholder (`ChatScreen`; `PresenterKeyScreen`+`PresenterRoster`) for a real import from their own subtree, nothing else in the file, now inside S12b's nested `children` array rather than the flat one. Both land in the same parallel stage and target this one file, so **`teco` serializes the two swaps** — their own `views/**` work proceeds fully in parallel regardless. Because S12c's and S12b's edits land first, **the file S13 and S12d receive at their own dispatch is the delivered, S12c- and S12b-inclusive `routes.tsx` — their diffs are taken against that file, not against S12a's original (`bbd9eb7`)**. **S14 makes no edit here** — see the seed row below. No step touches this file after S13's and S12d's swaps land |
-| `salesperson/src/views/{Cart,Order,Profile,Catalog}Panel.tsx` (inside `views/{Cart,Order,Profile,Catalog}*`, already S14's subtree above) | **S12b** (seeds four no-op placeholders), then **S14** (replaces their content) | **S12b → S14**, sequential hand-off, not a concurrent write — S12b finishes its whole stage before S14's starts. Mirrors the `App.tsx` i18n/layout slot precedent (this section's `salesperson/src/{main.tsx,index.css}` and `salesperson/src/App.tsx` rows, above): while building the header icons + bottom-sheet chrome, S12b seeds one no-op placeholder file per panel inside S14's already-owned subtree and wires each into its own sheet's body; S14 only ever replaces that file's content, never touching `layout/**` or `components/sheets/**` (v1.34) |
+| `salesperson/src/views/{Cart,Order,Profile,Catalog}Panel.tsx` (inside `views/{Cart,Order,Profile,Catalog}*`, already S14's subtree above) | **S12b** (seeds four no-op placeholders), then **S14** (replaces their content) | **S12b → S14**, sequential hand-off, not a concurrent write — S12b finishes its whole stage before S14's starts. Mirrors the `App.tsx` i18n/layout slot precedent (this section's `salesperson/src/{main.tsx,index.css}` and `salesperson/src/App.tsx` rows, above): while building the header icons + bottom-sheet chrome, S12b seeds one no-op placeholder file per panel inside S14's already-owned subtree and wires each into its own sheet's body; S14 only ever replaces that file's content, never touching `layout/**` or `components/sheets/**` (v1.34). **S17** (§4.13, v1.38) touches these same four files afterward, alongside `layout/**`/`components/sheets/**`/`views/Chat*`/`components/message/**` — its own row above |
 | `salesperson/tests/e2e/**` | S12b, S12d | — · **separate spec files** — S12b owns the mobile-shell specs, S12d owns `presenter.spec.ts`; neither edits the other's |
 | `salesperson/public/products/**` | S14 | — |
 | `salesperson/scripts/load_demo.py` | S15 | — |
@@ -1314,10 +1609,11 @@ no sequencing changes as a result.
 | **S12a** | **Session + API client + routing.** **The three shared entry files and their mount slots (`main.tsx`, `App.tsx`, `index.css`) are this row's *first* deliverable** — S12b, S12c, S12d, S13 and S14 all block on them, so a half-finished S12a stalls five steps. Then: **§5.3's credential & session contract in full — C1–C14, stated there and deliberately not restated here** (the two credentials and their storage keys, per-credential `401`/`403` dispatch, the per-path `504` re-read, the two `409`s, the post-reset language step, `503`, the polling cadence — including the shared-constant and single-timer rules, which is why no cadence figure appears in this row); **typing** `reset-all`'s `incomplete`/`unresolved` response so **S12d** can render it (§5.2), TanStack Query as the polling layer, route shell for join / chat / presenter. | `salesperson/src/api/**`, `salesperson/src/session/**`, `salesperson/src/routes.tsx`, **`salesperson/src/{main.tsx,App.tsx,index.css}`** | `useSession()`, `useShopState()`, `apiClient` | Join → chat round-trips against a live server; **each of §5.3's C1–C14 has a test that goes red when the rule is broken, not merely green when it is kept** (C1 alone is emergent — no client can satisfy C2 and C3 together with a global handler); **and — the guard for the *mis-ruled* half of the defect class (§5.3 C13's residual) — each rule's test must enumerate by name the routes its rule spans, driving every one of them, so a rule whose domain was widened without widening its content fails here rather than in a review pass**: C4 drives all **five** writing routes, C9 both of its actions on both of its trigger kinds, C11 all six `(route, field)` cells, C2/C3 every route carrying their credential. A rule's route list is read off §5.3's route-class and cross-cutting tables, and a test that covers a proper subset is a failing test, not a partial one. Specifically: a participant-route `401` returns the participant view to join **while `/shop/presenter` stays mounted and the presenter credential stays in storage** (**C3** — drive it the way `reset-all` does, by invalidating *only* the participant token, so a global `401` handler fails); a presenter-route `401`/`403` returns only to key entry with the participant session intact, **and a `403` from `POST /shop/api/presenter/session` reports a bad key in place without clearing anything or navigating** (**C2**, both halves); a `409 TurnInProgress` retains the composer text and re-enables send at `turn.state === 'idle'` (**C6a**); **and `turn.lastTurn === 'failed'` surfaces the dead-turn notice *without* gating the composer and without resending — asserted on a state body carrying `state: 'idle'` **and** `lastTurn: 'failed'` together, so an implementation that treats the latch as a busy state (send still disabled) and one that auto-resends both fail** (**C6a**'s second half; the field is typed here alongside `reset-all`'s `incomplete`, and **rendered by S13**); **a `409 unscoped_participant` on the same route surfaces as a failure — no retry, no send re-enable, no language-step navigation — so a handler that dispatches on the `409` rather than on the error body fails** (**C6b**); a `503` on either reset keeps the credential and the view and offers a **retry control**, reporting *nothing changed*, **while a `503` arriving on a poll tick of `/state`, `/messages` or `/presenter/participants` renders a staleness indicator and offers *no* control — asserted on both branches, so a single undifferentiated `503` handler fails** (**C9**, both actions); a reset-mine `200` keeps the credential and lands on the language step, not join (**C7**); **`504` — the test names and drives all five writing routes, and never reports "nothing changed" on any of them**, asserted on **both** a named `<op>_state_unknown` body and a body-less proxy-style `504`, and on a browser fetch timeout (**C4**): reset-mine re-reads `/state`; **reset-all's re-read is asserted on the URL the client actually requests — it must be `GET /shop/api/presenter/participants`, so a client wired to `/state` for both paths fails rather than passing through the participant `401` path** (**C4/C5**); `/order/advance` re-reads `/state` and re-renders the order; **`POST /messages` re-reads `/messages` *and* `/state` and reconciles — with the message present and `turn.state === 'idle'` it must report the turn as lost and re-enable send, so a client that re-reads only `/messages` and leaves the participant waiting fails**; and **`POST /shop/api/session` performs *no* re-read at all** (there is no credential) and renders the "your join may not have completed — join again" report, so a client that attempts any authenticated call on that branch fails; **a `404` and a `409` from `POST /shop/api/order/advance` re-read `/state` and re-render the order while the participant stays signed in — a handler that routes either through the `401`/`404` participant path fails, because it logs them out for a stale button** (**C10**); a `422` carrying `field: displayName`, `text` **or `key`** shows an in-place field error and clears nothing, while one carrying `field: language`, `limit` or `transition` goes to the dev surface and is **not** retried — **asserted on the `field` value with the route held constant, so a route-keyed implementation fails** (**C11**); **no automatic retry fires anywhere except the one-shot catalog fetch — counted, with a `401` on `/state` dispatching to C3 on the *first* response rather than after a backoff ladder, and a `422` on `/messages` issued exactly once** (**C12**); **a reset mutation fired offline fails into C9's path rather than being queued and auto-resumed** (**C12**'s `networkMode: 'always'`); **an injected response no rule covers — a `418` on `/state` will do — renders the explicit "unhandled response" failure naming route and status, and clears no credential** (**C13**, the guard that fails when a fall-through silently swallows it); **a `5xx` from either reset fires no automatic retry — asserted by counting requests, since the browser is the one layer §4.8's premise and S8's call-count test do not reach** (**C12**); **both polling hooks read one shared exported constant — asserted by changing that constant in the test and observing both intervals move, so two literals fail — and the catalog query is fetched once across a multi-tick run** (**C8**). **For C3 and C4 alike, assert the intercepted request and the stored credentials, never the rendered outcome** — a global `401` handler and a wrong re-read endpoint each produce the *right* rendered outcome for the wrong reason, which is exactly how both defects survived four review passes; **`App.tsx` exposes an i18n-provider slot and a layout-shell slot, and `index.css` a Tailwind layer entry, each with a no-op default, so S12b and S12c mount into them without editing any shared entry file** (verified by S12b/S12c touching none); `npm test` green | `frontend-engineer` | **after S5 and S8** |
 | **S12b** | **Mobile layout shell**, mounted into S12a's layout slot. Sticky header with cart/order/profile icon buttons, bottom-sheet overlays, safe-area insets, no horizontal scroll at 360 px; **AC-5's participant half — the participant's own reset control in the profile sheet's *chrome* (`components/sheets/`, S12b's own subtree — **not** S14's profile card in `views/Profile*`), behind a confirm step**; the Playwright mobile project. **Also seeds S14's four sheet-content placeholders per §5.0's new seed row (v1.34)** — a no-op `views/{Cart,Order,Profile,Catalog}Panel.tsx` each, wired into its own sheet's body, so S14 never edits any file this row owns. **v1.36 (§4.11, closing `falkor-chat/docs/reviews/salesperson-ui-s12b.md`'s Blocker and Major): this revision also lands the `App.tsx`/`routes.tsx` provider-order fix** — the only two files outside this row's normal subtree it is authorized to touch, each a narrow, structural edit (§5.0's rows) — **deletes `layout/sessionBridge.ts`, `layout/injectBridge.tsx` and `layout/injectBridge.test.tsx`**, and **simplifies `ResetControl` to call `useResetMine()` and switch on its `.action.kind` directly instead of the bridge plus a hand-rolled `catch`**, which closes the Blocker (full §5.3 C1–C14 dispatch, not just the 503 case) as a consequence of the simplification rather than a second patch. | `salesperson/src/layout/**`, `salesperson/src/components/sheets/**`, `salesperson/tests/e2e/**`, `salesperson/playwright.config.ts`, and (once) the four `salesperson/src/views/{Cart,Order,Profile,Catalog}Panel.tsx` seed placeholders (§5.0), **plus, v1.36 only: `salesperson/src/App.tsx` (provider reorder) and `salesperson/src/routes.tsx` (pathless layout-route wrap) — §4.11, §5.0** | — | Playwright at 360×740 and 390×844 shows no horizontal overflow and legible type; sheets open/close by icon; **the reset control is present, calls `useResetMine()` directly, and confirming it calls `POST /shop/api/reset` and returns the client to the language step with the previous language pre-selected (§4.8, §5.3 C7), asserted on rendered state rather than on the fetch**; **each of §5.3 C1–C14's branches reachable from `POST /shop/api/reset` has its own `ResetControl` test (mirroring S12a's own bar), not just the 503 case** (closes the Blocker); the four seed placeholders exist and are wired into their sheets, the only files this step touches inside `views/**` (§5.0); `Shell.tsx`'s `LayoutShell` renders `<Outlet/>` and takes no `children` prop, and `Shell.test.tsx` mounts it as a layout route; `sessionBridge.ts`/`injectBridge.tsx`/`injectBridge.test.tsx` no longer exist; `salesperson/AGENTS.md`'s file-ownership table (sourced from this plan's §5.0) is updated to show S12b's v1.36 grant on `App.tsx`/`routes.tsx` | `frontend-engineer` | **after S12a**, ‖ S12c (**the `App.tsx`/`routes.tsx` edits are v1.36-only and land after S12c's already-committed swap — no concurrency conflict, §5.0**) |
 | **S12c** | **i18n**, mounted into S12a's provider slot — **edits no shared entry file, except one narrow, additive swap in `routes.tsx`** (§5.0's row, v1.35: the join screen's inline language `<label>`/`<select>` block replaced by `<LanguageChooser .../>`, one import added, nothing else — already landed and committed, `42686fe`). `react-i18next` wiring, the three locale bundles, locale-aware currency/date formatting, and the join-screen language chooser feeding `POST /shop/api/session` — **seeded from `GET /shop/api/health`'s `locales`, which nothing consumed before**. That deletes §5.3 C11's config-drift trigger at source rather than handling it: the chooser can then only offer values the server accepts, so the UI-supplied `language` `422` becomes unreachable instead of merely well-rendered (C11's branch remains as the defence-in-depth behind it). | `salesperson/src/i18n/**`, `salesperson/src/locales/{en,pt-BR,es}.json`, plus the one already-landed `routes.tsx` swap (§5.0) | `t()`, `useLocale()` | All three bundles complete (no missing-key fallbacks in a key-coverage test); chosen locale reaches the join request; UI chrome switches | `frontend-engineer` | **after S12a**, ‖ S12b |
-| **S12d** | **Presenter view** (AC-5's UI half), mounted into S12b's layout shell — **edits no shared entry file, except one narrow, additive swap in `routes.tsx`** (§5.0's new row, v1.34: replace the inline `PresenterKeyScreen`/`PresenterRoster` placeholders with a real import from this row's own subtree, nothing else — serialized with S13's equivalent swap). The roster table over `GET /shop/api/presenter/participants` (one row per participant, **§5.2's four keys** — no activity data, see S10); the **reset-everyone** control behind a confirm step; and the rendering of `reset-all`'s `incomplete: true` / `unresolved` body as a named list of participants whose state is still live (§5.2). Presenter key entry, token storage and response typing stay in S12a — this row **renders**. | `salesperson/src/views/Presenter*`, `salesperson/tests/e2e/presenter.spec.ts` (its own spec file, not S12b's), plus the one narrow `routes.tsx` swap (§5.0) | — | **The roster renders, not merely routes:** with three participants provisioned and one holding cart items and an order — **that activity is the point of the fixture and must not be "simplified" away: a participant who *has* data worth showing is the negative control for the four-key contract, proving the roster shows name and language and nothing more even then** — `/shop/presenter` shows three rows carrying each participant's display name **and language** (§5.2's roster keys — the roster carries no activity data, see S10), **asserted on rendered text rather than on the fetch**; an empty roster shows an explicit empty state, not a blank panel; a `reset-all` response carrying `incomplete: true` and two `unresolved` ids renders both ids and does **not** read as a clean sweep; the reset-everyone control requires a confirm step | `frontend-engineer` | **after S12b, S12c**, ‖ S13, S14 (**the `routes.tsx` swap only** serializes against S13's — §5.0) |
+| **S12d** | **Presenter view** (AC-5's UI half), mounted into S12b's layout shell — **edits no shared entry file, except one narrow, additive swap in `routes.tsx`** (§5.0's new row, v1.34: replace the inline `PresenterKeyScreen`/`PresenterRoster` placeholders with a real import from this row's own subtree, nothing else — serialized with S13's equivalent swap). The roster table over `GET /shop/api/presenter/participants` (one row per participant, **§5.2's four keys** — no activity data, see S10); the **reset-everyone** control behind a confirm step; and the rendering of `reset-all`'s `incomplete: true` / `unresolved` body as a named list of participants whose state is still live (§5.2). Presenter key entry, token storage and response typing stay in S12a — this row **renders**. | `salesperson/src/views/Presenter*`, `salesperson/tests/e2e/presenter.spec.ts` (its own spec file, not S12b's), plus the one narrow `routes.tsx` swap (§5.0), plus (v1.38, §4.13) a new `presenter.*` namespace in `salesperson/src/locales/{en,pt-BR,es}.json` | — | **The roster renders, not merely routes:** with three participants provisioned and one holding cart items and an order — **that activity is the point of the fixture and must not be "simplified" away: a participant who *has* data worth showing is the negative control for the four-key contract, proving the roster shows name and language and nothing more even then** — `/shop/presenter` shows three rows carrying each participant's display name **and language** (§5.2's roster keys — the roster carries no activity data, see S10), **asserted on rendered text rather than on the fetch**; an empty roster shows an explicit empty state, not a blank panel; a `reset-all` response carrying `incomplete: true` and two `unresolved` ids renders both ids and does **not** read as a clean sweep; the reset-everyone control requires a confirm step. **(v1.38, §4.13) This row's own chrome routes through `t()` from its first line of code** — a new `presenter.*` locale-bundle namespace, following §4.13's key-namespacing convention exactly (one top-level namespace per feature area), added to `locales/{en,pt-BR,es}.json` by this row itself. S17's sweep deliberately does not cover this subtree (it doesn't exist yet); this is the substitute obligation, so S12d never produces a sixth hardcoded-chrome subtree | `frontend-engineer` | **after S12b, S12c**, ‖ S13, S14 (**the `routes.tsx` swap only** serializes against S13's — §5.0) |
 | **S13** | **Chat view** — transcript (`textContent` only, **no** `dangerouslySetInnerHTML`), optimistic send, thinking/queued indicator driven by `turn`, **welcome turn — the join response's `welcome` line (§5.2), never a greeting the client composes**, **the dead-turn notice — `turn.lastTurn === 'failed'` renders "the reply never arrived — send again" in the transcript area, from S12c's bundles (§5.2 *The dead-turn signal*, §5.3 C6a); it is the visible half of a failure that otherwise looks exactly like a completed turn, and it must not disable the composer**, error/retry, autoscroll-when-at-bottom (mirroring `web/app.js`). **Edits no shared entry file except one narrow, additive swap in `routes.tsx`** (§5.0's new row, v1.34: replace the inline `ChatScreen` placeholder with a real import from this row's own subtree, nothing else — serialized with S12d's equivalent swap). **v1.37 (§4.12) grants one more narrow, additive edit right, on two named S12a files, to close the welcome-turn gap this row's own delivered `ChatView.tsx` flagged (its own comment): `SessionContext.tsx` gains a `welcomeMessage`/`setWelcomeMessage` field mirroring `pendingLanguageStep`'s existing shape, and `hooks.ts`'s `useJoin()` `onSuccess` sets it from the join response's own `welcome` — nothing else in either file is touched. `ChatView.tsx` reads and clears it; that consumption is this row's ordinary `views/Chat*` scope, already unrestricted.** | `salesperson/src/views/Chat*`, `salesperson/src/components/message/**`, plus the one narrow `routes.tsx` swap (§5.0), plus (v1.37, §4.12) one field-and-setter pair on `salesperson/src/session/SessionContext.tsx` and one line in `salesperson/src/api/hooks.ts`'s `useJoin()` | — | A scripted 5-turn conversation renders correctly; a queued turn shows its position, **and `queuePosition: 0` on a `queued` turn renders as *first in line*, never as no queue** (§5.2 *The queue position*); **a state body carrying `turn: {state: 'idle', lastTurn: 'failed'}` renders the notice with send still enabled, and the notice disappears once the next post is accepted**; agent-emitted markup renders as literal text; **(v1.37) a fresh join's `welcome` line renders once in the chat view before the participant sends anything; a `SessionProvider` mounted fresh against a persisted `ParticipantSession` (no new join) starts `welcomeMessage` at `null` — proving the value never survives a reload; and it does not reappear on a second `ChatView` mount within the same join** | `frontend-engineer` | **after S12b, S12c**, ‖ S14 (**the `routes.tsx` swap only** serializes against S12d's — §5.0) |
 | **S14** | **Cart / order / profile / catalog panels** (FR-8/9/10/11 parity per §2.4). Cart lines + running total + empty state; profile card with em-dash placeholders; catalog grid with image-or-text-only cards; order card with a status chip, `cancel` as an ordinary customer action and **`fulfill`/`deliver` inside a visually distinct "demo controls" affordance labelled as a warehouse simulation** (§4.6). Sources the ~15 stock images and records their licence in `salesperson/README.md` (OQ-6). **Mounts via the four no-op placeholders S12b seeds in this row's own subtree** (§5.0's new seed row, v1.34) — replaces their content only; no edit outside `views/{Cart,Order,Profile,Catalog}*`/`public/products/**`, and no serialization with S12d or S13. | `salesperson/src/views/{Cart,Order,Profile,Catalog}*`, `salesperson/public/products/**` | — | Panels match §2.4's parity table; a product **with** an asset renders an `<img>` and one **without** renders text-only with no `<img>` in the DOM (both asserted) | `frontend-engineer` | **after S12b, S12c**, ‖ S13 |
-| **S15** | **Test suites & AC evidence** — the load harness (`load_demo.py`, stub-LLM and live-LLM modes, latency percentiles by route class, automated cross-participant isolation assertion on every response, and §6.4's queue-depth headroom check under `reset_all`), the live language-adherence run, the measured AC-8 run, and the mobile Playwright pass. Deliverable is a versioned test plan + report. | `salesperson/scripts/load_demo.py` (new), `docs/test-plans/salesperson-ui.md`, `docs/test-reports/salesperson-ui-report.md` | — | Every AC has recorded evidence; AC-3, AC-8 and AC-9 carry measured numbers, not assertions; **the report states plainly where AC-3's literal wording is not met** (§6.4); the `reset_all`-under-load run records the **observed** queue depth against §6.4's cap; **Run B publishes its dead-turn count (`turn.lastTurn === 'failed'`) beside the latency curve, never the curve alone** — the curve is computed over completed turns, so an unreported failure count is a silently biased number rather than a missing extra (§6.4) | `qa-engineer` | **after S11, S13, S14, S12d** |
+| **S17** | **Chrome i18n sweep** (§4.13) — every JSX chrome string in S12b's (`layout/**`, `components/sheets/**`), S13's (`views/Chat*`, `components/message/**`) and S14's (`views/{Cart,Order,Profile,Catalog}*`) delivered subtrees routes through `t()`, replacing the hardcoded English literal it read before. **No behavioural or structural change** — every branch, every condition, every component boundary stays exactly as delivered; this row only changes where each string's text comes from. §4.13's key table is the full, derived spec — one top-level bundle namespace per feature area (`chat`/`layout`/`cart`/`order`/`profile`/`catalog`), `composerNotice.ts` gains a threaded `t: TFunction` third parameter (its own design rationale, §4.13) rather than a hook, since the file is deliberately outside the React tree. **Explicitly excludes** S12d's not-yet-built `views/Presenter*` (its own row above now commits to `t()` from the start instead) and `routes.tsx`'s `JoinScreen` chrome (§4.13's own reversal-trigger note). | `salesperson/src/layout/**`, `salesperson/src/components/sheets/**`, `salesperson/src/views/Chat*`, `salesperson/src/components/message/**`, `salesperson/src/views/{Cart,Order,Profile,Catalog}*`, `salesperson/src/locales/{en,pt-BR,es}.json` (§5.0's dedicated row) | `composerNotice.ts`'s `composerNoticeFor(action, reconciliation, t)` | §4.13's three-layer test design in full, stated there and deliberately not restated here (key-coverage, per-component locale-switch tests with the named cognate exceptions, the one-time hand-run residual check) — applied to all **seventeen** files §4.13's tables name; `npx vitest run` and `npx tsc -b` stay green throughout | `frontend-engineer` | **after S12b, S13 (incl. its Major fix-back and the welcome-turn follow-up — both touch `views/ChatView.tsx`/`components/message/composerNotice.ts`), S14**; before S15 |
+| **S15** | **Test suites & AC evidence** — the load harness (`load_demo.py`, stub-LLM and live-LLM modes, latency percentiles by route class, automated cross-participant isolation assertion on every response, and §6.4's queue-depth headroom check under `reset_all`), the live language-adherence run, the measured AC-8 run, and the mobile Playwright pass. Deliverable is a versioned test plan + report. | `salesperson/scripts/load_demo.py` (new), `docs/test-plans/salesperson-ui.md`, `docs/test-reports/salesperson-ui-report.md` | — | Every AC has recorded evidence; AC-3, AC-8 and AC-9 carry measured numbers, not assertions; **the report states plainly where AC-3's literal wording is not met** (§6.4); the `reset_all`-under-load run records the **observed** queue depth against §6.4's cap; **Run B publishes its dead-turn count (`turn.lastTurn === 'failed'`) beside the latency curve, never the curve alone** — the curve is computed over completed turns, so an unreported failure count is a silently biased number rather than a missing extra (§6.4) | `qa-engineer` | **after S11, S13, S14, S17, S12d** |
 | **S16** | **Docs close-out.** Root `AGENTS.md` (new `salesperson/` bullet, new `deprecated/` bullet, component-docs table row, "Working in this repo" bullet); root `docs/HISTORY.md`; `falkor-chat/README.md` + `AGENTS.md` **+ `docs/SERVER.md`** (the `/shop` surface, the storefront deployment's un-mounted dev surface, new env vars — `SERVER.md` because §4.1 cites its §1.4 as the documented REST surface this work leaves alone, while §4.9 changes what the process serves, so the citation goes stale unless it is updated here); `salesperson/{README,AGENTS}.md` final pass. **The `claude/frontend-engineer/frontend-engineer.md` refresh is NOT in scope** — an agent edit must land with its `kaizen/{plan,history}.md` and `claude/README.md` in the same change (`claude/AGENTS.md`), which routes to **`cobb`**; `teco` dispatched it as U6. | root `AGENTS.md`, `docs/HISTORY.md`, `falkor-chat/README.md`, `falkor-chat/AGENTS.md`, **`falkor-chat/docs/SERVER.md`**, `salesperson/{README,AGENTS}.md` | — | The command below returns **zero** matches (verified today it returns exactly the two `claude/frontend-engineer/frontend-engineer.md` lines U6 owns, and nothing else) | `coder` | **last** |
 
 **S16's acceptance command.** v1.0's `rg -n 'salesperson/' --glob '!docs/**'` returns **36 matches
@@ -2265,7 +2561,12 @@ Ordered behaviours to drive black-box against a running `start_demo.sh`:
 6. Catalog shows the live 15-product electronics catalog. **(AC-9a)**
 7. **Measured, n = 10 per locale:** three participants pick en / pt-BR / es simultaneously and each
    holds a 5-turn conversation; record per-turn adherence. A failure triggers §4.5's reversal path
-   (one def per language), **not** a wording guess. **(AC-9b)**
+   (one def per language), **not** a wording guess. **(AC-9b)** **Also confirm, for at least one
+   non-English pick, that the SPA's own chrome switches too — composer placeholder, a sheet title,
+   a panel's loading/empty copy — not merely the agent's replies**: AC-9's own wording ("the
+   customer-facing copy appears in the language they chose") covers both, and S17's own unit-level
+   tests (§4.13) prove this per-component but not end-to-end in the running demo, which is this
+   pass's job. **(AC-9c, S17)**
 8. Presenter enters the key on `/shop/presenter`, then "reset everyone" clears all state including
    their own conversation while their presenter token survives; a single participant's own reset
    clears only theirs and keeps them signed in. **The roster lists every joined participant by
@@ -2345,6 +2646,7 @@ outcome, and this is stated here so nobody has to decide it under time pressure 
 | R10 | **Poll load** — 50 clients × 2 routes / 2 s ≈ 50 req/s of graph reads, against a measured ~614 msg/s write path. | Low | Well inside budget; `GET /shop/api/state` deliberately composes profile+cart+order into one round trip. S0's `GRAPH.PROFILE` check confirms the reads stay index-backed. |
 | R11 | **Retiring the Streamlit app.** Downgraded from v1.0: under OQ-3 it is a history-preserving `git mv` to `deprecated/`, not a delete, so the app survives **on disk**, not only in history — and the move (U5) happens *before* the new component is built, not after acceptance. | Low | The only residual is stale references to the old paths, which S16's acceptance command catches. |
 | R12 | **Join is not idempotent, so a lost `POST /shop/api/session` response can leave a ghost participant** — the write commits, the token never reaches the browser, and the graph keeps a `User` with a `tokenHash` nobody holds, owning a `Channel` and `Thread`, while the person re-joins as a second identity. It requires a FalkorDB socket timeout (default 10 s) during that one write. | Low (accepted) | Decided in §5.3 C4's join case: **accepted rather than engineered away**, because the alternative (a client-supplied idempotency nonce, which §5.2's invariant does permit) reopens **delivered** S6 — new `join()` parameter, uniqueness constraint, S0 amendment — for a window this narrow. The client reports "your join may not have completed — join again"; the presenter is warned a stale roster row may appear; S12d renders it as a participant who never speaks; `reset-all` sweeps it, since it is an ordinary participant `User`. **Reversal trigger:** join acquiring a side effect beyond the roster (payment, external provisioning, a quota), or use outside a controlled demo — then the nonce lands as its own step. |
+| R13 | **`routes.tsx`'s `JoinScreen` chrome (a handful of strings — "Please enter a name.", the presenter-key-entry screen's own copy) stays hardcoded English after S17.** §4.13 excludes it deliberately: `routes.tsx` already carries the plan's most heavily sequenced ownership chain (five steps, each licensed for one narrow, additive swap only), and adding a sixth grant for a non-swap sweep is judged not worth cracking that discipline for a small residual. | Low (accepted) | §4.13's own reversal trigger: if `routes.tsx`'s `JoinScreen` is ever revised for an unrelated reason, route its chrome through `t()` in that same change, using the shipped `join.*` namespace precedent — a future step's call against its own diff, not a grant carved out here. |
 
 ---
 
@@ -2402,6 +2704,6 @@ and `storefront_api.py` (S8 → S9 → S10) are the serialization constraints; `
 | **AC-6** | cart + running total update correctly | S7 (`get_state` over `services.get_cart`), S14 (cart panel) · verified §6.3 #3 |
 | **AC-7** | order lifecycle status visible | **S4** (`get_customer_current_order`, `order_belongs_to_customer` — B4's missing primitives), S7 (`advance_own_order`, order in state), S8 (`POST /shop/api/order/advance`), S14 (order card + "demo controls" framing) · verified §6.3 #4 |
 | **AC-8** | profile prompted for and displayed | **S6** (join writes the display name into the profile, so the panel is populated from second one — §4.10), **S1** (v7's order-time delivery-address sentence), S7 (profile in state), S14 (profile panel) · verified §6.3 #5 as a **measured** n=10 adherence run, not a code-review claim |
-| **AC-9** | real electronics catalog + per-participant language | S1 (v7 language sentence), S2 (chat-path `run_ctx`), S6 (language on the participant record), S7 (`list_catalog`, explicitly bounded), S9 (`run_ctx={"language": …}` at turn start), S12c (i18n + the join-time choice), S14 (catalog grid) · verified §6.3 #6 and **#7 (measured, n=10 per locale — the real gate)** |
+| **AC-9** | real electronics catalog + per-participant language | S1 (v7 language sentence), S2 (chat-path `run_ctx`), S6 (language on the participant record), S7 (`list_catalog`, explicitly bounded), S9 (`run_ctx={"language": …}` at turn start), S12c (i18n + the join-time choice), S14 (catalog grid), **S17** (§4.13 — the SPA's own chrome, the second half of AC-9's "customer-facing copy" wording, distinct from agent-reply adherence) · verified §6.3 #6, **#7 (measured, n=10 per locale — the real gate)** and **#7's added chrome check (AC-9c)** |
 | **AC-10** | readiness gate on the first live demo | Not a build gate. S16 records it in `docs/HISTORY.md`; K-056 is resolved (2026-08-30) and K-060 is a separate open track (R2) |
 | **AC-11** | picture when available, text-only with no placeholder otherwise | S7 (`build_image_manifest` over the **served** directory, non-empty assertion), **S8 (`create_app` forwards one `storefront_dir` to both the `Storefront` and the `/shop` mount — asserted against a different populated config default, since a mis-wire shows up as `null` or wrong URLs, never as an error)**, S14 (renders `<img>` only when `imageUrl !== null` — **no** `onError` swap; sources the assets) · verified §6.3 #9 with **both** branches asserted, since the negative branch alone passes vacuously on an empty manifest |
