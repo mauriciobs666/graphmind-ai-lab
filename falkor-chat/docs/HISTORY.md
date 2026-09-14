@@ -5,6 +5,27 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-14 — salesperson-ui: fix cross-cutting test breakage S14's landing exposed (S12b-owned tests)
+
+**What:** S14 replacing S12b's four seed placeholders with real panels broke two S12b-owned test
+files outside S14's own scope: `layout/Shell.test.tsx`'s wiring probe asserted literal placeholder
+copy S14 removed; `components/sheets/ResetControl.test.tsx`'s global, URL-unscoped `fetchMock`
+started also intercepting `ProfilePanel`'s own `GET /shop/api/state` poll (fired the instant its
+sheet opens), corrupting 8 tests' `POST /shop/api/reset`-only scenarios. Fixed in place:
+`Shell.test.tsx` now asserts the right sheet has the right panel mounted inside it via that
+panel's own real "Loading …" copy (production output, not test-invented text); every
+`ResetControl.test.tsx` `fetchMock` now routes by URL, answering the state poll with an ordinary
+200 and reserving each test's intended status/body for `/reset`.
+
+**Verified independently (teco):** diffed both files directly (93 insertions/20 deletions total,
+matches the delegate's own stat); confirmed via `git status` that no file outside
+`layout/**`/`components/sheets/**` remained modified (the delegate's mutation-test targets,
+`Header.tsx`/`ResetControl.tsx`, were cleanly restored); own `npx vitest run` — 178/178 green, 21
+files; own `npx tsc -b` — clean. Narrow, test-only, low design risk — accepted without a further
+`analyst` re-gate (same judgment already applied to S11/S12c's non-blocking suggestions).
+
+**Committed:** `1e230ef`.
+
 ## 2026-09-14 — salesperson-ui S14: cart/order/profile/catalog panels
 
 **What:** Closed S14 per `docs/plans/salesperson-ui.md` §5.1's S14 row (FR-8/9/10/11 parity,
