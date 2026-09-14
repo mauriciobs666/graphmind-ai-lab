@@ -1186,6 +1186,39 @@ def test_load_item_scorer_raises_run_refused_exit_4_on_unresolvable_scorer_name(
     assert excinfo.value.exitCode == 4
 
 
+# ==================================================================================================
+# `_load_conversation_scorer` — S5 spec §5 Step 6: mirrors `_load_item_scorer` exactly, resolving
+# `pack.manifest["scorer"]` to `modelbench.scoring.<name>` for the `tool-caller` role.
+# ==================================================================================================
+
+
+def test_load_conversation_scorer_resolves_a_real_scorer_name_to_its_module():
+    from modelbench.runner import _load_conversation_scorer
+    from modelbench.scoring import toolcalls
+
+    pack = FakePack(role="tool-caller", manifest={"scorer": "toolcalls"})
+    scorer = _load_conversation_scorer(pack)
+    assert scorer is toolcalls
+
+
+def test_load_conversation_scorer_raises_run_refused_exit_4_on_absent_scorer_key():
+    from modelbench.runner import RunRefused, _load_conversation_scorer
+
+    pack = FakePack(role="tool-caller", manifest={})
+    with pytest.raises(RunRefused) as excinfo:
+        _load_conversation_scorer(pack)
+    assert excinfo.value.exitCode == 4
+
+
+def test_load_conversation_scorer_raises_run_refused_exit_4_on_unresolvable_scorer_name():
+    from modelbench.runner import RunRefused, _load_conversation_scorer
+
+    pack = FakePack(role="tool-caller", manifest={"scorer": "no_such_scorer_module"})
+    with pytest.raises(RunRefused) as excinfo:
+        _load_conversation_scorer(pack)
+    assert excinfo.value.exitCode == 4
+
+
 def test_item_chat_messages_real_pack_with_no_prompt_block_does_not_crash():
     """Reproduction, on the real driving path: `_item_chat_messages` (runner.py:275) calls
     `pack.prompt_config()` unconditionally, uncaught, for every item-level role. A real, on-disk,
@@ -1254,6 +1287,8 @@ def _tool_caller_pack(
     determinism_probe_scripts: list[str] | None = None,
     replicates_per_script: int = 1,
     tool_module: EnvironmentFactory | None = None,
+    h: int = 4,
+    tool_schemas: tuple[Mapping[str, Any], ...] = (),
 ) -> FakePack:
     return FakePack(
         role="tool-caller",
@@ -1262,10 +1297,15 @@ def _tool_caller_pack(
             "sampling": {
                 "determinismProbeScripts": determinism_probe_scripts or [],
                 "replicatesPerScript": replicates_per_script,
-            }
+            },
+            # NEW — S5 spec §5 Step 6: the real `scoring.toolcalls.score_conversations` reads
+            # `pack.manifest["metrics"]["cleanThroughTurnH"]["H"]`; `FakeConversationScorer`
+            # (used by every OTHER test in this section) never touches this key, so adding it
+            # here is backward compatible with every existing call site.
+            "metrics": {"cleanThroughTurnH": {"H": h}},
         },
         tool_module=tool_module or EnvironmentFactory(),
-        prompt_cfg=make_prompt_cfg(maxIterationsPerTurn=8),
+        prompt_cfg=make_prompt_cfg(maxIterationsPerTurn=8, toolSchemas=tool_schemas),
     )
 
 
@@ -1721,3 +1761,156 @@ def test_run_pack_happy_path_stores_a_complete_run(tmp_path, monkeypatch):
     assert run.attestationTripWire == "compared"
     assert run.designEffect == 1.0
     assert run.basis == "by-construction"
+
+
+# ==================================================================================================
+# S5 spec §5 Step 6 — the end-to-end synthetic integration test: "the first point in this stage
+# where every new piece runs together." A `FakePack`-shaped tool-caller pack (mirroring this
+# file's own `_tool_caller_pack`, built for `FakeConversationScorer` — Step 5's stand-in, retired
+# here for exactly this one test) driven through `_drive_conversations` with the REAL
+# `modelbench.scoring.toolcalls` module, over two hand-built `Conversation` scripts and a stub
+# LLM — offline throughout, no live LM Studio call, no `conversations.jsonl` (both out of scope).
+# ==================================================================================================
+
+
+def _expect(*, tool_required: bool, tool: str | None = None, **rest: Any) -> dict[str, Any]:
+    expect: dict[str, Any] = {"toolRequired": tool_required}
+    if tool is not None:
+        expect["tool"] = tool
+    expect.update(rest)
+    return expect
+
+
+def _reply(content: str) -> ChatResult:
+    return ChatResult(
+        message={"role": "assistant", "content": content},
+        tool_calls=(),
+        toolCallForm="prose",
+        stats=None,
+        model_info=None,
+        runtime=None,
+        usage=None,
+        wallClockMs=50.0,
+    )
+
+
+def test_end_to_end_synthetic_integration_with_the_real_toolcalls_scorer(monkeypatch, tmp_path):
+    """`_drive_conversations` wired to the REAL scorer (not `FakeConversationScorer`), producing a
+    `RunResult` that `store()`/`load_history()`/`compare_report()` accept and render without
+    error — with the funnel table, the per-turn-position table, and the hazard curve all VISIBLY
+    rendering real numbers on the output (asserted on the actual rendered string content, per S5
+    spec §5 Step 6's own "Done when" clause — not merely "did not raise").
+
+    Two scripts, deliberately not all-clean (a toy where nothing ever fails proves nothing about
+    the FR-8 wiring): `A-01` — one clean tool call, then one clean restraint turn; `B-01` — one
+    turn requiring a tool the model never calls (a genuine, scored miss)."""
+    from modelbench.scoring import toolcalls
+
+    monkeypatch.setattr("modelbench.runner._load_conversation_scorer", lambda pack: toolcalls)
+
+    a01 = Conversation(
+        scriptId="A-01",
+        shape="A",
+        replicate=1,
+        turns=(
+            Turn(
+                seq=0,
+                user="what's in my cart?",
+                expect=_expect(
+                    tool_required=True,
+                    tool="view_cart",
+                    args={},
+                    finalReplyMustContain=["cart"],
+                ),
+            ),
+            Turn(seq=1, user="thanks!", expect=_expect(tool_required=False)),
+        ),
+    )
+    b01 = Conversation(
+        scriptId="B-01",
+        shape="B",
+        replicate=1,
+        turns=(
+            Turn(
+                seq=0,
+                user="place my order",
+                expect=_expect(tool_required=True, tool="place_order", args={}),
+            ),
+        ),
+    )
+    pack = _tool_caller_pack(scripts=[a01, b01], h=1, tool_module=EnvironmentFactory())
+
+    responses = [
+        _tool_call_chat_result("view_cart"),  # A-01 turn 0, iteration 1: the tool call
+        _reply("Your cart is empty."),  # A-01 turn 0, iteration 2: the final reply
+        _reply("You're welcome!"),  # A-01 turn 1 (restraint): no call, replies
+        _reply("Sure, I've placed that for you."),  # B-01 turn 0: required tool never called
+    ]
+    lms = StubLMStudio(chat_responses=responses, residency_sequence=[resident(), resident()])
+
+    items, disclosures, basis, design_effect, aggregates = _drive_conversations(
+        pack, _cfg(), lmstudio=lms, model_info=model_info(), baseline_residency=resident()
+    )
+
+    assert disclosures == ()
+    assert len(items) == 2
+    assert aggregates.kind == "toolcalls"
+    # A real, non-trivial funnel: one clean tool call, one restraint success, one genuine miss.
+    assert aggregates.funnelCounts.turnsDriven == 3
+    assert aggregates.funnelCounts.nativeCallEmitted == 1
+    assert aggregates.funnelCounts.noAttempt == 1
+    assert aggregates.funnelCounts.restraintTurns == 1
+    assert aggregates.cleanThroughTurn.successes == 1  # A-01 clean by H=1
+    assert aggregates.cleanThroughTurn.n == 2  # B-01 fails, still in the denominator
+
+    from conftest import model_fields
+    from conftest import run as run_fixture
+
+    from modelbench.packs import PackMetrics, PackRef
+    from modelbench.report import compare_report
+    from modelbench.results import load_history, store
+
+    record = run_fixture(
+        "r-s5-integration",
+        role="tool-caller",
+        items=list(items),
+        aggregates=aggregates,
+        design_effect=design_effect,
+        basis=basis,
+        fingerprint_fields=model_fields(
+            packId="tool-caller-shop-assistant", packVersion="1.0.0", packContentHash="a" * 64
+        ),
+    )
+
+    path = store(record, tmp_path)
+    assert path.exists()
+    valid, invalid = load_history(tmp_path, packId="tool-caller-shop-assistant")
+    assert invalid == []
+    assert len(valid) == 1
+
+    pack_ref = PackRef(
+        packId="tool-caller-shop-assistant",
+        packVersion="1.0.0",
+        contentHash=None,
+        role="tool-caller",
+        metrics=PackMetrics(
+            verdictMetrics=("cleanThroughTurnH",), headlineMetric="cleanThroughTurnH"
+        ),
+        pairingKey=("scriptId", "replicate"),
+        analysisUnit="scriptId",
+        seed=20260913,
+    )
+    md = compare_report(valid, pack=pack_ref)
+
+    # The funnel table visibly renders, before "## Arms", with this run's own real numbers.
+    assert md.index("turns driven") < md.index("## Arms")
+    native_line = next(ln for ln in md.splitlines() if "native call emitted" in ln)
+    assert "1" in native_line
+
+    # The per-turn-position table visibly renders, after "## Arms".
+    assert md.index("## Arms") < md.index("Per-turn position")
+    assert "t=0" in md
+
+    # The hazard curve visibly renders, after the per-turn-position table.
+    assert md.index("Per-turn position") < md.index("Hazard")
+    assert "f=" in md and "r=" in md and "c=" in md

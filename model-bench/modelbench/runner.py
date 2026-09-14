@@ -243,11 +243,23 @@ def _load_item_scorer(pack: Pack) -> ItemScorer:
 
 
 def _load_conversation_scorer(pack: Pack) -> ConversationScorer:
-    raise NotImplementedError(
-        f"no scorer module ships yet for role {pack.role!r} (pack {pack.packId!r}); "
-        "S2's runner ships the scorer seam only (spec §3.2) — the first concrete "
-        "ConversationScorer is S5's"
-    )
+    """Resolve `pack.manifest["scorer"]` to a `modelbench.scoring.<name>` module — `_load_item_
+    scorer`'s own resolution, mirrored exactly (S5 spec §5 Step 6): a module satisfies
+    `ConversationScorer` structurally (its `score_conversations` module-level function IS the
+    Protocol's method), and the same `RunRefused(exitCode=4)` contract applies to an absent
+    `"scorer"` key or an unresolvable module name — a pack-config defect, not a programming-contract
+    one."""
+    name = pack.manifest.get("scorer")
+    if not name:
+        raise RunRefused(f"pack {pack.packId!r} declares no \"scorer\"", exitCode=4)
+    try:
+        return importlib.import_module(f"modelbench.scoring.{name}")
+    except ImportError as exc:
+        raise RunRefused(
+            f"pack {pack.packId!r} declares scorer {name!r}, which does not resolve to "
+            f"modelbench.scoring.{name}: {exc}",
+            exitCode=4,
+        ) from exc
 
 
 # --- shared timing helpers (spec §3.3, §4) --------------------------------------------------

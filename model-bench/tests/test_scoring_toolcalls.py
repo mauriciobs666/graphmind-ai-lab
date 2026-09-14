@@ -1234,6 +1234,59 @@ def test_laundering_a_trace_collapsed_at_turn_two_does_not_outscore_one_reaching
     assert aggregates.cleanThroughTurn.n == 1
 
 
+# --- S5 spec §4.4 item 4 / §5 Step 6: `iterationSummary` -----------------------------------------
+
+
+def test_score_conversations_populates_iteration_summary_restricted_and_unrestricted() -> None:
+    """`iterationSummary` carries `-ml` §4.2(f)'s restricted `I(t)` mean/p95 (over
+    `replied`/`cap-hit` turns only, `iteration_summary`'s own filter) alongside the UNRESTRICTED
+    `yCalls`/`y` pair `-ml` §11.4's `Y_calls / Y` reads off of — summed/counted over EVERY turn
+    driven, including the `no-response` turn `iteration_summary` itself excludes. The two must
+    differ whenever a non-`replied`/`cap-hit` turn was driven, which is the distinctness the
+    report's own sentence asserts (§4.4 item 4)."""
+    replied_script = Conversation(
+        scriptId="A-01", shape="A", replicate=1, turns=(_restraint_turn(0), _restraint_turn(1))
+    )
+    replied_trace = make_trace(
+        "A-01",
+        (
+            make_turn(disposition="replied", iterations=2),
+            make_turn(disposition="replied", iterations=4),
+        ),
+    )
+    cap_hit_script = make_script("A-02", 1)
+    cap_hit_trace = make_trace(
+        "A-02", (make_turn(disposition="cap-hit", iterations=8, final_reply=None),)
+    )
+    unrunnable_script = make_script("A-03", 1)
+    unrunnable_trace = make_trace(
+        "A-03", (make_turn(disposition="no-response", iterations=0, final_reply=None),)
+    )
+    scored = [
+        (replied_script, replied_trace, ()),
+        (cap_hit_script, cap_hit_trace, ()),
+        (unrunnable_script, unrunnable_trace, ()),
+    ]
+
+    _, aggregates = toolcalls.score_conversations(scored, [], pack=make_pack(h=1))
+
+    expected = toolcalls.iteration_summary(
+        [("replied", 2), ("replied", 4), ("cap-hit", 8), ("no-response", 0)]
+    )
+    summary = aggregates.iterationSummary
+    assert summary["n"] == expected.n == 3
+    assert summary["capHitCount"] == expected.capHitCount == 1
+    assert summary["mean"] == pytest.approx(expected.mean)
+    assert summary["meanCensored"] is expected.meanCensored is True
+    assert summary["p95"] == pytest.approx(expected.p95)
+    assert summary["p95Censored"] == expected.p95Censored
+    # unrestricted: every turn driven (4), including the `no-response` one `iteration_summary`
+    # excludes from its own `n`.
+    assert summary["yCalls"] == 2 + 4 + 8 + 0
+    assert summary["y"] == 4
+    assert summary["mean"] != summary["yCalls"] / summary["y"]  # the distinctness §4.4 item 4 names
+
+
 def test_score_conversations_model_channel_unrunnable_is_not_tool_channel() -> None:
     """The sharp edge §2.6/§2.3 name explicitly: a MODEL-channel `unrunnable` turn
     (`no-response`/`server-rejected`) makes the item `scoreable=False` (n_a) exactly like

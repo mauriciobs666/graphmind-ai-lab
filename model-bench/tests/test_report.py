@@ -27,15 +27,27 @@ from conftest import (
 from modelbench import stats
 from modelbench.fingerprint import FieldProblem
 from modelbench.packs import PackConfigError, metrics_from_manifest
-from modelbench.report import _SAMPLE_NOUN, compare_report, resolving_power_line
+from modelbench.report import (
+    _SAMPLE_NOUN,
+    _render_funnel,
+    _render_hazard,
+    _render_per_turn_position,
+    compare_report,
+    resolving_power_line,
+)
 from modelbench.results import (
     ContinuousMetric,
     DistributionSummary,
+    FunnelCounts,
+    HazardPoint,
     InvalidRecord,
     ItemResult,
     ItemTiming,
     RetrievalAggregates,
     RunResult,
+    TurnPositionRate,
+    load_history,
+    store,
 )
 from modelbench.roles import UNIT_KIND_BY_ROLE
 from modelbench.roles import unit_kind as unit_kind_for_role
@@ -2508,3 +2520,312 @@ def test_each_no_verdict_cause_prints_its_own_reason_and_not_the_other_one() -> 
         for other, text in _NO_VERDICT_REASON.items():
             if other != cause:
                 assert text not in md
+
+
+# ==================================================================================================
+# S5 spec §4.4 / §5 Step 6 — the three tool-caller renderers (funnel, per-turn-position, hazard)
+# and E5 (the dispatch-failure count surviving storage and reload)
+# ==================================================================================================
+
+
+def _funnel_counts(**overrides) -> FunnelCounts:
+    """Every one of the thirteen fields distinct and non-zero by default, so a mutant that
+    dropped or transposed one would not coincidentally still match (mirrors `test_results.py`'s
+    own `FunnelCounts` round-trip fixture)."""
+    base = dict(
+        turnsDriven=360,
+        unrunnableModelChannel=13,
+        unrunnableToolChannel=7,
+        turnsScoredAfterUnrunnable=5,
+        restraintTurns=40,
+        requiredCallTurns=320,
+        nativeCallEmitted=142,
+        prosePseudoCall=31,
+        noAttempt=147,
+        turnsWithAnyCall=142,
+        dispatchedCalls=167,
+        factBearingReturns=118,
+        unscoreableReturns=24,
+    )
+    base.update(overrides)
+    return FunnelCounts(**base)
+
+
+def _toolcaller_run(run_id: str, **kwargs) -> RunResult:
+    return run(
+        run_id,
+        role="tool-caller",
+        fingerprint_fields=model_fields(
+            packId="tool-caller-shop-assistant",
+            packVersion="1.0.0",
+            packContentHash="a" * 64,
+        ),
+        **kwargs,
+    )
+
+
+# --- `_render_funnel` -----------------------------------------------------------------------------
+
+
+def test_render_funnel_prints_the_full_hierarchy_with_real_numbers() -> None:
+    """`-ml` §4.3 rule 3's illustrated shape (plan `ml.md:2098-2111`) — every named line present,
+    with the fixture's own distinct numbers, so a mutant that dropped a line or mixed up two
+    fields would fail here rather than being papered over by a repeated value."""
+    aggregates = ToolCallAggregates(funnelCounts=_funnel_counts())
+    r = _toolcaller_run("cand", aggregates=aggregates)
+    lines = _render_funnel(r, "cand")
+    text = "\n".join(lines)
+    for label, value in (
+        ("turns driven", 360),
+        ("unrunnable (model channel)", 13),
+        ("turns scored after unrunnable", 5),
+        ("unrunnable (tool channel)", 7),
+        ("restraint turns", 40),
+        ("R(t) >= 1", 320),
+        ("native call emitted", 142),
+        ("prose pseudo-call", 31),
+        ("no attempt", 147),
+        ("turns with", 142),
+        ("dispatched calls", 167),
+        ("fact-bearing returns", 118),
+        ("unscoreable returns", 24),
+    ):
+        assert any(label in ln and str(value) in ln for ln in lines), (label, value, text)
+
+
+def test_render_funnel_cross_references_restraint_rate_without_a_second_stored_copy() -> None:
+    """§7 rule 4: the restraint "-> k/n" annotation is computed at render time from
+    `ToolCallAggregates.restraint`, never a second, derivable integer stored on `FunnelCounts`
+    itself (confirmed structurally: `FunnelCounts` carries no restraint-rate field at all)."""
+    aggregates = ToolCallAggregates(
+        funnelCounts=_funnel_counts(restraintTurns=40),
+        restraint=BinaryMetric(name="restraint", successes=38, n=40, unit="turn"),
+    )
+    r = _toolcaller_run("cand", aggregates=aggregates)
+    lines = _render_funnel(r, "cand")
+    assert any("38/40" in ln for ln in lines)
+    assert not hasattr(FunnelCounts, "restraintRate")
+
+
+def test_render_funnel_is_empty_when_funnelCounts_is_none() -> None:
+    """A `tool-caller` run with no `funnelCounts` (every pre-S5-Step-6 fixture in this file's own
+    `_toolcall_arm`) renders no funnel block at all — never a table of zeros."""
+    aggregates = ToolCallAggregates(
+        restraint=BinaryMetric(name="restraint", successes=1, n=1, unit="turn")
+    )
+    r = _toolcaller_run("cand", aggregates=aggregates)
+    assert _render_funnel(r, "cand") == []
+
+
+def test_render_funnel_prints_iteration_summary_with_distinct_i_t_and_y_calls_over_y() -> None:
+    """§4.4 item 4: the `I(t)` mean/p95 (restricted to replied/cap-hit turns) and the unrestricted
+    `Y_calls / Y` ratio, plus the distinctness sentence, all render off `ToolCallAggregates.
+    iterationSummary` — with `mean` and `yCalls/y` deliberately DIFFERENT values, so the
+    distinctness claim is actually exercised rather than passing on two fields that happen to
+    coincide (coordinator finding: a prior version of this suite never populated `iterationSummary`
+    on any `test_report.py` fixture at all, so this whole block had zero coverage there)."""
+    summary = {
+        "n": 5,
+        "capHitCount": 0,
+        "mean": 3.25,
+        "meanCensored": False,
+        "p95": 7.5,
+        "p95Censored": False,
+        "yCalls": 20,
+        "y": 8,
+    }
+    assert summary["mean"] != summary["yCalls"] / summary["y"]  # the fixture itself is distinct
+    aggregates = ToolCallAggregates(funnelCounts=_funnel_counts(), iterationSummary=summary)
+    r = _toolcaller_run("cand", aggregates=aggregates)
+    text = "\n".join(_render_funnel(r, "cand"))
+    assert "mean 3.25" in text
+    assert "p95 7.50" in text
+    assert "20/8" in text  # the unrestricted Y_calls/Y count, printed as a k/n
+    assert "2.50" in text  # 20/8, the unrestricted rate itself
+    assert "Different statistics" in text
+
+
+def test_render_funnel_iteration_summary_censored_prefix_is_independent_per_field() -> None:
+    """The `>= ` censoring prefix on `mean` and on `p95` is driven by two INDEPENDENT booleans
+    (`meanCensored`/`p95Censored`) — never one flag governing both. Asserted with one true and the
+    other false, in BOTH directions, mirroring the U142 lesson: a mutant that substituted one
+    field's flag for the other's would pass a test that only ever set both flags together."""
+    base = {"n": 3, "capHitCount": 1, "mean": 4.0, "p95": 6.0, "yCalls": 9, "y": 3}
+
+    only_mean_censored = {**base, "meanCensored": True, "p95Censored": False}
+    aggregates_a = ToolCallAggregates(
+        funnelCounts=_funnel_counts(), iterationSummary=only_mean_censored
+    )
+    text_a = "\n".join(_render_funnel(_toolcaller_run("cand", aggregates=aggregates_a), "cand"))
+    assert "mean >= 4.00" in text_a
+    assert "p95 >=" not in text_a
+    assert "p95 6.00" in text_a
+
+    only_p95_censored = {**base, "meanCensored": False, "p95Censored": True}
+    aggregates_b = ToolCallAggregates(
+        funnelCounts=_funnel_counts(), iterationSummary=only_p95_censored
+    )
+    text_b = "\n".join(_render_funnel(_toolcaller_run("cand", aggregates=aggregates_b), "cand"))
+    assert "mean 4.00" in text_b
+    assert "mean >=" not in text_b
+    assert "p95 >= 6.00" in text_b
+
+
+def test_funnel_table_opens_the_report_before_the_arms_section() -> None:
+    """Rule 3, verbatim: "the report opens with a funnel table, not a metric table" — the funnel
+    text must appear strictly before the `## Arms` heading in the full rendered document."""
+    aggregates = ToolCallAggregates(funnelCounts=_funnel_counts())
+    r = _toolcaller_run("cand", aggregates=aggregates)
+    md = compare_report([r], pack=_toolcall_pack())
+    funnel_pos = md.index("turns driven")
+    arms_pos = md.index("## Arms")
+    assert funnel_pos < arms_pos
+
+
+def test_e5_dispatch_failure_count_survives_storage_and_prints_on_reload(tmp_root) -> None:
+    """E5 (dispatch-failure note §5's evaluation table): a stored run carrying a populated
+    `funnelCounts.unrunnableToolChannel > 0`, re-read by `compare`, prints the per-arm
+    dispatch-failure count — the whole point of §2.3's resolution (no new top-level `RunResult`
+    field; the funnel line IS the disclosure line)."""
+    aggregates = ToolCallAggregates(funnelCounts=_funnel_counts(unrunnableToolChannel=6))
+    written = _toolcaller_run("r-e5", aggregates=aggregates)
+    store(written, tmp_root)
+    valid, invalid = load_history(tmp_root, packId="tool-caller-shop-assistant")
+    assert invalid == []
+    assert len(valid) == 1
+    md = compare_report(valid, pack=_toolcall_pack())
+    tool_channel_line = next(ln for ln in md.splitlines() if "unrunnable (tool channel)" in ln)
+    assert "6" in tool_channel_line
+
+
+# --- `_render_per_turn_position` ------------------------------------------------------------------
+
+
+def _hazard_pair(*, n_at_0: int, f_at_0: int, c_at_0: int = 0) -> tuple[HazardPoint, ...]:
+    return (
+        HazardPoint(
+            turnIndex=0,
+            metric=BinaryMetric(name="hazard", successes=f_at_0, n=n_at_0, unit="conversation"),
+            censored=c_at_0,
+        ),
+    )
+
+
+def test_render_per_turn_position_one_column_per_arm_with_observed_and_structural_n() -> None:
+    """§4.4 item 2: `n` is the OBSERVED count (already censoring-aware); the STRUCTURAL n (the
+    run's own total scored-conversation count) is printed beside it — computed from `len(run.
+    items)`, never hardcoded, since `PackRef` carries no per-script-length distribution for
+    `report.py` to consult (S5 spec §4.4 item 2's own open wiring, this module's synthesis)."""
+    position = (
+        TurnPositionRate(
+            turnIndex=0, metric=BinaryMetric(name="hazard", successes=1, n=12, unit="conversation")
+        ),
+    )
+    items = [item(f"S-{i:02d}", correct=True, metric="cleanThroughTurn4") for i in range(12)]
+    a = _toolcaller_run(
+        "cand", items=items, aggregates=ToolCallAggregates(perTurnPosition=position)
+    )
+    b = _toolcaller_run(
+        "incumbent", items=items, aggregates=ToolCallAggregates(perTurnPosition=position)
+    )
+    lines = _render_per_turn_position(_toolcall_pack(), [a, b])
+    text = "\n".join(lines)
+    assert "1/12" in text
+    assert text.count("1/12") >= 2  # one occurrence per arm's own column
+    assert "12" in text  # the structural ceiling (len(items) == 12)
+
+
+def test_render_per_turn_position_marks_a_low_observed_n_as_descriptive() -> None:
+    """§4.4 item 2's own literal text: every position with observed `n < 10` is marked
+    "descriptive at this n — no significance claim"."""
+    position = (
+        TurnPositionRate(
+            turnIndex=0, metric=BinaryMetric(name="hazard", successes=1, n=3, unit="conversation")
+        ),
+    )
+    items = [item(f"S-{i:02d}", correct=True, metric="cleanThroughTurn4") for i in range(3)]
+    a = _toolcaller_run(
+        "cand", items=items, aggregates=ToolCallAggregates(perTurnPosition=position)
+    )
+    lines = _render_per_turn_position(_toolcall_pack(), [a])
+    text = "\n".join(lines)
+    assert "descriptive at this n — no significance claim" in text
+
+
+def test_render_per_turn_position_is_empty_when_no_run_carries_position_data() -> None:
+    a = _toolcaller_run("cand", aggregates=ToolCallAggregates())
+    assert _render_per_turn_position(_toolcall_pack(), [a]) == []
+
+
+def test_per_turn_position_table_appears_after_the_arms_section() -> None:
+    position = (
+        TurnPositionRate(
+            turnIndex=0, metric=BinaryMetric(name="hazard", successes=1, n=12, unit="conversation")
+        ),
+    )
+    r = _toolcaller_run("cand", aggregates=ToolCallAggregates(perTurnPosition=position))
+    md = compare_report([r], pack=_toolcall_pack())
+    arms_pos = md.index("## Arms")
+    position_pos = md.index("Per-turn position")
+    assert arms_pos < position_pos
+
+
+# --- `_render_hazard` -------------------------------------------------------------------------
+
+
+def test_render_hazard_prints_both_arms_side_by_side_with_their_own_censored_column() -> None:
+    """§4.4 item 3: both arms' curves side by side, each with its OWN `c_t` column reading
+    `HazardPoint.censored` directly — never a recomputed rate."""
+    a = _toolcaller_run(
+        "cand", aggregates=ToolCallAggregates(hazard=_hazard_pair(n_at_0=8, f_at_0=2, c_at_0=1))
+    )
+    b = _toolcaller_run(
+        "incumbent",
+        aggregates=ToolCallAggregates(hazard=_hazard_pair(n_at_0=6, f_at_0=1, c_at_0=3)),
+    )
+    lines = _render_hazard([a, b])
+    text = "\n".join(lines)
+    assert "2" in text and "8" in text and "1" in text  # cand's f_0, r_0, c_0
+    assert "6" in text and "3" in text  # incumbent's r_0, c_0
+
+
+def test_render_hazard_never_computes_a_cross_arm_difference() -> None:
+    """Load-bearing prohibition (§4.4 item 3, `-ml` §4.3 rule 5's closing clause): the two curves
+    are conditioned on different, arm-specific risk sets after censoring, so no path may compute
+    or print `a_rate - b_rate`. `cand`'s rate at t=0 is 1/2 = 0.5; `incumbent`'s is 1/4 = 0.25 —
+    a naive cross-arm difference would be exactly `0.25` / `25.0` (pp). Neither string may appear
+    anywhere in the rendered hazard block."""
+    a = _toolcaller_run(
+        "cand", aggregates=ToolCallAggregates(hazard=_hazard_pair(n_at_0=2, f_at_0=1))
+    )
+    b = _toolcaller_run(
+        "incumbent", aggregates=ToolCallAggregates(hazard=_hazard_pair(n_at_0=4, f_at_0=1))
+    )
+    lines = _render_hazard([a, b])
+    text = "\n".join(lines)
+    assert "0.25" not in text
+    assert "25.0" not in text
+    assert "0.250" not in text
+
+
+def test_render_hazard_is_empty_when_no_run_carries_hazard_data() -> None:
+    a = _toolcaller_run("cand", aggregates=ToolCallAggregates())
+    assert _render_hazard([a]) == []
+
+
+def test_hazard_table_appears_after_the_per_turn_position_table() -> None:
+    position = (
+        TurnPositionRate(
+            turnIndex=0, metric=BinaryMetric(name="hazard", successes=1, n=12, unit="conversation")
+        ),
+    )
+    r = _toolcaller_run(
+        "cand",
+        aggregates=ToolCallAggregates(
+            perTurnPosition=position, hazard=_hazard_pair(n_at_0=12, f_at_0=1)
+        ),
+    )
+    md = compare_report([r], pack=_toolcall_pack())
+    position_pos = md.index("Per-turn position")
+    hazard_pos = md.index("Hazard")
+    assert position_pos < hazard_pos

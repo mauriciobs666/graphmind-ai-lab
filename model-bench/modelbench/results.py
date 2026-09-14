@@ -556,6 +556,17 @@ class ToolCallAggregates:
     restraint: BinaryMetric | None = None
     hazard: tuple[HazardPoint, ...] = ()  # CHANGED from tuple[BinaryMetric, ...] (S5 spec §2.4)
     determinismProbe: Mapping[str, Any] | None = None  # plan `:2262-2264`'s exact shape
+    #: `-ml` §4.2(f)'s `I(t)` mean/p95 (restricted to `ITERATION_SUMMARY_DISPOSITIONS`) plus the
+    #: unrestricted `yCalls`/`y` pair `-ml` §11.4's `Y_calls / Y` reads off of — a plain
+    #: JSON-native mapping, `determinismProbe`'s own precedent (S5 spec §5 Step 6/§4.4 item 4):
+    #: no `RunResult.latency`/`LatencyBlock` home exists for this, since a `tool-caller`'s
+    #: `ItemResult.timing` is always `None` (one `ItemResult` per CONVERSATION, §2.6 — never per
+    #: call), so `LatencyBlock` is never built for this role at all (`runner.latency_block`
+    #: returns `None` whenever every item's `timing is None`). Keys: `n`, `capHitCount`, `mean`,
+    #: `meanCensored`, `p95`, `p95Censored` (`IterationSummary`'s own fields), plus `yCalls`
+    #: (`sum(iterations)` over EVERY turn driven) and `y` (`funnelCounts.turnsDriven`) — the two
+    #: figures `report.py`'s distinctness sentence contrasts against the restricted `I(t)` mean.
+    iterationSummary: Mapping[str, Any] | None = None
 
     def named_metrics(self) -> tuple[MetricValue, ...]:
         found = []

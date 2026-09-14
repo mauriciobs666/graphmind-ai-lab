@@ -643,6 +643,11 @@ class _Tally:
         self.stoppingSuccesses = 0
         self.stoppingTotal = 0
         self.replyMatchSuccesses = 0
+        #: Every driven turn's `(disposition, iterations)`, UNRESTRICTED — §4.4 item 4's `Y_calls`
+        #: sums `.iterations` over this list and `Y` is its length; `iteration_summary()` itself
+        #: filters this same list down to `ITERATION_SUMMARY_DISPOSITIONS` for the restricted
+        #: `I(t)` mean/p95, so one collection point serves both figures (S5 spec §5 Step 6).
+        self.iterationObservations: list[tuple[str, int]] = []
 
     def funnel_counts(self) -> FunnelCounts:
         return FunnelCounts(
@@ -731,6 +736,7 @@ def _score_one_conversation(
     for i, t_turn in enumerate(trace.turns):
         s_turn = script.turns[i]
         tally.turnsDriven += 1
+        tally.iterationObservations.append((t_turn.turnDisposition, t_turn.iterations))
         mechanism = turn_disposition_scores(t_turn.turnDisposition)
 
         if mechanism == "unrunnable":
@@ -874,6 +880,24 @@ def _determinism_probe(
     }
 
 
+def _iteration_summary_dict(observations: Sequence[tuple[str, int]]) -> dict[str, Any]:
+    """§4.4 item 4's report-facing shape: `iteration_summary`'s own restricted mean/p95, plus the
+    UNRESTRICTED `yCalls`/`y` pair `-ml` §11.4's `Y_calls / Y` reads off of. A plain dict (never a
+    dataclass instance) so it round-trips through `ToolCallAggregates.iterationSummary`'s generic
+    `_encode`/`_decode` treatment with no special case, `determinismProbe`'s own precedent."""
+    summary = iteration_summary(observations)  # type: ignore[arg-type]
+    return {
+        "n": summary.n,
+        "capHitCount": summary.capHitCount,
+        "mean": summary.mean,
+        "meanCensored": summary.meanCensored,
+        "p95": summary.p95,
+        "p95Censored": summary.p95Censored,
+        "yCalls": sum(iterations for _, iterations in observations),
+        "y": len(observations),
+    }
+
+
 def score_conversations(
     scored: Sequence[tuple[Conversation, ConversationTrace, Sequence[ItemTiming]]],
     probes: Sequence[tuple[Conversation, ConversationTrace, Sequence[ItemTiming]]],
@@ -962,5 +986,6 @@ def score_conversations(
         restraint=restraint_metric,
         hazard=hazard,
         determinismProbe=_determinism_probe(scored, probes, pack=pack),
+        iterationSummary=_iteration_summary_dict(tally.iterationObservations),
     )
     return tuple(items), aggregates

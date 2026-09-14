@@ -35,6 +35,7 @@ from modelbench.results import (
     ItemResult,
     MetricKindError,
     RunResult,
+    ToolCallAggregates,
 )
 from modelbench.roles import unit_kind as unit_kind_for_role
 
@@ -676,6 +677,193 @@ _ONE_PAIRED_UNIT = (
 )
 
 
+#: `-ml` §4.4 item 2's own literal text — printed verbatim beside any position whose OBSERVED
+#: risk-set size is below 10, never derived or paraphrased at each call site.
+_LOW_N_CAVEAT = "descriptive at this n — no significance claim"
+
+
+def _structural_n(run: RunResult) -> int:
+    """The per-turn-position table's "structural" ceiling (§4.4 item 2): how many conversations
+    this run scored in total, i.e. what every position's `n` would be had nothing ever been
+    censored by a real (model- or tool-channel) failure OR run out of turns early.
+
+    **Computed, not hardcoded — and deliberately the coarser of two honest readings, stated as
+    this module's own decision** (S5 spec §4.4 item 2 leaves the exact wiring to the implementer).
+    The real pack's own illustration prints a structural n that SHRINKS by position (12/8/4)
+    purely from its scripts' own length distribution (shape A/B/C), independent of any run's
+    censoring. That per-shape breakdown is not recoverable here: `report.py` is handed a `PackRef`
+    (Appendix A's identity-plus-sampling-contract carrier), never a loaded `Pack` with its scripts'
+    turn counts, and `RunResult`/`ToolCallAggregates` stores no per-script length either — only the
+    POST-censoring `hazard`/`perTurnPosition` tuples, whose own `.censored` field conflates a
+    genuine failure with a script simply ending, by design (`hazard_points`'s own docstring).
+    `len(run.items)` — one `ItemResult` per scored conversation, unconditionally (§2.6) — is the
+    one ceiling always available and always correct: it can only ever OVER-state the true
+    per-position structural n (never under), so the `_LOW_N_CAVEAT` this table exists to attach
+    still fires whenever the observed n genuinely warrants it.
+    """
+    return len(run.items)
+
+
+def _render_funnel(run: RunResult, arm_label: str) -> list[str]:
+    """`-ml` §4.3 rule 3's illustrated funnel table (plan `ml.md:2098-2111`), one per arm, plus
+    §4.4 item 4's `I(t)`/`Y_calls/Y` distinctness sentence appended to the same block (this
+    module's own wiring call, §4.4 item 4's own text — no `LatencyBlock` section exists in this
+    file to piggyback on at all: `run.latency` is always `None` for a `tool-caller` run, since
+    every conversation-level `ItemResult.timing` is `None` by construction, §2.6). `[]` when this
+    run carries no `funnelCounts` at all (every metric-only fixture predating S5 Step 6, and any
+    non-`tool-caller` run) — never a table of zeros.
+
+    The restraint line's own "-> k/n" annotation is computed here, at render time, by
+    cross-referencing `ToolCallAggregates.restraint` — never a second, derivable copy stored on
+    `FunnelCounts` (§7 rule 4).
+    """
+    fc = run.aggregates.funnelCounts if isinstance(run.aggregates, ToolCallAggregates) else None
+    if fc is None:
+        return []
+    restraint = run.aggregates.restraint
+    restraint_note = (
+        f"   -> restraint rate {restraint.successes}/{restraint.n}" if restraint is not None else ""
+    )
+    lines = [
+        f"### Funnel — {arm_label}",
+        "",
+        "```",
+        f"turns driven                    {fc.turnsDriven}",
+        f"  unrunnable (model channel)    {fc.unrunnableModelChannel}   "
+        "-> no-response / server-rejected",
+        f"    turns scored after unrunnable  {fc.turnsScoredAfterUnrunnable}",
+        f"  unrunnable (tool channel)     {fc.unrunnableToolChannel}   "
+        "-> dispatch raised; conversation censored at t",
+        f"  R(t) = 0 (restraint turns)    {fc.restraintTurns}{restraint_note}",
+        f"  R(t) >= 1                     {fc.requiredCallTurns}",
+        f"    native call emitted         {fc.nativeCallEmitted}   "
+        f"-> (a)+(b) partition over {fc.requiredCallTurns}",
+        f"    prose pseudo-call           {fc.prosePseudoCall}",
+        f"    no attempt                  {fc.noAttempt}",
+        f"  turns with >=1 call           {fc.turnsWithAnyCall}   -> (c), (e), (f) denominators",
+        f"  dispatched calls              {fc.dispatchedCalls}   "
+        "-> (d) denominator (calls, not turns)",
+        f"  fact-bearing returns          {fc.factBearingReturns}   -> (g) denominator",
+        f"  unscoreable returns           {fc.unscoreableReturns}",
+        "```",
+        "",
+    ]
+    summary = (
+        run.aggregates.iterationSummary if isinstance(run.aggregates, ToolCallAggregates) else None
+    )
+    if summary is not None and summary.get("n"):
+        mean_prefix = ">= " if summary["meanCensored"] else ""
+        p95_prefix = ">= " if summary["p95Censored"] else ""
+        y = summary["y"]
+        y_calls = summary["yCalls"]
+        unrestricted_rate = y_calls / y if y else 0.0
+        lines += [
+            f"- `I(t)` (iterations/turn, replied+cap-hit only, n={summary['n']}): "
+            f"mean {mean_prefix}{summary['mean']:.2f}, p95 {p95_prefix}{summary['p95']:.2f}",
+            f"- `Y_calls / Y` (unrestricted, every turn driven): "
+            f"{y_calls}/{y} = {unrestricted_rate:.2f}",
+            "- Different statistics, both printed: `Y_calls / Y` pools every driven turn "
+            "including ones that never completed, while `I(t)`'s mean/p95 count only "
+            "replied/cap-hit turns (`-ml` §4.2(f)/§11.4) — they will differ whenever a turn did "
+            "not complete, and neither substitutes for the other.",
+            "",
+        ]
+    return lines
+
+
+def _render_per_turn_position(pack: PackRef, runs: Sequence[RunResult]) -> list[str]:
+    """`-ml` §4.4's per-position table, one column per arm. `n` is the OBSERVED count
+    (`TurnPositionRate.metric.n`, already censoring-aware — `scoring.toolcalls.per_turn_position`'s
+    own docstring); the STRUCTURAL n (`_structural_n`, above) prints beside it. Every position
+    whose observed n is below 10 is marked `_LOW_N_CAVEAT`, printed verbatim. `[]` when no run in
+    `runs` carries any `perTurnPosition` data at all (every non-`tool-caller` report, and every
+    `tool-caller` fixture that predates this data existing)."""
+    if not any(
+        isinstance(r.aggregates, ToolCallAggregates) and r.aggregates.perTurnPosition for r in runs
+    ):
+        return []
+    arm_names = _arm_names(runs)
+    max_position = max(
+        (
+            point.turnIndex
+            for r in runs
+            if isinstance(r.aggregates, ToolCallAggregates)
+            for point in r.aggregates.perTurnPosition
+        ),
+        default=-1,
+    )
+    lines = [
+        "## Per-turn position",
+        "",
+        "| position | "
+        + " | ".join(f"{arm_names[r.runId]} (observed k/n, structural n)" for r in runs)
+        + " |",
+        "|---|" + "---|" * len(runs),
+    ]
+    for t in range(max_position + 1):
+        cells = []
+        for r in runs:
+            points = (
+                r.aggregates.perTurnPosition if isinstance(r.aggregates, ToolCallAggregates) else ()
+            )
+            point = next((p for p in points if p.turnIndex == t), None)
+            if point is None:
+                cells.append("—")
+                continue
+            cell = f"{point.metric.successes}/{point.metric.n} (structural {_structural_n(r)})"
+            if point.metric.n < 10:
+                cell += f" — {_LOW_N_CAVEAT}"
+            cells.append(cell)
+        lines.append(f"| t={t} | " + " | ".join(cells) + " |")
+    lines.append("")
+    return lines
+
+
+def _render_hazard(runs: Sequence[RunResult]) -> list[str]:
+    """`-ml` §4.3 rule 5's hazard curve, every arm's own column side by side, each with its own
+    `c_t` column reading `HazardPoint.censored` directly — never a recomputed rate. `[]` when no
+    run in `runs` carries any `hazard` data at all.
+
+    **Load-bearing prohibition, honoured structurally rather than by discipline**: this function
+    computes nothing across arms — every cell is read off exactly one run's own `HazardPoint` at
+    exactly one position, so there is no expression anywhere in this function's body that could
+    even syntactically become `a_rate - b_rate`. The two curves are conditioned on different,
+    arm-specific risk sets after censoring (`-ml` §4.3 rule 5's own closing clause), so a cross-arm
+    difference would compare two different populations under one number.
+    """
+    if not any(isinstance(r.aggregates, ToolCallAggregates) and r.aggregates.hazard for r in runs):
+        return []
+    arm_names = _arm_names(runs)
+    max_position = max(
+        (
+            point.turnIndex
+            for r in runs
+            if isinstance(r.aggregates, ToolCallAggregates)
+            for point in r.aggregates.hazard
+        ),
+        default=-1,
+    )
+    lines = [
+        "## Hazard (time-to-first-failure)",
+        "",
+        "| position | " + " | ".join(f"{arm_names[r.runId]} (f_t, r_t, c_t)" for r in runs) + " |",
+        "|---|" + "---|" * len(runs),
+    ]
+    for t in range(max_position + 1):
+        cells = []
+        for r in runs:
+            points = r.aggregates.hazard if isinstance(r.aggregates, ToolCallAggregates) else ()
+            point = next((p for p in points if p.turnIndex == t), None)
+            cells.append(
+                "—"
+                if point is None
+                else f"f={point.metric.successes}, r={point.metric.n}, c={point.censored}"
+            )
+        lines.append(f"| t={t} | " + " | ".join(cells) + " |")
+    lines.append("")
+    return lines
+
+
 def compare_report(
     runs: Sequence[RunResult],
     *,
@@ -761,6 +949,10 @@ def compare_report(
             )
         lines.append("")
 
+    # --- the funnel table (`-ml` §4.3 rule 3): opens the report, before any metric table --------
+    for r in runs:
+        lines += _render_funnel(r, _arm_label(r, arm_names[r.runId]))
+
     # --- per-arm descriptive table --------------------------------------------------------------
     lines += ["## Arms", "", "| arm | metric | k/n | rate | 95% Wilson |", "|---|---|---|---|---|"]
     pooled_seen = False
@@ -808,6 +1000,11 @@ def compare_report(
     lines += ["", _DESCRIPTIVE_NOTE, ""]
     if pooled_seen:
         lines += [_POOLED_FOOTNOTE, ""]
+
+    # --- the per-turn-position table and the hazard curve (`-ml` §4.4/§4.3 rule 5), both after
+    # the generic Arms table (§4.4 items 2-3) -----------------------------------------------------
+    lines += _render_per_turn_position(pack, runs)
+    lines += _render_hazard(runs)
 
     pair = _comparison_pair(runs)
     if isinstance(pair, str):
