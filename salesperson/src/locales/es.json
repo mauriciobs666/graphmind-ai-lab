@@ -119,5 +119,51 @@
     "loading": "Cargando el catálogo…",
     "empty": "Aún no hay productos para mostrar.",
     "noPhoto": "No hay foto disponible"
+  },
+  "presenter": {
+    "keyScreen": {
+      "heading": "Clave del presentador",
+      "keyLabel": "Clave del presentador",
+      "submit": "Entrar",
+      "submitting": "Comprobando…",
+      "error": {
+        "rejected": "Esa clave no fue aceptada.",
+        "fieldError": "Introduce la clave del presentador.",
+        "unhandled": "Respuesta inesperada del servidor (estado {{status}}). Inténtalo de nuevo."
+      }
+    },
+    "roster": {
+      "heading": "Participantes",
+      "loadError": "No se pudo cargar la lista de participantes. Reintentando automáticamente…",
+      "loading": "Cargando participantes…",
+      "empty": "Todavía no se ha unido nadie.",
+      "staleNotice": "Mostrando la última lista conocida — reconectando…",
+      "table": {
+        "nameHeader": "Nombre",
+        "languageHeader": "Idioma"
+      },
+      "error": {
+        "unhandled": "Respuesta inesperada del servidor (estado {{status}}). Inténtalo de nuevo."
+      }
+    },
+    "resetAll": {
+      "heading": "Controles de restablecimiento",
+      "cta": "Restablecer a todos",
+      "confirmBody": "Esto borra la sesión de todos los participantes de toda la demostración. Esto no se puede deshacer.",
+      "cancel": "Cancelar",
+      "confirm": "Sí, restablecer a todos",
+      "confirming": "Restableciendo…",
+      "success_one": "Restablecimiento completo — {{count}} participante eliminado.",
+      "success_other": "Restablecimiento completo — {{count}} participantes eliminados.",
+      "incomplete": {
+        "heading_one": "Restablecimiento incompleto — {{count}} participante sigue activo:",
+        "heading_other": "Restablecimiento incompleto — {{count}} participantes siguen activos:"
+      },
+      "error": {
+        "reread": "No pudimos confirmar si funcionó — la lista de arriba refleja lo último que pudimos leer.",
+        "nothingChanged": "Algo salió mal y nada se restableció. Inténtalo de nuevo.",
+        "unhandled": "Respuesta inesperada del servidor (estado {{status}}). Inténtalo de nuevo."
+      }
+    }
   }
 }

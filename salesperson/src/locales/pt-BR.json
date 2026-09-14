@@ -119,5 +119,51 @@
     "loading": "Carregando o catálogo…",
     "empty": "Nenhum produto para mostrar ainda.",
     "noPhoto": "Nenhuma foto disponível"
+  },
+  "presenter": {
+    "keyScreen": {
+      "heading": "Chave do apresentador",
+      "keyLabel": "Chave do apresentador",
+      "submit": "Entrar",
+      "submitting": "Verificando…",
+      "error": {
+        "rejected": "Essa chave não foi aceita.",
+        "fieldError": "Informe a chave do apresentador.",
+        "unhandled": "Resposta inesperada do servidor (status {{status}}). Tente novamente."
+      }
+    },
+    "roster": {
+      "heading": "Participantes",
+      "loadError": "Não foi possível carregar a lista de participantes. Tentando novamente automaticamente…",
+      "loading": "Carregando participantes…",
+      "empty": "Ninguém entrou ainda.",
+      "staleNotice": "Mostrando a última lista conhecida — reconectando…",
+      "table": {
+        "nameHeader": "Nome",
+        "languageHeader": "Idioma"
+      },
+      "error": {
+        "unhandled": "Resposta inesperada do servidor (status {{status}}). Tente novamente."
+      }
+    },
+    "resetAll": {
+      "heading": "Controles de redefinição",
+      "cta": "Redefinir todos",
+      "confirmBody": "Isso limpa a sessão de todos os participantes de toda a demonstração. Isso não pode ser desfeito.",
+      "cancel": "Cancelar",
+      "confirm": "Sim, redefinir todos",
+      "confirming": "Redefinindo…",
+      "success_one": "Redefinição concluída — {{count}} participante removido.",
+      "success_other": "Redefinição concluída — {{count}} participantes removidos.",
+      "incomplete": {
+        "heading_one": "Redefinição incompleta — {{count}} participante ainda ativo:",
+        "heading_other": "Redefinição incompleta — {{count}} participantes ainda ativos:"
+      },
+      "error": {
+        "reread": "Não conseguimos confirmar se funcionou — a lista acima reflete o que conseguimos ler mais recentemente.",
+        "nothingChanged": "Algo deu errado e nada foi redefinido. Tente novamente.",
+        "unhandled": "Resposta inesperada do servidor (status {{status}}). Tente novamente."
+      }
+    }
   }
 }

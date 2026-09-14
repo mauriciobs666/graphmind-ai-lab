@@ -119,5 +119,51 @@
     "loading": "Loading the catalog…",
     "empty": "No products to show yet.",
     "noPhoto": "No photo available"
+  },
+  "presenter": {
+    "keyScreen": {
+      "heading": "Presenter key",
+      "keyLabel": "Presenter key",
+      "submit": "Enter",
+      "submitting": "Checking…",
+      "error": {
+        "rejected": "That key was not accepted.",
+        "fieldError": "Enter the presenter key.",
+        "unhandled": "Unexpected response from the server (status {{status}}). Please try again."
+      }
+    },
+    "roster": {
+      "heading": "Participants",
+      "loadError": "Couldn't load the participant roster. Retrying automatically…",
+      "loading": "Loading participants…",
+      "empty": "No one has joined yet.",
+      "staleNotice": "Showing the last known roster — reconnecting…",
+      "table": {
+        "nameHeader": "Name",
+        "languageHeader": "Language"
+      },
+      "error": {
+        "unhandled": "Unexpected response from the server (status {{status}}). Please try again."
+      }
+    },
+    "resetAll": {
+      "heading": "Reset controls",
+      "cta": "Reset everyone",
+      "confirmBody": "This clears every participant's session for the whole demo. This cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Yes, reset everyone",
+      "confirming": "Resetting…",
+      "success_one": "Reset complete — {{count}} participant cleared.",
+      "success_other": "Reset complete — {{count}} participants cleared.",
+      "incomplete": {
+        "heading_one": "Reset incomplete — {{count}} participant is still live:",
+        "heading_other": "Reset incomplete — {{count}} participants are still live:"
+      },
+      "error": {
+        "reread": "We couldn't confirm whether that worked — the roster above reflects the latest we could read.",
+        "nothingChanged": "Something went wrong and nothing was reset. Please try again.",
+        "unhandled": "Unexpected response from the server (status {{status}}). Please try again."
+      }
+    }
   }
 }

@@ -12,7 +12,9 @@ import { Navigate, createBrowserRouter } from 'react-router-dom';
 import { LanguageChooser } from './i18n/LanguageChooser';
 import { LayoutShell } from './layout/Shell';
 import { ChatView } from './views/ChatView';
-import { useHealth, useJoin, usePresenterLogin, usePresenterParticipants } from './api/hooks';
+import { PresenterKeyScreen } from './views/PresenterKeyScreen';
+import { PresenterRoster } from './views/PresenterRoster';
+import { useHealth, useJoin } from './api/hooks';
 import { APP_PATHS } from './routePaths';
 import { useSession } from './session/SessionContext';
 
@@ -98,62 +100,6 @@ function ParticipantRoute() {
     return <JoinScreen />;
   }
   return <ChatView />;
-}
-
-function PresenterKeyScreen() {
-  const login = usePresenterLogin();
-  const [key, setKey] = useState('');
-  const keyRejected = login.action?.kind === 'presenterKeyRejected';
-
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    login.mutate(key);
-  }
-
-  return (
-    <main className="mx-auto flex min-h-svh max-w-sm flex-col justify-center gap-4 px-6">
-      <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">Presenter key</h1>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <input
-          type="password"
-          className="rounded-md border border-slate-300 px-3 py-2 text-base outline-none focus:border-slate-500 dark:border-slate-600 dark:bg-slate-900"
-          value={key}
-          onChange={(event) => setKey(event.target.value)}
-          required
-        />
-        {keyRejected && <p className="text-xs text-red-600">That key was not accepted.</p>}
-        <button
-          type="submit"
-          disabled={login.isPending}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
-        >
-          {login.isPending ? 'Checking…' : 'Enter'}
-        </button>
-      </form>
-    </main>
-  );
-}
-
-function PresenterRoster() {
-  const roster = usePresenterParticipants();
-  return (
-    <main className="mx-auto max-w-2xl px-4 py-6">
-      <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">Participants</h1>
-      {roster.data && roster.data.length === 0 && (
-        <p className="mt-4 text-sm text-slate-500">No one has joined yet.</p>
-      )}
-      <ul className="mt-4 space-y-2">
-        {(roster.data ?? []).map((row) => (
-          <li
-            key={row.participantId}
-            className="rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-700"
-          >
-            {row.displayName} · {row.language}
-          </li>
-        ))}
-      </ul>
-    </main>
-  );
 }
 
 function PresenterRoute() {
