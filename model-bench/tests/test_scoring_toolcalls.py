@@ -1,8 +1,10 @@
-"""`modelbench.scoring.toolcalls` — S5 spec §5 Steps 3-4: the scorer's per-turn pure functions,
-`clean_through_turn`/`hazard_points` (`-ml` §4.3 rule 5's three consumers), and the determinism
-probe's `outcome_vectors_differ` (plan item 12b). Offline throughout: every fixture is a hand-built
-`TurnTrace`/`ConversationTrace`, matching `tests/test_convo.py`'s "built by hand" convention — no
-pack loader, no `score_conversations` (Step 5's own assembly, out of this stage's scope).
+"""`modelbench.scoring.toolcalls` — S5 spec §5 Steps 3-5: the scorer's per-turn pure functions,
+`clean_through_turn`/`hazard_points` (`-ml` §4.3 rule 5's three consumers), the determinism probe's
+`outcome_vectors_differ` (plan item 12b), and `score_conversations` itself (Step 5's assembly,
+§2.3/§2.6). Offline throughout: every fixture is a hand-built `TurnTrace`/`ConversationTrace`
+(Steps 3-4) or `Conversation`/`Turn` script (Step 5) — no on-disk pack tree; Step 5's tests use a
+small duck-typed `_FakePack` stand-in, matching `retrieval.py`'s/`test_runner.py`'s own offline-stub
+convention.
 
 Docstrings on the tests below cite the exact plan/`-ml` item they pin, per
 `model-bench/AGENTS.md`'s guard-reach convention.
@@ -17,7 +19,7 @@ from typing import Any
 
 import pytest
 
-from modelbench.convo import ConversationTrace, TurnTrace
+from modelbench.convo import Conversation, ConversationTrace, Turn, TurnTrace
 from modelbench.scoring import toolcalls
 from modelbench.tooling import DispatchRecord
 
@@ -74,6 +76,82 @@ _SCHEMAS_PATH = (
 
 def real_schemas() -> list[dict[str, Any]]:
     return json.loads(_SCHEMAS_PATH.read_text(encoding="utf-8"))
+
+
+# --------------------------------------------------------------------------------------------
+# Step 5 — `score_conversations` fixtures: `Conversation`/`Turn` scripts + a duck-typed fake pack
+# --------------------------------------------------------------------------------------------
+
+
+def _restraint_turn(seq: int) -> Turn:
+    """A turn with `R(t) = ∅` — `toolRequired` absent entirely, matching a script that never
+    mentions it (§2.6's `_required_tool_names` reads `expect.get("toolRequired")`, `None`-safe)."""
+    return Turn(seq=seq, user=f"turn {seq}", expect={"toolRequired": False})
+
+
+def _required_turn(seq: int, tool: str = "lookup_product_fact") -> Turn:
+    return Turn(seq=seq, user=f"turn {seq}", expect={"toolRequired": True, "tool": tool})
+
+
+def make_script(
+    script_id: str, n_turns: int, *, shape: str = "A", replicate: int = 1
+) -> Conversation:
+    """A script whose every turn is a restraint turn (`toolRequired: False`) — the simplest
+    `Turn.expect` shape whose own cleanliness is exactly `restraint(dispatched_count)`, so a
+    fixture built from `make_turn()` (no dispatches) alone is clean by construction and Step 5's
+    tests can isolate the censoring/hazard/funnel mechanics from Steps 3-4's own FR-8 correctness
+    (already tested there)."""
+    return Conversation(
+        scriptId=script_id, shape=shape, replicate=replicate,
+        turns=tuple(_restraint_turn(i) for i in range(n_turns)),
+    )
+
+
+def _clean_nine_turn_script(script_id: str) -> Conversation:
+    return make_script(script_id, 9)
+
+
+def _clean_scored(script_id: str) -> tuple[Conversation, ConversationTrace, tuple[Any, ...]]:
+    """A `scored` triple for a fully clean, fully driven 9-turn restraint script — the shared
+    "nothing interesting happens" filler conversation Step 5's multi-conversation fixtures need
+    beside the one conversation under test."""
+    trace = make_trace(script_id, tuple(make_turn() for _ in range(9)))
+    return (_clean_nine_turn_script(script_id), trace, ())
+
+
+class _FakePack:
+    """A minimal duck-typed stand-in for `packs.Pack` (mirrors `tests/test_runner.py`'s own
+    `FakePack`) — `score_conversations` reads `pack.manifest` and `pack.prompt_config().toolSchemas`
+    structurally, never `isinstance`-checked."""
+
+    def __init__(
+        self,
+        *,
+        h: int = 4,
+        determinism_probe_scripts: tuple[str, ...] = (),
+        tool_schemas: tuple[Mapping[str, Any], ...] = (),
+    ) -> None:
+        self.manifest = {
+            "metrics": {"cleanThroughTurnH": {"H": h}},
+            "sampling": {"determinismProbeScripts": list(determinism_probe_scripts)},
+        }
+        self._tool_schemas = tool_schemas
+
+    def prompt_config(self) -> Any:
+        from types import SimpleNamespace
+
+        return SimpleNamespace(toolSchemas=self._tool_schemas)
+
+
+def make_pack(
+    *,
+    h: int = 4,
+    determinism_probe_scripts: tuple[str, ...] = (),
+    tool_schemas: tuple[Mapping[str, Any], ...] = (),
+) -> _FakePack:
+    return _FakePack(
+        h=h, determinism_probe_scripts=determinism_probe_scripts, tool_schemas=tool_schemas
+    )
 
 
 # ==================================================================================================
@@ -1010,3 +1088,270 @@ def test_outcome_vectors_differ_length_mismatch_counts_as_differing() -> None:
         ),
     )
     assert toolcalls.outcome_vectors_differ(a, b) == (1,)
+
+
+# ==================================================================================================
+# Step 5 — `score_conversations` (S5 spec §5 Step 5, §2.3/§2.6)
+# ==================================================================================================
+
+
+def test_score_conversations_e2_dispatch_censoring_funnel_and_hazard() -> None:
+    """E2, re-tested against the REAL scorer (not just the runner-level truncation `test_runner.py`
+    already covers, §2.1): a synthetic 9-turn/raise-at-`t=4`/`H=4` fixture. Funnel prints 1 under
+    `unrunnableToolChannel`; the headline denominator is 3 with 1 in its n/a tally; the hazard risk
+    set is 3 at `t >= 4` with `c_4 == 1`."""
+    censored_trace = make_trace("A-01", tuple(make_turn() for _ in range(3)))  # raise at t=4
+    scored = [
+        (make_script("A-01", 9), censored_trace, ()),
+        _clean_scored("A-02"),
+        _clean_scored("A-03"),
+        _clean_scored("A-04"),
+    ]
+
+    items, aggregates = toolcalls.score_conversations(scored, [], pack=make_pack(h=4))
+
+    assert len(items) == 4
+    assert aggregates.funnelCounts.unrunnableToolChannel == 1
+
+    scoreable_count = sum(1 for it in items if it.scoreable.get("cleanThroughTurnH") is True)
+    na_count = sum(1 for it in items if it.scoreable.get("cleanThroughTurnH") is False)
+    assert scoreable_count == 3
+    assert na_count == 1
+
+    hazard = aggregates.hazard
+    assert hazard[3].censored == 1  # "c_4 == 1": newly censored AT t=4 (index 3)
+    for point in hazard[3:]:
+        assert point.metric.n == 3  # the hazard risk set from t=4 onward is 3, not 4
+
+
+def test_score_conversations_e3_censoring_after_h_stays_in_the_headline_denominator() -> None:
+    """E3: the same fixture with the raise moved to `t = 5` — IN `cleanThroughTurn4`'s denominator
+    (the censoring happens after H) and OUT of the hazard from `t = 5` onward."""
+    censored_trace = make_trace("A-01", tuple(make_turn() for _ in range(4)))  # raise at t=5
+    scored = [
+        (make_script("A-01", 9), censored_trace, ()),
+        _clean_scored("A-02"),
+        _clean_scored("A-03"),
+        _clean_scored("A-04"),
+    ]
+
+    items, aggregates = toolcalls.score_conversations(scored, [], pack=make_pack(h=4))
+
+    censored_item = next(it for it in items if it.itemId == "A-01")
+    assert censored_item.scoreable["cleanThroughTurnH"] is True  # IN the denominator
+    assert censored_item.outcome == "pass"
+    assert censored_item.counts["cleanThroughTurnH"] == 1
+
+    # Still a tool-channel censoring event — FunnelCounts tracks it regardless of H.
+    assert aggregates.funnelCounts.unrunnableToolChannel == 1
+
+    hazard = aggregates.hazard
+    assert hazard[3].metric.n == 4  # t=4 (index 3): not yet censored
+    assert hazard[4].censored == 1  # t=5 (index 4): newly censored HERE
+    for point in hazard[4:]:
+        assert point.metric.n == 3  # OUT of the hazard from t=5 onward
+
+
+def test_score_conversations_e4_censoring_differs_from_an_ordinary_scored_failure() -> None:
+    """E4: the E2 fixture rendered beside one where turn 4 is an ordinary SCORED failure (a
+    `replied` turn that fails an FR-8 check) rather than a dispatch-censoring raise — the
+    headline/hazard figures must differ. If they did not, E2 would have passed on a tautology:
+    censoring would look indistinguishable from a mundane scored miss."""
+    # --- E2's own fixture ------------------------------------------------------------------------
+    censored_trace = make_trace("A-01", tuple(make_turn() for _ in range(3)))
+    scored_e2 = [
+        (make_script("A-01", 9), censored_trace, ()),
+        _clean_scored("A-02"),
+        _clean_scored("A-03"),
+        _clean_scored("A-04"),
+    ]
+    items_e2, aggregates_e2 = toolcalls.score_conversations(scored_e2, [], pack=make_pack(h=4))
+
+    # --- the negative control: turn 4 (index 3) requires a tool and the model never calls it -----
+    # (a genuine `replied`, FR-8-scored miss — never a dispatch raise, never truncated).
+    failing_script_turns = [_restraint_turn(i) for i in range(9)]
+    failing_script_turns[3] = _required_turn(3)
+    failing_script = Conversation(
+        scriptId="A-01", shape="A", replicate=1, turns=tuple(failing_script_turns)
+    )
+    failing_trace = make_trace("A-01", tuple(make_turn() for _ in range(9)))  # never dispatches
+    scored_e4 = [
+        (failing_script, failing_trace, ()),
+        _clean_scored("A-02"),
+        _clean_scored("A-03"),
+        _clean_scored("A-04"),
+    ]
+    items_e4, aggregates_e4 = toolcalls.score_conversations(scored_e4, [], pack=make_pack(h=4))
+
+    # The headline differs: E2 excludes A-01 (n/a); E4 scores it a genuine failure (still counted).
+    scoreable_e2 = sum(1 for it in items_e2 if it.scoreable.get("cleanThroughTurnH") is True)
+    scoreable_e4 = sum(1 for it in items_e4 if it.scoreable.get("cleanThroughTurnH") is True)
+    assert scoreable_e2 != scoreable_e4
+    assert aggregates_e2.funnelCounts.unrunnableToolChannel == 1
+    assert aggregates_e4.funnelCounts.unrunnableToolChannel == 0
+
+    # The hazard differs at t=4 (index 3): E2 excludes A-01 from the risk set THERE (censored);
+    # E4 keeps it in the risk set (it is a real, observed failure, not a censoring event).
+    assert aggregates_e2.hazard[3].metric.n == 3
+    assert aggregates_e2.hazard[3].censored == 1
+    assert aggregates_e4.hazard[3].metric.n == 4
+    assert aggregates_e4.hazard[3].censored == 0
+    assert aggregates_e4.hazard[3].metric.successes == 1
+
+
+def test_laundering_a_trace_collapsed_at_turn_two_does_not_outscore_one_reaching_turn_eight() -> (
+    None
+):
+    """Plan item 7's laundering guard: a conversation censored after ONE completed turn must never
+    register as clean, and must not out-score — on `cleanThroughTurn`'s own numerator OR
+    denominator — a conversation driven the full nine turns that only fails once, well after `H`."""
+    collapsed_script = make_script("SHORT", 9)
+    collapsed_trace = make_trace("SHORT", (make_turn(),))  # censored after turn 1 (raise at t=2)
+
+    long_script_turns = [_restraint_turn(i) for i in range(9)]
+    long_script_turns[7] = _required_turn(7)  # a late (post-H) failure — irrelevant to H=4
+    long_script = Conversation(
+        scriptId="LONG", shape="A", replicate=1, turns=tuple(long_script_turns)
+    )
+    long_trace = make_trace("LONG", tuple(make_turn() for _ in range(9)))  # no dispatch at t=8
+
+    scored = [(collapsed_script, collapsed_trace, ()), (long_script, long_trace, ())]
+    items, aggregates = toolcalls.score_conversations(scored, [], pack=make_pack(h=4))
+
+    short_item = next(it for it in items if it.itemId == "SHORT")
+    long_item = next(it for it in items if it.itemId == "LONG")
+
+    assert short_item.outcome == "unrunnable"
+    assert short_item.scoreable["cleanThroughTurnH"] is False
+
+    assert long_item.outcome == "pass"  # the late, post-H miss does not touch H=4's own verdict
+    assert long_item.scoreable["cleanThroughTurnH"] is True
+    assert long_item.counts["cleanThroughTurnH"] == 1
+
+    # The pooled headline excludes SHORT from both the numerator AND the denominator — it cannot
+    # inflate a rate it never entered, and it cannot be read as "worse" either: it is simply absent.
+    assert aggregates.cleanThroughTurn.successes == 1
+    assert aggregates.cleanThroughTurn.n == 1
+
+
+def test_score_conversations_model_channel_unrunnable_is_not_tool_channel() -> None:
+    """The sharp edge §2.6/§2.3 name explicitly: a MODEL-channel `unrunnable` turn
+    (`no-response`/`server-rejected`) makes the item `scoreable=False` (n_a) exactly like
+    tool-channel censoring does, but must NOT be counted in `FunnelCounts.unrunnableToolChannel` —
+    that field is the `len(trace.turns) < len(script.turns)` mechanism alone (§2.3), never the
+    model-channel one. A scorer that conflated the two, or double-counted, would pass every other
+    test in this file and still misreport E5's own dispatch-failure disclosure line."""
+    turns = (
+        make_turn(),
+        make_turn(),
+        make_turn(),
+        make_turn(disposition="no-response", final_reply=None),  # t=4 — model channel, NOT a raise
+        make_turn(),
+        make_turn(),
+        make_turn(),
+        make_turn(),
+        make_turn(),
+    )
+    trace = make_trace("A-01", turns)  # full 9 turns recorded — never truncated
+    scored = [(make_script("A-01", 9), trace, ())]
+
+    items, aggregates = toolcalls.score_conversations(scored, [], pack=make_pack(h=4))
+
+    assert items[0].scoreable["cleanThroughTurnH"] is False
+    assert items[0].outcome == "unrunnable"
+    assert aggregates.funnelCounts.unrunnableToolChannel == 0
+    assert aggregates.funnelCounts.unrunnableModelChannel == 1
+    assert aggregates.funnelCounts.turnsDriven == 9  # every scripted turn was still driven
+
+
+def test_score_conversations_cap_hit_with_a_correct_dispatched_call_is_still_not_clean() -> None:
+    """Another sharp edge: `-ml` §4.3 rule 4 — `cap-hit` "never stopped on its own — always
+    fails" (`stopping_when_done`'s own rule, already pinned at Step 3). A turn that dispatches the
+    right tool with fully correct arguments must STILL fail `cleanThroughTurnH` if its own
+    disposition is `cap-hit` rather than `replied` — right-tool-and-right-args is not sufficient
+    for "clean" on its own, and a scorer that dropped the disposition check here would pass every
+    other test in this file while silently crediting a conversation that never actually finished
+    its turn."""
+    script = Conversation(
+        scriptId="A-01", shape="A", replicate=1,
+        turns=(Turn(seq=0, user="turn 0", expect={"toolRequired": True, "tool": "view_cart"}),),
+    )
+    call = make_dispatch("view_cart", {})
+    cap_hit_turn = make_turn(disposition="cap-hit", dispatches=(call,), final_reply=None)
+    trace = make_trace("A-01", (cap_hit_turn,))
+
+    items, _ = toolcalls.score_conversations([(script, trace, ())], [], pack=make_pack(h=1))
+
+    assert items[0].outcome == "fail"
+    assert items[0].counts["cleanThroughTurnH"] == 0
+
+
+@pytest.mark.parametrize("disposition", ["cap-hit", "timed-out"])
+def test_score_conversations_restraint_turn_that_never_replied_is_still_not_clean(
+    disposition: str,
+) -> None:
+    """The restraint-branch analogue of the `cap-hit`-with-a-correct-call test above: a restraint
+    turn (`R(t) = ∅`) that dispatches NOTHING (`restraint(dispatched_count)` is `True`) but whose
+    own disposition is `cap-hit` (rambled through every iteration without ever calling a tool or
+    finishing) or `timed-out` (never came back at all) rather than `replied` must still fail
+    `cleanThroughTurnH` at that turn — dispatching nothing is not sufficient for "clean" on a
+    restraint turn that never actually replied. A scorer that scored `clean and dispatched_count
+    == 0` alone, dropping the disposition check, would pass every other test in this file while
+    silently crediting a conversation that never finished its restraint turn."""
+    script = make_script("A-01", 1)  # one restraint turn (toolRequired: False)
+    non_replied_turn = make_turn(disposition=disposition, dispatches=(), final_reply=None)
+    trace = make_trace("A-01", (non_replied_turn,))
+
+    items, _ = toolcalls.score_conversations([(script, trace, ())], [], pack=make_pack(h=1))
+
+    assert items[0].outcome == "fail"
+    assert items[0].counts["cleanThroughTurnH"] == 0
+
+
+# --- determinismProbe (plan `:2262-2264`) -----------------------------------------------------
+
+
+def test_determinism_probe_identical_when_the_probe_matches_its_scored_counterpart() -> None:
+    trace = make_trace("A-01", tuple(make_turn() for _ in range(9)))
+    probe_trace = make_trace("A-01", tuple(make_turn() for _ in range(9)))
+    scored = [(_clean_nine_turn_script("A-01"), trace, ())]
+    probes = [(_clean_nine_turn_script("A-01"), probe_trace, ())]
+
+    _, aggregates = toolcalls.score_conversations(
+        scored, probes, pack=make_pack(h=4, determinism_probe_scripts=("A-01",))
+    )
+    probe = aggregates.determinismProbe
+    assert probe["ran"] is True
+    assert probe["identical"] is True
+    assert probe["differingTurns"] == []
+
+
+def test_determinism_probe_not_identical_when_a_probe_turn_differs() -> None:
+    trace = make_trace("A-01", tuple(make_turn() for _ in range(9)))
+    probe_turns = list(make_turn() for _ in range(9))
+    probe_turns[2] = make_turn(final_reply="a completely different reply")
+    probe_trace = make_trace("A-01", tuple(probe_turns))
+    scored = [(_clean_nine_turn_script("A-01"), trace, ())]
+    probes = [(_clean_nine_turn_script("A-01"), probe_trace, ())]
+
+    _, aggregates = toolcalls.score_conversations(
+        scored, probes, pack=make_pack(h=4, determinism_probe_scripts=("A-01",))
+    )
+    probe = aggregates.determinismProbe
+    assert probe["ran"] is True
+    assert probe["identical"] is False
+    assert probe["differingTurns"] == [{"scriptId": "A-01", "turns": [2]}]
+
+
+def test_determinism_probe_not_ran_when_fewer_probes_returned_than_declared() -> None:
+    """The fail-safe default (plan `:2260-2261`): an unrun/incomplete probe never buys
+    `identical: True` by omission."""
+    trace = make_trace("A-01", tuple(make_turn() for _ in range(9)))
+    scored = [(_clean_nine_turn_script("A-01"), trace, ())]
+
+    _, aggregates = toolcalls.score_conversations(
+        scored, [], pack=make_pack(h=4, determinism_probe_scripts=("A-01", "B-01"))
+    )
+    probe = aggregates.determinismProbe
+    assert probe["ran"] is False
+    assert probe["identical"] is False

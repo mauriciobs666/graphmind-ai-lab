@@ -1,14 +1,34 @@
 """`tool-caller` scorer (`ConversationScorer`-shaped, structural — `retrieval.py`'s/
 `classification.py`'s own precedent).
 
-Design: `docs/plans/small-model-benchmarking-s5-spec.md` §3.4, §5 Steps 0/3/4. Step 0 landed the two
-`-ml` §4.2(f)/§4.3.1 item 8 scoring constants and the cross-module union+disjointness assertion
-below. **Steps 3-4 land this module's per-turn pure functions** — one per FR-8 letter (a)-(g) plus
+Design: `docs/plans/small-model-benchmarking-s5-spec.md` §3.4, §5 Steps 0/3/4/5. Step 0 landed the
+two `-ml` §4.2(f)/§4.3.1 item 8 scoring constants and the cross-module union+disjointness assertion
+below. Steps 3-4 landed this module's per-turn pure functions — one per FR-8 letter (a)-(g) plus
 `restraint`, plus `clean_through_turn`/`hazard_points` (`-ml` §4.3 rule 5's three consumers) and
-`outcome_vectors_differ` (the determinism probe, plan item 12b). **Still not built**:
-`score_conversations` (the `ConversationScorer` assembly — Step 5), which is the only consumer that
-needs a loaded pack or a real `Conversation` script; everything below is tested against hand-built
-`TurnTrace`/`ConversationTrace` fixtures alone.
+`outcome_vectors_differ` (the determinism probe, plan item 12b). **Step 5 lands
+`score_conversations` itself** (the `ConversationScorer` assembly, §2.6/§2.3/§3.4's own bullet) —
+the only function in this module that needs a loaded pack or a real `Conversation` script;
+everything above it is tested against hand-built `TurnTrace`/`ConversationTrace` fixtures alone,
+and `score_conversations`'s own tests add hand-built `Conversation`/`Turn` scripts and a small
+duck-typed pack stand-in (no on-disk pack tree, matching `retrieval.py`'s offline-stub convention).
+
+**`Turn.expect`'s exact schema is `score_conversations`'s own synthesis, stated rather than left
+implicit** (§7's honesty convention): `conversations.jsonl` does not exist yet (S6's), so no prior
+unit pins one. The fields read here — `toolRequired: bool`, `tool: str` (the one required tool
+name), `args: Mapping[str, Any]` (its expected arguments), `finalReplyMustContain`/
+`finalReplyMustNotContain: Sequence[str]` — mirror `tests/test_convo.py`'s own hand-authored
+`expect` blocks and the plan's own `conversations.jsonl` row example (`:2188-2192`), extended with
+the symmetric `finalReplyMustNotContain` that `reply_matches_tool` already accepts. `argChecks`
+(the plan's own literal) is deliberately not read here — S5 spec §3.3 relocated the boundary/unit
+rule onto the pack's own `tools/schemas.json` (`boundaryRule`), so a scripted `argChecks` block, if
+S6 authors one, is inert data `score_conversations` tolerates and never reads, exactly as
+`assemble` already tolerates it (`convo.py`, `test_convo.py`'s own
+`test_assemble_tolerates_the_plans_own_conversation_row_literal`). One per-turn axis is a stated,
+deliberate gap: `stopping_when_done`'s own
+`continued_after_satisfied` flag is approximated here as "the turn was spurious or duplicated a
+call" — a real but incomplete proxy for "kept calling after `R(t)` was already satisfied" (a model
+re-issuing a second, differently-argued but still-required call is neither caught) — cheap to widen
+once S6's real scripts show whether it matters, and called out rather than silently narrowed.
 
 **Two design decisions this module makes on its own, stated rather than left implicit** (S5 spec
 §7's own honesty convention):
@@ -40,8 +60,17 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from modelbench import convo
-from modelbench.convo import ConversationTrace, TurnDisposition
-from modelbench.results import BinaryMetric, HazardPoint
+from modelbench.convo import Conversation, ConversationTrace, Turn, TurnDisposition
+from modelbench.packs import Pack
+from modelbench.results import (
+    BinaryMetric,
+    FunnelCounts,
+    HazardPoint,
+    ItemResult,
+    ItemTiming,
+    ToolCallAggregates,
+    TurnPositionRate,
+)
 from modelbench.stats import LEVEL_P95, percentile
 
 #: `-ml` §4.2(f)/§4.3.1 item 8, transcribed literally (plan `:5838-5844`): the population of the
@@ -577,3 +606,361 @@ def outcome_vectors_differ(a: ConversationTrace, b: ConversationTrace) -> tuple[
         if sig_a != sig_b:
             differing.append(i)
     return tuple(differing)
+
+
+# ==================================================================================================
+# Step 5 — `score_conversations`, the `ConversationScorer` assembly (S5 spec §2.3/§2.6/§3.4)
+# ==================================================================================================
+
+
+class _Tally:
+    """One run's `FunnelCounts`/`.funnel` inputs, accumulated in a single pass over every scored
+    conversation's turns (never a second pass — `score_conversations` builds `turn_clean` and these
+    counters together, since both read the same per-turn FR-8 verdict)."""
+
+    def __init__(self) -> None:
+        self.turnsDriven = 0
+        self.unrunnableModelChannel = 0
+        self.unrunnableToolChannel = 0
+        self.turnsScoredAfterUnrunnable = 0
+        self.restraintTurns = 0
+        self.restraintSuccesses = 0
+        self.requiredCallTurns = 0
+        self.nativeCallEmitted = 0
+        self.prosePseudoCall = 0
+        self.noAttempt = 0
+        self.turnsWithAnyCall = 0
+        self.dispatchedCalls = 0
+        self.factBearingReturns = 0
+        self.unscoreableReturns = 0
+        self.capHitScored = 0
+        self.rightToolSuccesses = 0
+        self.argsCorrectSuccesses = 0
+        self.argsCorrectTotal = 0
+        self.spuriousCount = 0
+        self.duplicateWithinCount = 0
+        self.duplicateCrossCount = 0
+        self.stoppingSuccesses = 0
+        self.stoppingTotal = 0
+        self.replyMatchSuccesses = 0
+
+    def funnel_counts(self) -> FunnelCounts:
+        return FunnelCounts(
+            turnsDriven=self.turnsDriven,
+            unrunnableModelChannel=self.unrunnableModelChannel,
+            unrunnableToolChannel=self.unrunnableToolChannel,
+            turnsScoredAfterUnrunnable=self.turnsScoredAfterUnrunnable,
+            restraintTurns=self.restraintTurns,
+            requiredCallTurns=self.requiredCallTurns,
+            nativeCallEmitted=self.nativeCallEmitted,
+            prosePseudoCall=self.prosePseudoCall,
+            noAttempt=self.noAttempt,
+            turnsWithAnyCall=self.turnsWithAnyCall,
+            dispatchedCalls=self.dispatchedCalls,
+            factBearingReturns=self.factBearingReturns,
+            unscoreableReturns=self.unscoreableReturns,
+        )
+
+    def funnel_metrics(self) -> tuple[BinaryMetric, ...]:
+        """The FR-8 (a)-(g) RATE metrics only (S5 spec §2.5) — pooled over every scored
+        conversation's turns/calls, never per-item. Excludes the funnel-head's own structural
+        counts (`funnel_counts()`, above) and `restraint` (`ToolCallAggregates`'s own field)."""
+        return (
+            BinaryMetric(
+                name="iterationCapHitRate",
+                successes=self.capHitScored,
+                n=self.turnsDriven - self.unrunnableModelChannel,
+                unit="turn",
+            ),
+            BinaryMetric(
+                name="native", successes=self.nativeCallEmitted, n=self.requiredCallTurns,
+                unit="turn",
+            ),
+            BinaryMetric(
+                name="rightToolChosen", successes=self.rightToolSuccesses,
+                n=self.turnsWithAnyCall, unit="turn",
+            ),
+            BinaryMetric(
+                name="allArgsCorrect", successes=self.argsCorrectSuccesses,
+                n=self.argsCorrectTotal, unit="call",
+            ),
+            BinaryMetric(
+                name="spurious", successes=self.spuriousCount, n=self.turnsWithAnyCall,
+                unit="turn",
+            ),
+            BinaryMetric(
+                name="duplicateWithinTurn", successes=self.duplicateWithinCount,
+                n=self.turnsWithAnyCall, unit="turn",
+            ),
+            BinaryMetric(
+                name="duplicateCrossTurn", successes=self.duplicateCrossCount,
+                n=self.turnsWithAnyCall, unit="turn",
+            ),
+            BinaryMetric(
+                name="stoppingWhenDone", successes=self.stoppingSuccesses, n=self.stoppingTotal,
+                unit="turn",
+            ),
+            BinaryMetric(
+                name="replyMatchesTool", successes=self.replyMatchSuccesses,
+                n=self.factBearingReturns, unit="turn",
+            ),
+        )
+
+
+def _required_tool_names(turn: Turn) -> set[str]:
+    return {turn.expect["tool"]} if turn.expect.get("toolRequired") else set()
+
+
+def _score_one_conversation(
+    script: Conversation,
+    trace: ConversationTrace,
+    *,
+    schemas: Sequence[Mapping[str, Any]],
+    tally: _Tally,
+) -> list[bool]:
+    """One conversation's own pass: folds every driven turn's FR-8 verdict into `tally` (mutated in
+    place) and returns `turn_clean`, aligned one-to-one with `trace.turns` — `clean_through_turn`/
+    `hazard_points`'s own required shape (§4 Step 4)."""
+    turn_clean: list[bool] = []
+    seen_unrunnable = False
+    prior_calls: list[tuple[str, Mapping[str, Any]]] = []
+
+    if len(trace.turns) < len(script.turns):
+        tally.unrunnableToolChannel += 1
+
+    for i, t_turn in enumerate(trace.turns):
+        s_turn = script.turns[i]
+        tally.turnsDriven += 1
+        mechanism = turn_disposition_scores(t_turn.turnDisposition)
+
+        if mechanism == "unrunnable":
+            tally.unrunnableModelChannel += 1
+            seen_unrunnable = True
+            turn_clean.append(True)  # moot: excluded by mechanism before `turn_clean` is read
+            prior_calls.extend((d.name, d.parsedArguments) for d in t_turn.dispatches)
+            continue
+
+        if seen_unrunnable:
+            tally.turnsScoredAfterUnrunnable += 1
+        if t_turn.turnDisposition == "cap-hit":
+            tally.capHitScored += 1
+
+        required_names = _required_tool_names(s_turn)
+        dispatched_count = len(t_turn.dispatches)
+
+        if not required_names:
+            tally.restraintTurns += 1
+            clean = restraint(dispatched_count)
+            if clean:
+                tally.restraintSuccesses += 1
+            turn_clean.append(clean and t_turn.turnDisposition == "replied")
+            prior_calls.extend((d.name, d.parsedArguments) for d in t_turn.dispatches)
+            continue
+
+        tally.requiredCallTurns += 1
+        if dispatched_count == 0:
+            prose_detected = detect_prose_pseudo_call(t_turn.finalReplyText)
+            form = emission_form(required=True, dispatched_count=0, prose_detected=prose_detected)
+            if form == "prose_pseudo_call":
+                tally.prosePseudoCall += 1
+            else:
+                tally.noAttempt += 1
+            turn_clean.append(False)
+            continue
+
+        tally.turnsWithAnyCall += 1
+        tally.nativeCallEmitted += 1
+        tally.dispatchedCalls += dispatched_count
+        dispatched_names = {d.name for d in t_turn.dispatches}
+        right = right_tool_chosen(required_names, dispatched_names)
+        if right:
+            tally.rightToolSuccesses += 1
+
+        expected_args = s_turn.expect.get("args", {})
+        matching_calls = [d for d in t_turn.dispatches if d.name in required_names]
+        args_all_correct = bool(matching_calls)
+        for call in matching_calls:
+            tally.argsCorrectTotal += 1
+            schema = properties_for_tool(schemas, call.name)
+            correctness = argument_correctness(expected_args, call.parsedArguments, schema=schema)
+            if correctness.allCorrect:
+                tally.argsCorrectSuccesses += 1
+            else:
+                args_all_correct = False
+
+        calls_this_turn = [(d.name, d.parsedArguments) for d in t_turn.dispatches]
+        spurious_dup = spurious_and_duplicate(
+            required_names, calls_this_turn, prior_completed_calls=prior_calls
+        )
+        if spurious_dup.spurious:
+            tally.spuriousCount += 1
+        if spurious_dup.duplicateWithinTurn:
+            tally.duplicateWithinCount += 1
+        if spurious_dup.duplicateCrossTurn:
+            tally.duplicateCrossCount += 1
+
+        tally.stoppingTotal += 1
+        continued = (
+            spurious_dup.spurious
+            or spurious_dup.duplicateWithinTurn
+            or spurious_dup.duplicateCrossTurn
+        )
+        stops_cleanly = stopping_when_done(
+            t_turn.turnDisposition, dispatched_count, continued_after_satisfied=continued
+        )
+        if stops_cleanly:
+            tally.stoppingSuccesses += 1
+
+        must_contain = s_turn.expect.get("finalReplyMustContain", [])
+        must_not_contain = s_turn.expect.get("finalReplyMustNotContain", [])
+        reply_ok = True
+        if must_contain or must_not_contain:
+            tally.factBearingReturns += 1
+            reply_ok = reply_matches_tool(t_turn.finalReplyText, must_contain, must_not_contain)
+            if reply_ok:
+                tally.replyMatchSuccesses += 1
+        else:
+            tally.unscoreableReturns += 1
+
+        clean = (
+            t_turn.turnDisposition == "replied"
+            and right
+            and args_all_correct
+            and not (
+                spurious_dup.spurious
+                or spurious_dup.duplicateWithinTurn
+                or spurious_dup.duplicateCrossTurn
+            )
+            and reply_ok
+        )
+        turn_clean.append(clean)
+        prior_calls.extend(calls_this_turn)
+
+    return turn_clean
+
+
+def _determinism_probe(
+    scored: Sequence[tuple[Conversation, ConversationTrace, Sequence[ItemTiming]]],
+    probes: Sequence[tuple[Conversation, ConversationTrace, Sequence[ItemTiming]]],
+    *,
+    pack: Pack,
+) -> Mapping[str, Any]:
+    """Plan `:2262-2264`'s exact shape: `{scriptIds, ran, identical, differingTurns}`. `ran` mirrors
+    `runner._drive_conversations`'s own definition (every declared probe script produced a trace);
+    `identical` is `ran` AND every probe's `outcome_vectors_differ` against its same-`scriptId`
+    counterpart in `scored` is empty — `False`, never vacuously `True`, when a probe is missing its
+    counterpart entirely (a pack/runner defect, not a legitimate "identical")."""
+    declared_ids = tuple(pack.manifest.get("sampling", {}).get("determinismProbeScripts", ()))
+    scored_by_id = {script.scriptId: trace for script, trace, _ in scored}
+    ran = len(probes) == len(declared_ids)
+
+    differing: list[dict[str, Any]] = []
+    all_matched = True
+    for probe_script, probe_trace, _ in probes:
+        counterpart = scored_by_id.get(probe_script.scriptId)
+        if counterpart is None:
+            all_matched = False
+            continue
+        diff = outcome_vectors_differ(probe_trace, counterpart)
+        if diff:
+            differing.append({"scriptId": probe_script.scriptId, "turns": list(diff)})
+
+    identical = ran and all_matched and not differing
+    return {
+        "scriptIds": list(declared_ids),
+        "ran": ran,
+        "identical": identical,
+        "differingTurns": differing,
+    }
+
+
+def score_conversations(
+    scored: Sequence[tuple[Conversation, ConversationTrace, Sequence[ItemTiming]]],
+    probes: Sequence[tuple[Conversation, ConversationTrace, Sequence[ItemTiming]]],
+    *,
+    pack: Pack,
+) -> tuple[tuple[ItemResult, ...], ToolCallAggregates]:
+    """The `ConversationScorer` Protocol method (S5 spec §3.4's own bullet): assembles every
+    function above into the per-conversation `ItemResult`s and the run's `ToolCallAggregates`.
+
+    `items` carries EXACTLY ONE `ItemResult` per `scored` conversation (§2.6's own load-bearing
+    ruling, traced against `_paired_rows`/`_aggregate_item_mismatches`/`PairedOutcomes` — never one
+    per turn). `pairingKey = (scriptId, replicate, H - 1)`, `itemId = scriptId`. `probes` are
+    diagnostic only (plan `:2248`: "excluded from every denominator") and contribute nothing to
+    `items`/`FunnelCounts`/`hazard` — their only consumer is `determinismProbe`, below.
+    """
+    h = pack.manifest["metrics"]["cleanThroughTurnH"]["H"]
+    schemas = pack.prompt_config().toolSchemas
+
+    tally = _Tally()
+    traces: list[ConversationTrace] = []
+    turn_clean_by_conversation: list[list[bool]] = []
+    items: list[ItemResult] = []
+
+    for script, trace, _timings in scored:
+        turn_clean = _score_one_conversation(script, trace, schemas=schemas, tally=tally)
+        traces.append(trace)
+        turn_clean_by_conversation.append(turn_clean)
+
+        state = clean_through_turn(trace, turn_clean, h=h)
+        pairing_key = (script.scriptId, str(script.replicate), str(h - 1))
+        if state == "clean":
+            outcome, scoreable, counts = "pass", {"cleanThroughTurnH": True}, {
+                "cleanThroughTurnH": 1
+            }
+        elif state == "failed":
+            outcome, scoreable, counts = "fail", {"cleanThroughTurnH": True}, {
+                "cleanThroughTurnH": 0
+            }
+        else:
+            outcome, scoreable, counts = "unrunnable", {"cleanThroughTurnH": False}, {}
+        items.append(
+            ItemResult(
+                itemId=script.scriptId,
+                pairingKey=pairing_key,
+                outcome=outcome,  # type: ignore[arg-type]
+                scoreable=scoreable,
+                counts=counts,
+                timing=None,
+            )
+        )
+
+    # The hazard/per-position curves run the FULL trace length (`h=None`) — a report artifact
+    # distinct from `cleanThroughTurnH`'s own H-bounded headline verdict above (S5 spec §3.4:
+    # `hazard_points`'s `h` "bounds how many positions are computed"; the headline's own H is a
+    # different cut, already applied via `clean_through_turn` alone).
+    hazard = hazard_points(traces, turn_clean_by_conversation, h=None)
+    per_turn_position = tuple(
+        TurnPositionRate(turnIndex=point.turnIndex, metric=point.metric) for point in hazard
+    )
+
+    clean_count = sum(1 for it in items if it.outcome == "pass")
+    scoreable_count = sum(1 for it in items if it.scoreable.get("cleanThroughTurnH") is True)
+    clean_through_turn_metric = (
+        BinaryMetric(
+            name="cleanThroughTurnH", successes=clean_count, n=scoreable_count,
+            unit="conversation",
+        )
+        if scoreable_count
+        else None
+    )
+
+    restraint_metric = (
+        BinaryMetric(
+            name="restraint", successes=tally.restraintSuccesses, n=tally.restraintTurns,
+            unit="turn",
+        )
+        if tally.restraintTurns
+        else None
+    )
+
+    aggregates = ToolCallAggregates(
+        cleanThroughTurn=clean_through_turn_metric,
+        perTurnPosition=per_turn_position,
+        funnel=tally.funnel_metrics(),
+        funnelCounts=tally.funnel_counts(),
+        restraint=restraint_metric,
+        hazard=hazard,
+        determinismProbe=_determinism_probe(scored, probes, pack=pack),
+    )
+    return tuple(items), aggregates
