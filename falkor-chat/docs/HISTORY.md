@@ -5,6 +5,43 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-13 — salesperson-ui S12a: session module, API dispatch layer, routing
+
+**What:** Closed S12a per `docs/plans/salesperson-ui.md` §5.1's S12a row. Built the storefront
+SPA's session module (typed participant/presenter credential storage, graceful degradation on a
+throwing `localStorage`), the pure dispatch layer classifying every one of §5.3's fourteen
+client-behavior rules (C1-C14 — per-credential 401/403 dispatch, per-route 504 re-read, the two
+409s, the 503/`turn_not_scheduled` split, the 422 field/audience split, the "anything unruled is
+loud" fallback, one shared polling constant, no automatic retry except the one-shot catalog
+fetch), the TanStack Query hooks wiring that classification to actual network re-reads and
+navigation, and `react-router-dom` routing (the plan's sanctioned per-step dependency choice) with
+placeholder screens proving a live join-to-chat round trip against the real server. Landed the two
+shared-entry-file mount slots (`App.tsx`'s i18n-provider/layout-shell slots, `index.css`'s
+Tailwind layer) so S12b/S12c can mount without ever touching a shared file.
+
+**Review:** `docs/reviews/salesperson-ui-s12a.md`, two passes. Pass 1 — needs changes: two
+blockers, both the same failure shape — C4's per-route 504 re-read and C8's "one shared polling
+constant" were tested only as pure classification, never at the point either rule actually takes
+effect, and both were proven load-bearing by a reverted mutation that left the 85-test suite
+green (a wrong re-read endpoint, and a hard-coded polling literal, respectively). One major —
+`routes.tsx`'s file ownership had no authorized path for S12d/S13/S14 to mount their real views,
+not blocking S12a itself but blocking safe dispatch of those three; closed separately as plan
+v1.34 (two mechanisms: a narrow additive edit right for S12d/S13, serialized on that one file; a
+zero-touch seed-and-hand-off from S12b into S14's own subtree). One minor —
+`presenterSession` sat in the generic `PRESENTER_ROUTES` set, narrowing C13's unhandled-fallback
+guarantee for one contractually-impossible cell. All three fixed and independently
+reverted-mutation-verified in Pass 2 — approve.
+
+**Verified independently, not taken on report, at every stage:** full suite reran after both the
+original delivery and the fix round (85/85, then 92/92 green); `tsc -b` and production build
+(`/shop/`-prefixed assets) clean both times; every delivered file diffed against the reported
+list; `main.tsx` confirmed byte-identical to the S5 scaffold commit; C1-C14's route-enumeration
+completeness read cell-by-cell against §5.3's own tables rather than trusted from the delegate's
+naming; three of the delegate's own reported mutation-test results independently re-derived from
+scratch (not merely re-read) by both `teco` and, at the gate, `analyst`.
+
+**Committed:** `bbd9eb7` (code + review), `b15d0bb` (the v1.34 plan amendment).
+
 ## 2026-09-13 — fix: `find_update_shortlist` title-fuzzy query crashed on common RediSearch metacharacters
 
 **What:** Fixed `document-ingestion2` QA Defect 1
