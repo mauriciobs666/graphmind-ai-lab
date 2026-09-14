@@ -58,7 +58,7 @@ The plan splits this tree across steps so that parallel steps never collide. Res
 | `playwright.config.ts` | S5 scaffolded → S12b extends |
 | `src/{main.tsx,index.css}` — the SPA's shared entry files | S5 scaffolded → **S12a owns thereafter; no later step edits them** |
 | `src/App.tsx` | S5 scaffolded → S12a → **S12b** (v1.36, §4.11: reorders the three providers to wrap `RouterProvider` normally, one narrow structural edit — closes the review's Major); no step edits it after |
-| `src/api/**`, `src/session/**` | S12a |
+| `src/api/**`, `src/session/**` | S12a — **except two named files**: `src/session/SessionContext.tsx` and `src/api/hooks.ts` gain one narrow, additive S13 grant (`welcomeMessage` field + `useJoin()` one-liner; see `docs/plans/salesperson-ui.md` §4.12, v1.37); every other file in both subtrees stays S12a-only |
 | `src/routes.tsx` | S12a (builds it) → S12c → **S12b** (v1.36, §4.11: wraps the three routes in one pathless layout route, `element: <LayoutShell/>`) → S13, S12d — each adds one narrow, additive swap; see `docs/plans/salesperson-ui.md` §5.0 |
 | `src/layout/**`, `src/components/sheets/**` | S12b |
 | `src/i18n/**`, `src/locales/**` | S12c |
