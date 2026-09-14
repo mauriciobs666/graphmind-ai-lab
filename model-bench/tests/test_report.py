@@ -2529,9 +2529,13 @@ def test_each_no_verdict_cause_prints_its_own_reason_and_not_the_other_one() -> 
 
 
 def _funnel_counts(**overrides) -> FunnelCounts:
-    """Every one of the thirteen fields distinct and non-zero by default, so a mutant that
+    """Every one of the sixteen fields distinct and non-zero by default, so a mutant that
     dropped or transposed one would not coincidentally still match (mirrors `test_results.py`'s
-    own `FunnelCounts` round-trip fixture)."""
+    own `FunnelCounts` round-trip fixture). The last three
+    (`argsOmittedRequired`/`argsWrongValue`/`argsBoundaryUnit`) are the 2026-09-14 correction's own
+    addition (review `small-model-benchmarking-s5.md` Finding 3, option (a)) — kept distinct from
+    every other field's value so a mutant that dropped or transposed one of the three is caught the
+    same way the pre-existing thirteen are."""
     base = dict(
         turnsDriven=360,
         unrunnableModelChannel=13,
@@ -2546,6 +2550,9 @@ def _funnel_counts(**overrides) -> FunnelCounts:
         dispatchedCalls=167,
         factBearingReturns=118,
         unscoreableReturns=24,
+        argsOmittedRequired=9,
+        argsWrongValue=12,
+        argsBoundaryUnit=6,
     )
     base.update(overrides)
     return FunnelCounts(**base)
@@ -2570,8 +2577,17 @@ def _toolcaller_run(run_id: str, **kwargs) -> RunResult:
 def test_render_funnel_prints_the_full_hierarchy_with_real_numbers() -> None:
     """`-ml` §4.3 rule 3's illustrated shape (plan `ml.md:2098-2111`) — every named line present,
     with the fixture's own distinct numbers, so a mutant that dropped a line or mixed up two
-    fields would fail here rather than being papered over by a repeated value."""
-    aggregates = ToolCallAggregates(funnelCounts=_funnel_counts())
+    fields would fail here rather than being papered over by a repeated value.
+
+    2026-09-14 correction (review Finding 3, option (a)): also asserts the two new
+    `argsOmittedRequired`/`argsWrongValue` lines (`argsBoundaryUnit` is the "of which" annotation
+    on the second one, never its own top-level line) and the `allArgsCorrect`-derived denominator
+    cross-reference, read off `run.aggregates.funnel` rather than a second, derivable copy stored
+    on `FunnelCounts` itself (§7 rule 4)."""
+    aggregates = ToolCallAggregates(
+        funnelCounts=_funnel_counts(),
+        funnel=(BinaryMetric(name="allArgsCorrect", successes=130, n=150, unit="call"),),
+    )
     r = _toolcaller_run("cand", aggregates=aggregates)
     lines = _render_funnel(r, "cand")
     text = "\n".join(lines)
@@ -2589,8 +2605,19 @@ def test_render_funnel_prints_the_full_hierarchy_with_real_numbers() -> None:
         ("dispatched calls", 167),
         ("fact-bearing returns", 118),
         ("unscoreable returns", 24),
+        ("args omitted required", 9),
+        ("args wrong value", 12),
     ):
         assert any(label in ln and str(value) in ln for ln in lines), (label, value, text)
+
+    # The `allArgsCorrect` denominator annotation on the "args omitted required" line.
+    assert any(
+        "args omitted required" in ln and "150" in ln and "correct tool" in ln for ln in lines
+    ), text
+    # The "of which boundary/unit: N" annotation on the "args wrong value" line.
+    assert any(
+        "args wrong value" in ln and "of which boundary/unit: 6" in ln for ln in lines
+    ), text
 
 
 def test_render_funnel_cross_references_restraint_rate_without_a_second_stored_copy() -> None:

@@ -542,6 +542,23 @@ class FunnelCounts:
     dispatchedCalls: int  # denominator for (d); calls, not turns
     factBearingReturns: int  # denominator for (g)
     unscoreableReturns: int
+    # --- 2026-09-14 correction (review small-model-benchmarking-s5.md Finding 3, option (a)) ---
+    # `-ml` §4.2(d)'s required per-argument failure decomposition, pooled over exactly the same
+    # calls `allArgsCorrect` (`ToolCallAggregates.funnel`) counts as its own denominator. Declared
+    # with a `= 0` DEFAULT and placed after the 13 pre-existing, non-defaulted fields above (a
+    # Python dataclass requirement — fields with a default cannot precede one without) rather than
+    # inline after `dispatchedCalls`; this does NOT change the rendered table's line order, which
+    # `report.py`'s `_render_funnel` already controls by an explicit, hand-written line list. No
+    # `_encode`/`_decode` change is needed: both already treat `FunnelCounts` generically
+    # (`dict(vars(value))` / `FunnelCounts(**value)`), and the `= 0` default makes that
+    # constructor call succeed even against an older, already-serialized dict missing these keys.
+    argsOmittedRequired: int = 0  # count of REQUIRED arguments absent from a call in the
+    # `allArgsCorrect` denominator (per argument, not per call)
+    argsWrongValue: int = 0  # count of arguments present but != expected after canonicalization
+    # (same denominator, same per-argument unit)
+    argsBoundaryUnit: int = 0  # a NAMED SUBSET of argsWrongValue, never a sibling bucket: an
+    # argument counted here is also counted in argsWrongValue (mirrors
+    # `ArgumentCorrectness.boundaryUnit`'s own docstring)
 
 
 @dataclass(frozen=True)

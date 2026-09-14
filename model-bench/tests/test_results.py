@@ -904,8 +904,49 @@ def test_extraction_aggregates_round_trips_lucky_pass_count(tmp_root) -> None:
 
 def test_tool_call_aggregates_round_trips_funnel_counts(tmp_root) -> None:
     """`FunnelCounts` (S5 spec §2.5/§3.1) is a new, additive field on `ToolCallAggregates` —
-    every one of its thirteen fields distinct and non-zero, so a mutant that dropped or transposed
-    one would not coincidentally still match."""
+    every one of its sixteen fields distinct and non-zero, so a mutant that dropped or transposed
+    one would not coincidentally still match. The last three (`argsOmittedRequired`/
+    `argsWrongValue`/`argsBoundaryUnit`) are the 2026-09-14 correction's own defaulted addition
+    (review `small-model-benchmarking-s5.md` Finding 3, option (a))."""
+    funnel_counts = FunnelCounts(
+        turnsDriven=13,
+        unrunnableModelChannel=1,
+        unrunnableToolChannel=2,
+        turnsScoredAfterUnrunnable=3,
+        restraintTurns=4,
+        requiredCallTurns=5,
+        nativeCallEmitted=6,
+        prosePseudoCall=7,
+        noAttempt=8,
+        turnsWithAnyCall=9,
+        dispatchedCalls=10,
+        factBearingReturns=11,
+        unscoreableReturns=12,
+        argsOmittedRequired=14,
+        argsWrongValue=15,
+        argsBoundaryUnit=16,
+    )
+    aggregates = ToolCallAggregates(funnelCounts=funnel_counts)
+    store(_run("r-tool-call-funnel-counts", aggregates=aggregates), tmp_root)
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert [r.reason for r in invalid] == []
+    assert len(valid) == 1
+    restored = valid[0].aggregates
+    assert restored.funnelCounts == funnel_counts
+    assert restored.funnelCounts.argsOmittedRequired == 14
+    assert restored.funnelCounts.argsWrongValue == 15
+    assert restored.funnelCounts.argsBoundaryUnit == 16
+    # Never a rate, never reaching the generic Arms table (S5 spec §2.5).
+    assert restored.named_metrics() == ()
+
+
+def test_funnel_counts_decode_defaults_the_new_argument_decomposition_fields_to_zero() -> None:
+    """Backward compatibility with an already-stored run (2026-09-14 correction, review Finding 3
+    option (a)): a record written before this correction has no
+    `argsOmittedRequired`/`argsWrongValue`/`argsBoundaryUnit` keys in its `funnelCounts` dict at
+    all. `RunResult.from_dict` (the same reader `load_history` uses) must still construct a valid
+    `FunnelCounts`, absorbing the three missing keys via their `= 0` dataclass default — not
+    raising a `TypeError` for missing required arguments."""
     funnel_counts = FunnelCounts(
         turnsDriven=13,
         unrunnableModelChannel=1,
@@ -921,15 +962,20 @@ def test_tool_call_aggregates_round_trips_funnel_counts(tmp_root) -> None:
         factBearingReturns=11,
         unscoreableReturns=12,
     )
-    aggregates = ToolCallAggregates(funnelCounts=funnel_counts)
-    store(_run("r-tool-call-funnel-counts", aggregates=aggregates), tmp_root)
-    valid, invalid = load_history(tmp_root, packId=PACK)
-    assert [r.reason for r in invalid] == []
-    assert len(valid) == 1
-    restored = valid[0].aggregates
-    assert restored.funnelCounts == funnel_counts
-    # Never a rate, never reaching the generic Arms table (S5 spec §2.5).
-    assert restored.named_metrics() == ()
+    record = _run("r1", aggregates=ToolCallAggregates(funnelCounts=funnel_counts)).to_dict()
+    fc_dict = record["aggregates"]["funnelCounts"]
+    # `.to_dict()` always emits every current field (including a `= 0` default) — simulate a
+    # record written before this correction existed by deleting the three keys outright, mirroring
+    # `test_from_dict_is_the_one_place_the_legacy_fallback_belongs`'s own `del record[...]` pattern.
+    del fc_dict["argsOmittedRequired"]
+    del fc_dict["argsWrongValue"]
+    del fc_dict["argsBoundaryUnit"]
+
+    restored = RunResult.from_dict(record)
+
+    assert restored.aggregates.funnelCounts.argsOmittedRequired == 0
+    assert restored.aggregates.funnelCounts.argsWrongValue == 0
+    assert restored.aggregates.funnelCounts.argsBoundaryUnit == 0
 
 
 def test_tool_call_aggregates_round_trips_hazard_points_with_censored_count(tmp_root) -> None:
@@ -980,6 +1026,33 @@ def test_tool_call_aggregates_round_trips_determinism_probe(tmp_root) -> None:
     assert len(valid) == 1
     restored = valid[0].aggregates
     assert restored.determinismProbe == probe
+
+
+def test_tool_call_aggregates_round_trips_iteration_summary(tmp_root) -> None:
+    """`iterationSummary` (S5 spec §4.4 item 4/§5 Step 6) is, like `determinismProbe`, a plain
+    JSON-native mapping carrying `-ml` §4.2(f)'s `I(t)` mean/p95 (restricted to
+    `replied`/`cap-hit` turns) plus the unrestricted `yCalls`/`y` pair `Y_calls / Y` (§11.4) is
+    read off of — no special-case `_encode`/`_decode` branch needed, round-tripping through the
+    same generic `vars(agg).items()` dispatch."""
+    summary = {
+        "n": 3,
+        "capHitCount": 1,
+        "mean": 4.5,
+        "meanCensored": True,
+        "p95": 8.0,
+        "p95Censored": False,
+        "yCalls": 9,
+        "y": 4,
+    }
+    aggregates = ToolCallAggregates(iterationSummary=summary)
+    store(_run("r-tool-call-iteration-summary", aggregates=aggregates), tmp_root)
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert [r.reason for r in invalid] == []
+    assert len(valid) == 1
+    restored = valid[0].aggregates
+    assert restored.iterationSummary == summary
+    # Diagnostic only, like `determinismProbe` — never reaches the generic Arms table.
+    assert restored.named_metrics() == ()
 
 
 def test_tool_call_aggregates_named_metrics_excludes_hazard_funnel_counts_and_per_turn_position(

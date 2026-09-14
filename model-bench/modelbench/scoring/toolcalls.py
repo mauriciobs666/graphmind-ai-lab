@@ -633,6 +633,12 @@ class _Tally:
         self.dispatchedCalls = 0
         self.factBearingReturns = 0
         self.unscoreableReturns = 0
+        #: 2026-09-14 correction (review small-model-benchmarking-s5.md Finding 3, option (a)):
+        #: `argument_correctness`'s per-argument failure decomposition, wired at the
+        #: `matching_calls` loop below rather than discarded past `.allCorrect`.
+        self.argsOmittedRequired = 0
+        self.argsWrongValue = 0
+        self.argsBoundaryUnit = 0
         self.capHitScored = 0
         self.rightToolSuccesses = 0
         self.argsCorrectSuccesses = 0
@@ -664,6 +670,9 @@ class _Tally:
             dispatchedCalls=self.dispatchedCalls,
             factBearingReturns=self.factBearingReturns,
             unscoreableReturns=self.unscoreableReturns,
+            argsOmittedRequired=self.argsOmittedRequired,
+            argsWrongValue=self.argsWrongValue,
+            argsBoundaryUnit=self.argsBoundaryUnit,
         )
 
     def funnel_metrics(self) -> tuple[BinaryMetric, ...]:
@@ -789,6 +798,9 @@ def _score_one_conversation(
             tally.argsCorrectTotal += 1
             schema = properties_for_tool(schemas, call.name)
             correctness = argument_correctness(expected_args, call.parsedArguments, schema=schema)
+            tally.argsOmittedRequired += len(correctness.omittedRequired)
+            tally.argsWrongValue += len(correctness.wrongValue)
+            tally.argsBoundaryUnit += len(correctness.boundaryUnit)
             if correctness.allCorrect:
                 tally.argsCorrectSuccesses += 1
             else:

@@ -716,6 +716,13 @@ def _render_funnel(run: RunResult, arm_label: str) -> list[str]:
     The restraint line's own "-> k/n" annotation is computed here, at render time, by
     cross-referencing `ToolCallAggregates.restraint` — never a second, derivable copy stored on
     `FunnelCounts` (§7 rule 4).
+
+    2026-09-14 correction (review `small-model-benchmarking-s5.md` Finding 3, option (a)): two
+    more lines, `-ml` §4.2(d)'s per-argument failure decomposition
+    (`argsOmittedRequired`/`argsWrongValue`, with `argsBoundaryUnit` folded into the second line's
+    own "-> of which boundary/unit: N" annotation), nested under "dispatched calls" and denominated
+    by cross-referencing `ToolCallAggregates.funnel`'s own `allArgsCorrect` entry — same discipline
+    as the restraint annotation above, never a second stored copy.
     """
     fc = run.aggregates.funnelCounts if isinstance(run.aggregates, ToolCallAggregates) else None
     if fc is None:
@@ -724,6 +731,10 @@ def _render_funnel(run: RunResult, arm_label: str) -> list[str]:
     restraint_note = (
         f"   -> restraint rate {restraint.successes}/{restraint.n}" if restraint is not None else ""
     )
+    # 2026-09-14 correction (review Finding 3, option (a)): the denominator for the two new
+    # decomposition lines is `allArgsCorrect`'s own `n` — never a second, derivable copy stored on
+    # `FunnelCounts` itself (§7 rule 4).
+    args_correct_n = next((m.n for m in run.aggregates.funnel if m.name == "allArgsCorrect"), 0)
     lines = [
         f"### Funnel — {arm_label}",
         "",
@@ -743,6 +754,10 @@ def _render_funnel(run: RunResult, arm_label: str) -> list[str]:
         f"  turns with >=1 call           {fc.turnsWithAnyCall}   -> (c), (e), (f) denominators",
         f"  dispatched calls              {fc.dispatchedCalls}   "
         "-> (d) denominator (calls, not turns)",
+        f"    args omitted required       {fc.argsOmittedRequired}   "
+        f"-> per-argument split of (d)'s {args_correct_n} calls w/ correct tool",
+        f"    args wrong value            {fc.argsWrongValue}   "
+        f"-> of which boundary/unit: {fc.argsBoundaryUnit}",
         f"  fact-bearing returns          {fc.factBearingReturns}   -> (g) denominator",
         f"  unscoreable returns           {fc.unscoreableReturns}",
         "```",

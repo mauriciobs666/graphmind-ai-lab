@@ -1459,3 +1459,190 @@ def test_determinism_probe_not_ran_when_fewer_probes_returned_than_declared() ->
     probe = aggregates.determinismProbe
     assert probe["ran"] is False
     assert probe["identical"] is False
+
+
+# ==================================================================================================
+# 2026-09-14 correction (review `small-model-benchmarking-s5.md` Finding 3, option (a)):
+# `argument_correctness`'s per-argument failure decomposition wired into `_Tally`/`FunnelCounts`
+# ==================================================================================================
+
+_DECOMPOSITION_SCHEMAS: tuple[Mapping[str, Any], ...] = (
+    {
+        "type": "function",
+        "function": {
+            "name": "custom_tool",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "productName": {"type": "string"},
+                    "quantity": {"type": "integer"},
+                    "maxPrice": {
+                        "type": "number",
+                        "boundaryRule": {"confusedWith": [5000], "inclusive": True},
+                    },
+                },
+                "required": ["productName", "quantity", "maxPrice"],
+            },
+        },
+    },
+)
+
+
+def _decomposition_script(script_id: str, *, args: Mapping[str, Any]) -> Conversation:
+    """A 3-turn script whose middle turn requires `custom_tool`, called with `args` as the
+    scoring oracle's expected arguments — flanked by two ordinary restraint turns so the fixture
+    exercises `score_conversations`'s real assembly path, not just a single isolated turn."""
+    turns = [
+        _restraint_turn(0),
+        Turn(
+            seq=1,
+            user="turn 1",
+            expect={"toolRequired": True, "tool": "custom_tool", "args": dict(args)},
+        ),
+        _restraint_turn(2),
+    ]
+    return Conversation(scriptId=script_id, shape="A", replicate=1, turns=tuple(turns))
+
+
+def test_score_conversations_wires_argument_correctness_decomposition_into_funnel_counts() -> None:
+    """2026-09-14 correction (review Finding 3, option (a)): `argument_correctness`'s three
+    per-argument failure tuples — previously computed and immediately discarded at
+    `_score_one_conversation`'s `matching_calls` loop — now move `FunnelCounts.argsOmittedRequired`
+    /`.argsWrongValue`/`.argsBoundaryUnit`. One dispatched call, three simultaneous argument
+    defects: a missing required `productName` (omitted), a wrong, non-boundary `quantity`, and a
+    boundary-confused `maxPrice` (the schema's own `confusedWith` value) — so `wrongValue` counts
+    both `quantity` and `maxPrice` while `boundaryUnit` counts only `maxPrice`, exactly `-ml`
+    §4.2(d)'s "`wrong_value: 12, of which boundary/unit: 7`" shape at a small scale."""
+    expected_args = {"productName": "Pad", "quantity": 2, "maxPrice": 49.99}
+    dispatched_args = {"quantity": 3, "maxPrice": 5000}  # productName omitted entirely
+    script = _decomposition_script("A-01", args=expected_args)
+    trace = make_trace(
+        "A-01",
+        (
+            make_turn(),
+            make_turn(dispatches=(make_dispatch("custom_tool", dispatched_args),)),
+            make_turn(),
+        ),
+    )
+
+    _, aggregates = toolcalls.score_conversations(
+        [(script, trace, ())], [], pack=make_pack(h=1, tool_schemas=_DECOMPOSITION_SCHEMAS)
+    )
+
+    fc = aggregates.funnelCounts
+    assert fc.argsOmittedRequired == 1
+    assert fc.argsWrongValue == 2
+    assert fc.argsBoundaryUnit == 1
+
+
+def test_score_conversations_argument_decomposition_counters_stay_zero_when_all_correct() -> None:
+    """The mirror case: a dispatched call whose every expected argument matches leaves all three
+    new counters at their `FunnelCounts` default of 0 — the correction's own no-op path."""
+    expected_args = {"productName": "Pad", "quantity": 2, "maxPrice": 49.99}
+    script = _decomposition_script("A-01", args=expected_args)
+    trace = make_trace(
+        "A-01",
+        (
+            make_turn(),
+            make_turn(dispatches=(make_dispatch("custom_tool", dict(expected_args)),)),
+            make_turn(),
+        ),
+    )
+
+    _, aggregates = toolcalls.score_conversations(
+        [(script, trace, ())], [], pack=make_pack(h=1, tool_schemas=_DECOMPOSITION_SCHEMAS)
+    )
+
+    fc = aggregates.funnelCounts
+    assert fc.argsOmittedRequired == 0
+    assert fc.argsWrongValue == 0
+    assert fc.argsBoundaryUnit == 0
+
+
+_MULTI_CALL_SCHEMAS: tuple[Mapping[str, Any], ...] = (
+    {
+        "type": "function",
+        "function": {
+            "name": "custom_tool",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "productName": {"type": "string"},
+                    "quantity": {"type": "integer"},
+                    "maxPrice": {
+                        "type": "number",
+                        "boundaryRule": {"confusedWith": [5000, 4999], "inclusive": True},
+                    },
+                },
+                "required": ["productName", "quantity", "maxPrice"],
+            },
+        },
+    },
+)
+
+
+def test_score_conversations_argument_decomposition_sums_across_every_matching_call() -> None:
+    """`_Tally`'s three new accumulators must SUM every matching call's own contribution across
+    the whole run (`+=`), never retain only the last one's (`=`) — a distinction the two tests
+    above cannot make, since each drives exactly one qualifying call, where `+=`/`=` are
+    indistinguishable.
+
+    Four turns, four dispatched calls to the one required tool, each contributing a distinct,
+    known defect count:
+    - turn 0 omits `productName` only: `(omitted +1, wrong +0, boundary +0)`.
+    - turn 1 has a wrong, non-boundary `quantity` only: `(+0, +1, +0)`.
+    - turn 2's `maxPrice` hits the schema's FIRST `confusedWith` value: `(+0, +1, +1)`.
+    - turn 3's `maxPrice` hits the schema's SECOND, DIFFERENT `confusedWith` value: `(+0, +1, +1)`.
+
+    Summed: `argsOmittedRequired=1`, `argsWrongValue=3`, `argsBoundaryUnit=2`. Under a
+    `tally.x = len(...)` overwrite instead of `+=`, the final `FunnelCounts` would read turn 3's
+    own contribution alone (`0, 1, 1`) — every one of the three assertions below would then fail,
+    not just one, since turns 0-2's contributions are each fully lost on every axis they set."""
+    expected_args = {"productName": "Pad", "quantity": 2, "maxPrice": 49.99}
+    turns = tuple(
+        Turn(
+            seq=i,
+            user=f"turn {i}",
+            expect={"toolRequired": True, "tool": "custom_tool", "args": dict(expected_args)},
+        )
+        for i in range(4)
+    )
+    script = Conversation(scriptId="A-01", shape="A", replicate=1, turns=turns)
+    trace = make_trace(
+        "A-01",
+        (
+            make_turn(
+                dispatches=(make_dispatch("custom_tool", {"quantity": 2, "maxPrice": 49.99}),)
+            ),
+            make_turn(
+                dispatches=(
+                    make_dispatch(
+                        "custom_tool", {"productName": "Pad", "quantity": 9, "maxPrice": 49.99}
+                    ),
+                )
+            ),
+            make_turn(
+                dispatches=(
+                    make_dispatch(
+                        "custom_tool", {"productName": "Pad", "quantity": 2, "maxPrice": 5000}
+                    ),
+                )
+            ),
+            make_turn(
+                dispatches=(
+                    make_dispatch(
+                        "custom_tool", {"productName": "Pad", "quantity": 2, "maxPrice": 4999}
+                    ),
+                )
+            ),
+        ),
+    )
+
+    _, aggregates = toolcalls.score_conversations(
+        [(script, trace, ())], [], pack=make_pack(h=4, tool_schemas=_MULTI_CALL_SCHEMAS)
+    )
+
+    fc = aggregates.funnelCounts
+    assert fc.argsOmittedRequired == 1
+    assert fc.argsWrongValue == 3
+    assert fc.argsBoundaryUnit == 2
