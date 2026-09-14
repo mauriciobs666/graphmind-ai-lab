@@ -236,6 +236,25 @@ def test_dispatch_unknown_tool_name_returns_an_error_rather_than_raising(sim: Mo
     assert len(env.trace()) == 1
 
 
+@pytest.mark.parametrize(
+    "name",
+    [["not_a_real_tool"], {"x": 1}],
+    ids=["list-name", "dict-name"],
+)
+def test_dispatch_unhashable_tool_name_returns_an_error_rather_than_raising(
+    sim: ModuleType, name: Any
+) -> None:
+    """TD-1 regression (`docs/test-reports/small-model-benchmarking-s5-report.md`): a non-hashable
+    `name` (a `list`/`dict` — a shape an adversarially malformed or fuzzed tool call could carry)
+    must hit the same `{"error": "unknown-tool", ...}` totality contract as any other unknown name,
+    coerced to `str` for the payload, rather than raising `TypeError` out of the `_handlers.get`
+    lookup."""
+    env = _fresh_env(sim)
+    result = env.dispatch(name, {})
+    assert result == {"error": "unknown-tool", "name": str(name)}
+    assert len(env.trace()) == 1
+
+
 # --------------------------------------------------------------------------------------------
 # (b) E1 — the dispatch-totality property test
 # --------------------------------------------------------------------------------------------

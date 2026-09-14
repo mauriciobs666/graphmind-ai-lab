@@ -111,7 +111,7 @@ class ShopEnvironment:
     def dispatch(self, name: str, arguments: Mapping[str, Any]) -> Any:
         args = dict(arguments) if isinstance(arguments, Mapping) else {}
         safe_name = name if isinstance(name, str) else str(name)
-        handler = self._handlers.get(name)
+        handler = self._handlers.get(safe_name)
         result: Any
         if handler is None:
             result = {"error": "unknown-tool", "name": safe_name}
