@@ -1,6 +1,6 @@
 # Document ingestion — update & delete — Test Report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** —
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** —
 
 Execution of `docs/test-plans/document-ingestion2.md` — Stage E (final) of `docs/plans/document-
 ingestion2-coordination.md`. In progress; written incrementally as items execute (survives an

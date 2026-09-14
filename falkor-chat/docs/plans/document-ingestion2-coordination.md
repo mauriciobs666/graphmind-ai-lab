@@ -1,6 +1,6 @@
 # Document ingestion — update & delete — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** —
+> **Status:** archived · **Owner:** `teco` · **Tracks:** —
 
 Sequencing/gating log for implementing `falkor-chat/docs/plans/document-ingestion2.md` (Status:
 active, Owner: `architect` — every Cypher/index shape in it is live-verified by `graph-dba` across
@@ -39,7 +39,7 @@ for the coordination.
 | Stage D-fix | `tdd-engineer` | `a21c31b2be06c85b3` | accepted | commit `854f0b5` | `analyst` (`ab817d518c2689a3e`) → approve (Pass 7, zero new findings) | 167316 tok / 55 tools (+117663 tok / 32 tools review) |
 | Stage D-fix-graph | `graph-dba` | `a89b7b2fec6d7d88c` | accepted (no code change) | `claude/graph-dba/falkordb-quirks.md` entry, 2026-09-13 | — (diagnostic consult) → clean, closes Pass 6 Finding 1 | 90604 tok / 17 tools |
 | Stage E | `qa-engineer` | `a7a0f52688cef8b2b` | accepted | commit `e9fb5b3` (test plan + report) | self-executed acceptance pass → PASS-with-parked-defects (all AC-1..AC-8 hold; 2 defects found, see Notes) | 294710 tok / 110 tools |
-| Stage F (Defect 1 fix) | `tdd-engineer` | `a4426e33398d5d973` | in-flight | — | `analyst` → — | — |
+| Stage F (Defect 1 fix) | `tdd-engineer` | `a4426e33398d5d973` | accepted | commit `db928ed` | `analyst` (`a5e17703aa32d26b2`) → approve with suggestions (Pass 8, 1 minor + 2 nits) | 127840 tok / 52 tools (+113992 tok / 35 tools review) |
 
 ## Notes
 
@@ -326,3 +326,29 @@ for the coordination.
     test the fix; `test_queries.sh` §14.10 addition; `docs/HISTORY.md` entry). Once Stage F is
     delivered, verified, and gated, the whole `document-ingestion2` coordination closes — Defect 2
     (K-064) is intentionally left as a follow-up, not a blocker.
+- **Stage F delivered and independently verified**: new `_escape_fuzzy_token` helper (strips
+  RediSearch metacharacters, `\w`-only) wired into `find_update_shortlist`'s title-fuzzy branch
+  only; `fusion._fuzzy_query` deliberately untouched. Verified myself before gating: read the full
+  diff; confirmed the fix against all 7 QA characterization-table titles by hand; ran my own
+  mutation test (reverted just the escaping change, all 7 metacharacter-title tests failed with the
+  original `RediSearch: Syntax error`, restored + md5-verified byte-identical); re-ran the full
+  Python suite myself (2821 passed, 14 deselected — matches) and `./scripts/test_queries.sh` myself
+  (460/461 — matches, same pre-existing §14.8 gap); re-seeded `reference` after my own
+  `test_queries.sh` run wiped it (`bootstrap_schema.sh` → `seed_demo.sh` → `seed_workflows.sh` for
+  `acme`, verified `RESULT: OK`); confirmed the kaizen entry on the strip-vs-escape technique.
+  Dispatched `analyst` (`a5e17703aa32d26b2`) for Pass 8 — **approve with suggestions**, zero
+  blockers (1 minor: no test for the all-tokens-strip-to-empty branch; 2 nits), independently
+  re-ran the same mutation test and both suites with matching results. Committed `db928ed`.
+- **`document-ingestion2` coordination complete.** All six implementation stages (A, B, C,
+  C-testinfra, C-fix, D, D-fix — 8 stages counting fix rounds) + Stage E (QA acceptance,
+  PASS-with-parked-defects) + Stage F (Defect 1 fix) delivered, independently verified, and
+  diff-gated (8 `analyst` review passes, zero unresolved blockers). Defect 2 (Medium, design call,
+  non-AC-violating) is intentionally deferred as `docs/BACKLOG.md` K-064, not a blocker to closing
+  this coordination. **Milestone-close documentation freeze applied** (root `AGENTS.md`'s
+  mechanical `Status:`→`archived` flip, one token per file, no other content changed), mirroring
+  the `document-ingestion` (K-050) precedent exactly: `docs/requirements/document-ingestion2.md`,
+  `docs/plans/document-ingestion2.md`, `docs/plans/document-ingestion2-ml.md`, this coordination
+  doc, `docs/reviews/document-ingestion2-impl.md`, `docs/test-plans/document-ingestion2.md`,
+  `docs/test-reports/document-ingestion2-report.md` — all flipped to `archived`. `docs/BACKLOG.md`
+  and `docs/HISTORY.md` are living documents and do not archive; K-064 remains open there as the
+  one forward-looking follow-up out of this feature.

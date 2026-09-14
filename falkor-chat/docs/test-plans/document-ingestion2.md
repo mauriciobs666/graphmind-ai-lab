@@ -1,6 +1,6 @@
 # Document ingestion — update & delete — Test Plan
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** —
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** —
 
 Stage E (final) of `docs/plans/document-ingestion2-coordination.md`. Acceptance pass for
 `docs/plans/document-ingestion2.md`'s AC-1..AC-8, driven against the real running system —

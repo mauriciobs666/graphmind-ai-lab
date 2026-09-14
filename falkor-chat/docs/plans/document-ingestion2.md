@@ -1,6 +1,6 @@
 # Document ingestion — update & delete — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** —
+> **Status:** archived · **Owner:** `architect` · **Tracks:** —
 
 Turns `docs/requirements/document-ingestion2.md` (FR-1..FR-8, AC-1..AC-8, Status: Ready for
 design) into an ordered, staged build. Resolves Open Question 1 (entity/relationship cascade on

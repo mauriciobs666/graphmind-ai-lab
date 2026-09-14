@@ -1,6 +1,6 @@
 # Document ingestion — update & delete — Implementation Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (M5 follow-on)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — (M5 follow-on)
 
 **Note on filename:** dispatched to me as `document-ingestion2.md` (no role suffix). Root
 `AGENTS.md`'s doc-family convention reserves the bare slug for the *plan* review and requires an

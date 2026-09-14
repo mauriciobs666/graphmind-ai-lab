@@ -1,5 +1,5 @@
 # Document ingestion — update & delete — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Extends:** `falkor-chat/docs/requirements/document-ingestion.md` · **Last updated:** 2026-09-10
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Extends:** `falkor-chat/docs/requirements/document-ingestion.md` · **Last updated:** 2026-09-10
 
 ## Intent
 `falkor-chat`'s document-ingestion pipeline (`falkor-chat/docs/requirements/document-ingestion.md`,
