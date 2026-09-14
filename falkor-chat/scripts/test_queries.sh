@@ -1902,8 +1902,25 @@ assert_contains     "§14.10 title-fuzzy shortlist includes the current-version 
 assert_not_contains "§14.10 title-fuzzy shortlist excludes the non-current title match (lsd4)"     "lsd4" "$out"
 assert_not_contains "§14.10 title-fuzzy shortlist excludes a document with no title match (lsd5)"  "lsd5" "$out"
 
+# Defect 1 fix (document-ingestion2 QA report, "Report (Draft)" is one of its
+# characterization-table titles): repository.find_update_shortlist now builds
+# the fuzzy query from per-token output of repository._escape_fuzzy_token,
+# which strips RediSearch metacharacters before wrapping each token in
+# `%...%` — 'Report (Draft)'.split() -> ['Report', '(Draft)'] -> escaped ->
+# 'Report', 'Draft' -> fuzzyQuery '%Report% %Draft%'. The raw, unescaped
+# title ('%Report (Draft)%') is exactly what used to raise `RediSearch:
+# Syntax error at offset 8 near Report` live against this same index
+# (reproduced during this fix's own verification); the escaped shape below
+# is the one the shipped code now actually sends, and must both run clean
+# and still find the current-version match.
+gq "$WS" "CREATE (:Document {documentId:'lsd6', title:'Report (Draft)', text:'t', sourceFormat:'text', sourceKind:'document', status:'ready', pendingJobs:0, createdAt:100, currentVersion:true})" > /dev/null
+
+out=$(rq "$WS" "CYPHER fuzzyQuery='%Report% %Draft%' limit=5 $FIND_SHORTLIST_TITLE")
+assert_not_contains "§14.10 escaped title-fuzzy query for a metacharacter-bearing title raises no RediSearch syntax error" "Syntax error" "$out"
+assert_contains     "§14.10 escaped title-fuzzy query still matches the metacharacter-bearing title (lsd6)" "lsd6" "$out"
+
 # cleanup this section's fixture
-gq "$WS" "MATCH (n:Document) WHERE n.documentId IN ['asd1','asd2','asd3','lsd1','lsd2','lsd3','lsd4','lsd5'] DETACH DELETE n" > /dev/null
+gq "$WS" "MATCH (n:Document) WHERE n.documentId IN ['asd1','asd2','asd3','lsd1','lsd2','lsd3','lsd4','lsd5','lsd6'] DETACH DELETE n" > /dev/null
 gq "$WS" "MATCH (c:Chunk) WHERE c.documentId IN ['asd1','asd2','asd3'] DETACH DELETE c" > /dev/null
 
 # ── teardown ─────────────────────────────────────────────────────────────────

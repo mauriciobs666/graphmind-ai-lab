@@ -5,6 +5,27 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-13 — fix: `find_update_shortlist` title-fuzzy query crashed on common RediSearch metacharacters
+
+**What:** Fixed `document-ingestion2` QA Defect 1
+(`docs/test-reports/document-ingestion2-report.md`) — `repository.find_update_shortlist`'s
+title-fuzzy branch built its RediSearch query from raw title tokens, so any `Document.title`
+containing a common metacharacter (parens, hyphen, colon, quotes, brackets, pipe) raised
+`redis.exceptions.ResponseError: RediSearch: Syntax error...`. Caught silently by
+`_safe_detect_update`'s isolation, this completely defeated AC-2 suggested-tier detection for such
+titles with zero signal to any caller. Added `repository._escape_fuzzy_token`, which strips
+RediSearch metacharacters from each title token before it is wrapped in a `%token%` fuzzy term;
+wired into `find_update_shortlist` only, per the QA report's scoping — `fusion._fuzzy_query`'s
+identical, narrower exposure for entity names is a separate, tracked gap, left untouched.
+
+**Verified:** New `test_repository.py` cases (a targeted repro plus the QA report's full 7-title
+characterization table) reproduce the exact live crash before the fix and pass after; mutation-
+tested by reverting just the escaping change and confirming all new tests fail for the right
+reason, then restoring byte-identical (md5-verified). `scripts/test_queries.sh` §14.10 gained a
+live assertion that the escaped fuzzy-query shape runs clean and still matches. Full suites green:
+pytest 2821 passed/14 deselected (was 2813/14); `test_queries.sh` 460/461 (was 458/459 — the one
+failure is the pre-existing, unrelated `§14.8 SUPERSEDES.matchId` index-scan gap).
+
 ## 2026-09-11 — salesperson-ui S10: presenter surface moved onto `Storefront`
 
 **What:** Closed S10 per `docs/plans/salesperson-ui.md` §5.1's S10 row. The three presenter

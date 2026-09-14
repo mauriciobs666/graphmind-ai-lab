@@ -1818,6 +1818,50 @@ def test_find_update_shortlist_deduplicates_a_document_matching_both_signals(rep
     assert [c["documentId"] for c in candidates].count("d1") == 1
 
 
+def test_find_update_shortlist_title_with_redisearch_metacharacters_does_not_raise(repo):
+    """Regression for document-ingestion2 QA Defect 1: a title containing a
+    RediSearch query-syntax metacharacter (parens here) must not blow up the
+    title-fuzzy branch, and the query must still be valid enough to fuzzy-
+    match on the title's real words."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _document_with_lsh(
+        repo, document_id="d1", text="completely unrelated filler content here",
+        title="Quarterly Report (Draft)",
+    )
+
+    candidates = repo.find_update_shortlist(
+        "test", bands=["zzzzzzzzzzzzzzzz"] * 8, title="Quarterly Report (Draft)",
+    )
+
+    assert any(c["documentId"] == "d1" for c in candidates)
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Report - Final",
+        "Spec: v2",
+        'Q3 "Draft" Notes',
+        "Notes [2024]",
+        "A|B test",
+        "Report (Draft)",
+        "Plain Clean Title",
+    ],
+)
+def test_find_update_shortlist_survives_the_qa_characterization_table(repo, title):
+    """The exact seven title variants from the QA report's characterization
+    table (docs/test-reports/document-ingestion2-report.md, Defect 1) — all
+    seven must complete without raising, whether or not any candidate is
+    found."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+
+    candidates = repo.find_update_shortlist(
+        "test", bands=["zzzzzzzzzzzzzzzz"] * 8, title=title,
+    )
+
+    assert isinstance(candidates, list)
+
+
 # ── §14.5 Entities & RELATES_TO (K-050 M5 Stage 3) ────────────────────────────
 
 

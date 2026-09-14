@@ -1094,3 +1094,152 @@ review's scope and is the coordinator's/next session's call, same as any other r
 
 None beyond Pass 6's still-open items (Finding 1's `graph-dba` `PROFILE`-with-planted-probe-rows
 follow-up, already dispatched separately per the brief and not re-litigated here).
+
+## Pass 8 — Stage F (uncommitted, QA Defect 1 fix), 2026-09-13
+
+**Scope.** Diff-scoped review of the currently uncommitted working-tree diff fixing
+`document-ingestion2-report.md`'s Defect 1 (`find_update_shortlist`'s title-fuzzy RediSearch query
+crashed — silently, inside `_safe_detect_update`'s never-raise isolation — on any `Document.title`
+containing a common RediSearch metacharacter), dispatched as Stage F (`document-ingestion2-
+coordination.md`, dispatch `a4426e33398d5d973`). Touched: `server/falkorchat/repository.py` (new
+`_escape_fuzzy_token` helper, wired into `find_update_shortlist`'s title-fuzzy branch),
+`server/tests/test_repository.py` (two new tests), `scripts/test_queries.sh` (new `§14.10`
+assertions), `docs/HISTORY.md` (new dated entry). Baseline: `git diff` on exactly these four files
+(`git status --porcelain` confirms no other tracked file in scope changed). This is a focused
+bug-fix review, not a full feature re-review — scaled to the diff's actual size (one new 4-line
+helper, one call-site change, two tests, one script section, one history entry).
+
+**Verdict: approve with suggestions.** No blockers, no majors. One minor (a new code branch this
+fix introduces has no dedicated test) and two nits below.
+
+**CPG: considered, not relevant** — the diff changes the internals of one already-enumerated
+function (`find_update_shortlist`, exhaustively traced clause-by-clause in Pass 6) and adds one new
+private helper with a single caller inside the same file; no new symbol, caller, or edge a
+call-graph query would need to find. Direct reading plus live execution (pytest, mutation testing,
+`test_queries.sh`) were the right tools for this diff's actual questions.
+
+### What I verified
+
+- Read every hunk of `git diff` across all four target files directly, not a summary.
+- **Simulated `_escape_fuzzy_token` against all seven QA characterization-table titles** (`"Report -
+  Final"`, `"Spec: v2"`, `'Q3 "Draft" Notes'`, `"Notes [2024]"`, `"A|B test"`, `"Report (Draft)"`,
+  `"Plain Clean Title"`) plus the empty-token case: every one now strips to a fuzzy term made up
+  only of plain word characters (`%Report% %Final%`, `%Spec% %v2%`, `%Q3% %Draft% %Notes%`,
+  `%Notes% %2024%`, `%AB% %test%`, `%Report% %Draft%`, `%Plain% %Clean% %Title%`) — no metacharacter
+  survives into any `%...%` term, and the standalone `-` token in `"Report - Final"` strips to `""`
+  and is correctly dropped by the `if escaped` filter rather than producing a stray `%%` term. This
+  confirms the fix closes Defect 1 for the QA report's own evidence, not just plausibly.
+- **Confirmed `fusion._fuzzy_query` (`fusion.py:34-42`) is byte-unchanged** (`git diff` on the file
+  is empty) — the deliberate, QA-report-scoped exclusion holds; see Finding 2 (nit) below for the
+  one-line asymmetry note the brief asked for.
+- **Read both new `test_repository.py` tests in full.**
+  `test_find_update_shortlist_title_with_redisearch_metacharacters_does_not_raise` seeds a document
+  via `_document_with_lsh` with unrelated filler text/real LSH bands, then calls
+  `find_update_shortlist` with a deliberately non-matching `bands=["zzzzzzzzzzzzzzzz"] * 8` — so the
+  only signal that can produce a match is the title-fuzzy branch, and the test asserts the seeded
+  document **is** found. This is a genuine "still matches" proof, not merely "doesn't raise": the
+  band signal is intentionally defeated, isolating the assertion to the fixed code path.
+  `test_find_update_shortlist_survives_the_qa_characterization_table` parametrizes over the exact
+  seven titles and asserts only `isinstance(candidates, list)` (no seeded document to match against)
+  — correctly scoped to "doesn't raise," complementing rather than duplicating the first test's
+  "still matches" proof.
+- **Ran the new/adjacent tests live**: `pytest tests/test_repository.py -k "fuzzy or
+  characterization or shortlist"` — **15 passed** (against FalkorDB, `redis-cli -p 6379 ping` →
+  `PONG`).
+- **Mutation-tested the fix myself**, independent of the delegate's own claim. Copied
+  `repository.py` to `/tmp` (`md5sum`-recorded), reverted just the escaping change (`fuzzy_query =
+  " ".join(f"%{tok}%" for tok in title.split())`, dropping `_escape_fuzzy_token` from the call site
+  only — the helper itself, and every other line, left untouched), and re-ran the same test
+  selection: **7 failed, 8 passed** — every one of the seven metacharacter-bearing cases failed with
+  `redis.exceptions.ResponseError: RediSearch: Syntax error at offset 10 near Report` (the identical
+  live crash signature the QA report itself reproduced), while `Plain Clean Title` and every
+  pre-existing shortlist test stayed green, confirming the mutation is isolated to the defect path
+  and the tests fail for the right reason. Restored from the `/tmp` copy; `md5sum` confirmed
+  byte-identical before and after. Re-ran the un-mutated selection afterward — **15 passed** again.
+- **Ran the full suites live.** `pytest -q` (full): **2821 passed, 14 deselected, 0 failed** —
+  matches `HISTORY.md`'s claimed figure exactly. `./scripts/test_queries.sh`: **460/461 passed**;
+  the one failure is `§14.8 SUPERSEDES.matchId lookup … uses the relationship index, no label scan`
+  (`Edge By Index Scan` vs. the helper's hardcoded `Node By Index Scan` string) — the pre-existing,
+  already-logged `assert_index_scan` helper gap named in the brief, not a regression; all 20 new
+  `§14.10` assertions (including the two escaping-specific ones) passed. Both figures match
+  `HISTORY.md`'s claimed "was 2813/14" → "2821/14" and "was 458/459" → "460/461" deltas exactly.
+- **Re-seeded `reference` after `test_queries.sh`'s documented teardown wipe**
+  (`falkor-chat/AGENTS.md`'s script table): `bootstrap_schema.sh acme` → `seed_demo.sh acme` →
+  `seed_workflows.sh acme`, then `./scripts/verify_workflows.sh acme` → `RESULT: OK — 2 defs in sync
+  between reference and ws:acme`.
+- **Read `docs/HISTORY.md`'s new entry against two neighboring entries** (the 2026-09-11
+  `salesperson-ui S10` entry and the file's header convention) — same dated-`##`-header,
+  **What:**/**Verified:** bulleted-bold-lead-in shape; the claimed test figures independently
+  re-verified above, not taken on report.
+- Confirmed no other tracked file changed: `git status --porcelain` on the four target paths shows
+  exactly those four, no side effects from this pass's own mutation-test/backfill activity (working
+  tree restored byte-identical, `reference` re-seeded and verified `OK`).
+
+### Findings
+
+**Minor — the fix introduces a new "title present but every token strips to empty" skip branch
+(`repository.py`, the `else: fuzzy_query = ""` / `if fuzzy_query:` restructuring) that no test
+exercises.** All seven QA characterization-table titles have at least one alphanumeric token, so
+none of them hit this branch — the closest, `"Report - Final"`, only has *one* token strip to `""`
+(the standalone `-`), leaving `%Report% %Final%` non-empty. A title that is pure punctuation (e.g.
+`"---"` or `"(...)"`) would make `fuzzy_query` stay `""` even though `title` itself was truthy,
+silently skipping the title-fuzzy lookup entirely — correct, fail-safe behavior per the docstring's
+own stated reasoning ("a degenerate query"), but currently unverified by any test, unlike the
+already-well-covered "title empty" and "title has real content" axes. Suggested fix: one small
+`test_repository.py` case — seed a document, call `find_update_shortlist` with a pure-punctuation
+`title` (e.g. `"---"`), assert it returns without raising (mirroring
+`test_find_update_shortlist_empty_title_skips_title_lookup`'s existing shape for the analogous
+empty-title case).
+
+**Nit — the shared root cause is now visibly asymmetric between the two call sites, as the QA report
+itself flagged as a scoped-out follow-up, not an oversight here.** `fusion._fuzzy_query`
+(`fusion.py:34-42`) still builds its `%token%` terms from raw, unescaped entity-name tokens — the
+identical crash shape Defect 1 fixed for `find_update_shortlist`, just for a different
+`RediSearch.queryNodes('Entity', ...)` call, currently lower-risk only because LLM-extracted entity
+names rarely carry punctuation (this diff's own docstring says so directly). Correctly out of scope
+per the QA report's explicit deferral — not re-flagging as a defect, just confirming the asymmetry
+is real and worth keeping on the backlog so both call sites eventually share one escaping helper
+rather than diverging further.
+
+**Nit — stripping (not escaping) merges some distinct words into one token, changing match
+semantics for one QA-table case without breaking it.** `"A|B test"` strips to tokens `["AB",
+"test"]`, not two independent fuzzy terms — `%AB%` will fuzzy-match differently than a title
+genuinely containing the word "AB" would suggest (e.g. it now also 1-edit-fuzzy-matches "AB" as a
+whole rather than "A" and "B" separately). Not a defect: the docstring's own justification for
+stripping over backslash-escaping (surviving characters must be plain word characters for `%...%`
+fuzzy matching to behave sensibly) is internally consistent, and no QA-table case regresses from OK
+to CRASH or vice versa. Worth a one-line note only because a future reader diffing "why does `A|B`
+title-fuzzy-match differently than `A B` would" might otherwise assume a bug rather than a
+documented trade-off.
+
+### What's solid
+
+- **The fix genuinely closes Defect 1** — independently simulated and live-tested against all seven
+  QA characterization-table titles, every one now produces a syntactically valid RediSearch query,
+  confirmed by both the new `test_repository.py` cases and the new `test_queries.sh` §14.10
+  assertions passing live.
+- **At least one test proves a real match survives the escaping**, not just "doesn't raise" —
+  `test_find_update_shortlist_title_with_redisearch_metacharacters_does_not_raise` deliberately
+  defeats the band signal so only the title-fuzzy path can produce its asserted match.
+- **The mutation test reproduces the exact live crash signature** the QA report itself hit
+  (`RediSearch: Syntax error at offset 10 near Report`), on exactly the seven metacharacter-bearing
+  cases and no others — independently confirmed here, not just judged plausible from the delegate's
+  own claim.
+- **`test_queries.sh` §14.10's new assertions are genuinely discriminating**, not smoke checks —
+  one asserts no `Syntax error` substring appears, a second independently asserts the seeded
+  document (`lsd6`) is actually found, so a regression that silently degraded into "never matches
+  anything" would be caught by the second assertion even if the first stayed green.
+- **`fusion._fuzzy_query` is confirmed byte-unchanged**, matching the QA report's explicit scoping
+  of this fix to `find_update_shortlist` only.
+- **`docs/HISTORY.md`'s new entry follows the file's established convention** and its quantitative
+  claims (pytest 2821/14, `test_queries.sh` 460/461, both deltas) independently re-verified against
+  live runs, not taken on report.
+- **The working tree was left exactly as found** — this pass's own mutation-test backup/restore is
+  `md5sum`-verified byte-identical, and the `reference` graph wiped by `test_queries.sh`'s documented
+  teardown was re-seeded and re-verified `OK` before finishing.
+
+### Open questions
+
+None beyond the pre-existing, already-tracked items: the shared `fusion._fuzzy_query` gap (Finding 2
+above, already on the QA report's own deferred list) and Pass 6's still-open Finding 1 follow-up
+(unrelated to this diff).
