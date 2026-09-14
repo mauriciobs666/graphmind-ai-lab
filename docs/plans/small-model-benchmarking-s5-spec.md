@@ -1,6 +1,6 @@
 # `model-bench` S5 — `tool-caller` pack, part 1: environment and scoring — implementation spec
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Extends:** `docs/plans/small-model-benchmarking.md` (S5)
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — · **Extends:** `docs/plans/small-model-benchmarking.md` (S5)
 
 2026-09-14 — **correction, adopting `model-bench/docs/reviews/small-model-benchmarking-s5.md`'s
 Finding 3 (verdict: needs changes), resolved as option (a), wire it now**: `argument_correctness`
