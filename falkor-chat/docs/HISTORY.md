@@ -5,6 +5,44 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-14 — salesperson-ui S12b: mobile layout shell, AC-5 reset control, App.tsx/routes.tsx v1.36 composition
+
+**What:** Closed S12b per `docs/plans/salesperson-ui.md` §5.1's S12b row. Built the mobile layout
+shell (sticky header, four sheet-triggering icons, safe-area insets, no horizontal overflow at
+360px), the four bottom sheets (Cart/Order/Profile/Catalog) sharing one `BottomSheet` a11y contract
+(role, `aria-modal`, focus-on-open, Escape, backdrop close), AC-5's participant reset control
+behind a confirm step, the four S14 seed placeholders wired into their sheets, and a Playwright
+suite covering AC-4/AC-5 at two mobile viewports.
+
+Also lands plan v1.36 (§4.11, committed separately as `0f99b63`): `App.tsx`/`routes.tsx`/
+`layout/Shell.tsx` now implement `LayoutShell` as the router's own pathless layout route rather
+than a `children`-wrapper around `RouterProvider` — the fix for a real gap the S12b review
+surfaced (`LayoutShell` sitting outside `SessionContext`/TanStack Query/the router, unreachable
+from anything it renders). `layout/sessionBridge.ts`/`injectBridge.tsx` (S12b's original,
+well-tested interim workaround for the one hook `ResetControl` needed) are deleted;
+`ResetControl` now calls `api/hooks.ts`'s `useResetMine()` directly.
+
+**Review:** `docs/reviews/salesperson-ui-s12b.md` — three passes. Pass 1 **needs changes** (1
+blocker: `ResetControl`'s hand-rolled dispatch dropped §5.3's C3/C4/C6b/C13 for
+`POST /shop/api/reset`; 1 major: the provider-nesting root cause, routed to a separate `architect`
+unit rather than fixed inline; 2 minors). Pass 2 **approve** (blocker + one minor fixed; major +
+the other minor correctly carried forward to the `architect` unit). Pass 3, once v1.36 landed,
+**approve with suggestions** — the major and the carried-forward minor closed as a consequence of
+the architectural fix; one new minor found by checking the landed fixes against each other rather
+than each against its own finding (a stale error message from a prior failed attempt could render
+during a same-session retry's pending window) — fixed in the same commit as the rest of S12b.
+
+**Verified independently, not taken on report, at every stage:** full `vitest` (119/119), `tsc -b`
+and `./build.sh` clean (`/shop/` prefix intact), a live Playwright run (10/10, both viewports)
+against the actual built bundle via `vite preview`. Read `App.tsx`/`routes.tsx`/`layout/Shell.tsx`
+directly and confirmed they match §4.11's shown shapes exactly; confirmed the three bridge files
+are genuinely deleted. Mutation-tested `ResetControl.tsx` with mutations outside both the
+implementer's and the reviewer's own tables (an inverted-ternary mutation on the new `isPending`
+guard; a swallowed `unscopedAlarm` branch), each caught by the suite, restored via file copy and
+diff-confirmed identical before committing.
+
+**Committed:** `70b593b` (code + review).
+
 ## 2026-09-13 — salesperson-ui S12c: i18n wiring
 
 **What:** Closed S12c per `docs/plans/salesperson-ui.md` §5.1's S12c row. Built the storefront
