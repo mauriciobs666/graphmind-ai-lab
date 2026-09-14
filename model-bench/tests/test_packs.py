@@ -926,3 +926,54 @@ def test_validate_pack_does_not_resolve_a_tool_callers_scorer() -> None:
     assert pack.manifest["scorer"] == "toolcalls"
 
     assert validate_pack(pack) == []
+
+
+# --------------------------------------------------------------------------------------------
+# The real `tool-caller-shop-assistant` pack.json — S5 spec §3.2, §4 Step 2
+#
+# `data.conversations`/`data.prosePseudoCallCalibration` are declared but not yet backed by a
+# file S5 creates (S6's own `Create:` line, S5 spec §3.2) — so this is deliberately the
+# **manifest-only** read (`pack_ref_from_manifest`, S1-level, `packs.py:223-236`), which needs no
+# data files at all, never `load_pack`/`validate_pack`'s full pass (which would fail on the
+# row-count identity for want of `conversations.jsonl`). That full pass is S6's, once
+# `conversations.jsonl` exists.
+# --------------------------------------------------------------------------------------------
+
+_TOOL_CALLER_SHOP_ASSISTANT_PACK_JSON = (
+    Path(__file__).parent.parent / "packs" / "tool-caller-shop-assistant" / "pack.json"
+)
+
+
+def test_pack_ref_from_manifest_accepts_the_real_tool_caller_shop_assistant_manifest() -> None:
+    ref = pack_ref_from_manifest(_TOOL_CALLER_SHOP_ASSISTANT_PACK_JSON)
+    assert ref.packId == "tool-caller-shop-assistant"
+    assert ref.packVersion == "0.1.0"
+    assert ref.contentHash is None  # manifest-only read — never loaded, per PackRef's own contract
+    assert ref.role == "tool-caller"
+    assert ref.pairingKey == ("scriptId", "replicate", "turnIndex")
+    assert ref.analysisUnit == "scriptId"
+    assert ref.analysisUnitIndex == 0
+    assert ref.seed == 20260913
+    assert ref.label == "tool-caller-shop-assistant@0.1.0"
+
+
+def test_pack_ref_from_manifest_resolves_the_real_manifests_metrics_block() -> None:
+    """`metrics_from_manifest` is `pack_ref_from_manifest`'s own sub-parse of the `metrics` block
+    (`_ref_from_manifest_fields` calls it) — asserted directly here too, not just through the
+    `PackRef` it ends up folded into, so a future change to `PackRef.metrics`'s shape doesn't hide
+    a regression in `metrics_from_manifest` itself."""
+    ref = pack_ref_from_manifest(_TOOL_CALLER_SHOP_ASSISTANT_PACK_JSON)
+    assert ref.metrics == PackMetrics(verdictMetrics=("cleanThroughTurnH",),
+                                       headlineMetric="cleanThroughTurnH")
+    assert ref.metrics.k == 1
+
+
+def test_pack_ref_from_manifest_on_the_real_manifest_satisfies_the_sampling_contract() -> None:
+    """`_ref_from_manifest_fields` runs `check_sampling_contract` on every manifest it parses
+    (`pack_ref_from_manifest` included) — this just confirms the real manifest's own `sampling`
+    block doesn't raise, i.e. `analysisUnit == pairingKey[0]` and `pairingKey[0]` is
+    `roles.analysis_unit_field("tool-caller")`'s own value (`scriptId`), matching the real
+    manifest's `pairingKey`/`analysisUnit` above."""
+    ref = pack_ref_from_manifest(_TOOL_CALLER_SHOP_ASSISTANT_PACK_JSON)
+    check_sampling_contract(ref)  # must not raise
+    assert ref.pairingKey[0] == analysis_unit_field("tool-caller")

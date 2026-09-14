@@ -1,0 +1,39 @@
+{
+  "packId": "tool-caller-shop-assistant",
+  "packVersion": "0.1.0",
+  "role": "tool-caller",
+  "schemaVersion": 1,
+  "description": "Simulated storefront: catalog lookups, cart mutation, order placement, scripted multi-turn conversations.",
+  "scorer": "toolcalls",
+  "environment": {"requires": ["lmstudio-chat"]},
+  "prompt": {
+    "systemPrompt": "prompts/system.md",
+    "toolSchemas": "tools/schemas.json",
+    "representToolSchemasEachTurn": false,
+    "historyReplay": "structured",
+    "historyTurns": 0,
+    "maxIterationsPerTurn": 8,
+    "temperature": 0.0,
+    "maxTokens": 512
+  },
+  "data": {
+    "catalog": "catalog.json",
+    "conversations": "conversations.jsonl",
+    "prosePseudoCallCalibration": "prose_calibration.jsonl"
+  },
+  "tools": {"module": "tools/sim.py", "entrypoint": "build_environment", "schemas": "tools/schemas.json"},
+  "sampling": {
+    "seed": 20260913,
+    "pairingKey": ["scriptId", "replicate", "turnIndex"],
+    "analysisUnit": "scriptId",
+    "scripts": 12,
+    "replicatesPerScript": 1,
+    "determinismProbeScripts": ["A-01", "B-01"]
+  },
+  "metrics": {
+    "verdictMetrics": ["cleanThroughTurnH"],
+    "headlineMetric": "cleanThroughTurnH",
+    "cleanThroughTurnH": {"H": 4}
+  },
+  "provenance": "PROVENANCE.md"
+}

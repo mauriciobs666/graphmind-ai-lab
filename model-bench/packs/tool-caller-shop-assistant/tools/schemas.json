@@ -1,0 +1,114 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "lookup_product_fact",
+      "description": "Look up a fact (category, price) about one specific product by name. Use this to answer a question about a single named product.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The product's name, as the customer referred to it."
+          }
+        },
+        "required": ["name"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "filter_products",
+      "description": "List products matching an optional category and/or price range. Omit any argument you don't need to filter by; omitting all of them lists the whole catalog.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Only products in this category."
+          },
+          "minPrice": {
+            "type": "number",
+            "description": "Only products priced at or above this amount (inclusive). For 'more than $X', use a minPrice just above X (e.g. X + 0.01) — a product priced at exactly X must not match.",
+            "boundaryRule": {"confusedWith": [10.01], "inclusive": true}
+          },
+          "maxPrice": {
+            "type": "number",
+            "description": "Only products priced at or below this amount (inclusive). For 'less than $X', use a maxPrice just under X (e.g. X - 0.01), never round down to the nearest whole dollar — a product priced at exactly X - 0.01 must still match.",
+            "boundaryRule": {"confusedWith": [4999, 5000], "inclusive": true}
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "view_cart",
+      "description": "View the customer's current cart: every line item with its current price and quantity, and the live total.",
+      "parameters": {"type": "object", "properties": {}, "required": []}
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "add_to_cart",
+      "description": "Add a quantity of a named product to the customer's cart. Calling this again for the same product adds more of it (quantities accumulate, they don't replace).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "productName": {
+            "type": "string",
+            "description": "The product's name, as the customer referred to it."
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "How many to add. Defaults to 1 if omitted.",
+            "minimum": 1
+          }
+        },
+        "required": ["productName"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "remove_from_cart",
+      "description": "Remove a quantity of a named product from the customer's cart. Omit quantity to remove the entire line for that product, however many are in the cart.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "productName": {
+            "type": "string",
+            "description": "The product's name, as the customer referred to it."
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "How many to remove. Omit to remove the whole line.",
+            "minimum": 1
+          }
+        },
+        "required": ["productName"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "clear_cart",
+      "description": "Remove every item from the customer's cart.",
+      "parameters": {"type": "object", "properties": {}, "required": []}
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "place_order",
+      "description": "Place an order for everything currently in the customer's cart, at current catalog prices. Clears the cart on success.",
+      "parameters": {"type": "object", "properties": {}, "required": []}
+    }
+  }
+]

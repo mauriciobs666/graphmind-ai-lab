@@ -1,0 +1,16 @@
+[
+  {"productId": "wireless-earbuds", "name": "Wireless Earbuds", "category": "Electronics", "price": 49.99, "stock": 25},
+  {"productId": "bluetooth-speaker", "name": "Bluetooth Speaker", "category": "Electronics", "price": 79.99, "stock": 15},
+  {"productId": "usb-c-charging-cable", "name": "USB-C Charging Cable", "category": "Electronics", "price": 9.99, "stock": 100},
+  {"productId": "wireless-charging-pad", "name": "Wireless Charging Pad", "category": "Electronics", "price": 24.99, "stock": 40},
+  {"productId": "mechanical-keyboard", "name": "Mechanical Keyboard", "category": "Electronics", "price": 89.00, "stock": 12},
+  {"productId": "4k-webcam", "name": "4K Webcam", "category": "Electronics", "price": 59.50, "stock": 0},
+  {"productId": "noise-cancelling-headphones", "name": "Noise-Cancelling Headphones", "category": "Electronics", "price": 149.99, "stock": 10},
+  {"productId": "portable-ssd-1tb", "name": "Portable SSD 1TB", "category": "Electronics", "price": 99.99, "stock": 14},
+  {"productId": "standing-desk-mat", "name": "Standing Desk Mat", "category": "Office", "price": 34.99, "stock": 20},
+  {"productId": "ergonomic-office-chair", "name": "Ergonomic Office Chair", "category": "Office", "price": 199.99, "stock": 8},
+  {"productId": "desk-lamp", "name": "Desk Lamp", "category": "Office", "price": 19.99, "stock": 30},
+  {"productId": "notebook-set", "name": "Notebook Set", "category": "Office", "price": 10.00, "stock": 50},
+  {"productId": "ceramic-coffee-mug", "name": "Ceramic Coffee Mug", "category": "Kitchen", "price": 12.50, "stock": 60},
+  {"productId": "french-press", "name": "French Press", "category": "Kitchen", "price": 29.95, "stock": 18}
+]
