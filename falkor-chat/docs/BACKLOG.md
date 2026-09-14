@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-062
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-064
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -493,6 +493,49 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Risks/RAM:** none — verification only, no design change expected unless the run surfaces a defect.
 - **Test strategy:** a live manual run is the test; if it surfaces a defect, file a fix as its own
   follow-up rather than folding it into this item.
+
+### K-064 — `find_update_shortlist`'s title-fuzzy signal uses implicit-AND token combination, far narrower than its own docstring implies (🔵 proposed — filed out of `document-ingestion2` Stage E QA pass, `docs/test-reports/document-ingestion2-report.md` Defect 2, 2026-09-13)
+
+> **Why it exists.** `repository.find_update_shortlist`'s title-fuzzy RediSearch query joins one
+> `%token%` term per title word with a space, which RediSearch combines via implicit AND — a
+> candidate's title must fuzzy-match **every** token of the new document's title to surface at
+> all. Live-confirmed: a document titled `"Beta Doc"` was never shortlisted against a query title
+> of `"Beta Doc v2 clean title"`, even though both share two distinctive words. Any ordinary
+> revision suffix ("v2", "Draft", "Final", "Updated") defeats the signal for its own predecessor
+> unless the predecessor's title happens to already contain that exact word. This is narrower than
+> the method's own docstring promises ("a cheap complementary booster... title-fuzzy match...
+> when non-empty," `repository.py:1863-1868`, plan §3.4) — a reasonable reader expects any shared
+> distinctive word to shortlist a candidate for the precise Jaccard check to then judge.
+>
+> **Not an AC violation** — the LSH/MinHash-banding signal is the primary, fingerprint-based net
+> (ML note §4.1); title-fuzzy is explicitly "complementary," not load-bearing, and AC-2 held in
+> Stage E's live fixture via the band signal. This narrows the secondary signal's real-world
+> recall, it does not remove suggested-tier detection.
+>
+> **The decision is a design call, not a mechanical fix**: explicit-OR the per-token fuzzy terms
+> (`%tok1%|%tok2%|...`) trades recall up against precision down (a title sharing just one common
+> word, e.g. "Report", would now shortlist against unrelated documents — bounded in practice by the
+> LSH signal already narrowing to true near-duplicates and the exact-Jaccard check downstream
+> re-filtering the shortlist, but not zero-cost); dropping to a smaller, more distinctive token
+> subset is the other named option. Route to `data-scientist` for a method opinion (RAG/candidate-
+> generation recall/precision trade-off, squarely its lane) before `coder`/`tdd-engineer`
+> implements — this is exactly the "reviewer's suggested fix is a finding to judge, not an
+> instruction to apply" case: the QA report's own two options are plausible, not a decided answer.
+>
+> **Related:** Stage E's Defect 1 (High, same pass) — a crash, not a recall gap — was fixed
+> separately and does not block this item; both share the same root pattern (naive
+> whitespace-token RediSearch fuzzy-query construction, ported from `fusion._fuzzy_query`) but are
+> independent findings.
+- **Owner:** **`data-scientist`** (method note) → **`coder`**/**`tdd-engineer`** (implementation).
+- **Scope:** `falkor-chat/server/falkorchat/repository.py`'s `find_update_shortlist` title-fuzzy
+  branch only; `fusion._fuzzy_query` (entity-name matching) shares the same implicit-AND shape but
+  is out of this item's scope — note it as a related, unaddressed instance if picked up.
+- **Risks/RAM:** none — query-construction change only, no schema/index change.
+- **Test strategy:** a live-driven regression case with a title carrying an ordinary revision
+  suffix (mirroring Stage E's `"Beta Doc"` / `"Beta Doc v2 clean title"` pair) must shortlist the
+  predecessor after the fix; a hard-negative case (two titles sharing only a common stopword-ish
+  term) should not flood the shortlist — both belong in `test_repository.py` plus a
+  `test_queries.sh` addition per the plan's own "every new Cypher shape raises the baseline" rule.
 
 ## Deferred — M2.5 hardening track
 
