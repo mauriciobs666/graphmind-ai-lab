@@ -756,10 +756,10 @@ def _score_one_conversation(
 
         if not required_names:
             tally.restraintTurns += 1
-            clean = restraint(dispatched_count)
+            clean = restraint(dispatched_count) and t_turn.turnDisposition == "replied"
             if clean:
                 tally.restraintSuccesses += 1
-            turn_clean.append(clean and t_turn.turnDisposition == "replied")
+            turn_clean.append(clean)
             prior_calls.extend((d.name, d.parsedArguments) for d in t_turn.dispatches)
             continue
 
@@ -893,7 +893,8 @@ def _iteration_summary_dict(observations: Sequence[tuple[str, int]]) -> dict[str
         "meanCensored": summary.meanCensored,
         "p95": summary.p95,
         "p95Censored": summary.p95Censored,
-        "yCalls": sum(iterations for _, iterations in observations),
+        "yCalls": sum(iterations for _, iterations in observations)
+        + sum(1 for disposition, _ in observations if disposition in ITERATION_SUMMARY_EXCLUDED),
         "y": len(observations),
     }
 

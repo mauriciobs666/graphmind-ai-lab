@@ -1281,10 +1281,38 @@ def test_score_conversations_populates_iteration_summary_restricted_and_unrestri
     assert summary["p95"] == pytest.approx(expected.p95)
     assert summary["p95Censored"] == expected.p95Censored
     # unrestricted: every turn driven (4), including the `no-response` one `iteration_summary`
-    # excludes from its own `n`.
-    assert summary["yCalls"] == 2 + 4 + 8 + 0
+    # excludes from its own `n` — plus `-ml` §11.4's own `+1` for that turn's own non-returning
+    # attempt (its disposition is in `ITERATION_SUMMARY_EXCLUDED`); `iterations=0` here happens to
+    # make `+0` and `+1` indistinguishable in THIS fixture (review Finding 2's own gap — a fixture
+    # with a non-zero `iterations` excluded-disposition turn discriminates the two, see
+    # `test_iteration_summary_ycalls_counts_the_turns_own_nonreturning_attempt`).
+    assert summary["yCalls"] == 2 + 4 + 8 + 0 + 1
     assert summary["y"] == 4
     assert summary["mean"] != summary["yCalls"] / summary["y"]  # the distinctness §4.4 item 4 names
+
+
+@pytest.mark.parametrize("disposition", ["timed-out", "no-response", "server-rejected"])
+def test_iteration_summary_ycalls_counts_the_turns_own_nonreturning_attempt(
+    disposition: str,
+) -> None:
+    """`analyst` review `docs/reviews/small-model-benchmarking-s5.md` Finding 2 (major): `-ml`
+    §11.4's own formula is `a_i = callCount_i + [D(t_i) in {timed-out, no-response,
+    server-rejected}]` per item — this module's own `ITERATION_SUMMARY_EXCLUDED` names exactly
+    that set. A turn that completed `iterations=2` calls before its own disposition landed in
+    that set must contribute `2 + 1 = 3` to the unrestricted `yCalls`, not the bare `2` a plain
+    `sum(iterations)` gives — the turn's own final, non-returning call attempt is real cost that
+    was never recorded as a completed iteration. The existing `iterations=0` fixture in
+    `test_score_conversations_populates_iteration_summary_restricted_and_unrestricted` cannot
+    discriminate `+0` from `+1` since both give the same total (`0`); this fixture's `iterations=2`
+    can."""
+    script = make_script("A-01", 1)  # one restraint turn (toolRequired: False)
+    turn = make_turn(disposition=disposition, iterations=2, final_reply=None)
+    trace = make_trace("A-01", (turn,))
+
+    _, aggregates = toolcalls.score_conversations([(script, trace, ())], [], pack=make_pack(h=1))
+
+    assert aggregates.iterationSummary["yCalls"] == 3
+    assert aggregates.iterationSummary["y"] == 1
 
 
 def test_score_conversations_model_channel_unrunnable_is_not_tool_channel() -> None:
@@ -1359,6 +1387,29 @@ def test_score_conversations_restraint_turn_that_never_replied_is_still_not_clea
 
     assert items[0].outcome == "fail"
     assert items[0].counts["cleanThroughTurnH"] == 0
+
+
+@pytest.mark.parametrize("disposition", ["cap-hit", "timed-out"])
+def test_score_conversations_restraint_turn_that_never_replied_is_not_a_restraint_success(
+    disposition: str,
+) -> None:
+    """`analyst` review `docs/reviews/small-model-benchmarking-s5.md` Finding 1 (blocker): U142
+    gated `turn_clean` on `t_turn.turnDisposition == "replied"` for a restraint turn but left the
+    sibling `tally.restraintSuccesses` tally, three lines above it in the same branch, ungated —
+    it credits `restraint(dispatched_count)` alone. The standalone `aggregates.restraint`
+    `BinaryMetric` (which reaches `report.py`'s "## Arms" table unchanged via `named_metrics()`)
+    must not count a restraint turn that dispatched nothing but never actually replied
+    (`cap-hit`/`timed-out`) as a restraint SUCCESS, even though the same turn's `items[0].outcome`
+    is already `"fail"` (the test above). The existing parametrized headline test only asserts
+    `items[0].outcome`/`.counts`, never `aggregates.restraint` — this is exactly that gap."""
+    script = make_script("A-01", 1)  # one restraint turn (toolRequired: False)
+    non_replied_turn = make_turn(disposition=disposition, dispatches=(), final_reply=None)
+    trace = make_trace("A-01", (non_replied_turn,))
+
+    _, aggregates = toolcalls.score_conversations([(script, trace, ())], [], pack=make_pack(h=1))
+
+    assert aggregates.restraint.successes == 0
+    assert aggregates.restraint.n == 1
 
 
 # --- determinismProbe (plan `:2262-2264`) -----------------------------------------------------

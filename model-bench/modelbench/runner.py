@@ -32,12 +32,11 @@ because the spec's own §9 already asks that of the next reader:
    no run-level aggregation method at all, unlike `ConversationScorer.score_conversations`, which
    does return `(items, aggregates)`. `ItemScorer` gains one method beyond the spec's own two,
    `aggregate(items, *, pack) -> Aggregates`, so `run_pack` has a symmetric source on both loops.
-   Inert today: `_load_item_scorer`/`_load_conversation_scorer` raise `NotImplementedError`
-   unconditionally (no scorer ships before S3), so this is a seam for S3 to confirm or revise
-   (spec §3.2's own scorer-seam caveat), not a load-bearing decision anything already depends on.
+   Both scorer seams are live: `_load_item_scorer` resolves a real pack's scorer since S3, and
+   `_load_conversation_scorer` does the same as of S5 — `_drive_conversations` calls a real
+   `ConversationScorer` end to end (spec §3.2's own scorer-seam caveat, resolved rather than open).
 
-**Everything here is offline-testable and nothing here calls a real pack's scorer** — S2's own
-"Done when" never runs one (spec §3.2).
+**Everything here is offline-testable.**
 """
 
 from __future__ import annotations
