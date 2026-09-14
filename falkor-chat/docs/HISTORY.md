@@ -5,6 +5,44 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-14 — salesperson-ui S14: cart/order/profile/catalog panels
+
+**What:** Closed S14 per `docs/plans/salesperson-ui.md` §5.1's S14 row (FR-8/9/10/11 parity,
+AC-6/7/8/11). Replaced S12b's four seed placeholders with real panels:
+`CartPanel.tsx` (lines + running total + explicit empty state), `ProfilePanel.tsx` (name +
+delivery address, em-dash for unset fields), `CatalogPanel.tsx` (2-col grid, `<img>` only when
+`imageUrl` is non-null, a genuinely separate text-only "No photo available" card otherwise — no
+`onError` swap), `OrderPanel.tsx` (status chip, itemised lines via a local `isOrderLine` type
+guard, `Cancel order` as an ordinary customer action, `fulfill`/`deliver` boxed inside an
+explicitly-labelled "Demo controls — warehouse simulation" affordance, each transition gated to
+the status that legally permits it per §4.6/OQ-4). 14 of the catalog's 15 products carry a photo
+sourced from Lorem Picsum (Unsplash License, no attribution required); `smart-home-hub` is
+deliberately left bare so the no-image path is exercised by the real running app, not only by
+mocks. `README.md` documents the image source/licence (OQ-6).
+
+**Review:** `docs/reviews/salesperson-ui-s14.md` — **approve with suggestions**, no blockers or
+majors. Two minor findings logged rather than re-dispatched (precedent: S11/S12c) — `isOrderLine`'s
+reject branch is untested (traced to be currently unreachable: the server already filters
+malformed lines before they reach the client); order-status test coverage stops at `placed`/
+`fulfilled`/`delivered`, never `cancelled` (same disabled/hidden gating shape as `delivered`, not a
+suspected live bug). One nit: README's "fetched at build time" wording could be misread as a live
+network dependency of `build.sh` (it has none).
+
+**Verified independently:** full `vitest` (165/174 — the 9 failures are S12b's pre-existing
+`Shell.test.tsx`/`ResetControl.test.tsx`, exposed by this step's real content replacing S12b's
+placeholders, fixed as a separate unit), `tsc -b` clean, `./build.sh` clean (`/shop/` prefix
+intact, all 14 images land in `dist/products/`). Read the diffs directly; confirmed via
+`git diff -- salesperson/src/routes.tsx` that the only other modified file in the tree is S13's own
+concurrent, disjoint swap. Mutation-tested `OrderPanel.tsx`'s `isOrderLine` guard with a mutation
+outside the implementer's own table (gutted to `return true` unconditionally) — confirmed all 9
+`OrderPanel.test.tsx` tests stayed green, i.e. a real (if low-severity) coverage gap, not a false
+negative — restored via a freshly-taken, non-empty-verified backup, diff-confirmed byte-identical.
+The review independently traced the server-side CAS guards
+(`falkor-chat/server/falkorchat/repository.py:3736-3779`) against the client's gating logic and
+found them identical cell-for-cell.
+
+**Committed:** `c2943aa` (code + review).
+
 ## 2026-09-14 — salesperson-ui S12b: mobile layout shell, AC-5 reset control, App.tsx/routes.tsx v1.36 composition
 
 **What:** Closed S12b per `docs/plans/salesperson-ui.md` §5.1's S12b row. Built the mobile layout
