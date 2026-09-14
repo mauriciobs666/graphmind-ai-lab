@@ -21,7 +21,8 @@
     "i18next": "^26.4.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-i18next": "^17.0.13"
+    "react-i18next": "^17.0.13",
+    "react-router-dom": "^7.18.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

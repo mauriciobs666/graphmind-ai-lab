@@ -21,8 +21,5 @@ export default defineConfig({
     // tests/e2e/** is Playwright's; Vitest must not try to run it.
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules/**', 'dist/**', 'tests/e2e/**'],
-    // The scaffold ships no tests of its own (S5 owns no src/ file's content).
-    // Drop this once S12a lands the first real test.
-    passWithNoTests: true,
   },
 })
