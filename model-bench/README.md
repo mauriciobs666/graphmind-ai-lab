@@ -32,21 +32,26 @@ dependency.
 
 ## Status
 
-**Stage S4 is closed — both new packs run end to end against one model each.** Three `ItemScorer`
-implementations exist: `scoring/retrieval.py` for `embedder` (recall@10 = 37/38 = 0.974,
-`docs/test-reports/embedder-self-check-report.md`); `scoring/classification.py` for
-`guard-judge-understanding` (85 items, two verdict metrics, four diagnostics, `reports/guard-judge-understanding-20260911-02.md`);
-`scoring/extraction.py` for `nlq-structured-query` (40 items with answerability stamp 34/6,
-`layer1ExactMatchRate` 34/34 this run, `reports/nlq-structured-query-20260911-01.md`). The CLI ships
+**Stages S4 and S5 are closed.** Four scorer modules exist: `scoring/retrieval.py` for `embedder`
+(recall@10 = 37/38 = 0.974, `docs/test-reports/embedder-self-check-report.md`);
+`scoring/classification.py` for `guard-judge-understanding` (85 items, two verdict metrics, four
+diagnostics, `reports/guard-judge-understanding-20260911-02.md`); `scoring/extraction.py` for
+`nlq-structured-query` (40 items with answerability stamp 34/6, `layer1ExactMatchRate` 34/34 this
+run, `reports/nlq-structured-query-20260911-01.md`); and `scoring/toolcalls.py`, the first
+`ConversationScorer`, for `tool-caller` (per-turn funnel/hazard/argument-decomposition scoring
+against the new `packs/tool-caller-shop-assistant/` storefront pack, proved entirely against
+synthetic traces — `model-bench/docs/reviews/small-model-benchmarking-s5.md` and
+`model-bench/docs/test-reports/small-model-benchmarking-s5-report.md`, verdict PASS). The CLI ships
 all six commands (`compare`, `index rebuild`, `models --tested`, `attest`, `validate`, `run`) plus
-new `scripts/refresh_golden.py` flags (`--check-tables-shape`, `--stamp-answerability`, `--source-git-sha`)
+`scripts/refresh_golden.py` flags (`--check-tables-shape`, `--stamp-answerability`, `--source-git-sha`)
 wired into `main()`. What exists now is both halves: the part that decides whether a number may be
 printed (the environment fingerprint and its validation, the run store and its quarantine-on-read,
 the statistics module, the markdown comparison) and the part that produces one (the LM Studio adapter,
-the pack loader, the runner's capture-order orchestration, all six CLI commands, and three role-specific
-scorers). Two roles (`tool-caller`, S5-S6; `chat-responder`, S7) still have no scorer — `docs/plans/small-model-benchmarking.md` §4.
-The default suite (network-free) still runs offline; `pytest -m live` opts into the tests that need
-a reachable LM Studio.
+the pack loader, the runner's capture-order orchestration, all six CLI commands, and four
+role-specific scorers, including the first `ConversationScorer`). One role (`chat-responder`, S7)
+still has no scorer — `docs/plans/small-model-benchmarking.md` §4. `tool-caller`'s own first live
+run still needs S6's `conversations.jsonl`. The default suite (network-free) still runs offline;
+`pytest -m live` opts into the tests that need a reachable LM Studio.
 
 ## Quick start
 

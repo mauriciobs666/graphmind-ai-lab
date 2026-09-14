@@ -2,6 +2,37 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-14 — U150 — S5 stage-close doc sync
+
+**What:** Post-S5-closure doc sync, same kind of task as U137's S4 sync. S5 (`tool-caller` pack,
+part 1: environment and scoring, entirely against synthetic traces) went from spec through
+implementation, a code gate that found two real defects plus a scope-decision gap, a spec
+correction, and QA acceptance — the full trail is
+`docs/plans/small-model-benchmarking-coordination.md` rows U139 (Step 0: `FunnelCounts`/`HazardPoint`
+shapes, tripwire leg 3) through U148 (QA acceptance, verdict PASS with one non-blocking defect).
+Along the way: U140 (storefront pack), U141 (per-turn pure scoring functions + adversarial traces),
+U142 (`score_conversations` assembly), U143 (`report.py` renderers + `runner.py` wiring, S5
+code-complete), U144 (`analyst`'s code gate — needs changes: a restraint/disposition gating gap, an
+`iterationSummary` `yCalls` undercount, and the `-ml` §4.2(d) argument-failure decomposition
+computed but never wired anywhere printable), U145 (fixed the first two), U146 (`architect`'s spec
+correction choosing to wire the third now, `docs/plans/small-model-benchmarking-s5-spec.md`), U147
+(implemented that correction). Rewrote `model-bench/AGENTS.md`'s `## Current state` and
+`model-bench/README.md`'s `## Status` in place (not appended) to say "Stages S4 and S5 are closed,"
+naming `scoring/toolcalls.py` (the first `ConversationScorer`), `packs/tool-caller-shop-assistant/`,
+and `report.py`'s three new renderers; retargeted the forward-looking section to what S6 owes
+(`conversations.jsonl`/`PROVENANCE.md`, the prose-detector calibration replies, `validate --strict`,
+`tool-caller`'s first live run) and named `chat-responder` (S7) as the one remaining unscored role.
+
+**Files touched:** `model-bench/AGENTS.md`, `model-bench/README.md`, this entry. No source or test
+file touched.
+
+**Verification:** `model-bench/ $ .venv/bin/python -m pytest -q` — `1606 passed, 3 deselected`
+(current at the time of this sync; matches U148's QA-reproduced count exactly — a parallel unit,
+U149, fixing QA's non-blocking TD-1 defect was in flight alongside this one and may move this
+number afterward). Cited for detail rather than re-narrated: the code gate
+(`model-bench/docs/reviews/small-model-benchmarking-s5.md`) and the QA acceptance report
+(`model-bench/docs/test-reports/small-model-benchmarking-s5-report.md`).
+
 ## 2026-09-13 — U137 — sync stale S4-status prose across AGENTS.md and README.md
 
 **What:** Post-S4-closure doc-sync (same kind of task as U119's S2→S3 sync, `33fbe87` — that unit
