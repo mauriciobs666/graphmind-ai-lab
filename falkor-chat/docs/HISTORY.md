@@ -5,6 +5,36 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-13 — salesperson-ui S12c: i18n wiring
+
+**What:** Closed S12c per `docs/plans/salesperson-ui.md` §5.1's S12c row. Built the storefront
+SPA's `react-i18next` instance (`salesperson/src/i18n/config.ts`) with three shipped locale
+bundles (`en`/`pt-BR`/`es`, matching the server's `STOREFRONT_LOCALES` default exactly), the
+join-screen `LanguageChooser` (server-seeded from `GET /shop/api/health`'s `locales` field — never
+hard-coded to the three shipped bundles; falls back to a locale's raw code when it has no
+display-name entry), `useLocale`, `Intl`-based `format.ts` helpers, and the `I18nProvider`
+replacing S12a's pass-through placeholder (same export/path, so `App.tsx` needed no change).
+`routes.tsx` got one narrow, additive edit (import + a one-line swap of the inline language
+`<label>/<select>` for `<LanguageChooser>`) and `tsconfig.app.json` gained `resolveJsonModule` for
+the bundle imports.
+
+**Review:** `docs/reviews/salesperson-ui-s12c.md` — **approve with suggestions**, no blockers. One
+Major: v1.34's `routes.tsx`-ownership fix (below) closed the identical gap for S13/S12d but missed
+this third, structurally-identical case — S12c's edit is exactly the sanctioned pattern but no plan
+row yet says so; routed to `architect` for a v1.35 amendment, not a code fix. Three Minor/Nit
+quality points (label/select accessible-name association untested by the suite as delivered;
+live-preview chrome doesn't sync on initial mount, only on selection; `config.ts` hand-duplicates
+its locale→bundle map) — logged for a future pass, not blocking.
+
+**Verified independently:** full suite (109/109 including S12b's sibling files already on disk),
+`tsc -b` and production build clean; `routes.tsx`/`tsconfig.app.json` diffs matched the reported
+scope exactly; the locale key-coverage mutation (delete a bundle key, confirm the exact-diagnostic
+failure, restore) reproduced from scratch, not re-read from the report; the `/health` `locales`
+field read directly against server source to confirm the three-bundle match and the operator-knob
+non-hardcoding claim.
+
+**Committed:** `42686fe` (code + review).
+
 ## 2026-09-13 — salesperson-ui S12a: session module, API dispatch layer, routing
 
 **What:** Closed S12a per `docs/plans/salesperson-ui.md` §5.1's S12a row. Built the storefront
