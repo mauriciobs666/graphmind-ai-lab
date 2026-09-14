@@ -10,6 +10,7 @@
 import { type FormEvent, useState } from 'react';
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 import { LanguageChooser } from './i18n/LanguageChooser';
+import { LayoutShell } from './layout/Shell';
 import {
   useHealth,
   useJoin,
@@ -256,9 +257,18 @@ function PresenterRoute() {
 
 export const router = createBrowserRouter(
   [
-    { path: APP_PATHS.participant, element: <ParticipantRoute /> },
-    { path: APP_PATHS.presenter, element: <PresenterRoute /> },
-    { path: '*', element: <Navigate to={APP_PATHS.participant} replace /> },
+    {
+      // v1.36/§4.11 — a pathless layout route: `LayoutShell` is rendered by
+      // the router as part of its own matched-route tree, so everything it
+      // renders (not just its `<Outlet/>`) sits inside `RouterProvider`'s
+      // context, not as its sibling. See `LayoutShell`'s own top comment.
+      element: <LayoutShell />,
+      children: [
+        { path: APP_PATHS.participant, element: <ParticipantRoute /> },
+        { path: APP_PATHS.presenter, element: <PresenterRoute /> },
+        { path: '*', element: <Navigate to={APP_PATHS.participant} replace /> },
+      ],
+    },
   ],
   { basename: '/shop' },
 );

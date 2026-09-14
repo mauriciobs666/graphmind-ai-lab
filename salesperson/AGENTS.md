@@ -56,9 +56,10 @@ The plan splits this tree across steps so that parallel steps never collide. Res
 |---|---|
 | `package.json`, `package-lock.json`, `vite.config.ts`, `build.sh`, `scripts/install_node.sh`, `.gitignore`, `.node-version` | S5 (this scaffold) |
 | `playwright.config.ts` | S5 scaffolded → S12b extends |
-| `src/{main.tsx,App.tsx,index.css}` — the SPA's shared entry files | S5 scaffolded → **S12a owns thereafter; no later step edits them** |
+| `src/{main.tsx,index.css}` — the SPA's shared entry files | S5 scaffolded → **S12a owns thereafter; no later step edits them** |
+| `src/App.tsx` | S5 scaffolded → S12a → **S12b** (v1.36, §4.11: reorders the three providers to wrap `RouterProvider` normally, one narrow structural edit — closes the review's Major); no step edits it after |
 | `src/api/**`, `src/session/**` | S12a |
-| `src/routes.tsx` | S12a (builds it) → S12c → S13, S12d — each adds one narrow, additive swap; see `docs/plans/salesperson-ui.md` §5.0 (v1.35) |
+| `src/routes.tsx` | S12a (builds it) → S12c → **S12b** (v1.36, §4.11: wraps the three routes in one pathless layout route, `element: <LayoutShell/>`) → S13, S12d — each adds one narrow, additive swap; see `docs/plans/salesperson-ui.md` §5.0 |
 | `src/layout/**`, `src/components/sheets/**` | S12b |
 | `src/i18n/**`, `src/locales/**` | S12c |
 | `src/views/Chat*`, `src/components/message/**` | S13 |

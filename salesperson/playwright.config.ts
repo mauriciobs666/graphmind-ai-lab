@@ -23,11 +23,17 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [
+    // Mobile-first is the product requirement (§4.2, AC-4) — every project
+    // here is a mobile viewport, deliberately, at the two exact sizes S12b's
+    // done-condition names (docs/plans/salesperson-ui.md §5.1's S12b row):
+    // a small phone and a mid-size phone.
     {
-      // Mobile-first is the product requirement (§4.2, AC-4): the only
-      // project is a mobile viewport, deliberately.
-      name: 'mobile-chrome',
-      use: { ...devices['Pixel 7'] },
+      name: 'mobile-360x740',
+      use: { ...devices['Pixel 7'], viewport: { width: 360, height: 740 } },
+    },
+    {
+      name: 'mobile-390x844',
+      use: { ...devices['Pixel 7'], viewport: { width: 390, height: 844 } },
     },
   ],
 })
