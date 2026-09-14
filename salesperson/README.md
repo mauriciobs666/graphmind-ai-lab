@@ -153,9 +153,28 @@ salesperson/
 
 ## Product images
 
-Catalog imagery and its licensing are recorded here when they land (`docs/plans/salesperson-ui.md`
-OQ-6). The catalog's 15 `Product` nodes carry **no image field** of any kind, so images are
-client-side assets keyed by the deterministic `productId` slug, under `public/products/`.
+The catalog's 15 `Product` nodes (`falkor-chat/scripts/seed_catalog.sh`) carry **no image field**
+of any kind, so images are client-side assets keyed by the deterministic `productId` slug, under
+`public/products/<productId>.jpg`. `storefront.build_image_manifest()` (`falkor-chat` §4.7) turns
+presence/absence into `imageUrl: string | null` per product; the catalog panel (`src/views/
+CatalogPanel.tsx`) renders an `<img>` only when it is non-null.
+
+**Source and licence (OQ-6):** 14 of the 15 products carry a photo sourced from **[Lorem
+Picsum](https://picsum.photos)** — Picsum's own photos are drawn from Unsplash and distributed
+under the **[Unsplash License](https://unsplash.com/license)** (free for commercial and
+non-commercial use, no permission or attribution required). Each file is a deterministic,
+per-product photo fetched at build time from `https://picsum.photos/seed/<productId>/640/480.jpg`
+(the `seed` makes the pick stable across re-fetches, not a fresh-random image per run) and
+committed verbatim — no further processing. The photos are generic stock photography, not literal
+product shots (Picsum has no product/keyword search), consistent with the rest of this storefront
+being a simulated demo catalog rather than a real one.
+
+**`smart-home-hub` is deliberately left without a file** — one product with no asset is kept on
+purpose so the catalog panel's text-only card path is exercised by the running app itself, not
+only by a mocked unit test. Adding an image for it later is a drop-in: name the file
+`public/products/smart-home-hub.<ext>` and the manifest picks it up on the next server start
+(`falkor-chat` §4.7's accepted extensions are `.webp`, `.jpg`, `.jpeg`, `.png`, first match in that
+order).
 
 ## Status
 
