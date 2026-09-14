@@ -6,7 +6,7 @@
 // App.tsx's actual composition exactly (see `./Shell.tsx`'s top comment),
 // not a simplified stand-in.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
@@ -62,23 +62,38 @@ describe('LayoutShell', () => {
     expect(screen.getByText('join screen')).toBeInTheDocument();
   });
 
-  it('wires each of the four seed placeholders into its own sheet', async () => {
+  it('wires each of the four header buttons into its own sheet, with that sheet\'s own real panel mounted inside', async () => {
+    // S14 replaced S12b's seed placeholders with real, data-fetching panels
+    // (src/views/{Cart,Order,Profile,Catalog}Panel.tsx) — this test no
+    // longer has literal placeholder copy to assert on. `renderShell()` has
+    // no participant session, so every panel's query is `enabled: false`
+    // (see `api/hooks.ts`) and each renders its own permanent, panel-
+    // specific "Loading …" copy — that text is real production output, not
+    // a placeholder invented for this test, and it differs per panel, so it
+    // still proves *which* panel mounted, not just that a dialog opened.
+    // Combined with the dialog's accessible name (its title, set by the
+    // matching `*Sheet.tsx`), each assertion below proves both halves of
+    // "wired to its own sheet": the right title AND the right panel inside.
     const user = userEvent.setup();
     renderShell();
 
     await user.click(screen.getByRole('button', { name: 'Browse catalog' }));
-    expect(screen.getByText(/catalog will appear here/i)).toBeInTheDocument();
+    const catalogDialog = screen.getByRole('dialog', { name: 'Catalog' });
+    expect(within(catalogDialog).getByText(/loading the catalog/i)).toBeInTheDocument();
     await user.click(screen.getAllByRole('button', { name: 'Close' }).at(-1)!);
 
     await user.click(screen.getByRole('button', { name: 'Cart' }));
-    expect(screen.getByText(/cart will appear here/i)).toBeInTheDocument();
+    const cartDialog = screen.getByRole('dialog', { name: 'Cart' });
+    expect(within(cartDialog).getByText(/loading your cart/i)).toBeInTheDocument();
     await user.click(screen.getAllByRole('button', { name: 'Close' }).at(-1)!);
 
     await user.click(screen.getByRole('button', { name: 'Order status' }));
-    expect(screen.getByText(/order status will appear here/i)).toBeInTheDocument();
+    const orderDialog = screen.getByRole('dialog', { name: 'Order status' });
+    expect(within(orderDialog).getByText(/loading your order/i)).toBeInTheDocument();
     await user.click(screen.getAllByRole('button', { name: 'Close' }).at(-1)!);
 
     await user.click(screen.getByRole('button', { name: 'Profile' }));
-    expect(screen.getByText(/profile will appear here/i)).toBeInTheDocument();
+    const profileDialog = screen.getByRole('dialog', { name: 'Profile' });
+    expect(within(profileDialog).getByText(/loading your profile/i)).toBeInTheDocument();
   });
 });

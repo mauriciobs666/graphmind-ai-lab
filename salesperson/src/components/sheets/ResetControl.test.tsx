@@ -41,6 +41,32 @@ function jsonResponse(status: number, body: unknown): Response {
   } as Response;
 }
 
+// ProfilePanel (S14's real implementation, `views/ProfilePanel.tsx`) mounts
+// the instant `openProfileSheet()` opens this sheet, and — with a
+// participant session saved — its `useShopState()` immediately fires its
+// own `GET /shop/api/state` poll, independent of whatever this file's tests
+// mean to exercise via `POST /shop/api/reset`. Every `fetchMock` below must
+// answer that incidental call with an ordinary successful state response
+// (never the status/body a given test built for `/reset`), or it corrupts
+// the test's actual scenario — a state 401/504/500/etc. fires
+// `useErrorEffects`' own dispatch (C1-C14) independently of the reset
+// mutation this file is testing, and a state-poll error can render its own
+// `role="alert"`, colliding with `getByRole('alert')` below.
+function isStateRequest(input: RequestInfo | URL): boolean {
+  return String(input).includes('/shop/api/state');
+}
+
+const DEFAULT_STATE_RESPONSE = {
+  profile: { name: 'Ada', deliveryAddress: null },
+  cart: { items: [], total: 0 },
+  order: null,
+  turn: { state: 'idle', queuePosition: 0, lastTurn: null },
+};
+
+function stateResponse(): Response {
+  return jsonResponse(200, DEFAULT_STATE_RESPONSE);
+}
+
 function renderApp() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
@@ -85,7 +111,12 @@ describe('ResetControl', () => {
 
   it('requires a confirm step, and Cancel backs out without calling the API', async () => {
     saveParticipantSession({ participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'pt-BR' });
-    const fetchMock = vi.fn();
+    const resetCalls: unknown[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (isStateRequest(input)) return stateResponse();
+      resetCalls.push(input);
+      return jsonResponse(200, { threadId: 't1', language: 'pt-BR' });
+    });
     vi.stubGlobal('fetch', fetchMock);
     renderApp();
     const user = await openProfileSheet();
@@ -97,12 +128,17 @@ describe('ResetControl', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByText(/cannot be undone/i)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reset my session' })).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
+    // The state poll is expected (ProfilePanel's own concern) — what this
+    // test actually proves is that Cancel never drives a `/reset` call.
+    expect(resetCalls).toHaveLength(0);
   });
 
   it('confirming calls POST /shop/api/reset and lands the client on the language step with the previous language, asserted on rendered state — not the fetch', async () => {
     saveParticipantSession({ participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'pt-BR' });
+    let resetCallCount = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (isStateRequest(input)) return stateResponse();
+      resetCallCount += 1;
       expect(String(input)).toMatch(/\/shop\/api\/reset$/);
       expect((init?.method ?? 'GET').toUpperCase()).toBe('POST');
       return jsonResponse(200, { threadId: 't1', language: 'pt-BR' });
@@ -114,7 +150,10 @@ describe('ResetControl', () => {
     await user.click(screen.getByRole('button', { name: 'Reset my session' }));
     await user.click(screen.getByRole('button', { name: 'Yes, reset' }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    // The state poll is expected (ProfilePanel's own concern) — what this
+    // test actually proves is that confirming drives exactly one `/reset`
+    // call.
+    await waitFor(() => expect(resetCallCount).toBe(1));
     // Rendered state, not the fetch call: SessionContext's own
     // pendingLanguageStep flips to the previous language...
     await waitFor(() =>
@@ -128,7 +167,10 @@ describe('ResetControl', () => {
 
   it('shows an inline error and stays on the confirm step when the reset call fails', async () => {
     saveParticipantSession({ participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'en' });
-    const fetchMock = vi.fn(async () => jsonResponse(503, { error: 'quiesce_failed' }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (isStateRequest(input)) return stateResponse();
+      return jsonResponse(503, { error: 'quiesce_failed' });
+    });
     vi.stubGlobal('fetch', fetchMock);
     renderApp();
     const user = await openProfileSheet();
@@ -146,7 +188,10 @@ describe('ResetControl', () => {
 
   it('clears the participant credential and closes the sheet on a 401 (C3), via useResetMine()\'s own dispatch', async () => {
     saveParticipantSession({ participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'en' });
-    const fetchMock = vi.fn(async () => jsonResponse(401, { error: 'invalid_token' }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (isStateRequest(input)) return stateResponse();
+      return jsonResponse(401, { error: 'invalid_token' });
+    });
     vi.stubGlobal('fetch', fetchMock);
     renderApp();
     const user = await openProfileSheet();
@@ -164,7 +209,10 @@ describe('ResetControl', () => {
 
   it('reports the reset as unconfirmed (not failed) on a 504, per C4/F8', async () => {
     saveParticipantSession({ participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'en' });
-    const fetchMock = vi.fn(async () => jsonResponse(504, null));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (isStateRequest(input)) return stateResponse();
+      return jsonResponse(504, null);
+    });
     vi.stubGlobal('fetch', fetchMock);
     renderApp();
     const user = await openProfileSheet();
@@ -184,7 +232,10 @@ describe('ResetControl', () => {
 
   it('shows a distinct alarm, with no implied retry, on a 409 unscoped_participant (C6b)', async () => {
     saveParticipantSession({ participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'en' });
-    const fetchMock = vi.fn(async () => jsonResponse(409, { error: 'unscoped_participant' }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (isStateRequest(input)) return stateResponse();
+      return jsonResponse(409, { error: 'unscoped_participant' });
+    });
     vi.stubGlobal('fetch', fetchMock);
     renderApp();
     const user = await openProfileSheet();
@@ -200,7 +251,10 @@ describe('ResetControl', () => {
 
   it('shows a visible unexpected-response message for a status resolveErrorAction leaves unhandled (C13)', async () => {
     saveParticipantSession({ participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'en' });
-    const fetchMock = vi.fn(async () => jsonResponse(500, { error: 'boom' }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (isStateRequest(input)) return stateResponse();
+      return jsonResponse(500, { error: 'boom' });
+    });
     vi.stubGlobal('fetch', fetchMock);
     renderApp();
     const user = await openProfileSheet();
@@ -217,12 +271,16 @@ describe('ResetControl', () => {
   it('clears the previous attempt\'s stale error the instant a retry starts, before the new response resolves (analyst Pass 3 minor)', async () => {
     saveParticipantSession({ participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'en' });
     let resolveSecond: (response: Response) => void = () => {};
-    const fetchMock = vi
-      .fn()
-      .mockImplementationOnce(async () => jsonResponse(503, { error: 'quiesce_failed' }))
-      .mockImplementationOnce(
-        () => new Promise<Response>((resolve) => { resolveSecond = resolve; }),
-      );
+    // Ordered by *reset* attempt, not by raw call index — ProfilePanel's own
+    // state poll fires before the first reset attempt and would otherwise
+    // consume this sequence's first slot.
+    let resetAttempt = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (isStateRequest(input)) return stateResponse();
+      resetAttempt += 1;
+      if (resetAttempt === 1) return jsonResponse(503, { error: 'quiesce_failed' });
+      return new Promise<Response>((resolve) => { resolveSecond = resolve; });
+    });
     vi.stubGlobal('fetch', fetchMock);
     renderApp();
     const user = await openProfileSheet();
