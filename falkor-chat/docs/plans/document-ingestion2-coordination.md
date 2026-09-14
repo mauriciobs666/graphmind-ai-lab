@@ -38,7 +38,8 @@ for the coordination.
 | Stage D | `coder` | `a82458d12eeedad41` | accepted | commit `0c0fa4a` | `analyst` (`af1c21373dcf0a02d`) → approve with suggestions (Pass 6) | 409851 tok / 138 tools (+211974 tok / 54 tools review) |
 | Stage D-fix | `tdd-engineer` | `a21c31b2be06c85b3` | accepted | commit `854f0b5` | `analyst` (`ab817d518c2689a3e`) → approve (Pass 7, zero new findings) | 167316 tok / 55 tools (+117663 tok / 32 tools review) |
 | Stage D-fix-graph | `graph-dba` | `a89b7b2fec6d7d88c` | accepted (no code change) | `claude/graph-dba/falkordb-quirks.md` entry, 2026-09-13 | — (diagnostic consult) → clean, closes Pass 6 Finding 1 | 90604 tok / 17 tools |
-| Stage E | `qa-engineer` | — | queued | — | — | — |
+| Stage E | `qa-engineer` | `a7a0f52688cef8b2b` | accepted | commit `e9fb5b3` (test plan + report) | self-executed acceptance pass → PASS-with-parked-defects (all AC-1..AC-8 hold; 2 defects found, see Notes) | 294710 tok / 110 tools |
+| Stage F (Defect 1 fix) | `tdd-engineer` | `a4426e33398d5d973` | in-flight | — | `analyst` → — | — |
 
 ## Notes
 
@@ -289,3 +290,39 @@ for the coordination.
   `854f0b5` (test_api.py + test_queries.sh §14.10 + review doc). **Stage D-fix is now fully
   closed** — all three Pass 6 findings resolved (Finding 1 via `graph-dba`/`19ad080`, Findings 2+3
   via this unit/`854f0b5`). Next: Stage E (`qa-engineer`).
+- **Stage E (`qa-engineer`) delivered: PASS-with-parked-defects.** Full detail:
+  `docs/test-reports/document-ingestion2-report.md` + `docs/test-plans/document-ingestion2.md`
+  (both committed `e9fb5b3`). All AC-1..AC-8 live-verified end-to-end against a real, disposable
+  workspace (`ws:docingest2qa`), a real multi-version/multi-actor fixture (two genuine `User`
+  actors, restart-based), both REST and MCP transports. The ML note's named v1 known-gap
+  reproduced live exactly as documented (accepted behavior). Independently verified before
+  accepting: read both deliverables in full; confirmed the report's Defect 1 code citation
+  (`repository.py:1888`'s unescaped `%tok%` join) against the actual source — matches; **reproduced
+  Defect 1 myself**, independently, via a direct read-only `repository.find_update_shortlist(...)`
+  call against the QA pass's own disposable workspace (read-only — no mutation risk to their
+  fixture) — same `RediSearch: Syntax error` the report describes; also reproduced the plain-title
+  non-crash case for contrast. Confirmed both defect-related `:KaizenEntry` writes present in
+  `kaizen_team`. Did not re-drive the full live fixture myself (Stage E's own live execution is the
+  evidence; re-driving it would be redundant re-verification, not independent verification of a new
+  claim).
+  - **Routing decision, not taken from the report's own suggestion verbatim**: the report
+    recommends "coder/tdd-engineer" for Defect 1 and "architect/data-scientist" for Defect 2 without
+    fully distinguishing why. Re-derived independently: **Defect 1** is a pure bug (crash on valid
+    input, no design axis — any escaping fix is correct) with an already-isolated reproduction →
+    `tdd-engineer`, reproduction-test-first, dispatched now (High severity, silently and completely
+    defeats AC-2 for ordinary real-world titles — not deferred). **Defect 2** genuinely has a
+    design trade-off (recall vs. precision in the title-fuzzy candidate signal) that the report
+    itself frames as two live options with no clear winner, is Medium severity, and does **not**
+    falsify any AC (the LSH-band signal is primary and unaffected) — filed as `docs/BACKLOG.md`
+    K-064 instead of dispatched immediately, routed to `data-scientist` first (method opinion)
+    before any implementer, rather than blocking this coordination's close on a design decision
+    that isn't urgent. Finding 3 (`FALKORCHAT_USER_ID`/`Agent` boot collision) is pre-existing M1
+    tenancy-seam behavior, explicitly not a `document-ingestion2` defect per the report, already
+    captured as a `kaizen_team` entry — no further action.
+  - **Opened Stage F** for Defect 1's fix (`tdd-engineer`, dispatched — brief includes: escape
+    RediSearch metacharacters in `find_update_shortlist`'s title-fuzzy query construction only,
+    explicitly scoped away from `fusion._fuzzy_query`'s identical-but-out-of-scope exposure;
+    reproduction-test-first against the QA report's full 7-title characterization table; mutation-
+    test the fix; `test_queries.sh` §14.10 addition; `docs/HISTORY.md` entry). Once Stage F is
+    delivered, verified, and gated, the whole `document-ingestion2` coordination closes — Defect 2
+    (K-064) is intentionally left as a follow-up, not a blocker.
