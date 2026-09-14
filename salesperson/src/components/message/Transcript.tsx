@@ -10,6 +10,7 @@
 // `scrollHeight` — too late to tell "was" from "is now"), so the decision at
 // append time is always the viewer's true position immediately beforehand.
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { MessageRow } from '../../api/endpoints';
 import { MessageBubble } from './MessageBubble';
 import { WELCOME_ROW_ID } from './welcome';
@@ -25,6 +26,7 @@ export function Transcript({
    * trailing, unconfirmed echo (optimistic send). */
   pendingText?: string | null;
 }) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLUListElement | null>(null);
   const atBottomRef = useRef(true);
 
@@ -51,13 +53,13 @@ export function Transcript({
   return (
     <ul
       ref={containerRef}
-      aria-label="Transcript"
+      aria-label={t('chat.transcript.label')}
       aria-live="polite"
       className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-3"
     >
       {isEmpty && (
         <li className="px-2 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
-          No messages yet — say hello.
+          {t('chat.transcript.empty')}
         </li>
       )}
       {rows.map((row) => (

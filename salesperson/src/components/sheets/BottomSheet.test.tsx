@@ -1,7 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../../i18n/config';
 import { BottomSheet } from './BottomSheet';
+
+afterEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 describe('BottomSheet', () => {
   it('renders nothing when closed', () => {
@@ -63,5 +68,19 @@ describe('BottomSheet', () => {
     );
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes its own "Close" chrome through t() — switches to pt-BR, English literal gone', async () => {
+    render(
+      <BottomSheet open title="Cart" onClose={() => {}}>
+        content
+      </BottomSheet>,
+    );
+    expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(2);
+
+    await i18n.changeLanguage('pt-BR');
+
+    expect(await screen.findAllByRole('button', { name: 'Fechar' })).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
   });
 });

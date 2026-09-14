@@ -4,6 +4,7 @@
 // docs/plans/salesperson-ui.md §4.2's `textContent`-only rule: agent-emitted
 // markup (e.g. a literal `<b>` in the reply) is never parsed as HTML here,
 // with no `dangerouslySetInnerHTML` anywhere in this tree.
+import { useTranslation } from 'react-i18next';
 import { useLocale } from '../../i18n/useLocale';
 import { formatDate } from '../../i18n/format';
 import type { MessageRow } from '../../api/endpoints';
@@ -22,6 +23,7 @@ export function MessageBubble({
    * clock time for "epoch 0". */
   showTimestamp?: boolean;
 }) {
+  const { t } = useTranslation();
   const { locale } = useLocale();
   const isOwn = row.role !== 'assistant';
 
@@ -45,7 +47,7 @@ export function MessageBubble({
               isOwn ? 'text-slate-300 dark:text-slate-600' : 'text-slate-400 dark:text-slate-500'
             }`}
           >
-            {pending ? 'Sending…' : formatDate(row.createdAt, locale, { timeStyle: 'short' })}
+            {pending ? t('chat.message.sending') : formatDate(row.createdAt, locale, { timeStyle: 'short' })}
           </p>
         )}
       </div>

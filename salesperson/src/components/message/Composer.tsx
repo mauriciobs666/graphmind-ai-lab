@@ -5,6 +5,7 @@
 // it. That split is what keeps this file free of any hook, and therefore
 // trivial to render with a handful of props in a test.
 import type { FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ComposerNotice } from './composerNotice';
 
 const MAX_LENGTH = 2000; // §5.2 `POST /shop/api/messages` bound (C11)
@@ -28,6 +29,7 @@ export function Composer({
   disabled: boolean;
   notice: ComposerNotice | null;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       // `sticky bottom-0` is defensive: it keeps the composer reachable at
@@ -48,7 +50,7 @@ export function Composer({
       )}
       <form onSubmit={onSubmit} className="flex items-end gap-2 px-3 py-3">
         <label className="sr-only" htmlFor="chat-composer-input">
-          Message
+          {t('chat.composer.messageLabel')}
         </label>
         <textarea
           id="chat-composer-input"
@@ -62,14 +64,14 @@ export function Composer({
           }}
           maxLength={MAX_LENGTH}
           rows={1}
-          placeholder="Type a message…"
+          placeholder={t('chat.composer.placeholder')}
           disabled={disabled}
           className="max-h-32 min-h-11 flex-1 resize-none rounded-2xl border border-slate-300 px-4 py-2.5 text-base leading-snug outline-none focus:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900"
         />
         <button
           type="submit"
           disabled={disabled || value.trim().length === 0}
-          aria-label="Send"
+          aria-label={t('chat.composer.send')}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-900 text-white transition disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-100 dark:text-slate-900"
         >
           <svg

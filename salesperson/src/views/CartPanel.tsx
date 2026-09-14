@@ -4,11 +4,13 @@
 // separate cart endpoint exists. `views/{Cart,Order,Profile,Catalog}*` is
 // this step's own owned subtree; this file only replaces S12b's seed
 // placeholder content, per §5.0.
+import { useTranslation } from 'react-i18next';
 import { useShopState } from '../api/hooks';
 import { formatCurrency } from '../i18n/format';
 import { useLocale } from '../i18n/useLocale';
 
 export function CartPanel() {
+  const { t } = useTranslation();
   const state = useShopState();
   const { locale } = useLocale();
 
@@ -21,26 +23,26 @@ export function CartPanel() {
     if (state.isError) {
       return (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          Couldn't load your cart. Retrying automatically…
+          {t('cart.loadError')}
         </p>
       );
     }
     return (
-      <p className="text-sm text-slate-500 dark:text-slate-400">Loading your cart…</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">{t('cart.loading')}</p>
     );
   }
 
   const { cart } = state.data;
 
   if (cart.items.length === 0) {
-    return <p className="text-sm text-slate-500 dark:text-slate-400">Your cart is empty.</p>;
+    return <p className="text-sm text-slate-500 dark:text-slate-400">{t('cart.empty')}</p>;
   }
 
   return (
     <div className="flex flex-col gap-3">
       {state.isError && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
-          Showing the last known cart — reconnecting…
+          {t('cart.staleNotice')}
         </p>
       )}
       <ul className="flex flex-col divide-y divide-slate-100 dark:divide-slate-800">
@@ -62,7 +64,7 @@ export function CartPanel() {
         ))}
       </ul>
       <div className="flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-semibold text-slate-900 dark:border-slate-700 dark:text-slate-50">
-        <span>Total</span>
+        <span>{t('cart.total')}</span>
         <span className="tabular-nums">{formatCurrency(cart.total, locale)}</span>
       </div>
     </div>

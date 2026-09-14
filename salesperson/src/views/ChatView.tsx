@@ -23,6 +23,7 @@
 // render would be a same-render side effect on a value another consumer
 // could read).
 import { type FormEvent, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { usePostMessage, useShopState, useMessages } from '../api/hooks';
 import { Composer } from '../components/message/Composer';
 import { composerNoticeFor } from '../components/message/composerNotice';
@@ -34,6 +35,7 @@ import { withWelcomeRow } from '../components/message/welcome';
 import { useSession } from '../session/SessionContext';
 
 export function ChatView() {
+  const { t } = useTranslation();
   const shopState = useShopState();
   const messages = useMessages();
   const postMessage = usePostMessage();
@@ -74,7 +76,7 @@ export function ChatView() {
     greeting,
   );
   const pendingText = postMessage.isPending ? (postMessage.variables ?? null) : null;
-  const notice = composerNoticeFor(postMessage.action, postMessage.reconciliation);
+  const notice = composerNoticeFor(postMessage.action, postMessage.reconciliation, t);
 
   return (
     // `layout/Shell.tsx`'s `<Outlet/>` wrapper is `flex-1` on a `display:

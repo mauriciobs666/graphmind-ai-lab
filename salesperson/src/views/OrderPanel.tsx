@@ -13,6 +13,8 @@
 // product to a business audience, so those two transitions are boxed apart
 // from `cancel` and named as a simulation, never presented as an ordinary
 // storefront action.
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { useAdvanceOrder, useShopState } from '../api/hooks';
 import type { ErrorAction } from '../api/dispatch';
 import { formatCurrency } from '../i18n/format';
@@ -63,19 +65,19 @@ function statusLabel(status: string): string {
   return status.length === 0 ? status : status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-function errorMessageFor(action: ErrorAction | null): string | null {
+function errorMessageFor(action: ErrorAction | null, t: TFunction): string | null {
   if (!action) return null;
   switch (action.kind) {
     case 'staleOrderRefresh':
       // C10 — a 404/409 here is an ordinary stale-button outcome: the order
       // above has already been refreshed from the re-read.
-      return "That didn't go through — the order above now reflects its current status.";
+      return t('order.error.staleOrderRefresh');
     case 'reread':
       // C4 — a 504 leaves the outcome ambiguous; the order above reflects
       // the latest state the client could confirm.
-      return "We couldn't confirm whether that worked — the order above reflects the latest we could read.";
+      return t('order.error.reread');
     case 'unhandled':
-      return `Unexpected response from the server (status ${action.status}). Please try again.`;
+      return t('order.error.unhandled', { status: action.status });
     case 'clearParticipant':
       // C3 — credential already cleared, client is navigating away.
       return null;
@@ -104,6 +106,7 @@ function WarehouseIcon({ className }: { className?: string }) {
 }
 
 export function OrderPanel() {
+  const { t } = useTranslation();
   const state = useShopState();
   const advance = useAdvanceOrder();
   const { locale } = useLocale();
@@ -117,12 +120,12 @@ export function OrderPanel() {
     if (state.isError) {
       return (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          Couldn't load your order. Retrying automatically…
+          {t('order.loadError')}
         </p>
       );
     }
     return (
-      <p className="text-sm text-slate-500 dark:text-slate-400">Loading your order…</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">{t('order.loading')}</p>
     );
   }
 
@@ -131,13 +134,13 @@ export function OrderPanel() {
   if (!order) {
     return (
       <p className="text-sm text-slate-500 dark:text-slate-400">
-        You don't have an order yet. Browse the catalog and chat with us to place one.
+        {t('order.empty')}
       </p>
     );
   }
 
   const lines = order.lines.filter(isOrderLine);
-  const advanceError = advance.isPending ? null : errorMessageFor(advance.action);
+  const advanceError = advance.isPending ? null : errorMessageFor(advance.action, t);
   const canCancel = order.status === 'placed';
   const canFulfill = order.status === 'placed';
   const canDeliver = order.status === 'fulfilled';
@@ -146,20 +149,20 @@ export function OrderPanel() {
     <div className="flex flex-col gap-4">
       {state.isError && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
-          Showing the last known order — reconnecting…
+          {t('order.staleNotice')}
         </p>
       )}
 
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-          Order #{order.orderId}
+          {t('order.idLabel', { orderId: order.orderId })}
         </span>
         <span
           className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
             STATUS_STYLES[order.status] ?? DEFAULT_STATUS_STYLE
           }`}
         >
-          {statusLabel(order.status)}
+          {t(`order.status.${order.status}`, statusLabel(order.status))}
         </span>
       </div>
 
@@ -185,7 +188,7 @@ export function OrderPanel() {
       )}
 
       <div className="flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-semibold text-slate-900 dark:border-slate-700 dark:text-slate-50">
-        <span>Total</span>
+        <span>{t('order.total')}</span>
         <span className="tabular-nums">{formatCurrency(order.total, locale)}</span>
       </div>
 
@@ -202,7 +205,7 @@ export function OrderPanel() {
           disabled={advance.isPending}
           className="self-start rounded-md border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
         >
-          Cancel order
+          {t('order.cancel')}
         </button>
       )}
 
@@ -216,11 +219,10 @@ export function OrderPanel() {
       >
         <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">
           <WarehouseIcon className="h-3.5 w-3.5 shrink-0" />
-          Demo controls — warehouse simulation
+          {t('order.demoControls.label')}
         </p>
         <p className="mt-1 text-xs text-purple-700/80 dark:text-purple-300/80">
-          These stand in for warehouse staff. A real customer never fulfils or delivers their own
-          order — they're here only so this demo can show the full lifecycle.
+          {t('order.demoControls.description')}
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
           <button
@@ -229,7 +231,7 @@ export function OrderPanel() {
             disabled={!canFulfill || advance.isPending}
             className="rounded-md border border-purple-300 bg-white px-3 py-1.5 text-xs font-medium text-purple-700 transition hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-purple-700 dark:bg-slate-900 dark:text-purple-300 dark:hover:bg-purple-950/40"
           >
-            Simulate: mark fulfilled
+            {t('order.demoControls.fulfill')}
           </button>
           <button
             type="button"
@@ -237,7 +239,7 @@ export function OrderPanel() {
             disabled={!canDeliver || advance.isPending}
             className="rounded-md border border-purple-300 bg-white px-3 py-1.5 text-xs font-medium text-purple-700 transition hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-purple-700 dark:bg-slate-900 dark:text-purple-300 dark:hover:bg-purple-950/40"
           >
-            Simulate: mark delivered
+            {t('order.demoControls.deliver')}
           </button>
         </div>
       </div>

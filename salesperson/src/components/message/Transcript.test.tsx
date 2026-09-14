@@ -6,10 +6,15 @@
 // `fireEvent.scroll` to set its "am I at the bottom" tracking, exactly as a
 // real scroll would.
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { MessageRow } from '../../api/endpoints';
+import i18n from '../../i18n/config';
 import { Transcript } from './Transcript';
 import { WELCOME_ROW_ID } from './welcome';
+
+afterEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 function row(msgId: string, text: string): MessageRow {
   return { msgId, threadId: 't', authorId: 'p', text, role: 'user', createdAt: 1, mentions: [] };
@@ -77,5 +82,18 @@ describe('Transcript', () => {
     rerender(<Transcript rows={[row('1', 'first'), row('2', 'second')]} />);
 
     expect(list.scrollTop).toBe(100);
+  });
+
+  it('routes its own chrome through t() — switches to pt-BR, English literals gone', async () => {
+    render(<Transcript rows={[]} />);
+    expect(screen.getByRole('list', { name: 'Transcript' })).toBeInTheDocument();
+    expect(screen.getByText('No messages yet — say hello.')).toBeInTheDocument();
+
+    await i18n.changeLanguage('pt-BR');
+
+    expect(await screen.findByRole('list', { name: 'Transcrição' })).toBeInTheDocument();
+    expect(screen.getByText('Nenhuma mensagem ainda — diga olá.')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Transcript' })).not.toBeInTheDocument();
+    expect(screen.queryByText('No messages yet — say hello.')).not.toBeInTheDocument();
   });
 });

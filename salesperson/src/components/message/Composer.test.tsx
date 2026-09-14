@@ -1,8 +1,13 @@
 import type { FormEvent } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../../i18n/config';
 import { Composer } from './Composer';
+
+afterEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 describe('Composer', () => {
   it('reports every keystroke to the caller and submits on click', async () => {
@@ -71,5 +76,23 @@ describe('Composer', () => {
       />,
     );
     expect(screen.getByRole('status')).toHaveTextContent('fyi');
+  });
+
+  it('routes its own chrome through t() — switches to pt-BR, English literals gone', async () => {
+    render(
+      <Composer value="" onChange={vi.fn()} onSubmit={vi.fn()} disabled={false} notice={null} />,
+    );
+    expect(screen.getByText('Message')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Type a message…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeInTheDocument();
+
+    await i18n.changeLanguage('pt-BR');
+
+    expect(await screen.findByText('Mensagem')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Digite uma mensagem…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enviar' })).toBeInTheDocument();
+    expect(screen.queryByText('Message')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Type a message…')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument();
   });
 });

@@ -1,12 +1,18 @@
+import { useTranslation } from 'react-i18next';
 import { useSheetState } from '../../layout/SheetContext';
 import { ProfilePanel } from '../../views/ProfilePanel';
 import { BottomSheet } from './BottomSheet';
 import { ResetControl } from './ResetControl';
 
 export function ProfileSheet() {
+  const { t } = useTranslation();
   const { openSheet, close } = useSheetState();
   return (
-    <BottomSheet open={openSheet === 'profile'} title="Profile" onClose={close}>
+    <BottomSheet
+      open={openSheet === 'profile'}
+      title={t('layout.sheet.title.profile')}
+      onClose={close}
+    >
       <div className="flex flex-col gap-6">
         <ProfilePanel />
         <hr className="border-slate-100 dark:border-slate-800" />

@@ -2,5 +2,122 @@
   "join": {
     "languageLabel": "Idioma",
     "languageHint": "Escolha o idioma em que você quer conversar."
+  },
+  "chat": {
+    "composer": {
+      "messageLabel": "Mensagem",
+      "placeholder": "Digite uma mensagem…",
+      "send": "Enviar"
+    },
+    "transcript": {
+      "label": "Transcrição",
+      "empty": "Nenhuma mensagem ainda — diga olá."
+    },
+    "turn": {
+      "thinking": "Pensando…",
+      "firstInLine": "Você é o primeiro da fila — o processamento começa em breve.",
+      "aheadOfYou_one": "{{count}} pessoa na sua frente.",
+      "aheadOfYou_other": "{{count}} pessoas na sua frente."
+    },
+    "deadTurn": {
+      "notice": "A resposta nunca chegou — envie novamente."
+    },
+    "message": {
+      "sending": "Enviando…"
+    },
+    "notice": {
+      "turnInProgress": "Ainda processando sua última mensagem…",
+      "messageTooLong": "Essa mensagem é muito longa. Encurte-a e envie novamente.",
+      "sendFailedRetry": "Algo deu errado e sua mensagem não foi enviada. Tente novamente.",
+      "messageNotSent": "Sua mensagem não foi enviada. Tente novamente.",
+      "sentAwaitingReply": "Sua mensagem foi enviada — uma resposta está a caminho.",
+      "replyUnconfirmed": "Não conseguimos confirmar se uma resposta chegou. Enviar novamente adicionará uma nova linha ao chat.",
+      "checkingDelivery": "Não conseguimos confirmar se sua mensagem foi entregue — verificando…",
+      "messageSentNoReply": "Sua mensagem foi enviada, mas nenhuma resposta será gerada agora. Envie-a novamente em breve.",
+      "sessionUnscoped": "Sua sessão não está mais vinculada a esta loja. Recarregue a página para continuar.",
+      "unexpectedStatus": "Resposta inesperada do servidor (status {{status}}). Tente novamente."
+    }
+  },
+  "layout": {
+    "header": {
+      "brand": "Storefront",
+      "nav": "Loja",
+      "icon": {
+        "catalog": "Ver catálogo",
+        "cart": "Carrinho",
+        "order": "Status do pedido",
+        "profile": "Perfil"
+      }
+    },
+    "sheet": {
+      "close": "Fechar",
+      "title": {
+        "cart": "Carrinho",
+        "catalog": "Catálogo",
+        "order": "Status do pedido",
+        "profile": "Perfil"
+      }
+    },
+    "reset": {
+      "joinPrompt": "Entre na loja para gerenciar sua sessão.",
+      "heading": "Controles da sessão",
+      "cta": "Redefinir minha sessão",
+      "confirmBody": "Isso limpa seu carrinho, pedido e chat. Isso não pode ser desfeito.",
+      "cancel": "Cancelar",
+      "confirm": "Sim, redefinir",
+      "confirming": "Redefinindo…",
+      "error": {
+        "reread": "Não conseguimos confirmar se funcionou — verifique seu carrinho/pedido antes de tentar novamente.",
+        "nothingChanged": "Algo deu errado e nada foi redefinido. Tente novamente.",
+        "unscopedAlarm": "Sua sessão não está mais vinculada a esta loja. Recarregue a página para continuar.",
+        "unhandled": "Resposta inesperada do servidor (status {{status}}). Tente novamente."
+      }
+    }
+  },
+  "cart": {
+    "loadError": "Não foi possível carregar seu carrinho. Tentando novamente automaticamente…",
+    "loading": "Carregando seu carrinho…",
+    "empty": "Seu carrinho está vazio.",
+    "staleNotice": "Mostrando o último carrinho conhecido — reconectando…",
+    "total": "Total"
+  },
+  "order": {
+    "loadError": "Não foi possível carregar seu pedido. Tentando novamente automaticamente…",
+    "loading": "Carregando seu pedido…",
+    "empty": "Você ainda não tem um pedido. Explore o catálogo e converse conosco para fazer um.",
+    "staleNotice": "Mostrando o último pedido conhecido — reconectando…",
+    "idLabel": "Pedido nº {{orderId}}",
+    "total": "Total",
+    "cancel": "Cancelar pedido",
+    "status": {
+      "placed": "Feito",
+      "fulfilled": "Preparado",
+      "delivered": "Entregue",
+      "cancelled": "Cancelado"
+    },
+    "demoControls": {
+      "label": "Controles de demonstração — simulação do armazém",
+      "description": "Eles substituem a equipe do armazém. Um cliente real nunca prepara nem entrega o próprio pedido — eles existem apenas para que esta demonstração possa mostrar o ciclo completo.",
+      "fulfill": "Simular: marcar como preparado",
+      "deliver": "Simular: marcar como entregue"
+    },
+    "error": {
+      "staleOrderRefresh": "Isso não funcionou — o pedido acima agora reflete seu status atual.",
+      "reread": "Não conseguimos confirmar se funcionou — o pedido acima reflete o que conseguimos ler mais recentemente.",
+      "unhandled": "Resposta inesperada do servidor (status {{status}}). Tente novamente."
+    }
+  },
+  "profile": {
+    "loadError": "Não foi possível carregar seu perfil. Tentando novamente automaticamente…",
+    "loading": "Carregando seu perfil…",
+    "staleNotice": "Mostrando o último perfil conhecido — reconectando…",
+    "nameLabel": "Nome",
+    "addressLabel": "Endereço de entrega"
+  },
+  "catalog": {
+    "loadError": "Não foi possível carregar o catálogo. Tente novamente em breve.",
+    "loading": "Carregando o catálogo…",
+    "empty": "Nenhum produto para mostrar ainda.",
+    "noPhoto": "Nenhuma foto disponível"
   }
 }

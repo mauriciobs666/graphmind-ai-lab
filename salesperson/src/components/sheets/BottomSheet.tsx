@@ -4,6 +4,7 @@
 // (docs/plans/salesperson-ui.md §5.1's S12b row) — the four concrete sheets
 // beside this file wrap it with their own title + content.
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CloseIcon } from '../../layout/icons';
 
 export function BottomSheet({
@@ -17,6 +18,7 @@ export function BottomSheet({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const { t } = useTranslation();
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [entered, setEntered] = useState(false);
@@ -45,7 +47,7 @@ export function BottomSheet({
     <div className="fixed inset-0 z-40">
       <button
         type="button"
-        aria-label="Close"
+        aria-label={t('layout.sheet.close')}
         onClick={onClose}
         className={`absolute inset-0 h-full w-full cursor-default bg-slate-950/50 transition-opacity duration-200 motion-reduce:transition-none dark:bg-black/60 ${
           entered ? 'opacity-100' : 'opacity-0'
@@ -67,7 +69,7 @@ export function BottomSheet({
           </h2>
           <button
             type="button"
-            aria-label="Close"
+            aria-label={t('layout.sheet.close')}
             onClick={onClose}
             className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
           >

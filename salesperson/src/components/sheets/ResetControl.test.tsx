@@ -19,6 +19,7 @@ import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LayoutShell } from '../../layout/Shell';
+import i18n from '../../i18n/config';
 import { SessionProvider, useSession } from '../../session/SessionContext';
 import { SESSION_STORAGE_KEYS, saveParticipantSession } from '../../session/storage';
 
@@ -97,8 +98,9 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals();
+  await i18n.changeLanguage('en');
 });
 
 describe('ResetControl', () => {
@@ -303,5 +305,41 @@ describe('ResetControl', () => {
     // next test.
     resolveSecond(jsonResponse(503, { error: 'quiesce_failed' }));
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+  });
+
+  it('routes its own chrome through t() — switches to pt-BR, English literals gone, including the threaded errorMessageFor() copy', async () => {
+    saveParticipantSession({ participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'en' });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (isStateRequest(input)) return stateResponse();
+      return jsonResponse(503, { error: 'quiesce_failed' });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderApp();
+    const user = await openProfileSheet();
+
+    await i18n.changeLanguage('pt-BR');
+
+    expect(await screen.findByText('Controles da sessão')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Redefinir minha sessão' })).toBeInTheDocument();
+    expect(screen.queryByText('Session controls')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reset my session' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Redefinir minha sessão' }));
+    expect(screen.getByText('Isso limpa seu carrinho, pedido e chat. Isso não pode ser desfeito.')).toBeInTheDocument();
+    expect(screen.queryByText(/cannot be undone/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sim, redefinir' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Sim, redefinir' }));
+
+    // errorMessageFor()'s own `nothingChangedRetry` branch (C9), now threaded
+    // through `t` — the disappearing-literal proof for this file's own
+    // hardest case (a plain function returning translated copy).
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Algo deu errado e nada foi redefinido. Tente novamente.',
+      ),
+    );
+    expect(screen.queryByText(/nothing was reset/i)).not.toBeInTheDocument();
   });
 });

@@ -2,5 +2,122 @@
   "join": {
     "languageLabel": "Language",
     "languageHint": "Choose the language you'd like to chat in."
+  },
+  "chat": {
+    "composer": {
+      "messageLabel": "Message",
+      "placeholder": "Type a message…",
+      "send": "Send"
+    },
+    "transcript": {
+      "label": "Transcript",
+      "empty": "No messages yet — say hello."
+    },
+    "turn": {
+      "thinking": "Thinking…",
+      "firstInLine": "You're first in line — thinking starts shortly.",
+      "aheadOfYou_one": "{{count}} person ahead of you.",
+      "aheadOfYou_other": "{{count}} people ahead of you."
+    },
+    "deadTurn": {
+      "notice": "The reply never arrived — send again."
+    },
+    "message": {
+      "sending": "Sending…"
+    },
+    "notice": {
+      "turnInProgress": "Still working on your last message…",
+      "messageTooLong": "That message is too long. Please shorten it and send again.",
+      "sendFailedRetry": "Something went wrong and your message was not sent. Please try again.",
+      "messageNotSent": "Your message was not sent. Please try again.",
+      "sentAwaitingReply": "Your message was sent — a reply is on its way.",
+      "replyUnconfirmed": "We couldn't confirm a reply arrived. Sending again will add a new line to the chat.",
+      "checkingDelivery": "We couldn't confirm your message went through — checking…",
+      "messageSentNoReply": "Your message was sent, but no reply will be generated right now. Please send it again shortly.",
+      "sessionUnscoped": "Your session is no longer scoped to this store. Reload the page to continue.",
+      "unexpectedStatus": "Unexpected response from the server (status {{status}}). Please try again."
+    }
+  },
+  "layout": {
+    "header": {
+      "brand": "Storefront",
+      "nav": "Shop",
+      "icon": {
+        "catalog": "Browse catalog",
+        "cart": "Cart",
+        "order": "Order status",
+        "profile": "Profile"
+      }
+    },
+    "sheet": {
+      "close": "Close",
+      "title": {
+        "cart": "Cart",
+        "catalog": "Catalog",
+        "order": "Order status",
+        "profile": "Profile"
+      }
+    },
+    "reset": {
+      "joinPrompt": "Join the store to manage your session.",
+      "heading": "Session controls",
+      "cta": "Reset my session",
+      "confirmBody": "This clears your cart, order and chat. This cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Yes, reset",
+      "confirming": "Resetting…",
+      "error": {
+        "reread": "We couldn't confirm whether that worked — check your cart/order before trying again.",
+        "nothingChanged": "Something went wrong and nothing was reset. Please try again.",
+        "unscopedAlarm": "Your session is no longer scoped to this store. Reload the page to continue.",
+        "unhandled": "Unexpected response from the server (status {{status}}). Please try again."
+      }
+    }
+  },
+  "cart": {
+    "loadError": "Couldn't load your cart. Retrying automatically…",
+    "loading": "Loading your cart…",
+    "empty": "Your cart is empty.",
+    "staleNotice": "Showing the last known cart — reconnecting…",
+    "total": "Total"
+  },
+  "order": {
+    "loadError": "Couldn't load your order. Retrying automatically…",
+    "loading": "Loading your order…",
+    "empty": "You don't have an order yet. Browse the catalog and chat with us to place one.",
+    "staleNotice": "Showing the last known order — reconnecting…",
+    "idLabel": "Order #{{orderId}}",
+    "total": "Total",
+    "cancel": "Cancel order",
+    "status": {
+      "placed": "Placed",
+      "fulfilled": "Fulfilled",
+      "delivered": "Delivered",
+      "cancelled": "Cancelled"
+    },
+    "demoControls": {
+      "label": "Demo controls — warehouse simulation",
+      "description": "These stand in for warehouse staff. A real customer never fulfils or delivers their own order — they're here only so this demo can show the full lifecycle.",
+      "fulfill": "Simulate: mark fulfilled",
+      "deliver": "Simulate: mark delivered"
+    },
+    "error": {
+      "staleOrderRefresh": "That didn't go through — the order above now reflects its current status.",
+      "reread": "We couldn't confirm whether that worked — the order above reflects the latest we could read.",
+      "unhandled": "Unexpected response from the server (status {{status}}). Please try again."
+    }
+  },
+  "profile": {
+    "loadError": "Couldn't load your profile. Retrying automatically…",
+    "loading": "Loading your profile…",
+    "staleNotice": "Showing the last known profile — reconnecting…",
+    "nameLabel": "Name",
+    "addressLabel": "Delivery address"
+  },
+  "catalog": {
+    "loadError": "Couldn't load the catalog. Please try again shortly.",
+    "loading": "Loading the catalog…",
+    "empty": "No products to show yet.",
+    "noPhoto": "No photo available"
   }
 }

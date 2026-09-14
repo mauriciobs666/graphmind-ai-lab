@@ -9,9 +9,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import i18n from '../i18n/config';
 import { SessionProvider } from '../session/SessionContext';
 import { LayoutShell } from './Shell';
+
+afterEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 function renderShell(routeElement: React.ReactNode = <div>join screen</div>) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -95,5 +100,38 @@ describe('LayoutShell', () => {
     await user.click(screen.getByRole('button', { name: 'Profile' }));
     const profileDialog = screen.getByRole('dialog', { name: 'Profile' });
     expect(within(profileDialog).getByText(/loading your profile/i)).toBeInTheDocument();
+  });
+
+  // §4.13 (v1.39) Layer 2 — proves `CartSheet.tsx`/`CatalogSheet.tsx`/
+  // `OrderSheet.tsx`/`ProfileSheet.tsx`'s own `layout.sheet.title.*` keys
+  // (each file only threads a translated `title` prop into `BottomSheet`,
+  // so its own dialog name is the completeness proof) alongside
+  // `BottomSheet.tsx`'s shared `layout.sheet.close` key.
+  it('routes every sheet title and the shared Close control through t() — switches to pt-BR, English literals gone', async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    await i18n.changeLanguage('pt-BR');
+
+    await user.click(screen.getByRole('button', { name: 'Ver catálogo' }));
+    expect(screen.getByRole('dialog', { name: 'Catálogo' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Catalog' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Fechar' }).length).toBeGreaterThan(0);
+    await user.click(screen.getAllByRole('button', { name: 'Fechar' }).at(-1)!);
+
+    await user.click(screen.getByRole('button', { name: 'Carrinho' }));
+    expect(screen.getByRole('dialog', { name: 'Carrinho' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Cart' })).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: 'Fechar' }).at(-1)!);
+
+    await user.click(screen.getByRole('button', { name: 'Status do pedido' }));
+    expect(screen.getByRole('dialog', { name: 'Status do pedido' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Order status' })).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole('button', { name: 'Fechar' }).at(-1)!);
+
+    await user.click(screen.getByRole('button', { name: 'Perfil' }));
+    expect(screen.getByRole('dialog', { name: 'Perfil' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Profile' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument();
   });
 });

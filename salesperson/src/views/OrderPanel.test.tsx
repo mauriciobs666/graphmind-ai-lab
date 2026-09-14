@@ -7,6 +7,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../i18n/config';
 import { SessionProvider } from '../session/SessionContext';
 import { saveParticipantSession } from '../session/storage';
 import { OrderPanel } from './OrderPanel';
@@ -58,8 +59,9 @@ beforeEach(() => {
   saveParticipantSession({ participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'en' });
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals();
+  await i18n.changeLanguage('en');
 });
 
 describe('OrderPanel', () => {
@@ -181,4 +183,92 @@ describe('OrderPanel', () => {
 
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2));
   });
+
+  it('routes its own load/empty/status/total/cancel/demo-controls chrome through t() — switches to pt-BR, English literals gone (order.total is a cognate, Layer-1-only)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, stateWith(orderWith('placed')))));
+    renderPanel();
+    await waitFor(() => expect(screen.getByText('Placed')).toBeInTheDocument());
+
+    await i18n.changeLanguage('pt-BR');
+
+    expect(await screen.findByText('Feito')).toBeInTheDocument();
+    expect(screen.queryByText('Placed')).not.toBeInTheDocument();
+    expect(screen.getByText('Pedido nº ord-1')).toBeInTheDocument();
+    expect(screen.queryByText('Order #ord-1')).not.toBeInTheDocument();
+    // `order.total` is a named cognate exception (§4.13) — stays "Total" in
+    // pt-BR too; verified by key presence (Layer 1), not disappearance.
+    expect(screen.getByText('Total')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancelar pedido' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Controles de demonstração/)).toBeInTheDocument();
+    expect(screen.getByText(/simulação do armazém/)).toBeInTheDocument();
+    expect(screen.queryByText(/demo controls/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Simular: marcar como preparado' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Simular: marcar como entregue' }),
+    ).toBeInTheDocument();
+  });
+
+  it('routes the empty/loading state through t() — switches to pt-BR, English literals gone', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, stateWith(null))));
+    renderPanel();
+    await waitFor(() => expect(screen.getByText(/don't have an order yet/i)).toBeInTheDocument());
+
+    await i18n.changeLanguage('pt-BR');
+
+    expect(
+      await screen.findByText('Você ainda não tem um pedido. Explore o catálogo e converse conosco para fazer um.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/don't have an order yet/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the pt-BR loading copy — English literal gone', async () => {
+    await i18n.changeLanguage('pt-BR');
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+    renderPanel();
+    expect(screen.getByText('Carregando seu pedido…')).toBeInTheDocument();
+    expect(screen.queryByText(/loading your order/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the pt-BR load-error copy on a rejected fetch — English literal gone', async () => {
+    await i18n.changeLanguage('pt-BR');
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(500, { error: 'boom' })));
+    renderPanel();
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Não foi possível carregar seu pedido. Tentando novamente automaticamente…',
+      ),
+    );
+    expect(screen.queryByText(/couldn't load your order/i)).not.toBeInTheDocument();
+  });
+
+  it('routes the threaded errorMessageFor() unhandled-status copy through t() — switches to pt-BR, English literal gone', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(async () => jsonResponse(200, stateWith(orderWith('placed'))))
+      .mockImplementation(async () => jsonResponse(500, { error: 'boom' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await i18n.changeLanguage('pt-BR');
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(await screen.findByRole('button', { name: 'Cancelar pedido' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Resposta inesperada do servidor (status 500). Tente novamente.',
+      ),
+    );
+    expect(screen.queryByText(/unexpected response/i)).not.toBeInTheDocument();
+  });
+
+  // `order.staleNotice` and `order.error.staleOrderRefresh`/`.reread` have no
+  // pre-existing dynamic test driving their branches even before the sweep
+  // (a background-refetch race and a 404/409/504-specific advance response,
+  // respectively) — this file adds no new behavioural harness for them (S17
+  // is a pure string-extraction sweep). Both keys are covered by
+  // `i18n/locales.test.ts`'s key-coverage check (Layer 1) and are direct,
+  // literal `t(...)` calls in `OrderPanel.tsx`.
 });

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import i18n from '../i18n/config';
 import { SessionProvider } from '../session/SessionContext';
 import { saveParticipantSession } from '../session/storage';
 import { ProfilePanel } from './ProfilePanel';
@@ -45,8 +46,9 @@ beforeEach(() => {
   saveParticipantSession({ participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'en' });
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals();
+  await i18n.changeLanguage('en');
 });
 
 describe('ProfilePanel', () => {
@@ -82,4 +84,48 @@ describe('ProfilePanel', () => {
 
     await waitFor(() => expect(screen.getAllByText('—')).toHaveLength(2));
   });
+
+  it('routes its own labels through t() — switches to pt-BR, English literals gone', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse(200, stateWith({ name: 'Ada Lovelace', deliveryAddress: '1 Analytical Engine Way' }))),
+    );
+    renderPanel();
+    await waitFor(() => expect(screen.getByText('Name')).toBeInTheDocument());
+    expect(screen.getByText('Delivery address')).toBeInTheDocument();
+
+    await i18n.changeLanguage('pt-BR');
+
+    expect(await screen.findByText('Nome')).toBeInTheDocument();
+    expect(screen.getByText('Endereço de entrega')).toBeInTheDocument();
+    expect(screen.queryByText('Name')).not.toBeInTheDocument();
+    expect(screen.queryByText('Delivery address')).not.toBeInTheDocument();
+  });
+
+  it('shows the pt-BR loading copy — English literal gone', async () => {
+    await i18n.changeLanguage('pt-BR');
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+    renderPanel();
+    expect(screen.getByText('Carregando seu perfil…')).toBeInTheDocument();
+    expect(screen.queryByText(/loading your profile/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the pt-BR load-error copy on a rejected fetch — English literal gone', async () => {
+    await i18n.changeLanguage('pt-BR');
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(500, { error: 'boom' })));
+    renderPanel();
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Não foi possível carregar seu perfil. Tentando novamente automaticamente…',
+      ),
+    );
+    expect(screen.queryByText(/couldn't load your profile/i)).not.toBeInTheDocument();
+  });
+
+  // `profile.staleNotice` has no pre-existing dynamic test driving its
+  // branch (a background-refetch race) even before the sweep — no new
+  // behavioural harness is added for it here (S17 is a pure string-
+  // extraction sweep). Covered by `i18n/locales.test.ts`'s key-coverage
+  // check (Layer 1) and a direct, literal `t('profile.staleNotice')` call in
+  // `ProfilePanel.tsx`.
 });

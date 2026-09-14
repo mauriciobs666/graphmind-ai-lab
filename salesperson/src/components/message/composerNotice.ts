@@ -7,6 +7,7 @@
 // a plain function is what makes the mutation-testing requirement (break the
 // rule, watch the test go red) cheap to run, with no fetch/DOM/React tree in
 // the loop.
+import type { TFunction } from 'i18next';
 import type { ErrorAction } from '../../api/dispatch';
 import type { PostMessageReconciliation } from '../../api/hooks';
 
@@ -24,25 +25,26 @@ export interface ComposerNotice {
 export function composerNoticeFor(
   action: ErrorAction | null,
   reconciliation: PostMessageReconciliation | null,
+  t: TFunction,
 ): ComposerNotice | null {
   if (!action) return null;
 
   switch (action.kind) {
     case 'turnInProgressRetain':
-      return { tone: 'info', text: 'Still working on your last message…' };
+      return { tone: 'info', text: t('chat.notice.turnInProgress') };
 
     case 'fieldError':
       // C11 — dispatched on the field; a `dev` audience value (never
       // user-supplied) is a defence-in-depth branch, not shopper copy.
       return action.audience === 'user'
-        ? { tone: 'error', text: 'That message is too long. Please shorten it and send again.' }
+        ? { tone: 'error', text: t('chat.notice.messageTooLong') }
         : null;
 
     case 'nothingChangedRetry':
       // C9 — the 503 default: nothing was written, safe to retry.
       return {
         tone: 'warning',
-        text: 'Something went wrong and your message was not sent. Please try again.',
+        text: t('chat.notice.sendFailedRetry'),
       };
 
     case 'reread':
@@ -50,17 +52,16 @@ export function composerNoticeFor(
       // re-read + `reconcilePostMessageFailure`.
       switch (reconciliation) {
         case 'nothingCommitted':
-          return { tone: 'warning', text: 'Your message was not sent. Please try again.' };
+          return { tone: 'warning', text: t('chat.notice.messageNotSent') };
         case 'turnRunning':
-          return { tone: 'info', text: 'Your message was sent — a reply is on its way.' };
+          return { tone: 'info', text: t('chat.notice.sentAwaitingReply') };
         case 'turnLost':
           return {
             tone: 'warning',
-            text:
-              "We couldn't confirm a reply arrived. Sending again will add a new line to the chat.",
+            text: t('chat.notice.replyUnconfirmed'),
           };
         default:
-          return { tone: 'warning', text: "We couldn't confirm your message went through — checking…" };
+          return { tone: 'warning', text: t('chat.notice.checkingDelivery') };
       }
 
     case 'deadTurn':
@@ -68,14 +69,14 @@ export function composerNoticeFor(
       // written, but no reply will be generated for it.
       return {
         tone: 'warning',
-        text: 'Your message was sent, but no reply will be generated right now. Please send it again shortly.',
+        text: t('chat.notice.messageSentNoReply'),
       };
 
     case 'unscopedAlarm':
       // C6b — an alarm; never rendered as busy or success.
       return {
         tone: 'error',
-        text: 'Your session is no longer scoped to this store. Reload the page to continue.',
+        text: t('chat.notice.sessionUnscoped'),
       };
 
     case 'clearParticipant':
@@ -87,7 +88,7 @@ export function composerNoticeFor(
       // C13 — loud, never a silent generic fallback.
       return {
         tone: 'error',
-        text: `Unexpected response from the server (status ${action.status}). Please try again.`,
+        text: t('chat.notice.unexpectedStatus', { status: action.status }),
       };
 
     default:

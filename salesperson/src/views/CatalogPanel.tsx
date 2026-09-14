@@ -8,11 +8,13 @@
 // case. `views/{Cart,Order,Profile,Catalog}*` is this step's own owned
 // subtree; this file only replaces S12b's seed placeholder content, per
 // §5.0.
+import { useTranslation } from 'react-i18next';
 import { useCatalog } from '../api/hooks';
 import { formatCurrency } from '../i18n/format';
 import { useLocale } from '../i18n/useLocale';
 
 export function CatalogPanel() {
+  const { t } = useTranslation();
   const catalog = useCatalog();
   const { locale } = useLocale();
 
@@ -22,18 +24,18 @@ export function CatalogPanel() {
     if (catalog.isError) {
       return (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          Couldn't load the catalog. Please try again shortly.
+          {t('catalog.loadError')}
         </p>
       );
     }
     return (
-      <p className="text-sm text-slate-500 dark:text-slate-400">Loading the catalog…</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">{t('catalog.loading')}</p>
     );
   }
 
   if (catalog.data.length === 0) {
     return (
-      <p className="text-sm text-slate-500 dark:text-slate-400">No products to show yet.</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400">{t('catalog.empty')}</p>
     );
   }
 
@@ -56,7 +58,7 @@ export function CatalogPanel() {
               aria-hidden="true"
               className="flex h-24 w-full items-center justify-center bg-slate-100 px-2 text-center text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:bg-slate-800 dark:text-slate-500"
             >
-              No photo available
+              {t('catalog.noPhoto')}
             </div>
           )}
           <div className="flex flex-1 flex-col gap-0.5 p-2.5">

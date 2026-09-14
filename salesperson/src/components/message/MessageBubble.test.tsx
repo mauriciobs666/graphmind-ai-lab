@@ -2,8 +2,13 @@
 // §4.2: agent-emitted markup must render as literal text, never parsed as
 // HTML — no `dangerouslySetInnerHTML` anywhere in this tree.
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import i18n from '../../i18n/config';
 import { MessageBubble } from './MessageBubble';
+
+afterEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 describe('MessageBubble', () => {
   it('renders agent-emitted markup as literal text, not parsed HTML', () => {
@@ -71,5 +76,22 @@ describe('MessageBubble', () => {
     // No formatted-time caption either — the message bubble carries only
     // its text, nothing else.
     expect(screen.getByText('Welcome to the store, Ada.').parentElement?.children).toHaveLength(1);
+  });
+
+  it('routes the pending "Sending…" caption through t() — switches to pt-BR, English literal gone', async () => {
+    render(
+      <ul>
+        <MessageBubble
+          row={{ msgId: '__pending__', text: 'hi', role: 'user', createdAt: Date.now() }}
+          pending
+        />
+      </ul>,
+    );
+    expect(screen.getByText('Sending…')).toBeInTheDocument();
+
+    await i18n.changeLanguage('pt-BR');
+
+    expect(await screen.findByText('Enviando…')).toBeInTheDocument();
+    expect(screen.queryByText('Sending…')).not.toBeInTheDocument();
   });
 });

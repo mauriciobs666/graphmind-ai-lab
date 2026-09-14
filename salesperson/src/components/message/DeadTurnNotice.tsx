@@ -6,14 +6,17 @@
 // composer** — `ChatView.tsx` drives `disabled` from `turn.state` alone, this
 // component never touches it. `role="status"` (not `"alert"`): recoverable
 // by the participant's own next action, not a blocking failure.
+import { useTranslation } from 'react-i18next';
+
 export function DeadTurnNotice({ visible }: { visible: boolean }) {
+  const { t } = useTranslation();
   if (!visible) return null;
   return (
     <p
       role="status"
       className="mx-3 mt-2 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
     >
-      The reply never arrived — send again.
+      {t('chat.deadTurn.notice')}
     </p>
   );
 }

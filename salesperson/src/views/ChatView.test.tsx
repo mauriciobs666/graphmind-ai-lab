@@ -13,6 +13,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MessageRow, StateResponse } from '../api/endpoints';
 import { useJoin } from '../api/hooks';
+import i18n from '../i18n/config';
 import { SessionProvider, useSession } from '../session/SessionContext';
 import { saveParticipantSession } from '../session/storage';
 import { ChatView } from './ChatView';
@@ -143,8 +144,9 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals();
+  await i18n.changeLanguage('en');
 });
 
 describe('ChatView — scripted 5-turn conversation', () => {
@@ -391,5 +393,77 @@ describe('ChatView — the welcome turn (§4.12, v1.37)', () => {
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();
     // …but the welcome line does not return.
     expect(screen.queryByText('Welcome to the store, Ada.')).not.toBeInTheDocument();
+  });
+});
+
+// §4.13 (v1.39) — `ChatView.tsx` owns no key of its own (it only threads
+// `t` into `composerNoticeFor`, per the plan's own note), but the
+// composed-chrome proof still belongs here: this exercises the real
+// `useTranslation()` call site end to end, in pt-BR, across `Composer`,
+// `Transcript` and the threaded `composerNoticeFor` notice together.
+describe('ChatView — routes its composed chrome through t() (§4.13)', () => {
+  it('renders composer/transcript chrome in pt-BR, with English literals gone', async () => {
+    saveParticipantSession({ participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'en' });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/shop/api/messages')) return jsonResponse(200, []);
+      if (url.includes('/shop/api/state')) return jsonResponse(200, baseState());
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await i18n.changeLanguage('pt-BR');
+
+    renderChatView(makeClient());
+
+    expect(await screen.findByText('Nenhuma mensagem ainda — diga olá.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Mensagem')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Digite uma mensagem…')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enviar' })).toBeInTheDocument();
+    expect(screen.queryByText(/no messages yet/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+  });
+
+  it('threads t into composerNoticeFor() — the "checking…"/nothingCommitted sequence renders in pt-BR', async () => {
+    saveParticipantSession({ participantId: 'p-1', token: 'tok', displayName: 'Ada', language: 'en' });
+    const gate = createDeferred<void>();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'POST' && url.includes('/shop/api/messages')) {
+        return jsonResponse(504, null);
+      }
+      if (url.includes('/shop/api/messages') || url.includes('/shop/api/state')) {
+        await gate.promise;
+        return url.includes('/shop/api/state')
+          ? jsonResponse(200, baseState())
+          : jsonResponse(200, []);
+      }
+      throw new Error(`unexpected fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await i18n.changeLanguage('pt-BR');
+
+    const user = userEvent.setup();
+    renderChatView(makeClient());
+
+    await user.type(screen.getByLabelText('Mensagem'), 'chegará?');
+    await user.click(screen.getByRole('button', { name: 'Enviar' }));
+
+    expect(
+      await screen.findByText('Não conseguimos confirmar se sua mensagem foi entregue — verificando…'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/checking/i)).not.toBeInTheDocument();
+
+    gate.resolve();
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText('Não conseguimos confirmar se sua mensagem foi entregue — verificando…'),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      await screen.findByText('Sua mensagem não foi enviada. Tente novamente.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Your message was not sent. Please try again.')).not.toBeInTheDocument();
   });
 });
