@@ -58,49 +58,69 @@ surface.
   through S9f/S10/S11 and then stop to explicitly scope the frontend push (S12a-d/S13/S14) as its
   own decision point, or some other pacing. Not yet answered as of this document's opening.
 
-## RESUME HERE — state as of 2026-09-14, S12d accepted & committed (`993e8b2`) — all
-## implementation units done; S15 (QA) in flight, S16 (docs closeout) is the last unit left
+## RESUME HERE — state as of 2026-09-14, S15 delivered & committed (`f4f828a`) — CONDITIONAL PASS,
+## 4 product defects found; **paused for a stakeholder decision on defect-fix scope before S16**
 
 **Read this section first.** Reconcile it against `git log` and `git status` before acting — if
 they disagree, they win.
 
-**Every implementation unit in this coordination is now accepted and committed** — S12a,
-S12a-ownership, S12b, S12c, S12c-ownership, app-composition (plan v1.36), S14, S12b-testfix,
-S13-welcome-ownership, S13 (incl. its Major fix-back), i18n-chrome-scope (plan v1.39, S17's
-design), welcome-turn-followup, S17-impl, and now **S12d** (`993e8b2`) — see the ledger for shas,
-verdicts, and each unit's independent-verification notes; not restated here. S12d closed on its
-second gate pass: `analyst` Pass 1 returned needs changes (3 Majors — a C13/C9 conflation in
-`PresenterRoster.tsx`, a stale-error-through-pending-retry defect in `PresenterKeyScreen.tsx`
-matching a class already fixed twice elsewhere in this tree, and untested i18next singular plural
-forms), all fixed by the same delegate and re-verified independently by both teco and `analyst`
-(Pass 2 approve, no new findings).
+**Every implementation unit is accepted and committed** — S12a through S12d (see the ledger for
+shas/verdicts; S12d closed `993e8b2` on its second `analyst` gate pass, not restated here). **S15
+— test suites & AC evidence — is also now delivered and committed (`f4f828a`)**, `qa-engineer`
+(`ad9cd71a1563ddc25`), teco-verified independently (see the S15 ledger row): a versioned test plan
+(18 items), a test report driving the real running server + live LLM, and a new load/concurrency
+harness (`load_demo.py` + `stub_llm_server.py`).
 
-**Standing process correction (since the welcome-turn-followup slip): gate before commit, not
-after.** Held for S12d exactly as it did for S17-impl — teco verified independently at both the
-pre-fix and post-fix stages, dispatched/resumed the same `analyst` agent for both passes, and
-committed only after Pass 2's approve. Carry this forward for every remaining code-touching unit
-(none are expected — S16 is docs-only, see below).
+**S15's verdict: CONDITIONAL PASS.** Most ACs are met; AC-3 is met for reads and not met as
+literally worded for agent-turn latency under heavy concurrency (anticipated, measured not
+asserted); AC-5 is functionally correct but its primary access path is broken. **Four genuine,
+reproducible product-level defects found** — full repro/evidence in
+`docs/test-reports/salesperson-ui-report.md`, each independently re-confirmed by teco directly
+against source before this doc was updated:
+- **DEF-1 (High)** — `/shop/presenter` (any deep SPA route) 404s on direct navigation — no
+  server-side SPA-fallback under `falkor-chat/server/falkorchat/app.py`'s `/shop` `StaticFiles`
+  mount. Breaks the presenter's actual access path (link/QR/refresh).
+- **DEF-2 (High)** — `CartPanel.tsx` renders `$NaN` per line item — client reads
+  `item.unitPrice`, server's `get_cart` sends `price` (confirmed reading both sides directly).
+- **DEF-3 (High)** — the dead-turn latch (`turn.lastTurn`) never fires when
+  `services._drive_or_fault` catches a `ProviderCallError` internally and returns rather than
+  re-raising — `storefront.py`'s `_run_turn` only sets the latch from its own `except Exception`,
+  which this path never reaches. Proven live: 230 graph-confirmed failed `WorkflowRun`s, zero
+  latched.
+- **DEF-6 (Medium, attribution not established)** — `en`-configured participants sometimes get a
+  fully-formed Spanish reply under concurrency (2/10 trials even at the plan's own literal
+  3-way-concurrent wording); never at concurrency=1. Hypothesis is LM Studio's concurrent-request
+  handling, not application code — not confirmed this pass.
+- Plus two low-severity **test-only** defects (DEF-4: `presenter.spec.ts`'s URL resolves outside
+  `baseURL`'s path; DEF-5: `mobile-shell.spec.ts` asserts stale S12b-era placeholder copy S14
+  replaced) — both confirmed via direct grep.
 
-**S15 — test suites & AC evidence — is now in flight** (`ad9cd71a1563ddc25`, dispatched to
-`qa-engineer` against §5.1's S15 row + §6.3/§6.4/§10). This is the coordination's **first and only
-QA pass on the fully-assembled feature** — every implementation unit landed before this dispatch.
+**Standing process correction (gate before commit): held cleanly through S12d and applies going
+forward to any defect-fix unit** — none of DEF-1/2/3/4/5/6 have been fixed yet; S15's own
+guardrail (and this agent's standing rule) is report-only, no in-pass patching.
 
-**Next units, in order:**
-- **S15 (`ad9cd71a1563ddc25`)** — in flight; deliverable is `salesperson/scripts/load_demo.py` +
-  `docs/test-plans/salesperson-ui.md` + `docs/test-reports/salesperson-ui-report.md`. On return,
-  teco verifies independently (re-run whatever suites/scripts are reproducible, sanity-check the
-  reported load-harness figures rather than taking them on report, confirm every stated AC-evidence
-  gap is genuine rather than an omission). **This is a QA/verification deliverable, not
-  implementation** — no `analyst` code-gate is needed on the harness script itself unless teco's own
-  read of it raises a design concern; if the report surfaces a genuine production-code defect, that
-  becomes its own new unit routed to the right implementer (`tdd-engineer` for a bug fix), gated
-  the same as any other code unit, **before** S16 closes the coordination.
+**Paused here, not proceeding autonomously**, per this session's explicit credit-conservation
+request: whether/which of DEF-1/2/3/4/5/6 to route to implementers now (each would be its own
+gated unit — most likely `tdd-engineer` for DEF-1/DEF-2/DEF-4/DEF-5, a design decision needed on
+`services.py`/`storefront.py`'s failure-isolation contract for DEF-3, and a `data-scientist`/
+`graph-dba`-informed follow-up for DEF-6) versus deferring all of them and going straight to S16
+with the defects logged as known residual risk, is a stakeholder call teco has put to the user
+directly (not decided here). **Do not dispatch any defect-fix unit or S16 until that answer is
+in** — resume by reading the user's answer in the live conversation, or, if this doc is being
+read cold in a fresh session, treat the absence of any defect-fix ledger row below S15 as proof
+no such decision has been acted on yet.
+
+**Next units, in order (blocked until the pause above resolves):**
+- **Defect-fix units** — however many the stakeholder decision selects, each its own row below,
+  each gated by `analyst` before commit like any other code unit (same standing correction).
 - **S16** — docs close-out across root `AGENTS.md`, root `docs/HISTORY.md`,
-  `falkor-chat/README.md`/`AGENTS.md`/`docs/SERVER.md`, `salesperson/README.md`/`AGENTS.md`. Dispatch
-  only once S15 is fully closed (including any defect-fix unit S15 surfaces).
-- **Outstanding housekeeping**: this coordination doc (`docs/plans/salesperson-ui2-coordination.md`)
-  remains uncommitted throughout — commit it at the natural closeout point (after S16), by explicit
-  path, not batched with anything else.
+  `falkor-chat/README.md`/`AGENTS.md`/`docs/SERVER.md`, `salesperson/README.md`/`AGENTS.md`, plus a
+  new row/section recording S15's defects (fixed or accepted-as-residual, whichever the pause
+  above resolves to). Dispatch only once every selected defect-fix unit is closed.
+- **Outstanding housekeeping**: this coordination doc remains uncommitted between edits *except*
+  this checkpoint commit (`ce76a9f`, made under the same credit-conservation request that caused
+  this pause) — going forward, resume the normal practice of holding further edits uncommitted
+  and batch them into the natural closeout commit after S16, by explicit path.
 
 ## S10 delivered — teco's independent verification, 2026-09-11
 
@@ -214,4 +234,4 @@ later briefs can cite it by pointing at S12a's own brief/deliverable rather than
 | S17-impl | `frontend-engineer` | `a5a09bdd4169ece43` | **accepted — committed `578c713`** (gated pre-commit, corrected process) — teco independently verified before gating: own `tsc -b` clean + `vitest run` 219/219 reproduced, diffstat (35 files) matches claim, `composerNotice.ts`/locale diffs read in full against §4.13, cognate-exception + Blocker-fix keys confirmed present, plan's own residual regex re-run (2 hits, both false-positive JSX-syntax comments, zero genuine residuals), one independent mutation (`order.status.placed` garbage value) reddened 2 `OrderPanel.test.tsx` tests correctly, restored byte-identical; kaizen entry confirmed written (`i18next.t` not pre-bound) | 17 files per §4.13's table + `layout/Header.test.tsx` (new): `src/layout/**`, `src/components/sheets/**`, `src/locales/**` (new namespaces), `src/views/Chat*`+`src/components/message/**`, `src/views/{Cart,Order,Profile,Catalog}*` | `analyst` (`ae907f03e92b509c7`) → **approve**, no blockers/majors; 1 Minor (a handful of dynamic branches — `*.staleNotice`, `order.error.*` — remain untested, confirmed genuinely pre-existing via `git show HEAD:...`, not worsened by this sweep, §4.13 never commits S17 to closing them) + 1 Nit (cosmetic formatting inconsistency, no formatter gate wired); two further independent mutations beyond teco's own (cognate-exception content mutation, interpolation-key case mismatch) both caught cleanly; `falkor-chat/docs/reviews/salesperson-ui-s17-impl.md` | frontend-engineer 292.2k tok/176 tools; analyst 174.3k tok/58 tools |
 | S12d | `frontend-engineer` | `a5c467b4235ee4049` | **accepted — committed `993e8b2`** — all 3 Majors from Pass 1 fixed inside already-owned files: (1) `PresenterRoster.tsx` gained the same `unhandled`(C13) branch its two siblings already had, new `presenter.roster.error.unhandled` key (28 leaf keys/locale, parity 28/28/28 reconfirmed), old bare-500 test replaced with a real C13 test + 2 separate C9 tests; (2) `PresenterKeyScreen.tsx` gated its derived error on `login.isPending`, mirroring `PresenterResetAllControl.tsx`; (3) added exact-text `count:1` cases for `success_one`(en) and `incomplete.heading_one`(en, es, pt-BR). teco independently verified before and after the fix-back (own `tsc -b`/`vitest run` reproduced at both 237/237 and 243/243, diffstat/file-ownership match, kaizen entry confirmed, one independent mutation each round — the singular-plural-forms probe pre-fix, `PresenterRoster.tsx`'s `unhandled` derivation gutted post-fix, both caught cleanly and restored byte-identical) | `salesperson/src/views/Presenter*`, `salesperson/tests/e2e/presenter.spec.ts`, + one narrow additive `routes.tsx` swap (inline `PresenterKeyScreen`/`PresenterRoster` placeholders → real import), + new `presenter.*` namespace in `locales/{en,pt-BR,es}.json` | `analyst` (`ad2e44ad2598e44aa`) Pass 1 **needs changes** (3 Majors) → all fixed → Pass 2 **approve**, no new findings, one non-blocking residual noted (symmetric `success_one` coverage in es/pt-BR, explicitly not re-opened — Pass 1's stated minimum was "at minimum en"); `falkor-chat/docs/reviews/salesperson-ui-s12d-impl.md` | frontend-engineer 212.7k+263.8k tok/66+95 tools; analyst 143.1k+173.7k tok/57+19 tools |
 | i18n-chrome-scope | `architect` | `a65d93f8f1a347756` | **accepted — committed `57db7d7`** (plan v1.39; review `falkor-chat/docs/reviews/salesperson-ui-s17.md`) | plan v1.39 closes all 6 findings: `chat.notice.messageNotSent` + `chat.transcript.label` added to the key table; residual-check regex rewritten (`grep -Pzo`, real multiline, no trailing-letter requirement) with an honest disclosed limitation (cannot see JS-variable-built strings); cognate/brand-name exception added naming `cart.total`/`order.total`/`layout.header.brand`, verified by Layer 1 only; file count corrected "thirteen"→**seventeen** everywhere, §5.1's S17 row now cites §4.13 instead of restating the count; `ChatView.test.tsx`'s `useTranslation()`-import obligation named explicitly | `analyst` (`a94295a0e72f7ec8e`) Pass 1 **needs changes** (3 Blockers, 1 Major, 2 Minor) → all fixed → **Pass 2 approve with suggestions** (1 new non-blocking Minor — cognate-exception clause has no explicit review-gate instruction, logged not re-dispatched) — Pass 2 independently re-ran the corrected residual regex (35 raw/34 genuine matches + 1 disclosed false positive) and **could not reproduce teco's own quick re-run figure of 62** — teco's `tr '\0' '\n' \| grep -c` method over-counts multi-line matches; corrected in the commit message, own-instrument lesson | architect 252.5k+309.5k tok/93+35 tools; analyst 155k+225.7k tok/48+16 tools |
-| S15 | `qa-engineer` | `ad9cd71a1563ddc25` | **in-flight** — dispatched against §5.1's S15 row + §6.3/§6.4/§10; briefed to write `salesperson/scripts/load_demo.py` + versioned test plan (`docs/test-plans/salesperson-ui.md`) + test report (`docs/test-reports/salesperson-ui-report.md`); told to report AC-3's disclosed literal-wording gap plainly, publish Run B's dead-turn count beside the latency curve, state any live-LLM-unavailable gap rather than fabricate, and stop short of fixing any defect found (report severity, route to teco) | `salesperson/scripts/load_demo.py` (new), `docs/test-plans/salesperson-ui.md`, `docs/test-reports/salesperson-ui-report.md` | pending | — |
+| S15 | `qa-engineer` | `ad9cd71a1563ddc25` | **delivered — committed `f4f828a`** — **CONDITIONAL PASS**: most ACs met; AC-3 met for reads, not met as literally worded for agent-turn latency under heavy concurrency (measured, anticipated); AC-5 functionally correct but its access path is broken (DEF-1). 4 product defects (DEF-1/2/3 High, DEF-6 Medium) + 2 test-only (DEF-4/5 Low) — full detail in the report, summarized in RESUME HERE above. teco independently re-derived DEF-1 (read `app.py`'s `/shop` `StaticFiles` mount, no fallback route), DEF-2 (read `CartPanel.tsx`/`endpoints.ts` vs. `services.py`'s `get_cart` directly — client's `unitPrice` vs. server's `price`), DEF-3 (read `_drive_or_fault`'s except clause vs. `_run_turn`'s own `except Exception` directly), DEF-4/DEF-5 (grep-confirmed against the two spec files), and both kaizen entries (`kaizen_team` query). Did **not** independently re-run the load harness's live sweep or the 2821-test pytest baseline — accepted on report, explicitly noted, given this session's stated credit constraint | `salesperson/scripts/load_demo.py` (new), `salesperson/scripts/stub_llm_server.py` (new), `docs/test-plans/salesperson-ui.md`, `docs/test-reports/salesperson-ui-report.md` | none — QA/verification deliverable, no `analyst` code-gate on the harness scripts (teco's own read raised no design concern) | qa-engineer 476.2k tok/222 tools |
