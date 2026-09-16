@@ -59,7 +59,12 @@ export interface CartItem {
   productId: string;
   name: string;
   quantity: number;
-  unitPrice: number;
+  /** DEF-2: named `price`, not `unitPrice` — matches the server's actual
+   * `/shop/api/state` `cart.items[]` shape (`falkor-chat/server/falkorchat/
+   * services.py`'s `_priced_cart_lines`/`get_cart`). `OrderBlock.lines`'
+   * frozen order lines are a *separate* server shape that does use
+   * `unitPrice` (`place_order`'s `order_lines`) — do not conflate the two. */
+  price: number;
 }
 
 export interface OrderBlock {

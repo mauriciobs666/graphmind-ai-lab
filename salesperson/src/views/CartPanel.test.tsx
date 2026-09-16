@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CartItem } from '../api/endpoints';
 import i18n from '../i18n/config';
 import { SessionProvider } from '../session/SessionContext';
 import { saveParticipantSession } from '../session/storage';
@@ -19,7 +20,11 @@ function jsonResponse(status: number, body: unknown): Response {
   } as Response;
 }
 
-function stateWith(cart: { items: unknown[]; total: number }) {
+// `items` is typed against the real `CartItem` interface (sourced from
+// `../api/endpoints`, which mirrors the server's actual response shape) —
+// not `unknown[]` — so a fixture drift back to a hand-typed field name like
+// `unitPrice` fails `tsc -b`, not just silently renders `$NaN` (DEF-2).
+function stateWith(cart: { items: CartItem[]; total: number }) {
   return {
     profile: { name: 'Ada', deliveryAddress: null },
     cart,
@@ -64,6 +69,11 @@ describe('CartPanel', () => {
   });
 
   it('renders one line per item with quantity/name/price and a running total', async () => {
+    // Fixture uses `price` — the real `/shop/api/state` `cart.items[]` field
+    // name emitted by `falkor-chat/server/falkorchat/services.py`'s
+    // `get_cart`/`_priced_cart_lines` (confirmed by reading the server code
+    // directly), not `unitPrice` — DEF-2: a hand-typed `unitPrice` fixture
+    // here is what let the real `$NaN` regression through undetected.
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
@@ -71,8 +81,8 @@ describe('CartPanel', () => {
           200,
           stateWith({
             items: [
-              { productId: 'wireless-mouse-pro', name: 'Wireless Mouse Pro', quantity: 2, unitPrice: 29.99 },
-              { productId: 'usb-c-hub-7-in-1', name: 'USB-C Hub 7-in-1', quantity: 1, unitPrice: 39.99 },
+              { productId: 'wireless-mouse-pro', name: 'Wireless Mouse Pro', quantity: 2, price: 29.99 },
+              { productId: 'usb-c-hub-7-in-1', name: 'USB-C Hub 7-in-1', quantity: 1, price: 39.99 },
             ],
             total: 99.97,
           }),
@@ -104,7 +114,7 @@ describe('CartPanel', () => {
         jsonResponse(
           200,
           stateWith({
-            items: [{ productId: 'wireless-mouse-pro', name: 'Wireless Mouse Pro', quantity: 1, unitPrice: 29.99 }],
+            items: [{ productId: 'wireless-mouse-pro', name: 'Wireless Mouse Pro', quantity: 1, price: 29.99 }],
             total: 29.99,
           }),
         ),

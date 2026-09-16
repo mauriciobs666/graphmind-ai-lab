@@ -58,7 +58,7 @@ export function CartPanel() {
               {item.name}
             </span>
             <span className="shrink-0 tabular-nums text-slate-600 dark:text-slate-300">
-              {formatCurrency(item.unitPrice * item.quantity, locale)}
+              {formatCurrency(item.price * item.quantity, locale)}
             </span>
           </li>
         ))}
