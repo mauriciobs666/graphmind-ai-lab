@@ -14,6 +14,14 @@ engineering** (Claude Code and OpenCode artifacts).
   traces. GraphRAG (in-graph vector + traversal) and graph-state-machine workflows. Design and
   query library are locked and live-verified. Milestone status is authoritative in
   `falkor-chat/docs/BACKLOG.md`.
+- `salesperson/` — Business-facing, mobile-first storefront SPA (React + Vite + TypeScript,
+  `i18next` in English/Brazilian Portuguese/Spanish) for the workflow-engine-backed `salesperson`
+  agent hosted by `falkor-chat/`'s server: a pure static bundle, served at `/shop` on that same
+  FastAPI process (one process, one port, no CORS), replacing the retired Streamlit app
+  (`deprecated/salesperson/`). Delivered per `docs/requirements/salesperson-ui.md` /
+  `docs/plans/salesperson-ui.md`; delivery record, the defect-fix wave, and the one open
+  pre-live-demo gate (`K-065` — a language swap under LLM-serving-layer concurrency) are in
+  `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`.
 - `opencode/` — Personal OpenCode configuration. **`agents/tank/`** is the one live agent: a
   headless, local-model DevOps variant that runs a read-only health/hygiene check by default and
   can bring up/tear down one Docker-Compose environment it itself started
@@ -63,8 +71,9 @@ engineering** (Claude Code and OpenCode artifacts).
   Streamlit sales-assistant chatbot (its own `kg_pastel` FalkorDB graph + LangChain/LangGraph;
   optional local LLM via LM Studio), retired because it talks to an older, separate backend rather
   than falkor-chat's workflow engine. Its replacement — one business-facing UI for the
-  workflow-engine-backed `salesperson` agent — is specified in `docs/requirements/salesperson-ui.md`
-  and planned in `docs/plans/salesperson-ui.md`, but **not built yet**. Also holds
+  workflow-engine-backed `salesperson` agent, specified in `docs/requirements/salesperson-ui.md`
+  and planned in `docs/plans/salesperson-ui.md` — is **delivered**, at `salesperson/` (see that
+  Structure bullet above). Also holds
   `deprecated/opencode/`, `opencode/`'s former custom agents (`rpg`, `coding-senior`, `severino/`)
   and OpenCode-only `SKILL.md` packages, retired to clear the way for the headless `tank` agent
   (see the `opencode/` bullet above).
@@ -74,6 +83,7 @@ engineering** (Claude Code and OpenCode artifacts).
 | Component | Entry doc(s) |
 |---|---|
 | `falkor-chat/` | `falkor-chat/README.md` · `falkor-chat/AGENTS.md` · `falkor-chat/docs/DESIGN.md` (graph) · `falkor-chat/docs/SERVER.md` (server process) · `falkor-chat/docs/QUERIES.md` |
+| `salesperson/` | `salesperson/README.md` · `salesperson/AGENTS.md` · `docs/requirements/salesperson-ui.md` · `docs/plans/salesperson-ui.md` |
 | `opencode/` | `opencode/AGENTS.md` · `opencode/docs/manuals/local-llm.md` · `opencode/agents/tank/README.md` |
 | `cpg/` | `docs/requirements/cpg-query-access.md` · `skills/cpg-analysis/SKILL.md` |
 | `cypher-mcp/` | `cypher-mcp/README.md` |
@@ -90,6 +100,10 @@ engineering** (Claude Code and OpenCode artifacts).
   (`falkor-chat/CLAUDE.md` imports it) — FalkorDB OpenCypher (not Neo4j): no APOC/GDS, vector
   indexes via DDL, index-before-constraint. Keep the query suite green
   (`./scripts/test_queries.sh`).
+- **Salesperson storefront UI tasks** → `salesperson/` (the SPA) plus `falkor-chat/` (the server
+  it deploys on, `/shop` mount) — follow `salesperson/AGENTS.md` and `falkor-chat/docs/SERVER.md`
+  §1.3 for the storefront surface; delivery record and open items in
+  `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`, not root `docs/`.
 - **OpenCode agent tasks** → `opencode/` — `agents/tank/` is the one live agent (former ones are
   retired, `deprecated/opencode/agents/`); follow `opencode/AGENTS.md` and
   `opencode/agents/tank/README.md` for setup/run, `opencode/docs/manuals/local-llm.md` for local
@@ -99,8 +113,9 @@ engineering** (Claude Code and OpenCode artifacts).
   each `<name>/SKILL.md` and the directory's `README.md`.
 - **Retired components** → `deprecated/` — read for reference only, never maintained, extended, or
   copied from. The retired Streamlit chatbot is `deprecated/salesperson/`; "the salesperson app"
-  almost certainly means its not-yet-built replacement (`docs/requirements/salesperson-ui.md`) —
-  confirm before touching anything under `deprecated/`.
+  almost certainly means its **delivered** replacement at `salesperson/` (see that Structure
+  bullet above; delivery record in `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`) — confirm before
+  touching anything under `deprecated/`.
 - **Claude subagent / skill tasks** → `claude/` (agents) and `skills/` (skills); follow
   `claude/AGENTS.md`, which also owns the add/edit/rename update rule (source, `kaizen/`, catalogs)
   for agents and skills alike.

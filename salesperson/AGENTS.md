@@ -6,8 +6,10 @@ agent working *inside* the component needs.
 
 Authoritative specs live at repo root, not here: `docs/requirements/salesperson-ui.md` and
 `docs/plans/salesperson-ui.md`. **This component deliberately has no `docs/` tree** — the plan's
-§4.1 keeps the document family at repo-root `docs/`, and delivery entries go to root
-`docs/HISTORY.md`. It adopts `salesperson/docs/` only if it acquires topics of its own.
+§4.1 keeps the requirement/plan document family at repo-root `docs/`, but delivery entries and the
+backlog go to `falkor-chat/docs/HISTORY.md`/`BACKLOG.md` (root `docs/HISTORY.md`/`BACKLOG.md` are
+scoped to the CPG component only, not this feature). `salesperson/` adopts its own `docs/` tree
+only if it acquires topics of its own.
 
 > `deprecated/salesperson/` is a *different, retired* Streamlit app that used to occupy this
 > path. It is not a precedent for anything here (`deprecated/README.md`). Do not copy patterns
@@ -20,9 +22,9 @@ Authoritative specs live at repo root, not here: `docs/requirements/salesperson-
    under that prefix. Changing it breaks the deployment. `build.sh` asserts the built
    `index.html` still contains `/shop/` and fails the build if it does not.
 2. **`dist/` is gitignored and never committed** (plan OQ-6). `./build.sh` is the only supported
-   way to produce it. `falkor-chat/scripts/start_demo.sh` will invoke it during bring-up, but
-   **that script is not built yet — plan step S11**; until it lands, `./build.sh` is run by hand
-   and the server is pointed at `dist/` by hand (`README.md`, "Test").
+   way to produce it. `falkor-chat/scripts/start_demo.sh` (S11, delivered) invokes it during
+   bring-up; `./build.sh` run by hand and the server pointed at `dist/` by hand is the alternative
+   for iterating on the SPA alone (`README.md`, "Running the demo").
 3. **No secrets in the bundle.** Everything Vite inlines is public. The participant bearer token
    is issued by the server at join time and lives in browser storage — it is never a build-time
    value, and no `VITE_*` variable may carry a credential.
@@ -50,7 +52,9 @@ floor). The two differ on purpose: an existing Node 22 is acceptable, we just do
 
 ## File ownership (from `docs/plans/salesperson-ui.md` §5.0)
 
-The plan splits this tree across steps so that parallel steps never collide. Respect it.
+**The plan is delivered — S16 closes it, no further steps are dispatched.** This table is kept as
+a structural map of which subtree covers which feature area; the step labels below are history
+(cite `falkor-chat/docs/HISTORY.md` for what shipped when), not live parallel-work coordination.
 
 | Path | Owner |
 |---|---|
@@ -76,31 +80,21 @@ name — TanStack Query v5, `i18next` + `react-i18next`, Tailwind, Vitest, Testi
 Playwright — so the common case needs no such edit. A **router library is deliberately not
 chosen**: routing is S12a's design call (`src/routes.tsx`), so S12a picks and installs one.
 
-## What the scaffold does and does not contain
+## Application overview
 
-**Wired and verified working:**
+`src/routes.tsx` (`createBrowserRouter`) wraps three routes in one pathless `LayoutShell` layout
+route. `src/App.tsx` composes the session/query/i18n providers around `RouterProvider`.
+`src/session/**` + `src/api/**` are the join/auth/dispatch layer (S12a); `src/layout/**` +
+`src/components/sheets/**` are the mobile shell — sticky header, four sheet-triggering icons
+(S12b); `src/views/{Chat,Cart,Order,Profile,Catalog,Presenter*}*` are the panels (S13/S14/S12d);
+`src/i18n/**` + `src/locales/{en,pt-BR,es}.json` carry the three-locale translation bundles
+(S12c, swept across the remaining chrome at S17). No `VITE_*` environment configuration —
+everything the client needs is either public (per hard constraint 3) or read at runtime from
+`/shop/api`.
 
-- Vite 8 production build with `base: "/shop/"`, verified to emit `/shop/`-prefixed assets.
-- Tailwind CSS v4 via `@tailwindcss/vite`; `src/index.css` opens with `@import "tailwindcss";`
-  and Tailwind's output is confirmed present in the built stylesheet.
-- Vitest 4 + jsdom + Testing Library + `@testing-library/jest-dom` matchers (`vitest.setup.ts`),
-  verified by a throwaway render-and-assert probe that was then removed.
-- Playwright with one `Pixel 7` mobile project; the `chromium-headless-shell` binary is installed
-  under `~/.cache/ms-playwright` and verified to launch on this WSL2 box with no extra system
-  libraries.
-- `tsc -b` typechecking across three project references (`app`, `node`, root).
-
-**Deliberately not here:**
-
-- Any application code. `src/App.tsx`, `src/main.tsx`, `src/index.css` and `src/App.css` are
-  **Vite's generated demo content**, kept exactly as the tooling emitted them (plus the one
-  Tailwind import). S12a replaces them and lands the i18n-provider slot, the layout-shell slot
-  and the Tailwind layer entry. Do not treat any of it as design intent.
-- Tests. `vitest` is configured with `passWithNoTests: true` so `npm test` exits 0 on the empty
-  scaffold — **remove that line once S12a lands the first real test**, so an empty suite starts
-  failing again.
-- `tests/e2e/` holds only a `.gitkeep`; S12b writes the specs.
-- A router, and any `VITE_*` environment configuration.
+`tests/e2e/` holds the two live Playwright specs (`mobile-shell.spec.ts`, `presenter.spec.ts`),
+driven against a running server — see `README.md`, "Test" / "Running the demo". `vitest`'s
+`passWithNoTests` carve-out (needed only while the suite was empty) is gone.
 
 ## Conventions
 

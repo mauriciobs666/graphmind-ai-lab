@@ -5,6 +5,109 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-16 — salesperson-ui S16: docs close-out
+
+**What:** Closed the salesperson-ui feature's final plan step (`docs/plans/salesperson-ui.md`
+§5.1's S16 row): root `AGENTS.md` (new `salesperson/` Structure bullet, the `deprecated/` bullet
+corrected — the replacement app is no longer "not built yet" — a component-docs-table row, a
+"Working in this repo" bullet); this file and `BACKLOG.md` (new `K-065` for DEF-6's still-open
+pre-live-demo gate); `falkor-chat/README.md` (new storefront-deployment section — it previously had
+zero mentions of `salesperson`/`/shop`); `falkor-chat/AGENTS.md` and `falkor-chat/docs/SERVER.md`
+final passes (three stale "not built yet"/"does not exist yet" callouts, for S11/S12c/S12b+S12d,
+corrected now that all four are delivered); `salesperson/README.md` and `salesperson/AGENTS.md`
+final passes (both still read as the original S5 scaffold, "the application itself is built by the
+later steps" — rewritten for the shipped app).
+
+**One correction to the plan's own S16 row, made before writing:** it names root `docs/HISTORY.md`
+as a target, but that file's own header scopes it to the CPG component only (confirmed by reading
+it directly — every entry is a CPG `C-`/`M-` item), and root `docs/BACKLOG.md` carries the identical
+CPG-only scope statement. Neither was ever salesperson-ui's to write into. Every salesperson-ui
+delivery entry, this one included, belongs here and in `falkor-chat/docs/BACKLOG.md` instead —
+already the established home (`docs/plans/salesperson-ui2-coordination.md`, "S16 dispatched,
+2026-09-16").
+
+**Verification:** S16's own acceptance command — a `grep` for the retired Streamlit app's module
+names (`chatbot`/`cart`/`customer_profile`/`session_manager`/`diagnostics`/`agent`/`graph`/`cypher`/
+`prompts`/`utils_common`) outside `deprecated/`/`docs/` — returns zero matches. A broader,
+extension-unfiltered sweep for the bare string `salesperson` outside `deprecated/`, `docs/`, `.git`
+and this feature's own `salesperson/` component found no further leftover reference to the retired
+app.
+
+**Committed:** pending — held uncommitted per this coordination's own practice, batched into the
+closeout commit after S16 (`docs/plans/salesperson-ui2-coordination.md`).
+
+## 2026-09-16 — salesperson-ui: S15's defect-fix wave (DEF-1, DEF-2, DEF-3, DEF-4/DEF-5 fixed; DEF-6 diagnosed, not mitigated) + S18 design
+
+**What:** Closed every defect-fix unit the 2026-09-16 stakeholder decision selected out of S15's
+CONDITIONAL PASS (`docs/plans/salesperson-ui2-coordination.md`, "Stakeholder decision,
+2026-09-16"):
+- **DEF-1** (`97eca1c`, `tdd-engineer`) — `/shop` had no SPA-fallback route, so a direct or deep
+  navigation (`/shop/presenter`, a bookmark, a QR code, a refresh) 404'd before the client router
+  ever loaded. New `app._SPAStaticFiles` answers any non-asset, non-`/shop/api/*` path under
+  `/shop` with the SPA shell instead.
+- **DEF-2** (`f0e5719`, `tdd-engineer`) — `CartPanel.tsx` rendered `$NaN` per line item: the client
+  read `item.unitPrice`, the server's `get_cart` sends `price`. Fixed client-side — the server's
+  `price` already matches the LLM-agent-facing `ViewCartTool` tool-output contract.
+- **S18 design** (`04f8922`, `architect`, plan v1.40 §4.14) + **DEF-3 fix** (`4cebd96`,
+  `tdd-engineer`) — the dead-turn latch (`turn.lastTurn`) never fired when
+  `services._drive_or_fault` caught a `ProviderCallError` internally and returned instead of
+  re-raising, so `storefront.py`'s `_run_turn` — which only set the latch from its own
+  `except Exception` — never reached it (230 graph-confirmed failed `WorkflowRun`s, zero latched).
+  Fixed by having `_run_turn` also read `maybe_trigger`'s own return value, which closes both this
+  gap and a second, independently-found resume-path budget-exhaustion gap, with zero changes to
+  `services.py`/`executor.py`/`api.py`.
+- **DEF-4/DEF-5** (`dafec93`, `tdd-engineer`) — two test-only defects: `presenter.spec.ts` resolved
+  its URL outside Playwright's `baseURL`; `mobile-shell.spec.ts` asserted stale S12b-era placeholder
+  copy S14 had already replaced. Both fixed — first-ever live `tests/e2e/` pass, 16/16.
+- **DEF-6 spike** (`6ddf88b`, `data-scientist`, `docs/plans/salesperson-ui-ml.md`) — diagnostic
+  only, per the stakeholder's explicit scoping (no fix authorized). Reproduced directly against LM
+  Studio with application code bypassed entirely: an `en`-configured participant sometimes gets a
+  fully-formed Spanish reply under concurrent load (~20% at 3-way concurrency, matching QA's own
+  2/10), ruling out an application-layer cause and confirming the failure sits in LM Studio's own
+  serving layer. **No mitigation shipped or authorized** — the note recommends a prioritized path
+  (D: strengthen the `systemPrompt`'s language salience → C: a classifier + bounded retry → B: a
+  bounded semaphore) gating the *first live audience-facing demo* specifically, not this milestone
+  (mirrors the K-056→AC-10 precedent). Tracked as `K-065` (`BACKLOG.md`).
+
+Every code unit was gated by `analyst` before commit; `teco` independently re-verified each one,
+including at least one mutation test of its own beyond the implementer's/reviewer's own tables in
+every case (full detail in the coordination ledger, `docs/plans/salesperson-ui2-coordination.md`).
+
+**Verified:** `falkor-chat/server`'s full suite — **2830 passed, 14 deselected**. `salesperson`:
+`tsc -b` clean, `vitest run` 243/243, `tests/e2e/` 16/16 live.
+
+**Committed:** `97eca1c`, `f0e5719`, `04f8922`, `4cebd96`, `dafec93`, `6ddf88b`.
+
+## 2026-09-14 — salesperson-ui: frontend build-out closes — presenter panels, welcome turn, i18n sweep, and QA's CONDITIONAL PASS (S12d, S13-welcome, welcome-turn-followup, S17, S15)
+
+**What:** Five units closed the feature's frontend build-out per `docs/plans/salesperson-ui.md`
+§5.1:
+- **S12d** (`993e8b2`) — real `PresenterKeyScreen`/`PresenterRoster` panels (AC-9), a new
+  `presenter.*` locale namespace (28 keys × 3 locales), wired into `routes.tsx`. `analyst` Pass 1
+  found 3 Majors (an unhandled-roster-error branch, an error not gated on `isPending`, missing
+  `count:1` plural forms) — all fixed inside already-owned files, Pass 2 approve.
+- **S13-welcome-ownership** (`4d74fcb`, plan v1.37 §4.12) + **welcome-turn-followup** (`7ab7a97`,
+  gate `0b71aa3`) — a synthetic welcome message, rendered once per session in `ChatView.tsx`,
+  sourced from the join response's new `welcomeMessage` field.
+- **S17-impl** (`578c713`) + **i18n-chrome-scope** (`57db7d7`, plan v1.39) — routed the remaining
+  hardcoded SPA chrome (layout/sheets/chat/cart/order/profile/catalog, 17 files) through
+  `react-i18next`; the review's 6 findings (missing keys, a residual-check regex blind to multiline
+  JSX, a wrong file count) closed in the same plan amendment.
+- **S15** (`f4f828a`, `qa-engineer`) — a versioned test plan plus a live test report
+  (`docs/test-reports/salesperson-ui-report.md`), and a new load/concurrency harness
+  (`salesperson/scripts/{load_demo.py,stub_llm_server.py}`). **Verdict: CONDITIONAL PASS** — most
+  ACs met; AC-3 met for reads but not, as literally worded, for agent-turn latency under heavy
+  concurrency; AC-5 functionally correct but its primary access path was broken. Found 4
+  product-level defects (DEF-1/2/3 High, DEF-6 Medium) plus 2 test-only defects (DEF-4/5 Low) — see
+  the defect-fix wave entry above.
+
+**Verified independently (teco):** each unit re-checked directly against source/diff (full detail
+in `docs/plans/salesperson-ui2-coordination.md`'s ledger); offline suite `tsc -b` clean,
+`vitest run` 219/219 after S17; S15's four product defects independently re-derived by reading the
+cited code paths directly, not accepted on report alone.
+
+**Committed:** `993e8b2`, `4d74fcb`, `7ab7a97`/`0b71aa3`, `578c713`, `57db7d7`, `f4f828a`.
+
 ## 2026-09-14 — salesperson-ui: fix cross-cutting test breakage S14's landing exposed (S12b-owned tests)
 
 **What:** S14 replacing S12b's four seed placeholders with real panels broke two S12b-owned test

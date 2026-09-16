@@ -9,8 +9,10 @@ It is a **pure static bundle**. There is no Node server at runtime: `falkor-chat
 FastAPI process serves the built assets at `/shop`, so the demo stays one process, one port, no
 CORS. Node is a **build-time dependency only**.
 
-Requirements: `docs/requirements/salesperson-ui.md`. Plan: `docs/plans/salesperson-ui.md`
-(the stack rationale is §4.2).
+Delivered per `docs/requirements/salesperson-ui.md` (FR-1…FR-11, AC-1…AC-11) and
+`docs/plans/salesperson-ui.md` (the stack rationale is §4.2); delivery record, the S15 QA pass and
+defect-fix wave, and the one still-open pre-live-demo gate (`K-065`, a language swap under
+LLM-serving-layer concurrency) are in `falkor-chat/docs/HISTORY.md`/`BACKLOG.md`, not here.
 
 > This directory previously held a retired Streamlit chatbot. That app now lives at
 > `deprecated/salesperson/` and is unrelated to the code here — see `deprecated/README.md`.
@@ -21,9 +23,10 @@ Requirements: `docs/requirements/salesperson-ui.md`. Plan: `docs/plans/salespers
 |---|---|
 | Build / dev server | Vite 8 |
 | UI | React 19 + TypeScript 6 |
+| Routing | `react-router-dom` v7 (`createBrowserRouter`, HTML5 history) |
 | Styling | Tailwind CSS v4 (via `@tailwindcss/vite`) |
 | Server state / polling | TanStack Query v5 |
-| Localization | `i18next` + `react-i18next` |
+| Localization | `i18next` + `react-i18next` — English (default), Brazilian Portuguese, Spanish |
 | Unit / component tests | Vitest 4 + Testing Library + jsdom |
 | End-to-end tests | Playwright (one mobile-viewport project) |
 
@@ -70,9 +73,9 @@ command, upgradeable by editing `.node-version` and re-running the script.
 Output lands in `dist/` — `index.html` plus content-hashed assets.
 
 **`dist/` is gitignored and never committed** (`docs/plans/salesperson-ui.md` OQ-6). This script
-is the reproducible way to regenerate it, and `falkor-chat/scripts/start_demo.sh` will call it as
-part of demo bring-up — **that script is not built yet (plan step S11)**, so today you run
-`./build.sh` yourself before starting the server (see "Test" below).
+is the reproducible way to regenerate it. `falkor-chat/scripts/start_demo.sh` is the supported
+one-command bring-up and calls it for you (see "Running the demo" below); running `./build.sh`
+by hand is for iterating on the SPA alone.
 
 ### The `/shop` base path is load-bearing
 
@@ -92,17 +95,28 @@ npm run lint      # oxlint
 ```
 
 Unit and component tests live beside the code they cover, as `src/**/*.test.tsx`. The Playwright
-suite lives in `tests/e2e/` and drives a **running** storefront rather than starting one — it is
-pointed at `http://127.0.0.1:8000/shop/` unless `SALESPERSON_E2E_BASE_URL` says otherwise. (The
-suite itself is **not written yet — plan step S12b**; `tests/e2e/` holds only its `.gitkeep`, so
-`npm run test:e2e` has nothing to run today.)
+suite lives in `tests/e2e/` (`mobile-shell.spec.ts`, `presenter.spec.ts`) and drives a **running**
+storefront rather than starting one — it is pointed at `http://127.0.0.1:8000/shop/` unless
+`SALESPERSON_E2E_BASE_URL` says otherwise; bring the stack up first (below).
 
-**Bringing the stack up: manual until S11.** `falkor-chat/scripts/start_demo.sh` — the
-one-command bring-up — **does not exist yet**; it is plan step S11
-(`docs/plans/salesperson-ui.md`), which also defines the sequence below. Until it lands, do it by
-hand: build the bundle with `./build.sh`, then, from `falkor-chat/` (server venv installed as
-`start_server.sh` does it — `python3 -m venv server/.venv && server/.venv/bin/pip install -e
-'server[dev]'`):
+## Running the demo
+
+`falkor-chat/scripts/start_demo.sh` is the supported one-command, from-cold-box bring-up: FalkorDB
+→ schema → seed demo/catalog/salesperson → preflight checks → `./build.sh` → uvicorn as the
+**storefront** deployment (`FALKORCHAT_WS_ID=demo`, trigger pinned to `salesperson@v7`, responder
+fall-through off, `--reload` off). Run it from `falkor-chat/`:
+
+```bash
+./scripts/start_demo.sh
+```
+
+It is **not** `start_server.sh` with different flags — `start_server.sh` also seeds the `triage`/
+`access-request` defs the demo doesn't need and defaults to `--reload`, which a live demo doesn't
+want. Env overrides live in the script's own header comment.
+
+To iterate on the SPA alone without the full bring-up script, the equivalent manual sequence
+(server venv installed as `start_server.sh` does it — `python3 -m venv server/.venv &&
+server/.venv/bin/pip install -e 'server[dev]'`):
 
 ```bash
 ./scripts/start_falkordb.sh -d
@@ -112,7 +126,8 @@ EMBEDDING_DIM=1024 ./scripts/bootstrap_schema.sh demo   # ws:demo, NOT the "acme
 ./scripts/seed_salesperson.sh demo                      # publishes salesperson@v7
 ./scripts/verify_salesperson.sh demo && ./scripts/verify_catalog.sh   # read-only checks
 
-cd server && FALKORCHAT_WS_ID=demo FALKORCHAT_EMBEDDING_DIM=1024 \
+cd salesperson && ./build.sh && cd ../server && \
+  FALKORCHAT_WS_ID=demo FALKORCHAT_EMBEDDING_DIM=1024 \
   FALKORCHAT_ENABLE_AGENT=1 FALKORCHAT_WORKFLOW_ENABLED=1 \
   FALKORCHAT_TRIGGER_DEF_KEY=salesperson FALKORCHAT_TRIGGER_DEF_VERSION=v7 \
   FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH=0 \
@@ -122,12 +137,9 @@ cd server && FALKORCHAT_WS_ID=demo FALKORCHAT_EMBEDDING_DIM=1024 \
   .venv/bin/uvicorn falkorchat.app:app
 ```
 
-Two traps worth knowing before you run it. `FALKORCHAT_STOREFRONT_DIR` must name an **existing**
-directory or the `/shop` mount is skipped **silently** while `/shop/api` serves normally
-(`falkor-chat/docs/SERVER.md` §1.3) — so `./build.sh` really does come first. And
-`falkor-chat/scripts/start_server.sh` is *not* the shortcut: it also seeds the `triage` /
-`access-request` defs that S11 deliberately skips, and it defaults to `--reload`, which S11 turns
-off for a demo run.
+`FALKORCHAT_STOREFRONT_DIR` must name an **existing** directory or the `/shop` mount is skipped
+**silently** while `/shop/api` serves normally (`falkor-chat/docs/SERVER.md` §1.3) — so the build
+really does come before uvicorn.
 
 Playwright's browser binary is not installed by `npm ci`; get it once with:
 
@@ -178,6 +190,9 @@ order).
 
 ## Status
 
-Scaffold only. The application itself is built by the later steps of
-`docs/plans/salesperson-ui.md` §5.1. See `AGENTS.md` for what is wired and what is deliberately
-left open.
+Delivered — every FR/AC in `docs/requirements/salesperson-ui.md` is built and QA'd
+(`docs/test-reports/salesperson-ui-report.md`; `docs/plans/salesperson-ui2-coordination.md`
+carries the full unit-by-unit ledger). One still-open item gates the *first live, audience-facing*
+demo specifically, not ordinary use: `K-065` (`falkor-chat/docs/BACKLOG.md`), an occasional
+wrong-language reply under concurrency, confirmed to reproduce at LM Studio's own serving layer,
+not yet mitigated. See `AGENTS.md` for file ownership and conventions.

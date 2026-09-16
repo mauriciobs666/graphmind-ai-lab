@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-064
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-065
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -39,6 +39,41 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 ## Open follow-ups
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
+
+### K-065 — DEF-6: `en`-configured storefront participants sometimes get a Spanish reply under concurrency, confirmed at LM Studio's own serving layer (🔵 proposed — filed out of the salesperson-ui S15 QA pass + DEF-6 diagnostic spike, gates the first live audience-facing demo only, 2026-09-16)
+
+> **Why it exists.** `docs/test-reports/salesperson-ui-report.md`'s DEF-6: an `en`-configured
+> storefront participant sometimes gets a fully-formed, coherent **Spanish** reply under
+> concurrent load (QA: 2/10 at the plan's own literal 3-way-concurrent wording, 5/10 at 40-way;
+> never at concurrency=1). A dedicated diagnostic spike (`docs/plans/salesperson-ui-ml.md`)
+> reproduced the failure directly against LM Studio with `falkor-chat`/`salesperson` application
+> code bypassed entirely, ruling out an application-layer cause and confirming the mechanism sits
+> in LM Studio's own concurrent-request serving/decoding path — a **finding**, not merely a
+> hypothesis, though the exact internal cause (KV-cache/prompt-prefix cross-talk vs.
+> batch-composition-dependent floating-point non-associativity vs. something else) remains open.
+>
+> **This gates the first live, audience-facing demo specifically, not any current milestone** —
+> same shape as the existing K-056→AC-10 precedent (`HISTORY.md` 2026-08-28/2026-08-30 entries).
+> **No mitigation has been authorized or dispatched.**
+- **Recommended mitigation path, in priority order** (`docs/plans/salesperson-ui-ml.md`'s own
+  recommendation): **(D)** strengthen `SALESPERSON_DEF`'s `systemPrompt` language salience (a
+  cheap `v8` bump, redundantly naming the language in prose rather than relying solely on a
+  CONTEXT-block JSON key) → **(C)** a post-hoc language classifier + bounded retry on
+  `post_message.text`, forced through a serialized path, routed through whoever owns the
+  `_run_turn`/`_drive_or_fault` seam given DEF-3 already found it fragile under failure paths →
+  **(B)** a bounded concurrency semaphore as a complementary throughput/exposure lever, sized by
+  its own latency sweep. **Do not ship (A) full serialization** — it defeats the ~50-participant
+  concurrency the plan is sized for and turns the demo's latency profile into roughly the sum of
+  all in-flight turns.
+- **Owner:** no fix owner yet — `data-scientist`/`coder`/`tdd-engineer` once the stakeholder
+  authorizes a mitigation track for the first live demo.
+- **Risks/RAM:** none — diagnosis only so far, no shipped behavior change.
+- **Test strategy:** re-run QA's own `docs/test-plans/salesperson-ui.md` TP-007
+  literal-concurrency-variant protocol (n=10, 3-way concurrent `en`/`pt-BR`/`es`, 5 turns each)
+  after each mitigation increment, `en`-adherence rate as the primary metric, Wilson score
+  interval; at the ~20% baseline rate n=10 alone cannot distinguish "fixed" from "still ~10-20%" —
+  plan for n=20-30 post-mitigation trials, and report each trial's individual outcome, not only
+  the aggregate pass count.
 
 ### K-063 — `SERVER.md` §1.5 "Layout (as built, M1)" is an M1 snapshot presented as current (🔵 proposed — filed out of the salesperson-ui S7→S8g documentation unit, 2026-09-07)
 

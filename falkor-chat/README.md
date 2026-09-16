@@ -210,6 +210,25 @@ layer, or immutable snapshots materialized into the workspace graph (see §4 of 
 
 ---
 
+## The `salesperson` storefront deployment
+
+`salesperson/` (repo root) is a separate business-facing, mobile-first storefront SPA — React +
+Vite + TypeScript, English/Brazilian Portuguese/Spanish — for the workflow-engine-backed
+`salesperson` agent. It is a **deployment of this server**, not a separate service: it's a static
+bundle this same FastAPI process serves at `/shop` (`FALKORCHAT_STOREFRONT_ENABLED=1`), one
+process, one port, no CORS. Up to ~50 audience members each join with just a display name and hold
+their own isolated conversation — cart, order, profile — driven by `salesperson@v7`
+(`falkorchat.proof_defs`).
+
+```bash
+./scripts/start_demo.sh             # from-cold-box bring-up: FalkorDB + schema + seed + build + uvicorn
+```
+
+`./scripts/start_demo.sh` is the supported one-command bring-up (`salesperson/AGENTS.md`); see
+`docs/SERVER.md` §1.3 for the storefront's env vars, its per-caller auth path (participant/presenter
+bearer tokens, distinct from `get_context()`'s process-constant M1 tenant), and the `/shop/api`
+route table. Delivery record and open items: `docs/HISTORY.md`/`docs/BACKLOG.md`.
+
 ## Repository layout
 
 ```
