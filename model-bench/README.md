@@ -97,3 +97,10 @@ S3's job).
 Python 3.12, matching every other component. **Zero runtime dependencies** — stdlib only, on
 purpose: a benchmarking tool whose own dependency tree can rot is a tool whose old results stop
 being reproducible. `pytest` and `ruff` are the only dev extras.
+
+`scripts/s6_walkthrough.py` (`.venv/bin/python scripts/s6_walkthrough.py [--script <scriptId>]`) is
+a read-only review aid for the S6 stakeholder pass (`docs/plans/small-model-benchmarking-s6-spec.md`
+§2.6 Step 6): drives every `conversations.jsonl` script's `toolRequired` turns against the real,
+live `tool-caller-shop-assistant` environment and prints each turn's real dispatch result beside its
+scripted `expect` block. Never writes `conversations.jsonl`, `PROVENANCE.md`, or
+`provenance.verifiedBy` — filling `verifiedBy` stays the stakeholder's own action.
