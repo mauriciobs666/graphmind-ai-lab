@@ -1,6 +1,6 @@
 {
   "packId": "tool-caller-shop-assistant",
-  "packVersion": "0.1.0",
+  "packVersion": "0.2.0",
   "role": "tool-caller",
   "schemaVersion": 1,
   "description": "Simulated storefront: catalog lookups, cart mutation, order placement, scripted multi-turn conversations.",

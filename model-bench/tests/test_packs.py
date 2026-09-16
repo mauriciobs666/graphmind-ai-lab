@@ -1017,12 +1017,10 @@ def test_real_pack_json_prompt_block_matches_the_plans_canonical_manifest() -> N
 # --------------------------------------------------------------------------------------------
 # The real `tool-caller-shop-assistant` pack.json — S5 spec §3.2, §4 Step 2
 #
-# `data.conversations`/`data.prosePseudoCallCalibration` are declared but not yet backed by a
-# file S5 creates (S6's own `Create:` line, S5 spec §3.2) — so this is deliberately the
-# **manifest-only** read (`pack_ref_from_manifest`, S1-level, `packs.py:223-236`), which needs no
-# data files at all, never `load_pack`/`validate_pack`'s full pass (which would fail on the
-# row-count identity for want of `conversations.jsonl`). That full pass is S6's, once
-# `conversations.jsonl` exists.
+# This is deliberately the **manifest-only** read (`pack_ref_from_manifest`, S1-level,
+# `packs.py:223-236`), which needs no data files at all — a narrower, independent check from
+# `load_pack`/`validate_pack`'s full pass over this pack's real, on-disk data (which now also
+# succeeds, as of S6 Steps 2-4 — see `docs/plans/small-model-benchmarking-coordination.md`).
 # --------------------------------------------------------------------------------------------
 
 _TOOL_CALLER_SHOP_ASSISTANT_PACK_JSON = (
@@ -1033,14 +1031,14 @@ _TOOL_CALLER_SHOP_ASSISTANT_PACK_JSON = (
 def test_pack_ref_from_manifest_accepts_the_real_tool_caller_shop_assistant_manifest() -> None:
     ref = pack_ref_from_manifest(_TOOL_CALLER_SHOP_ASSISTANT_PACK_JSON)
     assert ref.packId == "tool-caller-shop-assistant"
-    assert ref.packVersion == "0.1.0"
+    assert ref.packVersion == "0.2.0"
     assert ref.contentHash is None  # manifest-only read — never loaded, per PackRef's own contract
     assert ref.role == "tool-caller"
     assert ref.pairingKey == ("scriptId", "replicate", "turnIndex")
     assert ref.analysisUnit == "scriptId"
     assert ref.analysisUnitIndex == 0
     assert ref.seed == 20260913
-    assert ref.label == "tool-caller-shop-assistant@0.1.0"
+    assert ref.label == "tool-caller-shop-assistant@0.2.0"
 
 
 def test_pack_ref_from_manifest_resolves_the_real_manifests_metrics_block() -> None:

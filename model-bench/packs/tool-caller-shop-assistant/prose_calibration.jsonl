@@ -1,0 +1,20 @@
+{"text": "Sure! add_to_cart(\"Wireless Earbuds\", 2)", "isPseudoCall": true}
+{"text": "I'll do that now: filter_products({\"category\": \"Electronics\"})", "isPseudoCall": true}
+{"text": "Got it -- remove_from_cart('French Press')", "isPseudoCall": true}
+{"text": "One moment: view_cart(\"current\")", "isPseudoCall": true}
+{"text": "{\"tool_call\": {\"name\": \"lookup_product_fact\", \"arguments\": {\"name\": \"Wireless Earbuds\"}}}", "isPseudoCall": true}
+{"text": "Here is the call I would make: \"tool_call\": {\"name\": \"add_to_cart\"}", "isPseudoCall": true}
+{"text": "\"TOOL_CALL\":  \"filter_products\"", "isPseudoCall": true}
+{"text": "I'm calling the lookup_product_fact tool now to check that price for you.", "isPseudoCall": true}
+{"text": "I am going to call filter_products to see what's in the Electronics category.", "isPseudoCall": true}
+{"text": "I'm invoking add_to_cart to add that item to your cart.", "isPseudoCall": true}
+{"text": "The Wireless Earbuds are $49.99 and currently in stock.", "isPseudoCall": false}
+{"text": "Sure, I can help you find something in the Kitchen category!", "isPseudoCall": false}
+{"text": "Your cart currently has two items totaling $42.45.", "isPseudoCall": false}
+{"text": "I don't see that product in our catalog -- could you double-check the name?", "isPseudoCall": false}
+{"text": "Thanks for your order! It's been placed successfully.", "isPseudoCall": false}
+{"text": "You're welcome! Let me know if there's anything else you need.", "isPseudoCall": false}
+{"text": "The Desk Lamp (in the Office category) is priced at $19.99.", "isPseudoCall": false}
+{"text": "That's the \"Notebook Set\" you asked about, priced at $10.00.", "isPseudoCall": false}
+{"text": "I found the item you meant (the \"French Press\") -- it's $29.95.", "isPseudoCall": false}
+{"text": "The price you're after is $12.50, which is our 'employee favorite' mug.", "isPseudoCall": false}
