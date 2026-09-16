@@ -1,6 +1,6 @@
 # The one salesperson UI — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (M<n> TBD) · **Version:** 1.39 · **Reviews:** `docs/reviews/salesperson-ui.md`, `docs/reviews/salesperson-ui-impl.md`, `falkor-chat/docs/reviews/salesperson-ui-s12a.md`, `falkor-chat/docs/reviews/salesperson-ui-s12c.md`, `falkor-chat/docs/reviews/salesperson-ui-s12b.md`, `falkor-chat/docs/reviews/salesperson-ui-s13.md`, `falkor-chat/docs/reviews/salesperson-ui-s17.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — (M<n> TBD) · **Version:** 1.40 · **Reviews:** `docs/reviews/salesperson-ui.md`, `docs/reviews/salesperson-ui-impl.md`, `falkor-chat/docs/reviews/salesperson-ui-s12a.md`, `falkor-chat/docs/reviews/salesperson-ui-s12c.md`, `falkor-chat/docs/reviews/salesperson-ui-s12b.md`, `falkor-chat/docs/reviews/salesperson-ui-s13.md`, `falkor-chat/docs/reviews/salesperson-ui-s17.md`
 
 *2026-09-02 — v1.1: revised against `docs/reviews/salesperson-ui.md` (4 blockers, 9 majors, 15 minors) and the stakeholder's OQ-1…OQ-6 answers; the client component takes the `salesperson/` name and the retired app moves to `deprecated/salesperson/`.*
 *2026-09-02 — v1.2: revised against that review's `## Pass 2` (approve with suggestions) — N1 pins `FALKORCHAT_WS_ID=demo` and adds a non-label survivor clause plus a positive non-participant survivor test, N2 assigns the SPA's shared entry files to S12a, N3 re-keys the route-table assertion onto the `storefront` parameter, plus both nits; `teco`'s `deprecated/` move is recorded as landed.*
@@ -63,6 +63,18 @@ Done-condition column now **cites** §4.13's test design instead of restating it
 this review found at its root rather than only at the one place it surfaced; one explicit sentence
 names `ChatView.test.tsx`'s new `useTranslation()`-import obligation, which the generic Layer 2
 rule already covered but no table row names since `ChatView.tsx` owns no key of its own.*
+
+*2026-09-16 — v1.40: DEF-3 design pass (`docs/test-reports/salesperson-ui-report.md`, U-DEF3-design
+of the 2026-09-16 stakeholder defect-fix decision, `docs/plans/salesperson-ui2-coordination.md`) —
+the dead-turn latch (`turn.lastTurn`) never fires when `services._drive_or_fault` catches a
+drive-time fault (or `_fail_budget` exhausts the step budget) and returns a `{"status": "failed",
+…}` envelope instead of raising; `storefront.py`'s `_run_turn` only ever latched on an escaped
+exception. New §4.14 designs the fix — `_run_turn` reads `maybe_trigger`'s own return value rather
+than re-reading the graph, and touches nothing in `services.py`/`executor.py`, so the REST
+(`start_workflow_run`/`submit_workflow_input`) and sweep (`sweep_due_workflow_runs`) callers keep
+their exact current contract. New step **S18** (after S15, before S16); §5.0 and §5.1 swept to
+carry it; §5.2's dead-turn-signal Lifecycle paragraph and §6.1 gain one sentence/bullet each,
+cited from §4.14 rather than restated.*
 
 ## 1. Goal & scope
 
@@ -1511,6 +1523,173 @@ splitting is small: S17 already sits behind two other pending units on the same 
 coordination doc's `## RESUME HERE`), so S12b's and S14's portions gain no real parallelism by
 starting early; the critical path is set by that chain regardless of how S17 itself is split.
 
+### 4.14 The dead-turn latch's swallowed-envelope gap (DEF-3) — new step S18, v1.40
+
+**The gap, confirmed by direct reading of `services.py`, `executor.py`, `trigger.py` and
+`storefront.py` against the code as it stands today (unchanged since `993e8b2`, the QA pass's own
+commit).** §5.2's dead-turn signal design assumed one failure shape: "S9's trigger call runs on the
+turn-queue worker under the platform's failure-isolated contract — logged, never propagated" — i.e.
+every turn death reaches `_run_turn`'s (`falkor-chat/server/falkorchat/storefront.py`) own
+`except Exception` block, which is the only place `_mark_turn_failed` is called. That assumption is
+false for the executor's own named fault class. `executor.py::_drive` (`:536-590`) wraps the whole
+`§2.1` drive loop in a fault net: on any exception other than `HumanHandoffSignal` it stamps
+`fail_run` (terminal, correct in the graph) and **always re-raises** — but, by `_drive`'s own
+docstring, *where that re-raise lands depends on the caller*: `resume_workflow_run`
+(`services.py:2554`) calls `executor.resume` directly and **lets the raise propagate**, so a fault
+on that path already reaches `_run_turn`'s `except` today, correctly. `start_workflow_run`
+(`services.py:2200`) and `submit_workflow_input` (`services.py:2298`) instead drive through
+`_drive_or_fault` (`services.py:2485`), which **catches**
+`NotImplementedError`/`WorkflowConfigError`/`ModelResolutionError`/`ProviderCallError`, re-reads the
+run's now-terminal status, and **returns** `(status, error, fault_ctx)` — a normal return, not a
+raise — by design, so the two REST callers `api.py` wires them to (`start_workflow_run`,
+`submit_workflow_input`) can answer `200`/`201` carrying `{"status": "failed", "error": …}` instead
+of a `500` for a run that is already correctly terminal in the graph (`api.py:484-488`'s own
+documented error map says this in so many words). `trigger.py::maybe_trigger`'s step 3
+(`@mention-to-start`, the branch a storefront turn takes on every fresh conversation — there is no
+prior `waiting` run to resume) calls `services.start_workflow_run` and **returns its envelope
+verbatim** (`trigger.py:82-85`). `_run_turn` (`storefront.py:1382-1390`) calls
+`self._trigger.maybe_trigger(...)` and **discards its return value** — so for this whole fault
+class, no exception ever reaches `_run_turn`'s `except`, and `_mark_turn_failed` is never called.
+This is exactly DEF-3's live evidence: 230 graph-confirmed `failed` `WorkflowRun`s, all carrying a
+`ProviderCallError`, zero latched.
+
+**A second, narrower gap the QA report did not name, found while tracing every path `_drive_or_fault`
+does not cover.** `_drive_or_fault`'s own docstring states plainly: "Budget exhaustion is not here
+and must never be — `_fail_budget` *returns* `"failed"` through the normal path and raises
+nothing." That is true on **both** the start and the resume path — `resume_workflow_run` never goes
+through `_drive_or_fault` at all, so a resumed run that exhausts its step budget returns
+`{"runId": …, "status": "failed"}` (no `error` key) from `resume_workflow_run`, again with no
+exception, again invisible to `_run_turn`'s `except`. Narrower in practice (budget exhaustion is
+rarer than a provider outage under load) but the same shape of bug, on the one path
+(`trigger.py`'s step 2, resume-if-waiting) the QA report's own trace treated as already safe. The
+fix below closes both in one change, because both surface the same way at `_run_turn`'s call site:
+a returned envelope whose `status` is `"failed"`, never an exception.
+
+**Decision: read `maybe_trigger`'s own return value (option (a), refined) — never touch
+`_drive_or_fault`, `start_workflow_run`, `submit_workflow_input`, or `sweep_due_workflow_runs`
+(rejecting option (b)).** `_run_turn` already receives whatever `maybe_trigger` returns; it simply
+never looks at it. `trigger.py`'s three data-producing branches each return a plain `dict | None`:
+step 2 (resume) returns `resume_workflow_run`'s `{"runId", "status"}`; step 3 (start) returns
+`start_workflow_run`'s `{"runId", "status", "defKey", "defVersion", "trace", "error"?}`; step 4
+(responder fall-through) returns `post_agent_answer`'s posted-message dict, which carries
+**no `status` key at all** (`services.py:985-988`: `msgId`/`threadId`/`authorId`/`text`/`role`/
+`createdAt`/`mentions` only — confirmed by reading `post_agent_answer` directly, not assumed). So
+`isinstance(result, dict) and result.get("status") == "failed"` is a safe, cheap, purely local
+check: it fires on exactly the two swallowed-envelope shapes traced above, and cannot fire on a
+successful workflow envelope (`status` is `"done"`/`"waiting"`, never `"failed"`) or on a responder
+answer (no `status` key, `.get` returns `None`). No new graph read is needed — the status this
+check needs is already the value `maybe_trigger` just computed and handed back; re-reading the
+`WorkflowRun` from the graph a second time (the QA report's literal wording for option (a)) would
+cost a round trip to reconstruct data already in hand and would still need this same `isinstance`/
+`dict` guard to avoid re-reading on the no-op and responder branches, so it is strictly more code
+for no additional coverage.
+
+**Option (b) rejected: `_drive_or_fault` cannot distinguish its callers without new coupling that
+the REST/sweep contract does not need.** `_drive_or_fault` has exactly one signature today and no
+notion of "who is asking" — making it re-raise (or return a distinguishable signal) *specifically
+for the chat-triggered path* means either threading a new parameter through `start_workflow_run` →
+`_drive_or_fault` (widening a shared method's signature so one of its three callers — `api.py`'s
+`start_workflow_run` route, `api.py`'s `submit_workflow_input` route, and `trigger.py`'s
+step-3 chat path — can opt into different behaviour, which is exactly the "widen shared machinery
+for one caller's benefit" risk this design pass exists to avoid), or changing `_drive_or_fault`'s
+return contract outright, which **would** regress `api.py`'s own documented, already-tested REST
+contract ("a fault during the drive is NOT an error status … comes back 201/200 carrying
+`{"status": "failed", "error": …}`" — `api.py:484-488`) and `sweep_due_workflow_runs`'s `faulted`
+bucketing (`services.py:2713-2727`, which reads `_drive_or_fault`'s `error` return to decide
+`faulted` vs `resumed`). Every fact this fix needs is already sitting in `maybe_trigger`'s return
+value at the one call site that has a legitimate, chat-only reason to look at it — there is no
+reason to move the distinction into the shared method at all.
+
+**The contract this fix leaves for every `_drive_or_fault` caller: unchanged, in full.**
+`start_workflow_run` and `submit_workflow_input` (`api.py`'s two REST routes) keep answering
+`200`/`201` with `{"status": "failed", "error": …}` on a caught drive-time fault, exactly as before
+— not one line of `services.py`, `executor.py`, or `api.py` changes. `sweep_due_workflow_runs`
+keeps bucketing the same faults into its `faulted` list exactly as before. `resume_workflow_run`
+keeps letting a fault propagate to its caller exactly as before (that propagation is *why* the
+resume path was already correctly latched, and stays so). The only file this fix touches is
+`falkor-chat/server/falkorchat/storefront.py`.
+
+**The change, concretely — `Storefront._run_turn`:**
+
+```python
+        participant_id = participant.participant_id
+        try:
+            self.set_turn_state(participant_id, TURN_THINKING, booking=booking)
+            if self._trigger is None:
+                return
+            result = self._trigger.maybe_trigger(
+                ctx,
+                thread_id=posted["threadId"],
+                msg_id=posted["msgId"],
+                text=posted["text"],
+                role=posted["role"],
+                mentions=posted.get("mentions", []),
+                run_ctx={"language": participant.language},
+            )
+            if isinstance(result, dict) and result.get("status") == "failed":
+                _log.error(
+                    "storefront turn drove to a failed run without raising "
+                    "(participantId=%s, msgId=%s, runId=%s, error=%s)",
+                    participant_id, posted.get("msgId"),
+                    result.get("runId"), result.get("error"),
+                )
+                self._mark_turn_failed(participant_id)
+        except Exception:  # noqa: BLE001 — turn isolation: log, never propagate
+            _log.exception(
+                "storefront turn failed (participantId=%s, msgId=%s)",
+                participant_id, posted.get("msgId"),
+            )
+            self._mark_turn_failed(participant_id)
+        finally:
+            self.release_turn(participant_id, booking)
+```
+
+Logged at `ERROR` (not `.exception` — there is no live exception to attach a traceback to), the same
+level the existing `except` uses, so an operator grepping for `ERROR` in the storefront logger
+finds both shapes of a died turn. **Two docstrings need the matching update, not just the code**:
+`_mark_turn_failed`'s ("Called only from `_run_turn`'s own failure-isolation block…") must say it is
+now called from either that block or the post-call check, both worker-thread-only; and `_run_turn`'s
+own docstring ("A turn that dies here sets the dead-turn latch first … the one place §5.2's
+`lastTurn` is written") must say *one of two places*, citing this section.
+
+**Test-first done-condition for the implementer (`U-DEF3-fix`, `tdd-engineer`), in
+`falkor-chat/server/tests/test_storefront.py`.** The existing S9-era test
+(`test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate`) only proves the
+already-working raised-exception path and must keep passing unchanged (regression guard). New
+cases, modelled on that file's existing `_RecordingTrigger`/`_FailOnceTrigger` fakes:
+
+1. **The reproduction.** A fake trigger (e.g. `_SwallowedFaultTrigger`) whose `maybe_trigger`
+   **returns, without raising**, `{"runId": "r-1", "status": "failed", "defKey": "salesperson",
+   "defVersion": "v7", "trace": False, "error": "ProviderCallError: LM Studio: terminated"}` —
+   exactly `start_workflow_run`'s shape after `_drive_or_fault` catches a `ProviderCallError`.
+   Enqueue a turn, drain it, then assert: the future carries no exception (isolation holds);
+   `turn_in_flight` is `False` and `turn_state` is `IDLE_TURN` (the map entry still clears); **and
+   `turn_payload(...)["lastTurn"] == "failed"`** — this line is red before the fix and green after,
+   the core proof. This is the test the QA report's own finding says is currently missing (only the
+   narrower already-latched path was ever exercised).
+2. **The logged evidence**, same discipline as the existing raise-path test: exactly one record on
+   `falkorchat.storefront` at `ERROR`, naming the participant id, the message id, the run id and the
+   `error` string, with `exc_info is None` (nothing raised) — the negative half of the existing
+   test's `exc_info is not None` assertion, so a mutant that deletes the new log call or silently
+   downgrades its level is caught the same way P17-4 caught the equivalent mutation on the raise
+   path.
+3. **Positive control — an ordinary successful envelope must not latch.** The same fake shape but
+   `{"runId": "r-2", "status": "waiting"}` (no `error` key): `lastTurn` stays `None`, no log record.
+   Closes the "mark every turn failed" mutant the new `if` could otherwise hide.
+4. **Positive control — the responder fall-through must not latch.** A fake trigger returning
+   `post_agent_answer`'s own shape (`{"msgId": …, "threadId": …, "authorId": …, "text": …, "role":
+   …, "createdAt": …, "mentions": […]}`, no `status` key): `lastTurn` stays `None`. Proves the check
+   is scoped to workflow envelopes, not to "any truthy dict".
+5. **The resume-path budget-exhaustion gap (§4.14's second finding).** A fake trigger returning
+   `{"runId": "r-3", "status": "failed"}` — `resume_workflow_run`'s shape, no `error` key — proves
+   the fix's `isinstance(...) and result.get("status") == "failed"` check (not an `error`-key
+   check) is what closes this second gap too, not just the `start_workflow_run` shape in case 1.
+6. **Lifecycle, unchanged.** The existing `_the_dead_turn_latchs_lifecycle_…` test's shape (a
+   trigger that fails once then succeeds) still holds for the new failure shape too — add or extend
+   a case proving the swallowed-envelope latch is likewise postable-through and cleared by the next
+   accepted post, not by anything in the fix itself (the fix only ever *sets* the latch; §5.2's
+   clear-on-next-post/clear-on-reset mechanics are untouched).
+
 ---
 
 ## 5. Step-by-step implementation
@@ -1539,7 +1718,7 @@ regenerated mechanically from §5.1's Files column — it is what dispatch is ga
 | `falkor-chat/server/falkorchat/app.py` | S3, S8, S9 | **S3 → S8 → S9** |
 | `falkor-chat/server/falkorchat/config.py` | S3, S6 | **S3 → S6** |
 | `falkor-chat/server/falkorchat/services.py` | S2, S4 | **S2 → S4** |
-| `falkor-chat/server/falkorchat/storefront.py` | S6, S7, S7c, S9, S10 | **S6 → S7 → S7c → S9 → S10** · S7c's touch is one method — `_catalog_rows` loses its second read once `filter_products` projects `productId` (§5.1 S7c). **S8 does not appear here**, which is the point of the S7c split |
+| `falkor-chat/server/falkorchat/storefront.py` | S6, S7, S7c, S9, S10, S18 | **S6 → S7 → S7c → S9 → S10 → S18** · S7c's touch is one method — `_catalog_rows` loses its second read once `filter_products` projects `productId` (§5.1 S7c). **S8 does not appear here**, which is the point of the S7c split. S18's touch is `_run_turn` plus the `_mark_turn_failed`/`_run_turn` docstrings (§4.14) — no other method |
 | `falkor-chat/server/falkorchat/storefront_api.py` | S8, S9, S10 | **S8 → S9 → S10** |
 | `falkor-chat/server/falkorchat/repository.py` | S4, S7c | **S4 → S7c** · S7c's touch is the additive `productId` projection on the delivered `filter_products` (§5.1 S7c) — the one place this plan reaches into a delivered step's file on purpose, which is why it is its own step and not a clause inside S8's |
 | `falkor-chat/server/falkorchat/trigger.py` | S2 | — |
@@ -1547,7 +1726,7 @@ regenerated mechanically from §5.1's Files column — it is what dispatch is ga
 | `falkor-chat/server/falkorchat/proof_defs.py` | S1 | — |
 | `falkor-chat/server/tests/test_services.py` | S2, S4 | **S2 → S4** |
 | `falkor-chat/server/tests/test_app.py` | S3, S8 | **S3 → S8** |
-| `falkor-chat/server/tests/test_storefront.py` | S6, S7, S7c, S9 | **S6 → S7 → S7c → S9** |
+| `falkor-chat/server/tests/test_storefront.py` | S6, S7, S7c, S9, S18 | **S6 → S7 → S7c → S9 → S18** |
 | `falkor-chat/server/tests/test_storefront_api.py` | S8, S9, S10 | **S8 → S9 → S10** |
 | `falkor-chat/server/tests/test_repository.py` | S4, S7c | **S4 → S7c** · S7c adds the `filter_products` row-key assertion only |
 | `falkor-chat/server/tests/test_trigger.py` · `test_salesperson_scaffold.py` | S2 · S1 | — |
@@ -1614,7 +1793,8 @@ no sequencing changes as a result.
 | **S14** | **Cart / order / profile / catalog panels** (FR-8/9/10/11 parity per §2.4). Cart lines + running total + empty state; profile card with em-dash placeholders; catalog grid with image-or-text-only cards; order card with a status chip, `cancel` as an ordinary customer action and **`fulfill`/`deliver` inside a visually distinct "demo controls" affordance labelled as a warehouse simulation** (§4.6). Sources the ~15 stock images and records their licence in `salesperson/README.md` (OQ-6). **Mounts via the four no-op placeholders S12b seeds in this row's own subtree** (§5.0's new seed row, v1.34) — replaces their content only; no edit outside `views/{Cart,Order,Profile,Catalog}*`/`public/products/**`, and no serialization with S12d or S13. | `salesperson/src/views/{Cart,Order,Profile,Catalog}*`, `salesperson/public/products/**` | — | Panels match §2.4's parity table; a product **with** an asset renders an `<img>` and one **without** renders text-only with no `<img>` in the DOM (both asserted) | `frontend-engineer` | **after S12b, S12c**, ‖ S13 |
 | **S17** | **Chrome i18n sweep** (§4.13) — every JSX chrome string in S12b's (`layout/**`, `components/sheets/**`), S13's (`views/Chat*`, `components/message/**`) and S14's (`views/{Cart,Order,Profile,Catalog}*`) delivered subtrees routes through `t()`, replacing the hardcoded English literal it read before. **No behavioural or structural change** — every branch, every condition, every component boundary stays exactly as delivered; this row only changes where each string's text comes from. §4.13's key table is the full, derived spec — one top-level bundle namespace per feature area (`chat`/`layout`/`cart`/`order`/`profile`/`catalog`), `composerNotice.ts` gains a threaded `t: TFunction` third parameter (its own design rationale, §4.13) rather than a hook, since the file is deliberately outside the React tree. **Explicitly excludes** S12d's not-yet-built `views/Presenter*` (its own row above now commits to `t()` from the start instead) and `routes.tsx`'s `JoinScreen` chrome (§4.13's own reversal-trigger note). | `salesperson/src/layout/**`, `salesperson/src/components/sheets/**`, `salesperson/src/views/Chat*`, `salesperson/src/components/message/**`, `salesperson/src/views/{Cart,Order,Profile,Catalog}*`, `salesperson/src/locales/{en,pt-BR,es}.json` (§5.0's dedicated row) | `composerNotice.ts`'s `composerNoticeFor(action, reconciliation, t)` | §4.13's three-layer test design in full, stated there and deliberately not restated here (key-coverage, per-component locale-switch tests with the named cognate exceptions, the one-time hand-run residual check) — applied to all **seventeen** files §4.13's tables name; `npx vitest run` and `npx tsc -b` stay green throughout | `frontend-engineer` | **after S12b, S13 (incl. its Major fix-back and the welcome-turn follow-up — both touch `views/ChatView.tsx`/`components/message/composerNotice.ts`), S14**; before S15 |
 | **S15** | **Test suites & AC evidence** — the load harness (`load_demo.py`, stub-LLM and live-LLM modes, latency percentiles by route class, automated cross-participant isolation assertion on every response, and §6.4's queue-depth headroom check under `reset_all`), the live language-adherence run, the measured AC-8 run, and the mobile Playwright pass. Deliverable is a versioned test plan + report. | `salesperson/scripts/load_demo.py` (new), `docs/test-plans/salesperson-ui.md`, `docs/test-reports/salesperson-ui-report.md` | — | Every AC has recorded evidence; AC-3, AC-8 and AC-9 carry measured numbers, not assertions; **the report states plainly where AC-3's literal wording is not met** (§6.4); the `reset_all`-under-load run records the **observed** queue depth against §6.4's cap; **Run B publishes its dead-turn count (`turn.lastTurn === 'failed'`) beside the latency curve, never the curve alone** — the curve is computed over completed turns, so an unreported failure count is a silently biased number rather than a missing extra (§6.4) | `qa-engineer` | **after S11, S13, S14, S17, S12d** |
-| **S16** | **Docs close-out.** Root `AGENTS.md` (new `salesperson/` bullet, new `deprecated/` bullet, component-docs table row, "Working in this repo" bullet); root `docs/HISTORY.md`; `falkor-chat/README.md` + `AGENTS.md` **+ `docs/SERVER.md`** (the `/shop` surface, the storefront deployment's un-mounted dev surface, new env vars — `SERVER.md` because §4.1 cites its §1.4 as the documented REST surface this work leaves alone, while §4.9 changes what the process serves, so the citation goes stale unless it is updated here); `salesperson/{README,AGENTS}.md` final pass. **The `claude/frontend-engineer/frontend-engineer.md` refresh is NOT in scope** — an agent edit must land with its `kaizen/{plan,history}.md` and `claude/README.md` in the same change (`claude/AGENTS.md`), which routes to **`cobb`**; `teco` dispatched it as U6. | root `AGENTS.md`, `docs/HISTORY.md`, `falkor-chat/README.md`, `falkor-chat/AGENTS.md`, **`falkor-chat/docs/SERVER.md`**, `salesperson/{README,AGENTS}.md` | — | The command below returns **zero** matches (verified today it returns exactly the two `claude/frontend-engineer/frontend-engineer.md` lines U6 owns, and nothing else) | `coder` | **last** |
+| **S18** | **Dead-turn latch fix (DEF-3, §4.14).** `_run_turn` reads `maybe_trigger`'s own return value instead of discarding it: `isinstance(result, dict) and result.get("status") == "failed"` also calls `_mark_turn_failed` — closing both the `start_workflow_run` swallowed-`ProviderCallError`/`ModelResolutionError`/`WorkflowConfigError`/`NotImplementedError` envelope (§4.14's main finding, DEF-3's own evidence) and the `resume_workflow_run` budget-exhaustion envelope (§4.14's second finding). **Touches no other file** — `services.py`, `executor.py`, `api.py` and every `_drive_or_fault` caller's contract (REST `start_workflow_run`/`submit_workflow_input`, `sweep_due_workflow_runs`) are unchanged, verbatim (§4.14). Docstring updates on `_mark_turn_failed` and `_run_turn` are part of this row's done-condition, not optional polish. | `falkor-chat/server/falkorchat/storefront.py` | `_run_turn` (the new post-call check; unchanged signature) | §4.14's six-case test list, all in `falkor-chat/server/tests/test_storefront.py`: the reproduction (`_SwallowedFaultTrigger`-shaped envelope → `lastTurn == "failed"`, no exception on the future, map entry still clears), the `ERROR`-level logged-evidence assertion (`exc_info is None`), two positive controls (a successful envelope and a responder-shaped dict must **not** latch), the resume-path budget-exhaustion envelope (no `error` key) also latching, and the existing lifecycle test extended to the new failure shape; the existing raise-path test (`test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate`) stays green unchanged | `tdd-engineer` | **after S15** (DEF-3 found there); **before S16** — gated by `analyst` before commit (`docs/plans/salesperson-ui2-coordination.md`'s standing process correction), same as any other defect-fix unit from that document's 2026-09-16 stakeholder decision |
+| **S16** | **Docs close-out.** Root `AGENTS.md` (new `salesperson/` bullet, new `deprecated/` bullet, component-docs table row, "Working in this repo" bullet); root `docs/HISTORY.md`; `falkor-chat/README.md` + `AGENTS.md` **+ `docs/SERVER.md`** (the `/shop` surface, the storefront deployment's un-mounted dev surface, new env vars — `SERVER.md` because §4.1 cites its §1.4 as the documented REST surface this work leaves alone, while §4.9 changes what the process serves, so the citation goes stale unless it is updated here); `salesperson/{README,AGENTS}.md` final pass. **The `claude/frontend-engineer/frontend-engineer.md` refresh is NOT in scope** — an agent edit must land with its `kaizen/{plan,history}.md` and `claude/README.md` in the same change (`claude/AGENTS.md`), which routes to **`cobb`**; `teco` dispatched it as U6. | root `AGENTS.md`, `docs/HISTORY.md`, `falkor-chat/README.md`, `falkor-chat/AGENTS.md`, **`falkor-chat/docs/SERVER.md`**, `salesperson/{README,AGENTS}.md` | — | The command below returns **zero** matches (verified today it returns exactly the two `claude/frontend-engineer/frontend-engineer.md` lines U6 owns, and nothing else) | `coder` | **after S18 and every other defect-fix unit the 2026-09-16 stakeholder decision selects that is still open** (`docs/plans/salesperson-ui2-coordination.md` — this plan does not enumerate those other units' own step numbers, if any; that document is authoritative on which remain open); **last** |
 
 **S16's acceptance command.** v1.0's `rg -n 'salesperson/' --glob '!docs/**'` returns **36 matches
 at `4bb96e1`** — `--glob '!docs/**'` contains a slash so it is root-anchored and excludes only the
@@ -1792,8 +1972,10 @@ untouched and a participant whose last turn failed is **postable-to** — which 
 recovery. A terminal value on `state` would have locked them out of the retry instead.
 
 **Lifecycle, stated because a field that only ever latches is a worse contract than one that
-clears.** *Set* by the worker, in the same isolation block that logs the failure, at the moment the
-turn ends without a reply. *Cleared* when that participant's **next turn is accepted** — the
+clears.** *Set* by the worker, either in the isolation block that logs an escaped exception or, for
+a fault the platform's own fault net already caught and returned as a `{"status": "failed", …}`
+envelope rather than raising, in a post-call check on that return value (two call sites, one
+latch — §4.14, DEF-3). *Cleared* when that participant's **next turn is accepted** — the
 enqueue on a successful `POST /shop/api/messages`, so the notice survives exactly as long as the
 participant has not acted on it; a post refused with `409 TurnInProgress` accepts no turn and
 therefore clears nothing. *Cleared* by **either reset**, alongside the turn entry, because the
@@ -2497,6 +2679,13 @@ always read `N passed, M skipped`. Re-run the seed sequence after any default py
   a stub trigger that raises leaves `turn: {state: 'idle', lastTurn: 'failed'}` on the next
   `/state`, the participant can still post, the next accepted post clears it and a `409`-refused
   one does not, and either reset clears it (§5.2 *The dead-turn signal*).
+- **S18** (DEF-3, §4.14) — the swallowed-envelope shape the S9-era test above does not reach: a
+  stub trigger that **returns**, without raising, a `{"status": "failed", ...}` envelope (both the
+  `start_workflow_run` shape with an `error` key and the `resume_workflow_run` budget-exhaustion
+  shape without one) also leaves `lastTurn: 'failed'`, logged once at `ERROR` with no `exc_info`;
+  a successful envelope and a responder-shaped return (no `status` key) must not latch; the
+  existing raise-path test and lifecycle test stay green unchanged. §4.14's six-case list is the
+  full spec, not restated here.
 
 **The client's unit tier runs separately and is not covered by the paragraph above** — Vitest +
 Testing Library under `npm test` in `salesperson/`, no server and no FalkorDB, with the network
