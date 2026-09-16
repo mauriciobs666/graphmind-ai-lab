@@ -1108,6 +1108,84 @@ def test_the_shop_mount_is_registered_inside_create_app_and_shadows_nothing(tmp_
     assert client.get("/shop/").status_code == 200
 
 
+def _built_spa_dir(tmp_path):
+    """A `served_dir` shaped like a real Vite build: an `index.html` shell plus
+    one real static asset, so tests can tell "served the SPA shell" apart from
+    "served the actual requested file" (DEF-1).
+    """
+    served = tmp_path / "dist"
+    (served / "products").mkdir(parents=True)
+    (served / "assets").mkdir()
+    (served / "index.html").write_text(
+        "<!doctype html><title>shop</title><div id='root'>SPA-SHELL-MARKER</div>"
+    )
+    (served / "assets" / "index-abc123.js").write_text(
+        "console.log('REAL-ASSET-MARKER');"
+    )
+    return served
+
+
+def test_deep_spa_route_serves_the_index_shell_instead_of_404ing(tmp_path):
+    """DEF-1: a direct navigation to a client-side route (bookmark, QR code,
+    refresh) must serve the SPA shell so `createBrowserRouter`'s HTML5-history
+    routing can take over — not 404 before the SPA ever loads.
+    """
+    served = _built_spa_dir(tmp_path)
+    app = _storefront_app(storefront_dir=served)
+    client = TestClient(app)
+
+    resp = client.get("/shop/presenter")
+
+    assert resp.status_code == 200
+    assert "SPA-SHELL-MARKER" in resp.text
+
+
+def test_nested_deep_spa_route_also_serves_the_index_shell(tmp_path):
+    """Not just one path segment — any depth of client-side route (e.g. a
+    hypothetical `/shop/order/123/status`) must fall back to the shell too.
+    """
+    served = _built_spa_dir(tmp_path)
+    app = _storefront_app(storefront_dir=served)
+    client = TestClient(app)
+
+    resp = client.get("/shop/order/123/status")
+
+    assert resp.status_code == 200
+    assert "SPA-SHELL-MARKER" in resp.text
+
+
+def test_a_real_static_asset_under_shop_still_serves_its_own_content(tmp_path):
+    """The fallback must not swallow real files — the built JS/CSS bundle
+    still has to be served as itself, not as the SPA shell.
+    """
+    served = _built_spa_dir(tmp_path)
+    app = _storefront_app(storefront_dir=served)
+    client = TestClient(app)
+
+    resp = client.get("/shop/assets/index-abc123.js")
+
+    assert resp.status_code == 200
+    assert "REAL-ASSET-MARKER" in resp.text
+    assert "SPA-SHELL-MARKER" not in resp.text
+
+
+def test_shop_api_paths_are_never_swallowed_by_the_spa_fallback(tmp_path):
+    """The fallback is scoped to non-API paths: an unmatched `/shop/api/*`
+    path must still 404 (or route normally) and never fall through to the SPA
+    shell — the standard SPA-fallback pattern's own known failure mode.
+    """
+    served = _built_spa_dir(tmp_path)
+    app = _storefront_app(storefront_dir=served)
+    client = TestClient(app)
+
+    resp = client.get("/shop/api/does-not-exist")
+
+    assert resp.status_code == 404
+    assert "SPA-SHELL-MARKER" not in resp.text
+    # the storefront's own real API routes are also untouched by the change
+    assert client.get("/shop/api/health").status_code == 200
+
+
 def test_create_app_never_pins_the_participant_id_generator(tmp_path):
     """S6's participant-id collision argument rests on **no caller ever pinning
     `id_gen`**, and `create_app` is the first caller.

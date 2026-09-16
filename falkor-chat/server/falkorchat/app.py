@@ -19,6 +19,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -28,6 +29,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import api, config, db, storefront_api
 from . import mcp as mcp_mod
@@ -75,6 +77,44 @@ class _McpPathAlias:
         if scope["type"] == "http" and scope.get("path") == "/mcp":
             scope = dict(scope, path="/mcp/", raw_path=b"/mcp/")
         await self._app(scope, receive, send)
+
+
+class _SPAStaticFiles(StaticFiles):
+    """`StaticFiles(html=True)` plus an HTML5-history SPA fallback (QA DEF-1).
+
+    Starlette `Mount`s are terminal — a 404 raised inside one does not fall
+    through to a route registered after it — so `StaticFiles(html=True)`
+    alone only ever serves `index.html` at the served directory's own root.
+    `salesperson/src/routes.tsx` uses `createBrowserRouter` (HTML5-history
+    client-side routing), which requires the server to serve the SPA shell
+    for *any* path that isn't a real static asset, so the client-side router
+    can take over — a direct navigation to a deep route (a bookmark, a QR
+    code, or a page refresh) otherwise 404s before the SPA ever loads.
+
+    `api_prefix` is the mount-relative prefix (e.g. `"api"` for a mount at
+    `/shop` whose API lives at `/shop/api`) that must be **excluded** from
+    the fallback: an unmatched `/shop/api/*` path (no such route) still
+    falls through to this static mount, and must keep 404ing rather than
+    silently start returning the SPA shell for a typo'd or missing API path.
+    """
+
+    def __init__(self, *args, api_prefix: str, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._api_prefix = api_prefix.strip("/")
+
+    async def get_response(self, path: str, scope):  # noqa: ANN001 - ASGI scope
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            route_path = path.replace(os.sep, "/")
+            if route_path == self._api_prefix or route_path.startswith(
+                f"{self._api_prefix}/"
+            ):
+                raise
+            return await super().get_response("index.html", scope)
+
 
 # The minimal browser client (DESIGN §14.5) lives at the repo root `web/`,
 # a sibling of `server/`. Served from this process so there is no CORS seam.
@@ -485,7 +525,15 @@ def create_app(
             # manifest from — never a second read of `config.STOREFRONT_DIR`.
             app.mount(
                 storefront_api.SHOP_MOUNT,
-                StaticFiles(directory=str(served_dir), html=True),
+                _SPAStaticFiles(
+                    directory=str(served_dir),
+                    html=True,
+                    # `/shop/api` relative to the `/shop` mount — the slice
+                    # the fallback must never swallow (see `_SPAStaticFiles`).
+                    api_prefix=storefront_api.API_PREFIX[
+                        len(storefront_api.SHOP_MOUNT) :
+                    ],
+                ),
                 name="shop",
             )
 

@@ -327,6 +327,16 @@ under `create_app(storefront=True)` (§1.3). The SPA build is mounted beside the
 **only when `FALKORCHAT_STOREFRONT_DIR` names an existing directory** — unset (the documented
 default) or mistyped and the mount is skipped silently while `/shop/api` serves normally.
 
+**The `/shop` mount carries an HTML5-history SPA fallback, not a bare `StaticFiles(html=True)`.**
+`salesperson/src/routes.tsx` uses `createBrowserRouter`, which needs the server to answer any
+non-asset path under `/shop` with the SPA shell so the client-side router can take over — a plain
+`StaticFiles(html=True)` only serves `index.html` at the mount's own root, and a Starlette `Mount`
+is terminal (a 404 inside one never falls through to a route registered after it), so a deep route
+(`/shop/presenter`, a bookmark, a QR code, a page refresh) 404'd before the SPA ever loaded
+(QA DEF-1). `app._SPAStaticFiles` closes this: any request under `/shop` that isn't a real static
+asset and isn't under `/shop/api/*` (an unmatched API path still 404s, never falls back to the
+shell) gets `index.html` instead.
+
 **What holds for all eleven:** none resolves through the process-constant `get_context()`, and
 `config.USER_ID` is reached by no route at all (it is touched once at startup, by
 `services.ensure_actor` in `_lifespan`). **What does not hold for all eleven is the `actor`**, and
