@@ -1074,6 +1074,207 @@ def test_a_write_failure_after_a_grant_reservation_leaves_the_latch_standing(
     assert shop.turn_payload("p-ada")["lastTurn"] == "failed"
 
 
+class _EnvelopeTrigger:
+    """A `WorkflowTrigger` seam whose `maybe_trigger` returns a plain
+    envelope **without raising** — the shape `start_workflow_run`/
+    `resume_workflow_run` hand back after `_drive_or_fault`/`_fail_budget`
+    catch a fault and return normally (`docs/plans/salesperson-ui.md` §4.14,
+    DEF-3). Unlike `_RecordingTrigger`'s `explode` flag, this fake never
+    raises at all — the whole point is that the fault never reaches
+    `_run_turn`'s `except`.
+    """
+
+    def __init__(self, envelope: dict | None) -> None:
+        self.calls: list[dict] = []
+        self.done = threading.Event()
+        self._envelope = envelope
+
+    def maybe_trigger(self, ctx, **kwargs):  # noqa: ANN001, ANN003
+        self.calls.append({"ctx": ctx, **kwargs})
+        try:
+            return self._envelope
+        finally:
+            self.done.set()
+
+
+def test_a_turn_whose_trigger_returns_a_failed_envelope_without_raising_is_isolated_and_latches(
+    services, caplog
+):
+    """§4.14's reproduction (DEF-3): `start_workflow_run`'s own swallowed-fault
+    shape after `_drive_or_fault` catches a `ProviderCallError` — a normal
+    *return*, never an exception. Before the fix this reaches nobody's
+    `except`, so `_mark_turn_failed` is never called; this is the line that is
+    red before the fix lands and green after (`lastTurn == "failed"`), exactly
+    the 230 graph-confirmed `failed` `WorkflowRun`s the live evidence names.
+
+    Paired with the negative half of the raise-path test's logging
+    assertions: the same discipline (one `ERROR` record, naming the
+    participant, the message id, the run id and the `error` string) but
+    `exc_info is None`, because nothing raised — a mutant that deletes the
+    new log call or silently downgrades its level is caught the same way
+    P17-4 caught the equivalent mutation on the raise path.
+    """
+    caplog.set_level(logging.DEBUG, logger="falkorchat.storefront")
+    envelope = {
+        "runId": "r-1", "status": "failed", "defKey": "salesperson",
+        "defVersion": "v7", "trace": False,
+        "error": "ProviderCallError: LM Studio: terminated",
+    }
+    trigger = _EnvelopeTrigger(envelope)
+    shop = _storefront(services, trigger=trigger)
+    record = ParticipantRecord(
+        participant_id="p-ada", display_name="Ada", language="en",
+        channel_id="ch-ada", thread_id="th-ada", joined_at=1,
+    )
+    posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
+              "role": "member", "mentions": [AGENT]}
+
+    future = _enqueue(shop, shop.context_for("p-ada"), record, posted)
+    _drain(shop, future, trigger)
+
+    # isolation holds: nothing was raised, so nothing propagates
+    assert future.exception(timeout=IMMEDIATE_S) is None
+    assert shop.turn_in_flight("p-ada") is False
+    assert shop.turn_state("p-ada") == IDLE_TURN
+    assert shop.turn_payload("p-ada") == {
+        "state": TURN_IDLE, "queuePosition": 0, "lastTurn": "failed",
+    }
+
+    logged = [r for r in caplog.records if r.name == "falkorchat.storefront"]
+    assert len(logged) == 1
+    assert logged[0].levelno == logging.ERROR
+    assert logged[0].exc_info is None
+    message = logged[0].getMessage()
+    assert "p-ada" in message
+    assert "m-1" in message
+    assert "r-1" in message
+    assert "ProviderCallError: LM Studio: terminated" in message
+
+
+def test_a_turn_whose_trigger_returns_a_successful_envelope_does_not_latch(
+    services, caplog
+):
+    """Positive control — an ordinary successful envelope (`status ==
+    "waiting"`, no `error` key) must not latch. Closes the "mark every turn
+    failed" mutant the new `if` could otherwise hide.
+    """
+    caplog.set_level(logging.DEBUG, logger="falkorchat.storefront")
+    trigger = _EnvelopeTrigger({"runId": "r-2", "status": "waiting"})
+    shop = _storefront(services, trigger=trigger)
+    record = ParticipantRecord(
+        participant_id="p-ada", display_name="Ada", language="en",
+        channel_id="ch-ada", thread_id="th-ada", joined_at=1,
+    )
+    posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
+              "role": "member", "mentions": [AGENT]}
+
+    _drain(shop, _enqueue(shop, shop.context_for("p-ada"), record, posted), trigger)
+
+    assert shop.turn_payload("p-ada")["lastTurn"] is None
+    assert [r for r in caplog.records if r.name == "falkorchat.storefront"] == []
+
+
+def test_a_turn_whose_trigger_returns_a_responder_answer_does_not_latch(
+    services, caplog
+):
+    """Positive control — the responder fall-through (`post_agent_answer`'s
+    own posted-message shape, no `status` key at all) must not latch. Proves
+    the check is scoped to workflow envelopes, not to "any truthy dict".
+    """
+    caplog.set_level(logging.DEBUG, logger="falkorchat.storefront")
+    envelope = {
+        "msgId": "m-answer", "threadId": "th-ada", "authorId": AGENT,
+        "text": "here's what I found", "role": "agent", "createdAt": 123,
+        "mentions": [],
+    }
+    trigger = _EnvelopeTrigger(envelope)
+    shop = _storefront(services, trigger=trigger)
+    record = ParticipantRecord(
+        participant_id="p-ada", display_name="Ada", language="en",
+        channel_id="ch-ada", thread_id="th-ada", joined_at=1,
+    )
+    posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
+              "role": "member", "mentions": [AGENT]}
+
+    _drain(shop, _enqueue(shop, shop.context_for("p-ada"), record, posted), trigger)
+
+    assert shop.turn_payload("p-ada")["lastTurn"] is None
+    assert [r for r in caplog.records if r.name == "falkorchat.storefront"] == []
+
+
+def test_a_turn_whose_trigger_returns_a_resume_path_failed_envelope_also_latches(
+    services,
+):
+    """§4.14's second finding: the resume-path budget-exhaustion envelope
+    (`resume_workflow_run`'s own shape, `{"runId", "status": "failed"}`, **no
+    `error` key**) also latches — proving the fix's `isinstance(...) and
+    result.get("status") == "failed"` check, not an `error`-key check, is
+    what closes this narrower gap too, not just the `start_workflow_run`
+    shape the reproduction test above uses.
+    """
+    trigger = _EnvelopeTrigger({"runId": "r-3", "status": "failed"})
+    shop = _storefront(services, trigger=trigger)
+    record = ParticipantRecord(
+        participant_id="p-ada", display_name="Ada", language="en",
+        channel_id="ch-ada", thread_id="th-ada", joined_at=1,
+    )
+    posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
+              "role": "member", "mentions": [AGENT]}
+
+    _drain(shop, _enqueue(shop, shop.context_for("p-ada"), record, posted), trigger)
+
+    assert shop.turn_payload("p-ada")["lastTurn"] == "failed"
+
+
+def test_the_dead_turn_latchs_lifecycle_holds_for_a_swallowed_envelope_too(
+    services,
+):
+    """§4.14's case 6: the existing lifecycle test's shape (a trigger that
+    fails once then succeeds) holds for the new, non-raising failure shape
+    too — the latch this fix sets is postable-through and cleared by the
+    next accepted post exactly like the raise-path latch, because §5.2's
+    clear-on-next-post mechanics are untouched by this fix; the fix only
+    ever *sets* the latch.
+    """
+    calls = {"n": 0}
+    done = threading.Event()
+
+    class _FailOnceViaEnvelope:
+        def maybe_trigger(self, ctx, **kwargs):  # noqa: ANN001, ANN003
+            calls["n"] += 1
+            try:
+                if calls["n"] == 1:
+                    return {"runId": "r-1", "status": "failed",
+                             "error": "ProviderCallError: LM Studio: terminated"}
+                return None
+            finally:
+                done.set()
+
+    trigger = _FailOnceViaEnvelope()
+    shop = _storefront(services, trigger=trigger)
+    record = ParticipantRecord(
+        participant_id="p-ada", display_name="Ada", language="en",
+        channel_id="ch-ada", thread_id="th-ada", joined_at=1,
+    )
+    posted = {"msgId": "m-1", "threadId": "th-ada", "text": "hi",
+              "role": "member", "mentions": [AGENT]}
+    ctx = shop.context_for("p-ada")
+
+    # first turn returns a failed envelope without raising — sets the latch
+    first = _enqueue(shop, ctx, record, posted)
+    done.wait(timeout=IMMEDIATE_S)
+    first.result(timeout=IMMEDIATE_S)
+    assert shop.turn_payload("p-ada")["lastTurn"] == "failed"
+
+    # the next accepted post reaches the worker — now it clears
+    done.clear()
+    second = _enqueue(shop, ctx, record, {**posted, "msgId": "m-2"})
+    done.wait(timeout=IMMEDIATE_S)
+    second.result(timeout=IMMEDIATE_S)
+    assert second.exception(timeout=IMMEDIATE_S) is None
+    assert shop.turn_payload("p-ada")["lastTurn"] is None
+
+
 def _refuses_to_start(self):  # noqa: ANN001, ANN201, ARG001
     """Stands in for `threading.Thread.start` under thread exhaustion.
 

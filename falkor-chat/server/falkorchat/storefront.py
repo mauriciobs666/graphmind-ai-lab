@@ -954,9 +954,11 @@ class Storefront:
             return "failed" if participant_id in self._last_turn_failed else None
 
     def _mark_turn_failed(self, participant_id: str) -> None:
-        """Set the dead-turn latch. Called only from `_run_turn`'s own
-        failure-isolation block, on the same turn whose exception it logs —
-        never from the request thread.
+        """Set the dead-turn latch. Called from either of `_run_turn`'s two
+        failure-marking places — its `except` block, on the same turn whose
+        exception it logs, or its post-call check, on a turn whose trigger
+        returned a failed envelope without raising (§4.14, DEF-3) — never
+        from the request thread.
         """
         with self._last_turn_failed_lock:
             self._last_turn_failed.add(participant_id)
@@ -1357,10 +1359,16 @@ class Storefront:
         The `finally` releases the map entry **when this booking still owns
         it**, which is what re-opens the composer and releases the `409` gate;
         the paragraph below is why that condition is there. **A turn that dies
-        here sets the dead-turn latch first** — `_mark_turn_failed`, in this
-        same `except`, the one place §5.2's `lastTurn` is written — so it stays
+        here sets the dead-turn latch first** — `_mark_turn_failed`, from one
+        of two places, the one place §5.2's `lastTurn` is written — so it stays
         distinguishable from one that completed even after the `finally` below
-        deletes the entry the exception happened on (§5.1's S9 row). A
+        deletes the entry the exception happened on (§5.1's S9 row). The first
+        place is this method's own `except`, on a trigger call that raised.
+        The second is the post-call check right after `maybe_trigger` returns:
+        `start_workflow_run`/`resume_workflow_run` can drive a run to `failed`
+        and hand that status back as a normal, non-raising return — never an
+        exception — so `_run_turn` reads `maybe_trigger`'s own return value
+        and marks the turn failed there too (§4.14, DEF-3). A
         `self._trigger is None` no-op turn is not a failure and does not touch
         the latch: nothing ran, so nothing died.
 
@@ -1379,7 +1387,7 @@ class Storefront:
             self.set_turn_state(participant_id, TURN_THINKING, booking=booking)
             if self._trigger is None:
                 return
-            self._trigger.maybe_trigger(
+            result = self._trigger.maybe_trigger(
                 ctx,
                 thread_id=posted["threadId"],
                 msg_id=posted["msgId"],
@@ -1388,6 +1396,14 @@ class Storefront:
                 mentions=posted.get("mentions", []),
                 run_ctx={"language": participant.language},
             )
+            if isinstance(result, dict) and result.get("status") == "failed":
+                _log.error(
+                    "storefront turn drove to a failed run without raising "
+                    "(participantId=%s, msgId=%s, runId=%s, error=%s)",
+                    participant_id, posted.get("msgId"),
+                    result.get("runId"), result.get("error"),
+                )
+                self._mark_turn_failed(participant_id)
         except Exception:  # noqa: BLE001 — turn isolation: log, never propagate
             _log.exception(
                 "storefront turn failed (participantId=%s, msgId=%s)",
