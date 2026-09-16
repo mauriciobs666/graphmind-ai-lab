@@ -911,6 +911,22 @@ def _iteration_summary_dict(observations: Sequence[tuple[str, int]]) -> dict[str
     }
 
 
+def _prose_pseudo_call_detector_dict(pack: Pack) -> Mapping[str, Any] | None:
+    """S6 spec §2.5, §5 Step 1: the detector's own precision/recall against the pack's declared
+    calibration corpus — `{"n": int, "precision": float, "recall": float}`, or `None` when the
+    pack's manifest declares no `data.prosePseudoCallCalibration` key at all. Guarded by manifest
+    key membership, never a bare `try`/`except PackConfigError`, matching `_determinism_probe`'s
+    own `.get(..., ())` idiom for an expected-absent case rather than exception flow."""
+    if "prosePseudoCallCalibration" not in pack.manifest.get("data", {}):
+        return None
+    labelled = list(pack.iter_prose_calibration())
+    result = prose_detector_precision_recall(labelled)
+    if result is None:
+        return None
+    precision, recall = result
+    return {"n": len(labelled), "precision": precision, "recall": recall}
+
+
 def score_conversations(
     scored: Sequence[tuple[Conversation, ConversationTrace, Sequence[ItemTiming]]],
     probes: Sequence[tuple[Conversation, ConversationTrace, Sequence[ItemTiming]]],
@@ -1000,5 +1016,6 @@ def score_conversations(
         hazard=hazard,
         determinismProbe=_determinism_probe(scored, probes, pack=pack),
         iterationSummary=_iteration_summary_dict(tally.iterationObservations),
+        prosePseudoCallDetector=_prose_pseudo_call_detector_dict(pack),
     )
     return tuple(items), aggregates

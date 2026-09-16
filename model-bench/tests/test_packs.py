@@ -929,6 +929,92 @@ def test_validate_pack_does_not_resolve_a_tool_callers_scorer() -> None:
 
 
 # --------------------------------------------------------------------------------------------
+# validate_pack — `H <= min(script length)` (S6 spec §2.3, §5 Step 0)
+# --------------------------------------------------------------------------------------------
+
+
+def test_validate_pack_accepts_an_h_within_every_scripts_length() -> None:
+    """The binding case, not merely `H` far below every script's length: `valid`'s own
+    `metrics.cleanThroughTurnH.H` is exactly 4 and every one of its 12 scripts has exactly 4
+    turns (S6 spec §4 Step 4's own reasoning: "shape C's own 4-turn scripts are the binding
+    case"). `H == min(script length)` must not trip the check."""
+    pack = load_pack(pack_fixture("valid"))
+    assert not any("cleanThroughTurnH.H" in p for p in validate_pack(pack))
+
+
+def test_validate_pack_rejects_h_exceeding_the_shortest_scripts_turn_count() -> None:
+    """S6 spec §2.3: before this check, `validate_pack` never read `metrics.cleanThroughTurnH.H`
+    against the authored scripts' own turn counts at all — a pack whose declared `H` exceeds its
+    shortest script's length silently loses that script from the paired table at REPORT time
+    (`report.py:126`'s own comment on the gap this closes), shrinking `n_eff` in the *optimistic*
+    direction with nothing printed to say so. The problem string must name the offending script
+    and its own turn count, not just the pack."""
+    pack = load_pack(pack_fixture("clean_through_turn_h_violation"))
+    problems = validate_pack(pack)
+    h_problems = [p for p in problems if "cleanThroughTurnH.H" in p]
+    assert len(h_problems) == 1
+    assert "script-01" in h_problems[0]
+    assert "turn count (3)" in h_problems[0]
+
+
+def test_clean_through_turn_h_problems_is_not_this_functions_problem_absent_either_key() -> None:
+    """Same convention as `_answerability_stamp_problems`/`_tool_module_problems`/
+    `_prompt_problems`: absent `sampling.scripts` (the item-level-pack shape) or absent
+    `metrics.cleanThroughTurnH.H` (a pack that carries no such verdict metric) is not this
+    function's problem — `missing_data_conversations` declares `sampling.scripts` but no
+    `cleanThroughTurnH.H`, and must not trip this axis (it does trip the row-count identity for
+    an unrelated reason, asserted elsewhere)."""
+    pack = load_pack(pack_fixture("missing_data_conversations"))
+    assert "cleanThroughTurnH" not in (pack.manifest.get("metrics") or {})
+    assert not any("cleanThroughTurnH.H" in p for p in validate_pack(pack))
+
+
+# --------------------------------------------------------------------------------------------
+# Pack.iter_prose_calibration() (S6 spec §2.5, §3.8, §5 Step 0)
+# --------------------------------------------------------------------------------------------
+
+
+def test_iter_prose_calibration_yields_text_is_pseudo_call_pairs() -> None:
+    pack = load_pack(pack_fixture("prose_calibration"))
+    rows = list(pack.iter_prose_calibration())
+    assert rows == [
+        ('add_to_cart("Pad", 1)', True),
+        ("The Pad costs $24.99.", False),
+    ]
+
+
+def test_iter_prose_calibration_raises_on_a_missing_manifest_key() -> None:
+    """Exactly `data_path`'s own contract (`packs.py:260-265`) — `valid` declares no
+    `data.prosePseudoCallCalibration` key at all."""
+    pack = load_pack(pack_fixture("valid"))
+    assert "prosePseudoCallCalibration" not in (pack.manifest.get("data") or {})
+    with pytest.raises(PackConfigError, match="prosePseudoCallCalibration"):
+        list(pack.iter_prose_calibration())
+
+
+# --------------------------------------------------------------------------------------------
+# The real `tool-caller-shop-assistant` pack.json — the three-field manifest correction
+# (S6 spec §2.4)
+# --------------------------------------------------------------------------------------------
+
+
+def test_real_pack_json_prompt_block_matches_the_plans_canonical_manifest() -> None:
+    """S6 spec §2.4: three `prompt` fields where the shipped manifest diverged, unflagged, from
+    the top-level plan's own canonical manifest literal for this exact pack (plan `:432-465`) —
+    corrected here, before this pack's first live run, per S6 spec §2.4's own "cheapest possible
+    time" argument. `historyReplay` is the load-bearing one (§3.4): `structured-replies-only` is
+    the one value that reproduces the documented turn-4 collapse's own evidence shape (no visible
+    tool-use evidence in replayed history); `structured` is R-3's own bisect rung 1, not the
+    baseline. `packVersion` is deliberately NOT asserted here — it stays unchanged at this step
+    (S6 spec §5 Step 0)."""
+    manifest = json.loads(_TOOL_CALLER_SHOP_ASSISTANT_PACK_JSON.read_text(encoding="utf-8"))
+    prompt = manifest["prompt"]
+    assert prompt["historyReplay"] == "structured-replies-only"
+    assert prompt["representToolSchemasEachTurn"] is True
+    assert prompt["maxTokens"] == 1024
+
+
+# --------------------------------------------------------------------------------------------
 # The real `tool-caller-shop-assistant` pack.json — S5 spec §3.2, §4 Step 2
 #
 # `data.conversations`/`data.prosePseudoCallCalibration` are declared but not yet backed by a

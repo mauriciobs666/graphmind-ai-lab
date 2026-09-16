@@ -1055,6 +1055,36 @@ def test_tool_call_aggregates_round_trips_iteration_summary(tmp_root) -> None:
     assert restored.named_metrics() == ()
 
 
+def test_tool_call_aggregates_round_trips_prose_pseudo_call_detector(tmp_root) -> None:
+    """`prosePseudoCallDetector` (S6 spec §2.5, §5 Step 1) is, like `determinismProbe`/
+    `iterationSummary`, a plain JSON-native mapping — `{"n", "precision", "recall"}` — no
+    special-case `_encode`/`_decode` branch, round-tripping through the same generic
+    `vars(agg).items()` dispatch every other field already uses."""
+    detector = {"n": 20, "precision": 0.875, "recall": 0.7}
+    aggregates = ToolCallAggregates(prosePseudoCallDetector=detector)
+    store(_run("r-tool-call-prose-pseudo-call-detector", aggregates=aggregates), tmp_root)
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert [r.reason for r in invalid] == []
+    assert len(valid) == 1
+    restored = valid[0].aggregates
+    assert restored.prosePseudoCallDetector == detector
+    # Diagnostic only, like `determinismProbe`/`iterationSummary` — never reaches the generic
+    # Arms table.
+    assert restored.named_metrics() == ()
+
+
+def test_tool_call_aggregates_prose_pseudo_call_detector_defaults_to_none(tmp_root) -> None:
+    """A run whose pack declares no calibration corpus must round-trip `None`, not a coincidental
+    zero-valued dict — the same `None`-means-"no corpus" contract `prose_detector_precision_recall`
+    itself carries (S6 spec §2.5)."""
+    aggregates = ToolCallAggregates()
+    store(_run("r-tool-call-prose-pseudo-call-detector-none", aggregates=aggregates), tmp_root)
+    valid, invalid = load_history(tmp_root, packId=PACK)
+    assert [r.reason for r in invalid] == []
+    assert len(valid) == 1
+    assert valid[0].aggregates.prosePseudoCallDetector is None
+
+
 def test_tool_call_aggregates_named_metrics_excludes_hazard_funnel_counts_and_per_turn_position(
     tmp_root,
 ) -> None:

@@ -332,6 +332,21 @@ class Pack:
                 return script
         raise PackConfigError(f"{self.packId}: no script {script_id!r} in data.conversations")
 
+    def iter_prose_calibration(self) -> Iterator[tuple[str, bool]]:
+        """Yield each row of `data.prosePseudoCallCalibration` (`prose_calibration.jsonl`) as a
+        `(text, isPseudoCall)` pair — the `Sequence[tuple[str, bool]]` shape
+        `scoring.toolcalls.prose_detector_precision_recall` takes (S6 spec §2.5, §3.8). Same
+        readability-only naming caveat and generic JSONL-row iteration as `iter_items`/
+        `iter_scripts` above; raises `PackConfigError` on a missing manifest key exactly as
+        `data_path` already does."""
+        with self.data_path("prosePseudoCallCalibration").open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                row = json.loads(line)
+                yield row["text"], row["isPseudoCall"]
+
     def ref(self) -> PackRef:
         """The §3.3 totality boundary: `contentHash` is never `None` on this path."""
         return _ref_from_manifest_fields(
@@ -883,10 +898,51 @@ def _answerability_stamp_problems(pack: Pack) -> list[str]:
     return problems
 
 
+def _clean_through_turn_h_problems(pack: Pack) -> list[str]:
+    """S6 spec §2.3: `validate_pack` fails a pack whose declared `metrics.cleanThroughTurnH.H`
+    exceeds its shortest script's own turn count — a small, role/metric-scoped function mirroring
+    `_answerability_stamp_problems`'s own shape (`:867-885` above). Left unchecked, `H`>`min(script
+    length)` silently loses every conversation too short to reach turn `H` from the paired table
+    at REPORT time (`report.py:126`'s own comment names this as "the only place a violated `H <=
+    min(script length)` would surface"), shrinking `n_eff` in the *optimistic* direction with
+    nothing printed to say so (`-ml` §4.5.1's own footnote: "a validated pack invariant, not an
+    assumption").
+
+    Scoped to a pack whose manifest declares both `sampling.scripts` and
+    `metrics.cleanThroughTurnH.H` — absent either key is not this function's problem, same
+    convention as every other optional-block check below (`_tool_module_problems` for absent
+    `tools.module`, `_prompt_problems` for absent `prompt`, `_answerability_stamp_problems` for a
+    non-`nlq-generator` role): a pack with no `sampling.scripts` is the item-level shape
+    (`check_sampling_contract` covers that instead), and a pack with no `cleanThroughTurnH.H`
+    carries no such verdict metric to bound at all.
+    """
+    sampling = pack.manifest.get("sampling") or {}
+    if "scripts" not in sampling:
+        return []
+    metrics = pack.manifest.get("metrics") or {}
+    clean_through_turn_h = metrics.get("cleanThroughTurnH")
+    if not isinstance(clean_through_turn_h, Mapping) or "H" not in clean_through_turn_h:
+        return []
+    h = clean_through_turn_h["H"]
+
+    scripts = list(pack.iter_scripts())
+    if not scripts:
+        return []
+    offending = min(scripts, key=lambda script: len(script.turns))
+    shortest = len(offending.turns)
+    if h <= shortest:
+        return []
+    return [
+        f"{pack.packId}: metrics.cleanThroughTurnH.H={h} exceeds script "
+        f"{offending.scriptId!r}'s own turn count ({shortest}); H must not exceed the shortest "
+        "script's length (plan §3.3, S6 spec §2.3)"
+    ]
+
+
 def validate_pack(pack: Pack) -> list[str]:
     """§4 S2's pack-integrity checks. `[]` means valid, matching `Fingerprint.validate()`'s shape.
 
-    Seven independent axes — a fixture can fail one, several, or none:
+    Eight independent axes — a fixture can fail one, several, or none:
 
     * the `sampling` contract (§3.3): structural (`analysisUnit == pairingKey[0]`, via
       `check_sampling_contract`), the row-count identity, and `-ml` §3.4 Rule 6's
@@ -910,6 +966,10 @@ def validate_pack(pack: Pack) -> list[str]:
     * (S4 spec §6) `items.jsonl`'s `"answerable"` stamp, scoped to `role == "nlq-generator"` only
       — `refresh_golden.py --stamp-answerability` writes it, and a pack shipped before that step
       runs fails validation rather than silently running with an incomplete accuracy denominator.
+    * (S6 spec §2.3) `metrics.cleanThroughTurnH.H <= min(script length)`, scoped to a pack
+      declaring both `sampling.scripts` and `metrics.cleanThroughTurnH.H` — closes the gap
+      `report.py:126`'s own comment names as "the only place" this invariant would otherwise
+      surface, and only at report time.
 
     **Not here:** the `callSurface`-versus-catalog-`type` cross-check and the tool-calling
     eligibility gate are `run`'s (§3.4.4a, §3.6) — this function has no model catalog to check
@@ -923,4 +983,5 @@ def validate_pack(pack: Pack) -> list[str]:
     problems.extend(_prompt_problems(pack))
     problems.extend(_scorer_problems(pack))
     problems.extend(_answerability_stamp_problems(pack))
+    problems.extend(_clean_through_turn_h_problems(pack))
     return problems

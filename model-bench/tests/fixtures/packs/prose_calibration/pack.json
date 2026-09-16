@@ -1,0 +1,6 @@
+{
+  "packId": "fixture-prose-calibration",
+  "packVersion": "1.0.0",
+  "role": "tool-caller",
+  "data": {"prosePseudoCallCalibration": "prose_calibration.jsonl"}
+}

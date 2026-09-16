@@ -1,0 +1,2 @@
+{"scriptId": "script-00", "shape": "A", "replicate": 1, "turns": [{"seq": 0, "user": "turn 0 of script-00", "expect": {}}, {"seq": 1, "user": "turn 1 of script-00", "expect": {}}, {"seq": 2, "user": "turn 2 of script-00", "expect": {}}, {"seq": 3, "user": "turn 3 of script-00", "expect": {}}]}
+{"scriptId": "script-01", "shape": "C", "replicate": 1, "turns": [{"seq": 0, "user": "turn 0 of script-01", "expect": {}}, {"seq": 1, "user": "turn 1 of script-01", "expect": {}}, {"seq": 2, "user": "turn 2 of script-01", "expect": {}}]}

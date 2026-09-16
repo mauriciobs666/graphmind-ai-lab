@@ -1,12 +1,12 @@
-{"scriptId": "script-00", "turnIndex": 0}
-{"scriptId": "script-01", "turnIndex": 0}
-{"scriptId": "script-02", "turnIndex": 0}
-{"scriptId": "script-03", "turnIndex": 0}
-{"scriptId": "script-04", "turnIndex": 0}
-{"scriptId": "script-05", "turnIndex": 0}
-{"scriptId": "script-06", "turnIndex": 0}
-{"scriptId": "script-07", "turnIndex": 0}
-{"scriptId": "script-08", "turnIndex": 0}
-{"scriptId": "script-09", "turnIndex": 0}
-{"scriptId": "script-10", "turnIndex": 0}
-{"scriptId": "script-11", "turnIndex": 0}
+{"scriptId": "script-00", "shape": "A", "replicate": 1, "turns": [{"seq": 0, "user": "turn 0 of script-00", "expect": {}}, {"seq": 1, "user": "turn 1 of script-00", "expect": {}}, {"seq": 2, "user": "turn 2 of script-00", "expect": {}}, {"seq": 3, "user": "turn 3 of script-00", "expect": {}}]}
+{"scriptId": "script-01", "shape": "B", "replicate": 1, "turns": [{"seq": 0, "user": "turn 0 of script-01", "expect": {}}, {"seq": 1, "user": "turn 1 of script-01", "expect": {}}, {"seq": 2, "user": "turn 2 of script-01", "expect": {}}, {"seq": 3, "user": "turn 3 of script-01", "expect": {}}]}
+{"scriptId": "script-02", "shape": "C", "replicate": 1, "turns": [{"seq": 0, "user": "turn 0 of script-02", "expect": {}}, {"seq": 1, "user": "turn 1 of script-02", "expect": {}}, {"seq": 2, "user": "turn 2 of script-02", "expect": {}}, {"seq": 3, "user": "turn 3 of script-02", "expect": {}}]}
+{"scriptId": "script-03", "shape": "A", "replicate": 1, "turns": [{"seq": 0, "user": "turn 0 of script-03", "expect": {}}, {"seq": 1, "user": "turn 1 of script-03", "expect": {}}, {"seq": 2, "user": "turn 2 of script-03", "expect": {}}, {"seq": 3, "user": "turn 3 of script-03", "expect": {}}]}
+{"scriptId": "script-04", "shape": "B", "replicate": 1, "turns": [{"seq": 0, "user": "turn 0 of script-04", "expect": {}}, {"seq": 1, "user": "turn 1 of script-04", "expect": {}}, {"seq": 2, "user": "turn 2 of script-04", "expect": {}}, {"seq": 3, "user": "turn 3 of script-04", "expect": {}}]}
+{"scriptId": "script-05", "shape": "C", "replicate": 1, "turns": [{"seq": 0, "user": "turn 0 of script-05", "expect": {}}, {"seq": 1, "user": "turn 1 of script-05", "expect": {}}, {"seq": 2, "user": "turn 2 of script-05", "expect": {}}, {"seq": 3, "user": "turn 3 of script-05", "expect": {}}]}
+{"scriptId": "script-06", "shape": "A", "replicate": 1, "turns": [{"seq": 0, "user": "turn 0 of script-06", "expect": {}}, {"seq": 1, "user": "turn 1 of script-06", "expect": {}}, {"seq": 2, "user": "turn 2 of script-06", "expect": {}}, {"seq": 3, "user": "turn 3 of script-06", "expect": {}}]}
+{"scriptId": "script-07", "shape": "B", "replicate": 1, "turns": [{"seq": 0, "user": "turn 0 of script-07", "expect": {}}, {"seq": 1, "user": "turn 1 of script-07", "expect": {}}, {"seq": 2, "user": "turn 2 of script-07", "expect": {}}, {"seq": 3, "user": "turn 3 of script-07", "expect": {}}]}
+{"scriptId": "script-08", "shape": "C", "replicate": 1, "turns": [{"seq": 0, "user": "turn 0 of script-08", "expect": {}}, {"seq": 1, "user": "turn 1 of script-08", "expect": {}}, {"seq": 2, "user": "turn 2 of script-08", "expect": {}}, {"seq": 3, "user": "turn 3 of script-08", "expect": {}}]}
+{"scriptId": "script-09", "shape": "A", "replicate": 1, "turns": [{"seq": 0, "user": "turn 0 of script-09", "expect": {}}, {"seq": 1, "user": "turn 1 of script-09", "expect": {}}, {"seq": 2, "user": "turn 2 of script-09", "expect": {}}, {"seq": 3, "user": "turn 3 of script-09", "expect": {}}]}
+{"scriptId": "script-10", "shape": "B", "replicate": 1, "turns": [{"seq": 0, "user": "turn 0 of script-10", "expect": {}}, {"seq": 1, "user": "turn 1 of script-10", "expect": {}}, {"seq": 2, "user": "turn 2 of script-10", "expect": {}}, {"seq": 3, "user": "turn 3 of script-10", "expect": {}}]}
+{"scriptId": "script-11", "shape": "C", "replicate": 1, "turns": [{"seq": 0, "user": "turn 0 of script-11", "expect": {}}, {"seq": 1, "user": "turn 1 of script-11", "expect": {}}, {"seq": 2, "user": "turn 2 of script-11", "expect": {}}, {"seq": 3, "user": "turn 3 of script-11", "expect": {}}]}

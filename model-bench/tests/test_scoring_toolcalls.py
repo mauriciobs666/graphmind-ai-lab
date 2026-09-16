@@ -13,7 +13,7 @@ Docstrings on the tests below cite the exact plan/`-ml` item they pin, per
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -130,17 +130,34 @@ class _FakePack:
         h: int = 4,
         determinism_probe_scripts: tuple[str, ...] = (),
         tool_schemas: tuple[Mapping[str, Any], ...] = (),
+        prose_calibration: Sequence[tuple[str, bool]] | None = None,
     ) -> None:
         self.manifest = {
             "metrics": {"cleanThroughTurnH": {"H": h}},
             "sampling": {"determinismProbeScripts": list(determinism_probe_scripts)},
+            # `score_conversations` guards on `"prosePseudoCallCalibration" in
+            # pack.manifest.get("data", {})` (S6 spec §5 Step 1) — present iff the caller passed a
+            # (possibly empty) calibration corpus, absent (empty `data`) otherwise, matching a real
+            # pack's manifest exactly: the key's mere presence is the signal, not its content.
+            "data": (
+                {"prosePseudoCallCalibration": "prose_calibration.jsonl"}
+                if prose_calibration is not None
+                else {}
+            ),
         }
         self._tool_schemas = tool_schemas
+        self._prose_calibration = prose_calibration
 
     def prompt_config(self) -> Any:
         from types import SimpleNamespace
 
         return SimpleNamespace(toolSchemas=self._tool_schemas)
+
+    def iter_prose_calibration(self) -> Iterator[tuple[str, bool]]:
+        """Mirrors `Pack.iter_prose_calibration()`'s own `(text, isPseudoCall)` shape — a plain
+        in-memory stand-in, never reading a real file, matching this class's own duck-typed
+        `prompt_config` above."""
+        return iter(self._prose_calibration or ())
 
 
 def make_pack(
@@ -148,9 +165,13 @@ def make_pack(
     h: int = 4,
     determinism_probe_scripts: tuple[str, ...] = (),
     tool_schemas: tuple[Mapping[str, Any], ...] = (),
+    prose_calibration: Sequence[tuple[str, bool]] | None = None,
 ) -> _FakePack:
     return _FakePack(
-        h=h, determinism_probe_scripts=determinism_probe_scripts, tool_schemas=tool_schemas
+        h=h,
+        determinism_probe_scripts=determinism_probe_scripts,
+        tool_schemas=tool_schemas,
+        prose_calibration=prose_calibration,
     )
 
 
@@ -1459,6 +1480,42 @@ def test_determinism_probe_not_ran_when_fewer_probes_returned_than_declared() ->
     probe = aggregates.determinismProbe
     assert probe["ran"] is False
     assert probe["identical"] is False
+
+
+# --- prosePseudoCallDetector (S6 spec §2.5, §5 Step 1) ------------------------------------------
+
+
+def test_score_conversations_populates_prose_pseudo_call_detector_when_calibration_declared() -> (
+    None
+):
+    """S6 spec §2.5: `score_conversations` calls `prose_detector_precision_recall` against the
+    pack's own calibration data when `"prosePseudoCallCalibration" in
+    pack.manifest.get("data", {})` — a real corpus, both a true positive (call-shaped text) and a
+    true negative (ordinary prose), so precision and recall are each a non-trivial fraction rather
+    than a vacuous `1.0`/`0.0` that a mutant computing either backwards could not be caught by."""
+    scored = [_clean_scored("A-01")]
+    calibration = [
+        ('add_to_cart("Pad", 1)', True),  # true positive
+        ("I'm calling this a great deal.", False),  # false positive (matches "I'm calling")
+        ("The Pad costs $24.99.", False),  # true negative
+    ]
+    _, aggregates = toolcalls.score_conversations(
+        scored, [], pack=make_pack(h=4, prose_calibration=calibration)
+    )
+    assert aggregates.prosePseudoCallDetector == {
+        "n": 3, "precision": pytest.approx(0.5), "recall": 1.0,
+    }
+
+
+def test_score_conversations_prose_pseudo_call_detector_is_none_when_no_calibration_declared() -> (
+    None
+):
+    """The default `_FakePack`/real-pack shape: no `data.prosePseudoCallCalibration` key at all
+    (`make_pack()`'s own default `prose_calibration=None` -> an empty `data` block) must leave the
+    field `None`, never call `iter_prose_calibration()` at all."""
+    scored = [_clean_scored("A-01")]
+    _, aggregates = toolcalls.score_conversations(scored, [], pack=make_pack(h=4))
+    assert aggregates.prosePseudoCallDetector is None
 
 
 # ==================================================================================================

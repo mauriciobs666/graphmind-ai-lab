@@ -584,6 +584,14 @@ class ToolCallAggregates:
     #: (`sum(iterations)` over EVERY turn driven) and `y` (`funnelCounts.turnsDriven`) — the two
     #: figures `report.py`'s distinctness sentence contrasts against the restricted `I(t)` mean.
     iterationSummary: Mapping[str, Any] | None = None
+    #: `-ml` §4.2(a)+(b)/§2.7's own calibration figure: `detect_prose_pseudo_call`'s precision/
+    #: recall against a pack's hand-labelled `data.prosePseudoCallCalibration` corpus (S6 spec
+    #: §2.5) — `{"n": int, "precision": float, "recall": float}`, mirroring `determinismProbe`/
+    #: `iterationSummary`'s own plain-JSON-mapping shape (generic `_encode`/`_decode`, no special
+    #: case). `None` when the pack's manifest declares no calibration data at all — mirroring
+    #: `prose_detector_precision_recall`'s own `None`-on-empty-corpus rule, never a coincidental
+    #: zero-valued dict.
+    prosePseudoCallDetector: Mapping[str, Any] | None = None
 
     def named_metrics(self) -> tuple[MetricValue, ...]:
         found = []

@@ -763,6 +763,21 @@ def _render_funnel(run: RunResult, arm_label: str) -> list[str]:
         "```",
         "",
     ]
+    detector = (
+        run.aggregates.prosePseudoCallDetector
+        if isinstance(run.aggregates, ToolCallAggregates)
+        else None
+    )
+    if detector is not None:
+        lines.append(
+            f"- prose-pseudo-call detector: precision {detector['precision']:.3f}, "
+            f"recall {detector['recall']:.3f} (n={detector['n']} calibration replies)"
+        )
+    else:
+        lines.append(
+            "- prose-pseudo-call detector: no calibration corpus declared — "
+            "precision/recall unmeasured"
+        )
     summary = (
         run.aggregates.iterationSummary if isinstance(run.aggregates, ToolCallAggregates) else None
     )

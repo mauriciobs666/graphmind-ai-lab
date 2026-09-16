@@ -9,12 +9,12 @@
   "prompt": {
     "systemPrompt": "prompts/system.md",
     "toolSchemas": "tools/schemas.json",
-    "representToolSchemasEachTurn": false,
-    "historyReplay": "structured",
+    "representToolSchemasEachTurn": true,
+    "historyReplay": "structured-replies-only",
     "historyTurns": 0,
     "maxIterationsPerTurn": 8,
     "temperature": 0.0,
-    "maxTokens": 512
+    "maxTokens": 1024
   },
   "data": {
     "catalog": "catalog.json",

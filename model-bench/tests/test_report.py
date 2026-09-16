@@ -2698,6 +2698,32 @@ def test_render_funnel_iteration_summary_censored_prefix_is_independent_per_fiel
     assert "p95 >= 6.00" in text_b
 
 
+def test_render_funnel_prints_the_prose_detector_precision_recall_when_populated() -> None:
+    """S6 spec §2.5, §5 Step 1: one new line beside the funnel table's existing (a)+(b) partition
+    line, printing the detector's own precision/recall figure when `ToolCallAggregates.
+    prosePseudoCallDetector` is populated — `precision`/`recall` deliberately DISTINCT values so a
+    mutant that printed one where the other belongs would be caught."""
+    aggregates = ToolCallAggregates(
+        funnelCounts=_funnel_counts(),
+        prosePseudoCallDetector={"n": 20, "precision": 0.875, "recall": 0.625},
+    )
+    text = "\n".join(_render_funnel(_toolcaller_run("cand", aggregates=aggregates), "cand"))
+    assert "prose-pseudo-call detector" in text
+    assert "precision 0.875" in text
+    assert "recall 0.625" in text
+    assert "n=20" in text
+
+
+def test_render_funnel_names_the_prose_detectors_absence_when_none() -> None:
+    """The `None` case — no calibration corpus declared — must still print a line naming that
+    absence, never silently omit it (S6 spec §5 Step 1's own two literal message shapes)."""
+    aggregates = ToolCallAggregates(funnelCounts=_funnel_counts(), prosePseudoCallDetector=None)
+    text = "\n".join(_render_funnel(_toolcaller_run("cand", aggregates=aggregates), "cand"))
+    assert "prose-pseudo-call detector" in text
+    assert "no calibration corpus declared" in text
+    assert "unmeasured" in text
+
+
 def test_funnel_table_opens_the_report_before_the_arms_section() -> None:
     """Rule 3, verbatim: "the report opens with a funnel table, not a metric table" — the funnel
     text must appear strictly before the `## Arms` heading in the full rendered document."""
