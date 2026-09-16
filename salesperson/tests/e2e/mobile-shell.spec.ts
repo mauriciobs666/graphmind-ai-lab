@@ -38,23 +38,36 @@ test.describe('mobile shell', () => {
     }
   })
 
-  test('the four seed placeholders are wired into their own sheets', async ({ page }) => {
+  test('each of the four sheets mounts its own real S14 panel, not a shared placeholder', async ({
+    page,
+  }) => {
+    // S14 replaced S12b's seed placeholders with real, data-fetching panels
+    // (src/views/{Cart,Order,Profile,Catalog}Panel.tsx) — there is no
+    // longer any literal placeholder copy to assert on here (DEF-5). This
+    // page has no participant session, so every panel's query is
+    // `enabled: false` (`src/api/hooks.ts`) and each renders its own
+    // permanent, panel-specific "Loading …" copy — real production output,
+    // not a placeholder invented for this test, and distinct per panel, so
+    // it still proves *which* panel mounted rather than just that a dialog
+    // opened. Same precedent already applied at the unit-test tier,
+    // `src/layout/Shell.test.tsx`'s "wires each of the four header
+    // buttons..." test (S12b-testfix).
     await page.goto('')
 
     await page.getByRole('button', { name: 'Browse catalog', exact: true }).click()
-    await expect(page.getByText(/catalog will appear here/i)).toBeVisible()
+    await expect(page.getByText(/loading the catalog/i)).toBeVisible()
     await page.getByRole('button', { name: 'Close' }).last().click()
 
     await page.getByRole('button', { name: 'Cart', exact: true }).click()
-    await expect(page.getByText(/cart will appear here/i)).toBeVisible()
+    await expect(page.getByText(/loading your cart/i)).toBeVisible()
     await page.getByRole('button', { name: 'Close' }).last().click()
 
     await page.getByRole('button', { name: 'Order status', exact: true }).click()
-    await expect(page.getByText(/order status will appear here/i)).toBeVisible()
+    await expect(page.getByText(/loading your order/i)).toBeVisible()
     await page.getByRole('button', { name: 'Close' }).last().click()
 
     await page.getByRole('button', { name: 'Profile', exact: true }).click()
-    await expect(page.getByText(/profile will appear here/i)).toBeVisible()
+    await expect(page.getByText(/loading your profile/i)).toBeVisible()
   })
 
   test('the profile sheet shows a join prompt, not a reset control, before joining', async ({

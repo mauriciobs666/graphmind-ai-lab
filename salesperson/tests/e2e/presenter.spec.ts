@@ -36,7 +36,7 @@ test.describe('presenter view', () => {
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
     )
 
-    await page.goto('/presenter')
+    await page.goto('presenter')
     await expect(page.getByRole('heading', { name: 'Presenter key' })).toBeVisible()
 
     await page.getByLabel('Presenter key').fill('wrong-key')
@@ -75,7 +75,7 @@ test.describe('presenter view', () => {
       }),
     )
 
-    await page.goto('/presenter')
+    await page.goto('presenter')
 
     const rows = page.getByRole('row')
     await expect(rows).toHaveCount(4) // header + 3
@@ -125,7 +125,7 @@ test.describe('presenter view', () => {
       })
     })
 
-    await page.goto('/presenter')
+    await page.goto('presenter')
     await expect(page.getByText('Ada')).toBeVisible()
 
     await expect(page.getByText(/cannot be undone/i)).toHaveCount(0)
