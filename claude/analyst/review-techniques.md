@@ -1521,3 +1521,119 @@ Origin: `salesperson-ui` S9e review (Pass 27) — `teco` reported `storefront_ap
 `DocumentNotFoundError` hunk reverted, with 145 passed / 1 failed; at review time `git diff` showed
 the hunk back, plus four more `ServiceError`-family-count hunks in `test_storefront_api.py` that
 HISTORY.md never mentioned, and the suite by then read 146 passed / 0 failed.
+
+## Verifying an index-anchored query claim with `EXPLAIN` when `PROFILE` isn't available
+
+The `cypher` MCP tool supports `EXPLAIN` (plan only, no execution) but not `PROFILE` — so it
+cannot show real Records-produced counts. `EXPLAIN` is still usable for a lightweight scan-anchor
+sanity check: plant a **deliberately-unindexed-property control query** alongside the query under
+review and compare plans. The indexed case reports `Node By Index Scan` with no `Filter`; the
+unindexed control reports `Filter` + `Node By Label Scan`. Seeing the same `Filter`+`Label-Scan`
+shape on the query under review (where an index anchor was claimed) is the tell that the claim is
+wrong, without needing `PROFILE`'s row counts to prove it.
+
+Origin: `falkor-chat` document-ingestion2 Stage D review, verifying `find_update_shortlist`
+(`MATCH (d:Document {currentVersion:true}) WHERE d.lshBand0=... OR ...`) against `ws:test` didn't
+deviate from `graph-dba`'s live-verified index-anchored shape.
+
+## A review nit transcribed verbatim into a docstring can carry the reviewer's own error forward as authoritative code comment text
+
+When a later fix pass copies a prior review's *suggested wording* verbatim into a docstring or
+comment, that wording inherits whatever the reviewer got wrong — and it now reads as authoritative
+source-of-truth prose rather than a review comment. Re-verify a prior pass's own suggested wording
+against the actual source (not just against what the fix changed) when a later pass reviews a diff
+that incorporates it — a docstring claim traces back to a review suggestion exactly as easily as
+it traces back to the implementer's own error, and the fix looks "correctly applied" either way.
+
+Origin: `falkor-chat` `services.py`'s `hybrid_search` docstring claimed the Thread/Channel scope
+join is an `OPTIONAL MATCH` (never discards a seed row); `repository.py:850-863` and
+`docs/QUERIES.md` §6 show only the Entity co-occurrence expansion is `OPTIONAL MATCH` — the scope
+join is a required `MATCH`. Traced the wording to the same review document's own Pass 3 nit
+suggestion, faithfully copied by the implementer (document-ingestion2 Stage C-fix, Pass 5).
+
+## A test that advances fake timers by an imported shared constant's *value* does not prove two call sites *share* that constant
+
+Advancing a fake-timer test by `POLL_INTERVAL_MS` (or any imported shared constant) only proves the
+test's own math is consistent with the constant's current value — it cannot distinguish "both call
+sites import the same constant" from "each call site independently hard-codes the same literal."
+Only replacing one call site's import with a hard-coded literal of the *same* value and confirming
+the suite still passes green (or, stronger, mocking the module to a *different* value and observing
+both sites move together) actually proves sharing.
+
+Origin: `salesperson-ui` S12a review — `hooks.test.tsx` C8 used `POLL_INTERVAL_MS` to compute its
+fake-timer advance; swapping one call site's import for the hard-coded literal `2_000` (the same
+value) left all 85 tests green, proving the test could not detect the exact constant-drift it was
+written to catch (a shared-polling-constant done-condition `docs/plans/salesperson-ui.md` required
+explicitly).
+
+## A shared dev-instance graph can be repopulated by a concurrent session within seconds of your own script's teardown
+
+Don't assume a shared FalkorDB dev instance's graph is empty or static immediately after your own
+teardown step reports it deleted — a concurrent session sharing the same instance can recreate
+content in the same window. Re-query before treating "my script just deleted this" as "this is
+currently empty," and don't report a stale post-teardown read as an operational finding without
+re-checking it live. This is the same shared-instance-concurrency family as *"Run the battery
+serially — a concurrent suite run destroys the measurement"* above, one direction over: there it's
+destructive interference during a run, here it's a false-empty reading right after one.
+
+Origin: `falkor-chat/scripts/test_queries.sh` (document-ingestion2 Stage D-fix review) logged
+`reference` deleted at teardown; a follow-up `GRAPH.RO_QUERY MATCH (n) RETURN count(n)` moments
+later showed 5 nodes (1 `WorkflowDef` + 4 `Step`), not empty.
+
+## A TanStack Query mutation's derived error/action state clears only in `onSuccess`/`onError` — gate its render on `!isPending`
+
+A mutation error or action derived via `useState` inside a wrapper hook (the
+`usePresenterLogin`-shaped pattern) is set once, in `onSuccess`/`onError`, and is **not** reset when
+`mutate()` is called again. A consuming component that renders that state unconditionally shows the
+*prior* attempt's error/rejection alert straight through a second, currently-pending submit — it
+must explicitly gate the render on `!mutation.isPending` (or clear the derived state at call time)
+for a fresh attempt to read as fresh. Checking for this gate is now a standard thing to look for in
+any component consuming a wrapper-hook mutation of this shape.
+
+Origin: `salesperson-ui` S12d (presenter view) review — reproduced live via a throwaway test; two
+sibling components (`PresenterResetAllControl.tsx`, `components/sheets/ResetControl.tsx`) already
+applied `mutation.isPending ? null : errorMessageFor(...)` to guard against exactly this.
+
+## In React 18, two `setState` calls separated by a real `await` are NOT batched — a derived-state default keyed on the second value is a genuinely reachable branch, not a defensive one
+
+React 18 batches synchronous state updates within one event handler, but an `onError`/`onSuccess`
+async handler that fires one `setState` synchronously and a second only after `await`ing a network
+round trip renders *in between* the two — so any derived-state switch keyed on the second value
+must treat its pre-resolution default (often `null`) as a state the UI can actually show, not dead
+code. Reading the code is not enough to judge reachability here: prove it with a controlled-promise
+reproduction — gate the async work, assert the intermediate render, release the gate, assert it
+clears.
+
+Origin: `salesperson-ui2` S13 (chat view) review — `salesperson/src/api/hooks.ts`'s
+`usePostMessage()` fires `setAction(resolved)` synchronously in `onError` but `setReconciliation(...)`
+only after `awaiting Promise.all([getMessages, getState])`; `composerNotice.ts`'s reread-branch
+default (`reconciliation` still `null`) was proven live, not dead, with a manually-released gate
+promise in a temporary `ChatView.test.tsx` probe (`falkor-chat/docs/reviews/salesperson-ui-s13.md`).
+
+## TypeScript excess-property checking reaches through nested object/array literals, not just the outermost one
+
+Excess-property checking on a typed function argument fires through every level of *fresh literal*
+nesting on the way in — `fn({items: [{price: 1, unitPrice: 2}]})` flags the unknown `unitPrice`
+even though it sits two levels of literal nesting deep — as long as every intermediate literal
+(the array, the inner object) is itself a fresh literal reaching the typed parameter, not a
+variable. This is what makes "type a test fixture helper against the real interface" a genuine
+drift detector for a nested-literal fixture, not just a top-level one: mutation-test the claim by
+renaming a nested field back to a stale name and confirming `tsc -b` flags every mutated site.
+
+Origin: `salesperson-ui` DEF-2 fix review — mutation-tested `salesperson/src/views/CartPanel.test.tsx`
+by renaming a fixture field from `price` back to `unitPrice` inside `stateWith({items: [...]})`,
+two levels of literal nesting deep, in a zero-touch scratch copy; `npx tsc -b` reported `TS2353` at
+all 3 mutated sites.
+
+## A combined isolation-check-plus-logged-evidence test can be the file's own established convention, not a coverage shortcut
+
+Before flagging a test that combines an isolation-check assertion block with a logged-evidence
+assertion block into one function as losing independent verifiability, check the file's existing
+sibling tests for the same shape — a combined test can be the established local convention rather
+than a corner someone cut on this one test.
+
+Origin: `falkor-chat/server/tests/test_storefront.py` (DEF-3/S18 dead-turn-latch fix review) —
+`test_a_turn_whose_trigger_returns_a_failed_envelope_without_raising_is_isolated_and_latches`
+combines future/turn_in_flight/turn_state/lastTurn assertions with logged-record assertions in one
+function, matching the pre-existing
+`test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate` (`:861-916`) exactly.

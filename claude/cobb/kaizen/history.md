@@ -2,6 +2,19 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-16 — `guard-cobb-topic-writes.sh` allowlist gained `skills/python-web-quirks/*`
+
+`analyst`'s gate of U1 (`docs/reviews/kaizen-team-distillation-u1.md`, finding 3) flagged that
+`skills/python-web-quirks/SKILL.md` had at least 4 prior distillation commits under my
+attribution but was never added to my own write guard's allowlist — every such write has been
+escalating to an `ask` prompt rather than being explicitly allowed, the same gap the guard's own
+comment anticipated for `cypher-mcp/README.md` ("extend it, don't broaden the globs, when a new
+such doc surfaces"). Closed it myself (my own hook, in remit): added
+`skills/python-web-quirks/*|*/skills/python-web-quirks/*` to the allowed-path union in
+`claude/cobb/hooks/guard-cobb-topic-writes.sh`, with a comment explaining it's a repeated shared
+knowledge-base target (not one of cobb's own packages) rather than broadening the existing
+`skills/agent-maintenance`/`skills/agent-standards` globs.
+
 ## 2026-09-13 — Docs-only coordination chains now commit once, at terminal state, not per round
 
 `tico` ran a requirements interview after a stakeholder git-hygiene complaint (hundreds of commits

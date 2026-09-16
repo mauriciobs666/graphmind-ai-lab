@@ -76,6 +76,15 @@ to the general fact here.
   actually created; don't infer "the index exists and this is a true empty result" from a clean
   zero-row response alone — confirm the index itself first (`CALL db.indexes()` or a bootstrap
   script's own idempotent creation) before trusting a fulltext-search miss.
+- **A RediSearch `%token%` fuzzy term must not be escaped by stripping every non-word character
+  from it.** `re.sub(r"[^\w]", "", tok)` avoids a `RediSearch: Syntax error` on a fuzzy term
+  carrying metacharacters (parens, hyphen, colon, quotes, brackets, pipe) — but it also silently
+  **merges adjacent word-fragments across the stripped character into one token** (`"A|B"` →
+  `"AB"`), changing fuzzy-match semantics with no error raised. Confirmed live against FalkorDB
+  (`falkor-chat` `repository._escape_fuzzy_token`, document-ingestion2 Stage F, QA Defect 1): the
+  pre-fix version crashed on the syntax error, the stripped-character post-fix version passed, and
+  neither surfaces the token-merging side effect as a failure — it has to be checked for
+  separately against a characterization table of titles carrying those metacharacters.
 - **`db.labels()` and `db.relationshipTypes()` are asymmetric for zero-data schema elements.** A
   node label registers in `db.labels()` (count 0) as soon as `CREATE INDEX FOR (n:Label) ON (...)`
   runs — it's index metadata, not data. A relationship type registers in `db.relationshipTypes()`

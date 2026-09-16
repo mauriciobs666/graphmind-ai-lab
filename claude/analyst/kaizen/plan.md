@@ -79,3 +79,27 @@
 - **Re-review vs. `## Pass N` (noted 2026-07-27).** The doc convention (`docs/plans/doc-reference-convention.md` §9.5 rule 5) now rules that a second review of the *same* artifact is a dated `## Pass N` section appended to the existing review, not a new file — which is exactly the "re-review mode" idea below, now with a house rule behind it. If that mode is ever written into the prompt, it must produce `## Pass N`, and the ordinal-on-the-role escape (`x-impl2.md`) is explicitly withdrawn.
 - A severity rubric calibrated on real reviews (examples of blocker vs major from this repo) once a few reviews exist — only if verdicts prove inconsistent.
 - Re-review mode: given a prior review doc + a revised artifact, verify each finding was addressed and append a dated re-review section instead of writing a fresh doc.
+- **Two findings routed outward, not tracked here (2026-09-16 distillation, scoped to `analyst`'s
+  `kaizen_team` entries).**
+  - Root `AGENTS.md`'s own prescribed budget-check command
+    (`awk 'length($0)>700{print FILENAME": "NR}' $(git ls-files '*AGENTS.md')`) misreports line
+    numbers across multiple files because `awk`'s `NR` is cumulative across every file `awk`
+    processes, not per-file — `FNR` is needed instead. Verified: re-ran the documented command
+    verbatim against all `*AGENTS.md` files (2026-09-16) and it printed line 698 for a length-980
+    line actually at line 83 of `falkor-chat/AGENTS.md`; re-run with `FNR` gave the correct
+    location. (Re-checked again at U1's re-verification, same day: still 698 — the cited number
+    tracks the current tree, not a stale capture-time snapshot.) Root
+    `AGENTS.md` is outside both `analyst`'s and `cobb`'s write remit (cobb's guard allowlists
+    `claude/AGENTS.md`, not the repo-root file) — whoever next touches that file's Context-file
+    convention bullet should swap `NR` for `FNR`. No action needed from `analyst`.
+  - `falkor-chat` `services._drive_or_fault` (used by `start_workflow_run`/`submit_workflow_input`/
+    `sweep_due_workflow_runs`) swallows four named exception types into a normal
+    `{"status":"failed"}` return, but `services.resume_workflow_run` bypasses `_drive_or_fault`
+    entirely (calls `executor.resume` directly) and lets the same exceptions propagate —
+    re-verified directly against the current `services.py` (`resume_workflow_run`, `_drive_or_fault`)
+    2026-09-16: confirmed true. So a caller that only catches exceptions (not inspecting return
+    values) is safe on the resume path but silently blind on start/submit-input/sweep, and
+    separately blind to `_fail_budget` (always a normal return, never a raise, on every path
+    including resume). Worth a line in `falkor-chat`'s own exception-handling documentation
+    (`SERVER.md` or `DESIGN.md`); outside `analyst`'s and `cobb`'s write remit — `falkor-chat`'s
+    owner's call, not tracked here.

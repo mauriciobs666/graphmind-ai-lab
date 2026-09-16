@@ -2,6 +2,19 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-09-16 — one `analyst`-produced RediSearch fuzzy-escaping gotcha added to `falkordb-quirks.md`
+
+- **What:** `cobb` distilled `analyst`'s `kaizen_team` inbox (scoped, one-producer pass). One entry
+  routed here: `f3d2a1c4-6b7e-4e3a-9c1f-8a2b5d7e9c10` (2026-09-13, `suggestedHome: knowledge base`)
+  — **PROMOTED** into `claude/graph-dba/falkordb-quirks.md`, § *Indexing, constraints & DDL*, sited
+  beside the existing fulltext/fuzzy-term bullets.
+- **The fact:** stripping non-word characters (`re.sub(r"[^\w]","",tok)`) from a RediSearch
+  `%token%` fuzzy term avoids a syntax error on metacharacters, but silently merges
+  adjacent word-fragments across the stripped character into one token, changing fuzzy-match
+  semantics without erroring.
+- **Why here and not `analyst`'s own artifacts:** a generic RediSearch/FalkorDB dialect fact, not
+  specific to `analyst`'s review methodology — this file is the live-verified home for exactly
+  this class of fact. Full disposition record: `claude/analyst/kaizen/history.md`, 2026-09-16.
 
 ## 2026-09-10 — one `architect`-produced FalkorDB quoting gotcha added to `falkordb-quirks.md`
 

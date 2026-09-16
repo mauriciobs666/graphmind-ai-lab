@@ -2,6 +2,77 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-09-16 — standing distillation pass, scoped to `analyst` only: 16-entry inbox, 10 promoted, 4 discarded, 2 routed outward
+
+- **What:** `cobb` ran the standing kaizen-graph distillation over all 16 `analyst`-produced
+  `kaizen_team` entries (dated 2026-09-13/09-14/09-16), per the stakeholder's request to dispatch
+  one producing agent per turn (`docs/plans/kaizen-team-distillation-coordination.md`). Legacy
+  (`author`-property) read returned 0 rows — every entry used the current `PRODUCED`-edge shape.
+  Every `fact`/`evidence` cell was paged past the MCP tool's 300-char truncation before
+  dispositioning. `analyst.md` untouched — no entry warranted the always-loaded-prompt bar.
+- **Promoted (8), all into `review-techniques.md`** (new sections, verified against current repo
+  state where feasible):
+  - `a1e6c9f0…` → *"Verifying an index-anchored query claim with `EXPLAIN` when `PROFILE` isn't
+    available"*.
+  - `a1f3c9e2…` → *"A review nit transcribed verbatim into a docstring can carry the reviewer's own
+    error forward as authoritative code comment text"*.
+  - `a1e6c3d2…` → *"A test that advances fake timers by an imported shared constant's *value* does
+    not prove two call sites *share* that constant"*.
+  - `a3f1c2e4…` → *"A shared dev-instance graph can be repopulated by a concurrent session within
+    seconds of your own script's teardown"*.
+  - `e3a9c1d2…` → *"A TanStack Query mutation's derived error/action state clears only in
+    `onSuccess`/`onError` — gate its render on `!isPending`"*. The cited instance
+    (`PresenterKeyScreen.tsx`) is **no longer live** — re-read the current file and it already
+    carries the `login.isPending ? null : login.action` gate — so only the generalized technique
+    was promoted, not the specific claim.
+  - `b1f3a2d4…` → *"In React 18, two `setState` calls separated by a real `await` are NOT batched —
+    a derived-state default keyed on the second value is a genuinely reachable branch"*.
+  - `7e6c2f0a…` → *"TypeScript excess-property checking reaches through nested object/array
+    literals, not just the outermost one"*.
+  - `f3a2c1e4…` → *"A combined isolation-check-plus-logged-evidence test can be the file's own
+    established convention, not a coverage shortcut"*.
+- **Promoted (1), cross-agent → `claude/graph-dba/falkordb-quirks.md`:**
+  - `f3d2a1c4…` (RediSearch `%token%` fuzzy-term escaping merging adjacent word-fragments) — a
+    generic FalkorDB/RediSearch dialect fact, not `analyst`-review-methodology; sited beside the
+    existing fulltext/fuzzy bullets. Logged in `claude/graph-dba/kaizen/history.md`, 2026-09-16.
+- **Promoted (1), cross-cutting → `skills/python-web-quirks/SKILL.md` (+ `skills/README.md` catalog
+  row + frontmatter description):**
+  - `7f528e17…` (Starlette `StaticFiles.get_response`'s `404.html` returned directly, not by
+    raising — silently bypasses an SPA-fallback subclass that only catches a raised exception) —
+    verified against starlette 1.3.1 source directly; new section placed beside the existing
+    `StaticFiles`/`HEAD` section.
+- **Discarded (4), all already published and/or already fixed — re-verified against the cited
+  source, not taken on the entry's word:**
+  - `f3a1c2e4…` (model-bench `refresh_golden.py --stamp-answerability` computes dynamically) —
+    **already published**: `model-bench/docs/reviews/small-model-benchmarking-s4.md:93-97` states
+    the identical finding, near-verbatim.
+  - `07c82bf4…` (dev-box `grep` shim mismatches `-E`) — **already published, more thoroughly**:
+    `skills/agent-standards/claude-code.md` §"Bash tool environment" already documents the
+    `ugrep -G` vs. POSIX `-E` divergence and the `/usr/bin/grep` escape route; re-tested the
+    specific "conflicting matchers" claim live and could not reproduce it with a plain `-E` call,
+    so only the already-covered core lesson stood.
+  - `b6e2b1b6…` (model-bench `restraintSuccesses` tally missight the `turn_clean` disposition gate)
+    — **already published as the review's own Blocker, and already fixed**:
+    `model-bench/docs/reviews/small-model-benchmarking-s5.md:34-72` states the identical finding
+    with the identical fix; `modelbench/scoring/toolcalls.py:767-770` confirms the fix is shipped
+    (`clean = restraint(dispatched_count) and t_turn.turnDisposition == "replied"` gates
+    `restraintSuccesses` too now).
+  - `a1e6f2b4…` (model-bench tool-caller `Turn.expect` schema can't represent a compound
+    two-distinguishable-calls turn) — **already published as the review's own Blocker, and already
+    fixed**: `model-bench/docs/reviews/small-model-benchmarking-s6-precheck.md` Finding 1 states the
+    identical finding; git history confirms the A-03 turn was split (commit `597dcf5`, "S6 pre-check
+    findings 1+2").
+- **Routed outward, not tracked in `history.md`'s own action list — logged in `plan.md`'s parking
+  lot instead (both verified true, both outside `analyst`'s and `cobb`'s write remit):**
+  - `a3f5e9c1…` — root `AGENTS.md`'s own budget-check `awk` command uses `NR` (cumulative across
+    files) where it needs `FNR` (per-file). Root `AGENTS.md` is not in `cobb`'s write-guard
+    allowlist (only `claude/AGENTS.md` is).
+  - `e9f3a1c2…` — `falkor-chat` `services.resume_workflow_run` bypasses `_drive_or_fault`'s
+    exception-swallowing entirely, unlike its three siblings. `falkor-chat/docs/` is not in
+    `cobb`'s write remit.
+- **Graph state confirmed:** re-ran both the legacy and current-shape reads for `agentId: 'analyst'`
+  after clearing all 16 entries — zero rows both ways.
+
 ## 2026-09-13 — standing distillation pass: 12-entry `analyst` inbox, 9 promoted, 3 discarded
 
 - **What:** `cobb` ran the standing kaizen-graph distillation over all 12 `analyst`-produced

@@ -13,7 +13,9 @@ description: >-
   included router's own routes are absent from app.routes entirely and its include_router(prefix=)
   never reaches the inner path, and a GET route not matching HEAD at all (starlette Route adds
   HEAD, fastapi APIRoute does not) so HEAD falls through to any path-matching Mount and reads as
-  a 404 while every other method reads as an indistinguishable 405; responses={...}
+  a 404 while every other method reads as an indistinguishable 405; StaticFiles(html=True) serving
+  a directory's 404.html by direct return rather than by raising, silently bypassing an
+  SPA-fallback subclass override that only catches a raised exception; responses={...}
   being keyed by status code alone, so two error bodies at one status collapse — though an x-
   extension inside a status entry does survive verbatim onto route.responses and into app.openapi();
   FastAPI/Starlette's exception-handler registry resolving by the raised class's MRO, keyed on
@@ -56,7 +58,8 @@ description: >-
   same-typed post-shutdown RuntimeError does not — one compensating except-branch cannot serve both. Use for asyncio.create_task scheduling, threading/executor
   lock-ordering questions, background-task dispatch, a
   FastAPI response model using exclude_unset, an assertion over an app's route table or its
-  responses={...} declarations, a method-matching or static-mount-shadowing question, a test that
+  responses={...} declarations, a method-matching or static-mount-shadowing question, an
+  SPA-fallback override on top of StaticFiles(html=True), a test that
   must bound a possibly-hanging call, an HTTP client against urllib/OpenAI-compatible
   endpoints (including its read-phase exception handling), a numeric-coercion boundary parsing
   untrusted JSON, a coverage-equals-declared-set test over a typing.Protocol, a mutation test whose
@@ -256,6 +259,24 @@ keyed on `(request.method, request.url.path)` against a `GET`-only route table c
 a `HEAD`, for a stronger reason than "HEAD is unhandled": the request is not routed there in the
 first place. To restore `HEAD`, declare it (`methods=["GET", "HEAD"]`), or mount the static app on a
 path that does not shadow the API prefix.
+
+## Starlette's `StaticFiles.get_response` returns its `404.html` by direct return, not by raising — a subclass override that only catches a raised exception is silently bypassed
+
+`StaticFiles(html=True).get_response` serves a directory's `404.html` (when one exists) as a
+`FileResponse` **returned directly**, not by raising `StarletteHTTPException(404)` first. An
+SPA-fallback subclass pattern that overrides error handling by catching the raised exception (e.g.
+`except StarletteHTTPException: return index_response`) never runs on this path whenever the served
+directory happens to contain a `404.html` — the fallback is silently bypassed, not because the
+override is wrong, but because there was no exception to catch.
+
+Verified against starlette 1.3.1 (`staticfiles.py:147-152`, `falkor-chat/server/.venv`). Check
+whether the served directory's build output could ever include a `404.html` before trusting an
+SPA-fallback override that only intercepts a raised exception — a bundler default (or a
+copied-in static asset) can introduce one without anyone intending an SPA-fallback bypass.
+
+Origin: `falkor-chat` `_SPAStaticFiles` (DEF-1 fix, salesperson-ui) review — no `404.html` exists in
+the current salesperson build, so the gap is latent, not live, but the override shape itself does
+not close it.
 
 ## FastAPI's `responses={...}` is keyed by status code only — two error bodies at one status collapse into one declaration
 
