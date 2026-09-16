@@ -1,6 +1,6 @@
 # The one salesperson UI — Coordination (continued)
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (M<n> TBD) · **Extends:** `docs/plans/salesperson-ui-coordination.md`
+> **Status:** archived · **Owner:** `teco` · **Tracks:** — (M<n> TBD) · **Extends:** `docs/plans/salesperson-ui-coordination.md`
 
 ## Why this document exists
 
@@ -115,11 +115,51 @@ also record**: all six S15 defects (fixed: DEF-1/2/3/4/5; diagnosed-not-yet-miti
 its own open pre-live-demo decision named explicitly, not silently dropped) — this coordination's
 own accumulated history since S15 is the source, not a re-derivation.
 
-**Not yet dispatched — paused here for a checkpoint, not a stakeholder question this time.** This
-is a natural completion boundary (the defect-fix wave that was blocking everything is fully
-closed); S16 is a large, many-file docs-closeout pass worth its own dispatch rather than folding
-into this already-long session silently. Resume by dispatching S16 to `coder` per §5.1's row,
-unless the stakeholder has a different next step in mind.
+**S16 dispatched, 2026-09-16.** Stakeholder said proceed. Pre-dispatch check turned up one factual
+correction to the plan's own S16 row: `docs/plans/salesperson-ui.md` names "root `docs/HISTORY.md`"
+as an S16 target, but that file's own header states it is scoped to **the CPG component only**
+("Change History — CPG code-graph component") — confirmed by reading it directly (every entry is a
+`C-`/`M-` CPG item; zero `model-bench`/`salesperson` mentions), and `docs/BACKLOG.md` carries the
+identical CPG-only scope statement. Both predate this plan's S16 row and were never salesperson-ui's
+to write into. **Corrected destination, per teco's own read, not re-routed through `architect`**
+(a factual redirect to the already-correct file, not a design decision): `falkor-chat/docs/
+HISTORY.md` — already the established home for every salesperson-ui delivery entry so far (S10,
+the S14/S12b test-breakage fix, etc.) — and `falkor-chat/docs/BACKLOG.md` — already home to the
+salesperson-reliability K-060/K-062 track — for DEF-6's still-open pre-live-demo decision as a new
+K-item. Root `AGENTS.md`'s own S16 asks (new `salesperson/` bullet, component-docs-table row,
+"Working in this repo" bullet) are unaffected — those are structural facts about root `AGENTS.md`
+itself, not history/backlog entries.
+
+## CLOSED, 2026-09-16 — S16 landed, feature delivered, this document archived
+
+**Every row in `docs/plans/salesperson-ui.md` §5.1 is closed** — S0 through S18, plus the six
+S15-discovered defects. S16 (docs close-out) is the plan's own last step and is now committed
+(`656dfbf`), gated `analyst` approve-with-suggestions, one post-gate Major fix-back independently
+re-verified before commit. The plan's own definition of done ("AC-1…AC-11 verified; the old
+`salesperson/` app retired; documentation reflects the delivered surface") is met: S15's QA pass
+verified every AC (with two recorded, measured exceptions per §6.4's own recording rule — AC-3's
+literal wording under heavy concurrency, and AC-5's access path, both since fixed as DEF-1/the
+latency finding); `deprecated/salesperson/` already carried the retired app before this build
+began; S16 brought every touched doc current.
+
+**One open item outside this plan's own scope, tracked separately, not blocking this close**:
+`K-065` (`falkor-chat/docs/BACKLOG.md`) — DEF-6, confirmed reproducing at LM Studio's own serving
+layer, no mitigation shipped or authorized, gates the *first live audience-facing demo*
+specifically. A future mitigation track, if authorized, opens its **own** coordination document
+(`docs/plans/salesperson-ui3-coordination.md`, per this repo's own ordinal-successor convention —
+already used once, `salesperson-ui` → `salesperson-ui2`) rather than reopening this one.
+
+**This document, its predecessor (`docs/plans/salesperson-ui-coordination.md`), the plan
+(`docs/plans/salesperson-ui.md`), and S15's test-plan/test-report are flipped to `Status: archived`
+by `teco` in the same pass** (mechanical Status-token-only edits, auto-allowed). Left `active`,
+deliberately: `docs/plans/salesperson-ui-ml.md` (the live reference for `K-065`'s still-open
+decision) and `docs/plans/salesperson-ui-graph.md` (not independently re-verified as fully closed
+this pass — left for its owner, `graph-dba`, to judge). `docs/requirements/salesperson-ui.md`'s
+own `Status:` is `tico`'s call, not touched here, and neither are the `docs/reviews/*` documents
+(reviews revise in place rather than archive, per this repo's own convention).
+
+**Full ledger below is the permanent record** — every unit, agent id, commit sha, gate verdict, and
+independent-verification note from S10 through S18 and the 2026-09-16 defect-fix wave and S16.
 
 ## RESUME HERE (superseded state, kept for history) — state as of 2026-09-14, S15 delivered &
 ## committed (`f4f828a`) — CONDITIONAL PASS, 4 product defects found; **paused for a stakeholder
@@ -307,4 +347,5 @@ later briefs can cite it by pointing at S12a's own brief/deliverable rather than
 | U-DEF3-design | `architect` | `a68995fd2d252ebeb` | **accepted — committed `04f8922`** — plan v1.40, new §4.14 + step S18: `_run_turn` reads `maybe_trigger`'s own return value (`isinstance(result, dict) and result.get("status") == "failed"`) rather than re-reading the graph; closes both the `start_workflow_run`-swallowed-fault gap and a second, independently-found resume-path budget-exhaustion gap; zero changes to `services.py`/`executor.py`/`api.py`. teco independently re-traced the mechanism against current source — every claim checked out, including the `_run_turn` before-context matching the proposed diff verbatim; `analyst` independently re-derived all four grounding claims from source too (not inherited from the plan's prose) | `docs/plans/salesperson-ui.md` (amendment, v1.40) | `analyst` (`a7fa235697e26b87d`) → **approve with suggestions** (1 minor — stale §9 step count, folds into S16; 1 nit) | architect 176.7k tok/84 tools; analyst 130.1k tok/37 tools |
 | U-DEF6-spike | `data-scientist` | `a88133aaf356fda45` | **accepted — committed `6ddf88b`** — reproduced DEF-6 directly against LM Studio, application code bypassed entirely; ruled out app-layer-only cause; recommends against accepting as residual risk for first live demo; mitigation D (prompt-salience) → C (classifier+retry) → B (bounded semaphore), not A (full serialize); required re-eval protocol specified. teco independently verified the quoted `SALESPERSON_DEF` v7 language instruction against `proof_defs.py` verbatim and confirmed the reported kaizen entry in `kaizen_team`; did **not** independently re-run the LM-Studio harness (lives only in that session's own scratchpad, not committed) — accepted on report, noted | `docs/plans/salesperson-ui-ml.md` (new) | teco read directly, no code gate (advisory/investigation deliverable) → accepted | data-scientist 135.6k tok/46 tools |
 | U-DEF45 | `tdd-engineer` | `ab74ceb5ca85d3079` | **accepted — committed `dafec93`** — DEF-4: 3× `page.goto('/presenter')` → `page.goto('presenter')` (relative path, joins `baseURL` correctly). DEF-5: fixed (not removed) — S14's real panels are unauthenticated in this test (`enabled: Boolean(authHeader)`, no session), so each shows its own permanent, panel-distinct "Loading …" copy; assertions updated to match, same precedent as `S12b-testfix`'s `Shell.test.tsx` fix. Live e2e run (first time either spec ever passed against a real server): `presenter.spec.ts` 6/6, `mobile-shell.spec.ts` 10/10, full `tests/e2e/` 16/16; offline `tsc -b` clean, `vitest run` 243/243. teco independently verified: diff matches report exactly, locale strings (`en.json`: "Loading your cart…"/"…order…"/"…profile…"/"the catalog…") and `hooks.ts`'s `enabled:` gating confirmed directly against source, offline suite reproduced (243/243, `tsc -b` clean); accepted the live e2e run on report (literal command output provided) — narrow, test-only, low design risk, no separate `analyst` re-gate (precedent: `S12b-testfix`) | `salesperson/tests/e2e/{presenter,mobile-shell}.spec.ts` | teco-accepted, no re-gate (precedent: `S12b-testfix`) | tdd-engineer 109.5k tok/34 tools |
-| U-DEF3-fix | `tdd-engineer` | `ab6861fe4dd72fc0f` | **accepted — committed `4cebd96`** — `analyst` (`af47ccc2a69197ae6`) **approve**, no blockers/majors, 2 non-blocking minors/nits (case-6 test is a narrower sibling than "extended" implies, defensibly so; a fake defined inline rather than at module scope). Independently confirmed diff matches §4.14 verbatim, zero-touch claim on `services.py`/`executor.py`/`api.py`/`trigger.py`, ran 2 further mutations of its own (status broadened to include `"waiting"`; `and`→`or` swap) — both killed cleanly, restored byte-identical, suite re-confirmed 2830/2830 — implemented §4.14 exactly (`_run_turn` captures `maybe_trigger`'s return, `isinstance(result, dict) and result.get("status") == "failed"` → `_mark_turn_failed`); 6 test cases, all red-before/green-after as specified; 3 own mutations, all killed. teco independently verified: diff matches §4.14's prescribed change verbatim, re-ran `test_storefront.py` (105/105) and full suite (2830/2830, matching report exactly), ran **one further mutation outside the implementer's own table** — removed the `isinstance(result, dict)` guard, keeping only `.get("status")` — this crashes on `_RecordingTrigger`'s ordinary `None` return (used by most normal-turn tests), correctly killed by 2 pre-existing lifecycle tests (confirms the guard is real and load-bearing, not dead code), restored byte-identical | `falkor-chat/server/falkorchat/storefront.py`, `falkor-chat/server/tests/test_storefront.py` | `analyst` (`af47ccc2a69197ae6`) → — | tdd-engineer 111k tok/38 tools |
+| U-DEF3-fix | `tdd-engineer` | `ab6861fe4dd72fc0f` | **accepted — committed `4cebd96`** — `analyst` (`af47ccc2a69197ae6`) **approve**, no blockers/majors, 2 non-blocking minors/nits (case-6 test is a narrower sibling than "extended" implies, defensibly so; a fake defined inline rather than at module scope). Independently confirmed diff matches §4.14 verbatim, zero-touch claim on `services.py`/`executor.py`/`api.py`/`trigger.py`, ran 2 further mutations of its own (status broadened to include `"waiting"`; `and`→`or` swap) — both killed cleanly, restored byte-identical, suite re-confirmed 2830/2830 — implemented §4.14 exactly (`_run_turn` captures `maybe_trigger`'s return, `isinstance(result, dict) and result.get("status") == "failed"` → `_mark_turn_failed`); 6 test cases, all red-before/green-after as specified; 3 own mutations, all killed. teco independently verified: diff matches §4.14's prescribed change verbatim, re-ran `test_storefront.py` (105/105) and full suite (2830/2830, matching report exactly), ran **one further mutation outside the implementer's own table** — removed the `isinstance(result, dict)` guard, keeping only `.get("status")` — this crashes on `_RecordingTrigger`'s ordinary `None` return (used by most normal-turn tests), correctly killed by 2 pre-existing lifecycle tests (confirms the guard is real and load-bearing, not dead code), restored byte-identical | `falkor-chat/server/falkorchat/storefront.py`, `falkor-chat/server/tests/test_storefront.py` | `analyst` (`af47ccc2a69197ae6`) → **approve** | tdd-engineer 111k tok/38 tools; analyst 90.7k tok/26 tools |
+| S16 | `coder` | `a7414a41ff6a70a4e` | **accepted — committed `656dfbf`** (incl. `deprecated/README.md`'s matching fix-back, found by `coder` while re-checking its Major fix-back's neighbors — one more instance of the same "not built yet" defect class, outside S16's original file list, independently re-verified by teco before commit) — all 8 files edited: root `AGENTS.md` (new `salesperson/` bullet, corrected `deprecated/` bullet, component-docs row, "Working in this repo" bullet); redirected the plan's own stale "root `docs/HISTORY.md`" instruction to `falkor-chat/docs/{HISTORY,BACKLOG}.md` (root `docs/HISTORY.md`/`BACKLOG.md` confirmed CPG-scoped-only by their own headers — a real gap in the plan itself, kaizen-logged); 3 new dated `falkor-chat/docs/HISTORY.md` entries (S16, the 2026-09-16 defect-fix wave, and a backfill for 6 previously-unrecorded 2026-09-14 units); new `K-065` in `falkor-chat/docs/BACKLOG.md` for DEF-6; `falkor-chat/README.md` gained a storefront-deployment section (was zero mentions); `falkor-chat/AGENTS.md`/`SERVER.md` final passes (3 stale "not built yet" callouts corrected); `salesperson/README.md`/`AGENTS.md` rewritten from stale S5-scaffold framing to the shipped app. S16's own acceptance command: zero matches. teco independently verified: word count (2730→2859, matches claim), acceptance command re-run (zero matches, confirmed), `K-065` confirmed next-available via fresh grep, read all 8 diffs in full (accurate, well-targeted, no overclaiming found), spot-checked the `passWithNoTests`-removed claim directly (confirmed absent from source) | root `AGENTS.md`, `falkor-chat/docs/HISTORY.md`, `falkor-chat/docs/BACKLOG.md`, `falkor-chat/README.md`, `falkor-chat/AGENTS.md`, `falkor-chat/docs/SERVER.md`, `salesperson/README.md`, `salesperson/AGENTS.md` | `analyst` (`a95835f100fbde987`) → **approve with suggestions** (no blocker; 1 Major — root `AGENTS.md:115-117`'s "Retired components" bullet, outside the diff's own hunks, still says "not-yet-built replacement", contradicting this unit's own new bullets a few lines above — resumed `coder` to fix before commit; 1 Minor — plan's own AC-10 row still cites unredirected root `docs/HISTORY.md`, `architect`'s to fix, out of S16 scope; 1 Nit — `AGENTS.md`'s own prescribed `awk` budget-check uses `NR` not `FNR`, pre-existing, kaizen-logged). All 13 cited commit shas independently resolved and matched via `git log -1`; DEF-6/`K-065` figures matched `salesperson-ui-ml.md` verbatim | coder 224.2k tok/80 tools; analyst 125.3k tok/54 tools |

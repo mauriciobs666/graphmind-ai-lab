@@ -1,6 +1,6 @@
 # Salesperson UI — Test Report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** S15 (M<n> TBD)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** S15 (M<n> TBD)
 
 ## Summary
 

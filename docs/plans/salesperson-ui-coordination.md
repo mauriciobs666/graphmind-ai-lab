@@ -1,6 +1,6 @@
 # The one salesperson UI — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (M<n> TBD) · **Extended by:** `docs/plans/salesperson-ui2-coordination.md`
+> **Status:** archived · **Owner:** `teco` · **Tracks:** — (M<n> TBD) · **Extended by:** `docs/plans/salesperson-ui2-coordination.md`
 
 ## Goal
 

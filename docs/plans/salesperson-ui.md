@@ -1,6 +1,6 @@
 # The one salesperson UI — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (M<n> TBD) · **Version:** 1.40 · **Reviews:** `docs/reviews/salesperson-ui.md`, `docs/reviews/salesperson-ui-impl.md`, `falkor-chat/docs/reviews/salesperson-ui-s12a.md`, `falkor-chat/docs/reviews/salesperson-ui-s12c.md`, `falkor-chat/docs/reviews/salesperson-ui-s12b.md`, `falkor-chat/docs/reviews/salesperson-ui-s13.md`, `falkor-chat/docs/reviews/salesperson-ui-s17.md`
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — (M<n> TBD) · **Version:** 1.40 · **Reviews:** `docs/reviews/salesperson-ui.md`, `docs/reviews/salesperson-ui-impl.md`, `falkor-chat/docs/reviews/salesperson-ui-s12a.md`, `falkor-chat/docs/reviews/salesperson-ui-s12c.md`, `falkor-chat/docs/reviews/salesperson-ui-s12b.md`, `falkor-chat/docs/reviews/salesperson-ui-s13.md`, `falkor-chat/docs/reviews/salesperson-ui-s17.md`
 
 *2026-09-02 — v1.1: revised against `docs/reviews/salesperson-ui.md` (4 blockers, 9 majors, 15 minors) and the stakeholder's OQ-1…OQ-6 answers; the client component takes the `salesperson/` name and the retired app moves to `deprecated/salesperson/`.*
 *2026-09-02 — v1.2: revised against that review's `## Pass 2` (approve with suggestions) — N1 pins `FALKORCHAT_WS_ID=demo` and adds a non-label survivor clause plus a positive non-participant survivor test, N2 assigns the SPA's shared entry files to S12a, N3 re-keys the route-table assertion onto the `storefront` parameter, plus both nits; `teco`'s `deprecated/` move is recorded as landed.*
