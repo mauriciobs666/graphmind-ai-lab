@@ -1,6 +1,6 @@
 # S7 `chat-responder` abstention-detection fix — independent code gate (U174)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** U174 (S7)
+> **Status:** active · **Owner:** `analyst` · **Tracks:** U174, U175 (S7)
 
 ## Scope & verdict
 
@@ -126,3 +126,55 @@ question explicitly) into this same unit before it lands, or land as-is and trac
 follow-up — the underlying defect class is the same one just fixed, so leaving it open has a real
 (if currently unobserved) cost to the pack's headline metric on a future run with a different reply
 shape. That call belongs to `teco`/the stakeholder, not to this gate.
+
+## Pass 2 — 2026-09-17 (U175 re-gate)
+
+**Verdict: approve with suggestions**, unchanged. Findings 1 and 4 closed. The findings-2/3
+trade-off resolution is sound and its own documented limitation is accepted as-is — no cleaner
+heuristic exists without real semantic understanding inside this component's zero-runtime-
+dependency, regex-only design constraint (FR-23), and both directions are honestly pinned by
+their own tests. But the *mechanism* chosen to implement the trade-off (`_sentence_span`) has one
+new, directly-verified Major defect that silently reopens finding 2 through a different trigger.
+
+- **Finding 1 (narrow connectives) — fixed, confirmed.** Re-ran all three original repro strings
+  (`although`/`though`/`yet` hedge-then-answer) directly against `07cccb1`: all three now correctly
+  return `False`.
+- **Finding 4 (contracted-only idiom) — fixed, confirmed.** `"does not mention"`/`"do not mention"`
+  both now correctly return `True`.
+- **Findings 2/3 (search-direction trade-off) — accepted resolution, confirmed sound.** Re-ran the
+  original finding-2 case (`"The answer is 42,000, but the passages don't mention the exact
+  breakdown."` → `False`) and both finding-3 cases (`False`-classified-should-be-`True` in pass 1,
+  now `True`) directly: all match. The digit-proxy's own documented residual limitation
+  (`"...but there were only 2 documents retrieved, so I cannot determine the answer."` →
+  misclassified `False`) was reproduced exactly as the code's own docstring and dedicated test
+  describe — an honest, load-bearing trade-off, not a hidden gap.
+
+### Major (new) — `_sentence_span` conflates a decimal number's internal period with a sentence boundary, silently reopening finding 2
+
+Root-caused by tracing `_sentence_span` against a constructed case, then confirmed live:
+
+```
+"The average value is 42, but according to page 4.5 the passages don't mention the source." -> True (should be False)
+```
+
+This is exactly finding 2's shape (answer-first, hedge-after, connective before the idiom) — it
+passes in every finding-2 regression test *without* a decimal number between the connective and
+the idiom, and fails the moment one is added. Mechanism: `_sentence_span`'s
+`canon.rfind(ch, 0, start)` over `.!?` treats the period inside `"4.5"` as a sentence boundary, so
+`sentence_start` lands just after that decimal point — *after* `"but"`. The truncated sentence
+handed to `_CONTRASTIVE_CONTINUATION_RE.search` therefore never contains `"but"`, `connective` is
+`None`, and `looks_like_abstention` falls through to `return True`. Suite/`ruff` don't catch this —
+it's a fresh case, not a regression of any committed test.
+
+This is squarely in-scope, not a contrived corner case: this pack's own domain (dollar amounts,
+percentages, page/section references) is decimal-heavy, and a reply citing a decimal figure
+between a hedge and the "don't mention" idiom is a plausible real shape from a small model
+narrating its reasoning. Suggested remedy: `_sentence_span`'s boundary regex should not treat a
+period as a boundary when it sits between two digits (a `\d\.\d` guard, e.g.
+`re.compile(r"(?<!\d)[.!?](?!\d)")` in place of the bare-character `rfind`/`find` scan), with a
+regression test using this exact reply shape (or a close paraphrase) added to
+`TestLooksLikeAbstentionContrastiveScope`. Not a blocker on its own — findings 1-4 as originally
+filed are genuinely closed, and this is a new, narrower recurrence of the same defect class rather
+than a failure to address what was asked — but it should be tracked as a fast follow-up rather than
+treated as done, for the same reason findings 1-4 were: it's the identical construct-validity risk
+this whole line of fixes exists to close.
