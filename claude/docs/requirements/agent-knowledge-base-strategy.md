@@ -1,5 +1,5 @@
 # Agent knowledge-base strategy — Feature Requirements
-> **Status:** Ready for design — substrate stage (everything past Stage 0) blocked pending `falkor-chat/docs/requirements/document-ingestion2.md` · **Owner:** `tico` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`) · **Last updated:** 2026-09-10
+> **Status:** Ready for design — two sequenced tracks: raw kaizen-capture migration into a new "agent team" falkor-chat workspace (FR-8/FR-9, first), then distilled-knowledge-base ingestion into that same workspace (FR-2–FR-7, Option B) · **Owner:** `tico` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`) · **Last updated:** 2026-09-17
 
 ## Intent
 Four custom agent prompts (`teco.md`, `architect.md`, `data-scientist.md`, `tdd-engineer.md`)
@@ -20,25 +20,65 @@ locate the relevant part, and `cobb` has to manually route/dedupe entries into i
 document captures the requirement for that graph-backed retrieval system, with K-030's four agents
 as its first concrete consumer — not a document about K-030 alone.
 
-**Which graph, and whether the flat files stay authoritative, is an explicitly open question
-(see Open questions)** — the stakeholder first named `kaizen_team` (the team's existing raw-capture
-graph) as the substrate, then separately floated keeping the flat Markdown files as the
+**Which graph, and whether the flat files stay authoritative — now settled (2026-09-17, see the
+resolution below and the decision log).** The stakeholder first named `kaizen_team` (the team's
+existing raw-capture graph) as the substrate, then floated keeping the flat Markdown files as the
 authoritative, git-versioned artifact `cobb` distills into (unchanged from today), with that
 content additionally *ingested* into `falkor-chat`'s own GraphRAG corpus for searchability —
-reached via `falkor-chat`'s own MCP server, not `cypher-mcp`/`kaizen_team`. The stakeholder
-explicitly does not know yet whether this replaces the `kaizen_team`-as-substrate answer or sits
-alongside it, and wants both weighed rather than one assumed.
+reached via `falkor-chat`'s own MCP server, not `cypher-mcp`/`kaizen_team`. That second framing —
+Option B — is the one chosen: the flat files stay authoritative and get ingested into falkor-chat's
+corpus for search.
 
 **Resolved as a sequencing decision (2026-09-10, see decision log):** the stakeholder's underlying
 reasoning is that `falkor-chat` is *meant* to be the one substrate for agent-and-human
 interaction/knowledge generally — not one graph among several with overlapping GraphRAG
 capability — so a gap in its document-ingestion pipeline (no update/delete, found by `architect`'s
 plan below) is worth closing rather than routing around with a parallel system on `kaizen_team`.
-This document's substrate stage (everything past Stage 0's interim K-030 relief) is therefore
+This document's substrate stage (everything past Stage 0's interim K-030 relief) was therefore
 **blocked** on a separate, successor falkor-chat feature,
 `falkor-chat/docs/requirements/document-ingestion2.md`, adding real update/delete to document
-ingestion. Once that exists, this document's Option A/Option B choice is revisited — not assumed
-to flip automatically to Option B just because the capability now exists.
+ingestion.
+
+**Block lifted, substrate decided (2026-09-17, see decision log):** `document-ingestion2` shipped
+and archived (`falkor-chat/docs/plans/document-ingestion2-coordination.md`, closed 2026-09-13) —
+real update/delete/versioning now exists in falkor-chat's document store, live-verified end-to-end
+(AC-1 through AC-8). The choice was re-run on the merits rather than auto-flipped: `architect`'s
+original Option B rejection named three separate problems, not one — no update/delete (now
+closed), a chunking-granularity mismatch (falkor-chat's generic paragraph/sentence splitter has no
+claim-awareness), and a tenancy/side-effect mismatch (ingestion targets a chat-shaped
+`ws:{workspaceId}` tenant graph and triggers automatic entity/relationship extraction by default).
+`document-ingestion2` was scoped purely to update/delete/versioning and left the other two
+untouched. Presented with that, the stakeholder chose **Option B (falkor-chat ingestion) anyway**
+— the original principle (one substrate, not several) still governs — accepting or resolving the
+two remaining costs as part of this feature's own design work, not as a reason to revert to Option
+A. **This document's substrate choice is now settled as Option B**, not still open.
+
+**Scope expanded (2026-09-17, see decision log): raw kaizen capture migrates first, ahead of
+distilled knowledge.** Every prior section of this document treated `kaizen_team` (the standalone
+graph holding every agent's raw, undistilled `:KaizenEntry` capture) as an untouched given —
+FR-5 originally assumed its writes "continue to work as today," and migrating it was never in
+scope. The stakeholder's reasoning for changing that: raw kaizen capture **is, at bottom, a
+knowledge base too** — just an earlier, undistilled stage of the same thing the rest of this
+document is about — so under the governing one-substrate principle (falkor-chat is *the* substrate
+for agent-and-human knowledge, not one graph among several) there's no principled reason to leave
+it on a separate graph while only the *distilled* knowledge moves. So the first concrete piece of
+work this document now calls for is **moving kaizen_team's functionality into a falkor-chat
+workspace** — not the distilled-knowledge-base retrieval work (FR-2 through FR-7), which comes
+after. Clarified: `kaizen_team` is **not** decommissioned as part of this — it keeps running in
+parallel (retirement timing is an open question, not decided here) — and the migration is
+**team-wide**: every agent that writes raw capture today (not only K-030's four), moves to writing
+through the new falkor-chat-workspace venue.
+
+**One workspace for both tracks, not two (2026-09-17, see decision log).** The new workspace is a
+**dedicated, new one** — not an existing chat/demo workspace — directionally named something like
+**"agent team"** (the stakeholder's naming intent; the exact literal workspace-id string is
+`architect`/`graph-dba`'s naming-convention call, following `falkor-chat`'s own `ws:{workspaceId}`
+pattern). It starts with raw kaizen entries (FR-8) but is explicitly meant to **generalize beyond
+that** — the stakeholder's own framing: "kick off with the Kaizen entries and generalize to all
+kind of stuff." Confirmed directly: **the distilled-knowledge-base ingestion (FR-2) targets this
+same workspace**, not a separate one — so this document's two tracks converge on one shared
+destination, consistent with the whole one-substrate premise, rather than trading `kaizen_team` for
+a different kind of graph proliferation.
 
 ## Problem & current state
 - **Today's pattern (six agents already have it):** `analyst`, `graph-dba`, `qa-engineer`,
@@ -58,23 +98,24 @@ to flip automatically to Option B just because the capability now exists.
   to find the applicable part, and `cobb` routes/dedupes new entries into it by hand — the same
   underlying problem (no way to find "just the relevant part") that the flat-file pattern was
   invented to solve for the *prompt*, recurring one layer down.
-- **What already exists, mechanically — two separate candidate substrates:**
+- **What already exists, mechanically — two graphs, one of them now a migration target:**
   - The team's raw kaizen capture already lives in a shared FalkorDB graph, `kaizen_team`,
     reachable by every agent via the `mcp__cypher__query` tool (`cypher-mcp`). Today that graph
     holds only **raw, undistilled** `:KaizenEntry` nodes pending `cobb`'s review; there is no
     embedding/semantic-search capability over it, and no distilled "knowledge base" content lives
     there — only flat files do. Writes to it are already restricted to specific authorized shapes
-    (a producer's own capture, and a small set of curator-only shapes for `cobb`).
+    (a producer's own capture, and a small set of curator-only shapes for `cobb`). **This is now
+    the first thing to move** (see above) — into a falkor-chat workspace, running in parallel with
+    `kaizen_team` rather than replacing it outright.
   - `falkor-chat` already runs a working GraphRAG pipeline on its own graphs (message ingestion →
     out-of-band embedding via an `EmbeddingWorker`/LM Studio → in-graph vector index → hybrid
     vector+traversal retrieval, `falkor-chat/docs/DESIGN.md` §6/§8), exposed over its own MCP
     server (Streamable-HTTP, distinct from `cypher-mcp`, `falkor-chat/docs/SERVER.md`). The
     stakeholder's stated preference throughout is to **reuse that actual machinery**, not build an
-    independent embedding/retrieval setup — but whether that means pointing it *at* `kaizen_team`,
-    or ingesting the knowledge-base Markdown files as a document corpus *into `falkor-chat`'s own
-    graph* (with the files themselves staying the authoritative, versioned source), is the open
-    substrate question above. Either way this is a preference to carry forward to design, not a
-    decision this document makes.
+    independent embedding/retrieval setup — resolved (2026-09-17, see above and the decision log)
+    to mean ingesting the knowledge-base Markdown files as a document corpus *into `falkor-chat`'s
+    own graph*, with the files themselves staying the authoritative, versioned source. This is a
+    preference to carry forward to design, not a schema/mechanism this document specifies.
 
 ## User stories
 - As an agent whose situation matches a rare-path learning, I want to retrieve just the relevant
@@ -88,6 +129,12 @@ to flip automatically to Option B just because the capability now exists.
 - As the stakeholder, I want the eventual system to cover every agent's knowledge base — not just
   the four new ones — so the team ends up with one consistent mechanism instead of two permanent,
   parallel ones.
+- As the stakeholder, I want the team's raw kaizen capture to land in the same substrate its
+  distilled knowledge eventually will, so falkor-chat is genuinely *the* one substrate rather than
+  the destination for only the "finished" half of the team's knowledge.
+- As any agent producing a raw kaizen entry, I want to keep writing it without disruption while
+  this migration happens, whether that write currently lands in `kaizen_team` or its new
+  falkor-chat-workspace home.
 
 ## Functional requirements
 - **FR-1.** K-030's four agents (`teco`, `architect`, `data-scientist`, `tdd-engineer`) must be
@@ -95,11 +142,12 @@ to flip automatically to Option B just because the capability now exists.
   an interim on-demand knowledge base, following the existing flat-file pattern, is acceptable and
   must not wait on the larger system.
 - **FR-2.** Distilled agent knowledge (existing flat-file content, plus anything created to satisfy
-  FR-1) must become **searchable from a graph-backed store** — which store (`kaizen_team`,
-  `falkor-chat`'s own graph via ingestion, or both) is undecided, see Open questions — in a form
-  other than "only inside a flat file." **Whether the flat file itself keeps being the
-  authoritative, git-versioned artifact `cobb` distills into (the stakeholder's most recent framing)
-  is part of that same open question**, not settled by this FR.
+  FR-1) must become **searchable from a graph-backed store** — decided (2026-09-17) to be
+  `falkor-chat`'s own graph, reached by ingesting the knowledge-base content as a document corpus
+  through `falkor-chat`'s own MCP server (Option B), **into the same dedicated "agent team"
+  workspace FR-8 creates for raw kaizen capture** — in a form other than "only inside a flat
+  file." **The flat file stays the authoritative, git-versioned artifact `cobb` distills into**,
+  unchanged from today; ingestion is what makes its content searchable, not a replacement for it.
 - **FR-3.** An agent must be able to query the graph-backed store for knowledge relevant to its
   current situation and receive back the relevant distilled entries, without reading an entire
   knowledge-base file end-to-end.
@@ -108,30 +156,46 @@ to flip automatically to Option B just because the capability now exists.
   match. This is the specific gap flat files cannot close as they grow, and the reason a graph/
   embedding-backed approach is being pursued instead of, say, a bigger or better-organized file.
 - **FR-5.** `cobb`'s distillation workflow must be able to route curated/distilled knowledge into
-  the graph-backed store so it becomes searchable (whether by writing it directly, or by the store
-  ingesting the flat file `cobb` still edits — see FR-2), while raw-capture writes continue to work
-  as today.
+  the graph-backed store so it becomes searchable — via the store ingesting the flat file `cobb`
+  still edits (see FR-2, Option B) — while raw-capture writes keep working uninterrupted throughout
+  (whether still via `kaizen_team` or via FR-8's falkor-chat-workspace successor, depending on
+  where FR-8's migration has reached).
 - **FR-6.** The five/six agents' existing flat-file knowledge bases must become searchable through
   the same graph-backed mechanism without content loss, so the team ends up with one retrieval
   mechanism for all agent knowledge, not two indefinitely-parallel ones.
 - **FR-7.** Whatever interim solution satisfies FR-1 must not cost materially more migration effort
   later than the pre-existing five/six agents' knowledge bases cost under FR-6 — the point of doing
   it now is relief, not a second throwaway system.
+- **FR-8 (added 2026-09-17).** The team's raw kaizen-capture writes — every agent's `:KaizenEntry`
+  producer/curator writes, today landing in the standalone `kaizen_team` graph — must be able to
+  land inside a **new, dedicated falkor-chat workspace** instead, team-wide (not only K-030's four
+  agents). The workspace is directionally named something like **"agent team"** (naming intent, not
+  a literal string this document mandates) and is meant to generalize beyond kaizen entries over
+  time, not stay kaizen-only (see FR-2, which targets this same workspace). `kaizen_team` is
+  **not** decommissioned as part of this FR — it keeps operating in parallel; retirement is a
+  separate, undecided question (see Open questions).
+- **FR-9 (added 2026-09-17).** FR-8's raw-capture migration is sequenced **before** FR-2 through
+  FR-7's distilled-knowledge-base retrieval work — it is this effort's first concrete deliverable,
+  not a parallel or later track.
 
 ## Out of scope
-- Which graph is the substrate (`kaizen_team`, `falkor-chat`'s own graph via ingestion, or both),
-  and the schema/content-model design for it — an architecture decision for `architect`/
-  `graph-dba`, per the open substrate question above.
-- The specific mechanism for pointing falkor-chat's embedding/retrieval machinery at whichever
-  store is chosen — captured above only as a stated stakeholder preference, not specified here.
+- The schema/content-model design for how distilled knowledge lives inside `falkor-chat`'s graph
+  once ingested (Option B, decided 2026-09-17) — an architecture decision for `architect`/
+  `graph-dba`, informed by Open question #1 above.
+- The specific mechanism for routing ingestion through falkor-chat's existing MCP tools — captured
+  above only as the decided direction, not specified here.
 - Redesigning `cobb`'s distillation procedure step-by-step (the `agent-maintenance` skill) — follows
-  once the storage target is decided.
-- Whether distilled knowledge also needs a git-tracked Markdown counterpart — open question below,
-  not decided here.
+  now that the storage target is decided.
 - `BACKLOG.md` content moving to the graph — explicitly a separate, related future item; this
   document stays scoped to agent on-demand knowledge bases.
 - The actual authoring/content of K-030's four interim knowledge bases — ordinary distillation
   work, once FR-1 is greenlit, following the pattern the existing six already use.
+- The structural shape raw kaizen capture takes once inside the new "agent team" workspace (a new
+  node type mirroring today's `:KaizenEntry`, reuse of falkor-chat's existing message/document
+  shapes, or something else), the workspace's exact literal id, and the write-access mechanism for
+  every agent (FR-8) — architecture decisions, see Open questions.
+- When or whether `kaizen_team` is ever retired once FR-8's parallel-run migration lands — not
+  decided; FR-8 only requires that it keep running, not that it be decommissioned.
 
 ## Acceptance criteria
 - **AC-1.** Given K-030's four agents have no on-demand knowledge base today, when the interim step
@@ -149,29 +213,35 @@ to flip automatically to Option B just because the capability now exists.
 - **AC-5.** Given the interim knowledge bases created under AC-1, when the graph-backed system
   becomes available, then migrating those four requires no more rework than migrating the
   pre-existing five/six under AC-4.
+- **AC-6 (added 2026-09-17).** Given every agent's raw kaizen capture writes to `kaizen_team` today,
+  when FR-8's migration lands, then every agent (not only K-030's four) can write and read its raw
+  capture through a falkor-chat-workspace destination, with `kaizen_team` still operational in
+  parallel, not decommissioned.
+- **AC-7 (added 2026-09-17).** Given this document's two tracks (raw-capture migration, FR-8/FR-9;
+  distilled-knowledge retrieval, FR-2 through FR-7), when work is sequenced, then AC-6 is satisfied
+  before any distilled-knowledge-retrieval capability (AC-2/AC-3) is built.
 
 ## Open questions
-1. **Which graph is the substrate, and does the flat file stay authoritative?** Two live options,
-   stakeholder explicitly undecided between them: (a) distilled knowledge is stored directly in
-   `kaizen_team`, flat-file-counterpart question open per #2 below; or (b) the flat Markdown files
-   stay the authoritative, git-versioned artifact `cobb` distills into exactly as today, and get
-   *ingested* into `falkor-chat`'s own GraphRAG corpus (reused machinery, per the stated
-   preference) purely to make them searchable, reached via `falkor-chat`'s own MCP server rather
-   than `cypher-mcp`. These are not necessarily mutually exclusive — flagged for `architect` to
-   weigh both, not assume one.
-2. Should distilled knowledge also exist as a git-tracked Markdown file (human-reviewable,
-   diffable, consistent with every other doc kind in this repo), or can it live purely as graph
-   data with no file counterpart? Option 1(b) above would answer this "yes" as a side effect if
-   chosen; under option 1(a) it's still genuinely open. Stakeholder has not settled between the two
-   options, so this stays open too.
-3. What is the actual write-authorization shape for a "distilled knowledge" write into whichever
-   store is chosen? If `kaizen_team` (option 1a): today's `cypher-mcp` write authorization covers
-   raw producer-capture and a small set of curator shapes (MENTIONS-write, edge-resolve, full-node
-   clear) — a distilled-knowledge write is a new shape that doesn't exist yet. If `falkor-chat`'s
-   own graph via ingestion (option 1b): the equivalent question is what ingestion authorization/
-   trigger looks like for a non-chat document corpus.
-4. Timeline/sequencing for actually starting the graph-backed system's build, beyond "a real
+1. What is the actual ingestion-authorization/trigger shape for a non-chat document corpus going
+   through `falkor-chat`'s ingestion MCP tools (Option B, decided 2026-09-17)? `document-ingestion2`
+   added update/delete/versioning to that pipeline but didn't design for a corpus with this
+   feature's shape (routinely re-edited, one-claim-per-node granularity desired, no natural chat
+   workspace) — a design decision for `architect`, informed by the chunking-granularity and
+   tenancy/extraction-noise costs named in the Intent section above, which the stakeholder chose to
+   accept or resolve within this feature's own design rather than treat as disqualifying.
+2. Timeline/sequencing for actually starting the graph-backed system's build, beyond "a real
    near-term plan" — not yet specified.
+3. **(added 2026-09-17) What does "raw kaizen capture inside a falkor-chat workspace" actually
+   look like structurally?** A new node type mirroring today's `:KaizenEntry`/`PRODUCED`/`MENTIONS`
+   shape, reuse of falkor-chat's existing message or document shapes, or something else — an
+   architecture decision for `architect`/`graph-dba`.
+4. **(added 2026-09-17) What is the write-access mechanism for every agent** once raw capture also
+   targets a falkor-chat workspace — does every agent's write path change from `cypher-mcp`'s
+   authorized shapes to falkor-chat's own MCP tools, or does something else preserve today's access
+   pattern? This touches every agent's session wiring team-wide, not just this feature's four —
+   flagged for `architect` given the breadth.
+5. **(added 2026-09-17) When or whether `kaizen_team` is eventually retired** once FR-8 lands and
+   both run in parallel — not decided; no trigger or timeline specified yet.
 
 ## Decision log
 - 2026-09-10 — Which K-030 (falkor-chat workflow item vs. cobb's agent-prompt backlog item) is this about? → cobb's agent-prompt compaction backlog.
@@ -194,3 +264,13 @@ to flip automatically to Option B just because the capability now exists.
 - 2026-09-10 — Sequencing decision → **block this feature's substrate work (everything past Stage 0) on a separate falkor-chat feature adding real update/delete to document ingestion.** K-030's four agents still get interim flat-file relief per Stage 0, unaffected either way. A new, separate requirements interview opens for the falkor-chat side (`falkor-chat/docs/requirements/document-ingestion2.md` — successor to the archived `document-ingestion.md`, same topic family); once that feature is specified/built, this document's substrate choice (Option A vs. Option B) is revisited, not assumed to flip automatically to Option B.
 - 2026-09-10 — Status changed from "Ready for design" to "Ready for design — substrate stage blocked" pending the new falkor-chat requirements doc. `architect` notified so its plan can reflect the block.
 - 2026-09-10 — Stakeholder's underlying rationale for the block, stated directly: this **is** falkor-chat's intended purpose — being *the* substrate for agent-and-human interaction/knowledge generally, not one graph among several with overlapping GraphRAG capability. Building a second, parallel semantic-retrieval system on `kaizen_team` runs against that, even though `kaizen_team` is technically capable and CPG-evidence-backed today. This is why the gap in falkor-chat's document store is worth closing rather than routing around.
+- 2026-09-17 — `teco` relayed that `document-ingestion2` shipped and archived (`falkor-chat/docs/plans/document-ingestion2-coordination.md`, closed 2026-09-13, commit `8906878`), satisfying the 2026-09-10 block condition, and asked for the Option A/Option B choice to be re-run on the merits — not auto-flipped to Option B just because the capability now exists (per this document's own prior instruction). Verified independently: read the coordination ledger (all 8 stages + QA acceptance `accepted`, AC-1..AC-8 live-verified) and `document-ingestion2`'s own requirements doc before treating the claim as settled.
+- 2026-09-17 — Re-examined `architect`'s original Option B rejection (`claude/docs/plans/agent-knowledge-base-strategy.md` §1): it named three separate problems with routing this feature through falkor-chat's ingestion pipeline, not one — (1) no update/delete, (2) a chunking-granularity mismatch (generic paragraph/sentence splitter, no claim-awareness), (3) a tenancy/side-effect mismatch (chat-shaped `ws:{workspaceId}` tenant graph, automatic entity/relationship extraction by default). Checked `document-ingestion2`'s requirements doc and plan directly: its FR-1 through FR-8 are entirely about update/delete/versioning/audit — it never touched chunking behavior or the tenancy/extraction model. So only problem 1 is resolved; problems 2 and 3 stand exactly as `architect` found them. Presented this to the stakeholder before asking for a decision, so the choice wasn't made on the mistaken premise that the whole objection was closed.
+- 2026-09-17 — Given that framing, which substrate? → **Option B (falkor-chat ingestion)**, chosen anyway. The original principle (falkor-chat as the one substrate, not several) still governs; the stakeholder accepts or resolves the remaining chunking-granularity and tenancy/extraction-noise costs as part of this feature's own design work, not as grounds to fall back to Option A. Status flipped from "blocked" to "Ready for design — substrate resolved to Option B"; FR-2/FR-5, the Intent section, and Open questions #1/#2 (substrate, file-counterpart) rewritten to reflect the settled choice — the file-counterpart question resolves to "yes" as Option B's own side effect (flat file stays authoritative, ingestion is what makes it searchable), consistent with what this document already named as the expected outcome if Option B were chosen.
+- 2026-09-17 — Before reporting back to `teco`, stakeholder reopened scope: wants to **start by moving `kaizen_team`'s functionality (raw kaizen capture) into a falkor-chat workspace, as this effort's first use case** — ahead of the distilled-knowledge-base retrieval work the document was otherwise ready to hand off on. Status reverted from "Ready for design" to "Interviewing" pending a fresh readback of the expanded document.
+- 2026-09-17 — Does this retire `kaizen_team`, or run both in parallel? → **run both in parallel for now**; not decommissioned as part of this work. Retirement timing left open (new Open question).
+- 2026-09-17 — Is the raw-capture migration scoped to every agent, or narrower? → **every agent, team-wide** — not limited to K-030's four.
+- 2026-09-17 — Why fold raw capture into this document/effort at all, rather than treat it as separate? → **"because it is what it is, a knowledge base"** — raw kaizen capture is, at bottom, an earlier/undistilled stage of the same knowledge this document is already about, so under the governing one-substrate principle it belongs in falkor-chat too, with no principled reason to carve it out. Recorded as new FR-8/FR-9 (migrate, sequenced first), AC-6/AC-7, new user stories, and four new Open questions (structural shape, workspace choice, write-access mechanism, retirement timing) — this document's original distilled-knowledge scope (FR-1 through FR-7, AC-1 through AC-5) is unchanged and still stands as Option B/settled; only the sequencing and the document's overall scope grew.
+- 2026-09-17 — Which workspace hosts the raw-capture migration? → **a new, dedicated one**, directionally named something like **"agent team"** (naming intent, exact literal id left to `architect`/`graph-dba`'s naming convention). Stated explicitly not kaizen-only forever: "we will kick off with the Kaizen entries and generalize to all kind of stuff" — recorded in FR-8 and the Intent section. Resolves former Open question #4 (which workspace); removed from Open questions, list renumbered.
+- 2026-09-17 — Does the distilled-knowledge-base ingestion (FR-2, Track 2) target this same new workspace, or a different one? → **same workspace, confirmed directly** ("yes, exactly, same workspace for both"). FR-2 rewritten to name the shared destination explicitly — this document's two tracks (raw capture, distillation) now converge on one shared workspace rather than each getting its own.
+- 2026-09-17 — Readback confirmed ("perfect, sir, please close and commit"): the two-track structure (FR-8/FR-9 raw-capture migration into the new "agent team" workspace, sequenced first; FR-2–FR-7 distilled-knowledge ingestion into that same workspace, second), the parallel-run/no-decommission posture for `kaizen_team`, the team-wide breadth, and the five remaining Open questions (all architecture-only, none stakeholder-level) are all correct as drafted. Status flipped back to **Ready for design**. Next step: report back to `teco` so the coordination can resume — `architect`'s existing plan needs a real revision, not a resume from §2, since it predates both the Option B choice and the whole raw-capture-migration track.
