@@ -7,9 +7,14 @@ fixture, not the real corpus, which is Step 2's) or reads only this pack's own *
 data under `model-bench/packs/embedder-graphrag-retrieval/` (inside `model-bench`, so FR-23's
 "standalone" rule is untouched — that data was itself produced by this script, once, against the
 real `falkor-chat` tree, confirmed this session by running `--check-origins` directly; see this
-unit's own report). Nothing here depends on `falkor-chat/` being present on disk, matching the
-same discipline plan §3.1 point 2(b) states for `test_metrics_agreement.py` (§5 test 20: "the
-default suite still passes with `falkor-chat/` renamed away").
+unit's own report) — with two named exceptions:
+`test_read_catalog_literal_handles_the_real_seed_catalog_script` and
+`test_read_schema_literal_handles_the_real_querygen_module` live-verify against the real
+`falkor-chat/` source directly, and carry `conftest.py`'s `requires_falkor_chat` skip guard so the
+default `pytest -q` suite stays green (skipped, not failed) with `falkor-chat/` absent. Every other
+test in this file matches the same discipline plan §3.1 point 2(b) states for
+`test_metrics_agreement.py` (§5 test 20: "the default suite still passes with `falkor-chat/`
+renamed away").
 """
 
 from __future__ import annotations
@@ -20,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import requires_falkor_chat
 
 from modelbench.lmstudio import EmbedResult, LMStudioUnreachable, ModelInfo
 
@@ -811,6 +817,7 @@ def test_catalog_rows_from_literal_computes_normalized_fields() -> None:
     }
 
 
+@requires_falkor_chat
 def test_read_catalog_literal_handles_the_real_seed_catalog_script() -> None:
     """Live-verified against the real `falkor-chat/scripts/seed_catalog.sh` — the fixed ~15-item
     consumer-electronics catalog (S4 spec §2.6/§6)."""
@@ -856,6 +863,7 @@ def test_read_schema_literal_raises_when_a_schema_assignment_is_missing() -> Non
         refresh_golden._read_schema_literal("CATALOG_SCHEMA = DatasetSchema(labels={})\n")
 
 
+@requires_falkor_chat
 def test_read_schema_literal_handles_the_real_querygen_module() -> None:
     """Live-verified against the real `falkor-chat/server/falkorchat/querygen.py` — matches this
     pack's own hand-written `schema.json` exactly (S4 spec §5.2.3/§6)."""

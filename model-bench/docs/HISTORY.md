@@ -2,6 +2,48 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-17 — U182 — FR-23 default-suite gap closed (`tdd-engineer`)
+
+**What:** Closed the gap U181's FR-23 audit found and logged (`docs/BACKLOG.md`): 3 tests
+(`test_refresh_golden.py::test_read_catalog_literal_handles_the_real_seed_catalog_script`,
+`test_refresh_golden.py::test_read_schema_literal_handles_the_real_querygen_module`,
+`test_scoring_extraction.py::test_prompts_querygen_md_matches_the_live_falkorchat_source_byte_for_byte`)
+read a real `falkor-chat/` source file with no `live` marker and no skip guard, so `pytest -q`
+reported false `FileNotFoundError` failures whenever `falkor-chat/` was renamed or absent —
+reproduced first, live: `3 failed, 1703 passed, 3 deselected` (baseline `1706 passed, 3 deselected`).
+`test_refresh_golden.py`'s own module docstring separately claimed "nothing here depends on
+`falkor-chat/` being present on disk" — false as shipped for 2 of these 3 tests; corrected.
+
+Chose a plain `skipif` over reusing the existing `live` marker (`tests/conftest.py`'s new
+`falkor_chat_present()` + `requires_falkor_chat`): `live` means "needs a reachable LM Studio"
+(`addopts = '-ra -m "not live"'`) — a different precondition, and conflating the two would make a
+future `pytest -m live` run also require a `falkor-chat/` checkout for no reason. The three tests
+now carry `@requires_falkor_chat`.
+
+TDD: a new `tests/test_standalone.py` pins the guard's presence and shape without deleting
+`falkor-chat/` in a unit test — `falkor_chat_present()` tested directly both ways via `tmp_path`,
+plus a marker-inspection reproduction test asserting each of the three named tests carries a
+`skipif` whose reason names `falkor-chat` and does *not* reuse the `live` mark. Written first
+(RED: `ImportError`, the helper didn't exist yet); green after the fix. Mutation-tested: reverted
+all three `@requires_falkor_chat` decorators, confirmed exactly one test reddened
+(`test_falkor_chat_dependent_tests_each_carry_the_skip_guard`, `1 failed, 1709 passed`) and no
+other test moved, then restored byte-identical (`git diff --stat` matched the pre-mutation fix-only
+diff).
+
+**Verification:** with `falkor-chat/` present, unchanged at `1710 passed, 3 deselected` (1706 +
+4 new tests in `test_standalone.py`). Re-ran the rename dance: `falkor-chat/` renamed away gives
+`1707 passed, 3 skipped, 3 deselected`, `-rs` showing all three skip reasons
+(`falkor-chat/ not present as a sibling checkout (FR-23 standalone default suite)`) — no failures.
+Restored immediately each time; `git status --porcelain` confirmed clean of any rename trace.
+`ruff check .` clean. `docs/BACKLOG.md`'s matching open item removed (delivered items don't stay,
+per the module documentation convention); `AGENTS.md`'s FR-23 caveat sentence rewritten to state
+the now-true, fixed contract.
+
+**Files touched:** `tests/conftest.py` (new `falkor_chat_present()`/`requires_falkor_chat`),
+`tests/test_refresh_golden.py` (docstring fix, two `@requires_falkor_chat` decorators),
+`tests/test_scoring_extraction.py` (one `@requires_falkor_chat` decorator), new
+`tests/test_standalone.py`, `AGENTS.md`, `docs/BACKLOG.md`.
+
 ## 2026-09-17 — U180–U181 — S8 closed: documentation and close
 
 **What:** S8 is the plan's final stage — no new pack, no new role, only bringing the docs in line

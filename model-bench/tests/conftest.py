@@ -4,6 +4,13 @@ S1 has no pack loader and makes no model calls (`docs/plans/small-model-benchmar
 so every in-memory fixture here is built by hand. S2 adds `pack_fixture()`, resolving the real
 on-disk packs under `tests/fixtures/packs/` that `load_pack`/`validate_pack` read (§4 S2) — those
 still touch no network and nothing outside `model-bench/`.
+
+`requires_falkor_chat` (FR-23) gates the handful of tests that live-verify against a real
+`falkor-chat/` source file, deliberately kept off the `live` marker: `live` means "needs a
+reachable LM Studio" (`addopts = '-ra -m "not live"'`, `pyproject.toml`) — a different
+precondition, and conflating the two would make a future `pytest -m live` run also require a
+`falkor-chat/` checkout for no reason. This one is a plain `skipif`, not a registered custom mark,
+so it needs no `pyproject.toml` `markers` entry.
 """
 
 from __future__ import annotations
@@ -230,6 +237,25 @@ def pack_fixture(name: str) -> Path:
     return PACKS_DIR / name
 
 
+#: The repo-root layout's `falkor-chat/`, a sibling of `model-bench/` — never read at runtime
+#: (FR-23), only by the handful of tests that live-verify a copied-in golden asset against its
+#: real source.
+_FALKOR_CHAT_ROOT = Path(__file__).resolve().parents[2] / "falkor-chat"
+
+
+def falkor_chat_present(root: Path | None = None) -> bool:
+    """True when `falkor-chat/` exists as a sibling checkout. `root` is overridable for tests."""
+    return (root if root is not None else _FALKOR_CHAT_ROOT).is_dir()
+
+
+#: Apply to any test that reads a real `falkor-chat/` file directly. Deliberately a plain
+#: `skipif`, not a reuse of the `live` marker — see this module's own docstring.
+requires_falkor_chat = pytest.mark.skipif(
+    not falkor_chat_present(),
+    reason="falkor-chat/ not present as a sibling checkout (FR-23 standalone default suite)",
+)
+
+
 __all__ = [
     "BinaryMetric",
     "ClassificationAggregates",
@@ -241,10 +267,12 @@ __all__ = [
     "classification_aggregates",
     "deterministic_fields",
     "embeddings_fields",
+    "falkor_chat_present",
     "guard_pack",
     "item",
     "model_fields",
     "pack_fixture",
+    "requires_falkor_chat",
     "run",
     "tmp_root",
 ]

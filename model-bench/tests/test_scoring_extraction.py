@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from conftest import requires_falkor_chat
 
 from modelbench.lmstudio import ChatResult
 from modelbench.packs import Pack, load_pack, validate_pack
@@ -294,10 +295,13 @@ class TestBuildMessages:
         assert messages[1]["role"] == "user"
 
 
+@requires_falkor_chat
 def test_prompts_querygen_md_matches_the_live_falkorchat_source_byte_for_byte():
     """Verified the same way `judge.md` was, not hand-typed and eyeballed: an AST
     `literal_eval` of `tools.py`'s own `_QUERY_REQUEST_INSTRUCTIONS` assignment against the live
-    source, compared to the shipped prompt file's exact bytes (S4 spec §5.2/§2.5)."""
+    source, compared to the shipped prompt file's exact bytes (S4 spec §5.2/§2.5). Needs a real
+    `falkor-chat/` checkout — `requires_falkor_chat` skips this cleanly when it's absent (FR-23:
+    the default suite otherwise stays independent of `falkor-chat/`'s presence on disk)."""
     import ast
 
     tools_py = (

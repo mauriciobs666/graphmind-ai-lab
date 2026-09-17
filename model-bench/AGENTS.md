@@ -118,10 +118,12 @@ it — which is why FR-17a's function is `models_with_stored_results`, not `test
 - **Standalone — FR-23.** No runtime code path reads any path outside `model-bench/`. Golden data
   from `falkor-chat` is *copied in* and versioned here with provenance; the one-way importer
   `scripts/refresh_golden.py` is a human-invoked maintenance script and is never reachable from a
-  run. Nothing in `falkor-chat` changes, in either direction, ever. **The default test suite does
-  not yet hold to the same rule** — 3 tests read a real `falkor-chat/` source file with no `live`
-  marker or skip guard, so the default `pytest -q` suite reports false failures if `falkor-chat/`
-  is renamed or absent; runtime/CLI code is unaffected. Open, `docs/BACKLOG.md`.
+  run. Nothing in `falkor-chat` changes, in either direction, ever. **The default test suite holds
+  to the same rule too**: 3 tests that live-verify a copied-in golden asset against its real
+  `falkor-chat/` source carry `tests/conftest.py`'s `requires_falkor_chat` skip guard — a plain
+  `skipif`, deliberately distinct from the `live` marker below (a different precondition) — so
+  `pytest -q` skips them cleanly (reported in the summary line) rather than failing when
+  `falkor-chat/` is absent or renamed.
 - **No aggregate across roles, no gate, no scheduler.** Enforced structurally: `load_history()`
   takes a `packId` and there is no API to load across packs. See `README.md`'s three non-features.
 
