@@ -30,20 +30,22 @@ see [`deprecated/opencode/skills/README.md`](../deprecated/opencode/skills/READM
 
 ## Deployment
 
-Skills live here, version-controlled, and are surfaced to Claude Code and Kiro via a whole-dir
-symlink from each tool's global config — so **every tool sees every skill in this directory** and
-edits here are picked up live.
+Skills live here, version-controlled, and are surfaced to Claude Code and Kiro via symlinks from
+each tool's global config, so edits here are picked up live.
 
-| Tool | Symlink |
+| Tool | Link |
 |---|---|
-| Claude Code | `~/.claude/skills` → `skills/` |
-| Kiro | `~/.kiro/skills` → `skills/` |
+| Claude Code | `~/.claude/skills/<name>` → `skills/<name>`, one per skill (real directory, not a whole-dir link) |
+| Kiro | `~/.kiro/skills` → `skills/` (whole-dir) |
 
-Recreate on a new machine with `ln -s <repo>/skills <target>`. Skills are progressively-disclosed
-(only the `description` is always-on), so exposing every skill in a tool's directory costs
-~nothing; unused ones simply never activate. If you later want per-tool scoping within this
-directory, switch a tool to per-skill symlinks (the pattern the `claude/` agents use) instead of
-the whole-dir link.
+Claude Code gets **per-skill** links because it also *writes* into `~/.claude/skills/`: the
+account-synced Anthropic skills land in `~/.claude/skills/synced/`, and with a whole-dir link they
+appeared inside this repo as untracked files (`skills/synced/` is gitignored as a belt-and-braces
+guard). Recreate on a new machine with
+`mkdir -p ~/.claude/skills && for s in <repo>/skills/*/; do ln -s "$s" ~/.claude/skills/; done`
+(skip `README.md`); a **new skill here needs its own link added**. Kiro keeps the whole-dir link
+(`ln -s <repo>/skills ~/.kiro/skills`) — it only reads. Skills are progressively-disclosed (only
+the `description` is always-on), so exposing every skill costs ~nothing; unused ones never activate.
 
 **OpenCode** separately symlinks `~/.config/opencode/skills` → `opencode/skills/`, previously a
 disjoint set of five OpenCode-only packages. That set is now retired
