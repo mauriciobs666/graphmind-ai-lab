@@ -200,6 +200,27 @@ class TestLooksLikeAbstentionContrastiveScope:
         )
         assert grounding.looks_like_abstention(reply) is False
 
+    # -- Pass 2 finding: a decimal number's internal period must not be treated as a sentence
+    # boundary — `_sentence_span` splitting on a bare `.` truncates the sentence right after the
+    # decimal point, dropping the connective before it and silently reopening finding 2's
+    # answer-then-hedge misclassification.
+
+    def test_decimal_number_between_connective_and_idiom_does_not_break_the_sentence_span(self):
+        reply = (
+            "The average value is 42, but according to page 4.5 the passages don't mention "
+            "the source."
+        )
+        assert grounding.looks_like_abstention(reply) is False
+
+    def test_percentage_decimal_between_connective_and_idiom_does_not_break_the_sentence_span(
+        self,
+    ):
+        reply = (
+            "The total is 42,000, but at a rate of 18.5% the passages don't mention the "
+            "exact breakdown."
+        )
+        assert grounding.looks_like_abstention(reply) is False
+
 
 # ==================================================================================================
 # 2. `resolve_format` — the three-way merge (S7 spec §3.1/§3.2/§3.4)

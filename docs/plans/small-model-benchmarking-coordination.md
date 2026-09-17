@@ -2709,6 +2709,12 @@ implementer must resolve or explicitly, testably document the genuine tension be
 and 3 (widening the contrastive search to catch an answer-then-hedge reply risks also catching a
 genuine abstention's own unrelated reasoning).
 
+## S7 abstention-fix final round dispatched — 2026-09-17
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
+|---|---|---|---|---|---|---|
+| U177 | `tdd-engineer` | `aa780b021c2af4dde` | **delivered — accepted, `teco`-verified directly against source. Defect-fix chain for `chat-responder`'s abstention detection is now closed.** `_sentence_span` rewritten around a new `_SENTENCE_BOUNDARY_RE` (`(?<!\d)\.(?!\d)|[!?]`) — a `.` flanked by digits on both sides is no longer a sentence boundary. Two new tests (decimal + percentage-decimal shapes). All prior tests (7 real replies, 3 original hedge fixtures, U175's 11) unchanged, still green. Suite 1704→1706 (+2), ruff clean. Delegate's own mutation test: reverted to the bare-split original, both new tests reddened correctly, restored byte-identical. Scope discipline held — checked for but found no further related gap (`!`/`?` digit-flanking judged not realistic), nothing else touched. **Independently re-verified against source**: full diff read in full; suite (1706/3) + ruff reproduced exactly; **reproduced the fix's own behavior directly** (both new cases + a re-check of two originals, 4/4 match); **reproduced the mutation myself independently** (reverted to bare split, confirmed exactly the 2 new tests fail with the exact assertion shown, 11 others in the class stay green, restored byte-identical, full suite green again) | `modelbench/scoring/grounding.py` + `tests/test_scoring_grounding.py` | `teco` (direct verification) → accepted | 79k tok / 20 tools |
+
 ## S7 abstention-fix full closure dispatched — 2026-09-17
 
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |

@@ -56,19 +56,31 @@ _CONTRASTIVE_CONTINUATION_RE = re.compile(r"\b(?:but|however|although|though|yet
 #: docstring below) — never a substitute for real language understanding.
 _DIGIT_RE = re.compile(r"\d")
 
+#: The sentence-boundary punctuation `_sentence_span` splits on — `.`/`!`/`?`, except a `.`
+#: flanked by digits on both sides (`4.5`, `18.5%`'s `18.5`), which is a decimal point, not a
+#: sentence end (Pass 2 finding: this pack's domain is decimal-heavy — dollar amounts,
+#: percentages, page/section references — and a bare-character split on `.` was treating a
+#: decimal's internal period as a boundary, truncating the sentence right after it and silently
+#: reopening finding 2's answer-then-hedge misclassification whenever a connective sat before a
+#: decimal number that came before the idiom). `!`/`?` need no such guard — no realistic reply
+#: shape produces `4!5` or `4?5` as a non-boundary.
+_SENTENCE_BOUNDARY_RE = re.compile(r"(?<!\d)\.(?!\d)|[!?]")
+
 
 def _sentence_span(canon: str, start: int, end: int) -> tuple[int, int]:
     """The `[start, end)` span, within `canon`, of the sentence containing `canon[start:end]` —
-    split on `.`/`!`/`?`, the same minimal boundary this module already leans on elsewhere
+    split on `.`/`!`/`?` (a `.` between two digits is a decimal point, not a boundary — see
+    `_SENTENCE_BOUNDARY_RE`), the same minimal boundary this module already leans on elsewhere
     (`format_checks`'s blank-line paragraph check). Scopes the contrastive-connective search
     below to the idiom's own sentence (U174 finding 5 / mutation probe: an unrelated connective
     in a *later* sentence must not suppress a genuine abstention — see
     `TestLooksLikeAbstentionContrastiveScope.
     test_connective_in_an_unrelated_later_sentence_does_not_suppress_a_genuine_abstention`)."""
-    left_bounds = [canon.rfind(ch, 0, start) for ch in ".!?"]
-    sentence_start = max(left_bounds) + 1
-    right_bounds = [pos for pos in (canon.find(ch, end) for ch in ".!?") if pos != -1]
-    sentence_end = min(right_bounds) if right_bounds else len(canon)
+    sentence_start = 0
+    for boundary in _SENTENCE_BOUNDARY_RE.finditer(canon, 0, start):
+        sentence_start = boundary.end()
+    boundary_after = _SENTENCE_BOUNDARY_RE.search(canon, end)
+    sentence_end = boundary_after.start() if boundary_after else len(canon)
     return sentence_start, sentence_end
 
 
