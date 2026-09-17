@@ -1,6 +1,6 @@
 # Agent knowledge-base strategy — Stage 0 implementation review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`)
 
 ## Scope & verdict
 
