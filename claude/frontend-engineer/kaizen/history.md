@@ -2,6 +2,18 @@
 
 > Dated log of actual changes to the `frontend-engineer` agent. Most recent first.
 
+## 2026-09-16 — cross-agent KB promotion: 2 entries from `architect`'s distillation added to `frontend-quirks.md`
+
+`cobb`, distilling `architect`'s (not this agent's) `kaizen_team` inbox, found two entries
+substantively technical/single-target and dispositioned them directly into this file rather than
+`MENTIONS`-tagging them back: a new **React Router** section (`RouterProvider` takes no `children`
+— a pathless layout route + `<Outlet/>` is the only way to get shared chrome inside the router's
+own context, verified against `react-router-dom@^7.18.3`) and a new bullet in the existing
+**i18next** section (`useTranslation()`/`t()` needs no `<I18nextProvider>` wrapper in a Vitest
+render as long as the app's `i18n/config.ts` singleton is anywhere in the test's import graph,
+verified against `react-i18next@^17.0.13`). Full disposition record:
+`claude/architect/kaizen/history.md`, 2026-09-16.
+
 ## 2026-09-16 — Kaizen distillation: 8 raw entries verified/routed, `frontend-quirks.md` KB created (K-002-adjacent)
 
 `cobb`, scoped single-agent distillation pass (`kaizen_team`, `frontend-engineer`'s 8

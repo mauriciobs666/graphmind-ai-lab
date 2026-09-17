@@ -2,6 +2,80 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-09-16 — kaizen distillation, `architect`'s 8-entry inbox (scoped single-agent pass): 5 promoted (2 combined into one `architect.md` Guardrails bullet, 1 into `review-techniques.md` item 9, 2 into `frontend-quirks.md` as a new section + a new bullet), 3 discarded as already published/shipped
+
+- **What:** `cobb` ran the standing `kaizen_team` distillation scoped to `architect` alone, per
+  the stakeholder's one-producing-agent-per-turn request. Re-queried fresh at dispatch: exactly 8
+  current-shape entries (dated 2026-09-13/09-14/09-16), 0 legacy `author`-property entries.
+
+- **`a1e6c3d4…` + `a6f2e6b1…` (both 2026-09-13, `routes.tsx` shared-file-ownership saga) —
+  PROMOTED, combined into one new `architect.md` Guardrails bullet.** Grepped `architect.md` and
+  `review-techniques.md` for "shared-file"/"ownership row"/"routes.tsx"/"at face value" first — no
+  prior coverage. The two entries are the same review-response defect seen twice on
+  `docs/plans/salesperson-ui.md` (now archived, v1.40): v1.34 granted `routes.tsx` rights to two of
+  three identical-shape rows and missed S12c (`a6f2e6b1…`); then an S12a review claimed all three
+  of S12d/S13/S14 needed `routes.tsx` edits, and tracing `routePaths.ts`/`routes.tsx` directly
+  showed only two of the three actually did — S14 mounts via S12b-owned bottom sheets instead
+  (`a1e6c3d4…`). Folded into one bullet: verify a shared-file-collision claim against the actual
+  gating file before granting rights, and sweep every row touching the file, not just the ones a
+  review named. Both plan-specific facts are historical (the plan is archived); only the
+  generalized rule was promoted.
+- **`c7e2a9f1…` (2026-09-14, letter-anchored grep missing Prettier-wrapped JSX text) — PROMOTED,
+  new item 9 in `claude/analyst/review-techniques.md`'s "A grep-pinned edit table is an edit list,
+  not a completeness proof" section.** The specific fix is already published verbatim at
+  `docs/plans/salesperson-ui.md:1485-1486` (§4.13, now archived) — but the *general* technique
+  (why a letter-anchored single-line regex misses Prettier-reformatted JSX text, and the
+  `grep -Pzo` fix) was not captured anywhere as a reusable rule; grepped `review-techniques.md` for
+  "Prettier"/"letter-anchored"/"grep -Pzo" first, no hits. Added as item 9, directly before "Two
+  derived checks" (same placement precedent as item 8, the prior JSX/grep-mechanics addition).
+  Also logged in `claude/analyst/kaizen/history.md` per the cross-agent-KB-promotion convention.
+- **`a1f3b6c2…` (2026-09-13, react-router-dom v7 `RouterProvider` takes no `children`) and
+  `a1f3d3d2…` (2026-09-14, react-i18next `useTranslation()` needs no provider if the config module
+  is in the test's import graph) — both PROMOTED directly into
+  `claude/frontend-engineer/frontend-quirks.md`** (new "React Router" section; new bullet in the
+  existing "i18next" section) rather than `MENTIONS`-tagged, per the established precedent
+  (chunk-2/chunk-A dispositions above) that a single-target technical KB fact is dispositioned
+  directly when the destination already exists. Both re-verified live: `RouterProviderProps`
+  (`node_modules/react-router/dist/development/index-react-server-client-*.d.ts:387`) confirmed to
+  carry no `children` field, against the pinned `react-router-dom@^7.18.3`; `LanguageChooser.test.tsx`
+  confirmed to render with no `<I18nextProvider>` wrapper, relying on `useLocale.ts`'s transitive
+  `./config` import, against the pinned `react-i18next@^17.0.13`. Also logged in
+  `claude/frontend-engineer/kaizen/history.md`.
+- **`a3f1e2c4…` (2026-09-13, model-bench `report.py` per-turn-vs-per-cluster `ItemResult` pairing
+  bug) and `b6e3a2f4…` (2026-09-14, `FunnelCounts` dataclass-default-ordering vs. `report.py`'s
+  hardcoded render-line list) — DISCARDED, already published more deeply at the document each was
+  captured while writing.** Both entries were captured mid-writing
+  `docs/plans/small-model-benchmarking-s5-spec.md` (now `Status: archived`, shipped). That document
+  states both facts in greater precision than the raw entries: the pairing-key filler-value fix at
+  `:172-212` (names the exact filler, `H-1`, and the `DuplicateAnalysisUnit` exception), and the
+  declaration-order-vs-render-order decoupling at `:279-284` (in the dataclass's own inline
+  comment). Same disposition shape as the established "captured mid-writing a still-open plan"
+  precedent (2026-09-10 entry above) — the plan is the deeper, more authoritative treatment.
+- **`a3f1e8c2…` (2026-09-16, `_drive_or_fault` swallows exceptions that `_drive`'s other callers
+  let raise — DEF-3's root cause) — DISCARDED, already published and the defect already shipped
+  fixed.** `docs/plans/salesperson-ui.md` §4.14 (now archived) states the exact same mechanism in
+  more detail, with the same citations (`executor.py::_drive:536-590`, `services.py:2200/2298/2485/
+  2554`, `trigger.py:53-93`); `storefront.py:1359-1373`'s own `_run_turn` docstring now documents
+  the fixed behavior in the entry's own terms ("a normal, non-raising return... `_run_turn` reads
+  `maybe_trigger`'s own return value and marks the turn failed there too, §4.14, DEF-3"); and the
+  fix itself is live at `storefront.py:1399-1406` (`isinstance(result, dict) and
+  result.get("status") == "failed"` → `_mark_turn_failed`), matching `falkor-chat/docs/HISTORY.md`'s
+  2026-09-16 DEF-3-fix entry (commit `4cebd96`). Nothing left to promote.
+- **Graph ops (per entry, write→log→clear, never batched):** all 8 re-counted individually
+  immediately before clearing (`MATCH (k:KaizenEntry {entryId:'<id>'}) OPTIONAL MATCH
+  (:Agent)-[p:PRODUCED]->(k) OPTIONAL MATCH (k)-[m:MENTIONS]->(:Agent) RETURN count(DISTINCT p),
+  count(DISTINCT m)`); no `MENTIONS` tag added to any (none is substantively about a different
+  agent — the frontend-quirks.md promotions are single-target technical facts, dispositioned
+  directly per precedent, not routed via `MENTIONS`).
+- **Docs touched:** `claude/architect/{architect.md,kaizen/history.md}`,
+  `claude/analyst/{review-techniques.md,kaizen/history.md}`,
+  `claude/frontend-engineer/{frontend-quirks.md,kaizen/history.md}`.
+- **Why:** standing distillation, dispatched single-producer-scoped per stakeholder request
+  (`docs/plans/kaizen-team-distillation-coordination.md`, this agent's unit). `architect` closes
+  at 0 produced / 0 mentioned.
+- **Plan items:** none opened — every entry landed inside `cobb`'s write remit or was discarded;
+  nothing kept open.
+
 ## 2026-09-13 — standing distillation pass: 9-entry `architect` inbox, 4 promoted, 3 discarded, 1 routed to teco, 1 routed to agent-standards
 
 - **What:** `cobb` ran the standing kaizen-graph distillation over all 9 `architect`-produced

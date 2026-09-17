@@ -46,6 +46,19 @@
   Verified against `@tanstack/react-query@^5.102.8` in `salesperson/src/api/hooks.test.tsx`'s C4
   network-effect tests (`usePresenterResetAll`/`useResetMine`/`useAdvanceOrder`).
 
+## React Router
+
+- **`RouterProvider` (react-router-dom v7) takes no `children` prop at all** —
+  `RouterProviderProps` is `{router, flushSync, onError, useTransitions}`, full stop
+  (`node_modules/react-router/dist/development/index-react-server-client-*.d.ts:387`). The only
+  way to get shared chrome (header/sidebar) rendered *inside* the router's own context — so it can
+  call `useNavigate`/`useLocation` — is a pathless layout route rendering `<Outlet/>`, never
+  wrapping `<RouterProvider>` in JSX and expecting children to render. Verified against
+  `react-router-dom@^7.18.3`. Bit `salesperson/src/App.tsx`, which had composed `<LayoutShell>`
+  *outside* `QueryClientProvider`/`SessionProvider`/`RouterProvider`, so `Header`/sheets inside it
+  could not reach session/query/router hooks — fixed by moving the shared chrome into a layout
+  route instead.
+
 ## Testing — React Testing Library / Vitest
 
 - **A heading and a button/CTA inside it sharing identical `t()`-translated copy makes
@@ -91,6 +104,20 @@
   `h-full` measured 177px against the wrapper's actual 787px.
 
 ## i18next
+
+- **`useTranslation()`/`t()` works in a Vitest render with no `<I18nextProvider>` wrapper**, as
+  long as the module that calls `i18next.use(initReactI18next).init(...)` (the app singleton, e.g.
+  `i18n/config.ts`) has executed anywhere in the test's import graph — `react-i18next` registers a
+  global default instance. A component test that renders a component newly calling
+  `useTranslation()` in isolation must import that config module (directly, or transitively via a
+  sibling hook) before `render()`, or the hook throws/warns for no obviously-related reason.
+  Verified against `react-i18next@^17.0.13` in `salesperson/src/i18n/LanguageChooser.test.tsx`,
+  which renders `<LanguageChooser/>` directly with no provider wrapper, importing `i18n from
+  './config'` only for its `afterEach` reset side effect; `i18n/useLocale.ts`'s own import of
+  `./config` (for `DEFAULT_LOCALE`) is what gives `CartPanel.tsx`/`OrderPanel.tsx`/
+  `CatalogPanel.tsx`/`MessageBubble.tsx` this transitively already — a sibling component with no
+  i18n import yet (`Composer.tsx`, `Header.tsx`, `ResetControl.tsx`, etc.) will need the test file
+  itself to add the import once it starts calling `t()`.
 
 - **i18next instance methods (`i18n.t`, `i18n.changeLanguage`) are not pre-bound.** Extracting
   `const t = i18n.t` and calling it standalone throws, because the method reads `this.translator`

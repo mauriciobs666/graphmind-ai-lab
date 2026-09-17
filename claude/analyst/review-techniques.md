@@ -1091,6 +1091,16 @@ chain (`docs/plans/small-model-benchmarking.md`, Passes 5–9):
    unscoped, `grep -cF "cross-arm"` returned 3 (2 real sites + the pin command's own line in the
    table); anchored to the section under revision, 2 — the intended count.
 
+9. **A letter-anchored, single-line regex prescribed to catch a hardcoded JSX text-child violation
+   misses almost everything in a Prettier-formatted codebase.**
+   `>[ \t]*[A-Za-z][^<{}]*[A-Za-z][ \t]*<` looks plausible and is not, for two independent reasons:
+   Prettier puts long JSX text on its own line, separate from its surrounding tags, so a
+   single-line grep never sees text and tag together; and most real sentences end in punctuation,
+   which a pattern requiring a bare letter immediately before `<` rejects outright. Measured
+   2026-09-14: the pattern matched **4 of ~40** real violations in `salesperson/src`. Fix: use
+   `grep -Pzo` (NUL-separated, real multiline) and drop the letter-immediately-before-`<`
+   requirement — match on "contains a letter anywhere in the run," not "ends with one."
+
 **Two derived checks.** A residual command must be re-asked against *every* implementation the same
 table authorises — an authorised literal branch can re-add the very string the residual asserts to
 zero. And a required, no-default parameter added to a public function breaks that function's **call

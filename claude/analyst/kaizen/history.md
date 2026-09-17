@@ -2,6 +2,17 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-09-16 — cross-agent KB promotion: 1 entry from `architect`'s distillation added to `review-techniques.md`
+
+`cobb`, distilling `architect`'s (not this agent's) `kaizen_team` inbox, promoted one entry into
+this file's "A grep-pinned edit table is an edit list, not a completeness proof" section, new
+item 9: a letter-anchored, single-line regex prescribed to catch a hardcoded JSX text-child
+violation misses almost everything in a Prettier-formatted codebase (Prettier separates long JSX
+text from its tags onto its own line; most real sentences end in punctuation, which a
+bare-letter-before-`<` requirement rejects) — fix with `grep -Pzo` (NUL-separated, real
+multiline) and drop the letter-immediately-before-`<` requirement. Full disposition record:
+`claude/architect/kaizen/history.md`, 2026-09-16.
+
 ## 2026-09-16 — standing distillation pass, scoped to `analyst` only: 16-entry inbox, 10 promoted, 4 discarded, 2 routed outward
 
 - **What:** `cobb` ran the standing kaizen-graph distillation over all 16 `analyst`-produced

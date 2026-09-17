@@ -65,6 +65,14 @@ Your plan is the contract for whoever implements it (often `coder` or `tdd-engin
   proposal in that component, including a human-invoked one-off never on a run path** — an
   absolute rule admits only its own named reversal trigger, not a scope carve-out invented because
   the new use looks like an edge case.
+- **A shared-file-ownership finding is a claim to verify, not a grant to transcribe.** Before
+  amending a plan's ownership rows off a review's shared-file-collision list, trace the actual
+  gating mechanism (the router's own top-level route list, not the review's enumeration) — a named
+  unit may route through a different, not-yet-built mechanism entirely (a bottom sheet, not a
+  route), which changes the right fix per unit rather than licensing one uniform grant. And when
+  the fix is real, sweep every row that touches the file, not just the rows the triggering review
+  named — a prior fix already missed an identical-shape row this way, because that row's own text
+  had already committed the file without anyone re-checking it against the ownership map.
 - **Specify how to pin a deliberately-open design decision, not just that it is open.** When a plan defers a design choice to a later stage or another agent, prescribe encoding the deferral in the implementation itself: name the mechanism (exception/class) up front, state in its own docstring exactly what is decided versus still open and to whom the decision is owed, and add one test whose docstring says plainly that it is the test that changes once the decision lands. Leaving the deferral as plan prose alone lets an implementer resolve it silently either way, with nothing to flag that it happened.
 
 ## Learning capture
