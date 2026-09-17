@@ -1,7 +1,8 @@
 # Joern CPG Component — Feature Requirements
-> **Status:** active · **Owner:** `tico` · **Tracks:** C-201…C-208 · C-301…C-307 (M1–M3) ·
-> M1 (producer pipeline) **delivered ✅** · M2 (CPG consumer skill) **specified, in progress** ·
-> **Last updated:** 2026-07-25
+> **Status:** archived · **Owner:** `tico` · **Tracks:** C-201…C-208 · C-301…C-307 (M1–M3) ·
+> M1 (producer pipeline) **delivered ✅** · M2 (CPG consumer skill) **delivered ✅** ·
+> M3 (MCP query access, superseding FR-9's transport) **delivered ✅**, see
+> [`./cpg-query-access.md`](./cpg-query-access.md) · **Last updated:** 2026-09-16
 
 ## Intent
 The stakeholder wants to run **Joern** to extract a **Code Property Graph (CPG)** from source code,
@@ -10,7 +11,7 @@ software-development work. Two phases:
 
 - **M1 — Produce the CPG** (delivered): a pipeline builds a CPG from any repo and loads it into
   FalkorDB so the code graph is traversable with Cypher.
-- **M2 — Consume the CPG** (specified): a **`cpg-analysis` skill** (one skill, per-task recipes)
+- **M2 — Consume the CPG** (delivered): a **`cpg-analysis` skill** (one skill, per-task recipes)
   teaches existing agents to query the loaded CPG for **impact analysis**, **root-cause analysis**,
   **code review**, and **test-gap** analysis.
 
@@ -22,15 +23,16 @@ built in `falkor-chat`.
 | Milestone | Scope | Status | Where |
 |---|---|---|---|
 | **M1 — Producer pipeline** | FR-1…FR-8 — build a CPG and load it into FalkorDB; the stored graph answers caller/callee, transitive-impact, data-flow, and symbol-reference queries | **✅ delivered 2026-07-17** (commit `b2b9a6e`) | `joern` agent + `joern-cpg` skill; see [`../HISTORY.md`](../HISTORY.md) |
-| **M2 — CPG consumer skill** | FR-9…FR-14 — a `cpg-analysis` skill with impact / RCA / code-review / test-gap recipes over the loaded CPG | 🔵 specified | [`../BACKLOG.md`](../BACKLOG.md) C-201…C-208 |
+| **M2 — CPG consumer skill** | FR-9…FR-14 — a `cpg-analysis` skill with impact / RCA / code-review / test-gap recipes over the loaded CPG | **✅ delivered 2026-07-19** (C-200…C-208) | `skills/cpg-analysis/`; see [`../HISTORY.md`](../HISTORY.md) |
+| **M3 — MCP query access** | Reverses FR-9's transport choice (MCP tool, not raw `redis-cli`) | **✅ delivered 2026-07-25** (C-301…C-307) | [`./cpg-query-access.md`](./cpg-query-access.md); see [`../HISTORY.md`](../HISTORY.md) |
 
 ## Problem & current state
 - Before M1 the agents (e.g. `analyst`, which does impact analysis and RCA) reasoned about code by
   reading and grepping files — there was **no structured call-graph / data-flow representation** to
   query. **M1 closed that gap on the producer side**: a CPG for a repo now exists in FalkorDB.
-- **M2 is the remaining gap**: the loaded CPG is only usable today by someone who already knows the
-  Joern→FalkorDB schema and hand-writes Cypher. The agents that would benefit (`analyst`,
-  `architect`, `qa-engineer`) need packaged, task-shaped query recipes to actually use it.
+- **M2 closed the consumer-side gap**: the `cpg-analysis` skill now packages task-shaped query
+  recipes so `analyst`/`architect`/`qa-engineer` don't need to hand-know the Joern→FalkorDB schema
+  to use the loaded CPG.
 - Note: `falkor-chat` is a hybrid human+AI chat platform over FalkorDB. This CPG capability is a
   **distinct new component** (decided 2026-07-12) — hence this doc lives at repo-root
   `docs/requirements/`. It reuses FalkorDB but is not part of the chat platform.
@@ -73,23 +75,23 @@ built in `falkor-chat`.
 - **FR-8** ✅ — The pipeline targets **this monorepo initially** (Python and JS/TS) but is designed
   to be **generic**, able to extract from arbitrary repositories later.
 
-### M2 — CPG consumer skill (`cpg-analysis`)
-- **FR-9** — Agents access the loaded CPG through a **`cpg-analysis` skill** (a lean core plus
+### M2 — CPG consumer skill (`cpg-analysis`, delivered ✅)
+- **FR-9** ✅ — Agents access the loaded CPG through a **`cpg-analysis` skill** (a lean core plus
   per-task recipes), querying FalkorDB with Cypher through the **`mcp__cypher__query` MCP tool**;
   `redis-cli GRAPH.QUERY` is retained as a documented fallback and remains the only path outside
   Claude Code. *(Resolves former OQ1. The original wording chose `redis-cli GRAPH.QUERY` "over MCP
   tool / raw Cypher"; that choice was **deliberately reversed on 2026-07-25** and is superseded by
   [`./cpg-query-access.md`](./cpg-query-access.md) FR-1/FR-2. The **skill** remains the access
   route — only the transport changed.)*
-- **FR-10** — An **impact-analysis** recipe packages FR-2/FR-3 for `analyst` and `architect`
+- **FR-10** ✅ — An **impact-analysis** recipe packages FR-2/FR-3 for `analyst` and `architect`
   (callers/callees + transitive up/downstream reach over `CALL`).
-- **FR-11** — An **RCA** recipe packages FR-4/FR-5 for `analyst` (data-flow back from a symptom over
+- **FR-11** ✅ — An **RCA** recipe packages FR-4/FR-5 for `analyst` (data-flow back from a symptom over
   `REACHING_DEF` + cross-file symbol definition/reference).
-- **FR-12** — A **code-review** recipe finds tainted paths from inputs to risky sinks (data-flow to
+- **FR-12** ✅ — A **code-review** recipe finds tainted paths from inputs to risky sinks (data-flow to
   suspicious calls/patterns) for `analyst`.
-- **FR-13** — A **test-gap** recipe finds code reachable from production entrypoints but from no test
+- **FR-13** ✅ — A **test-gap** recipe finds code reachable from production entrypoints but from no test
   entrypoint (structural reachability — **not** runtime coverage) for `qa-engineer`.
-- **FR-14** — The recipes cite a **single canonical CPG schema reference**
+- **FR-14** ✅ — The recipes cite a **single canonical CPG schema reference**
   (`skills/joern-cpg/references/cpg-model.md`: node/edge labels, UPPER_CASE property keys, `id`,
   real booleans) rather than duplicating the schema per recipe.
 
@@ -104,19 +106,19 @@ built in `falkor-chat`.
 ## Acceptance criteria
 - **AC-1** ✅ — Given a target repo, when the pipeline is run, then a CPG for that code exists in
   FalkorDB and is queryable.
-- **AC-2** — Given a function in the CPG, when the analyst asks (via the impact recipe) for its
+- **AC-2** ✅ — Given a function in the CPG, when the analyst asks (via the impact recipe) for its
   callers and callees, then both are returned correctly.
-- **AC-3** — Given a proposed change to a symbol, when the analyst/architect asks for its transitive
+- **AC-3** ✅ — Given a proposed change to a symbol, when the analyst/architect asks for its transitive
   impact, then the up/downstream reach is returned across call/dependency chains.
-- **AC-4** — Given a value/parameter, when the RCA recipe's data-flow query is run, then the
+- **AC-4** ✅ — Given a value/parameter, when the RCA recipe's data-flow query is run, then the
   propagation path(s) are returned.
-- **AC-5** — Given a symbol, when the analyst asks where it is defined and referenced, then all
+- **AC-5** ✅ — Given a symbol, when the analyst asks where it is defined and referenced, then all
   cross-file definitions and references are returned.
-- **AC-6** — Given a loaded CPG, when an agent invokes the `cpg-analysis` skill, then it can run the
+- **AC-6** ✅ — Given a loaded CPG, when an agent invokes the `cpg-analysis` skill, then it can run the
   recipe's Cypher against FalkorDB and get correct results without hand-knowing the schema.
-- **AC-7** — Given code where an input reaches a risky sink, when the code-review recipe runs, then
+- **AC-7** ✅ — Given code where an input reaches a risky sink, when the code-review recipe runs, then
   the tainted path(s) are reported (and clean code reports none).
-- **AC-8** — Given production and test entrypoints, when the test-gap recipe runs, then code
+- **AC-8** ✅ — Given production and test entrypoints, when the test-gap recipe runs, then code
   reachable from production but from no test entrypoint is listed.
 
 ## Open questions
@@ -157,3 +159,11 @@ consumer, runtime coverage explicitly excluded. Tracked as **M2 / C-201…C-208*
 supersedes the 2026-07-18 clause "chosen over MCP tool / raw Cypher" — the skill is still the
 access route, only the transport changed. Ruled by the stakeholder in
 [`./cpg-query-access.md`](./cpg-query-access.md) (FR-1/FR-2/FR-6, AC-4).
+2026-09-16 — Both remaining milestones confirmed delivered: **M2 delivered 2026-07-19**
+(`../HISTORY.md` "M2: CPG consumer skill (`cpg-analysis`) ✅", satisfies FR-9…FR-14/AC-2…AC-8,
+live-verified against `cpg_falkorchat`) and **M3 delivered 2026-07-25**
+(`./cpg-query-access.md`, already archived). This document's own Status was never flipped past
+`active` when M2 shipped — corrected now; flipped to **archived**. OQ2 (component structure) and
+OQ3 (Joern frontend coverage) were never formally closed by a stakeholder ruling — they didn't
+block either delivery and aren't reopened by this archival; OQ2 has since settled in practice as
+`cpg/` (component code) + top-level `cypher-mcp/` (the generic MCP server), per root `AGENTS.md`.
