@@ -32,7 +32,8 @@ dependency.
 
 ## Status
 
-**Stages S4, S5, S6 and S7 are closed — every role now has a scorer.** Five scorer modules exist:
+**All eight stages (S0–S8) are closed — the feature is delivered.** Five scorer modules cover all
+five FR-21 roles:
 `scoring/retrieval.py` for `embedder` (recall@10 = 37/38 = 0.974,
 `docs/test-reports/embedder-self-check-report.md`); `scoring/classification.py` for
 `guard-judge-understanding` (85 items, two verdict metrics, four diagnostics,
@@ -72,8 +73,11 @@ morphology gap (plain literal matching doesn't tolerate ordinary paraphrase, e.g
 including the original defect narrative kept as historical record:
 `docs/test-reports/small-model-benchmarking-s7-report.md`.
 
-The default suite (network-free) still runs offline; `pytest -m live` opts into the tests that need
-a reachable LM Studio.
+Full stage-by-stage history — every unit, defect, and gate — is `docs/HISTORY.md`; open follow-up
+work is `docs/BACKLOG.md`.
+
+The default suite (network-free) runs offline; `pytest -m live` opts into the tests that need a
+reachable LM Studio.
 
 ## Quick start
 
@@ -113,8 +117,65 @@ the same model, and that is an acceptance step.
 `attest` writes the operator-attested half of the fingerprint (`host.json`). `validate` checks a
 pack's structural integrity with no LM Studio connection at all. `run` drives one model through one
 pack against a live LM Studio, following the fingerprint's capture order, and stores the result on
-success — but it refuses every pack today, since no concrete per-role scorer exists yet (stage
-S3's job).
+success — every shipped pack has a concrete scorer, so `run` no longer refuses on that ground; it
+still refuses per §3.6a's closed exit-code set below (bad pack, unreachable LM Studio, stale
+fingerprint, a dispatch-censored conversation).
+
+**Exit codes are closed and operational-only** (§3.6a): `0` whenever the tool ran and reported —
+*whatever the scores*, including a `compare` that finds every stored record invalid (that prints
+`INVALID RESULTS EXCLUDED` and still exits `0`, because it is a report, not a failure). `2` bad
+arguments/usage. `3` LM Studio unreachable, reachable without its native `/api/v0` catalog, not
+answering the warm-up call within `--first-call-timeout`, or gone when re-probed after a scored
+call timed out. `4` an invalid pack — a `validate` failure, a load error, an unmet
+`environment.requires`, a `callSurface` the model's catalog type contradicts, or (after `run`'s
+artifacts are already written) a `tool-caller` conversation censored by a tool-dispatch failure — a
+data-quality finding discovered only once a partial record exists, not an aborted run. `5`
+fingerprint incomplete, or `host.json` stale/absent. Nothing else — there is no score-driven exit
+code, on purpose (see "Three things this tool deliberately is not," above).
+
+## What a pack is, and how to add one
+
+A **pack** is a directory under `packs/<pack-id>/`, declared by `pack.json`: `packId`,
+`packVersion`, `role` (one of the five FR-21 roles — `embedder`, `guard-judge`, `nlq-generator`,
+`tool-caller`, `chat-responder`), `scorer` (the module name `run` resolves against
+`modelbench/scoring/`), `environment.requires`, a `prompt` block for any chat-surface role, `data`
+(the golden files), `sampling` (item or script/replicate counts, the seed, the `pairingKey` and
+`analysisUnit` that make a comparison paired), and `metrics` (`verdictMetrics`, `headlineMetric`).
+Golden items are copied in as JSONL, each carrying a `provenance` object (`origin`, `originPath`,
+`originGitSha`, `copiedAt`, `draftedBy`, `verifiedBy`, `corpusVersion` — FR-19), and every pack
+ships its own `PROVENANCE.md` naming the origin file, the origin commit, the copy date, and what
+changed on copy. `packContentHash` covers every byte of the pack directory, so any change — a
+golden item, a prompt, a tool schema — is a new, distinguishable version.
+
+To add one: create `packs/<new-id>/`, write `pack.json` declaring its role, its scorer name, and
+its sampling/metrics contract; copy in golden data with real, FR-19-verified provenance (never
+fabricated); implement (or reuse) a scorer module under `modelbench/scoring/` satisfying the
+role's scorer protocol — `ItemScorer` for a single-call role, `ConversationScorer` for a
+multi-turn one (only `tool-caller` today); then run `./run.sh validate --pack packs/<new-id>
+--strict` — no LM Studio needed — before ever driving it live with `./run.sh run`.
+
+**Scope note — the `embedder` pack scores exact cosine, not the production ANN pipeline.**
+`embedder-graphrag-retrieval` embeds the pack's fixed corpus and queries, then ranks with
+brute-force exact cosine similarity in-process — no ANN index, no FalkorDB. That is deliberate:
+the object of measurement is the *model*, and an approximate index would inject pipeline noise
+into a model comparison; exact search is also what makes the score-separation metric possible at
+all, since it exposes the irrelevant-document scores an ANN index would prune before they could be
+measured. The consequence is a real scope boundary: **a model that wins here has not thereby been
+shown to win *through* falkor-chat's hybrid ANN retrieval pipeline** — this pack measures the
+embedding model in isolation, not the retrieval path a user actually hits.
+
+## Stored results and schema versioning
+
+`benchSchemaVersion` is a small integer in `modelbench/results.py`, starting at `1`, kept
+deliberately separate from `benchVersion` (the installed `modelbench` release). It increments only
+when the required-field set or the on-disk record shape changes in a way a *reader* must branch
+on — never automatically, and never as a side effect of adding a field. **A bump is a deliberate
+act**, not a side effect: a new `REQUIRED_BY_SCHEMA` entry, a `docs/HISTORY.md` line, and an
+explicit decision about whether existing stored records need a migration. An older-schema record
+is never excluded from a comparison on that basis alone — it is validated against the contract it
+was written under, and `compare` prints a `SCHEMA VERSIONS IN THIS COMPARISON` banner whenever a
+comparison spans more than one schema version, rather than silently mixing them or dropping the
+older ones. No schema bump has been needed through S0–S8; `benchSchemaVersion` is still `1`.
 
 Python 3.12, matching every other component. **Zero runtime dependencies** — stdlib only, on
 purpose: a benchmarking tool whose own dependency tree can rot is a tool whose old results stop

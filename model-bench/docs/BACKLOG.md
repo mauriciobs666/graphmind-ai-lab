@@ -5,6 +5,24 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
 
 ## Open items
 
+- **The default (network-free) test suite is not actually independent of `falkor-chat/` being
+  present on disk, contrary to `model-bench/AGENTS.md`'s FR-23 standalone rule.** Found at S8 close
+  (item 20, the FR-23 audit) and confirmed directly: `tests/test_scoring_extraction.py`'s
+  `test_prompts_querygen_md_matches_the_live_falkorchat_source_byte_for_byte` and
+  `tests/test_refresh_golden.py`'s `test_read_catalog_literal_handles_the_real_seed_catalog_script`
+  and `test_read_schema_literal_handles_the_real_querygen_module` each `Path(...).read_text()` a
+  real file under `../falkor-chat/` with no `@pytest.mark.live` and no skip guard. Runtime/CLI code
+  (`validate`/`run`/`compare`/`attest`) is clean — every other `falkor-chat` mention in
+  `modelbench/`/`scripts/`/`packs/` is either `scripts/refresh_golden.py` (the plan's named
+  permitted exception, unreferenced by any `modelbench/` import) or doc-only (docstring/comment/
+  `PROVENANCE.md` table) — and `model-bench validate` itself runs clean with `falkor-chat/` renamed
+  away. Only the default `pytest -q` suite is affected: with `falkor-chat/` renamed away it reports
+  3 failed instead of the true baseline, an environment-dependent false failure a future agent could
+  easily misread as a real regression. `tests/test_refresh_golden.py`'s own module docstring
+  (lines 9-12) already asserts the suite passes with `falkor-chat/` renamed away — that claim is
+  false as shipped and needs correcting alongside the fix. Fix is either an `@pytest.mark.live` (if
+  reachability, not content, is what should gate them) or a `pytest.importorskip`/explicit skip
+  keyed on the sibling directory's presence — a design call, not a one-line default.
 - **Judged reply quality for the `chat-responder` pack (deferred, not cancelled).** FR-21a scopes
   first delivery to the deterministic layer (latency, format, grounding-by-containment); no pack in
   this delivery contains an LLM judge. The design is preserved so it need not be re-derived:
@@ -65,7 +83,18 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   adversarial guard. Scope creep for this zero-runtime-dependency component if folded into a
   smaller fix; a `data-scientist`-scoped design task on its own.
 
-## Note
-
-Stage S8 of `docs/plans/small-model-benchmarking.md` re-checks this list at close and adds whatever
-the R-1 probe (does `lms ps --json` expose the KV-cache setting on a loaded model?) leaves open.
+- **`report.py` prints no per-script breakdown for `tool-caller`, only pooled turn-level exploratory
+  metrics and the one per-conversation verdict metric.** Named in the S6 QA pass's feedback
+  (`docs/test-reports/small-model-benchmarking-s6-report.md`) as a testability gap, not a blocker: a
+  future pass wanting to confirm one specific script's specific turn behavior needs either a richer
+  stored trace or a standalone tool like `scripts/s6_walkthrough.py` run against a live model.
+- **`mistralai/ministral-3-3b`'s rung-2 tool-call censoring pattern under `historyReplay: "plaintext"`
+  (69/81 turns unrunnable) was observed but not root-caused.** Recommended as a follow-up, not
+  actioned, by the S6 QA pass (`docs/test-reports/small-model-benchmarking-s6-report.md`) — worth a
+  dedicated root-cause pass only if `plaintext` `historyReplay` is ever considered for real use with
+  this model.
+- **No paired significance test exists for a turn-pooled exploratory metric** (e.g. the
+  duplicate-instruction rate) — `report.py` has no interval for a metric whose analysis unit is a
+  turn rather than the role's own conversation/item unit, so such a metric can only be reasoned about
+  conceptually, never measured directly. Named as a coverage gap by the S6 QA pass
+  (`docs/test-reports/small-model-benchmarking-s6-report.md`), not actioned there.

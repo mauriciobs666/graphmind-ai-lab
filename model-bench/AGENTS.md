@@ -9,199 +9,104 @@ for the full design.
 
 ## Current state
 
-**Stages S4, S5, S6 and S7 are closed — every role now has a scorer.** S4 closed both
-`guard-judge`/`nlq-structured-query` packs end to end; S5 closed `tool-caller`'s environment and
-scoring, part 1, entirely against synthetic traces; S6 closed `tool-caller`'s conversation scripts
-and first live run, part 2, closing the role end to end; S7 closed `chat-responder`, the last
-unscored role. `modelbench/` holds `fingerprint`, `results`, `stats`, `report`, `roles`, `packs` (the
-real loader: `load_pack`/`validate_pack`, content hashing, the AST import allowlist, the row-count
-identity, and — S6 — `_clean_through_turn_h_problems`'s `H <= min(script length)` axis, refusing
-gracefully rather than raising when a pack declares that axis before `conversations.jsonl` exists),
-`lmstudio`, `hostinfo`, `tooling`, `convo` (`assemble` and the bounded per-turn `drive`, plus — S6 —
-`_prologue_system_message`, merging the system prompt and tool-schema text into one `role:"system"`
-message after a live run showed two separate ones rejected outright by `mistralai/ministral-3-3b`'s
-chat template), `runner` (`RunConfig`, `RunRefused`, the `ItemScorer`/`ConversationScorer`
-scorer-seam Protocols — both live, `_load_conversation_scorer` mirrors `_load_item_scorer`
-byte-for-byte — `run_pack`'s ten-step capture order, both driving loops, and `latency_block`'s
-`LatencyBlock` accumulation, satisfying spec §5's nine invariants), and five scorer modules:
-`scoring/retrieval.py` (`embedder`), `scoring/classification.py` (`guard-judge`),
-`scoring/extraction.py` (`nlq-structured-query`), `scoring/toolcalls.py` — the first
-`ConversationScorer` — for `tool-caller` (per-turn pure functions per `-ml` §4.2's letters, `FunnelCounts`'
-16 fields including the `argsOmittedRequired`/`argsWrongValue`/`argsBoundaryUnit` failure
-decomposition, `HazardPoint`'s censored survival curve, the `I(t)`/`Y_calls` iteration summary, and
-— S6 — the prose-pseudo-call detector's precision/recall, previously computed nowhere in production
-code, now wired via `ToolCallAggregates.prosePseudoCallDetector` and one new `report.py` render
-line), and — S7 — `scoring/grounding.py` for `chat-responder` (deterministic layer only per FR-21a:
-latency, format, grounding-by-containment — the judged-quality layer stays deferred,
-`docs/BACKLOG.md`). `packs/tool-caller-shop-assistant/` ships complete: S5's
-storefront `tools/sim.py` + `catalog.json` + `schemas.json`, `pack.json`, `prompts/system.md`, plus
-S6's `conversations.jsonl` (12 hand-authored scripts, FR-19 human-verified — an agent pre-check
-found and fixed 3 issues, then the stakeholder personally reviewed all 12 against
-`scripts/s6_walkthrough.py` and filled `provenance.verifiedBy` on each), `prose_calibration.jsonl`
-(20 labelled replies), `PROVENANCE.md`, and `packVersion` `0.2.0`. **S7 shipped
-`packs/chat-responder-grounded-answers/`** (`pack.json`, `prompts/system.md`, 30 hand-authored
-items spread across all 12 of the `embedder` corpus's topics — 22 answerable, 8 genuine
-confabulation traps, 11 carrying a `mustNotContain` fabrication guard — FR-19 human-verified, the
-stakeholder personally reviewing all 30 in one round after an agent pre-check), `packVersion`
-`0.1.0`. `report.py` gained two S7 renderers, `_render_role_caveat` (the reply-quality-is-not-
-measured caveat, rendered first, before any number) and `_render_speed` (the first time
-`RunResult.latency` has ever been printed by this component), both additive-only alongside S5's
-three unchanged renderers (`_render_funnel`, `_render_per_turn_position`, `_render_hazard`). CLI
-unchanged since S4 (six commands, three `refresh_golden.py` flags). Proof runs against a live model
-exist for S3/S4's three packs (`docs/test-reports/embedder-self-check-report.md`,
-`reports/guard-judge-understanding-20260911-02.md`, `reports/nlq-structured-query-20260911-01.md`);
-S5's own proof is entirely synthetic — the code gate (`docs/reviews/small-model-benchmarking-s5.md`)
-and QA acceptance (`docs/test-reports/small-model-benchmarking-s5-report.md`, verdict PASS with one
-non-blocking defect, TD-1, in `tools/sim.py`'s dispatch-totality contract) both re-verified it
-directly. **S6's own proof is live**: item 19a (negative control) **PASS**; item 19b (known-answer
-validation, qwen vs. ministral) **not reproduced** at this pack's n=12 sizing, on the baseline
-config and both rungs of R-3's bisect — the stage's own accepted done-condition
-(`docs/test-reports/small-model-benchmarking-s6-report.md` §6: gates on 19b being run and recorded,
-never on the contrast appearing). Along the way S6 found and fixed the `convo.py` defect above,
-independently gated (`docs/reviews/small-model-benchmarking-s6-convo-fix.md`, approve with
-suggestions, no blockers).
+**All eight stages (S0–S8) are closed — the feature is delivered.** Every one of the five FR-21
+roles has a scorer module in `modelbench/scoring/`: `retrieval.py` (`embedder`), `classification.py`
+(`guard-judge`), `extraction.py` (`nlq-generator`), `toolcalls.py` — the package's first
+`ConversationScorer`, for the multi-turn `tool-caller` role — and `grounding.py` (`chat-responder`,
+deterministic layer only per FR-21a; the judged-quality layer stays deferred, `docs/BACKLOG.md`).
+Every pack has its own required live run against a real LM Studio. Two of those runs found real
+problems and shipped honestly rather than quietly: `tool-caller`'s known-answer validation
+(`qwen/qwen3-4b-2507` vs. `mistralai/ministral-3-3b`) did not reach statistical significance at
+this pack's sample size on any configuration tried, and ships flagged "not reproduced" rather than
+massaged into one; `chat-responder`'s `groundingRate` metric had a real abstention-detection defect
+found on its own required live run, fixed over a five-round gated chain, and confirmed fixed on a
+fresh re-run. `modelbench/` also holds `fingerprint`, `results`, `stats`, `report`, `roles`, `packs`
+(the loader: `load_pack`/`validate_pack`, content hashing, the AST import allowlist), `lmstudio`,
+`hostinfo`, `tooling`, `convo` (turn assembly and driving), and `runner` (`RunConfig`, the
+`ItemScorer`/`ConversationScorer` scorer-seam Protocols, `run_pack`'s capture-order orchestration).
+The CLI ships all six commands (`compare`, `index rebuild`, `models --tested`, `attest`, `validate`,
+`run`). To run a pack: `README.md`'s Quick start and "What a pack is, and how to add one."
+**Every unit, defect, gate, and live-run result is in `docs/HISTORY.md`** — this section states only
+what is true now, not how it got that way.
 
-**S7's own proof is live, and it found and closed a real defect in the metric it shipped.** The one
-live run item 16 owes (`qwen/qwen3-4b-2507`, all 30 items) passed its mechanical done-condition, but
-a required spot-check found `_ABSTENTION_MARKERS` didn't recognize this model's own dominant
-abstention phrasing ("The passages don't mention X"), and `checklist_pass`'s literal-substring
-containment didn't tolerate ordinary morphological paraphrase ("4 retries" vs. "4 retry attempts") —
-together understating `groundingRate` (measured 15/30 = 0.500; true rate closer to 0.80 by hand-
-reclassification). Stakeholder chose fix-now; a five-round chain (U173–U177, each `analyst`-gated
-and `teco`-verified with live reproduction) widened `_ABSTENTION_MARKERS` via a mention-pattern
-regex with a contrastive-continuation guard, then closed two rounds of regressions the guard itself
-introduced (a too-narrow connective set, then a decimal-boundary sentence-split bug). The separate
-containment/morphology mechanism was scoped out (no cheap fix; needs its own normalization design)
-and stays in `docs/BACKLOG.md`. **A fresh re-run confirmed the fix**: `groundingRate` **23/30
-(0.767)**, up from 15/30 (0.500); all 8 originally-misclassified abstentions now correctly classify,
-independently reproduced live. Full detail, corrected numbers under `## Re-run`, original pass kept
-as historical record: `docs/test-reports/small-model-benchmarking-s7-report.md`.
+## Load-bearing invariants
 
-**What S8 owes.** Documentation and close, per `docs/plans/small-model-benchmarking.md` §4: this
-file's working context, `README.md` (how to run, what a pack is, how to add one, the three
-non-features, the exact-cosine scope note), `docs/HISTORY.md` (already carries an entry per stage),
-and `docs/BACKLOG.md` re-checked and extended with whatever R-1's S2 probe and the S3/S6 test
-reports left open, with delivered items removed. Root `AGENTS.md` rows added at S0 are re-checked
-against what actually shipped. `README.md` additionally states the two things §3.4.3 and §3.6a make
-into user-visible contracts: a `benchSchemaVersion` bump is a deliberate act with a migration
-decision attached, and the closed exit-code set. No new pack, no new role — S8 is the close.
+Durable facts about the shipped code that a future change can silently break. `docs/HISTORY.md` has
+the story behind each; this section states only the rule.
 
-**The fingerprint has two discriminators and one derived key, and `ARM_KINDS` is deliberately not
-derived from the forbidden mapping.** `REQUIRED_BY_SCHEMA[schema]` and `FORBIDDEN_BY_ARM_PROFILE`
-are keyed by `armProfile` — `model:chat`, `model:embeddings`, `deterministic` — which `Fingerprint`
-derives from `armKind` (still two-valued, and every `armKind == "model"` filter in `results.py` and
-`report.py` is unchanged by that) and `callSurface` (required, no default, `None` **iff**
-deterministic). Both are members of no required set and are checked **before any mapping is
-consulted**: without a surface there is no profile, so there is no contract to report the fields
-against. **`from_dict`'s missing-key sentinel for `callSurface` is `""` on a model record and
-`None` on a deterministic one, and the split is load-bearing**: `None` is the deterministic arm's
-*value*, so a plain `d.get("callSurface")` reports a stored `null` — a surface something had and
-lost — as one that was never written, while a blanket `""` reports a correct reference-arm record
-as carrying a forbidden surface. Re-deriving `ARM_KINDS` from the profile mapping makes its members the three profiles, so
-`armKind == "model"` fails the membership test and **every model record refuses on write** — a green
-mapping and a dead harness. The forbidden sets stay a union-minus-mine **set operation, never a
-list**; that is what forbids `runtimeName`, `runtimeVersion`, `temperature` and `maxTokens` on an
-embeddings arm without anyone typing those four names. And `validate()` checks each residency
-element's whole key set (`{id, state}`, both non-empty strings), because the `present` tier checks
-presence and **never** element shape — the gap that let a retired fixture element validate and ship
-green.
+**The fingerprint has two discriminators and one derived key.** `REQUIRED_BY_SCHEMA[schema]` and
+`FORBIDDEN_BY_ARM_PROFILE[armProfile]` are keyed by `armProfile` (`model:chat` / `model:embeddings`
+/ `deterministic`), which `Fingerprint` derives from `armKind` (still two-valued — every
+`armKind == "model"` filter elsewhere is unaffected) and `callSurface` (required, no default,
+`None` **iff** deterministic) — both checked **before any mapping is consulted**, since without a
+surface there is no profile to report fields against. **`ARM_KINDS` must never be derived from the
+forbidden mapping** — its members would become the three profiles, `armKind == "model"` would fail
+membership, and every model record would refuse on write: a green mapping and a dead harness.
+`from_dict`'s missing-`callSurface` sentinel is `""` on a model record and `None` on a deterministic
+one, and collapsing that split is a real bug shape: it lets a surface something had and lost read as
+one that was never written, or a correct reference-arm record read as carrying a forbidden surface.
+Forbidden sets are a **set difference, never a list**. `validate()` checks each residency element's
+**whole key set** (`{id, state}`), never presence alone — the gap that let a retired fixture element
+validate and ship green.
 
-**`stats.py` implements `docs/plans/small-model-benchmarking-ml.md` and no other source.** Every
-formula, constant, threshold, tolerance and verdict string is that note's, cited by section; the
-plan deliberately does not restate them, and neither should this file. Its shape is §3.4's **seven**
-binding rules, written so the anti-conservative version does not typecheck. **`stats.percentile`
-is the only percentile or quantile *estimator* in the package** (`-ml` §11.2, Hyndman-Fan type 1,
-exact-rational level); `results.py` imports that object rather than defining one, since two copies
-is what let `index.csv` compute `latencyMsP95` at the 50th percentile and stay green.
-`exact_paired_quantiles` is not a second one — it is `-ml` §3.4 Rule 4's quantile of the *exact
-multinomial resample distribution*, the same operator on a known distribution rather than on a
-sample, and it shares `percentile`'s level refusals through `_check_level`. **Do not rename it to
-make §11.10(3)'s grep read 1**: plan v1.17 rules that residual's target to be two survivors named,
-because surviving a rename is the property it exists to have. `resolving_power`'s
-`design_effect`/`basis`/`unit_kind`/`alpha_family`/`alpha_mdd` are keyword-only **with no
-defaults**, `min_detectable_difference` takes `n_effective: float` so a raw observation count
-raises, and **Rule 7 is enforced inside `verdict()`** — no path returns `distinguishable` below
-`resolving.observable_floor`, compared against the exact float and never the printed one, and it
-**raises** on the `mcnemar-exact` path (there it is a theorem) while it demotes-and-names on the
-substitute one.
+**`stats.py` implements `docs/plans/small-model-benchmarking-ml.md` (`-ml`) and no other source** —
+every formula, constant, threshold and verdict string is that note's, cited by section; don't
+restate them here. `stats.percentile` is the **only** percentile/quantile estimator in the package
+(`-ml` §11.2, Hyndman-Fan type 1); `results.py` imports that object rather than defining a second
+one — two copies is what once let `index.csv` compute `latencyMsP95` at the wrong percentile and
+stay green. `exact_paired_quantiles` is not a second percentile estimator — it is `-ml` §3.4 Rule
+4's quantile of the *exact multinomial resample distribution* — and must never be renamed to make a
+stale grep read 1 (plan v1.17 §11.10(3)): surviving a rename is the property it exists to have.
+`resolving_power`'s `design_effect`/`basis`/`unit_kind`/`alpha_family`/`alpha_mdd` are keyword-only
+with **no defaults**; `min_detectable_difference` takes `n_effective: float`, so a raw observation
+count raises. **Rule 7 is enforced inside `verdict()`** — no path returns `distinguishable` below
+`resolving.observable_floor` — and it **raises** on the `mcnemar-exact` path (a theorem there) while
+it demotes-and-names on the substitute one.
 
-**Five honesty rules that are easy to break silently, and what holds each in place.**
+**Five honesty rules that are easy to break silently, and what holds each in place:**
 
-- **Every printed bound takes the rounding direction, the α and the denominator that keep *its
-  own* claim true.** One principle, three instances, and two bounds side by side routinely take
-  opposite values of the same parameter: the floor **truncates** at the **unadjusted α** over the
-  **unfloored** `n_eff`; the MDD **ceilings** at **α/k** over the **floored** one. So
-  `ResolvingPower` carries both αs (`alpha_family`, `alpha_mdd`) and the printed line names both;
-  `alpha_step` is Holm's data-dependent third and reaches `verdict()` as a parameter, since it is
-  known only after ranking. `stats.format_floor_pp` is the *only* place the floor's direction
-  lives — assert through it, never with `round(...)` in a test, which asserts the presentation
-  layer against itself. Its `+ 1e-12` guard is **defensive** since the floor moved to `6/n`
-  (nothing the note prints needs it), kept because `b_min` is a function of α; pin it with the
-  code's own `floor(x/precision)`, never `floor(x*1000)`, which has no hazard to find.
+- **Every printed bound takes the rounding direction, α, and denominator that keep *its own* claim
+  true.** The floor truncates at the unadjusted α over the unfloored `n_eff`; the MDD ceilings at
+  α/k over the floored one — `ResolvingPower` carries both αs and the printed line names both.
+  `stats.format_floor_pp` is the *only* place the floor's direction lives; assert through it, never
+  via `round(...)` in a test, which asserts the presentation layer against itself.
 - **Nothing that shapes a decision carries a default.** `RunResult.designEffect`/`basis`,
-  `BinaryMetric.unit`, `PackRef.seed`, `holm_steps`' `alpha`, and both bootstraps' `levels` and
-  `clamp` are all required: in each case the value a forgetful caller wants is the
-  anti-conservative or unreproducible one, so a default rebuilds gate B-1 at that seam. `levels`
-  is `(Fraction, Fraction)` because a `k`-member continuous family's level is `alpha/(2k)`, which
-  no decimal unit expresses, and the conventional `2.5/97.5` is exactly the value that prints a
-  plausible interval beside a family that was never corrected; `clamp`'s `(-1.0, 1.0)` is right
-  for a difference of proportions and false for `sep_z`. **`PackRef.seed`'s consumer is `-ml`
-  §3.2d's continuous bootstrap alone** — the paired *binary* interval is a closed form that takes
-  no seed, so `report.py` neither passes nor prints one, and re-adding a seed parenthetical there
-  would name a resample that does not run. `resolving_power` refuses any `design_effect` **not
-  `>= 1.0`** at construction, not `<= 0` — below 1 it *inflates* effective *n* and shrinks both
-  printed bounds. **The predicate is that way round at all four sites** — `resolving_power`,
-  `verdict()`, `envelope_arms`, `paired_cluster_bootstrap` — because `< 1.0` is `False` for a NaN,
-  and a NaN widens both bounds to `nan`, which the clamp turns into the full `(-1, 1)` support
-  printed as a real interval; do not simplify any of them. Only `verdict()`'s message names itself,
-  which is what keeps the layers orderable. The legacy fallbacks live in `from_dict` only, where
-  they are §3.4.3 reader rules.
-- **An item's outcome for a metric is *declared*, never inferred.** `ItemResult.scored_outcome`
-  is the only place that decides, and it has three answers: `metric` absent from `scoreable`, or
-  declared `False`, is **no outcome** (the row leaves the paired table and lands in the §4.3
-  tally); declared `True` **must** carry a `counts` entry, and one that does not is refused
-  (`IncompleteItemRecord`), never read as a zero. `report.py` infers nothing — its two old defaults
-  (absent = scoreable, absent count = failure) turned an arm holding no data at all into
-  *"+100.0 pp, p=0.002"*. A metric with an empty paired intersection gets an explicit refusal and
-  no resolving power, because `n_effective` of zero is not a small sample.
-- **Two halves of one contract on S2's scorers**, both enforced at S1 so the net exists before the
-  first real scorer does: emit a `counts` entry for every metric you declare scoreable, **and
-  derive `aggregates` from the same `items` in one pass**. An arm whose declared `n` for a
-  pre-registered verdict metric disagrees with its own scoreable-item count is **excluded from the
-  comparison and named** in the `INVALID RESULTS EXCLUDED` block (`report._aggregate_item_mismatches`,
-  plan §4 S1 done-condition 10) — never raised, which would abort outside §3.6a's exit-code set,
-  and never suppressed per metric, which would leave a partly-trusted arm in the table. A record
-  carrying the sibling malformation is quarantined a seam earlier, on read
-  (`results._item_problems`); the report-time check catches it too rather than letting
-  `scored_outcome`'s refusal escape.
-- **A Wilson interval prints only over the analysis unit.** `-ml` §4.4: *"Never print a Wilson
-  interval over a turn-pooled count."* `report.py` compares `BinaryMetric.unit` against the role's
-  unit kind; a pooled count prints its `k/n` and no interval. **`BinaryMetric.unit` and
-  `PackRef.analysisUnit` are different vocabularies** — a denominator noun (`item`, `turn`) against
-  a `pairingKey` component name (`itemId`) — so the predicate is always
-  `metric.unit == roles.unit_kind(pack.role)`; comparing against `analysisUnit` is never true and
-  fails silently.
-- **Holm needs two passes.** The step a metric is tested at depends on every other member's
-  p-value, so `compare_report` computes every paired table first, then `stats.holm_steps`, then the
-  verdicts, zipped `strict=True` so a short ladder cannot drop a metric.
-  `holm_thresholds` was replaced by `holm_steps` because a threshold without the
-  step-down stop is unusable — and the rendered family table carries a `decision` column for the
-  same reason. `holm_steps`' `alpha` is required, so `ALPHA_FAMILY` stays the only `0.05`.
+  `BinaryMetric.unit`, `PackRef.seed`, `holm_steps`' `alpha`, and both bootstraps' `levels`/`clamp`
+  are all required — a default would silently rebuild the retired anti-conservative behavior.
+  `PackRef.seed`'s only consumer is the continuous bootstrap; the paired *binary* interval is a
+  closed form that takes no seed, so `report.py` never passes or prints one there. `resolving_power`
+  refuses any `design_effect` **not `>= 1.0`** (not `<= 0`) — below 1 it inflates effective *n* and
+  shrinks both printed bounds. The predicate is that way round at all four sites that use it
+  (`resolving_power`, `verdict()`, `envelope_arms`, `paired_cluster_bootstrap`) because `< 1.0` is
+  `False` for a NaN, and a NaN would otherwise silently widen both bounds to the full support.
+- **An item's outcome for a metric is *declared*, never inferred.** `ItemResult.scored_outcome` has
+  three answers only: a metric absent from `scoreable`, or declared `False`, is no outcome; declared
+  `True` **must** carry a `counts` entry, and one that doesn't is refused (`IncompleteItemRecord`),
+  never read as zero. `report.py` infers nothing.
+- **S2's scorers owe two things, both enforced at S1 so the net exists before the first real scorer
+  does:** emit a `counts` entry for every metric you declare scoreable, and derive `aggregates` from
+  the same `items` in one pass. A mismatch is **excluded from the comparison and named**
+  (`report._aggregate_item_mismatches`) — never raised, never silently dropped per metric.
+- **A Wilson interval prints only over the analysis unit.** `report.py` compares `BinaryMetric.unit`
+  against the role's own unit kind (`roles.unit_kind(pack.role)`) — comparing against
+  `PackRef.analysisUnit` instead is a different vocabulary (a denominator noun vs. a `pairingKey`
+  component name) and is always false, silently.
+- **Holm needs two passes.** `compare_report` computes every paired table first, then
+  `stats.holm_steps`, then the verdicts, zipped `strict=True` so a short ladder can't silently drop
+  a metric. `holm_steps`' `alpha` is required, so `ALPHA_FAMILY` stays the only `0.05` in the code.
 
 **The analysis unit is pack data, never a call-site choice.** `report.py` resolves it from
-`PackRef.analysisUnit` (§3.3 fixes it by rule as `pairingKey[0]`). `PairedOutcomes.from_units`
-raising on a repeated unit id is a **backstop, not the mechanism** — it only fires when the id it
-is handed is the *cluster* key, and 48 conversation ids drawn from 12 scripts are all unique.
-`tests/test_report.py`'s DC-5(c) fixture asserts the captured argument itself for this reason.
+`PackRef.analysisUnit` (plan §3.3 fixes it by rule as `pairingKey[0]`). `PairedOutcomes.from_units`
+raising on a repeated unit id is a backstop, not the mechanism — it fires only when the id handed to
+it is the *cluster* key.
 
-**`tests/test_package.py` is not a placeholder** — it pins `modelbench.__version__` to the
-installed distribution metadata, which is what stamps `benchVersion` into every run record (plan
-§3.4). Keep it. It also exists because pytest exits 5 (`EXIT_NOTESTSCOLLECTED`) on an empty suite:
-never restore green by configuring that exit code away, since a permanent "no tests ran is fine"
-setting hides a collection breakage later.
+**`tests/test_package.py` is not a placeholder** — it pins `modelbench.__version__` to the installed
+distribution metadata, which is what stamps `benchVersion` into every run record. Keep it: pytest
+exits 5 (`EXIT_NOTESTSCOLLECTED`) on an empty suite, so configuring that exit code away would hide a
+real collection breakage later rather than fix anything.
 
-**A public name starting with `test` is collected by pytest as a test** in every module that
-imports it — which is why FR-17a's function is `models_with_stored_results`, not `tested_models`.
+**A public name starting with `test` is collected by pytest as a test** in every module that imports
+it — which is why FR-17a's function is `models_with_stored_results`, not `tested_models`.
 
 ## Hard rules (they are design constraints, not preferences)
 
@@ -213,7 +118,10 @@ imports it — which is why FR-17a's function is `models_with_stored_results`, n
 - **Standalone — FR-23.** No runtime code path reads any path outside `model-bench/`. Golden data
   from `falkor-chat` is *copied in* and versioned here with provenance; the one-way importer
   `scripts/refresh_golden.py` is a human-invoked maintenance script and is never reachable from a
-  run. Nothing in `falkor-chat` changes, in either direction, ever.
+  run. Nothing in `falkor-chat` changes, in either direction, ever. **The default test suite does
+  not yet hold to the same rule** — 3 tests read a real `falkor-chat/` source file with no `live`
+  marker or skip guard, so the default `pytest -q` suite reports false failures if `falkor-chat/`
+  is renamed or absent; runtime/CLI code is unaffected. Open, `docs/BACKLOG.md`.
 - **No aggregate across roles, no gate, no scheduler.** Enforced structurally: `load_history()`
   takes a `packId` and there is no API to load across packs. See `README.md`'s three non-features.
 
@@ -226,27 +134,26 @@ imports it — which is why FR-17a's function is `models_with_stored_results`, n
   with dev extra, smoke-import), resolving every path from the script's own location.
 - **Four fingerprint fields are operator-attested, not measured** — `lmStudioAppVersion`,
   `kvCacheSetting`, `hostRamGb`, `otherResidentWorkloads` — because no programmatic source exists on
-  this LM Studio build (plan §2.3, live-probed). They live in a gitignored `model-bench/host.json`
-  and are copied into every run record so a record stays self-contained. Plan §3.4 has the
-  staleness trip-wire that keeps them honest.
+  this LM Studio build (plan §2.3, live-probed; the S2 `R-1` probe re-confirmed no such source on
+  two independent live loads). They live in a gitignored `model-bench/host.json` and are copied into
+  every run record so a record stays self-contained. Plan §3.4 has the staleness trip-wire that
+  keeps them honest.
 - **Empty `docs/` subdirectories are held by `.gitkeep`** (repo precedent), so the module
   documentation convention's layout survives a clone before its first document exists.
 - **A guard's reach lives in an asserted constant, not in prose.** A module-level set or table a
   guard consults — a required-key set, an allowlist, an exemption list, a role→unit map — needs a
   test that binds it to another declaration of the same set, or asserts a distinct behavioural
-  consequence per member; never merely that the guard accepts what its own constant contains,
-  which is true of any constant. **To know you have one, mutate the constant alone both ways: a
-  shrink and a widen must each redden.** Shrink-only is not a pin — a fixture is covering it, or
-  its widen stays inert until the second declaration is bound. **A table takes a third mutation:
-  move a value to another key.** Its keys and its contents are two pins, and a value the test
-  reads back out of the table is asserted against itself. Absent that, the docstring may not claim
-  a reach (*only*, *every*, *never a sixth*). **Nothing here is exempt, including a constant
-  built wholesale from the runtime** — that one binds to its own source, and the equality is not
-  circular: what it refuses is an **augmentation** (`<derived> | {extra}`, the shape a hand-added
-  exception takes), never a re-derivation, which is equivalent by construction and stays green
-  correctly. Audits: `docs/reviews/small-model-benchmarking-impl.md` Pass 14 and Pass 16 — whose
-  P16-5 standing exception is withdrawn: it kept `packs._STDLIB_MODULE_NAMES` unpinned, and one
-  name appended there silently widens what every pack may import.
+  consequence per member; never merely that the guard accepts what its own constant contains, which
+  is true of any constant. **To know you have one, mutate the constant alone both ways: a shrink and
+  a widen must each redden.** Shrink-only is not a pin — a fixture is covering it, or its widen stays
+  inert until the second declaration is bound. **A table takes a third mutation:** move a value to
+  another key. Its keys and its contents are two pins, and a value the test reads back out of the
+  table is asserted against itself. Absent that, the docstring may not claim a reach (*only*,
+  *every*, *never a sixth*). **Nothing here is exempt, including a constant built wholesale from the
+  runtime** — that one binds to its own source, and the equality is not circular: what it refuses is
+  an **augmentation** (`<derived> | {extra}`, the shape a hand-added exception takes), never a
+  re-derivation, which is equivalent by construction and stays green correctly. Audits:
+  `docs/reviews/small-model-benchmarking-impl.md` Pass 14 and Pass 16.
 
 ## Commands
 
@@ -268,8 +175,8 @@ This component's feature documents live at the **repo root**, not under `model-b
 `docs/requirements/small-model-benchmarking.md` (`tico`) → `docs/plans/small-model-benchmarking.md`
 (`architect`) + `docs/plans/small-model-benchmarking-ml.md` (`data-scientist`, the statistics) →
 `docs/reviews/small-model-benchmarking.md`. That is deliberate: the feature was specified before the
-component existed and its footnote says to leave it there. Everything written *from here on* —
-this component's own requirements, plans, reviews, test plans and reports — goes under
+component existed and its footnote says to leave it there. Everything written *from here on* — this
+component's own requirements, plans, reviews, test plans and reports — goes under
 `model-bench/docs/`, which is why those subdirectories already exist. `docs/BACKLOG.md` and
 `docs/HISTORY.md` here are this component's living logs (module documentation convention, root
 `AGENTS.md`).

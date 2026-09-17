@@ -60,8 +60,10 @@ engineering** (Claude Code and OpenCode artifacts).
   LM Studio: one model × one versioned task pack per run, stored with a full environment
   fingerprint, compared only within a role. Python 3.12, **zero runtime dependencies**; no CI hook,
   no pass/fail gate, no leaderboard, no runtime read outside `model-bench/` (golden data copied in
-  and versioned here). Requirements/plan live at the **repo root**, not `model-bench/docs/`;
-  current stage is in `model-bench/AGENTS.md`.
+  and versioned here). **Delivered and closed (S0–S8)**: five packs across all five FR-21 roles
+  (`embedder`, `guard-judge`, `nlq-generator`, `tool-caller`, `chat-responder`) shipped, gated, and
+  live-verified. Requirements/plan live at the **repo root**, not `model-bench/docs/`; working
+  state is in `model-bench/AGENTS.md`, delivery record in `model-bench/docs/HISTORY.md`.
 - `skills/` — **Agent Skills home** (`SKILL.md` packages, the open `agentskills.io` standard) for
   cross-tool / Claude-Code-oriented capabilities: `agent-maintenance` + `agent-standards` (cobb's
   machinery), `joern-cpg` (drives `graph-dba`'s on-demand Joern CPG→FalkorDB pipeline),

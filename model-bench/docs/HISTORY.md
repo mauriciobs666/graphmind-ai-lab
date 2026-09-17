@@ -2,6 +2,67 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-17 — U180–U181 — S8 closed: documentation and close
+
+**What:** S8 is the plan's final stage — no new pack, no new role, only bringing the docs in line
+with what actually shipped across S0–S8 — plus item 20 (§5), the FR-23 audit S8 owes: grep the
+shipped tree for any runtime path reference outside `model-bench/`, and confirm the tool runs
+correctly with `falkor-chat/` renamed away.
+
+1. **Doc-sync** (U180, `coder`): `README.md` gained "What a pack is, and how to add one" (a pack is
+   a `packs/<pack-id>/` directory with `pack.json` + provenance-carrying JSONL golden data +
+   `PROVENANCE.md`; how to add one and validate it before a live run), the exact-cosine scope note
+   from plan §3.8.1 (the `embedder` pack measures the model in isolation via brute-force exact
+   cosine, never falkor-chat's ANN pipeline — a real, previously-undocumented scope boundary the
+   plan's own §3.8.1 already claimed README stated), the `benchSchemaVersion` migration contract
+   from §3.4.3 (a bump is a deliberate act — a new `REQUIRED_BY_SCHEMA` entry, a `HISTORY.md` line,
+   an explicit migration decision — never a side effect of adding a field; still `1` throughout
+   S0–S8), and the closed exit-code set from §3.6a (`0`/`2`/`3`/`4`/`5`, nothing else, no
+   score-driven exit). Also corrected two stale claims: the CLI section still said `run` "refuses
+   every pack today, since no concrete per-role scorer exists yet (stage S3's job)" — false since
+   S3; and the Status section's stage list. `AGENTS.md`'s ~2,700-word "Current state" section —
+   almost entirely S4–S7 stage-by-stage narrative already carried in full in this file — was
+   rewritten (not appended to) into a short present-tense summary plus a `docs/HISTORY.md` citation,
+   with the genuinely durable, non-historical invariants (the fingerprint's two discriminators, what
+   `stats.py` binds to, the five honesty rules, the analysis-unit rule, the `test_package.py` pin,
+   the `test`-prefix pytest-collection gotcha) kept intact under their own heading rather than
+   deleted — bringing the file from 3,034 words to under 2,000. `docs/BACKLOG.md` was re-checked
+   against `docs/test-reports/small-model-benchmarking-s{3,4,5,6,7}-report.md`: the S3 report and
+   the S4/S5 defects it already carried (`luckyPassCount` rendering, the `order_by` `None`-key sort,
+   `TD-1`) named nothing new — `TD-1` is confirmed fixed and tested
+   (`packs/tool-caller-shop-assistant/tools/sim.py`'s `dispatch` now looks up `safe_name`,
+   `tests/test_tools_sim.py::test_dispatch_unhashable_tool_name_returns_an_error_rather_than_raising`)
+   and was never carried in `BACKLOG.md`, so nothing to remove there. Three items the S6 QA pass's
+   feedback/gaps sections named but `BACKLOG.md` didn't yet carry were added: `report.py`'s missing
+   per-script breakdown (a testability gap), `mistralai/ministral-3-3b`'s rung-2 tool-call-censoring
+   pattern under `historyReplay: "plaintext"` (observed, not root-caused), and the absence of any
+   paired significance test for a turn-pooled exploratory metric (e.g. the duplicate-instruction
+   rate). R-1's S2 probe (closed at U111 — no new key on a loaded model's `/api/v0/models` entry
+   beyond the ten known fields plus `loaded_context_length`) needed no `BACKLOG.md` change; the
+   stale forward-looking `## Note` describing that check as still owed was removed. Root
+   `AGENTS.md`'s `model-bench/` bullet and Structure table were re-checked against the five shipped
+   packs (`embedder`, `guard-judge`, `nlq-generator`, `tool-caller`, `chat-responder` — all five
+   FR-21 roles, not four) and updated to state delivery is closed.
+2. **The FR-23 audit** (U181, `qa-engineer`, independently `teco`-verified): item 20. Runtime/CLI
+   code (`validate`/`run`/`compare`/`attest`) confirmed clean — every `falkor-chat` mention under
+   `modelbench/`/`scripts/`/`packs/` is either `scripts/refresh_golden.py` (the plan's one named
+   permitted exception, confirmed unreferenced by any `modelbench/` import) or doc-only
+   (docstring/comment/JSON description/`PROVENANCE.md` table); a live rename-`falkor-chat`-away
+   confirmed `validate` runs clean on both shipped packs. **But the default `pytest -q` suite does
+   not hold to the same rule**: 3 tests (`test_refresh_golden.py`×2,
+   `test_scoring_extraction.py`×1) directly read real `falkor-chat/` source files with no `live`
+   marker or skip guard — a real, in-scope defect logged to `docs/BACKLOG.md` rather than fixed
+   silently, since the fix is a design call (an `@pytest.mark.live` vs. an explicit
+   presence-keyed skip) sequenced as its own follow-up unit. Reproduced independently: renaming
+   `falkor-chat/` away and re-running the suite gives a byte-identical `3 failed, 1703 passed, 3
+   deselected` (baseline `1706 passed, 3 deselected`), confirming the finding rather than taking the
+   audit's word for it.
+
+**Verification:** `model-bench/ $ .venv/bin/python -m pytest -q` — unchanged baseline
+(`1706 passed, 3 deselected`), since S8 is documentation-only and touches no source or test file;
+`ruff check .` clean. `wc -w AGENTS.md` — `1,936` (well under the ~2,500-word smell threshold), no
+line over 700 characters (`awk 'length($0)>700'` across all four touched `model-bench/` docs).
+
 ## 2026-09-17 — U165–U178 — S7 closed: chat-responder pack + live-run defect fix
 
 **What:** S7 built the `chat-responder-grounded-answers` pack and `modelbench/scoring/grounding.py`
