@@ -2,6 +2,29 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-09-17 — K-030 Stage 0: added a third on-demand knowledge base, `test-design-techniques.md` (prompt restructure, not a distillation)
+
+- **What:** `cobb` ran K-030 Stage 0 (dispatched by `teco`): `tdd-engineer.md` was named in K-030
+  as a **partial** case — it already carries two on-demand knowledge bases
+  (`guard-testing-techniques.md`, `estimator-test-fixtures.md`) but the resident "Principles" list
+  still carried several long, situational test-design bullets with no on-demand home. Stage 0 for
+  this agent means adding what's still missing, not starting fresh. This is a **prompt
+  restructure**, not a kaizen-graph distillation: no content dropped, moved close to verbatim.
+- **New file:** `claude/tdd-engineer/test-design-techniques.md` (8 `##`-headed sections, one per
+  FR-7, split out of the "Prove a new assertion against the mutant" and "Cover the edges" bullets
+  plus three standalone bullets: coincidental-pass proving, duplicated-string mutant drift, the
+  degenerate-input rule, the identity-assertion trap, CLI/argparse wiring gaps, marker-gated
+  optional tests, positional-fixture-bias, and shared-helper caller risk). 758 words.
+- **What moved:** the technique depth of five Principles bullets, leaving short trigger sentences
+  plus a pointer at each site. Kept resident: the short, high-value "when a plan explicitly
+  rejected an alternative, the mutant is that alternative" rule (cross-referenced by `teco.md`
+  too) and all core TDD-loop/altitude/idiom principles.
+- **Result:** `tdd-engineer.md` 2,646 → **2,138 words** (−19%), longest line 1,502 → **1,240
+  chars** (−17%).
+- **Docs touched:**
+  `claude/tdd-engineer/{tdd-engineer.md,test-design-techniques.md,kaizen/history.md}`,
+  `claude/AGENTS.md`, `claude/README.md`, `claude/cobb/kaizen/plan.md` (K-030 updated, not closed).
+
 ## 2026-09-16 — U4 gate fix: removed an untraceable numbered anecdote from the promoted `ruff format` entry (analyst Blocker, `docs/reviews/kaizen-team-distillation-u4.md`)
 
 - **What:** `analyst`'s U4 gate found one Blocker in an otherwise-clean review: the `ruff format`

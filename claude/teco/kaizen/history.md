@@ -2,6 +2,38 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-09-17 — K-030 Stage 0: extracted an on-demand knowledge base, `coordination-techniques.md` (prompt restructure, not a distillation)
+
+- **What:** `cobb` ran K-030 Stage 0 (dispatched by `teco`): `teco.md` was the extreme case that
+  raised K-030 (four agents with no on-demand knowledge base, so every distillation could only ever
+  fold onto the resident prompt) — 11,010 words, 32 lines >700 chars, 17 >1,000, longest line 3,105
+  chars. This is a **prompt restructure**: moving already-resident, already-reviewed prompt content
+  to a new file with a pointer left behind, not a kaizen-graph distillation pass, and no content was
+  dropped — every extracted paragraph landed in the new file, generally close to verbatim.
+- **New file:** `claude/teco/coordination-techniques.md` (37 `##`-headed sections, one technique
+  each per FR-7: brief-writing discipline — stating priors, negation-constraints, carrying defect
+  lessons forward, mutation-testing implementers, kill-resilience, judging a reviewer's suggested
+  fix, dispatch sizing, fencing; in-flight recovery scenarios — stale placeholders, transient
+  platform failures, vanished edits, `agentId` session-scoping, sibling-premise relays, cross-gate
+  defect-class transfer, stale resume/pause messages, misrouted messages; integration-verification
+  traps — self-reported recovery, rebutting a delegate's report, instrument agreement, closing an
+  upstream artifact, interacting fixes; and review-gate techniques — repeated-gate stopping
+  signals, an audit's untrusted clears, a clean pass on a brand-new mechanism, holding a shared file
+  out of a commit, the three-way diff check before an integration commit; plus a hand-built-fixture
+  blind-spot entry alongside the repeated-gate one). 4,758 words.
+- **What moved:** the technique-heavy elaboration of each bullet above — rationale, worked
+  examples, specific failure-mode narratives — leaving a short trigger/summary sentence plus a
+  pointer in `teco.md` at each site. Core routing, the ledger mechanic, the pause/resume flow, and
+  the Guardrails' load-bearing safety rules (never mutate the tree, the commit grant itself, the
+  destructive-ops boundary) stayed resident — they're used on essentially every unit, not on
+  demand.
+- **Result:** `teco.md` 11,010 → **8,118 words** (−26%), longest line 3,105 → **1,874 chars**
+  (−40%), lines >700 chars 32 → **22**, lines >1,000 chars 17 → **13**. `teco.md` remains the
+  largest agent prompt in the team by a wide margin, as expected — Stage 0 is interim relief, not
+  the "prompt vs. restructure" decision K-030 also names as still open.
+- **Docs touched:** `claude/teco/{teco.md,coordination-techniques.md,kaizen/history.md}`,
+  `claude/AGENTS.md`, `claude/README.md`, `claude/cobb/kaizen/plan.md` (K-030 updated, not closed).
+
 ## 2026-09-13 — standing distillation pass: 3-entry `teco` inbox (2 own + 1 `MENTIONS`-tagged from `architect`), 2 promoted, 1 discarded
 
 - **What:** `cobb` ran the standing kaizen-graph distillation over `teco`'s inbox: its own 2

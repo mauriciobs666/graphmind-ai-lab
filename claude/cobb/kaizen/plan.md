@@ -24,7 +24,7 @@
 | K-025 | 2026-09-09 | high | 🔵 | A `MENTIONS` tag writes an obligation into a queue with no consumer: a distillation unit is scoped `MATCH (a:Agent {agentId})-[:PRODUCED]->(e)`, which by construction cannot see a `MENTIONS`-only node. 11 such nodes accumulated across 7 agents and 2 passes; **six** of those agents were recorded "closed out, 0/0" while still holding an unrouted edge. Two candidate fixes — scope a unit by *either* edge kind, or stop letting the tag imply a promotion. |
 | K-026 | 2026-09-09 | medium | 🔵 | `python-web-quirks` carries **two** `TestClient` **behaviour** sections (teardown task-cancellation; the default `raise_server_exceptions=True` re-raising into the caller), deliberately unmerged because the mechanisms, consequences and fixes differ. They are bound by a shared opening line naming the class. **On the third such entry, promote that line to a parent heading with sub-sections — do not add a third flat sibling.** The count is **still two**: U38 (2026-09-09) added a third section touching `TestClient` — the `httpx`→`httpx2` transport deprecation, which warns on *both* pinned starlette versions — and it is a **version-rot rider on the pair**, carrying no `TestClient` mechanism of its own, so the trigger did not fire. It was **retitled** to lead with the migration rather than the class precisely so a header scan cannot read it as a third sibling and defeat this count. |
 | K-029 | 2026-09-09 | high | 🔵 | **Nothing audits a skill's frontmatter — that it parses, fits the 1,536-char listing budget, and names the right audience. One missing check, not three** (consolidates K-027 + K-028 + U36's parse finding; no content dropped). The three are the same gap seen three ways, and the budget is what makes the other two moot: `python-web-quirks`' description is **4,584 chars**, so U35's audience fix sits ~3,000 chars past the cut and reaches no router. Carries a remediation (that description) and a check (`audit-team.sh`), plus the instrument caveat that strict YAML is the **wrong** parser to audit with. |
-| K-030 | 2026-09-09 | **high** | 🔵 | The always-loaded-prompt compaction backlog is **four agents**, not four separate follow-ups: `tdd-engineer.md:40`, `architect.md:51`, `data-scientist.md` (7 lines >700), and `teco.md`. The common mechanism is having **no knowledge base** — `teco`, `architect` and `data-scientist` have none, so every promotion can only fold onto the resident prompt. **`teco.md` after U44: 9,063 words, 31 lines >700, 17 >1,000, longest 1,716** — +583 (U42), +377 (U43), **+785 (U44)**, i.e. **+1,745 words / +24% in three units**, and U44 pushed **two** lines over 700 and three over 1,000. **U44 is the first unit to supply the counterfactual rather than the complaint:** 9 of its 12 entries routed to `teco.md` *because there was nowhere else*, while the two with an alternative home cost `teco.md` almost nothing — `511f0797` took one 400-char clause plus a pointer, with its measurement in `skills/agent-standards/claude-code.md`, and `d7a91e35` took **zero** `teco.md` words, landing whole in `claude/analyst/review-techniques.md`. Roughly half of U44's +785 is **method** content (how to build an instrument, which argument to mutate, how the accumulated lesson list is phrased) that a coordinator needs only while actually verifying — the definition of on-demand. Raised to **high**: the mechanism is now measured, not inferred. Decide the general question (knowledge base vs. restructure) before compacting any one file; `teco`'s answer is a stakeholder call, reserved as such in U42's brief. |
+| K-030 | 2026-09-09 | **high** | 🟡 | **Stage 0 delivered 2026-09-17 — interim knowledge-base relief for all four agents, per `claude/docs/plans/agent-knowledge-base-strategy.md` §3.** `teco` 11,010→**8,118 w** (longest line 3,105→**1,874**), `architect` 2,553→**1,522 w** (1,617→**718**), `data-scientist` 2,661→**2,032 w** (1,247→**826**), `tdd-engineer` 2,646→**2,138 w** (1,502→**1,240**) — `wc -w`/`awk` re-measured before and after, not asserted. New/extended on-demand KBs: `teco/coordination-techniques.md` (new, 37 sections), `architect/plan-authoring-techniques.md` (new, 13), `data-scientist/statistical-method-techniques.md` (added alongside the existing `lm-studio-model-notes.md`, 9), `tdd-engineer/test-design-techniques.md` (added alongside the existing two, 8) — each `##`-heading-delimited per FR-7, one claim per section. **Not resolved by this:** the general "knowledge base vs. restructure" question, and Stages 1–7 of the plan (the graph-backed substrate), both explicitly blocked/deferred — see the plan's own closing section. `teco.md` remains the largest prompt in the team by a wide margin; Stage 0 is relief, not the fix. Status flipped 🔵→🟡 (in-progress, not done) to reflect the interim delivery without claiming closure. |
 | K-031 | 2026-09-10 | medium | 🔵 | **Shared-working-tree commit knowledge is fragmented by *audience*, not by topic — and the split leaks.** Five statements now cover it: `claude/AGENTS.md`'s atomicity paragraph (index race, path-limited remedy, and — U44 — the unconditional index-ignored rule), its universal interactive-mode grant, `teco.md`'s grant bullet (path-limited form + the U43 disjointness condition), `teco.md`'s new holding-cost bullet (U44), and `teco.md`'s grant-scoping bullet. **Within a `teco` session the set is coherent** — the two `teco.md` bullets are adjacent and cite `claude/AGENTS.md` twice by section title. **For every other agent it is not:** `claude/AGENTS.md` grants all twelve agents path-limited committing into this shared tree and gives them the index race, but the two facts that bound the grant — *path-limiting protects nobody where the paths are not disjoint*, and *holding a shared file out has a rising cost with no natural end* — exist **only** in `teco`'s prompt, and nothing in `claude/AGENTS.md` points at them. Recommended home: the `claude/AGENTS.md` atomicity paragraph, because the grant that creates the hazard is already stated there for everyone. **Cost, and why it is not free either way:** moving prose *into* the always-loaded context file makes eleven other agents pay tokens for it every session (~+100 w on a file already 53 past its smell, forcing the K-032 trim first), while leaving it in `teco.md` keeps the cost narrow and leaves the other agents granted-but-uninformed. The deciding question is empirical and unmeasured: **how often does a non-`teco` agent actually commit into this tree under the interactive-mode grant?** Measure that before moving anything. Not performed in U44 by instruction. |
 | K-033 | 2026-09-13 | medium | 🔵 | **Corrected 2026-09-16** (`docs/reviews/commit-granularity.md` finding): the original word-count claim materially understated the 2026-09-13 growth. Independently re-measured (`git show 320f682^:<path> \| wc -w` vs. `git show 320f682:<path> \| wc -w`): `claude/AGENTS.md` **2,783→3,074 (+291**, not the originally-claimed +33 — ~9x), `teco.md` **10,765→10,899 (+134**, not ~450), `tico.md` **5,623→5,809 (+186**, close to the originally-claimed ~250). `claude/AGENTS.md` now sits 574 words over root `AGENTS.md`'s own ~2,500-word smell line — a real, not marginal, overage. Priority raised low→medium on the corrected figures. |
 | K-032 | 2026-09-10 | low | 🔵 | **`claude/AGENTS.md`'s roster enumerates each agent's knowledge-base *topics*, duplicating `claude/README.md`, and the two have now measurably diverged.** `AGENTS.md:37-41` lists `guard-testing-techniques.md` as *coverage probe vs. mutation test, the two axes of a hand-written resolver, the docstring-states-more-than-the-body defect*; `README.md`'s parallel entry carries those **plus** the probe/oracle split U43 added. **The divergence is not the defect — the enumeration is.** A context file is always loaded in full, `README.md` is the catalog of record, and no agent routes to another agent's knowledge base (routing runs on the injected `description`), so the topic lists buy nothing and create a standing two-place update duty on the copy that rots unnoticed. **Recommended fix: do not add the missing topic — delete the enumerations**, leaving the roster to name each KB and point at `README.md` (~35 words back on a file 53 past its smell, and it retires the duty). Same judgement applies to the six other roster entries carrying topic lists. **Deliberately not fixed silently in U44**; U44 likewise added no `README.md` entry because it created **zero** new sections anywhere. Carries the K-031 dependency: this trim is what makes room for that consolidation. |
@@ -391,43 +391,50 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
 
 ### K-030 — The always-loaded-prompt compaction backlog is now four agents, and distillation is what feeds it
 
-- **Status:** 🔵 proposed
+- **Status:** 🟡 in-progress — Stage 0 (interim knowledge-base relief) delivered 2026-09-17; the
+  general "knowledge base vs. restructure" question and the plan's graph-backed substrate (Stages
+  1–7) remain open/blocked (see below). Not moved to history.md: this item isn't done.
 - **Priority:** high
-- **Rationale:** Four separate follow-ups in `claude/docs/plans/kaizen-distillation2-coordination.md`
-  name the same defect in four prompts — `tdd-engineer.md:40` (1,502 chars), `architect.md:51`
-  (1,617), `data-scientist.md` (seven lines over 700, longest 1,247), and `teco.md`. This is one
-  item about a **mechanism**, not four about four files. **`teco.md`, measured across the pass:**
-  7,901 w at `117df76` (U41) → 8,278 w at U43 → **9,063 w at `8973269`** → **10,445 w after U45**,
-  i.e. **+2,544 words in four distillation units**, of which **+1,382 landed in U45 alone**. Lines
-  over 700 chars went 26 → 32; over 1,000, 13 → **20**; and the longest line went 1,677 → **3,105**
-  — `teco.md:89` (step 3, *Brief contents*), which absorbed two U45 promotions and is now nearly
-  twice the baseline maximum. `teco`'s own `kaizen/plan.md` **K-016** (blocking) proposes the same
-  split from the other side.
-- **The mechanism, and U45 is the cleanest evidence for it yet:** an agent with **no knowledge
-  base** has exactly one landing site for every promotion, so distillation can only ever fold onto
-  its always-loaded prompt. `analyst`, `graph-dba`, `tdd-engineer`, `qa-engineer`, `data-scientist`
-  and `devops` each have one; `teco` and `architect` do not. **Eight of U45's thirteen dispositions
-  landed in `teco.md`, and the routing evidence says most of them did not belong there** — they are
-  on-demand *gate and brief techniques* (how to read an empty result, how to probe a mutation
-  table, how to size a dispatch), consulted when a specific situation arises, not routing rules
-  needed in most sessions. That is §5's knowledge-base criterion stated exactly. The contrast is
-  decisive rather than suggestive: in the same unit, two entries that met the same criterion
-  **left `teco` entirely** — `f0f56a09` to `claude/analyst/review-techniques.md` and `5fc1dfea` to
-  `skills/agent-maintenance/SKILL.md` — because a suitable on-demand home existed. The others had
-  nowhere to go. **Argue this from routing, not from the word count**: the word count is the
-  symptom, the absent landing site is the cause.
-- **Proposed change:** decide the general question before compacting anything — does an agent whose
-  prompt has crossed the density threshold get a knowledge base, or does its prompt get
-  restructured? Then one compaction unit per prompt, none of them a side effect of a distillation
-  (K-026's rule). For `teco` specifically the candidate is `claude/teco/coordination-techniques.md`,
-  mirroring `analyst/review-techniques.md`. **`teco`'s answer is a stakeholder call and was
-  explicitly reserved as such in U42's brief** — do not create one unilaterally, and note that
-  creating it would restructure `teco.md` as a distillation side-effect, which is exactly what
-  K-026 exists to prevent.
-- **Notes:** Opened 2026-09-09 from U42; rewritten 2026-09-10 after U45 with the four-unit growth
-  series, the eight-of-thirteen routing figure, and the two contrasting out-of-`teco` promotions.
-  Raised to **high** — the table row already said high while this body still said medium; the body
-  was the stale half. Entry ids are not the trigger here; no `entryId` dedup applies.
+- **Rationale (as it stood before Stage 0 — kept for the trail, not current):** Four separate
+  follow-ups in `claude/docs/plans/kaizen-distillation2-coordination.md` named the same defect in
+  four prompts — `tdd-engineer.md:40` (1,502 chars), `architect.md:51` (1,617), `data-scientist.md`
+  (seven lines over 700, longest 1,247), and `teco.md` (10,445 w after U45, longest line 3,105).
+  One item about a **mechanism**, not four about four files: an agent with **no knowledge base**
+  has exactly one landing site for every promotion, so distillation can only ever fold onto its
+  always-loaded prompt. `teco` and `architect` had none at all; `data-scientist` and `tdd-engineer`
+  had partial coverage (model facts / two guard-testing KBs) but no home for their own dense
+  situational-technique content.
+- **Stage 0 delivered 2026-09-17, dispatched by `teco`, executed by `cobb`** — a **prompt
+  restructure** (moving already-resident content to a new file with a pointer left behind), not a
+  kaizen-graph distillation pass; no content dropped, chunked one claim per `##` heading per FR-7.
+  Re-measured with `wc -w`/`awk` before and after, not asserted from the dispatch's own priors:
+
+  | Agent | Words before → after | Longest line before → after | New/extended KB(s) |
+  |---|---|---|---|
+  | `teco` | 11,010 → **8,118** (−26%) | 3,105 → **1,874** | `coordination-techniques.md` (new, 37 sections) |
+  | `architect` | 2,553 → **1,522** (−40%) | 1,617 → **718** | `plan-authoring-techniques.md` (new, 13 sections) |
+  | `data-scientist` | 2,661 → **2,032** (−24%) | 1,247 → **826** | `statistical-method-techniques.md` (added; `lm-studio-model-notes.md` already existed, 9 sections) |
+  | `tdd-engineer` | 2,646 → **2,138** (−19%) | 1,502 → **1,240** | `test-design-techniques.md` (added; two guard/fixture KBs already existed, 8 sections) |
+
+  Full per-agent breakdown (what moved, what stayed resident and why) is in each agent's own
+  `kaizen/history.md`, 2026-09-17 entry.
+- **What Stage 0 does not resolve.** `teco.md` remains the largest prompt in the team by a wide
+  margin after the cut — Stage 0 is interim relief, not the "prompt vs. restructure" decision this
+  item was originally opened to force, which is still a stakeholder call (unchanged from the
+  original framing below). The deeper substrate question — a graph-backed on-demand retrieval
+  system replacing flat files entirely — is `claude/docs/plans/agent-knowledge-base-strategy.md`
+  §2 onward, and is **blocked** pending a separate requirements doc
+  (`falkor-chat/docs/requirements/document-ingestion2.md`) per that plan's own closing section;
+  none of it was touched here.
+- **Original proposed change (superseded by the above for Stage 0, still open for the rest):**
+  decide the general question before compacting anything further — does an agent whose prompt has
+  crossed the density threshold get a knowledge base, or does its prompt get restructured? That
+  question is not answered by Stage 0 landing; it's answered by whether `teco.md` at 8,118 words is
+  still too dense once the team has lived with the new KB for a while.
+- **Notes:** Opened 2026-09-09 from U42; rewritten 2026-09-10 after U45; Stage 0 delivered and
+  logged here 2026-09-17 (dispatch from `teco`, `claude/docs/plans/agent-knowledge-base-strategy.md`
+  §3's Stage-0 row and closing section). Entry ids are not the trigger here; no `entryId` dedup
+  applies.
 
 ### K-031 — Shared-tree commit rules are split by audience, and the half that bounds the grant is teco-only
 

@@ -2,6 +2,30 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-09-17 — K-030 Stage 0: extracted an on-demand knowledge base, `plan-authoring-techniques.md` (prompt restructure, not a distillation)
+
+- **What:** `cobb` ran K-030 Stage 0 (dispatched by `teco`): `architect.md` was one of the four
+  agents named in K-030 with no on-demand knowledge base at all — 2,553 words, longest line 1,617
+  chars. This is a **prompt restructure**, not a kaizen-graph distillation: moving already-resident
+  Guardrails content to a new file with a pointer left behind, no content dropped.
+- **New file:** `claude/architect/plan-authoring-techniques.md` (13 `##`-headed sections, one per
+  FR-7: grep-verification discipline against disowning prose, completeness-claim derivation,
+  compress-by-pointer vs. what must stay literal, verifying textual identity before a blanket
+  find-and-replace, reconciling a diverging delegated note by grep-not-recall, a wrong shared
+  mapping cell, an Appendix description as a claim not a fact, a plan row's word count vs. its
+  citation weight, a bypassable allow-list needing an architectural fix, a component's hard
+  constraint applying everywhere, a shared-file-ownership finding needing gating-mechanism
+  verification, and specifying how to pin an open design decision). 1,208 words.
+- **What moved:** eleven of `architect.md`'s Guardrails bullets — all situational plan-revision/
+  design-review techniques consulted only when that specific situation arises — leaving a one-line
+  pointer blockquote at the top of Guardrails. Kept resident: the source/test/config write
+  prohibition, the commit grant, "don't hand-wave," and the honesty-about-uncertainty principle —
+  core doctrine needed on every plan.
+- **Result:** `architect.md` 2,553 → **1,522 words** (−40%), longest line 1,617 → **718 chars**
+  (−56%).
+- **Docs touched:** `claude/architect/{architect.md,plan-authoring-techniques.md,kaizen/history.md}`,
+  `claude/AGENTS.md`, `claude/README.md`, `claude/cobb/kaizen/plan.md` (K-030 updated, not closed).
+
 ## 2026-09-16 — kaizen distillation, `architect`'s 8-entry inbox (scoped single-agent pass): 5 promoted (2 combined into one `architect.md` Guardrails bullet, 1 into `review-techniques.md` item 9, 2 into `frontend-quirks.md` as a new section + a new bullet), 3 discarded as already published/shipped
 
 - **What:** `cobb` ran the standing `kaizen_team` distillation scoped to `architect` alone, per

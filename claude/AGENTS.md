@@ -26,19 +26,20 @@ This directory (`claude/`) holds custom Claude Code subagents.
 Roster — behavior source is always `<name>/<name>.md`, kaizen at `<name>/kaizen/`; what each
 does and when to use it lives in the injected descriptions and [`README.md`](./README.md):
 
-`teco` (coordinator) · `tico` (product owner, project explainer, user-manual curator; **interactive**: `claude --agent tico`;
+`teco` (coordinator; carries an on-demand knowledge base: `coordination-techniques.md`) · `tico` (product owner, project explainer, user-manual curator; **interactive**: `claude --agent tico`;
 since 2026-08-29 may proactively initiate a single-topic specialist consult — review-shaped or
 fast-track Q&A, across `architect`/`analyst`/`graph-dba`/`data-scientist`/`qa-engineer`/
 `security-expert`/`devops`, never implementers — announced then proceeded, not offered; since
 2026-09-01 also coordinates its own docs-only multi-unit chains (requirements → plan → review,
 ledger-tracked like `teco`'s), handing the whole chain to `teco` the instant a unit needs an
 implementer; see `tico/tico.md`) ·
-`architect` · `coder` ·
-`tdd-engineer` (carries two on-demand knowledge bases: `guard-testing-techniques.md` — testing a
+`architect` (carries an on-demand knowledge base: `plan-authoring-techniques.md`) · `coder` ·
+`tdd-engineer` (carries three on-demand knowledge bases: `guard-testing-techniques.md` — testing a
 guard whose subject is other code's text: coverage probe vs. mutation test, the two axes of a
-hand-written resolver, the docstring-states-more-than-the-body defect — and
+hand-written resolver, the docstring-states-more-than-the-body defect —
 `estimator-test-fixtures.md` — fixture design for a test over a computed value: a degenerate
-sample as boundary tool and as blindfold, pinning a `len()`-derived constant) ·
+sample as boundary tool and as blindfold, pinning a `len()`-derived constant — and
+`test-design-techniques.md`) ·
 `frontend-engineer` (carries an on-demand knowledge base: `frontend-quirks.md` — live-verified
 React/TS/Vite/TanStack Query/i18next/RTL gotchas for this lab's storefront stack) ·
 `qa-engineer` (carries an on-demand knowledge base: `qa-testing-techniques.md` — environment/
@@ -46,8 +47,9 @@ tooling techniques such as the WSL2 browser-automation fallback, driving an inte
 CLI health-check gotchas) ·
 `analyst` (carries an on-demand knowledge base: `review-techniques.md` — review-methodology
 techniques consulted on demand) ·
-`data-scientist` (carries an on-demand knowledge base: `lm-studio-model-notes.md` —
-live-verified small-model realism notes for this lab's LM Studio stack) ·
+`data-scientist` (carries two on-demand knowledge bases: `lm-studio-model-notes.md` —
+live-verified small-model realism notes for this lab's LM Studio stack — and
+`statistical-method-techniques.md`) ·
 `graph-dba` (carries two on-demand knowledge bases: `falkordb-quirks.md`,
 live-verified and perishable — re-verify on upgrades — and `falkordb-reference.md`; also drives
 Joern via the `joern-cpg` skill, on demand, to build a repo's CPG and export/load it into
