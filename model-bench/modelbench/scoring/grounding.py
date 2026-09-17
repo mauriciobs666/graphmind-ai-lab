@@ -39,24 +39,82 @@ _ABSTENTION_MARKERS: tuple[str, ...] = (
 #: separately from the fixed-marker list, not folded into it, because a plain substring match on
 #: "don't mention" also matches a reply that *hedges but still answers* ("The passages don't
 #: mention this directly, but based on the numbers given, the answer is 42,000") — a real,
-#: grounded, non-abstaining reply. So this phrase counts as abstention only when it is not followed
-#: later in the reply by a contrastive continuation ("but"/"however") that signals the reply goes
-#: on to actually answer.
-_MENTION_ABSTENTION_RE = re.compile(r"\b(?:don't|doesn't) mention\b")
-_CONTRASTIVE_CONTINUATION_RE = re.compile(r"\b(?:but|however)\b")
+#: grounded, non-abstaining reply. Widened to the uncontracted "does not"/"do not" spelling too
+#: (independent code-gate finding, U174, `docs/reviews/small-model-benchmarking-s7-
+#: abstention-fix.md` finding 4) — same idiom, same risk of a false-positive hedge-then-answer
+#: match, so it shares the guard below rather than being checked separately.
+_MENTION_ABSTENTION_RE = re.compile(r"\b(?:don't|doesn't|do not|does not) mention\b")
+
+#: The connectives that can introduce a "but the reply actually answers" (or "but the reply is
+#: still reasoning about an absence") continuation. Widened from "but"/"however" to also cover
+#: "although"/"though"/"yet" (U174 finding 1) — "even though" needs no separate alternative
+#: since "though" alone already matches it at a word boundary.
+_CONTRASTIVE_CONTINUATION_RE = re.compile(r"\b(?:but|however|although|though|yet)\b")
+
+#: A crude "this clause states an actual, concrete answer" proxy: does it contain a digit? Used
+#: only to pick between the two directions the connective's own clause can point (see the
+#: docstring below) — never a substitute for real language understanding.
+_DIGIT_RE = re.compile(r"\d")
+
+
+def _sentence_span(canon: str, start: int, end: int) -> tuple[int, int]:
+    """The `[start, end)` span, within `canon`, of the sentence containing `canon[start:end]` —
+    split on `.`/`!`/`?`, the same minimal boundary this module already leans on elsewhere
+    (`format_checks`'s blank-line paragraph check). Scopes the contrastive-connective search
+    below to the idiom's own sentence (U174 finding 5 / mutation probe: an unrelated connective
+    in a *later* sentence must not suppress a genuine abstention — see
+    `TestLooksLikeAbstentionContrastiveScope.
+    test_connective_in_an_unrelated_later_sentence_does_not_suppress_a_genuine_abstention`)."""
+    left_bounds = [canon.rfind(ch, 0, start) for ch in ".!?"]
+    sentence_start = max(left_bounds) + 1
+    right_bounds = [pos for pos in (canon.find(ch, end) for ch in ".!?") if pos != -1]
+    sentence_end = min(right_bounds) if right_bounds else len(canon)
+    return sentence_start, sentence_end
 
 
 def looks_like_abstention(reply: str) -> bool:
     """`layer2_contains`'s own `not_found` branch, adapted (S7 spec §2.8): true iff any of the
     fixed abstention phrasings appears, as a canonicalized substring, in `reply` — or the reply
-    uses the "don't/doesn't mention" idiom without a later hedge-then-answer continuation."""
+    uses the "don't/doesn't/do not/does not mention" idiom without a same-sentence contrastive
+    continuation that signals the reply goes on to actually answer.
+
+    The continuation check is direction-*insensitive* within the idiom's own sentence (U174
+    finding 2: "The answer is 42,000, but the passages don't mention the exact breakdown." must
+    not be misclassified abstention just because the connective precedes the idiom instead of
+    following it) — but a same-sentence connective alone is not enough to conclude the reply
+    answers (U174 finding 3: "..., but neither do they contain any related information, so I
+    cannot determine the answer." is a genuine abstention despite the "but"). So the clause on
+    the *other* side of the connective from the idiom (whichever side that is) is checked for a
+    digit, a crude proxy for "this clause states a concrete answer" versus "this clause is more
+    reasoning about the absence."
+
+    Known, accepted limitation (documented deliberately, not an oversight — U174 finding 3's own
+    residual tension): this digit proxy is purely syntactic. A genuine abstention whose own
+    unrelated reasoning happens to mention a number ("...but there were only 2 documents
+    retrieved, so I cannot determine the answer.") is misclassified as answering, and a genuine
+    answer stated without any digit ("...but the price is unchanged from before.") is
+    misclassified as abstention. No regex-only heuristic can fully separate "this clause states
+    an answer" from "this clause reasons about an absence" — that is a semantic judgment, not a
+    syntactic one — so this trade-off is accepted rather than chased further; pinned by
+    `TestLooksLikeAbstentionContrastiveScope.
+    test_documented_residual_false_negative_when_unrelated_reasoning_contains_a_number`."""
     canon = _canon_str(reply)
     if any(marker in canon for marker in _ABSTENTION_MARKERS):
         return True
     match = _MENTION_ABSTENTION_RE.search(canon)
     if match is None:
         return False
-    return _CONTRASTIVE_CONTINUATION_RE.search(canon, match.end()) is None
+    sent_start, sent_end = _sentence_span(canon, match.start(), match.end())
+    sentence = canon[sent_start:sent_end]
+    idiom_end_in_sentence = match.end() - sent_start
+    connective = _CONTRASTIVE_CONTINUATION_RE.search(sentence)
+    if connective is None:
+        return True
+    if connective.start() >= idiom_end_in_sentence:
+        other_clause = sentence[connective.end():]
+    else:
+        other_clause = sentence[:connective.start()]
+    return _DIGIT_RE.search(other_clause) is None
 
 
 #: The three format keys every pack/item `format` block may declare, and their trivially-passing

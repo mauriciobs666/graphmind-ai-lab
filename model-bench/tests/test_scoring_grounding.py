@@ -95,6 +95,113 @@ class TestLooksLikeAbstentionDontMention:
 
 
 # ==================================================================================================
+# 1c. `looks_like_abstention` — code-gate finding fixes (U174, `docs/reviews/
+# small-model-benchmarking-s7-abstention-fix.md`): widen the connective alternation beyond
+# "but"/"however" (finding 1), widen the mention idiom beyond contracted "don't"/"doesn't"
+# (finding 4), and resolve the search-direction tension between findings 2 and 3 — an
+# answer-then-hedge reply must not be misclassified abstention (finding 2) while a genuine
+# abstention with unrelated post-idiom reasoning must still BE classified as abstention
+# (finding 3). All four are verified-live fixtures from the review, not synthetic ones.
+# ==================================================================================================
+
+
+class TestLooksLikeAbstentionContrastiveScope:
+    # -- finding 1: widen the connective alternation ---------------------------------------------
+
+    def test_hedge_then_answer_with_although_is_not_misclassified(self):
+        reply = (
+            "The passages don't mention this directly, although based on the numbers given, "
+            "the answer is 42,000."
+        )
+        assert grounding.looks_like_abstention(reply) is False
+
+    def test_hedge_then_answer_with_though_is_not_misclassified(self):
+        reply = (
+            "The passages don't mention this specific figure, though the context lets us "
+            "compute it: the total comes to 24.99."
+        )
+        assert grounding.looks_like_abstention(reply) is False
+
+    def test_hedge_then_answer_with_yet_is_not_misclassified(self):
+        reply = (
+            "The passages don't mention this directly, yet the numbers given add up to 42,000."
+        )
+        assert grounding.looks_like_abstention(reply) is False
+
+    # -- finding 4: widen the mention idiom to uncontracted "does not"/"do not" -------------------
+
+    def test_does_not_mention_uncontracted_is_recognized(self):
+        assert grounding.looks_like_abstention("The passages does not mention that fact.") is True
+
+    def test_do_not_mention_uncontracted_is_recognized(self):
+        assert grounding.looks_like_abstention("The passages do not mention that detail.") is True
+
+    # -- finding 2: an answer-then-hedge reply (connective BEFORE the idiom) must not be
+    # misclassified abstention — the review's own reproduction of the "after the idiom only"
+    # search-direction gap.
+
+    def test_answer_then_hedge_reply_is_not_misclassified_as_abstention(self):
+        reply = "The answer is 42,000, but the passages don't mention the exact breakdown."
+        assert grounding.looks_like_abstention(reply) is False
+
+    # -- finding 3: a genuine abstention with unrelated post-idiom "but"/"however" reasoning
+    # (no actual answer in the other clause) must still be classified as abstention — the
+    # opposite-direction false negative widening the search naively would reintroduce.
+
+    def test_genuine_abstention_with_unrelated_post_idiom_reasoning_is_still_detected(self):
+        reply = (
+            "The passages don't mention this specific detail, but neither do they contain any "
+            "related information, so I cannot determine the answer."
+        )
+        assert grounding.looks_like_abstention(reply) is True
+
+    def test_genuine_abstention_with_unrelated_post_idiom_however_is_still_detected(self):
+        reply = (
+            "The passages don't mention the figure, however I searched carefully and found "
+            "nothing else relevant either."
+        )
+        assert grounding.looks_like_abstention(reply) is True
+
+    # -- mutation-catching: pins sentence-scoping specifically (not just "search the whole
+    # string"), per the review's own finding 5 — mutating the sentence-scoped search back to a
+    # whole-canon search must turn this red, since the connective sits in an unrelated sentence.
+
+    def test_connective_in_an_unrelated_later_sentence_does_not_suppress_a_genuine_abstention(
+        self,
+    ):
+        reply = (
+            "The passages don't mention the shipping cost at all. However, the return policy "
+            "allows 30 days for exchanges."
+        )
+        assert grounding.looks_like_abstention(reply) is True
+
+    # -- mutation-catching: pins that the "does the other side state an actual answer" digit
+    # signal is scoped to the clause on the OTHER side of the connective from the idiom, not to
+    # the whole sentence — a digit embedded in the idiom's own clause must not itself flip the
+    # verdict.
+
+    def test_digit_signal_is_scoped_to_the_non_idiom_clause_not_the_whole_sentence(self):
+        reply = (
+            "The passages don't mention the exact total of 42 items, but I still cannot "
+            "determine the final price."
+        )
+        assert grounding.looks_like_abstention(reply) is True
+
+    # -- the accepted, documented trade-off (findings 2/3 cannot be fully separated by a regex
+    # alone — see `_CONTRASTIVE_CONTINUATION_RE`'s own docstring note): a genuine abstention whose
+    # own post-connective reasoning happens to include a number is misclassified as an answer.
+    # This is deliberate and pinned, not an oversight — see the module docstring's "Known,
+    # accepted limitation" note above `looks_like_abstention`.
+
+    def test_documented_residual_false_negative_when_unrelated_reasoning_contains_a_number(self):
+        reply = (
+            "The passages don't mention this figure, but there were only 2 documents retrieved, "
+            "so I cannot determine the answer."
+        )
+        assert grounding.looks_like_abstention(reply) is False
+
+
+# ==================================================================================================
 # 2. `resolve_format` — the three-way merge (S7 spec §3.1/§3.2/§3.4)
 # ==================================================================================================
 
