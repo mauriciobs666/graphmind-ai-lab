@@ -1,0 +1,588 @@
+{
+  "aggregates": {
+    "cleanThroughTurn": null,
+    "determinismProbe": {
+      "differingTurns": [],
+      "identical": true,
+      "ran": true,
+      "scriptIds": [
+        "A-01",
+        "B-01"
+      ]
+    },
+    "funnel": [
+      {
+        "n": 0,
+        "name": "iterationCapHitRate",
+        "successes": 0,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 0,
+        "name": "native",
+        "successes": 0,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 0,
+        "name": "rightToolChosen",
+        "successes": 0,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 0,
+        "name": "allArgsCorrect",
+        "successes": 0,
+        "type": "binary",
+        "unit": "call"
+      },
+      {
+        "n": 0,
+        "name": "spurious",
+        "successes": 0,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 0,
+        "name": "duplicateWithinTurn",
+        "successes": 0,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 0,
+        "name": "duplicateCrossTurn",
+        "successes": 0,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 0,
+        "name": "stoppingWhenDone",
+        "successes": 0,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 0,
+        "name": "replyMatchesTool",
+        "successes": 0,
+        "type": "binary",
+        "unit": "turn"
+      }
+    ],
+    "funnelCounts": {
+      "argsBoundaryUnit": 0,
+      "argsOmittedRequired": 0,
+      "argsWrongValue": 0,
+      "dispatchedCalls": 0,
+      "factBearingReturns": 0,
+      "nativeCallEmitted": 0,
+      "noAttempt": 0,
+      "prosePseudoCall": 0,
+      "requiredCallTurns": 0,
+      "restraintTurns": 0,
+      "turnsDriven": 81,
+      "turnsScoredAfterUnrunnable": 0,
+      "turnsWithAnyCall": 0,
+      "unrunnableModelChannel": 81,
+      "unrunnableToolChannel": 0,
+      "unscoreableReturns": 0
+    },
+    "hazard": [
+      {
+        "censored": 12,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 0
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 1
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 2
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 3
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 4
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 5
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 6
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 7
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 8
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 9
+      }
+    ],
+    "iterationSummary": {
+      "capHitCount": 0,
+      "mean": null,
+      "meanCensored": false,
+      "n": 0,
+      "p95": null,
+      "p95Censored": false,
+      "y": 81,
+      "yCalls": 81
+    },
+    "kind": "toolcalls",
+    "perTurnPosition": [
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 0
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 1
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 2
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 3
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 4
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 5
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 6
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 7
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 8
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 9
+      }
+    ],
+    "prosePseudoCallDetector": {
+      "n": 20,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "restraint": null
+  },
+  "armKind": "model",
+  "attestationTripWire": "compared",
+  "basis": "by-construction",
+  "designEffect": 1.0,
+  "fingerprint": {
+    "arch": "mistral3",
+    "armKind": "model",
+    "benchSchemaVersion": 1,
+    "benchVersion": "0.1.0",
+    "callSurface": "chat",
+    "compatibilityType": "gguf",
+    "endedAt": "2026-09-17T00:28:44Z",
+    "hostOs": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "hostRamGb": 16,
+    "kvCacheSetting": "f16",
+    "lmStudioAppVersion": "0.4.24+1",
+    "loadedContextLength": 8192,
+    "maxContextLength": 262144,
+    "maxTokens": 1024,
+    "modelCapabilities": [
+      "tool_use"
+    ],
+    "modelCapabilitiesPresent": true,
+    "modelKey": "mistralai/ministral-3-3b",
+    "modelPublisher": "mistralai",
+    "modelType": "vlm",
+    "otherResidentWorkloads": [],
+    "packContentHash": "9171ad4cbc439dc7bd3b029c982548760d0026d19e7f247629d955c93cfa92ad",
+    "packId": "tool-caller-shop-assistant",
+    "packVersion": "0.2.0",
+    "pythonVersion": "3.12.3",
+    "quantization": "Q8_0",
+    "residencySource": "lmstudio-api-v0",
+    "residentModelsAtEnd": [
+      {
+        "id": "mistralai/ministral-3-3b",
+        "state": "loaded"
+      }
+    ],
+    "residentModelsAtStart": [
+      {
+        "id": "qwen/qwen3-4b-2507",
+        "state": "loaded"
+      }
+    ],
+    "runtimeName": "llama.cpp-win-x86_64-nvidia-cuda12-avx2",
+    "runtimeVersion": "2.39.0",
+    "startedAt": "2026-09-17T00:28:36Z",
+    "temperature": 0.0
+  },
+  "items": [
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "A-01",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "A-01",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "A-02",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "A-02",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "A-03",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "A-03",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "A-04",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "A-04",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "B-01",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "B-01",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "B-02",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "B-02",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "B-03",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "B-03",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "B-04",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "B-04",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "C-01",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "C-01",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "C-02",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "C-02",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "C-03",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "C-03",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "C-04",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "C-04",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    }
+  ],
+  "latency": null,
+  "role": "tool-caller",
+  "runId": "tool-caller-shop-assistant-mistralai_ministral-3-3b-2026-09-17T00:28:36Z",
+  "sessionId": "known-answer-pair"
+}
