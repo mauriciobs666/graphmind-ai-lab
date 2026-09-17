@@ -925,7 +925,14 @@ def _clean_through_turn_h_problems(pack: Pack) -> list[str]:
         return []
     h = clean_through_turn_h["H"]
 
-    scripts = list(pack.iter_scripts())
+    data_file = (pack.manifest.get("data") or {}).get("conversations")
+    try:
+        scripts = list(pack.iter_scripts())
+    except (OSError, json.JSONDecodeError) as exc:
+        return [
+            f"{pack.packId}: cannot read data.conversations {data_file!r} for the "
+            f"cleanThroughTurnH.H bound ({exc})"
+        ]
     if not scripts:
         return []
     offending = min(scripts, key=lambda script: len(script.turns))

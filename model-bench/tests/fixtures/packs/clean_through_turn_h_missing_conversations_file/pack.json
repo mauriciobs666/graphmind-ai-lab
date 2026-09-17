@@ -1,0 +1,19 @@
+{
+  "packId": "fixture-clean-through-turn-h-missing-conversations-file",
+  "packVersion": "1.0.0",
+  "role": "tool-caller",
+  "environment": {"requires": ["lmstudio-chat"]},
+  "data": {"conversations": "conversations.jsonl"},
+  "sampling": {
+    "scripts": 2,
+    "replicatesPerScript": 1,
+    "seed": 20260916,
+    "pairingKey": ["scriptId"],
+    "analysisUnit": "scriptId"
+  },
+  "metrics": {
+    "verdictMetrics": ["cleanThroughTurnH"],
+    "headlineMetric": "cleanThroughTurnH",
+    "cleanThroughTurnH": {"H": 4}
+  }
+}

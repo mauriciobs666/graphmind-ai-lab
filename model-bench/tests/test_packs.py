@@ -969,6 +969,42 @@ def test_clean_through_turn_h_problems_is_not_this_functions_problem_absent_eith
     assert not any("cleanThroughTurnH.H" in p for p in validate_pack(pack))
 
 
+def test_clean_through_turn_h_problems_reports_missing_conversations_file() -> None:
+    """The exact real-world state confirmed live twice: a manifest declaring both
+    `sampling.scripts` and `metrics.cleanThroughTurnH.H` (so this axis's scoping condition is
+    met) whose `data.conversations` file (`conversations.jsonl`) does not exist on disk yet — the
+    real `tool-caller-shop-assistant` pack's own state for one commit in this stage's history,
+    manifest landing before the data file did. Before this fix, `pack.iter_scripts()`'s unguarded
+    `self.data_path("conversations").open(...)` let `FileNotFoundError` escape `validate_pack`
+    uncaught, violating its own documented contract ("always returns a list; `[]` means valid").
+    `_row_count_identity_problems` already guards the identical read (`rows_path.read_text(...)`
+    inside `try/except (OSError, json.JSONDecodeError)`); this axis needs its own guard, in its
+    own words, not a name borrowed from that sibling's problem string."""
+    pack = load_pack(pack_fixture("clean_through_turn_h_missing_conversations_file"))
+
+    problems = validate_pack(pack)
+
+    h_problems = [p for p in problems if "cleanThroughTurnH.H" in p]
+    assert len(h_problems) == 1
+    assert "cannot read data.conversations" in h_problems[0]
+    assert "row-count identity" not in h_problems[0]
+
+
+def test_clean_through_turn_h_problems_accepts_zero_scripts_without_crashing() -> None:
+    """The scoping condition (`sampling.scripts` and `metrics.cleanThroughTurnH.H` both declared)
+    can be met by a pack whose `data.conversations` file exists but is empty — `iter_scripts()`
+    then yields nothing, and `min(scripts, key=...)` on an empty sequence raises `ValueError`
+    unless the `if not scripts: return []` guard catches it first. That guard is correct,
+    existing behavior, but had zero test coverage before this: reverting it (mutation-testing)
+    produced no test failures anywhere in the suite."""
+    pack = load_pack(pack_fixture("clean_through_turn_h_empty_scripts"))
+    assert list(pack.iter_scripts()) == []
+
+    problems = validate_pack(pack)
+
+    assert not any("cleanThroughTurnH.H" in p for p in problems)
+
+
 # --------------------------------------------------------------------------------------------
 # Pack.iter_prose_calibration() (S6 spec §2.5, §3.8, §5 Step 0)
 # --------------------------------------------------------------------------------------------
