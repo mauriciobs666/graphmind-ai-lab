@@ -1,6 +1,13 @@
 # `model-bench` S7 — `chat-responder` pack: live-run test report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** — (S7)
+> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** — (S7) · **Version:** 2
+
+**2026-09-17 revision note (one dated line, not a narrative):** re-run after the four-round
+abstention-detection fix chain (U173–U177, `modelbench/scoring/grounding.py`, all `teco`-verified,
+landed through `fd515a2`) closed the defect this report's own first pass found — see "## Re-run —
+2026-09-17 (post-fix verification, session `s7-live-v2`)" below for the fresh live results and the
+corrected headline number; the original run's commands, output, and defect narrative below are kept
+intact as the historical record of what was found and how (S6 report precedent).
 
 ## Summary
 
@@ -26,9 +33,18 @@ stored cleanly, exactly as required) — but it is a real defect in the pack's o
 material enough that `groundingRate` as currently measured materially understates this model's
 actual grounded-reply rate. Reported in full below, not silently worked around.
 
+**2026-09-17 update: the defect is fixed and confirmed on a fresh live run.** A full fix chain
+(U173–U177) closed the `_ABSTENTION_MARKERS`/sentence-boundary defect this pass found; a fresh
+live re-run against the same model on the fixed scorer (session `s7-live-v2`, below) shows
+`groundingRate` **23/30 (0.767)**, up from the original 15/30 (0.500), and all 8 of the original
+run's `mustAbstain: true` false negatives now correctly classify — both in the stored comparison
+output and independently reproduced live, item by item, in this pass. This is the report's current,
+corrected verdict; the original 0.500 figure and the defect narrative below remain as the historical
+record of what was found.
+
 **CPG:** considered, not relevant — reconfirmed live this session via `mcp__cypher__query GRAPHS`
 (28 graphs listed, no `cpg_model-bench`); this is a code-level task in a component with no loaded
-CPG.
+CPG. Reconfirmed again on this re-run pass, same result.
 
 ## Commands run, in order
 
@@ -312,3 +328,193 @@ real fail, confirmed nine false-negative fails).
   gitignored, not tracked).
 - Pack under test: `model-bench/packs/chat-responder-grounded-answers/` (`packVersion: 0.1.0`, all
   30 items FR-19-signed-off per the coordination doc's S7 Step 5 entry).
+
+## Re-run — 2026-09-17 (post-fix verification, session `s7-live-v2`)
+
+**Why this re-run exists.** The defect found above (`_ABSTENTION_MARKERS` missing this model's
+dominant "don't/doesn't mention" phrasing, plus a literal-substring `checklist_pass` containment
+check) went through a full fix chain in `modelbench/scoring/grounding.py`, four rounds, each
+`teco`-verified directly against source and `analyst`-gated: **U173** (widened
+`_ABSTENTION_MARKERS` via a dedicated `_MENTION_ABSTENTION_RE`, contrastive-continuation guard) →
+**U174** (`analyst` gate, approve with suggestions, 4 findings routed to the stakeholder) →
+**U175** (closed all 4 findings; an explicitly documented, accepted digit-proxy trade-off for the
+two genuine-tradeoff findings) → **U176** (`analyst` re-gate, approve with suggestions, one new
+decimal-boundary finding from the fix itself) → **U177** (digit-aware sentence-boundary fix,
+closing the defect chain). Full history: `docs/plans/small-model-benchmarking-coordination.md`, "##
+S7 abstention-marker fix dispatched" through "## S7 abstention-fix final round dispatched". This
+section re-runs the pack fresh against the fixed scorer and independently confirms the fix's
+real-world effect — it does not re-litigate the scorer's own correctness, which was already gated
+twice on this exact defect class.
+
+**Environment:** `model-bench/` at commit `fd515a2` (worktree otherwise clean apart from this
+report and the new stored run/report artifacts this pass produced). Model `qwen/qwen3-4b-2507`,
+already resident (`GET /api/v0/models` showed `state: loaded` before this pass began — no warm-up
+load needed). No attestation fork this time (`host.json` from the original S7 pass, and S7's own
+same-day re-attestation, both still valid — no LM Studio drift since).
+
+### Commands run, in order
+
+1. `./run.sh validate --pack packs/chat-responder-grounded-answers` →
+   `chat-responder-grounded-answers 0.1.0 (chat-responder): valid`, exit 0.
+2. `./run.sh validate --pack packs/chat-responder-grounded-answers --strict` → same documented
+   `NotImplementedError` (runner-spec §9) as the original pass and S6's own report — confirmed by
+   direct execution, not assumed. Not a defect.
+3. `./run.sh run --pack chat-responder-grounded-answers --model qwen/qwen3-4b-2507 --session
+   s7-live-v2` → `stored:
+   results/runs/chat-responder-grounded-answers-qwen_qwen3-4b-2507-2026-09-17T21:04:25Z.json`, exit
+   0, no attestation refusal.
+4. Same command again (second live invocation, same model, same session tag, for the
+   negative-control comparison) → `stored:
+   results/runs/chat-responder-grounded-answers-qwen_qwen3-4b-2507-2026-09-17T21:04:47Z.json`, exit
+   0.
+5. `./run.sh compare --pack chat-responder-grounded-answers --session s7-live-v2
+   --negative-control` → rendered and stored
+   `reports/chat-responder-grounded-answers-20260917-02.md` (full output below).
+6. Baseline suite, re-confirmed before spending the live calls: `.venv/bin/python -m pytest -q` →
+   **1706 passed, 3 deselected**, matching the exact post-U177 count U177's own delivery reported —
+   green before this pass proceeded.
+
+### Real output — `compare`'s rendered markdown (verbatim, from step 5)
+
+```markdown
+# Comparison — chat-responder-grounded-answers@0.1.0 (chat-responder)
+
+> **Reply quality is not measured by this pack.** `groundingRate` is a deterministic containment check against the retrieved context, never a judgement of how good, helpful, or well-written a reply is (FR-21a — the judged-quality layer is deferred, `docs/BACKLOG.md`).
+
+> **NEGATIVE CONTROL (WIRING SMOKE CHECK)** — both arms are the *same stored record*, so `b = c = 0 by construction` and this comparison **cannot fail**. It proves the mode is wired; it says nothing about whether the harness is sound.
+
+## Arms
+
+| arm | metric | k/n | rate | 95% Wilson |
+|---|---|---|---|---|
+| qwen/qwen3-4b-2507 | groundingRate | 23/30 | 0.767 | [0.591, 0.882] |
+| qwen/qwen3-4b-2507 | formatMaxWords | 30/30 | 1.000 | [0.886, 1.000] |
+| qwen/qwen3-4b-2507 | formatSingleParagraph | 30/30 | 1.000 | [0.886, 1.000] |
+| qwen/qwen3-4b-2507 | formatNoForbiddenPatterns | 30/30 | 1.000 | [0.886, 1.000] |
+| ... (identical second arm — same underlying record, per negative-control mechanics) ...
+
+## Speed
+
+| arm | p50 | p95/max | timed/n | withheld (load/no-resp) | TTFT median | prefill ms/1k | tok/s median (diagnostic) |
+|---|---|---|---|---|---|---|---|
+| qwen/qwen3-4b-2507 | 557 | 1117 | 30/30 | 0/0 | 40 | 132.9 | 57.0 |
+| qwen/qwen3-4b-2507 | 557 | 1117 | 30/30 | 0/0 | 40 | 132.9 | 57.0 |
+
+*Descriptive only — decode tokens/sec is a diagnostic, never a comparison instrument (FR-11).*
+
+## Verdicts
+
+### groundingRate
+Not distinguishable at this sample size (by-construction negative control: b=0, c=0, McNemar exact p=1.000, CI [-6.1, 6.1] pp).
+
+### Exploratory metrics
+- `formatMaxWords` / `formatSingleParagraph` / `formatNoForbiddenPatterns` — exploratory — no significance claim
+```
+
+(Full, unabridged output is on disk: `reports/chat-responder-grounded-answers-20260917-02.md`.)
+
+Cross-checked the Speed table against the stored run JSON's own `latency` block directly (not just
+read off the render): `latencyMsP50: 556.99…` → 557, `latencyMsP95: 1116.79…` → 1117,
+`ttftMsMedian: 40.292` → 40, `prefillMsPer1kMedian: 132.94…` → 132.9,
+`tokensPerSecondMedian: 57.02…` → 57.0 — exact match, rounding only. **The "## Speed" section and
+the reply-quality caveat both still render correctly on this fresh output** (caveat is still the
+first content line under the title, before any number) — neither was touched by the fix, and this
+confirms that directly rather than assuming it.
+
+### The headline number: `groundingRate` 23/30 (0.767), up from 15/30 (0.500)
+
+This is the corrected, representative rate. It also closely matches the original report's own
+directional estimate ("closer to 24/30 (0.80) than the reported 0.500") derived from spot-checking
+9 false-negative reclassifications by hand — the fix's measured effect on fresh live output lands
+almost exactly where that estimate predicted, which is itself a second, independent line of
+evidence that the fix generalizes rather than merely passing its own unit fixtures.
+
+### Spot-check — all 8 original `mustAbstain: true` items, reproduced live against the fixed scorer
+
+Reproduced all 8 items that the original defect affected, live, through the real harness code
+(`modelbench.packs.load_pack`, `grounding.build_messages`, `LMStudio.chat`,
+`grounding.checklist_pass`/`looks_like_abstention`) — a fresh call each time, same model/pack/
+`temperature: 0.0` as the original spot-check, not a re-read of the stored artifact:
+
+| Item | Real reply (this session's live reproduction) | `abstained` | `checklistPass` |
+|---|---|---|---|
+| cr-03 | "The passages don't mention that the payment-timeout incident cost the company in lost revenue." | `True` | **`True`** |
+| cr-06 | "The passages don't mention who first noticed and reported the search-latency spike to the on-call engineer." | `True` | **`True`** |
+| cr-09 | "The passages don't mention that." | `True` | **`True`** |
+| cr-15 | "The passages don't mention the percentage of the total mobile user base that experienced the unexpected-logout bug." | `True` | **`True`** |
+| cr-18 | "The passages don't mention any compliance framework evaluated besides SOC 2 before settling on the new session-timeout policy." | `True` | **`True`** |
+| cr-24 | "The passages don't mention which moving company was hired to handle the office relocation." | `True` | **`True`** |
+| cr-26 | "The passages don't mention which cloud storage vendor is used to host these database snapshots." | `True` | **`True`** |
+| cr-28 | "The passages don't mention which specific customer accounts were affected by the slow escalation response times." | `True` | **`True`** |
+
+**8 of 8 — all correctly classify now**, live-reproduced, not just read off the stored record (which
+also shows all 8 as `checklistPass: true` in this run — matches exactly). This is the fix's
+real-world effect confirmed directly, per this task's own brief, on fresh output from this specific
+model.
+
+**Also reproduced `cr-11`/`cr-17` live** (the original report's two *containment/morphology* false
+negatives — a distinct mechanism from the abstention-marker defect, explicitly scoped out of the
+U173–U177 fix chain per a `data-scientist` consult, and recorded as an accepted, deferred limitation
+in `docs/BACKLOG.md`, "`checklist_pass`'s `mustContain`/`mustNotContain` containment is plain..."):
+both still fail (`"4 retry attempts"` reply, `"30-minute"`/`"8-hour"` reply — same replies as
+original, same `checklistPass: false`). **This is expected, not a regression or an unresolved
+finding** — the morphology defect was never in scope for this fix chain; it stays open in
+`docs/BACKLOG.md` exactly where it was filed.
+
+**The remaining 7 stored-run `checklistPass: false` items this run** (`cr-11`, `cr-16`, `cr-17`,
+`cr-22`, `cr-27`, `cr-29`, `cr-30`) were not all individually re-spot-checked beyond `cr-11`/`cr-17`
+above — per this task's scope (confirm the abstention fix's effect, not re-litigate the scorer),
+this is intentional. Two are already accounted for by name from the original pass: `cr-22` is the
+already-confirmed genuine model miss (context states "$180,000 ARR," reply still claims the
+passages don't mention it — `abstained: true, checklistPass: false` in this run too, same failure
+mode, not a new defect); `cr-16` is the already-flagged item-content ambiguity (not a scorer bug).
+`cr-27`/`cr-29`/`cr-30` are new to this run's failure set and not individually diagnosed here —
+named as a residual gap below, not silently absorbed into "the fix worked."
+
+### Coverage & gaps (this re-run)
+
+**Covered:** item 16's full done-when checklist re-confirmed on fresh output (run stores
+successfully; `groundingRate` is the headline metric; the three format counts render as exploratory,
+never pooled; the "## Speed" section renders with real numbers, cross-checked against the stored
+JSON; the reply-quality caveat renders first, before any number); a negative-control smoke pass; a
+live, code-level reproduction of all 8 original `mustAbstain: true` false-negative items, confirming
+8/8 now correctly classify; a live reproduction of both containment/morphology false negatives,
+confirming they correctly remain open (out of this fix's scope) rather than silently regressed or
+silently claimed fixed.
+
+**Gaps, named rather than hidden:**
+- `cr-27`/`cr-29`/`cr-30` (3 of this run's 7 `checklistPass: false` items) were not individually
+  spot-checked this pass — unlike the original pass's thoroughness across 12 of 30 items, this pass
+  scoped tightly to the fix's own claim (the 8 `mustAbstain` items plus the 2 known morphology
+  cases). A future pass wanting a full false-negative census on the *remaining* containment-
+  morphology defect class would need to check these three by hand.
+- The stored-run-record testability gap named in the original report (no raw reply text persisted)
+  is unchanged — this pass again had to reproduce every spot-checked item live rather than
+  auditing the stored artifact directly. The original report's recommendation to persist raw reply
+  text was not implemented as part of this fix chain; still open.
+- The original report's **format-check finding** ("the format axes were never meaningfully
+  exercised — every reply trivially satisfies every constraint") still holds on this run's data too:
+  same short-prose reply pattern, all three format axes at 30/30 without real variance exercised.
+  Not re-verified word-by-word this pass (the original pass already established this thoroughly and
+  nothing in the fix chain touches format scoring); noted for completeness rather than re-derived.
+
+### Verdict on this re-run
+
+**PASS — the fix holds on fresh, independently-reproduced live output from this model.** The
+headline `groundingRate` is now representative: 23/30 (0.767), matching the original report's own
+directional estimate closely, and all 8 of the specific items the original defect affected now
+correctly classify, confirmed both via the stored comparison output and via independent live
+reproduction. The one remaining defect class (containment/morphology, `cr-11`/`cr-17`) is exactly
+where the original report and `docs/BACKLOG.md` left it — explicitly out of scope for this fix,
+not silently reopened or silently claimed closed. Nothing crashed; nothing rendered incorrectly;
+no new defect surfaced.
+
+### Evidence on disk (this re-run)
+
+- Stored run records: `model-bench/results/runs/chat-responder-grounded-answers-qwen_qwen3-4b-2507-2026-09-17T21:{04:25,04:47}Z.json`.
+- Comparison markdown: `model-bench/reports/chat-responder-grounded-answers-20260917-02.md`.
+- Live spot-check reproduction script: session scratch (not committed), reproducible from the
+  method described above against any live LM Studio instance with this model resident.
+- Pack under test: unchanged, `model-bench/packs/chat-responder-grounded-answers/` (`packVersion:
+  0.1.0`).
+- Scorer under test: `model-bench/modelbench/scoring/grounding.py` at commit `fd515a2` (post-U177).
