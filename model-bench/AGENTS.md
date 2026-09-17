@@ -9,37 +9,53 @@ for the full design.
 
 ## Current state
 
-**Stages S4 and S5 are closed.** S4 closed both `guard-judge`/`nlq-structured-query` packs end to
-end; S5 closed `tool-caller`'s environment and scoring, part 1, entirely against synthetic traces
-(no live LM Studio call is owed until S6). `modelbench/` holds `fingerprint`, `results`, `stats`,
-`report`, `roles`, `packs` (the real loader: `load_pack`/`validate_pack`, content hashing, the AST
-import allowlist, the row-count identity), `lmstudio`, `hostinfo`, `tooling`, `convo` (`assemble`
-and the bounded per-turn `drive`), `runner` (`RunConfig`, `RunRefused`, the
-`ItemScorer`/`ConversationScorer` scorer-seam Protocols — **both now live**, `_load_conversation_scorer`
-mirrors `_load_item_scorer` byte-for-byte — `run_pack`'s ten-step capture order, both driving loops,
-and `latency_block`'s `LatencyBlock` accumulation, satisfying spec §5's nine invariants), and four
-scorer modules: `scoring/retrieval.py` (`embedder`), `scoring/classification.py` (`guard-judge`),
+**Stages S4, S5 and S6 are closed.** S4 closed both `guard-judge`/`nlq-structured-query` packs end
+to end; S5 closed `tool-caller`'s environment and scoring, part 1, entirely against synthetic
+traces; S6 closed `tool-caller`'s conversation scripts and first live run, part 2, closing the role
+end to end. `modelbench/` holds `fingerprint`, `results`, `stats`, `report`, `roles`, `packs` (the
+real loader: `load_pack`/`validate_pack`, content hashing, the AST import allowlist, the row-count
+identity, and — S6 — `_clean_through_turn_h_problems`'s `H <= min(script length)` axis, refusing
+gracefully rather than raising when a pack declares that axis before `conversations.jsonl` exists),
+`lmstudio`, `hostinfo`, `tooling`, `convo` (`assemble` and the bounded per-turn `drive`, plus — S6 —
+`_prologue_system_message`, merging the system prompt and tool-schema text into one `role:"system"`
+message after a live run showed two separate ones rejected outright by `mistralai/ministral-3-3b`'s
+chat template), `runner` (`RunConfig`, `RunRefused`, the `ItemScorer`/`ConversationScorer`
+scorer-seam Protocols — **both now live**, `_load_conversation_scorer` mirrors `_load_item_scorer`
+byte-for-byte — `run_pack`'s ten-step capture order, both driving loops, and `latency_block`'s
+`LatencyBlock` accumulation, satisfying spec §5's nine invariants), and four scorer modules:
+`scoring/retrieval.py` (`embedder`), `scoring/classification.py` (`guard-judge`),
 `scoring/extraction.py` (`nlq-structured-query`), and `scoring/toolcalls.py` — the first
 `ConversationScorer` — for `tool-caller` (per-turn pure functions per `-ml` §4.2's letters, `FunnelCounts`'
 16 fields including the `argsOmittedRequired`/`argsWrongValue`/`argsBoundaryUnit` failure
-decomposition, `HazardPoint`'s censored survival curve, the `I(t)`/`Y_calls` iteration summary).
-S5 also shipped `packs/tool-caller-shop-assistant/` (storefront `tools/sim.py` + `catalog.json` +
-`schemas.json`, `pack.json`, `prompts/system.md`) and `report.py`'s three new renderers
-(`_render_funnel`, `_render_per_turn_position`, `_render_hazard`). CLI unchanged since S4 (six
-commands, three `refresh_golden.py` flags). Proof runs against a live model exist for S3/S4's three
-packs only (`docs/test-reports/embedder-self-check-report.md`,
+decomposition, `HazardPoint`'s censored survival curve, the `I(t)`/`Y_calls` iteration summary, and
+— S6 — the prose-pseudo-call detector's precision/recall, previously computed nowhere in production
+code, now wired via `ToolCallAggregates.prosePseudoCallDetector` and one new `report.py` render
+line). `packs/tool-caller-shop-assistant/` now ships complete: S5's storefront `tools/sim.py` +
+`catalog.json` + `schemas.json`, `pack.json`, `prompts/system.md`, plus S6's `conversations.jsonl`
+(12 hand-authored scripts, FR-19 human-verified — an agent pre-check found and fixed 3 issues, then
+the stakeholder personally reviewed all 12 against `scripts/s6_walkthrough.py` and filled
+`provenance.verifiedBy` on each), `prose_calibration.jsonl` (20 labelled replies), `PROVENANCE.md`,
+and `packVersion` `0.2.0`. `report.py`'s three S5 renderers are unchanged (`_render_funnel`,
+`_render_per_turn_position`, `_render_hazard`). CLI unchanged since S4 (six commands, three
+`refresh_golden.py` flags). Proof runs against a live model exist for S3/S4's three packs
+(`docs/test-reports/embedder-self-check-report.md`,
 `reports/guard-judge-understanding-20260911-02.md`, `reports/nlq-structured-query-20260911-01.md`);
 S5's own proof is entirely synthetic — the code gate (`docs/reviews/small-model-benchmarking-s5.md`)
 and QA acceptance (`docs/test-reports/small-model-benchmarking-s5-report.md`, verdict PASS with one
 non-blocking defect, TD-1, in `tools/sim.py`'s dispatch-totality contract) both re-verified it
-directly.
+directly. **S6's own proof is live**: item 19a (negative control) **PASS**; item 19b (known-answer
+validation, qwen vs. ministral) **not reproduced** at this pack's n=12 sizing, on the baseline
+config and both rungs of R-3's bisect — the stage's own accepted done-condition
+(`docs/test-reports/small-model-benchmarking-s6-report.md` §6: gates on 19b being run and recorded,
+never on the contrast appearing). Along the way S6 found and fixed the `convo.py` defect above,
+independently gated (`docs/reviews/small-model-benchmarking-s6-convo-fix.md`, approve with
+suggestions, no blockers).
 
-**What S6+ owes.** `tool-caller`'s own S6 stage still owes the 12 human-verified conversation
-scripts (`conversations.jsonl` + `PROVENANCE.md`), the ~20 labelled prose-detector replies,
-`validate --strict` on the real pack, and this pack's first live LM Studio run — none of that is
-buildable before real scripts exist (S5 spec §1/§2.6). One role, `chat-responder` (S7), still has no
-scorer. `docs/plans/small-model-benchmarking.md` §4 sequences S2–S8; `docs/HISTORY.md` carries the
-unit trail.
+**What S7 owes.** One role, `chat-responder`, still has no scorer. S7 builds
+`packs/chat-responder-grounded-answers/` and `modelbench/scoring/grounding.py`, deterministic layer
+only (FR-21a: latency, format, grounding-by-containment; the judged-quality layer stays deferred,
+`docs/BACKLOG.md`). `docs/plans/small-model-benchmarking.md` §4 sequences S2–S8 (S8 closes with
+documentation); `docs/HISTORY.md` carries the unit trail.
 
 **The fingerprint has two discriminators and one derived key, and `ARM_KINDS` is deliberately not
 derived from the forbidden mapping.** `REQUIRED_BY_SCHEMA[schema]` and `FORBIDDEN_BY_ARM_PROFILE`

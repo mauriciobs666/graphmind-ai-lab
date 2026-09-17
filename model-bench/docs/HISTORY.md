@@ -2,6 +2,84 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-17 — U151–U164 — S6 closed: `tool-caller` pack, part 2 (conversation scripts + first live run)
+
+**What:** S6 built the second half of the `tool-caller-shop-assistant` pack — the conversation
+scripts that S5 left synthetic-only — and closed the stage, including its first live LM Studio run.
+Full trail: `docs/plans/small-model-benchmarking-coordination.md` rows U151 through U164.
+
+1. **Two code gaps fixed ahead of content authoring** (`docs/plans/small-model-benchmarking-s6-spec.md`
+   §2.3/§2.5): `packs.validate_pack` gained an 8th axis, `_clean_through_turn_h_problems`
+   (`modelbench/packs.py`), checking `H <= min(script length)`; and the prose-pseudo-call detector's
+   precision/recall — previously computed nowhere in production code — is now wired via
+   `ToolCallAggregates.prosePseudoCallDetector` (`modelbench/results.py`), `scoring/toolcalls.py`,
+   and one new `report.py` render line. A dedicated code gate over this diff (U162-163) then found
+   and fixed a second defect: `_clean_through_turn_h_problems` crashed with an uncaught
+   `FileNotFoundError`, instead of returning a problem string, when a pack declares the axis's
+   manifest keys before `conversations.jsonl` exists — fixed mirroring the sibling
+   `_row_count_identity_problems`'s existing `try/except` pattern.
+2. **Content authored**: `packs/tool-caller-shop-assistant/conversations.jsonl` (12 hand-authored
+   conversation scripts, turn by turn, covering shapes A/B/C per the spec's coverage matrix),
+   `prose_calibration.jsonl` (20 labelled replies), `PROVENANCE.md`, and a 3-field `pack.json`
+   manifest correction (`historyReplay`, `representToolSchemasEachTurn`, `maxTokens`) plus
+   `packVersion` bumped `0.1.0` → `0.2.0`.
+3. **FR-19's binding human-verification process, run in full**: an agent pre-check found and fixed
+   3 issues (a compound-turn schema mismatch, split into two turns; two missing empty-cart
+   assertions), then the stakeholder personally reviewed all 12 scripts against a purpose-built
+   read-only walkthrough tool (`scripts/s6_walkthrough.py`, new — drives every script's
+   `toolRequired` turns against the real, live storefront environment and prints each turn's real
+   dispatch result beside its scripted `expect` block) and filled `provenance.verifiedBy` on every
+   row — a step no agent is permitted to perform on the stakeholder's behalf.
+4. **A real live-run defect found and fixed**: the first live run against
+   `mistralai/ministral-3-3b` scored 0 of 81 usable turns ("unrunnable (model channel)" throughout)
+   — root-caused to `convo.assemble()` unconditionally sending two separate `role:"system"`
+   messages on every turn, which ministral's own chat template rejects outright (confirmed live via
+   direct curl replication, returning the template's own Jinja exception). Fixed
+   (`modelbench/convo.py`'s new `_prologue_system_message`, merging both pieces of text into one
+   system message — closes the defect for every future run against any model, not just this one),
+   independently gated (`analyst`: approve with suggestions, no blockers,
+   `docs/reviews/small-model-benchmarking-s6-convo-fix.md`), and confirmed sound by mutation probes
+   beyond the fixing delegate's own table (join-order swap, dropped turn-index branch). The
+   top-level plan doc (`docs/plans/small-model-benchmarking.md`, repo root) was synced to match (now
+   v1.32). Two learnings — the environment's stale-attestation trip-wire (LM Studio's CUDA runtime
+   engine version changed under a fixed app version) and `ministral-3-3b`'s multi-system-message
+   rejection — were recorded in the `kaizen_team` working-memory graph.
+5. **Live proof runs, all fresh after the `convo.py` fix**: three live LM Studio invocations (two
+   `qwen/qwen3-4b-2507`, one `mistralai/ministral-3-3b`). **Item 19a (negative control): PASS** —
+   12/12 conversations paired, b=0, c=0 (discordant counts exactly equal), McNemar exact p=1.000,
+   both arms identical on every printed figure. **Item 19b (known-answer validation, qwen vs.
+   ministral): the contrast did not reach statistical significance** at this pack's n=12 sizing —
+   baseline config (`historyReplay: structured-replies-only`): b=0, c=4, McNemar exact p=0.125; R-3's
+   bisect rung 1 (`historyReplay: structured`): b=4, c=1, p=0.375; rung 2 (`historyReplay:
+   plaintext`): no paired data at all, a separate and still-unresolved ministral censoring pattern
+   (69/81 turns unrunnable) recorded as an observation for a future pass, not root-caused here. The
+   pack ships honestly flagged **`known-answer validation: not reproduced`** — this stage's own
+   accepted done-condition (spec §6: gates on 19b being run and recorded, never on the contrast
+   appearing). Full detail, including the acceptance-tier checklist (baseline suite, `validate`,
+   `validate --strict`'s documented deferral, an independent spot-check of all 12 scripts' `expect`
+   blocks against `tools/sim.py` directly, and `prose_calibration.jsonl` verified against the real
+   detector — all PASS): `docs/test-reports/small-model-benchmarking-s6-report.md`.
+
+**Files touched:** `modelbench/packs.py`, `modelbench/results.py`, `modelbench/scoring/toolcalls.py`,
+`modelbench/report.py`, `modelbench/convo.py`, `packs/tool-caller-shop-assistant/conversations.jsonl`,
+`packs/tool-caller-shop-assistant/prose_calibration.jsonl`,
+`packs/tool-caller-shop-assistant/PROVENANCE.md`, `packs/tool-caller-shop-assistant/pack.json`,
+`scripts/s6_walkthrough.py` (new), `docs/plans/small-model-benchmarking-s6-spec.md`,
+`docs/reviews/small-model-benchmarking-s6-precheck.md`,
+`docs/reviews/small-model-benchmarking-s6-convo-fix.md`,
+`docs/test-reports/small-model-benchmarking-s6-report.md`,
+`docs/plans/small-model-benchmarking.md` (repo root, synced to v1.32), plus test files for every
+source module above.
+
+**Verification:** `model-bench/ $ .venv/bin/python -m pytest -q` — `1627 passed, 3 deselected`
+(reproduced fresh at the time of this doc-sync; the S6 test report itself recorded `1625 passed, 3
+deselected` immediately after the `convo.py` fix landed, before U162-163's own code-gate fix added
+two more tests). `ruff check .` — clean. Live proof: `./run.sh compare --pack
+tool-caller-shop-assistant --session v2-negctrl` (item 19a) and `./run.sh compare --pack
+tool-caller-shop-assistant --models qwen/qwen3-4b-2507,mistralai/ministral-3-3b` (item 19b baseline),
+plus the two bisect-rung comparisons — all captured verbatim in
+`docs/test-reports/small-model-benchmarking-s6-report.md`.
+
 ## 2026-09-14 — U150 — S5 stage-close doc sync
 
 **What:** Post-S5-closure doc sync, same kind of task as U137's S4 sync. S5 (`tool-caller` pack,
