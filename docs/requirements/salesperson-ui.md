@@ -1,5 +1,5 @@
 # The one salesperson UI — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M<n> TBD) · **Last updated:** 2026-08-29
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — (M<n> TBD) · **Last updated:** 2026-09-16
 
 ## Intent
 Give business people (not developers/sysadmins) a modern, pleasant chat interface for talking to
@@ -186,3 +186,9 @@ photos are acceptable, not necessarily the real product; a product with no pictu
 falls back to text-only, no placeholder image.
 2026-08-29 — Stakeholder confirmed the full readback (including the language and product-picture
 additions) with no further changes; flipped to Ready for design.
+2026-09-16 — Feature delivered and closed out (`docs/plans/salesperson-ui.md`, `docs/plans/
+salesperson-ui2-coordination.md`, `falkor-chat/docs/HISTORY.md` "salesperson-ui S16: docs
+close-out") — shipped at `salesperson/`, all FRs/ACs met including AC-10's K-056 gate; flipped to
+archived. One pre-live-demo gate remains open as a backlog item (`falkor-chat/docs/BACKLOG.md`
+K-065, an LLM-serving-layer language mix-up under concurrency) — tracked there, not reopening this
+document.
