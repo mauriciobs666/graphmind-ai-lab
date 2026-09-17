@@ -2,6 +2,61 @@
 
 > Dated log of actual changes to the `frontend-engineer` agent. Most recent first.
 
+## 2026-09-16 — Kaizen distillation: 8 raw entries verified/routed, `frontend-quirks.md` KB created (K-002-adjacent)
+
+`cobb`, scoped single-agent distillation pass (`kaizen_team`, `frontend-engineer`'s 8
+current-shape entries, 0 legacy). Re-verified each against live repo state before promoting —
+see the fork-free findings below.
+
+- **Promoted, 7 of 8 — new on-demand knowledge base, `claude/frontend-engineer/frontend-quirks.md`**
+  (this file's parking-lot idea from 2026-08-25/2026-09-02, now created): TS2312 discriminated-union
+  `interface extends` on TanStack Query v5 result types (`b6b1e8e0`); Vite/TS scaffolds lacking
+  `resolveJsonModule` by default (`7991a88d`); TanStack Query v5 `invalidateQueries()` needing a
+  mounted observer for a test to see the refetch (`c1f3a5b2`); RTL `getByText`/`getByRole`
+  ambiguity from identical heading/CTA copy (`b1e6c9f4`); Chromium not giving a `flex-1`
+  `display:block` intermediate div's `h-full` children a definite size (`f3d6a5c1`); i18next
+  instance methods not being pre-bound (`b3f1c2d4`); and the seed-placeholder-pattern test-scoping
+  trap (`1d9ba73a`) — this last one and the `resolveJsonModule` one were self-suggested "project
+  docs" by the producing agent, overridden to knowledge base here: both are reusable
+  library/technique facts that will recur on any future TanStack-Query/Vite/seed-placeholder work
+  in this lab, not one-off facts about this project's current state (routine judgment call, not a
+  fork). All 7 re-verified true against the current tree before promotion (e.g. `hooks.ts`'s 9
+  type aliases, `Shell.tsx`'s still-present `flex-1` wrapper, `composerNotice.ts`'s threaded
+  `TFunction` pattern) — see the KB file's own citations.
+- **Discarded, 1 of 8 — `e3a2f7b0` (LayoutShell provider-ordering constraint).** Verification
+  found the fact stale: the entry describes `App.tsx` mounting `LayoutShell` **outside**
+  `QueryClientProvider`/`SessionProvider`/`RouterProvider` (S12b, v1.36-era), worked around with a
+  `React.cloneElement` splice (`layout/injectBridge.tsx`). The current `App.tsx` and
+  `docs/plans/salesperson-ui.md` §4.11 (v1.36) show this was superseded by a real architectural
+  fix — `LayoutShell` is now the router's own pathless layout route, wrapped correctly by all
+  three providers — and `injectBridge.tsx`/`sessionBridge.ts` were deleted outright
+  (`falkor-chat/docs/reviews/salesperson-ui-s12b.md`'s Major finding, closed same v1.36). Already
+  fixed, already documented (in `App.tsx`'s own header comment and the plan doc) more currently
+  than the raw entry — nothing to promote.
+- **Graph check:** `MATCH (a:Agent {agentId:'frontend-engineer'})-[:PRODUCED]->(k:KaizenEntry)
+  RETURN count(k)` → 0 after clearing all 8 (re-run, not just asserted).
+- **Plan items:** closes the 2026-08-25/2026-09-02 parking-lot "framework quirks resource file"
+  watch note (`plan.md`) — created, not merely still-proposed.
+
+### Same-day fix round — `analyst`'s U2 gate (approve with suggestions, 0 blockers/majors, 4 minors/nits)
+
+Four findings from `docs/reviews/kaizen-team-distillation-u2.md`, all fixed:
+1. **Minor** — TS2312 entry undercounted (said "9 interfaces converted"; `grep` over
+   `salesperson/src/api/hooks.ts` shows 10). Fixed the count and the "and 6 more" → "and 7 more"
+   enumeration tail.
+2. **Minor** — `frontend-quirks.md`'s header claimed "each entry names the version it was
+   verified against" but only 1 of 7 did. Closed by adding the pinned version (from
+   `salesperson/package.json`) to the 5 entries genuinely tied to an npm package (TS2312 →
+   `@tanstack/react-query@^5.102.8`+`typescript@~6.0.2`; `resolveJsonModule` →
+   `typescript@~6.0.2`+`vite@^8.2.2`; `invalidateQueries` → `@tanstack/react-query@^5.102.8`; RTL
+   ambiguity → `@testing-library/react@^16.3.3`; i18next binding →
+   `i18next@^26.4.1`/`react-i18next@^17.0.13`) and softening the header to say so explicitly for
+   the 2 entries that aren't library-version facts (the Chromium layout behavior; the
+   seed-placeholder testing technique) rather than inventing a version for either.
+3. **Nit** — dropped the KB's README-backlink line (no sibling KB from this run has one).
+4. **Nit** — moved `frontend-engineer.md`'s KB-pointer blockquote from beside the unrelated
+   "Python-native UIs" section to beside "JavaScript / TypeScript & frameworks", where its content
+   (TS/React/testing gotchas) actually belongs.
 
 ## 2026-09-02 — U6 of `salesperson-ui`: the three-site `cpg_salesperson` / Streamlit repo fact corrected
 

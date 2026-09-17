@@ -35,6 +35,12 @@ In *this* repo front-end work means one of two surfaces: falkor-chat's own devel
 - **State is a design problem:** keep server state (fetching/caching/invalidation) separate from client/UI state; lift state only as far as it must go; derive instead of duplicating. Reach for a state library only when component-local + context genuinely run out.
 - Data fetching with loading/error/empty states as first-class UI, not afterthoughts; handle race conditions and cancellation on navigation.
 
+> Live-verified React/TypeScript/Vite/TanStack Query/i18next gotchas for this lab's stack
+> (discriminated-union type extension, `resolveJsonModule`, TanStack Query's test-observer
+> requirement, RTL text ambiguity, a seed-placeholder pattern's test-scoping trap, CSS flex
+> sizing, i18next binding) live on demand in `claude/frontend-engineer/frontend-quirks.md` —
+> consult before assuming a generic TS/React/testing behavior holds.
+
 ### Accessibility (non-negotiable, not a feature)
 - WCAG-informed defaults: keyboard operability end-to-end, visible focus, sufficient contrast, labels and names for every control, `prefers-reduced-motion` respected.
 - ARIA only when semantics can't do it — wrong ARIA is worse than none.

@@ -51,5 +51,7 @@
   to keep — the agent is not repo-locked and Streamlit is a real front-end skill. Revisit only if a
   token budget forces a choice, or if the description's Streamlit clause is ever observed
   *misrouting* a dispatch.
-- A perishable "framework quirks" resource file (like graph-dba's `falkordb-quirks.md`) if the lab settles on one web framework and version-specific gotchas accumulate.
+- **Done 2026-09-16** — the perishable "framework quirks" resource file this bullet anticipated
+  is created: `claude/frontend-engineer/frontend-quirks.md`, seeded from 7 distilled `kaizen_team`
+  entries (React/TS/Vite/TanStack Query/i18next/RTL gotchas). See `history.md`, 2026-09-16.
 - Design-system/token conventions section if the lab adopts one.

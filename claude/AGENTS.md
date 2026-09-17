@@ -39,7 +39,8 @@ guard whose subject is other code's text: coverage probe vs. mutation test, the 
 hand-written resolver, the docstring-states-more-than-the-body defect — and
 `estimator-test-fixtures.md` — fixture design for a test over a computed value: a degenerate
 sample as boundary tool and as blindfold, pinning a `len()`-derived constant) ·
-`frontend-engineer` ·
+`frontend-engineer` (carries an on-demand knowledge base: `frontend-quirks.md` — live-verified
+React/TS/Vite/TanStack Query/i18next/RTL gotchas for this lab's storefront stack) ·
 `qa-engineer` (carries an on-demand knowledge base: `qa-testing-techniques.md` — environment/
 tooling techniques such as the WSL2 browser-automation fallback, driving an interactive TUI, and
 CLI health-check gotchas) ·
@@ -217,7 +218,13 @@ by explicit path, only once the chain reaches its terminal state (accepted / gat
 handed off) — never one commit per intermediate round. A chain paused mid-way (e.g. awaiting a
 review) across a session boundary leaves its pending documents uncommitted; that's expected, not
 a sign of missed work — the coordination ledger's `Status`/Notes (or the conversation itself, for
-one held without a ledger) is the record of what's pending and why. A **code-implementation**
+one held without a ledger) is the record of what's pending and why. **"Terminal state" maps to the
+ledger's actual `Status` vocabulary** (`teco.md`: `queued` · `in-flight` · `delivered` · `gated` ·
+`accepted` · `abandoned` · `paused` — there is no separate `closed` value, and `gated` is otherwise
+a pre-`accepted` intermediate state): a chain's terminal commit point is reached when its row(s)
+read `accepted`, or `gated` with no further revision round scheduled — never merely `delivered`
+awaiting a gate — or, for a chain handed off to an implementer, the moment of that handoff itself
+(an event, not a ledger `Status` value). A **code-implementation**
 chain (any unit touching source/tests/config) is unaffected — it keeps today's per-verified-unit
 commit granularity. Staging discipline is unchanged either way: explicit path only, never
 `git add -A`, for the same index-race reason as above.
