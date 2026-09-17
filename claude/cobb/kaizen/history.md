@@ -2,6 +2,52 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-17 — OpenCode subagent-nesting settled empirically (POC), skill updated with confirmed mechanism
+
+Follow-up to the same-day drift-fix entry below (docs re-check had only gotten as far as
+"undocumented, ambiguous"). User asked to test it live, so built a throwaway 3-agent OpenCode
+POC (`opencode.json` in the session scratchpad, not committed — disposable) against the local
+LM Studio provider (`lmstudio/qwen/qwen3-4b-2507`, already running on the Windows host, reached
+per the existing WSL2↔LM Studio note): agent A (`mode: subagent`, `permission.task: "allow"`)
+instructed to invoke agent B (`mode: subagent`, sentinel-reply prompt) via the Task tool.
+Two independent legs confirmed nesting works: (1) `opencode debug agent A --tool task --params
+{...subagent_type:"B"}` — invoking the Task tool **directly as a subagent, no primary involved**
+— created a real child session for B with `parentID` correctly set to A's session (verified via
+`opencode export`); it then hit `TaskTool requires promptOps in ctx.extra`, but that's the bare
+debug-probe harness lacking plumbing the real agentic loop has, unrelated to permissions/nesting.
+(2) A full `opencode run` reproduced the same session-nesting live through the real loop
+(blocked short of a full text round-trip only by an unrelated LM Studio 8K-context overflow on
+the tiny local model — the exact gotcha already flagged in `opencode/docs/manuals/local-llm.md`,
+not a nesting limit). **Key mechanism finding, not previously documented anywhere:** the actual
+gate is `permission.task` on the invoked agent's own config, never its `mode`. A Task-spawned
+child session's permission set is the target's normal resolved permissions plus a
+harness-injected override (`question`/`plan_enter`/`plan_exit`/`todowrite` always denied, and
+`task` denied too **unless the target agent's own config explicitly sets `permission.task`**) —
+so nesting depth isn't hardcoded-capped at one level, it goes exactly as deep as each successive
+agent's own config re-grants `task`. Wrote this into `skills/agent-standards/opencode.md`
+("Primary vs. subagent" section) as an empirically-verified finding (distinct annotation from a
+docs-verified stamp) with the reproduction recipe, and updated the file's header stamp
+accordingly. This is the drift-resistance principle's other half: not just re-reading docs, but
+testing behavior directly when the docs themselves are silent.
+
+## 2026-09-17 — `skills/agent-standards/opencode.md` drift fix: subagent-nesting claim downgraded
+
+A user question ("can an opencode subagent call another opencode subagent?") triggered a
+re-verify per the skill's own stamp policy (cached answer was `Verified: 2026-06-20`, ~3 months
+stale). Live re-fetch of `opencode.ai/docs/agents` + `opencode.ai/docs/permissions` found **no
+sentence stating a subagent can invoke another subagent**, and no "nest"/"nesting" language at
+all — contradicting the file's prior "Nesting: YES (documented)" claim. Every worked
+`permission.task` example on the live page is on a primary agent's config; none is on a
+`mode: subagent` agent. Corrected two sections in `opencode.md` ("Primary vs. subagent" and
+"What reaches an OpenCode subagent") to state the accurate current status — undocumented, not
+confirmed either way, recommend an empirical `opencode debug agent` probe rather than citing
+either answer as fact — and bumped the file's stamp. Also downgraded the adjacent "task
+continuity" (parent-context-inheritance) claim in the same section on the same re-fetch, for the
+same reason: no textual support found on the live page. Root cause: the original 2026-06-20 pass
+either over-read looser docs phrasing or the docs themselves were edited since — either way, this
+is the drift-resistance principle doing its job (re-verify before asserting a perishable field,
+not trust a stale stamp).
+
 ## 2026-09-16 — Commit-granularity gate (`docs/reviews/commit-granularity.md`) fixed: 1 blocker, 2 majors, 1 minor
 
 `analyst` gated the 2026-09-13 docs-only-chain commit-batching delivery (see that date's entry

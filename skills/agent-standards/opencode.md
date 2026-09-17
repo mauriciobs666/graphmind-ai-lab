@@ -3,8 +3,15 @@
 > **Verified: 2026-06-20** against `opencode.ai/docs/agents`, `opencode.ai/docs/permissions`,
 > `opencode.ai/docs/rules`. **Skills + MCP servers verified 2026-07-25** against
 > `opencode.ai/docs/skills` and `opencode.ai/docs/mcp-servers` (own sections below).
-> Re-verify before relying on an exact key — OpenCode's
-> field set moves (note the `tools`→`permission` deprecation below).
+> **Subagent nesting re-verified 2026-09-17 two ways:** first against the live docs
+> (they turned out silent on it, not confirming either the old "documented: yes" or
+> a "no" — downgraded to "undocumented" at that point), **then settled empirically**
+> the same day by actually running it (`opencode debug agent --tool task` + a full
+> `opencode run`, v1.18.30) — see "Primary vs. subagent" below for the confirmed
+> mechanism. The context-inheritance ("task continuity") claim in "What reaches an
+> OpenCode subagent" is still only docs-downgraded, not empirically re-tested.
+> Re-verify before relying on an exact key — OpenCode's field set moves (note the
+> `tools`→`permission` deprecation below).
 
 ## Agents
 
@@ -89,19 +96,61 @@ subagents**), `external_directory`, `lsp`, `skill`, `todowrite`, `webfetch`,
   external docs/deps). Inherit the invoker's model unless overridden; `hidden: true`
   removes from autocomplete.
 - `mode: "all"` (default) → the agent can act as either.
-- **Nesting: YES (documented).** Subagents can invoke other subagents via the
-  **Task tool**, gated by **`permission.task`** glob patterns. (Contrast Kiro:
-  nesting undocumented.) Subagents run as **child sessions** (navigable via
-  `session_child_first` / `session_parent` keybinds).
+- **Nesting: YES — empirically confirmed 2026-09-17, v1.18.30, undocumented on the
+  live pages (docs gap, not a docs contradiction).** The docs never state this either
+  way (see prior note in this file's history); a direct three-legged probe settled
+  it:
+  1. `opencode debug agent <subagent-name> --tool task --params '{"description":...,
+     "prompt":...,"subagent_type":"<other-subagent>"}'` — invoking the **Task tool
+     directly as a `mode: subagent` agent** (not a primary) creates a real **child
+     session** for the target subagent, `parentID` correctly set to the calling
+     subagent's own session. Confirmed via `opencode export <sessionID>` on the
+     child. (The probe then errors — `TaskTool requires promptOps in ctx.extra` —
+     but that's the bare `debug agent --tool` harness lacking plumbing the real
+     agentic loop has; it doesn't touch permission/nesting at all.)
+  2. A full `opencode run` (primary → subagent A → subagent B) reproduced the same
+     nesting live through the real loop, independently confirming session creation
+     works the same way outside the debug probe.
+  3. **The actual gate is `permission.task` on the *invoked* agent's own config —
+     mode (`primary` vs `subagent`) never enters into it.** A Task-spawned child
+     session's permission set is the target agent's normal resolved permissions
+     **plus a harness-injected override list** (`question: deny`, `plan_enter: deny`,
+     `plan_exit: deny`, `todowrite: deny`, and — only when the target agent's own
+     config does **not** explicitly set `permission.task` — `task: deny` too).
+     Concretely: a subagent with `"permission": {"task": "allow"}` in its own
+     frontmatter/config **keeps `task: allow`** once spawned as a child (its
+     explicit grant survives the override layer) and can go on to invoke a further
+     subagent itself; a subagent with no explicit `permission.task` gets `task:
+     deny` injected the moment it's running *as a Task-spawned child* — even though
+     that same agent, run standalone/top-level, resolves `task` to the ordinary
+     global `"*": "allow"` default. **So nesting depth is not hardcoded-capped at
+     one level** — it goes exactly as deep as each successive agent's own config
+     explicitly re-grants `permission.task`; the default is a safety rail (don't
+     recurse unless you opted in), not a ceiling.
+  - **Reproduction recipe** (throwaway `opencode.json`, no real API keys needed —
+    works against a local LM Studio provider): define agent A (`mode: subagent`,
+    `permission.task: "allow"`) and agent B (`mode: subagent`, sentinel prompt), then
+    run leg 1 above with A as `<subagent-name>` and B as `subagent_type`. Full
+    end-to-end text round-trip (B's actual reply flowing back through A) needs a
+    model context window generous enough for OpenCode's own tool-calling system
+    prompt — an 8K-context local model overflowed before completing the hop
+    (`exceed_context_size_error`, consistent with the ≥16K guidance already in
+    `opencode/docs/manuals/local-llm.md`); that's an unrelated model-sizing limit,
+    not a nesting limit — the session-creation and permission-override behavior
+    above is independent of it and was confirmed without needing the round-trip to
+    finish.
 
 ### What reaches an OpenCode subagent (verify — notable divergence)
 
-⚠️ The agents doc indicates a subagent **receives the parent session's conversation
-history and file context** ("task continuity"). **This diverges from Claude Code**,
-where a subagent does *not* see the parent conversation. The phrasing is loose and
-this is consequential — **verify on your version** before relying on either passing
-context implicitly *or* on isolation. The rules doc **does not state** whether
-`AGENTS.md` propagates to subagents — treat that as unverified too.
+⚠️ **Re-verified 2026-09-17: the "task continuity" claim below no longer has
+textual support on the live docs page** — a targeted re-fetch found no sentence
+describing whether a subagent inherits the parent session's conversation history
+or file context; the mechanics of what the Task tool passes into a subagent's
+session are simply not described. Older phrasing here read that as an implicit
+"yes, subagents receive parent context" — **do not rely on that** without a live
+probe. This still diverges from Claude Code, where a subagent's isolation *is*
+explicitly documented (no parent conversation). The rules doc **does not state**
+whether `AGENTS.md` propagates to subagents — treat that as unverified too.
 
 ## Rules / memory — `AGENTS.md`
 
