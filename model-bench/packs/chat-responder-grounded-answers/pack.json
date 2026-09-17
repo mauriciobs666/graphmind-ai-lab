@@ -1,0 +1,30 @@
+{
+  "packId": "chat-responder-grounded-answers",
+  "packVersion": "0.1.0",
+  "role": "chat-responder",
+  "schemaVersion": 1,
+  "description": "Deterministic layer only (FR-21a): grounded-reply containment against retrieved context, plus format compliance and latency. No judge, no reply-quality score.",
+  "scorer": "grounding",
+  "environment": {"requires": ["lmstudio-chat"]},
+  "prompt": {
+    "systemPrompt": "prompts/system.md",
+    "temperature": 0.0,
+    "maxTokens": 512
+  },
+  "data": {"items": "items.jsonl"},
+  "format": {
+    "maxWords": 150,
+    "mustBeSingleParagraph": true,
+    "forbiddenPatterns": ["^\\s*[-*]\\s", "```"]
+  },
+  "sampling": {
+    "seed": 20260917,
+    "pairingKey": ["itemId"],
+    "analysisUnit": "itemId"
+  },
+  "metrics": {
+    "verdictMetrics": ["groundingRate"],
+    "headlineMetric": "groundingRate"
+  },
+  "provenance": "PROVENANCE.md"
+}
