@@ -1,8 +1,10 @@
 # Small-LLM benchmarking tool (`model-bench/`) — implementation plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.31 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
+> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Version:** 1.32 · **Reviews:** `docs/reviews/small-model-benchmarking.md` · `docs/reviews/small-model-benchmarking-impl.md` · `docs/reviews/small-model-benchmarking-ml.md`
 
 2026-09-10 — v1.31: **additions to unbuilt S5/runner scope plus one four-word deletion in a never-reached branch — the plan gate stays closed.** Implements `docs/plans/small-model-benchmarking-ml-dispatch-failure.md` §6's plan-side consequences of the ruling that a pack's raising `dispatch` censors the conversation at that turn rather than aborting the run or being driven past as undispatchable. §4 S2's replay clause drops "or the dispatch raised" (never replayed — the conversation ends at that turn). §3.3's `tools/sim.py` bullet gains the dispatch-totality contract. §3.8.4 gains the conversation-censoring ruling on top of `ToolDispatchFailed` (already shipped in `modelbench/convo.py`, P17-3's naming half): it carries the completed turns, the runner catches it, stores the conversation censored at `t`, and proceeds to the next script with a fresh `ToolEnvironment`. §3.6a's exit-code paragraph gains the artifacts-before-exit-`4` clause. §4 S5's *Done when* gains E1–E5 (totality, censoring wiring, the two independently-gated rules, the negative control, disclosure). §4 S2's *Done when* gains the per-conversation `ToolEnvironment` obligation `-ml-dispatch-failure.md` §7 names as a gap, plus its two gates. `TurnDisposition` stays at five members throughout — no sixth.
+
+2026-09-16 — v1.32: **§4 S2's order clause updated to state the system-prompt/tool-schema merge — no design decision moves, the gate is not reopened.** `convo.py`'s `assemble()` now merges the system prompt and tool-schema text into one `role:"system"` message rather than sending two (a chat template rejecting a second system-role message broke a live run); this is a documentation sync to match already-shipped code, not a new ruling.
 
 2026-09-10 — v1.30: **Appendix A only, swept against the tree at `3286f26`; no design decision moves and the gate is not reopened.** Six rows corrected — `ConversationTrace`'s `shape`/`replicate`, `Conversation`'s shipped shape, `EmbedResult`'s five fields, `resolving_power()`'s real signature, the `separationRaw`/`separationZ` carrier now shipped rather than pending, and two rotted line-number citations replaced by symbol names — plus `ContinuousVerdict` added to the `stats` verbatim row. One divergence is **reported and deliberately not swept**: `stats.DecidedBy` ships two members where §4 S1 and §4 S1e Table D specify three, so by the appendix's own rule 4 the owning section is right and the code is out of spec.
 
@@ -5129,8 +5131,7 @@ edits both files in one pass.)*
 wrongly** *(v1.25 — the ruling and its reasons are §3.8.4's "Prompt assembly" bullet; what follows is
 only what to build)*. `assemble(turn_index, script, observed, cfg)` returns the **whole** message
 list for turn `turn_index` — the harness resends the conversation from scratch every turn — in this
-order: system prompt if any · the tool-schema text block on turn 0, or every turn when
-`representToolSchemasEachTurn` · the replayed history · `{"role": "user", "content":
+order: one merged `role:"system"` message — the system prompt text (if any) then the tool-schema text block when it applies (turn 0, or every turn when `representToolSchemasEachTurn`), concatenated rather than sent as two separate messages · the replayed history · `{"role": "user", "content":
 script[turn_index].user}`, always last. `historyTurns > 0` windows the replayed prefix from the
 tail; `0` replays all of it.
 

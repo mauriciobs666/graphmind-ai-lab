@@ -372,17 +372,28 @@ class ToolDispatchFailed(RuntimeError):
         self.parsedArguments = parsedArguments
 
 
-def _system_message(cfg: PromptConfig) -> dict[str, Any] | None:
-    if not cfg.systemPrompt:
+def _tool_schema_text(schemas: Sequence[Mapping[str, Any]]) -> str:
+    return "Available tools (JSON Schema):\n" + json.dumps(list(schemas))
+
+
+def _prologue_system_message(cfg: PromptConfig, turn_index: int) -> dict[str, Any] | None:
+    """The turn's system-role prologue, collapsed to **at most one** `role: "system"` message.
+
+    A chat template can reject a second system-role message outright rather than tolerate it —
+    confirmed live against `mistralai/ministral-3-3b`'s own template (HTTP 400, *"Only user,
+    assistant and tool roles are supported, got system"*) — so when both the system prompt and the
+    tool-schema text block apply on this turn, their text is concatenated into **one** message's
+    content, prompt text first, instead of being sent as two separate messages. Either piece alone
+    still produces exactly the single message it always did.
+    """
+    parts: list[str] = []
+    if cfg.systemPrompt:
+        parts.append(cfg.systemPrompt)
+    if cfg.toolSchemas and (turn_index == 0 or cfg.representToolSchemasEachTurn):
+        parts.append(_tool_schema_text(cfg.toolSchemas))
+    if not parts:
         return None
-    return {"role": "system", "content": cfg.systemPrompt}
-
-
-def _tool_schema_message(schemas: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    return {
-        "role": "system",
-        "content": "Available tools (JSON Schema):\n" + json.dumps(list(schemas)),
-    }
+    return {"role": "system", "content": "\n\n".join(parts)}
 
 
 def _tool_call_name(call: Any) -> str | None:
@@ -524,9 +535,13 @@ def assemble(
     resends the conversation from scratch every turn (no hidden state), so this is the entire
     message list a caller passes to `llm(...)`, not an increment.
 
-    Order: system prompt (if any) · the tool-schema text block on turn 0, or every turn when
-    `representToolSchemasEachTurn` · the replayed history (per `historyReplay`) · the current
-    turn's own `{"role": "user", "content": script[turn_index].user}` message, **always last**.
+    Order: one merged `role: "system"` prologue — the system prompt text (if any), then the
+    tool-schema text block when it applies (on turn 0, or every turn under
+    `representToolSchemasEachTurn`), concatenated into that **single** message's content rather
+    than sent as two separate system-role messages (a chat template can reject the second one
+    outright, `_prologue_system_message`'s docstring) · the replayed history (per `historyReplay`)
+    · the current turn's own `{"role": "user", "content": script[turn_index].user}` message,
+    **always last**.
 
     **Two preconditions, both raising.** `0 <= turn_index < len(script)`, and
     `len(observed) == turn_index`. The second is the whole mechanism of §3.8.4's ruling: turn *n*
@@ -558,11 +573,9 @@ def assemble(
         prior = prior[-cfg.historyTurns :]
 
     messages: list[dict[str, Any]] = []
-    system = _system_message(cfg)
-    if system is not None:
-        messages.append(system)
-    if cfg.toolSchemas and (turn_index == 0 or cfg.representToolSchemasEachTurn):
-        messages.append(_tool_schema_message(cfg.toolSchemas))
+    prologue = _prologue_system_message(cfg, turn_index)
+    if prologue is not None:
+        messages.append(prologue)
 
     if cfg.historyReplay == "structured":
         for script_turn, observed_turn in prior:

@@ -528,15 +528,16 @@ def test_assemble_current_turn_user_message_is_always_last(mode: str) -> None:
 
 
 def test_assemble_structured_emits_the_documented_role_order_for_the_whole_list() -> None:
-    """The order §4 S2 states — system · schema block · replayed history · current user — asserted
-    as the **whole** sequence rather than by membership, which is what catches an `insert(0, ...)`
-    or a block emitted in the wrong place."""
+    """The order §4 S2 states — system prologue · replayed history · current user — asserted as
+    the **whole** sequence rather than by membership, which is what catches an `insert(0, ...)`
+    or a block emitted in the wrong place. The prologue is one `system` message (system prompt and
+    tool-schema text merged), never two — a second separate `role: "system"` message is the exact
+    shape some chat templates reject outright."""
     script = (turn(1, "price of the Pad?"), turn(2, "anything else?"))
     observed = (tool_calling_prior_turn(),)
     messages = assemble(1, script, observed, make_cfg())
     assert [m["role"] for m in messages] == [
-        "system",  # system prompt
-        "system",  # tool-schema text block
+        "system",  # merged system prompt + tool-schema text block, one message
         "user",  # replayed turn 1's scripted user text
         "assistant",  # iteration 1: the model's own message, tool_calls verbatim
         "tool",  # its one dispatched call's real return value
@@ -549,7 +550,7 @@ def test_assemble_none_mode_produces_no_history_messages_at_all() -> None:
     script = (turn(1, "first"), turn(2, "second"))
     observed = (tool_calling_prior_turn(reply="the first answer"),)
     messages = assemble(1, script, observed, make_cfg(historyReplay="none"))
-    assert [m["role"] for m in messages] == ["system", "system", "user"]
+    assert [m["role"] for m in messages] == ["system", "user"]
     serialized = json.dumps(messages)
     assert "first" not in serialized
     assert "the first answer" not in serialized
@@ -603,6 +604,66 @@ def test_assemble_no_tool_schemas_means_no_schema_message_regardless_of_the_flag
     script = (turn(1, "t1"),)
     cfg = make_cfg(toolSchemas=(), representToolSchemasEachTurn=represent_each_turn)
     assert [m["role"] for m in assemble(0, script, (), cfg)] == ["system", "user"]
+
+
+# --------------------------------------------------------------------------------------------
+# assemble — the system prologue is at most one message (live bug: a chat template that rejects
+# a second `role: "system"` message — confirmed against mistralai/ministral-3-3b's own template,
+# HTTP 400, "Only user, assistant and tool roles are supported, got system")
+# --------------------------------------------------------------------------------------------
+
+
+def test_assemble_merges_system_prompt_and_tool_schemas_into_one_system_message() -> None:
+    """At `turn_index == 0`, where the tool-schema block is unconditional: with both `systemPrompt`
+    and `toolSchemas` configured, `assemble` must emit exactly **one** `system` message, not two —
+    two separate `role: "system"` entries is the exact shape some chat templates reject outright."""
+    script = (turn(1, "hi"),)
+    cfg = make_cfg()  # make_cfg's baseline sets both systemPrompt and toolSchemas
+    messages = assemble(0, script, (), cfg)
+    assert len([m for m in messages if m["role"] == "system"]) == 1
+
+
+def test_assemble_merges_system_prompt_and_tool_schemas_on_a_later_turn_too() -> None:
+    """The second code path that hits the same bug: `representToolSchemasEachTurn=True` re-emits
+    the schema block on every turn, not only turn 0 — so the merge must hold at a later turn index
+    too, not only at `turn_index == 0`."""
+    script = (turn(1, "first"), turn(2, "second"))
+    observed = (tool_calling_prior_turn(),)
+    cfg = make_cfg(representToolSchemasEachTurn=True)
+    messages = assemble(1, script, observed, cfg)
+    assert len([m for m in messages if m["role"] == "system"]) == 1
+
+
+def test_assemble_merged_system_message_keeps_prompt_before_schema_order() -> None:
+    """Order is part of what the merge must preserve, not just presence — an explicit ordering
+    check, so a merge that concatenated the two in the wrong order would still redden."""
+    script = (turn(1, "hi"),)
+    cfg = make_cfg(systemPrompt="THE PROMPT TEXT")
+    messages = assemble(0, script, (), cfg)
+    content = messages[0]["content"]
+    assert content.index("THE PROMPT TEXT") < content.index("Available tools")
+
+
+def test_assemble_system_prompt_alone_is_unaffected_by_the_merge() -> None:
+    """Regression check: with no tool schemas configured, the single-message behavior that was
+    never broken is unchanged."""
+    script = (turn(1, "hi"),)
+    cfg = make_cfg(systemPrompt="THE PROMPT TEXT", toolSchemas=())
+    messages = assemble(0, script, (), cfg)
+    assert messages[0] == {"role": "system", "content": "THE PROMPT TEXT"}
+
+
+def test_assemble_tool_schemas_alone_is_unaffected_by_the_merge() -> None:
+    """Regression check, the other direction: with no system prompt configured, the schema-only
+    message is unchanged."""
+    script = (turn(1, "hi"),)
+    cfg = make_cfg(
+        systemPrompt=None, toolSchemas=({"name": "lookup_product_fact", "parameters": {}},)
+    )
+    messages = assemble(0, script, (), cfg)
+    assert messages[0]["role"] == "system"
+    assert "Available tools" in messages[0]["content"]
+    assert "THE PROMPT TEXT" not in messages[0]["content"]
 
 
 # --------------------------------------------------------------------------------------------
