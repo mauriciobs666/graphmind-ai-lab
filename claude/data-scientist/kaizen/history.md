@@ -2,6 +2,38 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-17 — one self-produced `kaizen_team` entry discarded as a duplicate of its own still-open plan doc (U7 of the single-agent-scoped distillation sequence)
+
+- **The entry:** `a1e6b3f4-2c7d-4e3a-9b5f-6d8c1a2f9e01` (2026-09-16, `suggestedHome:
+  project docs`) — "`salesperson/executor.py` puts the per-participant language directive only as
+  a single JSON key at the tail of the prompt (CONTEXT block), never restated in `systemPrompt`
+  text itself, making it a weak/late signal for a 3B model even before any concurrency effects."
+- **Verified true, evidence traceable:** re-checked directly against the live tree, not just the
+  entry's own citation. `falkor-chat/server/falkorchat/proof_defs.py:340/363-367` — `SALESPERSON_DEF`
+  `v7`'s `systemPrompt` carries exactly one language instruction ("Reply in the language named by
+  `language` in the CONTEXT block…"), no per-language text elsewhere in the prompt.
+  `falkor-chat/server/falkorchat/executor.py:1277` — the per-run `language` value is appended only
+  as a trailing `CONTEXT:\n{...}` JSON block on the coalesced user turn, confirming the "single
+  JSON key at the tail" placement claim.
+- **Discarded rather than promoted to project docs.** The fact is not new: it is a compressed
+  restatement of Mitigation D in `docs/plans/salesperson-ui-ml.md` (`Status: active`, this same
+  agent's own DEF-6 diagnosis doc, dated the same day), which already states the identical
+  observation with more precision and a concrete recommended fix (a `v8` `systemPrompt` bump
+  interpolating the language directly, prioritized #1 in that doc's Recommendation section).
+  `falkor-chat/AGENTS.md` ("Three traps when bumping `SALESPERSON_DEF`" section / the K-065
+  pre-live-demo-gate note) already points at that plan doc as the project-docs home for this
+  finding. Promoting the raw entry as a second, separate project-docs write would just create a
+  second, thinner copy of a fact the plan doc already owns — the same "captured while mid-writing
+  a still-open plan doc" pattern the `agent-maintenance` skill's §5 flags (origin: `data-scientist`
+  U56, `agent-knowledge-base-strategy-ml.md`); this is a second confirmed instance of that pattern,
+  not a first.
+- **No `MENTIONS` tag needed** — the entry is squarely `data-scientist`'s own domain (the
+  salesperson ML/LLM-serving diagnosis it authored), not substantively about another agent.
+- **Graph:** producer-write shape (real `:Agent`/`PRODUCED` edge, post-M8). Read
+  `producedEdges=1, mentionEdges=0` → `otherRemaining=0` → full-node `DETACH DELETE`, run after
+  this history entry was durably written. Re-queried both the `PRODUCED`-edge read and the legacy
+  `author`-property read for `data-scientist` afterward: zero raw entries remain either shape.
+
 ## 2026-09-16 — one `tdd-engineer`-produced entry routed here mid-pass (U4 follow-up): new `lm-studio-model-notes.md` section, no MENTIONS tag needed
 
 - **What:** while `cobb` was running U4 of the single-agent-scoped `kaizen_team` distillation
