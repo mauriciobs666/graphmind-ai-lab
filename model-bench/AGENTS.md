@@ -9,10 +9,11 @@ for the full design.
 
 ## Current state
 
-**Stages S4, S5 and S6 are closed.** S4 closed both `guard-judge`/`nlq-structured-query` packs end
-to end; S5 closed `tool-caller`'s environment and scoring, part 1, entirely against synthetic
-traces; S6 closed `tool-caller`'s conversation scripts and first live run, part 2, closing the role
-end to end. `modelbench/` holds `fingerprint`, `results`, `stats`, `report`, `roles`, `packs` (the
+**Stages S4, S5, S6 and S7 are closed — every role now has a scorer.** S4 closed both
+`guard-judge`/`nlq-structured-query` packs end to end; S5 closed `tool-caller`'s environment and
+scoring, part 1, entirely against synthetic traces; S6 closed `tool-caller`'s conversation scripts
+and first live run, part 2, closing the role end to end; S7 closed `chat-responder`, the last
+unscored role. `modelbench/` holds `fingerprint`, `results`, `stats`, `report`, `roles`, `packs` (the
 real loader: `load_pack`/`validate_pack`, content hashing, the AST import allowlist, the row-count
 identity, and — S6 — `_clean_through_turn_h_problems`'s `H <= min(script length)` axis, refusing
 gracefully rather than raising when a pack declares that axis before `conversations.jsonl` exists),
@@ -20,25 +21,34 @@ gracefully rather than raising when a pack declares that axis before `conversati
 `_prologue_system_message`, merging the system prompt and tool-schema text into one `role:"system"`
 message after a live run showed two separate ones rejected outright by `mistralai/ministral-3-3b`'s
 chat template), `runner` (`RunConfig`, `RunRefused`, the `ItemScorer`/`ConversationScorer`
-scorer-seam Protocols — **both now live**, `_load_conversation_scorer` mirrors `_load_item_scorer`
+scorer-seam Protocols — both live, `_load_conversation_scorer` mirrors `_load_item_scorer`
 byte-for-byte — `run_pack`'s ten-step capture order, both driving loops, and `latency_block`'s
-`LatencyBlock` accumulation, satisfying spec §5's nine invariants), and four scorer modules:
+`LatencyBlock` accumulation, satisfying spec §5's nine invariants), and five scorer modules:
 `scoring/retrieval.py` (`embedder`), `scoring/classification.py` (`guard-judge`),
-`scoring/extraction.py` (`nlq-structured-query`), and `scoring/toolcalls.py` — the first
+`scoring/extraction.py` (`nlq-structured-query`), `scoring/toolcalls.py` — the first
 `ConversationScorer` — for `tool-caller` (per-turn pure functions per `-ml` §4.2's letters, `FunnelCounts`'
 16 fields including the `argsOmittedRequired`/`argsWrongValue`/`argsBoundaryUnit` failure
 decomposition, `HazardPoint`'s censored survival curve, the `I(t)`/`Y_calls` iteration summary, and
 — S6 — the prose-pseudo-call detector's precision/recall, previously computed nowhere in production
 code, now wired via `ToolCallAggregates.prosePseudoCallDetector` and one new `report.py` render
-line). `packs/tool-caller-shop-assistant/` now ships complete: S5's storefront `tools/sim.py` +
-`catalog.json` + `schemas.json`, `pack.json`, `prompts/system.md`, plus S6's `conversations.jsonl`
-(12 hand-authored scripts, FR-19 human-verified — an agent pre-check found and fixed 3 issues, then
-the stakeholder personally reviewed all 12 against `scripts/s6_walkthrough.py` and filled
-`provenance.verifiedBy` on each), `prose_calibration.jsonl` (20 labelled replies), `PROVENANCE.md`,
-and `packVersion` `0.2.0`. `report.py`'s three S5 renderers are unchanged (`_render_funnel`,
-`_render_per_turn_position`, `_render_hazard`). CLI unchanged since S4 (six commands, three
-`refresh_golden.py` flags). Proof runs against a live model exist for S3/S4's three packs
-(`docs/test-reports/embedder-self-check-report.md`,
+line), and — S7 — `scoring/grounding.py` for `chat-responder` (deterministic layer only per FR-21a:
+latency, format, grounding-by-containment — the judged-quality layer stays deferred,
+`docs/BACKLOG.md`). `packs/tool-caller-shop-assistant/` ships complete: S5's
+storefront `tools/sim.py` + `catalog.json` + `schemas.json`, `pack.json`, `prompts/system.md`, plus
+S6's `conversations.jsonl` (12 hand-authored scripts, FR-19 human-verified — an agent pre-check
+found and fixed 3 issues, then the stakeholder personally reviewed all 12 against
+`scripts/s6_walkthrough.py` and filled `provenance.verifiedBy` on each), `prose_calibration.jsonl`
+(20 labelled replies), `PROVENANCE.md`, and `packVersion` `0.2.0`. **S7 shipped
+`packs/chat-responder-grounded-answers/`** (`pack.json`, `prompts/system.md`, 30 hand-authored
+items spread across all 12 of the `embedder` corpus's topics — 22 answerable, 8 genuine
+confabulation traps, 11 carrying a `mustNotContain` fabrication guard — FR-19 human-verified, the
+stakeholder personally reviewing all 30 in one round after an agent pre-check), `packVersion`
+`0.1.0`. `report.py` gained two S7 renderers, `_render_role_caveat` (the reply-quality-is-not-
+measured caveat, rendered first, before any number) and `_render_speed` (the first time
+`RunResult.latency` has ever been printed by this component), both additive-only alongside S5's
+three unchanged renderers (`_render_funnel`, `_render_per_turn_position`, `_render_hazard`). CLI
+unchanged since S4 (six commands, three `refresh_golden.py` flags). Proof runs against a live model
+exist for S3/S4's three packs (`docs/test-reports/embedder-self-check-report.md`,
 `reports/guard-judge-understanding-20260911-02.md`, `reports/nlq-structured-query-20260911-01.md`);
 S5's own proof is entirely synthetic — the code gate (`docs/reviews/small-model-benchmarking-s5.md`)
 and QA acceptance (`docs/test-reports/small-model-benchmarking-s5-report.md`, verdict PASS with one
@@ -51,11 +61,30 @@ never on the contrast appearing). Along the way S6 found and fixed the `convo.py
 independently gated (`docs/reviews/small-model-benchmarking-s6-convo-fix.md`, approve with
 suggestions, no blockers).
 
-**What S7 owes.** One role, `chat-responder`, still has no scorer. S7 builds
-`packs/chat-responder-grounded-answers/` and `modelbench/scoring/grounding.py`, deterministic layer
-only (FR-21a: latency, format, grounding-by-containment; the judged-quality layer stays deferred,
-`docs/BACKLOG.md`). `docs/plans/small-model-benchmarking.md` §4 sequences S2–S8 (S8 closes with
-documentation); `docs/HISTORY.md` carries the unit trail.
+**S7's own proof is live, and it found and closed a real defect in the metric it shipped.** The one
+live run item 16 owes (`qwen/qwen3-4b-2507`, all 30 items) passed its mechanical done-condition, but
+a required spot-check found `_ABSTENTION_MARKERS` didn't recognize this model's own dominant
+abstention phrasing ("The passages don't mention X"), and `checklist_pass`'s literal-substring
+containment didn't tolerate ordinary morphological paraphrase ("4 retries" vs. "4 retry attempts") —
+together understating `groundingRate` (measured 15/30 = 0.500; true rate closer to 0.80 by hand-
+reclassification). Stakeholder chose fix-now; a five-round chain (U173–U177, each `analyst`-gated
+and `teco`-verified with live reproduction) widened `_ABSTENTION_MARKERS` via a mention-pattern
+regex with a contrastive-continuation guard, then closed two rounds of regressions the guard itself
+introduced (a too-narrow connective set, then a decimal-boundary sentence-split bug). The separate
+containment/morphology mechanism was scoped out (no cheap fix; needs its own normalization design)
+and stays in `docs/BACKLOG.md`. **A fresh re-run confirmed the fix**: `groundingRate` **23/30
+(0.767)**, up from 15/30 (0.500); all 8 originally-misclassified abstentions now correctly classify,
+independently reproduced live. Full detail, corrected numbers under `## Re-run`, original pass kept
+as historical record: `docs/test-reports/small-model-benchmarking-s7-report.md`.
+
+**What S8 owes.** Documentation and close, per `docs/plans/small-model-benchmarking.md` §4: this
+file's working context, `README.md` (how to run, what a pack is, how to add one, the three
+non-features, the exact-cosine scope note), `docs/HISTORY.md` (already carries an entry per stage),
+and `docs/BACKLOG.md` re-checked and extended with whatever R-1's S2 probe and the S3/S6 test
+reports left open, with delivered items removed. Root `AGENTS.md` rows added at S0 are re-checked
+against what actually shipped. `README.md` additionally states the two things §3.4.3 and §3.6a make
+into user-visible contracts: a `benchSchemaVersion` bump is a deliberate act with a migration
+decision attached, and the closed exit-code set. No new pack, no new role — S8 is the close.
 
 **The fingerprint has two discriminators and one derived key, and `ARM_KINDS` is deliberately not
 derived from the forbidden mapping.** `REQUIRED_BY_SCHEMA[schema]` and `FORBIDDEN_BY_ARM_PROFILE`

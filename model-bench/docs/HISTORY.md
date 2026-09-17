@@ -2,6 +2,100 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-17 — U165–U178 — S7 closed: chat-responder pack + live-run defect fix
+
+**What:** S7 built the `chat-responder-grounded-answers` pack and `modelbench/scoring/grounding.py`
+— the last of the four roles to get a scorer — closed the stage, and, along the way, found and
+closed a real defect in the metric it shipped, discovered on the stage's own required live run.
+Full trail: `docs/plans/small-model-benchmarking-coordination.md`, "## S7 spec dispatched" through
+"## S7 Step 6 re-run dispatched" (units U165 through U178).
+
+1. **Spec** (U165, `architect`): 772-line spec resolving four real design gaps as rulings rather
+   than leaving them open — no production-code change needed beyond the scorer itself and two
+   `report.py` additions; `grounding.py` needs its own `build_messages` so the generic fallback
+   doesn't leak `mustContain`/`mustNotContain`/`mustAbstain`/`provenance` into the prompt; a new,
+   generic `_render_speed` renderer prints `RunResult.latency` for the first time in this
+   component's history; each of the 30 items must carry its own copied `context`, never a live
+   reference into the `embedder` pack's corpus. Found, en route, that `results.Outcome`'s `Literal`
+   has been missing `"unrunnable"` since S4 — logged to `docs/BACKLOG.md`, not fixed silently (needs
+   a consumer sweep, not a no-judgment one-liner).
+2. **Steps 0-2** (U166-U168, U170, `tdd-engineer`/`analyst`): `modelbench/scoring/grounding.py`
+   (`looks_like_abstention`/`resolve_format`/`checklist_pass`/`format_checks`/`build_messages`/
+   `score_item`/`aggregate`, strict TDD, 37 tests), `report.py`'s `_render_role_caveat` +
+   `_render_speed`, and `packs/chat-responder-grounded-answers/pack.json` + `prompts/system.md`.
+   The code gate (`docs/reviews/small-model-benchmarking-s7.md`) found one real integration gap —
+   nothing proved the runner actually resolves `grounding.build_messages` for a real pack rather
+   than just proving the function correct in isolation, the exact seam the spec named
+   load-bearing — closed by a new `test_runner.py` end-to-end case plus two `_format_directive`
+   coverage tests (U170); re-gated, approved.
+3. **Content authored** (U169, `coder`): 30 items drawn from the `embedder` corpus's 12 topics (22
+   answerable, 8 genuine confabulation traps, 11 with a `mustNotContain` fabrication guard,
+   including several deliberately cross-wired distractor pairs and one same-context
+   attribution-discrimination trap), `PROVENANCE.md`.
+4. **FR-19, per the stakeholder's own choice to reuse S6's process verbatim** (both `teco` and an
+   independent `data-scientist` opinion had recommended skipping the dedicated pre-check for this
+   pack's static, inspectable-text ground truth — the stakeholder chose the fuller process anyway):
+   an agent pre-check (U171, `analyst`) found two minor items (a couple of "textbook default"
+   guessable single-value items, one item easier than the rest) but no blocker; the stakeholder then
+   personally reviewed all 30 items grouped by topic and approved all 30 as-is, one round, filling
+   `provenance.verifiedBy` on every row.
+5. **The live run (item 16) found a real, High-severity metric-validity defect**: the run itself
+   stored cleanly and every done-when clause passed, but the spot-check the brief required found
+   `_ABSTENTION_MARKERS` (`grounding.py`) didn't recognize this model's own dominant abstention
+   phrasing ("The passages don't mention X"), and `checklist_pass`'s literal-substring containment
+   didn't tolerate ordinary morphological paraphrase ("4 retries" vs. "4 retry attempts", "30
+   minutes" vs. "30-minute"). Together these accounted for at least 9 of the run's 15
+   `groundingRate` failures — the measured 15/30 (0.500) materially understated a true grounded-
+   reply rate the spot-check estimated closer to 24/30 (0.80). Not a crash, not a blocker to item
+   16's own done-condition, but a defect in the pack's own headline metric, reported in full rather
+   than silently absorbed (`docs/test-reports/small-model-benchmarking-s7-report.md`).
+6. **A five-unit fix chain closed the defect, each round independently gated and
+   `teco`-reproduced against fresh live output**: the stakeholder chose "fix now, re-run, then
+   close" over recording and deferring. **U173** widened `_ABSTENTION_MARKERS` via a dedicated
+   mention-pattern regex, guarded by a contrastive-continuation check against a new hedge-then-
+   answer false-positive class; scoped the harder containment/morphology mechanism out to
+   `docs/BACKLOG.md` on a `data-scientist` consult's recommendation (no cheap fix exists — it needs
+   stemming/normalization design of its own). **U174** (`analyst` gate) found the contrastive guard
+   itself was too narrow (missed "although"/"though"/"yet", an unpinned search-ordering assumption,
+   two further false-negative/false-positive classes) — routed to the stakeholder, who chose "fix
+   everything now" over backlogging the harder trade-off. **U175** closed all four findings,
+   including an explicitly documented, deliberately accepted residual limitation for the genuine
+   digit-proxy trade-off (pinned by its own test, not hidden). **U176** (`analyst` re-gate) found
+   one more, narrower regression the fix itself introduced — a decimal number's internal period
+   being read as a sentence boundary — named the last round for this defect class rather than
+   another open-ended cycle. **U177** closed it with a digit-aware sentence-boundary regex. Suite
+   grew 1685 → 1706 across the chain; every round's mutation probes reproduced independently before
+   acceptance.
+7. **A fresh live re-run (U178, `qa-engineer`) confirmed the fix's real-world effect**:
+   `groundingRate` **23/30 (0.767)**, up from the original 15/30 (0.500) — Wilson [0.591, 0.882].
+   All 8 of the original run's `mustAbstain` false negatives now correctly classify, both in the
+   stored comparison output and independently reproduced live, item by item, against a freshly-
+   resident model. The separate, already-deferred containment/morphology cases (`cr-11`/`cr-17`)
+   were reproduced too, confirmed still correctly failing — not a regression, not silently
+   reopened. The test report was revised in place (`Version: 2`, one dated line), the original
+   pass's commands, output, and defect narrative kept intact as the historical record of what was
+   found and how (S6 report precedent).
+
+**Files touched:** `modelbench/scoring/grounding.py` (new), `modelbench/report.py`,
+`packs/chat-responder-grounded-answers/{pack.json,prompts/system.md,items.jsonl,PROVENANCE.md}`
+(new), `docs/plans/small-model-benchmarking-s7-spec.md` (new), `docs/reviews/small-model-benchmarking-s7.md`
+(new), `docs/reviews/small-model-benchmarking-s7-precheck.md` (new),
+`docs/reviews/small-model-benchmarking-s7-abstention-fix.md` (new, two passes),
+`docs/test-reports/small-model-benchmarking-s7-report.md` (new, revised to `Version: 2`),
+`docs/BACKLOG.md` (the `Outcome` `Literal` finding, then the containment/morphology deferral), plus
+test files for every source module above (`tests/test_scoring_grounding.py` new,
+`tests/test_report.py`, `tests/test_packs.py`, `tests/test_runner.py`).
+
+**Verification:** `model-bench/ $ .venv/bin/python -m pytest -q` — `1706 passed, 3 deselected`
+(the count after U177's own fix, reproduced fresh again as U178's own pre-run baseline check).
+`ruff check .` — clean throughout. Live proof: two live runs against `qwen/qwen3-4b-2507`
+pre-fix (session `s7-live`, `reports/chat-responder-grounded-answers-20260917-01.md`,
+`groundingRate` 15/30) and two post-fix (session `s7-live-v2`,
+`reports/chat-responder-grounded-answers-20260917-02.md`, `groundingRate` 23/30) — both captured
+verbatim in `docs/test-reports/small-model-benchmarking-s7-report.md`.
+
+---
+
 ## 2026-09-17 — U151–U164 — S6 closed: `tool-caller` pack, part 2 (conversation scripts + first live run)
 
 **What:** S6 built the second half of the `tool-caller-shop-assistant` pack — the conversation
