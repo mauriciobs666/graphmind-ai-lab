@@ -2739,3 +2739,11 @@ stakeholder decision. Model already resident (`qwen/qwen3-4b-2507`).
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
 | U179 | `coder` | `af9bc0a41108fb19b` | **delivered — accepted, `teco`-verified directly against source. S7 is now fully closed.** Rewrote (not appended) `model-bench/AGENTS.md`'s "Current state"/"What S8 owes" and `README.md`'s "## Status", both folding in the full S7 arc (pack shipped, live-run defect found/fixed/re-confirmed, corrected 23/30 headline) without overselling; one new dated `docs/HISTORY.md` entry (`U165–U178`, full unit-by-unit narrative). "What S8 owes" correctly sourced from the plan's own §4 S8 text, not guessed. Checked `docs/BACKLOG.md` for anything S7's close resolved — correctly found nothing (all three open items remain genuinely open) and left it untouched. Word count 3,034 (+365) — flagged as now past the ~2,500-word smell threshold (already true at S6's 2,669 baseline before this edit), logged to `kaizen_team` for `cobb` to route rather than silently trimmed or silently ignored. Zero lines >700 chars. **Independently re-verified against source**: word count and line-length check reproduced myself, matching exactly; full diffs on all three files read in full — every cited number/unit-id/mechanism matches what I (`teco`) independently verified across U165-U178 myself, no drift found | `model-bench/AGENTS.md` + `README.md` + `docs/HISTORY.md` | `teco` (direct verification) → accepted | 140k tok / 31 tools |
+
+**S7 is now fully closed** — spec, code (scorer + report additions, gated), 30 FR-19-verified
+golden items, a first live run that found a real High-severity defect in the pack's own headline
+metric, a five-round fix chain (each independently gated, each `teco`-verified with live
+reproduction), a fresh confirming re-run (`groundingRate` corrected from 15/30=0.500 to
+**23/30=0.767**), and the closing doc-sync — all committed. Every one of the four FR-21 roles now
+has a scorer. Next: S8 (documentation and close, per the plan's own §4 sequencing — no new pack, no
+new role) — not yet dispatched, awaiting stakeholder direction on whether/when to proceed.
