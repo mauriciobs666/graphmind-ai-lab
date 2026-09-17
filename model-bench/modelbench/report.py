@@ -22,7 +22,7 @@ parameter reaches it.
 
 from __future__ import annotations
 
-from typing import NamedTuple, Sequence
+from typing import Mapping, NamedTuple, Sequence
 
 from modelbench import stats
 from modelbench.packs import PackConfigError, PackRef, check_sampling_contract
@@ -894,6 +894,67 @@ def _render_hazard(runs: Sequence[RunResult]) -> list[str]:
     return lines
 
 
+def _render_role_caveat(pack: PackRef) -> list[str]:
+    """Plan §3.8.5/S7 Done-when: `chat-responder`'s deterministic layer never measures reply
+    *quality* — only grounding-by-containment, format compliance, and latency. Stated once, in
+    words, so a reader does not mistake `groundingRate` for a quality score. `[]` for every
+    other role (structural self-gate, `_render_funnel`'s own pattern)."""
+    if pack.role != "chat-responder":
+        return []
+    return [
+        "> **Reply quality is not measured by this pack.** `groundingRate` is a deterministic "
+        "containment check against the retrieved context, never a judgement of how good, "
+        "helpful, or well-written a reply is (FR-21a — the judged-quality layer is deferred, "
+        "`docs/BACKLOG.md`).",
+        "",
+    ]
+
+
+def _render_speed(runs: Sequence[RunResult], arm_names: Mapping[str, str]) -> list[str]:
+    """FR-11's headline block, printed once this component-wide: `RunResult.latency` has
+    existed since S2 and this is its first renderer (S7 spec §2.5). `[]` when every run's
+    `latency is None` (a `deterministic` arm, or a role that never times — none exist today, but
+    the guard costs nothing). Never a new capture: prints exactly `LatencyBlock`'s own thirteen
+    fields, nothing FR-11 asks for that this class does not already carry (cold-load time, peak
+    RAM — both out of scope, S7 spec §2.5)."""
+    present = [r for r in runs if r.latency is not None]
+    if not present:
+        return []
+    lines = [
+        "## Speed", "",
+        "| arm | p50 | p95/max | timed/n | withheld (load/no-resp) | TTFT median | "
+        "prefill ms/1k | tok/s median (diagnostic) |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for r in present:
+        lat = r.latency
+        p95_or_max = (
+            f"{lat.latencyMsP95:.0f}" if lat.latencyMsP95 is not None
+            else (f"{lat.latencyMsMax:.0f} (max)" if lat.latencyMsMax is not None else "—")
+        )
+        ttft = (
+            f"{lat.ttftMsMedian:.0f}" if lat.ttftMsMedian is not None
+            else "— (insufficient coverage)"
+        )
+        prefill = f"{lat.prefillMsPer1kMedian:.1f}" if lat.prefillMsPer1kMedian is not None else "—"
+        tps = f"{lat.tokensPerSecondMedian:.1f}" if lat.tokensPerSecondMedian is not None else "—"
+        p50 = (
+            f"{lat.latencyMsP50:.0f}" if lat.latencyMsP50 is not None
+            else "— (insufficient coverage)"
+        )
+        lines.append(
+            f"| {_arm_label(r, arm_names[r.runId])} | {p50} | {p95_or_max} | "
+            f"{lat.latencyTimedCount}/{lat.latencyItemCount} | "
+            f"{lat.latencyWithheldForLoad}/{lat.latencyWithheldForNoResponse} | {ttft} | "
+            f"{prefill} | {tps} |"
+        )
+    lines += [
+        "", "*Descriptive only — decode tokens/sec is a diagnostic, never a comparison "
+        "instrument (FR-11).*", "",
+    ]
+    return lines
+
+
 def compare_report(
     runs: Sequence[RunResult],
     *,
@@ -909,6 +970,7 @@ def compare_report(
         raise PackConfigError("headlineMetric is not a member of verdictMetrics")
 
     lines: list[str] = [f"# Comparison — {pack.label} ({pack.role})", ""]
+    lines += _render_role_caveat(pack)
 
     # S1 done-condition 10 — an arm whose stored aggregates disagree with its own items is
     # **excluded from the comparison, not repaired and not partly trusted**, and named below. The
@@ -1030,6 +1092,10 @@ def compare_report(
     lines += ["", _DESCRIPTIVE_NOTE, ""]
     if pooled_seen:
         lines += [_POOLED_FOOTNOTE, ""]
+
+    # --- speed (S7 spec §2.5/§3.5): FR-11's headline latency block, one more descriptive block
+    # before the verdict machinery, after the Arms table and its footnotes -----------------------
+    lines += _render_speed(runs, arm_names)
 
     # --- the per-turn-position table and the hazard curve (`-ml` §4.4/§4.3 rule 5), both after
     # the generic Arms table (§4.4 items 2-3) -----------------------------------------------------

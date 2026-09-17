@@ -1159,6 +1159,79 @@ def test_drive_single_call_items_chat_surface_falls_back_when_build_messages_abs
     ]
 
 
+def test_drive_single_call_items_chat_surface_reaches_the_real_grounding_scorer_end_to_end(
+    monkeypatch,
+):
+    """S7 spec §4's own file-table commitment (closing the code-gate review's major finding,
+    `docs/reviews/small-model-benchmarking-s7.md`): the two tests above prove the GENERIC
+    prefer-`build_messages`-over-fallback mechanism using a fake scorer stand-in — this proves the
+    runner actually REACHES the REAL `modelbench.scoring.grounding` module's `build_messages`/
+    `score_item` for a real `chat-responder`-shaped item. Monkeypatches `_load_item_scorer` to
+    return the real module itself — its module-level functions satisfy the `ItemScorer` Protocol
+    structurally, the same as `classification`/`extraction` (S7 spec §2.2)."""
+    from modelbench.scoring import grounding
+
+    monkeypatch.setattr("modelbench.runner._load_item_scorer", lambda pack: grounding)
+    item_input = {
+        "itemId": "cr-07",
+        "question": "How much does the Widget cost?",
+        "context": ["The Widget costs 24.99.", "The Gadget costs 19.99."],
+        "mustContain": ["24.99"],
+        "mustNotContain": ["19.99"],
+        "mustAbstain": False,
+        "format": {"maxWords": 120, "mustBeSingleParagraph": True, "forbiddenPatterns": []},
+        "provenance": {"draftedBy": "unit-test", "verifiedBy": "unit-test"},
+    }
+    pack = FakePack(
+        role="chat-responder",
+        items=[item_input],
+        manifest={
+            "format": {
+                "maxWords": 150, "mustBeSingleParagraph": True,
+                "forbiddenPatterns": ["^\\s*[-*]\\s", "```"],
+            }
+        },
+        prompt_cfg=make_prompt_cfg(
+            systemPrompt="You answer questions using only the passages you are given.",
+            maxIterationsPerTurn=None,
+        ),
+    )
+    reply = ChatResult(
+        message={"role": "assistant", "content": "The Widget costs 24.99, per the context."},
+        tool_calls=(), toolCallForm="prose", stats=None, model_info=None, runtime=None,
+        usage=None, wallClockMs=100.0,
+    )
+    lms = StubLMStudio(chat_responses=[reply], residency_sequence=[resident()])
+
+    items, _, _ = _drive_single_call_items(
+        pack,
+        _cfg(),
+        lmstudio=lms,
+        model_info=model_info(),
+        call_surface="chat",
+        baseline_residency=resident(),
+    )
+
+    # The messages actually sent came from grounding.build_messages's own CONTEXT/QUESTION
+    # rendering, not the generic `_item_chat_messages` fallback (which would instead have
+    # `json.dumps`-ed the raw item — mustContain/mustNotContain/provenance included).
+    sent = lms.chat_calls[0]["messages"]
+    assert (
+        "CONTEXT:\n[1] The Widget costs 24.99.\n[2] The Gadget costs 19.99."
+        in sent[1]["content"]
+    )
+    assert "QUESTION: How much does the Widget cost?" in sent[1]["content"]
+    rendered = sent[0]["content"] + sent[1]["content"]
+    assert "mustContain" not in rendered
+    assert "unit-test" not in rendered  # provenance never leaked
+
+    # The reply actually reached grounding.checklist_pass's real verdict, via score_item.
+    assert len(items) == 1
+    assert items[0].outcome == "pass"
+    assert items[0].scoreable["groundingRate"] is True
+    assert items[0].counts["groundingRate"] == 1
+
+
 def test_load_item_scorer_resolves_a_real_scorer_name_to_its_module():
     from modelbench.runner import _load_item_scorer
     from modelbench.scoring import retrieval

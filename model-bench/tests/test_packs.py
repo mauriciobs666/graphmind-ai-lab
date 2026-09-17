@@ -1097,3 +1097,67 @@ def test_pack_ref_from_manifest_on_the_real_manifest_satisfies_the_sampling_cont
     ref = pack_ref_from_manifest(_TOOL_CALLER_SHOP_ASSISTANT_PACK_JSON)
     check_sampling_contract(ref)  # must not raise
     assert ref.pairingKey[0] == analysis_unit_field("tool-caller")
+
+
+# --------------------------------------------------------------------------------------------
+# The real `chat-responder-grounded-answers` pack.json — S7 spec §3.2, §5 Step 2
+#
+# Deliberately the same **manifest-only** read as the `tool-caller-shop-assistant` section above
+# (`pack_ref_from_manifest`, S1-level, needs no `items.jsonl` at all) — S7 Step 2's own scope: the
+# 30 items are Step 3's, a later unit, so this pack has no `items.jsonl` yet when this test runs.
+# --------------------------------------------------------------------------------------------
+
+_CHAT_RESPONDER_PACK_JSON = (
+    Path(__file__).parent.parent / "packs" / "chat-responder-grounded-answers" / "pack.json"
+)
+
+
+def test_pack_ref_from_manifest_accepts_the_real_chat_responder_manifest() -> None:
+    ref = pack_ref_from_manifest(_CHAT_RESPONDER_PACK_JSON)
+    assert ref.packId == "chat-responder-grounded-answers"
+    assert ref.packVersion == "0.1.0"
+    assert ref.contentHash is None  # manifest-only read — never loaded, per PackRef's own contract
+    assert ref.role == "chat-responder"
+    assert ref.pairingKey == ("itemId",)
+    assert ref.analysisUnit == "itemId"
+    assert ref.seed == 20260917
+
+
+def test_pack_ref_from_manifest_resolves_the_real_chat_responder_metrics_block() -> None:
+    ref = pack_ref_from_manifest(_CHAT_RESPONDER_PACK_JSON)
+    assert ref.metrics == PackMetrics(
+        verdictMetrics=("groundingRate",), headlineMetric="groundingRate"
+    )
+    assert ref.metrics.k == 1
+
+
+def test_pack_ref_from_manifest_on_chat_responder_manifest_satisfies_sampling_contract() -> None:
+    ref = pack_ref_from_manifest(_CHAT_RESPONDER_PACK_JSON)
+    check_sampling_contract(ref)  # must not raise
+    assert ref.pairingKey[0] == analysis_unit_field("chat-responder")
+
+
+def test_the_real_chat_responder_manifest_declares_the_grounding_scorer() -> None:
+    manifest = json.loads(_CHAT_RESPONDER_PACK_JSON.read_text(encoding="utf-8"))
+    assert manifest["scorer"] == "grounding"
+
+
+def test_the_real_chat_responder_manifest_carries_its_own_top_level_format_block() -> None:
+    """S7 spec §3.2's own placement choice: `format` is a pack-level top-level manifest key —
+    neither nested inside `metrics` nor inside `prompt`."""
+    manifest = json.loads(_CHAT_RESPONDER_PACK_JSON.read_text(encoding="utf-8"))
+    assert "format" not in manifest.get("metrics", {})
+    assert "format" not in manifest.get("prompt", {})
+    assert manifest["format"]["maxWords"] == 150
+    assert manifest["format"]["mustBeSingleParagraph"] is True
+
+
+def test_the_real_chat_responder_manifests_prompt_block_declares_no_tool_or_replay_keys() -> None:
+    """S7 spec §3.2's first note: no `toolSchemas`, no `historyReplay`, no `maxIterationsPerTurn`
+    — this role is single-call and tool-free."""
+    manifest = json.loads(_CHAT_RESPONDER_PACK_JSON.read_text(encoding="utf-8"))
+    prompt = manifest["prompt"]
+    assert "toolSchemas" not in prompt
+    assert "historyReplay" not in prompt
+    assert "maxIterationsPerTurn" not in prompt
+    assert prompt["temperature"] == 0.0

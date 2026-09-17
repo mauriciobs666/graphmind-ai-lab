@@ -32,6 +32,8 @@ from modelbench.report import (
     _render_funnel,
     _render_hazard,
     _render_per_turn_position,
+    _render_role_caveat,
+    _render_speed,
     compare_report,
     resolving_power_line,
 )
@@ -39,10 +41,12 @@ from modelbench.results import (
     ContinuousMetric,
     DistributionSummary,
     FunnelCounts,
+    GroundingAggregates,
     HazardPoint,
     InvalidRecord,
     ItemResult,
     ItemTiming,
+    LatencyBlock,
     RetrievalAggregates,
     RunResult,
     TurnPositionRate,
@@ -2882,3 +2886,164 @@ def test_hazard_table_appears_after_the_per_turn_position_table() -> None:
     position_pos = md.index("Per-turn position")
     hazard_pos = md.index("Hazard")
     assert position_pos < hazard_pos
+
+
+# ==================================================================================================
+# S7 spec §3.5 item 1 — `_render_role_caveat`: `chat-responder`'s deterministic layer never
+# measures reply quality, stated once in words. `[]` for every other role (structural self-gate,
+# `_render_funnel`'s own pattern) — a widen/shrink pair: every ALREADY-ESTABLISHED role fixture in
+# this file stays silent (shrink-catcher), and `chat-responder` alone prints (widen-catcher).
+# ==================================================================================================
+
+
+def _chat_responder_pack(
+    verdicts: tuple[str, ...] = ("groundingRate",), headline: str | None = "groundingRate"
+) -> PackRef:
+    return PackRef(
+        packId="chat-responder-grounded-answers", packVersion="0.1.0", contentHash="f" * 64,
+        role="chat-responder",
+        metrics=PackMetrics(verdictMetrics=verdicts, headlineMetric=headline),
+        pairingKey=("itemId",), analysisUnit="itemId", seed=20260917,
+    )
+
+
+def _grounding_aggregates(successes: int, n: int) -> GroundingAggregates:
+    return GroundingAggregates(
+        checklistPass=BinaryMetric(name="groundingRate", successes=successes, n=n, unit="item"),
+        perCheck=(), parseFailures=0,
+    )
+
+
+def _chat_responder_arm(run_id: str, correct: int, total: int = 10) -> RunResult:
+    items = [item(f"c{i:02d}", correct=i < correct, metric="groundingRate") for i in range(total)]
+    return run(
+        run_id, role="chat-responder", items=items,
+        aggregates=_grounding_aggregates(correct, total),
+        fingerprint_fields=model_fields(
+            modelKey=run_id, packId="chat-responder-grounded-answers"
+        ),
+    )
+
+
+class TestRenderRoleCaveat:
+    def test_prints_for_the_chat_responder_role(self) -> None:
+        lines = _render_role_caveat(_chat_responder_pack())
+        text = "\n".join(lines)
+        assert "Reply quality is not measured by this pack" in text
+
+    def test_is_empty_for_guard_judge(self) -> None:
+        assert _render_role_caveat(guard_pack(headline=METRIC, verdicts=(METRIC,))) == []
+
+    def test_is_empty_for_tool_caller(self) -> None:
+        assert _render_role_caveat(_toolcall_pack()) == []
+
+    def test_is_empty_for_embedder(self) -> None:
+        assert _render_role_caveat(_embedder_pack()) == []
+
+    def test_appears_right_after_the_title_before_the_funnel_table(self) -> None:
+        a = _chat_responder_arm("cand", 8)
+        b = _chat_responder_arm("incumbent", 6)
+        md = compare_report([a, b], pack=_chat_responder_pack())
+        title_pos = md.index("# Comparison")
+        caveat_pos = md.index("Reply quality is not measured")
+        arms_pos = md.index("## Arms")
+        assert title_pos < caveat_pos < arms_pos
+
+
+# ==================================================================================================
+# S7 spec §3.5 item 2 — `_render_speed`: `RunResult.latency`'s first renderer, generic and
+# role-agnostic, retroactively benefiting every role that carries a populated `LatencyBlock`.
+# ==================================================================================================
+
+
+def _latency_block(**overrides) -> LatencyBlock:
+    fields = {
+        "latencyMsP50": 1200.0, "latencyMsP95": 1800.0, "latencyMsMax": 2200.0,
+        "latencyTimedCount": 40, "latencyItemCount": 40, "latencyWithheldForLoad": 0,
+        "latencyWithheldForNoResponse": 0, "statsCoveredCount": 40, "callCount": 40,
+        "ttftMsMedian": 150.0, "prefillMsPer1kMedian": 80.0, "tokensPerSecondMedian": 45.5,
+        "unexplainedMsMax": 5.0,
+    }
+    fields.update(overrides)
+    return LatencyBlock(**fields)
+
+
+class TestRenderSpeed:
+    def test_prints_a_populated_table_for_a_fully_covered_run(self) -> None:
+        import dataclasses
+
+        r = dataclasses.replace(_arm("cand", 34), latency=_latency_block())
+        lines = _render_speed([r], {r.runId: r.runId})
+        text = "\n".join(lines)
+        assert "## Speed" in text
+        assert "1200" in text  # p50
+        assert "1800" in text  # p95
+        assert "150" in text  # TTFT median
+        assert "80.0" in text  # prefill ms/1k
+        assert "45.5" in text  # tokens/sec median
+
+    def test_uses_insufficient_coverage_wording_for_missing_p50_and_ttft(self) -> None:
+        import dataclasses
+
+        block = _latency_block(latencyMsP50=None, ttftMsMedian=None)
+        r = dataclasses.replace(_arm("cand", 34), latency=block)
+        lines = _render_speed([r], {r.runId: r.runId})
+        text = "\n".join(lines)
+        assert text.count("— (insufficient coverage)") == 2
+
+    def test_p95_falls_back_to_max_labelled_when_p95_is_absent(self) -> None:
+        import dataclasses
+
+        block = _latency_block(latencyMsP95=None, latencyMsMax=2500.0)
+        r = dataclasses.replace(_arm("cand", 34), latency=block)
+        lines = _render_speed([r], {r.runId: r.runId})
+        text = "\n".join(lines)
+        assert "2500 (max)" in text
+
+    def test_returns_empty_when_every_runs_latency_is_none(self) -> None:
+        a = _arm("cand", 34)
+        b = _arm("incumbent", 30)
+        assert _render_speed([a, b], {a.runId: a.runId, b.runId: b.runId}) == []
+
+    def test_speed_section_appears_after_arms_and_before_per_turn_position(self) -> None:
+        import dataclasses
+
+        position = (
+            TurnPositionRate(
+                turnIndex=0,
+                metric=BinaryMetric(name="hazard", successes=1, n=12, unit="conversation"),
+            ),
+        )
+        r = _toolcaller_run("cand", aggregates=ToolCallAggregates(perTurnPosition=position))
+        r = dataclasses.replace(r, latency=_latency_block())
+        md = compare_report([r], pack=_toolcall_pack())
+        arms_pos = md.index("## Arms")
+        speed_pos = md.index("## Speed")
+        position_pos = md.index("Per-turn position")
+        assert arms_pos < speed_pos < position_pos
+
+
+# ==================================================================================================
+# S7 spec §5 Step 1's own regression half: re-run an EXISTING `compare_report` fixture test
+# (`test_the_per_arm_intervals_are_labelled_descriptive` / `test_every_rate_prints_with_its_
+# denominator`, both over `_nested_arms()` + `guard_pack`) and confirm every previously-asserted
+# line is still present and unchanged, with the new "## Speed" section appearing as a pure
+# addition — never a replacement of anything already there.
+# ==================================================================================================
+
+
+def test_regression_existing_guard_judge_report_is_unchanged_and_speed_is_a_pure_addition() -> None:
+    import dataclasses
+
+    a, b = _nested_arms()
+    a = dataclasses.replace(a, latency=_latency_block())
+    b = dataclasses.replace(b, latency=_latency_block(latencyMsP50=900.0))
+    md = compare_report([a, b], pack=guard_pack(headline=METRIC, verdicts=(METRIC,)))
+
+    # Every assertion these two pre-existing tests made, unchanged:
+    assert "descriptive, not the comparison instrument" in md
+    assert "40/40" in md and "34/40" in md
+
+    # ...and the new section is present, as an addition.
+    assert "## Speed" in md
+    assert md.count("## Speed") == 1

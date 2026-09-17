@@ -37,6 +37,17 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   `_load_item_scorer` import instead of at `validate` — a `RunRefused` (exit 4), the correct exit
   code, just one step later than a pre-flight check would catch it. Low risk, not blocking any
   stage.
+- **`results.Outcome`'s `Literal` (`results.py:38`, `["pass", "fail", "n_a", "parse_failure"]`) has
+  been missing `"unrunnable"` since S4.** `classification.score_item`/`extraction.score_item` both
+  already construct `ItemResult(outcome="unrunnable", ...)` on a `no_response` withholding
+  (`classification.py:218-221`, `extraction.py:216-221`) — a real, shipped, already-gated value the
+  type annotation does not admit. Uncaught because this repo runs no type checker in CI (no
+  `mypy`/`pyright` config anywhere in the tree). Found independently while verifying the S7 spec
+  (`docs/plans/small-model-benchmarking-s7-spec.md`), whose own `grounding.py` design correctly
+  mirrors this same precedent rather than inventing a fresh one — not this spec's defect to fix.
+  Widening the `Literal` is a one-line change but not a no-judgment one: it needs a sweep of every
+  `match`/`if`-chain over `Outcome` (at least `report.py`, `results.py`'s own aggregation helpers)
+  to confirm none silently assumes only four members before the fifth is added to the type.
 
 ## Note
 
