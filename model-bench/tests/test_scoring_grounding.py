@@ -38,6 +38,63 @@ class TestLooksLikeAbstention:
 
 
 # ==================================================================================================
+# 1b. `looks_like_abstention` — "don't/doesn't mention" (S7 live-run defect, `docs/test-reports/
+# small-model-benchmarking-s7-report.md` "Defect — `_ABSTENTION_MARKERS` does not recognize...").
+# `qwen/qwen3-4b-2507`'s own dominant, real, live-reproduced abstention phrasing was missed by the
+# original 15-marker list; these are the report's own quoted real replies (or paraphrases
+# preserving the exact phrasing pattern under test), not synthetic ones.
+# ==================================================================================================
+
+
+class TestLooksLikeAbstentionDontMention:
+    def test_detects_the_reports_cr_03_real_reply_verbatim(self):
+        """cr-03 (`mustAbstain: true`), quoted verbatim from the live-run spot-check table."""
+        reply = (
+            "The passages don't mention that the payment-timeout incident cost the company in "
+            "lost revenue."
+        )
+        assert grounding.looks_like_abstention(reply) is True
+
+    def test_detects_the_reports_cr_06_real_reply_verbatim(self):
+        """cr-06 (`mustAbstain: true`), independently reproduced fresh by `teco` — the report's
+        own strongest-confirmed real reply."""
+        reply = (
+            "The passages don't mention who first noticed and reported the search-latency spike "
+            "to the on-call engineer."
+        )
+        assert grounding.looks_like_abstention(reply) is True
+
+    def test_detects_doesnt_mention_singular_form(self):
+        """Not itself in the report's quoted table, but the same idiom's singular-subject form —
+        pinned so a future edit narrowing the marker back to only the contracted plural doesn't
+        silently drop it."""
+        assert grounding.looks_like_abstention("The passage doesn't mention that detail.") is True
+
+    def test_a_hedge_then_answer_reply_is_not_misclassified_as_abstention(self):
+        """The data-scientist-flagged false-positive risk: widening the marker list naively (plain
+        `\"don't mention\" in canon`) would also match a reply that hedges but still answers. This
+        reply is real-shaped, grounded, and non-abstaining — it must stay `False`."""
+        reply = (
+            "The passages don't mention this directly, but based on the numbers given, the "
+            "answer is 42,000."
+        )
+        assert grounding.looks_like_abstention(reply) is False
+
+    def test_a_second_hedge_then_answer_reply_with_however_is_not_misclassified(self):
+        reply = (
+            "The passages don't mention this specific figure, however the context lets us "
+            "compute it: the total comes to 24.99."
+        )
+        assert grounding.looks_like_abstention(reply) is False
+
+    def test_a_third_hedge_then_answer_reply_is_not_misclassified(self):
+        reply = (
+            "The passages doesn't mention it explicitly, but the numbers given add up to 42,000."
+        )
+        assert grounding.looks_like_abstention(reply) is False
+
+
+# ==================================================================================================
 # 2. `resolve_format` — the three-way merge (S7 spec §3.1/§3.2/§3.4)
 # ==================================================================================================
 
@@ -127,6 +184,33 @@ class TestChecklistPass:
             must_contain=[], must_not_contain=[], must_abstain=True,
         )
         assert result is False
+
+    def test_passes_on_the_reports_cr_03_real_reply_against_its_own_item_checklist(self):
+        """cr-03's own item shape (`packs/chat-responder-grounded-answers/items.jsonl`):
+        `mustContain: []`, `mustNotContain: ["$180,000"]`, `mustAbstain: true` — before the
+        `_ABSTENTION_MARKERS` widening this real reply scored `checklistPass: false` (the S7
+        report's confirmed false negative)."""
+        reply = (
+            "The passages don't mention that the payment-timeout incident cost the company in "
+            "lost revenue."
+        )
+        result = grounding.checklist_pass(
+            reply, must_contain=[], must_not_contain=["$180,000"], must_abstain=True,
+        )
+        assert result is True
+
+    def test_passes_on_the_reports_cr_06_real_reply_against_its_own_item_checklist(self):
+        """cr-06's own item shape: `mustContain: []`, `mustNotContain: []`, `mustAbstain: true` —
+        the report's most rigorously confirmed false negative (independently reproduced fresh by
+        `teco`)."""
+        reply = (
+            "The passages don't mention who first noticed and reported the search-latency spike "
+            "to the on-call engineer."
+        )
+        result = grounding.checklist_pass(
+            reply, must_contain=[], must_not_contain=[], must_abstain=True,
+        )
+        assert result is True
 
 
 # ==================================================================================================

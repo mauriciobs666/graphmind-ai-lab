@@ -32,12 +32,31 @@ _ABSTENTION_MARKERS: tuple[str, ...] = (
     "i'm not sure", "i don't know", "cannot find", "can't find",
 )
 
+#: `qwen/qwen3-4b-2507`'s own dominant, live-confirmed abstention idiom ("The passages don't
+#: mention X" / "...doesn't mention X") was missing from `_ABSTENTION_MARKERS` above (S7 live-run
+#: defect, `docs/test-reports/small-model-benchmarking-s7-report.md` "Defect —
+#: `_ABSTENTION_MARKERS` does not recognize..."; fix scoped by `data-scientist` consult). Checked
+#: separately from the fixed-marker list, not folded into it, because a plain substring match on
+#: "don't mention" also matches a reply that *hedges but still answers* ("The passages don't
+#: mention this directly, but based on the numbers given, the answer is 42,000") — a real,
+#: grounded, non-abstaining reply. So this phrase counts as abstention only when it is not followed
+#: later in the reply by a contrastive continuation ("but"/"however") that signals the reply goes
+#: on to actually answer.
+_MENTION_ABSTENTION_RE = re.compile(r"\b(?:don't|doesn't) mention\b")
+_CONTRASTIVE_CONTINUATION_RE = re.compile(r"\b(?:but|however)\b")
+
 
 def looks_like_abstention(reply: str) -> bool:
     """`layer2_contains`'s own `not_found` branch, adapted (S7 spec §2.8): true iff any of the
-    fourteen transcribed abstention phrasings appears, as a canonicalized substring, in `reply`."""
+    fixed abstention phrasings appears, as a canonicalized substring, in `reply` — or the reply
+    uses the "don't/doesn't mention" idiom without a later hedge-then-answer continuation."""
     canon = _canon_str(reply)
-    return any(marker in canon for marker in _ABSTENTION_MARKERS)
+    if any(marker in canon for marker in _ABSTENTION_MARKERS):
+        return True
+    match = _MENTION_ABSTENTION_RE.search(canon)
+    if match is None:
+        return False
+    return _CONTRASTIVE_CONTINUATION_RE.search(canon, match.end()) is None
 
 
 #: The three format keys every pack/item `format` block may declare, and their trivially-passing

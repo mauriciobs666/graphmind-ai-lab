@@ -49,6 +49,22 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   `match`/`if`-chain over `Outcome` (at least `report.py`, `results.py`'s own aggregation helpers)
   to confirm none silently assumes only four members before the fifth is added to the type.
 
+- **`checklist_pass`'s `mustContain`/`mustNotContain` containment is plain, canonicalized (case/
+  whitespace-only) substring matching, which fails on ordinary morphological paraphrase** — split
+  out of the S7 live-run defect (`docs/test-reports/small-model-benchmarking-s7-report.md`, "Defect
+  — `_ABSTENTION_MARKERS` does not recognize...", mechanism 2) as explicitly out of scope for the
+  `_ABSTENTION_MARKERS` widening fix, per a `data-scientist` consult that scoped the two mechanisms
+  separately. Confirmed live on `cr-11`/`cr-17` (`packs/chat-responder-grounded-answers/
+  items.jsonl`): `"4 retries" in "4 retry attempts"` is `False` (different stems, not a whitespace
+  issue) and `"30 minutes" in "30-minute"`/`"8 hours" in "8-hour"` are both `False` (a tokenization-
+  boundary artifact — the hyphen splits what plain substring containment treats as one token).
+  Word-boundary tokenization alone does not fix either cited example — a real fix needs stemming or
+  hand-rolled normalization, itself a real design task, not a one-line change: it needs its own
+  held-out fixture set to bound how many new false positives a widened containment check
+  introduces, the same way the `_ABSTENTION_MARKERS` widening needed the hedge-then-answer
+  adversarial guard. Scope creep for this zero-runtime-dependency component if folded into a
+  smaller fix; a `data-scientist`-scoped design task on its own.
+
 ## Note
 
 Stage S8 of `docs/plans/small-model-benchmarking.md` re-checks this list at close and adds whatever
