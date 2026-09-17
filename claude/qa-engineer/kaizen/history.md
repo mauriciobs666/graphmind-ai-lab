@@ -2,6 +2,60 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-09-16 — standing distillation pass, scoped to `qa-engineer` only: 7-entry inbox, 4 promoted, 3 discarded (U5)
+
+- **What:** `cobb` ran the standing kaizen-graph distillation over all 7 `qa-engineer`-produced
+  `kaizen_team` entries (dated 2026-09-13/09-14/09-17), per the stakeholder's request to dispatch
+  one producing agent per turn (`docs/plans/kaizen-team-distillation-coordination.md`, this is
+  U5). Fresh count at dispatch was 7, not the 5 estimated before dispatch — processed what was
+  actually there. Legacy (`author`-property) read returned 0 rows — every entry used the current
+  `PRODUCED`-edge shape. Every `fact`/`evidence` cell was paged past the MCP tool's 300-char
+  truncation before dispositioning. `qa-engineer.md` untouched — no entry warranted the
+  always-loaded-prompt bar.
+- **Promoted (4), all into `qa-testing-techniques.md`** (verified against current repo state):
+  - `c1f2a6b4-3d7e-4b1a-9e2f-6a8d4c9e0b71` → *"`/v1/models` confirms a model is present, not that
+    it's loaded with adequate context…"*. The specific incident (`opencode/agents/tank` DEF-1) is
+    already fully written up in `opencode/docs/test-reports/devops-opencode-headless-report.md`,
+    including an as-yet-unactioned recommendation to add the check to that README's Prerequisites
+    (outside `cobb`'s write remit, and not this agent's file to edit either) — promoted here as
+    the reusable cross-project technique so a *different* component's QA pass finds it without
+    having read that archived report.
+  - `d31967e9-d688-4b85-8725-ca729a61ea36` + `d2e8f7d3-7c9b-4b2f-8a3c-6f3d4a1f8b22` → merged into
+    one section, *"`model-bench attest`/`run`: non-interactive re-attestation needs `--set` for
+    every field, and a stale-attestation refusal can be the backend engine, not the app"*. Both
+    re-verified directly against current source: `modelbench/cli.py`'s `_gather_attested_fields`
+    still falls back to `input()` per unset field (confirming the non-interactive-hang claim), and
+    `modelbench/hostinfo.py`'s `check_attestation_staleness` "compared" branch still keys on
+    observed `runtimeName`/`runtimeVersion`/`residencySource`, never the operator-attested app
+    version (confirming the backend-engine-vs-app-version claim). The second entry's specific
+    external version numbers (a `~/.lmstudio/.internal/…` CUDA-engine bump, machine-local, outside
+    the repo, un-checkable from here) were dropped rather than promoted verbatim — the general
+    mechanism is what's kept.
+  - `2e047063-d12e-4da7-bfbf-e31ecf4180aa` → *"An adversarial 'totality contract' test must vary
+    the dispatch key itself, not just the argument values fed through it"*. The cited bug is
+    already fixed in current `packs/tool-caller-shop-assistant/tools/sim.py` (`dispatch()` now
+    uses `safe_name` throughout) — promoted the test-design lesson, not the (closed) bug.
+- **Discarded (3):**
+  - `3b9a1d4c-6e2f-4a8b-9c3d-0f7e2a1b5d92` (falkor-chat `FALKORCHAT_USER_ID`/`Agent`-id
+    `MemberIdCollisionError` at boot) — already fully documented, essentially verbatim including
+    the workaround and the "plausibly intentional, not filed as a defect" judgment, in
+    `falkor-chat/docs/test-reports/document-ingestion2-report.md` Finding 3 (this entry's own
+    cited source). Nothing to add.
+  - `7c1c9f3e-2b7a-4f6a-9b2e-1a3d5e8f9c01` (RediSearch fuzzy-query metacharacter crash in
+    `find_update_shortlist`/`fusion._fuzzy_query`) — already fixed in current
+    `falkor-chat/server/falkorchat/repository.py`: `_escape_fuzzy_token` strips the exact
+    metacharacter class named here, and its own docstring cites this same QA defect and test
+    report as its origin. Re-verified live against current source, not taken on the entry's word.
+  - `c1c7e6c2-6b8a-4a1e-9a2b-5f2c3f0e7a11` (`mistralai/ministral-3-3b` rejecting a second
+    `role:"system"` message) — already fixed in current `model-bench/modelbench/convo.py`
+    (`_prologue_system_message` collapses both pieces into one system message,
+    `convo.py:379-396`) **and** already documented near-verbatim, including the same "unit U159"
+    context, in `claude/data-scientist/lm-studio-model-notes.md`'s "A chat template can reject a
+    SECOND system-role message outright" section. A clean duplicate of an existing knowledge-base
+    entry, not a gap.
+- **Graph state confirmed:** re-ran both the legacy and current-shape reads for
+  `agentId: 'qa-engineer'` after clearing all 7 entries — zero rows both ways.
+
 ## 2026-09-10 — `kaizen_team` distillation: 1 entry, promoted (routed to `data-scientist`, not this agent's own KB) (U47)
 
 - **What:** U47 of `claude/docs/plans/kaizen-distillation2-coordination.md` — `qa-engineer`'s

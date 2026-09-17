@@ -208,3 +208,59 @@ explicitly** rather than trusting the default.)
 **Generalises past graphs.** Any shared-namespace teardown has this shape — a tenant-scoped SQL
 `DELETE`, an S3 prefix wipe, a Redis key pattern. Ask what the check would report if the delete
 took *everything*: if the answer is still "pass", the check is measuring the wrong thing.
+
+## `/v1/models` confirms a model is *present*, not that it's loaded with adequate context — check `/api/v0/models`'s `loaded_context_length` against the requirement
+
+`GET /v1/models` lists every downloaded LM Studio model regardless of load state or configured
+context; only `GET /api/v0/models` reports `loaded_context_length`, and that figure can sit well
+below both `max_context_length` and a manual-documented minimum even though the model is genuinely
+loaded. Confirmed live: `mistralai/ministral-3-3b` appeared correctly in `/v1/models` while
+`/api/v0/models` showed `loaded_context_length: 8192` (`max_context_length: 262144`) — below the
+16384 minimum `opencode/agents/tank`'s own manual documents — and `tank`'s persona + addendum +
+tool-schema overhead alone (11381 tokens) blew straight through it, surfacing as a 400
+`exceed_context_size_error` only once the real health-check actually ran a prompt through it, not
+when a briefing had merely cited the model's presence (`opencode/docs/test-reports/
+devops-opencode-headless-report.md`, DEF-1).
+
+**Technique:** before treating an environment as "ready" for a given agent/harness, `curl
+:1234/api/v0/models` and compare `loaded_context_length` against that harness's own known
+prompt-token floor — a `/v1/models` presence check alone will pass while the model is still
+unusable for that specific prompt budget.
+
+## `model-bench attest`/`run`: non-interactive re-attestation needs `--set` for every field, and a stale-attestation refusal can be the backend engine, not the app
+
+Two `model-bench` `attest`/`run` gotchas, hit back-to-back across two separate live sessions:
+
+1. **`run` refuses outright (a plain message, no traceback) whenever `host.json` is stale relative
+   to what LM Studio now reports**, and re-attesting from a non-interactive/agent-driven shell
+   needs **every one** of the four operator-attested fields passed via its own `--set name=value` —
+   `attest` falls back to `input()` for any field left unset, which hangs the shell instead of
+   skipping it (`modelbench/cli.py`'s `_gather_attested_fields`).
+2. **The staleness check compares LM Studio's *observed* runtime name/version/residency-source
+   against what was last attested — never the operator-attested app version.** A pure backend-engine
+   bump (the bundled inference-runtime auto-updating) is enough to trip a stale-attestation refusal
+   even when the app version an operator would report by hand hasn't changed at all
+   (`modelbench/hostinfo.py`'s `check_attestation_staleness`, the `"compared"` branch). Re-attesting
+   with the same operator-attested field values and letting `model-bench` re-baseline the observed
+   runtime resolves it — there's nothing to actually change if the app itself is unchanged.
+
+**Technique:** re-attest with `./run.sh attest --set lmStudioAppVersion=... --set
+kvCacheSetting=... --set hostRamGb=... --set otherResidentWorkloads=...` (comma-joined list,
+empty string allowed) rather than the bare `attest` command in any non-interactive session; and
+don't assume a stale-attestation refusal means the operator-attested fields themselves changed —
+check whether LM Studio's backend runtime moved before re-confirming values by hand.
+
+## An adversarial "totality contract" test must vary the dispatch key itself, not just the argument values fed through it
+
+A property/fuzz test built to prove a `dispatch(name, arguments)`-shaped function "never raises"
+can still miss a real violation if its generator only varies `arguments` and always passes a
+well-formed `name`. `model-bench`'s `tools/sim.py` `dispatch()` documented a total (never-raises)
+contract but called `self._handlers.get(name)` with the raw `name` instead of the already-computed,
+hash-safe `safe_name` — invisible to a generator that only tried odd argument shapes, and only
+reachable by handing `dispatch` a non-hashable `name` (a list/dict) directly. (Since fixed in
+current `sim.py`; the reusable lesson is the test-design gap, not the bug instance.)
+
+**Technique:** when a function's documented contract is totality over more than one parameter,
+generate adversarial values for *every* parameter the contract covers independently — including a
+"routing"/key-like parameter a test author's intuition treats as always well-formed — not just the
+ones that look like "the interesting input."
