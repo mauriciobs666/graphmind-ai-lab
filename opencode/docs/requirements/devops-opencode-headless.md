@@ -1,6 +1,6 @@
 # DevOps: headless, local-model OpenCode variant
 
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-09-12
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — (M0) · **Last updated:** 2026-09-16
 
 ## Terminology
 
@@ -236,3 +236,11 @@ back to **Ready for design**.
 means. Clarified: any environment — `falkor-chat` is the current practical example, not an
 exclusivity constraint. FR-5a/5b wording already said "a demo/dev environment" generically, so no
 FR text changed; recorded here for traceability since the plan had assumed otherwise.
+
+2026-09-16 — Feature delivered and closed out (`opencode/docs/HISTORY.md` "`tank`: headless,
+local-model OpenCode DevOps agent shipped", 2026-09-13; plan + coordination both `archived`) — all
+FRs/ACs met, live-tested per `opencode/docs/test-reports/devops-opencode-headless-report.md`;
+flipped to archived. DEF-3's residual model-capability ceiling (arbitrary-phrasing compliance,
+capped by stakeholder decision after an independent `architect` opinion) and the two open
+backlog follow-ons (evaluating an alternate model; wiring a scheduler) don't reopen this
+document's own acceptance criteria, which were met as scoped.
