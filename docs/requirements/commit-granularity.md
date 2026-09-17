@@ -1,5 +1,5 @@
 # Commit granularity — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M-) · **Last updated:** 2026-09-13
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — (M-) · **Last updated:** 2026-09-13
 
 ## Intent
 Stakeholder observes hundreds of commits across the team over recent days and suspects the git

@@ -2,6 +2,41 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-16 — Commit-granularity gate (`docs/reviews/commit-granularity.md`) fixed: 1 blocker, 2 majors, 1 minor
+
+`analyst` gated the 2026-09-13 docs-only-chain commit-batching delivery (see that date's entry
+below) needs-changes; all four findings fixed this pass. Blocker: `tico.md`'s Mode-1 "Commit at
+document boundaries" rule now carries an explicit carve-out for a document that is a unit of an
+active docs-only coordination, so it no longer contradicts "Coordinating a docs-only chain"'s
+batching rule on session close. Major: `teco.md`'s concurrent-churn recovery bullet now states
+that its prompt commit is an explicit exception to docs-only batching. Major: `plan.md` K-033's
+word-count claim was independently re-measured (not copied from the review's table) and corrected
+— `claude/AGENTS.md` +291 words (not +33, ~9x the original claim), `teco.md` +134 (not ~450),
+`tico.md` +186 (close to the original ~250) — and K-033's priority raised low→medium on the
+corrected figures; the same history entry's `teco.md` line-length claim was also corrected (the
+700-char bar is textually scoped to `*AGENTS.md`-named files, so `teco.md` was never in scope for
+it). Minor: `claude/AGENTS.md`'s docs-only-batching paragraph gained one clause mapping "terminal
+state" to the ledger's actual `Status` vocabulary (`accepted`, or `gated` with no further revision
+scheduled — there is no `closed` value); `teco.md`/`tico.md` already cite that section by name, so
+the mapping wasn't duplicated into either. **That `claude/AGENTS.md` edit was left uncommitted per
+the delegated-subagent rule, then swept into an unrelated concurrent commit** (`702704f`,
+frontend-engineer distillation) **before this session could hand it off** — content landed
+correct (verified via `git diff 320f682 -- claude/AGENTS.md`) but under a commit message that
+doesn't name it; logged as live evidence toward K-031's unmeasured question, not re-litigated
+here. `teco.md`, `tico.md`, and this pass's `plan.md`/`history.md` edits remain uncommitted for
+`teco` to verify and commit. Declined to add a `docs/HISTORY.md` entry: that log is
+scoped to the CPG/code-graph component, and while it does carry cross-cutting entries (M7/M8),
+those are substantial infrastructure rollouts CPG-adjacent agents depend on — this delivery is a
+pure three-file prompt/policy edit with no CPG relevance, and its complete record already lives in
+this file's 2026-09-13 entry per `claude/AGENTS.md`'s own routing (agent-prompt changes → kaizen).
+**Re-gated same day: approve with suggestions, two new wording-only items from reading the two
+fixes together.** `tico.md:68` — the docs-only-coordination carve-out sat ambiguously close to the
+pre-existing stakeholder-ask override, readable as suspended by it; split the stakeholder-ask
+sentence out so it visibly stands apart from and outranks the carve-out. `teco.md:155` ("The
+grant") — stated the docs-only single-terminal-commit rule with no pointer to the concurrent-churn
+exception added at step 5; added a one-clause cross-reference. Both re-read in place afterward;
+no other "commit" hit in either file needed a matching change.
+
 ## 2026-09-16 — `guard-cobb-topic-writes.sh` allowlist gained `skills/python-web-quirks/*`
 
 `analyst`'s gate of U1 (`docs/reviews/kaizen-team-distillation-u1.md`, finding 3) flagged that
@@ -62,9 +97,13 @@ current per-verified-unit granularity there is unchanged. Applies going forward 
   context/prompt file under time pressure: check "would this sentence make sense to someone who
   never saw the diff" before calling a context-file edit done, not after being asked.
 - **Verification:** re-read both edited prompts end to end for internal consistency (no leftover
-  contradicting "one commit per unit" phrasing); confirmed `claude/AGENTS.md`,
-  `claude/teco/teco.md` line-length budget still clean (`awk length>700`, zero hits) and word
-  count only marginally up net (see `plan.md` K-033). Did not live-test the behavior (there is
+  contradicting "one commit per unit" phrasing); confirmed `claude/AGENTS.md`'s line-length budget
+  still clean (`awk length>700` against `git ls-files '*AGENTS.md'`, zero hits — that check is
+  textually scoped to `*AGENTS.md`-named files, so `teco.md` was never actually in scope for it;
+  an earlier version of this line named `teco.md` alongside it, which was a citation mix-up, since
+  corrected per `docs/reviews/commit-granularity.md`) and word
+  count only marginally up net (**correction, 2026-09-16: materially understated — see `plan.md`
+  K-033**). Did not live-test the behavior (there is
   nothing to execute — this is a coordination-practice rule, not a mechanism) — confidence rests
   on cross-reading the three files together, not a live run.
 - **Plan items:** none opened beyond the K-033 word-count note (see `plan.md`).
