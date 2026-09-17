@@ -2,6 +2,44 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-16 — one `tdd-engineer`-produced entry routed here mid-pass (U4 follow-up): new `lm-studio-model-notes.md` section, no MENTIONS tag needed
+
+- **What:** while `cobb` was running U4 of the single-agent-scoped `kaizen_team` distillation
+  sequence (scoped to `tdd-engineer`), a fresh entry appeared in `tdd-engineer`'s produced inbox
+  between the initial fetch and the closing recount — `0a865703-5151-4b3c-b131-12146fd04794`
+  (2026-09-16, `model-bench` U159, `suggestedHome: knowledge base`). Processed in the same pass
+  rather than left for a future one, per the standing "read fresh, not the dispatch snapshot"
+  precedent (`claude/tdd-engineer/kaizen/history.md`, 2026-09-13 entry).
+- **The fact:** a chat template can reject a SECOND `role: "system"` message outright — distinct
+  from role-alternation enforcement. `mistralai/ministral-3-3b` HTTP 400s (*"Only user, assistant
+  and tool roles are supported, got system"*) the moment a request carries two system messages,
+  however positioned; `qwen/qwen3-4b-2507` accepts the identical shape silently.
+- **Re-verified against the live (uncommitted) tree, not taken at face value:** the fix the entry
+  describes is already shipped in `model-bench/modelbench/convo.py:379-396`
+  (`_prologue_system_message`, collapsing the system prompt and tool-schema text into one message).
+  That function's own docstring already documents the Ministral HTTP 400 half; it does **not**
+  mention Qwen3's silent tolerance of the same shape, which is this entry's actual new content —
+  not a duplicate.
+- **Owner ruled `data-scientist`, not `tdd-engineer`.** The fact is about LM Studio/model-serving
+  behavior across model families, `data-scientist`'s `lm-studio-model-notes.md` domain (per
+  `agent-maintenance` §5's "the fact's home is the artifact whose scope covers it, not the agent
+  that captured it" — precedent `claude/tdd-engineer/kaizen/history.md` U39, 2026-09-09), not a
+  testing-methodology fact for `tdd-engineer`'s own `guard-testing-techniques.md`.
+- **No `MENTIONS` tag needed** — `cobb` (the curator) promoted it directly into
+  `lm-studio-model-notes.md`, the same as every other cross-agent KB promotion during a
+  distillation pass; `MENTIONS` is reserved for a case needing the *subject* agent's own review
+  before the node is safe to clear (e.g. a host-toolchain fact for `devops`), not for an ordinary
+  domain-ownership routing call `cobb` can make directly.
+- **Where it landed:** new section in `claude/data-scientist/lm-studio-model-notes.md`, placed
+  beside the existing "Mistral/Ministral GGUF chat templates enforce strict user/assistant role
+  alternation" section (same Ministral-strict/Qwen3-tolerant asymmetry, a genuinely different
+  mechanism — a hard cap of one system message, not alternation).
+- **Graph:** read `producedEdges=1, mentionEdges=0` → `otherRemaining=0` → full-node
+  `DETACH DELETE`, cleared after this history entry and `tdd-engineer`'s own pass note were both
+  durably written. Full edge arithmetic and the other 7 entries of this pass are in
+  `claude/tdd-engineer/kaizen/history.md`, 2026-09-16.
+- **Plan items:** none opened here — nothing left unresolved.
+
 ## 2026-09-13 — standing distillation pass: 3-entry `data-scientist` inbox, 0 promoted, 1 kept open (K-005), 2 discarded
 
 - **What:** `cobb` ran the standing kaizen-graph distillation over all 3 `data-scientist`-produced

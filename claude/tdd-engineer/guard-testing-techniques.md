@@ -244,6 +244,21 @@ without anyone deciding to grow it. `residual == {allowed}` makes the next unlis
 stop-and-decide, and it reddens in the other direction too, on an exemption left behind by a raise
 that is gone.
 
+**A correctly-formed union+disjointness pin still has a blind spot the algebra doesn't cover: a
+clean move between the two sets.** Given `A|B == C` and `A∩B == ∅`, relocating one member from `A`
+to `B` (removed from one, added to the other, left in neither twice nor in neither at all)
+preserves both invariants exactly — the member was already counted toward `C` and was never in
+both sets, so neither assertion moves. It only reddens on an **incomplete** reclassification (the
+member left in both, breaking disjointness) or a **drop** (left in neither, breaking union
+completeness). Verified by construction on `model-bench`'s `ITERATION_SUMMARY_DISPOSITIONS`/
+`ITERATION_SUMMARY_EXCLUDED` partition of `convo.TURN_DISPOSITIONS`
+(`modelbench/scoring/toolcalls.py:81-99`): moving a disposition string between the two sets reddens
+neither the union nor the disjointness assertion; only leaving it in both or in neither does.
+**A per-member behavioural-consequence test is the only thing that catches a clean cross-set
+move** — assert what changes for a member *because* it is now in the other set (a different code
+path taken, a different value produced), not merely that the two sets still partition the
+vocabulary between them.
+
 **A different equality swap on the same kind of guard trades away a different property — check
 which one before accepting it as a straight upgrade.** A coverage guard partitioning a cell grid
 into "exercised" and "exempt" is sometimes written as a subtraction, `all - exercised == exempt`

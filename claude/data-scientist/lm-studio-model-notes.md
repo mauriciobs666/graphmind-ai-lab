@@ -42,6 +42,31 @@ assuming a prompt-assembly pattern that works on one model family ports to anoth
 
 **Context:** `falkor-chat` K-027 item 5 Ministral re-probe (`docs/plans/ministral-reprobe-ml.md`).
 
+## A chat template can reject a SECOND system-role message outright — a distinct failure from role-alternation enforcement, not a special case of it
+
+`mistralai/ministral-3-3b`'s LM Studio chat template raises a Jinja error (HTTP 400, *"Only user,
+assistant and tool roles are supported, got system"*) the moment a request carries **two**
+`role: "system"` messages, however they're positioned — this fires even back-to-back at the very
+start of the message list, before any user/assistant turn exists to alternate against. `qwen/
+qwen3-4b-2507` accepts the identical two-system-message shape silently (HTTP 200). Live-reproduced
+building `model-bench`'s `modelbench/convo.py` `assemble()`: constructing the system prologue as two
+separate messages (one for `cfg.systemPrompt`, one for the tool-schema text block) rather than one
+concatenated message triggers it for Ministral only. Fixed by collapsing both pieces into one
+`role: "system"` message's content (`_prologue_system_message`, `convo.py:379-396` — that
+function's own docstring carries the Ministral half of this fact; the Qwen3-tolerates-it half is
+new here).
+
+**Consequence, and why it's a separate entry from the role-alternation one above:** that entry's
+mechanism is "the same role cannot repeat consecutively, mid-conversation" (`[user, user]` after a
+system prologue); this one rejects a **second `system` message specifically**, independent of
+alternation — so a harness that emits "system prompt" and "tool schema block" as two separate
+`system`-role messages can pass every test against a tolerant model family and hard-fail the moment
+it's pointed at a stricter one. Any prompt-assembly code building a chat request programmatically
+should collapse to **at most one** `system`-role message per request rather than relying on either
+family's tolerance.
+
+**Context:** `model-bench` small-model-benchmarking coordination, unit U159.
+
 ## LM Studio can expose two catalog ids for the same underlying weights — verify state-flipping or byte-identical completions before assuming two entries are two different models
 
 On this lab's box, `mistralai_ministral-3-3b-instruct-2512` (publisher `bartowski`) and

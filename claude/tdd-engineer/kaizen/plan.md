@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `tdd-engineer` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-09-07 (`kaizen_team` distillation, chunks A and B — see history.md)
+> Last reviewed: 2026-09-16 (`kaizen_team` single-agent distillation U4 — see history.md)
 
 ## Active
 
@@ -13,11 +13,15 @@
 | K-009 | 2026-09-07 | low | 🔵 | Document `DatasetSchema`'s second, non-obvious construction site in `falkor-chat/docs/SERVER.md` §1.7 |
 | K-010 | 2026-09-07 | med | 🔵 | Document that `trace=True` alone traces nothing without `tracer=GraphTracer(repo)` — `falkor-chat/docs/SERVER.md` §1.7 |
 | K-011 | 2026-09-07 | low | 🔵 | Record in `model-bench/AGENTS.md` that the shared `select = ["E","F","W","I"]` ruff config cannot detect dead code |
+| K-012 | 2026-09-16 | med | 🔵 | Fix `test_queries.sh`'s `assert_index_scan` — blind to an edge-anchored "Edge By Index Scan" |
+| K-013 | 2026-09-16 | med | 🔵 | Re-investigate the claimed 1-2-event ANN recall drop for identical embeddings — not reproduced under a minimal probe |
 
-> All five are project-doc writes (K-007…K-010 in `falkor-chat`, K-011 in `model-bench`),
+> K-007…K-011 are project-doc writes (K-007…K-010 in `falkor-chat`, K-011 in `model-bench`),
 > **outside `cobb`'s write remit** — that is why they are kept open here rather than promoted
 > during the distillation pass. Each belongs to whoever next works the relevant component's area,
-> or routes through `teco` to the doc's owner.
+> or routes through `teco` to the doc's owner. K-012 is the same kind (a code fix to a
+> `falkor-chat/scripts/` file, outside remit); K-013 is different — kept open because
+> re-verification was inconclusive, not because of a remit boundary (see its own entry).
 
 ### K-007 — the shared `falkordb-dev` instance makes `pytest -q` flake across unrelated files
 - **Status:** 🔵 proposed · **Priority:** medium
@@ -109,6 +113,54 @@
   `test`-prefix conventions — the `select` line is deliberately small and buys no dead-code
   detection. Optionally mirrored in `mcp-monitor/AGENTS.md`. Not a lint-config change: widening
   `select` is a separate proposal with its own cost, not this item.
+
+### K-012 — `test_queries.sh`'s `assert_index_scan` is blind to an edge-anchored "Edge By Index Scan"
+- **Status:** 🔵 proposed · **Priority:** medium
+- **Source:** `kaizen_team` entry `b3f0b6a2-…` (2026-09-13), kept open at the 2026-09-16 distillation.
+- **Fact (re-verified 2026-09-16):** `assert_index_scan` (`falkor-chat/scripts/test_queries.sh:52-62`)
+  asserts `"Node By Index Scan"` is present and `"Node By Label Scan"` is absent — nothing else. A
+  relationship/edge-indexed lookup (`MATCH (a)-[r:SUPERSEDES {matchId:$id}]->(b) ...`) profiles as
+  `Edge By Index Scan | [r:SUPERSEDES]` on this build, live-reconfirmed against a disposable graph,
+  so the helper's first assertion fails for every edge-index-anchored call site. §14.8's
+  "SUPERSEDES.matchId lookup (unlabeled endpoints) uses the relationship index, no label scan"
+  assertion (`:1695`) is the one live-affected case — a known, currently-accepted failing assertion
+  in the suite (438/439 or 458/459 passing, one stable failure).
+- **Why it matters:** the underlying engine mechanism (a relationship-property predicate profiles as
+  `Edge By Index Scan`, never `Node By Index Scan`) is already documented in
+  `claude/graph-dba/falkordb-quirks.md` ("Indexing, constraints & DDL") — nothing to add there. The
+  residual is the test helper's own correctness: a passing call site that happens to be node-anchored
+  masks the fact the helper can't validate an edge-anchored one at all.
+- **Proposed change:** widen `assert_index_scan` to accept either `"Node By Index Scan"` or
+  `"Edge By Index Scan"` (or split into two explicit helpers, one per kind, so a call site states
+  which it expects), then drop §14.8's now-redundant standing failure. A code change to
+  `falkor-chat/scripts/test_queries.sh` — outside `cobb`'s write remit.
+
+### K-013 — ANN recall drop at 1-2 churn events for identical-embedding pairs: not reproduced under a minimal probe
+- **Status:** 🔵 proposed · **Priority:** medium
+- **Source:** `kaizen_team` entry `7e6d0a1e-…` (2026-09-13), kept open at the 2026-09-16 distillation.
+- **The raw claim:** on `ws:test`, two `Chunk`s with identical embeddings, freshly created against a
+  just-recreated vector index, are both found by `db.idx.vector.queryNodes` (k=4); after ONE extra
+  `SET`/`REMOVE` property write per node (simulating a superseded-flag flip / backfill), only 1 of 2
+  is returned — i.e. recall degradation at just 1-2 churn events, narrower/lower-threshold than the
+  ~100-200-cycle cumulative churn threshold `falkor-chat/docs/reviews/document-ingestion2-rca.md`
+  Appendix B already characterizes.
+- **Verification attempted 2026-09-16, inconclusive:** built a clean, fully isolated dim-4 vector
+  index with exactly two nodes carrying identical `vecf32([1,0,0,0])` embeddings; confirmed both
+  found by ANN; applied one extra `SET` on each node's non-embedding property (one node at a time,
+  then both); re-ran ANN (k=4) after each step — **both nodes were returned in every variant**. The
+  specific 1-2-event degradation did not reproduce under this minimal setup.
+- **Why kept open rather than promoted or discarded:** the entry's own framing ("even on a
+  freshly-rebuilt index") suggests the effect may depend on cumulative churn already present
+  elsewhere in the server/session state — matching `document-ingestion2-rca.md`'s broader "exact
+  cumulative churn count" framing — rather than on a literally-fresh, two-node index, which this
+  probe can't exercise. Promoting the raw claim as-is into `falkordb-quirks.md` (ground truth for
+  this build) risks shipping an unconfirmed, possibly overstated claim; discarding it risks losing a
+  real signal that drove an actual Stage C test fix. Neither a clean confirm nor a clean deny.
+- **Proposed change:** `graph-dba` (the domain owner) to re-attempt with a more faithful repro —
+  seed a realistic amount of background churn (the `ws:test`-scale session activity the entry
+  describes) before creating the two identical-embedding nodes — and settle whether this is a
+  distinct, lower-threshold mechanism or an artifact of accumulated session state. Only then promote
+  (or drop) into `falkordb-quirks.md`.
 
 ### K-003 — Tool permissions decision  ⚪ DEFERRED (2026-06-05)
 - **Status:** ⚪ deferred — user chose to keep `tools` unconstrained for now.

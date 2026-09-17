@@ -930,3 +930,15 @@ check` invocation assembled from "every file this pass touched" must filter to s
 be run per-directory with ruff's own file-discovery) rather than listing every edited path
 verbatim — a doc file edited in the same pass silently turns a clean lint gate into a false
 failure that looks like a real syntax defect.
+
+## `ruff format <path>` reformats the WHOLE file, not just the lines you touched
+
+Running `ruff format` on a file to clear a couple of new `E501`/style findings rewrites every
+pre-existing line's spacing and blank-line placement in the same pass — there is no "format only
+the lines near my edit" mode. Verified (ruff 0.14.14): a 5-line file with inconsistent spacing
+(`y    =     2`, `def f(a,b):`, `z = [1,2,3]`) reformatted to normalize every line's whitespace and
+insert the two blank lines PEP 8 wants around the `def`, none of which was the line under fix. On a
+large pre-existing file this turns a small intended change into a diff spanning the whole file,
+burying the actual change and making review of "what changed" far harder than the fix itself.
+Prefer a targeted fix (rewrap the flagged line(s) by hand, or use `ruff format --diff` to preview
+before applying) over running the formatter over an entire pre-existing file for a small fix.

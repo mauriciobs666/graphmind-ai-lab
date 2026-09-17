@@ -2,6 +2,115 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-09-16 — U4 gate fix: removed an untraceable numbered anecdote from the promoted `ruff format` entry (analyst Blocker, `docs/reviews/kaizen-team-distillation-u4.md`)
+
+- **What:** `analyst`'s U4 gate found one Blocker in an otherwise-clean review: the `ruff format`
+  section U4 promoted into `skills/python-web-quirks/SKILL.md` (below) carried a specific numbered
+  "real instance" — a fix producing a 1418-line `git diff --stat` vs. a 269-line hand-reconstruction
+  — that the raw `kaizen_team` entry's `evidence` field did state verbatim, but that the reviewer
+  could not find any trace of anywhere in `git log --all` (by subject or by `-S` pickaxe on
+  `"1418"`) or a repo-wide grep. `cobb` re-searched independently and confirmed the same null
+  result: the only `"1418"` anywhere in the repo is an unrelated `stats.py` line-count fact from a
+  completely different fix round (`docs/plans/small-model-benchmarking-coordination.md:109`, U55/
+  U58 — `stats.py` is 1418 lines before and after an edit, nothing to do with `ruff format` or
+  `test_report.py`); the one commit touching `model-bench/tests/test_report.py`'s own history
+  (`5d9daa0`) is an unrelated embedder-fixture fix. The specific numbers have no corroborating
+  trace anywhere in this repo's history, on any branch or in the reflog.
+- **Disposition:** removed the numbered anecdote outright, keeping only the general claim — which
+  both `cobb` and the reviewer independently live-verified themselves with the same ruff version
+  (0.14.14), reformatting a synthetic file end to end. Did not attempt to "explain" or re-derive the
+  specific numbers; §5's "unsupported instance into a KB billed as live-verified" bar is exactly
+  this case, and the raw `kaizen_team` node for this entry was already cleared (U4), so there is no
+  surviving source to re-check against — genuinely either a fabricated/hallucinated specific
+  riding along with a true general fact, or a real but never-committed incident, and neither can be
+  distinguished from here.
+- **Where:** `skills/python-web-quirks/SKILL.md`, the `` `ruff format <path>` reformats the WHOLE
+  file... `` section — one sentence's numbered clause removed, the section's general claim and my
+  own live-verified reproduction (the 5-line spacing example) left intact.
+- **Lesson for future distillation passes:** a raw entry's `evidence` field being internally
+  plausible and consistent with an independently-true general claim is not the same as the specific
+  numbers in it being checkable — a specific, citable instance ("N lines", "file X") needs its own
+  trace search (`git log --all -S`, not just a plausibility read) before being promoted verbatim
+  into a KB, even when the surrounding general claim is solid.
+
+## 2026-09-16 — single-agent-scoped distillation pass (U4): 7-entry `tdd-engineer` inbox, 2 promoted, 3 discarded, 2 kept open (K-012/K-013)
+
+- **What:** `cobb` ran the `agent-maintenance` §5 distillation over `tdd-engineer`'s produced inbox,
+  scoped to this agent alone per the stakeholder's one-producing-agent-per-turn request (this pass
+  is U4 in that sequence, after U1 `analyst`/U2 `frontend-engineer`/U3 `architect`). 7 entries at
+  fresh read (all dated 2026-09-13/09-14), matching the pre-dispatch count exactly. All carried real
+  `:Agent`-`PRODUCED` edges; no legacy `author`-property entries exist for this agent.
+
+**Promoted (2):**
+
+- **`61188d64-ccae-4466-9ec4-ccf617d28f9f`** (mutation-testing method: a union+disjointness pin is
+  NOT reddened by a clean member move between the two sets) → new paragraph in
+  `guard-testing-techniques.md`, inserted immediately before the existing "A different equality
+  swap on the same kind of guard trades away a different property" passage — a related but distinct
+  blind spot on the same union/disjointness theme, not a restatement of it. Verified by construction
+  (set algebra: `A|B==C` and `A∩B==∅` are both preserved by a clean relocation) and cross-checked
+  against the cited instance, `model-bench/modelbench/scoring/toolcalls.py:81-99`
+  (`ITERATION_SUMMARY_DISPOSITIONS`/`ITERATION_SUMMARY_EXCLUDED` partitioning
+  `convo.TURN_DISPOSITIONS`).
+- **`a1e4b6a0-6f2b-4c3a-9d1e-7c8f2b0a4d61`** (`ruff format <file>` reformats the whole file, not
+  just the touched lines) → new section in `skills/python-web-quirks/SKILL.md`, sibling of the
+  existing "`ruff check <path>` force-parses..." section. Re-verified live (ruff 0.14.14, this repo's
+  `model-bench/.venv`): a 5-line file with inconsistent spacing came back with every line's
+  whitespace normalized and PEP8 blank lines inserted around a `def`, none of which was the flagged
+  line. No frontmatter `description`/`skills/README.md` update — the sibling `ruff check` section
+  added 2026-09-09 (U54) set the precedent that a KB body addition doesn't always need a catalog
+  edit, and neither entry is listed in either catalog surface.
+
+**Discarded (3) — all "already documented, found only by looking":**
+
+- **`e3a8f6b2-6d1c-4b9a-9a2e-7f1c9d4e5a10`** (passing a headline cutoff `H` as `hazard_points`'s own
+  position-limit parameter silently truncates the curve) — already fixed and documented at the
+  point of use: `model-bench/modelbench/scoring/toolcalls.py:507-527`'s own docstring states "`h`
+  bounds how many positions are computed... `None` computes every position up to the longest trace
+  given", and the live call site (`:985`) already passes `h=None`. Nothing to add.
+- **`e6f1a4d2-3b7c-4a2e-9d1f-8c5b6a7e9012`** (RediSearch `%token%` fuzzy terms should be sanitized by
+  stripping metacharacters, not escaping them) — the same fix, same function
+  (`repository._escape_fuzzy_token`), same QA Defect 1 incident is already documented in
+  `claude/graph-dba/falkordb-quirks.md` ("Indexing, constraints & DDL") in materially more depth,
+  including a caveat this entry doesn't carry (stripping merges adjacent word-fragments across the
+  stripped character, a live side effect of the very fix this entry recommends).
+- **`46f4dfd4-bd76-4557-997d-4b5323d5ada0`** (`math.ceil(0.95*x)` matches the exact `LEVEL_P95`
+  integer rank for every `x` in 1..200, needed as an independent oracle to avoid the mutation-testing
+  "mirror trap") — already published verbatim, including the mirror-trap reasoning and the
+  `x<=200` caveat, in `model-bench/tests/test_scoring_toolcalls.py:543-563`'s own
+  `_independent_p95_rank` docstring.
+
+**Kept open (2) — new `plan.md` K-012/K-013:**
+
+- **K-012** ← `b3f0b6a2-7e4b-4b1a-9c1d-6d4e8f2a5c11` (`test_queries.sh`'s `assert_index_scan` only
+  greps "Node By Index Scan", blind to an edge-anchored lookup's "Edge By Index Scan"). Re-verified
+  live (`GRAPH.PROFILE` against a disposable graph): a relationship-property index lookup profiles
+  as `Edge By Index Scan | [r:SUPERSEDES]`, confirming the helper's first assertion fails for
+  §14.8's SUPERSEDES.matchId check exactly as the entry describes. The underlying engine mechanism
+  is already documented in `falkordb-quirks.md`; the un-fixed residual is the test-helper bug
+  itself, a code change to `falkor-chat/scripts/test_queries.sh` — outside `cobb`'s write remit,
+  same reasoning as K-007..K-011.
+- **K-013** ← `7e6d0a1e-2f3b-4c9a-9b3d-4a6b2f1c8e5a` (ANN recall for an identical-embedding pair can
+  drop after just 1-2 non-embedding property writes, not only past the ~100-200-cycle cumulative
+  churn threshold `document-ingestion2-rca.md` Appendix B characterizes). Attempted re-verification
+  2026-09-16: built a clean, isolated dim-4 index with exactly two identically-embedded nodes,
+  confirmed both found by ANN, then applied one extra `SET` per node (one at a time, then both) —
+  **both nodes remained in the ANN result in every variant**; the claimed 1-2-event drop did not
+  reproduce under this minimal setup. Kept open rather than promoted (into `falkordb-quirks.md`,
+  ground truth for this build) or discarded (the entry motivated a real Stage C test fix) — an
+  inconclusive verification, not a confirmed-false one; see K-013 for the fuller reasoning and the
+  proposed next repro.
+
+- **MENTIONS tags added:** none — no entry is substantively about a different agent's own work; the
+  FalkorDB-domain findings are engine facts, not `graph-dba` conduct, consistent with how prior
+  units have routed such facts directly rather than tagging.
+- **Graph:** all 7 nodes read `producedEdges=1, mentionEdges=0` → `otherRemaining=0` on every one →
+  full-node `DETACH DELETE` for all 7 (confirmed after each promotion/discard/kept-open note was
+  durably written, never before). `tdd-engineer` producer count after this pass: **0** (re-queried,
+  see U4's own report).
+- **Docs touched:** `claude/tdd-engineer/{guard-testing-techniques.md,kaizen/history.md,
+  kaizen/plan.md}` · `skills/python-web-quirks/SKILL.md`.
+
 ## 2026-09-13 — standing distillation pass: 7-entry `tdd-engineer` inbox (6 expected, 1 fresh), 2 promoted, 1 routed to devops, 4 discarded
 
 - **What:** `cobb` ran the standing kaizen-graph distillation over `tdd-engineer`'s inbox — 7
