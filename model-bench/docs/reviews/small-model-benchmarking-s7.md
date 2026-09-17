@@ -1,6 +1,6 @@
 # `model-bench` S7 — `chat-responder` pack, Steps 0-2: code gate
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** U168 (S7)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** U168 (S7)
 
 ## Scope & verdict
 

@@ -1,6 +1,6 @@
 # `model-bench` S7 — `chat-responder` pack: live-run test report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** — (S7) · **Version:** 2
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** — (S7) · **Version:** 2
 
 **2026-09-17 revision note (one dated line, not a narrative):** re-run after the four-round
 abstention-detection fix chain (U173–U177, `modelbench/scoring/grounding.py`, all `teco`-verified,

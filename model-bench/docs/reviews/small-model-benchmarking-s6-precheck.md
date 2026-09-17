@@ -1,6 +1,6 @@
 # Small-model-benchmarking S6 — `tool-caller` conversation scripts, agent pre-check (FR-19 process step 1)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** S6 (M6)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** S6 (M6)
 
 ## Scope & verdict
 

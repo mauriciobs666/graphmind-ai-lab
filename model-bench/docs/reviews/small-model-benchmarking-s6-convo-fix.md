@@ -1,6 +1,6 @@
 # S6 `convo.py` fix — the double `role:"system"` message defect (U160)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** U160, S6 (M6)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** U160, S6 (M6)
 
 ## Scope & verdict
 

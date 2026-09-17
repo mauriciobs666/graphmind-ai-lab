@@ -1,6 +1,6 @@
 # Small-Model Benchmarking — Statistics and Metric Definitions
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.25
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** — · **Version:** 1.25
 
 2026-09-11 (v1.25, `data-scientist`) — corrects this note's `nlq-generator` **analysis-unit count**,
 which was the raw item count rather than the scoring denominator. Plan §3.8.3 excludes

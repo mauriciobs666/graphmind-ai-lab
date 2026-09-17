@@ -1,6 +1,6 @@
 # Small-model-benchmarking S7 — `chat-responder` golden items, agent pre-check (FR-19 process step, mirroring S6)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** U171 (S7)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** U171 (S7)
 
 ## Scope & verdict
 

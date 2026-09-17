@@ -1,6 +1,6 @@
 # `model-bench` S7 — `chat-responder` pack — implementation spec
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** S7 · **Extends:** `docs/plans/small-model-benchmarking.md` (S7)
+> **Status:** archived · **Owner:** `architect` · **Tracks:** S7 · **Extends:** `docs/plans/small-model-benchmarking.md` (S7)
 
 ## 1. Goal & scope
 

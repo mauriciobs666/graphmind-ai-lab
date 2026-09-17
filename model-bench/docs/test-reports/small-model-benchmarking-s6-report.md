@@ -1,6 +1,6 @@
 # `model-bench` S6 — `tool-caller` pack, part 2: live-run test report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** — (S6)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** — (S6)
 
 ## Summary
 

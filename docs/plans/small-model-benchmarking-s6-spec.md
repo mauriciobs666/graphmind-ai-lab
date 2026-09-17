@@ -1,6 +1,6 @@
 # `model-bench` S6 — `tool-caller` pack, part 2: the conversation scripts — implementation spec
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — · **Extends:** `docs/plans/small-model-benchmarking.md` (S6)
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — · **Extends:** `docs/plans/small-model-benchmarking.md` (S6)
 
 ## 1. Goal & scope
 

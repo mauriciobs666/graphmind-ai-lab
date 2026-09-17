@@ -1,6 +1,6 @@
 # Small-LLM benchmarking tool (`model-bench/`) — S1 implementation review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/plans/small-model-benchmarking.md` §4 S1
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/plans/small-model-benchmarking.md` §4 S1
 
 **Pass 1** gated `ab91419` (needs changes). **Pass 2** re-gated `3ad27d3` (approve with
 suggestions). **Pass 3** re-gated `95b4c88` (needs changes). **Pass 4** re-gated `d55f4d8` (needs

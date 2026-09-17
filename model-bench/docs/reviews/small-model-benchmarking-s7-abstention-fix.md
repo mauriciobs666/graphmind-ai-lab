@@ -1,6 +1,6 @@
 # S7 `chat-responder` abstention-detection fix — independent code gate (U174)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** U174, U175 (S7)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** U174, U175 (S7)
 
 ## Scope & verdict
 

@@ -1,6 +1,6 @@
 # `nlq-structured-query` — answerability of the `conflicting-facts` items (methodology review)
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** S4 (`nlq-structured-query` pack)
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** S4 (`nlq-structured-query` pack)
 
 **Verdict: needs changes.** Resolution path **(a)**, with three amendments. `nlq-38`/`nlq-39`
 are unanswerable under the only reading of "answerable" that keeps `layer1ExactMatchRate`

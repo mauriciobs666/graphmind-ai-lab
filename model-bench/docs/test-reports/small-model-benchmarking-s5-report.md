@@ -1,6 +1,6 @@
 # `model-bench` S5 — `tool-caller` pack, part 1: acceptance test report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** — (S5)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** — (S5)
 
 ## Summary
 

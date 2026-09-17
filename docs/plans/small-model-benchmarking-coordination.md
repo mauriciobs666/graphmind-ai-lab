@@ -1,6 +1,6 @@
 # Small-LLM benchmarking tool (`model-bench/`) — coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (M<n> TBD)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** — (M<n> TBD)
 
 Coordinates delivery of [`small-model-benchmarking.md`](./small-model-benchmarking.md) (v1.1,
 `architect`) against [`../requirements/small-model-benchmarking.md`](../requirements/small-model-benchmarking.md)
@@ -2744,6 +2744,74 @@ stakeholder decision. Model already resident (`qwen/qwen3-4b-2507`).
 golden items, a first live run that found a real High-severity defect in the pack's own headline
 metric, a five-round fix chain (each independently gated, each `teco`-verified with live
 reproduction), a fresh confirming re-run (`groundingRate` corrected from 15/30=0.500 to
-**23/30=0.767**), and the closing doc-sync — all committed. Every one of the four FR-21 roles now
-has a scorer. Next: S8 (documentation and close, per the plan's own §4 sequencing — no new pack, no
-new role) — not yet dispatched, awaiting stakeholder direction on whether/when to proceed.
+**23/30=0.767**), and the closing doc-sync — all committed. Every one of the five FR-21 roles now
+has a scorer (corrected here from an earlier miscount of four — caught independently by U180, see
+below). Next: S8 (documentation and close, per the plan's own §4 sequencing — no new pack, no new
+role).
+
+## S8 dispatched — 2026-09-17
+
+Stakeholder said go. §4 S8's own text: `README.md` (how to run, what a pack is, how to add one,
+the three non-features, the exact-cosine scope note from §3.8.1, plus what §3.4.3/§3.6a make into
+user-visible contracts — a `benchSchemaVersion` bump is deliberate with a migration decision
+attached, and the closed exit-code set), `AGENTS.md` (working context re-check), `HISTORY.md` (an
+S8 entry), `BACKLOG.md` re-checked/extended per whatever R-1's S2 probe and the S3/S6 reports left
+open (R-1 itself already closed at U111 — no new key on a loaded model's `/api/v0/models` entry;
+verified nothing further is owed from it), root `AGENTS.md`'s `model-bench` rows re-checked against
+what shipped. Test item 20 (§5): the FR-23 audit — grep the shipped tree for any path reference
+outside `model-bench/` in runtime code, confirm `model-bench` runs correctly with `falkor-chat/`
+renamed away.
+
+Two independent units (disjoint files, no shared claim — doc-sync reads the shipped tree
+descriptively, the audit greps/runs it structurally):
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
+|---|---|---|---|---|---|---|
+| U180 — doc-sync | `coder` | `a2d91621bf36feca8` | **delivered — accepted, `teco`-verified directly against source. Committed `cb5185a`.** Full §4 S8 scope covered: `README.md` gained "What a pack is, and how to add one," the exact-cosine scope note (§3.8.1), the `benchSchemaVersion` migration contract (§3.4.3), the closed exit-code set (§3.6a), and corrected the stale "run refuses every pack" claim. `AGENTS.md` rewritten (not appended) 3,034→1,936 words, load-bearing invariants preserved under their own heading, S7's own "four FR-21 roles" miscount caught and corrected to five. `HISTORY.md` gained the dated S8 entry. `BACKLOG.md`: 3 items added (sourced from the S6 QA report's feedback/gaps, not guessed), the stale R-1-note removed (closed at U111), 6 pre-existing items re-verified directly against current source and left untouched. Root `AGENTS.md`'s `model-bench` bullet updated. Honestly flagged mid-run, without fixing or hiding it: U181's already-accepted FR-23 test-suite finding (see below), folded into `BACKLOG.md` and `AGENTS.md`'s FR-23 rule as a documented gap rather than silently omitted, explicitly deferring the actual fix to avoid a same-file collision with itself. **Independently re-verified against source**: word count (1936) and zero-lines->700-chars both reproduced; suite (1706/3) + ruff reproduced clean; every §3.4.3/§3.6a/§3.8.1 transcription cross-read against the plan's own text, verbatim-consistent; all 3 new + 6 untouched `BACKLOG.md` items spot-checked directly against source (`luckyPassCount` absent from `report.py`, `Outcome` `Literal` still 4 members, `order_by` still unguarded, `TD-1` confirmed fixed+tested, all 3 S6-sourced items confirmed present in the S6 report) — no drift found. Only the 5 expected files touched (`git status`, 3-way baseline/HEAD/worktree check clean) | `model-bench/README.md` + `AGENTS.md` + `docs/HISTORY.md` + `docs/BACKLOG.md` + root `AGENTS.md` (model-bench rows only) | `teco` (direct verification, per S4-S7 stage-close precedent) → accepted | 197k tok / 90 tools |
+| U181 — FR-23 audit | `qa-engineer` | `a6300775364ae4922` | **delivered — accepted, `teco`-verified directly against source. Real, in-scope defect found; fix sequenced below as U182.** Runtime CLI code (`validate`/`run`/`compare`/`attest`) confirmed FR-23-clean: every `falkor-chat` mention in `modelbench/`/`scripts/`/`packs/` is either `scripts/refresh_golden.py` (the plan's named permitted exception — confirmed unreferenced by any `modelbench/` import) or a doc-only mention (docstring/comment/JSON description/`PROVENANCE.md` table), none a live import/open/Path/read reachable from a run-path module. Live rename-`falkor-chat`-away confirmed `validate` runs clean (2 packs, exit 0 both) — but the **default `pytest -q` suite does not**: 3 tests (`test_refresh_golden.py`×2, `test_scoring_extraction.py`×1) directly `Path(...).read_text()` real `falkor-chat/` source files with no `live`-marker/skip-guard, undeclared in `model-bench/AGENTS.md`'s FR-23 rule — exactly what item 20's live-confirmation clause exists to catch. Net verdict: product PASS, test-suite-independence FAIL. **Independently re-verified against source**: reproduced the grep audit myself (found the report undercounted total falkor-chat mentions — 39-40 actual hits vs. its stated "21" — but every additional hit falls in the same already-judged doc-only categories, PROVENANCE.md tables and docstrings, so the disposition itself is unaffected, only its own tally was sloppy); confirmed via `grep -iE "import\|open(\|Path(\|read_text"` that no runtime `.py` module reads `falkor-chat` live; **reproduced the rename-and-run myself end to end**: `mv falkor-chat falkor-chat.teco-fr23-check`, ran suite → **byte-identical result** (3 failed/1703 passed/3 deselected, identical `FileNotFoundError` on `falkor-chat/server/falkorchat/tools.py`), restored, `git status --porcelain` diffed byte-identical pre/post, baseline re-run confirmed 1706 passed/3 deselected. Noted for the fix: `test_refresh_golden.py`'s own module docstring (lines 9-12) already *claims* "the default suite still passes with `falkor-chat/` renamed away" — a false claim baked in, to be corrected by whichever fix lands | (audit only, no file changed — findings folded into ledger here; fix sequenced below, after U180, since both would touch `model-bench/AGENTS.md`) | `teco` (direct re-run) → accepted, real defect confirmed | 100k tok / 40 tools |
+
+## S8 FR-23 test-suite fix dispatched — 2026-09-17
+
+Sequenced after U180 lands (both touch `model-bench/AGENTS.md`/`BACKLOG.md`) — now committed
+(`cb5185a`), so this can proceed.
+
+| Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
+|---|---|---|---|---|---|---|
+| U182 | `tdd-engineer` | `a9804f7de87d03b12` | **delivered — accepted, `teco`-verified directly against source. Committed `e686ce2`. S8 is fully closed — every item this stage owed is done.** Chose a plain `skipif` (`tests/conftest.py`'s new `falkor_chat_present()`/`requires_falkor_chat`) over reusing `live`, correctly reasoned as a distinct precondition (LM-Studio-reachable vs. falkor-chat-present). Decorated the 3 offending tests, corrected `test_refresh_golden.py`'s now-false docstring claim, wrote a new `tests/test_standalone.py` (4 tests: 2 direct on `falkor_chat_present()`, 1 marker-inspection reproduction test, 1 pin on the marker's own shape). TDD: RED (`ImportError`) before the fix, green after. Mutation-tested (reverted all 3 decorators, exactly 1 test reddened with a clean message, restored byte-identical). Caught and corrected my own brief's error: the open item was in `model-bench/docs/BACKLOG.md`, not root `docs/BACKLOG.md` as I'd stated. **Independently re-verified against source, everything reproduced exactly**: full diffs on all 6 touched files read in full, matching every claim; suite (1710/3) + ruff reproduced clean; **reproduced the rename-and-verify dance myself end to end** (`mv falkor-chat` away → `1707 passed, 3 skipped, 3 deselected`, exact same 3 skip reasons, byte-identical to the report; restored, `git status --porcelain` diffed identical pre/post, baseline re-confirmed 1710/3); **reproduced the mutation test myself independently** (stripped all 3 decorators, confirmed exactly 1 failure — `test_falkor_chat_dependent_tests_each_carry_the_skip_guard` — with the exact same message, `1 failed, 1709 passed, 3 deselected`, restored from backup, diff matched fix-only delta exactly). Word count (1,950) and line-length checks clean | `model-bench/tests/conftest.py` + `tests/test_refresh_golden.py` + `tests/test_scoring_extraction.py` + `tests/test_standalone.py` (new) + `AGENTS.md` + `docs/BACKLOG.md` + `docs/HISTORY.md` | `teco` (direct verification) → accepted | 126k tok / 59 tools |
+
+## Feature closed — 2026-09-17
+
+**The entire `small-model-benchmarking` feature is now closed, S0 through S8.** All five FR-21
+task packs (`embedder`, `guard-judge`, `nlq-generator`, `tool-caller`, `chat-responder`) are built,
+gated, and each has its own required live run against a real LM Studio — two of those runs found
+real problems and shipped honestly flagged rather than massaged (`tool-caller`'s known-answer
+contrast did not reach significance at this sample size; `chat-responder`'s `groundingRate` had a
+real abstention-detection defect, found on its own required live run and fixed over a five-round
+gated chain). S8 itself closed three units: the doc-sync (`README.md`/`AGENTS.md`/`HISTORY.md`/
+`BACKLOG.md`, root `AGENTS.md`), the plan's own item-20 FR-23 audit (found the runtime CLI clean
+but a real, undeclared test-suite dependency on `falkor-chat/`'s presence), and the fix for that
+finding — every one of the three independently `teco`-verified against source, not accepted on
+report.
+
+**Milestone-close documentation sweep, performed here per this repo's own convention** (root
+`AGENTS.md`, "Freeze at milestone close"): every plan, review, and test-report document this
+feature's close freezes has had its `Status:` mechanically flipped `active` → `archived` (one-token
+edits only, each diffed to confirm nothing else changed) — the main plan
+(`docs/plans/small-model-benchmarking.md`, v1.32), its `-ml` note and the `-ml-dispatch-failure`
+ruling note, the S6/S7 specs (S3-S5 specs were already archived at their own stage closes), the
+three root-level plan-gate reviews, and all fourteen `model-bench/docs/{reviews,test-reports}/`
+documents tied to a now-closed stage. **Left deliberately untouched**:
+`docs/requirements/small-model-benchmarking.md` (still `Ready for design`, owned by `tico`) —
+whether its scope is fully discharged given FR-21a's judged-quality layer was explicitly deferred
+(not delivered) is a judgment call for `tico`, not a mechanical flip; flagged in the closing report
+rather than decided here. This coordination doc itself is flipped to `archived` immediately after
+this note, as the very last edit.
+
+**What's left, all already honestly tracked, none of it blocking this close:** the judged
+reply-quality layer for `chat-responder` (FR-21a, deferred by design) and the +22 harder retrieval
+queries for `embedder` (recall-ceiling limitation), both preserved in `model-bench/docs/BACKLOG.md`
+with their design/evidence intact; five smaller items the S3-S7 test reports and this stage's own
+audit surfaced (`luckyPassCount` rendering, the `order_by` `None`-key guard, `validate_pack`'s
+scorer-importability check, `results.Outcome`'s missing `"unrunnable"` member, the
+`checklist_pass` containment/morphology gap) plus the three S6-sourced items U180 added this stage
+— all genuinely open, all honestly still in `BACKLOG.md`, none silently dropped.

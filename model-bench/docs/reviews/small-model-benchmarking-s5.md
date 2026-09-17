@@ -1,6 +1,6 @@
 # `model-bench` S5 — tool-caller pack, part 1: code gate
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (S5)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — (S5)
 
 ## Scope & verdict
 

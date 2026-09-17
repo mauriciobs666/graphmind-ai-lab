@@ -1,6 +1,6 @@
 # `model-bench` S4 — acceptance test report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** — (S4)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** — (S4)
 
 ## Summary
 

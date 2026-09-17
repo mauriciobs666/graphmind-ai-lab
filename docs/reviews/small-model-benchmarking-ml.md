@@ -1,6 +1,6 @@
 # Small-Model Benchmarking — Methodology Review of S1's Statistics
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** —
+> **Status:** archived · **Owner:** `data-scientist` · **Tracks:** —
 
 **Scope.** `model-bench/modelbench/stats.py`, `model-bench/tests/test_stats.py`, and the
 statistical claims rendered by `model-bench/modelbench/report.py`, as delivered in commit

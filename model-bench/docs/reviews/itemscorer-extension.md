@@ -1,6 +1,6 @@
 # `ItemScorer` extension (`prime`/`embed_text`/`deterministic_arm`) — seam-readiness review for S4
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** U123 (S3); informs S4 planning
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** U123 (S3); informs S4 planning
 
 ## Scope & verdict
 

@@ -1,6 +1,6 @@
 # `model-bench` S4 — cumulative code + methodology-consistency gate
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (S4)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — (S4)
 
 ## Scope & verdict
 

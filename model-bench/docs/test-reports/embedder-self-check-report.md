@@ -1,6 +1,6 @@
 # Embedder Harness Self-Check — Test Report
 
-> **Status:** active · **Owner:** `coder` · **Tracks:** S3 Step 2 — `docs/plans/small-model-benchmarking-s3-spec.md` §8 Step 2 item 3, `docs/plans/small-model-benchmarking-ml.md` §5.4
+> **Status:** archived · **Owner:** `coder` · **Tracks:** S3 Step 2 — `docs/plans/small-model-benchmarking-s3-spec.md` §8 Step 2 item 3, `docs/plans/small-model-benchmarking-ml.md` §5.4
 
 Live execution of the `embedder-graphrag-retrieval` pack's harness self-check (`-ml` §5.4 point 1),
 run 2026-09-11 against a reachable local LM Studio serving `text-embedding-qwen3-embedding-0.6b`

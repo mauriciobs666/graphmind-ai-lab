@@ -1,6 +1,6 @@
 # Small-LLM benchmarking tool (`model-bench/`) — plan review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/plans/small-model-benchmarking.md`
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — · **Reviews:** `docs/plans/small-model-benchmarking.md`
 
 ## Pass 1 — 2026-09-02
 

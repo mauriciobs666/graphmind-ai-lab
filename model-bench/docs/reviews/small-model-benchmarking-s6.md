@@ -1,6 +1,6 @@
 # `model-bench` S6 — code gate: Step 0/1 production diff
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** U162 (S6)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** U162 (S6)
 
 ## Scope & verdict
 
