@@ -208,3 +208,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Claude Code account-synced Anthropic skills (arrive via the ~/.claude/skills symlink)
+skills/synced/
