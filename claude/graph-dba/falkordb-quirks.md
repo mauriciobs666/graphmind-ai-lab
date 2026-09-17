@@ -322,6 +322,14 @@ to the general fact here.
   `ready`. Cross-`FOREACH` visibility measured separately — `FOREACH (_ IN [1] | SET d.flag = 7)`
   followed by `FOREACH (_ IN CASE WHEN d.flag = 7 THEN [1] ELSE [] END | ...)` fires. So a
   decrement-then-branch counter update is **one** atomic statement, not a read plus a write.
+- **A node `CREATE`d inside a `FOREACH` (even a guarded one) is NOT referenceable by that bound
+  variable anywhere after the `FOREACH` clause ends** — Cypher's own scoping rule, not a
+  FalkorDB-specific quirk (independently corroborated by `falkor-chat/server/falkorchat/
+  repository.py`'s `create_document_with_auto_supersede`, verified 2026-09-17 — its own docstring
+  documents hitting exactly this). To use that node in a later step of the SAME atomic
+  `GRAPH.QUERY` (e.g. to conditionally attach a relationship from it), re-`MATCH` it by its own
+  unique-constrained id property right after the `FOREACH` block — a cheap indexed lookup — rather
+  than trying to carry the `CREATE`-bound variable forward.
 - **`exists((n)-[:REL]->())` in a pattern returns `true` even when the edge is
   absent** (broken on this build); `count{ … }` subquery syntax is unsupported.
   For existence checks use `OPTIONAL MATCH (n)-[:REL]->(x) RETURN x IS NOT NULL`

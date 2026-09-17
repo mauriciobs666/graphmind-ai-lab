@@ -2,7 +2,24 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
-## 2026-09-16 — one `analyst`-produced RediSearch fuzzy-escaping gotcha added to `falkordb-quirks.md`
+## 2026-09-17 — one `coder`-produced FOREACH/CREATE scoping gotcha added to `falkordb-quirks.md`
+
+- **What:** `cobb` distilled `coder`'s `kaizen_team` inbox (scoped, one-producer pass; full
+  detail in `claude/coder/kaizen/history.md`, same date). One entry routed here:
+  `7517488c-cd0d-4141-a28d-a46d7b7a4e31` (2026-09-13) — **PROMOTED** into
+  `claude/graph-dba/falkordb-quirks.md`, FOREACH section, new bullet directly after the
+  decrement-then-branch counter example.
+- **The fact:** a node `CREATE`d inside a `FOREACH` (even a guarded one) is not referenceable by
+  that bound variable anywhere after the `FOREACH` clause ends — Cypher's own scoping rule, not a
+  FalkorDB-specific quirk. To use that node in a later step of the same atomic `GRAPH.QUERY`,
+  re-`MATCH` it by its own unique-constrained id property right after the `FOREACH` block instead
+  of trying to carry the `CREATE`-bound variable forward.
+- **Why here and not `coder`'s own artifacts:** a Cypher-dialect fact about `FOREACH` scoping is
+  squarely this quirks file's domain, not `coder`'s. Re-verified directly (not just the entry's
+  own citation) against `falkor-chat/server/falkorchat/repository.py:1741`
+  (`create_document_with_auto_supersede`) — its own docstring independently documents hitting
+  this exact scoping rule and applying the same `OPTIONAL MATCH`-by-`documentId` fix, so the
+  general claim is corroborated by a second, independent source, not just the raw entry.
 
 - **What:** `cobb` distilled `analyst`'s `kaizen_team` inbox (scoped, one-producer pass). One entry
   routed here: `f3d2a1c4-6b7e-4e3a-9c1f-8a2b5d7e9c10` (2026-09-13, `suggestedHome: knowledge base`)

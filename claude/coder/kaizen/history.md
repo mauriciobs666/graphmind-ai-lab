@@ -2,6 +2,56 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-09-17 — standing distillation pass, scoped to `coder` only: 3-entry inbox, 2 promoted (1 cross-agent, 1 project docs), 1 discarded
+
+- **What:** `cobb` ran the standing kaizen-graph distillation over all 3 `coder`-produced
+  `kaizen_team` entries (dated 2026-09-13/09-16), per the stakeholder's one-producing-agent-per-turn
+  request (`docs/plans/kaizen-team-distillation-coordination.md`). Fresh count at dispatch matched
+  the 3 estimated. Legacy (`author`-property) read returned 0 rows — all three used the current
+  `PRODUCED`-edge shape. Every `fact`/`evidence` cell was paged past the MCP tool's 300-char
+  truncation before dispositioning. `coder.md` untouched — no entry warranted the always-loaded-
+  prompt bar.
+- **`7517488c-cd0d-4141-a28d-a46d7b7a4e31`** (a node `CREATE`d inside a guarded `FOREACH` is not
+  referenceable by that variable name after the `FOREACH` ends — hit implementing
+  `Repository.create_document_with_auto_supersede`, falkor-chat document-ingestion2 Stage D) —
+  **PROMOTED, into `claude/graph-dba/falkordb-quirks.md`** (new bullet, FOREACH section), not
+  `coder`'s own domain. Re-verified directly against `falkor-chat/server/falkorchat/
+  repository.py:1741` (`create_document_with_auto_supersede`): its own docstring independently
+  documents hitting this identical scoping rule and the same `OPTIONAL MATCH`-by-`documentId`
+  fix — the general Cypher-scoping fact (not FalkorDB-specific, per the entry's own framing) was
+  not yet in the quirks file's FOREACH section, so it was a genuine gap, not a duplicate. Also
+  logged in `claude/graph-dba/kaizen/history.md` per the cross-agent-KB-promotion convention. The
+  raw entry's own cited evidence figure ("2812 passed" full suite) was dropped rather than
+  promoted verbatim — checked live: the same suite now collects 2830/2844 (14 deselected `live`
+  tests), consistent with ordinary growth over the 4 days since the entry was written, not a red
+  flag, but a point-in-time pass count isn't durable knowledge-base content either way.
+- **`a1f3c9d2-6b4e-4a1a-9e8d-2c7f5b0a3e11`** (root `docs/HISTORY.md`/`docs/BACKLOG.md` are scoped
+  to the CPG component only despite living at repo root, which reads as a natural default target
+  — hit during salesperson-ui S16 docs close-out, corrected a wrong plan row) — **PROMOTED, into
+  root `AGENTS.md`** (project docs). Re-verified: both files' own headers confirm CPG-only scope;
+  `salesperson/` has no `docs/` tree of its own (delivery record correctly lives in
+  `falkor-chat/docs/` per root `AGENTS.md`'s existing `salesperson/` Structure bullet);
+  `model-bench/docs/` does have its own `HISTORY.md`/`BACKLOG.md`, confirming the general rule
+  the entry states. Root `AGENTS.md` already documented the `salesperson/` carve-out correctly
+  (the S16 mistake this entry reports has no way to recur there) but never actually said root
+  `docs/HISTORY.md`/`BACKLOG.md` are the **`cpg/`** component's own — added that clause to the
+  `cpg/` Structure bullet, plus the two paths to the `cpg/` row of the Component docs table.
+- **`c3e8b6b4-2f1a-4b8e-9b0a-6d7f5e9a1c22`** (model-bench `Pack.iter_scripts()`/
+  `load_tool_module()` are the sanctioned way to parse `conversations.jsonl` and build a real
+  `ShopEnvironment`, rather than hand-rolling either — built while writing `scripts/
+  s6_walkthrough.py`) — **DISCARDED.** Re-verified both methods exist exactly as described
+  (`model-bench/modelbench/packs.py:267,305`) and that `s6_walkthrough.py` already uses them
+  correctly. Not promoted: a narrow, single-instance API-reuse tip, already self-documented by
+  clear docstrings at the two call sites, with no existing model-bench knowledge-base file and no
+  second instance yet to justify starting one (the skill's "create one when facts accumulate"
+  bar isn't met by one entry).
+- **0 kept open, 0 `MENTIONS` tags** — every entry had a direct, concrete, still-true disposition;
+  none was substantively about a *different* producing agent's own behavior (the graph-dba
+  promotion above is a direct-KB-write, not a `MENTIONS` deferral, per the established precedent
+  that a single-target technical fact is dispositioned directly when the destination file already
+  exists). All 3 raw nodes cleared from `kaizen_team` after this log was written (see the graph
+  check in the same pass's report).
+
 ## 2026-09-13 — standing distillation pass: 9-entry `coder` inbox, 4 promoted, 1 routed outward, 1 routed to graph-dba, 3 discarded
 
 - **What:** `cobb` ran the standing kaizen-graph distillation over all 9 `coder`-produced
