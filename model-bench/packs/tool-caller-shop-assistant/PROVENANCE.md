@@ -12,18 +12,18 @@ for the reconstruction method and the coverage matrix.
 
 | scriptId | shape | draftedBy | basedOn | verifiedBy | verifiedAt |
 |---|---|---|---|---|---|
-| A-01 | A | tdd-engineer | §8.1 condition A, turns 1-9 (determinism-probe fidelity) | | |
-| A-02 | A | tdd-engineer | §8.1 condition A pattern, extended with restraint turns per plan step 2's own named coverage gap | | |
-| A-03 | A | tdd-engineer | §8.1 condition A pattern, extended for boundary-argument and fabrication-guard coverage | | |
-| A-04 | A | tdd-engineer | §8.1 condition A pattern, extended for restraint-phrasing diversity and cross-turn-duplicate coverage | | |
-| B-01 | B | tdd-engineer | §8.1 condition B, turns 1-7 (determinism-probe fidelity) | | |
-| B-02 | B | tdd-engineer | §8.4 ministral duplicate-instruction defect, turns 1-4 pattern; §8.1 condition B's add/view/order shape for turns 5-7 | | |
-| B-03 | B | tdd-engineer | §8.1 condition B pattern, extended with a customer-initiated removal error and clear_cart coverage | | |
-| B-04 | B | tdd-engineer | §8.1 condition B pattern, extended with a read-only opening turn and a closing-then-reopening restraint/new-request pair | | |
-| C-01 | C | tdd-engineer | §8.1 condition C, turns 1-4 (direct replication) | | |
-| C-02 | C | tdd-engineer | §8.2's position-not-content finding, adapted to a 4-turn script with a non-tool-bearing opening turn | | |
-| C-03 | C | tdd-engineer | the pack's own boundary-argument pairing pattern (S6 spec §3.2), adapted to a 4-turn short script | | |
-| C-04 | C | tdd-engineer | §8.2's turn-4 onset finding, adapted to an abstention-heavy 4-turn script | | |
+| A-01 | A | tdd-engineer | §8.1 condition A, turns 1-9 (determinism-probe fidelity) | Mauricio Stefani | 2026-09-16 |
+| A-02 | A | tdd-engineer | §8.1 condition A pattern, extended with restraint turns per plan step 2's own named coverage gap | Mauricio Stefani | 2026-09-16 |
+| A-03 | A | tdd-engineer | §8.1 condition A pattern, extended for boundary-argument and fabrication-guard coverage | Mauricio Stefani | 2026-09-16 |
+| A-04 | A | tdd-engineer | §8.1 condition A pattern, extended for restraint-phrasing diversity and cross-turn-duplicate coverage | Mauricio Stefani | 2026-09-16 |
+| B-01 | B | tdd-engineer | §8.1 condition B, turns 1-7 (determinism-probe fidelity) | Mauricio Stefani | 2026-09-16 |
+| B-02 | B | tdd-engineer | §8.4 ministral duplicate-instruction defect, turns 1-4 pattern; §8.1 condition B's add/view/order shape for turns 5-7 | Mauricio Stefani | 2026-09-16 |
+| B-03 | B | tdd-engineer | §8.1 condition B pattern, extended with a customer-initiated removal error and clear_cart coverage | Mauricio Stefani | 2026-09-16 |
+| B-04 | B | tdd-engineer | §8.1 condition B pattern, extended with a read-only opening turn and a closing-then-reopening restraint/new-request pair | Mauricio Stefani | 2026-09-16 |
+| C-01 | C | tdd-engineer | §8.1 condition C, turns 1-4 (direct replication) | Mauricio Stefani | 2026-09-16 |
+| C-02 | C | tdd-engineer | §8.2's position-not-content finding, adapted to a 4-turn script with a non-tool-bearing opening turn | Mauricio Stefani | 2026-09-16 |
+| C-03 | C | tdd-engineer | the pack's own boundary-argument pairing pattern (S6 spec §3.2), adapted to a 4-turn short script | Mauricio Stefani | 2026-09-16 |
+| C-04 | C | tdd-engineer | §8.2's turn-4 onset finding, adapted to an abstention-heavy 4-turn script | Mauricio Stefani | 2026-09-16 |
 
 `prose_calibration.jsonl`'s 20 labelled replies are hand-authored calibration data for
 `scoring/toolcalls.py`'s `detect_prose_pseudo_call` heuristic — not derived from any live model
