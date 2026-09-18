@@ -154,6 +154,30 @@ def test_ingest_document_empty_text_is_422(client):
     assert r.status_code == 422
 
 
+# ── `produced_by` attribution (agent-team-ingestion-graph.md §5, K-030) ───────
+
+
+def test_ingest_document_with_produced_by_resolves_agent(client, conn):
+    Repository(conn).ensure_agent("test", agent_id="bot1", name="Bot One")
+
+    r = client.post("/documents", json={"text": "hello", "producedBy": "bot1"})
+    assert r.status_code == 201
+    doc_id = r.json()["documentId"]
+
+    got = client.get(f"/documents/{doc_id}")
+    assert got.status_code == 200
+    doc = got.json()
+    assert doc["sourceKind"] == "agent"
+    assert doc["ingestedByKind"] == "Agent"
+    assert doc["ingestedById"] == "bot1"
+
+
+def test_ingest_document_unresolvable_produced_by_is_404(client):
+    r = client.post("/documents", json={"text": "hello", "producedBy": "ghost-agent"})
+    assert r.status_code == 404
+    assert r.json()["error"] == "AgentNotFoundError"
+
+
 # ── K-050 M5 Stage 6a: bulk ingestion (FR-11) ────────────────────────────────────
 
 
@@ -197,6 +221,42 @@ def test_ingest_documents_batch_route_not_shadowed_by_document_id_route(client):
     # `/documents/{document_id}` treating "batch" as an id.
     r = client.post("/documents/batch", json={"documents": [{"text": "hi"}]})
     assert r.status_code == 201
+
+
+def test_ingest_documents_batch_produced_by_per_item(client, conn):
+    Repository(conn).ensure_agent("test", agent_id="bot1", name="Bot One")
+
+    r = client.post(
+        "/documents/batch",
+        json={"documents": [
+            {"text": "from the agent", "producedBy": "bot1"},
+            {"text": "from the actor"},
+        ]},
+    )
+    assert r.status_code == 201
+    receipts = r.json()
+    assert all(rec["status"] == "processing" for rec in receipts)
+
+    got0 = client.get(f"/documents/{receipts[0]['documentId']}").json()
+    got1 = client.get(f"/documents/{receipts[1]['documentId']}").json()
+    assert got0["ingestedByKind"] == "Agent"
+    assert got0["ingestedById"] == "bot1"
+    assert got1["ingestedByKind"] == "User"
+    assert got1["ingestedById"] == "u1"
+
+
+def test_ingest_documents_batch_unresolvable_produced_by_item_isolates_to_a_receipt(client):
+    r = client.post(
+        "/documents/batch",
+        json={"documents": [
+            {"text": "good"}, {"text": "bad producer", "producedBy": "ghost-agent"},
+        ]},
+    )
+    assert r.status_code == 201
+    receipts = r.json()
+    assert receipts[0]["status"] == "processing"
+    assert receipts[1]["status"] == "error"
+    assert receipts[1]["errorType"] == "AgentNotFoundError"
 
 
 # ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ────────────

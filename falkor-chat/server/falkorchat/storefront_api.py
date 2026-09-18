@@ -84,6 +84,7 @@ from . import config
 from .db import FalkorDBUnreachableError
 from .guards import WorkflowConfigError
 from .services import (
+    AgentNotFoundError,
     BatchTooLargeError,
     ChannelNotFoundError,
     DocumentNotFoundError,
@@ -711,6 +712,7 @@ SERVICE_ERRORS_UNREACHABLE: dict[type[ServiceError], str] = {
     EmptyDocumentError: "document ingestion; no storefront route ingests",
     DocumentTooLargeError: "document ingestion; no storefront route ingests",
     BatchTooLargeError: "document ingestion; no storefront route ingests",
+    AgentNotFoundError: "document ingestion; no storefront route ingests",
     MatchNotFoundError: "entity-match confirmation; no storefront route touches it",
     DocumentNotFoundError: "document deletion; no storefront route deletes documents",
     DocumentUpdateNotFoundError: (

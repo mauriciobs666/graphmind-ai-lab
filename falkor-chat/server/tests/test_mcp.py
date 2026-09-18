@@ -264,6 +264,42 @@ def test_ingest_document_unknown_actor_errors(repo):
         asyncio.run(mcp_mod.mcp.call_tool("ingest_document", {"text": "hello"}))
 
 
+def test_ingest_document_produced_by_resolves_agent_via_mcp_tool(repo):
+    """Sibling of `test_ingest_document_then_get_document_round_trips` — the
+    same round trip, but attributed via `produced_by` to a registered Agent
+    rather than the configured actor."""
+    repo.ensure_agent("test", agent_id="bot1", name="Bot One")
+    _configure(repo, actor="ghost")  # actor is unresolvable; produced_by must still work
+
+    async def scenario():
+        posted = _unwrap(await mcp_mod.mcp.call_tool(
+            "ingest_document", {"text": "hello world", "produced_by": "bot1"}
+        ))
+        got = _unwrap(await mcp_mod.mcp.call_tool(
+            "get_document", {"document_id": posted["documentId"]}
+        ))
+        return posted, got
+
+    posted, got = asyncio.run(scenario())
+    assert posted["status"] == "processing"
+    assert got["sourceKind"] == "agent"
+    assert got["ingestedByKind"] == "Agent"
+    assert got["ingestedById"] == "bot1"
+
+
+def test_ingest_document_produced_by_unresolvable_agent_errors(repo):
+    """Sibling of `test_ingest_document_unknown_actor_errors` — a valid actor
+    must not rescue an unresolvable `produced_by` (`AgentNotFoundError`, no
+    silent fallback)."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _configure(repo)  # actor "u1" IS resolvable
+
+    with pytest.raises(Exception):
+        asyncio.run(mcp_mod.mcp.call_tool(
+            "ingest_document", {"text": "hello", "produced_by": "ghost-agent"}
+        ))
+
+
 def test_get_document_missing_returns_none(repo):
     _configure(repo)
 
@@ -852,6 +888,57 @@ def test_ingest_documents_tool_isolates_a_malformed_item_missing_text(repo):
     # the two good documents are independently retrievable — not just
     # "not crashed," genuinely still written and returned correctly
     assert receipts[0]["documentId"] != receipts[2]["documentId"]
+
+
+def test_ingest_documents_tool_produced_by_per_item(repo):
+    """Sibling of `test_ingest_documents_tool_returns_one_receipt_per_item` —
+    one item carrying a resolvable `produced_by`, one carrying none (falls
+    back to the configured actor), each receipt reflecting its own
+    resolution independently."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    repo.ensure_agent("test", agent_id="bot1", name="Bot One")
+    _configure(repo)
+
+    async def scenario():
+        receipts = _unwrap(await mcp_mod.mcp.call_tool(
+            "ingest_documents",
+            {"items": [
+                {"text": "from the agent", "produced_by": "bot1"},
+                {"text": "from the actor"},
+            ]},
+        ))
+        got0 = _unwrap(await mcp_mod.mcp.call_tool(
+            "get_document", {"document_id": receipts[0]["documentId"]}
+        ))
+        got1 = _unwrap(await mcp_mod.mcp.call_tool(
+            "get_document", {"document_id": receipts[1]["documentId"]}
+        ))
+        return got0, got1
+
+    got0, got1 = asyncio.run(scenario())
+    assert got0["ingestedByKind"] == "Agent"
+    assert got0["ingestedById"] == "bot1"
+    assert got1["ingestedByKind"] == "User"
+    assert got1["ingestedById"] == "u1"
+
+
+def test_ingest_documents_tool_isolates_a_non_string_produced_by_item(repo):
+    """Sibling of `test_ingest_documents_tool_isolates_a_malformed_item_missing_text`
+    — a non-string, non-`None` `produced_by` isolates to a `MalformedItemError`
+    receipt; the batch's other items still process."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+    _configure(repo)
+
+    receipts = _unwrap(asyncio.run(mcp_mod.mcp.call_tool(
+        "ingest_documents",
+        {"items": [
+            {"text": "good document"}, {"text": "bad producer", "produced_by": 123},
+        ]},
+    )))
+
+    assert receipts[0]["status"] == "processing"
+    assert receipts[1]["status"] == "error"
+    assert receipts[1]["errorType"] == "MalformedItemError"
 
 
 def test_ingest_documents_tool_schedules_every_chunk_of_every_item_for_embedding(repo):

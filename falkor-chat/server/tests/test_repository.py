@@ -1471,7 +1471,7 @@ def test_get_document_history_single_version_with_no_supersession(repo):
 
 def _auto_supersede(
     repo, *, document_id, text_normalized_hash, match_id, created_at=100,
-    ingested_by="u1", title="t", text="x", chunks=None,
+    ingested_by="u1", title="t", text="x", chunks=None, produced_by=None,
 ):
     return repo.create_document_with_auto_supersede(
         "test", document_id=document_id, title=title, text=text,
@@ -1480,7 +1480,7 @@ def _auto_supersede(
         chunks=chunks if chunks is not None else [
             {"chunkId": f"{document_id}-c0", "text": text, "seq": 0}
         ],
-        match_id=match_id,
+        match_id=match_id, produced_by=produced_by,
     )
 
 
@@ -1860,6 +1860,45 @@ def test_find_update_shortlist_survives_the_qa_characterization_table(repo, titl
     )
 
     assert isinstance(candidates, list)
+
+
+# ── `produced_by` attribution (agent-team-ingestion-graph.md §2, K-030) ───────
+
+
+def test_create_document_with_auto_supersede_produced_by_resolves_agent_not_actor(repo):
+    """`produced_by` takes the producer branch even when the `ingested_by`
+    actor would ALSO have resolved fine on its own — proving resolution took
+    the `_INGESTOR_RESOLVE_BY_PRODUCER` branch, not the actor branch."""
+    repo.ensure_agent("test", agent_id="bot1", name="Bot One")
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+
+    result = _auto_supersede(
+        repo, document_id="d1", text_normalized_hash="hash-a", match_id="m1",
+        ingested_by="u1", produced_by="bot1",
+    )
+
+    assert result["ingestorFound"] is True
+    doc = repo.get_document("test", document_id="d1")
+    assert doc["ingestedByKind"] == "Agent"
+    assert doc["ingestedById"] == "bot1"
+    assert doc["sourceKind"] == "agent"
+
+
+def test_create_document_with_auto_supersede_produced_by_missing_agent_nothing_written(repo):
+    """Mirrors `test_create_document_with_auto_supersede_unknown_actor_nothing_written`
+    but with `produced_by="ghost-agent"` (no such `Agent`) and a *valid*
+    `ingested_by` — the producer branch never consults `ingested_by` at all,
+    so a resolvable actor must not rescue an unresolvable `produced_by`."""
+    repo.ensure_user("test", user_id="u1", display_name="Alice")
+
+    result = _auto_supersede(
+        repo, document_id="d1", text_normalized_hash="hash-a", match_id="m1",
+        ingested_by="u1", produced_by="ghost-agent",
+    )
+
+    assert result["ingestorFound"] is False
+    assert result["autoSuperseded"] is False
+    assert repo.get_document("test", document_id="d1") is None
 
 
 # ── §14.5 Entities & RELATES_TO (K-050 M5 Stage 3) ────────────────────────────

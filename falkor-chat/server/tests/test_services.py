@@ -30,6 +30,7 @@ from falkorchat.services import (
     RAG_QUERY_TIMEOUT_MS,
     RESERVED_CTX_KEYS,
     SEARCH_DOCUMENTS_OVERFETCH,
+    AgentNotFoundError,
     BatchTooLargeError,
     ChannelNotFoundError,
     DocumentNotFoundError,
@@ -257,18 +258,33 @@ class FakeRepo:
     def create_document_with_auto_supersede(
         self, ws, *, document_id, title, text, text_normalized_hash,
         source_format, ingested_by, created_at, chunks, match_id,
+        produced_by=None,
     ):
         """Mirrors `create_document` above, plus the FR-2/AC-1 auto-tier: a
         `currentVersion` document already sharing `text_normalized_hash` is
-        auto-superseded in the same call (document-ingestion2 Stage D)."""
+        auto-superseded in the same call (document-ingestion2 Stage D).
+
+        `produced_by` (agent-team-ingestion-graph.md §2.2): when given,
+        resolves against `self.agents` ONLY — `ingested_by`/`self.members`
+        play no role at all in that branch, mirroring the real repository's
+        two-literal-query-branch behavior. Absent, `ingestorFound=False`.
+        """
         self.calls.append((
             "create_document_with_auto_supersede", ws, document_id, ingested_by,
-            text_normalized_hash, chunks, match_id,
+            text_normalized_hash, chunks, match_id, produced_by,
         ))
-        if ingested_by in self.agents:
-            kind, actor_label = "agent", "Agent"
+        if produced_by is not None:
+            if produced_by not in self.agents:
+                return {
+                    "documentId": document_id, "chunkCount": len(chunks),
+                    "autoSuperseded": False, "supersededDocumentId": None,
+                    "matchId": None, "ingestorFound": False,
+                }
+            kind, actor_label, resolved_actor = "agent", "Agent", produced_by
+        elif ingested_by in self.agents:
+            kind, actor_label, resolved_actor = "agent", "Agent", ingested_by
         elif ingested_by in self.members:
-            kind, actor_label = "document", "User"
+            kind, actor_label, resolved_actor = "document", "User", ingested_by
         else:
             return {
                 "documentId": document_id, "chunkCount": len(chunks),
@@ -287,7 +303,7 @@ class FakeRepo:
             "documentId": document_id, "title": title, "text": text,
             "sourceFormat": source_format, "sourceKind": kind,
             "status": "processing", "createdAt": created_at,
-            "ingestedByKind": actor_label, "ingestedById": ingested_by,
+            "ingestedByKind": actor_label, "ingestedById": resolved_actor,
             "chunks": chunks, "textNormalizedHash": text_normalized_hash,
             "currentVersion": True,
         }
@@ -1005,6 +1021,35 @@ def test_ingest_document_known_agent_actor_source_kind_agent():
     assert repo.documents[result["documentId"]]["sourceKind"] == "agent"
 
 
+def test_ingest_document_produced_by_resolves_agent_over_unresolvable_actor():
+    """`produced_by` alone drives resolution — `ctx.actor` is a different,
+    unresolvable id, so success here proves `produced_by` did the work."""
+    repo = FakeRepo()
+    repo.agents.add("bot1")
+    svc = make_service(repo)  # ctx.actor "u1" not registered anywhere
+
+    result = svc.ingest_document(CTX, text="hello", produced_by="bot1")
+
+    assert result["status"] == "processing"
+    assert repo.documents[result["documentId"]]["sourceKind"] == "agent"
+    assert repo.documents[result["documentId"]]["ingestedById"] == "bot1"
+
+
+def test_ingest_document_produced_by_missing_agent_raises_agent_not_found_not_unknown_actor():
+    """Sibling of `test_ingest_document_unknown_actor_raises_instead_of_silent_write`
+    — a **valid** `ctx.actor` is the load-bearing part: it proves there is no
+    silent fallback to `ctx.actor` when `produced_by` fails to resolve, not
+    merely that *some* error is raised."""
+    repo = FakeRepo()
+    repo.members.add("u1")  # ctx.actor IS valid
+    svc = make_service(repo)
+
+    with pytest.raises(AgentNotFoundError):
+        svc.ingest_document(CTX, text="hello", produced_by="ghost")
+
+    assert repo.documents == {}
+
+
 # ── ingest_documents (K-050 M5 Stage 6a, FR-11 bulk ingestion) ──────────────────
 
 
@@ -1109,6 +1154,26 @@ def test_ingest_documents_isolates_a_non_string_text_item():
     assert results[1]["errorType"] == "MalformedItemError"
 
 
+def test_ingest_documents_isolates_a_non_string_produced_by_item():
+    """Sibling of `test_ingest_documents_isolates_a_non_string_text_item` —
+    a non-string, non-`None` `produced_by` isolates to a `MalformedItemError`
+    receipt; the batch's other items still process."""
+    repo = FakeRepo()
+    repo.members.add("u1")
+    svc = make_service(repo)
+
+    results = svc.ingest_documents(
+        CTX,
+        documents=[
+            {"text": "good document"}, {"text": "bad producer", "produced_by": 123},
+        ],
+    )
+
+    assert results[0]["status"] == "processing"
+    assert results[1]["status"] == "error"
+    assert results[1]["errorType"] == "MalformedItemError"
+
+
 def test_ingest_documents_isolates_a_non_dict_item():
     repo = FakeRepo()
     repo.members.add("u1")
@@ -1146,6 +1211,30 @@ def test_ingest_documents_isolates_an_unknown_actor_failure():
     assert result["status"] == "error"
     assert result["errorType"] == "UnknownActorError"
     assert repo.documents == {}
+
+
+def test_ingest_documents_produced_by_is_per_item_independent():
+    """Sibling of `test_ingest_documents_isolates_an_unknown_actor_failure` —
+    a two-item batch, one item carrying a resolvable `produced_by` and one
+    carrying none (falls back to `ctx.actor`), each receipt reflecting its
+    own resolution independently."""
+    repo = FakeRepo()
+    repo.agents.add("bot1")
+    repo.members.add("u1")  # ctx.actor, used only by the item with no produced_by
+    svc = make_service(repo)
+
+    results = svc.ingest_documents(
+        CTX,
+        documents=[
+            {"text": "from the agent", "produced_by": "bot1"},
+            {"text": "from ctx.actor"},
+        ],
+    )
+
+    assert results[0]["status"] == "processing"
+    assert repo.documents[results[0]["documentId"]]["ingestedById"] == "bot1"
+    assert results[1]["status"] == "processing"
+    assert repo.documents[results[1]["documentId"]]["ingestedById"] == "u1"
 
 
 def test_ingest_documents_rejects_batch_over_max_size():

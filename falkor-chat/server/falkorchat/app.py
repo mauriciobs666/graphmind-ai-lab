@@ -40,6 +40,7 @@ from .modelconfig import ModelGateway, StaticModelGateway
 from .repository import Repository
 from .services import (
     DEFAULT_SWEEP_LIMIT,
+    AgentNotFoundError,
     ChannelNotFoundError,
     DocumentNotFoundError,
     DocumentUpdateNotFoundError,
@@ -129,6 +130,7 @@ def _register_error_handlers(app: FastAPI) -> None:
             (
                 ChannelNotFoundError, ThreadNotFoundError, MatchNotFoundError,
                 DocumentNotFoundError, DocumentUpdateNotFoundError,
+                AgentNotFoundError,
             ),
         )
         return JSONResponse(

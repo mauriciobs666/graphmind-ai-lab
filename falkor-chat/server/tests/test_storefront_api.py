@@ -2931,7 +2931,7 @@ def test_every_service_error_subclass_is_mapped_or_declared_unreachable():
     """
     family = _subclasses(ServiceError)
     mapped, unreachable = set(SERVICE_ERROR_RESPONSES), set(SERVICE_ERRORS_UNREACHABLE)
-    assert len(family) == 12, sorted(k.__name__ for k in family)
+    assert len(family) == 13, sorted(k.__name__ for k in family)
     assert family - (mapped | unreachable) == set()
     assert not mapped & unreachable
     assert (mapped | unreachable) - family == set()
@@ -2975,11 +2975,11 @@ def test_the_service_error_map_resolves_through_the_class_tree():
     assert service_error_response(derived("gone")) == (401, "invalid_token")
 
     # ...and minting it did not disturb the family the two partition tests
-    # assert is exactly twelve. This used to need `del` + `gc.collect()` and so
+    # assert is exactly thirteen. This used to need `del` + `gc.collect()` and so
     # rested on reclaim timing; `_subclasses` now filters on the defining
     # package, which holds while the subclass is still alive (P12-4)
     assert derived in ThreadNotFoundError.__subclasses__()
-    assert len(_subclasses(ServiceError)) == 12
+    assert len(_subclasses(ServiceError)) == 13
     assert derived not in _subclasses(ServiceError)
 
     # ...and it agrees with the partition: nothing declared unreachable

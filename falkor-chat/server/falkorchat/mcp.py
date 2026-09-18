@@ -286,7 +286,7 @@ def list_threads(channel_id: str, limit: int = 50) -> list[dict[str, Any]]:
 @mcp.tool()
 def ingest_document(
     text: str, title: str | None = None, source_format: str = "text",
-    source_label: str | None = None,
+    source_label: str | None = None, produced_by: str | None = None,
 ) -> dict[str, Any]:
     """Ingest a text document: split into chunks, retained verbatim (K-050).
 
@@ -300,11 +300,17 @@ def ingest_document(
     right alongside the embed (K-050 M5 Stage 3) — no fusion yet, every
     extracted entity is a fresh node (plan §3.1). Fusion is a later stage;
     this call only returns `{documentId, chunkCount, status: 'processing'}`.
+
+    `produced_by` (optional — `agent-knowledge-base-strategy.md` §4.1): when
+    given, attribution resolves ONLY against an existing `Agent` (never the
+    `get_context()` actor) and raises `AgentNotFoundError` — loudly, no silent
+    fallback to the configured actor — if no such `Agent` exists yet. Omitted,
+    behavior is unchanged.
     """
     ctx = _get_context()
     receipt = _svc().ingest_document(
         ctx, text=text, title=title, source_format=source_format,
-        source_label=source_label,
+        source_label=source_label, produced_by=produced_by,
     )
     if _embed_worker is not None or _ingestion_pipeline is not None:
         chunks = _svc().list_document_chunks(ctx, document_id=receipt["documentId"])
@@ -325,8 +331,12 @@ def ingest_documents(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     Each entry in `items` takes the same fields as `ingest_document`'s own
     parameters: `text` (required), `title`, `source_format` (defaults
-    `"text"`), `source_label` (all optional except `text`). Returns **one
-    receipt per item**, in the same order as `items` — a per-item failure
+    `"text"`), `source_label`, `produced_by` (all optional except `text`).
+    `produced_by` is per-item, not a batch-level default
+    (`agent-knowledge-base-strategy.md` §4.1) — a caller wanting one producer
+    for every item in a batch just repeats the same string in each item's
+    dict. Returns **one receipt per item**, in the same order as `items` —
+    a per-item failure
     (empty text, oversized text, unknown actor) does not abort the batch; it
     comes back as that item's own `{"status": "error", "error": ...,
     "errorType": ...}` receipt instead (`Services.ingest_documents`

@@ -1738,10 +1738,29 @@ class Repository:
     # Every SUPERSEDES-anchored write below follows the same unlabeled-endpoint
     # discipline as §14.8 above (plan §3.2).
 
+    # Ingestor-resolution query prefixes for `create_document_with_auto_supersede`
+    # below (agent-team-ingestion-graph.md §2.2) — two literal query-text
+    # branches, not one shared text with a possibly-NULL `$producedBy` param: the
+    # identical pattern-property match plans `Node By Index Scan` when the param
+    # carries a real value and falls back to `Node By Label Scan` + `Filter` when
+    # it is NULL (live-verified, same doc §2.3). `ingestorIsUser` lets everything
+    # after the resolution prefix stay byte-identical text in both branches.
+    _INGESTOR_RESOLVE_BY_ACTOR = (
+        "OPTIONAL MATCH (u:User  {userId:  $ingestedBy}) "
+        "OPTIONAL MATCH (a:Agent {agentId: $ingestedBy}) "
+        "WITH coalesce(u, a) AS ingestor, (coalesce(u, a) IS NOT NULL) AS ok, "
+        "     (u IS NOT NULL) AS ingestorIsUser "
+    )
+    _INGESTOR_RESOLVE_BY_PRODUCER = (
+        "OPTIONAL MATCH (pa:Agent {agentId: $producedBy}) "
+        "WITH pa AS ingestor, (pa IS NOT NULL) AS ok, false AS ingestorIsUser "
+    )
+
     def create_document_with_auto_supersede(
         self, ws: str, *, document_id: str, title: str, text: str,
         text_normalized_hash: str, source_format: str, ingested_by: str,
         created_at: int, chunks: list[dict[str, Any]], match_id: str,
+        produced_by: str | None = None,
     ) -> dict[str, Any]:
         """FR-2/AC-1 auto-tier update detection, folded into document creation
         itself — mirrors `create_entity_with_auto_match`'s concurrency-fix
@@ -1798,22 +1817,45 @@ class Repository:
         `supersededDocumentId`/`matchId` are `None` when `autoSuperseded` is
         `False`. `chunkCount` is computed app-side from `len(chunks)` — no
         extra aggregation needed in the query.
+
+        **`produced_by`** (optional, additive — `agent-knowledge-base-strategy.md`
+        §4.1): when given, the ingestor-resolution clause matches ONLY
+        `(a:Agent {agentId: $producedBy})` — `ingested_by`/`$ingestedBy` plays no
+        role in this branch's query text or params at all, so a resolved
+        `produced_by` always sources `sourceKind: 'agent'`, never `'document'`.
+        When omitted (`None`, the default), the query text, params, and result are
+        byte-identical to this method's pre-existing behavior. See §2.2/§2.3 of
+        `docs/plans/agent-team-ingestion-graph.md` for why this is two literal
+        query-text branches, not one shared text with a possibly-`NULL` param.
         """
+        resolve = (
+            self._INGESTOR_RESOLVE_BY_PRODUCER if produced_by is not None
+            else self._INGESTOR_RESOLVE_BY_ACTOR
+        )
+        params: dict[str, Any] = {
+            "documentId": document_id, "title": title, "text": text,
+            "textNormalizedHash": text_normalized_hash,
+            "sourceFormat": source_format,
+            "createdAt": created_at, "chunks": chunks, "matchId": match_id,
+        }
+        if produced_by is not None:
+            params["producedBy"] = produced_by
+        else:
+            params["ingestedBy"] = ingested_by
+
         res = self._graph(ws).query(
-            "OPTIONAL MATCH (u:User  {userId:  $ingestedBy}) "
-            "OPTIONAL MATCH (a:Agent {agentId: $ingestedBy}) "
-            "WITH u, a, coalesce(u, a) AS ingestor, (coalesce(u, a) IS NOT NULL) AS ok "
+            resolve +
             "OPTIONAL MATCH (candidate:Document {"
             "  textNormalizedHash: $textNormalizedHash, currentVersion: true"
             "}) "
-            "WITH u, a, ingestor, ok, candidate "
+            "WITH ingestor, ok, ingestorIsUser, candidate "
             "ORDER BY candidate.createdAt ASC "
             "LIMIT 1 "
             "FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END | "
             "  CREATE (d:Document {"
             "    documentId: $documentId, title: $title, text: $text, "
             "    sourceFormat: $sourceFormat, "
-            "    sourceKind: CASE WHEN u IS NOT NULL THEN 'document' ELSE 'agent' END, "
+            "    sourceKind: CASE WHEN ingestorIsUser THEN 'document' ELSE 'agent' END, "
             "    status: 'processing', pendingJobs: 0, createdAt: $createdAt, "
             "    currentVersion: true, textNormalizedHash: $textNormalizedHash"
             "  }) "
@@ -1852,12 +1894,7 @@ class Repository:
             "       CASE WHEN doSupersede THEN candidate.documentId ELSE null END "
             "         AS supersededDocumentId, "
             "       CASE WHEN doSupersede THEN $matchId ELSE null END AS matchId",
-            {
-                "documentId": document_id, "title": title, "text": text,
-                "textNormalizedHash": text_normalized_hash,
-                "sourceFormat": source_format, "ingestedBy": ingested_by,
-                "createdAt": created_at, "chunks": chunks, "matchId": match_id,
-            },
+            params,
         )
         row = res.result_set[0]
         return {

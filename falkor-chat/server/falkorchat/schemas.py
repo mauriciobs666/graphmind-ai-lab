@@ -66,6 +66,7 @@ class IngestDocumentIn(BaseModel):
     title: str | None = Field(None, max_length=MAX_NAME_LEN)
     sourceFormat: str = Field("text", min_length=1, max_length=MAX_SOURCE_FORMAT_LEN)
     sourceLabel: str | None = Field(None, max_length=MAX_NAME_LEN)
+    producedBy: str | None = Field(None, max_length=MAX_NAME_LEN)
 
 
 class IngestDocumentsIn(BaseModel):

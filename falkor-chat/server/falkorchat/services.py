@@ -252,6 +252,24 @@ class DocumentNotFoundError(ServiceError):
     """
 
 
+class AgentNotFoundError(ServiceError):
+    """Raised when `ingest_document`/`ingest_documents`'s optional `produced_by`
+    names no existing `Agent` (agent-knowledge-base-strategy plan §4.1, FR-8's
+    per-producer attribution).
+
+    Mirrors `DocumentNotFoundError`'s shape/posture: an explicit-id lookup that
+    resolves nothing is a loud 404, never a silent no-op or a fallback to
+    `ctx.actor` — `produced_by`'s whole point is differentiating the writing
+    agent from the single, process-pinned configured actor `get_context()`
+    always returns, so silently attributing to `ctx.actor` instead would
+    defeat exactly what it exists to fix. `repository.
+    create_document_with_auto_supersede`'s `produced_by` branch guards the
+    entire `Document`/`Chunk` `CREATE` on the same `ok` flag
+    `UnknownActorError`'s check already relies on, so no partial `Document`
+    is ever written when this fires.
+    """
+
+
 class DocumentUpdateNotFoundError(ServiceError):
     """Raised when `confirm_document_update`/`reject_document_update` is
     given a `match_id` with no `SUPERSEDES` edge (document-ingestion2 plan
@@ -1136,6 +1154,7 @@ class Services:
     def ingest_document(
         self, ctx: CallContext, *, text: str, title: str | None = None,
         source_format: str = "text", source_label: str | None = None,
+        produced_by: str | None = None,
     ) -> dict[str, Any]:
         """Split, chunk, and write a document (FR-1/FR-4/FR-13, plan §3.2/§3.5).
 
@@ -1169,6 +1188,13 @@ class Services:
         `False`, alongside the existing per-chunk embed/extract scheduling
         (plan §3.4's "not touched by this job" scope note — detection has no
         place on this synchronous write path).
+
+        **`produced_by`** (optional — `agent-knowledge-base-strategy.md` §4.1):
+        when given, attribution resolves ONLY against an existing `Agent` (never
+        the `ctx.actor` `User`/`Agent` coalesce) and raises `AgentNotFoundError`
+        — loudly, no silent fallback to `ctx.actor` — if no such `Agent` exists
+        yet. Omitted, behavior is unchanged: `INGESTED_BY` resolves `ctx.actor`
+        exactly as before.
         """
         if not text.strip():
             raise EmptyDocumentError("document text must not be empty or whitespace-only")
@@ -1192,8 +1218,11 @@ class Services:
             text=text, text_normalized_hash=text_normalized_hash,
             source_format=source_format, ingested_by=ctx.actor,
             created_at=now, chunks=chunks, match_id=self._id(),
+            produced_by=produced_by,
         )
         if not result["ingestorFound"]:
+            if produced_by is not None:
+                raise AgentNotFoundError(produced_by)
             raise UnknownActorError(ctx.actor)
         return {
             "documentId": document_id, "chunkCount": len(chunks),
@@ -1217,8 +1246,25 @@ class Services:
 
         Each item in `documents` takes the same keyword shape as
         `ingest_document`'s own parameters: `text` (required), `title`,
-        `source_format` (defaults `"text"`), `source_label` — all optional
-        except `text`.
+        `source_format` (defaults `"text"`), `source_label`, `produced_by` —
+        all optional except `text`. `produced_by` is per-item, not a
+        batch-level default (`agent-knowledge-base-strategy.md` §4.1) — every
+        other optional field here is already per-item, and a caller that wants
+        one producer for every item in a batch just repeats the same string in
+        each item's dict.
+
+        **The `isinstance(doc.get("produced_by"), (str, type(None)))` check
+        below is a deliberate, slightly-stricter addition versus `title`/
+        `source_format`/`source_label`'s existing untyped `.get(...)` calls**
+        — those rely purely on the wide `except` clause for defense in depth.
+        This feature's entire point is "fail loudly on misattribution, never
+        silently" (`AgentNotFoundError`); a wrong-typed `produced_by` (e.g. a
+        list) reaching the repository call risks surfacing as some
+        driver-level exception type outside the wide `except` tuple, aborting
+        the whole batch rather than isolating one item's receipt — a worse
+        failure mode here specifically than it would be for a cosmetic field
+        like `source_label`. Cheap to add, so add it explicitly rather than
+        leaning on the existing net.
 
         **Per-item error handling (implementer's call, plan §3.6 leaves this
         open):** one bad document does NOT abort the whole batch. Each item
@@ -1272,11 +1318,15 @@ class Services:
         receipts: list[dict[str, Any]] = []
         for doc in documents:
             try:
-                if not isinstance(doc, dict) or not isinstance(doc.get("text"), str):
+                if (
+                    not isinstance(doc, dict)
+                    or not isinstance(doc.get("text"), str)
+                    or not isinstance(doc.get("produced_by"), (str, type(None)))
+                ):
                     receipt = {
                         "status": "error",
-                        "error": "each batch item must be a dict with a string "
-                                 "'text' key",
+                        "error": "each batch item must be a dict with a string 'text' "
+                                 "key and an optional string 'produced_by' key",
                         "errorType": "MalformedItemError",
                     }
                 else:
@@ -1284,6 +1334,7 @@ class Services:
                         ctx, text=doc["text"], title=doc.get("title"),
                         source_format=doc.get("source_format", "text"),
                         source_label=doc.get("source_label"),
+                        produced_by=doc.get("produced_by"),
                     )
             except (ServiceError, KeyError, TypeError, AttributeError) as exc:
                 receipt = {

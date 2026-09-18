@@ -169,6 +169,7 @@ def build_router(
         receipt = services.ingest_document(
             ctx, text=body.text, title=body.title,
             source_format=body.sourceFormat, source_label=body.sourceLabel,
+            produced_by=body.producedBy,
         )
         # Out-of-band, off the guarded write path (K-050 M5 Stage 2, mirrors
         # the message embed scheduling above): every chunk of a just-ingested
@@ -212,6 +213,7 @@ def build_router(
                     "text": item.text, "title": item.title,
                     "source_format": item.sourceFormat,
                     "source_label": item.sourceLabel,
+                    "produced_by": item.producedBy,
                 }
                 for item in body.documents
             ],
