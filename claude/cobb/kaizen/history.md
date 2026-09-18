@@ -2,6 +2,68 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-18 — `kaizen_team` distillation pass 2, U1: `analyst` chunk A (8 meta-lessons from gating the 09-16 sweep) — 7 promoted as sharpenings, 1 discarded, 4 of them into my own `agent-maintenance` §5
+
+- **What:** ran §5 over the 8 `analyst` entries pinned by `teco`'s brief
+  (`docs/plans/kaizen-team-distillation2-coordination.md`, U1). Full per-entry record:
+  `claude/analyst/kaizen/history.md`, 2026-09-18. Files changed: that history + `plan.md`
+  (last-reviewed date, parking-lot line), `claude/analyst/review-techniques.md` (two one-clause
+  sharpenings of existing sections, no new section: git-ref word-count deltas; a header's
+  blanket claim about its own entries), and `skills/agent-maintenance/SKILL.md` §5 (four
+  sharpenings: a date-vs-clearing-commit attribution instrument in step 1; "a figure inside
+  `evidence` is a claim of its own — trace or drop" and the generalised sibling-doc grep in
+  step 2; header-count and duplicate-heading self-checks in step 4 item 4). `analyst.md`
+  untouched. Word deltas (`git show 1022c20:<path> | wc -w` vs working file):
+  `review-techniques.md` 18,881 → 19,039; `SKILL.md` 6,366 → 6,603; `analyst.md` 2,699 → 2,699.
+- **Why the skill, not `analyst`'s files, for five of the eight:** every one of those lessons
+  is a check that fires when the *distiller* writes or verifies a promotion — the 09-16 sweep's
+  U4 Blocker (an untraced diff-stat figure carried verbatim), the U1 Major (duplicate heading),
+  the U3 Minor (header counts) — and `analyst`'s side of each was already in
+  `review-techniques.md` ("a grep away from confirmation", "Reconciling a kaizen-graph
+  distillation's claimed dispositions"). The gate re-applies the distiller's procedure; the
+  procedure is where the rule pays for itself. Two entries (`b4f6c1a2`/`b7e4a1f2`) merged into
+  one step-4 sentence. The one discard (`f3d9a1c2`, trace the whole call chain) is stated in
+  `analyst.md` itself *and* in the KB.
+- **Verification standard applied, per the 09-16 Close-out:** every fact re-derived against the
+  tree in this run (git-ref `wc -w` at `320f682^`/`320f682`; `git show -s --format=%ci` on the
+  clearing commits; the `hostinfo`→`runner`→`cli` chain; `git log --all --stat` + `git grep` for
+  the `1418` figure — zero hits; the S16 sibling docs). No figure from any entry's `evidence`
+  was carried into a promotion; the promoted forms are rules only.
+- **Observed, folded into the step-1 promotion rather than captured as a new entry:** 4 of the
+  8 cleared `PRODUCED` edges carried a `sessionId` (3 distinct values, none a known reference for
+  the 09-16 coordination) and 4 were `null`, so the documented `sessionId` instrument would have
+  covered at most half of them; what placed the 8 in the post-clear window was their `context`
+  naming the U1-U7 gates. Also observed on the survivors: 5 of 6 `createdAt` values are placeholder
+  midnights (`2026-09-17T00:00:00Z`) and timezones are mixed (`Z` vs `-03:00`) — `createdAt` is
+  only as fine-grained as its writer made it.
+- **Gate (`docs/reviews/kaizen-team-distillation2.md` §U1): needs changes → fixed same day.**
+  Major: my step-1 instrument claimed every legitimate refill post-dates its clearing commit, but
+  the sweep's order is clear → gate → commit (`git show --stat 1896a1f` includes the U1 gate
+  review), so a gate-written entry legitimately pre-dates it. Rewrote the paragraph: the exact
+  instrument is the unit's pinned `entryId` set; the commit timestamp is only an upper bound on
+  the clear, a pre-commit survivor is a lead only if its `context` names nothing in that unit,
+  compare `createdAt` not `date` — and, beyond the reviewer's fix, read `createdAt` sceptically
+  (the placeholder-midnight/mixed-timezone observation above). Restated the `f0e8b2a4` bullet in
+  `analyst`'s history at the level it was actually verified. Minors: moved the `f4b8c2d1`
+  paragraph in `review-techniques.md` below the "Compare the AST…" paragraph so the measurement
+  again follows the technique it measures, and turned its recount clause into a cross-reference to
+  item (4) of "a grep away from confirmation"; replaced the adjacent-only `awk` scan in §5 step 4
+  with `grep '^## ' <file> | sort | uniq -d` (any distance). Infos: the "8 of 14 null" claim
+  replaced with the exact 4-of-8 observation in both histories; "both ends *of the delta*" in the
+  word-count clause. Post-fix word counts: `review-techniques.md` 18,881 → 19,056; `SKILL.md` 6,366 → 6,705.
+- **Clearing:** one `DETACH DELETE` per `entryId`, after every file edit above was on disk.
+  Pre-clear `analyst` count re-queried at 14 (no new arrivals). Post-clear result:
+  `MATCH (a:Agent {agentId:'analyst'})-[:PRODUCED]->(k:KaizenEntry) RETURN count(k), collect(k.entryId)`
+  → `6` | `a1f3c9e2-6b7d-4e10-9f2a-3d5c8e7b1a44`, `a1e6c9d4-3b7a-4f2e-9c1d-7e5f8a2b0c3d`,
+  `b3f1b8b4-6f3c-4b6a-9a1a-2f0f9a2b6d31`, `c7e2a814-5f3b-4a9c-8e21-6b9d4f0a2c31`,
+  `c7f2a815-4e9b-4a1d-8c6e-1f3b9d5a7e02`, `a1f3c9e2-7b4d-4e1a-9c6f-3d2b8e5a1f70` — exactly the
+  six U2 ids, nothing new.
+- **Not mine, left for `teco`:** mid-run `git status` showed `claude/graph-dba/falkordb-quirks.md`
+  modified and `falkor-chat/docs/plans/agent-team-ingestion-graph.md` +
+  `falkor-chat/scripts/start_agent_team.sh` untracked — a concurrent session's work, untouched.
+- **Plan items:** none advanced; K-030's Track 1 substrate work is visibly in flight elsewhere
+  (the untracked `falkor-chat` files above).
+
 ## 2026-09-17 — OpenCode subagent-nesting settled empirically (POC), skill updated with confirmed mechanism
 
 Follow-up to the same-day drift-fix entry below (docs re-check had only gotten as far as

@@ -1333,7 +1333,16 @@ Compare the AST line-range hash technique at the top of this file: same instrume
 — that one hashes a code construct across revisions, this one a prose block, and the claim under
 test is the document's account of its own history rather than a locked-artifact guarantee.
 
+**A header's blanket claim about its own body is the same class, checked per item.** A
+knowledge-base header promising *"each entry names the version it was verified against"* has no
+mechanism enforcing it, so it drifts from what the entries actually do — check the promise against
+every entry body individually rather than trusting the header; and recount an enumerated instance
+list (*"X, Y, and N more — M converted"*) the way item (4) of *"A 'this already exists' claim is a
+grep away from confirmation"* treats a copied count.
+
 Origin: `analyst` kaizen `8d2b47f0…` (2026-09-08), Pass 7 of `docs/reviews/cpg-provenance-stamp.md`.
+The header/recount form: `analyst` kaizen `f4b8c2d1…` (2026-09-16), gating
+`claude/frontend-engineer/frontend-quirks.md` at U2 of `docs/plans/kaizen-team-distillation-coordination.md`.
 
 ## The remedy a finding hands over is the least-verified thing in the review
 
@@ -1514,10 +1523,14 @@ evidence must come from `git grep <pattern> <sha> -- <path>` against an **explic
 bare working-tree grep or the session-start status block — and re-run it at **both** ends that
 matter: the sha you are actually reviewing, and (when the artifact under review itself cites a
 sha, e.g. a plan pin naming "as of `<sha>`") the sha the artifact claims, since those two can
-already have diverged by the time you check.
+already have diverged by the time you check. A word-count delta is a count too, at both ends *of
+the delta*: derive it as `git show <sha>^:<path> | wc -w` vs. `git show <sha>:<path> | wc -w`, never `wc -w` on the live
+tree — an unrelated uncommitted hunk in the same always-loaded file shifts the live figure,
+making a correct self-reported delta look wrong or a wrong one look plausible.
 
 Origin: 2026-09-10, model-bench plan gate Pass 16, verifying a plan-stated grep pin over shipped
-code while a `tdd-engineer` unit edited the same files concurrently.
+code while a `tdd-engineer` unit edited the same files concurrently. The word-count form:
+`analyst` kaizen `a1e2c3d4…` (2026-09-16), gating `docs/reviews/commit-granularity.md`.
 
 **The same hazard applies to a narrative claim, not just a grep pin — and a green suite does not
 catch it.** A coordinator's or implementer's HISTORY.md claim of "found an out-of-scope hunk and

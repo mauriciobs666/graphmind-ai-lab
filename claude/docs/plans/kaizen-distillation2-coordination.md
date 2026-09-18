@@ -1,6 +1,6 @@
 # Kaizen distillation — team-wide pass 2
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (—) · **Extends:** `claude/docs/plans/kaizen-distillation-coordination.md`
+> **Status:** archived · **Owner:** `teco` · **Tracks:** — (—) · **Extends:** `claude/docs/plans/kaizen-distillation-coordination.md`
 
 Second routine curation pass over the shared `kaizen_team` FalkorDB graph
 (`skills/agent-maintenance/SKILL.md` §5), covering the 196 raw `:KaizenEntry`

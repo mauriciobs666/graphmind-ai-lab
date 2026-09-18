@@ -2,6 +2,99 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-09-18 — standing distillation pass, `analyst` chunk A (U1 of `docs/plans/kaizen-team-distillation2-coordination.md`): 8 meta-lessons from gating the 09-16 sweep — 2 promoted here, 5 promoted into `skills/agent-maintenance/SKILL.md` §5 (as 4 sharpenings, two entries merged), 1 discarded
+
+- **What:** `cobb` distilled the 8 `analyst`-produced `kaizen_team` entries captured while
+  `analyst` gated the 2026-09-16 sweep (`docs/reviews/kaizen-team-distillation-u1.md` … `-u7.md`):
+  `b4f6c1a2` `a1e2c3d4` `f4b8c2d1` `7f3c9a2e` `f3d9a1c2` `b7e4a1f2` `e2f1a8c3` `f0e8b2a4`. The
+  other 6 `analyst` entries (code facts) are U2's and were not touched. Every `fact`/`evidence`
+  cell was paged past the MCP tool's 300-char cut before dispositioning. Because all 8 are lessons
+  about verifying kaizen promotions, the bar applied was *does this add a method the published
+  text lacks, or re-instance one* — checked against `review-techniques.md`, `analyst.md`, and
+  `agent-maintenance` §5 — and each promotion sharpens an existing section rather than adding a
+  new one. `analyst.md` untouched. Every fact was re-derived against the tree in this run (git-ref
+  word counts, commit timestamps, the model-bench call chain, `git log --all --stat` traces), not
+  taken from the entries' `evidence`.
+- **Promoted (2), both as one-clause sharpenings of existing `review-techniques.md` sections:**
+  - `a1e2c3d4…` (a self-reported word-count delta must be re-derived from git refs at both ends,
+    never `wc -w` on the live tree) → folded into *"A parallel implementer can move HEAD and dirty
+    the tracked tree mid-review — pin every count to an explicit sha, at both ends"*, whose rule
+    ("every count a review uses as evidence … against an explicit sha") already covered it in
+    principle but was framed around grep pins and concurrent implementers; the word-count form
+    is what every distillation gate actually meets. Verified: `git show 320f682^:claude/AGENTS.md
+    | wc -w` = 2783 vs `git show 320f682:claude/AGENTS.md | wc -w` = 3074 (+291), and
+    `git show 320f682:claude/cobb/kaizen/plan.md` line 29 still carries the original "+33 net"
+    claim the entry refuted (since corrected in `cobb`'s K-033, 2026-09-16).
+  - `f4b8c2d1…` (a KB header's blanket promise about its entries is unenforced — check it per
+    entry, and recount any enumerated "X, Y and N more" list against a fresh grep) → folded into
+    *"A document's claim about its own revision history is falsified by hashing the cited block at
+    every revision"* as the sibling per-item form of a self-certifying claim. Verified: both cited
+    instances are already fixed at baseline `1022c20` (`frontend-quirks.md`'s header now scopes
+    its version promise; the TS2312 entry says "10 interfaces"; `grep -c '^export type
+    Use.*Result' salesperson/src/api/hooks.ts` = 10 in this run) — so only the technique was
+    promoted, not the instance.
+- **Promoted (5) into `skills/agent-maintenance/SKILL.md` §5 — the distiller's own procedure,
+  because each rule fires when `cobb` writes or verifies a promotion, before any gate sees it;
+  the `analyst`-side halves of these lessons are already published (see the discard notes):**
+  - `7f3c9a2e…` (a specific figure inside an otherwise-true entry can be unsourced — trace it with
+    `git log --all --stat` + a repo-wide grep for the exact number, or leave it out) → §5 step 2,
+    one clause after "Re-derive the fact yourself". This was the 09-16 sweep's only Blocker (U4)
+    and lived only in that coordination's Close-out. Verified: `git log --all --oneline --stat |
+    grep -c 1418` = 0 and `git log --all --format=%s | grep -c 1418` = 0 in this run; the only
+    `.md` hits are the U4 review, `tdd-engineer`'s history recording the discard, and an
+    unrelated `model-bench` line-count fact. The `analyst`-side rule (a cited event is "a grep
+    away from confirmation") is already in `review-techniques.md`.
+  - `e2f1a8c3…` (grep the repo's history/coordination docs for the fact's keywords before a
+    project-docs promotion — a sibling doc may hold it more precisely, or corroborate it and
+    prove the gap is still open) → §5 step 2, generalising the existing "captured while
+    mid-writing a still-open plan doc" clause from the producer's own doc to any sibling
+    document, and adding the corroboration direction it lacked. Verified: `git grep -n S16 --
+    docs/plans/salesperson-ui2-coordination.md falkor-chat/docs/HISTORY.md` shows both documenting
+    the root `docs/HISTORY.md` CPG-only scope on 2026-09-16 and deferring the root `AGENTS.md`
+    fix; root `AGENTS.md:34` now carries it.
+  - `f0e8b2a4…` (a non-zero `PRODUCED` count for an agent whose unit cleared it is not a missed
+    sweep when the agent ran further sessions in the same coordination) → §5 step 1, folded into
+    the existing "count delta is a lead to attribute" paragraph as attribution instruments that
+    need no `sessionId`: primarily the unit's pinned `entryId` set (a survivor in it is the
+    miscount, one outside it an arrival); as a fallback, the clearing commit's timestamp as an
+    *upper bound* on the clear — the entry's own "every refill post-dates its clearing commit"
+    framing is **not** what this sweep's ordering (clear → gate → commit) produces, since a
+    gate-written entry legitimately pre-dates the commit (`git show --stat 1896a1f` contains the
+    U1 gate review itself), so that framing was corrected rather than promoted (gate finding,
+    `docs/reviews/kaizen-team-distillation2.md` U1 Major). In this run 4 of the 8 cleared edges
+    carried a `sessionId` (3 distinct values, none a known reference for the 09-16 coordination),
+    4 were `null` — the `sessionId` instrument would have covered at most half of them. Verified,
+    at the level actually run: `1896a1f` = 2026-09-16 20:32:35, `b6e1454` = 2026-09-16 21:51:27
+    (`git show -s --format=%ci`); all 8 entries are dated on or after the clearing day
+    (day-granular `date`, so this does not establish timestamp-level post-dating) and their
+    `context` fields name the U1-U7 gate reviews — which is what places them in the window.
+  - `b7e4a1f2…` + `b4f6c1a2…` **merged** (a duplicate-heading `awk` scan over every changed `.md`;
+    a history entry's header counts must sum to the inbox size and match its body) → §5 step 4
+    item 4, one sentence of producer-side self-checks — both defects are made by `cobb` inserting
+    a dated entry, so the check belongs where the entry is written. `b4f6c1a2`'s `analyst`-side
+    half (reconcile a distillation's aggregate claim against itemised ground truth) is already
+    published verbatim in *"Reconciling a kaizen-graph distillation's claimed dispositions"*, so
+    `review-techniques.md` gained nothing for it. Verified: the U1 review's Major and the U3
+    review's Minor record both defects; the `awk` scan is clean on this file at `1896a1f` and at
+    the working tree after this entry; `git show 1022c20:claude/architect/kaizen/history.md`'s
+    2026-09-16 header now reads 5 promoted + 3 discarded = 8.
+- **Discarded (1), already published twice:**
+  - `f3d9a1c2…` (verifying a "check X refuses/raises" claim needs the whole call chain, not the
+    pure decision function) — `analyst.md`'s *"The unit of verification is the citation's scope,
+    not the citation … read every function the claim spans"* and `review-techniques.md`'s
+    *"'Verified by execution' names a level — the primitive was executed but not the call path that
+    uses it"* both state it. Chain re-traced anyway: `modelbench/hostinfo.py:274`
+    `check_attestation_staleness` → `modelbench/runner.py:850` call, `:858` `raise RunRefused` →
+    `modelbench/cli.py:406` `except RunRefused`; the promoted `qa-testing-techniques.md:234` claim
+    holds end-to-end.
+- **Backlog:** no `analyst` item opened — nothing kept open. Dedup check run: none of the 8
+  `entryId`s appears in `plan.md`. Word deltas (`git show 1022c20:<path> | wc -w` vs working
+  file): `review-techniques.md` 18,881 → 19,056; `analyst.md` 2,699 → 2,699 (untouched);
+  `skills/agent-maintenance/SKILL.md` 6,366 → 6,705.
+- **Graph state:** all 8 nodes cleared one `DETACH DELETE` per `entryId` after every file edit was
+  on disk; post-clear `analyst` `PRODUCED` count and remaining ids recorded in
+  `claude/cobb/kaizen/history.md`, 2026-09-18.
+
 ## 2026-09-16 — cross-agent KB promotion: 1 entry from `architect`'s distillation added to `review-techniques.md`
 
 `cobb`, distilling `architect`'s (not this agent's) `kaizen_team` inbox, promoted one entry into

@@ -460,7 +460,20 @@ distills — on request, and folded into every certification pass (§4):
    the *parent* session, not the producing agent** — so the value identifies
    *which coordination* captured an entry, never *which agent* or *which
    unit*, and two units of the same coordination are indistinguishable by
-   this method alone. Worked example, including a mis-attribution this
+   this method alone. An agent whose unit cleared it to zero and that then
+   ran further sessions in the same coordination (its own gate review is
+   one) legitimately reads non-zero again. The exact instrument for telling
+   a refill from a miscount is the unit's **pinned `entryId` set** (the
+   brief/ledger): a survivor whose id is in it is the miscount; one outside
+   it is an arrival, whatever its clock says. Only when no pinned set exists
+   fall back to time, and then the clearing commit's timestamp
+   (`git show -s --format=%ci <sha>`) is an **upper bound** on the clear,
+   not the clear itself — the unit's gate runs between the clear and the
+   commit, so a gate-written entry legitimately pre-dates it; a survivor
+   dated before the commit is a lead only if its `context` names nothing in
+   that unit. Compare `createdAt`, never the day-granular `date`, and read
+   `createdAt` sceptically too: writers stamp placeholder midnights
+   (`…T00:00:00Z`) and mixed timezones. Worked example, including a mis-attribution this
    caught and corrected: `claude/docs/plans/kaizen-distillation2-coordination.md`
    (Follow-ups, "`$CLAUDE_CODE_SESSION_ID` resolves to the *parent* session
    inside a subagent").
@@ -473,16 +486,25 @@ distills — on request, and folded into every certification pass (§4):
    since five weeks before the entry was written — the entry's bottom-line
    conclusion still held, for a narrower reason than claimed, but a verbatim
    promotion would have shipped the wrong absolute claim into project docs).
+   **A specific figure inside an entry's `evidence` — a line count, a
+   diff-stat, an N-of-M — is a claim of its own**: the surrounding general
+   claim reproducing says nothing about it. Trace it (`git log --all --stat`
+   plus a repo-wide grep for the exact number) or leave it out of the
+   promotion; never carry it verbatim.
    Unverifiable ≠ discard — date-stamp the doubt and keep or drop by value.
-   **Also check whether the entry was captured while its producing agent was
-   mid-writing a still-open plan/method doc on the same topic** — that
-   document can already hold a fuller, more authoritative treatment,
-   including a disposition (e.g. "defensible as-is", a scope bound) the raw
-   entry itself never states; a match there is usually grounds for
-   discard/generalize rather than a stop-and-ask fork (origin: 2026-09-10,
-   `data-scientist` U56 — two entries captured while writing
+   **Also grep the repo — `HISTORY.md`s, coordination docs, and any
+   still-open plan/method doc the producing agent was mid-writing on the same
+   topic — for the fact's own keywords before a project-docs or KB
+   promotion.** A sibling document can already hold a fuller, more
+   authoritative treatment, including a disposition (e.g. "defensible as-is",
+   a scope bound) the raw entry itself never states; a match there is usually
+   grounds for discard/generalize rather than a stop-and-ask fork (origin:
+   2026-09-10, `data-scientist` U56 — two entries captured while writing
    `agent-knowledge-base-strategy-ml.md` turned out to be compressed
-   duplicates of that doc's own recommendations; one instance so far).
+   duplicates of that doc's own recommendations). Or it can independently
+   corroborate the fact and show the gap the promotion closes is still open —
+   stronger evidence than the entry's own citation, and worth citing in the
+   disposition.
 3. **Route each surviving entry to exactly one destination:**
    - **The agent's always-loaded prompt** — only if it changes behavior or
      routing in most sessions. Highest bar: every session pays tokens for it.
@@ -571,6 +593,14 @@ distills — on request, and folded into every certification pass (§4):
    4. `Edit` `claude/<agent>/kaizen/history.md`, appending the disposition
       (promoted/discarded/kept-open, with reasoning) in the existing format,
       and `plan.md` too if a backlog item is opened for a kept-open entry.
+      Two mechanical self-checks on the entry before moving on: its header
+      counts must sum to the inbox size and match its own body (the two are
+      drafted independently enough to drift while the body is fully correct),
+      and a duplicate-heading scan over every changed `.md` —
+      `grep '^## ' <file> | sort | uniq -d`, which catches a repeat at any
+      distance, not only the adjacent one — since inserting a dated entry
+      above an existing one can duplicate the older heading in a way a
+      line-by-line diff read misses.
       **Confirm the edit(s) succeeded** before the next step — do not proceed
       on an error. **This append-before-mutate ordering is non-negotiable
       regardless of disposition, and regardless of whether the next step is a

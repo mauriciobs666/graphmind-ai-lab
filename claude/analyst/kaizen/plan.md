@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `analyst` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-09-09 (kaizen_team distillation pass 2, unit U37)
+> Last reviewed: 2026-09-18 (kaizen-team distillation pass 2, unit U1 — chunk A of `analyst`'s inbox)
 
 ## Active
 
@@ -36,6 +36,10 @@
 - **Blocked on:** nothing, but it is the analyst-side analogue of `K-016` progressive disclosure and deliberately out of scope for the prompt-waste plan (its finding 6 routes floor-bound files here rather than to cutting rules to reach a number).
 
 ## Parking lot / ideas
+- **No `analyst` backlog item opened by U1 of the 2026-09-18 sweep (8 meta-lessons from gating the
+  09-16 sweep).** Seven promoted (two here, five into `agent-maintenance` §5), one discarded as
+  already published; nothing kept open. Dedup check run on all eight `entryId`s — none appears in
+  this file. Dispositions: `kaizen/history.md`, 2026-09-18.
 - **No `analyst` backlog item opened by U37 (2026-09-09, 5 entries).** Four promoted, one
   discarded as already published; nothing unresolved, so nothing needs a `K-`number. Dedup check
   run on all five `entryId`s — none appears in this file. Dispositions: `kaizen/history.md`,
