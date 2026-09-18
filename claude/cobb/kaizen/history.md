@@ -102,6 +102,44 @@
   falkordb-quirks.md`, the untracked `falkor-chat/docs/plans/`/`falkor-chat/scripts/`/
   `claude/docs/plans/` files) — no falkor-chat fact was needed for this unit.
 
+## 2026-09-18 — `kaizen_team` distillation pass 2, U5: `data-scientist` (1 entry) — discarded as a duplicate of the document it names
+
+- **What:** ran §5 over the 1 `data-scientist` entry pinned by `teco`'s brief
+  (`docs/plans/kaizen-team-distillation2-coordination.md`, U5): `7a3e9c1b-4f2d-4e8a-9b6c-2d1f7e5a8c3d`
+  (a client-side calling convention cannot be unit-tested for per-call compliance, only its stored
+  definition can). Re-queried the graph fresh at open — exactly 1 row, matching the brief. Full
+  per-entry record: `claude/data-scientist/kaizen/history.md`, 2026-09-18. Files changed: that
+  history file only; this file. `data-scientist.md` and `plan.md` untouched — nothing cleared the
+  always-loaded-prompt bar and nothing was left open.
+- **Re-verified the cited code directly rather than trusting the citation.** `git show
+  6d54fc4:falkor-chat/server/falkorchat/services.py` (pinned — a concurrent unrelated session had
+  this file dirty in the working tree): `search_documents` spans exactly lines 1309-1354 as cited
+  and embeds `query` verbatim with no template/floor parameter, confirming the entry's premise.
+- **The one real finding: the promotion target already fully states the fact, discarded rather
+  than promoted.** `claude/docs/plans/agent-knowledge-base-strategy-ml.md` (`active`,
+  `data-scientist`-owned, `Version: 2`, read whole) — the entry was captured *while writing this
+  exact document*, and the document's own response section ("1. Client-side realization of the
+  prefix/floor") and Risks section both already state the identical testability-gap reasoning, in
+  more depth (a named backstop — Stage 8's golden-set regression run — and a canonical-artifact
+  recommendation the raw entry never reaches). Promoting the raw entry as a second, thinner
+  project-docs write would have duplicated content the document already owns. This is the third
+  confirmed instance of the "captured mid-writing a still-open plan/method doc" pattern this same
+  agent's history already names twice (2026-09-17 U7, 2026-09-10 U56) — worth noting as a
+  recurring shape for future distillation passes over this agent's entries, not something to act
+  on beyond the discard itself. Document left untouched: nothing in it needed adding, correcting,
+  or moving, so no `Version:`/revision-note bump.
+- **Graph ops:** one edge-count read (`producedEdges=1, mentionEdges=0` → `otherRemaining=0`), one
+  curator `DETACH DELETE`, run only after `data-scientist`'s history entry was durably written; no
+  `MENTIONS` tag (squarely this agent's own domain). Post-clear: `data-scientist` `PRODUCED` → 0
+  rows, legacy `author`-property read → 0 rows. Not touched: the `MENTIONS`-only survivor
+  `e1a6c4d2…`→`tico` (re-confirmed still present, still pointing at `tico`), every other agent's
+  entries, and every dirty/untracked file of the concurrent falkor-chat session
+  (`falkor-chat/server/**`, `falkor-chat/AGENTS.md`, `claude/graph-dba/falkordb-quirks.md`, the
+  untracked `falkor-chat/docs/plans/`/`falkor-chat/scripts/`/`claude/docs/plans/` files) — none of
+  that content was read, cited, or touched; the one falkor-chat source read was pinned to
+  `git show 6d54fc4:…`, never the working tree or `HEAD`. `HISTORY.md`/`BACKLOG.md` not touched in
+  any component — this unit produced no record-of-work, only a discard.
+
 ## 2026-09-18 — `kaizen_team` distillation pass 2, U2: `analyst` chunk B (6 code facts, model-bench + falkor-chat `CallContext`) — 5 promoted as 3 promotions, 1 kept open in `model-bench/docs/BACKLOG.md`
 
 - **What:** ran §5 over the 6 `analyst` entries pinned by `teco`'s brief

@@ -2,6 +2,47 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-18 — one self-produced `kaizen_team` entry discarded as a duplicate of the very document it was captured while revising (U5 of the kaizen-team distillation pass 2)
+
+- **The entry:** `7a3e9c1b-4f2d-4e8a-9b6c-2d1f7e5a8c3d` (2026-09-17, `suggestedHome: project
+  docs`) — a client-side calling convention (query-instruction prefix, score floor) cannot be
+  unit-tested for per-call compliance in this lab, because agents invoke MCP tools directly from
+  prompt-driven reasoning with no shared wrapper code, so only the stored template definition is
+  testable, not whether a given runtime call actually used it. Context: captured while revising
+  `claude/docs/plans/agent-knowledge-base-strategy-ml.md` against `architect`'s Option B substrate
+  revision.
+- **Re-verified the cited evidence directly, not taken on the entry's word.** `git show
+  6d54fc4:falkor-chat/server/falkorchat/services.py` — `search_documents` spans exactly lines
+  1309-1354 as cited (`def search_documents(` at 1309 through the closing `)` of the
+  `self._repo.search_chunks(...)` call at 1354); it embeds `query` verbatim
+  (`q_vec = embedder.embed(query)`) with no template and no floor parameter, over-fetching
+  `k = limit * SEARCH_DOCUMENTS_OVERFETCH` against `repository.search_chunks` and returning the
+  top `limit` rows by `score` ascending. Confirmed by direct read of the pinned commit (never the
+  working tree, which a concurrent unrelated session had dirty for this file). The entry's
+  underlying fact is true.
+- **Discarded rather than promoted to project docs — the target document itself already states it,
+  in more depth, in two places.** Grepped `claude/docs/plans/agent-knowledge-base-strategy-ml.md`
+  (read whole first): the response section "1. Client-side realization of the prefix/floor"
+  already carries the identical testability-gap reasoning verbatim in substance ("that test guards
+  the *definition*, not *compliance* — whether a given agent's actual `search_documents` call at
+  runtime used the documented template... this lab's agents call MCP tools directly from their own
+  prompt-driven reasoning, with no shared wrapper code every call is forced through"), plus a named
+  backstop (Stage 8's recurring golden-set regression run) and a canonical-artifact recommendation
+  the raw entry never reaches. The Risks section restates it a second time under a dated
+  "New (2026-09-17)" bullet. Promoting the raw entry as a second, separate project-docs write would
+  duplicate a fact the document already owns at greater depth — the same "captured mid-writing a
+  still-open plan doc" pattern this agent's own 2026-09-17 (U7) and 2026-09-10 (U56) entries hit;
+  this is a third confirmed instance, not a first. `claude/docs/plans/agent-knowledge-base-strategy-ml.md`
+  itself untouched — no new content, no `Version:`/revision-note bump warranted, since nothing in
+  it needed adding, correcting, or moving.
+- **No `MENTIONS` tag needed** — the entry is squarely this agent's own domain (RAG/retrieval
+  methodology it was itself authoring), not substantively about another agent.
+- **Graph:** producer-write shape (real `:Agent`/`PRODUCED` edge, post-M8). Read
+  `producedEdges=1, mentionEdges=0` → `otherRemaining=0` → full-node `DETACH DELETE`, run after
+  this history entry was durably written. Re-queried both the `PRODUCED`-edge read and the legacy
+  `author`-property read for `data-scientist` afterward: zero raw entries remain either shape.
+- **Plan items:** none opened — fully resolved, nothing left unverifiable or actionable.
+
 ## 2026-09-17 — K-030 Stage 0: added a second on-demand knowledge base, `statistical-method-techniques.md` (prompt restructure, not a distillation)
 
 - **What:** `cobb` ran K-030 Stage 0 (dispatched by `teco`): `data-scientist.md` was named in
