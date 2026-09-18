@@ -1,6 +1,6 @@
 # Agent knowledge-base strategy — Track 1 implementation coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`)
 
 Third coordination document on this topic slug (ordinal per `AGENTS.md` collision rule 5 — the
 prior two, `agent-knowledge-base-strategy-coordination.md` (Stage 0) and
@@ -55,7 +55,38 @@ not rebuilt for this coordination; every falkor-chat-side unit reads current sou
 
 **Stage 4 complete and committed.** Stage 5 dispatched below.
 
-| U12 | `cobb` | `a0f3b255b6bacd9e8` | in-flight | Stage 5: `skills/agent-maintenance/SKILL.md` §5 gains the `ws:agent-team` read (`list_documents`/`get_document`)/clear (`delete_document`) hook, alongside the unchanged `kaizen_team` shapes; live-verified against the two real Stage-4-pilot documents (read-only) plus a disposable throwaway doc for the delete path — independently re-confirmed by `teco` (`MATCH (d:Document) RETURN ...` against `ws:agent-team`: still exactly the 2 real pilot docs, disposable one genuinely gone). `claude/AGENTS.md`/`cobb/kaizen/{history,plan}.md` also updated, all diffs verified directly. | `analyst` (`ae0985fd62134fcaf`) → approve with suggestions (1 minor — stale `plan.md` `Notes:` line; 1 nit — a misquote), both routed back to `cobb`, in progress | 199363 tok / 37 tools |
+| U12 | `cobb` | `a0f3b255b6bacd9e8` | accepted | Stage 5: `skills/agent-maintenance/SKILL.md` §5 gains the `ws:agent-team` read (`list_documents`/`get_document`)/clear (`delete_document`) hook, alongside the unchanged `kaizen_team` shapes; live-verified against the two real Stage-4-pilot documents (read-only) plus a disposable throwaway doc for the delete path — independently re-confirmed by `teco` (`MATCH (d:Document) RETURN ...` against `ws:agent-team`: still exactly the 2 real pilot docs, disposable one genuinely gone). Committed `1819676`. | `analyst` (`ae0985fd62134fcaf`) → approve with suggestions (1 minor — stale `plan.md` `Notes:` line; 1 nit — a misquote); both fixes applied by `cobb`, re-verified directly by `teco` (`git diff`, both spots correct, nothing else touched) | 212000 tok / 4 tools |
+
+## Track 1 complete (2026-09-18)
+
+All five Track 1 stages (`claude/docs/plans/agent-knowledge-base-strategy.md` §3) are `accepted` and
+committed: Stage 1 (`8a1449a`), Stage 2 (`de4158e`), Stage 3 process bring-up (`501f8ae`) +
+`.mcp.json` wiring (`4be2fa8`, user-committed after the bypass incident — `9f6f3c6`), Stage 4
+(`250ac77`), Stage 5 (`1819676`). Every unit's own deliverable was independently verified by `teco`
+directly against source/graph state, not accepted on a delegate's word; every significant unit was
+independently reviewed (`analyst` ×3 — Stage 1, Stage 4, Stage 5; `graph-dba` ×1 — Stage 3's
+bring-up script; `security-expert` ×1 — the `.mcp.json` incident) before commit.
+
+**Real, live state left behind:** `ws:agent-team` workspace (13 seeded `Agent` nodes, 2 real
+raw-capture documents from the `cobb`/`teco` pilot), a dedicated falkor-chat process on port 8200
+(`FALKORCHAT_WS_ID=agent-team`), `.mcp.json` wired to it, `produced_by` attribution merged into
+`ingest_document`/`ingest_documents`, and `agent-maintenance` SKILL.md's curator distillation
+procedure aware of both `ws:agent-team` and `kaizen_team`.
+
+**Open, named, not this coordination's to close:**
+- **Team-wide cutover** — only `cobb`/`teco` write to `ws:agent-team`; the other 11 agents' own
+  "Learning capture" sections, and each one's frontmatter `tools:` allowlist (per the `teco.md` gap
+  Stage 4 found), still need the same repoint. A real follow-up unit, not sized here.
+- **`ws:agent-team`'s embedding backend is unreachable** (LM Studio, `192.168.0.69:1234`,
+  `[Errno 113] No route to host`) — blocks `search_documents` against that workspace only (writes/
+  reads/deletes all work). Routes to `devops`/`graph-dba`, not actioned in this coordination.
+  Will matter for Track 2 (Stages 6-9), sequenced after Track 1 per FR-9 — out of scope here.
+- Two `security-expert` advisory findings from the `.mcp.json` incident, still undispatched
+  (optional): `cobb` sharpening `skills/agent-standards/claude-code.md`'s self-modification lesson;
+  `devops` adding a `.mcp.json`-scoped always-escalate `PreToolUse` hook.
+- `cobb`'s own sign-off that `skills/agent-kb-retrieval/SKILL.md` is the right placement for the
+  Track 2 retrieval artifact — needed before Track 2 Stage 7, not yet given (unchanged from the
+  design-pass coordination).
 
 ## Notes
 
