@@ -2,6 +2,66 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-09-18 — `kaizen_team` distillation pass 2, U8: 1 self-produced `teco` entry (ledger-row prefix-anchor splice bug) — PROMOTED, sharpened into `coordination-techniques.md`'s existing ledger-editing section
+
+- **What:** `cobb` ran `agent-maintenance` §5 over the one `teco`-produced `kaizen_team` entry
+  pinned by U8 of `docs/plans/kaizen-team-distillation2-coordination.md`:
+  `b2f6a1d4-8e3c-4a7f-9d1b-6c5e2a8f0193` (2026-09-17, `suggestedHome: prompt`). Re-queried fresh
+  at dispatch, pinned to this one `entryId` — 1 row, current-shape (`PRODUCED` edge), matching the
+  brief's text verbatim (`fact`/`evidence`/`context`/`suggestedHome` all confirmed unchanged).
+- **The entry's claim:** when string-replace-inserting a new ledger row adjacent to an existing
+  multi-line-content row in a markdown table, anchor the replace on the **full prior row text**
+  (or a trailing-newline-bounded marker), never on just the row-start prefix — a prefix-only
+  anchor can splice the new row into the middle of an existing row when that row's own long cell
+  content happens to contain a substring matching the anchor prefix, orphaning the rest of that
+  row's content onto the end of the new row's line. Evidence cited: inserting U7's row into the
+  09-16 sweep's ledger using U6's accepted-committed **prefix** text (not its full row) as the
+  anchor spliced U7 into the middle of U6, caught pre-commit by a routine pipe-count check.
+- **Re-verified the evidence directly, not taken on the entry's word.** Read
+  `docs/plans/kaizen-team-distillation-coordination.md:69-75` (the 09-16 sweep's own close-out
+  note): confirms the incident exactly as the entry states it — "an earlier string-replace edit
+  (inserting U7's row using only U6's *prefix* text as the anchor, not its full row) spliced U7's
+  row into the middle of U6's, orphaning the rest of U6's content onto the end of U7's line...
+  Caught by a routine pipe-count sanity check (`tr -cd '|' | wc -c` per row — all 7 should read 8,
+  one read fewer) before this document was ever committed" — and that same passage is the one
+  that names this "worth a kaizen entry for `teco` follow-up." Confirmed this entry is that
+  follow-up, filed the next day (2026-09-17).
+- **Judged against the two existing ledger-editing guards, not assumed either way.** Read
+  `claude/teco/teco.md:89` and `claude/teco/coordination-techniques.md`'s "Editing the
+  coordination ledger" section whole (both, before touching anything). The existing text covers:
+  (a) a scripted replace that asserts nothing no-ops silently, leaving a stale `Status` cell; (b)
+  a *header*-only anchor being unique text yet landing an insertion in the **wrong table** when a
+  document holds two, fixed by "anchor on the last data row of the intended table"; (c) confirming
+  placement afterward by line number, since a cell-count check is blind to location. **None of the
+  three covers this entry's failure mode**, which is distinct on two counts: it happens with a
+  **row** anchor (not a header) inside the **single, correct** table — the U7 incident anchored on
+  U6, the actual last data row, exactly as (b) prescribes — and the corrupting match is not a
+  count-of-1-vs-many problem an occurrence assertion would catch: the prefix resolved to exactly
+  one match, just at the wrong byte position inside the row's own long cell content, because that
+  content happened to contain a recurrence of the anchor substring. "Anchor on the last data row"
+  read literally is satisfied by a bare prefix of that row, which is precisely what caused the
+  bug — the existing guidance names the right row but not what to identify it *by*.
+- **Promoted, not discarded — sharpened the existing "Editing the coordination ledger" section in
+  `claude/teco/coordination-techniques.md`** (same topic, no new section) with a new paragraph
+  stating the full-row-vs-prefix distinction generally, using the U6/U7 incident as its
+  illustration (not tied to unit numbers beyond that one dated example). Word count
+  4,758 → 4,945 (+187 w). **`claude/teco/teco.md` left untouched (8,118 → 8,118, delta 0)** — the
+  brief's own steer (the file's already-over-budget K-016 backlog item) and this file's own
+  Origin note both place on-demand technique depth here, not inline in the always-loaded prompt;
+  the existing one-line pointer at `teco.md:89` already previews the KB section without
+  enumerating its contents, so it needed no edit to stay accurate.
+- **No `MENTIONS` tag needed** — the entry is squarely `teco`'s own coordination-mechanics domain,
+  not substantively about another agent.
+- **Graph:** producer-write shape (real `:Agent`/`PRODUCED` edge, post-M8). Read via
+  `MATCH (a:Agent {agentId:'teco'})-[:PRODUCED]->(k) RETURN k`, pinned to this one `entryId`. Edge
+  count before clearing: 1 `PRODUCED`, 0 `MENTIONS`. Cleared via the curator `DETACH DELETE`
+  (`agent='cobb'`) once this file and `claude/cobb/kaizen/history.md` were written to disk.
+  Post-clear `teco` `PRODUCED` count: 0.
+- **Why:** Standing distillation duty (`agent-maintenance` skill §5) over the shared `kaizen_team`
+  graph — U8 of the pass-2 sweep `docs/plans/kaizen-team-distillation2-coordination.md`.
+- **Plan items:** none opened — the lesson lives in `coordination-techniques.md`, not as an open
+  `plan.md` item.
+
 ## 2026-09-17 — K-030 Stage 0: extracted an on-demand knowledge base, `coordination-techniques.md` (prompt restructure, not a distillation)
 
 - **What:** `cobb` ran K-030 Stage 0 (dispatched by `teco`): `teco.md` was the extreme case that

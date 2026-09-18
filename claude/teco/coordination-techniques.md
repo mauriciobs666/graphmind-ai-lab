@@ -39,6 +39,19 @@ insertion on the last data row of the intended table**; a cell-count check valid
 blind to location. Confirm placement afterwards by **line number** — `grep -n '^| U'` and look for
 the gap — which is the only check that can see it.
 
+That fix has its own way to fail: anchoring on the row's **prefix** rather than its full text. A
+ledger row's own cell content routinely runs to hundreds of words, and can by coincidence contain
+a substring matching another row's opening text — so a prefix-only anchor can match *inside* the
+wrong row's content instead of at the intended row's boundary, splicing the new row into the
+middle of it and orphaning the rest of that row's content onto the end of the newly inserted line,
+even though the anchor still resolved to exactly one match (an occurrence-count assertion does not
+catch this — the match is unique, just in the wrong place). This happened inserting a later unit's
+row using an earlier, already-committed unit's row-start prefix as the anchor; caught only by a
+pipe-per-row count (`tr -cd '|' | wc -c` — every row should carry the same cell count) before the
+document was ever committed. **Anchor on the full text of the row you're inserting after, or a
+trailing-newline-bounded marker — a prefix is never a safe anchor, even when it names the right
+row.**
+
 ## Stating a prior as a prior, not as background fact
 
 Any figure you put in a brief as background — a total, a running tally, a decomposition — is

@@ -245,6 +245,43 @@
   `model-bench/docs/HISTORY.md`/`BACKLOG.md` and root `docs/HISTORY.md`/`BACKLOG.md` not touched
   in any way — this unit produced a discard, not a record of delivered work.
 
+## 2026-09-18 — `kaizen_team` distillation pass 2, U8: `teco` (1 self-produced entry — ledger-row prefix-anchor splice bug) — promoted, sharpened into `coordination-techniques.md`'s existing ledger-editing section
+
+- **What:** ran §5 over the 1 `teco`-produced entry pinned by `teco`'s brief
+  (`docs/plans/kaizen-team-distillation2-coordination.md`, U8): `b2f6a1d4-8e3c-4a7f-9d1b-6c5e2a8f0193`
+  (2026-09-17). Re-queried fresh before touching anything: 1 row, current-shape, matching the
+  brief's text exactly. Full per-entry record: `claude/teco/kaizen/history.md`, 2026-09-18. Files
+  changed: that history; `claude/teco/coordination-techniques.md` (one new paragraph in the
+  existing "Editing the coordination ledger" section); this file. `teco.md` untouched (0 delta).
+- **Judged against `teco.md`'s existing one-line ledger-editing pointer and
+  `coordination-techniques.md`'s existing "assert the match, anchor on a row, not a header"
+  section, per the brief's own instruction not to assume either way.** That existing text covers
+  a non-asserted no-op, and a *header*-unique anchor landing in the wrong *table*. This entry's
+  failure survives both fixes: it anchors on a **row**, in the **correct, single** table, and the
+  anchor still resolves to exactly **one** match — just at the wrong byte position, because the
+  target row's own long cell content coincidentally contains a recurrence of the row-start prefix
+  used as the anchor. An occurrence-count assertion cannot catch a uniquely-matching-but-misplaced
+  anchor; "anchor on the last data row" read literally is satisfied by a bare prefix of that row,
+  which is exactly what caused the incident. Genuinely distinct from the documented failure
+  mechanism (wrong-table vs. wrong-position-within-the-right-table), not subsumed by it.
+  Independently re-read the cited evidence at `docs/plans/kaizen-team-distillation-coordination.md:69-75`
+  and confirmed it matches the entry's account exactly, including that passage's own line naming
+  this "worth a kaizen entry for `teco` follow-up."
+- **Promoted, not discarded: sharpened the existing section (no new heading) with one general
+  paragraph**, illustrated by the U6/U7 incident, stating the full-row-vs-prefix rule and the
+  reason an occurrence-count assertion doesn't catch this shape.
+  `coordination-techniques.md` 4,758 → 4,945 words (+187). `teco.md` left at 8,118 (unchanged) —
+  the file's own Origin note and its already-over-budget K-016 backlog item both place on-demand
+  technique depth in the KB, not inline in the always-loaded prompt; its existing pointer at
+  `teco.md:89` already previews the section without enumerating contents, so needed no edit.
+- **No `MENTIONS` tag needed** — squarely `teco`'s own coordination-mechanics domain.
+- **Graph:** producer-write shape confirmed (real `:Agent`/`PRODUCED` edge). Edge count before
+  clearing: 1 `PRODUCED`, 0 `MENTIONS`. Cleared via the curator `DETACH DELETE` (`agent='cobb'`)
+  only after both kaizen-history files were durably on disk. Post-clear `teco` `PRODUCED` count: 0.
+  Not touched: the deferred `coder` entry `a1c4e6b2…`, the `MENTIONS`-only survivor `e1a6c4d2…`,
+  every other agent's entries. `HISTORY.md`/`BACKLOG.md` (root or any component's) not touched —
+  this unit's disposition is a KB sharpening, not a record of delivered project work.
+
 ## 2026-09-18 — `kaizen_team` distillation pass 2, U2: `analyst` chunk B (6 code facts, model-bench + falkor-chat `CallContext`) — 5 promoted as 3 promotions, 1 kept open in `model-bench/docs/BACKLOG.md`
 
 - **What:** ran §5 over the 6 `analyst` entries pinned by `teco`'s brief
