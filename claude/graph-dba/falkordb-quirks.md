@@ -633,6 +633,24 @@ to the general fact here.
   present and of the sentinel's type. Live use: `falkor-chat`'s `Repository.filter_products`,
   `falkor-chat/docs/QUERIES.md` §15.2.
 
+- **A bare pattern-property equality match, `(n:Label {prop: $param})`, keeps its index scan only
+  when `$param` carries a real value — the identical query text with `$param` bound to literal
+  `NULL` falls back to `Node By Label Scan` + `Filter`, with no `OR`/`coalesce` in sight** (verified
+  2026-09-18, module `41811`, live `EXPLAIN` against `ws:demo`'s indexed `Agent.agentId` — RANGE
+  index confirmed via `db.indexes()`). `EXPLAIN CYPHER producedBy='demo' MATCH (d:Document
+  {documentId:'x'}) OPTIONAL MATCH (pa:Agent {agentId: $producedBy}) RETURN pa` plans
+  `Node By Index Scan | (pa:Agent)`; the same text with `CYPHER producedBy=null` plans
+  `Filter` → `Node By Label Scan | (pa:Agent)`. A different failure mode from the `$param IS NULL OR
+  prop = $param` entry above (that one degrades even with a real value bound; this one is fine with
+  a real value and only degrades on the `NULL` call) — but the same consequence: **a repository
+  method with an optional lookup parameter should branch at the Python layer into two literal query
+  strings (param referenced only in the branch where it's real) rather than always including an
+  possibly-`NULL` parameter in one shared query text**, exactly the `hybrid_search`/`list_documents`
+  discipline this file already documents elsewhere. Surfaced designing the `produced_by`/`Agent`-only
+  resolution branch for `agent-knowledge-base-strategy`'s Track 1 (`falkor-chat/docs/plans/
+  agent-team-ingestion-graph.md` §2) — low-stakes there (the `Agent` label is small), but the same
+  shape recurs anywhere an optional id parameter gates a pattern-property match on an indexed label.
+
 - **A multi-property `OR` — a genuinely different disjunct on each side, not the same property
   repeated — DOES stay index-anchored per disjunct, unlike the single-property `IS NULL OR`
   idiom above; don't conflate the two shapes** (verified 2026-09-11, module `41811`, disposable
