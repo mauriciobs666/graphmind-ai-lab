@@ -2,6 +2,31 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-09-18 — `ops-quirks.md`: `jq` absence + python3 `dict.get()` exact-match lookup (inbound `MENTIONS` promotion, U11)
+
+- **What:** U11 of `docs/plans/kaizen-team-distillation2-coordination.md` — the sweep's 3
+  `MENTIONS`-only orphans (entries whose own `PRODUCED` edge was already resolved in an earlier
+  pass, leaving only a dangling `MENTIONS` edge). `devops` carried one of the three:
+  `a3f1c8e2-6b4d-4e91-9a7c-2d5f8b1e0c93` (2026-09-13).
+- **Verified:** re-derived directly rather than trusting the entry's own citation — `which jq` →
+  exit 1 (absent), `which python3` → `/usr/bin/python3` (present) on this box; `opencode/agents/
+  tank/scripts/lib.sh:39-48` (`resolve_slug()`) confirmed to actually use `json.load()` +
+  `data.get(slug)` exactly as claimed. Also confirmed neither `opencode/agents/tank/README.md` nor
+  `opencode/AGENTS.md` mentioned `jq`/`python3` before this edit (grep, both files) — not already
+  documented elsewhere.
+- **Disposition — promoted** as a new entry in `claude/devops/ops-quirks.md` (1,707→1,842 words):
+  `jq` is not installed on this dev box; a bash script needing exact-match JSON key lookup should
+  use `python3 -c` + `json.load()`/`dict.get()` rather than `jq` or grep/regex parsing —
+  `dict.get()` gives true key equality for free, which matters for a security-relevant exact-match
+  gate. Sited in `devops`'s own KB rather than `opencode/agents/tank/README.md` or
+  `opencode/AGENTS.md`: the lesson is general dev-environment advice (any bash script doing
+  exact-match JSON lookup, on any project), not narrowly `opencode`-scoped, and `devops` is the
+  user-scoped agent that carries forward across projects. Not promoted into the always-loaded
+  `devops.md`/`devops-persona.md` prompt — a tool-availability fact for occasional bash-scripting
+  work, not something that changes behavior in most sessions.
+- **Graph:** counted before mutating — 0 `PRODUCED` / 1 `MENTIONS`, so `otherRemaining = 0 + 1 − 1
+  = 0` ⇒ full-node curator `DETACH DELETE` (not a partial edge-resolve).
+
 ## 2026-09-13 — Persona split for cross-tool sharing with OpenCode's `tank` (U2, `devops-opencode-headless-coordination.md`)
 
 - **What:** `cobb` (U2 of the `tank`-headless-agent coordination, plan

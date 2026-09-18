@@ -154,6 +154,39 @@ to the general fact here.
   `db.idx.vector.queryNodes(…, k, …)` may return fewer than `k` (approximate recall of distant/
   orthogonal candidates). Near neighbors are returned and correctly ordered; don't treat
   "returns exactly k" as an invariant.
+
+  **Refinement — on a tiny, near-duplicate-heavy corpus the shortfall can be total: a `k` many
+  times the true node count can still return ZERO rows, not just "fewer than k"** (verified
+  2026-09-11, module `41811`, disposable `ws:probe_stage_c`/`ws:probe_stage_c2` workspaces, raw
+  `GRAPH.QUERY`/`GRAPH.RO_QUERY CALL db.idx.vector.queryNodes`). An 8-chunk corpus (5
+  near-duplicate + 3 distinct vectors) returned **0 rows** for `k` in
+  `[3,5,6,7,8,9,10,15,20,25,30]` — `k=24` on this 8-node index still returned nothing — 1 row only
+  at `k=32`, and all 8 only at `k>=45` (~5-6x the true node count); a distinct-vector variant of
+  the same corpus recovered gradually with `k` instead (partial at `k=5/8/9`, full only at
+  `k=15`). So near-duplicate/identical vectors make the shortfall worse, and even genuinely
+  distinct vectors under-recall a second, farther cluster of points at small `k`. This made a
+  planned real-FalkorDB end-to-end "hard negative" integration test for `search_documents`'s
+  over-fetch multiplier unreliably flaky; it was replaced with a deterministic FakeRepo-based
+  Services-layer test instead (`falkor-chat/server/tests/test_services.py::
+  test_search_documents_overfetch_prevents_under_fill_when_superseded_chunks_rank_first`).
+  Surfaced building `falkor-chat`'s `document-ingestion2` Stage C `search_chunks`
+  `documentCurrent` post-filter / `search_documents` over-fetch multiplier
+  (`falkor-chat/docs/plans/document-ingestion2.md` §4).
+
+  **Refinement — on an index that is never rebuilt mid-session, the same small-`k` shortfall also
+  emerges gradually from cumulative create+delete CHURN alone, independent of corpus
+  composition** (verified 2026-09-11, module `41811`, dim-4 `Chunk` vector index mirroring
+  `falkor-chat/server/tests/conftest.py`'s `TEST_EMBEDDING_DIM = 4`, default `efRuntime=10`).
+  Recall for `k=4` starts failing roughly 150-200 create/delete cycles into a long-running pytest
+  session; `k=10` survives further out but is still reachable within one long session. Surfaced
+  RCA'ing `document-ingestion2` Stage C test flakiness initially suspected to be the
+  `search_chunks` `WHERE documentCurrent` filter, which turned out instead to be this unrelated,
+  pre-existing test-infra issue — a session-long suite that never rebuilds its vector index
+  accumulates exactly this degradation. **Consequence of both refinements together:** never treat
+  a fixed `k` as safe against a vector index whose corpus is small/near-duplicate-heavy, or that
+  has absorbed substantial create/delete churn without a rebuild — over-fetch by a wide margin
+  (several times the expected true-match count), or rebuild the index before relying on small-`k`
+  recall in a long-running test session.
 - **A value over 4096 bytes written into a `UNIQUE`-constrained property crashes the ENTIRE
   instance — SIGSEGV, not a query error** (verified 2026-08-22 on v4.18.11 / module `41811`, in an
   isolated throwaway container, never against a shared instance). `CREATE`/`MERGE` writing a value

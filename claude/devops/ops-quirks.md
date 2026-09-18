@@ -148,3 +148,15 @@ convincing: one of the two habitual invocation points works.
 
 **Check, don't assume:** `python -c "import <pkg>; print(<pkg>.__file__)"` from the exact
 directory the real command will use. A `git status` in the worktree cannot see this.
+
+## `jq` is not guaranteed present on a dev box — for exact-match JSON key lookup in a bash script, reach for `python3 -c` + `json.load()`/`dict.get()`, not `jq` or a grep/regex scan
+
+Confirmed on this box (WSL2 Linux): `which jq` → exit 1 (absent); `which python3` →
+`/usr/bin/python3` (present). Don't assume a script's `jq`-first fallback chain is safe to rely
+on — plan for the `jq`-absent case as the common one, not the exception. `dict.get()` also gives
+**true key equality for free** — no substring/prefix/glob match, unlike a naive grep/regex scan of
+a JSON blob — which matters whenever the lookup is a security-relevant exact-match gate (a slug
+allowlist, a key whose value feeds a shell command). Worked instance:
+`opencode/agents/tank/scripts/lib.sh`'s `resolve_slug()` reads `environments.json` with
+`json.load()` + `data.get(slug)` for exactly this reason, built test-first for
+`devops-opencode-headless`.

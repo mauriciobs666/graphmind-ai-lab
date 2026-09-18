@@ -2,6 +2,42 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-09-18 — `falkordb-quirks.md`: small-corpus/near-duplicate-vector zero-row ANN recall + create/delete-churn degradation, two refinements on the existing "up to k" entry (inbound `MENTIONS` promotion, U11)
+
+- **What:** U11 of `docs/plans/kaizen-team-distillation2-coordination.md` — 2 of the sweep's 3
+  `MENTIONS`-only orphans (each own `PRODUCED` edge already resolved in an earlier pass, leaving
+  only a dangling `MENTIONS` edge): `c1f3a9e2-6b4d-4b8a-9c7f-2b6a2f0a7e11` and
+  `a1c2e3f4-5b6a-4c7d-8e9f-0a1b2c3d4e5f` (both 2026-09-11, both from `document-ingestion2` Stage C
+  work).
+- **Verified:** re-derived rather than trusting the citations alone — FalkorDB module version
+  still `41811` (`redis-cli MODULE LIST`, unchanged since these were captured), `TEST_EMBEDDING_DIM
+  = 4` confirmed at `falkor-chat/server/tests/conftest.py:32` (matches `c1f3a9e2`'s "dim 4"
+  claim), and `test_search_documents_overfetch_prevents_under_fill_when_superseded_chunks_rank_first`
+  confirmed present at `falkor-chat/server/tests/test_services.py:1403` (matches `a1c2e3f4`'s
+  cited replacement test). Did **not** re-run the underlying live vector-recall probes: both
+  entries already carry detailed, internally consistent empirical tables (exact `k` values tried,
+  exact row counts returned at each) from throwaway `ws:probe_stage_c`/`ws:rca_churn_probe`
+  workspaces built specifically to measure this — re-deriving those numbers from scratch would
+  mean re-running a long churn probe for a fact already precisely measured once; verification here
+  corroborates the surrounding claims (build version, cited files/tests) rather than re-running
+  the experiment itself.
+- **Coverage check:** `falkordb-quirks.md` already carried one thin, related bullet — "ANN kNN
+  returns *up to* `k`, not exactly `k` ... may return fewer than `k`" — but nothing capturing
+  either the **severity** (zero rows at a `k` many times the true node count) or the
+  **churn-driven** degradation mechanism; neither new entry duplicates existing content.
+- **Disposition — both promoted, as two `Refinement —` paragraphs on the existing bullet**
+  (11,824→12,155 words), not as two new standalone bullets: both are about the same underlying
+  unreliability (small-`k` ANN recall on this build is not a safe invariant) and share one
+  practical consequence (over-fetch by a wide margin, or rebuild the index, before trusting
+  small-`k` recall) — splitting them into separate entries would have duplicated that framing and
+  consequence twice. `c1f3a9e2`'s near-duplicate-vector zero-row finding and `a1c2e3f4`'s
+  churn-degradation finding remain each their own paragraph with its own verification stamp, since
+  they are distinct trigger mechanisms (static corpus composition vs. cumulative churn) — only the
+  shared framing and consequence sentence are merged.
+- **Graph:** counted before mutating — both entries read 0 `PRODUCED` / 1 `MENTIONS`, so
+  `otherRemaining = 0 + 1 − 1 = 0` for each ⇒ full-node curator `DETACH DELETE` (not a partial
+  edge-resolve).
+
 ## 2026-09-17 — one `coder`-produced FOREACH/CREATE scoping gotcha added to `falkordb-quirks.md`
 
 - **What:** `cobb` distilled `coder`'s `kaizen_team` inbox (scoped, one-producer pass; full
