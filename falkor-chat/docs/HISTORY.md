@@ -5,6 +5,33 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-18 — FalkorDB graph cleanup: spent probes, closed QA workspaces, and the `ws:acme` orphan `v6` snapshot
+
+**What:** teco-coordinated cleanup of the shared FalkorDB instance, at the stakeholder's request
+(RAM cost of leaving spent graphs resident). Three actions, all independently verified via
+`GRAPH.LIST`/node-count checks before and after:
+
+1. Deleted the 7 spent probe/scratch graphs `docs/plans/salesperson-ui-coordination.md` §"Outstanding
+   cleanup for the stakeholder" had flagged back on 2026-09-16 and left unexecuted:
+   `probe_u8_rename_dst`, `ws:probe-s0-reset`, `ws:probe-s0r2`, `ws:probe-s0r3`, `ws:probe-s4b`,
+   `ws:s1v6`, `ws:s1v7` (the `ws:s1v6` hold-until-S1c-closes condition that doc noted is satisfied —
+   the whole salesperson-ui feature closed at S16, 2026-09-16, above).
+2. Removed the orphan `salesperson@v6` `WorkflowDefSnapshot` from the live `ws:acme` workspace (2
+   `Step` nodes, 4 edges total) — the reverted K-060 experiment's stray copy that the same section
+   flagged as "the stakeholder's call, not mine." Confirmed zero `WorkflowRun`/`StepRun` bindings
+   before deleting; confirmed the `v7` snapshot (currently shipped) and everything else in `ws:acme`
+   byte-for-byte unchanged after. `falkor-chat/AGENTS.md`'s `v6`-burned trap note updated to stop
+   describing the now-removed stray as present.
+3. Deleted 12 closed QA-pass/scratch workspaces whose evidentiary value is already captured in their
+   own test-reports: `ws:qa-cart-totals`, `ws:qa-cart-totals2`, `ws:qa-catalog-lookup`,
+   `ws:qa-catalog-lookup2`, `ws:qa-durable-profile`, `ws:qa-salesperson-demo`,
+   `ws:qa-tico-workflows-manual`, `ws:qa028`, `ws:qa_s9`, `ws:docingest2qa`, `test`, `ws:test`.
+
+**Left untouched (still live/active):** `cpg_falkorchat`, `kaizen_team`, `reference`, `ws:acme`,
+`ws:demo`, `ws:agent-team`, `ws:eval`, `ws:nlq-eval`. (`cpg_deprecated_salesperson`'s removal is a
+separate decision, recorded in root `docs/HISTORY.md` — it belongs to the `cpg/` component, not
+this one.)
+
 ## 2026-09-16 — salesperson-ui S16: docs close-out
 
 **What:** Closed the salesperson-ui feature's final plan step (`docs/plans/salesperson-ui.md`

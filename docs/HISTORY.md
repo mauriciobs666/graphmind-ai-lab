@@ -5,6 +5,30 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-09-18 — `cpg_deprecated_salesperson` deleted; skill-doc/script references corrected
+
+**What:** teco-coordinated FalkorDB cleanup, at the stakeholder's explicit request (RAM cost —
+FalkorDB/Redis keeps every graph resident in memory, and the ~17,550-node CPG served no purpose
+beyond being a documentation example). This **reverses** the standing decision recorded in
+`docs/plans/salesperson-ui-coordination.md:386-392` (2026-09-02): "not deleted: a drop is
+destructive and irreversible... keeping it costs nothing but ~17.5k nodes of RAM." That note is
+now superseded by this entry, not edited in place (the coordination doc is `Status: archived`). Not
+literally irreversible either way — `deprecated/salesperson/`'s source is retained, so `graph-dba`
+can rebuild the CPG via Joern if it's ever needed again.
+
+`cobb` corrected every living reference that cited the graph as a currently-queryable example,
+reframing each as historical rather than inventing a replacement: `skills/cpg-analysis/references/
+freshness.md` (the "stale, not rebuildable on demand" pattern's worked example, and the hand-
+backfilled-marker key list), `skills/joern-cpg/references/cpg-model.md` (the absent-Joern-labels
+caveat, now noting the finding is historical evidence from two independent builds rather than a
+claim checkable against two live graphs today), and matching comments in `skills/joern-cpg/scripts/
+pipeline.sh` and `git-provenance.sh`. Dated, frozen historical records (reviews, test-reports,
+kaizen history) that merely reported the graph's past existence were correctly left untouched.
+Commit `6d73a1e`.
+
+The rest of that day's cleanup (spent probe graphs, closed QA workspaces, an orphan workflow-def
+snapshot) is `falkor-chat`'s own — `falkor-chat/docs/HISTORY.md`, same date.
+
 ## 2026-09-12 — M9: Cypher MCP tool surface — direct in-tool graph discovery (C-901, C-902) ✅
 
 `mcp__cypher__query` gains a fourth directive, `GRAPHS` (alongside `EXPLAIN`/`PROFILE`), that lists

@@ -93,9 +93,9 @@ overridden explicitly. `start_server.sh` already passes 1024.
 `config.model` are **create-only** — changing any of them requires a new version, and every new
 version must repeat `config.model` or the `assistant` step silently falls back to the shared role
 default (`qwen/qwen3-4b-2507`) and undoes K-056's Ministral re-point. Topology is byte-identical
-across versions, so a bump never hits K-034's `409`. (2) **`v6` is burned** — materialized into
-`ws:acme` from a reverted K-060 experiment and, `config` being create-only, not overwritable
-there; never reuse it. (3) **`salesperson` is chat-triggered, not startable via a bare
+across versions, so a bump never hits K-034's `409`. (2) **`v6` is burned** — denoted a reverted K-060 experiment; the stray copy it left in `ws:acme`
+(`config` create-only, so unfixable in place) was removed in a 2026-09-18 graph cleanup
+(`docs/HISTORY.md`), but the version number itself stays retired; never reuse it. (3) **`salesperson` is chat-triggered, not startable via a bare
 `POST /workflow-runs`** (no trigger message ⇒ no thread for `post_message`) — point
 `FALKORCHAT_TRIGGER_DEF_KEY`/`_VERSION` at it and `@mention` the demo agent. `order-fulfillment`
 starts over REST; advancing `Order.status` is a separate `services.advance_order` call, not a
