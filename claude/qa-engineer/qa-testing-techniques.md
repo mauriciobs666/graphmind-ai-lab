@@ -264,3 +264,20 @@ current `sim.py`; the reusable lesson is the test-design gap, not the bug instan
 generate adversarial values for *every* parameter the contract covers independently — including a
 "routing"/key-like parameter a test author's intuition treats as always well-formed — not just the
 ones that look like "the interesting input."
+
+## A hand-reclassification spot-check's corrected-metric estimate is a good predictor of the eventual measured rate — worth doing even when a full re-score is infeasible
+
+When a full re-score of every item isn't practical, hand-reclassifying just the false negatives a
+spot-check surfaces and reporting the corrected metric that implies is more than a severity
+gesture — it predicts what a real fix will later measure closely enough to be worth stating as a
+number, not just a qualitative "probably worse than reported." `model-bench` S7
+`chat-responder`: hand-reclassifying 9 of 15 `groundingRate` false negatives put the true rate at
+"closer to 24/30 (0.80) than the reported 15/30 (0.500)"
+(`docs/test-reports/small-model-benchmarking-s7-report.md`); after a 4-round fix chain
+(U173-U177) closed the abstention-detection defect, an independent fresh live re-run measured
+`groundingRate` at 23/30 (0.767) — within one item of the spot-check's own estimate
+(`docs/HISTORY.md`, S7 close-out).
+
+**Technique:** report the spot-check's corrected estimate as an explicit number, not a hedge — it
+gives the eventual fix's re-run something falsifiable to confirm or refute, and is worth doing
+even when reproducing every item live is too expensive for the pass at hand.

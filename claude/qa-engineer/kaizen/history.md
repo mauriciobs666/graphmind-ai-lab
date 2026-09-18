@@ -2,6 +2,65 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-09-18 — `kaizen_team` distillation pass 2, unit U4: 2 entries — both promoted (1 to `model-bench/AGENTS.md`, 1 to this file), 1 corrected on re-derivation
+
+- **What:** `cobb` ran `agent-maintenance` skill §5 over the 2 `qa-engineer`-produced entries
+  pinned by `teco`'s brief (`docs/plans/kaizen-team-distillation2-coordination.md`, U4):
+  `c2e40890-5f35-45cb-9c6c-9501f93e3959` (model-bench stored run records never persist raw reply
+  text; `compare --negative-control` duplicates one record) and
+  `5a2b5130-8c8a-4ca3-af19-e16f1dbec024` (a hand-reclassification spot-check's corrected estimate
+  predicts the eventual measured rate). Both current-shape (`PRODUCED` edges only; legacy read not
+  needed). Both cells paged past the MCP tool's 300-char truncation before dispositioning
+  (`c2e40890`'s `fact` was 614 chars, `evidence` 393; `5a2b5130`'s `fact` was 353 chars — none of
+  the truncated tails changed the disposition, but the negative-control mechanics half of
+  `c2e40890`'s tail is exactly where the correction below lives).
+- **`c2e40890` → promoted to `model-bench/AGENTS.md`'s "Load-bearing invariants" section, two
+  paragraphs — one claim corrected on re-derivation, not carried verbatim.** Re-confirmed
+  directly: read both stored `chat-responder-grounded-answers` run JSONs in full — `items[].detail`
+  carries only `{abstained, checklistPass, wordCount}`, no `message`/`content`/`reply` field
+  anywhere, and `results.py`'s `RunResult`/`ItemResult` schema has no reply-text field either. The
+  "auditing after the fact needs a fresh live call" half promoted as stated. **The `_select_arms`
+  half was wrong as stated, and the error was not the entry's own invention — it echoes
+  `docs/test-reports/small-model-benchmarking-s7-report.md:78`'s claim that `--negative-control`
+  "selects the newest matching stored record."** Ran `_select_arms` directly (`.venv/bin/python3`,
+  live import) against the real 4-record `chat-responder-grounded-answers` history using the exact
+  invocation the S7 acceptance test itself used (`--session s7-live`, no `--models`) and got the
+  **oldest** of the two matching records (`...T18:19:18Z`, not `...T18:19:41Z`) —
+  `results.load_history` sorts `directory.glob("*.json")` ascending by filename/timestamp, and
+  `_select_arms` takes unfiltered `candidates[0]` unchanged whenever no `--models` filter runs.
+  Only when `--models` is given does the dict-comprehension dedup (`by_key = {r.modelKey: r for r
+  in candidates}`) pick the **last-stored** (newest) run for that key — confirmed by running that
+  case too (`...T21:04:47Z`, the newest of all four). The promoted text states both branches
+  instead of the single "newest" claim the source report and the graph entry both got wrong. Same
+  defect class as the U1 gate's finding on the `analyst` chunk (a citation read as verbatim when it
+  misdescribes the code) — here the entry's own cited source carried the error, so confirming the
+  citation existed (rather than re-running the function) would have shipped a false absolute into
+  `AGENTS.md`.
+- **`5a2b5130` → promoted to `claude/qa-engineer/qa-testing-techniques.md`** (new section, end of
+  file): a hand-reclassification spot-check's corrected estimate is a good predictor of the
+  eventual measured rate. Both figures re-derived against `model-bench/docs/HISTORY.md`'s S7
+  close-out entry ("2026-09-17 — U165–U178 — S7 closed"), not trusted from the graph entry: item 5
+  states the original spot-check reclassified 9 of 15 `groundingRate` failures to estimate "closer
+  to 24/30 (0.80) than the reported 15/30 (0.500)"; item 7 states the fresh live re-run (U178)
+  measured `groundingRate` 23/30 (0.767) — matching the entry's own arithmetic exactly (24
+  estimated vs. 23 measured, "within one item"). Kept in this agent's own KB rather than promoted
+  to project docs — it's a QA methodology technique with no code claim about model-bench itself.
+  Read the entry's own `suggestedHome: prompt` as "the technique KB, not the always-loaded prompt
+  file" — the prompt bar (changes behavior/routing in *most* sessions) isn't met by a technique
+  used only when a full re-score is infeasible.
+- **No `MENTIONS` tags** — both are qa-engineer's own live-QA findings; neither is substantively
+  about another agent's behavior.
+- **Dedup check:** grepped `plan.md` and this file for both entry ids before writing — neither
+  appears; no prior distillation pass opened an item for either.
+- **Graph:** both entries carried exactly 1 `PRODUCED` edge, 0 `MENTIONS` ⇒ `otherRemaining = 0`
+  for each ⇒ full-node `DETACH DELETE`, run only after both file edits above were confirmed on
+  disk. Post-clear: `qa-engineer` `PRODUCED` → 0 rows (re-verified read-only).
+- **Docs touched:** `model-bench/AGENTS.md` (2,035→2,244 w) · `claude/qa-engineer/
+  qa-testing-techniques.md` (3,027→3,210 w) · this file. `HISTORY.md`/`BACKLOG.md` in either
+  component untouched — record-of-work only, not applicable to either promotion.
+- **Plan items:** none opened — both entries had a direct, concrete promotion target; nothing kept
+  open.
+
 ## 2026-09-16 — standing distillation pass, scoped to `qa-engineer` only: 7-entry inbox, 4 promoted, 3 discarded (U5)
 
 - **What:** `cobb` ran the standing kaizen-graph distillation over all 7 `qa-engineer`-produced

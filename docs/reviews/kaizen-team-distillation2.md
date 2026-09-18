@@ -573,3 +573,131 @@ nothing new for it" into its own sentence costs nothing and reads better. Take o
 None blocking. For `teco`: the Minor is one clause in one sentence of `SERVER.md`; no re-gate needed —
 a diff of that sentence suffices. Sequencing note from §U2 stands resolved by `cobb`'s wording
 (nothing uncommitted is named), so U3 can commit ahead of the concurrent `mcp.py` work.
+
+## U4 — `qa-engineer` (2026-09-18)
+
+### Scope & verdict
+
+Reviewed `cobb`'s uncommitted diff (`git diff 2513f0e -- <path>`, baseline `2513f0e`, never `HEAD`)
+for U4: the distillation of the 2 `qa-engineer`-produced entries `c2e40890-5f35-45cb-9c6c-
+9501f93e3959` (stored run records never persist raw reply text; `compare --negative-control`
+duplicates one stored record as both arms) and `5a2b5130-8c8a-4ca3-af19-e16f1dbec024` (a
+hand-reclassification spot-check's corrected estimate predicts the eventual measured rate). Four
+files, all read whole around the hunks: `model-bench/AGENTS.md` (two new "Load-bearing invariants"
+paragraphs), `claude/qa-engineer/qa-testing-techniques.md` (one new final section),
+`claude/qa-engineer/kaizen/history.md`, `claude/cobb/kaizen/history.md`. Not reviewed (concurrent
+session's work, irrelevant to this unit anyway): `falkor-chat/server/**`, `falkor-chat/AGENTS.md`,
+`claude/graph-dba/falkordb-quirks.md`, the untracked `falkor-chat/`/`claude/docs/plans/` files. The
+2 source nodes are already cleared; promotions were judged against the current tree, git history,
+and live execution, not against the deleted entries.
+
+**Verdict: approve** — no Blocker, no Major, no Minor. Every claim in both promoted paragraphs and
+both disposition records re-derives, including the one genuinely corrected mechanics claim (see
+What's solid); the KB-vs-prompt routing call is right per the skill's own written bar; the
+bookkeeping mechanics (word counts, dedup, no `HISTORY.md`/`BACKLOG.md` touch, no duplicate
+headings, ordering) all check exactly.
+
+**CPG: considered, not relevant — the diff is documentation-only but both promotions assert code
+facts (a dataclass schema, a CLI function's branching behavior); no CPG freshness claim was made
+in the brief, so each fact was verified by direct source reads pinned to the working tree
+(`modelbench/results.py`, `modelbench/cli.py`) plus live execution of the actual code against real
+stored records under `model-bench/results/runs/` — evidence a CPG could not supply for a
+behavioral/branching claim like this one.**
+
+### Findings
+
+None. Every checked claim held.
+
+### Gate questions, with what was run
+
+1. **Word-count deltas.** `git show 2513f0e:model-bench/AGENTS.md | wc -w` = 2,035, working tree =
+   2,244 (exact match). `git show 2513f0e:claude/qa-engineer/qa-testing-techniques.md | wc -w` =
+   3,027, working tree = 3,210 (exact match).
+2. **Duplicate headings.** `grep -n '^## ' <file> | sort | uniq -d` and the adjacent-duplicate
+   `awk` scan: 0 hits on all four touched files.
+3. **Dedup.** `git show 2513f0e:claude/qa-engineer/kaizen/history.md` and `…cobb/kaizen/history.md`
+   both grep 0 for `c2e40890` and `5a2b5130` — neither id pre-existed in either history file.
+4. **`HISTORY.md`/`BACKLOG.md` untouched.** `git diff 2513f0e --stat -- model-bench/docs/
+   HISTORY.md model-bench/docs/BACKLOG.md claude/qa-engineer/kaizen/plan.md claude/qa-engineer/
+   qa-engineer.md` → empty. `git status --short model-bench/ claude/qa-engineer/ claude/cobb/` →
+   exactly the four claimed files. Judged the routing call itself, not just the mechanical check:
+   both promotions are present-tense facts about how the system behaves (a schema's field set, a
+   CLI function's branch selection; a QA technique's predictive value), not records of work
+   performed — `HISTORY.md`/`BACKLOG.md` would be the wrong home for either, and root `AGENTS.md`'s
+   own distinction ("a live constraint on the system" vs. "a record of work") backs that call.
+5. **The `_select_arms`/`load_history` mechanics claim, reproduced live, not trusted from either
+   citation.** Read `modelbench/cli.py:161-186` (`_select_arms`) and `modelbench/results.py:993-
+   1014` (`load_history`, `sorted(directory.glob("*.json"))` — ascending filename order) directly.
+   Four real stored records exist under `model-bench/results/runs/` for `chat-responder-grounded-
+   answers`/`qwen/qwen3-4b-2507`, two tagged `sessionId="s7-live"` (`…T18:19:18Z`, `…T18:19:41Z`)
+   and two `sessionId="s7-live-v2"`. Ran `_select_arms` live via `.venv/bin/python3` against
+   `load_history`'s real output, both branches: `models=None, session="s7-live"` → returns
+   `[…T18:19:18Z, …T18:19:18Z]`, the **oldest** of the two matching records — not the newest,
+   confirming the correction and *refuting* the original `docs/test-reports/small-model-
+   benchmarking-s7-report.md:78` claim ("it selects the newest matching stored record") the entry
+   had echoed; `models="qwen/qwen3-4b-2507", session="s7-live"` → `[…T18:19:41Z, …T18:19:41Z]`, the
+   newest of the two, via the dict-comprehension dedup keeping the last-stored value. Also ran
+   `models=…, session=None` (all four candidates) → returns `…T21:04:47Z` (the newest of all four),
+   matching `cobb`'s history bullet's own third data point exactly. All three results match
+   `cobb`'s history entry and the promoted `AGENTS.md` text byte-for-byte on every timestamp and
+   every mechanism named (`by_key = {r.modelKey: r for r in candidates}`, last value wins; ascending
+   filename order otherwise).
+6. **The reply-text schema claim.** Read `ItemResult`/`RunResult` in `modelbench/results.py:342-
+   372, 677-702` directly: fields are `itemId`, `pairingKey`, `outcome`, `scoreable`, `counts`,
+   `timing`, `measures`, `detail` (`Mapping[str, Any]`) — no `message`/`content`/`reply` field.
+   Read a real stored record's `items[].detail` — exactly `{abstained, checklistPass, wordCount}`,
+   as claimed. `grounding.build_messages`, `modelbench.packs.load_pack`, `LMStudio.chat` all exist
+   at the cited signatures (`grounding.py:198`, `packs.py:490`, `lmstudio.py:546`); the "never a
+   read of `results/runs/*.json`" practice is the S7 report's own recorded discipline
+   (`docs/test-reports/small-model-benchmarking-s7-report.md:170-171,316-317,435-437`), not
+   invented for this promotion.
+7. **The `5a2b5130` figures.** `model-bench/docs/HISTORY.md` S7 close-out item 5: "closer to 24/30
+   (0.80) than the reported 15/30 (0.500)" (9 of 15 `groundingRate` failures reclassified); item 7
+   (U178): fresh live re-run measured `groundingRate` 23/30 (0.767). Both match the promoted
+   `qa-testing-techniques.md` section exactly, including "within one item." The S7 report's own
+   text (`:262`, `:428`) calls the same reclassifications "9 of 15 failures"/"9 false-negative
+   reclassifications" — the promoted section's "9 of 15 … false negatives" phrasing is the source's
+   own wording, not a drift.
+8. **KB-vs-prompt routing for `5a2b5130`.** `skills/agent-maintenance/SKILL.md:509-510`: "The
+   agent's always-loaded prompt — only if it changes behavior or routing in most sessions. Highest
+   bar: every session pays tokens for it." A technique that applies only when a full re-score is
+   infeasible does not clear that bar; routing to the on-demand `qa-testing-techniques.md` KB
+   instead of `qa-engineer.md` (confirmed untouched) is the correct call per the skill's own written
+   line, overriding the entry's raw `suggestedHome: prompt` field for a documented reason — the
+   same "suggestedHome is an input, not a mandate" pattern U1-U3 already established.
+9. **Placement and ordering.** Both new `AGENTS.md` paragraphs sit at the end of "Load-bearing
+   invariants," same bold-lead/present-tense/code-cited shape as their four peers immediately
+   above; the new `qa-testing-techniques.md` section is appended at file end, same shape as its
+   neighbours. Both history entries are prepended above all other same-day 2026-09-18 entries in
+   their respective files (`grep -n '^## 2026-09-18'` shows U4 second from the top in `cobb`'s
+   file, after U3 and before U2/U1) — the same insertion pattern U1→U2→U3 already established, not
+   a new defect.
+10. **Graph state.** Brief states both `entryId`s are already cleared; not independently re-queried
+    (out of scope per the brief — "you're reviewing the bookkeeping/promotion record and file
+    diffs, not the graph").
+
+### What's solid
+
+- The pass's one real catch (`_select_arms`/`load_history`) is a genuine, non-obvious correction of
+  a wrong claim that had already shipped once, in a closed test report, and re-confirmed the entry
+  had merely repeated rather than invented it — independently reproduced here byte-for-byte on
+  every branch and timestamp, exactly the discipline root `AGENTS.md`'s citation-scope rule asks
+  for (verify the whole interaction the claim spans, not the half that reads plausibly).
+- The reply-text schema paragraph is fully grounded: the dataclass fields, a real record's `detail`
+  shape, and every named helper function all exist exactly as cited, and the "never read the stored
+  artifact" discipline is lifted from the S7 report's own recorded practice rather than asserted
+  fresh.
+- The KB-vs-prompt routing call for `5a2b5130` correctly applies the skill's own written bar rather
+  than the entry's raw `suggestedHome` field, and correctly leaves `HISTORY.md`/`BACKLOG.md` alone
+  in a closed component for two facts that are methodology/mechanics, not records of work.
+- The disposition records in both `history.md` files are honest about the correction (they don't
+  quietly fix the claim and cite it as if it were right from the start) and name the exact evidence
+  (timestamps, flag combinations) needed to re-run the check, which is what let this gate reproduce
+  it independently rather than re-trust it.
+- Bookkeeping is exactly as claimed on every mechanical axis checked: word counts, no duplicate
+  headings, no pre-existing ids, no stray files touched, no `MENTIONS` tags (correctly — both are
+  qa-engineer's own findings about model-bench, not about another agent).
+
+### Open questions
+
+None. No re-gate needed — verdict is approve outright, nothing to fix.

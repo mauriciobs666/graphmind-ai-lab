@@ -115,6 +115,26 @@ split reads the decimal point as a sentence end, truncating whatever span was sc
 and silently reopening the abstention-detection misclassification the span exists to prevent. A new
 same-sentence heuristic reuses that regex; a second boundary definition is a second copy of the bug.
 
+**A stored run record never persists a model's raw reply text — auditing a scorer's verdict against
+a real reply after the fact needs a fresh live call, never a read of `results/runs/*.json`.**
+`RunResult`/`ItemResult` keep only `outcome`, `scoreable`, `counts`, and a scorer-defined `detail`
+block (grounding's is `{abstained, checklistPass, wordCount}`) — no `message`/`content`/`reply`
+field exists anywhere in the schema. Reproducing a real reply for a spot-check means calling the
+harness live with the same inputs — `modelbench.packs.load_pack` for the pack, the scorer's own
+`build_messages` (e.g. `grounding.build_messages`), and `modelbench.lmstudio.LMStudio.chat`, same
+model/pack/prompt/`temperature: 0.0` — never the stored artifact
+(`docs/test-reports/small-model-benchmarking-s7-report.md`).
+
+**`compare --negative-control` always duplicates exactly one already-stored run record as both
+arms — never two independently-run invocations, even when two live runs share a session.**
+`cli.py`'s `_select_arms` returns `[candidates[0], candidates[0]]`; which record survives as
+`candidates[0]` depends on the other flags. `--models` dedups by model key keeping the
+**last-stored** (newest) run for that key (`by_key = {r.modelKey: r for r in candidates}`, last
+value wins); with only `--session`, or no model/session filter at all, the filtered list keeps
+`load_history`'s ascending filename order, so `candidates[0]` is instead the **oldest** matching
+run. Either way the mode's purpose is unaffected — a wiring smoke check where `b = c = 0` by
+construction, never a real comparison.
+
 ## Hard rules (they are design constraints, not preferences)
 
 - **Zero runtime dependencies.** stdlib only — `urllib.request` for HTTP (falkor-chat's own

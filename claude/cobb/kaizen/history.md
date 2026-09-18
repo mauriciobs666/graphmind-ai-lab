@@ -55,6 +55,53 @@
   measuring the final count). Nits: architect history's `:1804-1820` → `:1803-1820`; split the
   run-on sentence. The two Infos left exactly as the gate scoped them (not requested, not applied).
 
+## 2026-09-18 — `kaizen_team` distillation pass 2, U4: `qa-engineer` (2 model-bench facts) — 1 promoted to `model-bench/AGENTS.md` with a mechanics claim corrected, 1 promoted to this agent's own KB
+
+- **What:** ran §5 over the 2 `qa-engineer` entries pinned by `teco`'s brief
+  (`docs/plans/kaizen-team-distillation2-coordination.md`, U4): `c2e40890` (stored run records
+  never persist raw reply text; `--negative-control` duplicates one stored record) · `5a2b5130` (a
+  hand-reclassification spot-check's corrected estimate predicts the eventual measured rate). Full
+  per-entry record: `claude/qa-engineer/kaizen/history.md`, 2026-09-18. Files changed: that
+  history; `model-bench/AGENTS.md` (two new "Load-bearing invariants" paragraphs); `claude/
+  qa-engineer/qa-testing-techniques.md` (one new section); this file. Word deltas (baseline
+  `2513f0e`, never `HEAD`): `AGENTS.md` 2,035 → 2,244; `qa-testing-techniques.md` 3,027 → 3,210.
+  `qa-engineer.md` and `plan.md` untouched — no entry cleared the always-loaded-prompt bar, and
+  nothing was kept open (the brief's own instruction: touch `plan.md` only if something is).
+- **The pass's one real catch: `c2e40890`'s own citation was itself wrong, not just untraced.**
+  The entry says `--negative-control` "duplicates ONE newest-matching stored record," echoing
+  `model-bench/docs/test-reports/small-model-benchmarking-s7-report.md:78`'s claim verbatim. Ran
+  `_select_arms` live (`model-bench/.venv`) against the real 4-record `chat-responder-grounded-
+  answers` history, first with the exact flags the S7 acceptance test used
+  (`--session s7-live`, no `--models`): result was the **oldest** matching record
+  (`...T18:19:18Z`), not the newest (`...T18:19:41Z`) — `results.load_history` sorts
+  `directory.glob("*.json")` ascending, and `_select_arms` returns unfiltered `candidates[0]`
+  whenever no `--models` filter runs. Ran it again with `--models` given: **that** branch does
+  pick the newest, via a dict-comprehension dedup where the last-stored run wins. So "newest" is
+  half-true, condition on a flag nobody's citation named. This is the U1 gate's defect class
+  (a citation that reads as verbatim and misdescribes reality) with a twist: here the citation was
+  a project document, not the graph entry's own guess, so confirming the entry against its source
+  would have passed a live check while still shipping a false absolute. Promoted text states both
+  branches; did not touch the S7 report itself (out of scope, a closed test-report, by-lookup not
+  by-whole-read).
+- **`5a2b5130` re-derived against `model-bench/docs/HISTORY.md`'s S7 close-out, not the graph
+  entry's own arithmetic** — items 5 and 7 (2026-09-17) independently confirm both figures (24/30
+  estimate from 9 reclassified false negatives; 23/30 measured on the post-fix live re-run),
+  matching the entry exactly. Routed to `qa-testing-techniques.md` per the brief's steer, reading
+  the entry's own `suggestedHome: prompt` as "the technique KB," not the always-loaded prompt file
+  — the bar for the latter (changes behavior in *most* sessions) isn't met by a technique for the
+  infeasible-full-re-score case specifically.
+- **Neither `HISTORY.md` nor `BACKLOG.md` touched, in either component** — both promotions are
+  durable/methodology facts, not records of work; the brief flagged this explicitly given
+  model-bench is closed (S0–S8).
+- **Graph ops:** one edge-count read per `entryId` (`producedEdges=1, mentionEdges=0` each), one
+  curator `DETACH DELETE` per `entryId`, both after every file edit was on disk; no `MENTIONS` tag
+  (both are qa-engineer's own findings, neither substantively about another agent). Post-clear:
+  `qa-engineer` `PRODUCED` → 0 rows. Not touched: the `MENTIONS`-only survivor `e1a6c4d2…`→`tico`,
+  every other agent's entries, and every dirty/untracked file of the concurrent falkor-chat
+  session (`falkor-chat/server/**`, `falkor-chat/AGENTS.md`, `claude/graph-dba/
+  falkordb-quirks.md`, the untracked `falkor-chat/docs/plans/`/`falkor-chat/scripts/`/
+  `claude/docs/plans/` files) — no falkor-chat fact was needed for this unit.
+
 ## 2026-09-18 — `kaizen_team` distillation pass 2, U2: `analyst` chunk B (6 code facts, model-bench + falkor-chat `CallContext`) — 5 promoted as 3 promotions, 1 kept open in `model-bench/docs/BACKLOG.md`
 
 - **What:** ran §5 over the 6 `analyst` entries pinned by `teco`'s brief
