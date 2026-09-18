@@ -8,6 +8,10 @@
         "FALKORDB_PORT": "6379"
       },
       "timeout": 60000
+    },
+    "falkor-chat-agent-team": {
+      "type": "streamable-http",
+      "url": "http://localhost:8200/mcp"
     }
   }
 }
