@@ -394,11 +394,20 @@ identifying it); tagging a different agent onto an entry, editing, or
 clearing one all require the curator role below. The maintainer (cobb)
 distills — on request, and folded into every certification pass (§4):
 
-1. **Read the team-wide graph.** Two queries, needed **side by side for as
-   long as any pre-M8 entry remains uncleared** — once every legacy entry has
-   been cleared through step 4 below, the legacy query permanently returns
-   nothing and can eventually be dropped, but don't drop it while any legacy
-   entry still exists (`docs/plans/kaizen-agent-ontology-graph.md` §7):
+1. **Read the team-wide raw capture.** Two `kaizen_team` queries, needed
+   **side by side for as long as any pre-M8 entry remains uncleared** — once
+   every legacy entry has been cleared through step 4 below, the legacy query
+   permanently returns nothing and can eventually be dropped, but don't drop
+   it while any legacy entry still exists (`docs/plans/
+   kaizen-agent-ontology-graph.md` §7) — plus a **third, separate read
+   source**, `ws:agent-team` (below), needed *alongside* these two for as long
+   as any agent's raw capture is still landing there rather than in
+   `kaizen_team`. That's the case today: Track 1's write-convention rollout
+   (`claude/docs/plans/agent-knowledge-base-strategy.md` §3 Stage 4) is a
+   pilot, not a team-wide cutover — only `cobb`/`teco` currently write to
+   `ws:agent-team`, every other agent still writes to `kaizen_team` — so which
+   of the three sources holds a given entry depends on which agent produced
+   it and when, not on one global switch:
    - **Legacy read** (pre-M8 entries — `author` property, no edges):
      `mcp__cypher__query(graph='kaizen_team', cypher="MATCH (e:KaizenEntry)
      RETURN e.entryId, e.date, e.fact, e.evidence, e.context, e.suggestedHome,
@@ -425,9 +434,31 @@ distills — on request, and folded into every certification pass (§4):
      either `OPTIONAL MATCH` to traverse, so it is silently absent from this
      query — expected under FR-2's no-retrofit rule, not a gap; the legacy
      read above is what still reaches it.
+   - **`ws:agent-team` read** (entries produced via Track 1's write-convention
+     pilot, §3 Stage 4/5 above): `mcp__falkor-chat-agent-team__list_documents()`
+     (default `current_only=True`, `limit=50`) on the dedicated
+     `falkor-chat-agent-team` MCP server lists every current document's
+     `documentId`/`title`/`ingestedByKind`/`ingestedById`/`status`;
+     `mcp__falkor-chat-agent-team__get_document(document_id)` fetches one
+     document's verbatim `text`. `ingestedById` is this source's
+     producer-identity field — the direct analogue of `kaizen_team`'s
+     `:Agent`/`PRODUCED` edge (§4.1 of the plan above: `produced_by` resolves
+     only against a real `Agent` node, raising `AgentNotFoundError` rather
+     than silently falling back, so `ingestedById` is trustworthy the same
+     way `PRODUCED` is). No `agent`/authorization argument needed — reads are
+     unrestricted on this MCP server too. **Live-verified 2026-09-18**
+     against the two real pilot documents from Stage 4
+     (`e3ddf8bc…`/`0afbe08b…`, produced by `cobb`/`teco`): `list_documents()`
+     surfaced both with correct `ingestedById`, and `get_document` on each
+     returned its full labeled `Fact:`/`Evidence:`/`Context:`/`Suggested
+     home:` text verbatim.
 
-   **Both reads truncate every cell — page the long ones before dispositioning
-   anything.** The `cypher` MCP tool cuts each cell at `CYPHER_MCP_MAX_CELL`
+   **Both `kaizen_team` reads truncate every cell — page the long ones before
+   dispositioning anything.** (`ws:agent-team`'s `get_document` does not —
+   confirmed in the same 2026-09-18 verification above, both pilot documents'
+   full text came back on one call, no `…(+N chars)` tail — so this paging
+   step is specific to the two `kaizen_team` reads, not a concern on the third
+   source.) The `cypher` MCP tool cuts each cell at `CYPHER_MCP_MAX_CELL`
    chars (default **300**) and appends `…(+N chars)`, so any `fact` or
    `evidence` longer than that is read **short** — and the tail is exactly
    where an entry's scope caveats, negative results and self-corrections sit.
@@ -572,10 +603,15 @@ distills — on request, and folded into every certification pass (§4):
    **current-shape** entry (real `PRODUCED`/`MENTIONS` edges) is instead a
    **read-then-decide** sequence, because the node may still be needed by an
    edge nobody has resolved yet (FR-6, `docs/plans/kaizen-agent-ontology-graph.md`
-   §4). Concretely, for each entry being disposed of (promoted, discarded, or
+   §4). Clearing a **`ws:agent-team`** entry is a third shape again, closer in
+   spirit to the legacy case than the current-shape one: falkor-chat's
+   `Document`/`Chunk` model has no producer/mentions-edge analogue for `cobb`
+   to resolve first, so it runs unconditionally too, just via a different
+   tool (`delete_document`, below) — no read-then-decide, no count-what-
+   remains step. Concretely, for each entry being disposed of (promoted, discarded, or
    kept open), for agent `<agent>`:
    1. Read the raw entry (already done in step 1, or re-read by id) — the
-      legacy or current-shape read as applicable.
+      legacy, current-shape, or `ws:agent-team` read as applicable.
    2. Verify it (step 2, above).
    3. **Ordering invariant (load-bearing, not incidental — state this
       explicitly, don't rely on step numbering alone):** if step 3 (above)
@@ -655,14 +691,36 @@ distills — on request, and folded into every certification pass (§4):
           `MATCH (k:KaizenEntry {entryId: '<id>'}) DETACH DELETE k` (removes
           only `k`'s own incident edges and `k` itself; the `Agent` node(s) on
           the other end are never deleted).
-        All of the above are curator-gated Cypher shapes; `cobb` is a
-        recognized curator agent (`CYPHER_MCP_CURATOR_AGENTS`), so each is
-        authorized when called with `agent='cobb'`. **One call per `entryId`,
-        never batched:** `UNWIND [...] AS eid MATCH (k:KaizenEntry {entryId:
-        eid}) DETACH DELETE k` over several ids is rejected outright by the
-        authorizer (it matches none of the six recognized shapes) — clearing
-        several entries means issuing the single-id `DETACH DELETE` form above
-        once per `entryId`, not batching them.
+      - **`ws:agent-team` entry** — one call, unconditional, no Cypher and no
+        count-what-remains step: `mcp__falkor-chat-agent-team__delete_document
+        (document_id)` — a real hard delete
+        (`document-ingestion2` FR-4). **Live-verified 2026-09-18**: a
+        disposable test document (title prefixed `[Stage 5 hook verification,
+        disposable]`, never one of the two real pilot documents) round-tripped
+        `ingest_document` → `get_document` (text back verbatim) →
+        `delete_document` (`{"deleted": true}`) → `get_document` on the same
+        id (`None`) and absent from a follow-up `list_documents()` — matching
+        the tool's own documented contract exactly. Item 3's same-pass
+        ordering invariant (land a `MENTIONS` tag before the count-and-decide
+        read) does not apply to this shape: falkor-chat's `Document` model
+        carries no `MENTIONS`-equivalent edge for `cobb` to tag in the first
+        place — that gap is named and left open by the parent plan
+        (`agent-knowledge-base-strategy.md` §5, Track 2 Stage 9 bullet), not
+        resolved here.
+        All of the `kaizen_team` Cypher shapes above (legacy, and the
+        current-shape entry's `PRODUCED`-resolve/`MENTIONS`-resolve/full-node
+        variants) are curator-gated; `cobb` is a recognized curator agent
+        (`CYPHER_MCP_CURATOR_AGENTS`), so each is authorized when called with
+        `agent='cobb'`. **One call per `entryId`, never batched:** `UNWIND
+        [...] AS eid MATCH (k:KaizenEntry {entryId: eid}) DETACH DELETE k`
+        over several ids is rejected outright by the authorizer (it matches
+        none of the six recognized shapes) — clearing several `kaizen_team`
+        entries means issuing the single-id `DETACH DELETE` form above once
+        per `entryId`, not batching them. The `ws:agent-team` shape just
+        described carries no analogous curator-authorization gate —
+        `delete_document` is a plain MCP tool call, explicit-id-only by its
+        own contract (never automatic, never batched), not a Cypher shape the
+        `cypher` MCP server's authorizer inspects.
 
    This runs for **every** disposition, kept-open included — an unresolved
    question lives on in `history.md`'s dated note (and `plan.md` if

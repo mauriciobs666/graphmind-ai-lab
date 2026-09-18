@@ -29,10 +29,10 @@ This directory (`claude/`) holds custom Claude Code subagents.
   `kaizen_team` entries may still carry only a plain `author` property and no edges.
 - **Distillation** — `cobb` periodically verifies each entry, routes it (agent prompt /
   knowledge base / project docs / discard), logs the promotion in that agent's `history.md`, and
-  clears it with a curator-scoped `DETACH DELETE`. Procedure: `agent-maintenance` skill §5.
-  **Covers `kaizen_team` only for now** — `ws:agent-team`'s equivalent read/clear step
-  (`list_documents`/`get_document` + `delete_document`) is Stage 5's own, not yet wired into the
-  skill.
+  clears it. Procedure: `agent-maintenance` skill §5, which now reads/clears **both** sources in
+  parallel — `kaizen_team`'s curator-scoped `DETACH DELETE` (unchanged), and, for an entry produced
+  against `ws:agent-team` under the pilot above, `list_documents`/`get_document` to review and
+  `delete_document` to clear.
 - **Skills do not live here** — their home is the repo-root [`skills/`](../skills/) (see
   [`skills/README.md`](../skills/README.md)); cobb's `agent-maintenance` and `agent-standards`
   skills are there.

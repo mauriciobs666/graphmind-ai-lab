@@ -2,6 +2,43 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-18 — K-030 Track 1 Stage 5: `agent-maintenance` SKILL.md §5 gains the `ws:agent-team` read/clear hook
+
+- **What:** dispatched by `teco` as Stage 5 of `claude/docs/plans/agent-knowledge-base-strategy.md`
+  §3's Track 1, after Stage 4 (write-convention pilot) closed
+  (`claude/docs/plans/agent-knowledge-base-strategy3-coordination.md`). Extended
+  `skills/agent-maintenance/SKILL.md` §5's existing distillation procedure — a named hook point,
+  not a redesign of §5's step sequence — at two points: (1) the curator **review** step (§5 item
+  1, "Read the team-wide raw capture") gains a third read source alongside `kaizen_team`'s legacy/
+  current-shape queries — `mcp__falkor-chat-agent-team__list_documents`/`get_document` against
+  `ws:agent-team`, whose `ingestedById` field is that source's producer-identity analogue of
+  `kaizen_team`'s `:Agent`/`PRODUCED` edge; noted that `get_document` returns full verbatim text
+  with no `CYPHER_MCP_MAX_CELL`-style truncation, unlike the two `kaizen_team` reads. (2) the
+  curator **clear-after-distillation** step (§5 item 4) gains a third disposal shape — one
+  unconditional `mcp__falkor-chat-agent-team__delete_document(document_id)` call (a real hard
+  delete, `document-ingestion2` FR-4), closer in posture to the legacy `kaizen_team` shape than the
+  current-shape one since falkor-chat's `Document` model has no producer/mentions-edge analogue to
+  resolve first — no read-then-decide, no count-what-remains step, and item 3's same-pass
+  `MENTIONS`-ordering invariant does not apply to it. **Live-verified before finalizing the text**
+  (not taken on the plan's word): `list_documents`/`get_document` against `ws:agent-team` correctly
+  surfaced Stage 4's two real pilot documents (`e3ddf8bc…` produced by `cobb`, `0afbe08b…` by
+  `teco`) with correct `ingestedById` and full verbatim text on one call; a disposable throwaway
+  document (title prefixed `[Stage 5 hook verification, disposable]`, never one of the two real
+  pilots) was created, read back, then `delete_document`d, and a follow-up `get_document`/
+  `list_documents` confirmed it gone while the two real pilot documents were untouched.
+- **Why:** the parent plan's own Track 1 Stage 5 row/§5 named this exact hook point: `cobb`/`teco`
+  now write raw capture to `ws:agent-team` under Track 1's pilot (Stage 4), so the curator's review
+  and clear steps needed a second source/target for as long as `ws:agent-team` and `kaizen_team`
+  both hold live entries in parallel — every other agent still writes to `kaizen_team` only, so
+  neither source can be dropped yet. Explicitly out of scope per the plan/requirements doc and left
+  untouched: redesigning §5's overall step sequence, deciding the `MENTIONS`-equivalent tagging gap
+  (flagged there as genuinely open, no falkor-chat analogue), and `kaizen_team`'s eventual
+  retirement timing.
+- **Plan items:** — (follow-up worth flagging, not mine to act on here: once Track 1 Stage 4's
+  pilot widens to a team-wide cutover, every other agent's own "Learning capture" prompt section
+  needs the same repoint Stage 4 gave `cobb`/`teco`'s, and this §5 hook text's "today: `cobb`/`teco`
+  only" framing will need updating to match.)
+
 ## 2026-09-18 — K-030 Track 1 Stage 4: raw-capture write-convention repointed, piloted with `cobb`/`teco`
 
 - **What:** dispatched by `teco` as Stage 4 of `claude/docs/plans/agent-knowledge-base-strategy.md`
