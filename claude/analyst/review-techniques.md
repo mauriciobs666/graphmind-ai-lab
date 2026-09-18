@@ -1660,3 +1660,31 @@ Origin: `falkor-chat/server/tests/test_storefront.py` (DEF-3/S18 dead-turn-latch
 combines future/turn_in_flight/turn_state/lastTurn assertions with logged-record assertions in one
 function, matching the pre-existing
 `test_a_turn_whose_trigger_raises_is_isolated_and_still_clears_the_gate` (`:861-916`) exactly.
+
+## Two cheap mutants for a suite that already mutation-tests the math: a constant for the glue, the laxer variant for a documented design choice
+
+When a module's pure functions are thoroughly mutation-pair tested, the hole is usually the
+**glue** between them — the function that renders a decision into text, assembles a prompt, or
+applies a documented ordering rule — because the tests around it assert *structure* (roles present,
+no answer-key leak, a list of the right length) and never the *content* the glue produces. Two
+mutants find this, and each takes one edit and one suite run:
+
+1. **Make the glue return a constant.** Replace the renderer's body with an unrelated fixed string
+   and re-run the suite. Green means no test reads what it renders — the directive, the label, the
+   message text — however well the arithmetic feeding it is pinned.
+2. **Make a documented design choice the laxer one.** When a docstring states a deliberate
+   restriction — "search only after the match", "same sentence only", "first occurrence" — replace
+   the implementation with the permissive variant (`search(text)` for `search(text, pos)`, the whole
+   reply for the sentence) and re-run. Green means every test happens to satisfy both variants, and
+   the stated design is prose, not a pinned behaviour; the next refactor can drop it silently.
+
+Both read the same way: a suite that stays green under a mutant that plainly violates the
+documented behaviour has not pinned that behaviour, whatever its kill rate on the math. Ask for
+one test per mutant that asserts the rendered content or a case only the strict variant passes.
+
+Origin: `model-bench` S7 code gates (`docs/plans/small-model-benchmarking-coordination.md`, U168 and
+U174) — `scoring/grounding.py`'s `_format_directive`, mutated to a constant, left the full
+grounding + report suite green while its scoring math was mutation-pair tested; the same module's
+"search only after the idiom" contrastive check, mutated to an order-insensitive search, passed
+every one of its new tests. Both closed by later units (U170's directive-content tests; U175's
+redesign of the ordering rule), so the technique, not the instances, is what carries.

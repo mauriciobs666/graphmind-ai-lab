@@ -85,11 +85,22 @@ def get_context() -> CallContext:        # a wrapper, so tests can override it
 
 It is **process-constant, not literal**: both values come from the environment at import time, which
 is what lets a deployment point the process at its own workspace (§4.9). What it is not is
-*per-caller* — every REST and MCP call resolves to the same actor.
+*per-caller* — every call that resolves through `get_context`, which is the legacy `api.py` router
+and `/mcp`, gets the same actor **and the same workspace**. So a second target workspace is a
+**second server process** with its own `FALKORCHAT_WS_ID` (what `scripts/start_demo.sh` does for
+`demo`), never a per-call or per-token parameter; the storefront's `/shop/api` routes do not resolve
+through `get_context` at all (below) — their `actor` is per participant, their `ws` this same
+constant.
 
-Services and the repository already take `ws` / `actor` as parameters, so when auth lands
-(token → user + workspace claim, or the `identity` graph as source of truth) **only `get_context`
-changes** — everything below is untouched.
+`get_context` is the *only* place `ws` is fixed. Everything below the seam is workspace-parametrized
+**per call**: services and the repository take `ws` / `actor` as parameters, and the three components
+constructed once at startup — `ModelGateway` (`.llm()` / `.embedder()` / `.resolve()` take `ws=`,
+§1.8), `EmbeddingWorker` (`embed_message(ws, …)` / `embed_chunk(ws, …)`, its index-dimension cache
+keyed by `(ws, label)`) and `IngestionPipeline` (`extract_chunk(ws, …)`) — resolve `ws` fresh on
+every call rather than baking it in at construction. "Constructed once per process" is therefore
+not evidence that any of them would need re-architecting to serve another workspace. When auth
+lands (token → user + workspace claim, or the `identity` graph as source of truth) **only
+`get_context` changes** — everything below is untouched.
 
 **Until it lands, the whole REST router is unauthenticated**, and that is fine only while every
 caller is trusted. It stops being fine the moment mutually-untrusting people share one workspace:

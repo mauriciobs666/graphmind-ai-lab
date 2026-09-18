@@ -183,3 +183,216 @@ on all 8 U1 ids returns 0 nodes; `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` exists w
 None blocking. For `teco`: after `cobb` applies the Major, no re-gate is needed — a diff of the
 one §5 paragraph and the one history bullet is enough to confirm; the two Minors and two Infos are
 optional in the same fix pass.
+
+## U2 — `analyst` chunk B (2026-09-18)
+
+### Scope & verdict
+
+Reviewed `cobb`'s uncommitted diff (`git diff 48e8a84 -- <path>`, baseline `48e8a84`, never `HEAD`)
+for U2: the distillation of the 6 `analyst`-produced code facts `b3f1b8b4` `a1f3c9e2-6b7d` `a1e6c9d4`
+`c7f2a815` (model-bench) · `c7e2a814` `a1f3c9e2-7b4d` (falkor-chat `CallContext`). Seven files, each
+read whole around the hunks: `claude/analyst/review-techniques.md` (new final section),
+`model-bench/AGENTS.md` (one "Load-bearing invariants" paragraph), `model-bench/docs/BACKLOG.md`
+(one open item), `falkor-chat/docs/SERVER.md` §1.3 (read whole, two paragraphs merged),
+`claude/analyst/kaizen/history.md`, `claude/analyst/kaizen/plan.md`, `claude/cobb/kaizen/history.md`.
+Every code claim was checked at `git show 48e8a84:<path>`; `falkor-chat/server/**` was never read
+from the working tree (a concurrent session's mid-edit), except the one read-only look at the
+`mcp.py` diff the brief asked for (the U3-sequencing Info below). Not reviewed: `falkor-chat/AGENTS.md`,
+`claude/graph-dba/falkordb-quirks.md`, the untracked `falkor-chat/` and `claude/docs/plans/` files,
+`teco`'s coordination documents, and the concurrent session's dirty `server/` files. The 6 source
+nodes are already cleared; promotions were judged against the tree, git history, and the
+disposition record.
+
+**Verdict: approve with suggestions** — no Blocker, no Major. Three Minors, all wording-level and
+disjoint (a false axis count in the history record; a sentence in the merged SERVER.md paragraph
+that now contradicts its own next sentence; a quoted "contract" in the BACKLOG item that is a
+review paraphrase, not source text), plus five Infos, two of them sequencing notes for `teco` (U3,
+U6). Everything promoted re-derives: the `CallContext` facts hold end-to-end at `48e8a84`; the
+sentence-boundary regex, its comment, and all five named tests exist and pass; the one remaining
+unguarded `validate_pack` axis is real and the crash reproduced with the exact frame chain the
+record cites; `aa29fc2`, U170, U175 and U177 are all confirmed in git, not on report; no figure from
+any entry's `evidence` reached a promotion (the 09-16 U4 class — clean); the graph is exactly as
+reported; the bookkeeping mechanics all check. No Pass-2 re-gate needed once the Minors are applied.
+
+**CPG: considered, not relevant — the diff is documentation-only but every promotion asserts a
+code fact; `teco` flagged `cpg_model-bench`/`cpg_falkor-chat` freshness as unverified, so each
+claim was verified by direct source reads pinned to `48e8a84` plus executing the named tests and
+the crash reproduction — evidence (exact line numbers, a `try/except` guard's presence, a runtime
+`FileNotFoundError`) a possibly-stale CPG could not have supplied.**
+
+### Findings
+
+#### Minor — the history record says "exactly two axes read a data file"; at `48e8a84` it is three
+
+`claude/analyst/kaizen/history.md`, the `b3f1b8b4…` bullet: *"exactly two axes read a data file,
+and one is still unguarded"*. Enumerated from `validate_pack` (`packs.py:986-993`) and every
+`data_path(`/`read_text(` site in the file: **three** axes read a `data.*` file —
+`_row_count_identity_problems` (`:670-678`, `data.conversations` via `rows_path.read_text`, guarded
+`try/except (OSError, json.JSONDecodeError)`), `_clean_through_turn_h_problems` (`:929-935`,
+`data.conversations` via `iter_scripts()`, guarded since `aa29fc2`), and
+`_answerability_stamp_problems` (`:890`, `data.items` via `iter_items()`, **unguarded**). The
+promoted BACKLOG text is correct ("one axis that crashes", "the sibling axis had the identical
+defect") — only the record's count is wrong, and it is the record's own re-derivation claim. Also
+verified for the record: U162's gate row (`docs/plans/small-model-benchmarking-coordination.md:2587`)
+already named `_row_count_identity_problems` as the guarded pattern the fix mirrored. **Fix (history
+bullet only):** "three axes read a `data.*` file; two are guarded (`_row_count_identity_problems`,
+`_clean_through_turn_h_problems`), one is not — `_answerability_stamp_problems`". Optional, same
+shape, in the BACKLOG item: "the two sibling axes … are guarded" instead of "the sibling axis".
+
+#### Minor — the merged §1.3 paragraph keeps "every REST and MCP call resolves to the same actor" two lines above the sentence that names the exception
+
+`falkor-chat/docs/SERVER.md` §1.3, merged paragraph (working tree L86-91): *"every REST and MCP call
+resolves to the same actor **and the same workspace** … the storefront's own per-caller path (below)
+varies only `actor`"*. At baseline the "every REST call" sentence and the storefront exception sat
+~60 lines apart, with the later paragraph ("no `/shop/api` request resolves through it") doing the
+qualifying; the merge pulls the exception into the same paragraph, so the two sentences now read as
+a contradiction on their face. The sentence is true at `48e8a84` only when "REST" means the legacy
+`api.py` router (44× `Depends(get_context)`, verified) — the `/shop/api` REST routes resolve
+`actor` per participant (`storefront.py:685`). The "and the same workspace" addition is true for
+both paths (`app.py:374` `ws=provider().ws`). This is also the sentence U3's `architect` clause is
+slated to land on, so a loose antecedent now becomes a stacked one. **Fix (that sentence):** "every
+call that resolves through `get_context` — the legacy `api.py` router and `/mcp` — gets the same
+actor and the same workspace; the storefront's per-caller path (below) varies only `actor`…".
+
+#### Minor — the BACKLOG item quotes a "documented 'always returns a list' contract" that is not in the source
+
+`model-bench/docs/BACKLOG.md` L88: *"every caller relying on its documented 'always returns a
+list' contract"*. `validate_pack`'s docstring (`packs.py:950`) says *"`[]` means valid, matching
+`Fingerprint.validate()`'s shape"*; `git grep -i 'always return' 48e8a84 -- model-bench/modelbench/`
+finds nothing. The quoted phrase is U162's gate-row paraphrase (coordination doc L2587), carried
+into a component backlog as if it were the code's own words — the 09-16 U4 class in miniature (a
+citation that reads as verbatim and cannot be found). The contract it points at is real (a raise
+plainly violates "`[]` means valid"), and "every caller" is exactly two, both `cli.py` (`:350`
+`validate`, `:383`). **Fix (same sentence):** drop the quotation marks and cite the docstring's
+actual wording, e.g. "…from `validate` and the one other `cli.py` caller, breaking the docstring's
+'`[]` means valid' shape".
+
+#### Info — `guard-testing-techniques.md` is `tdd-engineer`'s KB, cited bare as if it were `analyst`'s
+
+`claude/analyst/kaizen/history.md`, the `a1f3c9e2-6b7d…` bullet: *"in neither `review-techniques.md`
+nor `guard-testing-techniques.md`"*. `git ls-files | grep guard-testing` →
+`claude/tdd-engineer/guard-testing-techniques.md` only; `claude/analyst/` has no such file. The check
+itself was the right one (the mutation-technique KB that could already hold this lives there);
+path-qualify the citation so the next distiller does not go looking under `analyst/`.
+
+#### Info — the `plan.md` dedup sentence is true pre-write and false post-write, by the same phrasing U1 used
+
+`claude/analyst/kaizen/plan.md` parking-lot line: *"Dedup check run on all six `entryId`s — none
+appears in this file"* — the line that says so carries `b3f1b8b4-6f3c-4b6a-9a1a-2f0f9a2b6d31` in full
+(`grep -c b3f1b8b4 plan.md` = 1, 0 at baseline). Reads fine as a pre-write check and matches the U1
+precedent line below it; "none appeared before this line" would make it exact. Nit.
+
+#### Info (for `teco`, U3 sequencing) — the concurrent `mcp.py` diff makes the retained sentence stale in implicature, not in letter
+
+The concurrent session's uncommitted `falkor-chat/server/falkorchat/mcp.py` adds `produced_by` to
+`ingest_document`/`ingest_documents`: `ctx = _get_context()` is unchanged (the `CallContext` actor
+stays process-constant), but its new docstring says attribution *"resolves ONLY against an existing
+`Agent` (never the `get_context()` actor)"*. So "every … MCP call resolves to the same actor" stays
+literally true of the *context* while what an MCP call *attributes* becomes per-item — which is
+exactly the per-caller-attribution caveat U3's `architect` entry (`a1f3d9c2…`) promotes onto this
+sentence. Sequence U3 after that `mcp.py` change is committed (or have U3 word the clause
+conditionally), and apply the Minor above first so the clause lands on a precise antecedent.
+
+#### Info (for `teco`, U6) — the `tdd-engineer` entry the AGENTS.md paragraph is written to absorb recommends the very split the paragraph forbids
+
+`a1f3c2e4-…` (live, `tdd-engineer`): *"canonicalized reply text can still be split into sentences
+with a plain rfind/find on `.!?`"*. The new `model-bench/AGENTS.md` paragraph forbids exactly that
+(`rfind(".")`, `split(".")`) and is right to — the fold in U6 must promote only the `_canon_str`
+preserves-punctuation precondition and discard the `rfind` advice as superseded by U177. Not a U2
+defect; the paragraph is correctly shaped for that fold.
+
+#### Info (out of U2's scope, pre-existing) — a delivered item is still in the forward-looking backlog
+
+`model-bench/docs/BACKLOG.md` L34-39 ("`validate_pack` doesn't check that a pack's declared
+`"scorer"` name resolves…") is delivered: `_scorer_problems` (`packs.py:846` at `48e8a84`) does
+precisely that and is wired into `validate_pack` (`:991`). Not in `cobb`'s diff and not a distiller's
+job; noted because root `AGENTS.md`'s "a delivered item does not stay in it" rule is breached one
+bullet above the new item. Route to the model-bench closeout list.
+
+### Gate questions, with what was run
+
+1. **Truth, re-derived at `48e8a84`.** `config.py:16-17` `WS_ID`/`USER_ID`, `:276-284`
+   `get_context() → CallContext(ws=WS_ID, actor=USER_ID)`; `api.py` `grep -c 'Depends(get_context)'`
+   = 44; `mcp.py:41` `_get_context = config.get_context`, replaceable only via `context_provider`
+   (`:147-169`), read at `:210-260`; `storefront.py:570` `self._ws = config.WS_ID if ws is None else
+   ws`, `:678-685` `context_for → CallContext(ws=self._ws, actor=participant_id)`, `:1494`
+   `_catalog_ctx` same `ws`; `app.py:364-374` constructs the one `Storefront` with `ws=provider().ws`;
+   `modelconfig.py:602-607` docstring "resolving per call (not at construction)", `.resolve()/.llm()/
+   .embedder()` all take `ws=` (`:729-787`); `embedding.py:127` `_index_dim_cache`, `:138` `key =
+   (ws, label)`, `:216/:230` `embed_message(ws, …)`/`embed_chunk(ws, …)`; `ingestion.py:100-123`
+   `extract_chunk … self._models.llm("extraction", ws=ws)`; `db.py:78` `workspace_graph(db, ws)`;
+   `repository.py:193-194` `_graph(self, ws) → db.workspace_graph(self._conn, ws)`;
+   `scripts/start_demo.sh:103` `FALKORCHAT_WS_ID="${FALKORCHAT_WS_ID:-demo}"`, `falkor-chat/AGENTS.md`
+   Key-scripts row at `48e8a84` L84. Grounding: `grounding.py:67` `_SENTENCE_BOUNDARY_RE =
+   re.compile(r"(?<!\d)\.(?!\d)|[!?]")` with the 8-line comment naming the decimal mechanism; `git
+   grep` for `rfind(".")`/`split(".")` in `scoring/` at `48e8a84` → none; `looks_like_abstention`
+   docstring (`:87-103`) documents "direction-*insensitive*" and U174 findings 3/5. `validate_pack`:
+   axis enumeration above (Minor 1); `aa29fc2` exists (2026-09-17, "S6 Steps 0-1 code gate … (U162-
+   163)"), touches `packs.py` +`tests/test_packs.py` and adds
+   `test_clean_through_turn_h_problems_reports_missing_conversations_file`.
+2. **"Already fixed" dispositions, in git.** U170: `9ef89d7` ("Steps 0-2 … U165-U168,U170") adds
+   both `test_format_directive_*` defs (`grep -c` = 2); `model-bench/docs/HISTORY.md:132-133` records
+   "two `_format_directive` coverage tests (U170)". U175: `07cccb1` adds `_sentence_span` and the
+   "direction-*insensitive*" docstring; coordination rows U174/U175/U176 (`:2702/:2722/:2723`) carry
+   the order-insensitive mutation finding and its redesign. U177: `fd515a2` adds
+   `_SENTENCE_BOUNDARY_RE`; `HISTORY.md:167-169`. Ran from `model-bench/` with its venv: `pytest -q
+   -k "format_directive or decimal_number_between or percentage_decimal or unrelated_later_sentence
+   or clean_through_turn_h_problems_reports_missing"` → **6 passed**, 1707 deselected. Reproduced
+   the open crash on a scratchpad copy of `packs/nlq-structured-query` with `items.jsonl` removed:
+   `load_pack` ok, `validate_pack` → `FileNotFoundError`, frames `validate_pack:992 →
+   _answerability_stamp_problems:890 → iter_items:299` — byte-for-byte the record's chain. Scratch
+   removed; `git status model-bench/` shows only `cobb`'s two dirty files.
+3. **Figures.** `grep '1625\|\b169\b'` over the added lines of all four promoted files → 0 each (the
+   entry-`evidence` counts stayed in the graph, as the record says). Every number `cobb` wrote
+   re-derives: 44× `Depends(get_context)`; line numbers `890/992/299`, `mcp.py:41`,
+   `storefront.py:685/:1494`, `modelconfig.py:605-606` (the phrase spans `:606-607` — within a
+   line), `:730-790`, `embedding.py:216/:230/:127-138`, `ingestion.py:100-123`, `repository.py:193`;
+   word counts exact — `review-techniques.md` 19,056→19,399, `model-bench/AGENTS.md` 1,950→2,035,
+   `SERVER.md` 8,829→8,955, `BACKLOG.md` 896→1,020. The one untraceable quotation is Minor 3.
+4. **Re-instance vs new method.** Baseline `review-techniques.md` neighbours read: L275 (a
+   structural probe's negative is about shape), L652 (rebinding a class constant via a pytest
+   plugin — *how* to mutate without touching source), L868 (SHRINK/WIDEN on a membership-guard
+   pin), L906 (kill count is a draw), L965 (shared fixture couples two checks); the 09-16 U1 list
+   (`git show 48e8a84:claude/analyst/kaizen/history.md`, 2026-09-16 entry) is EXPLAIN, docstring-nit
+   transcription, fake timers, dev-instance repopulation, TanStack, React 18, TS excess-property,
+   combined isolation test. None targets *what* to mutate when the math is already pinned — the
+   glue's content, or a documented restriction's laxer variant. `grep -i 'glue\|directive\|laxer\|
+   return a constant'` at baseline hits only unrelated text (L702-712 "glued fence"). Genuinely new;
+   the Origin line's U168/U174 attributions both match their coordination rows verbatim.
+5. **Altitude and doc-kind fit.** `model-bench/AGENTS.md`: present-tense invariant naming the regex,
+   the forbidden shape, and the failure it prevents; same shape as its "Load-bearing invariants"
+   peers (L96-110); 2,035 words < ~2,500. `BACKLOG.md`: an open item with a reproduction date as one
+   dated clause, a named fix shape and a risk statement; matches the file's un-numbered bold-lead
+   bullet convention. `SERVER.md` §1.3 read whole (L68-215): the two paragraphs read as one
+   statement and nothing downstream contradicts them — except the intra-paragraph tension in
+   Minor 2, which is the retained sentence's pre-existing looseness made visible by the merge.
+6. **Bookkeeping.** History header 5 + 1 + 0 = 6; body 1 + 2 + 1 + 2 bullets, each of the six ids
+   with `…` appears exactly once in the U2 entry; `git diff 48e8a84 -- claude/analyst/kaizen/
+   history.md | grep -c '^-[^-]'` = 0 (U1 untouched, pure insertion). `grep '^## ' | sort | uniq -d`
+   and the adjacent-`awk` scan: 0 on all seven files. `plan.md`: none of the six ids at baseline;
+   `Last reviewed` bumped; one parking-lot pointer (the Info above). `cobb`'s history file list and
+   word deltas match the diff.
+7. **Graph (live, read-only).** `analyst` `PRODUCED` → exactly 1: `bb058e98-566b-43c6-b4fa-
+   8e216accd573` (2026-09-18, U1's gate capture — out of scope). Prefix match on the six U2 ids → 0.
+   `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` present, producers `[]`, `MENTIONS` → `['tico']`. This
+   gate wrote no capture of its own, so `analyst` still reads 1.
+
+### What's solid
+
+- The discard bar was applied honestly: four model-bench instances confirmed fixed in git before
+  being called fixed, and only the technique/invariant forms promoted — the instances live in the
+  S7 fix chain already.
+- The `validate_pack` item is a model open-item: the one remaining axis named, the crash
+  reproduced (and re-reproduced here identically), the sibling's fix pattern and pinning test named,
+  blast radius stated.
+- The `review-techniques.md` section is a real new method at the right altitude, with the two
+  mutants stated as one-edit-one-run procedures and a single reading rule.
+- The SERVER.md merge is the right home and shape for U3's clause; naming all three
+  once-constructed components closes a gap §1.8 only half-covered.
+- The AGENTS.md paragraph anticipates U6 correctly — it forecloses the `rfind` advice the pending
+  `tdd-engineer` entry carries.
+
+### Open questions
+
+None blocking. For `teco`: the three Minors are one-sentence edits in three different files; no
+re-gate needed — a diff of those three sentences suffices. Sequence U3 per the Info above.

@@ -2,7 +2,7 @@
 
 > Forward-looking backlog for the `analyst` agent.
 > Status: 🔵 proposed · 🟡 in-progress · ✅ done (then moved to history.md) · ⚪ rejected/deferred
-> Last reviewed: 2026-09-18 (kaizen-team distillation pass 2, unit U1 — chunk A of `analyst`'s inbox)
+> Last reviewed: 2026-09-18 (kaizen-team distillation pass 2, units U1–U2 — both chunks of `analyst`'s inbox)
 
 ## Active
 
@@ -36,6 +36,13 @@
 - **Blocked on:** nothing, but it is the analyst-side analogue of `K-016` progressive disclosure and deliberately out of scope for the prompt-waste plan (its finding 6 routes floor-bound files here rather than to cutting rules to reach a number).
 
 ## Parking lot / ideas
+- **No `analyst` backlog item opened by U2 of the 2026-09-18 sweep (6 code facts).** Five promoted
+  (two merged into `review-techniques.md`, one into `model-bench/AGENTS.md`, two merged into
+  `falkor-chat/docs/SERVER.md` §1.3); the one kept-open item — `validate_pack`'s
+  `_answerability_stamp_problems` still crashing on a not-yet-authored `items.jsonl` (raw entry
+  `b3f1b8b4-6f3c-4b6a-9a1a-2f0f9a2b6d31`) — is tracked in `model-bench/docs/BACKLOG.md`, that
+  component's own backlog, not here. Dedup check run on all six `entryId`s — none appeared in this
+  file before this line was written. Dispositions: `kaizen/history.md`, 2026-09-18 (chunk B).
 - **No `analyst` backlog item opened by U1 of the 2026-09-18 sweep (8 meta-lessons from gating the
   09-16 sweep).** Seven promoted (two here, five into `agent-maintenance` §5), one discarded as
   already published; nothing kept open. Dedup check run on all eight `entryId`s — none appears in

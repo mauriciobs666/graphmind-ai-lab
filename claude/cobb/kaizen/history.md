@@ -2,6 +2,69 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-18 — `kaizen_team` distillation pass 2, U2: `analyst` chunk B (6 code facts, model-bench + falkor-chat `CallContext`) — 5 promoted as 3 promotions, 1 kept open in `model-bench/docs/BACKLOG.md`
+
+- **What:** ran §5 over the 6 `analyst` entries pinned by `teco`'s brief
+  (`docs/plans/kaizen-team-distillation2-coordination.md`, U2): `b3f1b8b4` `a1f3c9e2-6b7d`
+  `a1e6c9d4` `c7f2a815` (model-bench) · `c7e2a814` `a1f3c9e2-7b4d` (falkor-chat). Full per-entry
+  record: `claude/analyst/kaizen/history.md`, 2026-09-18 (chunk B). Files changed: that history +
+  `plan.md` (last-reviewed stamp, parking-lot pointer); `claude/analyst/review-techniques.md`
+  (one new section merging two entries — a constant-returning mutant for glue code, the laxer
+  variant for a documented design choice); `model-bench/AGENTS.md` (one new Load-bearing
+  invariant: sentence scoping in `scoring/` reuses `_SENTENCE_BOUNDARY_RE`, never a bare `.`
+  split); `model-bench/docs/BACKLOG.md` (one kept-open bullet: `_answerability_stamp_problems`
+  still crashes `validate_pack` on a not-yet-authored `items.jsonl`); `falkor-chat/docs/SERVER.md`
+  §1.3 (the two seam paragraphs rewritten as one merged fact: `ws` is pinned only at
+  `get_context`, a second workspace is a second process, and `ModelGateway`/`EmbeddingWorker`/
+  `IngestionPipeline` are per-call `ws`-parametrized). Word deltas (`git show 48e8a84:<path> |
+  wc -w` → working file): `review-techniques.md` 19,056 → 19,399; `model-bench/AGENTS.md`
+  1,950 → 2,035; `SERVER.md` 8,829 → 8,955; `BACKLOG.md` 896 → 1,020; `analyst.md` untouched.
+- **Verification, per the 09-16 Close-out and the U1 gate:** every fact re-derived in this run —
+  the still-open crash reproduced on a scratchpad copy of `packs/nlq-structured-query` with
+  `items.jsonl` removed (`validate_pack:992 → _answerability_stamp_problems:890 →
+  iter_items:299`); the fixed sibling traced to `aa29fc2` via `git log -S`; the five
+  directive/decimal tests run (`pytest -k "format_directive or decimal or
+  unrelated_later_sentence"`, 5 passed); the `CallContext` claims read directly in `config.py`,
+  `api.py`, `mcp.py`, `storefront.py`, `modelconfig.py`, `embedding.py`, `ingestion.py`, `db.py`,
+  and `repository.py` **at `48e8a84`** because that file and `services.py` are mid-edit by a
+  concurrent session. No figure from any entry's `evidence` was carried (the `1625 passed` and
+  `169 tests` counts stayed in the graph). Sibling-doc grep before each promotion: the S7 fix chain
+  (`small-model-benchmarking-coordination.md` U163–U177, `model-bench/docs/HISTORY.md`) already
+  records every model-bench *instance*, so only technique/invariant forms were promoted;
+  `claude/docs/plans/agent-knowledge-base-strategy.md` §4.3 holds the `CallContext` design
+  decision, so SERVER.md received the two code facts only.
+- **Routing calls worth stating:** two "project docs" suggestions overridden to the reviewer KB
+  (a fixed instance has nothing to tell model-bench; the technique is the reviewer's move);
+  `model-bench/AGENTS.md` and `docs/BACKLOG.md` written on the brief's explicit direction
+  (model-bench is closed, so a living surface is the only landing; the by-kind owner table routes
+  neither kind) — outside my hook allowlist, flagged in the report rather than assumed
+  rubber-stamped. The merged `CallContext` fact sits in §1.3's "process-constant, not literal"
+  paragraph so U3's `architect` entry (`a1f3d9c2…`, the per-caller-attribution caveat) can fold
+  onto it. The brief's `model-bench/AGENTS.md` figure (3,034 words) did not match the baseline
+  read (1,950) — reported, not acted on.
+- **Not touched:** `analyst`'s `bb058e98…` (U1's gate capture, a future sweep's), the
+  `MENTIONS`-only survivor `e1a6c4d2…`→`tico`, every dirty/untracked file of the concurrent
+  session, `teco`'s coordination doc and the gate review. No new arrivals for `analyst` beyond
+  `bb058e98…` at read time.
+- **Gate (`docs/reviews/kaizen-team-distillation2.md` §U2): approve with suggestions — 3 Minors,
+  5 Infos, no Blocker/Major; all three Minors and the two file-level Infos applied by me the same
+  day, each a one-sentence edit, each re-derived before writing rather than pasted from the
+  review.** (1) My history's "exactly two axes read a data file" was a miscount — at `48e8a84`
+  three do (`_row_count_identity_problems` via `read_text`, guarded; `_clean_through_turn_h_problems`,
+  guarded; `_answerability_stamp_problems`, not), confirmed by reading the first function's
+  baseline body; the BACKLOG bullet's "sibling axis" became "two sibling axes" to match. (2) The
+  merged SERVER.md §1.3 sentence "every REST and MCP call resolves to the same actor" contradicted
+  the storefront exception two lines below once the merge put them together — scoped to "every
+  call that resolves through `get_context`, which is the legacy `api.py` router and `/mcp`"
+  (`storefront_api.py` has zero `Depends(get_context)` at baseline; `api.py` has 44). (3) The
+  BACKLOG bullet quoted an "always returns a list" contract that exists only as U162's gate-row
+  paraphrase — replaced with the docstring's own wording (`packs.py:950`: `[]` means valid,
+  matching `Fingerprint.validate()`'s shape) unquoted, and "every caller" made concrete as the two
+  `cli.py` sites (`:350` `validate`, `:383` `run`'s pre-flight). Infos: `guard-testing-techniques.md`
+  path-qualified as `claude/tdd-engineer/…` in the history; `plan.md`'s dedup sentence now says
+  "before this line was written". Not mine, left to `teco`: the U3/U6 sequencing Infos and the
+  pre-existing delivered item at BACKLOG L34-39. Post-fix word counts in the report.
+
 ## 2026-09-18 — `kaizen_team` distillation pass 2, U1: `analyst` chunk A (8 meta-lessons from gating the 09-16 sweep) — 7 promoted as sharpenings, 1 discarded, 4 of them into my own `agent-maintenance` §5
 
 - **What:** ran §5 over the 8 `analyst` entries pinned by `teco`'s brief

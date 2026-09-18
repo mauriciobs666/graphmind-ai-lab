@@ -80,3 +80,16 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   turn rather than the role's own conversation/item unit, so such a metric can only be reasoned about
   conceptually, never measured directly. Named as a coverage gap by the S6 QA pass
   (`docs/test-reports/small-model-benchmarking-s6-report.md`), not actioned there.
+
+- **`validate_pack` still has one axis that crashes instead of reporting when a declared data file is
+  not yet authored.** `_answerability_stamp_problems` (`packs.py`, the `nlq-generator`-only
+  `"answerable"` check) iterates `pack.iter_items()` unguarded, so a manifest that declares
+  `data.items` before `items.jsonl` exists makes `validate_pack` raise `FileNotFoundError` — out of
+  both `cli.py` callers, `validate` and `run`'s pre-flight — instead of returning a problem string,
+  breaking the shape its own docstring states (`[]` means valid, matching `Fingerprint.validate()`). Reproduced 2026-09-18 on a copy of the shipped
+  `packs/nlq-structured-query` with `items.jsonl` removed. The two sibling axes that read a
+  data file are guarded — `_row_count_identity_problems` from the start, `_clean_through_turn_h_problems`
+  since S6, when it had this identical defect (`try/except (OSError, json.JSONDecodeError)` → one
+  problem string, pinned by a `tests/test_packs.py` case); the fix here is the same shape, plus its
+  mirror test. Low risk: no shipped pack hits it, only a pack
+  mid-authoring.

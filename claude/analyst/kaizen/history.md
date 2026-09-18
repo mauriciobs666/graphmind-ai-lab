@@ -2,6 +2,109 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-09-18 — standing distillation pass, `analyst` chunk B (U2 of `docs/plans/kaizen-team-distillation2-coordination.md`): 6 code facts — 5 promoted (as 3 promotions: 2 merged into one new `review-techniques.md` section, 1 into `model-bench/AGENTS.md`, 2 merged into `falkor-chat/docs/SERVER.md` §1.3), 1 kept open (`model-bench/docs/BACKLOG.md`), 0 discarded
+
+- **What:** `cobb` distilled the 6 `analyst`-produced `kaizen_team` entries captured during
+  `model-bench` S6/S7 code gates and the `agent-knowledge-base-strategy` design review:
+  `b3f1b8b4` `a1f3c9e2-6b7d` `a1e6c9d4` `c7f2a815` (model-bench) · `c7e2a814` `a1f3c9e2-7b4d`
+  (falkor-chat `CallContext`). Not touched: `analyst`'s seventh entry `bb058e98…` (2026-09-18,
+  written by U1's gate — a future sweep's) and the `MENTIONS`-only survivor `e1a6c4d2…`→`tico`.
+  Every `fact`/`evidence`/`context` cell was paged past the MCP tool's 300-char cut before
+  dispositioning. Every fact was re-derived against the tree in this run — baseline reads at
+  `48e8a84`, the working tree only for clean files (`git status` checked per target); no figure
+  from any entry's `evidence` travelled into a promotion. The three model-bench *defect* entries
+  were checked against the S7 fix chain (U163/U170/U175/U177 in
+  `docs/plans/small-model-benchmarking-coordination.md`, `model-bench/docs/HISTORY.md`) before
+  being called open or fixed.
+- **Kept open (1) — `model-bench/docs/BACKLOG.md`, new bullet (the component's own living backlog;
+  model-bench is closed, so a living surface is the only legitimate landing):**
+  - `b3f1b8b4…` (`validate_pack` axis functions call `iter_scripts()`/`iter_items()` unguarded, so
+    a manifest declaring a data key before the file is authored crashes with `FileNotFoundError`
+    instead of returning a problem string) → **partly true now.** The cited instance,
+    `_clean_through_turn_h_problems`, was fixed by `aa29fc2` (U163: `try/except (OSError,
+    json.JSONDecodeError)`, pinned by `tests/test_packs.py::
+    test_clean_through_turn_h_problems_reports_missing_conversations_file`). "Most axis
+    functions" is not true of the tree at `48e8a84`: three axes read a `data.*` file — two are
+    guarded (`_row_count_identity_problems`, `data.conversations` via `read_text` inside
+    `try/except (OSError, json.JSONDecodeError)`; `_clean_through_turn_h_problems`, guarded since
+    `aa29fc2`) and one is not — `_answerability_stamp_problems` (`packs.py:890`, `for row in
+    pack.iter_items()`). Reproduced in this run on a scratchpad copy of the real
+    `packs/nlq-structured-query` with `items.jsonl` removed: `load_pack` succeeds,
+    `validate_pack` raises `FileNotFoundError` via `validate_pack:992 →
+    _answerability_stamp_problems:890 → iter_items:299`. Rewritten as one present-tense backlog
+    bullet naming the one remaining axis and the sibling's pattern to mirror; the entry's
+    mutation-test half and its suite count were not carried (a figure from `evidence`).
+- **Promoted (2, merged) — `claude/analyst/review-techniques.md`, one new section, *"Two cheap
+  mutants for a suite that already mutation-tests the math: a constant for the glue, the laxer
+  variant for a documented design choice"*:**
+  - `a1f3c9e2-6b7d…` (`grounding.py _format_directive` had zero coverage while the scoring math
+    around it was mutation-pair tested — `build_messages` tests checked structure/leak properties,
+    not the directive text) → **instance fixed** by U170 (`tests/test_scoring_grounding.py::
+    test_format_directive_names_all_three_resolved_constraints` and
+    `…_states_no_constraints_apply_when_all_three_are_absent`, both asserting the rendered text
+    — a constant-returning mutant fails them; both pass in this run). The *technique* — the glue
+    between mutation-tested pure functions is where the hole sits; the audit is a
+    constant-returning mutant — is in neither `review-techniques.md` nor
+    `claude/tdd-engineer/guard-testing-techniques.md` (grepped `glue`, `directive`, `zero coverage`; the nearest
+    sections are the SHRINK/WIDEN set-constant audit and the mutation-vs-probe distinction, both
+    about a different object). Promoted as the technique only.
+  - `a1e6c9d4…` (a docstring-stated order-sensitivity — "search only after the match" — can be
+    unpinned by tests that all satisfy the laxer variant; mutate to the laxer variant and re-run)
+    → **instance obsolete by design change**: U175 replaced the order-sensitive search with a
+    deliberately direction-*insensitive* same-sentence search plus a digit proxy
+    (`grounding.py` `looks_like_abstention`, whose docstring now documents both U174 findings),
+    so there is no order rule left to pin. The technique is the second shape of the same
+    audit — mutate a documented design choice to the laxer variant the tests would also accept —
+    and is promoted merged with the entry above. Its `suggestedHome` was "knowledge base"; the
+    sibling's was "project docs" — overridden, because a fixed instance has nothing to say to
+    model-bench and the reusable part is the reviewer's move.
+- **Promoted (1) — `model-bench/AGENTS.md` "Load-bearing invariants", one new paragraph:**
+  - `c7f2a815…` (a bare-`.` sentence split treats a decimal number as a sentence break, truncating
+    a span scoped to that boundary and reopening the bug the span was built to fix) → **instance
+    fixed** by U177: `grounding._SENTENCE_BOUNDARY_RE` is `(?<!\d)\.(?!\d)|[!?]`, its comment
+    documents this exact mechanism, and the two decimal tests
+    (`test_decimal_number_between_connective_and_idiom_…`, `test_percentage_decimal_…`) pass in
+    this run. `model-bench/docs/HISTORY.md` records the U176→U177 round. What no living surface
+    stated is the *invariant* — any future sentence-scoped heuristic in `scoring/` reuses that
+    regex rather than splitting on `.` — so that is the promoted form, written so U6's
+    `tdd-engineer` entry `a1f3c2e4…` (`_canon_str` preserves `.!?`, making canonicalized text
+    sentence-splittable) can fold onto the same paragraph. `model-bench/AGENTS.md` 1,950 → 2,035 words
+    (`git show 48e8a84:<path> | wc -w` → working file), still under its ~2,500-word smell budget
+    (the brief's 3,034 figure does not match the baseline read).
+- **Promoted (2, merged) — `falkor-chat/docs/SERVER.md` §1.3 "The auth/tenancy seam", the
+  "process-constant, not literal" paragraph and the "Services and the repository already take
+  `ws`/`actor`" paragraph rewritten as one merged statement:**
+  - `a1f3c9e2-7b4d…` (`CallContext.ws`, like `.actor`, is one process-wide constant, so a
+    different target workspace is a separate server process, not a per-call parameter;
+    `Storefront.context_for` varies only `actor`) → **verified true**: `config.py` (`WS_ID`/
+    `USER_ID` module constants; `get_context()` returns `CallContext(ws=WS_ID, actor=USER_ID)`),
+    `api.py` (every route `Depends(get_context)`), `mcp.py:41` (`_get_context = config.get_context`,
+    module-global, replaceable only by `context_provider` at configure time), `storefront.py:685`
+    (`CallContext(ws=self._ws, actor=participant_id)`) and `:1494` (`_catalog_ctx`, same `ws`);
+    `scripts/start_demo.sh` pins `FALKORCHAT_WS_ID=demo` per `falkor-chat/AGENTS.md`'s Key
+    scripts row at `48e8a84`. §1.3 already said "process-constant, not literal … not per-caller"
+    but never stated the workspace consequence explicitly.
+  - `c7e2a814…` (only `CallContext.ws`/`actor` are pinned — `ModelGateway`, `EmbeddingWorker`,
+    `IngestionPipeline` are workspace-parametrized per call; do not read "constructed once" as
+    "fixed to one workspace") → **verified true**: `modelconfig.py:605-606` ("resolving per call
+    (not at construction)"), `.llm()`/`.embedder()`/`.resolve()` all take `ws=` (`:730-790`);
+    `embedding.py:216/230` (`embed_message(ws, …)`/`embed_chunk(ws, …)`, `_index_dim_cache`
+    keyed `(ws, label)` at `:127-138`); `ingestion.py:100-123` (`extract_chunk(ws, …)` →
+    `self._models.llm("extraction", ws=ws)`); `db.py` `workspace_graph(db, ws)` and, at
+    `48e8a84`, `repository.py:193` `_graph(self, ws)` → `db.workspace_graph(self._conn, ws)`
+    (`repository.py`/`services.py` are mid-edit by a concurrent session, so read at baseline
+    only; nothing promoted depends on them beyond that one line). §1.8 already states per-call
+    resolution for `ModelGateway`; §1.3 now names all three so the seam paragraph is complete.
+    The entries' design-review context (`claude/docs/plans/agent-knowledge-base-strategy.md`
+    §4.3 holds the dedicated-process decision and its corrected rationale) is the plan's, not
+    SERVER.md's — only the two code facts were promoted. `architect`'s `a1f3d9c2…` (U3) — the
+    per-caller-attribution caveat — belongs on this same paragraph.
+- **Bookkeeping:** header counts 5 promoted + 1 kept open + 0 discarded = 6 and match the body
+  (1 + 2 + 1 + 2 bullets, one per id). Dedup check for the kept-open item: none of the 6
+  `entryId`s appears in `kaizen/plan.md`; the backlog item lives in `model-bench/docs/BACKLOG.md`
+  (the component's own convention), with a pointer line in this agent's `plan.md` parking lot.
+  Duplicate-heading scan (`grep '^## ' | sort | uniq -d`) clean on every changed `.md`.
+
 ## 2026-09-18 — standing distillation pass, `analyst` chunk A (U1 of `docs/plans/kaizen-team-distillation2-coordination.md`): 8 meta-lessons from gating the 09-16 sweep — 2 promoted here, 5 promoted into `skills/agent-maintenance/SKILL.md` §5 (as 4 sharpenings, two entries merged), 1 discarded
 
 - **What:** `cobb` distilled the 8 `analyst`-produced `kaizen_team` entries captured while

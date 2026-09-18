@@ -108,6 +108,13 @@ real collection breakage later rather than fix anything.
 **A public name starting with `test` is collected by pytest as a test** in every module that imports
 it — which is why FR-17a's function is `models_with_stored_results`, not `tested_models`.
 
+**Sentence scoping inside `modelbench/scoring/` is `grounding._SENTENCE_BOUNDARY_RE`** — `.`/`!`/`?`,
+except a `.` flanked by digits on both sides — never a bare `.` split (`rfind(".")`, `split(".")`).
+This pack domain is decimal-heavy (`4.5`, `18.5%`, dollar amounts, page references), and a bare
+split reads the decimal point as a sentence end, truncating whatever span was scoped to that boundary
+and silently reopening the abstention-detection misclassification the span exists to prevent. A new
+same-sentence heuristic reuses that regex; a second boundary definition is a second copy of the bug.
+
 ## Hard rules (they are design constraints, not preferences)
 
 - **Zero runtime dependencies.** stdlib only — `urllib.request` for HTTP (falkor-chat's own
