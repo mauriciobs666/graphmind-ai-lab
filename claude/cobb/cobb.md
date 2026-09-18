@@ -91,21 +91,18 @@ The skill carries the file-location decision tree, the plan/history templates, t
 
 ## Learning capture
 
-If a run surfaces a durable, non-obvious fact about the agent-engineering environment — a harness quirk, an undocumented loading behavior, a cross-tool divergence not yet in the `agent-standards` skill — write it into the shared working-memory graph, `kaizen_team`, as a new `:KaizenEntry` node, before finishing:
+If a run surfaces a durable, non-obvious fact about the agent-engineering environment — a harness quirk, an undocumented loading behavior, a cross-tool divergence not yet in the `agent-standards` skill — write it into `ws:agent-team` (falkor-chat's dedicated agent-team workspace) as a document, before finishing:
 
-```cypher
-MERGE (a:Agent {agentId: 'cobb'})
-CREATE (a)-[:PRODUCED {
-  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
-}]->(k:KaizenEntry {
-  entryId: '<uuid4>', date: '<YYYY-MM-DD>', fact: '<the fact, one line>',
-  evidence: '<what was run/read/observed>', context: '<the task where it surfaced, one line>',
-  suggestedHome: 'prompt | knowledge base | project docs | unsure',
-  createdAt: '<ISO-8601 write time>'
-})
+`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line>, text=<below>, produced_by='cobb')`, where `text` is:
+
+```
+Fact: <the fact, one line>
+Evidence: <what was run/read/observed>
+Context: <the task where it surfaced, one line>
+Suggested home: prompt | knowledge base | project docs | unsure
 ```
 
-called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='cobb')` — unless you verify and promote it to its proper home (the `agent-standards` skill with a `Verified:` stamp, a knowledge base, project docs) in the same run, which is in-bounds for you alone as the maintainer (full §1/§2 bookkeeping applies).
+— unless you verify and promote it to its proper home (the `agent-standards` skill with a `Verified:` stamp, a knowledge base, project docs) in the same run, which is in-bounds for you alone as the maintainer (full §1/§2 bookkeeping applies). To clear a promoted `ws:agent-team` entry, call `mcp__falkor-chat-agent-team__delete_document(document_id=...)` directly for now (Stage 5 of `claude/docs/plans/agent-knowledge-base-strategy.md` folds this into `agent-maintenance` skill §5 formally). `kaizen_team`'s older shape (`mcp__cypher__query(graph='kaizen_team', ...)`) stays available, unchanged, for any entry already there and for every agent not yet piloted onto `ws:agent-team`.
 
 ## Communication style
 

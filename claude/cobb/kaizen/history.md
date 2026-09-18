@@ -2,6 +2,66 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-18 — K-030 Track 1 Stage 4: raw-capture write-convention repointed, piloted with `cobb`/`teco`
+
+- **What:** dispatched by `teco` as Stage 4 of `claude/docs/plans/agent-knowledge-base-strategy.md`
+  §3's Track 1 (raw-capture migration), after Stages 1-3 (attribution extension, workspace
+  bootstrap, dedicated process + `.mcp.json` wiring) closed
+  (`claude/docs/plans/agent-knowledge-base-strategy3-coordination.md`). Repointed the "Learning
+  capture" convention from `kaizen_team`'s Cypher producer-write shape to `ingest_document`
+  against the new `ws:agent-team` falkor-chat workspace, via the `falkor-chat-agent-team` MCP
+  server.
+- **Live verification before any prose changed** (the brief's own condition, honored): two real
+  `mcp__falkor-chat-agent-team__ingest_document` calls against `ws:agent-team`,
+  `produced_by='cobb'`/`'teco'`, each a genuine dated fact from this K-030 effort — confirmed via
+  `get_document`/`list_documents` that `ingestedByKind`/`ingestedById` resolved per-agent
+  correctly (`Agent`/`cobb` and `Agent`/`teco`, not one uniform actor). Mutation check:
+  `produced_by='not-a-real-agent-xyz'` raised `AgentNotFoundError` (`str(e)` is the raw id, per
+  `services.py:1225`'s `raise AgentNotFoundError(produced_by)`), created no `Document` (doc count
+  stayed at 2, confirmed by direct count before/after). **Found and flagged, not fixed:** both
+  real writes landed `status:"failed"`, no `Chunk.embedding`; `search_documents` itself raised
+  `... connection failed: [Errno 113] No route to host` against `192.168.0.69:1234` — this
+  dedicated process's LM Studio embedding backend is unreachable from this environment right now
+  (the standing "Severino WSL↔LM Studio" note's networking gap, apparently also live for this new
+  process). Confirmed the write/attribution path is unaffected (it completes synchronously, ahead
+  of the async embed step) — this blocks retrieval only, a real environment finding for whoever
+  next needs `search_documents` against `ws:agent-team` (Track 2 Stages 7/8), not a Stage 4
+  defect, and not fixed here (devops/graph-dba's process, outside this remit).
+- **Scope correction found mid-run, not assumed from the brief:** the brief scoped the edit to
+  `claude/AGENTS.md`'s "Learnings capture" bullet alone. Checked first
+  (`grep -l "Learning capture" claude/*/*.md`) and found the actual operative mechanism lives in
+  **each agent's own `<name>.md`** (13 near-identical sections) — `claude/README.md`'s own Kaizen
+  section already says as much ("a 'Learning capture' closing protocol in every prompt"). Editing
+  `claude/AGENTS.md` alone would have been documentation-only and behaviorally inert. Repointed
+  `cobb/cobb.md` and `teco/teco.md`'s own sections instead (the two piloted agents), and in doing
+  so found `teco.md`'s frontmatter `tools:` allowlist carried no `mcp__falkor-chat-agent-team__*`
+  entry — would have silently left the new instruction uncallable by `teco` even after the
+  prompt-text edit; added `mcp__falkor-chat-agent-team__ingest_document` to its `tools:` line.
+  `cobb.md` needed no such fix (no `tools:` allowlist declared — inherits every tool).
+- **Pilot-scope call (mine, per the plan's own closing-section item (c), left to this stage's
+  implementer):** a true pilot, not a full team-wide cutover — only `cobb`'s and `teco`'s own
+  files are repointed; the other 11 agents' own "Learning capture" sections are untouched and
+  still write `kaizen_team`. Reasoning: the newly-discovered real mechanism (13 separate prompt
+  files, each needing the same prompt-text change plus a `tools:`-allowlist check like the one
+  just found for `teco`) makes "team-wide" a materially bigger, more consequential change than
+  the brief's framing implied — better run as its own reviewed follow-up unit than folded silently
+  into this dispatch. `kaizen_team` stays fully live in parallel, unchanged, for every
+  non-piloted agent and for every historical entry (per plan §3/§8 — not decommissioned, not a
+  bulk migration).
+- **Where it landed:** `claude/AGENTS.md` (Learnings capture + Distillation bullets, rewritten in
+  place, not appended alongside the old text), `claude/README.md` (Kaizen section, one clause),
+  `claude/cobb/cobb.md`, `claude/teco/teco.md` (prompt text + `tools:`). `claude/scripts/
+  audit-team.sh` re-run after all edits: 5 pre-existing FAILs (personal-identifier leaks — git
+  user.name, git user.email, hostname, username, home-path) traced to files unrelated to this
+  diff (`model-bench/` data-pack provenance fields, `opencode/agents/tank/opencode.json`,
+  `docs/plans/salesperson-ui.md`, `docs/reviews/cpg-provenance-stamp.md`), confirmed unrelated to
+  this change by direct `grep` of the 4 touched files (clean); no new failures introduced.
+- **Left open, explicitly not done here:** `agent-maintenance` SKILL.md §5's step-by-step update
+  (Stage 5, named as `cobb`'s own next unit by the brief — not touched this run); rewriting the
+  remaining 11 agents' own sections onto the new mechanism (team-wide cutover, a named follow-up);
+  the LM Studio connectivity gap for `ws:agent-team`'s embedding backend (devops/graph-dba
+  territory).
+
 ## 2026-09-18 — `kaizen_team` distillation pass 2, U10: `cobb` self-produced (1 entry — the curator full-node clear must be issued per-`entryId`, never batched) — promoted, one clause added to `agent-maintenance` §5 step 5
 
 - **What:** ran §5 over my own single pinned entry (`teco`'s brief,

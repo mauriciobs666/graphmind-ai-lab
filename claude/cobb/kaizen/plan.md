@@ -391,10 +391,10 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
 
 ### K-030 — The always-loaded-prompt compaction backlog is now four agents, and distillation is what feeds it
 
-- **Status:** 🟡 in-progress — Stage 0 (interim knowledge-base relief) delivered 2026-09-17,
-  closed; the substrate design for the rest of the plan (Tracks 1-2, formerly "Stages 1-7") is no
-  longer blocked — a full design pass completed this session (below) — but no implementation has
-  been dispatched yet. Not moved to history.md: this item isn't done.
+- **Status:** 🟡 in-progress — Stage 0 (2026-09-17) and Track 1 Stages 1-4 (2026-09-18) delivered
+  and closed (detail below); Stage 5 (curator read/clear hook), team-wide cutover of the write
+  convention beyond the `cobb`/`teco` pilot, and Track 2 (Stages 6-9, distilled-knowledge
+  ingestion) are still open. Not moved to history.md: this item isn't done.
 - **Priority:** high
 - **Stage 0 — delivered 2026-09-17, commit `6d834f0`, closed.** A prompt restructure (moving
   already-resident content to a new file with a pointer left behind, not a kaizen-graph
@@ -429,17 +429,28 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
   with suggestions, with one more factual correction (a wrong justification for the
   workspace-pinning decision, swapped for the real one — the decision itself never changed)
   independently verified against source by both `architect` and `teco` directly.
-- **Not resolved by this: no implementation has been dispatched — this was design work only.**
-  Concretely still open before Track 1 Stage 1 can start: a `graph-dba` design note turning the
-  plan's §4.1 attribution-fix interface spec into exact Cypher/schema, and the `devops` work to
-  stand up the dedicated `ws:agent-team` falkor-chat process. Before Track 2 Stage 7 specifically:
-  `cobb`'s own confirmation that `skills/agent-kb-retrieval/SKILL.md` is the right placement for
-  the retrieval calling-convention artifact — the plan flags this as needing cobb's sign-off, not
-  decided yet.
+- **Still open before Track 2 Stage 7:** `cobb`'s own confirmation that
+  `skills/agent-kb-retrieval/SKILL.md` is the right placement for the retrieval
+  calling-convention artifact — the plan flags this as needing cobb's sign-off, not decided yet.
+- **Track 1 (Stages 1-4) since delivered, 2026-09-18** — coordination ledger
+  `claude/docs/plans/agent-knowledge-base-strategy3-coordination.md`: Stage 1 (`produced_by`
+  attribution extension), Stage 2 (`ws:agent-team` bootstrap+seed), Stage 3 (dedicated process +
+  `.mcp.json` wiring, one incident along the way — a `devops` delegate's blocked `Edit` bypassed
+  via `Bash`, resolved directly by the user, `docs/reviews/mcp-json-edit-bypass-incident.md`), and
+  Stage 4 (this agent's own unit — write-convention repointed, **piloted with `cobb`/`teco` only,
+  not team-wide**, full detail in `history.md`, 2026-09-18). **Two real follow-ups Stage 4 named,
+  not yet actioned:** rewrite the other 11 agents' own "Learning capture" sections onto the new
+  mechanism (team-wide cutover); `ws:agent-team`'s embedding backend (LM Studio,
+  `192.168.0.69:1234`) is currently unreachable from this environment, blocking `search_documents`
+  against that workspace (not this agent's to fix). **Stage 5 (curator read/clear hook,
+  `agent-maintenance` SKILL.md §5) is still open** — named as this agent's own next unit, not
+  done. Track 2 (Stages 6-9, distilled-knowledge ingestion) stays sequenced after Track 1
+  completes, unchanged.
 - **Coordination ledger for this design pass:**
   `claude/docs/plans/agent-knowledge-base-strategy2-coordination.md`.
 - **Notes:** Opened 2026-09-09 from U42; rewritten 2026-09-10 after U45; Stage 0 delivered and
-  logged here 2026-09-17; the Tracks-1-2 design pass completed and logged here 2026-09-17. Entry
+  logged here 2026-09-17; the Tracks-1-2 design pass completed and logged here 2026-09-17; Track 1
+  Stages 1-4 delivered and logged here 2026-09-18 (detail in `history.md`). Entry
   ids are not the trigger here; no `entryId` dedup applies.
 
 ### K-031 — Shared-tree commit rules are split by audience, and the half that bounds the grant is teco-only

@@ -31,7 +31,16 @@ same day onto this single shared `kaizen_team` graph
 agent's raw learnings in one query. During runs, every agent writes dated,
 evidence-backed `:KaizenEntry` nodes of durable, non-obvious environment
 facts in its discipline via `mcp__cypher__query` against `kaizen_team` (a
-"Learning capture" closing protocol in every prompt).
+"Learning capture" closing protocol in every prompt) — **except `cobb` and
+`teco`**, piloted 2026-09-18 onto a new destination instead:
+`mcp__falkor-chat-agent-team__ingest_document` against a dedicated
+`ws:agent-team` falkor-chat workspace, with per-agent write attribution
+(`produced_by`), live-verified end to end
+(`claude/docs/plans/agent-knowledge-base-strategy3-coordination.md`,
+Stage 4). `kaizen_team` stays fully live in parallel — every other agent's
+own "Learning capture" section is unchanged, and rewriting the rest onto
+the new destination is a named follow-up
+(`claude/docs/plans/agent-knowledge-base-strategy.md` §3), not yet done.
 
 M8 (2026-08-22, `docs/plans/kaizen-agent-ontology.md`) gave the graph real
 agent identity: an entry created from that point on is linked by a

@@ -5,16 +5,34 @@ This directory (`claude/`) holds custom Claude Code subagents.
 - **Layout** — one folder per agent: `<name>/<name>.md` (Markdown + YAML frontmatter) plus
   `<name>/kaizen/{plan,history}.md`. There is **no `inbox.md`**, and `audit-team.sh` check 1
   requires only that pair.
-- **Learnings capture** — every agent writes its durable run-time discoveries directly into one
-  **shared** FalkorDB graph, `kaizen_team`, as `:KaizenEntry` nodes via `mcp__cypher__query`, so
-  a single query reaches every agent's raw learnings. An entry is tied to its producer by
-  `(:Agent {agentId})-[:PRODUCED]->(:KaizenEntry)`, plus an optional
-  `(:KaizenEntry)-[:MENTIONS]->(:Agent)` when `cobb` tags it as being about a different agent.
-  **Older entries carry a plain `author` string property and no edges — read both shapes, write
-  only the edge shape.**
+- **Learnings capture** — each agent's own `<name>.md` carries the actual operative "Learning
+  capture" write instruction; this bullet is the summary, kept in sync with it, not the mechanism
+  itself. **Piloted 2026-09-18 with `cobb`/`teco`:** their own files write a document into
+  `ws:agent-team`, a dedicated falkor-chat workspace, via
+  `mcp__falkor-chat-agent-team__ingest_document(text=..., title=..., produced_by=<own agentId>)`.
+  `title` = the entry's `fact` (one line); `text` is a fixed, labeled rendering, one paragraph per
+  field:
+  ```
+  Fact: <fact>
+  Evidence: <evidence>
+  Context: <context>
+  Suggested home: <suggestedHome>
+  ```
+  `produced_by` must be the writer's own, already-seeded `Agent.agentId` (this roster, kept
+  current via `seed_agent_team.sh`) — an unresolvable id raises `AgentNotFoundError` loudly, never
+  a silent fallback. Reread with `list_documents`/`get_document` on the same MCP server, or a
+  direct `mcp__cypher__query` read against `ws:agent-team`. **Every other agent's own file still
+  writes the old way** — the shared `kaizen_team` graph, as `:KaizenEntry` nodes via
+  `mcp__cypher__query` — unchanged and not decommissioned; rewriting each remaining `<name>.md`'s
+  own section to the same new shape is a named follow-up, not yet done
+  (`claude/docs/plans/agent-knowledge-base-strategy.md` §3, Stage 4). Historical, pre-M8
+  `kaizen_team` entries may still carry only a plain `author` property and no edges.
 - **Distillation** — `cobb` periodically verifies each entry, routes it (agent prompt /
   knowledge base / project docs / discard), logs the promotion in that agent's `history.md`, and
   clears it with a curator-scoped `DETACH DELETE`. Procedure: `agent-maintenance` skill §5.
+  **Covers `kaizen_team` only for now** — `ws:agent-team`'s equivalent read/clear step
+  (`list_documents`/`get_document` + `delete_document`) is Stage 5's own, not yet wired into the
+  skill.
 - **Skills do not live here** — their home is the repo-root [`skills/`](../skills/) (see
   [`skills/README.md`](../skills/README.md)); cobb's `agent-maintenance` and `agent-standards`
   skills are there.
