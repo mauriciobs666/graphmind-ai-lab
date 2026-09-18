@@ -2,6 +2,56 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-09-18 — `kaizen_team` distillation pass 2, U7: 1 `coder` entry (model-bench/AGENTS.md word-count creep across stage closes) — DISCARDED, already covered by root `AGENTS.md`'s existing compaction convention
+
+- **What:** `cobb` ran `agent-maintenance` §5 over the one `coder`-produced `kaizen_team` entry
+  pinned by `teco`'s brief (`docs/plans/kaizen-team-distillation2-coordination.md`, U7):
+  `c2b1f6b4-2f6a-4a1c-9c3e-8a2f0e0f2a11` (2026-09-17). Re-queried fresh at dispatch: `coder`
+  read exactly 2 rows (current-shape), of which this is the one in scope — the other
+  (`a1c4e6b2…`, dated 2026-09-18) is a second, unrelated `coder` entry that appeared mid-flight
+  from a concurrent session mutation-testing an uncommitted feature; per the brief it was left
+  untouched (not read past its summary line, not cleared, no disposition logged for it here).
+  Legacy (`author`-property) read for `coder` returned 0 rows.
+- **The entry's claim:** `model-bench/AGENTS.md`'s word count keeps climbing across successive
+  stage-close doc-syncs (cited: S6 close 2,669 words, already past the ~2,500-word smell budget;
+  S7 close 3,034 after trimming) because each close adds a real new paragraph and the file is
+  read whole, so the smell-check never self-triggers — a stage-close brief should explicitly
+  budget a compaction pass, not just append-then-trim the newest paragraph.
+- **Re-derived word-count history (the entry's own figures are correct at the two points it
+  cites, but stale as a picture of where the file stands today — do not carry them forward
+  verbatim):**
+  | Point | Commit | Words |
+  |---|---|---|
+  | S6 close (U164) | `00d0046` | 2,669 |
+  | S7 close (U179) | `a2774ff` | 3,034 (net +365 over S6; diffstat 50 insertions/21 deletions — mostly additive) |
+  | S8 close (U180, final stage — "documentation and close") | `cb5185a` | **1,936** |
+  | S8 close diffstat | `cb5185a` | 114 insertions/207 deletions — an explicit rewrite, not an append: the commit message states the "Current state" section was rewritten from a "3,034-word stage-by-stage narrative into a ~1,900-word present-tense summary citing HISTORY.md for the story" |
+  | Current working tree | — | 2,244 (after this same sweep's U182 fix commit plus the U2/U4 kaizen-distillation commits' unrelated touches) — comfortably under the ~2,500 smell budget |
+- **Root-`AGENTS.md`-coverage judgment: already substantively covered — discard, not promote.**
+  Read whole (lines ~128–144, 161–171): the context-file convention already states (a) "It is
+  rewritten, not appended to" (b) "A living document is compacted at milestone close, not only
+  appended to" — naming `AGENTS.md` explicitly among the "read whole" documents this applies to
+  — and (c) "Smells, not gates" for the ~2,500-word bar. The re-derived history shows this is
+  exactly what happened: model-bench's S0–S8 is **one milestone** (root `AGENTS.md`'s own
+  model-bench Structure bullet: "Delivered and closed (S0–S8)"), and the compaction the
+  convention prescribes landed, as designed, **at that milestone's actual close (S8)** — a
+  genuine rewrite-not-append that took the file from 3,034 back down to 1,936, citing
+  `HISTORY.md` for the story exactly as the "History is not context" clause directs. The
+  over-budget readings at S6 and S7 are the expected, tolerated **intermediate** state under
+  "smells, not gates" — the convention deliberately compacts at milestone close, not at every
+  intervening stage. The entry's proposed fix ("budget a compaction pass in the close brief") is
+  the same mechanism the convention already names; it just wanted it applied one or two stages
+  earlier than the milestone boundary the convention actually specifies. That is a defensible
+  taste call for a future multi-stage component, not a gap in the doctrine, and model-bench is
+  closed (S0–S8, no further stage closes will ever apply the lesson to itself). Not promoted
+  anywhere — root `AGENTS.md`, and no new technique note.
+- **`coder.md` untouched** — no entry warranted the always-loaded-prompt bar; this was a
+  discard, not a prompt-behavior change.
+- **Graph ops.** Edge-count read for `c2b1f6b4…`: `producedEdges=1, mentionEdges=0`, so
+  `otherRemaining=0` — full `DETACH DELETE`, run only after this file was on disk. `a1c4e6b2…`
+  left completely alone (present, uncleared). Post-clear count for `coder`: **1** (the deferred
+  entry remains) — not 0.
+
 ## 2026-09-17 — standing distillation pass, scoped to `coder` only: 3-entry inbox, 2 promoted (1 cross-agent, 1 project docs), 1 discarded
 
 - **What:** `cobb` ran the standing kaizen-graph distillation over all 3 `coder`-produced

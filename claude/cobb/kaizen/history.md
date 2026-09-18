@@ -188,6 +188,63 @@
   `HISTORY.md`/`BACKLOG.md` not touched in any component — this unit produced no record-of-work,
   only a discard.
 
+## 2026-09-18 — `kaizen_team` distillation pass 2, U7: `coder` (1 of 2 pinned entries — model-bench/AGENTS.md word-count creep) — discarded as already covered by root `AGENTS.md`'s milestone-close compaction convention
+
+- **What:** ran §5 over exactly 1 of `coder`'s 2 current graph rows, per `teco`'s brief
+  (`docs/plans/kaizen-team-distillation2-coordination.md`, U7): `c2b1f6b4-2f6a-4a1c-9c3e-8a2f0e0f2a11`
+  (2026-09-17). Re-queried fresh before touching anything: `coder` read exactly 2 rows, matching
+  the brief's count. The second (`a1c4e6b2-3f7d-4b1a-9c2e-7d8f6a1b0c3e`, `createdAt` 2026-09-18)
+  is a fresh arrival from a separate, concurrent session mutation-testing an uncommitted
+  `agent-knowledge-base-strategy` Track-1 feature (`repository.py`'s
+  `create_document_with_auto_supersede`, dirty in this exact tree) — left entirely alone per the
+  brief: not read past its summary line, not cleared, no `MENTIONS` tag, no disposition logged.
+  Full per-entry record for the in-scope entry: `claude/coder/kaizen/history.md`, 2026-09-18.
+  Files changed: that history file; this file. `coder.md` and `plan.md` untouched — no promotion,
+  nothing kept open.
+- **Re-derived the word-count history myself rather than trusting the entry's cited figures**
+  (the brief flagged them as possibly stale): `git show <sha>:model-bench/AGENTS.md | wc -w` at
+  the three actual close commits — S6 close `00d0046` → 2,669; S7 close `a2774ff` → 3,034 (matches
+  the entry's own two cited numbers exactly, so those specific figures were not wrong); S8 close
+  `cb5185a` → **1,936**, which the entry never mentions at all. `git show --stat` on `cb5185a`
+  shows 114 insertions/207 deletions, and its own commit message states the "Current state"
+  section was rewritten "from a 3,034-word stage-by-stage narrative into a ~1,900-word
+  present-tense summary citing HISTORY.md for the story" — an explicit compaction pass, not an
+  append. Current working tree: 2,244 words (after this same sweep's U182 fix and the U2/U4
+  kaizen-distillation commits' incidental touches), comfortably under the ~2,500 smell budget.
+- **The gap between what the entry says and what actually happened: the entry stops its
+  narrative at S7 (still climbing) and never checks S8 (the file's genuine milestone close),
+  where the exact remedy it recommends already landed.** Re-read root `AGENTS.md` lines
+  ~128–171 whole before judging coverage: the context-file convention already states "It is
+  rewritten, not appended to," that "a living document is compacted at milestone close, not only
+  appended to" (naming `AGENTS.md` explicitly among the documents this applies to, alongside
+  `BACKLOG.md`/`DESIGN.md`/`README.md`), and that the ~2,500-word bar is "smells, not gates."
+  Model-bench's S0–S8 is one milestone (root `AGENTS.md`'s own model-bench Structure bullet:
+  "Delivered and closed (S0–S8)"), and S8 — its documentation-and-close stage — is that
+  milestone's actual close. The compaction happened exactly there, exactly as the convention
+  already prescribes. The over-budget readings at S6/S7 are the tolerated intermediate state
+  "smells, not gates" exists to permit, not evidence of a doctrine gap. The entry's proposed fix
+  (budget a compaction pass in the stage-close brief) asks for the same mechanism the convention
+  already names, just earlier than the milestone boundary the convention actually specifies —
+  a defensible taste call for some future multi-stage component, not a missing rule, and
+  model-bench itself is closed with no further stage closes of its own to apply it to.
+- **Disposition: discard, not promote — the same call U5/U6 made, for the same reason (already
+  substantively covered), verified independently rather than assumed from the brief's framing.**
+  Not promoted into root `AGENTS.md`'s context-file section, not into a new `cobb`/`architect`
+  technique note, and not back into `model-bench/AGENTS.md` (a closed component, no further
+  stage-close briefs of its own coming).
+- **Graph ops:** edge-count read for `c2b1f6b4…` — `producedEdges=1, mentionEdges=0` →
+  `otherRemaining=0` — one curator `DETACH DELETE`, run only after `coder`'s history entry was
+  durably on disk. `a1c4e6b2…` left completely untouched (present, uncleared, no edge read or
+  written against it). Post-clear count for `coder`: **1**, not 0 — the deferred entry legitimately
+  remains. Not touched: the `MENTIONS`-only survivor `e1a6c4d2…`→`tico`, every other agent's
+  entries, and every dirty/untracked file of the concurrent falkor-chat session
+  (`falkor-chat/server/**`, `falkor-chat/AGENTS.md`, `claude/graph-dba/falkordb-quirks.md`, the
+  untracked `claude/docs/plans/agent-knowledge-base-strategy3-coordination.md`) — none of that
+  content was read, cited, or touched; every file this unit read or wrote was model-bench
+  source/docs, root `AGENTS.md`, or this sweep's own kaizen/coordination files.
+  `model-bench/docs/HISTORY.md`/`BACKLOG.md` and root `docs/HISTORY.md`/`BACKLOG.md` not touched
+  in any way — this unit produced a discard, not a record of delivered work.
+
 ## 2026-09-18 — `kaizen_team` distillation pass 2, U2: `analyst` chunk B (6 code facts, model-bench + falkor-chat `CallContext`) — 5 promoted as 3 promotions, 1 kept open in `model-bench/docs/BACKLOG.md`
 
 - **What:** ran §5 over the 6 `analyst` entries pinned by `teco`'s brief
