@@ -1,18 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# start_agent_team.sh — DESIGN DRAFT, NOT YET WIRED FOR USE.
-#
-# Written for `claude/docs/plans/agent-knowledge-base-strategy.md` §4.3/§3 Stage 3
-# (Track 1, raw-capture migration). Do NOT run this yet:
-#   1. It calls `seed_agent_team.sh`, Stage 2's deliverable — that script does not
-#      exist yet (Stage 2 is not merged).
-#   2. It must run a falkor-chat build that includes Stage 1's `produced_by`
-#      patch to `ingest_document`/`ingest_documents` — not yet merged either.
-# Running this today against the current tree would stand up a process that
-# looks healthy but cannot deliver FR-8/AC-6's per-agent attribution, against a
-# workspace nothing has bootstrapped correctly yet. Once Stages 1-2 land, drop
-# this notice and the script is otherwise ready to run as-is.
+# start_agent_team.sh — bring-up for Track 1 Stage 3
+# (`claude/docs/plans/agent-knowledge-base-strategy.md` §4.3/§3). Stage 1
+# (`produced_by`/`AgentNotFoundError`, `8a1449a`) and Stage 2 (`ws:agent-team`
+# bootstrap + `seed_agent_team.sh`, `de4158e`) are both merged, satisfying this
+# script's two stated dependencies — it is wired for real use.
 #
 # Bring-up for the dedicated falkor-chat server process serving ws:agent-team —
 # the shared, always-on knowledge-base substrate every Claude Code agent in
