@@ -67,9 +67,14 @@ per-build history.
   (`MATCH (b:CpgBuildInfo) RETURN b`) — expect `STATUS`, `RENAMED_FROM` and a
   `NOTE`. Treat it as **"stale, and not
   rebuildable on demand"**: you have provenance but no date, so checks 0 and 1
-  are unavailable and **check 2 must not be run** (see Limits). Live example:
-  `cpg_deprecated_salesperson`, the CPG of the retired Streamlit `salesperson/`
-  app whose source now sits at `deprecated/salesperson/`.
+  are unavailable and **check 2 must not be run** (see Limits). This shape
+  typically belongs to a retired component's CPG, kept as a frozen snapshot
+  after its source moved or its maintenance ceased —
+  `cpg_deprecated_salesperson` (the CPG of the retired Streamlit
+  `salesperson/` app) was one such instance until it was deleted 2026-09-18 in
+  a FalkorDB cleanup, once it no longer served a purpose beyond this
+  documentation example. No currently loaded graph carries this shape, but
+  expect to meet it again whenever another component retires.
 - **One row, `provenance` = `hand-backfilled`** → a **hand-backfilled marker**:
   a real `builtAt` and real `source*` values, but derived *after* the build by a
   human and written in by `graph-dba` — not captured by the pipeline before the
@@ -281,8 +286,10 @@ signal, not the threshold.
   not apply either**, because there is no `parsedAt` or `builtAt` to anchor a
   `--since` on even once you have confirmed the real directory. This shape also
   carries **no `sourceCommit`/`sourceDirty` whatsoever** — don't go hunting for
-  them; `cpg_deprecated_salesperson`'s keys are `BUILT_AT`, `SOURCE_PATH`,
-  `STATUS`, `MARKER_ORIGIN`, `MARKER_WRITTEN_AT`, `RENAMED_FROM`, `NOTE`.
+  them; the key set is small — `BUILT_AT`, `SOURCE_PATH`, `STATUS`,
+  `MARKER_ORIGIN`, `MARKER_WRITTEN_AT`, `RENAMED_FROM`, `NOTE` — as observed on
+  `cpg_deprecated_salesperson` (deleted 2026-09-18 in a FalkorDB cleanup, once
+  it no longer served a purpose beyond this documentation example).
   What you can still do is read the marker's
   `NOTE`/`STATUS`, and treat the graph as a frozen snapshot: for a retired
   component that is the correct reading, not a gap to close, and asking

@@ -279,13 +279,14 @@ SET b = {
 #   graph. And an edit that drops a property out of the map cannot fire this at
 #   all: _cpg_prop removes it from the map and the allow-list in the same call.
 #
-#   DO NOT DELETE IT, on the honest reason rather than the overclaimed one. Two
-#   loaded graphs carry hand-authored markers today — cpg_falkorchat and
-#   cpg_deprecated_salesperson — and on each one's next rebuild this is a real,
-#   firing check on the exact defect this whole arc was about. After both have
-#   rebuilt once it can no longer fire under any trigger named above; at that
-#   point it costs one read per build and still catches a foreign key
-#   reintroduced by any writer other than the stamp. That is a cheap standing
+#   DO NOT DELETE IT, on the honest reason rather than the overclaimed one. One
+#   loaded graph carries a hand-authored marker today — cpg_falkorchat — and on
+#   its next rebuild this is a real, firing check on the exact defect this
+#   whole arc was about (cpg_deprecated_salesperson carried the same shape
+#   until it was deleted 2026-09-18 in a FalkorDB cleanup, without ever being
+#   rebuilt). After that rebuild it can no longer fire under any trigger named
+#   above; at that point it costs one read per build and still catches a
+#   foreign key reintroduced by any writer other than the stamp. That is a cheap standing
 #   guard on a closed-by-construction invariant, not a regression test for the
 #   replace semantics, and the distinction is checkable — which the previous
 #   claim was not.

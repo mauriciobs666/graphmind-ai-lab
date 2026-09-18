@@ -493,10 +493,12 @@ if [ -n "$LOAD" ]; then
   # stamped keys on a graph whose previous marker was pipeline-clean, so none of
   # them fires there; and an edit that drops a property out of the map cannot
   # fire this at all, since _cpg_prop drops it from the allow-list in the same
-  # call. Two graphs carry hand-authored markers today (cpg_falkorchat,
-  # cpg_deprecated_salesperson) and on each one's next rebuild this fires on
-  # exactly the defect the arc was about; after that it is a cheap standing
-  # guard against a foreign key reintroduced by any writer other than the stamp.
+  # call. One loaded graph carries a hand-authored marker today (cpg_falkorchat)
+  # and on its next rebuild this fires on exactly the defect the arc was about
+  # (cpg_deprecated_salesperson carried the same shape until it was deleted
+  # 2026-09-18 in a FalkorDB cleanup, without ever being rebuilt); after that
+  # rebuild fires it once, this becomes a cheap standing guard against a
+  # foreign key reintroduced by any writer other than the stamp.
   # DO NOT REMOVE IT — on that reason, which is checkable, rather than the
   # bigger one, which was not.
   #
