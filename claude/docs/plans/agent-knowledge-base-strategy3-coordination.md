@@ -55,7 +55,7 @@ not rebuilt for this coordination; every falkor-chat-side unit reads current sou
 
 **Stage 4 complete and committed.** Stage 5 dispatched below.
 
-| U12 | `cobb` | `a0f3b255b6bacd9e8` | delivered | Stage 5: `skills/agent-maintenance/SKILL.md` §5 gains the `ws:agent-team` read (`list_documents`/`get_document`)/clear (`delete_document`) hook, alongside the unchanged `kaizen_team` shapes; live-verified against the two real Stage-4-pilot documents (read-only) plus a disposable throwaway doc for the delete path — independently re-confirmed by `teco` (`MATCH (d:Document) RETURN ...` against `ws:agent-team`: still exactly the 2 real pilot docs, disposable one genuinely gone). `claude/AGENTS.md`/`cobb/kaizen/{history,plan}.md` also updated, all diffs verified directly. | `analyst` (`ae0985fd62134fcaf`) → — | 199363 tok / 37 tools |
+| U12 | `cobb` | `a0f3b255b6bacd9e8` | in-flight | Stage 5: `skills/agent-maintenance/SKILL.md` §5 gains the `ws:agent-team` read (`list_documents`/`get_document`)/clear (`delete_document`) hook, alongside the unchanged `kaizen_team` shapes; live-verified against the two real Stage-4-pilot documents (read-only) plus a disposable throwaway doc for the delete path — independently re-confirmed by `teco` (`MATCH (d:Document) RETURN ...` against `ws:agent-team`: still exactly the 2 real pilot docs, disposable one genuinely gone). `claude/AGENTS.md`/`cobb/kaizen/{history,plan}.md` also updated, all diffs verified directly. | `analyst` (`ae0985fd62134fcaf`) → approve with suggestions (1 minor — stale `plan.md` `Notes:` line; 1 nit — a misquote), both routed back to `cobb`, in progress | 199363 tok / 37 tools |
 
 ## Notes
 
