@@ -44,9 +44,9 @@ not rebuilt for this coordination; every falkor-chat-side unit reads current sou
 | U2 | `devops` | `a70b7b50d8ada1d33` | accepted | `falkor-chat/scripts/start_agent_team.sh` (draft, port 8200, not run) | `graph-dba` (`a808e3665f094b8f8`) → sound as-is, no changes | 145746 tok / 20 tools |
 | U3 | `graph-dba` | `a808e3665f094b8f8` | accepted | naming/config review of U2's script | verdict: sound as-is, no changes | 106815 tok / 13 tools |
 
-| U4 | `coder` | `a61c94585706ce329` | delivered | Stage 1 implementation: `produced_by` on `ingest_document`/`ingest_documents` + `AgentNotFoundError`, full §7 test coverage (14 new tests), mutation-tested (raise-deletion, rejected-alternative-reimplementation, silent-arg-swap — all caught/reproduced) | `analyst` (diff-scoped, dispatching now) → — | 219590 tok / 71 tools |
-| U5 | `graph-dba` | `a90059122a9d47f3c` (resumed) | accepted | Stage 2: `ws:agent-team` bootstrap (live) + `seed_agent_team.sh` (live, idempotent) | verified directly by `teco` (`mcp__cypher__query` against `ws:agent-team`: 13 `Agent` nodes matching `claude/AGENTS.md`'s roster exactly, `Agent.agentId` RANGE index present; `seed_agent_team.sh` + `falkor-chat/AGENTS.md` row confirmed on disk) | 270105 tok / 19 tools |
-| U6 | `analyst` | `a8dd9342917ec8068` | in-flight | diff-scoped review of U4's `falkor-chat/server/` diff → `falkor-chat/docs/reviews/agent-team-ingestion-produced-by.md` | — → — | — |
+| U4 | `coder` | `a61c94585706ce329` | accepted | Stage 1 implementation: `produced_by` on `ingest_document`/`ingest_documents` + `AgentNotFoundError`, full §7 test coverage (14 new tests), mutation-tested (raise-deletion, rejected-alternative-reimplementation, silent-arg-swap — all caught/reproduced); committed `8a1449a` | `analyst` (`a8dd9342917ec8068`) → approve | 219590 tok / 71 tools |
+| U5 | `graph-dba` | `a90059122a9d47f3c` (resumed) | accepted | Stage 2: `ws:agent-team` bootstrap (live) + `seed_agent_team.sh` (live, idempotent); committed `de4158e` | verified directly by `teco` (`mcp__cypher__query` against `ws:agent-team`: 13 `Agent` nodes matching `claude/AGENTS.md`'s roster exactly, `Agent.agentId` RANGE index present; `seed_agent_team.sh` + `falkor-chat/AGENTS.md` row confirmed on disk) | 270105 tok / 19 tools |
+| U6 | `analyst` | `a8dd9342917ec8068` | accepted | diff-scoped review, `falkor-chat/docs/reviews/agent-team-ingestion-produced-by.md`; committed `8a1449a` | verdict: approve (1 minor — constant placement, 1 nit — docstring wrap; both fixed directly by `teco`, re-verified: full suite 2844 passed/14 deselected/0 failed after the fix, shared `reference`-graph wipe hazard repaired and re-verified both times) | 117445 tok / 44 tools |
 
 ## Notes
 
@@ -56,3 +56,23 @@ not rebuilt for this coordination; every falkor-chat-side unit reads current sou
   check.
 - U2 is design-only for now; Stage 3's actual bring-up/deployment is a later unit, sequenced after
   Stage 1 (coder-implemented, `produced_by` merged) and Stage 2 (workspace bootstrapped) land.
+
+## Stage 1/2 close-out (2026-09-18)
+
+Stages 1-2 both `accepted` and committed (`fb10a7a`, `cfe1a78`, `de4158e`, `8a1449a`). U4's `coder`
+run was interrupted mid-work by a session-wide rate-limit kill and resumed via `SendMessage` to its
+recorded `agentId` rather than re-dispatched — its on-disk state and reasoning survived intact;
+`teco` independently re-verified the resumed deliverable in full (diff --stat, full suite rerun,
+new-test-name greps, unmodified-regression-test check, kaizen entry) before treating it as
+delivered. `analyst`'s diff-scoped gate (U6) approved with two low-stakes findings, both fixed
+directly by `teco` as genuinely trivial single-file no-brainers (moving two query-text constants
+to sit beside their consumer method, mirroring this file's own `_SINCE_PLAIN`/`_SINCE_KEYSET`
+precedent; a docstring line-wrap nit) — re-verified green (2844 passed/14 deselected/0 failed)
+after each of two full-suite reruns (mine and `analyst`'s), each of which triggers the documented
+`falkor-chat/AGENTS.md` "default pytest wipes `reference`" hazard; both repaired and independently
+re-verified via `verify_workflows.sh`/`verify_salesperson.sh`/`verify_catalog.sh` on `ws:demo`/
+`ws:acme`.
+
+**Next:** Stage 3 bring-up (`start_agent_team.sh`, already designed+reviewed in U2/U3) can now run
+for real — Stage 1's code is merged and Stage 2's workspace exists, the plan's own stated
+dependency for it. Not yet dispatched.
