@@ -2,6 +2,46 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-09-18 — one self-produced `kaizen_team` entry discarded as superseded by the very fix chain it was captured mid-writing (U6 of the kaizen-team distillation pass 2)
+
+- **The entry:** `a1f3c2e4-7b6d-4e9a-9c1f-2d5b8a6e4f10` (2026-09-17, `suggestedHome: project
+  docs`) — `modelbench.scoring.extraction._canon_str` casefolds and collapses whitespace but
+  preserves sentence punctuation (`.!?`), so canonicalized reply text can still be split into
+  sentences with a plain `rfind`/`find` on `".!?"`. Context: captured while building
+  `grounding.py._sentence_span` for the U174 abstention-detection fix (S7 chat-responder pack).
+- **Re-derived independently, not taken on the entry's own word or on the coordinator's
+  pre-derivation.** `git log --oneline --all -- model-bench/modelbench/scoring/grounding.py`
+  shows the fix chain the entry's own context names only the start of: U173/U174 widened the
+  abstention markers and contrastive-connective guard; **U176** (`analyst` re-gate) found a
+  regression the U175 fix itself introduced — a decimal number's internal period being
+  misread as a sentence boundary; **U177** closed it by replacing the plain-punctuation split
+  with a digit-aware regex. Read the current `grounding.py:59-67` directly: `_SENTENCE_BOUNDARY_RE
+  = re.compile(r"(?<!\d)\.(?!\d)|[!?]")`, with a docstring comment naming the exact defect this
+  entry's technique causes ("this pack's domain is decimal-heavy... a bare-character split on `.`
+  was treating a decimal's internal period as a boundary, truncating the sentence right after it
+  and silently reopening finding 2's answer-then-hedge misclassification"). `model-bench/AGENTS.md`
+  already carries the promoted invariant (line 111, "Load-bearing invariants," added by this same
+  sweep's U2): "Sentence scoping inside `modelbench/scoring/` is `grounding._SENTENCE_BOUNDARY_RE`
+  … never a bare `.` split (`rfind(".")`, `split(".")`)" — the exact opposite recommendation from
+  this entry.
+- **Confirms the coordinator's pre-derivation exactly — discarded as superseded, not promoted.**
+  The entry was captured mid-U174, before U176/U177 discovered and fixed the defect its own
+  recommended technique causes; promoting it now would ship advice into project docs that
+  contradicts the fix that came after it and already occupies the same "how to scope a sentence in
+  this scorer" topic. The underlying fact that `_canon_str` preserves `.!?` punctuation is still
+  true, but it adds nothing once separated from the (now-wrong) technique it was captured to
+  justify — the current-shape topic is fully owned by the `_SENTENCE_BOUNDARY_RE` paragraph
+  already in `model-bench/AGENTS.md`, and a second, narrower restatement of the same "how to find a
+  sentence boundary here" fact would only invite the next reader to pick the wrong one.
+- **No `MENTIONS` tag needed** — the entry is squarely model-bench scoring-code domain, this
+  agent's own capture, not substantively about another agent.
+- **Graph:** producer-write shape (real `:Agent`/`PRODUCED` edge, post-M8). Read via
+  `MATCH (a:Agent {agentId:'tdd-engineer'})-[:PRODUCED]->(k) RETURN k`, pinned to this one
+  `entryId`. Edge count before clearing: 1 `PRODUCED`, 0 `MENTIONS` — this was the entry's only
+  edge, so `otherRemaining == 0` and the whole node was cleared (`DETACH DELETE`), same shape as a
+  legacy clear. Post-clear `tdd-engineer` `PRODUCED` count: 0.
+- **Plan items:** none opened — nothing actionable survives; `plan.md` unchanged.
+
 ## 2026-09-17 — K-030 Stage 0: added a third on-demand knowledge base, `test-design-techniques.md` (prompt restructure, not a distillation)
 
 - **What:** `cobb` ran K-030 Stage 0 (dispatched by `teco`): `tdd-engineer.md` was named in K-030

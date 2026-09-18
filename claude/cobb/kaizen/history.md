@@ -140,6 +140,54 @@
   `git show 6d54fc4:…`, never the working tree or `HEAD`. `HISTORY.md`/`BACKLOG.md` not touched in
   any component — this unit produced no record-of-work, only a discard.
 
+## 2026-09-18 — `kaizen_team` distillation pass 2, U6: `tdd-engineer` (1 entry) — discarded as superseded by a later fix chain in the same file
+
+- **What:** ran §5 over the 1 `tdd-engineer` entry pinned by `teco`'s brief
+  (`docs/plans/kaizen-team-distillation2-coordination.md`, U6): `a1f3c2e4-7b6d-4e9a-9c1f-2d5b8a6e4f10`
+  (`modelbench.scoring.extraction._canon_str` preserves `.!?` punctuation, so a plain `rfind`/`find`
+  on `".!?"` can scope a match to "the same sentence" — captured mid-U174, building
+  `grounding.py._sentence_span`). Re-queried the graph fresh at open — exactly 1 row, matching the
+  brief. Full per-entry record: `claude/tdd-engineer/kaizen/history.md`, 2026-09-18. Files changed:
+  that history file only; this file. `tdd-engineer.md` and `plan.md` untouched.
+- **Paged both truncated cells before dispositioning anything** (`fact` 370 chars, `evidence` 264
+  chars — both over the MCP tool's 300-char cell cut) via `substring` offsets, per §5 step 1's
+  paging instrument — full text of both confirmed, not argued from the truncated read.
+- **The coordinator's brief pre-derived this entry as likely superseded and asked me to verify
+  independently rather than take that framing on trust — I did, and it holds.** `git log
+  --oneline --all -- model-bench/modelbench/scoring/grounding.py` shows the chain the entry's own
+  `context` field names only the start of (U173/U174): **U176** (`analyst` re-gate) found a
+  regression the U175 fix itself introduced — a decimal's internal period misread as a sentence
+  boundary — and **U177** closed it with a digit-aware regex, replacing the plain-punctuation split
+  this entry recommends. Read `grounding.py:59-67` directly (not just grepped): `_SENTENCE_BOUNDARY_RE
+  = re.compile(r"(?<!\d)\.(?!\d)|[!?]")`, with a docstring naming the exact defect class this
+  entry's technique causes (this pack's domain is decimal-heavy — `4.5`, `18.5%`, dollar amounts —
+  and a bare `.` split "was treating a decimal's internal period as a boundary, truncating the
+  sentence right after it"). `model-bench/AGENTS.md:111` already carries this sweep's own U2
+  promotion of the invariant ("never a bare `.` split (`rfind(".")`, `split(".")`)") — the literal
+  opposite of this entry's advice, already in the exact doc this entry's `suggestedHome` targets.
+- **The one real finding: discarded as superseded, not promoted — the underlying `_canon_str` fact
+  adds nothing once separated from the (now-wrong) technique it was captured to justify.** The
+  entry conflates two claims: `_canon_str` preserves `.!?` punctuation (still true) and that this
+  makes a plain `rfind`/`find` a good way to find a sentence boundary (now known-wrong, fixed two
+  units later in the same fix chain the entry's own context names). Promoting the entry as written
+  would ship advice into `model-bench/AGENTS.md` that directly contradicts the paragraph already
+  sitting a few lines above it in the same document. A narrower promotion of just the punctuation
+  fact would add nothing beyond what the existing `_SENTENCE_BOUNDARY_RE` paragraph already implies
+  by construction (the regex only needs to distinguish `.` cases because the punctuation survives
+  canonicalization) — a second, weaker restatement of the same "how to find a sentence boundary
+  here" topic would only invite a future reader to pick the stale one.
+- **No `MENTIONS` tag needed** — squarely model-bench scoring-code domain, this agent's own
+  capture, not substantively about another agent.
+- **Graph ops:** one edge-count read (`producedEdges=1, mentionEdges=0` → `otherRemaining=0`), one
+  curator `DETACH DELETE`, run only after `tdd-engineer`'s history entry was durably written; no
+  `MENTIONS` tag. Post-clear: `tdd-engineer` `PRODUCED` → 0 rows. Not touched: the `MENTIONS`-only
+  survivor `e1a6c4d2…`→`tico`, every other agent's entries, and every dirty/untracked file of the
+  concurrent falkor-chat session (`falkor-chat/server/**`, `falkor-chat/AGENTS.md`,
+  `claude/graph-dba/falkordb-quirks.md`) — none of that content was read, cited, or touched; every
+  file this unit read was model-bench source/docs or this sweep's own kaizen/coordination files.
+  `HISTORY.md`/`BACKLOG.md` not touched in any component — this unit produced no record-of-work,
+  only a discard.
+
 ## 2026-09-18 — `kaizen_team` distillation pass 2, U2: `analyst` chunk B (6 code facts, model-bench + falkor-chat `CallContext`) — 5 promoted as 3 promotions, 1 kept open in `model-bench/docs/BACKLOG.md`
 
 - **What:** ran §5 over the 6 `analyst` entries pinned by `teco`'s brief
