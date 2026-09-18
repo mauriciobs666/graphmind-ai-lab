@@ -396,3 +396,180 @@ bullet above the new item. Route to the model-bench closeout list.
 
 None blocking. For `teco`: the three Minors are one-sentence edits in three different files; no
 re-gate needed — a diff of those three sentences suffices. Sequence U3 per the Info above.
+
+## U3 — `architect` (2026-09-18)
+
+### Scope & verdict
+
+Reviewed `cobb`'s uncommitted diff (`git diff 49ba441 -- <path>`, baseline `49ba441`, never `HEAD`)
+for U3: the distillation of the 2 `architect`-produced entries `a1e6d9f4` (model-bench `report.py`
+never rendered `LatencyBlock` in `compare_report`, S1–S6 — discarded) and `a1f3d9c2` (falkor-chat:
+one process-constant actor behind every `get_context`-resolved call — promoted). Three files, each
+read whole around the hunk: `falkor-chat/docs/SERVER.md` §1.3 (read whole, L68-215, plus §2.2),
+`claude/architect/kaizen/history.md`, `claude/cobb/kaizen/history.md`. Every falkor-chat code claim
+was checked at `git show 49ba441:<path>` only — `falkor-chat/server/**` was never read from the
+working tree (a concurrent session's mid-edit). Not reviewed: `falkor-chat/AGENTS.md`,
+`claude/graph-dba/falkordb-quirks.md`, the dirty `server/` files, the untracked `falkor-chat/` and
+`claude/docs/plans/` files, `teco`'s coordination doc. The 2 source nodes are already cleared;
+promotions were judged against the tree, git history, and the disposition record.
+
+**Verdict: approve with suggestions** — no Blocker, no Major. One Minor (the promoted sentence's
+middle clause is `agent-knowledge-base-strategy.md` §4.1's *design stance* restated as if it were a
+code fact, and it sits two sentences above §1.3's own "when auth lands only `get_context` changes"
+without the doc reconciling the two), two Infos (one of them pre-existing and out of scope), two
+nits. Every code clause of the promoted sentence holds at `49ba441` — including the strongest one:
+`ctx.actor` is the only value any production caller hands `create_document*` (exactly one
+production call site, `services.py:1190`). The discard re-derives end-to-end (`9ef89d7`,
+`_render_speed` at `report.py:913`/`:1098`, `HISTORY.md` S7 items 1–2, 6 tests green, and
+`LatencyBlock` counted at 13 by reading). No figure from either entry's `evidence` reached
+`SERVER.md`; the graph is exactly as reported; the bookkeeping mechanics all check. No Pass-2 re-gate
+needed once the Minor is applied — it is one clause in one sentence.
+
+**CPG: considered, not relevant — the diff is documentation-only but the promoted sentence asserts
+five code facts; the brief flagged any CPG as unverified, so each was verified by direct source
+reads pinned to `49ba441` (`config.py`, `mcp.py`, `services.py`, `repository.py`, `storefront.py`,
+`api.py`, `app.py`) plus a repo-wide `git grep` caller enumeration and the executed model-bench
+tests — evidence a possibly-stale graph could not supply.**
+
+### Findings
+
+#### Minor — the sentence's "needs its own additive per-call identity path *alongside* this seam rather than a change to it" is §4.1's design decision, not a code fact, and §1.3 now describes two futures for per-caller identity without saying how they relate
+
+`falkor-chat/docs/SERVER.md` §1.3, working tree L94-99: *"…cannot read it off `ctx.actor` and
+**needs its own additive per-call identity path alongside this seam rather than a change to it**,
+the shape `Storefront.context_for` (below) already takes…"*. Compared clause-for-clause with
+`claude/docs/plans/agent-knowledge-base-strategy.md` §4.1 L300-315 ("add an optional parameter …
+**purely additive** … bolted a second, per-caller auth path … **alongside** the same
+process-constant `get_context()` seam, **rather than reworking the seam itself**") and §1 L166-169:
+the bolded clause is that plan's *chosen* design, with its rationale, not a statement about what the
+code does. The disposition record (`claude/architect/kaizen/history.md`, the `a1f3d9c2` bullet) says
+SERVER.md "received only the code fact, phrased so it neither anticipates that design" — the facts
+around it do meet that bar; this clause does not. It also lands two sentences above §1.3's own
+*"When auth lands (token → user + workspace claim…) **only `get_context` changes** — everything
+below is untouched"* (L107-109): one sentence says per-caller identity arrives by changing the seam,
+the next says it must arrive beside it. `cobb`'s history reconciles them ("auth is the seam's own
+future; attribution rides beside it") but the doc itself does not — a reader gets both prescriptions
+and no rule. **Fix (that clause only):** make it descriptive of today's code, e.g. "…cannot read it
+off `ctx.actor`; the one per-caller precedent is `Storefront.context_for` (below), which builds its
+own `CallContext` beside the seam and varies only `actor`" — and let §4.1 keep the "must be
+additive" ruling, which is where a design decision belongs per root `AGENTS.md`'s doc-kind rule.
+
+#### Info — `Repository.create_document` has no production caller at `49ba441`; the sentence names it as a peer of the production path
+
+`git grep -n 'create_document(' 49ba441 -- falkor-chat`: the plain method (`repository.py:1036`) is
+called from 24 sites, **all under `server/tests/`**; the only production `INGESTED_BY` write is
+`services.py:1190` → `create_document_with_auto_supersede` (since document-ingestion2 Stage D, per
+its own docstring at `services.py:1155-1163`). The sentence's "already resolve `INGESTED_BY` …
+by the id they are handed" is true of both methods (both carry the identical `OPTIONAL MATCH …
+coalesce(u, a)` clause, `:1061-1072` / `:1803-1820`), so nothing is false — but "the id they are
+handed, today always `ctx.actor`" is vacuous for a method nothing in production hands anything to.
+Optional one-word tweak: "`create_document_with_auto_supersede` (the production path) and the plain
+`create_document` already resolve…". Tests hand it `u1`/`u2`/`bot1`/`ghost`, which is the
+`User`-or-`Agent`-or-missing coverage the clause relies on — worth knowing, not worth promoting.
+
+#### Info (pre-existing, out of U3's scope) — §2.2's tool table does not list the document tools the new sentence now names
+
+`SERVER.md` §2.2 (L755-763) lists seven MCP tools; at `49ba441` `mcp.py` also exposes
+`ingest_document` (`:287`), `ingest_documents` (`:323`) and further `@mcp.tool()`s below (`:363`
+onward). `grep -n ingest_document falkor-chat/docs/SERVER.md` → the new sentence at L95 is the file's
+**only** mention. The cross-reference the sentence makes to §2.2 is for `frm`, which §2.2 does state
+(L765-766, "MCP ignores any client-supplied `frm`"), so the citation is correct; the gap is that a
+reader following "such as `ingest_document`" to §2 finds no such tool. Not `cobb`'s diff and not a
+distiller's job — route to the falkor-chat doc owner as a §2.2 refresh.
+
+#### Nit — one line-number inconsistency in the disposition record
+
+`claude/architect/kaizen/history.md`, `a1f3d9c2` bullet: "`:1804-1820` `create_document_with_auto_
+supersede`" then, in the same sentence, "(`:1061-1072`, `:1803-1820`)". The clause opens at
+`:1803` (`OPTIONAL MATCH (u:User …`); `:1804` is the `Agent` line. Make both `:1803-1820`.
+
+#### Nit — the appended sentence is ~110 words joined by three semicolons
+
+The paragraph (L86-99) is now the longest prose block in §1.3. Splitting at "the graph side needs
+nothing new for it" into its own sentence costs nothing and reads better. Take or leave.
+
+### Gate questions, with what was run
+
+1. **The promoted sentence, clause by clause, at `49ba441`.** `config.py:264-273` `@dataclass(frozen=True)
+   class CallContext(ws, actor)`; `:276-284` `get_context() → CallContext(ws=WS_ID, actor=USER_ID)`,
+   docstring "MCP ignores any client-supplied `from`". `mcp.py:41` `_get_context = config.get_context`,
+   swappable only via `configure(context_provider=…)` (`:147-169`; `app.py:348` `provider =
+   context_provider or config.get_context`, `:404` passes it on); `send_message(body, re, mentions,
+   frm)` at `:201-213` — `frm` is accepted and **never read** (docstring `:206` "reserved/ignored in
+   M1"; body uses `ctx = _get_context()` only); `ingest_document` `:287`, `ctx = _get_context()`
+   `:304`, → `Services.ingest_document` `services.py:1136` → `create_document_with_auto_supersede(…,
+   ingested_by=ctx.actor)` `:1190-1194`; `ingest_documents` (`services.py:1205`) loops the same
+   method; REST `api.py:165/:204` reach the same two service methods. `repository.py:1036`
+   `create_document` and `:1741` `create_document_with_auto_supersede` both open with `OPTIONAL MATCH
+   (u:User {userId: $ingestedBy}) OPTIONAL MATCH (a:Agent {agentId: $ingestedBy}) WITH … coalesce(u,
+   a) AS ingestor` and `CREATE (d)-[:INGESTED_BY]->(ingestor)` (`:1061-1072`, `:1803-1820`);
+   `sourceKind` derived from which label bound. `storefront.py:570` `self._ws = config.WS_ID if ws is
+   None else ws`, `:678-685` `context_for(pid) → CallContext(ws=self._ws, actor=participant_id)`;
+   `:1494` the agent's own ctx, same `ws`. **Caller enumeration** (`git grep` over all of
+   `falkor-chat` at `49ba441`): production call sites of `create_document*` = **1**
+   (`services.py:1190`, `ingested_by=ctx.actor`); every other `ingested_by=` site (28) is under
+   `server/tests/`. §2.2's `frm` bullet confirmed at L765-766 — the cross-reference is correct.
+2. **Paragraph coherence, read whole.** U2's antecedent ("every call that resolves through
+   `get_context`, which is the legacy `api.py` router and `/mcp`") is precise, so the new clause
+   stacks on a true subject. No contradiction with the storefront sentences: "their `actor` is per
+   participant, their `ws` this same constant" (L92-93) and "no `/shop/api` request resolves through
+   it … the `actor` half is per-request" (L175-179) agree with "the shape `Storefront.context_for`
+   (below) already takes for `actor`". "`get_context` is the *only* place `ws` is fixed" (L101) is
+   about `ws`; the new sentence is about `actor` — consistent. The one tension is the Minor: the
+   normative "alongside … rather than a change to it" vs. L107-109's "only `get_context` changes".
+3. **The discard.** `git show --stat 9ef89d7`: 2026-09-17 14:53:50 -0300, touches `report.py` (+68)
+   and `test_report.py` (+165); `git show 9ef89d7 -- report.py | grep '^+.*_render_speed'` → the
+   `def` and the `lines += _render_speed(runs, arm_names)` wiring; `git log -S _render_speed --
+   report.py` → that one commit. At `49ba441`: `report.py:913` `def _render_speed`, `:1098` wired in
+   `compare_report` (`:958`); `:917` docstring "prints exactly `LatencyBlock`'s own thirteen".
+   `model-bench/docs/HISTORY.md:108` S7 entry, item 1 (L120-121) "prints `RunResult.latency` for the
+   first time in this component's history", item 2 (L127-128) names `_render_speed` delivered. Ran
+   from `model-bench/` with `.venv`: `pytest -q -k "speed or Speed or latency" tests/test_report.py`
+   → **6 passed**, 125 deselected (`TestRenderSpeed` 5 cases at `:2971-3034`, helper `_latency_block`
+   at `:2959`, regression `test_regression_existing_guard_judge_report_is_unchanged_and_speed_is_a_
+   pure_addition` at `:3035`). **`LatencyBlock` counted by reading** `results.py:274-294` at
+   `49ba441`: `latencyMsP50`, `latencyMsP95`, `latencyMsMax`, `latencyTimedCount`,
+   `latencyItemCount`, `latencyWithheldForLoad`, `latencyWithheldForNoResponse`, `statsCoveredCount`,
+   `callCount`, `ttftMsMedian`, `prefillMsPer1kMedian`, `tokensPerSecondMedian`, `unexplainedMsMax`
+   — **13** field lines (`:282-294`); `callAttemptedCount` (`:296`) is a `@property`, not a field,
+   and is the likely tenth-vs-thirteenth trap for any regex that anchors on `: ` rather than the
+   dataclass body. Matches both history entries and the `:917` docstring.
+4. **Figures.** `git diff 49ba441 -- SERVER.md | grep '^+' | grep -o '[0-9]\+'` → only "2" (twice,
+   both `§2.2`). "13" appears in the two history logs only; "549", "913", "1098", "14:53" appear in
+   the history logs only. Word count `git show 49ba441:… | wc -w` = 8,971 → working 9,076 — exact.
+5. **Altitude / doc-kind fit.** Confirmed `agent-knowledge-base-strategy.md` §1 L150-188 ("Two
+   costs …") and §4.1 L290-327 hold the finding *and* the design decision, as the record says. Of
+   the promoted sentence's clauses, four are present-tense code facts (client self-description
+   ignored; `ctx.actor` unreadable as per-caller identity; `context_for` varies only `actor`;
+   `INGESTED_BY` resolves `User`/`Agent` by the handed id, today always `ctx.actor`) and one is
+   §4.1's ruling (the Minor). The sentence names no uncommitted symbol (`produced_by` absent; `grep
+   produced_by SERVER.md` → 0) and describes no working-tree behavior — the concurrent `mcp.py` work
+   is neither described nor named, though the Minor's clause anticipates its *shape*.
+6. **Bookkeeping.** Architect history header "1 promoted … 1 discarded … 0 kept open" = 2; body: one
+   DISCARDED bullet (`a1e6d9f4`), one PROMOTED bullet (`a1f3d9c2`), each id exactly once in each
+   history file's added lines and absent at baseline. `git diff 49ba441 -- <history> | grep -c
+   '^-[^-]'` = 0 for both (pure insertion; U2 entries untouched). `grep '^## ' | sort | uniq -d` and
+   the adjacent-`awk` scan → 0 on all three files. `git diff 49ba441 --stat -- claude/architect/
+   kaizen/plan.md` → empty; neither id in `plan.md` at baseline. `cobb`'s history file list (3 files)
+   and word delta match the diff; `git status --short` shows exactly those three plus the concurrent
+   session's files and this review.
+7. **Graph (live, read-only).** `MATCH (:Agent {agentId:'architect'})-[:PRODUCED]->(k)` → **0**.
+   Prefix match on `a1e6d9f4`/`a1f3d9c2` → 0 nodes. `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` present,
+   producers `[]`, `MENTIONS` → `['tico']`. This gate wrote no capture of its own.
+
+### What's solid
+
+- The strongest claim in the sentence — "only that id, today always `ctx.actor`, never varies" —
+  is exactly right at `49ba441`, and was checked by enumerating every caller rather than by reading
+  the one obvious path.
+- The discard was traced to its fix in git, its test, and its `HISTORY.md` record before being
+  called fixed, and the field count was enumerated rather than carried — the 09-16 U4 class is absent.
+- Home and shape: the sentence lands on the exact antecedent U2 sharpened for it, cross-references
+  §2.2 rather than restating it, and rejects the private-KB alternative for the right reason.
+- The disposition record is complete and every line number in it re-derives (one off-by-one nit).
+
+### Open questions
+
+None blocking. For `teco`: the Minor is one clause in one sentence of `SERVER.md`; no re-gate needed —
+a diff of that sentence suffices. Sequencing note from §U2 stands resolved by `cobb`'s wording
+(nothing uncommitted is named), so U3 can commit ahead of the concurrent `mcp.py` work.

@@ -2,6 +2,80 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-09-18 — kaizen distillation pass 2, `architect`'s 2-entry inbox (U3 of `docs/plans/kaizen-team-distillation2-coordination.md`): 1 promoted as one sentence in `falkor-chat/docs/SERVER.md` §1.3, 1 discarded as fixed-and-recorded, 0 kept open
+
+- **What:** `cobb` ran the standing `kaizen_team` distillation (`skills/agent-maintenance/SKILL.md`
+  §5) over exactly the 2 `architect`-produced entries `teco`'s brief pinned. Re-queried at dispatch:
+  exactly 2 current-shape `PRODUCED` entries (both dated 2026-09-17; `fact`/`evidence`/`context`
+  paged whole with `substring`, longest cell 549 chars), 0 legacy `author` entries, no new arrival.
+  Every code fact was re-derived at `git show 49ba441:<path>`, never the working tree —
+  `falkor-chat/server/**` is mid-edit by a concurrent session and nothing uncommitted is described
+  or anticipated below.
+- **`a1e6d9f4…` (2026-09-17, model-bench `report.py` had never rendered `RunResult.latency` /
+  `LatencyBlock` in `compare_report`, S1–S6) — DISCARDED: true when captured, closed the same day,
+  already recorded where model-bench keeps its record.** Captured while writing the S7 spec, which
+  resolved the gap as a new renderer; `git log -S _render_speed -- model-bench/modelbench/report.py`
+  → one commit, `9ef89d7` (2026-09-17 14:53, "S7 chat-responder Steps 0-2 … (U165-U168,U170)"). At
+  `49ba441`: `_render_speed` is defined at `report.py:913` and wired into `compare_report` at
+  `:1098`; `tests/test_report.py:2954-3040` holds `TestRenderSpeed` (5 cases) plus the pure-addition
+  regression test — ran `pytest -k "speed or Speed or latency" tests/test_report.py` from
+  `model-bench/` → 6 passed. `model-bench/docs/HISTORY.md`'s 2026-09-17 S7 entry (items 1–2) records
+  both the gap and its closure ("prints `RunResult.latency` for the first time in this component's
+  history"). The entry's "13 captured fields" was enumerated rather than trusted: `LatencyBlock`
+  (`results.py:274`, fields `:282-294` at `49ba441`) declares `latencyMsP50`, `latencyMsP95`,
+  `latencyMsMax`, `latencyTimedCount`, `latencyItemCount`, `latencyWithheldForLoad`,
+  `latencyWithheldForNoResponse`, `statsCoveredCount`, `callCount`, `ttftMsMedian`,
+  `prefillMsPer1kMedian`, `tokensPerSecondMedian`, `unexplainedMsMax` — 13, matching (and
+  `_render_speed`'s own docstring says "`LatencyBlock`'s own thirteen"). Nothing left to promote:
+  model-bench is closed (S0–S8), its `BACKLOG.md` is forward-looking only, and the fact is a record
+  of delivered work, which is `HISTORY.md`'s job and already done. Not technique-shaped, so not
+  `plan-authoring-techniques.md` either.
+- **`a1f3d9c2…` (2026-09-17, falkor-chat: every `get_context`-resolved call is one
+  process-constant actor; MCP ignores a client-supplied `from`; per-caller attribution needs an
+  additive per-call path; `Storefront.context_for` is the precedent; `INGESTED_BY` already resolves
+  against `User` or `Agent`) — PROMOTED, one sentence appended to `falkor-chat/docs/SERVER.md`
+  §1.3's "process-constant, not literal" paragraph — the sentence U2 rewrote for exactly this
+  fold.** Re-derived at `49ba441`: `config.py:265-273` (`CallContext(ws, actor)`), `:276-284`
+  (`get_context() → CallContext(ws=WS_ID, actor=USER_ID)`, docstring "MCP ignores any
+  client-supplied `from`"); `mcp.py:41` `_get_context = config.get_context`, `:206` "`frm` is
+  reserved/ignored in M1", `:287` `ingest_document` opens with `ctx = _get_context()` (`:304`) and
+  passes `ctx` to `Services.ingest_document` (`services.py:1136`), which passes
+  `ingested_by=ctx.actor` (`:1193`); `repository.py:1036` `create_document` and `:1803-1820`
+  `create_document_with_auto_supersede` both resolve it as `OPTIONAL MATCH (u:User {userId:
+  $ingestedBy}) OPTIONAL MATCH (a:Agent {agentId: $ingestedBy}) WITH coalesce(u, a) AS ingestor …
+  CREATE (d)-[:INGESTED_BY]->(ingestor)` (`:1061-1072`, `:1803-1820`); `storefront.py:678-685`
+  `context_for(participant_id) → CallContext(ws=self._ws, actor=participant_id)`. Sibling-doc grep
+  before promoting: SERVER.md §2.2 already carries "MCP ignores any client-supplied `frm`" — the new
+  sentence cross-references it (§2.2) rather than restating it; `claude/docs/plans/
+  agent-knowledge-base-strategy.md` §1 ("Two costs …") and §4.1 hold this same finding *and* the
+  design decision built on it, so SERVER.md received only the code fact, phrased so it neither
+  anticipates that design nor the concurrent session's uncommitted server work. The entry's
+  alternative home (a `graph-dba`/`architect` KB) rejected: a fact about falkor-chat's code belongs
+  in falkor-chat's own docs, where every agent reads it (§5 step 3). `SERVER.md` 8,971 → 9,066
+  words; `git status` confirmed the file clean before the edit and its diff mine alone after.
+- **Gate (`docs/reviews/kaizen-team-distillation2.md` §U3): approve with suggestions — 1 Minor, 2
+  Infos, 2 nits — fixed the same day.** The Minor: the promoted sentence's middle clause ("needs
+  its own additive per-call identity path alongside this seam rather than a change to it") was
+  `agent-knowledge-base-strategy.md` §4.1's design ruling restated as a present-tense code fact,
+  and sat two sentences above §1.3's own "when auth lands only `get_context` changes" with no
+  reconciliation. Confirmed against §4.1 L290-327 and §1.3 L86-109 myself before fixing (not the
+  gate's wording taken on faith): reworded to state only what exists today — no call through
+  `get_context` reads any per-caller identity off `ctx.actor`, and `Storefront.context_for` is the
+  *one existing precedent* for varying identity per caller — leaving §4.1 the sole owner of what a
+  future path *should* look like. Both nits applied: this bullet's `:1804-1820` → `:1803-1820`
+  typo; the run-on sentence split at "The graph side needs nothing new for it." The two Infos (no
+  production caller for the plain `create_document`; §2.2's tool table missing `ingest_document`)
+  left as the gate scoped them — informational, one pre-existing and out of `cobb`'s remit.
+- **Graph ops (per entry, log → count → clear, one query per `entryId`):** both entries
+  edge-counted individually immediately before clearing (`OPTIONAL MATCH` + `count(DISTINCT …)`,
+  never `exists()`): `producedEdges=1, mentionEdges=0` each → last edge → full-node `DETACH DELETE`.
+  No `MENTIONS` tag added (neither entry is substantively about another agent). Post-clear
+  re-query: `architect` `PRODUCED` → 0 rows. Not touched: the `MENTIONS`-only survivor
+  `e1a6c4d2…`→`tico`, every other agent's entries.
+- **Docs touched:** `claude/architect/kaizen/history.md`, `falkor-chat/docs/SERVER.md`,
+  `claude/cobb/kaizen/history.md`. `plan.md` untouched — nothing kept open, no new idea (same as
+  the 09-16 pass).
+
 ## 2026-09-17 — K-030 Stage 0: extracted an on-demand knowledge base, `plan-authoring-techniques.md` (prompt restructure, not a distillation)
 
 - **What:** `cobb` ran K-030 Stage 0 (dispatched by `teco`): `architect.md` was one of the four

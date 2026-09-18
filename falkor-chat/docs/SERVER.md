@@ -90,7 +90,13 @@ and `/mcp`, gets the same actor **and the same workspace**. So a second target w
 **second server process** with its own `FALKORCHAT_WS_ID` (what `scripts/start_demo.sh` does for
 `demo`), never a per-call or per-token parameter; the storefront's `/shop/api` routes do not resolve
 through `get_context` at all (below) — their `actor` is per participant, their `ws` this same
-constant.
+constant. The `actor` half carries the mirror consequence: whatever a client says about itself is
+ignored (MCP's `frm`, §2.2) — no call through `get_context`, including `ingest_document` and
+`send_message`, reads any per-caller identity off `ctx.actor`. The one existing precedent for
+varying identity per caller is `Storefront.context_for` (below), which builds its own `CallContext`
+beside this seam and varies only `actor`. The graph side needs nothing new for it: `Repository.create_document` and
+`create_document_with_auto_supersede` already resolve `INGESTED_BY` against either a `User` or an
+`Agent` by the id they are handed, and only that id — today always `ctx.actor` — never varies.
 
 `get_context` is the *only* place `ws` is fixed. Everything below the seam is workspace-parametrized
 **per call**: services and the repository take `ws` / `actor` as parameters, and the three components

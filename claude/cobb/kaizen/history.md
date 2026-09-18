@@ -2,6 +2,59 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-18 — `kaizen_team` distillation pass 2, U3: `architect` (2 code facts, model-bench + falkor-chat `CallContext`) — 1 promoted as one sentence in `falkor-chat/docs/SERVER.md` §1.3, 1 discarded
+
+- **What:** ran §5 over the 2 `architect` entries pinned by `teco`'s brief
+  (`docs/plans/kaizen-team-distillation2-coordination.md`, U3): `a1e6d9f4` (model-bench
+  `report.py` never rendered `LatencyBlock`) · `a1f3d9c2` (falkor-chat: one process-constant
+  actor behind every `get_context`-resolved call). Full per-entry record:
+  `claude/architect/kaizen/history.md`, 2026-09-18. Files changed: that history;
+  `falkor-chat/docs/SERVER.md` §1.3 (one sentence appended to the "process-constant, not literal"
+  paragraph — the actor half of the seam: a client's self-description is ignored, per-caller
+  attribution needs an additive path alongside the seam on `Storefront.context_for`'s pattern, and
+  `INGESTED_BY` already resolves `User` or `Agent` by id); this file. Word delta (`git show
+  49ba441:<path> | wc -w` → working file): `SERVER.md` 8,971 → 9,076; `architect.md` and
+  `plan-authoring-techniques.md` untouched (neither entry is technique-shaped); `architect`'s
+  `plan.md` untouched (nothing kept open).
+- **Verification:** every fact re-derived at `49ba441`, never `HEAD` — `falkor-chat/server/**` is
+  mid-edit by a concurrent session, so each file was read via `git show 49ba441:<path>`, and
+  `git status` bracketed the SERVER.md edit (clean before; one hunk, mine, after). The model-bench
+  entry was traced to its fix before being called fixed: `git log -S _render_speed` → `9ef89d7`
+  (2026-09-17), `_render_speed` at `report.py:913`/`:1098`, `TestRenderSpeed` + the pure-addition
+  regression test run (6 passed), `model-bench/docs/HISTORY.md` S7 items 1–2 already recording the
+  closure. The entry's "13 captured fields" was enumerated against `LatencyBlock`'s definition
+  (`results.py:282-294`) and came to 13 — stated in the record as an observation, not carried from
+  the entry. Sibling-doc grep before the falkor-chat promotion: SERVER.md §2.2's "MCP ignores any
+  client-supplied `frm`" is cross-referenced, not restated; `claude/docs/plans/
+  agent-knowledge-base-strategy.md` §1/§4.1 hold the design decision on this seam, so SERVER.md got
+  the code fact only, worded to anticipate neither that design nor the uncommitted server work.
+- **Routing calls worth stating:** the entry's own alternative home (a `graph-dba`/`architect` KB)
+  rejected — a fact about a component's code is project docs, not one agent's private file. The
+  new sentence names the storefront path as "alongside this seam rather than a change to it" so it
+  does not collide with the next paragraph's "when auth lands only `get_context` changes" — auth is
+  the seam's own future; attribution rides beside it, as the storefront already does.
+  `falkor-chat/docs/SERVER.md` is outside my hook allowlist; written on the brief's explicit
+  direction, flagged in the report rather than assumed rubber-stamped.
+- **Graph ops:** one edge-count read per `entryId` (`producedEdges=1, mentionEdges=0` each), one
+  curator `DETACH DELETE` per `entryId`, both after every file edit was on disk; no `MENTIONS` tag.
+  Post-clear: `architect` `PRODUCED` → 0 rows. Not touched: the `MENTIONS`-only survivor
+  `e1a6c4d2…`→`tico`, every other agent's entries, every dirty/untracked file of the concurrent
+  session, `teco`'s coordination doc and the gate review.
+- **Gate (§U3): approve with suggestions — 1 Minor, 2 Infos, 2 nits — all fixed same day, no
+  re-gate needed (pre-stated: "a diff of that sentence suffices").** The Minor: my promoted
+  sentence's clause "needs its own additive per-call identity path alongside this seam rather than
+  a change to it" was `agent-knowledge-base-strategy.md` §4.1's chosen design restated as if it
+  were code behavior, sitting ungrounded two sentences above §1.3's own "only `get_context`
+  changes" when auth lands. Re-read §4.1 (L290-327) and §1.3 (L86-109) myself and confirmed the
+  diagnosis before touching anything — did not apply the gate's suggested text verbatim, wrote my
+  own: the clause now states only that no call through `get_context` reads per-caller identity off
+  `ctx.actor`, and names `Storefront.context_for` as the one existing precedent for varying it —
+  §4.1 keeps sole ownership of the "must be additive" ruling. `SERVER.md` 8,971 → 9,066 (one
+  self-inflicted bug caught before finishing: my first fix wrapped a code span
+  (`` `Repository.create_document` ``) across a line break inside the heredoc, corrected before
+  measuring the final count). Nits: architect history's `:1804-1820` → `:1803-1820`; split the
+  run-on sentence. The two Infos left exactly as the gate scoped them (not requested, not applied).
+
 ## 2026-09-18 — `kaizen_team` distillation pass 2, U2: `analyst` chunk B (6 code facts, model-bench + falkor-chat `CallContext`) — 5 promoted as 3 promotions, 1 kept open in `model-bench/docs/BACKLOG.md`
 
 - **What:** ran §5 over the 6 `analyst` entries pinned by `teco`'s brief
