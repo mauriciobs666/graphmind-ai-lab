@@ -2,6 +2,47 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-18 — `kaizen_team` distillation pass 2, U10: `cobb` self-produced (1 entry — the curator full-node clear must be issued per-`entryId`, never batched) — promoted, one clause added to `agent-maintenance` §5 step 5
+
+- **What:** ran §5 over my own single pinned entry (`teco`'s brief,
+  `docs/plans/kaizen-team-distillation2-coordination.md`, U10): `9f2b6e1a-3d4c-4a7e-8b1f-6c5d9a0e2f71`
+  (2026-09-16) — during a `frontend-engineer` distillation, an `UNWIND`-batched
+  `MATCH (k:KaizenEntry {entryId: eid}) DETACH DELETE k` over all 8 pinned ids was rejected outright
+  by the `cypher` MCP authorizer; re-issued as 8 separate single-`entryId` clears, all 8 succeeded.
+  Checked precedent first: `grep -n -i "UNWIND\|batch" skills/agent-maintenance/SKILL.md` found one
+  hit (line 419), and reading it in context showed it's the **read**-side "every note produced by or
+  mentioning agent X" query — an unrestricted read, unrelated to a write authorization shape — so it
+  doesn't already cover this. Read all of §5 step 5 whole (the legacy clear, the current-shape
+  read-then-decide sequence, both `DETACH DELETE` forms) end to end: neither of the two existing
+  read-time traps stated there (the zero-row-read-is-an-id-error warning; the `exists()`
+  relationship-scoping sibling trap) says anything about the *mutate* step rejecting a batched form —
+  genuine gap, not a duplicate. **Promoted:** one clause appended right after the "All of the above
+  are curator-gated Cypher shapes" sentence that already closes out both `DETACH DELETE` forms shown
+  in step 5 — the shared anchor point for a caveat that applies to either shape. `skills/
+  agent-maintenance/SKILL.md` 6,705 → 6,757 words (+52), single hunk; duplicate-heading scan
+  (`grep '^## ' … | sort | uniq -d`) clean.
+- **Verification:** mutation-tested live rather than trusting the entry's own account — issued the
+  exact rejected shape myself, `UNWIND ['<fake-uuid-1>','<fake-uuid-2>'] AS eid MATCH (k:KaizenEntry
+  {entryId: eid}) DETACH DELETE k` against `kaizen_team` with `agent='cobb'`, using two fabricated
+  ids that match no real node (so nothing could be touched either way) — got back the identical
+  `Rejected: … neither an author-write … nor a recognized curator shape` message the entry describes,
+  confirming the mechanism independent of the entry's own report. Cross-checked against the
+  `mcp__cypher__query` server's own tool-instructions text, which already states the curator
+  full-node clear singularly ("a full-node clear by `entryId`") — judged the new clause as adding
+  real information that description leaves implicit (that a batched attempt is rejected outright, and
+  what to do instead: one call per id), not a restatement, so it clears the bar for a skill-doc
+  addition rather than being pure noise.
+- **Graph ops:** one edge-count read on the entry's own `entryId` (`producedEdges=1, mentionEdges=0`),
+  confirmed against the fresh full re-query run immediately before touching anything. Curator
+  `DETACH DELETE` issued only after this history entry was confirmed written to disk. Post-clear:
+  `cobb` `PRODUCED` → 0 rows. Not touched: the deferred `coder` entry `a1c4e6b2…`, the `MENTIONS`-only
+  survivor `e1a6c4d2…`→`tico`, every other agent's entries, and every file flagged dirty/mid-edit by
+  the concurrent session (`falkor-chat/server/**`, `falkor-chat/AGENTS.md`,
+  `claude/graph-dba/falkordb-quirks.md`). `HISTORY.md`/`BACKLOG.md` (root or component) untouched —
+  no project-docs promotion; this is a skill-doc-only disposition. Self-produced entry — per this
+  file's existing convention (every other self-produced-unit row above logs only its own disposition
+  entry, no separate distillation-run entry), this entry is the whole record.
+
 ## 2026-09-18 — `kaizen_team` distillation pass 2, U3: `architect` (2 code facts, model-bench + falkor-chat `CallContext`) — 1 promoted as one sentence in `falkor-chat/docs/SERVER.md` §1.3, 1 discarded
 
 - **What:** ran §5 over the 2 `architect` entries pinned by `teco`'s brief

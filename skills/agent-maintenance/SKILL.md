@@ -657,7 +657,12 @@ distills — on request, and folded into every certification pass (§4):
           the other end are never deleted).
         All of the above are curator-gated Cypher shapes; `cobb` is a
         recognized curator agent (`CYPHER_MCP_CURATOR_AGENTS`), so each is
-        authorized when called with `agent='cobb'`.
+        authorized when called with `agent='cobb'`. **One call per `entryId`,
+        never batched:** `UNWIND [...] AS eid MATCH (k:KaizenEntry {entryId:
+        eid}) DETACH DELETE k` over several ids is rejected outright by the
+        authorizer (it matches none of the six recognized shapes) — clearing
+        several entries means issuing the single-id `DETACH DELETE` form above
+        once per `entryId`, not batching them.
 
    This runs for **every** disposition, kept-open included — an unresolved
    question lives on in `history.md`'s dated note (and `plan.md` if
