@@ -2,6 +2,48 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-09-18 — `kaizen_team` distillation: `f3d8a1c2…` (requirements docs going stale post-ship) — 3 named cases already fixed; the general lesson promoted into `teco.md`, not here
+
+U9 of `docs/plans/kaizen-team-distillation2-coordination.md` (curator: `cobb`).
+
+- **What:** verified all 3 instances the entry names — `docs/requirements/salesperson-ui.md`,
+  `docs/requirements/joern-cpg-pipeline.md`, `opencode/docs/requirements/devops-opencode-headless.md`
+  — are `Status: archived`, dated 2026-09-16 (the entry's own capture date). Whoever ran the
+  repo-wide grep sweep the entry describes had already fixed all 3 the same day; nothing about the
+  named cases needed further action.
+- **General lesson checked against existing coverage, not assumed closed.** Root `AGENTS.md`'s
+  owner-by-kind table and `teco.md`'s "Freeze at milestone close" paragraph already instruct
+  `teco` to list every document a milestone close freezes — **naming "requirements" explicitly**
+  — and perform the mechanical `Status→archived` flip itself. Traced all 3 named cases against
+  their sibling plan/coordination docs anyway: each requirements doc sat stale well after its
+  sibling plan/coordination doc was already `archived` (`docs/plans/salesperson-ui2-coordination.md`,
+  `opencode/docs/plans/devops-opencode-headless-coordination.md` both closed before 2026-09-16),
+  and all 3 were only caught by the ad hoc, stakeholder-triggered grep this entry describes — not
+  by `teco`'s own close-out step. The paragraph names the right document kind but gives no way to
+  *locate* it beyond recall, and recall measured 0/3 in the cases available to check.
+- **Disposition: promoted, but the fix lands in `teco.md`, not this prompt.** `teco` is the one
+  who performs the close and already holds the sibling plan/coordination doc's slug in hand at
+  that moment — extending its check to look up `docs/requirements/<same-slug>.md` by that slug
+  (root `AGENTS.md` collision rule 2's family chain) is a near-free, mechanical anchor at the
+  correct trigger point. `tico` has no equivalent trigger: it isn't present when
+  `architect`/`coder`/`teco` close a feature elsewhere, so a `tico`-side self-audit habit would
+  run blind with no signal of when to fire, and wouldn't clear the "changes behavior in most
+  sessions" bar for an always-loaded prompt addition — so no change was made to this file's
+  prompt. Exact wording proposed for `teco.md`'s existing "Freeze at milestone close" bullet
+  (`cobb` cannot edit `teco.md` directly; returned to `teco` for human-reviewed application):
+
+  > insert after "...reviews, requirements, test plans and reports)": "— the requirements
+  > document is the one most often missed since it sits outside the units you dispatched, so look
+  > it up by the plan's own slug (`docs/requirements/<slug>.md`, root `AGENTS.md` collision rule
+  > 2) rather than relying on recall —"
+
+- **Not kept open on this agent's own backlog** — the outstanding action (applying the wording
+  above) belongs to `teco`/the human, not to `tico`; `plan.md` left untouched.
+- **Graph:** `f3d8a1c2-6b4e-4a9f-9c1d-7e2b5a8f0d31` — current-shape, sole `PRODUCED` edge, no
+  `MENTIONS` — cleared by full-node `DETACH DELETE` (last edge, `otherRemaining == 0`). `tico`
+  producer count after this pass: 0.
+- **Docs touched:** this file only.
+
 ## 2026-09-13 — standing distillation pass: 2 of 3 entries resolved, 1 left deliberately open (pre-existing K-016)
 
 - **What:** `cobb` ran the standing kaizen-graph distillation over `tico`'s inbox: 2 own entries

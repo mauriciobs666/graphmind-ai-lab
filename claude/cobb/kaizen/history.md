@@ -282,6 +282,60 @@
   every other agent's entries. `HISTORY.md`/`BACKLOG.md` (root or any component's) not touched —
   this unit's disposition is a KB sharpening, not a record of delivered project work.
 
+## 2026-09-18 — `kaizen_team` distillation pass 2, U9: `tico` (1 entry — requirements docs going stale post-ship) — 3 named instances already fixed; the general lesson's fix proposed for `teco.md`, not applied (out of `cobb`'s edit authority)
+
+- **What:** ran §5 over the 1 `tico`-produced entry pinned by `teco`'s brief
+  (`docs/plans/kaizen-team-distillation2-coordination.md`, U9): `f3d8a1c2-6b4e-4a9f-9c1d-7e2b5a8f0d31`
+  (2026-09-16). Re-queried fresh before touching anything: 1 row, current-shape, matching the
+  brief's text exactly. Full per-entry record: `claude/tico/kaizen/history.md`, 2026-09-18. Files
+  changed: that history file only. `tico.md` untouched (0 delta) — deliberately, see below.
+- **Verified the entry's own claim first.** `grep -m1 Status:` on all 3 named requirements docs
+  (`docs/requirements/salesperson-ui.md`, `docs/requirements/joern-cpg-pipeline.md`,
+  `opencode/docs/requirements/devops-opencode-headless.md`) — all `archived`, `Last updated:
+  2026-09-16`, matching the entry's own capture date: whoever ran the sweep the entry describes
+  had already closed all 3 named cases same-day. Nothing about the 3 specific instances needed
+  promoting.
+- **Judged whether the general lesson is already covered by root `AGENTS.md`'s owner-by-kind
+  table and `teco.md`'s existing "Freeze at milestone close" paragraph, per `teco`'s own framing
+  of the open question, rather than assuming either way.** That paragraph already instructs
+  `teco` to list every document a close freezes, naming "requirements" explicitly, and to perform
+  the mechanical flip itself. Traced each of the 3 named cases against its sibling plan/
+  coordination doc's own archival date and found the paragraph's coverage is real but ineffective
+  in practice: `docs/plans/salesperson-ui2-coordination.md` and `opencode/docs/plans/
+  devops-opencode-headless-coordination.md` were both already `archived` well before 2026-09-16,
+  while their sibling requirements docs sat at `Ready for design`/`active` until the ad hoc,
+  stakeholder-triggered grep sweep this entry itself describes caught them — not `teco`'s own
+  close-out step. 0/3 measured. The paragraph names the right document kind but gives `teco` no
+  way to *locate* the sibling doc beyond memory, and memory measured 0/3 across every instance
+  available to check — a genuine, narrower gap than "already fully covered," not a restatement of
+  the incident.
+- **Disposition: promoted, target is `teco.md`, not `tico.md` — and I hold no write authority
+  over `teco.md` beyond what `teco` explicitly authorized this run.** `teco` is the agent that
+  actually performs the close and already has the sibling plan/coordination doc's slug in hand at
+  that moment, so anchoring its existing check onto that slug (root `AGENTS.md` collision rule
+  2's family chain: `requirements/<slug>.md` ↔ `plans/<slug>.md`/`plans/<slug>-coordination.md`)
+  is a near-free, mechanical fix at the correct trigger point. `tico` has no equivalent trigger —
+  it isn't present when `architect`/`coder`/`teco` close a feature elsewhere in the repo, so a
+  `tico`-side periodic self-audit would run blind with no firing signal, and a one-off awareness
+  bullet wouldn't clear the "changes behavior in most sessions" bar the §5 promotion doctrine sets
+  for an always-loaded prompt — so `tico.md` was left unchanged. Exact wording returned to `teco`
+  for human-reviewed application (insert into the existing "Freeze at milestone close" bullet,
+  after "...reviews, requirements, test plans and reports)"): *"— the requirements document is
+  the one most often missed since it sits outside the units you dispatched, so look it up by the
+  plan's own slug (`docs/requirements/<slug>.md`, root `AGENTS.md` collision rule 2) rather than
+  relying on recall —"*. One rule, one clause of why, no restated incident narrative, per the
+  prompt-waste doctrine this skill applies to every promotion.
+- **No `MENTIONS` tag needed** — squarely about a `tico`-owned document, but the acting party at
+  the point of failure is `teco`; that's a routing judgment for the promoted text's destination,
+  not evidence the entry itself is about a different producer.
+- **Graph:** producer-write shape confirmed (real `:Agent`/`PRODUCED` edge). Edge count before
+  clearing: 1 `PRODUCED`, 0 `MENTIONS`. Cleared via the curator `DETACH DELETE` (`agent='cobb'`)
+  only after `claude/tico/kaizen/history.md` was durably on disk. Post-clear `tico` `PRODUCED`
+  count: 0. Not touched: the deferred `coder` entry `a1c4e6b2…`, the `MENTIONS`-only survivor
+  `e1a6c4d2…`, every other agent's entries. `HISTORY.md`/`BACKLOG.md` (root or any component's)
+  not touched — this unit's disposition is a proposed prompt sharpening pending `teco`'s own
+  application, not a record of delivered project work.
+
 ## 2026-09-18 — `kaizen_team` distillation pass 2, U2: `analyst` chunk B (6 code facts, model-bench + falkor-chat `CallContext`) — 5 promoted as 3 promotions, 1 kept open in `model-bench/docs/BACKLOG.md`
 
 - **What:** ran §5 over the 6 `analyst` entries pinned by `teco`'s brief
