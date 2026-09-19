@@ -862,25 +862,37 @@ distills — on request, and folded into every certification pass (§4):
      matches this claim's expected title (the same `"<family-slug> —
      <claim-title>"` or plain-heading convention the "New claim" bullet
      above already uses for `title=`) and whose `documentId` isn't the
-     manifest's stale tracked id. **Found one** → case (b)'s orphan: adopt
-     it by overwriting the manifest's `documentId` with the found id, leave
-     `verified: "pending"`, and fall through to the byte-exact check
-     above — but that check's mismatch outcome does not mean what it means
-     on an ordinarily-tracked id. There, "doesn't match" safely implies "the
-     interruption landed before `delete_document` ever ran, the old
-     document genuinely still exists, re-run the sequence" — a conclusion
-     that depends on the id being *this claim's own* previously-tracked
-     document. An id adopted from a title match carries no such guarantee:
-     a mismatch here means the title match itself was wrong — a genuine
-     collision with a *different* claim's document — and re-running the
-     sequence would `delete_document` that other claim's live, correctly
-     tracked document. **So on a byte-exact mismatch reached via this adopt
-     branch, do not re-run "Existing claim, text changed" and do not call
-     `delete_document`** — stop and escalate to the distiller to resolve the
-     collision by hand instead. A byte-exact *match* is unaffected and flips
-     to `verified: true` exactly as the check above already describes — no
-     `delete_document`/`ingest_document` call needed either way in this
-     branch, the claim is already correctly ingested. **Found none** → case
+     manifest's stale tracked id. **Found one** → a case-(b) orphan
+     *candidate*, not yet confirmed — **verify before writing anything to
+     the manifest**, the same byte-exact discipline the "pending-entry-
+     found-at-start" bullet above uses, just run here against the found id
+     instead of the manifest's own tracked id: `get_document(found_id)`,
+     compared against the claim's current text in the `.md` file. A
+     **match** confirms this really is case (b)'s orphan — only now write
+     the manifest, in one shot: overwrite `documentId` with `found_id` and
+     flip `verified: true` directly (no need to pass through the
+     intermediate `"pending"` stop the ordinary sequence uses — this check
+     already *is* the confirmation that stop exists to gate); no
+     `delete_document`/`ingest_document` call either way, the claim was
+     already correctly ingested. A **mismatch** means the title match
+     itself was wrong — a genuine collision with a *different* claim's
+     live, correctly tracked document — so this was never case (b) at all.
+     **On a mismatch, do not write `found_id` into the manifest under any
+     circumstance** — not even provisionally, not even only to gate a later
+     `delete_document` call — **leave the manifest entry exactly as it was
+     at the top of this recovery attempt** (still the old, already-`None`-
+     confirmed id, still `verified: "pending"`), and stop, escalating to
+     the distiller to resolve the collision by hand. This ordering matters
+     beyond the current pass: writing `found_id` provisionally and gating
+     only the delete would leave a *future* pass' "pending-entry-found-at-
+     start" check (above) re-reading that same live, non-`None`, mismatching
+     document — but through the *unconditional* delete branch that check
+     uses for an ordinarily-tracked id, since by then `found_id` would look
+     exactly like this claim's own previously-tracked id. Deferring the
+     manifest write until after confirmation keeps a mismatch inert instead:
+     the untouched `"pending"`/old-id entry re-enters this same
+     ambiguous-`None` branch on the next pass, not the unconditional-delete
+     one. **Found none** → case
      (a): call `ingest_document` directly (skip `delete_document` — the old
      document is already confirmed gone by this same `get_document` call),
      then the same immediate manifest overwrite the ordinary sequence uses.
@@ -962,7 +974,19 @@ distills — on request, and folded into every certification pass (§4):
 > byte-exact check could `delete_document` a *different* claim's live
 > document on a title collision — a mismatch reached via that branch now
 > escalates to the distiller instead of re-running the delete+ingest
-> sequence.
+> sequence. **Same day, a Pass 4 correction:** `analyst`'s re-check of the
+> second fix found it closed the *same-pass* deletion but reopened it one
+> pass later — the "Found one" branch still wrote `found_id` into the
+> manifest immediately, before the byte-exact check ran, so a mismatch left
+> `verified: "pending"` pointing at the colliding document; a *later* pass
+> would re-enter the unrelated, unchanged "pending-entry-found-at-start"
+> check upstream, see a non-`None` mismatch, and take *that* check's
+> unconditional delete branch instead. Fixed by moving the `get_document`
+> confirmation ahead of any manifest write: the manifest is now touched
+> only after a match, and a mismatch leaves the entry exactly as it was at
+> the top of the recovery attempt, so a future pass safely re-enters this
+> same ambiguous-`None` branch rather than the upstream unconditional-delete
+> one.
 
 ---
 

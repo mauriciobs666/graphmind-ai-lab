@@ -2,6 +2,34 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-19 — Pass 4 correction: Finding-2 fix reopened the same hazard one pass later (`agent-knowledge-base-strategy5-coordination.md`)
+
+Same-day correction to the entry directly below. `analyst`'s Pass 4 re-check of commit `b7e39a1`
+(appended to `claude/docs/reviews/agent-knowledge-base-strategy5-u1.md`) found the Finding-2 fix
+closed the *same-pass* deletion but reopened it one pass later, independently re-traced and
+confirmed by `teco` before routing back here.
+
+**The gap:** the "Found one" branch wrote `documentId := found_id` into the manifest
+*immediately*, before the byte-exact check ran; the escalate-instead-of-delete logic only gated
+the `delete_document` call in that same pass, not this earlier write. So a mismatch left
+`verified: "pending"` pointing at the colliding document — and a **later** distillation pass
+re-entering through the unrelated, unchanged "pending-entry-found-at-start" upstream check would
+see a non-`None` mismatch and take *that* check's unconditional "old document still exists,
+re-run and delete" branch, deleting the collision target one pass later instead of preventing it.
+
+**Fix:** moved the `get_document(found_id)` confirmation ahead of *any* manifest write in the
+"Found one" branch. A match now writes `documentId`/`verified: true` in one shot, having already
+confirmed it. A mismatch writes nothing — the manifest entry is left exactly as it was at the top
+of the recovery attempt (old id, `"pending"`), so a future pass re-enters the same
+already-safe ambiguous-`None` branch rather than the upstream unconditional-delete one. Traced
+this as the general axis `analyst` named it — for every branch in this bullet, checked what a
+second, later pass does with whatever state an escalate/abort branch leaves behind, not just the
+current pass — and found no other branch in the bullet writes to the manifest ahead of its own
+verification completing (the corpus-count-guard escalate path performs no manifest write at all;
+the "Found none" case's write follows a fresh `ingest_document`, not an adopted, unverified id).
+Added a matching dated correction to the file's own origin-note trailer. Left uncommitted for
+`teco` to verify and commit.
+
 ## 2026-09-19 — U1a follow-up: orphan-sweep fix, closing `analyst`'s two Major findings (`agent-knowledge-base-strategy5-coordination.md`)
 
 Fresh dispatch (the U1 session that landed `209017c` was too large to resume); fixed
