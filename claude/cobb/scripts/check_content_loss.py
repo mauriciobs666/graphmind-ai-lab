@@ -125,6 +125,19 @@ LIMITATIONS (named, not hidden)
   (the primary manifest shape) can. See "MANIFEST SCHEMA" above.
 - This tool has no opinion on whether a split boundary was the *right* one editorially — only
   whether the content on both sides of it is completely and exactly accounted for.
+- **False positive: a claim pair sharing one duplicated context/label sentence.** This corpus's
+  documented, deliberate split convention for two claims that share one context sentence/citation
+  which "doesn't split by trap" (e.g. a shared Origin, duplicated in both siblings) gives each
+  claim the shared text plus its own distinct portion — so claim B's content sits *between*
+  claim A's two halves in the source, and neither sibling's stored text is one contiguous
+  substring of it. `locate_claim` requires contiguity, so both siblings read as NOT_FOUND (and
+  the interleaved span between them as an UNACCOUNTED gap) even though the pair's *union*, once
+  the duplicated shared prefix is stripped, exactly reconstructs the source with nothing missing,
+  added, or altered. Not a tool bug to fix — a legitimate split shape this contiguous-substring
+  method cannot represent. Worked example, byte-for-byte verified: `claude/docs/reviews/
+  agent-knowledge-base-strategy4-stage6.md` (Finding 1) — concrete instances at
+  `review-techniques.md`'s h13/h14, h21/h22, h39/h40 documentId pairs and
+  `qa-testing-techniques.md`'s model-bench-attest heading.
 """
 
 from __future__ import annotations

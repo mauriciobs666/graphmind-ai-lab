@@ -188,9 +188,19 @@
   ways matching its own explicit markdown sub-bullet nesting. All 16 texts byte-exact verified via
   `get_document` immediately after ingest (all `status:"processing"` at that check — normal, final
   ready/failed to reconfirm later per the push-through-and-defer policy). Manifest updated in
-  place: `_graph_dba_falkordb_quirks_IN_PROGRESS` renamed to `..._DONE`, all 83 documentIds
+  place: `_graph_dba_falkordb_quirks_IN_PROGRESS` renamed to `..._DONE`, all 86 documentIds
   recorded, `_note4` marked superseded (kept for history — it's the artifact that proved the
   resume worked).
+  - **2026-09-19 correction:** this entry's claim count was mis-recorded as 83 (67+16); the
+    manifest's own nested structure actually holds 86 (67+19 — heading 5 is 3+16, not just 16).
+    Found by `analyst`'s Stage 6 review (`claude/docs/reviews/agent-knowledge-base-strategy4-stage6.md`,
+    Finding 1); the corpus-wide 332 total is unaffected.
+  - **2026-09-19:** `review-techniques.md`'s and `qa-testing-techniques.md`'s AC-4/AC-5
+    fidelity-check obligation (plan §6: "a scripted diff... run once per migrated file") is now
+    formally closed for both files — by `analyst`'s U3k Stage 6 review's manual byte-for-byte
+    reconciliation of every flagged pair, not by a prior automated `check_content_loss.py` pass
+    (the only earlier run, during U3f, covered just 14 of `review-techniques.md`'s eventual 81
+    claims). `claude/docs/reviews/agent-knowledge-base-strategy4-stage6.md`.
 - **`analyst/review-techniques.md` — started, 11/54 headings done (14 claims), then checkpointed.**
   Re-ran `flag_split_candidates.py` fresh (25/54 flagged, not the earlier estimate of 26 — the tool
   has been refined since). Confirmed all 54 `## ` heading line numbers via `grep -n '^## '` for a
