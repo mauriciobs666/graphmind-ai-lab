@@ -2,6 +2,58 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-19 — K-030 Track 2 Stage 9 fixes: U7b, `analyst`'s diff-scoped review of U7 (1 blocker, 1 major, 2 minors — all fixed)
+
+`claude/docs/reviews/agent-knowledge-base-strategy4-stage9.md` (commit `85b2b08`), verdict needs
+changes. All four findings landed in `skills/agent-maintenance/SKILL.md` step 5 itself (not just
+here) — the review's own instruction, since step 5 is what a future dispatch actually follows.
+
+- **Blocker fixed — dropped the miscited Stage-6-review citation.** `SKILL.md:755` (as originally
+  written), `history.md`'s prior entry, and `plan.md`'s K-030 row all claimed
+  `agent-knowledge-base-strategy4-stage6.md` "recommends" reusing the manifest for Stage 9's
+  tracking mechanism. The review confirmed by direct `grep -i "recommend"` that the word never
+  appears in that document, and its only two Stage-9-relevant passages both name a different
+  artifact (`check_content_loss.py`) as what Stage 9 relies on — the review never discusses the
+  manifest-reuse question at all. Took the review's suggested option (a), the smaller/faster fix:
+  dropped the citation from all three locations, standing on the two legs that are actually true
+  (manifest already exists; already keyed on the edit axis) rather than manufacturing a citation
+  by adding an answer to the Stage 6 review's own "Open questions" section (option (b) — not taken,
+  since the two remaining legs are sufficient on their own and reopening a `Status: active`
+  document's content for this alone would be more churn than the finding warrants).
+- **Major fixed — added mid-sequence failure handling to the delete-old+ingest-new step.** The
+  review's evidence: `delete_document` is a hard delete, and if the following `ingest_document`
+  then fails, the literal-as-written sequence left the manifest never updated — still pointing at
+  a now-deleted id, often still `verified: true` from a prior cycle, with nothing recording that a
+  claim had silently vanished from `ws:agent-team`. Not hypothetical: this exact failure class hit
+  31 documents during Stage 6's own migration (LM Studio embedding-backend contention, ledger rows
+  U1/U3b/U3c) on the same backend this step depends on. Took the review's option 2 (write a
+  `"pending"` marker *before* the delete/ingest pair runs, not option 1's reorder-to-ingest-first)
+  — reordering would reopen the plan's own stated design rationale for delete-before-ingest (avoid
+  the "old and new both searchable" staleness window), and option 2 closes the data-loss gap
+  without touching that choice. `SKILL.md`'s "Existing claim, text changed" bullet now writes
+  `verified: "pending"` (old `documentId` left in place) before calling `delete_document`/
+  `ingest_document`, and a new bullet instructs a future pass that finds a `"pending"` entry at the
+  *start* of a fresh distillation run to treat it as a possible incomplete prior cycle — check
+  `get_document(documentId)` (a `None` means the claim really is missing and the whole sequence
+  must be re-run; a real document means only the manifest flip was left undone) before trusting it.
+- **Minor 1 fixed — step 5 now says to refresh the manifest's own stale per-file narrative.**
+  Stage-6-era `_DONE`-suffixed keys and `_note`/`_status` strings like "FILE COMPLETE (... N
+  claims)" will go stale the first time a post-Stage-6 claim add/remove changes the true count
+  under them; step 5 now says to update or strike that narrative in the same edit when it does.
+- **Minor 2 fixed — step 5 now names the manifest's concurrent-write risk.** `kb-claim-
+  manifest.json` is flat JSON with no locking; a read-modify-write race between two dispatches is a
+  silent lost update, the same failure shape `claude/AGENTS.md` already documents for the shared
+  git index. Step 5 now says to serialize: never run two `cobb` distillation passes against the
+  file concurrently.
+- **`claude/scripts/audit-team.sh` re-run after all four fixes** — same 5 pre-existing, unrelated
+  FAILs (personal-identifier leaks in files this dispatch never touched), no new ones; the
+  `agent-kb-retrieval` prefix-template check (check 11) still passes.
+- **Unrelated to this agent's files, per the review's own "Open questions":** a stale `in-flight`
+  ledger status on U3l (already committed since `1b9d1c0`) was flagged for `teco`, not `cobb`, to
+  fix — nothing landed here for that.
+- Left uncommitted, same as U7 — `teco` verifies and sends back to `analyst` for a focused
+  re-check of just these four items.
+
 ## 2026-09-19 — K-030 Track 2 Stage 9: distillation-ingestion hook (U7, the final Track 2 stage)
 
 - **What.** `skills/agent-maintenance/SKILL.md` §5 gained a new step 5, appended after the existing
@@ -17,17 +69,21 @@
 - **Both design decisions the plan left open (closing item c) — resolved, with reasoning recorded
   here per the dispatching brief's instruction, not just decided silently.**
   1. **Claim → current `documentId` tracking: reused `claude/cobb/scripts/kb-claim-manifest.json`**
-     rather than building a `list_documents`+title-match scan (the plan's other named option). Three
-     converging reasons, not just one: (a) the manifest already exists and is already keyed on the
-     exact axis a future edit is made along — file path + `##` heading — so no new lookup structure
-     is needed; (b) the manifest's own `_comment`, written during Stage 6, names Stage 9 as its
-     intended future consumer and explicitly says it was kept on disk past migration's own close for
-     this reason; (c) `claude/docs/reviews/agent-knowledge-base-strategy4-stage6.md` (the Stage 6
-     gate) independently recommends it, and `check_content_loss.py` already treats this same file as
-     the canonical per-heading manifest shape — Stage 9 leaning on it keeps one manifest as the
-     single source of truth for both the fidelity checker and the sync hook, rather than two
-     drifting mechanisms. A `list_documents` scan is named as the fallback only if the manifest and
-     the live corpus are ever found to have drifted apart.
+     rather than building a `list_documents`+title-match scan (the plan's other named option). Two
+     converging reasons: (a) the manifest already exists and is already keyed on the exact axis a
+     future edit is made along — file path + `##` heading — so no new lookup structure is needed;
+     (b) the manifest's own `_comment`, written during Stage 6, names Stage 9 as its intended future
+     consumer and explicitly says it was kept on disk past migration's own close for this reason.
+     **Correction, 2026-09-19 (U7b review):** an earlier version of this entry also cited
+     `claude/docs/reviews/agent-knowledge-base-strategy4-stage6.md` as "independently recommending"
+     this reuse — false; `analyst`'s U7b review confirmed by direct `grep` that the word
+     "recommend" never appears in that document, and its only two Stage-9-relevant passages both
+     name `check_content_loss.py` (a different artifact) as what Stage 9 relies on. `cobb` never
+     posed the manifest-reuse question to that review, and it never answered one. The citation is
+     dropped here and from `SKILL.md`/`plan.md`; the decision stands on the two legs above, which
+     remain independently true and sufficient. `check_content_loss.py` treating the same manifest
+     file as canonical is still true and still a real point in the design's favor — it's just not
+     a Stage-6-review endorsement, so it's stated as its own fact, not folded into a citation.
   2. **`MENTIONS`-equivalent tagging — left explicitly open, not solved.** The new §5 text states
      plainly that `ws:agent-team`'s `Document` model has no edge for crediting a second agent a KB
      claim substantively concerns (falkor-chat has no analogue to `kaizen_team`'s

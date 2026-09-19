@@ -751,30 +751,39 @@ distills — on request, and folded into every certification pass (§4):
    `claude/cobb/scripts/kb-claim-manifest.json`.** Same file → `##`-heading →
    `claims[]` → `{title, documentId, verified}` structure Stage 6's migration
    built and deliberately kept on disk past its own close for exactly this —
-   its own `_comment` names Stage 9 as the intended consumer, and
-   `claude/docs/reviews/agent-knowledge-base-strategy4-stage6.md` recommends
-   it (`check_content_loss.py` already treats it as the canonical
-   per-heading manifest shape, so Stage 9 leans on the same file the fidelity
-   checker does). Chosen over a `list_documents`+title-match scan (the plan's
-   other named option, closing item c) because the manifest already exists,
-   is already keyed on the same axis an edit is made along (file + heading),
-   and needs no live MCP round-trip just to find the id to delete — fall back
-   to a `list_documents` scan only if the manifest and the live corpus are
-   ever found to have drifted apart (missing/stale entry, orphaned id).
+   its own `_comment` names Stage 9 as the intended consumer. Chosen over a
+   `list_documents`+title-match scan (the plan's other named option, closing
+   item c) because the manifest already exists, is already keyed on the same
+   axis an edit is made along (file + heading), and needs no live MCP
+   round-trip just to find the id to delete — fall back to a `list_documents`
+   scan only if the manifest and the live corpus are ever found to have
+   drifted apart (missing/stale entry, orphaned id).
 
-   For each claim touched by the edit, look up its manifest entry by file
-   path + heading (or, within a heading that holds several split-sibling
-   claims, by the claim's own `title`):
-   - **Existing claim, text changed** — `delete_document(documentId)` (the
-     manifest's current id) first, then `ingest_document(text=<new claim
-     text>, title=<same "<family-slug> — <claim-title>" convention Stage 6
-     used for a split sibling, or the plain heading text for a claim that was
-     never split>, produced_by='cobb')` against `ws:agent-team`. Overwrite
-     the manifest entry's `documentId` with the new id and set
-     `verified: false` until the last bullet below confirms it.
+   **Every write below must survive a mid-sequence failure without silently
+   losing a claim.** `delete_document` is a hard delete — if `ingest_document`
+   then fails (this exact backend has failed transiently 31 times over Stage
+   6's own migration, ledger rows U1/U3b/U3c), a claim can vanish from
+   `ws:agent-team` with nothing recording it happened unless the manifest is
+   marked *before* the pair runs, not only after. For each claim touched by
+   the edit, look up its manifest entry by file path + heading (or, within a
+   heading that holds several split-sibling claims, by the claim's own
+   `title`):
+   - **Existing claim, text changed** — first, set the manifest entry's
+     `verified` field to the string `"pending"` (leaving its `documentId`
+     field untouched, still pointing at the *old* id) — this is the in-flight
+     marker a later pass checks for, below. Only then run
+     `delete_document(documentId)` (the old id), then
+     `ingest_document(text=<new claim text>, title=<same "<family-slug> —
+     <claim-title>" convention Stage 6 used for a split sibling, or the plain
+     heading text for a claim that was never split>, produced_by='cobb')`
+     against `ws:agent-team`. Overwrite the manifest entry's `documentId`
+     with the new id, but leave `verified` at `"pending"` — the final flip to
+     `true` happens only in the last bullet below, after a byte-exact check,
+     never write `true` before that check runs.
    - **New claim** (a heading, or a new split sibling, that never existed
      before) — no prior id, so skip the delete: `ingest_document` directly,
-     then add a fresh entry to the manifest under its file/heading.
+     then add a fresh entry to the manifest under its file/heading with
+     `verified: "pending"` until the last bullet below confirms it.
    - **Claim removed** (a heading deleted or merged away, nothing replaces
      it) — `delete_document(documentId)` and remove that entry from the
      manifest; no matching `ingest_document`.
@@ -782,6 +791,33 @@ distills — on request, and folded into every certification pass (§4):
      confirm the text returned is byte-exact against what now sits in the
      `.md` file, the same discipline Stage 6 used throughout. Don't leave a
      manifest entry pointing at an id nobody has confirmed round-trips.
+   - **A `"pending"` entry found at the *start* of a fresh distillation
+     pass is not an unfinished-but-harmless leftover — it is a sign the prior
+     cycle's `ingest_document` step may have failed after its `delete_document`
+     already ran, and the claim may currently be missing from `ws:agent-team`
+     entirely.** Before trusting it, call `get_document(documentId)` on the
+     entry's current id: `None` confirms the claim is gone and the whole
+     "Existing claim, text changed" sequence above must be re-run to repair
+     it; a real document back means the prior cycle actually completed and
+     only its manifest flip was left undone — safe to just set `verified:
+     true` and move on.
+
+   **After a claim add/remove, also refresh the enclosing file's own stale
+   narrative fields.** Several manifest keys are Stage-6-era completion
+   markers (`_DONE`-suffixed keys, a `_note`/`_status` string like "FILE
+   COMPLETE (... N claims)") written once at migration close. A claim add or
+   remove (not a same-count text revision) changes the true count under
+   them, so update or strike that file's `_note`/`_status` narrative in the
+   same edit if it states a specific claim count or a "complete" status the
+   change just made stale — don't leave a frozen migration-era summary next
+   to data it no longer describes.
+
+   **The manifest has no locking — treat it like the shared git index.**
+   `kb-claim-manifest.json` is a flat JSON file; a read-modify-write race
+   between two dispatches touching it concurrently is a silent lost update,
+   not a crash, the same failure shape `claude/AGENTS.md` already documents
+   for the shared git index. Serialize: never run two `cobb` distillation
+   passes against this file at the same time.
 
    **`MENTIONS`-equivalent tagging stays an open item, not solved here.**
    `ws:agent-team`'s `Document` model has no edge for crediting a second
