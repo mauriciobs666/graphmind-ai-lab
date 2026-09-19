@@ -96,6 +96,8 @@ other components' suites.
 
 ```bash
 ./run.sh compare --pack <pack-id> [--models a,b] [--session <id>] [--negative-control] [--out <path>]
+./run.sh rank --pack <pack-id> [--session <id>] [--reference <key>] [--footprints <path.json>]
+    [--out <path>]   # ranked table across every in-scope model with a stored result, not two arms
 ./run.sh index rebuild            # regenerate results/index.csv from results/runs/
 ./run.sh models --tested          # models with stored results (never a deterministic arm)
 ./run.sh attest [--api-base-url <url>] [--set key=value ...]   # write host.json
@@ -113,6 +115,20 @@ a report, not an operational failure, and the excluded records are named in it w
 arithmetic rather than a measurement. It proves the mode is wired and nothing more, and the report
 it writes says so in a banner at the top — the real negative control is two *independent* runs of
 the same model, and that is an acceptance step.
+
+`rank` is `compare`'s N-arm sibling: one ranked table per pack (two, for a pack with no single
+headline metric — one per `verdictMetrics` member) covering every in-scope model with a stored,
+consistent result, each row carrying its own descriptive confidence interval, latency p95, and
+opaque footprint string — never a pairwise matrix. Like `compare`, it writes to `reports/` **and**
+stdout and never overwrites an earlier same-day report (`-rank-` in the filename keeps its sequence
+separate from `compare`'s own). `--reference <key>` additionally renders an optional, pre-registered,
+Holm-Bonferroni family of verdicts against that one stored model; omitted, the report states only
+descriptive intervals, no p-value anywhere. Naming a model key with no stored run for this pack
+(and session, if given) is a usage error, exit `2`, and nothing is written. `--footprints
+<path.json>` passes through a flat `{"<modelKey>": "<display string>"}` map verbatim — never
+parsed as a number, so a missing or malformed *value* only ever degrades to a wrong-looking cell
+(`—`, or a coerced `str()`); an
+unparseable or non-object *file* is a usage error, exit `2`.
 
 `attest` writes the operator-attested half of the fingerprint (`host.json`). `validate` checks a
 pack's structural integrity with no LM Studio connection at all. `run` drives one model through one

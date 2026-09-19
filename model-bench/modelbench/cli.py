@@ -28,6 +28,7 @@ out as a third option. Resolve or replace this per
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from datetime import date
 from pathlib import Path
@@ -36,7 +37,7 @@ from typing import Any, Sequence
 from modelbench import hostinfo
 from modelbench.lmstudio import LMStudio
 from modelbench.packs import PackConfigError, load_pack, pack_ref_from_manifest, validate_pack
-from modelbench.report import compare_report
+from modelbench.report import compare_report, rank_report
 from modelbench.results import (
     RunResult,
     load_history,
@@ -57,6 +58,13 @@ class AttestUsageError(ValueError):
     integer), or stdin running out while prompting for a field `--set` did not supply (review
     Pass 13, P13-6 — non-interactive `--set` is the sanctioned route, so this is normal usage,
     not abuse)."""
+
+
+class RankUsageError(ValueError):
+    """A usage problem with `rank`'s own inputs (catalog-sweep plan §3.3's exit 2): a
+    `--footprints` file that is not parseable JSON, or whose top level is not a JSON object. A
+    malformed **value** under a modelKey degrades to its own `str()` instead (plan §3.3,
+    `analyst` review §2.4) — only a malformed *file* reaches this far."""
 
 
 EXIT_OK = 0
@@ -95,6 +103,23 @@ def _build_parser() -> argparse.ArgumentParser:
         "construction, so it proves the mode is wired, not that the harness is sound)",
     )
     compare.add_argument("--out")
+
+    rank = with_root(
+        sub.add_parser("rank", help="render a ranked table across every in-scope model")
+    )
+    rank.add_argument("--pack", required=True)
+    rank.add_argument("--session")
+    rank.add_argument(
+        "--reference",
+        help="a stored model key to anchor FR-8's optional reference-anchored Holm-Bonferroni "
+        "family; omitted, the ranked table alone is rendered, no p-value anywhere in the report",
+    )
+    rank.add_argument(
+        "--footprints",
+        help="path to a JSON {modelKey: display string} map, passed through to the footprint "
+        "column verbatim; never parsed as a number",
+    )
+    rank.add_argument("--out")
 
     index = with_root(sub.add_parser("index", help="the derived results/index.csv"))
     index.add_argument("action", choices=["rebuild"])
@@ -158,6 +183,21 @@ def _report_path(root: Path, pack_id: str) -> Path:
     raise RuntimeError(f"more than 99 comparisons for {pack_id} on {stamp}")
 
 
+def _rank_report_path(root: Path, pack_id: str) -> Path:
+    """`reports/<pack-id>-rank-<date>-<n>.md` — identical to `_report_path` (same two-digit,
+    never-overwrites same-day sequence) but with a `-rank-` infix, so the consolidation step
+    (catalog-sweep plan §3.5, `scripts/consolidate_sweep_reports.py`) can find "the ranked report"
+    unambiguously and never picks up an ordinary two-arm `compare` report by accident."""
+    directory = root / "reports"
+    directory.mkdir(parents=True, exist_ok=True)
+    stamp = date.today().strftime("%Y%m%d")
+    for n in range(1, 100):
+        candidate = directory / f"{pack_id}-rank-{stamp}-{n:02d}.md"
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError(f"more than 99 rank reports for {pack_id} on {stamp}")
+
+
 def _select_arms(
     runs: Sequence[RunResult], *, models: str | None, session: str | None, negative_control: bool
 ) -> list[RunResult]:
@@ -184,6 +224,47 @@ def _select_arms(
         # until review P3-4, and this comment claimed otherwise while it did.
         return [candidates[0], candidates[0]]
     return candidates
+
+
+def _select_rank_arms(runs: Sequence[RunResult], *, session: str | None) -> list[RunResult]:
+    """Every distinct model with a stored run for this pack (and session, if given) — never a
+    fixed arm count (catalog-sweep plan §3.3). `--session` filters exactly as `_select_arms`
+    does; dedup then keeps the newest-stored run per `modelKey` via the same last-value-wins
+    dict-comprehension `_select_arms`'s own `--models` path already uses above — `load_history`
+    returns records sorted oldest-first (`results.py`'s `sorted(directory.glob("*.json"))`), so
+    the last occurrence of a key is the newest one. `rank_report` itself still refuses a
+    duplicate `modelKey` (`DuplicateModelInReport`) as a backstop, not the mechanism."""
+    candidates = list(runs)
+    if session is not None:
+        candidates = [r for r in candidates if r.sessionId == session]
+    by_key = {r.modelKey: r for r in candidates}
+    return list(by_key.values())
+
+
+def _load_footprints(path: str | None) -> dict[str, str] | None:
+    """`--footprints <path.json>`: a flat `{"<modelKey>": "<display string>"}` map, read from disk
+    and passed through to `rank_report`'s `footprints` parameter verbatim — never parsed for a
+    number (catalog-sweep plan §3.3). `None` when `--footprints` was not given, so every footprint
+    cell renders `—`.
+
+    A malformed *file* (unparseable JSON, or a JSON value that isn't an object) is a usage error,
+    `RankUsageError` — the same shape `_gather_attested_fields` already uses for a bad `attest`
+    input. A malformed *value* under a modelKey (a JSON number, object, or array) degrades to its
+    own `str()` instead of raising — a wrong-looking display cell, never a computation error
+    (plan §3.3, `analyst` review §2.4)."""
+    if path is None:
+        return None
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise RankUsageError(f"--footprints {path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise RankUsageError(f"--footprints {path}: not valid JSON: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise RankUsageError(
+            f"--footprints {path}: expected a JSON object, got {type(raw).__name__}"
+        )
+    return {str(k): v if isinstance(v, str) else str(v) for k, v in raw.items()}
 
 
 def _cmd_compare(args: argparse.Namespace) -> int:
@@ -223,6 +304,52 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     # `load_history` call above draws, and the half Pass 1's m-6 left behind: `_report_path`'s
     # parameter is `pack_id` and its docstring promises `reports/<pack-id>-…` (review P3-14).
     target = Path(args.out) if args.out else _report_path(root, pack.packId)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(markdown, encoding="utf-8")
+    print(markdown)
+    print(f"wrote {target}")
+    return EXIT_OK
+
+
+def _cmd_rank(args: argparse.Namespace) -> int:
+    """catalog-sweep plan §3.3: mirrors `_cmd_compare`'s structure — load the manifest, select
+    every in-scope arm (never a fixed count), render, write to `reports/` **and** stdout."""
+    root = Path(args.root)
+    manifest = root / "packs" / args.pack / "pack.json"
+    if not manifest.is_file():
+        print(f"model-bench: no pack manifest at {manifest}", file=sys.stderr)
+        return EXIT_BAD_PACK
+    try:
+        pack = pack_ref_from_manifest(manifest)
+    except (PackConfigError, KeyError, ValueError) as exc:
+        print(f"model-bench: invalid pack {args.pack}: {exc}", file=sys.stderr)
+        return EXIT_BAD_PACK
+
+    try:
+        footprints = _load_footprints(args.footprints)
+    except RankUsageError as exc:
+        print(f"model-bench: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    # Same `packId`-not-directory-name distinction `_cmd_compare` draws above (review m-6).
+    valid, invalid = load_history(root, packId=pack.packId)
+    arms = _select_rank_arms(valid, session=args.session)
+    try:
+        markdown = rank_report(
+            arms, pack=pack, invalid=invalid, reference=args.reference, footprints=footprints
+        )
+    except PackConfigError as exc:
+        print(f"model-bench: invalid pack {args.pack}: {exc}", file=sys.stderr)
+        return EXIT_BAD_PACK
+    except ValueError as exc:
+        # `rank_report`'s own raise for an unknown/absent `--reference` model key (plan §3.3: "a
+        # usage-shaped error at the rank_report/CLI boundary") and its `DuplicateModelInReport`
+        # backstop (unreachable via this CLI path — `_select_rank_arms` already dedupes) both
+        # land here; `PackConfigError` is caught first above since it is also a `ValueError`.
+        print(f"model-bench: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    target = Path(args.out) if args.out else _rank_report_path(root, pack.packId)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(markdown, encoding="utf-8")
     print(markdown)
@@ -448,6 +575,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "compare":
         return _cmd_compare(args)
+    if args.command == "rank":
+        return _cmd_rank(args)
     if args.command == "index":
         return _cmd_index(args)
     if args.command == "models":

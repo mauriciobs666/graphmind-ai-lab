@@ -2,6 +2,46 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-19 — U183 — catalog-sweep Unit B: `rank` CLI wiring (`coder`)
+
+**What:** Wired Unit A's already-gated `report.rank_report()` (`docs/plans/small-model-catalog-
+sweep.md` Version 2, §3.3, Unit B — "fully specified, mechanical") into a new `./run.sh rank`
+subcommand, `modelbench/cli.py`: the `rank` subparser (`--pack`, `--session`, `--reference`,
+`--footprints`, `--out`, `--root`, mirroring `compare`'s registration), `_select_rank_arms`
+(session filter identical to `_select_arms`'s, then dedupe by `modelKey` keeping the
+alphabetically-last-sorted, i.e. newest-stored, run — the same last-value-wins one-liner
+`_select_arms`'s own `--models` path already uses), `_rank_report_path` (identical to
+`_report_path`'s two-digit never-overwrites same-day sequence, with a `-rank-` filename infix so
+the consolidation step, Unit C, can never mistake it for an ordinary `compare` report), and
+`_cmd_rank` (mirrors `_cmd_compare`: load manifest, select every in-scope arm — never a fixed
+count — render, write to `reports/` **and** stdout). Added `_load_footprints`/`RankUsageError` for
+`--footprints <path.json>`: a malformed *file* (unparseable JSON, or not a JSON object) is a usage
+error, exit `2`; a malformed *value* under a modelKey degrades to its own `str()`, never an
+exception. `rank_report`'s own raise for an unknown/absent `--reference` model key is caught in
+`_cmd_rank` and mapped to exit `2` (its plan-documented resolution: "a usage-shaped error at the
+`rank_report`/CLI boundary," decided by Unit A as `rank_report`'s own `ValueError`, not a
+`_cmd_rank` pre-check).
+
+Tests: 14 new tests in `tests/test_cli.py` covering the mechanical surface per the plan's §5 Unit B
+list — subcommand wiring and exit `0`; a pack with zero in-scope arms (no stored runs at all, or a
+`--session` matching nothing stored) still exiting `0` via `rank_report`'s own "no in-scope model"
+text (`analyst` review §Unit B, [MINOR] #1); the `-rank-` filename/sequence not colliding with a
+same-day `compare` report; `--out`; `--session` filtering; dedup keeping the newest-stored run;
+`--reference` rendering the family (and its absence not rendering one); an unknown `--reference`
+key exiting `2` with nothing written; `--footprints` passthrough (string value, non-string value
+coerced to `str()`, missing key and missing flag both rendering `—`); an unparseable and a
+non-object `--footprints` file each exiting `2` with nothing written; an unknown pack and a
+`headlineMetric ∉ verdictMetrics` manifest each exiting `4`. One pre-existing test,
+`test_validate_and_run_are_now_recognized_commands`, asserted the full `--help` subcommand set
+literally and needed its own one-line update to include `rank`. `README.md`'s `rank` paragraph also
+gained a clause naming the unknown-`--reference`-key exit-`2` case, alongside the `--footprints`
+one already there (`analyst` review §Unit B, [MINOR] #2).
+
+**Verification:** `.venv/bin/python -m pytest -q` → `1774 passed, 3 deselected` (1760 + 14 new,
+`tests/test_cli.py -k rank` → `14 passed` in isolation). `.venv/bin/ruff check .` → `All checks
+passed!`. `modelbench/stats.py`, `modelbench/report.py`, and `scripts/consolidate_sweep_reports.py`
+(Units A and C) untouched — confirmed via `git diff --stat`.
+
 ## 2026-09-17 — U182 — FR-23 default-suite gap closed (`tdd-engineer`)
 
 **What:** Closed the gap U181's FR-23 audit found and logged (`docs/BACKLOG.md`): 3 tests

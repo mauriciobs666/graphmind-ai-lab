@@ -256,7 +256,7 @@ def test_validate_and_run_are_now_recognized_commands(capsys) -> None:
     still meaning "unrecognized")."""
     main(["--help"])
     out = capsys.readouterr().out
-    assert "{compare,index,models,attest,validate,run}" in out
+    assert "{compare,rank,index,models,attest,validate,run}" in out
     assert main(["validate"]) == 2  # recognized, but --pack is required — still exit 2, usage
     assert main(["run"]) == 2  # recognized, but --pack/--model are required — still exit 2
 
@@ -437,6 +437,213 @@ def test_the_report_filename_is_the_manifests_pack_id_not_the_directory_name(
     assert "| cand | falseAdvanceRate | 40/40 |" in body
     assert "| incumbent | falseAdvanceRate | 34/40 |" in body
     assert "fewer than two arms were selected" not in body
+
+
+# --- rank (catalog-sweep plan §3.3, Unit B) -------------------------------------------------------
+
+
+def test_rank_writes_a_report_and_exits_zero(workspace, capsys) -> None:
+    _store_arm(workspace, "cand", 40)
+    _store_arm(workspace, "incumbent", 34)
+    _store_arm(workspace, "third", 20)
+    code = main(["rank", "--pack", PACK, "--root", str(workspace)])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "# Ranked comparison" in out
+    assert "| cand |" in out and "| incumbent |" in out and "| third |" in out
+    reports = list((workspace / "reports").glob("*.md"))
+    assert len(reports) == 1
+    assert reports[0].name.startswith(f"{PACK}-rank-")
+    assert reports[0].name.endswith("-01.md")
+
+
+def test_rank_with_no_stored_runs_still_exits_zero(workspace, capsys) -> None:
+    """`analyst` review (`docs/reviews/small-model-catalog-sweep-impl.md`, Unit B, [MINOR] #1) —
+    `rank_report` handles zero in-scope arms gracefully by design (no score-driven exit code,
+    matching `compare`'s own "fewer than two arms" behavior), but nothing pinned it. Two shapes:
+    no stored runs at all, and a `--session` that matches nothing stored."""
+    code = main(["rank", "--pack", PACK, "--root", str(workspace)])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "No in-scope model has a stored, consistent result" in out
+    reports = list((workspace / "reports").glob("*.md"))
+    assert len(reports) == 1
+
+    _store_arm(workspace, "cand", 40, session="s1")
+    code = main(["rank", "--pack", PACK, "--session", "no-such-session", "--root", str(workspace)])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "No in-scope model has a stored, consistent result" in out
+
+
+def test_a_same_day_rank_rerun_does_not_overwrite_the_earlier_one_or_collide_with_compare(
+    workspace,
+) -> None:
+    """Same never-overwrites discipline as `compare` (plan §3.5), and the `-rank-` infix means a
+    same-day `compare` and `rank` on the same pack don't share a sequence counter."""
+    _store_arm(workspace, "cand", 40)
+    _store_arm(workspace, "incumbent", 34)
+    main(["compare", "--pack", PACK, "--root", str(workspace)])
+    main(["rank", "--pack", PACK, "--root", str(workspace)])
+    main(["rank", "--pack", PACK, "--root", str(workspace)])
+    names = sorted(p.name for p in (workspace / "reports").glob("*.md"))
+    assert len(names) == 3
+    rank_names = sorted(n for n in names if "-rank-" in n)
+    compare_names = sorted(n for n in names if "-rank-" not in n)
+    assert len(rank_names) == 2
+    assert len(compare_names) == 1
+    assert rank_names[0].endswith("-01.md") and rank_names[1].endswith("-02.md")
+    assert compare_names[0].endswith("-01.md")
+
+
+def test_rank_with_an_out_path(workspace, tmp_path) -> None:
+    _store_arm(workspace, "cand", 40)
+    _store_arm(workspace, "incumbent", 34)
+    target = tmp_path / "custom-rank.md"
+    assert main(["rank", "--pack", PACK, "--out", str(target), "--root", str(workspace)]) == 0
+    assert "# Ranked comparison" in target.read_text()
+
+
+def test_rank_session_restricts_the_arm_set_to_that_session(workspace, capsys) -> None:
+    _store_arm(workspace, "cand", 40, session="s1")
+    _store_arm(workspace, "incumbent", 34, session="s1")
+    _store_arm(workspace, "outlier", 20, session="s2")
+
+    assert main(["rank", "--pack", PACK, "--session", "s1", "--root", str(workspace)]) == 0
+    out = capsys.readouterr().out
+    assert "| cand |" in out and "| incumbent |" in out
+    assert "outlier" not in out
+
+
+def test_rank_dedupes_a_repeated_model_key_keeping_the_newest_stored_run(
+    workspace, capsys
+) -> None:
+    """`_select_rank_arms` dedup, mirroring `_select_arms`'s own `--models` last-value-wins
+    one-liner (plan §3.3). `load_history` sorts stored files by filename (`results.py`), so the
+    alphabetically-later `runId` is "newest" for this dedup's purposes."""
+    _store_arm(workspace, "cand-a", 10)
+    (workspace / "results" / "runs" / "cand-a.json").write_text(
+        (workspace / "results" / "runs" / "cand-a.json")
+        .read_text()
+        .replace('"modelKey": "cand-a"', '"modelKey": "cand"')
+    )
+    _store_arm(workspace, "cand-b", 30)
+    (workspace / "results" / "runs" / "cand-b.json").write_text(
+        (workspace / "results" / "runs" / "cand-b.json")
+        .read_text()
+        .replace('"modelKey": "cand-b"', '"modelKey": "cand"')
+    )
+    code = main(["rank", "--pack", PACK, "--root", str(workspace)])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert out.count("| cand |") == 1
+    assert "30/40" in out
+    assert "10/40" not in out
+
+
+def test_rank_reference_renders_the_family_and_omitted_does_not(workspace, capsys) -> None:
+    _store_arm(workspace, "cand", 40)
+    _store_arm(workspace, "incumbent", 34)
+    _store_arm(workspace, "third", 20)
+
+    code = main(
+        ["rank", "--pack", PACK, "--reference", "incumbent", "--root", str(workspace)]
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "Reference-anchored family" in out
+    assert "vs `incumbent`" in out
+
+    code = main(["rank", "--pack", PACK, "--root", str(workspace)])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "Reference-anchored family" not in out
+
+
+def test_rank_exits_two_naming_an_unknown_reference_model(workspace, capsys) -> None:
+    _store_arm(workspace, "cand", 40)
+    _store_arm(workspace, "incumbent", 34)
+    code = main(
+        ["rank", "--pack", PACK, "--reference", "nope", "--root", str(workspace)]
+    )
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "nope" in err
+    assert not list((workspace / "reports").glob("*.md"))
+
+
+def test_rank_footprints_passthrough(workspace, capsys, tmp_path) -> None:
+    _store_arm(workspace, "cand", 40)
+    _store_arm(workspace, "incumbent", 34)
+    fp = tmp_path / "footprints.json"
+    fp.write_text(json.dumps({"cand": "4.2 GB Q4_K_M", "incumbent": 7}))
+
+    code = main(
+        ["rank", "--pack", PACK, "--footprints", str(fp), "--root", str(workspace)]
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "4.2 GB Q4_K_M" in out
+    assert "| 7 |" in out  # a non-string JSON value is coerced to its own str()
+
+
+def test_rank_footprints_missing_key_and_missing_flag_render_a_dash(
+    workspace, capsys, tmp_path
+) -> None:
+    _store_arm(workspace, "cand", 40)
+    _store_arm(workspace, "incumbent", 34)
+    fp = tmp_path / "footprints.json"
+    fp.write_text(json.dumps({"cand": "4.2 GB"}))
+
+    code = main(
+        ["rank", "--pack", PACK, "--footprints", str(fp), "--root", str(workspace)]
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "| incumbent | 34/40 | 0.850 | [0.709, 0.929] | — | — |" in out
+
+    code = main(["rank", "--pack", PACK, "--root", str(workspace)])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "| cand | 40/40 | 1.000 | [0.912, 1.000] | — | — |" in out
+
+
+def test_rank_exits_two_on_an_unparseable_footprints_file(workspace, capsys, tmp_path) -> None:
+    _store_arm(workspace, "cand", 40)
+    fp = tmp_path / "footprints.json"
+    fp.write_text("{not json")
+    code = main(
+        ["rank", "--pack", PACK, "--footprints", str(fp), "--root", str(workspace)]
+    )
+    assert code == 2
+    assert str(fp) in capsys.readouterr().err
+    assert not list((workspace / "reports").glob("*.md"))
+
+
+def test_rank_exits_two_when_the_footprints_file_is_not_a_json_object(
+    workspace, capsys, tmp_path
+) -> None:
+    _store_arm(workspace, "cand", 40)
+    fp = tmp_path / "footprints.json"
+    fp.write_text(json.dumps(["cand", "incumbent"]))
+    code = main(
+        ["rank", "--pack", PACK, "--footprints", str(fp), "--root", str(workspace)]
+    )
+    assert code == 2
+    assert not list((workspace / "reports").glob("*.md"))
+
+
+def test_rank_an_unknown_pack_exits_four(workspace, capsys) -> None:
+    assert main(["rank", "--pack", "nope", "--root", str(workspace)]) == 4
+    assert "nope" in capsys.readouterr().err
+
+
+def test_rank_a_headline_outside_the_verdict_family_exits_four(workspace, capsys) -> None:
+    manifest = json.loads((workspace / "packs" / PACK / "pack.json").read_text())
+    manifest["metrics"]["headlineMetric"] = "somethingElse"
+    (workspace / "packs" / PACK / "pack.json").write_text(json.dumps(manifest))
+    _store_arm(workspace, "cand", 40)
+    assert main(["rank", "--pack", PACK, "--root", str(workspace)]) == 4
 
 
 # --- attest (plan §3.6a) -------------------------------------------------------------------------

@@ -742,3 +742,162 @@ genuinely load-bearing (mutation-caught, not decorative). Combined with Unit A.1
 closed from the statistical-validity lens** — no further re-check needed from me unless a future
 change touches `stats.py`'s `verdict`/`resolving_power`/`mean_bootstrap_interval` contracts, the
 combined-ladder construction, or the per-metric resolving-power sentence again.
+
+---
+
+# Unit B Implementation Review — CLI wiring (`modelbench/cli.py`) (`analyst`)
+
+**Scope.** Reviewed the uncommitted working-tree diff of `modelbench/cli.py`, `tests/test_cli.py`,
+`README.md`, `docs/HISTORY.md` (U183) — Unit B of `docs/plans/small-model-catalog-sweep.md`
+**Version 2** §3.3/§4/§5 — against that plan's exact spec for the `rank` subcommand (`--build_parser`
+registration, `_select_rank_arms`, `_rank_report_path`, `_cmd_rank`'s structure). Moderate-depth
+gate, matching the plan's own framing of this unit as "fully specified, mechanical" reuse of Unit
+A's already-gated `rank_report()` — not the mutation-testing-grade bar Unit A/the `correction_k`
+change got. `modelbench/stats.py`, `modelbench/report.py`, `scripts/consolidate_sweep_reports.py`
+are out of scope and confirmed untouched by this diff (see Verification).
+
+**Verdict: approve with suggestions.** No blockers. Structural mirroring against `compare` holds,
+both judgment calls the brief asked me to scrutinize are correctly resolved, and the 13 new tests
+exercise real CLI behavior (arg parsing, exit codes, real file writes) rather than mocks. Two minor
+findings and one nit, none gating.
+
+**CPG:** considered, not relevant — `GRAPHS` lists `cpg_falkorchat`, `kaizen_team`, `reference`,
+`ws:*`; no `cpg_model-bench` graph exists, and this diff (~320 changed lines across four files)
+needed no call-graph tooling beyond direct reading.
+
+## Findings
+
+### [MINOR] `rank` has no test for the "pack exists but zero in-scope arms" path
+
+`rank_report` handles zero stored runs gracefully by design (renders `"No in-scope model has a
+stored, consistent result for <metric> in this report."` per table, exit `0`) — I confirmed this
+directly, not by inference, by driving `main(["rank", "--pack", "guard-judge-understanding",
+"--root", <empty root>])` against a real empty `results/runs/` directory: exit `0`, a report is
+written, no exception. So this is **not a live defect** — the behavior is correct and matches the
+"no score-driven exit code" philosophy `compare` already follows. But the brief's own point 3 (walk
+every failure/edge path against the closed exit-code set) names exactly this path, and nothing in
+the 13 new tests pins it: `test_rank_session_restricts_the_arm_set_to_that_session` only checks a
+*non-empty* filtered set, and there is no `--session` that matches nothing, nor a "no stored runs at
+all" fixture. **Suggested fix:** one cheap test, e.g. `test_rank_with_no_stored_runs_still_exits_
+zero`, asserting `code == 0` and a report is written — cheap insurance against a future change to
+`_cmd_rank` or `rank_report`'s zero-run branch regressing to a crash or a wrong exit code silently.
+
+### [MINOR] README's `rank` paragraph doesn't document the unknown-`--reference`-key exit code
+
+`README.md`'s `rank` paragraph (lines 119–129) documents `--footprints`' malformed-file exit `2`
+explicitly, but says nothing about what happens when `--reference` names a model key with no stored
+run — a real, tested (`test_rank_exits_two_naming_an_unknown_reference_model`), user-reachable
+failure mode with the same exit code (`2`) as the footprints case one sentence away. A reader of
+just this paragraph (as opposed to the closed exit-code table two paragraphs below, which only
+states the *generic* "`2` bad arguments/usage" without naming this specific case) would not know an
+unstored `--reference` key fails this way rather than, say, silently rendering the table without a
+family. **Suggested fix:** one clause after the `--reference` sentence, e.g. "naming a model key
+with no stored run for this pack is a usage error, exit `2`, and nothing is written" — matching the
+footprints sentence's own level of detail immediately after it.
+
+### [NIT] `docs/HISTORY.md`'s U183 entry doesn't name the `headlineMetric ∉ verdictMetrics` exit-4 case explicitly in its own prose
+
+The entry's last sentence lists the exit-4 cases tested ("an unknown pack and a `headlineMetric ∉
+verdictMetrics` manifest each exiting `4`") — this is accurate, so this is not a defect, just a
+note that the phrasing groups two different failure origins (an unloadable manifest vs. a
+structurally-invalid-but-loadable one) under one clause. Not worth a rewrite on its own; flagging
+only because a future reader diffing this entry against `_cmd_rank`'s two separate `except` blocks
+might wonder if they're the same code path (they're not — one is `pack_ref_from_manifest`'s own
+raise, the other is `rank_report`'s new guard covered by the round-2 Unit A fix above). No action
+needed.
+
+## Verification performed
+
+- **Structural mirroring against `compare`, read side by side.** `_build_parser`: `rank`'s
+  subparser is registered with the same `with_root` wrapper, `--pack` required identically to
+  `compare`'s, `--out` present identically; the new `rank` choice appears in `--help`'s subcommand
+  set, pinned by the updated `test_validate_and_run_are_now_recognized_commands`
+  (`{compare,rank,index,models,attest,validate,run}`). `_cmd_rank`'s flow (manifest check → pack
+  load → `load_history` → select arms → render in a `try`/`except` → write to `reports/` and
+  stdout) matches `_cmd_compare`'s shape exactly, with two justified, commented divergences: an
+  extra `_load_footprints` step (no `compare` equivalent — `compare` has no footprints concept) and
+  a second `except ValueError` clause after `except PackConfigError` (covering `rank_report`'s own
+  reference-not-found/`DuplicateModelInReport` raises, which `compare_report` has no equivalent
+  of). Neither divergence is surprising given what each command actually does.
+
+- **The exit-2-for-unknown-`--reference` judgment call, checked against `README.md`'s closed exit-
+  code set.** `README.md`'s own table: `2` "bad arguments/usage," `4` "an invalid pack... an unmet
+  `environment.requires`... a `callSurface` the model's catalog type contradicts... (after `run`'s
+  artifacts are already written) a `tool-caller` conversation censored by a tool-dispatch failure."
+  Exit 4's category is entirely about the **pack manifest/environment** being wrong; naming a
+  `--reference` value that happens not to be stored is a property of the **argument the user typed**,
+  not the pack — squarely exit 2's "bad arguments/usage," not exit 4's category. Confirmed the
+  implementation matches: `_cmd_rank`'s `except ValueError` maps `rank_report`'s reference-not-found
+  raise to `EXIT_USAGE` (`2`), and `test_rank_exits_two_naming_an_unknown_reference_model` pins it
+  end to end (exit `2`, `"nope"` in stderr, nothing written to `reports/`) — I re-ran this test in
+  isolation (`.venv/bin/python -m pytest tests/test_cli.py -k rank_exits_two_naming -q`) and drove
+  the CLI myself with a fresh empty root to confirm no report file appears on disk after a `2` exit.
+
+- **The dedup-parity judgment call, verified against the actual code, not the docstring's claim.**
+  `_select_arms`'s `--models` path: `by_key = {r.modelKey: r for r in candidates}` (line 209),
+  last-value-wins by Python dict-comprehension semantics. `_select_rank_arms`: `by_key =
+  {r.modelKey: r for r in candidates}` (line 240) — byte-identical shape. `load_history`
+  (`modelbench/results.py:1014`) iterates `sorted(directory.glob("*.json"))`, i.e. ascending by
+  filename, so both functions' "last occurrence wins" resolves to the alphabetically-last (and, by
+  this codebase's `runId`/filename convention, newest-timestamped) stored file for a given
+  `modelKey`. No inconsistency between `compare`'s and `rank`'s dedup semantics. Also ran
+  `test_rank_dedupes_a_repeated_model_key_keeping_the_newest_stored_run` in isolation — passes, and
+  its assertions (`30/40` present, `10/40` absent) genuinely exercise which record survives, not
+  merely that dedup happened.
+
+- **Exit codes walked against every path `_cmd_rank` can take**, cross-checked one by one against
+  `README.md`'s closed set: missing manifest file → `4` (`test_rank_an_unknown_pack_exits_four`);
+  `pack_ref_from_manifest` raising (bad/inconsistent manifest, incl. `headlineMetric ∉
+  verdictMetrics` at load time) → `4` (`test_rank_a_headline_outside_the_verdict_family_exits_four`);
+  malformed/non-object `--footprints` file → `2`, both cases tested
+  (`test_rank_exits_two_on_an_unparseable_footprints_file`,
+  `test_rank_exits_two_when_the_footprints_file_is_not_a_json_object`); unknown `--reference` → `2`
+  (above); normal render, any ranking → `0`, including the zero-arms case I drove by hand (finding
+  above — correct behavior, undertested). No path lands on an ad-hoc code outside `{0, 2, 4}` — `3`
+  (LM Studio) and `5` (fingerprint) are not reachable from `rank` at all, correctly, since `rank`
+  never touches LM Studio or `host.json`.
+
+- **Tests read in full (13 new), confirmed real rather than mocked.** Every new test drives
+  `main([...])` (the actual CLI entry point) against a real `workspace` fixture with real files
+  under a real `tmp_path`-backed root, asserts real process exit codes, real stdout content
+  (`capsys`), and real files on disk (`(workspace / "reports").glob("*.md")`) — no
+  `unittest.mock`/monkeypatch anywhere in the new test bodies. The footprints tests write a real
+  JSON file and assert the rendered markdown cell; the dedup test mutates a real stored JSON
+  record's `modelKey` field on disk rather than constructing an in-memory double. This is the same
+  house style the rest of `test_cli.py` already uses.
+
+- **Scope claim, verified via `git`, not assumed.** `git diff --stat -- modelbench/stats.py
+  modelbench/report.py scripts/consolidate_sweep_reports.py` → empty; `git status --porcelain` on
+  the same three paths → empty. Confirms Unit B's diff genuinely touches only `cli.py`,
+  `test_cli.py`, `README.md`, `docs/HISTORY.md`, matching the coder's stated scope.
+
+- **`README.md`/`docs/HISTORY.md` read for accuracy against actual behavior.** Both are accurate in
+  substance (verified above); the two gaps found (README's exit-2 omission, HISTORY's grouped
+  phrasing) are precision nits, not overstatement/understatement of what `rank` does — neither
+  claims a capability the code lacks or omits one the code has.
+
+- **Suite and lint, run myself, from `model-bench/`:**
+  `.venv/bin/python -m pytest -q` → **1773 passed, 3 deselected** (exact match to the brief's
+  expectation; `1760 + 13` new). `.venv/bin/ruff check .` → **All checks passed!**
+
+## What's solid
+
+- Structural mirroring against `compare` is genuine, not superficial — same registration pattern,
+  same flow shape, same never-overwrites same-day-sequence filename discipline
+  (`-rank-` infix keeps its own counter, confirmed by
+  `test_a_same_day_rank_rerun_does_not_overwrite_the_earlier_one_or_collide_with_compare`).
+- Both judgment calls the brief flagged for independent scrutiny (exit-2 for an unstored
+  `--reference`, dedup-keeps-newest parity with `compare`) are correctly resolved and match the
+  documented closed exit-code set and `_select_arms`'s own precedent exactly.
+- Test quality is real: exit codes, file-writing, and rendered content are asserted against the
+  actual CLI entry point and actual files on disk, not mocks — the dedup test in particular mutates
+  a real stored record's `modelKey` rather than fabricating a convenient double.
+- `docs/HISTORY.md`'s U183 entry and `README.md`'s new `rank` documentation are substantively
+  accurate against the real diff — no overclaim, no silent omission of a real behavior.
+- Scope discipline held: `stats.py`, `report.py`, and `scripts/consolidate_sweep_reports.py` are
+  genuinely untouched, confirmed via `git`, not taken on the coder's word.
+
+## Open questions
+
+- None blocking. Whether the two minor findings (the zero-arms test, the README exit-2 clause) are
+  worth a follow-up commit now or batched with a later documentation pass is `teco`'s call.
