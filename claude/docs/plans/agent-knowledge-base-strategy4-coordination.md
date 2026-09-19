@@ -44,8 +44,7 @@ caveat noted and worked around.
 | U5 (Stage 8 golden-set design + pilot calibration) | `data-scientist` | `a54a41942db93aa4f` | accepted | `claude/docs/plans/agent-knowledge-base-strategy-ml.md` "Stage 8 Phase 1" section (45-pair golden-set design, all 13 KBs, 5 strata a-e; 16-pair pilot executed live); `skills/agent-kb-retrieval/SKILL.md` floor section updated (0.42 cosine distance, no longer provisional/disabled) — teco-reverified: Wilson CI [0.529,0.978] recomputed by hand from n=8/x=7 and matches exactly; 5 documentIds spot-checked live against `ws:agent-team`, all real/ready/title-matching; pilot's 16 ✓-tagged design rows cross-counted against the reported 8 single-answer + 4 families(8 docs) + 4 negatives = 16, consistent; floor-derivation arithmetic (0.409/0.446/0.42 margins) correct; `audit-team.sh` re-run clean (same 5 pre-existing FAILs, check 11 still passes) | `analyst` → — | 231.5k tok / 81 tools / 1104s |
 | U5a (Stage 8 Phase 1 review — diff-scoped) | `analyst` | `a108e34078a14a3ba` | accepted | `claude/docs/reviews/agent-knowledge-base-strategy4-stage8-phase1.md` | self → **approve with suggestions** — Wilson CI/MRR independently re-derived (different method), 11 disjoint documentIds spot-checked, R3/h39 crowding-out + 2 negative queries live-reran and reproduced exactly; no blockers. 2 Minors: a prose inaccuracy (ml.md:417-418's "6 plus one held in reserve" — table actually uses all 7 named families), R9's query paraphrases its target's title too closely (explicitly deferred, no rerun needed now). Prose fix routed to U5b | 101.2k tok / 23 tools / 318s |
 | U5b (fix U5a's Minor: ml.md:417-418 prose correction) | `data-scientist` | `a060769a2e0655dd4` | accepted | `claude/docs/plans/agent-knowledge-base-strategy-ml.md`:417-418 corrected, commit `7342f9e` — teco-reverified exact text matches the review's suggested replacement | n/a — mechanical, exact replacement text supplied by the review | 37.4k tok / 4 tools / 30s |
-| U6 (Stage 8 Phase 2 — full ~45-pair AC-2 regression gate) | `qa-engineer` | `a67e8c1654cd18e1d` | in-flight | — | — → — | — |
-| U6 (Stage 8 full AC-2 gate) | `qa-engineer` | — | queued | — | — → — | — |
+| U6 (Stage 8 Phase 2 — full ~45-pair AC-2 regression gate) | `qa-engineer` | `a67e8c1654cd18e1d` | accepted | `claude/docs/test-plans/agent-knowledge-base-strategy-ac2.md`, `claude/docs/test-reports/agent-knowledge-base-strategy-ac2-report.md` (commit `f8558f2`); `skills/agent-kb-retrieval/SKILL.md` floor re-derived 0.42→0.43 (commit `658e29b`) — teco-reverified: Wilson CI/MRR hand-recomputed for every reported subset (pooled 32/28 → [0.719,0.950]/0.8594; phase-2-only 24/21 → [0.690,0.957]; code 11/11 → [0.741,1.000]; prose 19/15 → [0.567,0.915]; stratum-e 14/13 → [0.685,0.987]), all matched exactly; floor-derivation arithmetic (0.4201/0.446/0.43 margins) correct; 5 pivotal documentIds (R6/h40's trigger sibling + the 3 fresh misses P1/X1/G2 + R3/h39's target) spot-checked live against `ws:agent-team`, all real/ready/on-topic; `SKILL.md` diff clean (no stale "0.42"/"provisional" language outside explanatory prose); `audit-team.sh` re-run clean (same 5 pre-existing unrelated FAILs, check 11 still passes); `ml.md`/coordination ledger confirmed untouched by this unit as claimed | `analyst` → — | 227.2k tok / 51 tools / 1096s |
 | U7 (Stage 9 distillation-ingestion hook) | `cobb` | — | queued | — | `analyst` → — | — |
 
 U1 and U2 are independent (no file/state overlap) — dispatched in parallel. U3 depends on both.
@@ -253,3 +252,20 @@ and full Stage 6 coverage. U7 depends on U6 (plan's own Stage 8→9 sequencing).
   spot-checks, the 5-document permanent-failure gap's documentation, manifest/kaizen consistency)
   before Stage 7 (U4) opens — per the standing plan recorded in U3h/U3i's own rows ("Stage 6's own
   diff-scoped analyst gate covers the whole migration once U3i closes, not per-dispatch").
+
+- **Update 2026-09-19 (U6 — Stage 8 Phase 2, the full AC-2 gate, delivered and teco-verified).**
+  `qa-engineer` executed all 29 design-only golden-set rows live against `ws:agent-team` and pooled
+  with Phase 1's 16: pooled recall@5 0.875 [Wilson 0.719,0.950] (point estimate unchanged from
+  Phase 1, CI tightened as designed), code/prose split now statistically distinguishable (code
+  11/11=1.000 vs. prose 19/15=0.789), stratum-e pooled set-recall 13/14=0.929. Two real findings:
+  (1) the 0.42 floor did not survive out-of-sample validation — a genuine true positive (R6/h40's
+  second sibling) scored 0.4201, over the floor by 0.0001 — re-derived to **0.43** (landed in
+  `SKILL.md`, commit `658e29b`), 0/41 pooled true positives wrongly dropped at the new value; (2)
+  the C1 prose-retrieval miss Phase 1 flagged as "unexplained" is confirmed a real, evidenced
+  pattern, not a one-off — all 4 misses across the full 45-pair set are `b-prose`-tagged, 0 of 11
+  `b-code`-tagged queries missed. The h39 duplicate-chunk crowding-out defect is judged **isolated**
+  (0 of the 3 newly-tested stratum-e families reproduce it; 6 of 7 designed families show no
+  crowding at all) — recommends against a `graph-dba`/`cobb` de-duplication follow-up on this
+  evidence. Deliverables committed `f8558f2` (test plan + report) and `658e29b` (SKILL.md floor).
+  **Not yet gated** — `analyst` review dispatched next (U6a); the C1/DEF-1 prose-retrieval gap is
+  flagged as the most actionable open follow-up, not this gate's to fix.
