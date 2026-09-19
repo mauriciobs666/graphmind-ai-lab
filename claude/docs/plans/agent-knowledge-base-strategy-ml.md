@@ -1,6 +1,15 @@
 # Agent knowledge-base strategy — ML method note
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`) · **Version:** 4
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`) · **Version:** 5
+
+**Revision note (2026-09-19, third pass, U2 of the follow-up batch coordination,
+`claude/docs/plans/agent-knowledge-base-strategy5-coordination.md`).** Revised in place, not
+forked (`AGENTS.md` collision rule 5 — new section, not a revision of previously-gated content) to
+diagnose Stage 8 Phase 2's DEF-1 finding (prose/narrative queries missing their correct document at
+a materially higher rate than code/config queries,
+`claude/docs/test-reports/agent-knowledge-base-strategy-ac2-report.md`). New section "DEF-1
+diagnosis — prose/narrative retrieval quality" appended at the end, after "Stage 8 Phase 2
+addendum." Nothing above it changed in substance.
 
 **Revision note (2026-09-19, second pass, U8).** Revised in place, not forked (`AGENTS.md`
 collision rule 5 — the Stage 8 Phase 1 section below was reviewed/gated `approve with suggestions`
@@ -991,3 +1000,158 @@ anything that would reopen it.** Two independent reasons:
   n=3 as enough to fully characterize the distribution. Three points establish reproducible
   bimodality (now with a timing pattern) convincingly enough to act on; a fourth or fifth
   reproduction would sharpen confidence marginally, not change the recommendation.
+
+## DEF-1 diagnosis — prose/narrative retrieval quality (2026-09-19)
+
+**The question this section answers.** Stage 8 Phase 2's full 45-pair gate confirmed DEF-1 as
+real, not a one-off: `b-prose`-tagged queries miss their correct document 21% of the time (15/19,
+Wilson CI [0.567, 0.915]) versus 0% for `b-code`-tagged queries (11/11, CI [0.741, 1.000]) — all 4
+misses across the full set (C1, P1, X1, G2) are `b-prose`. The report named two candidate next
+steps, neither executed there: (a) a prefix-wording or per-claim keyword tweak, (b) a title/
+family-slug differentiation fix for X1's cross-KB confusion. This diagnoses the actual mechanism
+and judges both candidates against it, plus what else is worth trying.
+
+### Method
+
+Read all 4 misses' expected documents' stored text/title via `get_document`, then re-ran all 4
+exact prefixed queries live against `ws:agent-team` at `limit=20` (not the standard `limit=5`) to
+see how far each expected document actually sits from its query — a `limit=5` miss alone cannot
+distinguish "just outside the cutoff" from "genuinely far away," and that distinction changes what
+a fix should look like.
+
+### Finding 1 — this is not a top-K or floor-tuning problem; the gap is largely real embedding
+distance
+
+| Query | Expected doc found at `limit=20`? | Rank | Score |
+|---|---|---|---|
+| C1 | **No** — absent even at rank 20 | — | — |
+| P1 | Yes | 9 | 0.4487 |
+| X1 | Yes | ~11 | 0.4632 |
+| G2 | **No** — absent even at rank 20 | — | — |
+
+Two of the four (C1, G2) don't surface even 4x past the operative top-K; the other two (P1, X1) do
+surface, but both at scores already above the 0.43 floor — so even a top-K widen to 10-15 would not
+have made either of them admissible without a separate floor change, and a floor change large
+enough to admit 0.4487/0.4632 was already shown unworkable in the Phase 2 addendum above (it would
+leave no margin to the closest negative, 0.446). **Widening top-K is not a viable mitigation for
+any of the 4** — ruled out by measurement, not by assumption.
+
+### Finding 2 — document length/dilution explains half the misses, not the common cause
+
+G2's expected document (`f29bddad2cf14479ba6bafd9bd0c4212`, `guard-testing-techniques.md`) is a
+~370-word entry with a worked router-reach-guard case study (`TARGET`/`VALUE` axis terminology, AST
+alias analysis) — despite its title being a near-paraphrase of the query ("hand-written… resolver…
+two axes" vs. the query's "hand-wrote a resolver… two different independent things"), the dense,
+jargon-specific worked example pulls its embedding away from the query's plainer framing (topic
+dilution, exactly the mechanism Recommendation 2 named for `review-techniques.md`, here showing up
+in a different KB). X1's expected document (`75c0e47a01244de5b4373a193887293c`,
+`estimator-test-fixtures.md`) is longer still (~750 words, a numeric worked table) — same
+mechanism.
+
+But **C1 (~110 words) and P1 (~95 words) are shorter than the `b-code` documents that hit cleanly
+at rank 1** (e.g. R8's clamp/NaN entry, ~230 words; F2's `RESULTSET_SIZE` entry, ~230 words) — so
+length/dilution is a real, partial mechanism (2 of 4), not the root cause common to all four.
+
+### Finding 3 — the common cause is corpus-neighborhood density, not query wording
+
+Two of the four misses (P1, G2) have **striking exact-phrase overlap** between the query and their
+own expected document's title — P1's query says "completeness claim… transcribed… check… fail"
+against a title that reads "A completeness claim must be derived, not transcribed — and its check
+must be able to fail"; G2's query says "hand-wrote a resolver… two… independent things" against "A
+hand-written… resolver has two axes." **High lexical overlap did not save either from missing** —
+both still lost to several *other* documents scoring lower (closer). This rules out "the query is
+badly worded relative to its target" as the explanation and points at the embedding model's
+fine-grained discrimination capacity within a crowded region, not the query-document pair's own
+wording.
+
+The structural asymmetry: the `b-code` KBs (`falkordb-quirks.md`, `frontend-quirks.md`,
+`falkordb-reference.md`) each document a narrow, largely non-overlapping operational fact, with
+unique low-frequency tokens (`RESULTSET_SIZE`, `GRAPH.RO_QUERY`, exact measured numbers) giving
+each claim a sharp, near-lookup embedding signature and few-to-no topically-adjacent neighbors
+anywhere else in the 332-claim corpus. The `b-prose` KBs — `review-techniques.md` (81 claims),
+`coordination-techniques.md` (39), plus `plan-authoring-techniques.md`,
+`guard-testing-techniques.md`, `test-design-techniques.md`, `estimator-test-fixtures.md`,
+`qa-testing-techniques.md`, `statistical-method-techniques.md` — collectively form one broad,
+stylistically homogeneous semantic neighborhood (every entry is cobb's own "principle stated once +
+worked instance + Origin:" voice, on the shared theme of verifying/reviewing/testing AI-agent work)
+holding on the order of 150-200 of the corpus's 332 claims. C1's `limit=20` result list is the
+clearest direct evidence of this: **~15 distinct documents, all from this same neighborhood, all
+about "verifying a delegate's/reviewer's claim via git,"** none of them the expected one, filled
+every slot up to rank 20. A 0.6B-parameter embedding model discriminating inside a dense,
+stylistically homogeneous cluster of ~150-200 near-synonymous short claims is a materially harder
+task than discriminating a handful of lexically-unique operational facts — this is consistent with
+a known general property of smaller embedding models (fine-grained semantic-textual-similarity/
+paraphrase discrimination scales with model capacity in the broader embedding literature), but **I
+have not benchmarked this specific effect on this corpus against a larger model** — naming it as
+the expected mechanism, not a verified number. Do not cite this as a settled benchmark claim without
+running Recommendation 1 below.
+
+### Judging the two candidate fixes named in the AC-2 report
+
+**(a) Prefix-wording or per-claim keyword tweak — rejected as a fix for this gap.** The prefix's
+job is to shift the query vector toward a "retrieval task" framing; it has no mechanism to add
+local discriminative power inside an already-dense semantic cluster. Finding 3 is the direct
+evidence against it: P1 and G2 already have strong lexical/semantic alignment with their own
+correct target and still lose — the failure is at the embedding model's fine-discrimination layer,
+a layer a prefix string cannot reach. A keyword-augmentation variant (appending distinguishing
+terms to a claim's stored text) is a more invasive version of the same idea and carries the same
+objection, plus a new risk: it would need to be applied consistently across ~150-200 claims to
+avoid arbitrarily helping the ones cobb happens to touch first.
+
+**(b) Title/family-slug differentiation for the `estimator-test-fixtures.md`/
+`test-design-techniques.md` X1 case — narrower than the report frames it, but worth a scoped
+version.** Recommendation 2's `familyId`→title-prefix convention exists for documents **split from
+one shared heading during migration** — true siblings. X1's and T1's documents were never split
+from a shared heading; they are two independently-authored, topically-overlapping claims in
+different files (X1: a percentile-bootstrap/clamp mechanism with a numeric worked table; T1: the
+general "vary the position/dimension the rule anchors to" principle). There is no shared family to
+prefix, so a family-slug convention does not literally apply here. What **would** help this one
+already-discovered pair: a `cobb` curation pass that either merges the two into one canonical entry
+cross-referenced from both files, or sharpens each one's opening sentence to foreground its own
+distinguishing evidence rather than the shared abstract framing both currently lead with. Cheap,
+low-risk, worth doing — but scope it honestly: **it only fixes this one discovered collision.** C1
+and G2 have no single identifiable "near-duplicate twin" to differentiate against; each is
+outcompeted by many different, only-loosely-related documents from the same crowded neighborhood,
+not confused with one specific sibling claim. A title-differentiation pass cannot touch that
+pattern.
+
+### Recommendation — what's actually worth trying, and what's out of scope for a documentation fix
+
+**Honest bottom line: neither candidate in the report closes this gap, and I am not going to
+manufacture a cheap fix that the evidence above doesn't support.** Ranked:
+
+1. **Recommended first step (moderate cost, bounded, low-risk): a targeted held-out trial of the
+   documented upgrade path, `qwen3-embedding:4b`** (same family, same 1024-dim MRL, re-embed-only,
+   no schema change — the escape hatch Recommendation 1 already named). Re-embed a small,
+   representative slice (the 150-200-claim `b-prose` neighborhood plus a `b-code` control sample)
+   and re-run these 4 queries plus 5-10 already-hitting `b-prose`/`b-code` controls under the same
+   prefix/floor convention, re-derived for the new model. **Concrete acceptance criterion:** if at
+   least 3 of these 4 queries' expected documents land in top-5, the model-capacity hypothesis is
+   supported and a fuller corpus re-embed is justified; if fewer (especially if C1/G2 still miss
+   even at `limit=20` under the 4B model), the hypothesis is falsified and effort should move to
+   item 2. This is the cheapest way to get real evidence on the model-capacity question before
+   committing to a full corpus re-embed or a structural retrieval change.
+2. **Named, but out of scope for me to design or execute — route to `graph-dba`/`architect`:
+   hybrid lexical (BM25/full-text) + semantic score fusion.** This is the single most promising
+   structural lever specifically for P1 and G2, where the query and its correct document share
+   strong exact-phrase overlap a lexical signal would reward directly, independent of the embedding
+   model's fine-discrimination ceiling. Not something a documentation-convention fix can deliver;
+   flagging the direction and these two queries as the concrete motivating evidence for a future
+   design consult, not proposing a build here.
+3. **Apply now, cheap, scoped correctly:** the `cobb` curation edit for the X1/T1 pair described
+   under candidate (b) above — merge or differentiate the two claims' opening text. Land it as a
+   normal content edit, not a schema/naming-convention change.
+4. **Do not apply:** a prefix-wording tweak or blanket keyword augmentation (candidate (a)) — named
+   and rejected above, not a partial recommendation.
+5. **If neither 1 nor 2 is pursued, name the residual honestly rather than closing it silently:**
+   recall on this corpus's broad review/verification/test-methodology neighborhood (~150-200 of 332
+   claims) will likely stay materially below the corpus's other, sparser neighborhoods for as long
+   as retrieval is single-model dense-vector-only. This is a structural property of a small
+   embedding model over a densely homogeneous corpus region — not a defect in any one KB file's
+   formatting, and not something a prefix or title-convention change can be expected to fix.
+
+**Traceability.** Diagnosed against `claude/docs/test-reports/agent-knowledge-base-strategy-ac2-report.md`'s
+DEF-1/"C1-pattern finding" sections; live re-verification (`search_documents`/`get_document` at
+`limit=20`) run 2026-09-19 against `ws:agent-team`, same corpus state as that report (no migration
+activity between). Coordination: `claude/docs/plans/agent-knowledge-base-strategy5-coordination.md`,
+U2.
