@@ -160,4 +160,51 @@ designed multi-facet families."
   checks argue mildly for transcription error, but I don't have the report's original tool-call
   transcript to compare against. Whoever re-runs R6 per the Blocker's suggested fix should record
   enough repetitions to settle this, since the two explanations call for different remedies (fix
-  one number vs. widen the floor's safety margin as a matter of policy).
+  one number vs. widen the floor's safety margin as a matter of policy). **Resolved by Pass 2,
+  below** — `qa-engineer` ruled out transcription error on its side (3/3 stable at 0.4201), and I
+  independently re-confirmed my own side is equally stable (3/3 now at 0.4405), so this is genuine
+  bimodal cross-session behavior, not drift or a typo. The remaining open question (what causes
+  the bimodality, and whether a fixed-point floor is sound at all given it) is correctly escalated
+  to `data-scientist`, not something either qa-engineer or I can resolve by re-running more calls.
+
+## Pass 2 (2026-09-19)
+
+**Re-check scope:** unit U6c, a focused re-check of `qa-engineer`'s in-place revision (commit
+`25e26a3`) to `claude/docs/test-reports/agent-knowledge-base-strategy-ac2-report.md` and
+`skills/agent-kb-retrieval/SKILL.md` only, per this repo's repeated-gate convention — not a full
+re-review of the whole Stage 8 Phase 2 deliverable.
+
+**Verdict: approve.** All three Pass-1 findings addressed; no new findings.
+
+- **Blocker (R6/h40 score instability):** addressed — escalated, not silently resolved, which I
+  judge the right disposition. Re-ran R6's exact query once more live: **0.440489292144775 at rank
+  5**, byte-identical to both of my Pass-1 runs (3/3 in my session now). This corroborates the
+  report's bimodal-per-session characterization (qa-engineer: 3/3 at 0.4201/rank 3; me: 3/3 at
+  0.4405/rank 5) rather than slow drift or ordinary jitter. The revision withdraws the false "0 of
+  41 wrongly dropped" claim, narrows the floor's guarantee to explicitly exclude R6/h40's second
+  sibling as a named residual risk, and routes the methodology question (is a fixed-point floor
+  sound given confirmed ~0.02 cross-session instability this close to the negative boundary) to
+  `data-scientist` rather than qa-engineer picking a new point value unilaterally. Since neither
+  0.4201 nor 0.4405 is provably "the" correct value — both are rock-solid within their own
+  sessions — re-deriving a fresh single number would just repeat the original overclaim with more
+  confidence; escalating is not overcaution here. `SKILL.md`'s floor section matches the report's
+  framing exactly.
+- **Major (DEF-1/X1 wrong documentId):** fixed. Live rank-1 for X1 is
+  `31e22f72d811485eaad5a0aadd9c1d30`, matching the correction in both report locations (the
+  C1-pattern finding and DEF-1's reproduction steps) exactly.
+- **Major (crowding-out scoped to 7 rows only):** fixed. Spot-checked one row from each phase, as
+  requested. **R8** (Phase 1): live top 5 has `297b3ed4acf44f07bfed46f7de76e49d` (R8's own correct
+  answer) at both rank 1 (0.1792) and rank 2 (0.2263) — confirms the report's "duplicate is the
+  correct answer, harmless" pattern for this row. **T1** (Phase 2): live top 5 has
+  `1ad762f7dd834a20aa924ede2be1c6a8` at both rank 2 (0.3693) and rank 3 (0.3909), while T1's own
+  expected document (`aa72815433924cfea2760062daa22b40`) still lands cleanly at rank 1 (0.3463) —
+  confirms the "duplicate of an unrelated document, doesn't displace the correct one" pattern. Both
+  rows are correctly included in the report's 27/45 list, and the stated count arithmetic (12
+  Phase 1 + 15 Phase 2 = 27) checks out against the named rows.
+
+**`teco`'s bucket correction (R5/F5/F6/F9 moved from "(Phase 1)" to "(Phase 2)"):** confirmed
+right. All four are design-only rows per `ml.md`'s own Pilot column (`—`, not `✓`), so they belong
+in the Phase 2 list; the remaining 12-item Phase 1 list (R2, R3, R7, R8, R9, F1, F2, F3, C1, N1,
+N3, N4) are all genuinely `✓`-piloted rows. No further bucketing errors found.
+
+No new findings from this pass.
