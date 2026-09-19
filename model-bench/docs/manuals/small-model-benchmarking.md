@@ -114,6 +114,28 @@ the pack, talking to your live LM Studio, and — if it succeeds — stores the 
 Nothing about the score decides whether this command "succeeds" — a run only fails for operational
 reasons (see Troubleshooting below), never because a model scored badly.
 
+### 5a. Testing several models in one sweep
+
+There's no built-in "run N models" command — `run` is deliberately one model per invocation (see
+Overview: no scheduler, no batch mode). The easiest way to sweep a subset is a plain shell loop,
+tagging every run with the same `--session` so you can pull the whole batch back out together
+afterward:
+
+```bash
+MODELS=("qwen/qwen3-4b-2507" "mistralai/ministral-3-3b" "qwen2.5-3b-instruct")
+for m in "${MODELS[@]}"; do
+  ./run.sh run --pack tool-caller-shop-assistant --model "$m" --session batch-20260918 || \
+    echo "!! $m failed operationally, continuing"
+done
+./run.sh compare --pack tool-caller-shop-assistant --session batch-20260918
+```
+
+The `|| echo ...` matters: a `run` only exits non-zero for an operational reason (see
+Troubleshooting), never a bad score, but that's still enough to stop a loop that isn't guarded
+against it. Every model in the loop needs to be the right type for the pack (see the table in step
+3), and each run is a full live pass through the pack, so N models costs roughly N× one pack's
+runtime.
+
 ### 6. See what's already been tested
 
 Before running a model again, check whether it already has a stored result:
@@ -152,6 +174,12 @@ sequenceDiagram
 ```
 
 ## FAQ / troubleshooting
+
+**How do I view a report after it's written?** You don't need to hunt for it — `compare` prints
+the same markdown to your screen as it runs. The saved copy is plain text at
+`reports/<pack-id>-<date>-<NN>.md` (the two-digit suffix is a same-day sequence number, so a
+re-run never overwrites an earlier report); open it in any markdown viewer or editor, or `cat` it.
+Pass `--out <path>` on `compare` if you'd rather it land somewhere else entirely.
 
 **"LM Studio unreachable" / exit code 3.** LM Studio isn't running, isn't answering its
 `/api/v0/models` catalog endpoint, or didn't respond to the warm-up call in time. Start LM Studio
