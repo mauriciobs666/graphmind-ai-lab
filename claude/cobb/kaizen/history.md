@@ -2,6 +2,88 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-19 — K-030 closed: U1, team-wide write-convention cutover + Stage 9 orphan-doc fix (`agent-knowledge-base-strategy5-coordination.md`)
+
+Two independent follow-ups from the now-closed K-030 Track 1/Track 2 effort, dispatched together
+(disjoint files).
+
+**Part A — cutover completed.** Rewrote the "Learning capture" section in all 11 remaining agents
+(`analyst`, `architect`, `coder`, `data-scientist`, `devops`, `frontend-engineer`, `graph-dba`,
+`qa-engineer`, `security-expert`, `tdd-engineer`, `tico`) from the old `kaizen_team`
+`mcp__cypher__query` producer-write shape onto the `ingest_document`-against-`ws:agent-team` shape
+already live in `teco.md`/`cobb.md`, using `teco.md`:174-189 as the literal template and preserving
+each agent's own framing clause (what kind of fact to capture) and any agent-specific skip-note
+addition (`devops`'s project-docs clause, `qa-engineer`'s defects-belong-in-the-report clause,
+`graph-dba`'s two-sentence falkordb-quirks-first structure, `tico`'s "session" vs. "run" wording).
+Every rewritten section carries the same trailing note `teco.md`:187 has — `kaizen_team`'s older
+shape stays available, unchanged, for any entry already there; nothing needs migrating (no-retrofit
+rule). Added `mcp__falkor-chat-agent-team__ingest_document` to the explicit `tools:` allowlist of
+the 5 agents that needed it (`analyst.md`, `architect.md`, `data-scientist.md` — alongside the
+`search_documents`/`get_document` pair already there from Stage 7's U4b; `security-expert.md` and
+`tico.md` — `ingest_document` only, deliberately not the retrieval pair, since neither is a named
+Stage 7 `agent-kb-retrieval` consumer). The other 6 agents (no explicit `tools:` line, inherit
+everything) needed no frontmatter change. Updated `claude/AGENTS.md`'s "Learnings capture" summary
+bullet and `skills/agent-maintenance/SKILL.md` §5's stale "only `cobb`/`teco` currently write to
+`ws:agent-team`" note (Part B item 1 below, same edit) to say the cutover is complete
+(2026-09-19) and `kaizen_team` is no longer a live write target for any agent.
+
+**Live tool-visibility probe — real finding, not a clean pass.** Per the brief's "close the loop"
+instruction, dispatched a fresh `security-expert` subagent (one of the 5 newly-`tools:`-touched
+agents) to actually invoke `mcp__falkor-chat-agent-team__ingest_document`. It failed twice — once
+by self-reported tool-list absence, once by an actual attempted-call report of non-resolution —
+and both times it *also* reported `Grep`/`Glob` as absent, which are unambiguously in its
+pre-existing frontmatter. A control probe against `teco` (whose `ingest_document` grant predates
+this session, untouched by today's edit) succeeded on the first real call
+(`documentId: 38c4883cea374065866755616ce7edc9`, cleaned up via `delete_document` immediately
+after). **Conclusion: a mid-session frontmatter `tools:` edit does not take effect for a subagent
+spawned via `Agent` later in the *same* running session** — the agent-type/tool-set resolution a
+spawned subagent gets appears to be fixed earlier (session start, or first reference), not
+re-read from disk per dispatch. The deployed file itself is correct (confirmed by direct `Read`/
+`grep` against both the repo path and its `~/.claude/agents/` symlink target — they're identical).
+This refines the brief's own caveat ("a frontmatter change only takes effect for a freshly-spawned
+instance") — the unit that must be fresh is the *session*, not merely the subagent dispatch within
+an existing one. Filed as a new kaizen item (`plan.md`, parking lot) rather than guessed away;
+`teco` should either re-run this exact probe in a fresh session before treating live confirmation
+as closed, or accept the file-level verification plus this control-probe evidence as sufficient
+(the mechanism is now well understood and consistent with the pattern, not a shot in the dark).
+
+**Part B — two `skills/agent-maintenance/SKILL.md` fixes, same file, folded in.**
+1. §5's stale pilot note (grepped for "cobb"/"teco" together) rewritten as above.
+2. **Stage 9's orphan-document gap** (`claude/docs/reviews/agent-knowledge-base-strategy4-stage9.md`
+   Pass 3, "One new, non-blocking observation" — analyst-diagnosed, not re-derived here): a third
+   interruption point in step 5's `"pending"`-recovery sequence, between `ingest_document`
+   succeeding and the manifest's `documentId`-overwrite landing, meant a `None`-triggered re-run
+   was indistinguishable from the case where nothing had happened yet — re-running blindly would
+   `ingest_document` a second, manifest-untracked document, orphaning the first. **Fix chosen:**
+   split the recovery bullet's `None` branch into two cases via one narrow `list_documents`
+   title-match sweep (no server-side title filter exists — confirmed by reading
+   `falkor-chat/server/falkorchat/{mcp,repository,services}.py`'s actual `list_documents` signature,
+   `limit` is a plain int with no documented cap) before doing anything else: a live document at
+   the claim's exact expected title, not the manifest's stale id, means the orphan exists — adopt
+   it (overwrite `documentId`, leave `verified: "pending"`, fall through to the existing byte-exact
+   check) instead of re-ingesting; no such document means it's safe to `ingest_document` directly.
+   Also discovered and folded in: `delete_document` is **not** a safe no-op on an already-gone id —
+   it raises `DocumentNotFoundError` (`falkor-chat/docs/plans/document-ingestion2.md` FR-4,
+   confirmed by reading the plan and the tool's own docstring in `mcp.py`) — so the fixed recovery
+   text also drops the unconditional re-`delete_document` call the old text implied, since the
+   same `get_document(documentId)` call that returns `None` already proves there's nothing left to
+   delete. Chose the title-sweep-and-adopt design over the review's other named alternative
+   (making `delete_document` itself idempotent) because that tool's contract isn't `cobb`'s to
+   change — it's `document-ingestion2`'s spec — while the sweep is a self-contained fix entirely
+   inside step 5's own text. Extended the §5 origin blockquote with one dated sentence recording
+   both same-day follow-ups. Left the "Pass 4" write-up on
+   `agent-knowledge-base-strategy4-stage9.md` for the analyst gate this unit routes to (ledger:
+   `analyst` → —) — reviser adds `## Pass 4`, not the author.
+
+`claude/scripts/audit-team.sh` re-run clean: 5 pre-existing FAIL lines (username, home path, git
+user.name, git user.email, hostname — all personal-identifier leaks in files this unit never
+touched: `bypass-permissions-subagent-gap*.md`, `salesperson-ui.md`, `cpg-provenance-stamp.md`,
+`small-model-benchmarking-coordination.md`, `devops-opencode-headless-report.md`,
+`document-ingestion2-report.md`, `opencode/agents/tank/opencode.json`, `model-bench/*`), no new
+category — this baseline grew from Stage 9 Pass 3's "2 categories" since other, unrelated work
+landed between then and now. Check 11 (`agent-kb-retrieval` prefix template) still passes. Left
+uncommitted per this coordination's standing practice — `teco` verifies and commits.
+
 ## 2026-09-19 — K-030 Track 2 Stage 9 fixes: U7d, `analyst`'s Pass 2 re-check of U7b (1 remaining gap in the major's fix)
 
 `claude/docs/reviews/agent-knowledge-base-strategy4-stage9.md` Pass 2 (commit `3e974c2`) confirmed

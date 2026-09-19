@@ -401,13 +401,18 @@ distills — on request, and folded into every certification pass (§4):
    it while any legacy entry still exists (`docs/plans/
    kaizen-agent-ontology-graph.md` §7) — plus a **third, separate read
    source**, `ws:agent-team` (below), needed *alongside* these two for as long
-   as any agent's raw capture is still landing there rather than in
-   `kaizen_team`. That's the case today: Track 1's write-convention rollout
-   (`claude/docs/plans/agent-knowledge-base-strategy.md` §3 Stage 4) is a
-   pilot, not a team-wide cutover — only `cobb`/`teco` currently write to
-   `ws:agent-team`, every other agent still writes to `kaizen_team` — so which
-   of the three sources holds a given entry depends on which agent produced
-   it and when, not on one global switch:
+   as any pre-cutover entry remains in `kaizen_team` unread/uncleared. Track
+   1's write-convention rollout (`claude/docs/plans/agent-knowledge-base-strategy.md`
+   §3 Stage 4) completed its team-wide cutover 2026-09-19 (piloted 2026-09-18
+   with `cobb`/`teco`, the remaining 11 agents cut over the next day, K-030's
+   last Track 1 item) — every agent's own `<name>.md` now writes new captures
+   to `ws:agent-team`, not `kaizen_team`. `kaizen_team` is no longer a live
+   write target for any agent going forward; its two reads above exist solely
+   to reach what a pre-cutover session already wrote there (both the pre-M8
+   legacy shape and the post-M8 current shape) — nothing existing there needs
+   migrating (this cutover's own no-retrofit rule, same as FR-2's) — so which
+   of the three sources holds a given entry depends on when it was written
+   relative to the cutover, not on which agent produced it:
    - **Legacy read** (pre-M8 entries — `author` property, no edges):
      `mcp__cypher__query(graph='kaizen_team', cypher="MATCH (e:KaizenEntry)
      RETURN e.entryId, e.date, e.fact, e.evidence, e.context, e.suggestedHome,
@@ -807,12 +812,47 @@ distills — on request, and folded into every certification pass (§4):
      pre-edit document).** Apply the same check the "Verify, then flip"
      bullet above already uses, not a new one: call `get_document(documentId)`
      on the entry's current id, then compare what comes back against the
-     claim's *current* text in the `.md` file. `None`, **or** a document
-     whose text does not match byte-exact, both mean the same thing — the
-     edit was never actually synced — and both get the same fix: re-run the
-     whole "Existing claim, text changed" sequence above to actually apply
-     it. Only a byte-exact match is safe to flip straight to `verified:
-     true`.
+     claim's *current* text in the `.md` file. A non-`None` result that
+     matches byte-exact is safe to flip straight to `verified: true`. A
+     non-`None` result that doesn't match means the interruption landed
+     before `delete_document` ever ran — the old document genuinely still
+     exists — so re-run the whole "Existing claim, text changed" sequence
+     above unchanged; its own `delete_document(documentId)` call will
+     succeed as written, since the id it's deleting is still live.
+   - **A `None` result is ambiguous between two different prior states, and
+     only one of them is safe to `ingest_document` straight into.** Either
+     (a) the interruption landed at or before `delete_document`, so the old
+     document is gone (or the delete itself is what's mid-flight) and no new
+     document exists anywhere for this claim yet — safe to proceed — or (b)
+     `ingest_document` already succeeded and only the manifest's own
+     `documentId`-overwrite write was left undone (the third interruption
+     point Stage 9's Pass 3 review flagged): a *new* document already exists
+     in `ws:agent-team`, just untracked by the manifest, and blindly
+     re-running the full sequence would `ingest_document` a **second**,
+     equally untracked document for the same claim, orphaning the first.
+     **Never re-run `delete_document` in either case** — it raises
+     `DocumentNotFoundError` on an id that doesn't exist
+     (`falkor-chat/docs/plans/document-ingestion2.md` FR-4; not a safe no-op
+     to call again), and this same `get_document(documentId)` call already
+     proved the old id is gone. Distinguish (a) from (b) with one narrow
+     sweep before doing anything else: `list_documents(current_only=True,
+     limit=<comfortably above the current corpus size, e.g. 1000>)`, scanned
+     client-side (this tool has no server-side title filter) for a document
+     whose `title` exactly matches this claim's expected title (the same
+     `"<family-slug> — <claim-title>"` or plain-heading convention the "New
+     claim" bullet above already uses for `title=`) and whose `documentId`
+     isn't the manifest's stale tracked id. **Found one** → case (b)'s
+     orphan: adopt it by overwriting the manifest's `documentId` with the
+     found id, leave `verified: "pending"`, and fall through to the
+     byte-exact check above — no `delete_document`/`ingest_document` call in
+     this branch, the claim is already correctly ingested. **Found none** →
+     case (a): call `ingest_document` directly (skip `delete_document` — the
+     old document is already confirmed gone by this same `get_document`
+     call), then the same immediate manifest overwrite the ordinary sequence
+     uses. This sweep only runs on the rarer `None` branch of an
+     already-rare `"pending"`-at-start-of-pass finding, so it doesn't
+     reintroduce the live-round-trip cost the manifest was chosen to avoid
+     for the common path.
 
    **After a claim add/remove, also refresh the enclosing file's own stale
    narrative fields.** Several manifest keys are Stage-6-era completion
@@ -869,6 +909,13 @@ distills — on request, and folded into every certification pass (§4):
 > `ws:agent-team`'s mirror of a KB `.md` file's content after any edit to it
 > (delete-old + ingest-new, tracked via `claude/cobb/scripts/
 > kb-claim-manifest.json`), closing the loop Stage 6's migration opened.
+> **Same day, a follow-up unit:** the `"pending"`-recovery bullet's `None`
+> branch gained the title-match adopt-or-ingest split above, closing the
+> third interruption point (`ingest_document` succeeds, manifest overwrite
+> doesn't land) Stage 9's own review Pass 3 flagged as non-blocking — a bare
+> re-run there orphaned the successfully-ingested document by ingesting a
+> second, untracked one alongside it. The same unit also completed Track 1's
+> write-convention cutover for the remaining 11 agents (§ above).
 
 ---
 

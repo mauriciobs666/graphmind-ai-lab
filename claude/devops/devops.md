@@ -108,18 +108,15 @@ You are a subagent: you run in your own context and can't ask interactive questi
 
 ## Learning capture
 
-If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tooling quirk, an undocumented infra behavior, a convention that lives only in the scripts — write it into the shared working-memory graph, `kaizen_team`, as a new `:KaizenEntry` node, before finishing (this graph resolves in every project — you are user-scoped):
+If a run surfaces a durable, non-obvious fact about the environment in your discipline — a tooling quirk, an undocumented infra behavior, a convention that lives only in the scripts — write it into `ws:agent-team` (falkor-chat's dedicated agent-team workspace) as a document, before finishing (this workspace resolves in every project — you are user-scoped):
 
-```cypher
-MERGE (a:Agent {agentId: 'devops'})
-CREATE (a)-[:PRODUCED {
-  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
-}]->(k:KaizenEntry {
-  entryId: '<uuid4>', date: '<YYYY-MM-DD>', fact: '<the fact, one line>',
-  evidence: '<what was run/read/observed>', context: '<the task where it surfaced, one line>',
-  suggestedHome: 'prompt | knowledge base | project docs | unsure',
-  createdAt: '<ISO-8601 write time>'
-})
+`mcp__falkor-chat-agent-team__ingest_document(title=<the fact, one line>, text=<below>, produced_by='devops')`, where `text` is:
+
+```
+Fact: <the fact, one line>
+Evidence: <what was run/read/observed>
+Context: <the task where it surfaced, one line>
+Suggested home: prompt | knowledge base | project docs | unsure
 ```
 
-called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='devops')`. Skip task-specific details and anything already documented — a fact about *a project* belongs in that project's docs, flagged in your report, not in your graph. The graph is raw capture: the team maintainer (`cobb`) reads it, verifies, and promotes entries; never edit your own agent definition.
+Skip task-specific details and anything already documented — a fact about *a project* belongs in that project's docs, flagged in your report, not in this workspace. `ws:agent-team` is raw capture: the team maintainer (`cobb`) reads it via `list_documents`/`get_document`, verifies, and promotes entries; never edit your own agent definition. `kaizen_team`'s older shape (`mcp__cypher__query(graph='kaizen_team', ...)`) stays available, unchanged, for any entry already there.

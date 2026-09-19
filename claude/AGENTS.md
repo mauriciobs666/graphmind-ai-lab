@@ -7,8 +7,9 @@ This directory (`claude/`) holds custom Claude Code subagents.
   requires only that pair.
 - **Learnings capture** — each agent's own `<name>.md` carries the actual operative "Learning
   capture" write instruction; this bullet is the summary, kept in sync with it, not the mechanism
-  itself. **Piloted 2026-09-18 with `cobb`/`teco`:** their own files write a document into
-  `ws:agent-team`, a dedicated falkor-chat workspace, via
+  itself. **Team-wide since 2026-09-19** (piloted 2026-09-18 with `cobb`/`teco`, cut over for the
+  remaining 11 agents the next day — K-030's last Track 1 item): every agent's own file writes a
+  document into `ws:agent-team`, a dedicated falkor-chat workspace, via
   `mcp__falkor-chat-agent-team__ingest_document(text=..., title=..., produced_by=<own agentId>)`.
   `title` = the entry's `fact` (one line); `text` is a fixed, labeled rendering, one paragraph per
   field:
@@ -21,12 +22,12 @@ This directory (`claude/`) holds custom Claude Code subagents.
   `produced_by` must be the writer's own, already-seeded `Agent.agentId` (this roster, kept
   current via `seed_agent_team.sh`) — an unresolvable id raises `AgentNotFoundError` loudly, never
   a silent fallback. Reread with `list_documents`/`get_document` on the same MCP server, or a
-  direct `mcp__cypher__query` read against `ws:agent-team`. **Every other agent's own file still
-  writes the old way** — the shared `kaizen_team` graph, as `:KaizenEntry` nodes via
-  `mcp__cypher__query` — unchanged and not decommissioned; rewriting each remaining `<name>.md`'s
-  own section to the same new shape is a named follow-up, not yet done
-  (`claude/docs/plans/agent-knowledge-base-strategy.md` §3, Stage 4). Historical, pre-M8
-  `kaizen_team` entries may still carry only a plain `author` property and no edges.
+  direct `mcp__cypher__query` read against `ws:agent-team`. **`kaizen_team` is no longer a live
+  write target for any agent** — the shared graph, `:KaizenEntry` nodes via `mcp__cypher__query`,
+  stays available unchanged and not decommissioned, holding only whatever any agent wrote there
+  before this cutover; nothing existing there needs migrating (this cutover's own no-retrofit
+  rule). Historical, pre-M8 `kaizen_team` entries may still carry only a plain `author` property
+  and no edges.
 - **Distillation** — `cobb` periodically verifies each entry, routes it (agent prompt /
   knowledge base / project docs / discard), logs the promotion in that agent's `history.md`, and
   clears it. Procedure: `agent-maintenance` skill §5, which now reads/clears **both** sources in
