@@ -1,6 +1,6 @@
 # Agent knowledge-base strategy — ML method note
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`) · **Version:** 6
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`) · **Version:** 7
 
 **Revision note (2026-09-19, fourth pass, U4 of the follow-up batch coordination,
 `claude/docs/plans/agent-knowledge-base-strategy5-coordination.md`).** Revised in place — corrects
@@ -1201,3 +1201,211 @@ DEF-1/"C1-pattern finding" sections; live re-verification (`search_documents`/`g
 `limit=20`) run 2026-09-19 against `ws:agent-team`, same corpus state as that report (no migration
 activity between). Coordination: `claude/docs/plans/agent-knowledge-base-strategy5-coordination.md`,
 U2.
+
+## DEF-1 Recommendation 1 execution — `qwen3-embedding-4b` held-out trial (2026-09-19)
+
+**The question this section answers.** The diagnosis above named the corpus-neighborhood-density
+hypothesis (a 0.6B-parameter encoder's fine-discrimination capacity is the bottleneck inside the
+~150-200-claim `b-prose` neighborhood) as the leading, but unverified, explanation for DEF-1, and
+Recommendation 1 specified a bounded held-out trial as the cheapest way to get real evidence before
+committing to a fuller corpus re-embed. This section executes that trial, exactly as scoped in
+`claude/docs/plans/agent-knowledge-base-strategy6-coordination.md` (U2), and judges the result
+against my own prior acceptance criterion.
+
+### Environment note
+
+`devops` resolved the recommendation's literal string (`qwen3-embedding:4b`, an Ollama-style tag
+that does not exist) to the real artifact — **`Qwen/Qwen3-Embedding-4B-GGUF`, Q4_K_M quantization**
+— loaded in LM Studio under API id `text-embedding-qwen3-embedding-4b`. I independently
+re-confirmed it live before running anything (a fresh `/v1/embeddings` probe call returned a
+correct 2560-dimension, non-degenerate vector, ~0.4s). Per the flagged VRAM ceiling (~357-360 MiB
+free with the 4B model resident — no headroom for a second concurrent model load), this trial does
+**not** load the 0.6B model alongside it; the 0.6B comparison numbers used throughout are the
+already-recorded Stage 8 Phase 1/Phase 2 figures, not a fresh live run.
+
+### Method
+
+**No write to `ws:agent-team`.** Every read against it in this trial was `GRAPH.RO_QUERY` (via the
+`cypher` MCP tool, and — for bulk full-text fetch, see below — directly against the same
+`falkordb-dev` container on its published host port, same read-only command). No `ingest_document`
+call was made against `ws:agent-team` at any point.
+
+**Corpus slice reconstruction.** The diagnosis's named "~150-200-claim `b-prose` neighborhood" is
+the union of 8 KB files: `review-techniques.md`, `coordination-techniques.md`,
+`plan-authoring-techniques.md`, `guard-testing-techniques.md`, `test-design-techniques.md`,
+`estimator-test-fixtures.md`, `qa-testing-techniques.md`, `statistical-method-techniques.md`. I
+reconstructed the exact per-file `documentId` sets from `claude/cobb/scripts/kb-claim-manifest.json`
+(the same manifest Stage 6 migration itself produced and verified byte-exact against
+`ws:agent-team`) rather than re-deriving them by search, and dropped the one `documentId` recorded
+there as permanently `status:failed` (1 in `guard-testing-techniques.md` — not search-retrievable
+in production either, so excluding it is the correct like-for-like comparison). This yielded
+**188 `b-prose` documents** — inside the diagnosis's own named 150-200 range. For the **`b-code`
+control sample**, I pulled every `b-code` KB file present in the same manifest structure —
+`falkordb-quirks.md` (86, the source of the `F2` control and of most `b-code`-tagged golden-set
+queries), `falkordb-reference.md` (19), `frontend-quirks.md` (9) — rather than hand-picking a
+smaller subsample, once the fetch mechanism was built for the `b-prose` side anyway: **114 `b-code`
+documents. Total corpus: 302 documents** (188 + 114), all confirmed `status:'ready'` on fetch (no
+`failed` document leaked into the slice). This is wider than "just `F2`'s source file" as first
+scoped, but it is still a bounded, non-production held-out sample, and it does not change any
+result below — none of the 4 target/control queries' outcomes depend on which extra `b-code`
+documents sit in the corpus, since none of the extras land within reach of any target query's top
+ranks.
+
+**Text fetch.** `get_document` returns full untruncated text but is one call per document;
+`mcp__cypher__query`'s own display layer truncates long `text` values (confirmed: a 680-character
+field was cut to ~340 chars + a "(+N chars)" marker) — unusable for full-fidelity re-embedding.
+Fetched all 302 documents' full `title`/`status`/`text` via direct `GRAPH.RO_QUERY` calls against
+the `falkordb-dev` container (`localhost:6379`, the same instance `ws:agent-team` lives in, reached
+over its published host port per `cypher-mcp/README.md`'s own documented access pattern) — strictly
+read-only, one `MATCH (d:Document {documentId:$id}) RETURN ...` per document, no write. All 302
+fetched cleanly, `status:'ready'`, no parse errors; spot-checked word counts against the diagnosis's
+own earlier estimates (e.g. X1's document: diagnosis said "~750 words," this fetch measured 555 —
+the diagnosis's figure was itself an eyeballed approximation, not a discrepancy).
+
+**Query set.** The 4 originally-missed queries (C1, P1, X1, G2) plus **8 controls** (6 `b-prose`:
+C2, C4, Q2, P2, T1, G1; 2 `b-code`: R8, F2) drawn from Stage 8 Phase 1/Phase 2's already-hitting
+rows, plus **1 negative** (N4, the closest false match under the 0.6B model, 0.446) as a floor
+sanity check not required by the brief but cheap to add. All 13 query situation strings and expected
+`documentId`s were copied verbatim from `claude/docs/plans/agent-knowledge-base-strategy-ml.md`'s
+own Stage 8 Phase 1 table and `claude/docs/test-reports/agent-knowledge-base-strategy-ac2-report.md`
+— not reworded.
+
+**Prefix/floor convention, re-derived for the new model.** The asymmetric query/document
+instruction convention itself (documents unprefixed, queries wrapped in `"Instruct: Given a coding
+agent's description of its current situation, retrieve the distilled technique or rule that applies
+to it.\nQuery: {situation}"`) is a property of the Qwen3-Embedding **architecture/training recipe**,
+documented as shared across the whole model-size family (0.6B/4B/8B) — I reused it unchanged rather
+than inventing a new template, since nothing about model size implies a different instruction
+format. The **floor**, by contrast, is a property of this specific model's score distribution and
+had to be measured fresh — see "Floor observation" below; it is not carried over from the 0.6B
+model's 0.43.
+
+**Ranking.** Embedded all 302 corpus documents unprefixed and all 13 queries prefixed, via batched
+calls to `http://localhost:1234/v1/embeddings` (`text-embedding-qwen3-embedding-4b`, 2560-dim,
+batches of 20; 302 corpus + 13 query embeddings completed in 38s total). Computed cosine distance
+(`1 - cosine_similarity`, L2-normalized vectors) between every query and every corpus document in
+plain Python (no FalkorDB vector index involved — brute-force exact ranking over the 302-document
+slice, which is *more* accurate than an ANN index would be, so this is if anything a favorable,
+not unfavorable, comparison for the 4B model). Reproduced the three most consequential numbers
+(C1, X1, G2's target-document scores) via a second, independent embedding call each — all three
+reproduced to 4 decimal places exactly, so this is not a repeat of the 0.6B model's documented
+cross-session score-instability finding (R6/h40) — at least not within-session; no cross-session
+reproduction was attempted, an explicit limitation, see below.
+
+### Results
+
+**The 4 target queries:**
+
+| Query | Expected doc | Rank in top-302 | Score | In top-5? | Comparison to 0.6B (from DEF-1 diagnosis) |
+|---|---|---|---|---|---|
+| C1 | `9870c48f98…` | 14 | 0.4437 | **No** | 0.6B: absent even at rank 20. 4B: now surfaces, but at rank 14, still a top-5 miss. |
+| P1 | `08a422aeca…` | **1** | 0.3940 | **Yes** | 0.6B: rank 9, score 0.4487 (above its own floor). 4B: rank 1 — clear improvement. |
+| X1 | `75c0e47a01…` | **4** | 0.3870 | **Yes** | 0.6B: rank ~11, score 0.4632. 4B: rank 4 — clear improvement, but a thin margin (rank-5 competitor scored 0.3899, only 0.0029 apart — reproduced twice, stable). |
+| G2 | `f29bddad2c…` | 53 | 0.5678 | **No** | 0.6B: absent even at rank 20. 4B: still absent well past rank 20 — no material improvement, if anything relatively worse. |
+
+**2 of 4 target documents land in top-5 (P1, X1); 2 do not (C1, G2).**
+
+**The 8 controls — all 8 hit at rank 1** (scores 0.1371–0.3940, well inside a sane floor):
+
+| Query | Tag | Rank | Score |
+|---|---|---|---|
+| C2 | b-prose | 1 | 0.3188 |
+| C4 | b-prose | 1 | 0.3423 |
+| Q2 | b-prose | 1 | 0.1371 |
+| P2 | b-prose | 1 | 0.2510 |
+| T1 | b-prose | 1 | 0.3489 |
+| G1 | b-prose | 1 | 0.2553 |
+| R8 | b-code | 1 | 0.1715 |
+| F2 | b-code | 1 | 0.2200 |
+
+This confirms the embedding/ranking mechanism itself is sound under the 4B model (no pipeline bug
+depressing scores generally) — the 2 remaining target misses are a genuine retrieval-quality
+result, not an artifact of a broken trial.
+
+**Negative control (N4, "React Server Components data-fetching boundary"):** closest match in the
+302-document corpus scored 0.5233 (a `frontend-quirks.md` "React Router" entry) — correctly
+rejected under any plausible floor, and notably farther from the boundary than the 0.6B model's
+0.446 on the same query. **Floor observation, heavily caveated:** if a floor were fit against only
+this trial's data (worst surviving top-5-hit score 0.3940 [P1] vs. this one negative's 0.5233), the
+gap (0.129) is far wider than the 0.6B model's calibrated 0.037 — a promising secondary signal for
+general (non-crowded-neighborhood) discrimination, but **n=1 negative query is not a floor
+derivation**, only a single data point; do not treat 0.129 as a re-derived floor or cite it as if it
+were Recommendation 3's actual full-negative-stratum exercise. A real re-derivation needs the same
+~6-negative-query discipline Stage 8 Phase 1 used, not something this bounded trial was scoped to
+redo.
+
+### Verdict against the acceptance criterion
+
+**My own prior criterion, verbatim: "if at least 3 of these 4 queries' expected documents land in
+top-5, the model-capacity hypothesis is supported and a fuller corpus re-embed is justified; if
+fewer (especially if C1/G2 still miss even at `limit=20` under the 4B model), the hypothesis is
+falsified and effort should move to item 2."**
+
+**Result: 2 of 4 (P1, X1) land in top-5 — below the 3-of-4 bar. Hypothesis falsified**, and the
+named "especially" trigger is substantially met: G2 misses cleanly even at a limit far wider than
+20 (rank 53 of 302); C1 no longer misses at `limit=20` (it now appears at rank 14, an improvement
+over "absent even at rank 20" under 0.6B) but still misses the operative `limit=5` cutoff the
+production pipeline actually uses. **Per the criterion's own instruction, effort should move to
+item 2** (hybrid lexical/semantic score fusion, routed to `graph-dba`/`architect`) rather than a
+fuller corpus re-embed under this model on model-capacity grounds alone.
+
+The result is not a uniform null, though, and that nuance matters for anyone deciding what to do
+next: **model capacity is a real, partial lever** (P1 and X1 both moved from top-5 misses to clean
+hits, and C1 moved from "not even in the top 20" to "in the top 20, still not top 5") — but it is
+**not sufficient on its own** to close the gap for the two hardest cases (C1, and especially G2,
+which shows no material improvement at all). This is consistent with Finding 3 in the diagnosis
+above: P1 and G2 both had strong lexical/exact-phrase overlap with their own correct document and
+still lost — a symptom a lexical-fusion signal (item 2) would attack directly, and a symptom pure
+embedding-capacity scaling only partially fixes (it fixed P1, it did not fix G2, its sibling case in
+the same diagnostic pattern).
+
+### What this trial does and does not tell you
+
+**Does tell you:** on a corpus of this shape and this exact document set, a larger embedding model
+in the same family measurably improves ranking for at least some `b-prose` queries inside the dense
+neighborhood, but does not close the gap for the specific queries whose expected document has
+*many* other topically-adjacent competitors rather than one identifiable near-duplicate (G2's
+pattern, per the diagnosis's own Finding 3) — that residual looks structural to dense-vector-only
+retrieval, not a model-size problem alone, reinforcing rather than undercutting item 2's case.
+
+**Does not tell you, and would need separate validation before committing to a fuller corpus
+re-embed under this model:**
+- **Held-out ≠ full-corpus.** This ran on 302 of the corpus's 332 claims (excluding
+  `ops-quirks.md`, `lm-studio-model-notes.md`, and 1 permanently-failed document) — a genuinely
+  representative slice of the two neighborhoods in question, but not the whole corpus, and not a
+  test of whether re-embedding interacts with the excluded files or with cross-neighborhood
+  queries the diagnosis didn't stratify into this set.
+- **No cross-session score-stability check.** All reproduction here was **within this one session**
+  (three targets' scores reproduced exactly, twice each) — this corpus's own precedent (R6/h40)
+  found a real, unexplained cross-session score drift on the 0.6B model for one borderline document.
+  Whether the 4B model is more or less prone to that same instability is untested; a fuller
+  commitment should re-run at least the borderline cases (X1's thin rank-4/rank-5 margin is exactly
+  the kind of case that instability would flip) from a fresh session before trusting them as final.
+- **Floor is not re-derived, only illustrated.** As stated above, n=1 negative is not a
+  calibration — a real floor for this model needs Stage 8 Phase 1's full ~6-negative-query
+  discipline repeated fresh, not inferred from this trial.
+- **Cost/latency of the 4B model in production was not measured here.** Embedding 302 documents +
+  13 queries took ~38s total in this trial (batches of 20, local GPU) — a real number, but from a
+  cold, idle, uncontended model; it says nothing about the 4B model's behavior under this lab's
+  actual query load or about the VRAM contention already flagged (only ~357-360 MiB free with this
+  model resident, no headroom for the 0.6B model to also be loaded) — a real operational constraint
+  a "fuller corpus re-embed" decision would have to resolve (does production stop loading the 0.6B
+  model at all, or contend for the same thin margin?), not addressed by this note.
+- **This is one embedding pass, not a regression suite.** A genuine "fuller corpus re-embed"
+  decision should re-run Stage 8's actual 45-pair golden set (all `b-prose`/`b-code`/stratum-(e)/
+  negative rows, not just this trial's 12 queries) under the 4B model before shipping — this trial
+  is deliberately narrower, exactly as scoped.
+
+**Bottom line for the decision this serves:** do not commit to a fuller corpus re-embed under
+`qwen3-embedding-4b` on the strength of this trial. The acceptance criterion I set myself is not
+met. The next move, per my own prior ranking, is item 2 (hybrid lexical+semantic fusion) — this
+trial's own result (P1 and G2 are the same diagnostic pattern, lexical overlap without a
+discriminative embedding win, and model-capacity scaling fixed only one of the two) is itself
+additional evidence for that direction, not just a fallback because item 1 failed.
+
+**Traceability.** Corpus/documentId reconstruction: `claude/cobb/scripts/kb-claim-manifest.json`
+cross-checked against direct `GRAPH.RO_QUERY` reads (`status:'ready'` confirmed for all 302).
+Embeddings: `http://localhost:1234/v1/embeddings`, model id `text-embedding-qwen3-embedding-4b`,
+run 2026-09-19. Query/expected-answer source: this file's own Stage 8 Phase 1 table (§"Stage 8
+Phase 1") and `claude/docs/test-reports/agent-knowledge-base-strategy-ac2-report.md`. Coordination:
+`claude/docs/plans/agent-knowledge-base-strategy6-coordination.md`, U2.
