@@ -64,40 +64,49 @@ golden-set run (`claude/docs/plans/agent-knowledge-base-strategy.md` §7/§8).
 call; a different value here is itself a drift signal, not a legitimate per-situation
 choice.
 
-## Score floor — interim value, one known unresolved risk
+## Score floor — 0.43, with a named class of residual risk near tight score clusters
 
-**Reject any hit with `score > 0.43`** (cosine distance; lower = more similar). This is an
-**interim** value, not a finished calibration — see below before treating it as settled.
-Landed 2026-09-19 by `qa-engineer` (Stage 8 Phase 2, `claude/docs/test-reports/
-agent-knowledge-base-strategy-ac2-report.md`, revised in place 2026-09-19 per `analyst`'s
-review, `claude/docs/reviews/agent-knowledge-base-strategy4-stage8-phase2.md`), executing the
-29 design-only rows of the 45-pair golden set `data-scientist` designed and partially piloted
-in Stage 8 Phase 1 (`claude/docs/plans/agent-knowledge-base-strategy-ml.md`, "Stage 8 Phase
-1"), pooled with Phase 1's 16 executed rows.
+**Reject any hit with `score > 0.43`** (cosine distance; lower = more similar). Landed
+2026-09-19 by `qa-engineer` (Stage 8 Phase 2, `claude/docs/test-reports/
+agent-knowledge-base-strategy-ac2-report.md`, revised in place per `analyst`'s review,
+`claude/docs/reviews/agent-knowledge-base-strategy4-stage8-phase2.md`), executing the 29
+design-only rows of the 45-pair golden set `data-scientist` designed and partially piloted in
+Stage 8 Phase 1 (`claude/docs/plans/agent-knowledge-base-strategy-ml.md`, "Stage 8 Phase 1"),
+pooled with Phase 1's 16 executed rows. `data-scientist`'s follow-up methodology consult
+(same file, "Stage 8 Phase 2 addendum") diagnosed the residual risk below and confirmed 0.43
+as the right operative value — no number change from this revision, only the framing.
 
 **0.43 is confirmed safe for every pooled found true-positive document except one, and for
 all 6 pooled negative queries.** The worst of the other 40 found true positives is 0.4140
 (C4); the closest false match on a genuine negative is 0.446 (N4, stable across three
-independent measurements). **One document's score is confirmed unstable across sessions**:
-the second sibling of stratum-(e) family h40 (`5b1b477ff67e4e3b81c57f14899bbe48`, query R6)
-scored **0.4201** in three separate live calls in one session, and a stable-but-different
-**0.4405** in `analyst`'s independent review session (two calls, byte-identical to each
-other) — both readings internally reproducible, but 0.0204 apart, which is not ordinary
-per-call jitter. **No fixed two-decimal floor can be shown safe against this specific
-document across both observed readings**: 0.43 admits the 0.4201 reading but rejects the
-0.4405 reading; a floor high enough to admit 0.4405 (≥0.4405) would leave only 0.0055 margin
-to the closest negative (0.446) — no working safety margin at all.
+independent measurements).
 
-**This is a genuine, unresolved methodology question, not a number this file should silently
-patch.** Escalated to `data-scientist`: is this instability isolated to this one
-query/document pair, or does it indicate broader backend non-determinism worth
-characterizing systematically — and is a fixed-point floor even the right mechanism given
-confirmed sub-0.02 instability this close to the decision boundary? Until that consult
-lands, **0.43 stays the operative floor** (correct for every other measured case), but do
-not read "the floor is calibrated" as meaning R6/h40's second sibling is guaranteed
-admitted — it may be wrongly rejected depending on which backend state answers a given call,
-a known, accepted, named residual risk. Full derivation, the instability investigation, and
-the pooled score data are in the Stage 8 Phase 2 report cited above; this section states only
+**A hit whose score sits within ~0.025 of a competing candidate's score, near the floor,
+should not be trusted from a single `search_documents` call.** This convention has one
+confirmed instance — the second sibling of stratum-(e) family h40
+(`5b1b477ff67e4e3b81c57f14899bbe48`, query R6) scored **0.4201** (rank 3) in one session and a
+stable-but-different **0.4405** (rank 5) in two later, independent sessions, each internally
+reproducible but 0.0204 apart — and may have others not yet identified: R6's own top-5 sits
+inside an unusually tight ~0.02-wide cluster of competing scores, and the diagnosis (cited
+below) found this kind of clustering, not a corpus-wide property, is what makes an
+otherwise-invisible embedding-computation difference floor-relevant. **No fixed two-decimal
+floor can admit both observed readings of this one document while keeping a working margin
+to the closest negative** (0.446) — 0.43 admits 0.4201 but rejects 0.4405; a floor high enough
+to admit 0.4405 would leave only 0.0055 margin, i.e. none. The mitigation is corpus-level, not
+per-call: Stage 8's periodic regression-gate re-run records each row's floor-relevant score
+gap and flags any row below 0.025 as floor-unstable-risk, requiring multi-session reproduction
+before that row's floor-applied verdict is trusted as calibration evidence
+(`claude/docs/plans/agent-knowledge-base-strategy-ml.md`, Recommendation 4's "Standing
+practice" bullet) — **not** a client-side re-query-and-average convention, which was
+considered and rejected: the instability is session-scoped (each session's own repeated calls
+are internally consistent), not per-call-random, so re-querying inside one calling session
+would not surface the other reading.
+
+**0.43 stays the operative floor** for every measured case except R6/h40's second sibling,
+whose admission depends on which backend state answers a given call — a known, accepted,
+named residual risk, not a defect to keep chasing per-row. Full derivation, the original
+instability investigation, and the diagnosis/recommendation are in the Stage 8 Phase 2 report
+and `data-scientist`'s "Stage 8 Phase 2 addendum" (both cited above); this section states only
 the operative number and the caveat, per this skill's own "point to the source, don't
 duplicate" convention.
 
