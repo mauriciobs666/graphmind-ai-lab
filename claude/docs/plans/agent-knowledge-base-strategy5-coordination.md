@@ -31,11 +31,20 @@ user from a menu of flagged-but-undispatched backlog items:
 |---|---|---|---|---|---|---|
 | U1 (team-wide write-convention cutover, 11 agents + SKILL.md §5 note + Stage 9's orphan-doc fix) | `cobb` | `a036af9239f8dd423` | in-flight | — | `analyst` → — | — |
 | U2 (DEF-1 — diagnose the prose-retrieval quality gap) | `data-scientist` | `a1dbec04fe6cac54d` | in-flight | — | — → — | — |
-| U3 (R6/h40 backend-log check — confirm/falsify the discrete-reload hypothesis) | `devops` | `ac42d9af3c8a7a7ed` | in-flight | — | n/a — diagnostic, teco-reverified | — |
+| U3 (R6/h40 backend-log check — confirm/falsify the discrete-reload hypothesis) | `devops` | `ac42d9af3c8a7a7ed` | accepted | Diagnostic finding, no file changes (read-only): the discrete-LM-Studio-reload hypothesis is **falsified** — `falkor-chat-agent-team` process running continuously since 2026-09-18 23:12:50 (no restart), LM Studio's own server log shows exactly 5 model-unload events all day, none between 14:00-15:00 -03:00 (nearest: 09:32:10 and 15:44:47), and no LM Studio app-process restart in the window either. Concurrent-request-batching floating-point non-associativity (data-scientist's #2-ranked candidate) is now the leading explanation, not investigated further (no log surface for it; a design question, not a process/log check) — teco independently re-confirmed both the process-start timestamp and the exact unload-event list via direct `ps`/log reads | n/a — diagnostic, teco-reverified directly | 126.2k tok / 28 tools / 200s |
 
 U1/U2/U3 are independent (disjoint files: agent prompt files + `skills/agent-maintenance/SKILL.md`
 vs. `claude/docs/plans/agent-knowledge-base-strategy-ml.md` vs. no expected file writes) —
 dispatched in parallel.
+
+- **U4 (queued, dependent on U2 — same file):** U3's falsification means `claude/docs/plans/
+  agent-knowledge-base-strategy-ml.md`'s "Stage 8 Phase 2 addendum" section currently states a
+  now-disproven diagnosis ("most likely — a discrete state change... happening once between
+  qa-engineer's run and analyst's first review pass") as its ranked #1 conclusion — that needs a
+  correction once U2 finishes (both touch `ml.md`; running them concurrently risks a file
+  collision, so U4 is deliberately held rather than dispatched alongside U2). `SKILL.md`'s own
+  "Score floor" section doesn't mention the reload hypothesis at all (confirmed via grep — no
+  correction needed there), so this is `ml.md`-only.
 
 ## Notes
 
