@@ -2,6 +2,447 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-19 — K-030 Track 2 Stage 6: final low-contention retry pass over the 31 deferred-failed documents — Stage 6 is now FULLY CLOSED
+
+- **Scope.** The last unit owed by Stage 6: a single, genuinely-once, one-item-at-a-time retry
+  pass over the 31 `ws:agent-team` documents still `Document.status:"failed"` after content
+  migration closed (12 in `claude/devops/ops-quirks.md`, 19 in
+  `claude/tdd-engineer/guard-testing-techniques.md`) — per `teco`'s dispatching brief in
+  `claude/docs/plans/agent-knowledge-base-strategy4-coordination.md` (U3i).
+- **Pre-flight backend check.** `curl localhost:1234/v1/models` → 200; `/api/v0/models` responded
+  with real model data; no `model-bench`/LM Studio processes running (`ps aux`) and no run files
+  newer than the recent window. A throwaway sanity document (`ingest_document` → `get_document` →
+  `delete_document`) round-tripped cleanly, resolving `processing` → `ready` in ~20s. Backend
+  judged healthy enough to proceed.
+- **Method, strictly one document at a time.** For each of the 31: read the existing (byte-exact,
+  `failed`) document's exact `title`/`text` via `get_document` (all 31 read first, in parallel —
+  a pure read, no embedding-pipeline contention); then, serially, `delete_document` the old id,
+  `ingest_document` the identical text with `produced_by='cobb'`, recording the new documentId.
+  No batching of the ingest step itself — one `ingest_document` call per document, in sequence.
+- **Result — checked after a real delay (not instantly), verified byte-exact on every document via
+  `get_document`.** **26/31 resolved to `Document.status:"ready"`. 5/31 reproduced the identical
+  `"failed"` signature a second time, even under confirmed low-contention conditions** — re-checked
+  a second time after several more minutes of other work to rule out a timing artifact, still
+  `failed`. All 5 confirmed byte-exact text at the final check; only retrievability (embedding/
+  `Document.status`) is affected, never content. The 5, by heading:
+  - `devops/ops-quirks.md` (4 of its 12): `docker run` is stdout-clean; a fully-cached `docker
+    build` still makes a registry round trip for `FROM` metadata; PID-1-bare-interpreter `SIGTERM`
+    is silently ignored; an interrupted `docker build` keeps its completed layers.
+  - `tdd-engineer/guard-testing-techniques.md` (1 of its 19): a coverage probe's silence criterion
+    must call the specific route under test, not an umbrella function.
+  Per the brief's explicit "genuinely once, not a loop, not multiple attempts per document"
+  instruction, none of these 5 were retried a third time — they are now a **closed, permanent,
+  named gap**, not silently dropped and not queued for further retry.
+- **Manifest updated** (`claude/cobb/scripts/kb-claim-manifest.json`): both files' sections rewritten
+  with the new documentIds and final per-claim `embeddingStatus` (whether the retry succeeded or
+  failed again, as instructed); top-level `_status`, `_stillOwedAfterMigration`, and `_deferred`
+  rewritten to reflect closure; a new `_finalRetryPass_2026_09_19` block records the pass's method
+  and the 5 permanently-failed documentIds for traceability. Validated as well-formed JSON after
+  editing (`python3 -m json.tool`).
+- **Final Stage 6 corpus tally, all 13 KB files, all documents ever ingested:** 327 documents
+  `ready`, 5 documents permanently `failed` (332 manifest-tracked claims across all 13 KB files; all 5 text-verified byte-exact, only retrieval is
+  affected).
+- 2026-09-19 — *Corrected: "308" was an arithmetic error caught by teco's independent re-verification against ws:agent-team and the manifest's own documentId inventory.* **Stage 6 (K-030 Track 2's first stage) is now fully closed**, triggering Stage 7 per
+  the coordination doc's own sequencing. `claude/docs/plans/agent-knowledge-base-strategy4-
+  coordination.md`'s U3i row and Notes updated to close accordingly (re-read fresh immediately
+  before editing, per the coordination doc's own frequent-concurrent-edit caution).
+- **Team coherence certification unaffected** — no agent/skill roster or prompt changed this
+  dispatch; only `ws:agent-team` document state, the claim manifest, and kaizen/coordination
+  bookkeeping.
+
+## 2026-09-19 — K-030 Track 2 Stage 6: fresh dispatch (U3h) finished `review-techniques.md` (headings 33-54, 37 claims) — Stage 6 content migration is now COMPLETE for all 13 KB files
+
+- **Resumed purely from the manifest's own `_resume_from_heading_33` block, per the brief** — no
+  cold re-read of the source file for heading 33 itself, exactly as U3g's checkpoint intended.
+  Independently re-confirmed the file's 54 `## ` heading line numbers (`grep -n '^## '`) and
+  re-ran `flag_split_candidates.py` fresh, which reproduced the same 25/54-flagged count U3g had
+  already found (9 of the 22 remaining headings, 33-54, flagged: 35, 37, 38, 39, 40, 42, 44, 45, 54).
+- **Heading 33** ("A grep-pinned edit table is an edit list, not a completeness proof," ~2170w, the
+  densest single heading in the corpus) ingested exactly per the prior dispatch's already-decided
+  plan: 9 independently-attributed numbered items (the source's own "Seven ways" vs. actually-
+  numbered-1-9 inconsistency transcribed as-is, not "fixed"), the "Two derived checks" paragraph as
+  its own claim, and the three trailing re-deriving-caveat paragraphs ("One caution...", "And
+  re-run the command...", "Keep the measurement...") bundled into one final claim — 11 claims
+  total, ingested in three `ingest_documents` batches of 4/4/3, all byte-exact verified via
+  `get_document` immediately after, all status `ready`.
+- **Headings 34-54 (21 more headings, 26 claims) migrated fresh, split-boundary judgment calls made
+  consistent with the established precedent** (full detail and every documentId in the manifest's
+  `headings_33_54_done_2026_09_19` block):
+  - h35 split 2 (a refusal that retires when a delegating call is deleted, vs. diffing collected
+    test IDs to audit retired *tests* exactly — two independently re-derived/dated instruments).
+  - h37 split 2 (the module-wide-walk "checked not guessed" case, its own separately-verified
+    2026-09-09 scenario, vs. the CPG-provenance-stamp shell incident — one shared Origin spanning
+    two sequential narrative beats, kept together as a pair).
+  - h38 kept **whole** — one continuous narrative built around a single worked instance
+    (`freshness.md`'s false mechanism), no per-paragraph distinct Origin.
+  - h39 split 2 (the main revision-history-hashing technique with its own Pass-7 Origin, vs. an
+    explicitly-labeled "header's blanket claim" companion finding carrying its own separate,
+    later-dated 2026-09-16 Origin).
+  - h40 split 2 (two remedy shapes — a `$?`-inside-`if !` call-site trap, and an
+    enumeration-gated-remedy trap — each attributed to its own named Pass of the same four-pass
+    gate, the Origin line itself dividing the same way, same shape as U3g's h13/h21 precedent).
+  - h42 kept **whole** (one worked instance — the 173,472-combination sweep — with bolded
+    sub-paragraphs as refinements of it, one Origin).
+  - h44 kept **whole** (a single measured technique plus a generalization capstone; no Origin line
+    at all, nothing to split along).
+  - h45 split 2 (sha-pinning every review count, with its own two-part Origin, vs. an
+    explicitly-labeled "same hazard applies to a narrative claim" companion finding with its own
+    separate `salesperson-ui` S9e Origin).
+  - h54 kept **whole** — two numbered mutants share one Origin (`model-bench` S7 gates, U168/U174)
+    covering both, unlike h13/h21/h40's per-item-Origin split cases; matches the "shared single
+    Origin → keep whole" heuristic used throughout this file's migration.
+  - h34/h36/h41/h43/h46-53 (12 headings) migrated whole, unflagged, single-Origin techniques.
+- **Zero instances of the recurring `Document.status:"failed"` signature this entire dispatch** —
+  all 37 new claims verified byte-exact via `get_document` immediately after ingest, status
+  `ready` at every check (not `processing`), across seven `ingest_documents` batches (sizes
+  4/4/3/2/3/3/3/8/1) plus one solo `ingest_document` call for the heading-54 whole-heading claim.
+  `analyst/review-techniques.md` closes at **81 claims across all 54 headings** (14 from U3f's
+  headings 1-11, 30 from U3g's headings 12-32, 37 from this dispatch's headings 33-54).
+- **This was the last of the 13 KB files — Stage 6's content migration is now complete for the
+  whole corpus.** Updated the manifest (`claude/cobb/scripts/kb-claim-manifest.json`): renamed
+  `_analyst_review_techniques_IN_PROGRESS` → `_analyst_review_techniques_DONE`, replaced
+  `_resume_from_heading_33` with the full `headings_33_54_done_2026_09_19` documentId/reasoning
+  block, rewrote the top-level `_status` to reflect all 13 files attempted, cleared
+  `_remainingFiles` to empty, and tightened `_stillOwedAfterMigration` to name the final count (31
+  documents: `ops-quirks.md`'s 12 + `guard-testing-techniques.md`'s 19) as confirmed and closed
+  rather than an estimate subject to further recurrence.
+- **Per the dispatching brief, this triggers the next, separate unit**: the final low-contention
+  one-item-at-a-time retry pass over every document still `Document.status:"failed"` — not
+  attempted in this dispatch, explicitly out of scope for it, and now unblocked since all 13 files
+  have been through at least one full migration attempt.
+- Rewrote `claude/cobb/kaizen/plan.md`'s K-030 roster row and detailed Track 2 Stage 6 paragraph in
+  place to match (no stacked "Update:" — the entry now reads as one present-tense statement of
+  what's true, per this repo's own `AGENTS.md` "an open item is rewritten" convention).
+
+## 2026-09-19 — K-030 Track 2 Stage 6: fresh dispatch (U3g) migrated `review-techniques.md` headings 12-32 (30 claims), checkpointed at the tightened ~80-tool-call threshold with heading 33 fully read and split-decided
+
+- **Resumed per the brief**, reading the manifest's `_analyst_review_techniques_IN_PROGRESS` block,
+  the parent plan's §6/§2/§4.5, and the coordination doc's U3/U3f/U3g rows directly — no
+  paraphrase, no cold re-derivation of anything the prior checkpoint had already worked out.
+- **Migrated headings 12-32 (21 headings, 30 claims), all byte-exact verified via `get_document`
+  immediately after ingest.** Zero instances of the recurring `Document.status:"failed"` signature
+  across every ingest this run (5 `ingest_documents` batches, sizes 5/5/5/5/5, plus the initial
+  5-item h12-14 batch). Every claim's text was constructed by direct copy from a prior `Read` tool
+  call's literal output (never retyped from memory) and cross-checked against a fresh `sed`
+  extraction of the source lines for the two trickiest inline-code/regex spans (heading 25's
+  glued-fence regex containing a literal `\n`, heading 26's `^\|\s*\*\*(S\d+[a-z]?)\*\*\s*\|`
+  pattern) before trusting the JSON-escaping round-trip.
+- **Split-boundary judgment calls made fresh, consistent with established precedent but genuinely
+  new decisions in each case** (full detail and documentIds in the manifest's
+  `headings_12_32_done_2026_09_19` block):
+  - Heading 13 and heading 21 both split 2 ways along a numbered-check enumeration whose own
+    Origin paragraph names each check separately ("Check 1 caught... Check 2 caught...") — same
+    shape as the qa-testing-techniques.md model-bench precedent from the prior checkpoint.
+  - Heading 14 split along its own Origin's `(1)(2)` vs `(3)(4)` numbered examples — the first pair
+    verifies the core grep-correctly technique, the second pair the separate
+    pasted-evidence-decays technique; the intervening prose (bound/Tombstone/decay paragraphs)
+    was assigned to whichever claim it substantively belonged to, not mechanically to whichever
+    half came first.
+  - Heading 22's two bolded numbered traps were judged genuinely distinct failure modes (not one
+    mechanism with two symptoms) and split 2 ways, with the single shared Origin paragraph
+    duplicated verbatim in both since it does not itself split by trap.
+  - Heading 24 was kept **whole** despite carrying 3 bolded sub-paragraphs (precondition /
+    seam-reach / run-serially), because — unlike every split case above — all three share **one**
+    single Origin citation. This is the deciding signal used throughout: distinct per-item origins
+    → split; one shared origin → keep whole, treating the bolded parts as caveats of one technique.
+  - Heading 26 split 2 ways: the main per-row-hashing technique (plus its own "hash the whole
+    window" caveat, kept together as one mechanism) versus an explicitly-labeled "companion trap"
+    that is a genuinely unrelated finding about completeness-table keying, placed in the same
+    heading only because it's "in the same family of documents."
+  - **Heading 27 (the first of the two ~1200-2200-word flagged giants) needed a fresh call, not the
+    prior checkpoint's guess.** The earlier note had guessed "2 clearly labeled sub-techniques."
+    On full read it has 4 real chunks: a deletion-not-modification flavour, an AST-alias flavour
+    that bundles 3 paragraphs all elaborating the *same* `storefront_api.py`/`_router_bindings`
+    worked example (the "two axes" and "assignment-shape census" paragraphs are refinements of
+    that one flavour, not separate ones), an explicitly-labeled "Third flavour" (names-keyed
+    allowlist blindness), and a general gating-discipline capstone — kept as one claim because its
+    last paragraph explicitly says "The same move" when extending the point to a shell harness,
+    marking it as a continuation of the same generalization rather than a 5th flavour.
+- **Checkpointed at the tightened ~80-tool-call threshold, per the brief's explicit instruction to
+  stop even mid-heading.** Heading 33 ("A grep-pinned edit table is an edit list, not a
+  completeness proof," the *other* flagged giant, ~2170w) was read in full and split-decided —
+  9 independently-attributed numbered items (each with its own worked grep/measurement) + a
+  "two derived checks" claim + one claim bundling the three trailing re-deriving-caveat
+  paragraphs = 11 claims planned — but **deliberately not ingested this run**, so the next
+  dispatch can go straight to ingestion with zero re-reading. Manifest's `_resume_from_heading_33`
+  carries the full plan verbatim. Updated in the same pass: the manifest's top-level `_status`,
+  the coordination doc's U3g row (closed) + new U3h row (queued) + a new dated Update note, and
+  this history entry / `kaizen/plan.md`'s K-030 section.
+
+## 2026-09-19 — K-030 Track 2 Stage 6: fresh dispatch (U3f) resumed cleanly from the manifest checkpoint, finished `falkordb-quirks.md`, checkpointed again mid-`review-techniques.md`; fixed one fidelity bug, cleared a false-positive one
+
+- **Resume discipline validated.** Read `claude/cobb/scripts/kb-claim-manifest.json` (especially
+  its `_note4`), `claude/docs/plans/agent-knowledge-base-strategy.md` §6/§2/§4.5, and
+  `claude/docs/plans/agent-knowledge-base-strategy4-coordination.md` (U3f) directly, per the brief.
+  Resumed `graph-dba/falkordb-quirks.md` heading 5 purely from `_note4`'s recorded line numbers —
+  no cold re-read of the source file was needed to locate the remaining work, confirming the prior
+  instance's checkpoint discipline paid off as designed.
+- **`graph-dba/falkordb-quirks.md` — file now COMPLETE (all 5 headings).** Finished heading 5's
+  remaining 10 bullets (of 13; the prior instance had done the first 3), split into 16 claims: 8
+  bullets kept whole, and 2 bullets required a fresh split-boundary judgment call (no
+  near-identical precedent in the corpus) — the ~65-line `redis-cli`-exits-0-on-error-reply bullet
+  split 4 ways (core exit-0 trap + control; no-uniform-prefix finding + control; the affirmative
+  last-line-trailer discriminator's construction+soundness kept as ONE claim despite 3 bolded
+  sub-paragraphs since each builds on the last to argue one technique; the live `pipeline.sh`
+  incident as a separable worked example), and the `TIMEOUT`/`socket_timeout`/retry bullet split 4
+  ways matching its own explicit markdown sub-bullet nesting. All 16 texts byte-exact verified via
+  `get_document` immediately after ingest (all `status:"processing"` at that check — normal, final
+  ready/failed to reconfirm later per the push-through-and-defer policy). Manifest updated in
+  place: `_graph_dba_falkordb_quirks_IN_PROGRESS` renamed to `..._DONE`, all 83 documentIds
+  recorded, `_note4` marked superseded (kept for history — it's the artifact that proved the
+  resume worked).
+- **`analyst/review-techniques.md` — started, 11/54 headings done (14 claims), then checkpointed.**
+  Re-ran `flag_split_candidates.py` fresh (25/54 flagged, not the earlier estimate of 26 — the tool
+  has been refined since). Confirmed all 54 `## ` heading line numbers via `grep -n '^## '` for a
+  clean per-heading resume map. Migrated headings 1-11: heading 1 (Byte-identity AST hash) kept
+  whole despite being flagged — one coherent technique with a natural extension and a caveat, not
+  independently-attributed sub-claims. Heading 2 ("Verifying an uncommitted diff without mutating
+  the working tree," 1581w) genuinely split 4 ways along the source's own labeled `(a)`/`(b)`/`(c)`/
+  `(d)` enumeration — the shared 2-sentence intro folded into `(a)` as its lead-in. Headings 3-11
+  (all unflagged) migrated whole, one claim each. All 14 byte-exact verified. Stopped at the
+  mandatory ~100-tool-call checkpoint (a clean per-heading boundary — heading 12 not started) with
+  full resume detail, including split-judgment notes through heading 27, recorded in the manifest's
+  new `_analyst_review_techniques_IN_PROGRESS` block rather than left to a cold re-read.
+- **Fixed a real content-fidelity bug, found by `coder`'s new checker (U3e), mid-run.** `teco`
+  relayed two findings from `claude/cobb/scripts/check_content_loss.py`'s live run against the
+  already-migrated corpus. (1) `qa-engineer/qa-testing-techniques.md`'s "model-bench attest/run"
+  2-way split had dropped the leading word "and" from claim 2's `**Technique:**` paragraph
+  (documentId `3e38c2d9d50848a7bb02f75327d7ec75`) — confirmed against the live source
+  (`claude/qa-engineer/qa-testing-techniques.md:249-250`), a genuine splice defect (the word was
+  simply deleted rather than the sentence being properly restructured as its own standalone
+  directive). Fixed via the standard delete-then-recreate revision convention: deleted, re-ingested
+  with the word restored (new id `1034d23fe5b04503b90c53128e7cfb17`), byte-exact re-verified,
+  manifest entry updated in place with a `note` explaining the fix.
+- **Assessed and cleared a second flagged item as a false positive, not a fix.** (2)
+  `data-scientist/lm-studio-model-notes.md`'s heading-5 split (documentIds `35964b75...`/
+  `dbcc7f3a...`) was flagged by the same checker as 3 NOT_FOUND + 1 large UNACCOUNTED gap. Full
+  word-by-word reconciliation against the live source (`claude/data-scientist/
+  lm-studio-model-notes.md:84-115`) found **no actual content lost**: the flags are fully explained
+  by (a) a mid-paragraph sentence ("Separately, what is pinned changes...") correctly relocated
+  from claim 1's position into claim 2, where it topically belongs, and (b) the source's joint
+  "**Consequence — two reusable habits:** (1)... (2)..." paragraph split into two independent
+  "**Consequence:**" labels (one per claim), dropping only the "(1)"/"(2)" list numerals and the
+  "two reusable habits" framing phrase — both structural, not factual. This is a legitimate,
+  well-judged split (consistent with how other joint-paragraph splits were handled elsewhere in the
+  corpus, e.g. the qa-testing-techniques.md fix above's own claim-1 half), not a fidelity defect.
+  **Not re-ingested.** This distinguishes a checker false positive (large reorganization confusing
+  a sequential diff) from a real defect (a word silently dropped mid-splice) — worth the checker's
+  author knowing the difference exists, for tuning it later.
+- **Manifest discipline held throughout**: every ingest batch was followed by individual
+  `get_document` byte-exact verification before moving on, and the manifest was updated at each
+  natural boundary (file completion, checkpoint) rather than held in memory — same discipline as
+  the prior instance, explicitly to make a mid-run kill or a deliberate checkpoint cost nothing.
+
+## 2026-09-18 — K-030 Track 2 Stage 6: migration pass paused mid-run on a live embedding-backend failure signal
+
+- **What, confirmed against the actual design first (not the coordinator's summary):** read
+  `claude/docs/plans/agent-knowledge-base-strategy.md` §6/§2/§4.5/§7 and
+  `claude/docs/plans/agent-knowledge-base-strategy4-coordination.md` (U3) directly before doing
+  anything, per the brief's own instruction. Confirmed the file list against the actual tree
+  rather than the coordination doc's own hedge ("the five/six existing KBs"): the real
+  pre-existing count is **9 files across 7 agents**, not five/six — the plan's own phrase is an
+  imprecise estimate, not a scope error, since the total candidate set (9 pre-existing + Stage 0's
+  4 interim) is exactly the 13 files both the coordination doc's Notes section and a fresh
+  `find claude -maxdepth 2 -iname "*.md"` scan agree on: `analyst/review-techniques.md`,
+  `architect/plan-authoring-techniques.md`, `data-scientist/{lm-studio-model-notes,
+  statistical-method-techniques}.md`, `devops/ops-quirks.md`, `frontend-engineer/
+  frontend-quirks.md`, `graph-dba/{falkordb-quirks,falkordb-reference}.md`,
+  `qa-engineer/qa-testing-techniques.md`, `tdd-engineer/{estimator-test-fixtures,
+  guard-testing-techniques,test-design-techniques}.md`, `teco/coordination-techniques.md`.
+- **Step 1 (pre-migration smoke test, §7) — passed.** Ingested one real claim
+  (`architect/plan-authoring-techniques.md`'s first heading) via `ingest_document`, confirmed it
+  ranked top via `search_documents` against the documented query-prefix template (score
+  0.2555 vs. 0.75+ for unrelated hits) — the embedding backend is live and working, not the
+  `192.168.0.69:1234`-unreachable state Track 1 Stage 4 found. Separately smoke-tested the
+  delete-then-recreate revision convention (§4.5) on a disposable scratch document (v1→delete→v2),
+  confirmed the old id gone and the new one byte-exact, then deleted the scratch doc — the
+  convention works end-to-end.
+- **Step 1b (the stuck pilot document) — resolved.** Recovered `e3ddf8bccbf34454876431f09d2a2482`'s
+  exact title/text via `get_document` (never trusted a paraphrase), `delete_document`d it — no
+  classifier block encountered, unlike `devops`'s earlier attempt — and re-`ingest_document`d the
+  same content under `produced_by='cobb'`. New id `4da25923b0214ed0ba20a91dd2132c50`, byte-exact
+  verified, status progressed past `"failed"` normally.
+- **Step 2 — ran `claude/cobb/scripts/flag_split_candidates.py`** against the confirmed 13-file
+  list: 184 total `##` sections, 55 flagged as split candidates (30%).
+- **Step 3 (migration) — 4 of 13 files fully migrated and byte-exact verified, 1 file ingested but
+  blocked on retrieval, 1 file analyzed but not yet ingested, 7 files not yet started:**
+  - `architect/plan-authoring-techniques.md` — 13 headings, 0 flagged, 13 claims (1:1), all
+    `status:"ready"`.
+  - `data-scientist/statistical-method-techniques.md` — 9 headings, 0 flagged, 9 claims (1:1), all
+    `"ready"`. Caught and fixed a fidelity defect on the first attempt: three claims containing
+    Greek/math unicode (κ, ≤, ≥, α, ≈, −) were sent with ASCII substitutes typed by hand instead of
+    the source's actual characters — caught by the byte-exact `get_document` re-read (never
+    skipped, per the brief), all three deleted and re-ingested with the exact source unicode,
+    re-verified byte-exact.
+  - `tdd-engineer/test-design-techniques.md` — 8 headings, 0 flagged, 8 claims (1:1), all `"ready"`.
+  - `graph-dba/falkordb-reference.md` — 5 headings, 3 flagged, **19 claims** (a genuine split, not
+    a naive 1:1): the 2 unflagged headings ("Graph data modeling (LPG)", "GraphRAG / knowledge
+    graphs") migrated whole per the brief's own literal instruction ("an unflagged heading migrates
+    as one claim, unchanged"), even though this file's bulleted-reference style (each bullet is
+    its own independently-retrievable fact, unlike the other KBs' flowing-prose-per-heading
+    convention) would, on my own editorial read, have warranted finer splitting there too — noted
+    as a judgment call the brief's literal step-3 wording forecloses, not silently overridden. The
+    3 flagged headings ("Cypher on FalkorDB", "Indexing & constraints", "Architecture &
+    operations") were reviewed and split one claim per bullet (5 + 4 + 8 = 17 claims), each
+    carrying the heading as its family-slug prefix. All 19 byte-exact verified, all `"ready"`.
+  - `devops/ops-quirks.md` — 12 headings, 2 flagged, both reviewed and judged **not** to split (one
+    coherent two-symptom/one-fix technique; one mechanism-plus-worked-example) — 12 claims (1:1).
+    **All 12 ingested via two `ingest_documents` batch calls and byte-exact verified, but
+    `Document.status` came back `"failed"` on every one of the 12, confirmed persistent on a
+    second check after a delay** (not merely transient `"processing"`). A same-session diagnostic
+    single-item `ingest_document` probe (immediately after, then deleted) succeeded normally,
+    ruling out "the backend is down" outright — but also ruling out "batch calls categorically
+    fail," since three earlier `ingest_documents` batches this same run (12, 9, 8, and two batches
+    totaling 19 items) all succeeded and are `"ready"`. Working, unconfirmed hypothesis:
+    cumulative embedding-queue load across ~60+ documents ingested in quick succession within one
+    session may have degraded backend throughput right at the point this batch landed — not
+    verified, not acted on. **Per the brief's explicit instruction, stopped here rather than
+    guessing at a workaround** (e.g., silently switching every remaining batch to spaced-out
+    individual calls). The 12 documents' text/title/attribution are all byte-exact-correct and
+    left in place (not deleted) — they are just not yet retrievable via `search_documents`.
+  - `frontend-engineer/frontend-quirks.md` — read and analyzed (6 headings, 3 flagged; each flagged
+    heading is itself a bundle of independently-`Verified against <package>`-attributed bullets,
+    splitting into 2 claims each; the 3 unflagged headings carry exactly one bullet each and
+    migrate whole) — **9 claims decided, none ingested yet**, paused before execution once the
+    ops-quirks.md signal appeared.
+  - **Not yet started:** `analyst/review-techniques.md` (54 sections, 26 flagged — the densest
+    file, per the plan's own characterization), `data-scientist/lm-studio-model-notes.md`,
+    `graph-dba/falkordb-quirks.md` (4 headings, all 4 flagged, 2,000-4,700 words each),
+    `qa-engineer/qa-testing-techniques.md`, `tdd-engineer/estimator-test-fixtures.md`,
+    `tdd-engineer/guard-testing-techniques.md`, `teco/coordination-techniques.md`.
+  - **Step 4 (content-loss check script) — not started.** No point building/mutation-testing it
+    against a corpus still mid-migration and carrying a live retrieval-integrity question.
+- **Manifest** (kill-resilience, per the brief): `claude/cobb/scripts/kb-claim-manifest.json`,
+  built and updated incrementally, one file at a time, exactly as instructed — file → heading →
+  resulting claim `documentId`(s) → verified (byte-exact) → `embeddingStatus` for the one file
+  that needs it. Kept on disk past this pause; see the open question below on whether it is also
+  Stage 9's answer.
+- **Why paused, not pushed through:** the brief's own explicit instruction ("if you hit any sign
+  it's not actually working (a `Document.status` staying `"failed"`), stop and report back rather
+  than pushing through") names this exact signal. Continuing the bulk migration into
+  `analyst/review-techniques.md` (the largest, most split-heavy file) while an unresolved
+  retrieval-integrity question sits open on already-ingested content would risk the same defect at
+  much larger scale, and deciding how to handle it (retry now vs. wait for `devops` to confirm the
+  embedding backend's behavior under sustained load) is explicitly not cobb's call to guess at
+  under this brief.
+- **Not done:** Stage 6 is **not** delivered. `claude/cobb/kaizen/plan.md`'s K-030 entry is updated
+  to reflect the paused, partial state honestly rather than claiming completion.
+
+## 2026-09-18 — K-030 Track 2 Stage 6 (continued): retry reproduced the identical failure, paused again per the routed diagnosis's own stop condition
+
+- **What:** `teco` routed the open question to a fresh `devops` diagnosis rather than deciding it
+  unilaterally, independently re-verified it, and resumed the unit with a decision (retry now, in
+  smaller sub-batches) plus two caveats. Root cause per that diagnosis: a transient LM Studio
+  crash of the **extraction**-role model (`qwen/qwen3-4b-2507`), not the embedder — 14 consecutive
+  extract-job tracebacks exactly spanning the original 12-item batch, then a clean total recovery;
+  `Document.status` flips to `"failed"` on either an embed **or** extract job failure
+  (documented K-051 behavior, not a bug), which is why the embeds succeeded but the status still
+  read failed. Best-evidence, unconfirmed trigger: cross-model contention on the single shared LM
+  Studio instance.
+- **Retry, exactly as decided:** deleted all 12 original `devops/ops-quirks.md` documents (clean,
+  no classifier block) and re-ingested them in **3 sub-batches of 4** (the diagnosis's
+  blast-radius caution), rather than repeating the original single 12-item batch.
+- **Result: all 12 came back `Document.status:"failed"` again, identical signature, across all 3
+  sub-batches.** Text/title/attribution re-verified byte-exact for every one — the content is
+  still correct, only retrieval is affected. New `documentId`s recorded in
+  `claude/cobb/scripts/kb-claim-manifest.json` (superseding the deleted originals).
+- **Stopped, did not attempt a third retry** — per the diagnosis's own explicit second caveat:
+  "if a retry batch fails again with the same signature... stop and report back rather than
+  blind-retrying a third time." This is the observable signal available to `cobb` (all-failed
+  immediately post-ingestion, byte-exact text) rather than a direct read of the raw LM Studio
+  HTTP-status log, which `cobb` has no access to — reported as such, not overclaimed as a
+  confirmed log match.
+- **Why this matters for the decision ahead:** per the diagnosis's own framing, a same-signature
+  repeat "upgrades the contention hypothesis to confirmed" — the fix, if the hypothesis holds, is
+  about model concurrency on the shared LM Studio instance (e.g. serializing the extractor against
+  whatever else is generating on it), not something retriable from `cobb`'s side or fixable by
+  waiting alone.
+- **Not done:** Stage 6 remains paused on this one file's retrieval status; `frontend-quirks.md`
+  and the 7 not-started files are untouched, exactly where the previous pause left them.
+
+## 2026-09-18 — K-030 Track 2 Stage 6 (continued): `teco` resolved and resumed; a second, larger-scale recurrence stopped the run again
+
+- **What:** `teco` routed the retry-vs-wait question to `devops`, independently re-verified the
+  diagnosis, and decided: proceed now with the 8 remaining files (`ops-quirks.md` deferred as a
+  known platform-level gap, one final single-item retry owed at the end). Resumed migration.
+- **4 files completed cleanly, byte-exact verified, zero embedding failures:**
+  - `frontend-engineer/frontend-quirks.md` — 6 headings, 3 flagged (each split one claim per
+    independently-`Verified against <package>`-attributed bullet, 2 claims each) → 9 claims. 2 of
+    the first 9 ingested came back `status:"failed"` (a partial-batch recurrence, milder than
+    `ops-quirks.md`'s total wipeout) — retried individually, one at a time; both succeeded.
+  - `qa-engineer/qa-testing-techniques.md` — 17 headings, 2 flagged. "Every label still has a
+    survivor" kept whole (one mechanism + worked example + generalization coda). "`model-bench
+    attest`/`run`" genuinely split into 2 claims — its own numbered list cites two different code
+    paths (`modelbench/cli.py` vs `modelbench/hostinfo.py`), unlike a case where one fix serves two
+    symptoms of one mechanism → 18 claims. Zero failures.
+  - `tdd-engineer/estimator-test-fixtures.md` — 2 headings, both flagged, both kept whole (each a
+    single rich technique with its own worked table) → 2 claims. Zero failures.
+  - `teco/coordination-techniques.md` — 37 headings (matches Stage 0's own count), 2 flagged.
+    "Mutation-test the green-on-arrival tests" split into 3 claims, matching the Stage 0 note's own
+    characterization of this exact heading bundling 3 separable claims. "The three-way diff check"
+    reviewed and kept whole — judged as one integrated technique (one diff, one outcome table),
+    not 3 independently-useful facts, despite superficially resembling the split case → 39 claims.
+    Zero failures.
+- **Then `tdd-engineer/guard-testing-techniques.md` — a second, much larger recurrence, migration
+  stopped again.** 8 headings, 4 flagged; all four are dense, multi-instance sections (comparable
+  in density to `review-techniques.md`'s own characterization) and were split accordingly: heading
+  1 into 4 claims, heading 2 kept whole, heading 3 into 2, heading 4 (the densest single heading
+  migrated in this corpus) into 8 independently-attributed claims → 19 claims from 8 headings, all
+  byte-exact verified on write. **All 19 subsequently came back `Document.status:"failed"`** —
+  checked with a time gap, not transient — a **total wipeout of the entire file**, worse than
+  `frontend-quirks.md`'s partial recurrence and matching `ops-quirks.md`'s original all-or-nothing
+  pattern. This happened during 5 back-to-back `ingest_documents` batch calls for this one file,
+  **immediately after** `coordination-techniques.md`'s 39 claims across 10 batches had all
+  succeeded cleanly moments earlier — so simple request-volume/pacing does not explain the
+  difference either; whatever the trigger is, it does not correlate cleanly with `cobb`'s own
+  batch cadence.
+- **Stopped, not retried** — per `teco`'s own pre-authorized condition ("same stop-and-report
+  instruction applies if you hit another genuine fork"). A recurrence this size (an entire file,
+  not 1-2 items) is a materially different signal than the deferred `ops-quirks.md` case and is
+  reported rather than absorbed or worked around a second time.
+- **Manifest updated** (`claude/cobb/scripts/kb-claim-manifest.json`) with the full state: 4 files
+  clean, `ops-quirks.md` deferred with its known retry outcome, `guard-testing-techniques.md`'s 19
+  `documentId`s recorded with `embeddingStatus: "ALL 19 failed"`, and the 3 not-yet-started files
+  (`analyst/review-techniques.md`, `data-scientist/lm-studio-model-notes.md`,
+  `graph-dba/falkordb-quirks.md`) named explicitly. Step 4 (content-loss checker) not started —
+  premature against a corpus with two open retrieval-integrity questions.
+- **Not done:** Stage 6 remains open. `claude/cobb/kaizen/plan.md`'s K-030 entry updated to match.
+
+## 2026-09-18 — K-030 Track 2 Stage 6 (continued): `teco` resolved and re-authorized push-through; session checkpointed mid-file on context size, not a defect
+
+- **What:** `teco` checked with the user and an independent `devops` read; both converged on
+  "push through" — the recurring `Document.status:"failed"` class is now a known, accepted risk
+  for the rest of Stage 6, not something to stop-and-report per occurrence. Directive: keep
+  migrating the 3 remaining files under the same approach, record any recurrence in the manifest
+  and continue, then do exactly one low-contention single-item retry pass across everything still
+  `failed` once all 13 files are attempted, then hand back (content-loss checker separately
+  reassigned to a fresh `coder` dispatch, out of this agent's scope as of the same message).
+- **4 more files completed cleanly this round, zero embedding failures across any of them:**
+  `data-scientist/lm-studio-model-notes.md` (8 headings, all flagged; 5 kept whole, 1 split into
+  2, 1 huge bulleted-reference-style heading split into 9 → 17 claims total, all byte-exact,
+  verified in two waves since most were still `"processing"` at first check and confirmed later).
+  `graph-dba/falkordb-quirks.md`, in progress: 4 of 5 headings fully migrated — Indexing/DDL (16
+  bullets → 16 claims, one `Refinement`-bearing bullet kept whole per the "long worked example,
+  not evidence of bundling" default), Concurrency & atomicity (1 unflagged bullet, whole), Cypher
+  dialect & query behavior (39 bullets → 39 claims, no splits or merges beyond the bullet
+  boundary — the largest single heading migrated in this whole corpus), Query tuning (11 bullets
+  → 11 claims, two `Refinement`-bearing bullets kept whole). All 67 of these claims byte-exact
+  verified, zero embedding failures across any of them — a genuinely large, clean run.
+- **Then a checkpoint, not a failure.** `teco` stopped the session mid-file (heading 5, "Ops,
+  config & tooling," 3 of 13 bullets done) on context-size grounds alone (~800k tokens), an
+  explicit "this isn't a reflection of anything wrong with your work" instruction — not the
+  embedding-failure class, not a new fork. Followed the stop instruction literally: no further
+  migration work attempted to "finish cleanly" first.
+- **State captured precisely in the manifest** (`claude/cobb/scripts/kb-claim-manifest.json`):
+  9/13 files fully done; `falkordb-quirks.md` at heading 5/5, bullet 3/13, with the exact
+  remaining bullets' line numbers and one-line summaries recorded so a fresh dispatch can resume
+  without re-reading the whole 1016-line file cold; `analyst/review-techniques.md` (the densest
+  file in the corpus, 54 sections/26 flagged) not started at all; the deferred retry pass
+  (`ops-quirks.md`'s 12 + `guard-testing-techniques.md`'s 19, likely plus recurrences from the
+  remaining work) explicitly named as still owed.
+- **Not done:** Stage 6 remains open, handed off for a fresh dispatch to resume from the manifest.
+  `claude/cobb/kaizen/plan.md`'s K-030 entry updated to match this exact state.
+
 ## 2026-09-18 — K-030 Track 1 Stage 5: `agent-maintenance` SKILL.md §5 gains the `ws:agent-team` read/clear hook
 
 - **What:** dispatched by `teco` as Stage 5 of `claude/docs/plans/agent-knowledge-base-strategy.md`
