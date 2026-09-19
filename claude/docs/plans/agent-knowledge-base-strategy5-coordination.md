@@ -1,6 +1,6 @@
 # Agent knowledge-base strategy — K-030 follow-up batch coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`)
 
 Three follow-up items surfaced by K-030 Track 2's now-closed coordination
 (`claude/docs/plans/agent-knowledge-base-strategy4-coordination.md`, archived), selected by the
@@ -29,9 +29,9 @@ user from a menu of flagged-but-undispatched backlog items:
 
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
-| U1a (write-convention cutover review — diff-scoped) | `analyst` | `ac021e93cccda49a0` | gated | `claude/docs/reviews/agent-knowledge-base-strategy5-u1.md`, commit `ad1f1b7` — teco-reverified both Major findings directly: `list_documents` confirmed hardcoded oldest-first (`repository.py:1353-1386`, `mcp.py:404-412`, no sort param); the "Found one" adopt branch's fall-through to the byte-mismatch `delete_document` path confirmed by reading `SKILL.md`'s actual text (lines ~803-855) — a title collision would delete a different claim's live document; manifest re-checked directly (90 titles, 0 duplicates today) | approve with suggestions (2 Major, non-blocking) — U5 dispatched to fix | 144.2k tok / 33 tools / 270s |
-| U5 (fix SKILL.md orphan-sweep: corpus-count guard + collision-safe adopt branch) | `cobb` | `ae77ce414732a6168` | gated | `skills/agent-maintenance/SKILL.md` + `claude/cobb/kaizen/history.md`, commit `b7e39a1` | `analyst` → needs changes (Pass 4, `claude/docs/reviews/agent-knowledge-base-strategy5-u1.md`, commit `1a4e84d`) | 98.2k tok / 20 tools / 153s |
-| U6 (fix Pass 4's delayed-collision-delete gap — gate the manifest write, not just the delete) | `cobb` | `ae77ce414732a6168` | gated | `skills/agent-maintenance/SKILL.md` + `claude/cobb/kaizen/history.md`, commit `8dde185` — teco-reverified: read the full edited bullet directly, hand-traced the two-pass sequence myself (mismatch → manifest left at old, already-`None`-confirmed id → next pass re-enters the safe ambiguous-`None` branch, not the unconditional-delete one); `git diff --stat` confirmed only the 2 intended files changed (a concurrent session's unrelated edit to `claude/graph-dba/falkordb-quirks.md` correctly left out) | `analyst` → — (Pass 5 dispatched) | 133.5k tok / 16 tools / 128s |
+| U1a (write-convention cutover review — diff-scoped) | `analyst` | `ac021e93cccda49a0` | accepted | `claude/docs/reviews/agent-knowledge-base-strategy5-u1.md`, Pass 1 commit `ad1f1b7`, Pass 4 commit `1a4e84d`, Pass 5 commit `bef8fa8` — teco-reverified every pass directly against the live `SKILL.md` text and code, not the reports' stated intent (see U5/U6) | approve → needs changes (Pass 4) → **approve** (Pass 5) | 144.2k + 180.3k + 196.0k tok cumulative / 5-33 tools/pass |
+| U5 (fix SKILL.md orphan-sweep: corpus-count guard + collision-safe adopt branch) | `cobb` | `ae77ce414732a6168` | superseded by U6 | `skills/agent-maintenance/SKILL.md` + `claude/cobb/kaizen/history.md`, commit `b7e39a1` | `analyst` → needs changes (Pass 4) — closed the count-guard gap cleanly but left a delayed-collision-delete gap, fixed in U6 | 98.2k tok / 20 tools / 153s |
+| U6 (fix Pass 4's delayed-collision-delete gap — gate the manifest write, not just the delete) | `cobb` | `ae77ce414732a6168` | accepted | `skills/agent-maintenance/SKILL.md` + `claude/cobb/kaizen/history.md`, commit `8dde185` — teco-reverified: read the full edited bullet directly, hand-traced the two-pass sequence myself (mismatch → manifest left at old, already-`None`-confirmed id → next pass re-enters the safe ambiguous-`None` branch, not the unconditional-delete one); `git diff --stat` confirmed only the 2 intended files changed (a concurrent session's unrelated edit to `claude/graph-dba/falkordb-quirks.md` correctly left out) | `analyst` → **approve** (Pass 5, commit `bef8fa8`) — full re-trace of the two-pass sequence plus a fresh sweep for the same write-ahead-of-verification pattern, no other branch found | 133.5k tok / 16 tools / 128s |
 | U1 (team-wide write-convention cutover, 11 agents + SKILL.md §5 note + Stage 9's orphan-doc fix) | `cobb` | `a036af9239f8dd423` | accepted | 15 files (11 agent prompts, `claude/AGENTS.md`, `skills/agent-maintenance/SKILL.md`, `claude/cobb/kaizen/history.md`+`plan.md`), commit `209017c` — teco-reverified: 8/11 agent files read in full (framing clauses/special notes correctly preserved), rest diff-stat-consistent; 5 `tools:` additions confirmed exact; `DocumentNotFoundError`/`list_documents` API citations confirmed against `document-ingestion2.md`; `audit-team.sh` clean. **K-052 finding (mid-session `tools:` edit invisible to a nested subagent-of-subagent) independently tested**: a fresh top-level probe from this session succeeded cleanly (tool present, real `ingest_document` call worked) — refines K-052 rather than confirming it as originally stated (caching boundary looks nested-dispatch-specific, not same-session-general); recorded as a `kaizen_team` entry; orphaned test document (no `delete_document` in the probe's grant) cleaned up separately | `analyst` → — (dispatched, U1a) | 282.4k tok / 77 tools / 827s |
 | U2 (DEF-1 — diagnose the prose-retrieval quality gap) | `data-scientist` | `a1dbec04fe6cac54d` | accepted | `claude/docs/plans/agent-knowledge-base-strategy-ml.md` "DEF-1 diagnosis" section (Version 4→5), commit `1133329` — teco-reverified: kaizen entry real; document word counts for 3/4 targets checked (minor imprecision in the report's own approximate figures for 2 of them, not worth chasing — teco's own quick check undercounted first, corrected); ~150-200-claim neighborhood tally cross-checked against known per-file counts (~189, in range). Root cause: corpus-neighborhood density (a 150-200-claim stylistically homogeneous region), not query wording or top-K/floor tuning (ruled out by a live `limit=20` re-run). Recommends a bounded `qwen3-embedding:4b` held-out trial first, hybrid lexical+semantic fusion routed to `graph-dba`/`architect` as a future design question, and a cheap `cobb` content edit for the one discovered X1/T1 near-duplicate pair | — → — (advisory, not gated — see U1's precedent for advisory work teco verifies directly) | 174.3k tok / 28 tools / 350s |
 | U4 (correct ml.md's Stage 8 Phase 2 addendum per U3's falsification) | `data-scientist` | `a1dbec04fe6cac54d` | accepted | `claude/docs/plans/agent-knowledge-base-strategy-ml.md` (Version 5→6), commit `213db59` — teco-reverified: falsified candidate demoted to "Eliminated" (kept visible, not deleted); concurrent-batching promoted leading-by-elimination with its own original objection preserved, not overclaimed; section-by-section confirmation that sections 2-4's recommendations don't depend on the mechanism, only section 4's "currently-live" framing withdrawn | n/a — advisory correction, teco-verified directly | 216.3k tok / 14 tools / 139s |
@@ -75,3 +75,39 @@ dispatched in parallel.
   `falkor-chat-agent-team` process (`falkor-chat/scripts/start_agent_team.sh`, port 8200) talking
   to an LM Studio embedding backend at a `base_url` resolved once at process startup per that
   script's own 3-tier fallback (env var → `opencode.local.json` → shared `opencode.json`).
+- **U1a's Pass 4 landed on this coordination's own review file, not `-stage9.md`.** The scope note
+  above ("continues that same review file... as a dated Pass 4") was written before U1a existed
+  and pointed at `agent-knowledge-base-strategy4-stage9.md` (Stage 9's original 3-pass review,
+  still `active`, un-archived). Once U1a opened a fresh, diff-scoped review of commit `209017c`
+  under this coordination, Pass 4/5 correctly continued *there* instead — the SKILL.md logic gap
+  they found originates in U1's diff, not in Stage 9's original design, and `-stage9.md` covers a
+  now-closed Track 2 coordination. `analyst` flagged the mismatch against the old note as a
+  non-blocking process observation; noted here for anyone tracing the citation later.
+
+## Closing summary (2026-09-19)
+
+All six units accepted/approved. The three user-selected follow-up streams from K-030 Track 2's
+closeout are complete:
+
+1. **Track 1's write-convention cutover** — all 13 agents now write raw learnings to
+   `ws:agent-team` via `ingest_document`; `kaizen_team` is retired for new writes, kept as
+   read-only history. Went through an unplanned but valuable 5-pass gate cycle (U1a→U5→Pass
+   4→U6→Pass 5) after the review caught a genuine two-pass data-corruption hazard in the Stage 9
+   orphan-doc recovery logic that neither Stage 9's own 3-pass review nor U1's initial fix caught —
+   closed clean, independently re-traced by `teco` at every pass rather than accepted on the
+   reports' word.
+2. **DEF-1 (prose-retrieval quality gap)** — diagnosed (U2): a 150-200-claim stylistically
+   homogeneous corpus neighborhood the current 0.6B embedding model struggles to discriminate
+   within, not a tuning problem. Recommends a bounded `qwen3-embedding:4b` held-out trial as the
+   next step — **not yet executed**, a genuine open follow-up.
+3. **R6/h40 score instability** — falsified the leading hypothesis (U3: no discrete LM Studio
+   reload occurred), corrected the ML note accordingly (U4). Concurrent-batching floating-point
+   non-associativity is now the leading candidate by elimination, itself unconfirmed — the 0.43
+   score floor's "interim value, named residual risk" framing (set at Track 2's own close) is
+   still accurate and unchanged by this finding.
+
+**Not archived by this closure** (unchanged from Track 2's own precedent, still each owner's
+call): `claude/docs/plans/agent-knowledge-base-strategy.md` (parent plan, `architect`-owned, still
+`active`) and `claude/docs/plans/agent-knowledge-base-strategy-ml.md` (ML note, `data-scientist`-
+owned, still `active`, now Version 6). Both cite this coordination's outcomes by path; neither is
+restated here.
