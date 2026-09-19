@@ -1,6 +1,14 @@
 # Agent knowledge-base strategy — ML method note
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`) · **Version:** 2
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`) · **Version:** 3
+
+**Revision note (2026-09-19).** Revised in place, not forked (`AGENTS.md` collision rule 5 — still
+never independently reviewed or gated as of this pass) to execute Stage 8 Phase 1: the AC-2
+golden-set design Recommendation 4 specified, plus a pilot run against the now-fully-migrated
+corpus (all 13 KB files, 327/332 claims `ready` in `ws:agent-team`) that produces the first
+calibrated score floor. New section "Stage 8 Phase 1" below; the "Risks & open questions" section
+is updated at its end to close what this resolves and name what stays open for the qa-engineer-run
+full-set gate (Stage 8 Phase 2). Nothing above this point changed in substance.
 
 **Revision note (2026-09-17).** Revised in place, not forked (`AGENTS.md` collision rule 5 — this
 note has never itself been independently reviewed or executed against; only the plan's Stage 0,
@@ -382,21 +390,294 @@ CI, not a bare pass/fail percentage.**
   convention changes (Qwen3-Embedding-0.6B → 4B upgrade, or adopting Recommendation 1's prefix on
   an already-embedded corpus, both invalidate a previously-calibrated floor).
 
+## Stage 8 Phase 1 — golden-set design, pilot execution, score-floor calibration (2026-09-19)
+
+**The question this phase answers:** Recommendation 4 designed the AC-2 golden set and its
+sequencing (pilot → full set) before any corpus existed to test it against. Migration (Stage 6)
+is now closed — 327/332 claims `ready` across all 13 KB files (5 permanently `failed`, content
+byte-exact but not search-retrievable — `docs/reviews/agent-knowledge-base-strategy4-stage6.md`).
+This phase (a) lands the full ~40-pair golden set as a reusable, structured artifact so a later
+`qa-engineer` unit doesn't redesign it, and (b) executes a weighted pilot subset against the real
+`search_documents` tool to sanity-check the mechanism and produce `skills/agent-kb-retrieval/
+SKILL.md`'s first calibrated score floor, closing that file's "provisional, currently disabled"
+section. **Sequencing call, diverging slightly from the letter of Recommendation 4's own
+condition:** that recommendation gated the *full* 40-pair execution on migration covering both
+Track 0's interim KBs and the pre-existing ones — now true — but I judge the pilot-then-full split
+still the right call even so: a fresh calibration needs a first real number before a `qa-engineer`
+unit spends a much larger query budget against a floor that hasn't been sanity-checked at all, and
+the dispatching brief asked for exactly this split. The **full 45-pair table below is the
+design**, all queries and expected answers fixed; **16 of the 45 are executed here** (the pilot);
+the remaining 29 are ready for Stage 8 Phase 2 to run as-is, with no re-derivation needed — and,
+notably, **none of the 29 were used to derive the floor below**, so Phase 2's run is genuine
+out-of-sample validation of it, not a re-run of the same evidence.
+
+### Golden-set design — 45 pairs, not exactly ~40
+
+Sized to 45 rather than exactly 40 because covering **every one of the 13 migrated KBs with a
+floor of at least 1 pair**, plus a full 6-family stratum-(e) set (Stage 6 review Appendix A names
+7 real split families; I used 6 plus one held in reserve) and a 6-pair negative stratum, added up
+to slightly more than "~40" — I did not force a cut to hit the number exactly, since every row
+earns its place under one of Recommendation 4's five axes and the ML note's own "~40" was
+explicitly approximate, not a hard budget. Weighted roughly by each KB's migrated-claim count
+(`claude/cobb/scripts/kb-claim-manifest.json`, cross-checked against the coordination ledger's
+per-file totals, 332 claims total): `review-techniques.md` (81 claims, 24%) and
+`falkordb-quirks.md` (86 claims, 26%) get 9 rows each; `coordination-techniques.md` (39, 12%) gets
+5; the remaining ten KBs get 1-2 each (floor of 1, `estimator-test-fixtures.md` at only 2 claims
+total). All expected `documentId`s below were confirmed live against `ws:agent-team`
+(`mcp__cypher__query`) before being fixed in this table — not asserted from the source `.md`
+files' headings alone.
+
+**Query-authoring discipline (per Recommendation 4's "author independently of `cobb`"):** every
+query below is my own situation-description, grounded in the claim's real `Origin:`/worked-example
+text (a genuine historical incident, `falkor-chat` K-028, `cypher-mcp`'s `authorize_write()`, a
+real WSL2/LM-Studio session, etc. — read directly from the source `.md` files, not paraphrased
+from the stored claim's own title/fact wording) rather than a synthetic rewording of the stored
+claim itself. This is deliberately a harder test than echoing the claim's vocabulary — it costs
+some recall (see the pilot's one clean miss, below) by design, not by accident.
+
+Legend: **Tags** — a=KB-weighted, b-code=code/regex/shell-heavy, b-prose=prose-only,
+c=negative, d=near-duplicate stress, e=multi-facet/sibling stratum (scored by set-recall, not
+headline recall@5). **Pilot** = executed 2026-09-19 (✓) vs. design-only, ready for Phase 2.
+
+#### `claude/analyst/review-techniques.md` (9 rows)
+
+| # | Tags | Query (situation) | Expected `documentId`(s) | Pilot |
+|---|---|---|---|---|
+| R1 | a,e | "Reviewing a fix to falkor-chat's workflow-timer state machine (the K-028 v2-to-v3 change): the new version makes every wait step carry a mandatory default fallback transition so the state machine always makes forward progress. Two earlier review passes already signed off on the fix's own reasoning. What am I supposed to check beyond confirming the fix's internal logic holds together?" | `d41d743e5c344eccbf46715f54cbab44` + `5c2ef4055ff34ea6a1ba5f7eb329ae4c` (family h13) | ✓ |
+| R2 | a,e | "I'm doing a Pass-2 review of a fix to cypher-mcp's authorize_write() function, which checks an incoming Cypher write statement against a sequence of recognized authorized shapes before allowing it through. The fix author supplied two concrete attack reproductions that are now both blocked. What should I check beyond re-running those two named attacks?" | `0158a990da6d46b58b0eea3f32047669` + `ba1e9b45d83a443c8fde5f94dbe51daa` (family h21) | ✓ |
+| R3 | a,e | "A document under review says three flagged passages have each since had their own certifying sentence corrected on review. I don't want to just read the diffs between versions — how do I actually verify a document's claim about its own revision history, and does the same concern apply to a header's blanket promise about what every entry underneath it does?" | `5a6763497f2740e8aa21efac72b3a1c6` + `ccefd08d853247cd941de116946cda5b` (family h39) | ✓ |
+| R4 | a,e | "A plan claims a NULL-backfill decision surfaced during a specific earlier investigation, and separately a pasted grep result from a few days ago said a schema had zero RELATIONSHIP-type constraints. Are both of those still safe to cite as-is?" | `138ec31887af425ca7f0bd3eb87817c4` + `7fbe0fe06e824180a6bf4937bfe88542` (family h14) | — |
+| R5 | a,e | "I'm trying to establish where some data materialized in a live graph actually came from — can git history settle that, and if two derived snapshots agree with each other, does that prove they're both correct?" | `f0a93c99dace45029538dd2bbb78a390` + `af28885869224aab85048555903c3c36` (family h22) | — |
+| R6 | a,e | "A review's suggested fix told the implementer to capture `$?` right inside an `if ! VAR=\"$(cmd)\"` block to route a helper's tri-state return — and separately, a static guard has been closed three times against a fixed list of shapes and keeps getting beaten by a form nobody listed. Are both of those remedies actually sound?" | `af9ffb191cbd4659a77dbf3a1139c289` + `5b1b477ff67e4e3b81c57f14899bbe48` (family h40) | — |
+| R7 | a,d | "I grepped the codebase for a function name and got three hits, so I'm ready to call a 'does this helper already exist' finding confirmed. Is counting those grep hits actually strong enough evidence that the function is defined, not just referenced somewhere?" | `d3c4ef7117c343bfaf003d1ad7fc44b8` (distractor, must not outrank/replace: `4fe63fb109bd4a04ba479389a29c8e08`) | ✓ |
+| R8 | a,b-code | "I'm reviewing a piece of code that clamps a computed value between a min and a max before using it downstream. Is there a known failure mode where that kind of clamp can quietly let a NaN through, or where swapping the order of the min/max calls changes the result?" | `297b3ed4acf44f07bfed46f7de76e49d` | ✓ |
+| R9 | a,b-prose | "A repo-wide lint/smell sweep flagged a violation in a file my current diff never touched. Should I treat that as something my change introduced, or could it have been sitting there before my diff even started?" | `6d88fecb435547dea1d93d67b8995356` | ✓ |
+
+#### `claude/graph-dba/falkordb-quirks.md` (9 rows)
+
+| # | Tags | Query | Expected `documentId`(s) | Pilot |
+|---|---|---|---|---|
+| F1 | a,d | "I need to store a KaizenEntry.fact string that contains an apostrophe, like a contraction, as an inline Cypher literal. Is the SQL-style doubled single-quote trick for escaping an embedded apostrophe going to work here?" | `17731d3d4d9d4f04a15d139dd42e9bad` (distractor: `719fc4c69d1845ad9298b32c0adecdc6`) | ✓ |
+| F2 | a,b-code | "A load test against FalkorDB is reporting a peak row count that never exceeds exactly 10000, no matter how large the matching set actually is, and a query with an explicit LIMIT 50000 is coming back short too. Is there a silent server-side cap I should know about, and how would a caller tell a capped reply apart from a genuinely complete one?" | `5f04f062d95b4ace82d3c5b5059dbc8c` | ✓ |
+| F3 | a,b-code | "I wrapped a redis-cli GRAPH.RO_QUERY call in a bash script with set -e and it just silently continued past what I'm pretty sure was a malformed query, no error caught. Does redis-cli's exit code actually reflect a rejected query, or do I need a different way to detect that?" | `f38c0ed774494b88afa6a5e93ad37010` | ✓ |
+| F4 | a,b-code | "I ran a targeted property update against one node and the reply said one property was set AND one was removed, but I didn't remove anything and every other property is still there. What's going on?" | `684e4ea5762c4f62abad5b8dfbbf9040` | — |
+| F5 | a,b-code | "A repository function projects a property that a UNIQUE constraint is supposed to guarantee is present, but one row came back with that key as null and nothing raised. Is a UNIQUE constraint here also a NOT NULL guarantee?" | `72a1e5e1cb4144bfa325f3a41713a6a3` | — |
+| F6 | a,b-code | "I need to rename a graph key without doubling RAM or risking a window where the data doesn't exist under either name. Is COPY-then-DELETE the only way, or is there something more direct?" | `fae4b822cca4460a8c8bde6c0b8c35a0` | — |
+| F7 | a,b-prose | "A colleague says a destructive Redis op run from inside a wrapper script used to slip past our command-pattern guard because the literal command text never appeared in the outer shell invocation. Is that still an open gap?" | `801c1bb16d4d457abafe132db1419257` | — |
+| F8 | a,b-code | "I want to non-destructively check whether a graph key already holds data before writing to it, without accidentally creating an empty graph as a side effect of the probe itself." | `be7d7c5755b64419b9ed6394226299d2` | — |
+| F9 | a,b-code | "A query returns one scalar column alongside a collect(DISTINCT ...) aggregate from an OPTIONAL MATCH fan-out, and I assumed the scalar would be constant across every row of the result. Is that actually guaranteed?" | `74ce458645d247dda774d950c001ccd3` | — |
+
+#### `claude/teco/coordination-techniques.md` (5 rows)
+
+| # | Tags | Query | Expected `documentId`(s) | Pilot |
+|---|---|---|---|---|
+| C1 | a,b-prose | "A delegated subagent reported finishing its file edits and handed back cleanly, no crash, no error — but when I went to verify, the edits weren't actually in the working tree, and there's no git history showing they were ever made and then reverted. How is that even possible, and how would I confirm this happened rather than assume I mis-read the diff?" | `9870c48f9840491d94e4f1d62ca7a3c5` | ✓ |
+| C2 | a,b-prose | "When mutation-testing a set of tests that are already green on arrival, is deleting the implementation the only mutant worth running, or should a rejected design alternative also count as one?" | `ef4c32cc11c44747994bb60e62bb5940` | — |
+| C3 | a,b-prose | "Two concurrent sessions are both about to commit into the same working tree. If our changed files don't overlap, is a plain `git commit -a`-style commit still safe, or do I need to do something more careful?" | `1b0addf5b8354bacaeb0e938d09d7ab6` | — |
+| C4 | a,b-prose | "I couldn't find evidence of something in one place I checked — is that enough to conclude it doesn't exist anywhere, or could it just be that I looked in the wrong place?" | `506f08975c4641508da50fe9b9c585a2` | — |
+| C5 | a,b-prose | "Two independent-seeming checks in a gate both agree with each other. Does agreement between them mean the underlying claim is actually verified, or could my own checking instrument be the thing that's wrong for both?" | `1200232e42074349a6bd6c0cc45e290f` | — |
+
+#### `claude/qa-engineer/qa-testing-techniques.md` (2 rows)
+
+| # | Tags | Query | Expected `documentId`(s) | Pilot |
+|---|---|---|---|---|
+| Q1 | a,e | "model-bench's run command just refused to proceed with a stale-attestation error, even though I re-ran attest a minute ago non-interactively with --set for every field and none of the operator-attested values actually changed. What's causing the refusal, and what's the right way to re-attest from a script rather than an interactive shell in the first place?" | `781c055d0be5468f98dbe6143d5ac551` + `1034d23fe5b04503b90c53128e7cfb17` (family) | ✓ |
+| Q2 | a,b-prose | "A model shows up in the /v1/models listing, but I need to know whether it's actually loaded with enough context length for my prompt, not just that it's present at all." | `93fcdd089eb94f1d8b29ce388622c982` | — |
+
+#### `claude/devops/ops-quirks.md` (2 rows)
+
+| # | Tags | Query | Expected `documentId`(s) | Pilot |
+|---|---|---|---|---|
+| O1 | a,b-prose | "A bash script I'm reviewing shells out to jq to pull one specific key out of a JSON config file for an exact-match lookup. Is jq something I can assume is installed on every dev box here, or is there a more portable way to do that lookup?" | `2fdbec98873c4ce38a49d72f01c2a95a` | ✓ |
+| O2 | a,b-prose | "I edited .mcp.json to add or reconfigure an MCP server. Is there a way to confirm the launch shape actually works from a plain shell, or do I have to restart the whole harness to find out?" | `91b9f5bb09e54db3a798f05f8a55bd40` | — |
+
+#### `claude/architect/plan-authoring-techniques.md` (2 rows)
+
+| # | Tags | Query | Expected `documentId`(s) | Pilot |
+|---|---|---|---|---|
+| P1 | a,b-prose | "A plan states a completeness claim ('every X now does Y') but I only have the author's word for it. What would actually make that check able to fail, rather than just being transcribed as true?" | `08a422aeca974749a5a4cf1dab2164e5` | — |
+| P2 | a,b-prose | "A permission or allow-list design I'm reviewing technically enforces its rule today, but I suspect a slightly different input shape would sail right past it. Is a tighter pattern the right fix, or does this need something more structural?" | `15c71ec82ff249a79a3b9045268e0c3f` | — |
+
+#### `claude/data-scientist/statistical-method-techniques.md` (1 row)
+
+| # | Tags | Query | Expected `documentId`(s) | Pilot |
+|---|---|---|---|---|
+| S1 | a,b-prose | "Two groups' 95% confidence intervals don't overlap, and the sample is small and near a ceiling value. Is that non-overlap itself a valid difference test?" | `f12fb25f754e4d4ca58acc163c9c422a` | — |
+
+#### `claude/frontend-engineer/frontend-quirks.md` (1 row)
+
+| # | Tags | Query | Expected `documentId`(s) | Pilot |
+|---|---|---|---|---|
+| E1 | a,b-code | "A fresh Vite + TypeScript scaffold is failing to compile because it can't resolve a JSON import. Is that a tsconfig option I need to turn on myself?" | `6891424b924a404c9691203415b848ba` | — |
+
+#### `claude/tdd-engineer/test-design-techniques.md` (1 row)
+
+| # | Tags | Query | Expected `documentId`(s) | Pilot |
+|---|---|---|---|---|
+| T1 | a,b-prose | "A mutation-testing pass keeps deferring one mutant as 'needs a lucky random input to trigger.' Is there a way to force it without relying on Monte-Carlo luck?" | `aa72815433924cfea2760062daa22b40` | — |
+
+#### `claude/tdd-engineer/estimator-test-fixtures.md` (1 row)
+
+| # | Tags | Query | Expected `documentId`(s) | Pilot |
+|---|---|---|---|---|
+| X1 | a,b-prose | "A test fixture I'm using has zero variance on the dimension the rule under test actually cares about. Could that be silently hiding whether the rule works at all?" | `75c0e47a01244de5b4373a193887293c` | — |
+
+#### `claude/tdd-engineer/guard-testing-techniques.md` (2 rows)
+
+| # | Tags | Query | Expected `documentId`(s) | Pilot |
+|---|---|---|---|---|
+| G1 | a,b-prose | "A mutation-testing pass on a guard came back all green. Does that mean a plain coverage probe over the same guard would find nothing new?" | `2a467d9fef184191b5fadfee14b6839d` | — |
+| G2 | a,b-prose | "I hand-wrote a resolver that decides 'which object is this' from a set of clues. Testing it feels like it has two different independent things that could go wrong — is that right, and are both equally testable?" | `f29bddad2cf14479ba6bafd9bd0c4212` | — |
+
+#### `claude/graph-dba/falkordb-reference.md` (2 rows)
+
+| # | Tags | Query | Expected `documentId`(s) | Pilot |
+|---|---|---|---|---|
+| D1 | a,b-code | "Is there a meaningful difference between GRAPH.QUERY and GRAPH.RO_QUERY beyond just read-vs-write, and should I always be parameterizing?" | `e69ff7c592a14a02b9f6eed78f716cf8` | — |
+| D2 | a,b-code | "I want to run a graph algorithm like betweenness or label propagation against FalkorDB. Do I need something like Neo4j's GDS library, or APOC?" | `1de0ff37ffa3494bbc832e5c9fd26cd6` | — |
+
+#### `claude/data-scientist/lm-studio-model-notes.md` (2 rows)
+
+| # | Tags | Query | Expected `documentId`(s) | Pilot |
+|---|---|---|---|---|
+| L1 | a,b-prose | "Between a small Mistral-family model and a Qwen3 model of similar size, which one is more likely to emit a real structured tool call rather than plain prose describing what it would call?" | `0181f4c0350d47458e3800e76a36d05a` | — |
+| L2 | a,b-prose | "Qwen3-Embedding's own docs describe some kind of asymmetric convention between how queries and documents should be embedded. If I just embed both the same way, how bad is that really?" | `089f80e62c0f458992f086fae82ef557` | — |
+
+#### Negative queries (6 rows — no matching entry in the corpus)
+
+| # | Tags | Query | Expected | Pilot |
+|---|---|---|---|---|
+| N1 | c | "I need to rotate the TLS server certificate on our production Postgres database without any client-facing downtime — what's the safe sequence for that?" | none | ✓ |
+| N2 | c | "I want to set up a canary deployment for a newly retrained ML model in production, with an automatic rollback if p99 latency regresses past a threshold — how should that pipeline be structured?" | none | ✓ |
+| N3 | c | "How do I configure GPU passthrough so LM Studio can use an NVIDIA card for inference on this Linux host?" | none | ✓ |
+| N4 | c | "How should I structure a React Server Components data-fetching boundary to avoid request waterfalls in a Next.js app?" | none | ✓ |
+| N5 | c | "What's the correct way to configure the OAuth2 Authorization Code flow with PKCE for a public single-page app that has no backend session store?" | none | — |
+| N6 | c | "How do I configure a Kubernetes readiness probe for a FastAPI container whose startup depends on a slow-starting database connection?" | none | — |
+
+### Pilot execution (2026-09-19, run against `ws:agent-team`)
+
+Method: for each of the 16 ✓-tagged rows above, built the exact prefixed string per
+`skills/agent-kb-retrieval/SKILL.md`'s fenced template (`"Instruct: Given a coding agent's
+description of its current situation, retrieve the distilled technique or rule that applies to
+it.\nQuery: {situation}"`), called `search_documents(query=<prefixed>, limit=5)` against
+`ws:agent-team`, and judged each `documentId` returned (`score` = cosine distance, ascending,
+lower = more similar) against this row's fixed expected answer(s). Full per-query score tables are
+not reproduced here (already run and recorded in this session's tool trace); the results below are
+the derived judgments.
+
+**Hits/misses, single-answer pool (R7, R8, R9, F1, F2, F3, O1, C1 — 8 queries):**
+
+| Query | Rank of correct answer | Best score of correct answer |
+|---|---|---|
+| R7 (near-dup) | 1 | 0.294 |
+| R8 | 1 | 0.179 |
+| R9 | 2 | 0.340 |
+| F1 (near-dup) | 1 | 0.200 |
+| F2 | 1 | 0.267 |
+| F3 | 1 | 0.165 |
+| O1 | 1 | 0.305 |
+| C1 | **miss — not in top 5** | — |
+
+7/8 found → **recall@5 = 0.875**, **Wilson 95% CI [0.529, 0.978]** (z=1.96, n=8 — a wide interval
+by construction at this n, exactly the honesty the Wilson convention is for; this is not the
+full-set gate). **MRR = 0.8125** (six rank-1 hits, one rank-2 at 0.5, one miss at 0).
+
+Both near-dup rows (R7, F1) passed their discrimination check cleanly: in both cases the intended
+distractor sibling (`4fe63fb1…`, `719fc4c6…`) did **not** appear anywhere in the top 5 — the
+embedding didn't just avoid ranking it above the correct answer, it didn't surface it as a
+plausible alternative at all. Small n (2), but a clean directional result for Recommendation
+4(d)'s discrimination question.
+
+**Set-recall, stratum (e) (R1, R2, R3, Q1 — 4 families, 8 sibling documents):**
+
+| Family | Siblings found / total | Set-recall |
+|---|---|---|
+| R1 (h13) | 2/2 | 1.0 |
+| R2 (h21) | 2/2 | 1.0 |
+| R3 (h39) | 1/2 | **0.5 — second sibling (`ccefd08d…`) never appeared in top 5** |
+| Q1 (model-bench) | 2/2 | 1.0 |
+
+Pooled: 7/8 siblings found (0.875 — numerically identical to the headline recall@5 figure above,
+a coincidence of this specific n=8-vs-n=8 pilot, reported here as its own construct per
+Recommendation 4's explicit instruction not to blend the two). **The R3 miss is a genuine finding,
+not floor-related** (see below): the top 5 for that query held 3 duplicate chunks of the *other*
+sibling document (`5a676349…`, at seq0/1/2) crowding out room the true second sibling needed —
+concrete, measured evidence for the `familyId`-sibling-pull risk the 2026-09-17 revision flagged
+as needing empirical evidence rather than architectural argument. On this one case, the loss is
+real: no floor value would have fixed it, because the document never reached the top 5 at all.
+
+**Negative stratum (N1-N4 — 4 queries, no correct answer exists):**
+
+| Query | Closest (top-1) returned score |
+|---|---|
+| N1 (Postgres TLS) | 0.647 |
+| N2 (ML canary deploy) | 0.562 |
+| N3 (LM Studio GPU) | 0.552 |
+| N4 (React Server Components) | **0.446 — closest of the four, a real near-neighbor by topic (LM Studio/React infra) without answering the actual question** |
+
+### Score-floor derivation
+
+Pooled every *found* true-positive document's best (lowest) returned score across all 16 pilot
+queries (14 found-document events: 7 stratum-e siblings + 2 near-dup primaries + 5 plain
+positives; the R3/C1 misses contribute no score, they are recall losses regardless of any floor)
+against the 4 negative queries' closest (lowest, i.e. most dangerous) returned score:
+
+- **Worst surviving true positive: 0.409** (`5c2ef405…`, the h13 second sibling).
+- **Closest negative-query false match: 0.446** (N4, React Server Components → a React-18
+  batching claim).
+- Gap: **0.037** — real, but thin.
+
+**Calibrated floor: 0.42** (cosine distance; reject any hit with `score > 0.42`), sitting in the
+gap with a margin of 0.011 above the worst surviving true positive and 0.026 below the closest
+negative false match. At this floor: **0 of the 14 found true-positive documents are wrongly
+dropped** (max 0.409 < 0.42), and **all 4 pilot negative queries are correctly rejected** (all four
+top scores > 0.42).
+
+**Explicit limitation, not glossed over: this floor is fit and validated on the same 4 negative
+queries and same 14 positive hits — there is no held-out validation in this pilot.** The margin is
+thin (0.037) and n is small; a different negative query, or a different sibling-claim pair, could
+plausibly land on either side of 0.42. The right mitigation already exists in the design: **the 29
+design-only rows above (including N5/N6, 2 more negatives) were never used to derive this floor**,
+so Stage 8 Phase 2's full run against them is genuine out-of-sample validation, not a re-run of the
+same evidence — treat 0.42 as this pilot's first, provisional, conservative floor, to be
+**confirmed or re-derived** once Phase 2 lands, exactly as Recommendation 3's original "re-derive
+whenever the corpus or the prefix convention changes materially" discipline already anticipated
+(a full-set run is itself such a change in effective sample size, if not in corpus/prefix).
+
+**Run/date of record:** 2026-09-19, `data-scientist`, pilot n=16 of 45 designed pairs, against
+`ws:agent-team` post-Stage-6-migration (327/332 claims `ready`). `skills/agent-kb-retrieval/
+SKILL.md`'s floor section is updated with this value and this run/date below.
+
+### A secondary, unplanned finding worth flagging: code/regex-heavy retrieval looked *strong*, not weak
+
+Recommendation 1 named "does this encoder handle code/regex-dense entries as well as prose
+entries" as the corpus's open empirical question. This pilot is far too small to close it (5
+code/regex-heavy queries vs. 3 prose-only ones in the clean single-answer pool), but the
+*direction* is the opposite of the worry: every code/regex-heavy query (R7, R8, F1, F2, F3) landed
+its correct answer at rank 1, scores clustered tightly (0.165-0.294); the one clean miss (C1) and
+the one rank-2 (R9) were both prose/process narratives, not code. Not a claim the risk is closed —
+Phase 2's larger, more balanced sample is what would actually settle it — but worth carrying
+forward as a specific thing to watch rather than assuming the original worry direction holds.
+
 ## Risks & open questions (mine to flag, not mine to resolve)
 
 - **Recommendation 2's split-migration effort is real, not zero**, and should be sized into
   `architect`'s plan rather than assumed to be a mechanical re-embed — this is the concrete shape
   of FR-7's "no more rework than the pre-existing KBs cost" concern, landing specifically on
   `review-techniques.md`. Confirmed realized in the plan's §6 (Track 2 Stage 6), unchanged.
-- **The code-retrieval quality question (Recommendation 1) stays genuinely open until the
-  stratified golden-set run produces a number** — I looked for a citable Qwen3-Embedding
-  code-retrieval sub-score and could not verify one in this session; don't let this note's overall
-  "keep the model" verdict be read as having closed that specific sub-question with evidence it
-  doesn't have.
-- **The score-floor value and the top-K=5 default are both provisional until Recommendation 4's
-  pilot run** — I'm recommending the *procedure* that produces the number, not the number itself,
-  deliberately: any cosine-distance constant I supplied without running the pipeline would be
-  exactly the kind of unmeasured claim this lab's own conventions (and my own guardrails) rule out.
+- **Partially resolved (2026-09-19), still not closed with confidence.** The code-retrieval
+  quality question (Recommendation 1) got a first, small, *directional* data point from the Stage
+  8 Phase 1 pilot — every code/regex-heavy query retrieved cleanly at rank 1, no sign of the
+  originally-worried underperformance — but n=5 code-heavy queries cannot close this; a citable
+  Qwen3-Embedding code-retrieval sub-score is still unverified. Treat the pilot's direction as a
+  reason for lower urgency, not as evidence the question is settled — Phase 2's larger, more
+  balanced sample is what would actually close it.
+- **Resolved (2026-09-19).** The score-floor value and top-K=5 default were provisional pending
+  Recommendation 4's pilot run — that run happened (Stage 8 Phase 1, above): **top-K=5 is
+  confirmed sufficient** (every found true positive landed at rank 1-2, well inside K=5, no
+  evidence for widening it), and **the score floor is calibrated at 0.42** (cosine distance),
+  landed in `skills/agent-kb-retrieval/SKILL.md`. Carried forward as a new, narrower open item
+  below: the floor's margin is thin (0.037) and derived on a small, non-held-out sample.
 - **New (2026-09-17): client-side calling-convention compliance is not unit-testable, only
   aggregate-observable.** The plan's §7 unit test guards the stored template's *definition*
   against drift; it cannot catch one agent's runtime call silently omitting the prefix or floor,
@@ -406,11 +687,35 @@ CI, not a bare pass/fail percentage.**
   distribution rather than erroring) — accepted, with Stage 8's recurring golden-set run as the
   only backstop that would notice an aggregate compliance drift (not attribute it to one agent).
   Full reasoning in the response section above.
-- **New (2026-09-17): the multi-facet/sibling-claim golden-set stratum (Recommendation 4(e)) is
-  the concrete instrument that resolves whether losing `familyId` sibling-pull matters** —
-  currently unmeasured; my own architectural read (aligned with `architect`'s) is that it probably
-  doesn't for the primary single-rule use case, but that read is provisional until this stratum
-  runs, exactly like the score-floor/top-K values above.
+- **Partially resolved (2026-09-19), and the answer is more mixed than either of us guessed.**
+  The multi-facet/sibling-claim golden-set stratum (Recommendation 4(e)) ran on 4 families in the
+  pilot: 3 of 4 recovered both siblings cleanly (set-recall 1.0), but the 4th (family h39, R3
+  above) recovered only one of two — the missing sibling never reached the top 5 at all, crowded
+  out by three duplicate chunks of the *other*, already-found sibling document. **This is real,
+  measured evidence the `familyId` sibling-pull loss is material in at least one case**, not just
+  a hypothetical the architectural argument could wave off — and no score-floor value could have
+  fixed it (the document wasn't retrieved, so a floor never got a chance to reject or admit it).
+  Genuinely open for Phase 2: is this systematic (a specific chunk-duplication pathology worth
+  fixing — e.g. de-duplicating same-document chunks before truncating to top-K) or a one-off on
+  this specific family/query pairing? The remaining 2 stratum-(e) families in the full design
+  (R4/h14, R5/h22, R6/h40) are exactly what would tell.
+- **New (2026-09-19): the calibrated floor (0.42) is fit and validated on the same small sample
+  — thin margin (0.037), no held-out negatives in the pilot.** Not a defect in the derivation (the
+  method — max surviving true positive vs. min negative false match — is the right one, and it's
+  disclosed in the same section, not hidden), but a genuine reason not to treat 0.42 as final.
+  Stage 8 Phase 2's run against the 29 not-yet-executed design-only rows (including 2 more
+  negatives, N5/N6) is real out-of-sample validation of this exact number — if it holds up there,
+  it's confirmed; if a Phase 2 negative scores below 0.42 or a Phase 2 positive scores above it,
+  re-derive using the pooled Phase 1 + Phase 2 evidence rather than patching the single number.
+- **New (2026-09-19): the one clean single-answer miss (C1, `coordination-techniques.md`'s
+  "a delegate's edits can vanish mid-run" claim) is unexplained, not just unlucky.** The returned
+  top 5 were all topically adjacent (verification-distrust/provenance claims) but none was the
+  actual target — a genuine embedding-distance gap between this real, independently-authored query
+  and its correct answer, not a floor issue (nothing scored close enough for a floor to matter) and
+  not an artifact of duplicate chunks crowding the page (all 5 returned were distinct documents).
+  Whether this is one hard query or a real weak spot for narrative/process claims (as opposed to
+  the concrete code/config claims that all retrieved cleanly) is exactly what Phase 2's larger,
+  more prose-heavy sample would surface — flagged, not diagnosed further here.
 - **Superseded (2026-09-17):** "which graph is the substrate" is no longer open — the requirements
   doc's decision log settled it as Option B (falkor-chat ingestion, `ws:agent-team`), confirmed by
   `architect` reading the current source directly (plan §1). Every recommendation above is
