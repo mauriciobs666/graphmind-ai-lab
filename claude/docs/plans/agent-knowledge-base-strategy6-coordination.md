@@ -38,26 +38,11 @@ mid-trial. This coordination does not touch any file from that concurrent effort
 
 | Unit | Owner | Agent id | Status | Deliverable | Gate → verdict | Cost |
 |---|---|---|---|---|---|---|
-| U1 (provision `qwen3-embedding:4b` in LM Studio, judge memory feasibility) | `devops` | `a7909d6eb3fb54000` | in-flight | User resolved the memory blocker directly (manually unloaded the model on the Windows host) — teco-reverified: GPU now 5848 MiB free of 6141 (was 122 MiB). Resumed to finish provisioning: still needs the correct LM Studio Hub identifier for a 4B Qwen3 embedding model (unresolved as of round 2) | n/a — environment readiness | 82.6k + 90.5k tok / 17+22 tools (2 rounds) |
-| U2 (design + run the held-out trial, judge against the acceptance criterion) | `data-scientist` | — | queued (blocked on U1) | — | — → — (advisory, teco-reverified directly, same precedent as U2/U3/U4 in `-strategy5-coordination.md`) | — |
+| U1 (provision `qwen3-embedding:4b` in LM Studio, judge memory feasibility) | `devops` | `a7909d6eb3fb54000` | accepted | Resolved via HF URL (`Qwen/Qwen3-Embedding-4B-GGUF`, Q4_K_M, 2.50 GB) since the Ollama-style tag and bare Hub-path guesses never resolved (same issue affected the 0.6B sibling — imported via direct URL, not the curated catalog). Loaded, API id `text-embedding-qwen3-embedding-4b` — teco-reverified independently: GPU free (360 MiB) matches report, `/v1/models` lists it, and a fresh `/v1/embeddings` call (different input than devops used) returned a correct 2560-dim non-degenerate vector. **Flagged for U2**: only ~357-360 MiB VRAM free with this model resident — no headroom for a second concurrent model load during the trial | n/a — environment readiness | 82.6k + 90.5k + 111.9k tok / 17+22+42 tools (3 rounds) |
+| U2 (design + run the held-out trial, judge against the acceptance criterion) | `data-scientist` | `ab536d41ef3d3ef04` | in-flight | — | — → — (advisory, teco-reverified directly, same precedent as U2/U3/U4 in `-strategy5-coordination.md`) | — |
 
 U1 → U2 is a hard sequential dependency (U2 needs the model actually loaded and responding before
 it can embed anything) — not dispatched in parallel.
-
-## Session pause (2026-09-19)
-
-Paused here at the user's request, mid-U1. `devops` (agentId `a7909d6eb3fb54000`) is still
-running its own background work (resolving the correct LM Studio Hub identifier for a 4B Qwen3
-embedding model, then provisioning it) — it had not reported a final result when the pause was
-requested. **On resume:** check whether that agentId is still reachable/has a result via
-`SendMessage`/a completion notification before re-dispatching anything; if the id no longer
-resolves (a new session), state-recovery is cheap here since U1 makes no repo file changes — just
-re-check `curl http://localhost:1234/v1/models` for what's now loaded/available and restart from
-wherever that leaves off, rather than re-running the whole identifier hunt blind. U2 has not been
-dispatched. Nothing in this coordination has been committed elsewhere; this file itself is being
-committed now, uncommitted-normally per the docs-only-chain batching convention, at the user's
-explicit request to persist state before the pause — not a signal that the chain reached its
-terminal state.
 
 ## Notes
 
