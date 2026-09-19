@@ -255,3 +255,64 @@ non-blocking; independently confirmed the same via direct grep. Agreed: doesn't 
 correctness, not worth a fix cycle on its own — but if `cobb` is already touching this section for
 the recovery-bullet fix above, restoring the one clause ("`check_content_loss.py` already treats
 this file as canonical") to `SKILL.md` itself would cost nothing extra.
+
+## Pass 3 — 2026-09-19 (U7d, focused re-check of commit `948368c`)
+
+**Verdict: approve.** Pass 2's New Major is fixed, cleanly, with no new gap introduced. This
+closes the review — no findings remain open. All prior findings (blocker, original major, both
+minors, Pass 2's new major, and the trailing restoration note) are now resolved.
+
+- **Pass 2's New Major (byte-exact ambiguity in the `"pending"`-recovery check) — fixed.** Re-read
+  `SKILL.md:798-815` (the current recovery bullet) directly, not the commit message. It now reads:
+  `get_document(documentId)` → `None` **or** a document that doesn't match the claim's current
+  `.md` text byte-exact → both trigger a full re-run of "Existing claim, text changed"; only a
+  byte-exact match flips to `verified: true`. I traced both of Pass 2's named cases against the
+  new check: (1) *truly completed, only the flip forgotten* — per the ordering in
+  `SKILL.md:772-786`, `documentId` was already overwritten to the *new* id before ingest's manifest
+  write step, so `get_document(new_id)` returns exactly the ingested (= current `.md`) text — byte-
+  exact match, correctly flips to `true`. (2) *interrupted right after writing `"pending"`, before
+  `delete_document` ever ran* — `documentId` is still the *old* id, so `get_document(old_id)`
+  returns the real but stale pre-edit document — this now fails the byte-exact check against the
+  current `.md` text and correctly falls into the re-run branch, no longer the silent false-`true`
+  Pass 2 flagged. The two cases are genuinely distinguished now, not just relabeled.
+- **Identifying "which file/heading/claim" for the comparison — no remaining ambiguity.** The
+  recovery bullet doesn't restate this explicitly, but it doesn't need to: a `"pending"` entry is
+  found by scanning the manifest's own `files[path].headings[].claims[]` tree (confirmed against
+  the on-disk structure, same as Pass 1's "What's solid" spot-check), so the file, heading, and
+  (for a split sibling) claim title are already the coordinates the scan is iterating over — the
+  same identification the pre-existing "Verify, then flip" bullet relies on, inherited unchanged,
+  not a new gap this fix introduces.
+- **Rest of step 5 stays internally consistent.** Re-read `SKILL.md:750-845` in full with the new
+  bullet in place: the "Existing claim, text changed" sequence's `"pending"`-then-overwrite-then-
+  flip ordering, the "New claim"/"Claim removed" bullets, the stale-narrative-fields bullet, and
+  the no-locking bullet all still cohere with the new recovery text — nothing else needed to change
+  to accommodate it.
+- **Restored `check_content_loss.py` clause — present and reads correctly.** `SKILL.md:754-757`
+  now reads "...its own `_comment` names Stage 9 as the intended consumer, and
+  `claude/cobb/scripts/check_content_loss.py` already treats this same file as the canonical
+  per-heading manifest shape — reusing it here keeps one manifest as the single source of truth
+  for both the fidelity checker and this sync step, rather than two structures that can drift
+  apart." Reads cleanly in context, closes the Pass-2 Note without introducing anything new.
+- **`audit-team.sh` re-run clean.** Same two pre-existing FAIL categories (username leak, home-path
+  leak), both in files last touched 2026-09-01 through 2026-09-19 14:12 — all predate and are
+  unrelated to this commit (`948368c`, 18:33:15) and none is among the three files it touched.
+  Check 11 (the `agent-kb-retrieval` prefix-template check) passes: `PASS  agent-kb-retrieval:
+  exact query-instruction prefix template present in SKILL.md`.
+- **Scope confirmed via `git show --stat 948368c`.** Exactly three files changed:
+  `skills/agent-maintenance/SKILL.md`, `claude/cobb/kaizen/history.md`,
+  `claude/cobb/kaizen/plan.md` — no scope creep, `kb-claim-manifest.json` untouched as `cobb`
+  claimed.
+
+**One new, non-blocking observation (not a reopening of Pass 2's finding, not gating).** Tracing a
+third interruption point for completeness — between `ingest_document` succeeding and the
+manifest's `documentId`-overwrite write actually landing — surfaces a narrow, pre-existing gap this
+fix wasn't asked to close and doesn't touch: at that point `documentId` is still the *old*
+(already-deleted) id, so `get_document(old_id)` correctly returns `None` and triggers a full
+re-run — but the re-run's own `delete_document(documentId)` now targets an id already deleted, and
+its `ingest_document` call creates a **second**, manifest-untracked document for the same claim
+alongside the orphaned first one. This interruption window existed identically under the
+pre-fix logic (which also treated any `None` result as "re-run"), so it's not something U7d
+introduced or regressed — it's a sibling gap to the one Pass 2 named, one step later in the same
+sequence. Worth a `cobb` kaizen/backlog note for a future pass (e.g. idempotent
+`delete_document`/orphan-sweep), but out of scope for this gate and not a reason to withhold
+approval here.
