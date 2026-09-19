@@ -24,7 +24,7 @@
 | K-025 | 2026-09-09 | high | 🔵 | A `MENTIONS` tag writes an obligation into a queue with no consumer: a distillation unit is scoped `MATCH (a:Agent {agentId})-[:PRODUCED]->(e)`, which by construction cannot see a `MENTIONS`-only node. 11 such nodes accumulated across 7 agents and 2 passes; **six** of those agents were recorded "closed out, 0/0" while still holding an unrouted edge. Two candidate fixes — scope a unit by *either* edge kind, or stop letting the tag imply a promotion. |
 | K-026 | 2026-09-09 | medium | 🔵 | `python-web-quirks` carries **two** `TestClient` **behaviour** sections (teardown task-cancellation; the default `raise_server_exceptions=True` re-raising into the caller), deliberately unmerged because the mechanisms, consequences and fixes differ. They are bound by a shared opening line naming the class. **On the third such entry, promote that line to a parent heading with sub-sections — do not add a third flat sibling.** The count is **still two**: U38 (2026-09-09) added a third section touching `TestClient` — the `httpx`→`httpx2` transport deprecation, which warns on *both* pinned starlette versions — and it is a **version-rot rider on the pair**, carrying no `TestClient` mechanism of its own, so the trigger did not fire. It was **retitled** to lead with the migration rather than the class precisely so a header scan cannot read it as a third sibling and defeat this count. |
 | K-029 | 2026-09-09 | high | 🔵 | **Nothing audits a skill's frontmatter — that it parses, fits the 1,536-char listing budget, and names the right audience. One missing check, not three** (consolidates K-027 + K-028 + U36's parse finding; no content dropped). The three are the same gap seen three ways, and the budget is what makes the other two moot: `python-web-quirks`' description is **4,584 chars**, so U35's audience fix sits ~3,000 chars past the cut and reaches no router. Carries a remediation (that description) and a check (`audit-team.sh`), plus the instrument caveat that strict YAML is the **wrong** parser to audit with. |
-| K-030 | 2026-09-09 | **high** | 🟡 | **Stage 0 (2026-09-17), Track 1 all five stages (2026-09-18), and Track 2 Stage 6 in full — including the final retry pass (2026-09-19) — delivered and closed.** Final corpus tally: 327 documents `ready`, 5 permanently `Document.status:"failed"` (332 manifest-tracked claims across all 13 KB files) after one genuine retry each (4 in `ops-quirks.md`, 1 in `guard-testing-techniques.md`) — a closed, named, byte-exact-content-verified gap, not retried further. See `history.md`, 2026-09-18/2026-09-19, for full detail. **Open:** team-wide cutover of the write convention beyond the `cobb`/`teco` pilot; Stages 7-9 (Stage 7 now triggered). |
+| K-030 | 2026-09-09 | **high** | 🟡 | **Stage 0 (2026-09-17), Track 1 all five stages (2026-09-18), Track 2 Stage 6 in full (2026-09-19), and Track 2 Stage 7 (2026-09-19) — delivered and closed.** Stage 6 final corpus tally: 327 documents `ready`, 5 permanently `Document.status:"failed"` (332 manifest-tracked claims across all 13 KB files) after one genuine retry each — a closed, named, byte-exact-content-verified gap. Stage 7: `skills/agent-kb-retrieval/SKILL.md` (query-prefix template, top-K=5, score floor explicitly provisional/disabled pending Stage 8), a drift check (`audit-team.sh` check 11, mutation-tested), and a one-line pointer in all 9 consuming agents' prompts. See `history.md`, 2026-09-18/2026-09-19, for full detail. **Open:** team-wide cutover of the *write* convention beyond the `cobb`/`teco` pilot (Track 1's own follow-up); Stage 8 (golden-set pilot + full AC-2 gate — `data-scientist`/`qa-engineer`, blocked on nothing further from `cobb`); Stage 9 (`cobb`'s own `agent-maintenance` §5 distillation-ingestion hook, blocked on Stage 8). |
 | K-031 | 2026-09-10 | medium | 🔵 | **Shared-working-tree commit knowledge is fragmented by *audience*, not by topic — and the split leaks.** Five statements now cover it: `claude/AGENTS.md`'s atomicity paragraph (index race, path-limited remedy, and — U44 — the unconditional index-ignored rule), its universal interactive-mode grant, `teco.md`'s grant bullet (path-limited form + the U43 disjointness condition), `teco.md`'s new holding-cost bullet (U44), and `teco.md`'s grant-scoping bullet. **Within a `teco` session the set is coherent** — the two `teco.md` bullets are adjacent and cite `claude/AGENTS.md` twice by section title. **For every other agent it is not:** `claude/AGENTS.md` grants all twelve agents path-limited committing into this shared tree and gives them the index race, but the two facts that bound the grant — *path-limiting protects nobody where the paths are not disjoint*, and *holding a shared file out has a rising cost with no natural end* — exist **only** in `teco`'s prompt, and nothing in `claude/AGENTS.md` points at them. Recommended home: the `claude/AGENTS.md` atomicity paragraph, because the grant that creates the hazard is already stated there for everyone. **Cost, and why it is not free either way:** moving prose *into* the always-loaded context file makes eleven other agents pay tokens for it every session (~+100 w on a file already 53 past its smell, forcing the K-032 trim first), while leaving it in `teco.md` keeps the cost narrow and leaves the other agents granted-but-uninformed. The deciding question is empirical and unmeasured: **how often does a non-`teco` agent actually commit into this tree under the interactive-mode grant?** Measure that before moving anything. Not performed in U44 by instruction. |
 | K-033 | 2026-09-13 | medium | 🔵 | **Corrected 2026-09-16** (`docs/reviews/commit-granularity.md` finding): the original word-count claim materially understated the 2026-09-13 growth. Independently re-measured (`git show 320f682^:<path> \| wc -w` vs. `git show 320f682:<path> \| wc -w`): `claude/AGENTS.md` **2,783→3,074 (+291**, not the originally-claimed +33 — ~9x), `teco.md` **10,765→10,899 (+134**, not ~450), `tico.md` **5,623→5,809 (+186**, close to the originally-claimed ~250). `claude/AGENTS.md` now sits 574 words over root `AGENTS.md`'s own ~2,500-word smell line — a real, not marginal, overage. Priority raised low→medium on the corrected figures. |
 | K-032 | 2026-09-10 | low | 🔵 | **`claude/AGENTS.md`'s roster enumerates each agent's knowledge-base *topics*, duplicating `claude/README.md`, and the two have now measurably diverged.** `AGENTS.md:37-41` lists `guard-testing-techniques.md` as *coverage probe vs. mutation test, the two axes of a hand-written resolver, the docstring-states-more-than-the-body defect*; `README.md`'s parallel entry carries those **plus** the probe/oracle split U43 added. **The divergence is not the defect — the enumeration is.** A context file is always loaded in full, `README.md` is the catalog of record, and no agent routes to another agent's knowledge base (routing runs on the injected `description`), so the topic lists buy nothing and create a standing two-place update duty on the copy that rots unnoticed. **Recommended fix: do not add the missing topic — delete the enumerations**, leaving the roster to name each KB and point at `README.md` (~35 words back on a file 53 past its smell, and it retires the duty). Same judgement applies to the six other roster entries carrying topic lists. **Deliberately not fixed silently in U44**; U44 likewise added no `README.md` entry because it created **zero** new sections anywhere. Carries the K-031 dependency: this trim is what makes room for that consolidation. |
@@ -391,10 +391,11 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
 
 ### K-030 — The always-loaded-prompt compaction backlog is now four agents, and distillation is what feeds it
 
-- **Status:** 🟡 in-progress — Stage 0 (2026-09-17), Track 1 Stages 1-5 (2026-09-18), and Track 2
-  Stage 6 in full, including its final retry pass (2026-09-19), delivered and closed (detail
-  below); team-wide cutover of the write convention beyond the `cobb`/`teco` pilot, and Stages
-  7-9, are still open. Not moved to history.md: this item isn't done.
+- **Status:** 🟡 in-progress — Stage 0 (2026-09-17), Track 1 Stages 1-5 (2026-09-18), Track 2 Stage
+  6 in full including its final retry pass (2026-09-19), and Track 2 Stage 7 (2026-09-19),
+  delivered and closed (detail below); team-wide cutover of the write convention beyond the
+  `cobb`/`teco` pilot, and Stages 8-9, are still open — Stage 8 blocked on nothing further from
+  `cobb`. Not moved to history.md: this item isn't done.
 - **Priority:** high
 - **Stage 0 — delivered 2026-09-17, commit `6d834f0`, closed.** A prompt restructure (moving
   already-resident content to a new file with a pointer left behind, not a kaizen-graph
@@ -429,9 +430,17 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
   with suggestions, with one more factual correction (a wrong justification for the
   workspace-pinning decision, swapped for the real one — the decision itself never changed)
   independently verified against source by both `architect` and `teco` directly.
-- **Still open before Track 2 Stage 7:** `cobb`'s own confirmation that
-  `skills/agent-kb-retrieval/SKILL.md` is the right placement for the retrieval
-  calling-convention artifact — the plan flags this as needing cobb's sign-off, not decided yet.
+- **Track 2 Stage 7 (retrieval convention) — DELIVERED 2026-09-19.** `cobb`'s own confirmation
+  (the plan's closing item (b)) landed both calls as the plan's own recommendation, not a
+  divergence: `skills/agent-kb-retrieval/SKILL.md` is the right home for the query-prefix/top-K/
+  score-floor artifact (a single convention nine agents share, matching `skills/`'s markdown-only
+  precedent), and `claude/scripts/audit-team.sh` (check 11, not a standalone script) is the right
+  place for its drift check, since it colocates with the certification pass that actually gets run
+  regularly. Delivered: the skill itself (exact fenced query-prefix template, fixed top-K=5, score
+  floor explicitly provisional/disabled pending Stage 8), the mutation-tested drift check, and a
+  one-line pointer added to all 9 consuming agents' prompts (`teco`, `architect`, `tdd-engineer`,
+  `frontend-engineer`, `qa-engineer`, `analyst`, `data-scientist`, `graph-dba`, `devops`). Full
+  detail in `history.md`, 2026-09-19.
 - **Track 1 (Stages 1-5) since delivered, 2026-09-18** — coordination ledger
   `claude/docs/plans/agent-knowledge-base-strategy3-coordination.md`: Stage 1 (`produced_by`
   attribution extension), Stage 2 (`ws:agent-team` bootstrap+seed), Stage 3 (dedicated process +
@@ -474,10 +483,10 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
   (U3).
 - **Notes:** Opened 2026-09-09 from U42; rewritten 2026-09-10 after U45; Stage 0 delivered and
   logged here 2026-09-17; the Tracks-1-2 design pass completed and logged here 2026-09-17; Track 1
-  Stages 1-5 delivered and logged here 2026-09-18; Track 2 Stage 6 opened and paused, logged here
-  2026-09-18 (detail in `history.md`). Entry ids are not the trigger here; no `entryId` dedup
-  applies.
-- 2026-09-19 — *Corrected: "308" was an arithmetic error caught by teco's independent re-verification against ws:agent-team and the manifest's own documentId inventory.*
+  Stages 1-5 delivered and logged here 2026-09-18; Track 2 Stage 6 closed (including the "308"
+  arithmetic-error correction caught by `teco`'s independent re-verification) and Stage 7
+  delivered, both logged here 2026-09-19 (detail in `history.md`). Entry ids are not the trigger
+  here; no `entryId` dedup applies.
 
 ### K-031 — Shared-tree commit rules are split by audience, and the half that bounds the grant is teco-only
 

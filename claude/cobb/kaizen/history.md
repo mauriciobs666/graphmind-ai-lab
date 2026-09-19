@@ -2,6 +2,79 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-19 — K-030 Track 2 Stage 7: retrieval-convention skill, drift check, and team-wide pointer rollout
+
+- **Step 0 reasoning (the plan's closing item (b), recorded here as the dispatch required).**
+  (1) **A new `skills/agent-kb-retrieval/` package is the right home** — confirmed, not
+  diverged from. The retrieval calling convention (query-prefix template, top-K, score floor)
+  is a single artifact nine agents (`teco`, `architect`, `tdd-engineer`, `frontend-engineer`,
+  `qa-engineer`, `analyst`, `data-scientist`, `graph-dba`, `devops`) all consume identically —
+  folding it into any one agent's own on-demand KB file would make every other consumer point
+  sideways at a peer's file rather than at a shared one, the exact anti-pattern `skills/` exists
+  to avoid. Every existing `skills/` package is markdown-only (`skills/README.md` catalog,
+  confirmed by re-reading it directly), so the fenced-literal shape (not a Python constant) also
+  holds without deviation. (2) **`claude/scripts/audit-team.sh` is the right place for the drift
+  check**, not a standalone sibling script — confirmed, not diverged from. The script already
+  runs a mixed bag of small, cheap, mechanical greps as numbered checks (frontmatter parsing,
+  boundary-pair symmetry, the conventions-precedence family) inside one certification pass that
+  gets invoked together; a one-file, one-string `grep -qF` check is exactly that shape, and
+  colocating it means it actually gets run every time the team is certified, rather than needing
+  a second script someone remembers to invoke separately. Added as check 11.
+- **`skills/agent-kb-retrieval/SKILL.md` authored** (new package, symlinked live at
+  `~/.claude/skills/agent-kb-retrieval` per `skills/README.md`'s deployment convention). Holds, as
+  exact fenced literals: the asymmetric query-instruction prefix template (byte-identical to the
+  plan's own §4.4 quote,
+  `f"Instruct: Given a coding agent's description of its current situation, retrieve the
+  distilled technique or rule that applies to it.\nQuery: {situation}"`), the fixed top-K=5, and
+  the score-floor's explicit **provisional/disabled** status (no floor applied client-side until
+  Stage 8's golden-set pilot publishes one — deliberately not guessed at). Also documents the
+  full calling convention (build the prefixed string → `search_documents(query=...,
+  limit=5)` → `get_document(documentId)` for full-claim recovery on a split chunk) and the
+  `familyId` sibling-pull loss (plan §2/§4.4).
+- **Drift check added to `claude/scripts/audit-team.sh` (check 11)** — greps
+  `skills/agent-kb-retrieval/SKILL.md` for the exact fenced prefix string, `failmsg`s if missing
+  or the file itself is absent. **Mutation-tested per the dispatch's instruction**: (a) corrupted
+  the fenced string in the real file (`retrieve the` → `retrieve a`) — check correctly FAILed;
+  (b) reverted from a scratch backup and confirmed the check PASSed again, `diff` confirming the
+  restored file byte-identical to the original; (c) additionally tested the missing-file branch
+  by moving the file aside — check correctly FAILed with the "not found" message, then PASSed
+  again once restored. Full audit run afterward showed only 5 pre-existing, unrelated FAILs (check
+  7's personal-info leak, in `docs/plans/`, `docs/reviews/`, `model-bench/`, and
+  `opencode/agents/tank/` files never touched by this dispatch — confirmed via a direct grep that
+  none of the hits are in `skills/agent-kb-retrieval/` or this dispatch's other touched files) and
+  harmless advisory NOTEs (prompt-weight, including `analyst` newly crossing the 2500w line by
+  the one line added below — advisory only, never a FAIL).
+- **Every consuming agent's prompt pointed at the new skill, one line each** — added immediately
+  after each agent's existing on-demand-KB blockquote/section: `teco.md`, `architect.md`,
+  `tdd-engineer.md`, `frontend-engineer.md`, `qa-engineer.md`, `analyst.md`,
+  `data-scientist.md`, `graph-dba.md` (as a bullet, matching its own KB section's list style, not
+  a blockquote), `devops.md`. **One insertion error caught and fixed before finishing:**
+  `devops.md`'s edit initially landed mid-sentence, splitting "...etc.); this / prompt stays lean
+  and doesn't restate it." across the new paragraph — caught by rereading the file immediately
+  after editing (not assumed correct from the Edit tool's success message alone) and corrected by
+  moving the new paragraph after the original sentence's actual end.
+- **Catalogs updated.** `skills/README.md`: new catalog row (origin `` `cobb` (K-030 Track 2
+  Stage 7) ``, distinct from calling it "cobb machinery" the way `agent-maintenance`/
+  `agent-standards` are, since this skill is authored/maintained by `cobb` but consumed
+  team-wide, not cobb's own internal maintenance tooling) and the Maintenance section's kaizen-log
+  pointer widened to include it. `claude/AGENTS.md`: the "Skills do not live here" bullet now
+  names `agent-kb-retrieval` alongside cobb's other two skills and states its one-line purpose;
+  left the terse agent-roster parenthetical for `cobb` unchanged (adding a third skill name there
+  would repeat what the fuller bullet above already says, the same over-enumeration smell K-032
+  already flags for this file).
+- **`docs/plans/agent-knowledge-base-strategy4-coordination.md`'s U4 row** was already updated by
+  `teco` (agentId + `in-flight`) before this dispatch started — not edited further here; that
+  coordination ledger stays `teco`'s to close.
+- **Not done, deliberately out of this dispatch's scope**: Stage 8 (golden-set pilot + full AC-2
+  gate, `data-scientist`/`qa-engineer`) and Stage 9 (this agent's own `agent-maintenance` §5
+  distillation-ingestion hook). Team-wide cutover of the *write* side beyond the `cobb`/`teco`
+  pilot (Track 1's own still-open follow-up) is also untouched — this dispatch was the *read*-side
+  convention only.
+- **Why:** `teco`'s dispatch implementing
+  `claude/docs/plans/agent-knowledge-base-strategy.md` §3 Track 2 Stage 7, following Stage 6's
+  full closure (2026-09-19, entry below).
+- **Plan items:** K-030 updated (see `plan.md`).
+
 ## 2026-09-19 — K-030 Track 2 Stage 6: final low-contention retry pass over the 31 deferred-failed documents — Stage 6 is now FULLY CLOSED
 
 - **Scope.** The last unit owed by Stage 6: a single, genuinely-once, one-item-at-a-time retry
