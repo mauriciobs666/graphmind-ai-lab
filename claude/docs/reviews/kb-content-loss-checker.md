@@ -237,3 +237,56 @@ absorbed into silence.
 dropped:** both whole-file (flat-key-shaped) and per-heading checks correctly report the missing
 occurrence as a gap; `str.find`'s first-occurrence behavior changes which claim gets "credit" for
 which literal occurrence, but never causes the drop to go unreported.
+
+## Pass 2 — 2026-09-19
+
+**Verdict: approve.**
+
+Read the diff directly (not just the coordinator's summary) and reran
+`check_content_loss_selftest.py` myself — 16/16 pass, matching the coordinator's own independent
+rerun — plus my own targeted rechecks below, reusing the exact constructions from Pass 1's
+Appendix. All six Pass-1 findings are fixed and independently reverified by execution.
+
+- **Major 1 (non-adjacent nested overlap):** fixed. `check_partition`'s overlap loop
+  (check_content_loss.py:345-352) now scans each span against every later span until one starts
+  at/after the current span's end. Reran Pass 1's own Appendix A construction against the current
+  code: both `wide↔narrow1` and `wide↔narrow2` are now reported (previously only the first). The
+  new `check_nonadjacent_nested_overlap` test asserts the full overlap-pair *set*, closing the
+  exact "would pass even with the bug present" gap called out in Pass 1.
+- **Major 2 (whitespace-normalization had zero coverage):** fixed. Reran Pass 1's regression
+  probe (monkeypatch `build_normalized` to a no-op, rerun the selftest): `check_rewrapped_claim_
+  still_locates` now fails as expected (1/16 FAILED, with a legible word-level diff) — the exact
+  signal that was silent in Pass 1. The negative companion
+  (`check_rewrapped_and_word_dropped_still_not_found`) confirms the tolerance stays exact rather
+  than becoming permissive.
+- **Major 3 (CLI/manifest layer untested):** fixed. 8 new tests drive `main(argv=...)` end-to-end
+  (both manifest-schema forks, `--documents`, `missing_document` via `--dump`, and the `--live`
+  missing-venv error path) plus a `check_partition`-level `missing_document` test. All pass on my
+  own rerun.
+- **Minor (empty claim text):** fixed. `empty_text` is now its own `ClaimOutcome.status`, set
+  before `locate_claim` is ever called (check_content_loss.py:314-326) — this also removes a
+  latent side effect not called out in Pass 1: an empty-text claim no longer contributes a bogus
+  `(0,0)` span to the overlap-candidate list at all (it `continue`s before `spans.append`), so it
+  can no longer spuriously "overlap" whatever claim starts at position 0.
+- **Minor (silent full-file scope):** fixed. Confirmed the stderr warning fires exactly when
+  `--headings` is omitted in `--documents`/`--manifest-flat-key` mode (visible in the selftest's
+  own captured stderr during my rerun).
+- **Nit (mutual exclusion):** fixed. `--manifest-flat-key`/`--documents` are now an argparse
+  mutually-exclusive group; confirmed directly (`argument --manifest-flat-key: not allowed with
+  argument --documents`, exit code 2) via both the new test and my own ad hoc rerun.
+- **Nit (stale docstring):** fixed. The MANIFEST SCHEMA section now names itself a snapshot and
+  states neither fallback depends on the specifics staying accurate (check_content_loss.py:64-69)
+  — accurate as written.
+
+**Open judgment call, settled:** whether generating the Major-3 CLI fixtures via
+`tempfile.TemporaryDirectory()` per test, rather than persisting them under `fixtures/`, is an
+acceptable substitution. **It is — no change requested.** The one existing persisted fixture
+(`content_loss_test_kb.md`) is a different kind of artifact: real KB prose demonstrating the
+checker's three substantive split shapes, worth hand-inspection and reuse as the matching logic
+evolves. The new CLI tests exercise argparse/manifest-parsing *plumbing* with trivial,
+fully-deterministic JSON literals written inline in each test function — reading the test source
+already is reading the fixture; nothing is generated or hidden, and a failing assertion's message
+already names the synthetic ids/paths involved. Persisting them under `fixtures/` would add files
+with no independent inspection value over the test code itself.
+
+No new findings from this pass. All six Pass-1 findings are closed; nothing outstanding.
