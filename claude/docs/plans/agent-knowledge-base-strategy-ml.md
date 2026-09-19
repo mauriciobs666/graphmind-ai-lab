@@ -414,8 +414,7 @@ out-of-sample validation of it, not a re-run of the same evidence.
 ### Golden-set design — 45 pairs, not exactly ~40
 
 Sized to 45 rather than exactly 40 because covering **every one of the 13 migrated KBs with a
-floor of at least 1 pair**, plus a full 6-family stratum-(e) set (Stage 6 review Appendix A names
-7 real split families; I used 6 plus one held in reserve) and a 6-pair negative stratum, added up
+floor of at least 1 pair**, plus a full 6-family stratum-(e) set (Stage 6 review Appendix A names 7 real split families; all 7 appear as design rows (R1-R6 + Q1), of which 4 (R1, R2, R3, Q1) were executed in this pilot.) and a 6-pair negative stratum, added up
 to slightly more than "~40" — I did not force a cut to hit the number exactly, since every row
 earns its place under one of Recommendation 4's five axes and the ML note's own "~40" was
 explicitly approximate, not a hard budget. Weighted roughly by each KB's migrated-claim count
