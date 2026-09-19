@@ -27,14 +27,44 @@ A checker that stays clean on all four mutants proves nothing (per this team's s
 mutation-testing practice) -- each one is asserted to actually flip the checker's verdict, and the
 specific finding kind is asserted too, not just "not clean".
 
+ADDED PER `analyst`'S REVIEW (`claude/docs/reviews/kb-content-loss-checker.md`, commit `a0dfeb4`
+was reviewed and came back "needs changes"; this revision addresses all three majors plus the
+cheap minor/nit)
+------------------------------------------------------------------------------------------------
+  - **Major 1 (non-adjacent nested overlap)**: the original adjacent-pairs-only overlap check
+    missed a wide span nesting two non-adjacent narrower ones (the review's own Appendix A
+    construction). `check_nonadjacent_nested_overlap` reproduces it and asserts BOTH overlapping
+    pairs are reported by document id, not just that `report.overlaps` is non-empty (the review's
+    own callout: the old mutation-test style would have passed even with the bug present).
+  - **Major 2 (whitespace normalization had zero coverage)**: `check_rewrapped_claim_still_locates`
+    is the positive case (same words, re-wrapped at a different column -> still `found`, clean);
+    `check_rewrapped_and_word_dropped_still_not_found` is the companion negative case (re-wrapped
+    AND missing one word -> must still be `not_found`, proving the match stays exact rather than
+    becoming accidentally permissive).
+  - **Major 3 (CLI/manifest layer untested)**: `check_missing_document_status` covers the
+    `missing_document` outcome at the `check_partition` level (no CLI plumbing needed, per the
+    review's own "at minimum"); `check_cli_primary_manifest_shape`,
+    `check_cli_manifest_flat_key_shape`, `check_cli_documents_manual_mode`, and
+    `check_cli_missing_document_via_dump` drive `check_content_loss.main()` end-to-end with `argv`
+    against small synthetic manifest/source/dump files under a temp directory (no FalkorDB
+    needed); `check_cli_live_missing_venv_errors_cleanly` smoke-tests the `--live` "binary
+    missing" error path by pointing `CYPHER_MCP_VENV_PYTHON` at a path that doesn't exist.
+  - **Minor (empty claim text)**: `check_empty_text_status` confirms an empty/whitespace-only
+    claim text gets its own `empty_text` outcome rather than a free "found" at a zero-length span.
+  - **Nit (mutually exclusive args)**: `check_documents_and_flat_key_are_mutually_exclusive`
+    confirms argparse itself refuses `--documents` and `--manifest-flat-key` together.
+
 Run: `python3 claude/cobb/scripts/check_content_loss_selftest.py`
 Exit 0 and "ALL PASS" on success; exit 1 and the failing assertion's diagnosis otherwise.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import sys
+import tempfile
+import textwrap
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -224,12 +254,345 @@ def check_mutation_duplicated_bullet() -> None:
         assert outcome.status == "found", f"claim {outcome.claim.document_id} unexpectedly broke"
 
 
+# --------------------------------------------------------------------------------------------
+# Major 1 (analyst review): non-adjacent nested overlap
+# --------------------------------------------------------------------------------------------
+
+
+def check_nonadjacent_nested_overlap() -> None:
+    """The review's own Appendix A construction: a wide span nesting two narrower, NON-ADJACENT
+    (in sort order) ones. The old adjacent-pairs-only comparison reported only (wide, narrow1) and
+    never the real (wide, narrow2) overlap. Asserts the full overlapping-pair SET, not just that
+    `report.overlaps` is non-empty -- the review's own callout that the old assertion style would
+    have passed even with the bug present."""
+    body = "A" * 10 + "B" * 20 + "C" * 10 + "D" * 20 + "E" * 40  # len 100
+    store = {
+        "wide": {"title": "wide", "text": body[0:60]},  # span (0, 60)
+        "narrow1": {"title": "narrow1", "text": body[10:30]},  # span (10, 30), nested in wide
+        "narrow2": {"title": "narrow2", "text": body[40:60]},  # span (40, 60), nested, NOT
+        # adjacent to narrow1 once sorted by start (wide, narrow1, narrow2) -- narrow1 sits
+        # between wide and narrow2 in sort order, which is exactly what an adjacent-only
+        # comparison misses.
+    }
+    claims = [ccl.Claim(document_id=k, title=v["title"]) for k, v in store.items()]
+    report = ccl.check_partition(body, claims, store.get)
+
+    assert not report.clean, "a nested duplicate should NOT report clean"
+    pairs = {frozenset((o1.claim.document_id, o2.claim.document_id)) for o1, o2 in report.overlaps}
+    expected = {frozenset(("wide", "narrow1")), frozenset(("wide", "narrow2"))}
+    assert pairs == expected, (
+        f"expected overlap pairs {expected}, got {pairs} -- the wide<->narrow2 overlap is the "
+        "one an adjacent-only comparison misses"
+    )
+    # narrow1 and narrow2 genuinely don't overlap each other -- confirm that non-pair isn't
+    # spuriously reported either (a sanity check on the fix, not just the miss it fixes).
+    assert frozenset(("narrow1", "narrow2")) not in pairs
+
+
+# --------------------------------------------------------------------------------------------
+# Major 2 (analyst review): whitespace normalization -- positive and negative coverage
+# --------------------------------------------------------------------------------------------
+
+
+def check_rewrapped_claim_still_locates() -> None:
+    """Positive case: a claim built from a real source bullet but re-wrapped at a DIFFERENT
+    column than the source's own hard-wrap (same words, different newline placement) must still
+    locate cleanly. This is the real defect shape `build_normalized` exists to fix
+    (`coordination-techniques.md`, live data) -- without it, this case regresses to NOT_FOUND."""
+    sections, claims_by_heading, store = build_baseline()
+    body = sections[BULLET_HEADING]
+    claims = list(claims_by_heading[BULLET_HEADING])
+    target = claims[0]
+    original_text = store[target.document_id]["text"]
+
+    one_line = " ".join(original_text.split())
+    rewrapped = textwrap.fill(one_line, width=25)  # the fixture wraps at ~95 cols -- a very
+    # different column, so this can't pass by accidentally matching the source's own line breaks
+    assert rewrapped != original_text, "fixture drifted -- rewrap produced no visible change"
+    assert " ".join(rewrapped.split()) == one_line, "rewrap changed the words, not just layout"
+
+    mutated_store = dict(store)
+    mutated_store[target.document_id] = {**store[target.document_id], "text": rewrapped}
+    report = ccl.check_partition(body, claims, mutated_store.get)
+
+    assert report.clean, (
+        f"a claim re-wrapped at a different column (same words) should still locate cleanly:\n"
+        f"{ccl.render_report(BULLET_HEADING, report)}"
+    )
+
+
+def check_rewrapped_and_word_dropped_still_not_found() -> None:
+    """Negative companion: the SAME re-wrap, but with one word also dropped. Must still report
+    NOT_FOUND -- proving whitespace normalization stays exact on real content and doesn't become
+    accidentally permissive just because it tolerates layout differences."""
+    sections, claims_by_heading, store = build_baseline()
+    body = sections[BULLET_HEADING]
+    claims = list(claims_by_heading[BULLET_HEADING])
+    target = claims[0]
+    original_text = store[target.document_id]["text"]
+
+    words = original_text.split()
+    dropped_word = words.pop(len(words) // 2)  # remove one word from the middle
+    one_line_minus_word = " ".join(words)
+    rewrapped_minus_word = textwrap.fill(one_line_minus_word, width=25)
+    assert dropped_word not in rewrapped_minus_word.split()
+
+    mutated_store = dict(store)
+    mutated_store[target.document_id] = {**store[target.document_id], "text": rewrapped_minus_word}
+    report = ccl.check_partition(body, claims, mutated_store.get)
+
+    assert not report.clean, "re-wrapped text with a real word dropped must NOT report clean"
+    outcome = next(o for o in report.outcomes if o.claim.document_id == target.document_id)
+    assert outcome.status == "not_found", (
+        f"expected not_found for the re-wrapped-and-shortened claim, got {outcome.status!r} -- "
+        "whitespace normalization must not be permissive enough to paper over a real dropped word"
+    )
+
+
+# --------------------------------------------------------------------------------------------
+# Minor (analyst review): empty/whitespace-only claim text
+# --------------------------------------------------------------------------------------------
+
+
+def check_empty_text_status() -> None:
+    """An empty/whitespace-only claim `text` must get its own `empty_text` outcome, not a free
+    "found" at a bogus zero-length span (the old behavior: `"".find("")` returns 0
+    unconditionally)."""
+    body = "Some real content here that should be fully claimed by one document."
+    report = ccl.check_partition(
+        body,
+        [ccl.Claim(document_id="empty-claim")],
+        lambda k: {"title": "oops", "text": "   \n  "},
+    )
+    outcome = report.outcomes[0]
+    assert outcome.status == "empty_text", f"expected empty_text, got {outcome.status!r}"
+    assert not report.clean
+    assert outcome.span is None
+
+
+# --------------------------------------------------------------------------------------------
+# Major 3 (analyst review): the CLI/manifest layer
+# --------------------------------------------------------------------------------------------
+
+CLI_SOURCE_MD = """## Heading One
+
+Some short body text for heading one, used only by this synthetic CLI self-test.
+
+## Heading Two
+
+Different short body text for heading two, also synthetic, also self-test-only.
+"""
+
+
+def _cli_source_bodies() -> dict[str, str]:
+    return dict(fsc.parse_sections(CLI_SOURCE_MD))
+
+
+def check_missing_document_status() -> None:
+    """The `missing_document` outcome, at the `check_partition` level -- no CLI plumbing needed
+    (the review's own "at minimum" ask). A fetch that returns None for a real id must be reported
+    as its own status, not silently dropped or conflated with `not_found`."""
+    body = "Body text that exists in the source but has no matching claim fetched."
+    report = ccl.check_partition(
+        body, [ccl.Claim(document_id="ghost-id")], lambda k: None
+    )
+    outcome = report.outcomes[0]
+    assert outcome.status == "missing_document", f"expected missing_document, got {outcome.status!r}"
+    assert not report.clean
+    # The real body content, unclaimed by anything, must still surface as a gap -- a
+    # missing_document claim doesn't get to silently cover its own span.
+    assert report.gaps, "the unclaimed body should show up as a gap"
+
+
+def check_cli_primary_manifest_shape() -> None:
+    """Drives `check_content_loss.main()` end-to-end (argv, temp files, no FalkorDB) against the
+    PRIMARY manifest shape (`files[path]["headings"]`) via `--dump`. Covers `main`,
+    `load_manifest`, `claims_from_manifest_file_entry`, and `make_dump_fetcher` together."""
+    bodies = _cli_source_bodies()
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        source = tmp_path / "source.md"
+        source.write_text(CLI_SOURCE_MD, encoding="utf-8")
+        source_key = str(source)
+
+        manifest = {
+            "files": {
+                source_key: {
+                    "headings": [
+                        {
+                            "heading": "Heading One",
+                            "claims": [{"title": "Heading One", "documentId": "cli-1"}],
+                        },
+                        {
+                            "heading": "Heading Two",
+                            "claims": [{"title": "Heading Two", "documentId": "cli-2"}],
+                        },
+                    ]
+                }
+            }
+        }
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        dump = {
+            "cli-1": {"title": "Heading One", "text": bodies["Heading One"].strip()},
+            "cli-2": {"title": "Heading Two", "text": bodies["Heading Two"].strip()},
+        }
+        dump_path = tmp_path / "dump.json"
+        dump_path.write_text(json.dumps(dump), encoding="utf-8")
+
+        rc = ccl.main([str(source), "--manifest", str(manifest_path), "--dump", str(dump_path)])
+        assert rc == 0, f"expected exit 0 for a clean primary-shape run, got {rc}"
+
+
+def check_cli_manifest_flat_key_shape() -> None:
+    """Same synthetic file, but through the flat-key fallback -- covers
+    `claims_from_manifest_flat_key` and the whole-file `combined_body` path end-to-end."""
+    bodies = _cli_source_bodies()
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        source = tmp_path / "source.md"
+        source.write_text(CLI_SOURCE_MD, encoding="utf-8")
+
+        manifest = {"_cli_flat_test": {"documentIds": ["cli-1", "cli-2"]}}
+        manifest_path = tmp_path / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        dump = {
+            "cli-1": {"title": "Heading One", "text": bodies["Heading One"].strip()},
+            "cli-2": {"title": "Heading Two", "text": bodies["Heading Two"].strip()},
+        }
+        dump_path = tmp_path / "dump.json"
+        dump_path.write_text(json.dumps(dump), encoding="utf-8")
+
+        rc = ccl.main(
+            [
+                str(source),
+                "--manifest",
+                str(manifest_path),
+                "--manifest-flat-key",
+                "_cli_flat_test",
+                "--dump",
+                str(dump_path),
+            ]
+        )
+        assert rc == 0, f"expected exit 0 for a clean flat-key run, got {rc}"
+
+
+def check_cli_documents_manual_mode() -> None:
+    """`--documents` manual mode never touches the manifest at all -- confirm it still works
+    end-to-end through `main()` with no `--manifest`/`--manifest-flat-key` given."""
+    bodies = _cli_source_bodies()
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        source = tmp_path / "source.md"
+        source.write_text(CLI_SOURCE_MD, encoding="utf-8")
+
+        dump = {
+            "cli-1": {"title": "Heading One", "text": bodies["Heading One"].strip()},
+            "cli-2": {"title": "Heading Two", "text": bodies["Heading Two"].strip()},
+        }
+        dump_path = tmp_path / "dump.json"
+        dump_path.write_text(json.dumps(dump), encoding="utf-8")
+
+        rc = ccl.main(
+            [str(source), "--documents", "cli-1", "cli-2", "--dump", str(dump_path)]
+        )
+        assert rc == 0, f"expected exit 0 for a clean --documents run, got {rc}"
+
+
+def check_cli_missing_document_via_dump() -> None:
+    """End-to-end `missing_document` through the real CLI path: a dump missing one referenced
+    id must make `main()` exit 1, not silently succeed."""
+    bodies = _cli_source_bodies()
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        source = tmp_path / "source.md"
+        source.write_text(CLI_SOURCE_MD, encoding="utf-8")
+
+        dump = {"cli-1": {"title": "Heading One", "text": bodies["Heading One"].strip()}}
+        # "cli-2" deliberately absent from the dump.
+        dump_path = tmp_path / "dump.json"
+        dump_path.write_text(json.dumps(dump), encoding="utf-8")
+
+        rc = ccl.main(
+            [str(source), "--documents", "cli-1", "cli-2", "--dump", str(dump_path)]
+        )
+        assert rc == 1, f"expected exit 1 when a referenced document is missing from the dump, got {rc}"
+
+
+def check_cli_live_missing_venv_errors_cleanly() -> None:
+    """`--live` smoke test for the "binary missing" error path (no FalkorDB needed): point
+    `CYPHER_MCP_VENV_PYTHON` at a path that doesn't exist and confirm `main()` fails loud with an
+    actionable message, rather than crashing on some unrelated exception."""
+    original_venv_python = ccl.CYPHER_MCP_VENV_PYTHON
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        source = tmp_path / "source.md"
+        source.write_text(CLI_SOURCE_MD, encoding="utf-8")
+        ccl.CYPHER_MCP_VENV_PYTHON = tmp_path / "does-not-exist" / "python3"
+        try:
+            try:
+                ccl.main([str(source), "--documents", "cli-1", "--live"])
+            except SystemExit as exc:
+                message = str(exc)
+            else:
+                raise AssertionError("expected SystemExit when the venv python doesn't exist")
+        finally:
+            ccl.CYPHER_MCP_VENV_PYTHON = original_venv_python
+    assert "setup.sh" in message or "does-not-exist" in message, (
+        f"expected an actionable error naming the missing venv/setup step, got: {message!r}"
+    )
+
+
+# --------------------------------------------------------------------------------------------
+# Nit (analyst review): --documents and --manifest-flat-key are mutually exclusive
+# --------------------------------------------------------------------------------------------
+
+
+def check_documents_and_flat_key_are_mutually_exclusive() -> None:
+    """argparse itself must refuse `--documents` and `--manifest-flat-key` together, rather than
+    one silently winning with no warning."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        source = tmp_path / "source.md"
+        source.write_text(CLI_SOURCE_MD, encoding="utf-8")
+        try:
+            ccl.main(
+                [
+                    str(source),
+                    "--documents",
+                    "cli-1",
+                    "--manifest-flat-key",
+                    "whatever",
+                    "--live",
+                ]
+            )
+        except SystemExit as exc:
+            assert exc.code == 2, f"expected argparse's usage-error exit code 2, got {exc.code}"
+        else:
+            raise AssertionError(
+                "expected argparse to reject --documents + --manifest-flat-key together"
+            )
+
+
 CHECKS = [
     ("baseline (uncorrupted fixture) reports clean on all three heading shapes", check_baseline_clean),
     ("mutation (a): dropped bullet -> UNACCOUNTED gap", check_mutation_dropped_bullet),
     ("mutation (b): truncated claim -> UNACCOUNTED gap for the remainder", check_mutation_truncated_claim),
     ("mutation (c): ASCII-for-unicode substitution -> NOT_FOUND", check_mutation_unicode_substitution),
     ("mutation (d): duplicated bullet across two claims -> DUPLICATE overlap", check_mutation_duplicated_bullet),
+    ("[review Major 1] non-adjacent nested overlap -> both pairs reported", check_nonadjacent_nested_overlap),
+    ("[review Major 2a] re-wrapped claim (same words) -> still locates cleanly", check_rewrapped_claim_still_locates),
+    ("[review Major 2b] re-wrapped AND word dropped -> still NOT_FOUND", check_rewrapped_and_word_dropped_still_not_found),
+    ("[review minor] empty/whitespace-only claim text -> empty_text status", check_empty_text_status),
+    ("[review Major 3] missing_document status (check_partition-level)", check_missing_document_status),
+    ("[review Major 3] CLI: primary manifest shape end-to-end", check_cli_primary_manifest_shape),
+    ("[review Major 3] CLI: manifest-flat-key shape end-to-end", check_cli_manifest_flat_key_shape),
+    ("[review Major 3] CLI: --documents manual mode end-to-end", check_cli_documents_manual_mode),
+    ("[review Major 3] CLI: missing_document via --dump -> exit 1", check_cli_missing_document_via_dump),
+    ("[review Major 3] CLI: --live with missing venv fails loud", check_cli_live_missing_venv_errors_cleanly),
+    ("[review nit] --documents + --manifest-flat-key rejected by argparse", check_documents_and_flat_key_are_mutually_exclusive),
 ]
 
 

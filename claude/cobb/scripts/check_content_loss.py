@@ -61,6 +61,12 @@ shapes** as of this writing (2026-09-18):
    `_graph_dba_falkordb_quirks_IN_PROGRESS`) carry only a **flat** `documentIds` list (or, for the
    last one, two separately-named partial lists) with no heading breakdown at all — the
    heading-to-claim mapping lives only in that key's free-text `_note`, not in structured data.
+   The manifest is a live, evolving document (`cobb`'s own in-flight migration ledger, not part of
+   this tool's commit) — the exact key names/counts above are a snapshot, already observed to
+   have moved on since (`analyst` review, Nit 2: `_graph_dba_falkordb_quirks_IN_PROGRESS` has since
+   been renamed and restructured). Neither fallback below depends on these specifics staying
+   accurate; `--manifest-flat-key` fails loud on a key that no longer has a flat `documentIds` (as
+   it always did), and `--documents` never reads the manifest at all.
 
 Rather than parse that prose to reconstruct heading boundaries (a guess this tool refuses to make
 silently), this tool offers two schema-agnostic fallbacks that never need per-heading structure:
@@ -305,6 +311,19 @@ def check_partition(body: str, claims: list[Claim], fetch) -> Report:
             )
             continue
         text = doc["text"]
+        if not text.strip():
+            # `locate_claim` would normalize this to "" and `str.find("")` returns 0
+            # unconditionally, silently reporting a zero-length span as "found" -- an
+            # ingestion-bug shape (a document with genuinely empty/whitespace-only stored text)
+            # deserves its own flagged outcome, not a free pass into the clean bucket.
+            report.outcomes.append(
+                ClaimOutcome(
+                    claim=claim,
+                    status="empty_text",
+                    diagnostic="claim text is empty or whitespace-only",
+                )
+            )
+            continue
         loc = locate_claim(body, text)
         if loc is None:
             outcome = ClaimOutcome(
@@ -316,12 +335,21 @@ def check_partition(body: str, claims: list[Claim], fetch) -> Report:
         report.outcomes.append(outcome)
         spans.append((loc[0], loc[1], outcome))
 
+    # Proper interval-overlap check, not just adjacent-in-sort-order pairs: a wide span can
+    # nest two narrower, non-adjacent ones (wide=(0,60), narrow1=(10,30), narrow2=(40,60)) --
+    # comparing only consecutive pairs after sorting misses the wide<->narrow2 overlap entirely
+    # (analyst review, kb-content-loss-checker.md, Major finding 1 / Appendix A). For each span
+    # (sorted by start), compare against every later span until one starts at or after the
+    # current span's end -- correct and still cheap, since every later span's start is
+    # non-decreasing once sorted, so the break point is valid.
     spans.sort(key=lambda s: s[0])
-    for i in range(1, len(spans)):
-        prev_start, prev_end, prev_outcome = spans[i - 1]
-        cur_start, cur_end, cur_outcome = spans[i]
-        if cur_start < prev_end:
-            report.overlaps.append((prev_outcome, cur_outcome))
+    for i in range(len(spans)):
+        start_i, end_i, outcome_i = spans[i]
+        for j in range(i + 1, len(spans)):
+            start_j, _, outcome_j = spans[j]
+            if start_j >= end_i:
+                break
+            report.overlaps.append((outcome_i, outcome_j))
 
     covered = bytearray(len(body))
     for start, end, _ in spans:
@@ -503,12 +531,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--manifest", type=Path, default=DEFAULT_MANIFEST, help="kb-claim-manifest.json path."
     )
-    parser.add_argument(
+    # Mutually exclusive: if both were accepted, one would silently win with no warning (analyst
+    # review, Nit 1) -- argparse itself is the cheapest place to refuse the ambiguous combination.
+    scope_group = parser.add_mutually_exclusive_group()
+    scope_group.add_argument(
         "--manifest-flat-key",
         help="Read manifest[KEY]['documentIds'] as a flat whole-file claim list, instead of the "
         "primary per-heading manifest['files'][...] shape.",
     )
-    parser.add_argument(
+    scope_group.add_argument(
         "--documents",
         nargs="+",
         metavar="ID",
@@ -555,11 +586,27 @@ def main(argv: list[str] | None = None) -> int:
     all_ids: list[str] = []
 
     if args.documents is not None:
+        if args.headings is None:
+            print(
+                f"note: no --headings given -- checking against ALL {len(sections)} heading(s) "
+                f"in {source_key}. If this id list covers only some of them (a partial "
+                "migration), every unmigrated heading's whole body will show up as an "
+                "UNACCOUNTED gap -- expected noise, not necessarily a real defect.",
+                file=sys.stderr,
+            )
         claims = [Claim(document_id=i) for i in args.documents]
         body = combined_body(sections, args.headings)
         all_ids.extend(c.document_id for c in claims)
         pending = [("whole file (manual --documents list)", body, claims)]
     elif args.manifest_flat_key is not None:
+        if args.headings is None:
+            print(
+                f"note: no --headings given -- checking against ALL {len(sections)} heading(s) "
+                f"in {source_key}. If manifest[{args.manifest_flat_key!r}]'s id list covers only "
+                "some of them (a partial migration), every unmigrated heading's whole body will "
+                "show up as an UNACCOUNTED gap -- expected noise, not necessarily a real defect.",
+                file=sys.stderr,
+            )
         claims = claims_from_manifest_flat_key(manifest, args.manifest_flat_key)
         body = combined_body(sections, args.headings)
         all_ids.extend(c.document_id for c in claims)
