@@ -60,7 +60,7 @@ both reviewers.
 | U3br | `coder` (resume) | `a04e75a1454a5ec5d` | accepted | fold 2 minor suggestions (missing zero-arms test, README clause) — committed `4433e56` | — | 186.8k tok / 19 tools |
 | U3c | `coder` | `a20f36e22226f0479` | delivered | `scripts/consolidate_sweep_reports.py` (plan Unit C, fixture-built, parallel to U3a) | `analyst` (light) → in-flight | 158.9k tok / 26 tools |
 | U4c | `analyst` (fresh) | `ac2c3f299cd822b87` | accepted | `docs/reviews/small-model-catalog-sweep-impl.md` (own `-impl` doc, not a section of the plan review — analyst's own correct call per the closed role set) | `analyst` → **approve** (2 non-blocking: a `main()`-level test gap, HISTORY.md entry deferred) | 120.8k tok / 31 tools |
-| U5 | `devops` | — | queued, **held** (LM Studio in use) | 70-run sweep under one session id, `results/` | — | — |
+| U5 | `devops` | — | queued, **held** (LM Studio in use) | 71-run sweep under one session id, `results/` | — | — |
 | U6 | TBD | — | queued | five per-pack reports via `rank` (needs U3a+U3b gated, U5 data) | `analyst`/`data-scientist` → — | — |
 | U7 | TBD | — | queued | consolidated document via U3c's script (FR-9/FR-10) | `analyst` (+`qa-engineer` if it has walkthrough claims) → — | — |
 
@@ -82,3 +82,13 @@ housekeeping — see the design-docs commit alongside this one.
 Track B (U5 live sweep, U6 five reports, U7 consolidated document) remains **fully held,
 undispatched** — still waiting on the stakeholder's explicit word that LM Studio is free for this
 sweep's exclusive use.
+
+**2026-09-19 — Scope grown to 20 models / 71 runs.** Stakeholder asked to add a third embedding
+model, `granite-278m-multilingual`; confirmed downloaded and present in the LM Studio catalog
+(`GET /api/v0/models`, catalog id `text-embedding-granite-embedding-278m-multilingual`) before
+amending scope. `tico` (agent id `a3628d9fcdf158283`) amended
+`docs/requirements/small-model-catalog-sweep.md` in place — Scope/FR-1/AC-1 counts 19/2/70 →
+20/3/71, dated Decision log entry — diff independently re-verified by `teco` against the live
+tree before commit (`92536a0`). No code or design impact: Track A's report code is generic over
+model count, so nothing in Units A/B/C needs revisiting. U5's target run count updated above to
+71; U6/U7 are pack-shaped and unaffected by the model-count change.
