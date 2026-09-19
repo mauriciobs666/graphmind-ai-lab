@@ -6,9 +6,9 @@ description: >-
   via the already-shipped search_documents/get_document MCP tools. Holds, as exact fenced
   literals, the asymmetric query-instruction prefix template a querying agent must build
   itself before calling search_documents (the stored Document/Chunk text is never
-  prefixed), the fixed top-K, and the current score-floor value (0.42 cosine distance,
-  provisionally calibrated 2026-09-19 by Stage 8 Phase 1's golden-set pilot; Phase 2's
-  full run still owed). Use whenever a coding agent
+  prefixed), the fixed top-K, and the current score-floor value (0.43 cosine distance,
+  re-derived 2026-09-19 by Stage 8 Phase 2's full-set gate over the pooled 45-pair golden
+  set). Use whenever a coding agent
   needs to look up a distilled technique/rule/pattern from the team knowledge base by
   describing its current situation, instead of re-deriving the convention from memory or
   restating it in a prompt. Consuming agents (teco, architect, tdd-engineer,
@@ -36,7 +36,7 @@ this file.
    text — a claim can (rarely) split across two chunks of the same document (a mitigated,
    not eliminated, chunking residual — see the plan's §1/§8). If you need the complete text,
    follow up with `get_document(documentId)` rather than trusting one chunk's excerpt.
-4. **Apply the score floor yourself** — reject any returned hit with `score > 0.42`. See
+4. **Apply the score floor yourself** — reject any returned hit with `score > 0.43`. See
    below for the value's derivation and caveats. Do not invent a different number.
 
 ## The query-instruction prefix (exact, fenced — do not paraphrase or reformat)
@@ -65,24 +65,37 @@ choice.
 
 ## Score floor — calibrated, apply it
 
-**Reject any hit with `score > 0.42`** (cosine distance; lower = more similar). Calibrated
-2026-09-19 by `data-scientist` (Stage 8 Phase 1 pilot, `claude/docs/plans/
-agent-knowledge-base-strategy-ml.md`, "Stage 8 Phase 1" section) against 16 of a 45-pair
-golden set, run with the exact prefix template above, against the post-Stage-6-migration
-corpus (327/332 claims `ready`). Derivation: the worst-scoring true positive that was
-actually found in the pilot scored 0.409; the closest false match returned for a genuine
-negative query (no matching entry in the corpus at all) scored 0.446; 0.42 sits in that
-0.037 gap. At this floor, none of the pilot's 14 found true-positive documents were wrongly
-dropped, and all 4 pilot negative queries were correctly rejected.
+**Reject any hit with `score > 0.43`** (cosine distance; lower = more similar). Re-derived
+2026-09-19 by `qa-engineer` (Stage 8 Phase 2, `claude/docs/test-reports/
+agent-knowledge-base-strategy-ac2-report.md`), executing the 29 design-only rows of the
+same 45-pair golden set `data-scientist` designed and partially piloted in Stage 8 Phase 1
+(`claude/docs/plans/agent-knowledge-base-strategy-ml.md`, "Stage 8 Phase 1" section), then
+pooling with Phase 1's 16 executed rows for the full 45-pair sample.
 
-**This is a first, provisional floor, not a finished calibration — treat it as directional,
-not exact.** The margin above is thin, and the pilot's negative queries are the same ones
-used to derive it (no held-out validation yet). Stage 8 Phase 2 (the full ~40-45-pair
-regression gate, `qa-engineer`, not yet dispatched as of this writing) runs the 29
-not-yet-executed rows of the same golden-set design — genuine out-of-sample evidence for
-this exact number — and should confirm or re-derive it from the pooled result rather than
-patching 0.42 in isolation. If you're reading this well after Stage 8 Phase 2 has landed and
-this section still cites only the Phase 1 pilot, treat it as stale and flag it to `cobb`.
+**Why 0.42 didn't survive out-of-sample validation.** Phase 1's provisional floor (0.42) was
+fit on only 4 negative queries and 14 found positives, margin 0.037 — explicitly flagged
+there as thin and non-held-out. Phase 2 found a genuine true positive scoring *above* it: the
+second sibling of stratum-(e) family h40 (`5b1b477ff67e4e3b81c57f14899bbe48`, query R6)
+scored **0.4201** — over the 0.42 floor by 0.0001, which would wrongly reject a real answer
+that the retrieval step actually found. Per this file's own standing instruction ("if a Phase
+2 positive scores above it... re-derive"), the floor is re-derived rather than patched.
+
+**Derivation, pooled over all 45 pairs (14 Phase 1 + 27 Phase 2 found true-positive
+documents; 4 Phase 1 + 2 Phase 2 negative queries):** the worst-scoring true positive found
+anywhere in the pooled sample is 0.4201 (the h40 sibling above); the closest false match
+returned for a genuine negative query is still 0.446 (N4, Phase 1, React Server Components →
+a React-18-batching claim — unchanged by Phase 2's 2 additional negatives, N5/N6, whose
+closest scores were 0.614 and 0.463, both further away). Gap: **0.0259**. **0.43** sits in
+that gap, ~0.0099 above the worst surviving true positive and ~0.016 below the closest
+negative false match. At this floor: **0 of the 41 pooled found true-positive documents are
+wrongly dropped**, and **all 6 pooled negative queries (N1-N6) are correctly rejected**.
+
+**This is now a full-set calibration, not a provisional one — re-derive only on a material
+change** (a corpus/prefix change per the standing discipline above, or a future regression run
+that again finds a positive scoring above 0.43 or a negative scoring below it). Full
+per-row score data, the crowding-out assessment, and the prose-vs-code retrieval-quality
+finding are in the Stage 8 Phase 2 report cited above — this section states only the number
+and its derivation, per this skill's own "point to the source, don't duplicate" convention.
 
 ## `familyId` sibling linkage — not available through this tool
 
