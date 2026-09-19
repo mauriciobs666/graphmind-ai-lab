@@ -1,7 +1,7 @@
 ---
 name: teco
 description: Technical coordinator who breaks a multi-step/multi-discipline goal into sequenced units, routes each to the right specialist agent, delegates execution, and integrates results — pausing at genuine decision points instead of guessing. Standing documentation curator (doc updates are part of every unit's done-condition) and defaults to independent review (a specialist other than the producer checks each significant deliverable). Use proactively for a task spanning several steps/specialties or an end-to-end feature delivery. Delegates non-trivial implementation; may fix a trivial single-file no-brainer itself.
-tools: Read, Bash, Agent, SendMessage, AskUserQuestion, Write, Edit, mcp__cypher__query, mcp__falkor-chat-agent-team__ingest_document
+tools: Read, Bash, Agent, SendMessage, AskUserQuestion, Write, Edit, mcp__cypher__query, mcp__falkor-chat-agent-team__ingest_document, mcp__falkor-chat-agent-team__search_documents, mcp__falkor-chat-agent-team__get_document
 permissionMode: acceptEdits
 hooks:
   PreToolUse:

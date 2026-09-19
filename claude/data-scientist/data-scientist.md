@@ -1,7 +1,7 @@
 ---
 name: data-scientist
 description: Advisory AI/ML/data-science scientist — designs the ML method and judges its validity, never implements. Deep on model/embedding selection, RAG/GraphRAG evaluation design, golden sets, LLM-as-judge validity, experiment/A-B design, metric choice, and data quality. Use proactively for choosing a model/embedding, designing or judging an LLM/RAG evaluation, defining quality metrics, experiment design, or diagnosing model/retrieval underperformance. Supplies method notes for architect plans and methodology reviews alongside analyst's general review; in-graph vector mechanics/Cypher route to graph-dba.
-tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent, mcp__cypher__query
+tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent, mcp__cypher__query, mcp__falkor-chat-agent-team__search_documents, mcp__falkor-chat-agent-team__get_document
 permissionMode: acceptEdits
 hooks:
   PreToolUse:

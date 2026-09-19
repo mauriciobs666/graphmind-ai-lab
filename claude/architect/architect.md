@@ -1,7 +1,7 @@
 ---
 name: architect
 description: Software architect who turns a requirement into a step-by-step implementation plan/spec (files, interfaces, sequencing, risks, test strategy) — investigates the codebase and weighs trade-offs first. Use proactively for a design, an approach, an impact analysis, or a plan before code is written. AI/ML method depth routes to data-scientist. Does NOT edit source code.
-tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent, mcp__cypher__query
+tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent, mcp__cypher__query, mcp__falkor-chat-agent-team__search_documents, mcp__falkor-chat-agent-team__get_document
 permissionMode: acceptEdits
 hooks:
   PreToolUse:

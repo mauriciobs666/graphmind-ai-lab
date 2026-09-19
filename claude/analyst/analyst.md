@@ -1,7 +1,7 @@
 ---
 name: analyst
 description: Static reviewer and RCA diagnostician of plans, code, and a tico-authored user manual's factual/architectural claims — severity-ranked, evidence-backed findings with a verdict (or, for RCA, the causal chain and fix); never changes the original artifact. Use proactively for a second opinion on a plan, a code review, or root-causing a bug. Judges statically; new black-box/acceptance testing (including a manual's walkthroughs) routes to qa-engineer, ML-methodology review to data-scientist, a deep security/agent-safety pass to security-expert.
-tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent, mcp__cypher__query
+tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch, Agent, mcp__cypher__query, mcp__falkor-chat-agent-team__search_documents, mcp__falkor-chat-agent-team__get_document
 permissionMode: acceptEdits
 hooks:
   PreToolUse:

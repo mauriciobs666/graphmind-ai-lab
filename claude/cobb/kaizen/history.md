@@ -74,6 +74,7 @@
   `claude/docs/plans/agent-knowledge-base-strategy.md` §3 Track 2 Stage 7, following Stage 6's
   full closure (2026-09-19, entry below).
 - **Plan items:** K-030 updated (see `plan.md`).
+- **Blocker found and fixed (2026-09-19): 4 agents had restricted `tools:` allowlists missing the MCP tools the skill requires.** `analyst` identified that the one-line pointer to `skills/agent-kb-retrieval/SKILL.md` added to 9 agents' prompts was silently inert for 4 of them — `teco`, `architect`, `analyst`, `data-scientist` — because their frontmatter `tools:` field never gained `mcp__falkor-chat-agent-team__search_documents` and `mcp__falkor-chat-agent-team__get_document` (the other 5 agents — `tdd-engineer`, `frontend-engineer`, `qa-engineer`, `graph-dba`, `devops` — declare no explicit `tools:` field and inherit all tools, so no fix was needed). **Fix**: added both MCP tool names to the end of each of the 4 agents' `tools:` line. **Audit run afterward**: only the same 5 pre-existing check-7 FAILs (personal-info leak) remain; no new failures introduced. **Reason**: `claude/docs/reviews/agent-knowledge-base-strategy4-stage7.md`, which also independently re-verified the finding in its review gate before routing it.
 
 ## 2026-09-19 — K-030 Track 2 Stage 6: final low-contention retry pass over the 31 deferred-failed documents — Stage 6 is now FULLY CLOSED
 
