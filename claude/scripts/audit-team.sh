@@ -68,6 +68,13 @@
 #      claim at all misses the 2026-08-21 policy). No PreToolUse hook can
 #      gate this either way: it's prose capability, not a Write/Edit path or
 #      a Bash command pattern.
+#  11. agent-kb-retrieval drift check — the exact fenced query-instruction
+#      prefix template in skills/agent-kb-retrieval/SKILL.md (K-030 Track 2
+#      Stage 7) must be present byte-for-byte. Structural/mechanical, not a
+#      pytest unit test — no runtime import path exists for this string (each
+#      agent builds it inline). Catches DEFINITION drift only, never
+#      COMPLIANCE drift (a live call omitting the prefix) — see the check's
+#      own inline comment.
 #
 # Exit 0 = all PASS; exit 1 = at least one FAIL.
 # Origin: 2026-07-09 teco interface review — teco's roster had silently missed
@@ -266,6 +273,28 @@ if [ "$hits" -eq "${#conv_agents[@]}" ] || [ "$hits" -eq 0 ]; then
   pass "conventions-precedence rule: consistent across all ${#conv_agents[@]} implementer prompts ($hits/${#conv_agents[@]})"
 else
   failmsg "conventions-precedence rule in only $hits/${#conv_agents[@]} implementer prompts — this family moves together (coder K-004 / tdd-engineer K-006 / frontend-engineer K-003)"
+fi
+
+# 11. agent-kb-retrieval drift check — the query-instruction prefix template
+#     (K-030 Track 2 Stage 7, claude/docs/plans/agent-knowledge-base-strategy.md
+#     §4.4/§7) is a fenced literal in skills/agent-kb-retrieval/SKILL.md, not a
+#     pytest-covered runtime constant (no import path exists for it — every
+#     agent builds the string inline from its own prompt reasoning). This is
+#     the one mechanical guard against DEFINITION drift (a future edit
+#     dropping/rewrapping/rewording the exact string); it cannot catch
+#     COMPLIANCE drift (a live call silently omitting the prefix), which stays
+#     an accepted gap backstopped only by Stage 8's recurring golden-set run.
+echo
+kb_retrieval_skill="$ROOT/skills/agent-kb-retrieval/SKILL.md"
+kb_prefix='f"Instruct: Given a coding agent'"'"'s description of its current situation, retrieve the distilled technique or rule that applies to it.\nQuery: {situation}"'
+if [ -f "$kb_retrieval_skill" ]; then
+  if grep -qF "$kb_prefix" "$kb_retrieval_skill"; then
+    pass "agent-kb-retrieval: exact query-instruction prefix template present in SKILL.md"
+  else
+    failmsg "agent-kb-retrieval: exact query-instruction prefix template MISSING or altered in skills/agent-kb-retrieval/SKILL.md — definition drift (K-030 Track 2 Stage 7)"
+  fi
+else
+  failmsg "agent-kb-retrieval: skills/agent-kb-retrieval/SKILL.md not found — the retrieval-convention skill (K-030 Track 2 Stage 7) is missing"
 fi
 
 echo

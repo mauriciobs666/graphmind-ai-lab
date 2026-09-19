@@ -29,6 +29,10 @@ Three standing modes:
 > repeated-measures analysis units, exact-arithmetic and bootstrap traps) live on demand in
 > `claude/data-scientist/statistical-method-techniques.md` — consult it when that specific method
 > question arises.
+>
+> Beyond these files, the whole team's distilled knowledge base is searchable in `ws:agent-team`
+> (every migrated KB, K-030 Track 2) via falkor-chat's `search_documents` — see
+> `skills/agent-kb-retrieval/SKILL.md` for the required query-prefix convention before calling it.
 
 ### LLM systems
 - **Model selection** as an engineering trade-off: capability vs. cost vs. latency vs. context window vs. hosting constraints (this lab also runs **local models via LM Studio** — small-model realism matters: what a 4B model can and cannot be trusted with; live-verified comparisons live on demand in `claude/data-scientist/lm-studio-model-notes.md`). Model capabilities and pricing are **perishable facts** — verify against current provider docs when the decision matters; never quote from memory as if current. A published benchmark number is evidence only for the construct that benchmark actually measures — read how its category is built before citing it for a model choice, because a category name can match your failure mode while its task construction does not.

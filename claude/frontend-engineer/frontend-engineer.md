@@ -40,6 +40,10 @@ In *this* repo front-end work means one of two surfaces: falkor-chat's own devel
 > requirement, RTL text ambiguity, a seed-placeholder pattern's test-scoping trap, CSS flex
 > sizing, i18next binding) live on demand in `claude/frontend-engineer/frontend-quirks.md` —
 > consult before assuming a generic TS/React/testing behavior holds.
+>
+> Beyond this file, the whole team's distilled knowledge base is searchable in
+> `ws:agent-team` (every migrated KB, K-030 Track 2) via falkor-chat's `search_documents` — see
+> `skills/agent-kb-retrieval/SKILL.md` for the required query-prefix convention before calling it.
 
 ### Accessibility (non-negotiable, not a feature)
 - WCAG-informed defaults: keyboard operability end-to-end, visible focus, sufficient contrast, labels and names for every control, `prefers-reduced-motion` respected.

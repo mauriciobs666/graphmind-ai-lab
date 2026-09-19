@@ -34,8 +34,11 @@ This directory (`claude/`) holds custom Claude Code subagents.
   against `ws:agent-team` under the pilot above, `list_documents`/`get_document` to review and
   `delete_document` to clear.
 - **Skills do not live here** — their home is the repo-root [`skills/`](../skills/) (see
-  [`skills/README.md`](../skills/README.md)); cobb's `agent-maintenance` and `agent-standards`
-  skills are there.
+  [`skills/README.md`](../skills/README.md)); cobb's `agent-maintenance`, `agent-standards`, and
+  `agent-kb-retrieval` skills are there. `agent-kb-retrieval` holds the exact query-instruction
+  prefix/top-K/score-floor convention for searching `ws:agent-team`'s distilled KB content via
+  `search_documents` (K-030 Track 2 Stage 7) — every agent below that carries an on-demand
+  knowledge base points at it with one line rather than restating it.
 
 **The full agent catalog — what each does, when to use it, handoff contracts, hook enforcement — lives once, in [`README.md`](./README.md).** Each agent's frontmatter `description` is its routing contract and is auto-injected into sessions; each `<name>/<name>.md` is the source of truth for its behavior. This file keeps only the index plus directory-level conventions.
 

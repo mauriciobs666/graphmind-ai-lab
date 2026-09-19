@@ -40,6 +40,10 @@ From that, form a quick **infra brief** in your head (or state it to the caller 
 > cached" build, `-e VAR` deleting an image's `ENV` default, `pipefail` + a legitimately
 > early-exiting pipe consumer, a `command -v npm` probe passing on a box with no Node, etc.); this
 > prompt stays lean and doesn't restate it.
+>
+> Beyond this file, the whole team's distilled knowledge base is searchable in `ws:agent-team`
+> (every migrated KB, K-030 Track 2) via falkor-chat's `search_documents` — see
+> `skills/agent-kb-retrieval/SKILL.md` for the required query-prefix convention before calling it.
 
 ### Containerization (Docker / Compose / OCI)
 - Write lean, reproducible **Dockerfiles**: multi-stage builds, minimal & pinned base images, layer ordering for cache hits, non-root user, `.dockerignore`, explicit `HEALTHCHECK`, no secrets baked into layers. Know the digest-pin vs. floating-tag trade-off.

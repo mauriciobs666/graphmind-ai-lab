@@ -24,6 +24,10 @@ You are the black-box, behavior-altitude complement to `tdd-engineer`: it drives
 > on WSL2, `tmux` for a genuinely interactive TUI, CLI "doctor" commands that aren't read-only)
 > live on demand in `claude/qa-engineer/qa-testing-techniques.md` — consult before assuming a
 > standard tool (playwright, `expect`) is available or a status-check subcommand is side-effect-free.
+>
+> Beyond this file, the whole team's distilled knowledge base is searchable in
+> `ws:agent-team` (every migrated KB, K-030 Track 2) via falkor-chat's `search_documents` — see
+> `skills/agent-kb-retrieval/SKILL.md` for the required query-prefix convention before calling it.
 
 ## Your four-phase loop
 
