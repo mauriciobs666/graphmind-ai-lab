@@ -150,6 +150,24 @@ to the general fact here.
   **not** change the dimension, and because `redis-cli` exits 0 on Redis-level errors, a
   `set -e` script sails past it. The only way to change a vector index's dimension is to drop
   and re-create the index.
+- **`DROP VECTOR INDEX` succeeds normally regardless of how much data the label carries — zero
+  nodes of that label, or nodes present but none carrying the vector property, both drop cleanly
+  — but it hard-errors, rather than no-opping, when the vector index doesn't exist on that
+  label/property at all** (verified 2026-09-19, module `41811`, disposable `ws:gdba_embmig_probe`,
+  `falkor-chat` embedding-migration graph-design work). Sequence tested in order on one `Chunk`
+  label: index created over zero `Chunk` nodes → `DROP VECTOR INDEX` → `Indices deleted: 1`
+  (succeeds); index re-created, one `Chunk` node written with no `.embedding` property set at all
+  → `DROP VECTOR INDEX` → `Indices deleted: 1` (still succeeds — data presence is irrelevant, the
+  index is metadata); `DROP VECTOR INDEX` called a **second** time with nothing left to drop →
+  `ERR Unable to drop index on :Chunk(embedding): no such index.` (a real, loud error, not a
+  silent no-op). Consequence: a migration/rebuild script that unconditionally calls `DROP VECTOR
+  INDEX` before `CREATE VECTOR INDEX` (the only way to change a vector index's dimension, per the
+  entry above) is not resume-safe — if the process crashes between the `DROP` and the `CREATE`, a
+  naive retry hard-errors on the drop with nothing left to remove. Guard it: check the index
+  exists first (e.g. `read_index_dimension(...) is not None`, the pattern `falkor-chat/server/
+  falkorchat/repository.py:805` already uses for exactly this kind of check) or catch the specific
+  `ResponseError` text and treat "no such index" as "already dropped, proceed." Full write-up:
+  `falkor-chat/docs/plans/embedding-migration-graph.md` item 5.
 - **ANN kNN returns *up to* `k`, not exactly `k`** — on a small/near-empty HNSW index,
   `db.idx.vector.queryNodes(…, k, …)` may return fewer than `k` (approximate recall of distant/
   orthogonal candidates). Near neighbors are returned and correctly ordered; don't treat
@@ -805,6 +823,28 @@ to the general fact here.
   don't assert the endpoint labels "for clarity" — it silently reintroduces the full label scan
   the relationship index was supposed to avoid. Full worked example (with PROFILE output at both
   1000- and unlabeled-clean shapes): `falkor-chat/docs/plans/document-ingestion-graph.md` §1.4.
+
+- **`<` and `<=` against an INDEXED string property fold into a broken `Node By Index Scan` that
+  silently returns the WHOLE label, not the filtered subset — `>` and `>=` on the same indexed
+  property are unaffected** (verified 2026-09-19, module `41811`, disposable graphs
+  `ws:gdba_embmig_probe`/`probe2`, `falkor-chat` embedding-migration graph-design work). Setup: a
+  100-node label with a range index on a zero-padded string id (`msg000000`..`msg000099`).
+  `WHERE n.msgId < 'msg000050'` and `WHERE n.msgId <= 'msg000050'` both returned **all 100 rows**
+  (expected 50/51) — `GRAPH.EXPLAIN` shows `Node By Index Scan | (n:Message)` for both, so the scan
+  itself is silently unbounded rather than falling back to a safe full scan + correct filter.
+  `WHERE n.msgId > 'msg000050'` and `>= ` on the identical indexed property returned the exactly
+  correct 49/1. **Confirmed index-scan-specific, not a general string-comparison bug**: the
+  identical `<`/`<=` predicate against an *unindexed* copy of the same property values (a
+  `Node By Label Scan` + `Filter` plan) returned the correct 50/51 — dropping the index is what
+  fixes it. Same family as the "undirected pattern + indexed relationship property" and "`OR` as
+  scan anchor" entries above (a predicate silently folds into an index-scan plan that computes the
+  wrong row set, no error, no warning) but this is the first instance found on a plain **node**
+  range index rather than a relationship-property or undirected-pattern index. Consequence: never
+  use `<`/`<=` against an indexed string property on this build for a bounded/keyset scan — use
+  `>`/`>=` (verified safe) instead, e.g. by reversing which side of a range a paginating cursor
+  anchors on. Surfaced building `falkor-chat`'s embedding-migration read-unmigrated-batch keyset
+  query (`docs/plans/embedding-migration-graph.md` item 1) — the chosen query shape only ever uses
+  `>`, so it was unaffected, but the bug would have silently broken a descending-cursor variant.
 
 ## Ops, config & tooling
 
