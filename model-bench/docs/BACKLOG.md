@@ -109,3 +109,17 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   distinguishable verdict on either metric, so this has never surfaced in a rendered report. Full
   mechanism, and a scoped design that avoids the defect in new code without fixing it here:
   `docs/plans/small-model-catalog-sweep.md` §2.4 and §6.
+
+- **`report.rank_report()`'s reference-not-found error message is oddly worded, not wrong.**
+  `report.py:1362-1368`: when `--reference` names a model key with no stored run, the raised
+  `ValueError` reads `"reference model {reference!r} has no stored, consistent run for this
+  pack"`, with `" and session"` appended — but that suffix's condition is `if runs`, i.e. it
+  appends whenever the pack has *any* other stored run at all, not when a `--session` filter was
+  actually the reason the reference wasn't found. Reads backwards: a reader would expect the
+  session clause to appear only when a `--session` argument was actually passed and is plausibly
+  why the reference is missing, not merely because *some* runs exist. **Confirmed by reading the
+  code; not a live bug** — the message is still factually accurate either way, just confusingly
+  phrased. Flagged during Unit B's code-gate review of `docs/plans/small-model-catalog-sweep.md`
+  (`docs/reviews/small-model-catalog-sweep-impl.md`, "Unit B Implementation Review"). Worth a
+  one-line reword (tie the suffix to whether `session` was actually passed to `rank_report`, not
+  to whether `runs` is non-empty) the next time this function is touched.
