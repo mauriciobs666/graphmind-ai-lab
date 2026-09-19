@@ -178,3 +178,80 @@ existing git-index-race convention's spirit. No mechanism change needed at curre
 - Whether `cobb` wants to pursue Blocker-finding option (b) — actually answering the manifest's own
   open `_comment` question about the reuse decision — or just take option (a) (drop the miscited
   leg) is `cobb`'s call; either resolves the blocker.
+
+## Pass 2 — 2026-09-19 (U7c, focused re-check of commit `7cc266d`)
+
+**Verdict: needs changes.** 3 of 4 findings are cleanly fixed. The major is only partially
+fixed: the fix correctly closes the originally-reported scenario but its own recovery logic
+introduces a new, unaddressed failure mode of the same severity and character — a claim can still
+end up silently unsynced and marked `verified: true`, which is worse than being left `"pending"`,
+since `"pending"` at least reads as suspect.
+
+- **Blocker (miscited Stage 6 review) — fixed.** `grep -i "recommend"` and
+  `grep "agent-knowledge-base-strategy4-stage6"` against `skills/agent-maintenance/SKILL.md`
+  return zero matches — the citation and any mention of that review are both gone from the
+  operative file. `history.md:13,78` and `plan.md:471` still say "recommend[ing]" but only inside
+  the correction's own past-tense description of the false claim being removed — not a live
+  restatement. No new false claim introduced in its place; the design now stands on the two true
+  legs, stated plainly in all three files.
+- **Major (delete-succeeds/ingest-fails) — partially fixed; see new finding below.** The
+  originally-reported scenario (delete succeeds, then `ingest_document` fails) is now correctly
+  caught: `documentId` in the manifest stays at the old, now-deleted id until `ingest_document`
+  succeeds (`SKILL.md:772-780`), so a future pass's `get_document(documentId)` call correctly
+  returns `None` and correctly triggers a full re-run. That part of the fix is sound and verified
+  by re-reading the bullet's actual write ordering.
+- **Minor 1 (stale narrative fields) — fixed.** `SKILL.md:801-809` adds exactly the instruction
+  requested: refresh a file's `_DONE`/`_note`/`_status` narrative after a claim add/remove.
+- **Minor 2 (no concurrent-write guard) — fixed.** `SKILL.md:811-816` names the no-locking risk
+  and instructs serializing `cobb` distillation passes against the manifest, mirroring the git-index
+  race convention as suggested.
+
+### New (Major) — the `"pending"`-recovery check can't tell "completed, unflipped" from "never started," and treats both as safe
+
+**Evidence.** `SKILL.md:794-801`, the new recovery bullet: on finding `verified: "pending"` at the
+start of a pass, call `get_document(documentId)` — `None` means re-run the full sequence; **"a
+real document back means the prior cycle actually completed and only its manifest flip was left
+undone — safe to just set `verified: true` and move on."** This binary check conflates two
+genuinely different prior states that both return a non-`None` document:
+1. **Truly completed, only the flip forgotten** — `ingest_document` succeeded, so per the bullet's
+   own ordering (`:772-778`) `documentId` was already overwritten to the *new* id before the
+   interruption. `get_document(new_id)` correctly returns the new content — safe to flip.
+2. **Interrupted between writing `"pending"` and calling `delete_document`** (the very first, and
+   arguably most likely, interruption point in the whole sequence — before any network/MCP call
+   has even run) — `documentId` is untouched, still the *old* id, and the old document still
+   exists (delete never ran). `get_document(old_id)` **also returns a real, non-`None` document**
+   — but it's the stale, pre-edit text, not the intended new claim. The bullet's instruction says
+   to flip this to `verified: true` and move on too — which is wrong: the `.md` file's edit that
+   triggered step 5 in the first place is never actually synced to `ws:agent-team`, and the `true`
+   flag now actively hides that gap from every future check, which is worse than leaving it
+   `"pending"` (at least visibly suspect).
+
+The recovery bullet never compares the returned content against the current `.md` text, and never
+tells the reader to check whether `documentId` is the pre- or post-edit id — the two cases are
+indistinguishable under the check as written, even though the information needed to distinguish
+them (byte-exact match against the source, the same check the pre-existing "Verify, then flip"
+bullet already performs) is one clause away.
+
+**Why this matters.** This is the same failure class as the original finding (a claim silently
+drops out of sync with its `.md` source, undetected) — the fix moved the blind spot earlier in the
+sequence rather than closing it, and made the failure mode strictly worse in one respect: the
+false-safe path ends in `verified: true`, which is the state every other check in this procedure
+treats as trustworthy, so nothing will ever re-examine that entry again.
+
+**Suggested fix.** `cobb`: in the recovery bullet, replace the bare `None`-check with the same
+byte-exact discipline the "Verify, then flip" bullet already uses: `get_document(documentId)` →
+`None` → re-run the full sequence (unchanged); **document returned** → additionally confirm it is
+byte-exact against the claim's current text in the `.md` file — matches → safe to flip to `true`;
+does not match (still old/stale content) → treat identically to the `None` case, run the full
+"Existing claim, text changed" sequence to actually apply the edit. One added clause, reusing
+existing text/tooling already present two bullets up — no new mechanism required.
+
+### Note — `check_content_loss.py`'s supporting fact was dropped from `SKILL.md`, not merely restated (self-report imprecision, matches `teco`'s own catch)
+
+**Evidence.** `grep -n "check_content_loss" skills/agent-maintenance/SKILL.md` returns zero
+matches — the fact is gone from the operative procedure text entirely, present only in
+`history.md:84` and `plan.md:469`. `teco`'s message already caught this and judged it
+non-blocking; independently confirmed the same via direct grep. Agreed: doesn't affect
+correctness, not worth a fix cycle on its own — but if `cobb` is already touching this section for
+the recovery-bullet fix above, restoring the one clause ("`check_content_loss.py` already treats
+this file as canonical") to `SKILL.md` itself would cost nothing extra.
