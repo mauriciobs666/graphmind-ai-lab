@@ -1,6 +1,6 @@
 # Agent knowledge-base strategy — Track 2 implementation coordination (Stages 6-9)
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`)
 
 Implements `claude/docs/plans/agent-knowledge-base-strategy.md` §3 "Track 2 — distilled-knowledge
 ingestion (FR-2–FR-7), after Track 1" (Stages 6-9). Track 1 (Stages 1-5, raw-capture migration)
@@ -53,7 +53,7 @@ caveat noted and worked around.
 | U7b (fix U7a's blocker + major, and its 2 minors if cheap to fold in) | `cobb` | `acd2a171f0554221c` | accepted | `skills/agent-maintenance/SKILL.md`, `claude/cobb/kaizen/history.md`+`plan.md`, commit `7cc266d` — teco-reverified: false citation confirmed gone from all 3 locations; pending-marker sequencing matches suggested option 2; `kb-claim-manifest.json` untouched; `audit-team.sh` re-run clean. Noted one minor self-report imprecision (the `check_content_loss.py` supporting fact preserved in kaizen docs but silently dropped from `SKILL.md` itself, not restated there as claimed) — doesn't affect correctness, not worth a round-trip | `analyst` → — (focused re-check dispatched, U7c) | 237.3k tok / 21 tools / 339s |
 | U7c (Stage 9 re-check — focused, the 4 U7a items) | `analyst` | `a80309ea9d6da6b52` | accepted | `claude/docs/reviews/agent-knowledge-base-strategy4-stage9.md` "Pass 2" section, commit `3e974c2` | self → **needs changes** — 3/4 fixed (blocker, both minors, teco-reverified via grep); Major only partially fixed: the new recovery bullet's binary `get_document` `None`-check can't distinguish "completed, flip forgotten" from "interrupted before `delete_document` even ran" — both return a non-`None` document, both get flipped to `verified: true`, silently hiding an unsynced claim behind the state every other check trusts. Same failure class as the original finding, arguably worse (`"pending"` at least reads suspect). Fix: add the same byte-exact-against-source check the pre-existing "Verify, then flip" bullet already does. Routed to U7d | 162.1k tok / 10 tools / 396s |
 | U7d (fix U7c's new Major: byte-exact check in the recovery bullet) | `cobb` | `acd2a171f0554221c` | accepted | `skills/agent-maintenance/SKILL.md`, `claude/cobb/kaizen/history.md`+`plan.md`, commit `948368c` — teco-reverified: fix matches the review's suggested wording exactly (byte-exact check reused from "Verify, then flip"); `check_content_loss.py` clause restored to `SKILL.md`; `kb-claim-manifest.json` untouched; `audit-team.sh` re-run clean | `analyst` → — (final focused re-check dispatched, U7e) | 264.4k tok / 14 tools / 218s |
-| U7e (Stage 9 re-check — focused, the 1 remaining Major) | `analyst` | `af1b5281cc1975e06` | in-flight | — | n/a | — |
+| U7e (Stage 9 re-check — focused, the 1 remaining Major) | `analyst` | `af1b5281cc1975e06` | accepted | `claude/docs/reviews/agent-knowledge-base-strategy4-stage9.md` "Pass 3" section, commit `f0a5cdc` | self → **approve** — Pass 2's Major genuinely fixed (both named interruption cases traced against the new byte-exact check, correctly distinguished now); restored clause reads correctly; `audit-team.sh` clean; scope confirmed. One non-blocking observation logged (a third, pre-existing, not-introduced-by-this-fix interruption window one step later in the same sequence — orphans a manifest-untracked duplicate on re-run; filed as a `kaizen_team` entry, teco-reverified real, for `cobb`'s natural next distillation pass, not a new unit here) | 114.1k tok / 16 tools / 880s |
 | U8 (floor-instability methodology consult, escalated by U6b/U6c) | `data-scientist` | `a83b0581dd06762dc` | accepted | `claude/docs/plans/agent-knowledge-base-strategy-ml.md` "Stage 8 Phase 2 addendum" section (Version 3→4), commit `d2056d6` — teco-reverified: `kaizen_team` entry confirmed real, single-process/`base_url`-at-startup claim spot-checked against `falkor-chat/scripts/start_agent_team.sh`; diagnosed R6/h40's instability as a one-time discrete backend-state change (LM Studio reload), not live per-call/per-session randomization; recommends keeping the fixed 0.43 floor, reframing the residual risk as a named checkable class (any row's floor-relevant gap <0.025 flagged for multi-session reproduction), a `devops` backend-log follow-up (not executed, filed as backlog), and judges Stage 8's `approve` verdict should stand unchanged | skipped, advisory-only — teco independently verified the two load-bearing empirical claims + internal arithmetic (§Guardrails) | 148.9k tok / 13 tools / 321s |
 | U9 (apply U8's 2 "actionable now" items: SKILL.md floor-risk reframe + tight-clustering-gap flag as standing practice) | `data-scientist` | `a83b0581dd06762dc` | accepted | `claude/docs/plans/agent-knowledge-base-strategy-ml.md` Recommendation 4 "Standing practice" bullet, commit `bcb186e` — teco-reverified diff matches exactly. **Item 1 (SKILL.md reframe) correctly declined by data-scientist itself** — out of its advisory role/write allowlist (`docs/plans/`/`docs/reviews/` only), per its own guardrails and the original U8 brief; supplied a ready-to-paste replacement instead, routed to U10 | n/a — advisory role boundary respected, no gate needed for the one item it did apply | 170.7k tok / 3 tools / 98s |
 | U10 (apply U9's ready-to-paste SKILL.md floor-section reframe) | `cobb` | `aeedcc5b6ead39b00` | accepted | `skills/agent-kb-retrieval/SKILL.md` "Score floor" section, commit `ea54ee6` — teco confirmed the applied diff matches the specified replacement text byte-for-byte; `audit-team.sh` re-run clean (same 5 pre-existing FAILs, check 11 passes) | n/a — mechanical, exact text supplied | 51.3k tok / 6 tools / 102s |
@@ -276,6 +276,23 @@ and full Stage 6 coverage. U7 depends on U6 (plan's own Stage 8→9 sequencing).
   parallel with Stage 9 (U7) since the two are file-disjoint and owner-disjoint — U8 is advisory
   follow-up, not a Stage 8 blocker, and does not gate Stage 9's start. **Stage 9 (U7, `cobb`'s
   distillation-ingestion hook) now dispatched — this is Track 2's final stage.**
+- **Closure, 2026-09-19 — this coordination is done; Status flipped to `archived`.** All units
+  U1-U10 and their gate chains (U4a/b, U5a/b, U6a-c, U7a-e) are `accepted`/`approve`. K-030 Track 2
+  (Stages 6-9) is fully delivered: Stage 6 migration (327 ready/5 permanently-failed of 332 KB
+  claims), Stage 7 retrieval-convention skill, Stage 8 golden-set evaluation (pooled recall@5 0.875
+  [Wilson 0.719,0.950], score floor 0.43 with one named residual-risk class, escalated and
+  documented rather than silently resolved), and Stage 9 distillation-ingestion hook (3 review
+  passes, ending in a clean `approve`). **Not archived by this closure, deliberately:** the parent
+  plan (`agent-knowledge-base-strategy.md`) and the ML method note (`agent-knowledge-base-strategy-
+  ml.md`) — the parent plan still has one open item under the same K-030 backlog entry (Track 1's
+  team-wide write-convention cutover beyond the `cobb`/`teco` pilot, unrelated to Track 2 but not
+  yet closed), and the ML note remains a live, cited reference (`SKILL.md` points into it) rather
+  than a document whose milestone has fully passed — both freezes route to their own owners
+  (`architect`, `data-scientist`) per `AGENTS.md`'s by-kind table when that judgment call is made,
+  not decided here. **One follow-up flagged, not chased:** `analyst`'s U7e re-check found a narrow,
+  pre-existing (not introduced by this coordination's fixes) orphan-document risk one interruption
+  point later in Stage 9's delete-then-ingest recovery sequence — captured as a `kaizen_team` entry
+  for `cobb`'s own next distillation pass to pick up naturally, not opened as a new unit here.
 - **Update 2026-09-19 (U6 — Stage 8 Phase 2, the full AC-2 gate, delivered and teco-verified).**
   `qa-engineer` executed all 29 design-only golden-set rows live against `ws:agent-team` and pooled
   with Phase 1's 16: pooled recall@5 0.875 [Wilson 0.719,0.950] (point estimate unchanged from
