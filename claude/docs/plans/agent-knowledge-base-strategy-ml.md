@@ -1,6 +1,16 @@
 # Agent knowledge-base strategy — ML method note
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`) · **Version:** 5
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`) · **Version:** 6
+
+**Revision note (2026-09-19, fourth pass, U4 of the follow-up batch coordination,
+`claude/docs/plans/agent-knowledge-base-strategy5-coordination.md`).** Revised in place — corrects
+the "Stage 8 Phase 2 addendum" section's ranked root-cause below, not a new section: `devops` (U3,
+same coordination) directly falsified that addendum's leading candidate (a discrete LM Studio
+backend-state change between `qa-engineer`'s and `analyst`'s sessions) with process-uptime and
+model-load-log evidence — no restart/reload anywhere near the 2026-09-19 14:00-15:00 window, self-
+reconfirmed against the same logs. "A third data point" and "1. Likely cause, ranked" below are
+corrected accordingly; items 2-4's recommendations (keep the fixed 0.43 floor, the tight-clustering
+standing practice, Stage 8's acceptance) are unchanged and now say so explicitly.
 
 **Revision note (2026-09-19, third pass, U2 of the follow-up batch coordination,
 `claude/docs/plans/agent-knowledge-base-strategy5-coordination.md`).** Revised in place, not
@@ -797,71 +807,91 @@ vote for 0.4405":
   is chronologically first; `analyst`'s two passes and my own run, all later, agree with each
   other and disagree with `qa-engineer`. Three independent sessions landing 2-1 with the two
   *later* ones matching is more consistent with **a single state change that happened once and
-  persisted** (e.g. the LM Studio backend behind `ws:agent-team`'s single always-on server process,
-  `falkor-chat/scripts/start_agent_team.sh`, was restarted or reloaded its model between
-  `qa-engineer`'s run and `analyst`'s first review pass) than with **live, per-session random
-  routing between two parallel replicas** — the latter would predict a roughly even mix across
-  three independent sessions, not a clean before/after split. This is a hypothesis the evidence
-  favors, not one it proves; three points cannot rule out coincidence.
+  persisted** than with **live, per-session random routing between two parallel replicas** — the
+  latter would predict a roughly even mix across three independent sessions, not a clean
+  before/after split. **Corrected 2026-09-19 (U4): the specific mechanism this bullet originally
+  named for that "single state change" — a restart or reload of the LM Studio backend between the
+  two sessions — is now falsified by `devops`'s direct evidence (see "1. Likely cause, ranked"
+  below).** The chronological 2-1 split itself still stands as observed (three points cannot rule
+  out coincidence, as this bullet already said), but it no longer licenses a backend-reload
+  explanation; what could still produce a state change with no reload is addressed below.
 
 ### 1. Likely cause, ranked
 
-I confirmed one structural fact that changes the shape of the answer versus the report's own
-framing: `ws:agent-team` is served by **one single, always-on falkor-chat server process**
-(`start_agent_team.sh`, default port 8200) — not a load-balanced pool the tool caller reaches
-differently per session. Its embedding-backend `base_url` is resolved **once, at process startup**
-(the script's documented 3-tier fallback: explicit env var → `opencode.local.json` → the shared
-`opencode.json`), not per-request. That rules out "different sessions transparently load-balance
-across live replicas serving different weights" as a *literal* mechanism — there is one process,
-one resolved `base_url`, for every calling session unless that process itself restarted in between.
+**Corrected 2026-09-19 (U4).** I confirmed one structural fact that changes the shape of the
+answer versus the report's own framing: `ws:agent-team` is served by **one single, always-on
+falkor-chat server process** (`start_agent_team.sh`, default port 8200) — not a load-balanced pool
+the tool caller reaches differently per session. Its embedding-backend `base_url` is resolved
+**once, at process startup** (the script's documented 3-tier fallback: explicit env var →
+`opencode.local.json` → the shared `opencode.json`), not per-request. That rules out "different
+sessions transparently load-balance across live replicas serving different weights" as a *literal*
+mechanism — there is one process, one resolved `base_url`, for every calling session unless that
+process itself restarted in between.
 
-Ranked:
+**The original ranking's leading candidate is now disproven, not merely unconfirmed.** `devops`
+(U3, same coordination) ran exactly the check this section's original "What would confirm this"
+line asked for, and reported: the `falkor-chat-agent-team` server process has been running
+continuously since 2026-09-18 23:12:50 with no restart anywhere near 2026-09-19 14:00-15:00
+(`ps -eo lstart`); LM Studio's own server log shows exactly 5 model-unload events all day
+(02:02:31, 02:03:15, 09:31:15, 09:32:10, 15:44:47), none inside the 14:00-15:00 window — the
+embedding model was continuously resident across both `qa-engineer`'s run (~14:27) and `analyst`'s
+first review pass (~14:42); and no LM Studio application-process restart on the Windows side in
+that window either. I independently re-confirmed the process-start timestamp and the exact
+unload-event list myself via direct `ps`/log reads — both match `devops`'s report exactly. This
+falsifies "a discrete backend restart/reload happened once between the two sessions" as the
+mechanism, not just as a specific timing guess.
 
-1. **Most likely — a discrete state change in the shared LM Studio backend itself (a reload,
-   restart, or a different compute-kernel path selected on reload), happening once between
-   `qa-engineer`'s run and `analyst`'s first review pass, not a live per-call or per-session
-   randomization.** This is the only candidate consistent with all three observations together:
-   (a) the 15-decimal byte-exact match between two independent later sessions (rules out
-   continuous jitter, argues for a small number of discrete, reproducible compute states); (b) the
-   clean two-sided split correlating with chronology rather than a random mix (argues for "changed
-   once," not "randomly routes each call/session"); (c) the fact that only R6 shows any
-   discrepancy at all across the report's four spot-checked rows (argues the underlying cause is
-   small in magnitude — otherwise every query's scores would visibly shift, not just the one sitting
-   inside a tight cluster). LM Studio (llama.cpp/GGML under the hood) is documented to select
-   different matmul/reduction kernels depending on batch size, thread count, and GPU-offload
-   negotiation at load time — mathematically equivalent, numerically distinct floating-point
-   results between two otherwise-identical model loads is a known behavior class for this kind of
-   inference stack, and a magnitude of ~0.02 cosine distance from such a kernel-path difference,
-   while on the larger side, is plausible for a 1024-dim vector where many small per-dimension
-   differences compound in the dot product. **What would confirm this:** a `devops`-level check of
-   `ws:agent-team`'s process uptime/restart timestamp and LM Studio's own load/reload log around
-   the two sessions' timestamps — if a restart/reload event sits between `qa-engineer`'s run and
-   `analyst`'s first pass, this is confirmed; if the process has been continuously up the whole
-   time with no LM Studio-side reload either, this hypothesis is falsified and (2) below becomes
-   the leading candidate.
-2. **Second — live floating-point non-associativity from concurrent request batching on an
-   otherwise-unchanged backend**, i.e. this query happened to land in a different batch composition
-   each time, and llama.cpp's batched matmul reduction order shifted enough to move the embedding
-   measurably. Weighed lower than (1) because the byte-exact 15-decimal match across two
-   independent sessions is a poor fit for "different batch composition every call" (that predicts
-   a *spread* of close-but-not-identical values across many calls, not two clean, exactly-repeating
-   clusters) — but not ruled out, since `qa-engineer`'s and `analyst`'s sessions could each have had
-   internally-consistent concurrent load (e.g. each session's own parallel tool calls forming a
-   stable batch shape within that session) while differing between sessions. **What would
-   distinguish this from (1):** running R6 several more times *within* a single session while
-   deliberately varying concurrent load (e.g. firing several other `search_documents` calls
-   simultaneously vs. serially) — if the score changes with concurrency pattern inside one session
-   without any backend restart, this is confirmed over (1).
-3. **Third, least likely — FalkorDB's own `db.idx.vector.queryNodes` (HNSW-based ANN) returning
-   different approximate results run-to-run.** Weighed lowest because HNSW's approximation
-   nondeterminism affects *which* candidates get exact-distance-scored and returned, not the
-   *value* of a distance computation for a document that **is** returned in both readings — cosine
-   distance between two fixed, already-embedded vectors is a deterministic function once both
-   vectors exist, so if the *stored* document vector is unchanged (confirmed — corpus unchanged
-   since Stage 6, `qa-engineer`'s own check) and the *query* vector were unchanged, the reported
-   score could not differ. This candidate only survives if the query-side embedding is what's
-   actually changing (folding it back into (1)/(2)), so I don't treat it as a distinct cause, only
-   as the tool-layer at which any of the above would surface.
+Ranked, corrected:
+
+1. **Now most likely by elimination — live floating-point non-associativity from concurrent
+   request batching on an otherwise-unchanged, continuously-resident backend**, i.e. this query
+   happened to land in a different batch composition each time `search_documents` reached the
+   embedding server, and llama.cpp's batched matmul reduction order shifted enough to move the
+   embedding measurably. This was originally weighed second because the byte-exact 15-decimal match
+   across two independent sessions is a poor fit for "different batch composition every call" (that
+   predicts a *spread* of close-but-not-identical values across many calls, not two clean,
+   exactly-repeating clusters) — that objection still stands, and I am not overstating this as a
+   confirmed mechanism, only as the leading one once the discrete-reload candidate is eliminated. A
+   session-scoped variant of this (e.g. each session's own parallel tool-call pattern forming an
+   internally-stable batch shape that differs session-to-session, without any backend restart) is
+   consistent with both the byte-exact-within-session and disagree-across-session pattern and with
+   `devops`'s findings. **What would confirm this — not investigated by `devops` or by me, no log
+   surface exists for LM Studio's internal batch scheduling:** running R6 several more times
+   *within* a single session while deliberately varying concurrent load (e.g. firing several other
+   `search_documents` calls simultaneously vs. serially) — if the score changes with concurrency
+   pattern inside one session with the backend process continuously up (now independently
+   confirmed, not just assumed), that is direct, positive evidence for this mechanism. This would
+   need either instrumenting concurrent load against the shared service or a bounded follow-up
+   investigation — named as an open item below, not required.
+2. **Second, unchanged in its own reasoning — FalkorDB's own `db.idx.vector.queryNodes` (HNSW-based
+   ANN) returning different approximate results run-to-run.** Still weighed lowest for the same
+   reason as before: HNSW's approximation nondeterminism affects *which* candidates get
+   exact-distance-scored and returned, not the *value* of a distance computation for a document
+   that **is** returned in both readings — cosine distance between two fixed, already-embedded
+   vectors is deterministic once both vectors exist, so if the *stored* document vector is
+   unchanged (confirmed — corpus unchanged since Stage 6) and the *query* vector were unchanged,
+   the reported score could not differ. This candidate only survives if the query-side embedding is
+   what's actually changing (folding it back into (1)), so I still don't treat it as a distinct
+   cause, only as the tool-layer at which (1) would surface.
+3. **Eliminated (2026-09-19, U4) — a discrete state change in the shared LM Studio backend (a
+   reload, restart, or a different compute-kernel path selected on reload) happening once between
+   the two sessions.** This was the original ranking's leading candidate. `devops`'s process-uptime
+   and model-load-log evidence above directly falsifies it: no restart, no reload, no unload event
+   anywhere near the window in question, on either side (falkor-chat process or LM Studio itself).
+   Kept here, demoted rather than deleted, so a future reader sees what was ruled out and why,
+   rather than wondering whether it was simply never considered.
+
+**Why this correction does not reopen sections 2-4 below.** Every recommendation in this addendum
+(the tight-clustering flag as standing practice, keeping a single fixed 0.43 floor with the
+residual risk named as a class rather than a single row, and Stage 8's acceptance standing
+unchanged) was reasoned from the **observed pattern** — two internally-consistent,
+mutually-contradicting readings for one borderline document — not from *which* backend mechanism
+produced that pattern. Falsifying the discrete-reload candidate changes which mechanism is likely,
+not whether the pattern is real, whether it is worth a standing detection practice, or whether a
+fixed floor with a named residual risk is still the right response to it — none of sections 2-4's
+reasoning below cites the discrete-reload hypothesis as a premise. Confirmed unaffected by rereading
+each; only the "currently live" framing in section 4 below (which did lean on the reload timeline)
+is corrected there.
 
 ### 2. Is this isolated to one row, and is tight score-clustering a good risk predictor?
 
@@ -915,8 +945,9 @@ named in the brief:
   `qa-engineer` got 0.4201 three times in a row in one session; `analyst` and I each got 0.4405
   three-for-three across our own calls. A calling agent re-querying 3× *within its own session*
   would get the same session-pinned value three times over — false confidence, not real averaging,
-  because whatever determines the state (most likely the backend's current serving configuration,
-  per the diagnosis above) does not change between calls inside one session. Recommending this
+  because whatever determines the state (per the corrected diagnosis above, most likely a
+  session-scoped concurrent-load/batching pattern rather than a backend reload) does not change
+  between calls inside one session. Recommending this
   convention would ship a mechanism that looks like it addresses the problem while measurably not
   doing so against the one case with real evidence.
 - **(a) — keep a fixed floor, document the residual risk as an accepted, bounded limitation:
@@ -930,9 +961,15 @@ named in the brief:
   process rather than by a lucky independent-review re-run (which is how this one was actually
   caught — not by design).
 - **(d) — something else, specifically "characterize and pin the backend to remove the
-  nondeterminism at its source":** this is the real fix, but it is a `devops`-level investigation
-  and action, not a methodology change to the floor mechanism, and not something I can execute or
-  verify from here. See "actionable now vs. follow-up" below.
+  nondeterminism at its source":** **narrowed 2026-09-19 (U4).** `devops`'s check (item 1 above)
+  already ruled out the premise this originally targeted — the backend process and the embedding
+  model were both continuously up and unreloaded across the discrepancy window, so there is no
+  discrete reload event left to "pin against." If concurrent-batching (the now-leading candidate)
+  is confirmed by the bounded follow-up named under item 1, the equivalent fix would be about
+  controlling concurrent load during a regression-gate run (e.g. running it without competing
+  concurrent traffic against the shared service), not backend version-pinning — still a
+  `devops`/`graph-dba`-level action, not a methodology change to the floor mechanism, and still not
+  something I can execute or verify from here. See "actionable now vs. follow-up" below.
 
 **Concrete `SKILL.md` change this implies (not applied by me — for a follow-up dispatch):** in the
 "Score floor" section, keep **0.43** as the operative value (no change to the number), but revise
@@ -959,19 +996,23 @@ anything that would reopen it.** Two independent reasons:
   under both observed readings** (rank 3 and rank 5) — only its *floor-admission* status differs,
   and the report already correctly reports floor-applied figures both ways (0.857 vs. 0.929 for
   the affected sub-metric) rather than picking one. Nothing here changes what was actually
-  measured, only which of two already-disclosed readings turns out (per my third data point) to be
-  more likely the currently-live one.
+  measured.
 - **Escalating instead of resolving was the methodologically correct call, and remains so.** Given
   two equally-reproducible, mutually-contradicting readings with no principled way to prefer one
   as "the" true value from either `qa-engineer`'s or `analyst`'s vantage point alone, picking either
   0.4201 or 0.4405 as a fresh floor-deriving input would have been a false-precision overclaim —
-  exactly the failure mode `analyst`'s Pass 2 named and declined to commit. My own third data point
-  adds evidence about *which state is currently live* (favoring 0.4405, per the timing-pattern
-  reasoning above) but does not change the underlying judgment that neither reading was "provably
-  more correct" from the position `qa-engineer`/`analyst` were each in — it only became more
-  informative once a third, differently-timed session was available, which is itself an argument
-  for the process fix in item 3 (multi-session reproduction as standing practice) rather than a
-  retroactive complaint about the original escalation.
+  exactly the failure mode `analyst`'s Pass 2 named and declined to commit. **Corrected 2026-09-19
+  (U4): my own third data point's original framing ("favoring 0.4405 as the currently-live state,
+  per the timing-pattern reasoning") leaned on the now-falsified discrete-reload hypothesis and is
+  withdrawn — there is no "currently-live backend state" to favor once no reload occurred.** What
+  the third data point still establishes, unaffected: a third, independent, differently-timed
+  session reproduced `analyst`'s 0.4405 exactly rather than `qa-engineer`'s 0.4201, which remains
+  evidence the 2-1 split is not coincidence, just not evidence of *which* mechanism drives it. This
+  does not change the underlying judgment that neither reading was "provably more correct" from the
+  position `qa-engineer`/`analyst` were each in — it only became more informative once a third,
+  differently-timed session was available, which is itself an argument for the process fix in item
+  3 (multi-session reproduction as standing practice) rather than a retroactive complaint about the
+  original escalation.
 
 ### Actionable now vs. follow-up
 
@@ -984,22 +1025,27 @@ anything that would reopen it.** Two independent reasons:
   periodic re-run (the test plan, or a note in this file's Recommendation 4) — also cheap and ready
   now.
 
-**Needs further investigation, not my call to execute:**
-- **Recommended `devops` follow-up:** check `ws:agent-team`'s server process uptime/restart history
-  (`start_agent_team.sh`'s process) and LM Studio's own model-load/reload log around
-  `qa-engineer`'s U6/U6b run timestamp versus `analyst`'s U6a first-pass timestamp, to confirm or
-  falsify the "one discrete backend-state change happened in between" hypothesis (item 1, ranked
-  #1). If confirmed, the practical fix is operational (keep the backend process/model load stable
-  across a regression-gate run, or re-run the gate immediately after any known reload rather than
-  days later) rather than a further methodology change here.
-- **Lower priority, only if the above is inconclusive:** a `devops`/`graph-dba` check of whether
-  concurrent request load measurably changes R6's score within one session (item 1's ranked #2
-  distinguishing test) — only worth running if the restart/reload check comes back negative, since
-  it's a more expensive, noisier experiment to design well.
+**Completed (2026-09-19, U3/U4):**
+- **`devops` follow-up: done.** Checked `ws:agent-team`'s server process uptime/restart history
+  and LM Studio's own model-load/reload log around `qa-engineer`'s U6/U6b run timestamp versus
+  `analyst`'s U6a first-pass timestamp — **falsified** the "one discrete backend-state change
+  happened in between" hypothesis (continuous uptime, no reload in the 14:00-15:00 window on
+  either side), independently re-confirmed against the same logs. No operational fix follows from
+  this branch (there was no reload to keep stable or re-run after).
+
+**Open, bounded, not required — my own call to name, not to execute:**
+- The trigger this file's own original "Lower priority, only if the above is inconclusive" bullet
+  set is now met: the restart/reload check came back negative, so a `devops`/`graph-dba` check of
+  whether **concurrent request load** measurably changes R6's score within one session (the
+  corrected ranking's item 1, "What would confirm this") is the next thing that would actually
+  distinguish a mechanism, if this is worth pursuing further. It's a more expensive, noisier
+  experiment to design well (no existing log surface for LM Studio's internal batch scheduling),
+  and none of sections 2-4's recommendations depend on resolving it — so this stays a named,
+  bounded open item, not a blocking follow-up.
 - Not recommended as a use of further investigation time: chasing a "third" score value or treating
   n=3 as enough to fully characterize the distribution. Three points establish reproducible
-  bimodality (now with a timing pattern) convincingly enough to act on; a fourth or fifth
-  reproduction would sharpen confidence marginally, not change the recommendation.
+  bimodality convincingly enough to act on; a fourth or fifth reproduction would sharpen confidence
+  marginally, not change the recommendation.
 
 ## DEF-1 diagnosis — prose/narrative retrieval quality (2026-09-19)
 
