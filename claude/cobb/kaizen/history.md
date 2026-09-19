@@ -2,6 +2,72 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-19 — K-030 Track 2 Stage 9: distillation-ingestion hook (U7, the final Track 2 stage)
+
+- **What.** `skills/agent-maintenance/SKILL.md` §5 gained a new step 5, appended after the existing
+  4-step numbered procedure (Read/Verify/Route/Log & clear) — one addition, not a restructure of the
+  distillation judgment itself, per the dispatching brief's explicit scope limit. It fires whenever
+  step 3 routes a promotion to "An on-demand knowledge base" and the corresponding `<agent>/
+  <topic>.md` file is actually edited, and more generally whenever any later edit to an
+  already-migrated KB `.md` file changes a claim's stored text (a content-loss fix, a stale-fact
+  correction, a re-split) — not only a fresh promotion. For each claim touched: delete the old
+  `ws:agent-team` `documentId` (if one exists) then `ingest_document` the new text, `produced_by=
+  'cobb'`. The plan is explicit that the file edit stays the authoring act and this is a follow-on
+  sync step, never a replacement — stated verbatim in the new §5 text, not just in this log.
+- **Both design decisions the plan left open (closing item c) — resolved, with reasoning recorded
+  here per the dispatching brief's instruction, not just decided silently.**
+  1. **Claim → current `documentId` tracking: reused `claude/cobb/scripts/kb-claim-manifest.json`**
+     rather than building a `list_documents`+title-match scan (the plan's other named option). Three
+     converging reasons, not just one: (a) the manifest already exists and is already keyed on the
+     exact axis a future edit is made along — file path + `##` heading — so no new lookup structure
+     is needed; (b) the manifest's own `_comment`, written during Stage 6, names Stage 9 as its
+     intended future consumer and explicitly says it was kept on disk past migration's own close for
+     this reason; (c) `claude/docs/reviews/agent-knowledge-base-strategy4-stage6.md` (the Stage 6
+     gate) independently recommends it, and `check_content_loss.py` already treats this same file as
+     the canonical per-heading manifest shape — Stage 9 leaning on it keeps one manifest as the
+     single source of truth for both the fidelity checker and the sync hook, rather than two
+     drifting mechanisms. A `list_documents` scan is named as the fallback only if the manifest and
+     the live corpus are ever found to have drifted apart.
+  2. **`MENTIONS`-equivalent tagging — left explicitly open, not solved.** The new §5 text states
+     plainly that `ws:agent-team`'s `Document` model has no edge for crediting a second agent a KB
+     claim substantively concerns (falkor-chat has no analogue to `kaizen_team`'s
+     `(:KaizenEntry)-[:MENTIONS]->(:Agent)` edge), names the plan's own closing bullet as the source
+     of that gap, and states the interim answer (express it in the claim's own prose, or fall back
+     to a `kaizen_team` `:KaizenEntry` with a curator `MENTIONS` tag if a standing cross-agent
+     pointer is truly needed) without inventing a `ws:agent-team`-native workaround. Checked twice
+     before finalizing the edit that this reads as "flagged," not as "solved."
+- **Live smoke-tested, not just documented** — the dispatching brief left this to judgment rather
+  than mandating it, and a natural low-risk test fit: ingested a disposable throwaway claim titled
+  `[Stage 9 smoke test, disposable] — v1` (`produced_by='cobb'`) → `get_document` confirmed it
+  byte-exact-retrievable (id `73463b5d1e524e3985767197d260aae0`) → ran the new sequence exactly as
+  documented: `delete_document` on the v1 id, then `ingest_document` a v2 text simulating an edit
+  (new id `e4f2b18133ad4a5e8b1ddeeb5c60e6cb`) → confirmed `get_document(v1_id)` now returns `null`
+  and `get_document(v2_id)` returns the v2 text byte-exact → `delete_document`'d the v2 artifact
+  too and confirmed it also returns `null` afterward. No leftover test document remains in
+  `ws:agent-team`; nothing in `kb-claim-manifest.json` was touched by this smoke test (it used a
+  disposable title/claim outside the real corpus, not an entry the manifest tracks).
+- **`claude/scripts/audit-team.sh` re-run clean** after the SKILL.md edit — same 5 pre-existing,
+  unrelated FAILs (personal-identifier leaks in files this dispatch never touched: `bypass-
+  permissions-subagent-gap-coordination.md`, `salesperson-ui.md`, `cpg-provenance-stamp.md`,
+  `small-model-catalog-sweep-impl.md`, `opencode/agents/tank/opencode.json`), no new ones. The
+  `agent-kb-retrieval` prefix-template check (check 11, Stage 7's own) still passes.
+- **Provenance line added to §5's own "Origin" blockquote** (the file's established convention for
+  chronicling structural changes to the distillation procedure — matches the M8/2026-08-21/
+  2026-08-22 entries already there), naming this addition dated and by stage.
+- **Deliberately left alone, per the brief's explicit scope.** No other part of §5's step-by-step
+  judgment was touched — steps 1-4 (Read/Verify/Route/Log & clear) are byte-identical to before this
+  edit except for the one new step appended after them. Stage 6's already-migrated 332 claims and
+  their existing `documentId`s were not re-touched, re-verified, or re-ingested — this unit is
+  process/tooling for *future* KB edits, not a re-run of the migration.
+- **This closes K-030 Track 2 in full** — Stages 6 (migration), 7 (retrieval skill), 8 (golden-set
+  gate), and 9 (this unit) are now all delivered; see `plan.md`'s K-030 entry, rewritten in place to
+  reflect this. The only remaining open item under K-030 is Track 1's own team-wide write-convention
+  cutover (beyond the `cobb`/`teco` pilot), unrelated to Track 2.
+- **Delivered as a `teco`-coordinated dispatch (U7,
+  `claude/docs/plans/agent-knowledge-base-strategy4-coordination.md`), left uncommitted per this
+  coordination's standing practice** — `teco` verifies and commits after its own independent check,
+  same as U4/U5/U6 before it.
+
 ## 2026-09-19 — K-030 Track 2 Stage 7: retrieval-convention skill, drift check, and team-wide pointer rollout
 
 - **Step 0 reasoning (the plan's closing item (b), recorded here as the dispatch required).**

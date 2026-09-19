@@ -737,6 +737,63 @@ distills — on request, and folded into every certification pass (§4):
    `history.md`/`plan.md` don't already serve just as well.)
    Promotion into a prompt or catalog is a normal agent edit: full §1/§2
    bookkeeping applies.
+5. **Sync `ws:agent-team` after a KB `.md` file edit** (Track 2 Stage 9,
+   `claude/docs/plans/agent-knowledge-base-strategy.md` §4.5/§5, closing item
+   c). Fires whenever step 3 routes a promotion to "An on-demand knowledge
+   base" and the corresponding `<agent>/<topic>.md` file is actually edited —
+   and, more generally, whenever *any* later edit to an already-migrated KB
+   `.md` file changes a claim's stored text (a content-loss fix, a stale-fact
+   correction, a re-split), not only a fresh promotion. **The file edit stays
+   the authoring act; this is a follow-on sync step, never a replacement for
+   it** (plan §4.5).
+
+   **Claim → current `documentId` tracking: reuse
+   `claude/cobb/scripts/kb-claim-manifest.json`.** Same file → `##`-heading →
+   `claims[]` → `{title, documentId, verified}` structure Stage 6's migration
+   built and deliberately kept on disk past its own close for exactly this —
+   its own `_comment` names Stage 9 as the intended consumer, and
+   `claude/docs/reviews/agent-knowledge-base-strategy4-stage6.md` recommends
+   it (`check_content_loss.py` already treats it as the canonical
+   per-heading manifest shape, so Stage 9 leans on the same file the fidelity
+   checker does). Chosen over a `list_documents`+title-match scan (the plan's
+   other named option, closing item c) because the manifest already exists,
+   is already keyed on the same axis an edit is made along (file + heading),
+   and needs no live MCP round-trip just to find the id to delete — fall back
+   to a `list_documents` scan only if the manifest and the live corpus are
+   ever found to have drifted apart (missing/stale entry, orphaned id).
+
+   For each claim touched by the edit, look up its manifest entry by file
+   path + heading (or, within a heading that holds several split-sibling
+   claims, by the claim's own `title`):
+   - **Existing claim, text changed** — `delete_document(documentId)` (the
+     manifest's current id) first, then `ingest_document(text=<new claim
+     text>, title=<same "<family-slug> — <claim-title>" convention Stage 6
+     used for a split sibling, or the plain heading text for a claim that was
+     never split>, produced_by='cobb')` against `ws:agent-team`. Overwrite
+     the manifest entry's `documentId` with the new id and set
+     `verified: false` until the last bullet below confirms it.
+   - **New claim** (a heading, or a new split sibling, that never existed
+     before) — no prior id, so skip the delete: `ingest_document` directly,
+     then add a fresh entry to the manifest under its file/heading.
+   - **Claim removed** (a heading deleted or merged away, nothing replaces
+     it) — `delete_document(documentId)` and remove that entry from the
+     manifest; no matching `ingest_document`.
+   - **Verify, then flip `verified: true`** — `get_document(newId)` and
+     confirm the text returned is byte-exact against what now sits in the
+     `.md` file, the same discipline Stage 6 used throughout. Don't leave a
+     manifest entry pointing at an id nobody has confirmed round-trips.
+
+   **`MENTIONS`-equivalent tagging stays an open item, not solved here.**
+   `ws:agent-team`'s `Document` model has no edge for crediting a second
+   agent a KB claim substantively concerns — falkor-chat has no analogue to
+   `kaizen_team`'s `(:KaizenEntry)-[:MENTIONS]->(:Agent)` edge, and the plan
+   explicitly leaves this open
+   (`agent-knowledge-base-strategy.md` §5, Track 2 Stage 9 bullet). If a KB
+   claim genuinely needs that credit, express it in the claim's own prose (as
+   today), or, if a standing cross-agent pointer is truly needed, write it as
+   a `kaizen_team` `:KaizenEntry` with a curator `MENTIONS` tag instead —
+   `kaizen_team` keeps running in parallel for exactly this gap (§3). Do not
+   invent a `ws:agent-team`-native workaround for it.
 
 > Origin: 2026-07-12 — the user asked how the agents could self-improve from
 > what they learn exploring their areas; the answer generalized graph-dba's
@@ -759,7 +816,11 @@ distills — on request, and folded into every certification pass (§4):
 > property with `:Agent` nodes and `(:Agent)-[:PRODUCED]->(:KaizenEntry)` /
 > `(:KaizenEntry)-[:MENTIONS]->(:Agent)` edges, for entries created from that
 > point on; entries that predate M8 are unaffected (FR-2's no-retrofit rule)
-> and are still read and cleared exactly as before.
+> and are still read and cleared exactly as before. **2026-09-19 (K-030 Track 2
+> Stage 9):** step 5 added — the distillation pass now also syncs
+> `ws:agent-team`'s mirror of a KB `.md` file's content after any edit to it
+> (delete-old + ingest-new, tracked via `claude/cobb/scripts/
+> kb-claim-manifest.json`), closing the loop Stage 6's migration opened.
 
 ---
 
