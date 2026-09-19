@@ -396,6 +396,19 @@ CI, not a bare pass/fail percentage.**
   re-run it, cheaply, any time a bulk migration tranche lands or the embedding model/prefix
   convention changes (Qwen3-Embedding-0.6B → 4B upgrade, or adopting Recommendation 1's prefix on
   an already-embedded corpus, both invalidate a previously-calibrated floor).
+- **Standing practice, added 2026-09-19 (Stage 8 Phase 2 addendum, R6/h40 score-instability
+  consult, below): record each row's floor-relevant score gap on every future full-set/regression
+  run.** For each row, alongside the existing hit/miss and score table, record the distance
+  between the floor-relevant document's score and its nearest competing candidate in the same
+  top-5. **Flag any row where that gap is < 0.025 as floor-unstable-risk** — do not treat that
+  row's floor-applied verdict as settled calibration evidence from a single run; reproduce the
+  query in at least one additional, independently-timed session before trusting it. This is a
+  mechanical, cheap check (no new queries needed beyond what a full-set run already executes) that
+  closes a gap discovered the hard way: R6/h40's second sibling scored 0.4201/rank 3 in one session
+  and 0.4405/rank 5 in two later ones, caught only because `analyst`'s independent review happened
+  to re-run the exact query — the gap check below would have flagged this row as at-risk before
+  its score was used as the sole input recalibrating the floor, regardless of which reading came
+  first. Full diagnosis and reasoning: "Stage 8 Phase 2 addendum" section below.
 
 ## Stage 8 Phase 1 — golden-set design, pilot execution, score-floor calibration (2026-09-19)
 
