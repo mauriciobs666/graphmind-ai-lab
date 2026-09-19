@@ -1,5 +1,5 @@
 # Small-Model Catalog Sweep — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-09-18
+> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-09-19
 
 ## Intent
 
@@ -35,6 +35,7 @@ the model's currently-configured quantization (not raw parameter count) — see 
 **Embedding models** (target pack: `embedder-graphrag-retrieval` only):
 - `text-embedding-qwen3-embedding-0.6b`
 - `text-embedding-nomic-embed-text-v1.5`
+- `text-embedding-granite-embedding-278m-multilingual`
 
 **Chat/VLM models** (target packs: all four chat-role packs — `guard-judge-understanding`,
 `nlq-structured-query`, `tool-caller-shop-assistant`, `chat-responder-grounded-answers`):
@@ -57,7 +58,7 @@ the model's currently-configured quantization (not raw parameter count) — see 
 - `qwen3.5-9b-uncensored-hauhaucs-aggressive`
 - `qwen3.5-9b-claude-4.6-opus-uncensored-distilled`
 
-19 models total (2 embedding + 17 chat/vlm).
+20 models total (3 embedding + 17 chat/vlm).
 
 ## User stories
 
@@ -70,7 +71,7 @@ the model's currently-configured quantization (not raw parameter count) — see 
 
 ## Functional requirements
 
-- **FR-1.** Each of the 2 embedding models is run against `embedder-graphrag-retrieval`.
+- **FR-1.** Each of the 3 embedding models is run against `embedder-graphrag-retrieval`.
 - **FR-2.** Each of the 17 chat/vlm models is run against all four chat-role packs:
   `guard-judge-understanding`, `nlq-structured-query`, `tool-caller-shop-assistant`,
   `chat-responder-grounded-answers`.
@@ -137,10 +138,10 @@ the model's currently-configured quantization (not raw parameter count) — see 
 
 ## Acceptance criteria
 
-- **Given** the 19-model list and the five packs, **when** the sweep completes without
-  operational failures, **then** there are 2 stored runs for `embedder-graphrag-retrieval` (one
+- **Given** the 20-model list and the five packs, **when** the sweep completes without
+  operational failures, **then** there are 3 stored runs for `embedder-graphrag-retrieval` (one
   per embedding model) and 17 × 4 = 68 stored runs across the four chat-role packs, all tagged
-  with the sweep's shared session identifier — 70 stored runs in total.
+  with the sweep's shared session identifier — 71 stored runs in total.
 - **Given** a (model, pack) combination fails for an operational reason, **when** the sweep
   finishes, **then** that failure is visible in the sweep's own summary/record (not silently
   absent from it) and every other combination was still attempted.
@@ -199,3 +200,12 @@ the model's currently-configured quantization (not raw parameter count) — see 
   on the consolidated-document design, without a cross-role number.
 - 2026-09-19 — AC-3's cited command corrected from `compare` to `rank`, per architect's plan +
   analyst's review finding that `compare` cannot support this report shape.
+- 2026-09-19 — Stakeholder asked to add a third embedding model to the locked-in scope list:
+  `granite-278m-multilingual` (IBM Granite Embedding, 278M params), confirmed by `teco` as
+  downloaded and present in the local LM Studio catalog (`GET /api/v0/models`: publisher
+  `lmstudio-community`, arch `bert`, quantization `Q8_0`, state `not-loaded`) under the
+  LM-Studio-local catalog id `text-embedding-granite-embedding-278m-multilingual`. At 278M
+  params, Q8_0-quantized, it is trivially within the footprint threshold already established
+  above (smaller than the already-in-scope `text-embedding-qwen3-embedding-0.6b`) — no
+  re-litigation of that criterion needed. Scope, FR-1, and the acceptance criteria updated from
+  19/2-embedding/70-total to 20/3-embedding/71-total accordingly.
