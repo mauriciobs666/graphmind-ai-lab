@@ -192,9 +192,12 @@ order).
 
 Delivered — every FR/AC in `docs/requirements/salesperson-ui.md` is built and QA'd
 (`docs/test-reports/salesperson-ui-report.md`; `docs/plans/salesperson-ui2-coordination.md`
-carries the full unit-by-unit ledger). One still-open item gates the *first live, audience-facing*
-demo specifically, not ordinary use: `K-065` (`falkor-chat/docs/BACKLOG.md`), an occasional
-wrong-language reply under concurrency, confirmed to reproduce at LM Studio's own serving layer.
-Mitigation D (`systemPrompt` language salience, `v8`) is implemented and reviewed but **not yet
-live-verified** — see `falkor-chat/docs/BACKLOG.md`'s `K-065` entry for current status. See
+carries the full unit-by-unit ledger). Two still-open items gate the *first live, audience-facing*
+demo specifically, not ordinary use (`falkor-chat/docs/BACKLOG.md`): `K-065`, an occasional
+wrong-language reply under concurrency, confirmed to reproduce at LM Studio's own serving layer —
+Mitigation D (`systemPrompt` language salience, `v8`) is implemented, reviewed, and live-verified
+clean (0 wrong-language occurrences across n=25 trials); whether that clears the bar for a live
+demo is a pending stakeholder call. `K-066`, filed out of that same live re-test: a high no-reply
+rate under concurrent load against a contended LM Studio instance, not yet isolated from that
+contention. See `falkor-chat/docs/BACKLOG.md`'s `K-065`/`K-066` entries for current status. See
 `AGENTS.md` for file ownership and conventions.

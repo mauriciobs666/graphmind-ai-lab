@@ -5,6 +5,40 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-18 — K-065/DEF-6: Mitigation D live-verified — 0/25 wrong-language trials; stakeholder sufficiency call pending; K-066 filed (engine-stability finding)
+
+**What:** `qa-engineer` live re-ran QA's own `docs/test-plans/salesperson-ui.md` TP-007
+literal-concurrency-variant protocol (3-way concurrent `en`/`pt-BR`/`es`, 5 turns each) against the
+committed `v8` `SALESPERSON_DEF` (Mitigation D, `999141f`) at n=25 trials — the plan's own required
+n=20-30 range. **Result: zero wrong-language occurrences across all three languages, every trial,
+every reply** (61/61 `en`, 46/46 `pt-BR`, 33/33 `es` replied turns; trial-level 0/23
+trials-with-a-reply affected, Wilson 95% CI [0.0%, 14.3%]) — down from the recorded baseline point
+estimate of ~20% (QA original 2/10, CI [5.7%, 51.0%]; ml-plan repro 1/5, CI [3.6%, 62.4%]). Full
+report, every trial's individual outcome, and the CI math:
+`docs/test-reports/salesperson-language-salience-report.md`.
+
+Independently re-verified by `teco`, not accepted on the subagent's word: every Wilson interval in
+the report recomputed by hand from raw counts and matched exactly; the per-trial table's replied/
+dead-turn arithmetic cross-summed against the headline 140-replied/235-no-reply/14-dead-but-replied
+figures and reconciled exactly; `SALESPERSON_DEF.config.model` confirmed via direct grep to be the
+sole model exercised; `fe3cfe3` confirmed an ancestor of current `HEAD` with `proof_defs.py`
+untouched since; all cited commit shas confirmed to exist; the claimed `kaizen_team` entry
+confirmed present verbatim.
+
+**Not unilaterally closed.** The measured rate is reported as the measured rate — whether it
+clears the bar for the first live, audience-facing demo is a stakeholder risk-tolerance call, made
+separately, not by this pass or its coordinator. `BACKLOG.md`'s `K-065` entry stays open pending
+that call.
+
+**A second, separate finding filed as `K-066`**: 62.7% of turns (235/375) produced no reply at all
+during this pass, from LM Studio's own serving layer returning hard errors under this pass's 3-way
+concurrent load against the pinned `ministral-3-3b` model — a different failure mechanism from
+DEF-6 (no reply vs. a wrong-language reply), not folded into the K-065 measurement in either
+direction, but a real, separate demo-readiness risk; confirmed contended by an unrelated second
+process sharing the same LM Studio instance throughout the run, so not yet trustworthy as a clean
+baseline. Full ledger for the whole Mitigation-D coordination:
+`falkor-chat/docs/plans/salesperson-language-salience-coordination.md`.
+
 ## 2026-09-18 — K-065/DEF-6: Mitigation D implemented and statically reviewed — `salesperson@v8`, live re-verification pending
 
 **What:** `tdd-engineer` implemented **Mitigation D**, the stakeholder-authorized first increment
