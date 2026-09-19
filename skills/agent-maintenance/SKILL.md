@@ -751,13 +751,17 @@ distills — on request, and folded into every certification pass (§4):
    `claude/cobb/scripts/kb-claim-manifest.json`.** Same file → `##`-heading →
    `claims[]` → `{title, documentId, verified}` structure Stage 6's migration
    built and deliberately kept on disk past its own close for exactly this —
-   its own `_comment` names Stage 9 as the intended consumer. Chosen over a
-   `list_documents`+title-match scan (the plan's other named option, closing
-   item c) because the manifest already exists, is already keyed on the same
-   axis an edit is made along (file + heading), and needs no live MCP
-   round-trip just to find the id to delete — fall back to a `list_documents`
-   scan only if the manifest and the live corpus are ever found to have
-   drifted apart (missing/stale entry, orphaned id).
+   its own `_comment` names Stage 9 as the intended consumer, and
+   `claude/cobb/scripts/check_content_loss.py` already treats this same file
+   as the canonical per-heading manifest shape — reusing it here keeps one
+   manifest as the single source of truth for both the fidelity checker and
+   this sync step, rather than two structures that can drift apart. Chosen
+   over a `list_documents`+title-match scan (the plan's other named option,
+   closing item c) because the manifest already exists, is already keyed on
+   the same axis an edit is made along (file + heading), and needs no live
+   MCP round-trip just to find the id to delete — fall back to a
+   `list_documents` scan only if the manifest and the live corpus are ever
+   found to have drifted apart (missing/stale entry, orphaned id).
 
    **Every write below must survive a mid-sequence failure without silently
    losing a claim.** `delete_document` is a hard delete — if `ingest_document`
@@ -792,15 +796,23 @@ distills — on request, and folded into every certification pass (§4):
      `.md` file, the same discipline Stage 6 used throughout. Don't leave a
      manifest entry pointing at an id nobody has confirmed round-trips.
    - **A `"pending"` entry found at the *start* of a fresh distillation
-     pass is not an unfinished-but-harmless leftover — it is a sign the prior
-     cycle's `ingest_document` step may have failed after its `delete_document`
-     already ran, and the claim may currently be missing from `ws:agent-team`
-     entirely.** Before trusting it, call `get_document(documentId)` on the
-     entry's current id: `None` confirms the claim is gone and the whole
-     "Existing claim, text changed" sequence above must be re-run to repair
-     it; a real document back means the prior cycle actually completed and
-     only its manifest flip was left undone — safe to just set `verified:
-     true` and move on.
+     pass is not an unfinished-but-harmless leftover — it is a sign a prior
+     cycle was interrupted somewhere in the sequence above, and a bare
+     `None`-check cannot tell which interruption point it was at (a
+     non-`None` result comes back both when the cycle truly completed and
+     only its manifest flip was left undone, *and* when it was interrupted
+     right after writing `"pending"` but before `delete_document` ever ran —
+     in the second case `documentId` is still the *old* id, and
+     `get_document` on it returns the real, non-`None`, but stale
+     pre-edit document).** Apply the same check the "Verify, then flip"
+     bullet above already uses, not a new one: call `get_document(documentId)`
+     on the entry's current id, then compare what comes back against the
+     claim's *current* text in the `.md` file. `None`, **or** a document
+     whose text does not match byte-exact, both mean the same thing — the
+     edit was never actually synced — and both get the same fix: re-run the
+     whole "Existing claim, text changed" sequence above to actually apply
+     it. Only a byte-exact match is safe to flip straight to `verified:
+     true`.
 
    **After a claim add/remove, also refresh the enclosing file's own stale
    narrative fields.** Several manifest keys are Stage-6-era completion

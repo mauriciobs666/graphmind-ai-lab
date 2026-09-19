@@ -2,6 +2,34 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-19 — K-030 Track 2 Stage 9 fixes: U7d, `analyst`'s Pass 2 re-check of U7b (1 remaining gap in the major's fix)
+
+`claude/docs/reviews/agent-knowledge-base-strategy4-stage9.md` Pass 2 (commit `3e974c2`) confirmed
+3 of 4 U7b fixes clean (the blocker and both minors) but found the major's fix incomplete: the
+recovery bullet's bare `get_document(documentId) is None?` check cannot distinguish two different
+prior-interruption states that both return a real, non-`None` document — (1) the cycle truly
+completed and only the manifest's `verified` flip was left undone (safe to flip), vs. (2) the cycle
+was interrupted right after writing `"pending"` but *before* `delete_document` ever ran, so
+`documentId` is still the *old* id and `get_document` on it returns real but **stale, pre-edit**
+content (not safe to flip — flipping this one actively hides that the `.md` file's edit was never
+synced). The bullet's binary check treated both cases as safe, reproducing the same failure class
+the original major finding was about.
+
+- **Fixed** — `SKILL.md`'s recovery bullet now applies the same byte-exact discipline the
+  pre-existing "Verify, then flip" bullet already uses, rather than inventing a second mechanism:
+  `get_document(documentId)` → `None` **or** a document that isn't byte-exact against the claim's
+  current `.md` text → both mean the edit was never actually synced, both get the same fix (re-run
+  the whole "Existing claim, text changed" sequence); only a byte-exact match is safe to flip to
+  `verified: true`.
+- **Also restored** (free, while already editing this section, per the review's own note): the
+  `check_content_loss.py`-treats-this-manifest-as-canonical clause, present in `history.md`/
+  `plan.md` but dropped from `SKILL.md` itself during U7b's edit — restored to the manifest-reuse
+  paragraph.
+- `claude/scripts/audit-team.sh` re-run clean (same 5 pre-existing, unrelated FAILs, no new ones);
+  `kb-claim-manifest.json` confirmed untouched, still valid JSON.
+- Left uncommitted, same as U7/U7b — `teco` verifies and sends back to `analyst` for a final
+  focused re-check of just this one item.
+
 ## 2026-09-19 — K-030 Track 2 Stage 9 fixes: U7b, `analyst`'s diff-scoped review of U7 (1 blocker, 1 major, 2 minors — all fixed)
 
 `claude/docs/reviews/agent-knowledge-base-strategy4-stage9.md` (commit `85b2b08`), verdict needs
