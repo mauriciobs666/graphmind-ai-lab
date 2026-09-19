@@ -194,5 +194,7 @@ Delivered — every FR/AC in `docs/requirements/salesperson-ui.md` is built and 
 (`docs/test-reports/salesperson-ui-report.md`; `docs/plans/salesperson-ui2-coordination.md`
 carries the full unit-by-unit ledger). One still-open item gates the *first live, audience-facing*
 demo specifically, not ordinary use: `K-065` (`falkor-chat/docs/BACKLOG.md`), an occasional
-wrong-language reply under concurrency, confirmed to reproduce at LM Studio's own serving layer,
-not yet mitigated. See `AGENTS.md` for file ownership and conventions.
+wrong-language reply under concurrency, confirmed to reproduce at LM Studio's own serving layer.
+Mitigation D (`systemPrompt` language salience, `v8`) is implemented and reviewed but **not yet
+live-verified** — see `falkor-chat/docs/BACKLOG.md`'s `K-065` entry for current status. See
+`AGENTS.md` for file ownership and conventions.

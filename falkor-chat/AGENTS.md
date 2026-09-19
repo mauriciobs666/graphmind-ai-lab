@@ -104,8 +104,9 @@ REST route. Per-version history lives in `proof_defs.py`'s `SALESPERSON_DEF` com
 **Before running a live, audience-facing storefront demo, check `docs/BACKLOG.md`'s `K-065`.**
 Under concurrent load, an `en`-configured participant can occasionally get a fully-formed Spanish
 reply — confirmed reproducing at LM Studio's own serving layer, application code bypassed
-(`docs/plans/salesperson-ui-ml.md`), not yet mitigated. Gates a live demo specifically, not
-ordinary dev/test use.
+(`docs/plans/salesperson-ui-ml.md`). Mitigation D (`systemPrompt` language salience, `v8`) is
+implemented and reviewed but **not yet live-verified** — check `K-065`'s current status before
+relying on it. Gates a live demo specifically, not ordinary dev/test use.
 
 **`FALKORCHAT_WORKFLOW_ENABLED=1` alone is not enough to run a workflow** — the executor/trigger
 are wired only *inside* the `FALKORCHAT_ENABLE_AGENT` branch of `_build_default_app()`; without

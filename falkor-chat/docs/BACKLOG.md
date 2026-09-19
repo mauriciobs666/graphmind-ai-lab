@@ -40,7 +40,7 @@ Follow-ups filed out of a closed milestone are **not** green-gates for it; they 
 
 Each was filed out of a closed milestone's gates or a later investigation; none gates M5.
 
-### K-065 — DEF-6: `en`-configured storefront participants sometimes get a Spanish reply under concurrency, confirmed at LM Studio's own serving layer (🔵 proposed — filed out of the salesperson-ui S15 QA pass + DEF-6 diagnostic spike, gates the first live audience-facing demo only, 2026-09-16)
+### K-065 — DEF-6: `en`-configured storefront participants sometimes get a Spanish reply under concurrency, confirmed at LM Studio's own serving layer (🟡 in-progress — Mitigation D implemented and statically reviewed, live re-verification in flight, gates the first live audience-facing demo only, 2026-09-18)
 
 > **Why it exists.** `docs/test-reports/salesperson-ui-report.md`'s DEF-6: an `en`-configured
 > storefront participant sometimes gets a fully-formed, coherent **Spanish** reply under
@@ -54,26 +54,38 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 >
 > **This gates the first live, audience-facing demo specifically, not any current milestone** —
 > same shape as the existing K-056→AC-10 precedent (`HISTORY.md` 2026-08-28/2026-08-30 entries).
-> **No mitigation has been authorized or dispatched.**
+> **Mitigation D authorized 2026-09-18 (stakeholder decision) and implemented** —
+> `SALESPERSON_DEF` bumped to `v8` (`falkor-chat/server/falkorchat/proof_defs.py`), adding a
+> redundant, more emphatic "entire reply" / anti-drift language instruction to `systemPrompt`,
+> landing in the `system` message resent every LLM turn rather than the tail-of-user-turn
+> CONTEXT-block JSON key the diagnostic spike found to be a weak signal. Statically reviewed and
+> independently verified twice (`docs/reviews/salesperson-language-salience.md`, approve with
+> suggestions, no blockers) and committed. **Not yet live-verified** — do not treat this item as
+> closed until the live re-test below lands a result.
 - **Recommended mitigation path, in priority order** (`docs/plans/salesperson-ui-ml.md`'s own
   recommendation): **(D)** strengthen `SALESPERSON_DEF`'s `systemPrompt` language salience (a
   cheap `v8` bump, redundantly naming the language in prose rather than relying solely on a
-  CONTEXT-block JSON key) → **(C)** a post-hoc language classifier + bounded retry on
-  `post_message.text`, forced through a serialized path, routed through whoever owns the
-  `_run_turn`/`_drive_or_fault` seam given DEF-3 already found it fragile under failure paths →
-  **(B)** a bounded concurrency semaphore as a complementary throughput/exposure lever, sized by
-  its own latency sweep. **Do not ship (A) full serialization** — it defeats the ~50-participant
-  concurrency the plan is sized for and turns the demo's latency profile into roughly the sum of
-  all in-flight turns.
-- **Owner:** no fix owner yet — `data-scientist`/`coder`/`tdd-engineer` once the stakeholder
-  authorizes a mitigation track for the first live demo.
-- **Risks/RAM:** none — diagnosis only so far, no shipped behavior change.
+  CONTEXT-block JSON key) — **implemented, see above** — → **(C)** a post-hoc language classifier
+  + bounded retry on `post_message.text`, forced through a serialized path, routed through
+  whoever owns the `_run_turn`/`_drive_or_fault` seam given DEF-3 already found it fragile under
+  failure paths → **(B)** a bounded concurrency semaphore as a complementary throughput/exposure
+  lever, sized by its own latency sweep. **Do not ship (A) full serialization** — it defeats the
+  ~50-participant concurrency the plan is sized for and turns the demo's latency profile into
+  roughly the sum of all in-flight turns. C and B remain unauthorized — if D's live re-test
+  doesn't clear the bar, escalating to either is a fresh stakeholder decision, not automatic.
+- **Owner:** `tdd-engineer` implemented D (2026-09-18); `qa-engineer` live-verifying next
+  (`falkor-chat/docs/plans/salesperson-language-salience-coordination.md` carries the full
+  ledger). `data-scientist`/`coder`/`tdd-engineer` again if C or B is authorized later.
+- **Risks/RAM:** none identified structurally — `analyst`'s review confirms `config.model`/
+  `config.tools`/topology are byte-identical to `v7` carried forward (no capability regression,
+  no `v6` reuse). The only open risk is empirical: whether this actually moves the live
+  wrong-language rate, which the live re-verification below determines.
 - **Test strategy:** re-run QA's own `docs/test-plans/salesperson-ui.md` TP-007
   literal-concurrency-variant protocol (n=10, 3-way concurrent `en`/`pt-BR`/`es`, 5 turns each)
   after each mitigation increment, `en`-adherence rate as the primary metric, Wilson score
   interval; at the ~20% baseline rate n=10 alone cannot distinguish "fixed" from "still ~10-20%" —
   plan for n=20-30 post-mitigation trials, and report each trial's individual outcome, not only
-  the aggregate pass count.
+  the aggregate pass count. **In flight now** against the `v8` diff above.
 
 ### K-063 — `SERVER.md` §1.5 "Layout (as built, M1)" is an M1 snapshot presented as current (🔵 proposed — filed out of the salesperson-ui S7→S8g documentation unit, 2026-09-07)
 

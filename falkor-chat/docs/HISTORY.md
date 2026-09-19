@@ -5,6 +5,36 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-18 — K-065/DEF-6: Mitigation D implemented and statically reviewed — `salesperson@v8`, live re-verification pending
+
+**What:** `tdd-engineer` implemented **Mitigation D**, the stakeholder-authorized first increment
+against K-065/DEF-6 (an `en`-configured storefront participant occasionally getting a Spanish
+reply under concurrency, root-caused to LM Studio's own serving layer,
+`docs/plans/salesperson-ui-ml.md`): a `v8` bump of `SALESPERSON_DEF`
+(`falkor-chat/server/falkorchat/proof_defs.py`) adding one redundant, more emphatic
+"entire reply" / anti-drift language-salience sentence to `systemPrompt`, landing in the `system`
+message resent every LLM turn rather than the tail-of-user-turn CONTEXT-block JSON key the
+diagnostic spike found to be a weak signal. `config.model`/`config.tools`/topology carried forward
+byte-identical from `v7` (verified both by the coordinator and, independently, by the review
+below). Every other `v7` default/reference describing current state (three scripts, `AGENTS.md`,
+both `README.md`s) swept to `v8` in the same change; dated/archived documents correctly left
+untouched.
+
+`analyst` reviewed the diff: **approve with suggestions, no blockers**
+(`docs/reviews/salesperson-language-salience.md`) — the three version-bump traps verified (not
+assumed), the new regression test's bite confirmed by mutation (a deliberately watered-down
+paraphrase of the new sentence fails it), the prompt-salience mechanism corroborated by reading
+`executor._assemble_messages` directly. One Major finding (several "not yet mitigated" status
+claims across `BACKLOG.md`/`AGENTS.md`/both `README.md`s left stale by the diff) — addressed in
+this same pass, this entry included.
+
+**Not yet live-verified.** This does **not** close K-065 — the plan's own required evaluation
+(re-run QA's TP-007 literal-concurrency protocol at n=20-30/locale, Wilson interval, per-trial
+reporting) is the next step, dispatched separately. Same shape as the K-056 2026-08-28 precedent
+below: implemented and shipped first, live result to follow, revert-if-negative is the fallback
+path if it doesn't move the measured rate. Full ledger:
+`falkor-chat/docs/plans/salesperson-language-salience-coordination.md`.
+
 ## 2026-09-18 — FalkorDB graph cleanup: spent probes, closed QA workspaces, and the `ws:acme` orphan `v6` snapshot
 
 **What:** teco-coordinated cleanup of the shared FalkorDB instance, at the stakeholder's request
