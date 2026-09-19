@@ -60,7 +60,7 @@ both reviewers.
 | U3br | `coder` (resume) | `a04e75a1454a5ec5d` | accepted | fold 2 minor suggestions (missing zero-arms test, README clause) — committed `4433e56` | — | 186.8k tok / 19 tools |
 | U3c | `coder` | `a20f36e22226f0479` | delivered | `scripts/consolidate_sweep_reports.py` (plan Unit C, fixture-built, parallel to U3a) | `analyst` (light) → in-flight | 158.9k tok / 26 tools |
 | U4c | `analyst` (fresh) | `ac2c3f299cd822b87` | accepted | `docs/reviews/small-model-catalog-sweep-impl.md` (own `-impl` doc, not a section of the plan review — analyst's own correct call per the closed role set) | `analyst` → **approve** (2 non-blocking: a `main()`-level test gap, HISTORY.md entry deferred) | 120.8k tok / 31 tools |
-| U5 | `devops` | — | queued, **held** (LM Studio in use) | 72-run sweep under one session id, `results/` | — | — |
+| U5 | `devops` | `aa7e668860b23a794` | in-flight | 76-run sweep under one session id, `results/` | — | — |
 | U6 | TBD | — | queued | five per-pack reports via `rank` (needs U3a+U3b gated, U5 data) | `analyst`/`data-scientist` → — | — |
 | U7 | TBD | — | queued | consolidated document via U3c's script (FR-9/FR-10) | `analyst` (+`qa-engineer` if it has walkthrough claims) → — | — |
 
@@ -109,3 +109,33 @@ before commit (`3248b69`); confirmed no other stale count references remain
 is a historical Decision-log entry quoting the original 2026-09-18 question verbatim — correctly
 left as-is). No code or design impact: same reasoning as the prior scope growth. U5's target run
 count updated above to 72; U6/U7 remain pack-shaped and unaffected.
+
+**2026-09-19 — Count correction: 18 chat/vlm models, not 17 (76 total runs, not 72).** `devops`
+flagged a discrepancy present since the doc's very first commit (`56e2e02`): the Scope section's
+bulleted Chat/VLM list has always held 18 models, while the summary line, FR-2, the acceptance
+criteria, and the Problem-section's combo math all said 17 (68/70/72) — unrelated to either
+embedding-count amendment above. `teco` independently re-verified the discrepancy directly against
+the doc text and git history before escalating. `tico` (resumed, agent id `a786647d4686dccf8`)
+investigated independently in parallel with the stakeholder being asked directly: three
+independently-derived numbers in the doc (the original 70-combo arithmetic, a 2026-09-18
+Decision-log "19-model list locked in" confirmation, and FR-2/AC's 17×4 math) all self-consistently
+pointed to 17, with `mistralai_ministral-3-3b-instruct-2512` suspected as the accidental 18th
+bullet. Stakeholder's ruling, direct and overriding that inference: **18 is correct** — both
+Ministral catalog entries (`mistralai/ministral-3-3b` and `mistralai_ministral-3-3b-instruct-2512`)
+are confirmed genuinely distinct Mistral releases. `tico` amended the doc accordingly (Scope/FR-2/
+AC/Problem-section corrected to 18/72/76/76, plus two more stale numbers caught in the same pass —
+FR-7's `C(17,2)=136`→`C(18,2)=153`, Out of scope's "21-model list"→"22-model list" — and a new dated
+Decision log entry), independently re-verified by `teco` (arithmetic + a stale-reference grep sweep
+— only historical/narrative log-entry text retains "17", correctly untouched) and committed
+(`a912bcb`). U5 was `paused` for this question (relayed and resolved same day) and is now resumed
+with the confirmed 22-model/76-run scope; U6/U7 targets update from 72→76 stored runs accordingly
+but stay otherwise pack-shaped and unaffected.
+
+**2026-09-19 — Track B released.** Stakeholder: "lets go the machine is all yours" — explicit,
+unambiguous go-ahead that LM Studio is now free for this sweep's exclusive use, superseding the
+standing hold. Confirmed LM Studio reachable (`GET /api/v0/models`) before dispatch. `host.json`
+is dated 2026-09-17T18:19:13Z — now 2 days old; freshness against the plan's staleness trip-wire
+(`docs/plans/small-model-benchmarking.md` §3.4, repo root) is folded into U5's brief as a
+precondition check, since the requirements doc's Out-of-scope section assumes current attestation
+going in rather than the sweep producing it. Dispatching U5 (the 72-run sweep) to `devops` now;
+U6/U7 stay `queued` behind U5's data, unaffected by this release.
