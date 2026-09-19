@@ -835,24 +835,59 @@ distills — on request, and folded into every certification pass (§4):
      (`falkor-chat/docs/plans/document-ingestion2.md` FR-4; not a safe no-op
      to call again), and this same `get_document(documentId)` call already
      proved the old id is gone. Distinguish (a) from (b) with one narrow
-     sweep before doing anything else: `list_documents(current_only=True,
-     limit=<comfortably above the current corpus size, e.g. 1000>)`, scanned
-     client-side (this tool has no server-side title filter) for a document
-     whose `title` exactly matches this claim's expected title (the same
-     `"<family-slug> — <claim-title>"` or plain-heading convention the "New
-     claim" bullet above already uses for `title=`) and whose `documentId`
-     isn't the manifest's stale tracked id. **Found one** → case (b)'s
-     orphan: adopt it by overwriting the manifest's `documentId` with the
-     found id, leave `verified: "pending"`, and fall through to the
-     byte-exact check above — no `delete_document`/`ingest_document` call in
-     this branch, the claim is already correctly ingested. **Found none** →
-     case (a): call `ingest_document` directly (skip `delete_document` — the
-     old document is already confirmed gone by this same `get_document`
-     call), then the same immediate manifest overwrite the ordinary sequence
-     uses. This sweep only runs on the rarer `None` branch of an
-     already-rare `"pending"`-at-start-of-pass finding, so it doesn't
-     reintroduce the live-round-trip cost the manifest was chosen to avoid
-     for the common path.
+     sweep before doing anything else — but the sweep is only trustworthy if
+     it can see the whole live corpus, so confirm that *first*, every time,
+     rather than trusting a large `limit` constant to still hold:
+     `mcp__cypher__query(graph='ws:agent-team', cypher="MATCH (d:Document
+     {currentVersion: true}) RETURN count(d)")` (a plain read, no `agent`
+     needed — reads are unrestricted on this MCP server too). **The count
+     must sit comfortably under the `limit` you're about to pass
+     `list_documents` — if it doesn't, the sweep is inconclusive: stop here
+     and escalate to the distiller running this pass instead of trusting
+     either "Found" outcome below.** This check isn't optional bookkeeping —
+     `list_documents` returns the corpus **oldest-first, with no
+     server-side ordering override**
+     (`falkor-chat/server/falkorchat/repository.py`'s `ORDER BY
+     d.createdAt` ascending, confirmed by `falkor-chat/server/falkorchat/
+     mcp.py`'s own docstring), and the orphan this sweep hunts for was, by
+     construction, just created — one of the *newest* documents in the
+     corpus. Once the live count exceeds `limit`, the scan silently returns
+     the wrong end of the corpus, always misses the target, and a "Found
+     none" coming out of that state is indistinguishable from a genuine
+     one — proceeding on it re-triggers the exact orphaning this whole step
+     exists to prevent. Only once the count is confirmed comfortably under
+     `limit`, run `list_documents(current_only=True, limit=<the same,
+     count-confirmed value, e.g. 1000>)`, scanned client-side (this tool has
+     no server-side title filter) for a document whose `title` exactly
+     matches this claim's expected title (the same `"<family-slug> —
+     <claim-title>"` or plain-heading convention the "New claim" bullet
+     above already uses for `title=`) and whose `documentId` isn't the
+     manifest's stale tracked id. **Found one** → case (b)'s orphan: adopt
+     it by overwriting the manifest's `documentId` with the found id, leave
+     `verified: "pending"`, and fall through to the byte-exact check
+     above — but that check's mismatch outcome does not mean what it means
+     on an ordinarily-tracked id. There, "doesn't match" safely implies "the
+     interruption landed before `delete_document` ever ran, the old
+     document genuinely still exists, re-run the sequence" — a conclusion
+     that depends on the id being *this claim's own* previously-tracked
+     document. An id adopted from a title match carries no such guarantee:
+     a mismatch here means the title match itself was wrong — a genuine
+     collision with a *different* claim's document — and re-running the
+     sequence would `delete_document` that other claim's live, correctly
+     tracked document. **So on a byte-exact mismatch reached via this adopt
+     branch, do not re-run "Existing claim, text changed" and do not call
+     `delete_document`** — stop and escalate to the distiller to resolve the
+     collision by hand instead. A byte-exact *match* is unaffected and flips
+     to `verified: true` exactly as the check above already describes — no
+     `delete_document`/`ingest_document` call needed either way in this
+     branch, the claim is already correctly ingested. **Found none** → case
+     (a): call `ingest_document` directly (skip `delete_document` — the old
+     document is already confirmed gone by this same `get_document` call),
+     then the same immediate manifest overwrite the ordinary sequence uses.
+     This sweep only runs on the rarer `None` branch of an already-rare
+     `"pending"`-at-start-of-pass finding, so the count check and the sweep
+     itself don't reintroduce the live-round-trip cost the manifest was
+     chosen to avoid for the common path.
 
    **After a claim add/remove, also refresh the enclosing file's own stale
    narrative fields.** Several manifest keys are Stage-6-era completion
@@ -915,7 +950,19 @@ distills — on request, and folded into every certification pass (§4):
 > doesn't land) Stage 9's own review Pass 3 flagged as non-blocking — a bare
 > re-run there orphaned the successfully-ingested document by ingesting a
 > second, untracked one alongside it. The same unit also completed Track 1's
-> write-convention cutover for the remaining 11 agents (§ above).
+> write-convention cutover for the remaining 11 agents (§ above). **2026-09-19,
+> a same-day follow-up (U1a review):** `analyst`'s diff-scoped review of that
+> unit (`claude/docs/reviews/agent-knowledge-base-strategy5-u1.md`) found two
+> Major gaps in the sweep above, both closed here. First, `list_documents`
+> returns the corpus oldest-first with no ordering override, so a "Found
+> none" was trustworthy only by accident — the sweep now confirms the live
+> corpus count sits under its `limit` via a direct `mcp__cypher__query`
+> count first, and escalates instead of trusting "Found none" when it
+> doesn't. Second, the "Found one" adopt branch's fall-through to the
+> byte-exact check could `delete_document` a *different* claim's live
+> document on a title collision — a mismatch reached via that branch now
+> escalates to the distiller instead of re-running the delete+ingest
+> sequence.
 
 ---
 

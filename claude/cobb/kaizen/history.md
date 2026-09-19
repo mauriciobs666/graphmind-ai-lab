@@ -2,6 +2,42 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-19 — U1a follow-up: orphan-sweep fix, closing `analyst`'s two Major findings (`agent-knowledge-base-strategy5-coordination.md`)
+
+Fresh dispatch (the U1 session that landed `209017c` was too large to resume); fixed
+`skills/agent-maintenance/SKILL.md`'s orphan-doc sweep (§5, the `"pending"`-recovery bullet's
+`None` branch) per `analyst`'s U1a review (`claude/docs/reviews/agent-knowledge-base-strategy5-u1.md`,
+committed `ad1f1b7`), both findings independently re-verified by the dispatching `teco` before
+routing here.
+
+**Finding 1 — stale "found none."** `list_documents` returns the live corpus oldest-first with no
+ordering override (`falkor-chat/server/falkorchat/repository.py`'s ascending `ORDER BY
+d.createdAt`, `mcp.py`'s own docstring), but the orphan the sweep hunts for is, by construction,
+one of the *newest* documents — so once the corpus outgrows the sweep's `limit`, a "found none"
+silently means "scanned the wrong end," not "genuinely absent," and the recovery step would
+`ingest_document` a second, duplicate orphan on the strength of it. Fix: before trusting either
+"Found" outcome, the sweep now runs a direct corpus-count check —
+`mcp__cypher__query(graph='ws:agent-team', cypher="MATCH (d:Document {currentVersion:true}) RETURN
+count(d)")` — and requires it to sit comfortably under `limit`; if it doesn't, the sweep is
+inconclusive and the step stops and escalates to the distiller rather than proceeding on an
+unverified "found none."
+
+**Finding 2 — false-positive title match on the adopt branch.** The "Found one" branch adopts a
+title match and falls through to the existing byte-exact check; that check's mismatch branch
+unconditionally means "stale pre-edit document, re-run delete+ingest" — but that reasoning only
+holds when the id being checked is the claim's *own* previously-tracked id. On an id adopted from
+a title match, a mismatch instead signals the match itself was wrong (a title collision with a
+different claim's document), and the old unconditional branch would `delete_document` that other
+claim's live, correctly-tracked document. Fix: a byte-exact mismatch reached via the adopt branch
+now stops and escalates to the distiller to resolve the collision by hand, instead of falling into
+the ordinary re-run/delete path; a byte-exact match is unaffected and still flips to
+`verified: true` as before.
+
+Both fixes are additive to the existing bullet's structure — no other branch, citation, or
+cross-reference in the file changed (checked: nothing elsewhere cites this bullet by line number,
+only by its "Found one"/"Found none" labels, both preserved). Added a corresponding dated line to
+the file's own origin-note trailer. Left uncommitted for `teco` to verify and commit.
+
 ## 2026-09-19 — K-030 closed: U1, team-wide write-convention cutover + Stage 9 orphan-doc fix (`agent-knowledge-base-strategy5-coordination.md`)
 
 Two independent follow-ups from the now-closed K-030 Track 1/Track 2 effort, dispatched together
