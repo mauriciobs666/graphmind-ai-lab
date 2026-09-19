@@ -1,6 +1,13 @@
 # Agent knowledge-base strategy — ML method note
 
-> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`) · **Version:** 3
+> **Status:** active · **Owner:** `data-scientist` · **Tracks:** K-030 (`claude/cobb/kaizen/plan.md`) · **Version:** 4
+
+**Revision note (2026-09-19, second pass, U8).** Revised in place, not forked (`AGENTS.md`
+collision rule 5 — the Stage 8 Phase 1 section below was reviewed/gated `approve with suggestions`
+by `analyst`, but this addendum is a new section, not a revision of that gated content) to answer
+U6b/U6c's escalation on R6/h40's cross-session score instability. New section "Stage 8 Phase 2
+addendum" appended at the end, after "Risks & open questions." Nothing above it changed in
+substance.
 
 **Revision note (2026-09-19).** Revised in place, not forked (`AGENTS.md` collision rule 5 — still
 never independently reviewed or gated as of this pass) to execute Stage 8 Phase 1: the AC-2
@@ -722,3 +729,252 @@ forward as a specific thing to watch rather than assuming the original worry dir
   before the choice was made — only the realization mechanism for the prefix/floor (server code →
   client-side convention) and the sibling-linkage mechanism (`familyId` edge → title-prefix
   convention) changed, both addressed above.
+
+## Stage 8 Phase 2 addendum — R6/h40 score-instability consult (2026-09-19)
+
+**The question this addendum answers.** `qa-engineer` (Stage 8 Phase 2, U6/U6b) and `analyst`
+(U6a/U6c) jointly found and confirmed that R6/h40's second sibling
+(`5b1b477ff67e4e3b81c57f14899bbe48`) scores **0.4201 at rank 3** reproducibly (3/3) in
+`qa-engineer`'s session and **0.4405 at rank 5** reproducibly (3/3, across two separate review
+passes) in `analyst`'s — genuine, session-internally-stable, cross-session-inconsistent behavior,
+not transcription error or ordinary per-call jitter. Both explicitly declined to pick a fresh
+point-value floor themselves and escalated four questions here: (1) likely cause, (2) whether this
+is isolated to this one row or a corpus-wide property, (3) whether a fixed-point floor is even the
+right mechanism, (4) whether Stage 8's `approve` gate should stand. `skills/agent-kb-retrieval/
+SKILL.md`'s floor section (0.43, interim) is the artifact any recommendation here must be concrete
+enough to hand to a follow-up dispatch against, per the brief — I do not edit it myself.
+
+### A third data point, collected live for this consult
+
+I ran R6's exact prefixed query (`ml.md`:450, the string `skills/agent-kb-retrieval/SKILL.md`'s
+template produces) against `ws:agent-team` once. Result: top 5 —
+`af9ffb191c...` 0.278255462646484 (rank 1, the correct first sibling), `b09fca8c9a...`
+0.421908736228943 (rank 2), `5fabd6dce3...` 0.428452491760254 (rank 3), `64eed8bab7...`
+0.428490340709254 (rank 4), **`5b1b477ff6...` 0.440489292144775 (rank 5)** — matching `analyst`'s
+reading exactly, not `qa-engineer`'s. Two things about this third reading matter beyond "one more
+vote for 0.4405":
+
+- **Byte-exact match at 15 decimal places** (`0.440489292144775`) against `analyst`'s Pass 2 number,
+  from a session with no shared process state with `analyst`'s (independent MCP client connection,
+  hours apart, no cache I have access to). Continuous floating-point non-associativity (e.g.
+  different summation order from request batching/concurrency) does not reproduce to 15 decimal
+  places by chance across independent sessions — that degree of match is the signature of a
+  **discrete, quantized backend state** (two distinct compute paths each individually deterministic),
+  not continuous per-call jitter.
+- **The *other* four scores also match `analyst`'s reading closely** (`b09fca8c9a` 0.4219,
+  `5fabd6dce3`/`64eed8bab7` both ≈0.4285 in both readings), while `qa-engineer`'s session's values
+  for those same competing documents were never recorded in the report (only the sibling's own
+  0.4201/rank-3 was). This means the discrepancy is not "one document's score moved while
+  everything else held" — it's consistent with the whole query's embedding vector differing
+  between the two backend states, which happens to be *invisible* everywhere except this query's
+  own top-5, because R6's top-5 sits inside an unusually tight ~0.16-point band (0.278 outlier
+  aside, the next four cluster within 0.019 of each other) where a small vector-level shift is
+  enough to reorder ranks and cross the floor. F4/N4/R4-h14, all confirmed stable, have no
+  competing candidate within that band of the reported target score.
+- **Timing pattern worth naming, not provable from 3 points alone:** `qa-engineer`'s run (U6/U6b)
+  is chronologically first; `analyst`'s two passes and my own run, all later, agree with each
+  other and disagree with `qa-engineer`. Three independent sessions landing 2-1 with the two
+  *later* ones matching is more consistent with **a single state change that happened once and
+  persisted** (e.g. the LM Studio backend behind `ws:agent-team`'s single always-on server process,
+  `falkor-chat/scripts/start_agent_team.sh`, was restarted or reloaded its model between
+  `qa-engineer`'s run and `analyst`'s first review pass) than with **live, per-session random
+  routing between two parallel replicas** — the latter would predict a roughly even mix across
+  three independent sessions, not a clean before/after split. This is a hypothesis the evidence
+  favors, not one it proves; three points cannot rule out coincidence.
+
+### 1. Likely cause, ranked
+
+I confirmed one structural fact that changes the shape of the answer versus the report's own
+framing: `ws:agent-team` is served by **one single, always-on falkor-chat server process**
+(`start_agent_team.sh`, default port 8200) — not a load-balanced pool the tool caller reaches
+differently per session. Its embedding-backend `base_url` is resolved **once, at process startup**
+(the script's documented 3-tier fallback: explicit env var → `opencode.local.json` → the shared
+`opencode.json`), not per-request. That rules out "different sessions transparently load-balance
+across live replicas serving different weights" as a *literal* mechanism — there is one process,
+one resolved `base_url`, for every calling session unless that process itself restarted in between.
+
+Ranked:
+
+1. **Most likely — a discrete state change in the shared LM Studio backend itself (a reload,
+   restart, or a different compute-kernel path selected on reload), happening once between
+   `qa-engineer`'s run and `analyst`'s first review pass, not a live per-call or per-session
+   randomization.** This is the only candidate consistent with all three observations together:
+   (a) the 15-decimal byte-exact match between two independent later sessions (rules out
+   continuous jitter, argues for a small number of discrete, reproducible compute states); (b) the
+   clean two-sided split correlating with chronology rather than a random mix (argues for "changed
+   once," not "randomly routes each call/session"); (c) the fact that only R6 shows any
+   discrepancy at all across the report's four spot-checked rows (argues the underlying cause is
+   small in magnitude — otherwise every query's scores would visibly shift, not just the one sitting
+   inside a tight cluster). LM Studio (llama.cpp/GGML under the hood) is documented to select
+   different matmul/reduction kernels depending on batch size, thread count, and GPU-offload
+   negotiation at load time — mathematically equivalent, numerically distinct floating-point
+   results between two otherwise-identical model loads is a known behavior class for this kind of
+   inference stack, and a magnitude of ~0.02 cosine distance from such a kernel-path difference,
+   while on the larger side, is plausible for a 1024-dim vector where many small per-dimension
+   differences compound in the dot product. **What would confirm this:** a `devops`-level check of
+   `ws:agent-team`'s process uptime/restart timestamp and LM Studio's own load/reload log around
+   the two sessions' timestamps — if a restart/reload event sits between `qa-engineer`'s run and
+   `analyst`'s first pass, this is confirmed; if the process has been continuously up the whole
+   time with no LM Studio-side reload either, this hypothesis is falsified and (2) below becomes
+   the leading candidate.
+2. **Second — live floating-point non-associativity from concurrent request batching on an
+   otherwise-unchanged backend**, i.e. this query happened to land in a different batch composition
+   each time, and llama.cpp's batched matmul reduction order shifted enough to move the embedding
+   measurably. Weighed lower than (1) because the byte-exact 15-decimal match across two
+   independent sessions is a poor fit for "different batch composition every call" (that predicts
+   a *spread* of close-but-not-identical values across many calls, not two clean, exactly-repeating
+   clusters) — but not ruled out, since `qa-engineer`'s and `analyst`'s sessions could each have had
+   internally-consistent concurrent load (e.g. each session's own parallel tool calls forming a
+   stable batch shape within that session) while differing between sessions. **What would
+   distinguish this from (1):** running R6 several more times *within* a single session while
+   deliberately varying concurrent load (e.g. firing several other `search_documents` calls
+   simultaneously vs. serially) — if the score changes with concurrency pattern inside one session
+   without any backend restart, this is confirmed over (1).
+3. **Third, least likely — FalkorDB's own `db.idx.vector.queryNodes` (HNSW-based ANN) returning
+   different approximate results run-to-run.** Weighed lowest because HNSW's approximation
+   nondeterminism affects *which* candidates get exact-distance-scored and returned, not the
+   *value* of a distance computation for a document that **is** returned in both readings — cosine
+   distance between two fixed, already-embedded vectors is a deterministic function once both
+   vectors exist, so if the *stored* document vector is unchanged (confirmed — corpus unchanged
+   since Stage 6, `qa-engineer`'s own check) and the *query* vector were unchanged, the reported
+   score could not differ. This candidate only survives if the query-side embedding is what's
+   actually changing (folding it back into (1)/(2)), so I don't treat it as a distinct cause, only
+   as the tool-layer at which any of the above would surface.
+
+### 2. Is this isolated to one row, and is tight score-clustering a good risk predictor?
+
+**Judgment: not proven to be corpus-wide, but tight top-5 clustering is a real, checkable risk
+predictor and should be used as one, independent of ever fully closing the root-cause question.**
+The report's own spot-checks (F4, N4, R4/h14 — all confirmed byte-stable to the 3rd-4th decimal
+across both sessions) show the effect is not universal; every other measured row is fine. But the
+*mechanism* argued for above — a small, usually-invisible embedding-computation difference that
+only becomes rank/floor-relevant when several competing scores sit within a narrow band — predicts
+exactly the pattern observed: instability shows up precisely on the one row whose top-5 (excluding
+the clean rank-1 hit) clusters within ~0.019 of each other, and nowhere else spot-checked. That is
+a testable, mechanistic reason to expect tight clustering to correlate with instability, not just a
+post-hoc pattern-match on n=1.
+
+**This is worth checking systematically, and cheaply — no new queries needed for the historical
+run.** Recommend a **mechanical, one-pass addition to any future full-set gate** (Stage 8's own
+periodic re-run, per Recommendation 4's "re-run cheaply after any bulk migration or corpus growth"
+clause): when recording each row's top-5, also record the **score gap between the floor-relevant
+document (the worst-scoring true positive expected to pass, or the best-scoring non-match near the
+floor) and its nearest neighbor in the returned list.** Flag any row where that gap is smaller than
+the confirmed observed instability magnitude (~0.02, rounding up for safety to **0.025** as a
+detection threshold) as **floor-unstable-risk** — not a defect, a flag that this row's floor-applied
+verdict should not be trusted from a single run and should be spot-reproduced across at least two
+independent sessions before being used as calibration evidence. This is exactly what would have
+caught R6 before it became the sole input recalibrating the whole floor, and it generalizes: it
+would catch the *next* tightly-clustered row too, whatever backend state happens to be live when it's
+first measured, without needing the root cause resolved first.
+
+### 3. Is a fixed-point score floor the right mechanism? — recommendation
+
+**Recommendation: keep a single fixed-point floor as the standing mechanism (option (a), not (b) or
+(c)) — but change what "calibrated" means going forward: a floor value is not treated as final
+until every row within ~0.025 of it has been reproduced across at least two independent sessions.
+Document R6/h40's second sibling's admission as an explicit, named, accepted residual risk in
+`SKILL.md`, not silently absorbed into a new point value.** Reasoning, against each alternative
+named in the brief:
+
+- **(b) — widen the floor's required margin as a matter of policy: rejected, and demonstrably not
+  achievable here, not just undesirable.** The report's own arithmetic already proves this: the
+  worst *other* true positive is 0.4140 (C4) and the closest stable negative is 0.446 (N4) — a
+  0.032 natural window. R6/h40's second sibling's *worse* observed reading (0.4405) leaves only
+  0.0055 to the negative boundary. A margin-widening policy applied uniformly cannot admit 0.4405
+  and preserve any working margin at the same time — the report already showed this is a hard
+  arithmetic wall, not a policy choice avoided out of caution. Widening margin *only* around this
+  one row, rather than globally, degenerates into option (a) below (a named exception), not a
+  distinct mechanism.
+- **(c) — a re-query-and-average/re-query-and-take-best convention for borderline scores: rejected
+  as ineffective for the failure mode actually observed, not merely unnecessary.** This only helps
+  if the instability is *per-call* random within a session — average/best-of-N over repeated calls
+  samples across that randomness. What's actually been observed is **session-scoped, not per-call**:
+  `qa-engineer` got 0.4201 three times in a row in one session; `analyst` and I each got 0.4405
+  three-for-three across our own calls. A calling agent re-querying 3× *within its own session*
+  would get the same session-pinned value three times over — false confidence, not real averaging,
+  because whatever determines the state (most likely the backend's current serving configuration,
+  per the diagnosis above) does not change between calls inside one session. Recommending this
+  convention would ship a mechanism that looks like it addresses the problem while measurably not
+  doing so against the one case with real evidence.
+- **(a) — keep a fixed floor, document the residual risk as an accepted, bounded limitation:
+  recommended, with one addition beyond the current interim state.** 0.43 is correct for every
+  other measured true positive (worst 0.4140) and every measured negative (closest 0.446) — the
+  method (max surviving true positive vs. min negative false match) is sound, only this one row's
+  input is contested, and no single point value can be "more correct" than another given two
+  equally-reproducible, mutually contradicting readings. The addition: don't just accept the risk
+  as static — **adopt the tight-clustering flag from item 2 above as standing practice** for every
+  future full-set/regression run, so a future row landing in this same situation is caught by
+  process rather than by a lucky independent-review re-run (which is how this one was actually
+  caught — not by design).
+- **(d) — something else, specifically "characterize and pin the backend to remove the
+  nondeterminism at its source":** this is the real fix, but it is a `devops`-level investigation
+  and action, not a methodology change to the floor mechanism, and not something I can execute or
+  verify from here. See "actionable now vs. follow-up" below.
+
+**Concrete `SKILL.md` change this implies (not applied by me — for a follow-up dispatch):** in the
+"Score floor" section, keep **0.43** as the operative value (no change to the number), but revise
+the framing from "one known unresolved risk" (implying a single contested row awaiting resolution)
+to a standing **class** of risk: *"a hit whose score sits within ~0.025 of a competing candidate's
+score, near the floor, should not be trusted from a single `search_documents` call — this convention
+has one confirmed instance (R6/h40's second sibling, 0.4201–0.4405 depending on backend state) and
+may have others not yet identified; the mitigation is corpus-level (Stage 8's periodic regression
+gate re-runs each row's floor-relevant gap and flags any below 0.025 for multi-session
+reproduction), not a per-call client-side retry."* This is a **wording/framing change**, not a
+number change — 0.43 stays, R6/h40 stays a named exception, but the file should read as describing
+a checkable *pattern* rather than a single closed-out anomaly, so `cobb`/whoever next runs the
+regression gate knows to apply the item-2 check rather than treating R6/h40 as the only row that
+will ever need it.
+
+### 4. Does this change Stage 8's acceptance?
+
+**No — Stage 8 stands as accepted (`analyst`'s U6c `approve`), and this diagnosis does not surface
+anything that would reopen it.** Two independent reasons:
+
+- **The headline gate metrics are unaffected either way.** Pooled recall@5 (0.875, Wilson
+  [0.719, 0.950]) and set-recall (13/14 = 0.929) are both computed on **raw retrieval** (was the
+  document present anywhere in the top 5), and R6/h40's second sibling **was found in the top 5
+  under both observed readings** (rank 3 and rank 5) — only its *floor-admission* status differs,
+  and the report already correctly reports floor-applied figures both ways (0.857 vs. 0.929 for
+  the affected sub-metric) rather than picking one. Nothing here changes what was actually
+  measured, only which of two already-disclosed readings turns out (per my third data point) to be
+  more likely the currently-live one.
+- **Escalating instead of resolving was the methodologically correct call, and remains so.** Given
+  two equally-reproducible, mutually-contradicting readings with no principled way to prefer one
+  as "the" true value from either `qa-engineer`'s or `analyst`'s vantage point alone, picking either
+  0.4201 or 0.4405 as a fresh floor-deriving input would have been a false-precision overclaim —
+  exactly the failure mode `analyst`'s Pass 2 named and declined to commit. My own third data point
+  adds evidence about *which state is currently live* (favoring 0.4405, per the timing-pattern
+  reasoning above) but does not change the underlying judgment that neither reading was "provably
+  more correct" from the position `qa-engineer`/`analyst` were each in — it only became more
+  informative once a third, differently-timed session was available, which is itself an argument
+  for the process fix in item 3 (multi-session reproduction as standing practice) rather than a
+  retroactive complaint about the original escalation.
+
+### Actionable now vs. follow-up
+
+**Actionable now (no further investigation needed):**
+- `SKILL.md`'s floor-section framing change described under item 3 (0.43 unchanged; reframe R6/h40
+  from a single resolved anomaly to a named instance of a checkable class) — cheap, mechanical,
+  ready for a follow-up dispatch.
+- Add the tight-clustering flag (item 2: record floor-relevant score gaps, flag <0.025, require
+  multi-session reproduction before trusting) to whatever process document governs Stage 8's
+  periodic re-run (the test plan, or a note in this file's Recommendation 4) — also cheap and ready
+  now.
+
+**Needs further investigation, not my call to execute:**
+- **Recommended `devops` follow-up:** check `ws:agent-team`'s server process uptime/restart history
+  (`start_agent_team.sh`'s process) and LM Studio's own model-load/reload log around
+  `qa-engineer`'s U6/U6b run timestamp versus `analyst`'s U6a first-pass timestamp, to confirm or
+  falsify the "one discrete backend-state change happened in between" hypothesis (item 1, ranked
+  #1). If confirmed, the practical fix is operational (keep the backend process/model load stable
+  across a regression-gate run, or re-run the gate immediately after any known reload rather than
+  days later) rather than a further methodology change here.
+- **Lower priority, only if the above is inconclusive:** a `devops`/`graph-dba` check of whether
+  concurrent request load measurably changes R6's score within one session (item 1's ranked #2
+  distinguishing test) — only worth running if the restart/reload check comes back negative, since
+  it's a more expensive, noisier experiment to design well.
+- Not recommended as a use of further investigation time: chasing a "third" score value or treating
+  n=3 as enough to fully characterize the distribution. Three points establish reproducible
+  bimodality (now with a timing pattern) convincingly enough to act on; a fourth or fifth
+  reproduction would sharpen confidence marginally, not change the recommendation.
