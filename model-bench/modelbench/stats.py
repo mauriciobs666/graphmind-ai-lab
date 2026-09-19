@@ -202,10 +202,80 @@ def paired_bootstrap(
             "paired_bootstrap needs finite differences; a non-finite difference makes every "
             "resample mean non-finite and sorted() does not order a NaN (-ml §3.2d)"
         )
-    rng = random.Random(seed)
-    n = len(diffs)
-    means = sorted(sum(rng.choice(diffs) for _ in range(n)) / n for _ in range(B))
+    means = _bootstrap_means(diffs, B=B, seed=seed)
     return percentile(means, level=levels[0]), percentile(means, level=levels[1])
+
+
+def _bootstrap_means(data: Sequence[float], *, B: int, seed: int) -> list[float]:
+    """The resample engine shared by `paired_bootstrap` and `mean_bootstrap_interval` (`-ml`
+    review §3): `B` draws of `len(data)` values with replacement from `data`, each reduced to its
+    own mean, sorted ascending. The two callers differ only in what they do with the result — a
+    paired-difference percentile pair with no clamp, or a one-sample mean's percentile pair clamped
+    directly to a declared support — never in how the resample itself is drawn; factoring this out
+    is "two copies of a formula is one copy and one bug" (plan §3.9) applied to the engine, while
+    leaving each caller's own clamp semantics as two legitimately different things.
+    """
+    rng = random.Random(seed)
+    n = len(data)
+    return sorted(sum(rng.choice(data) for _ in range(n)) / n for _ in range(B))
+
+
+def mean_bootstrap_interval(
+    values: Sequence[float],
+    *,
+    B: int,
+    seed: int,
+    levels: tuple[Fraction, Fraction],
+    support: tuple[float, float] | None,
+) -> tuple[float, float]:
+    """Percentile bootstrap CI on a single arm's own mean — never a comparison instrument (plan
+    §3.1, §3.4 Q1; `-ml` review §3).
+
+    **Not `paired_bootstrap` called on raw values.** That function's clamp (where a caller widens
+    the result, e.g. `paired_cluster_bootstrap`) is built for the support of a *difference* of two
+    arms — `(lo - hi, hi - lo)` — and a one-sample mean's own support must clamp the result
+    *directly*, never through that conversion (`-ml` review §3). This function shares
+    `_bootstrap_means`'s resample engine with `paired_bootstrap` but owns its own, distinct clamp.
+
+    `support`, when given, clamps the returned interval directly — `ContinuousMetric.support`
+    already carries the metric's own bounds (e.g. `(0.0, 1.0)` for `mrr`), so no new judgment call
+    about what the bound is. `None` means the metric is unbounded and the interval is returned
+    unclamped, mirroring `sep_z`'s own `support=None` treatment elsewhere in this module.
+
+    **Two refusals, mirroring Rule 8's and `paired_bootstrap`'s own:**
+
+    1. `len(values) < 2` — a one-value interval is a point, and the string would report a CI of
+       zero width as though it were a measurement (`continuous_verdict`'s own refusal 4).
+    2. a non-finite value — one NaN makes every resample mean NaN, and `sorted()` does not order a
+       NaN (`paired_bootstrap`'s own refusal, `-ml` §3.2d).
+
+    **`levels` is required with no default**, and a transposed pair raises — the same discipline
+    `paired_bootstrap` carries, for the same reason (`-ml` §11.2.2): this interval carries no
+    multiplicity correction of its own, so its caller always passes the plain, unadjusted 95%
+    levels (`LEVEL_CI95_LO`/`LEVEL_CI95_HI`), matching Wilson's descriptive treatment rather than
+    `continuous_verdict`'s family-adjusted ones (`-ml` review Pass 2-2).
+    """
+    if levels[0] >= levels[1]:
+        raise ValueError(
+            f"levels must be ordered lower then upper, not {levels!r}: a transposed pair returns "
+            "an inverted interval that no other check sees (-ml §11.2.2)"
+        )
+    if len(values) < 2:
+        raise ValueError(
+            "mean_bootstrap_interval needs at least two values: a one-value interval is a point, "
+            "and the string would report a CI of zero width as though it were a measurement "
+            "(-ml §3.4 Rule 8)"
+        )
+    if not all(math.isfinite(v) for v in values):
+        raise ValueError(
+            "mean_bootstrap_interval needs finite values; a non-finite value makes every "
+            "resample mean non-finite and sorted() does not order a NaN (-ml §3.2d)"
+        )
+    means = _bootstrap_means(values, B=B, seed=seed)
+    lo, hi = percentile(means, level=levels[0]), percentile(means, level=levels[1])
+    if support is None:
+        return lo, hi
+    return max(support[0], lo), min(support[1], hi)
 
 
 def paired_cluster_bootstrap(
@@ -1149,12 +1219,23 @@ def verdict(
     resolving: ResolvingPower,
     metric_name: str,
     family: Sequence[str],
+    correction_k: int | None = None,
     a_label: str = "A",
     b_label: str = "B",
     alpha_step: float | None = None,
     holm_tested: bool = True,
 ) -> Verdict:
     """Decide one pre-registered metric, or refuse (`-ml` §3.4 Rule 4).
+
+    **`correction_k`** decouples precondition 3's correction divisor from `family`'s membership
+    role (plan §3.2.1, `-ml` review §2). `family` still does exactly one job — `metric_name in
+    family` still requires a genuinely pre-registered metric — but the divisor precondition 3
+    checks `resolving.alpha_mdd` against is `correction_k` when given, `len(family)` otherwise.
+    `None` (the default) reproduces the one existing call site's behaviour unchanged: it is not the
+    anti-conservative-by-omission shape this module's "nothing that shapes a decision carries a
+    default" rule refuses, because it reproduces exactly the one already-shipped, already-audited
+    call. FR-8's reference-anchored family (a candidate-count axis independent of the pack's own
+    metric-count family) always passes this explicitly.
 
     Raises — never warns, never silently proceeds — unless all of Rule 4's four preconditions
     hold, and unless `alpha_step` lies in `[alpha_mdd, alpha_family]` (Rule 7's premise). McNemar
@@ -1186,10 +1267,11 @@ def verdict(
         raise ValueError(
             f"{metric_name!r} is not in the pre-registered family {list(family)}"
         )
-    if abs(resolving.alpha_mdd - resolving.alpha_family / len(family)) > 1e-12:
+    k = correction_k if correction_k is not None else len(family)
+    if abs(resolving.alpha_mdd - resolving.alpha_family / k) > 1e-12:
         raise ValueError(
-            f"a {len(family)}-member verdict family must report its MDD at alpha="
-            f"{resolving.alpha_family / len(family)}, not {resolving.alpha_mdd} (-ml §3.3). This "
+            f"a {k}-member verdict family must report its MDD at alpha="
+            f"{resolving.alpha_family / k}, not {resolving.alpha_mdd} (-ml §3.3). This "
             "is the *pre-registration* alpha and it is unchanged by v1.6: the floor moved to "
             "alpha_family, the MDD did not (-ml §3.4 Rule 4, precondition 3)"
         )

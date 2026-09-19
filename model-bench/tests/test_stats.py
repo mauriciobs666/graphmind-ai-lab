@@ -18,6 +18,7 @@ from fractions import Fraction
 
 import pytest
 
+import modelbench.stats as stats_module
 from modelbench.stats import (
     _Z_95,
     ALPHA_FAMILY,
@@ -47,6 +48,7 @@ from modelbench.stats import (
     format_floor_pp,
     holm_steps,
     mcnemar_exact,
+    mean_bootstrap_interval,
     min_detectable_difference,
     min_detectable_difference_exact,
     mover_d_interval,
@@ -562,6 +564,49 @@ def test_verdict_requires_the_family_adjusted_alpha() -> None:
     )
 
 
+def test_verdict_correction_k_defaults_to_len_family_and_matches_the_omitted_path() -> None:
+    """§3.2.1 — `correction_k=None` (the default) reproduces today's one call site exactly: the
+    precondition-3 check against `len(family)`, asserted both by omitting the keyword and by
+    passing it explicitly equal to `len(family)` (`-ml` review's own stated test obligation)."""
+    with pytest.raises(ValueError):
+        verdict(
+            _outcomes(34, 6, 0, 0), resolving=_rp(40, alpha_mdd=0.05), metric_name="m",
+            family=["m", "other"], correction_k=None,
+        )
+    v_omitted = verdict(
+        _outcomes(34, 6, 0, 0), resolving=_rp(40, alpha_mdd=0.025), metric_name="m",
+        family=["m", "other"],
+    )
+    v_explicit = verdict(
+        _outcomes(34, 6, 0, 0), resolving=_rp(40, alpha_mdd=0.025), metric_name="m",
+        family=["m", "other"], correction_k=2,
+    )
+    assert v_omitted.text == v_explicit.text
+
+
+def test_verdict_correction_k_decouples_the_divisor_from_the_familys_own_length() -> None:
+    """§3.2.1 — FR-8's candidate axis needs a correction size independent of `len(family)`: a
+    16-candidate ladder's `alpha_mdd = alpha_family / 16` fails precondition 3 against a 1-member
+    `family` today, and is accepted once `correction_k=16` names the real divisor — `family` keeps
+    its only remaining job, the `metric_name in family` membership check, untouched."""
+    with pytest.raises(ValueError):
+        verdict(
+            _outcomes(34, 6, 0, 0), resolving=_rp(40, alpha_mdd=0.05 / 16), metric_name="m",
+            family=["m"],
+        )
+    v = verdict(
+        _outcomes(34, 6, 0, 0), resolving=_rp(40, alpha_mdd=0.05 / 16), metric_name="m",
+        family=["m"], correction_k=16,
+    )
+    assert v.metric_name == "m"
+    # membership is still checked against `family`, unaffected by `correction_k`
+    with pytest.raises(ValueError):
+        verdict(
+            _outcomes(34, 6, 0, 0), resolving=_rp(40, alpha_mdd=0.05 / 16), metric_name="unlisted",
+            family=["m"], correction_k=16,
+        )
+
+
 def test_verdict_requires_the_metric_to_be_in_the_family() -> None:
     with pytest.raises(ValueError):
         verdict(_outcomes(34, 6, 0, 0), resolving=_rp(40), metric_name="unlisted", family=["m"])
@@ -892,6 +937,95 @@ def test_paired_bootstrap_is_seeded_and_reproducible() -> None:
     levels = (LEVEL_CI95_LO, LEVEL_CI95_HI)
     first = paired_bootstrap(diffs, B=500, seed=3, levels=levels)
     assert paired_bootstrap(diffs, B=500, seed=3, levels=levels) == first
+
+
+# --- Q1: `mean_bootstrap_interval` — a one-sample mean CI, never `paired_bootstrap` on raw values -
+
+
+def test_mean_bootstrap_interval_shares_the_resample_engine_with_paired_bootstrap(
+    monkeypatch,
+) -> None:
+    """`-ml` review §3 — the resample engine (draw n with replacement, mean, repeat B times, sort)
+    is factored out into `stats._bootstrap_means` and shared, never a second implementation with
+    its own RNG draw order.
+
+    A bit-identical-output comparison against `paired_bootstrap` is not enough to prove this: two
+    genuinely different resample loops can still land on the same percentile bound by coincidence
+    (measured: `rng.choices(data, k=n)` and `n` calls to `rng.choice` disagree on the *full*
+    resample distribution but happened to agree on this fixture's 2.5th/97.5th percentiles).
+    Instrumenting the shared helper itself is the test that cannot pass on a second, parallel
+    implementation: it asserts `mean_bootstrap_interval` actually calls `_bootstrap_means`, with
+    the caller's own data/B/seed, rather than merely producing a number that could have come from
+    anywhere.
+    """
+    calls: list[tuple[tuple[float, ...], int, int]] = []
+    real = stats_module._bootstrap_means
+
+    def spy(data, *, B, seed):
+        calls.append((tuple(data), B, seed))
+        return real(data, B=B, seed=seed)
+
+    monkeypatch.setattr(stats_module, "_bootstrap_means", spy)
+    values = (0.2, 0.4, 0.6, 0.8, 1.0)
+    levels = (LEVEL_CI95_LO, LEVEL_CI95_HI)
+    mean_bootstrap_interval(values, B=200, seed=9, levels=levels, support=None)
+    assert calls == [(values, 200, 9)]
+
+
+def test_mean_bootstrap_interval_clamps_directly_never_via_a_difference_support() -> None:
+    """`-ml` review §3 — `support` clamps the printed RESULT directly (the metric's own bounds),
+    never `_support_clamp`'s `(lo - hi, hi - lo)` conversion, which is the wrong clamp for a
+    one-sample mean. A support of `(0.45, 0.55)` narrower than the raw resample range proves the
+    direction: the unclamped interval reaches below 0.45, the clamped one is pinned to exactly
+    `(0.45, 0.55)` — a difference-support conversion would instead have clamped to `(-0.1, 0.1)`,
+    a visibly different (and wrong) pair of bounds."""
+    values = [0.1, 0.3, 0.5, 0.5, 0.7, 0.5, 0.3, 0.5, 0.7, 0.3]
+    levels = (LEVEL_CI95_LO, LEVEL_CI95_HI)
+    lo_unclamped, hi_unclamped = mean_bootstrap_interval(
+        values, B=5000, seed=11, levels=levels, support=None
+    )
+    lo_clamped, hi_clamped = mean_bootstrap_interval(
+        values, B=5000, seed=11, levels=levels, support=(0.45, 0.55)
+    )
+    assert lo_unclamped < 0.45
+    assert hi_unclamped > 0.55
+    assert (lo_clamped, hi_clamped) == (0.45, 0.55)
+
+
+def test_mean_bootstrap_interval_leaves_the_interval_unclamped_when_support_is_none() -> None:
+    values = [0.1, 0.3, 0.5, 0.5, 0.7, 0.5, 0.3, 0.5, 0.7, 0.3]
+    lo, hi = mean_bootstrap_interval(
+        values, B=5000, seed=11, levels=(LEVEL_CI95_LO, LEVEL_CI95_HI), support=None
+    )
+    assert lo < 0.45
+    assert hi > 0.55
+
+
+def test_mean_bootstrap_interval_refuses_fewer_than_two_values() -> None:
+    """Mirrors `continuous_verdict`'s own refusal (Rule 8): a one-value interval is a point, and
+    the string would report a CI of zero width as though it were a measurement."""
+    with pytest.raises(ValueError):
+        mean_bootstrap_interval(
+            [0.5], B=100, seed=1, levels=(LEVEL_CI95_LO, LEVEL_CI95_HI), support=None
+        )
+
+
+def test_mean_bootstrap_interval_refuses_a_non_finite_value() -> None:
+    """Mirrors `paired_bootstrap`'s own refusal: one NaN makes every resample mean NaN, and
+    `sorted()` does not order a NaN."""
+    with pytest.raises(ValueError):
+        mean_bootstrap_interval(
+            [0.5, float("nan")], B=100, seed=1, levels=(LEVEL_CI95_LO, LEVEL_CI95_HI), support=None
+        )
+
+
+def test_mean_bootstrap_interval_is_seeded_and_reproducible() -> None:
+    values = [0.2, 0.4, 0.6, 0.8, 1.0]
+    levels = (LEVEL_CI95_LO, LEVEL_CI95_HI)
+    support = (0.0, 1.0)
+    first = mean_bootstrap_interval(values, B=500, seed=5, levels=levels, support=support)
+    again = mean_bootstrap_interval(values, B=500, seed=5, levels=levels, support=support)
+    assert again == first
 
 
 # --- Rule 7: no verdict path returns `distinguishable` below the observable floor -----------------
@@ -1948,6 +2082,9 @@ _LEVEL_PAIR_CALLERS = {
     "exact_paired_quantiles": lambda levels: exact_paired_quantiles(
         (0, 1, 1, 0), levels=levels
     ),
+    "mean_bootstrap_interval": lambda levels: mean_bootstrap_interval(
+        [1.0, 0.0, -1.0], B=100, seed=1, levels=levels, support=None
+    ),
 }
 
 #: The same, for `-ml` §11.2.2's two refusals on a **single** level. `exact_paired_quantiles`
@@ -1973,7 +2110,9 @@ def test_every_level_pair_estimator_refuses_a_transposed_pair(call) -> None:
         call((LEVEL_CI95_LO, LEVEL_CI95_LO))
 
 
-@pytest.mark.parametrize("fn", [paired_bootstrap, paired_cluster_bootstrap])
+@pytest.mark.parametrize(
+    "fn", [paired_bootstrap, paired_cluster_bootstrap, mean_bootstrap_interval]
+)
 def test_the_bootstrap_levels_are_keyword_only_with_no_default(fn) -> None:
     """§4 S1e Table G — required with no default, for the reason `designEffect`,
     `BinaryMetric.unit` and `sampling.seed` are: a default that is right at `k = 1` and silently

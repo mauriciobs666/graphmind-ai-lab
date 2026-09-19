@@ -205,6 +205,10 @@ def build_messages(item_input: Mapping[str, Any], *, pack: Pack) -> list[ChatMes
 
 #: tier -> the metric name that tier's items contribute to (S4 spec §5.1.3). `boundary`'s metric is
 #: exploratory (never in `verdictMetrics` — plan §3.8.2/`-ml` §7.3: "not a verdict metric" at n=15).
+#: **If `falseAdvanceRateBoundary` is ever promoted into a pack's `verdictMetrics`,
+#: `report._LOWER_IS_BETTER` must gain it in the same change** — same undesired-event polarity as
+#: `falseAdvanceRate`/`falseSuspendRate` (`docs/plans/small-model-catalog-sweep.md` §3.1.1/§3.4 Q2,
+#: `data-scientist`'s review §4).
 _METRIC_BY_TIER: Mapping[str, str] = {
     "clear_suspend": "falseAdvanceRate",     # expected=False; a False->True flip is a false advance
     "clear_advance": "falseSuspendRate",     # expected=True; a True->False flip is a false suspend

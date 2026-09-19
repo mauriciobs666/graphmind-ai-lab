@@ -24,17 +24,21 @@ from conftest import (
     run,
 )
 
-from modelbench import stats
+from modelbench import report, stats
 from modelbench.fingerprint import FieldProblem
 from modelbench.packs import PackConfigError, metrics_from_manifest
 from modelbench.report import (
     _SAMPLE_NOUN,
+    DuplicateModelInReport,
+    _better,
+    _metric_value,
     _render_funnel,
     _render_hazard,
     _render_per_turn_position,
     _render_role_caveat,
     _render_speed,
     compare_report,
+    rank_report,
     resolving_power_line,
 )
 from modelbench.results import (
@@ -3047,3 +3051,577 @@ def test_regression_existing_guard_judge_report_is_unchanged_and_speed_is_a_pure
     # ...and the new section is present, as an addition.
     assert "## Speed" in md
     assert md.count("## Speed") == 1
+
+
+# ==================================================================================================
+# Unit A (`docs/plans/small-model-catalog-sweep.md` §3.1–§3.2): `rank_report` and its helpers.
+# ==================================================================================================
+
+
+def test_metric_value_reads_a_binary_metrics_rate() -> None:
+    a, b = _nested_arms()
+    assert _metric_value(a, METRIC) == 1.0
+    assert _metric_value(b, METRIC) == 0.85
+
+
+def test_metric_value_reads_a_continuous_metrics_mean() -> None:
+    pack = _embedder_pack()
+    items = [_mrr_item(f"q{i:02d}", 0.5) for i in range(10)]
+    agg = RetrievalAggregates(mrr=ContinuousMetric(name="mrr", mean=0.5, n=10, support=(0.0, 1.0)))
+    a = run("cand", role="embedder", call_surface="embeddings", items=items, aggregates=agg,
+            fingerprint_fields=embeddings_fields(packId=pack.packId, modelKey="cand"))
+    assert _metric_value(a, "mrr") == 0.5
+
+
+def test_metric_value_is_none_when_the_run_declares_no_aggregate_for_the_metric() -> None:
+    a, _b = _nested_arms()
+    assert _metric_value(a, "unrelatedMetric") is None
+
+
+def test_metric_value_raises_on_a_distribution_summary() -> None:
+    """§3.1.1 — no shipped pack's headline/verdictMetrics member resolves to a
+    `DistributionSummary` today; silently picking median over p10 would be a guess this module
+    refuses elsewhere."""
+    pack = _embedder_pack(verdicts=(), headline=None)
+    agg = RetrievalAggregates(
+        separationZ=DistributionSummary(
+            name="separationZ", median=1.5, p10=-0.3, n=40, unit="query", support=None
+        )
+    )
+    a = run("cand", role="embedder", call_surface="embeddings", items=[], aggregates=agg,
+            fingerprint_fields=embeddings_fields(packId=pack.packId, modelKey="cand"))
+    with pytest.raises(PackConfigError):
+        _metric_value(a, "separationZ")
+
+
+def test_better_honors_lower_is_better_and_is_pinned_against_both_mutations(monkeypatch) -> None:
+    """AGENTS.md's guard-testing convention — `_LOWER_IS_BETTER`'s reach is bound by mutating the
+    constant alone, both ways: shrinking it must make a `falseAdvanceRate` comparison rank
+    backwards, and widening it must make an ordinary higher-is-better metric rank backwards too."""
+    assert _better("falseAdvanceRate", 0.1, 0.2) is True  # the lower rate wins
+    assert _better("groundingRate", 0.9, 0.8) is True  # the higher rate wins
+
+    monkeypatch.setattr(report, "_LOWER_IS_BETTER", frozenset())
+    assert _better("falseAdvanceRate", 0.1, 0.2) is False  # shrink: now ranks backwards
+
+    monkeypatch.setattr(
+        report, "_LOWER_IS_BETTER", frozenset({"falseAdvanceRate", "groundingRate"})
+    )
+    assert _better("groundingRate", 0.9, 0.8) is False  # widen: now ranks backwards
+
+
+def _rank_pack(
+    packId: str = "nlq-structured-query",
+    role: str = "nlq-generator",
+    verdicts: tuple[str, ...] = ("layer1ExactMatchRate",),
+    headline: str | None = "layer1ExactMatchRate",
+) -> PackRef:
+    return PackRef(
+        packId=packId, packVersion="1.0.0", contentHash="9" * 64, role=role,
+        metrics=PackMetrics(verdictMetrics=verdicts, headlineMetric=headline),
+        pairingKey=("itemId",), analysisUnit="itemId", seed=20260902,
+    )
+
+
+def _rank_arm(
+    model_key: str,
+    correct: int,
+    total: int = 40,
+    *,
+    metric: str = "layer1ExactMatchRate",
+    pack_id: str = "nlq-structured-query",
+    latency_p95: float | None = None,
+) -> RunResult:
+    import dataclasses
+
+    items = [item(f"q{i:02d}", correct=i < correct, metric=metric) for i in range(total)]
+    r = run(
+        model_key, items=items, aggregates=_agg_from(items, metric=metric),
+        fingerprint_fields=model_fields(modelKey=model_key, packId=pack_id),
+    )
+    if latency_p95 is not None:
+        r = dataclasses.replace(r, latency=_latency_block(latencyMsP95=latency_p95))
+    return r
+
+
+def test_rank_report_ranks_a_binary_headline_metric_with_ci_latency_and_footprint() -> None:
+    """§5 test 3 — 3+ runs, one binary headline metric, no `reference`: rows sorted correctly,
+    each with k/n/rate/Wilson CI, the pack's own restated caveat block-quoted, latency populated
+    from `RunResult.latency`, footprint reading `—` when omitted."""
+    pack = _rank_pack()
+    a = _rank_arm("model-a", 40, 40, latency_p95=1500.0)
+    b = _rank_arm("model-b", 30, 40, latency_p95=1800.0)
+    c = _rank_arm("model-c", 20, 40)
+
+    md = rank_report([a, b, c], pack=pack)
+
+    section = md.split("### layer1ExactMatchRate")[1]
+    a_pos, b_pos, c_pos = (section.index(k) for k in ("model-a", "model-b", "model-c"))
+    assert a_pos < b_pos < c_pos
+    assert "40/40" in section and "1.000" in section
+    assert "30/40" in section and "0.750" in section
+    assert "1500" in section
+    assert "1800" in section
+    assert "—" in section  # model-c's missing latency, and every model's missing footprint
+    assert "The true denominator is 34, not 40" in md  # the pack's own restated caveat
+
+
+def test_rank_report_footprint_column_reads_the_supplied_string_when_present() -> None:
+    pack = _rank_pack()
+    a = _rank_arm("model-a", 40, 40)
+    b = _rank_arm("model-b", 30, 40)
+
+    md = rank_report([a, b], pack=pack, footprints={"model-a": "4.2 GB"})
+
+    section = md.split("### layer1ExactMatchRate")[1]
+    assert "4.2 GB" in section
+    assert "—" in section  # model-b has no footprint entry
+
+
+def test_rank_report_emits_a_marker_comment_naming_the_top_row() -> None:
+    """§3.5/§5 test 12 — the `<!-- rank-report: ... -->` line Unit C depends on."""
+    pack = _rank_pack()
+    a = _rank_arm("model-a", 40, 40)
+    b = _rank_arm("model-b", 30, 40)
+
+    md = rank_report([a, b], pack=pack)
+
+    assert f"<!-- rank-report: pack={pack.packId} metric=layer1ExactMatchRate top=model-a" in md
+
+
+def test_rank_report_raises_on_a_duplicate_model_key() -> None:
+    """§5 test 8 — mirrors `PairedOutcomes.from_units`'s duplicate-unit-id backstop test shape.
+    Deduplication is the caller's job (Unit B); `rank_report` never silently keeps one."""
+    pack = _rank_pack()
+    a = _rank_arm("model-a", 40, 40)
+    a_again = _rank_arm("model-a", 30, 40)
+
+    with pytest.raises(DuplicateModelInReport):
+        rank_report([a, a_again], pack=pack)
+
+
+def test_rank_report_ranks_a_continuous_headline_metric_by_mean() -> None:
+    """§5 test 4 — the CI column calls `stats.mean_bootstrap_interval` with `support=(0.0, 1.0)`
+    from `ContinuousMetric.support` and renders its own stronger descriptive caveat, distinct from
+    `_DESCRIPTIVE_NOTE`."""
+    pack = _embedder_pack()
+    values_a = [0.9, 0.95, 0.85, 0.9, 0.92, 0.88, 0.91, 0.93, 0.89, 0.9]
+    values_b = [0.4, 0.5, 0.45, 0.5, 0.42, 0.48, 0.44, 0.46, 0.43, 0.47]
+    items_a = [_mrr_item(f"q{i:02d}", v) for i, v in enumerate(values_a)]
+    items_b = [_mrr_item(f"q{i:02d}", v) for i, v in enumerate(values_b)]
+    agg_a = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=sum(values_a) / len(values_a), n=10,
+                              support=(0.0, 1.0))
+    )
+    agg_b = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=sum(values_b) / len(values_b), n=10,
+                              support=(0.0, 1.0))
+    )
+    a = run("model-a", role="embedder", call_surface="embeddings", items=items_a,
+            aggregates=agg_a, fingerprint_fields=embeddings_fields(packId=pack.packId,
+                                                                     modelKey="model-a"))
+    b = run("model-b", role="embedder", call_surface="embeddings", items=items_b,
+            aggregates=agg_b, fingerprint_fields=embeddings_fields(packId=pack.packId,
+                                                                     modelKey="model-b"))
+
+    md = rank_report([a, b], pack=pack)
+
+    section = md.split("### mrr")[1]
+    assert section.index("model-a") < section.index("model-b")
+    assert "n=10" in section
+    assert "This interval describes this model's own mean" in section
+    assert "descriptive, not the comparison instrument" not in section
+
+
+def test_rank_report_with_no_headline_renders_two_independently_sorted_tables() -> None:
+    """§5 test 5 — `guard-judge`'s two co-equal, polarity-corrected metrics: this is also the test
+    that would have caught §2.4's polarity defect had it existed in this new code path. A model
+    with a LOWER falseAdvanceRate must rank ABOVE one with a higher rate."""
+    pack = guard_pack(headline=None, verdicts=("falseAdvanceRate", "falseSuspendRate"))
+    # model-a: 2/40 falseAdvanceRate (good), 10/40 falseSuspendRate (bad)
+    # model-b: 8/40 falseAdvanceRate (bad), 4/40 falseSuspendRate (good)
+    a_advance = [item(f"a{i:02d}", correct=i < 2, metric="falseAdvanceRate") for i in range(40)]
+    a_suspend = [item(f"s{i:02d}", correct=i < 10, metric="falseSuspendRate") for i in range(40)]
+    b_advance = [item(f"a{i:02d}", correct=i < 8, metric="falseAdvanceRate") for i in range(40)]
+    b_suspend = [item(f"s{i:02d}", correct=i < 4, metric="falseSuspendRate") for i in range(40)]
+    agg_a = ClassificationAggregates(
+        perClass=(
+            _agg_from(a_advance, metric="falseAdvanceRate").perClass[0],
+            _agg_from(a_suspend, metric="falseSuspendRate").perClass[0],
+        ),
+        parseFailures=0, n=80,
+    )
+    agg_b = ClassificationAggregates(
+        perClass=(
+            _agg_from(b_advance, metric="falseAdvanceRate").perClass[0],
+            _agg_from(b_suspend, metric="falseSuspendRate").perClass[0],
+        ),
+        parseFailures=0, n=80,
+    )
+    a = run("model-a", items=a_advance + a_suspend, aggregates=agg_a,
+            fingerprint_fields=model_fields(modelKey="model-a", packId=PACK_ID))
+    b = run("model-b", items=b_advance + b_suspend, aggregates=agg_b,
+            fingerprint_fields=model_fields(modelKey="model-b", packId=PACK_ID))
+
+    md = rank_report([a, b], pack=pack)
+
+    assert md.count("### falseAdvanceRate") == 1
+    assert md.count("### falseSuspendRate") == 1
+    advance_section = md.split("### falseAdvanceRate")[1].split("### falseSuspendRate")[0]
+    suspend_section = md.split("### falseSuspendRate")[1]
+    # falseAdvanceRate: model-a (2/40 = lower, better) ranks above model-b (8/40)
+    assert advance_section.index("model-a") < advance_section.index("model-b")
+    # falseSuspendRate: model-b (4/40 = lower, better) ranks above model-a (10/40)
+    assert suspend_section.index("model-b") < suspend_section.index("model-a")
+
+
+def test_rank_report_excludes_a_model_with_no_aggregate_without_dropping_it() -> None:
+    """§5 test 6 — a model in `runs` with no aggregate at all for the target metric is excluded
+    from that table (never ranked last), and never silently dropped from the whole report."""
+    pack = _rank_pack()
+    a = _rank_arm("model-a", 40, 40)
+    b = _rank_arm("model-b", 30, 40)
+    c = run(
+        "model-c", items=[], aggregates=RetrievalAggregates(),
+        fingerprint_fields=model_fields(modelKey="model-c", packId=pack.packId),
+    )
+
+    md = rank_report([a, b, c], pack=pack)
+
+    section = md.split("### layer1ExactMatchRate")[1]
+    assert "model-c" not in section
+
+
+def test_rank_report_excludes_and_names_an_arm_whose_aggregate_disagrees_with_its_items() -> None:
+    """§5 test 7 — S1 done-condition 10's cross-check, reused: the same exclude-and-name block
+    `compare_report` already renders (`_aggregate_item_mismatches`)."""
+    import dataclasses
+
+    pack = _rank_pack()
+    a = _rank_arm("model-a", 40, 40)
+    items_b = [item(f"q{i:02d}", correct=True, metric="layer1ExactMatchRate") for i in range(10)]
+    bad_agg = _agg_from(items_b, metric="layer1ExactMatchRate")
+    bad_agg = dataclasses.replace(
+        bad_agg, perClass=(dataclasses.replace(bad_agg.perClass[0], n=40, successes=40),)
+    )
+    b = run(
+        "model-b", items=items_b, aggregates=bad_agg,
+        fingerprint_fields=model_fields(modelKey="model-b", packId=pack.packId),
+    )
+
+    md = rank_report([a, b], pack=pack)
+
+    assert "> **INVALID RESULTS EXCLUDED** (AC-2)" in md
+    assert "`model-b` — aggregates disagree with items" in md
+    assert "model-b" not in md.split("### layer1ExactMatchRate")[1]
+
+
+def test_rank_report_version_banner_fires_across_a_multi_model_table() -> None:
+    """§5 test 13 — the version/hash/schema banners still fire across an N-arm ranked table
+    exactly as they do across two arms."""
+    pack = _rank_pack()
+    a = _rank_arm("model-a", 40, 40)
+    b = _rank_arm("model-b", 30, 40)
+    c = _rank_arm("model-c", 20, 40)
+    import dataclasses
+
+    new_fields = {**c.fingerprint.fields, "packVersion": "2.0.0"}
+    c = dataclasses.replace(
+        c, fingerprint=dataclasses.replace(c.fingerprint, fields=new_fields)
+    )
+
+    md = rank_report([a, b, c], pack=pack)
+
+    assert "PACK VERSION MISMATCH" in md
+    # the ranking is still rendered for every consistent arm, not dropped over the mismatch
+    assert "model-a" in md and "model-b" in md and "model-c" in md
+
+
+def test_rank_report_reference_family_holm_ladder_reaches_all_four_decision_states() -> None:
+    """§5 test 9 — `reference` given, a single-metric pack, 3+ candidates: one Holm ladder over
+    `N-1` p-values, `correction_k=N-1` passed to each `verdict()` call, at least one fixture
+    reaching each of the four decision states."""
+    pack = _rank_pack()
+    reference = _rank_arm("reference", 40, 40)
+    # rejected under Holm: hugely discordant vs. reference -> tiny p
+    cand_distinguishable = _rank_arm("cand-strong", 20, 40)
+    # tested, but its own p (0.03125) exceeds its Holm step (0.025) once ranked second
+    cand_not_distinguishable = _rank_arm("cand-mid", 34, 40)
+    # ranked last (p=1.0); never reached because Holm already stopped at cand-mid
+    cand_not_tested = _rank_arm("cand-weak", 39, 40)
+    # disjoint item ids -> empty paired intersection with the reference
+    disjoint_items = [
+        item(f"z{i:02d}", correct=True, metric="layer1ExactMatchRate") for i in range(40)
+    ]
+    cand_no_data = run(
+        "cand-no-data", items=disjoint_items,
+        aggregates=_agg_from(disjoint_items, metric="layer1ExactMatchRate"),
+        fingerprint_fields=model_fields(modelKey="cand-no-data", packId=pack.packId),
+    )
+
+    md = rank_report(
+        [reference, cand_distinguishable, cand_not_distinguishable, cand_not_tested, cand_no_data],
+        pack=pack, reference="reference",
+    )
+
+    family_section = md.split("#### Reference-anchored family")[1]
+    rows = {
+        ln.split("|")[1].strip(): ln
+        for ln in family_section.splitlines() if ln.startswith("|")
+    }
+    assert "distinguishable" in rows["cand-strong"] and "not " not in rows["cand-strong"]
+    assert rows["cand-mid"].endswith("not distinguishable |") or (
+        "not distinguishable" in rows["cand-mid"] and "not tested" not in rows["cand-mid"]
+    )
+    assert "not tested (Holm stops here)" in rows["cand-weak"]
+    assert "no verdict — no paired data" in rows["cand-no-data"]
+
+
+def _guard_judge_arm(
+    model_key: str,
+    advance_correct: int,
+    suspend_correct: int,
+    total: int = 40,
+    *,
+    advance_total: int | None = None,
+    suspend_total: int | None = None,
+):
+    """`advance_total`/`suspend_total` default to `total` — override either to build a fixture
+    with the pack's own real, asymmetric item counts (40 `falseAdvanceRate` / 30
+    `falseSuspendRate`, `-ml` §7.3) rather than the equal-n shape every other fixture here uses."""
+    advance_n = advance_total if advance_total is not None else total
+    suspend_n = suspend_total if suspend_total is not None else total
+    advance = [item(f"a{i:02d}", correct=i < advance_correct, metric="falseAdvanceRate")
+               for i in range(advance_n)]
+    suspend = [item(f"s{i:02d}", correct=i < suspend_correct, metric="falseSuspendRate")
+               for i in range(suspend_n)]
+    agg = ClassificationAggregates(
+        perClass=(
+            _agg_from(advance, metric="falseAdvanceRate").perClass[0],
+            _agg_from(suspend, metric="falseSuspendRate").perClass[0],
+        ),
+        parseFailures=0, n=advance_n + suspend_n,
+    )
+    return run(model_key, items=advance + suspend, aggregates=agg,
+               fingerprint_fields=model_fields(modelKey=model_key, packId=PACK_ID))
+
+
+def test_rank_report_guard_judge_reference_family_uses_one_combined_ladder(monkeypatch) -> None:
+    """§5 test 10 — the guard-judge family is one combined Holm ladder over the flattened
+    `2*(N-1)` p-values, not two independent `(N-1)`-entry ladders (a regression test for the
+    plan's originally-rejected per-metric default); `correction_k=2*(N-1)` passed to every
+    `verdict()` call, and each table's decisions come from a shared 4-entry ladder, not two
+    2-entry ones."""
+    pack = guard_pack(headline=None, verdicts=("falseAdvanceRate", "falseSuspendRate"))
+    reference = _guard_judge_arm("reference", 0, 0)
+    cand_a = _guard_judge_arm("cand-a", 2, 10)
+    cand_b = _guard_judge_arm("cand-b", 8, 4)
+
+    calls: list[list[float]] = []
+    real_holm_steps = stats.holm_steps
+
+    def spy(p_values, *, alpha):
+        calls.append(list(p_values))
+        return real_holm_steps(p_values, alpha=alpha)
+
+    monkeypatch.setattr(stats, "holm_steps", spy)
+
+    md = rank_report([reference, cand_a, cand_b], pack=pack, reference="reference")
+
+    assert len(calls) == 1  # ONE combined call, never two per-metric calls
+    assert len(calls[0]) == 4  # 2 metrics * 2 candidates, not two independent 2-entry ladders
+
+    correction_k_line = "alpha_mdd = 0.05/4"
+    assert correction_k_line in md
+
+
+def test_rank_report_guard_judge_family_k_does_not_shrink_when_a_candidate_has_no_paired_data() -> (
+    None
+):
+    """`-ml` review Pass2-1 (required) — a candidate missing paired data for ONE metric must not
+    shrink `k` from 32 to 31 (here, 4 to 3): the empty intersection contributes
+    `mcnemar_exact(0, 0) = 1.0` and still consumes a Holm rank, mirroring `compare_report`'s own
+    homogeneous-binary handling (`report.py`'s `mcnemar_exact(table_b, table_c)` call, unconditional
+    even when `outcomes.n_units == 0`)."""
+    pack = guard_pack(headline=None, verdicts=("falseAdvanceRate", "falseSuspendRate"))
+    reference = _guard_judge_arm("reference", 0, 0)
+    cand_a = _guard_judge_arm("cand-a", 2, 10)
+    cand_b_advance = [
+        item(f"a{i:02d}", correct=i < 8, metric="falseAdvanceRate") for i in range(40)
+    ]
+    # disjoint item ids for falseSuspendRate -> empty paired intersection with the reference
+    cand_b_suspend = [
+        item(f"zz{i:02d}", correct=i < 4, metric="falseSuspendRate") for i in range(40)
+    ]
+    agg_b = ClassificationAggregates(
+        perClass=(
+            _agg_from(cand_b_advance, metric="falseAdvanceRate").perClass[0],
+            _agg_from(cand_b_suspend, metric="falseSuspendRate").perClass[0],
+        ),
+        parseFailures=0, n=80,
+    )
+    cand_b = run(
+        "cand-b", items=cand_b_advance + cand_b_suspend, aggregates=agg_b,
+        fingerprint_fields=model_fields(modelKey="cand-b", packId=PACK_ID),
+    )
+
+    md = rank_report([reference, cand_a, cand_b], pack=pack, reference="reference")
+
+    assert "alpha_mdd = 0.05/4" in md  # k stays 4 (2 metrics * 2 candidates), never shrinks to 3
+    suspend_family = md.split("#### Reference-anchored family — falseSuspendRate")[1]
+    cand_b_row = next(
+        ln for ln in suspend_family.splitlines() if ln.startswith("| cand-b")
+    )
+    assert "no verdict — no paired data" in cand_b_row
+
+
+def test_polarity_corrected_reads_a_lower_false_advance_rate_candidate_as_better() -> None:
+    """§2.4/§5 test 10 — a candidate with FEWER false-advances than the reference (i.e. the
+    reference itself carries more of the undesired event) must render with a POSITIVE
+    (candidate-better) signed diff — the fix for `stats.verdict()`'s own polarity-blind
+    `diff >= 0` (§2.4), exercised directly against `_polarity_corrected` rather than through a
+    full report fixture."""
+    from modelbench.report import _polarity_corrected
+
+    # reference had the false-advance event on 8 units the candidate did not (reference worse);
+    # the candidate had it on 2 units the reference did not (candidate worse there).
+    diff = (8 - 2) / 10  # (b - c) / n, exactly as `stats.verdict` computes it
+    signed, _ci = _polarity_corrected("falseAdvanceRate", diff, (0.0, 0.0))
+    assert signed > 0  # net: candidate is better -> reads positive
+
+    # an ordinary higher-is-better metric is the opposite: raw diff > 0 means the REFERENCE
+    # (the "ok" = success winner) is ahead, so the candidate-reads-positive convention must flip.
+    signed_hib, ci_hib = _polarity_corrected("groundingRate", 0.6, (0.1, 0.9))
+    assert signed_hib < 0
+    assert ci_hib == (-0.9, -0.1)
+
+
+def test_rank_report_raises_when_the_reference_model_has_no_stored_run() -> None:
+    """§5 test 11 — `reference` named but absent from `runs` (or excluded above): a usage-shaped
+    error at `rank_report`'s own boundary."""
+    pack = _rank_pack()
+    a = _rank_arm("model-a", 40, 40)
+    b = _rank_arm("model-b", 30, 40)
+
+    with pytest.raises(ValueError, match="no stored"):
+        rank_report([a, b], pack=pack, reference="unknown-model")
+
+
+def test_rank_report_no_reference_resolving_power_sentence_is_alongside_the_pack_line() -> None:
+    """§5 test 14 — printed whenever the ranked table has >=2 models; `k` is `N-1` for a
+    single-metric pack; no specific model name appears; printed alongside, never instead of, the
+    pack's own unmodified `resolving_power_line`."""
+    pack = _rank_pack()
+    a = _rank_arm("model-a", 40, 40)
+    b = _rank_arm("model-b", 30, 40)
+    c = _rank_arm("model-c", 20, 40)
+
+    md = rank_report([a, b, c], pack=pack)
+
+    assert "This pack resolves differences of" in md  # the pack's own unmodified sentence
+    assert "If this pack's optional reference-anchored family (FR-8) were run" in md
+    assert "that family of 2 tests" in md  # k = N-1 = 2
+    for name in ("model-a", "model-b", "model-c"):
+        assert name not in md.split("If this pack's optional")[1].split(".")[0]
+
+
+def test_rank_report_no_reference_resolving_power_sentence_doubles_k_for_guard_judge() -> None:
+    """§5 test 14 — `k` is `2*(N-1)` for a pack with two co-equal verdict metrics (no headline)."""
+    pack = guard_pack(headline=None, verdicts=("falseAdvanceRate", "falseSuspendRate"))
+    a = _guard_judge_arm("model-a", 2, 10)
+    b = _guard_judge_arm("model-b", 8, 4)
+    c = _guard_judge_arm("model-c", 5, 5)
+
+    md = rank_report([a, b, c], pack=pack)
+
+    assert "that family of 4 tests" in md  # k = 2 * (N-1) = 2 * 2 = 4
+    assert "jointly across both verdict metrics" in md
+
+
+def test_rank_report_resolving_power_sentence_uses_each_metrics_own_n_not_pooled() -> None:
+    """Code-gate finding (`docs/reviews/small-model-catalog-sweep-impl.md`, Unit A.5) —
+    guard-judge's real, already-published `-ml` §7.3 asymmetric item counts (40
+    `falseAdvanceRate`, 30 `falseSuspendRate`) must each print their own resolving-power sentence
+    pair, never one pooled via `max`/`min` across metrics. Uses the pack's real asymmetric n
+    (`advance_total=40, suspend_total=30`), not the suite's other equal-n `_guard_judge_arm`
+    fixtures — that symmetry is specifically why the pooling defect was invisible until now."""
+    pack = guard_pack(headline=None, verdicts=("falseAdvanceRate", "falseSuspendRate"))
+    a = _guard_judge_arm("model-a", 2, 4, advance_total=40, suspend_total=30)
+    b = _guard_judge_arm("model-b", 8, 10, advance_total=40, suspend_total=30)
+    c = _guard_judge_arm("model-c", 5, 5, advance_total=40, suspend_total=30)
+
+    md = rank_report([a, b, c], pack=pack)
+
+    advance_section = md.split("### falseAdvanceRate")[1].split("### falseSuspendRate")[0]
+    suspend_section = md.split("### falseSuspendRate")[1]
+
+    # falseAdvanceRate: its own n=40 figures (floor 15.0pp; published MDD80 21.9pp at pack alpha_mdd
+    # 0.025; hypothetical MDD80 24.6pp at the compound family's k=4)
+    assert "n=40 effective items" in advance_section
+    assert "resolves differences of >=21.9 pp" in advance_section
+    assert "Differences below 15.0 pp cannot reach significance" in advance_section
+    assert "that family of 4 tests would resolve differences of >=24.6 pp" in advance_section
+
+    # falseSuspendRate: its own n=30 figures (floor 20.0pp; published MDD80 28.7pp; hypothetical
+    # MDD80 32.3pp at k=4) — never falseAdvanceRate's n=40 numbers
+    assert "n=30 effective items" in suspend_section
+    assert "resolves differences of >=28.7 pp" in suspend_section
+    assert "Differences below 20.0 pp cannot reach significance" in suspend_section
+    assert "that family of 4 tests would resolve differences of >=32.3 pp" in suspend_section
+    assert "n=40 effective items" not in suspend_section
+    assert ">=21.9 pp" not in suspend_section
+    assert ">=24.6 pp" not in suspend_section
+
+
+def test_rank_report_refuses_a_headline_outside_the_verdict_family() -> None:
+    """`analyst` code-gate suggestion (`docs/reviews/small-model-catalog-sweep-impl.md`) — mirrors
+    `compare_report`'s own guard on the identical field. Pack-load-time enforcement
+    (`metrics_from_manifest`) only protects the real `./run.sh rank` CLI path; every fixture in
+    this suite (including `rank_report`'s own) builds a `PackRef`/`PackMetrics` directly, bypassing
+    it entirely — which is exactly why `compare_report` carries its own independent check too."""
+    pack = PackRef(
+        packId="nlq-structured-query", packVersion="1.0.0", contentHash="9" * 64,
+        role="nlq-generator",
+        metrics=PackMetrics(verdictMetrics=("a",), headlineMetric="b"),
+        pairingKey=("itemId",), analysisUnit="itemId", seed=20260902,
+    )
+    a = _rank_arm("model-a", 40, 40, metric="a", pack_id="nlq-structured-query")
+
+    with pytest.raises(PackConfigError):
+        rank_report([a], pack=pack)
+
+
+def test_rank_report_reference_family_floor_demotion_fires_at_the_candidate_axis_correction_k() -> (
+    None
+):
+    """`analyst` code-gate suggestion (`docs/reviews/small-model-catalog-sweep-impl.md`) — Rule 7's
+    observable-floor enforcement is untouched by `correction_k` (`stats.py`'s `verdict()` computes
+    `resolving.observable_floor` from `alpha_family`/`n_eff` alone, never from `k`), but nothing
+    pinned that by test at `rank_report`'s new candidate-axis scale (`correction_k != len(family)`)
+    before this test. Two candidates against one reference gives `correction_k = 2`, not the
+    trivial `k = 1` a single-candidate fixture would exercise."""
+    import dataclasses
+
+    pack = _rank_pack()
+    reference = _rank_arm("reference", 40, 40)
+    # a declared design effect > 1.0 moves the decision off the exact mcnemar path onto the
+    # conservative envelope, where Rule 7's floor is a guard (demotes) rather than a theorem
+    # (raises) — the same worked shape as `stats.py`'s own
+    # `test_no_clustered_verdict_is_distinguishable_below_the_observable_floor`.
+    reference = dataclasses.replace(reference, designEffect=2.0, basis="measured")
+    # (a, b, c, d) = (32, 8, 0, 0) at deff=2.0 is `stats.py`'s own worked floor-demotion fixture
+    # (`test_rule_7_is_what_catches_the_case_the_widened_interval_still_misses`): the interval
+    # alone excludes zero, but the observed 20.0 pp sits below the deff-widened 30.0 pp floor.
+    cand_below_floor = _rank_arm("cand-floor", 32, 40)
+    cand_other = _rank_arm("cand-other", 20, 40)  # only present to make correction_k = 2, not 1
+
+    md = rank_report(
+        [reference, cand_below_floor, cand_other], pack=pack, reference="reference",
+    )
+
+    family_section = md.split("#### Reference-anchored family")[1]
+    floor_row = next(
+        ln for ln in family_section.splitlines() if ln.startswith("| cand-floor")
+    )
+    assert "not distinguishable — below the observable floor" in floor_row
+    assert "distinguishable |" not in floor_row  # never plain "distinguishable"

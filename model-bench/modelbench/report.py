@@ -22,6 +22,7 @@ parameter reaches it.
 
 from __future__ import annotations
 
+import functools
 from typing import Mapping, NamedTuple, Sequence
 
 from modelbench import stats
@@ -99,6 +100,56 @@ def _metric_aggregate(
 ) -> BinaryMetric | ContinuousMetric | DistributionSummary | None:
     """`name`'s own aggregate on `run`, or `None` when this arm declares none for it (§3.3 (iv))."""
     return next((m for m in run.aggregates.named_metrics() if m.name == name), None)
+
+
+class DuplicateModelInReport(ValueError):
+    """A `modelKey` appears more than once in `rank_report`'s `runs` (plan §3.1).
+
+    Mirrors `PairedOutcomes.from_units`'s duplicate-unit-id guard: a backstop, not the mechanism.
+    Deduplication is the caller's job (Unit B's `_select_rank_arms`, which keeps the newest-stored
+    run per `modelKey` — the same one-liner `_select_arms`'s `--models` path already uses).
+    """
+
+
+#: Verdict metrics whose raw rate is a rate of an UNDESIRED event (plan §2.4) — declared explicitly
+#: because no manifest field carries polarity. Scoped to `rank_report`'s ranking/family code only;
+#: it does not change `stats.verdict()`'s own text, which stays polarity-blind (plan §2.4's
+#: flagged, unfixed defect in already-shipped, heavily-tested machinery). Confirmed complete
+#: against every pack.json shipped today (`data-scientist`'s review §4). **If
+#: `falseAdvanceRateBoundary` (currently exploratory-only, `classification.py::_METRIC_BY_TIER`) is
+#: ever promoted into a pack's `verdictMetrics`, this set must gain it in the same change** — same
+#: undesired-event polarity, confirmed by the same review.
+_LOWER_IS_BETTER: frozenset[str] = frozenset({"falseAdvanceRate", "falseSuspendRate"})
+
+
+def _metric_value(run: RunResult, metric: str) -> float | None:
+    """The one sortable number for `metric` on `run`'s own aggregate (plan §3.1.1):
+    `BinaryMetric.rate` or `ContinuousMetric.mean`. `None` when `run` declares no aggregate for
+    `metric` at all — excluded from ranking, never ranked last: a model with no data for this pack
+    is absent, not "worst".
+
+    Raises `PackConfigError` for a `DistributionSummary` — no shipped pack's headline/
+    `verdictMetrics` member resolves to one today, and silently picking median over p10 would be a
+    guess this module refuses elsewhere.
+    """
+    agg = _metric_aggregate(run, metric)
+    if agg is None:
+        return None
+    if isinstance(agg, DistributionSummary):
+        raise PackConfigError(
+            f"{metric!r} resolves to a DistributionSummary on run {run.runId!r}; rank_report has "
+            "no sortable single number for a median+p10 aggregate (plan §3.1.1)"
+        )
+    if isinstance(agg, ContinuousMetric):
+        return agg.mean
+    return agg.rate
+
+
+def _better(metric: str, value: float, other: float) -> bool:
+    """True if `value` ranks at or above `other` on `metric`, honoring `_LOWER_IS_BETTER`."""
+    if metric in _LOWER_IS_BETTER:
+        return value <= other
+    return value >= other
 
 
 def _metric_kind(a: RunResult, b: RunResult, name: str) -> str:
@@ -953,6 +1004,410 @@ def _render_speed(runs: Sequence[RunResult], arm_names: Mapping[str, str]) -> li
         "instrument (FR-11).*", "",
     ]
     return lines
+
+
+#: FR-11's restated ceiling/adequacy caveat, per pack (plan §2.3/§3.1, sourced from `-ml`, cited by
+#: section — matching this module's own citation discipline). `chat-responder`'s own caveat is
+#: `_render_role_caveat`'s existing string, reused verbatim rather than duplicated here.
+_RANK_CAVEATS: dict[str, str] = {
+    "embedder-graphrag-retrieval": (
+        "recall@10 = 37/38 at this pack's own item set: only 1 item is available to win, and "
+        "McNemar needs 6 — this ranking can detect a materially worse embedder but cannot certify "
+        "a better one (`-ml` §7.4)."
+    ),
+    "guard-judge-understanding": (
+        "Two co-equal class-conditional error rates, no single headline: floor 15.0/20.0 pp, "
+        "MDD80 21.9/28.7 pp for falseAdvanceRate/falseSuspendRate at the two-member "
+        "alpha_mdd=0.025 (`-ml` §7.3)."
+    ),
+    "nlq-structured-query": (
+        "The true denominator is 34, not 40 — 6 items are structurally unanswerable and excluded "
+        "(`-ml` §7.2, v1.25 note)."
+    ),
+    "tool-caller-shop-assistant": (
+        "The analysis unit is scripts, n=12 (3 shapes x 4 scripts): floor 50.0 pp, MDD80 57.8 pp "
+        "at this n (`-ml` §7.2/§4.5)."
+    ),
+}
+
+
+def _rank_caveat_lines(pack: PackRef) -> list[str]:
+    """FR-11's restated caveat, block-quoted above a ranked table (plan §3.1). `chat-responder`'s
+    is `_render_role_caveat`'s own string, reused rather than duplicated — "two copies of a string
+    is one copy and one drift" cuts here exactly as it does for `stats.py`'s formula strings."""
+    if pack.role == "chat-responder":
+        return _render_role_caveat(pack)
+    caveat = _RANK_CAVEATS.get(pack.packId)
+    if caveat is None:
+        return []
+    return [f"> {caveat}", ""]
+
+
+#: `mean_bootstrap_interval`'s own descriptive caveat (plan §3.1, `-ml` review §3) — stronger than
+#: `_DESCRIPTIVE_NOTE`: a single arm's own mean CI is not itself a basis for a verdict, even by
+#: eyeball comparison against another arm's interval. A distinct footnote so the two can't merge.
+_MEAN_DESCRIPTIVE_NOTE = (
+    "_This interval describes this model's own mean; it is not a comparison, and two such "
+    "intervals overlapping or not overlapping is not itself a basis for a verdict — see FR-8's "
+    "optional reference-anchored family for an actual test, when one was run._"
+)
+
+
+def _rank_item_values(run: RunResult, metric: str) -> list[float]:
+    """A continuous member's own per-item values, for `stats.mean_bootstrap_interval`."""
+    return [v for it in run.items for v in [it.scored_value(metric)] if v is not None]
+
+
+def _rank_latency_cell(run: RunResult) -> str:
+    """The ranked table's latency column: `RunResult.latency.latencyMsP95`, `—` when the run
+    carries no latency at all or no p95 within it — matching `_render_speed`'s own per-field guard
+    (plan §3.1) rather than inventing a new convention."""
+    if run.latency is None or run.latency.latencyMsP95 is None:
+        return "—"
+    return f"{run.latency.latencyMsP95:.0f}"
+
+
+def _rank_rows(runs: Sequence[RunResult], metric: str) -> list[tuple[RunResult, float]]:
+    """Every run with a value for `metric`, sorted best-first via `_better` (plan §3.1.1) — a run
+    with no aggregate for `metric` is excluded, never ranked last."""
+    rows = [(r, v) for r in runs for v in [_metric_value(r, metric)] if v is not None]
+
+    def _cmp(x: tuple[RunResult, float], y: tuple[RunResult, float]) -> int:
+        if x[1] == y[1]:
+            return 0
+        return -1 if _better(metric, x[1], y[1]) else 1
+
+    rows.sort(key=functools.cmp_to_key(_cmp))
+    return rows
+
+
+def _render_one_rank_table(
+    runs: Sequence[RunResult],
+    *,
+    metric: str,
+    pack: PackRef,
+    footprints: Mapping[str, str] | None,
+) -> list[str]:
+    """One ranked table for `metric` (plan §3.1): rank | model | k/n (or n) | rate (or mean) |
+    95% CI | latency p95 | footprint, plus the `<!-- rank-report: ... -->` marker Unit C depends
+    on (plan §3.5)."""
+    lines: list[str] = [f"### {metric}", ""]
+    lines += _rank_caveat_lines(pack)
+    rows = _rank_rows(runs, metric)
+    if not rows:
+        lines += [
+            f"_No in-scope model has a stored, consistent result for `{metric}` in this report._",
+            "",
+        ]
+        return lines
+
+    continuous = isinstance(_metric_aggregate(rows[0][0], metric), ContinuousMetric)
+    if continuous:
+        lines += [
+            "| rank | model | n | mean | 95% CI | latency p95 | footprint |",
+            "|---|---|---|---|---|---|---|",
+        ]
+    else:
+        lines += [
+            "| rank | model | k/n | rate | 95% Wilson | latency p95 | footprint |",
+            "|---|---|---|---|---|---|---|",
+        ]
+
+    rendered: list[tuple[RunResult, float, float, float]] = []
+    for r, value in rows:
+        agg = _metric_aggregate(r, metric)
+        if isinstance(agg, ContinuousMetric):
+            values = _rank_item_values(r, metric)
+            lo, hi = stats.mean_bootstrap_interval(
+                values, B=_BOOTSTRAP_B, seed=pack.seed,
+                levels=(stats.LEVEL_CI95_LO, stats.LEVEL_CI95_HI), support=agg.support,
+            )
+            count_cell = f"n={agg.n}"
+            value_cell, ci_cell = f"{agg.mean:.4f}", f"[{lo:.4f}, {hi:.4f}]"
+        else:
+            lo, hi = stats.wilson_interval(agg.successes, agg.n)
+            count_cell = f"{agg.successes}/{agg.n}"
+            value_cell, ci_cell = f"{agg.rate:.3f}", f"[{lo:.3f}, {hi:.3f}]"
+        latency_cell = _rank_latency_cell(r)
+        footprint_cell = (footprints or {}).get(r.modelKey, "—")
+        rendered.append((r, value, lo, hi))
+        lines.append(
+            f"| {len(rendered)} | {r.modelKey} | {count_cell} | {value_cell} | {ci_cell} | "
+            f"{latency_cell} | {footprint_cell} |"
+        )
+
+    lines.append("")
+    lines += [_MEAN_DESCRIPTIVE_NOTE if continuous else _DESCRIPTIVE_NOTE, ""]
+
+    top_run, top_value, top_lo, top_hi = rendered[0]
+    lines.append(
+        f"<!-- rank-report: pack={pack.packId} metric={metric} top={top_run.modelKey} "
+        f"value={top_value:.4f} ci=[{top_lo:.4f},{top_hi:.4f}] -->"
+    )
+    lines.append("")
+    return lines
+
+
+def _polarity_corrected(
+    metric: str, diff: float, ci: tuple[float, float]
+) -> tuple[float, tuple[float, float]]:
+    """Flips `diff`/`ci` — both oriented reference-minus-candidate on the raw "ok" rate, exactly
+    as `stats.verdict` computes them — so a positive number always reads "candidate is better"
+    (plan §3.2.2), honoring `_LOWER_IS_BETTER`'s polarity rather than `stats.verdict`'s own
+    polarity-blind `diff >= 0` (plan §2.4). Deliberately does not touch `Verdict.text`.
+
+    For an ordinary higher-is-better metric, `scored_outcome`'s `True` means success, so a `b`-unit
+    (reference ok, candidate not) is a reference win: `diff >= 0` means the *reference* is ahead,
+    the opposite of what this table wants — negate both. For a `_LOWER_IS_BETTER` metric,
+    `scored_outcome`'s `True` means the undesired event occurred, so a `b`-unit (reference "ok" —
+    i.e. reference had the bad event, candidate did not) is a *candidate* win: `diff >= 0` already
+    means the candidate is ahead, and no flip is needed.
+    """
+    if metric in _LOWER_IS_BETTER:
+        return diff, ci
+    return -diff, (-ci[1], -ci[0])
+
+
+def _render_reference_family(
+    *,
+    metric: str,
+    pack: PackRef,
+    reference_run: RunResult,
+    candidates: Sequence[RunResult],
+    cells: Sequence[tuple[str, str]],
+    steps: Sequence[stats.HolmStep],
+    outcomes: Mapping[tuple[str, str], stats.PairedOutcomes],
+    correction_k: int,
+    unit_kind: str,
+) -> list[str]:
+    """FR-8's optional reference-anchored family (plan §3.2.2), filtered back to `metric`'s own
+    rows from the one combined (candidate x metric) Holm ladder `rank_report` already ran over the
+    whole family — never a second, per-metric ladder."""
+    lines = [
+        f"#### Reference-anchored family — {metric} vs `{reference_run.modelKey}`", "",
+        "_exploratory — no significance claim outside this family_", "",
+        "| candidate | diff | 95% CI | Holm-adjusted threshold | decision |",
+        "|---|---|---|---|---|",
+    ]
+    alpha_mdd = pack.metrics.alpha_family / correction_k
+    for candidate in candidates:
+        idx = cells.index((candidate.modelKey, metric))
+        step = steps[idx]
+        outcome = outcomes[(candidate.modelKey, metric)]
+        if outcome.n_units == 0:
+            lines.append(
+                f"| {candidate.modelKey} | — | — | {step.threshold:.4f} | "
+                f"{_decision(None, step)} |"
+            )
+            continue
+        rp = stats.resolving_power(
+            outcome.n_units, unit_kind=unit_kind,
+            design_effect=max(reference_run.designEffect, candidate.designEffect),
+            basis=min((reference_run.basis, candidate.basis), key=_BASIS_STRENGTH.__getitem__),
+            alpha_family=pack.metrics.alpha_family, alpha_mdd=alpha_mdd,
+        )
+        v = stats.verdict(
+            outcome, resolving=rp, metric_name=metric, family=[metric],
+            correction_k=correction_k, a_label=reference_run.modelKey, b_label=candidate.modelKey,
+            alpha_step=step.threshold, holm_tested=step.tested,
+        )
+        diff, ci = _polarity_corrected(metric, v.diff, v.ci)
+        lines.append(
+            f"| {candidate.modelKey} | {'+' if diff >= 0 else ''}{_pp(diff)} pp | "
+            f"[{_pp(ci[0])}, {_pp(ci[1])}] pp | {step.threshold:.4f} | {_decision(v, step)} |"
+        )
+    lines.append("")
+    return lines
+
+
+def _rank_resolving_power_lines(
+    runs: Sequence[RunResult], pack: PackRef, family: Sequence[str], metric: str
+) -> list[str]:
+    """FR-7's "recomputed for the model count actually in this report" sentence (plan §3.4 Q4),
+    printed alongside — never instead of — the pack's own already-published single-comparison
+    `resolving_power_line` (unchanged), **once per member of `family`** (code-gate finding, Unit
+    A.5, `docs/reviews/small-model-catalog-sweep-impl.md`) — mirroring how `_rank_caveat_lines`/
+    `_render_one_rank_table` already loop per ranked table, immediately below the table whose own
+    FR-11 caveat already states that metric's own figures.
+
+    **`n_units` is `metric`'s own item count, never pooled with a sibling metric's via `max`/`min`
+    across `family`.** Guard-judge's two verdict metrics have different, already-published item
+    counts (`-ml` §7.3: 40 for `falseAdvanceRate`, 30 for `falseSuspendRate`) — pooling them (the
+    original, defective implementation took `max` across both) silently applied whichever metric
+    happened to have the larger, less-constrained n to the other metric's own sentence too, always
+    in the optimistic direction (both the floor and the MDD get *worse*, i.e. larger, as n shrinks
+    — `-ml` §3.4 Rule 3). Neither `max` nor `min` pooled into one sentence is correct: each metric
+    publishes its own row in `-ml` §7.3 for exactly this reason, and a single number in either
+    direction misrepresents whichever metric it doesn't match.
+
+    `k` still reflects Q3's resolution — the full **compound** family size (`len(family) * (n-1)`,
+    `2*(N-1)` for guard-judge) — since the hypothetical sentence describes what the one joint,
+    reference-anchored family (not a per-metric one) would cost; only the `n_units` feeding each
+    metric's own two `resolving_power` calls is metric-specific. Names no specific anchor model —
+    naming "the top-ranked model" would read as a post-hoc, choose-after-you-see-the-data
+    pre-registration (plan §3.4 Q4)."""
+    n = len(runs)
+    k = len(family) * (n - 1)
+    if k <= 0:
+        return []
+    unit_kind = unit_kind_for_role(pack.role)
+    ns = [agg.n for r in runs for agg in [_metric_aggregate(r, metric)] if agg is not None]
+    if not ns:
+        return []
+    n_units = max(ns)
+    published = stats.resolving_power(
+        n_units, unit_kind=unit_kind, design_effect=1.0, basis="by-construction",
+        alpha_family=pack.metrics.alpha_family, alpha_mdd=pack.metrics.alpha_mdd,
+    )
+    hypothetical = stats.resolving_power(
+        n_units, unit_kind=unit_kind, design_effect=1.0, basis="by-construction",
+        alpha_family=pack.metrics.alpha_family, alpha_mdd=pack.metrics.alpha_family / k,
+    )
+    joint = " jointly across both verdict metrics," if len(family) > 1 else ""
+    cost = (
+        "no difference at any effect size" if hypothetical.mdd80 is None
+        else f">={_pp(hypothetical.mdd80)} pp"
+    )
+    sentence = (
+        f"If this pack's optional reference-anchored family (FR-8) were run — any one of the "
+        f"{n} models here designated as the reference, the other {n - 1} compared against it"
+        f"{joint} — that family of {k} tests would resolve differences of {cost} with 80% power "
+        f"(alpha_mdd = {pack.metrics.alpha_family:g}/{k})."
+    )
+    return [resolving_power_line(published, pack), "", sentence, ""]
+
+
+def rank_report(
+    runs: Sequence[RunResult],
+    *,
+    pack: PackRef,
+    invalid: Sequence[InvalidRecord] = (),
+    reference: str | None = None,
+    footprints: Mapping[str, str] | None = None,
+) -> str:
+    """FR-6/FR-7/FR-11/FR-12: one ranked table per pack (two, for a pack with no headline metric —
+    one per `verdictMetrics` member), covering every in-scope model with a stored, consistent
+    result — never a pairwise matrix. `reference`, when given, additionally renders FR-8's optional
+    reference-anchored Holm-Bonferroni family (plan §3.2)."""
+    check_sampling_contract(pack)
+    # Mirrors `compare_report`'s own guard on the identical field (`analyst` code-gate suggestion,
+    # `docs/reviews/small-model-catalog-sweep-impl.md`) — pack-load-time enforcement
+    # (`packs.metrics_from_manifest`) only protects the real CLI manifest-loading path; a
+    # hand-built `PackRef`/`PackMetrics`, which every test fixture (including this function's own)
+    # constructs directly, bypasses it entirely.
+    if pack.metrics.headlineMetric is not None and (
+        pack.metrics.headlineMetric not in pack.metrics.verdictMetrics
+    ):
+        raise PackConfigError("headlineMetric is not a member of verdictMetrics")
+
+    seen: set[str] = set()
+    for r in runs:
+        if r.modelKey in seen:
+            raise DuplicateModelInReport(
+                f"modelKey {r.modelKey!r} appears more than once in rank_report's runs; "
+                "deduplication is the caller's job, not rank_report's (plan §3.1)"
+            )
+        seen.add(r.modelKey)
+
+    lines: list[str] = [f"# Ranked comparison — {pack.label} ({pack.role})", ""]
+
+    # S1 done-condition 10, reused: an arm whose stored aggregates disagree with its own items is
+    # excluded from the ranking, not repaired and not partly trusted — the same net `compare_report`
+    # already casts.
+    inconsistent = [(r, _aggregate_item_mismatches(r, pack)) for r in runs]
+    excluded = [(r, m) for r, m in inconsistent if m]
+    runs = [r for r, m in inconsistent if not m]
+
+    versions = {_fp(r, "packVersion") for r in runs}
+    hashes = {_fp(r, "packContentHash") for r in runs}
+    if len(versions) > 1:
+        lines += [
+            "> **PACK VERSION MISMATCH** — these runs span pack versions "
+            + ", ".join(sorted(versions))
+            + ". They are not measuring the same thing; the ranking below is rendered anyway.",
+            "",
+        ]
+    if len(hashes) > 1:
+        lines += [
+            "> **PACK CONTENT HASH MISMATCH** — same declared version, different bytes: "
+            + ", ".join(sorted(h[:8] for h in hashes))
+            + ". A declared version can be forgotten; a hash cannot (§3.3).",
+            "",
+        ]
+    schemas = sorted({r.fingerprint.benchSchemaVersion for r in runs})
+    if len(schemas) > 1:
+        lines += [
+            "> **SCHEMA VERSIONS IN THIS COMPARISON** — "
+            + ", ".join(str(s) for s in schemas)
+            + ". Each record was validated against the contract it was written under; a schema "
+            "difference is visible, never silent, and never a reason to drop a record (§3.4.3).",
+            "",
+        ]
+    if invalid or excluded:
+        lines += ["> **INVALID RESULTS EXCLUDED** (AC-2)", ">"]
+        for record in invalid:
+            detail = ", ".join(f"`{p.field}` ({p.reason})" for p in record.problems)
+            suffix = f": {detail}" if detail else ""
+            lines.append(f"> - `{record.runId or record.path.name}` — {record.reason}{suffix}")
+        for run_, mismatches in excluded:
+            detail = ", ".join(f"`{m.metric}` ({m.detail})" for m in mismatches)
+            lines.append(f"> - `{run_.runId}` — aggregates disagree with items: {detail}")
+        lines.append("")
+
+    family = list(pack.metrics.verdictMetrics)
+    unit_kind = unit_kind_for_role(pack.role)
+    members = [pack.metrics.headlineMetric] if pack.metrics.headlineMetric is not None else family
+
+    reference_run: RunResult | None = None
+    if reference is not None:
+        reference_run = next((r for r in runs if r.modelKey == reference), None)
+        if reference_run is None:
+            raise ValueError(
+                f"reference model {reference!r} has no stored, consistent run for this pack"
+                + (" and session" if runs else "")
+            )
+
+    combined_p_values: list[float] = []
+    combined_cells: list[tuple[str, str]] = []
+    combined_outcomes: dict[tuple[str, str], stats.PairedOutcomes] = {}
+    candidates: list[RunResult] = []
+    combined_steps: list[stats.HolmStep] = []
+    correction_k = 0
+    if reference_run is not None:
+        candidates = [r for r in runs if r.modelKey != reference_run.modelKey]
+        for metric in family:
+            for cand in candidates:
+                paired = _paired_rows(reference_run, cand, metric, pack)
+                outcomes = stats.PairedOutcomes.from_units(
+                    unit_kind, list(zip(paired.unit_ids, paired.a_ok, paired.b_ok))
+                )
+                combined_outcomes[(cand.modelKey, metric)] = outcomes
+                _a, b_, c_, _d = outcomes.table
+                # `-ml` review Pass2-1: `k` is fixed by pre-registration, never by how much data
+                # arrived — a candidate with no paired data for one metric still consumes a Holm
+                # rank, via the same `mcnemar_exact(0, 0) = 1.0` empty-intersection handling
+                # `compare_report`'s own homogeneous-binary path already relies on (its own
+                # unconditional `p_values.append(stats.mcnemar_exact(table_b, table_c))` below),
+                # reused rather than reinvented.
+                combined_p_values.append(stats.mcnemar_exact(b_, c_))
+                combined_cells.append((cand.modelKey, metric))
+        # ONE combined call over (metric x candidate), never one call per metric — the plan's
+        # originally-rejected per-metric default under-corrects the family-wise error rate (§3.2.2).
+        combined_steps = stats.holm_steps(combined_p_values, alpha=pack.metrics.alpha_family)
+        correction_k = len(combined_p_values)
+
+    for metric in members:
+        lines += _render_one_rank_table(runs, metric=metric, pack=pack, footprints=footprints)
+        if len(runs) >= 2:
+            lines += _rank_resolving_power_lines(runs, pack, family, metric)
+        if reference_run is not None and candidates:
+            lines += _render_reference_family(
+                metric=metric, pack=pack, reference_run=reference_run, candidates=candidates,
+                cells=combined_cells, steps=combined_steps, outcomes=combined_outcomes,
+                correction_k=correction_k, unit_kind=unit_kind,
+            )
+
+    return "\n".join(lines) + "\n"
 
 
 def compare_report(
