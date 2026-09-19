@@ -35,6 +35,8 @@ caveat noted and worked around.
 | U3b (diagnose embedding-backend throughput under sustained load; unblock U3's retry decision) | `devops` | `a98ff226c19d0968e` | accepted | root cause: transient LM Studio crash of extractor model `qwen3-4b-2507` under cross-model contention (14 extract failures, 0 embed failures — teco-reverified via log grep) — recommends retry now, smaller batches. Diagnosis only, no server/process action taken | skipped, diagnostic finding independently re-verified by teco against raw log + graph state instead | 112.4k tok / 23 tools / 243s |
 | U3c (independent read: push-through vs. fix-pipeline-first, unfiltered from teco's/user's own view) | `devops` | `abd3fbd98d3a5f850` | accepted | recommends (a) push through + defer, matching the user's independently-made choice; flags a concrete, cheap-to-check lead (concurrent `model-bench` LM Studio sweeps as the contention source) and recommends filing `background.py` retry/backoff as a separate backlog item rather than a live mid-migration change | skipped, advisory-only opinion, cross-checked against user's independent answer instead | 57.3k tok / 1 tool / 57s |
 | U3d (file the deferred `background.py` extract-job retry/backoff hardening as a `falkor-chat` backlog item) | `devops` | `a3f5fdea8dff4a9c7` | accepted | `falkor-chat/docs/BACKLOG.md` K-067, commit `5743ab1` | skipped, trivial single-file backlog write following existing convention exactly — teco-verified via diff before commit | 64.6k tok / 4 tools / 65s |
+| U3j (correct the "308" arithmetic error at its source in cobb's own kaizen files/manifest `_status`) | `cobb` | `aea51f90e1e7d33d0` | accepted | `claude/cobb/kaizen/history.md`, `claude/cobb/kaizen/plan.md` (2 spots), `claude/cobb/scripts/kb-claim-manifest.json` `_status` field, all corrected to 327 ready/5 failed/332 total; JSON re-validated; grep-swept `claude/cobb/`/`claude/docs/` for any other "308 documents" occurrence, none found | skipped, purely mechanical text correction with numbers pre-supplied by teco's own re-verification (§Guardrails, trivial/low-risk) — teco re-grepped and re-validated JSON before commit instead | 103.6k tok / 22 tools / 837s |
+| U3k (Stage 6 overall migration review — diff-scoped, whole corpus) | `analyst` | — | queued | — | self → — | — |
 | U4 (Stage 7 retrieval-convention skill) | `cobb` | — | queued | — | `analyst` → — | — |
 | U5 (Stage 8 golden-set design + pilot calibration) | `data-scientist` | — | queued | — | — → — | — |
 | U6 (Stage 8 full AC-2 gate) | `qa-engineer` | — | queued | — | — → — | — |
@@ -229,3 +231,18 @@ and full Stage 6 coverage. U7 depends on U6 (plan's own Stage 8→9 sequencing).
   Stage 6 coverage" refers to). Team coherence certification unaffected (no agent/skill roster or
   prompt changed; only `ws:agent-team` document state and manifest/kaizen/coordination
   bookkeeping).
+
+- **Update 2026-09-19 (U3j — "308" correction, and Stage 6's artifacts committed).** U3j (fresh
+  `cobb` dispatch, haiku, mechanical) fixed the "308" figure at its source in
+  `claude/cobb/kaizen/history.md`, `plan.md` (2 spots), and the manifest's `_status` field to the
+  corrected 327 ready/5 failed/332 total; re-validated the manifest as well-formed JSON afterward.
+  teco grep-swept `claude/cobb/` and `claude/docs/` post-dispatch and confirmed no remaining
+  "308 documents" occurrence (the only "308" hits left are this correction's own explanatory prose
+  and an unrelated `C-308` backlog ticket ID). **Stage 6's full artifact set is now committed** —
+  `a1eb03d` (`kb-claim-manifest.json` + this coordination doc) and `62824af` (cobb's
+  `kaizen/history.md` + `kaizen/plan.md` correction) — `git status` confirmed clean of Stage 6
+  files afterward, only the unrelated concurrent `model-bench/` session's diffs remain untouched.
+  **Next: U3k, a diff-scoped `analyst` review of the whole Stage 6 migration** (content-fidelity
+  spot-checks, the 5-document permanent-failure gap's documentation, manifest/kaizen consistency)
+  before Stage 7 (U4) opens — per the standing plan recorded in U3h/U3i's own rows ("Stage 6's own
+  diff-scoped analyst gate covers the whole migration once U3i closes, not per-dispatch").
