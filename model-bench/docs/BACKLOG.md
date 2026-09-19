@@ -93,3 +93,19 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   problem string, pinned by a `tests/test_packs.py` case); the fix here is the same shape, plus its
   mirror test. Low risk: no shipped pack hits it, only a pack
   mid-authoring.
+
+- **`stats.verdict()`'s "is better than" wording assumes every verdict metric's own raw rate is the
+  desired outcome — untrue for `falseAdvanceRate`/`falseSuspendRate`.** `modelbench/scoring/
+  classification.py:209-210,259` stores the error itself as the metric's own "success": for a
+  `clear_suspend` item, `advanced=True` IS the false-advance event, and
+  `counts["falseAdvanceRate"] = int(advanced)`; symmetrically, `counts["falseSuspendRate"] =
+  int(not advanced)` on a `clear_advance` item IS the false-suspend event. So a model's own
+  `BinaryMetric.rate` for either metric is the rate of the *undesired* event — lower is better —
+  while `stats.verdict()`'s generic winner selection (`stats.py:1320`, `winner, loser = (a_label,
+  b_label) if diff >= 0 else (b_label, a_label)`) and the `report.py` text built from it are
+  polarity-blind: a distinguishable guard-judge verdict on either metric would print "X is better
+  than Y" when X in fact has the *higher* error rate. **Read-verified by tracing both files; never
+  yet observed live** — every shipped `reports/guard-judge-*.md` was checked and none has reached a
+  distinguishable verdict on either metric, so this has never surfaced in a rendered report. Full
+  mechanism, and a scoped design that avoids the defect in new code without fixing it here:
+  `docs/plans/small-model-catalog-sweep.md` §2.4 and §6.
