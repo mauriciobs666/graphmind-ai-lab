@@ -29,7 +29,7 @@ set -euo pipefail
 #   FALKORCHAT_AGENT_ID    (default: assistant)
 #   FALKORCHAT_AGENT_NAME  (default: Assistant)
 #   FALKORCHAT_TRIGGER_DEF_KEY     (default: salesperson) — pinned so an @mention
-#   FALKORCHAT_TRIGGER_DEF_VERSION (default: v7)           starts the demo agent,
+#   FALKORCHAT_TRIGGER_DEF_VERSION (default: v8)           starts the demo agent,
 #                          not the dev deployment's `triage`.
 #   FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH (default: 0) — OFF: the M2 responder's
 #                          workspace-wide retrieval must stay structurally
@@ -108,7 +108,7 @@ EMBEDDING_DIM="${EMBEDDING_DIM:-1024}"
 FALKORCHAT_AGENT_ID="${FALKORCHAT_AGENT_ID:-assistant}"
 FALKORCHAT_AGENT_NAME="${FALKORCHAT_AGENT_NAME:-Assistant}"
 FALKORCHAT_TRIGGER_DEF_KEY="${FALKORCHAT_TRIGGER_DEF_KEY:-salesperson}"
-FALKORCHAT_TRIGGER_DEF_VERSION="${FALKORCHAT_TRIGGER_DEF_VERSION:-v7}"
+FALKORCHAT_TRIGGER_DEF_VERSION="${FALKORCHAT_TRIGGER_DEF_VERSION:-v8}"
 FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH="${FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH:-0}"
 FALKORCHAT_ENABLE_AGENT="${FALKORCHAT_ENABLE_AGENT:-1}"
 FALKORCHAT_WORKFLOW_ENABLED="${FALKORCHAT_WORKFLOW_ENABLED:-1}"

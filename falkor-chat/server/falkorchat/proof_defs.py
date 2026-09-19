@@ -318,6 +318,40 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # `config.model` (`lmstudio/mistralai/ministral-3-3b`) is carried forward
 # **unchanged** at `v7` too, for the same create-only reason.
 #
+# **`v8` (K-065/DEF-6, Mitigation D — `docs/plans/salesperson-ui-ml.md` "Mitigation
+# options assessed" item D / "Recommendation") is a `v2.1`/`v5`/`v7`-shaped bump,
+# not a capability bump** — `config.tools` and topology are byte-identical to
+# `v7`; only `systemPrompt` gains one more sentence. DEF-6: an `en`-configured
+# participant can occasionally get a fully-formed Spanish reply under
+# concurrency, confirmed (that session's own harness, bypassing this app
+# entirely) to reproduce at LM Studio's own concurrent-request serving layer —
+# not an application-layer bug. The ml plan's own diagnosis: the *only*
+# per-language differentiator in the whole prompt is a single JSON
+# `"language"` key buried at the tail of a long, mostly-prompt-identical
+# coalesced user turn — a weak signal even before concurrency-induced decoding
+# noise gets a chance to flip it. Mitigation D raises that signal's margin by
+# interpolating a second, redundant language instruction directly into
+# `systemPrompt` itself — read on every turn as part of the `system` message,
+# not buried in the tail of the user turn — **in addition to**, not instead
+# of, the existing "reply in the language named by `language` in the CONTEXT
+# block" sentence (which stays unchanged): a config-shared def cannot
+# interpolate a *specific* run's resolved language name at authoring time
+# (`systemPrompt` is one create-only string shared by every participant's
+# run, whatever `language` their own `ctx` carries), so the added sentence is
+# a generic, redundant, more emphatic imperative that the CONTEXT block's
+# `language` value governs the **entire** reply, every sentence, with no
+# mid-reply drift — the plan's own example phrasing ("Respond in
+# {language_name} for this entire reply") re-expressed for a value resolved
+# at request time, not def-authoring time. This does **not** fix the
+# suspected underlying LM-Studio/llama.cpp-level nondeterminism (the plan is
+# explicit on that); it is a cheap, no-throughput-cost lever "testable cheaply
+# with the same direct-LM-Studio harness... before touching the application at
+# all" — validated live, against this exact wording, before being treated as
+# closing DEF-6 (`docs/plans/salesperson-ui-ml.md` "Required evaluation before
+# calling this closed for the demo"). `config.model`
+# (`lmstudio/mistralai/ministral-3-3b`) is carried forward **unchanged** at
+# `v8` too, for the same create-only reason every prior bump's note gives.
+#
 # **Why exactly one conditional transition, not zero and not unconditional**
 # (plan §2.4 — binding for all four versions): `_validate_def_spec` requires a def
 # to carry >= 1 transition (K-024 U4b, O-6; K-030, still open, would relax this),
@@ -337,7 +371,7 @@ ACCESS_REQUEST_DEF: dict[str, Any] = {
 # conversation, plus a sanity companion proving the guard mechanism itself is real.
 SALESPERSON_DEF: dict[str, Any] = {
     "key": "salesperson",
-    "version": "v7",
+    "version": "v8",
     "name": "Salesperson",
     "kind": "conversation",
     "steps": [
@@ -355,16 +389,21 @@ SALESPERSON_DEF: dict[str, Any] = {
                 # resolvable at publish time (`services._check_models_resolvable`,
                 # FR-9): an unresolvable ref fails the publish with a 400, not silently
                 # at first use. Carried forward unchanged from `v2.1` into `v3`
-                # (K-054), `v4` (K-055), `v5` (K-057) and again into `v7` (the
-                # storefront demo) — `config.model` is create-only, so omitting this
-                # line on a version bump would silently undo the re-point (see the
-                # `v3`/`v4`/`v5`/`v7` notes above).
+                # (K-054), `v4` (K-055), `v5` (K-057), `v7` (the storefront demo) and
+                # again into `v8` (K-065/DEF-6, Mitigation D) — `config.model` is
+                # create-only, so omitting this line on a version bump would silently
+                # undo the re-point (see the `v3`/`v4`/`v5`/`v7`/`v8` notes above).
                 "model": "lmstudio/mistralai/ministral-3-3b",
                 "systemPrompt": (
                     "You are a helpful electronics-store assistant chatting with a "
                     "customer. Reply in the language named by `language` in the "
                     "CONTEXT block; if no language is named there, reply in "
                     "English.\n\n"
+                    "The `language` value in the CONTEXT block governs your entire "
+                    "reply, from the first word to the last — check it before every "
+                    "reply you send and respond in that language throughout, with no "
+                    "exceptions and no drifting into a different language partway "
+                    "through.\n\n"
                     "You can answer factual questions about specific products (name, "
                     "category, price) and list products matching a category or price "
                     "range, using your catalog tools. Never guess a price or category "

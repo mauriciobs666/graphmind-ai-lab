@@ -217,7 +217,7 @@ Vite + TypeScript, English/Brazilian Portuguese/Spanish — for the workflow-eng
 `salesperson` agent. It is a **deployment of this server**, not a separate service: it's a static
 bundle this same FastAPI process serves at `/shop` (`FALKORCHAT_STOREFRONT_ENABLED=1`), one
 process, one port, no CORS. Up to ~50 audience members each join with just a display name and hold
-their own isolated conversation — cart, order, profile — driven by `salesperson@v7`
+their own isolated conversation — cart, order, profile — driven by `salesperson@v8`
 (`falkorchat.proof_defs`).
 
 ```bash

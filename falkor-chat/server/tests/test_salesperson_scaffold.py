@@ -315,15 +315,16 @@ def test_salesperson_def_pins_ministral_model_and_version_bump():
     salesperson-tool-reliability-ml.md` §8), first bumped at `v2.1` and carried
     forward unchanged into `v3` (K-054, the durable-profile capability bump),
     `v4` (K-055, NL query generation), `v5` (K-057, the compound-filter
-    wording fix) and `v7` (the storefront demo's two `systemPrompt`
-    sentences) — `config.model` is create-only exactly like
-    `config.tools`/`systemPrompt` (`proof_defs.py`'s module docstring), so a
-    version that republished a full, fresh `config` without repeating this
-    line would silently fall back to the shared `step`-role default and undo
-    the re-point."""
+    wording fix), `v7` (the storefront demo's two `systemPrompt` sentences)
+    and `v8` (K-065/DEF-6, Mitigation D's language-salience `systemPrompt`
+    sentence — `v2.1` → `v3` → `v4` → `v5` → `v7` → `v8`) — `config.model` is
+    create-only exactly like `config.tools`/`systemPrompt` (`proof_defs.py`'s
+    module docstring), so a version that republished a full, fresh `config`
+    without repeating this line would silently fall back to the shared
+    `step`-role default and undo the re-point."""
     assistant = next(s for s in SALESPERSON_DEF["steps"] if s["key"] == "assistant")
     assert assistant["config"]["model"] == "lmstudio/mistralai/ministral-3-3b"
-    assert SALESPERSON_DEF["version"] == "v7"
+    assert SALESPERSON_DEF["version"] == "v8"
 
 
 #: The exact `config.tools` list `salesperson@v5` shipped — the cumulative set
@@ -374,6 +375,49 @@ def test_salesperson_v7_carries_v5_tools_forward_and_adds_both_prompt_sentences(
     assert "Never invent a delivery address." in prompt
 
     # Topology is byte-identical to v5 — a change here is the K-034 409 path.
+    assert [s["key"] for s in SALESPERSON_DEF["steps"]] == ["assistant", "ended"]
+    assert len(SALESPERSON_DEF["transitions"]) == 1
+
+
+def test_salesperson_v8_carries_v7_forward_and_adds_language_salience_sentence():
+    """`v8` (K-065/DEF-6, Mitigation D — `docs/plans/salesperson-ui-ml.md`
+    "Mitigation options assessed" item D / "Recommendation") is a
+    `v2.1`/`v5`/`v7`-shaped bump: `config.tools` and topology are unchanged
+    from `v7` and only `systemPrompt` grows, by one more sentence, additive
+    to (never replacing) `v7`'s own two sentences.
+
+    DEF-6: an `en`-configured participant can occasionally get a fully-formed
+    Spanish reply under concurrency — confirmed reproducing at LM Studio's
+    own serving layer with application code bypassed entirely. The only
+    per-language differentiator anywhere in the prompt is a single JSON
+    `language` key sitting at the tail of a long, mostly-prompt-identical
+    coalesced user turn — a weak signal even before concurrency-induced
+    decoding noise gets a chance to flip it. Mitigation D raises that
+    signal's margin with a second, redundant, more emphatic instruction
+    living in `systemPrompt` itself — resent as part of the `system` message
+    on every turn, not buried in the tail of the user turn — without
+    touching the existing CONTEXT-block mechanism at all."""
+    assistant = next(s for s in SALESPERSON_DEF["steps"] if s["key"] == "assistant")
+    config = assistant["config"]
+
+    assert V5_TOOLS <= set(config["tools"])
+    assert len(config["tools"]) == len(set(config["tools"]))
+    assert config["requiredTools"] == ["post_message"]
+
+    prompt = config["systemPrompt"]
+    # v7's own two sentences stay untouched — Mitigation D is explicitly
+    # additive, never a replacement of the existing CONTEXT-block mechanism.
+    assert "`language`" in prompt and "CONTEXT" in prompt
+    assert "English" in prompt
+    assert "Before you place an order, confirm the delivery address on file" in prompt
+    assert "Never invent a delivery address." in prompt
+    # v8's own new sentence — redundant, entire-reply-scoped language salience,
+    # load-bearing content pinned so a mutant that drops or waters it down
+    # (e.g. loses the "entire reply" framing or the anti-drift clause) is caught.
+    assert "governs your entire reply" in prompt
+    assert "no drifting into a different language" in prompt
+
+    # Topology is byte-identical to v7/v5 — a change here is the K-034 409 path.
     assert [s["key"] for s in SALESPERSON_DEF["steps"]] == ["assistant", "ended"]
     assert len(SALESPERSON_DEF["transitions"]) == 1
 

@@ -103,7 +103,7 @@ storefront rather than starting one — it is pointed at `http://127.0.0.1:8000/
 
 `falkor-chat/scripts/start_demo.sh` is the supported one-command, from-cold-box bring-up: FalkorDB
 → schema → seed demo/catalog/salesperson → preflight checks → `./build.sh` → uvicorn as the
-**storefront** deployment (`FALKORCHAT_WS_ID=demo`, trigger pinned to `salesperson@v7`, responder
+**storefront** deployment (`FALKORCHAT_WS_ID=demo`, trigger pinned to `salesperson@v8`, responder
 fall-through off, `--reload` off). Run it from `falkor-chat/`:
 
 ```bash
@@ -123,13 +123,13 @@ server/.venv/bin/pip install -e 'server[dev]'`):
 EMBEDDING_DIM=1024 ./scripts/bootstrap_schema.sh demo   # ws:demo, NOT the "acme" default
 ./scripts/seed_demo.sh demo                             # the Agent the storefront posts to
 ./scripts/seed_catalog.sh                               # products live in `reference`
-./scripts/seed_salesperson.sh demo                      # publishes salesperson@v7
+./scripts/seed_salesperson.sh demo                      # publishes salesperson@v8
 ./scripts/verify_salesperson.sh demo && ./scripts/verify_catalog.sh   # read-only checks
 
 cd salesperson && ./build.sh && cd ../server && \
   FALKORCHAT_WS_ID=demo FALKORCHAT_EMBEDDING_DIM=1024 \
   FALKORCHAT_ENABLE_AGENT=1 FALKORCHAT_WORKFLOW_ENABLED=1 \
-  FALKORCHAT_TRIGGER_DEF_KEY=salesperson FALKORCHAT_TRIGGER_DEF_VERSION=v7 \
+  FALKORCHAT_TRIGGER_DEF_KEY=salesperson FALKORCHAT_TRIGGER_DEF_VERSION=v8 \
   FALKORCHAT_TRIGGER_RESPONDER_FALLTHROUGH=0 \
   FALKORCHAT_STOREFRONT_ENABLED=1 \
   FALKORCHAT_STOREFRONT_DIR="$PWD/../../salesperson/dist" \
