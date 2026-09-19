@@ -53,8 +53,31 @@ set -euo pipefail
 #   FALKORCHAT_ENABLE_AGENT(default: 1)      — REQUIRED on: search_documents
 #                          needs the embedder wired (app._build_default_app).
 #                          Do not set this to 0 for this process.
-#   FALKORCHAT_OPENCODE_CONFIG(default: $HOME/.config/opencode/opencode.json)
-#                          — same convention as start_server.sh/start_demo.sh.
+#   FALKORCHAT_OPENCODE_CONFIG(default: see resolution order below) — same
+#                          convention as start_server.sh/start_demo.sh, EXCEPT
+#                          for the extra fallback tier just below: this is an
+#                          always-on process nobody may be watching when it's
+#                          cold-restarted, so silently resolving to a provider
+#                          baseURL that's unreachable from this box (e.g. a
+#                          stale LAN IP under WSL2 mirrored networking — see
+#                          claude/qa-engineer/qa-testing-techniques.md) would
+#                          leave every embed/search call failing with no
+#                          obvious cause. Resolution order, cold-restart-safe:
+#                            1. explicit env var, if set — used as-is, no
+#                               warning (caller's call, e.g. a QA pass's own
+#                               scratch copy per the technique doc above).
+#                            2. else $HOME/.config/opencode/opencode.local.json,
+#                               if present — a **local, untracked, hand-
+#                               maintained override** living beside the shared
+#                               opencode.json (never edit that shared file
+#                               directly, ever — other tools/sessions read it).
+#                               Logged at INFO so a restart's own output shows
+#                               which file is actually in play.
+#                            3. else $HOME/.config/opencode/opencode.json (the
+#                               shared, pristine file) — logged at WARNING,
+#                               since this is the exact fallback that goes
+#                               stale silently; the warning names the local-
+#                               override path so the fix is one line away.
 #   FALKORCHAT_MODEL_CONFIG — deliberately NOT set/defaulted here. Leave unset
 #                          so config.py's own shared default overlay applies
 #                          unchanged. See the model-config note above.
@@ -114,7 +137,21 @@ if [ "$FALKORCHAT_ENABLE_AGENT" != "1" ]; then
   echo "       search_documents needs the embedder wired (app._build_default_app)." >&2
   exit 1
 fi
-FALKORCHAT_OPENCODE_CONFIG="${FALKORCHAT_OPENCODE_CONFIG:-$HOME/.config/opencode/opencode.json}"
+OPENCODE_LOCAL_OVERRIDE="$HOME/.config/opencode/opencode.local.json"
+OPENCODE_SHARED_DEFAULT="$HOME/.config/opencode/opencode.json"
+if [ -n "${FALKORCHAT_OPENCODE_CONFIG:-}" ]; then
+  : # explicit override — used as-is, caller's call, no warning
+elif [ -f "$OPENCODE_LOCAL_OVERRIDE" ]; then
+  FALKORCHAT_OPENCODE_CONFIG="$OPENCODE_LOCAL_OVERRIDE"
+  echo "INFO: FALKORCHAT_OPENCODE_CONFIG not set — using local override $OPENCODE_LOCAL_OVERRIDE" >&2
+else
+  FALKORCHAT_OPENCODE_CONFIG="$OPENCODE_SHARED_DEFAULT"
+  echo "WARNING: FALKORCHAT_OPENCODE_CONFIG not set and no $OPENCODE_LOCAL_OVERRIDE found —" >&2
+  echo "         falling back to the shared $OPENCODE_SHARED_DEFAULT. Its provider baseURL(s)" >&2
+  echo "         may not be reachable from this box (e.g. a stale LAN IP under WSL2 — see" >&2
+  echo "         claude/qa-engineer/qa-testing-techniques.md). To fix without touching that" >&2
+  echo "         shared file, create $OPENCODE_LOCAL_OVERRIDE with a corrected baseURL." >&2
+fi
 if [ -n "${FALKORCHAT_MODEL_CONFIG:-}" ]; then
   echo "WARNING: FALKORCHAT_MODEL_CONFIG is set. This process must use the same," >&2
   echo "         default model-config overlay as the rest of the deployment —" >&2
