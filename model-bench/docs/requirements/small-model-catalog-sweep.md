@@ -36,6 +36,7 @@ the model's currently-configured quantization (not raw parameter count) — see 
 - `text-embedding-qwen3-embedding-0.6b`
 - `text-embedding-nomic-embed-text-v1.5`
 - `text-embedding-granite-embedding-278m-multilingual`
+- `text-embedding-qwen3-embedding-4b`
 
 **Chat/VLM models** (target packs: all four chat-role packs — `guard-judge-understanding`,
 `nlq-structured-query`, `tool-caller-shop-assistant`, `chat-responder-grounded-answers`):
@@ -58,7 +59,7 @@ the model's currently-configured quantization (not raw parameter count) — see 
 - `qwen3.5-9b-uncensored-hauhaucs-aggressive`
 - `qwen3.5-9b-claude-4.6-opus-uncensored-distilled`
 
-20 models total (3 embedding + 17 chat/vlm).
+21 models total (4 embedding + 17 chat/vlm).
 
 ## User stories
 
@@ -71,7 +72,7 @@ the model's currently-configured quantization (not raw parameter count) — see 
 
 ## Functional requirements
 
-- **FR-1.** Each of the 3 embedding models is run against `embedder-graphrag-retrieval`.
+- **FR-1.** Each of the 4 embedding models is run against `embedder-graphrag-retrieval`.
 - **FR-2.** Each of the 17 chat/vlm models is run against all four chat-role packs:
   `guard-judge-understanding`, `nlq-structured-query`, `tool-caller-shop-assistant`,
   `chat-responder-grounded-answers`.
@@ -125,7 +126,7 @@ the model's currently-configured quantization (not raw parameter count) — see 
 - A full pairwise comparison matrix across all in-scope models within a pack (superseded by the
   ranked-table + reference-anchored-family design in FR-7/FR-8).
 
-- Any model not on the 19-model list above (including the two 12B-parameter catalog models
+- Any model not on the 21-model list above (including the two 12B-parameter catalog models
   already discussed and excluded, `google/gemma-4-12b-qat` and `google/gemma-3-12b`).
 - Declaring a "winning" model for any role, or any pass/fail threshold — `model-bench` has no
   gate by design, and this sweep does not add one. Interpreting the resulting reports is a
@@ -138,10 +139,10 @@ the model's currently-configured quantization (not raw parameter count) — see 
 
 ## Acceptance criteria
 
-- **Given** the 20-model list and the five packs, **when** the sweep completes without
-  operational failures, **then** there are 3 stored runs for `embedder-graphrag-retrieval` (one
+- **Given** the 21-model list and the five packs, **when** the sweep completes without
+  operational failures, **then** there are 4 stored runs for `embedder-graphrag-retrieval` (one
   per embedding model) and 17 × 4 = 68 stored runs across the four chat-role packs, all tagged
-  with the sweep's shared session identifier — 71 stored runs in total.
+  with the sweep's shared session identifier — 72 stored runs in total.
 - **Given** a (model, pack) combination fails for an operational reason, **when** the sweep
   finishes, **then** that failure is visible in the sweep's own summary/record (not silently
   absent from it) and every other combination was still attempted.
@@ -209,3 +210,16 @@ the model's currently-configured quantization (not raw parameter count) — see 
   above (smaller than the already-in-scope `text-embedding-qwen3-embedding-0.6b`) — no
   re-litigation of that criterion needed. Scope, FR-1, and the acceptance criteria updated from
   19/2-embedding/70-total to 20/3-embedding/71-total accordingly.
+- 2026-09-19 — Stakeholder asked to add a fourth embedding model to the locked-in scope list:
+  `text-embedding-qwen3-embedding-4b` (Qwen), confirmed by `teco` as present in the local LM
+  Studio catalog (`GET /api/v0/models`: publisher `Qwen`, arch `qwen3`, compatibility type
+  `gguf`, quantization `Q4_K_M`, state `loaded` at time of check) under the LM-Studio-local
+  catalog id `text-embedding-qwen3-embedding-4b`. Applying the footprint-at-configured-
+  quantization criterion already locked in above: at 4B params, Q4_K_M (~4.5 bits/weight
+  effective), the estimated quantized footprint is roughly ~2.2–2.5 GB — well under the ~6 GB-ish
+  line implied by the bonsai-vs-12B-models precedent, and in the same size class as several
+  already-in-scope chat/vlm models at 4B params (`qwen/qwen3-4b-2507`,
+  `qwen/qwen3-4b-thinking-2507`, `nvidia/nemotron-3-nano-4b`). Passes the existing footprint
+  threshold cleanly — no re-litigation of the criterion itself needed. Scope, FR-1, and the
+  acceptance criteria updated from 20/3-embedding/71-total to 21/4-embedding/72-total
+  accordingly.
