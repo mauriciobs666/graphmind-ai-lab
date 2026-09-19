@@ -60,7 +60,7 @@ both reviewers.
 | U3br | `coder` (resume) | `a04e75a1454a5ec5d` | accepted | fold 2 minor suggestions (missing zero-arms test, README clause) — committed `4433e56` | — | 186.8k tok / 19 tools |
 | U3c | `coder` | `a20f36e22226f0479` | delivered | `scripts/consolidate_sweep_reports.py` (plan Unit C, fixture-built, parallel to U3a) | `analyst` (light) → in-flight | 158.9k tok / 26 tools |
 | U4c | `analyst` (fresh) | `ac2c3f299cd822b87` | accepted | `docs/reviews/small-model-catalog-sweep-impl.md` (own `-impl` doc, not a section of the plan review — analyst's own correct call per the closed role set) | `analyst` → **approve** (2 non-blocking: a `main()`-level test gap, HISTORY.md entry deferred) | 120.8k tok / 31 tools |
-| U5 | `devops` | — | queued, **held** (LM Studio in use) | 71-run sweep under one session id, `results/` | — | — |
+| U5 | `devops` | — | queued, **held** (LM Studio in use) | 72-run sweep under one session id, `results/` | — | — |
 | U6 | TBD | — | queued | five per-pack reports via `rank` (needs U3a+U3b gated, U5 data) | `analyst`/`data-scientist` → — | — |
 | U7 | TBD | — | queued | consolidated document via U3c's script (FR-9/FR-10) | `analyst` (+`qa-engineer` if it has walkthrough claims) → — | — |
 
@@ -90,5 +90,22 @@ amending scope. `tico` (agent id `a3628d9fcdf158283`) amended
 `docs/requirements/small-model-catalog-sweep.md` in place — Scope/FR-1/AC-1 counts 19/2/70 →
 20/3/71, dated Decision log entry — diff independently re-verified by `teco` against the live
 tree before commit (`92536a0`). No code or design impact: Track A's report code is generic over
-model count, so nothing in Units A/B/C needs revisiting. U5's target run count updated above to
+model count, so nothing in Units A/B/C needs revisiting. U5's target run count was updated above to
 71; U6/U7 are pack-shaped and unaffected by the model-count change.
+
+**2026-09-19 — Scope grown again to 21 models / 72 runs.** Stakeholder asked to add a fourth
+embedding model, `text-embedding-qwen3-embedding-4b`; confirmed present in the LM Studio catalog
+(`GET /api/v0/models`: publisher `Qwen`, arch `qwen3`, quantization `Q4_K_M`, state `loaded` at
+time of check — a read-only listing call only) before amending scope. Footprint check (4B params
+at Q4_K_M, ~2.2–2.5 GB) clears the doc's existing footprint-at-quantization criterion cleanly —
+same size class as several already-in-scope 4B chat/vlm models, no re-litigation of the criterion
+needed. `tico` (agent id `a4c29d02ae1b639e6`, resumed for this task) amended
+`docs/requirements/small-model-catalog-sweep.md` in place — Scope/FR-1/AC-1 counts 20/3/71 →
+21/4/72, dated Decision log entry — and, self-flagged and fixed on request, a stale "19-model
+list" cross-reference in the Out of scope section left over from the prior granite addition, now
+corrected to "21-model list". Diff independently re-verified by `teco` against the live tree
+before commit (`3248b69`); confirmed no other stale count references remain
+(`grep -n "19-model\|20-model\|19 model\|20 model\|70 stored\|71 stored"`, the one remaining hit
+is a historical Decision-log entry quoting the original 2026-09-18 question verbatim — correctly
+left as-is). No code or design impact: same reasoning as the prior scope growth. U5's target run
+count updated above to 72; U6/U7 remain pack-shaped and unaffected.
