@@ -119,3 +119,44 @@ distiller to resolve by hand, rather than auto-deleting.
 None blocking. Both Major findings are independent of each other and of the rest of the dispatch
 — they can be fixed in a small, disjoint follow-up to `skills/agent-maintenance/SKILL.md` without
 touching any of the 11 agent files or `claude/AGENTS.md`.
+
+## Pass 4 (2026-09-19) — re-check of commit `b7e39a1`
+
+**Verdict: needs changes.** The stale-"found-none" fix is clean. The collision-unsafe-delete fix
+closes the same-pass deletion but leaves a write ordering gap that reopens the identical hazard
+one distillation pass later — a new finding, not a re-argument of the original one.
+
+**Finding 1 (stale "found none") — fixed.** `skills/agent-maintenance/SKILL.md:837-847` inserts
+the corpus-count guard before either "Found" branch is reachable, and the escalate path
+(`limit`-exceeded) performs no manifest write at all — confirmed by reading lines 837-890 in full:
+nothing between "stop here and escalate" and the next bullet touches `documentId`/`verified`, so a
+retried pass safely re-enters the same check from the same `"pending"` state. Clean.
+
+**Finding 2 (collision-unsafe delete) — not fully fixed; new gap.** The "Found one" branch
+(`SKILL.md:865-867`) still writes `documentId := <found id>` into the manifest *before* the
+byte-exact check runs and *unconditionally* — the fix (lines 877-880) only gates the
+`delete_document` call on that check's outcome, not this earlier write. On a genuine title
+collision the manifest is therefore left pointing at a different claim's live document, with
+`verified: "pending"`, even after escalating. The **next** distillation pass that revisits this
+`"pending"` entry hits the upstream "pending-at-start-of-pass" check
+(`SKILL.md:803-821`, byte-identical before and after this fix, untouched by it): `get_document
+(documentId)` now returns non-`None` (the adopted id is real and live) and mismatches this claim's
+own `.md` text (it's someone else's content) — and that check treats *any* non-`None` mismatch
+unconditionally as "the old document genuinely still exists … re-run the sequence … its own
+`delete_document(documentId)` call will succeed as written, since the id it's deleting is still
+live." That deletes the other claim's live document — the exact hazard Finding 2 was meant to
+close, reintroduced one pass later instead of prevented. Evidence: read `SKILL.md:799-890` in full
+(both the unchanged 803-821 block and the new 837-890 block) and traced the two-pass sequence by
+hand against both branches — not just the single pass the fix's own text addresses.
+
+**Suggested fix (route to `cobb`, same file):** gate the manifest overwrite on the same
+confirmation that gates the delete — write `documentId := found_id` only *after*
+`get_document(found_id)` confirms a byte-exact match; on mismatch, leave the manifest entry
+exactly as it was at the top of this recovery attempt (still the pre-recovery id, already
+confirmed `None`) so a future pass re-enters the *ambiguous-`None`* branch — which now safely
+re-runs the corpus-count-gated sweep — rather than the upstream unconditional-delete branch. This
+is a two-pass defect class (a write that outruns its own verification, surfaced only on a *later*
+pass through a *different*, unrelated branch): before accepting the next revision, trace what a
+**second, later pass** does with whatever partial manifest state each escalate/abort branch
+leaves behind, for every branch in this bullet that writes to the manifest ahead of its own
+verification completing — not only what the same pass does with it.
