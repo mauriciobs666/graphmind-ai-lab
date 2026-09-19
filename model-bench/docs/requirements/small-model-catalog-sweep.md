@@ -144,9 +144,10 @@ the model's currently-configured quantization (not raw parameter count) — see 
 - **Given** a (model, pack) combination fails for an operational reason, **when** the sweep
   finishes, **then** that failure is visible in the sweep's own summary/record (not silently
   absent from it) and every other combination was still attempted.
-- **Given** the sweep is complete, **when** `./run.sh compare --session <sweep-session-id>` is run
-  for each of the five packs, **then** each renders a comparison report to `reports/` covering
-  every in-scope model with a stored result for that pack.
+- **Given** the sweep is complete, **when**
+  `./run.sh rank --pack <pack-id> --session <sweep-session-id>` is run for each of the five packs,
+  **then** each renders a comparison report to `reports/` covering every in-scope model with a
+  stored result for that pack.
 - **Given** a chat-role pack's report, **when** it is rendered, **then** every number outside the
   reference-anchored family (if used) is labelled `exploratory — no significance claim`, and the
   pack's existing ceiling/adequacy caveat is restated in that report, not merely cited (FR-11).
@@ -196,3 +197,5 @@ the model's currently-configured quantization (not raw parameter count) — see 
   the consolidated document's preamble must set honest expectations about what this sample size
   can and cannot prove. This resolves the stakeholder's "both" answer: the two readings converge
   on the consolidated-document design, without a cross-role number.
+- 2026-09-19 — AC-3's cited command corrected from `compare` to `rank`, per architect's plan +
+  analyst's review finding that `compare` cannot support this report shape.
