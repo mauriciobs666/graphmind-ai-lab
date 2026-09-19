@@ -11,7 +11,7 @@ evidence instead of the handful of one-off runs done so far.
 
 ## Problem & current state
 
-Today only 5 of the 70 possible (model × applicable-pack) combinations in the in-scope list have
+Today only 5 of the 76 possible (model × applicable-pack) combinations in the in-scope list have
 a stored result at all, and they were produced incidentally across separate, earlier sessions —
 not as one coordinated, directly-comparable batch:
 
@@ -59,7 +59,7 @@ the model's currently-configured quantization (not raw parameter count) — see 
 - `qwen3.5-9b-uncensored-hauhaucs-aggressive`
 - `qwen3.5-9b-claude-4.6-opus-uncensored-distilled`
 
-21 models total (4 embedding + 17 chat/vlm).
+22 models total (4 embedding + 18 chat/vlm).
 
 ## User stories
 
@@ -73,7 +73,7 @@ the model's currently-configured quantization (not raw parameter count) — see 
 ## Functional requirements
 
 - **FR-1.** Each of the 4 embedding models is run against `embedder-graphrag-retrieval`.
-- **FR-2.** Each of the 17 chat/vlm models is run against all four chat-role packs:
+- **FR-2.** Each of the 18 chat/vlm models is run against all four chat-role packs:
   `guard-judge-understanding`, `nlq-structured-query`, `tool-caller-shop-assistant`,
   `chat-responder-grounded-answers`.
 - **FR-3.** Every run produced by this sweep is tagged with one shared session identifier, so the
@@ -91,8 +91,8 @@ the model's currently-configured quantization (not raw parameter count) — see 
 - **FR-7.** Each per-pack report ranks every in-scope model by that pack's headline metric (or
   each `verdictMetrics` member, for a pack with no headline metric), with each model's own
   confidence interval and the pack's resolving-power sentence recomputed for the model count
-  actually in that report. It does **not** contain a full pairwise comparison matrix (136 cells
-  for 17 models is both unreadable and statistically unsupportable — see the Decision log).
+  actually in that report. It does **not** contain a full pairwise comparison matrix (153 cells
+  for 18 models is both unreadable and statistically unsupportable — see the Decision log).
 - **FR-8.** If pairwise significance verdicts are included, they are limited to one
   pre-registered, reference-anchored family per pack: each of the other in-scope chat/vlm models
   compared against one designated reference model (recommended: `qwen/qwen3-4b-2507`, already
@@ -126,7 +126,7 @@ the model's currently-configured quantization (not raw parameter count) — see 
 - A full pairwise comparison matrix across all in-scope models within a pack (superseded by the
   ranked-table + reference-anchored-family design in FR-7/FR-8).
 
-- Any model not on the 21-model list above (including the two 12B-parameter catalog models
+- Any model not on the 22-model list above (including the two 12B-parameter catalog models
   already discussed and excluded, `google/gemma-4-12b-qat` and `google/gemma-3-12b`).
 - Declaring a "winning" model for any role, or any pass/fail threshold — `model-bench` has no
   gate by design, and this sweep does not add one. Interpreting the resulting reports is a
@@ -139,10 +139,10 @@ the model's currently-configured quantization (not raw parameter count) — see 
 
 ## Acceptance criteria
 
-- **Given** the 21-model list and the five packs, **when** the sweep completes without
+- **Given** the 22-model list and the five packs, **when** the sweep completes without
   operational failures, **then** there are 4 stored runs for `embedder-graphrag-retrieval` (one
-  per embedding model) and 17 × 4 = 68 stored runs across the four chat-role packs, all tagged
-  with the sweep's shared session identifier — 72 stored runs in total.
+  per embedding model) and 18 × 4 = 72 stored runs across the four chat-role packs, all tagged
+  with the sweep's shared session identifier — 76 stored runs in total.
 - **Given** a (model, pack) combination fails for an operational reason, **when** the sweep
   finishes, **then** that failure is visible in the sweep's own summary/record (not silently
   absent from it) and every other combination was still attempted.
@@ -223,3 +223,29 @@ the model's currently-configured quantization (not raw parameter count) — see 
   threshold cleanly — no re-litigation of the criterion itself needed. Scope, FR-1, and the
   acceptance criteria updated from 20/3-embedding/71-total to 21/4-embedding/72-total
   accordingly.
+- 2026-09-19 — A `devops` execution run flagged a count discrepancy present since this document's
+  very first commit (`56e2e02`, 2026-09-18), unrelated to the two embedding-count amendments
+  above: the Scope section's own bulleted Chat/VLM list has always held 18 distinct models, while
+  the Scope summary line, FR-2, the acceptance criteria, and the Problem & current-state section's
+  combo math all said 17 (and the Problem-section's "70 possible combinations" line was never
+  updated across either embedding-count-growth commit, independently stale regardless of this
+  question). `tico`'s own investigation (uninfluenced by the stakeholder's parallel read) found
+  three independently-derived numbers — the Problem-section's original 70-combo arithmetic
+  (2×1 + 17×4), this log's own 2026-09-18 "19-model list... locked in as-is" confirmation, and
+  FR-2/AC's 17×4 math — all self-consistently pointing to 17 as the number actually held at
+  authoring time, and suspected `mistralai_ministral-3-3b-instruct-2512` as the likely accidental
+  18th bullet given its underscore-style catalog id (inconsistent with this list's otherwise
+  uniform `publisher/model` convention for officially-published entries) and its apparent overlap
+  with the already-in-scope `mistralai/ministral-3-3b`. Stakeholder ruling, direct and overriding
+  that inference: **18 is correct** — both Ministral catalog entries (`mistralai/ministral-3-3b`
+  and `mistralai_ministral-3-3b-instruct-2512`) are confirmed genuinely distinct Mistral releases,
+  not a duplicate; the `-2512` suffix denotes a real, separate release. The bulleted Chat/VLM list
+  was right all along; the surrounding prose was the stale part. Scope, FR-2, the acceptance
+  criteria, and the Problem & current-state section corrected from 17/68/70/72 to 18/72/76/76
+  (21/4-embedding/72-total to 22/4-embedding/76-total overall) accordingly. Two more numbers
+  built on the old counts, not called out by the stakeholder but caught in the same pass, were
+  corrected for consistency: FR-7's pairwise-matrix-size illustration (C(17,2)=136 → C(18,2)=153)
+  and the Out of scope section's "21-model list" cross-reference (→ 22-model list). The
+  2026-09-18 Decision log entry above, which computed "up to C(17,2)=136 pairs per chat pack" as
+  part of the `data-scientist` consult record, is left as-is — it documents what was actually
+  found and decided at that time under the then-believed 17-count, and this log is append-only.
