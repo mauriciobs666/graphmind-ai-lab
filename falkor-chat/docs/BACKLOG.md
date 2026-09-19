@@ -1,6 +1,6 @@
 # Backlog — falkor-chat
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-066
+> **Status:** active · **Owner:** `teco` · **Tracks:** K-016…K-067
 
 > **How to read this.** Forward-looking only — what is proposed but unbuilt. *When* something
 > changed and *what* it involved live in [`HISTORY.md`](./HISTORY.md), one dated entry per
@@ -580,6 +580,41 @@ Each was filed out of a closed milestone's gates or a later investigation; none 
 - **Risks/RAM:** none — verification only, no design change expected unless the run surfaces a defect.
 - **Test strategy:** a live manual run is the test; if it surfaces a defect, file a fix as its own
   follow-up rather than folding it into this item.
+
+### K-067 — Extract job in `background.py` has no retry/backoff for transient provider errors (🔵 proposed — filed out of K-030 Track 2 Stage 6 bulk-migration ingestion failures, observed 2026-09-18)
+
+> **Why it exists.** `falkor-chat/server/falkorchat/background.py`'s document-ingestion extract job
+> calls an LM Studio-hosted chat model (`qwen/qwen3-4b-2507`) per chunk; that model has been
+> observed to hard-crash mid-request under suspected cross-model contention on the shared local LM
+> Studio instance, returning HTTP 400 `{"error":"terminated"}` followed by HTTP 500, then full
+> recovery within seconds — a transient failure, not a permanently bad chunk.
+>
+> `repository.py`'s `report_document_job_done` (~lines 1144-1175) flips `Document.status` to
+> `"failed"` **permanently** the instant any single scheduled job (embed OR extract) fails, by
+> design (K-051) — so one transient extract-call failure strands an otherwise-successfully-embedded
+> document as unsearchable, with no automatic recovery. The only current remedy is a manual
+> delete-then-recreate.
+>
+> **Confirmed in the field:** observed during K-030 Track 2 Stage 6 bulk-migration sessions across
+> two separate batches (12/12 and 19/19 documents each), both later confirmed byte-exact/content-intact
+> but requiring manual re-ingestion. Recurrence is at a scale/timing uncorrelated with request batch
+> size or pacing — i.e. it can happen to any ingestion call, not just large ones.
+>
+> **This is not a one-line fix — real design/testing required.** Distinguishing a transient
+> provider error (HTTP 5xx, "terminated" 400) from a genuinely bad/malformed chunk that should fail
+> fast, retry-with-backoff timing relative to LM Studio's own recovery window, and idempotency of
+> the extract side-effect (what happens if a retry fires after a partial write, or fires twice?)
+> all need deliberate choices, not guesses. A backoff strategy that exceeds LM Studio's actual
+> recovery time loses the ingestion for no benefit; one that underestimates it retries against a
+> still-crashed instance.
+- **Owner:** `coder`/`tdd-engineer` — needs an `architect` design pass first (distinguish transient
+  from permanent, backoff timing, retry limit, side-effect idempotency) before implementation.
+- **Risks/RAM:** none — query/schema/topology unchanged.
+- **Test strategy:** a design that names (1) the transient error shapes to catch, (2) the backoff
+  strategy (duration/max-attempts), (3) proof of idempotency (extract can be safely retried N times
+  on the same chunk without changing the document state), then unit/integration tests exercising
+  each lever — both happy-path retries and a case where the max-attempts budget is exhausted,
+  falling back to `"failed"`.
 
 ### K-064 — `find_update_shortlist`'s title-fuzzy signal uses implicit-AND token combination, far narrower than its own docstring implies (🔵 proposed — filed out of `document-ingestion2` Stage E QA pass, `docs/test-reports/document-ingestion2-report.md` Defect 2, 2026-09-13)
 
