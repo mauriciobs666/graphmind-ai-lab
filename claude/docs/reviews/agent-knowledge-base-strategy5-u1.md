@@ -160,3 +160,53 @@ pass through a *different*, unrelated branch): before accepting the next revisio
 **second, later pass** does with whatever partial manifest state each escalate/abort branch
 leaves behind, for every branch in this bullet that writes to the manifest ahead of its own
 verification completing — not only what the same pass does with it.
+
+## Pass 5 (2026-09-19) — re-check of commit `8dde185`
+
+**Verdict: approve.** The two-pass collision-delete gap from Pass 4 is closed, confirmed by
+re-tracing the same sequence against the current text, not the commit message's stated intent.
+No new gap found (including on the match path). This was the last open item in
+`agent-knowledge-base-strategy5-coordination.md` — nothing outstanding from this review.
+
+**Finding 2 (collision-unsafe delete) — fixed, re-traced clean.** Read `SKILL.md:799-902` in
+full (current text). "Found one" (`:865-895`) now runs `get_document(found_id)` and compares it
+against the claim's current `.md` text **before any manifest write occurs at all** — not just
+before the `delete_document` call, which is what Pass 4 found still missing.
+- **Mismatch (the collision case):** the manifest entry is left **completely untouched** —
+  still the pre-recovery `documentId` (the old id, already confirmed `None` by the top-of-branch
+  `get_document` at line 836) and still `verified: "pending"` (`:880-885`, "leave the manifest
+  entry exactly as it was at the top of this recovery attempt"). Re-traced the next pass by hand
+  against this state: a fresh pass finds `"pending"`, hits the upstream check (`:803-821`,
+  byte-identical to Pass 3/4, still untouched by this fix), calls `get_document(documentId)` on
+  the *old* id — still `None`, unchanged — and lands back in the *ambiguous-`None`* branch
+  (`:822+`), not the unconditional-delete branch (`:815-821`) the Pass 4 hazard ran through. The
+  corpus-count-gated sweep re-runs from there; a persistent collision re-escalates safely on every
+  subsequent pass instead of ever reaching a `delete_document` call. Gap closed.
+- **Match:** manifest is written once, `documentId := found_id` and `verified: true` together
+  (`:871-877`). Confirmed this is the *only* place `found_id` ever reaches the manifest, and it's
+  written only after the same byte-exact confirmation the "Verify, then flip" bullet already
+  trusts elsewhere in this file (`:799-802`).
+- **Re-swept the rest of the bullet for the same write-ahead-of-verification pattern** (the
+  general axis, not a re-check of one shape): the corpus-count-guard escalate path performs no
+  manifest write (`:843-847`, confirmed in Pass 4 and unchanged here); "Found none" writes
+  `documentId` only after its *own* `ingest_document` call in the same branch returns a real id
+  (`:895-898`) — not an externally-adopted, unverified one, so it isn't this hazard class. No
+  other branch found.
+
+**Quick check — does deferring the write introduce a new race on the match path?** No. The
+intermediate `"pending"` stop the *ordinary* "Existing claim, text changed" sequence uses
+(`:780-791`) exists specifically to protect against a `delete_document`+`ingest_document` pair
+where the delete could otherwise complete with nothing recording that in-flight state — the
+hazard named at `:771-776` ("a claim can vanish from `ws:agent-team` with nothing recording it
+happened"). The "Found one" match branch never calls `delete_document`/`ingest_document` at all —
+the document was already correctly ingested by an earlier, separate cycle; this branch only
+repoints tracking at it. If the write is interrupted before it lands, the entry is simply still
+`"pending"` at the old, already-`None`-confirmed id — exactly the state it was in before this
+recovery attempt started, safely re-enterable next pass (same trace as the mismatch case above,
+confirmed independently). There is no window where a real document could be silently lost, so
+collapsing two writes into one doesn't reintroduce the hazard the intermediate stop exists for —
+if anything it removes an unnecessary intermediate persisted state that would itself have needed
+the same two-pass interpretation care Finding 2 was about.
+
+**Disposition of `cobb`'s own re-sweep claim** ("re-traced every other branch ... none found",
+commit message): independently confirmed, not just trusted — see the re-sweep above.
