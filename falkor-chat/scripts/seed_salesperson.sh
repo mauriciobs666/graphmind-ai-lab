@@ -120,7 +120,9 @@
 # of editing a shipped one in place.
 #
 # ORDERING — run this AFTER:
-#   1. ./scripts/bootstrap_schema.sh <wsId>   (indexes + constraints for `reference` + ws)
+#   1. ./scripts/bootstrap_schema.sh <wsId>   (indexes + constraints for `reference` + ws;
+#                                               or `create_workspace.sh`, which also pins the
+#                                               embedding-model override, FR-2)
 #   2. ./scripts/seed_demo.sh <wsId>          (the `assistant` Agent + a channel/thread to @mention)
 #   3. ./scripts/seed_catalog.sh              (the Product catalog the demo's tools query)
 # It does not touch chat/demo data or the catalog itself.

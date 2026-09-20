@@ -145,7 +145,7 @@ fi
 
 # ── 3. Bootstrap schema ───────────────────────────────────────────────────────
 echo "[3/6] Bootstrapping schema for workspace '$FALKORCHAT_WS_ID' (dim $EMBEDDING_DIM)..."
-EMBEDDING_DIM="$EMBEDDING_DIM" "$REPO_DIR/scripts/bootstrap_schema.sh" "$FALKORCHAT_WS_ID"
+EMBEDDING_DIM="$EMBEDDING_DIM" "$REPO_DIR/scripts/create_workspace.sh" "$FALKORCHAT_WS_ID"
 
 # ── 4. Seed the agent + demo channel/thread ──────────────────────────────────
 echo "[4/6] Seeding agent '$FALKORCHAT_AGENT_ID' + demo channel/thread..."

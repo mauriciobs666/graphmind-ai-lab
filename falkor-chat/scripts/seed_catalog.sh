@@ -36,9 +36,11 @@
 # the `Product.productId` UNIQUE constraint bootstrap_schema.sh already
 # creates) makes a re-seed against a NON-wiped `reference` a clean no-op too.
 #
-# ORDERING — run this AFTER ./scripts/bootstrap_schema.sh <wsId> (creates the
-# `Product` index-then-constraint pair this MERGE relies on). Independent of
-# seed_demo.sh/seed_workflows.sh — no ordering constraint against either.
+# ORDERING — run this AFTER ./scripts/bootstrap_schema.sh <wsId> (or
+# `create_workspace.sh`, which also pins the embedding-model override, FR-2) —
+# creates the `Product` index-then-constraint pair this MERGE relies on).
+# Independent of seed_demo.sh/seed_workflows.sh — no ordering constraint against
+# either.
 #
 # Env vars (all optional):
 #   FALKORDB_HOST (default: 127.0.0.1)

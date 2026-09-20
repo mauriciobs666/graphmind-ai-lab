@@ -51,7 +51,9 @@
 # that point at it via OF_DEF/AT_STEP — a destructive shared-state op.
 #
 # ORDERING — run this AFTER:
-#   1. ./scripts/bootstrap_schema.sh <wsId>   (indexes + constraints for `reference` + ws)
+#   1. ./scripts/bootstrap_schema.sh <wsId>   (indexes + constraints for `reference` + ws;
+#                                               or `create_workspace.sh`, which also pins the
+#                                               embedding-model override, FR-2)
 #   2. ./scripts/seed_demo.sh <wsId>          (the `assistant` Agent + a channel/thread to @mention)
 # It depends on the workspace graph + its schema existing; it does NOT touch chat or demo data.
 # RE-RUN IT after `./scripts/test_queries.sh` or a server pytest run — for DIFFERENT reasons:

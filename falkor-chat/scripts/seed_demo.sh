@@ -17,7 +17,8 @@
 # NOTE — unlike the app's runtime channel/thread creates (server-minted uuids,
 # plain CREATE, non-idempotent), this seed uses FIXED ids + MERGE on purpose so a
 # re-run never duplicates the demo. Both MERGEs are backed by the uniqueness
-# constraints created by bootstrap_schema.sh — run that FIRST.
+# constraints created by bootstrap_schema.sh (or `create_workspace.sh`, which
+# also pins the embedding-model override, FR-2) — run that FIRST.
 #
 # Mention resolution only needs the Agent NODE to exist (services.resolve_member_kinds
 # looks up agentId, not channel membership); MEMBER_OF is seeded for roster/scoping.

@@ -7,7 +7,8 @@
 # Usage:
 #   ./scripts/seed_agent_team.sh [<workspaceId>]   # default: $FALKORCHAT_WS_ID or "agent-team"
 #
-# Run after ./scripts/bootstrap_schema.sh agent-team (needs the Agent.agentId
+# Run after ./scripts/bootstrap_schema.sh agent-team (or `create_workspace.sh`,
+# which also pins the embedding-model override, FR-2) — needs the Agent.agentId
 # index + uniqueness constraint that creates — the same one every other
 # workspace's Agent node already relies on).
 #

@@ -14,7 +14,8 @@ What this does, in order:
   1. Resolve the real, configured embedding model + its declared dimension via
      `ModelGateway.from_env()` — never a hardcoded 1024.
   2. Bootstrap/reset `ws:eval`'s schema at that dimension if it doesn't exist yet,
-     is at the wrong dimension, or `RESEED=1` is set (a deliberate full reset).
+     is at the wrong dimension, or `RESEED=1` is set (a deliberate full reset) —
+     then pin its `embeddingModelOverride` (FR-2, `embedding_migration.pin`).
   3. Ensure the fixed corpus-author `User`/`Agent` exist.
   4. `MERGE`-idempotent Channel/Thread per topic (fixed ids — never
      `repository.create_channel`/`create_thread`, which are plain non-idempotent
@@ -52,10 +53,13 @@ _PROVENANCE_PATH = _SERVER_DIR / "tests" / "eval" / "corpus_provenance.json"
 # always uses `server/.venv/bin/python`, which already resolves it — this is a
 # defensive fallback for a direct `python3 scripts/seed_eval_corpus.py` run).
 sys.path.insert(0, str(_SERVER_DIR))
+sys.path.insert(0, str(_REPO_ROOT / "scripts"))
 
 from falkorchat import config, db, modelconfig  # noqa: E402
 from falkorchat.embedding import EmbeddingWorker  # noqa: E402
 from falkorchat.repository import Repository  # noqa: E402
+
+import embedding_migration  # noqa: E402
 
 EVAL_WS = os.environ.get("EVAL_WS", "eval")
 EVAL_USER_ID = os.environ.get("EVAL_USER_ID", "eval-author")
@@ -597,6 +601,11 @@ def main() -> None:
             check=True,
             env={**os.environ, "EMBEDDING_DIM": str(dim)},
         )
+        # FR-2 (docs/plans/embedding-migration.md §3.2/§5 step 2): a freshly
+        # (re)bootstrapped ws:eval gets its embeddingModelOverride pinned
+        # in-process here, reusing the gateway already resolved above, instead
+        # of shelling out to pin_workspace_embedding_model.sh.
+        embedding_migration.pin(EVAL_WS, gateway=gateway)
     else:
         print(f"ws:{EVAL_WS} already at dim={dim} — no reseed needed.")
 
