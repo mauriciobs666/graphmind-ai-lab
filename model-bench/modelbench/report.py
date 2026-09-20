@@ -226,6 +226,16 @@ def _better(metric: str, value: float, other: float) -> bool:
     return value >= other
 
 
+def _aggregate_kind(
+    metric: BinaryMetric | ContinuousMetric | DistributionSummary | None,
+) -> str:
+    """`"binary"` or `"continuous"` for one already-resolved aggregate (or none declared, which
+    resolves `"binary"` — `_metric_kind`'s own pre-Table-F default). The one isinstance check both
+    `_metric_kind` and `_resolve_reference_kinds` need, so it lives in exactly one place
+    (`docs/plans/rank-continuous-reference.md` §3.4)."""
+    return "continuous" if isinstance(metric, (ContinuousMetric, DistributionSummary)) else "binary"
+
+
 def _metric_kind(a: RunResult, b: RunResult, name: str) -> str:
     """`"binary"` or `"continuous"`, resolved from a family member's own arm aggregate type — never
     guessed from which per-item map it lives in (§3.3 (iv)): a member whose resolved aggregate is a
@@ -238,8 +248,42 @@ def _metric_kind(a: RunResult, b: RunResult, name: str) -> str:
     neither arm declares an aggregate for resolves `"binary"`, matching this loop's pre-Table-F
     assumption for the one case Table F's own carrier gives no aggregate to ask.
     """
-    metric = _metric_aggregate(a, name) or _metric_aggregate(b, name)
-    return "continuous" if isinstance(metric, (ContinuousMetric, DistributionSummary)) else "binary"
+    return _aggregate_kind(_metric_aggregate(a, name) or _metric_aggregate(b, name))
+
+
+def _resolve_reference_kinds(
+    reference_run: RunResult, candidates: Sequence[RunResult], family: Sequence[str]
+) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+    """Each family member's kind, resolved across every arm the reference-anchored family
+    touches — reference and every candidate — not just a reference-anchored pair at a time
+    (`docs/plans/rank-continuous-reference.md` §3.4).
+
+    Deliberately does NOT delegate to `_metric_kind(a, b, name)` pairwise, anchored at
+    `reference_run`: `_metric_kind` always prefers its first argument's own declaration when it
+    has one, so anchoring every pairwise call at `reference_run` would silently miss two
+    *candidates* disagreeing with each other whenever `reference_run` itself declares any
+    aggregate for that metric — exactly the failure this function exists to catch.
+
+    Returns `(kinds, per_arm)`. `kinds[metric]` is the resolved kind (`"binary"`/`"continuous"`),
+    present only when every arm that declares an aggregate for `metric` agrees (falling back to
+    `"binary"` when no arm declares one at all, mirroring `_metric_kind`'s own default). A `metric`
+    absent from `kinds` is a genuine cross-arm disagreement; `per_arm[metric]` always carries
+    every arm that declared an aggregate for it, keyed by `modelKey`, for the disagreement banner
+    to name them regardless of whether `metric` resolved cleanly.
+    """
+    kinds: dict[str, str] = {}
+    per_arm: dict[str, dict[str, str]] = {}
+    for metric in family:
+        declared: dict[str, str] = {}
+        for candidate_run in (reference_run, *candidates):
+            agg = _metric_aggregate(candidate_run, metric)
+            if agg is not None:
+                declared[candidate_run.modelKey] = _aggregate_kind(agg)
+        per_arm[metric] = declared
+        distinct = set(declared.values())
+        if len(distinct) <= 1:
+            kinds[metric] = next(iter(distinct), "binary")
+    return kinds, per_arm
 
 
 class PairedRows(NamedTuple):
@@ -801,6 +845,156 @@ _ONE_PAIRED_UNIT = (
     "were a measurement, so no verdict is computed (`-ml` §3.4 Rule 8)."
 )
 
+#: Ordinary pre-registered mixed-kind refusal for `rank_report`'s reference-anchored family — the
+#: sibling of `_MIXED_FAMILY_MEMBER` (report.py above), reworded for "no candidate's row is
+#: verdicted against the reference" rather than "no member of the two-arm comparison is verdicted"
+#: (`docs/plans/rank-continuous-reference.md` §4 step 5).
+_MIXED_REFERENCE_FAMILY_MEMBER = (
+    "**{kind} metric — no reference-anchored verdict.** This pack's pre-registered "
+    "verdict-metric family mixes binary and continuous members, so the optional "
+    "reference-anchored family (FR-8) has no single Holm ladder or single bootstrap correction "
+    "it can apply across the whole family — mirroring `compare_report`'s own two-arm "
+    "mixed-family refusal. No candidate's row for `{metric}` is verdicted against `{reference}`."
+)
+
+#: A genuine cross-arm kind DISAGREEMENT (not a pre-registered mixed family) — sharper framing
+#: than `_MIXED_REFERENCE_FAMILY_MEMBER`, printed for the metric(s) named in the banner above it.
+_REFERENCE_KIND_DISAGREEMENT_MEMBER = (
+    "**kind disagreement — no reference-anchored verdict.** Arms in this ranking do not agree "
+    "on `{metric}`'s aggregate kind (see the banner above); no candidate's row for this metric "
+    "is verdicted against `{reference}`."
+)
+
+#: A metric that resolved CLEANLY but is refused anyway because a SIBLING metric in the same
+#: pre-registered family has a cross-arm disagreement (plan §3.5/§4 step 7) — this metric's own
+#: block must not say "mixes binary and continuous members" (`_MIXED_REFERENCE_FAMILY_MEMBER`),
+#: because for THIS metric that is not true; the reason it is refused lives one metric over.
+_REFERENCE_FAMILY_SIBLING_DISAGREEMENT_MEMBER = (
+    "**no reference-anchored verdict.** A sibling metric in this pack's pre-registered "
+    "verdict-metric family has a cross-arm kind disagreement (see the banner above); the whole "
+    "optional reference-anchored family (FR-8) is refused because `k` is fixed across the whole "
+    "family and cannot be honestly re-sized once results already exist. No candidate's row for "
+    "`{metric}` is verdicted against `{reference}`."
+)
+
+#: Printed once, before the per-metric loop, when `_resolve_reference_kinds` finds a genuine
+#: cross-arm disagreement — mirrors PACK VERSION MISMATCH / SCHEMA VERSIONS IN THIS COMPARISON
+#: (`rank_report`, above): visible, never silent, never a reason to drop a record.
+#:
+#: **The primary reason a disagreement refuses the whole family is a data-integrity failure, not
+#: a multiplicity/k-shrinkage argument** (`docs/reviews/rank-continuous-reference-ml.md` §3,
+#: `data-scientist`'s methodology finding on the plan this note builds on): a metric's aggregate
+#: kind is supposed to be a type fact, and a metric that resolves to a different type depending
+#: on which arm answers it is a self-contradictory record — the same class of problem as the
+#: pack/version/schema mismatch banners above, none of which invoke a multiplicity argument
+#: either. Refusing the whole family (rather than only the disagreeing metric's own cells) is a
+#: conservative response to that epistemic uncertainty: once one metric's type declaration is
+#: shown unreliable for some arm, the same arm's other declared aggregates are owed the same
+#: distrust. `k` staying fixed across the family is a real, secondary property of the fix (this
+#: plan already keeps the same `k` correctly-sized for the clean-metric case), not the forcing
+#: reason for refusing the whole family in the first place.
+_REFERENCE_KIND_DISAGREEMENT_EXPLANATION = (
+    "This is a data-integrity problem, not a foreseen pre-registration choice: a metric's "
+    "aggregate kind is supposed to be a type fact, never something that varies by which arm "
+    "answers it. A metric that resolves to a different type depending on which arm answers it is "
+    "a self-contradictory record, in the same class as a pack/version/schema mismatch — and once "
+    "one metric's type declaration is shown unreliable for some arm, the same arm's other "
+    "declared aggregates are owed the same distrust. The whole optional reference-anchored "
+    "family (FR-8) is refused for the metric(s) named above, not just the disagreeing metric's "
+    "own cells."
+)
+
+
+def _render_reference_kind_disagreement_banner(
+    disagreements: Sequence[str], per_arm: Mapping[str, Mapping[str, str]]
+) -> list[str]:
+    lines = ["> **REFERENCE-FAMILY KIND DISAGREEMENT**", ">"]
+    for metric in disagreements:
+        detail = ", ".join(f"`{model}`: {kind}" for model, kind in per_arm[metric].items())
+        lines.append(f"> - `{metric}` — {detail}")
+    lines += ["> ", "> " + _REFERENCE_KIND_DISAGREEMENT_EXPLANATION, ""]
+    return lines
+
+
+def _render_reference_family_refused(
+    metric: str, reference_run: RunResult, text: str, tallies: Sequence[str] = ()
+) -> list[str]:
+    """The refused-family block for one metric. `tallies` (m1,
+    `docs/reviews/rank-continuous-reference.md`) carries one `_pairing_tally` line per candidate
+    for the ordinary pre-registered-mixed case only — each metric's own kind is still cleanly
+    resolved there, only the *combination* is mixed, mirroring `compare_report`'s own precedent
+    (report.py above, its mixed-kind branch). The disagreement case passes none: no resolvable
+    kind exists to build a tally by."""
+    lines = [
+        f"#### Reference-anchored family — {metric} vs `{reference_run.modelKey}`", "",
+        text, "",
+    ]
+    if tallies:
+        lines.extend(tallies)
+        lines.append("")
+    return lines
+
+
+def _render_reference_family_continuous(
+    *,
+    metric: str,
+    pack: PackRef,
+    reference_run: RunResult,
+    candidates: Sequence[RunResult],
+    correction_k: int,
+    unit_kind: str,
+) -> list[str]:
+    """The continuous sibling of `_render_reference_family` (report.py above). Every candidate's
+    interval is decided independently at the same fixed `alpha_used` (`-ml` §3.4) — no Holm
+    ladder, no per-row threshold, no "not tested" state.
+
+    **M1** (`docs/reviews/rank-continuous-reference.md`) — `alpha_used` is computed via
+    `stats.alpha_used`, the same one-line helper `stats.continuous_verdict` itself calls, rather
+    than a second, independent `alpha_family / correction_k` here: one formula, one home, so the
+    caption and `cv.alpha_used` can never drift apart. The caption still prints before any `cv`
+    exists (the correction is fixed once per table, before any candidate's own interval is
+    computed), so this calls the helper directly rather than reading `cv.alpha_used` off some
+    candidate's result.
+    """
+    used_alpha = stats.alpha_used(pack.metrics.alpha_family, correction_k)
+    lines = [
+        f"#### Reference-anchored family — {metric} vs `{reference_run.modelKey}`", "",
+        "_exploratory — no significance claim outside this family_", "",
+        f"_`alpha_family={pack.metrics.alpha_family:g}, k={correction_k}, "
+        f"alpha_used={used_alpha:g} ({100 * (1 - used_alpha):g}% CI)`_", "",
+        "| candidate | diff | CI | decision |",
+        "|---|---|---|---|",
+    ]
+    for candidate in candidates:
+        diffs_row = _paired_diffs(reference_run, candidate, metric, pack)
+        if not diffs_row.diffs:
+            lines.append(f"| {candidate.modelKey} | — | — | no verdict — no paired data |")
+            continue
+        if len(diffs_row.diffs) == 1:
+            lines.append(f"| {candidate.modelKey} | — | — | no verdict — one paired unit |")
+            continue
+        support_metric = (
+            _metric_aggregate(reference_run, metric) or _metric_aggregate(candidate, metric)
+        )
+        support = support_metric.support if support_metric is not None else None
+        cv = stats.continuous_verdict(
+            diffs_row.diffs, metric_name=metric, family=[metric],
+            alpha_family=pack.metrics.alpha_family, unit_kind=unit_kind,
+            design_effect=max(reference_run.designEffect, candidate.designEffect),
+            basis=min(
+                (reference_run.basis, candidate.basis), key=_BASIS_STRENGTH.__getitem__
+            ),
+            B=_BOOTSTRAP_B, seed=pack.seed, support=support, correction_k=correction_k,
+            a_label=reference_run.modelKey, b_label=candidate.modelKey,
+        )
+        diff, ci = _polarity_corrected(metric, cv.diff, cv.ci)
+        decision = "distinguishable" if cv.distinguishable else "not distinguishable"
+        lines.append(
+            f"| {candidate.modelKey} | {diff:+.3f} | [{ci[0]:+.3f}, {ci[1]:+.3f}] | {decision} |"
+        )
+    lines.append("")
+    return lines
+
 
 #: `-ml` §4.4 item 2's own literal text — printed verbatim beside any position whose OBSERVED
 #: risk-set size is below 10, never derived or paraphrased at each call site.
@@ -1326,9 +1520,19 @@ def _rank_resolving_power_lines(
     if k <= 0:
         return []
     unit_kind = unit_kind_for_role(pack.role)
-    ns = [agg.n for r in runs for agg in [_metric_aggregate(r, metric)] if agg is not None]
-    if not ns:
+    aggs = [_metric_aggregate(r, metric) for r in runs]
+    first_agg = next((a for a in aggs if a is not None), None)
+    if first_agg is None:
         return []
+    if _aggregate_kind(first_agg) == "continuous":
+        # `-ml` §3.5 — this sentence's whole vocabulary (McNemar/Wilson-shaped: "resolves
+        # differences of >=X pp", "80% power") is undefined for a continuous metric, exactly as
+        # `compare_report`'s own continuous branch never calls `resolving_power` for the same
+        # reason (`stats.continuous_verdict`'s own docstring, `stats.py:1675-1677`). Printing it
+        # anyway is a confidently-stated, methodologically meaningless figure, live and wrong for
+        # `embedder-graphrag-retrieval`'s `mrr` before this fix.
+        return []
+    ns = [a.n for a in aggs if a is not None]
     n_units = max(ns)
     published = stats.resolving_power(
         n_units, unit_kind=unit_kind, design_effect=1.0, basis="by-construction",
@@ -1448,39 +1652,118 @@ def rank_report(
     candidates: list[RunResult] = []
     combined_steps: list[stats.HolmStep] = []
     correction_k = 0
+    reference_kinds: dict[str, str] = {}
+    reference_kind_details: dict[str, dict[str, str]] = {}
+    reference_kind_disagreements: list[str] = []
+    reference_family_refused = False
     if reference_run is not None:
         candidates = [r for r in runs if r.modelKey != reference_run.modelKey]
-        for metric in family:
-            for cand in candidates:
-                paired = _paired_rows(reference_run, cand, metric, pack)
-                outcomes = stats.PairedOutcomes.from_units(
-                    unit_kind, list(zip(paired.unit_ids, paired.a_ok, paired.b_ok))
+        if candidates:
+            # §3.3 (iv) / plan §3.4-§3.5 — a family member's kind is a type fact, resolved across
+            # every arm the reference-anchored family touches (reference and every candidate), not
+            # merely a reference-anchored pair at a time: a metric absent from `reference_kinds`
+            # is a genuine cross-arm disagreement, distinct from an ordinary pre-registered mixed
+            # family (where every member resolves cleanly and only the combination is mixed).
+            reference_kinds, reference_kind_details = _resolve_reference_kinds(
+                reference_run, candidates, family
+            )
+            reference_kind_disagreements = [m for m in family if m not in reference_kinds]
+            resolved_kinds = set(reference_kinds.values())
+            reference_family_refused = (
+                bool(reference_kind_disagreements) or len(resolved_kinds) > 1
+            )
+            if reference_kind_disagreements:
+                lines += _render_reference_kind_disagreement_banner(
+                    reference_kind_disagreements, reference_kind_details
                 )
-                combined_outcomes[(cand.modelKey, metric)] = outcomes
-                _a, b_, c_, _d = outcomes.table
-                # `-ml` review Pass2-1: `k` is fixed by pre-registration, never by how much data
-                # arrived — a candidate with no paired data for one metric still consumes a Holm
-                # rank, via the same `mcnemar_exact(0, 0) = 1.0` empty-intersection handling
-                # `compare_report`'s own homogeneous-binary path already relies on (its own
-                # unconditional `p_values.append(stats.mcnemar_exact(table_b, table_c))` below),
-                # reused rather than reinvented.
-                combined_p_values.append(stats.mcnemar_exact(b_, c_))
-                combined_cells.append((cand.modelKey, metric))
-        # ONE combined call over (metric x candidate), never one call per metric — the plan's
-        # originally-rejected per-metric default under-corrects the family-wise error rate (§3.2.2).
-        combined_steps = stats.holm_steps(combined_p_values, alpha=pack.metrics.alpha_family)
-        correction_k = len(combined_p_values)
+            if not reference_family_refused and resolved_kinds == {"binary"}:
+                # --- unchanged existing binary combined-ladder construction --------------------
+                for metric in family:
+                    for cand in candidates:
+                        paired = _paired_rows(reference_run, cand, metric, pack)
+                        outcomes = stats.PairedOutcomes.from_units(
+                            unit_kind, list(zip(paired.unit_ids, paired.a_ok, paired.b_ok))
+                        )
+                        combined_outcomes[(cand.modelKey, metric)] = outcomes
+                        _a, b_, c_, _d = outcomes.table
+                        # `-ml` review Pass2-1: `k` is fixed by pre-registration, never by how
+                        # much data arrived — a candidate with no paired data for one metric still
+                        # consumes a Holm rank, via the same `mcnemar_exact(0, 0) = 1.0`
+                        # empty-intersection handling `compare_report`'s own homogeneous-binary
+                        # path already relies on (its own unconditional
+                        # `p_values.append(stats.mcnemar_exact(table_b, table_c))` below), reused
+                        # rather than reinvented.
+                        combined_p_values.append(stats.mcnemar_exact(b_, c_))
+                        combined_cells.append((cand.modelKey, metric))
+                # ONE combined call over (metric x candidate), never one call per metric — the
+                # plan's originally-rejected per-metric default under-corrects the family-wise
+                # error rate (§3.2.2).
+                combined_steps = stats.holm_steps(
+                    combined_p_values, alpha=pack.metrics.alpha_family
+                )
+                correction_k = len(combined_p_values)
+            elif not reference_family_refused and resolved_kinds == {"continuous"}:
+                # m2 (`docs/reviews/rank-continuous-reference.md`) — written explicitly rather
+                # than as a bare `elif`/implicit `else`: an empty `family` (a malformed pack, or a
+                # test fixture bug) resolves `resolved_kinds == set()`, which is neither
+                # `{"binary"}` nor `{"continuous"}`, and must not silently fall into this branch
+                # and set `correction_k = 0` under a comment claiming the continuous case.
+                correction_k = len(family) * len(candidates)
 
     for metric in members:
         lines += _render_one_rank_table(runs, metric=metric, pack=pack, footprints=footprints)
         if len(runs) >= 2:
             lines += _rank_resolving_power_lines(runs, pack, family, metric)
         if reference_run is not None and candidates:
-            lines += _render_reference_family(
-                metric=metric, pack=pack, reference_run=reference_run, candidates=candidates,
-                cells=combined_cells, steps=combined_steps, outcomes=combined_outcomes,
-                correction_k=correction_k, unit_kind=unit_kind,
-            )
+            if reference_family_refused:
+                if metric in reference_kind_disagreements:
+                    text = _REFERENCE_KIND_DISAGREEMENT_MEMBER.format(
+                        metric=metric, reference=reference_run.modelKey
+                    )
+                    tallies: tuple[str, ...] = ()
+                elif reference_kind_disagreements:
+                    # This metric itself resolved cleanly; a SIBLING metric's disagreement is what
+                    # forced the whole family refused (§3.5) — `_MIXED_REFERENCE_FAMILY_MEMBER`'s
+                    # "mixes binary and continuous members" wording would misstate the reason for
+                    # THIS metric's own refusal.
+                    text = _REFERENCE_FAMILY_SIBLING_DISAGREEMENT_MEMBER.format(
+                        metric=metric, reference=reference_run.modelKey
+                    )
+                    tallies = ()
+                else:
+                    # m1 (`docs/reviews/rank-continuous-reference.md`) — the ordinary
+                    # pre-registered-mixed case (not a disagreement): this metric's own kind is
+                    # still individually resolved cleanly, only the family's *combination* is
+                    # mixed, so its own per-candidate `_pairing_tally` diagnostic still renders,
+                    # mirroring `compare_report`'s existing mixed-kind precedent.
+                    text = _MIXED_REFERENCE_FAMILY_MEMBER.format(
+                        kind=reference_kinds[metric], metric=metric,
+                        reference=reference_run.modelKey,
+                    )
+                    paired_or_diffs = (
+                        _paired_rows if reference_kinds[metric] == "binary" else _paired_diffs
+                    )
+                    tallies = tuple(
+                        _pairing_tally(
+                            paired_or_diffs(reference_run, cand, metric, pack),
+                            f"{unit_kind}s", reference_run.modelKey, cand.modelKey,
+                        )
+                        for cand in candidates
+                    )
+                lines += _render_reference_family_refused(
+                    metric, reference_run, text, tallies=tallies
+                )
+            elif reference_kinds[metric] == "binary":
+                lines += _render_reference_family(
+                    metric=metric, pack=pack, reference_run=reference_run, candidates=candidates,
+                    cells=combined_cells, steps=combined_steps, outcomes=combined_outcomes,
+                    correction_k=correction_k, unit_kind=unit_kind,
+                )
+            else:
+                lines += _render_reference_family_continuous(
+                    metric=metric, pack=pack, reference_run=reference_run, candidates=candidates,
+                    correction_k=correction_k, unit_kind=unit_kind,
+                )
 
     return "\n".join(lines) + "\n"
 

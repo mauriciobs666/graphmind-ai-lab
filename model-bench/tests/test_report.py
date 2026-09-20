@@ -32,11 +32,13 @@ from modelbench.report import (
     DuplicateModelInReport,
     _better,
     _metric_value,
+    _rank_resolving_power_lines,
     _render_funnel,
     _render_hazard,
     _render_per_turn_position,
     _render_role_caveat,
     _render_speed,
+    _resolve_reference_kinds,
     compare_report,
     rank_report,
     resolving_power_line,
@@ -1699,6 +1701,89 @@ def test_a_continuous_units_value_is_the_mean_over_its_items_not_a_flattened_poo
     assert "+0.450" in section
     assert "+0.250" not in section
     assert "+0.175" not in section
+
+
+def _kind_arm(model_key: str, aggregate) -> RunResult:
+    """A bare arm for `_resolve_reference_kinds` fixtures: only the declared aggregate matters —
+    these are direct calls against the resolver, not a full `rank_report` pass, so no items are
+    needed at all."""
+    return run(
+        model_key, role="embedder", call_surface="embeddings", items=[],
+        aggregates=RetrievalAggregates(**aggregate) if aggregate else RetrievalAggregates(),
+        fingerprint_fields=embeddings_fields(packId="embedder-graphrag-retrieval",
+                                              modelKey=model_key),
+    )
+
+
+def test_resolve_reference_kinds_agrees_when_every_arm_declares_the_same_kind() -> None:
+    """Plan §3.4 test 5 — reference plus two candidates, all declaring `ContinuousMetric` for
+    `mrr`: resolves cleanly to `"continuous"`, no disagreement."""
+    reference = _kind_arm("reference", {"mrr": ContinuousMetric(name="mrr", mean=0.5, n=10,
+                                                                  support=(0.0, 1.0))})
+    cand_a = _kind_arm("cand-a", {"mrr": ContinuousMetric(name="mrr", mean=0.6, n=10,
+                                                            support=(0.0, 1.0))})
+    cand_b = _kind_arm("cand-b", {"mrr": ContinuousMetric(name="mrr", mean=0.4, n=10,
+                                                            support=(0.0, 1.0))})
+
+    kinds, per_arm = _resolve_reference_kinds(reference, [cand_a, cand_b], ["mrr"])
+
+    assert kinds == {"mrr": "continuous"}
+    assert set(per_arm["mrr"]) == {"reference", "cand-a", "cand-b"}
+    assert all(k == "continuous" for k in per_arm["mrr"].values())
+
+
+def test_resolve_reference_kinds_falls_back_to_binary_when_no_arm_declares_an_aggregate() -> None:
+    """Plan §3.4 test 6 — mirrors `_metric_kind`'s own pre-Table-F default: a metric no arm
+    declares an aggregate for resolves `"binary"`, with an empty `per_arm` entry (no arm declared
+    anything to name)."""
+    reference = _kind_arm("reference", None)
+    cand_a = _kind_arm("cand-a", None)
+
+    kinds, per_arm = _resolve_reference_kinds(reference, [cand_a], ["mrr"])
+
+    assert kinds == {"mrr": "binary"}
+    assert per_arm["mrr"] == {}
+
+
+def test_resolve_reference_kinds_catches_two_candidates_disagreeing_with_each_other() -> None:
+    """Plan §3.4 test 7 — the reference declares no aggregate for `mrr` at all; one candidate
+    declares `ContinuousMetric`, another declares a (synthetic, mismatched-field) `BinaryMetric`
+    named `mrr`: a genuine disagreement invisible to a check anchored at the reference (`-ml`
+    §3.3 step 1's literal sketch), since the reference's own declaration never wins here — it
+    declares nothing at all."""
+    reference = _kind_arm("reference", None)
+    cand_continuous = _kind_arm(
+        "cand-continuous", {"mrr": ContinuousMetric(name="mrr", mean=0.6, n=10, support=(0.0, 1.0))}
+    )
+    cand_binary = _kind_arm(
+        "cand-binary", {"precisionAt1": BinaryMetric(name="mrr", successes=5, n=10, unit="query")}
+    )
+
+    kinds, per_arm = _resolve_reference_kinds(
+        reference, [cand_continuous, cand_binary], ["mrr"]
+    )
+
+    assert "mrr" not in kinds
+    assert per_arm["mrr"] == {"cand-continuous": "continuous", "cand-binary": "binary"}
+
+
+def test_resolve_reference_kinds_catches_a_candidate_disagreeing_with_a_declaring_reference() -> (
+    None
+):
+    """Plan §3.4 test 8 — the reference itself declares `ContinuousMetric`; one candidate declares
+    a mismatched `BinaryMetric` for the same name: also a disagreement, confirming the fix is not
+    narrower than test 7's case (where the reference declares nothing at all)."""
+    reference = _kind_arm(
+        "reference", {"mrr": ContinuousMetric(name="mrr", mean=0.5, n=10, support=(0.0, 1.0))}
+    )
+    cand_binary = _kind_arm(
+        "cand-binary", {"precisionAt1": BinaryMetric(name="mrr", successes=5, n=10, unit="query")}
+    )
+
+    kinds, per_arm = _resolve_reference_kinds(reference, [cand_binary], ["mrr"])
+
+    assert "mrr" not in kinds
+    assert per_arm["mrr"] == {"reference": "continuous", "cand-binary": "binary"}
 
 
 def _mixed_pack(
@@ -3722,6 +3807,44 @@ def test_rank_report_resolving_power_sentence_uses_each_metrics_own_n_not_pooled
     assert ">=24.6 pp" not in suspend_section
 
 
+def test_rank_resolving_power_lines_returns_empty_for_a_continuous_metric_with_no_reference() -> (
+    None
+):
+    """Plan §4 step 6/`-ml` §3.5, test 17 — direct regression test: `_rank_resolving_power_lines`
+    fires independent of `--reference`, and is already live and wrong for a continuous metric
+    (`embedder-graphrag-retrieval`'s `mrr`) today. `_embedder_pack()`-shaped `runs` with >= 2 arms,
+    `reference` not given at all: the function itself returns `[]`, and — driven through the full
+    `rank_report` — none of the McNemar/Wilson-shaped vocabulary leaks into the `### mrr` section.
+    """
+    pack = _embedder_pack()
+    values_a = [0.9, 0.95, 0.85, 0.9, 0.92, 0.88, 0.91, 0.93, 0.89, 0.9]
+    values_b = [0.4, 0.5, 0.45, 0.5, 0.42, 0.48, 0.44, 0.46, 0.43, 0.47]
+    items_a = [_mrr_item(f"q{i:02d}", v) for i, v in enumerate(values_a)]
+    items_b = [_mrr_item(f"q{i:02d}", v) for i, v in enumerate(values_b)]
+    agg_a = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=sum(values_a) / len(values_a), n=10,
+                              support=(0.0, 1.0))
+    )
+    agg_b = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=sum(values_b) / len(values_b), n=10,
+                              support=(0.0, 1.0))
+    )
+    a = run("model-a", role="embedder", call_surface="embeddings", items=items_a,
+            aggregates=agg_a, fingerprint_fields=embeddings_fields(packId=pack.packId,
+                                                                     modelKey="model-a"))
+    b = run("model-b", role="embedder", call_surface="embeddings", items=items_b,
+            aggregates=agg_b, fingerprint_fields=embeddings_fields(packId=pack.packId,
+                                                                     modelKey="model-b"))
+
+    assert _rank_resolving_power_lines([a, b], pack, ["mrr"], "mrr") == []
+
+    md = rank_report([a, b], pack=pack)
+    section = md.split("### mrr")[1]
+    assert "resolves differences of" not in section
+    assert "80% power" not in section
+    assert " pp" not in section
+
+
 def test_rank_report_refuses_a_headline_outside_the_verdict_family() -> None:
     """`analyst` code-gate suggestion (`docs/reviews/small-model-catalog-sweep-impl.md`) — mirrors
     `compare_report`'s own guard on the identical field. Pack-load-time enforcement
@@ -3774,3 +3897,625 @@ def test_rank_report_reference_family_floor_demotion_fires_at_the_candidate_axis
     )
     assert "not distinguishable — below the observable floor" in floor_row
     assert "distinguishable |" not in floor_row  # never plain "distinguishable"
+
+
+# --- `rank --reference` on a continuous verdict metric (D-1) ------------------------------------
+
+
+def _rank_mrr_arm(model_key: str, values: dict[str, float]) -> RunResult:
+    """The continuous sibling of `_rank_arm`, for `embedder-graphrag-retrieval`-shaped fixtures:
+    one `mrr` item per `(item id, value)` pair in `values`, its own `ContinuousMetric` aggregate."""
+    items = [_mrr_item(qid, v) for qid, v in values.items()]
+    agg = RetrievalAggregates(
+        mrr=ContinuousMetric(
+            name="mrr", mean=sum(values.values()) / len(values) if values else 0.0,
+            n=len(values), support=(0.0, 1.0),
+        )
+    )
+    return run(
+        model_key, role="embedder", call_surface="embeddings", items=items, aggregates=agg,
+        fingerprint_fields=embeddings_fields(
+            packId="embedder-graphrag-retrieval", modelKey=model_key
+        ),
+    )
+
+
+def test_rank_report_reference_family_continuous_renders_k_and_four_state_decisions() -> None:
+    """Plan §5 test 9 — the direct regression test for D-1 itself: `_embedder_pack()`-shaped
+    fixture, reference plus 4 candidates spanning all four decision states —
+    `distinguishable`, `not distinguishable`, `no verdict — no paired data` (disjoint item ids vs.
+    the reference), `no verdict — one paired unit` (exactly one shared item id). Asserts
+    `correction_k = len(family) * len(candidates)` appears in the caption, the table has exactly
+    the four decision strings above and never `"not tested"`/`"below the observable floor"`
+    (binary-only vocabulary), and no `MetricKindError`/crash — this is D-1's own reproduction."""
+    pack = _embedder_pack()
+    reference_values = {f"q{i:02d}": 0.50 for i in range(10)}
+    reference = _rank_mrr_arm("reference", reference_values)
+
+    cand_distinguishable = _rank_mrr_arm(
+        "cand-strong", {f"q{i:02d}": 0.90 for i in range(10)}
+    )
+    not_distinguishable_values = [0.51, 0.48, 0.505, 0.49, 0.495, 0.505, 0.48, 0.51, 0.49, 0.505]
+    cand_not_distinguishable = _rank_mrr_arm(
+        "cand-mid",
+        {f"q{i:02d}": v for i, v in enumerate(not_distinguishable_values)},
+    )
+    cand_no_data = _rank_mrr_arm(
+        "cand-no-data", {f"z{i:02d}": 0.70 for i in range(10)}
+    )
+    # Two items total (so the ranked table's own per-arm CI, which needs n>=2, does not itself
+    # raise) but exactly one of them ("q00") is shared with the reference — the rest is disjoint.
+    cand_one_unit = _rank_mrr_arm("cand-one-unit", {"q00": 0.90, "y00": 0.80})
+
+    md = rank_report(
+        [reference, cand_distinguishable, cand_not_distinguishable, cand_no_data, cand_one_unit],
+        pack=pack, reference="reference",
+    )
+
+    assert "MetricKindError" not in md
+    family_section = md.split("#### Reference-anchored family")[1]
+    assert "alpha_family=0.05, k=4, alpha_used=0.0125 (98.75% CI)" in family_section
+    rows = {
+        ln.split("|")[1].strip(): ln
+        for ln in family_section.splitlines() if ln.startswith("|") and "candidate" not in ln
+    }
+    assert rows["cand-strong"].endswith("distinguishable |")
+    assert "not distinguishable" in rows["cand-mid"]
+    assert "no verdict — no paired data" in rows["cand-no-data"]
+    assert "no verdict — one paired unit" in rows["cand-one-unit"]
+    assert "not tested" not in family_section
+    assert "below the observable floor" not in family_section
+
+
+def test_rank_report_reference_family_continuous_row_uses_the_real_combined_k_not_k1() -> None:
+    """Independent integration-verification finding (teamed review, post-delivery gate) — a real
+    test-coverage gap: nothing at the `report.py` level pinned that `_render_reference_family_
+    continuous` actually passes its own `correction_k` (the real combined `len(family) *
+    len(candidates)`) through to `stats.continuous_verdict`, rather than silently reverting to the
+    default uncorrected `k=len(family)=1` — a data-plumbing mistake distinct from every
+    control-flow branch the delivery's own mutation table already covered. Mutating that one call
+    site's `correction_k=correction_k` to `correction_k=None` left the full suite green before this
+    test existed, because the caption (pinned by test 10) still states the correct `k`/`alpha_used`
+    even when the *row's own decision* silently used the wrong one — exactly the
+    "wrong-but-plausible-looking number" failure class this codebase's own convention (`analyst`
+    review, Unit A.5 framing) says must never ship unpinned.
+
+    Mirrors `stats.py`'s own `test_continuous_verdict_correction_k_decouples_the_divisor_from_
+    the_familys_own_length` (fixture engineered to be significant only at the uncorrected level),
+    but through the actual `rank_report` render path, at the real `_BOOTSTRAP_B`/pack seed: the
+    fixture below is `distinguishable` at the uncorrected `k=1` and `not distinguishable` at the
+    real combined `k=2` (one flip candidate plus one filler candidate)."""
+    pack = _embedder_pack()
+    # `diff[i] = reference[i] - candidate[i]`; engineered (at B=10000, seed=pack.seed=20260902 —
+    # both matching the real render path exactly) so `continuous_verdict(..., correction_k=1)` is
+    # `distinguishable` and `continuous_verdict(..., correction_k=2)` is not — confirmed directly
+    # against `stats.continuous_verdict` before wiring into this fixture.
+    diffs = [
+        0.128, 0.103, -0.047, 0.053, 0.164, 0.093, -0.024, 0.004, 0.046, -0.059, -0.052, 0.132,
+        0.068, -0.013,
+    ]
+    reference_values = {f"q{i:02d}": 0.5 for i in range(len(diffs))}
+    flip_values = {f"q{i:02d}": 0.5 - d for i, d in enumerate(diffs)}
+    reference = _rank_mrr_arm("reference", reference_values)
+    cand_flip = _rank_mrr_arm("cand-flip", flip_values)
+    # A second candidate purely to make `correction_k = len(family) * len(candidates) = 2`, not 1
+    # — the trivial single-candidate case would not distinguish `correction_k` from its default.
+    cand_filler = _rank_mrr_arm("cand-filler", {f"q{i:02d}": 0.5 for i in range(len(diffs))})
+
+    md = rank_report([reference, cand_flip, cand_filler], pack=pack, reference="reference")
+
+    family_section = md.split("#### Reference-anchored family")[1]
+    assert "alpha_family=0.05, k=2, alpha_used=0.025 (97.5% CI)" in family_section
+    flip_row = next(ln for ln in family_section.splitlines() if ln.startswith("| cand-flip"))
+    # The real combined k=2 interval covers zero for this candidate — a `correction_k=None`
+    # regression (silently reverting to k=1) would instead render "distinguishable" here.
+    assert "not distinguishable" in flip_row
+    assert flip_row.count("distinguishable") == 1  # never plain "distinguishable" too
+
+
+def test_rank_report_reference_family_continuous_caption_alpha_used_matches_each_rows_cv() -> None:
+    """Plan §5 test 10 — the caption's own `alpha_used` number, read back out of the rendered
+    markdown, equals `pack.metrics.alpha_family / correction_k` exactly — the drift-detection pin
+    for M1's shared-formula seam (`docs/reviews/rank-continuous-reference.md`)."""
+    pack = _embedder_pack()
+    reference = _rank_mrr_arm("reference", {f"q{i:02d}": 0.50 for i in range(10)})
+    cand_a = _rank_mrr_arm("cand-a", {f"q{i:02d}": 0.90 for i in range(10)})
+    cand_b = _rank_mrr_arm("cand-b", {f"q{i:02d}": 0.55 for i in range(10)})
+
+    md = rank_report([reference, cand_a, cand_b], pack=pack, reference="reference")
+
+    family_section = md.split("#### Reference-anchored family")[1]
+    caption = family_section.split("alpha_used=", 1)[1].split(" ", 1)[0]
+    printed_alpha_used = float(caption)
+    correction_k = len(["mrr"]) * 2  # 1 metric * 2 candidates
+    assert printed_alpha_used == pytest.approx(pack.metrics.alpha_family / correction_k)
+
+
+def test_rank_report_reference_family_continuous_diff_and_ci_print_as_plain_decimals_not_pp() -> (
+    None
+):
+    """Plan §5 test 11 — mirrors `test_a_continuous_verdict_member_is_routed_through_continuous_
+    verdict_not_booleanised`'s own `" pp" not in section` assertion (`tests/test_report.py:1604`)
+    on the two-arm path: `mrr` is a ratio with no percentage-point semantics, so the continuous
+    reference-family table must never route through `_pp`."""
+    pack = _embedder_pack()
+    reference = _rank_mrr_arm("reference", {f"q{i:02d}": 0.50 for i in range(10)})
+    cand_a = _rank_mrr_arm("cand-a", {f"q{i:02d}": 0.90 for i in range(10)})
+
+    md = rank_report([reference, cand_a], pack=pack, reference="reference")
+
+    family_section = md.split("#### Reference-anchored family")[1]
+    assert " pp" not in family_section
+
+
+def test_rank_report_reference_family_continuous_polarity_matches_the_binary_convention() -> None:
+    """Plan §5 test 12 — a candidate with a HIGHER `mrr` than the reference must print a POSITIVE
+    diff ("candidate is better reads positive"), exactly as the binary table's
+    `_polarity_corrected` convention already guarantees — the direct pin for the plan's
+    orientation-reuse argument (§2.2)."""
+    pack = _embedder_pack()
+    reference = _rank_mrr_arm("reference", {f"q{i:02d}": 0.50 for i in range(10)})
+    cand_better = _rank_mrr_arm("cand-better", {f"q{i:02d}": 0.90 for i in range(10)})
+
+    md = rank_report([reference, cand_better], pack=pack, reference="reference")
+
+    family_section = md.split("#### Reference-anchored family")[1]
+    row = next(ln for ln in family_section.splitlines() if ln.startswith("| cand-better"))
+    diff_cell = row.split("|")[2].strip()
+    assert diff_cell.startswith("+")
+    assert float(diff_cell) > 0
+
+
+def test_rank_report_reference_family_continuous_selects_max_deff_and_min_strength_basis(
+    monkeypatch,
+) -> None:
+    """Independent post-implementation gate finding (analyst review,
+    `docs/reviews/rank-continuous-reference-impl.md`) — a second same-class coverage gap:
+    `_render_reference_family_continuous`'s per-candidate call selects `design_effect=max(
+    reference_run.designEffect, candidate.designEffect)` and `basis=min((reference_run.basis,
+    candidate.basis), key=_BASIS_STRENGTH.__getitem__)`, mirroring the binary table's own
+    provenance-selection convention (`_render_reference_family`, `compare_report`). Every
+    continuous-path fixture elsewhere in this suite uses identical `designEffect`/`basis` for
+    reference and candidate, so this selection logic was never actually exercised on a differing
+    pair — confirmed unreached by flipping `max`<->`min` at that call site in a scratch copy and
+    reconfirming the full suite stayed green.
+
+    Pinned directly by spying on `stats.continuous_verdict` (mirrors this file's own existing
+    `stats.holm_steps` spy in `test_rank_report_guard_judge_reference_family_uses_one_combined_
+    ladder`) rather than through a numeric CI/decision side effect: `basis` is carried on
+    `ContinuousVerdict.basis`/`.text` but never bends `paired_cluster_bootstrap`'s own arithmetic
+    (`design_effect` is the only one of the two that widens the printed interval, unlike the
+    binary path's `mcnemar_may_decide` fork) — so there is no observable table-cell difference a
+    correct `basis` selection could produce to assert against, and a test relying on one would be
+    silent on a `basis` flip specifically. Asserting the constructed call's own keyword arguments
+    is what actually catches a `max`<->`min` flip on **either** selection, which is the property
+    a passing suite failed to guarantee before this test existed."""
+    import dataclasses
+
+    pack = _embedder_pack()
+    reference = _rank_mrr_arm("reference", {f"q{i:02d}": 0.50 for i in range(10)})
+    # designEffect=1.0/basis="by-construction" (this fixture's — and every other continuous
+    # fixture's — otherwise-shared default), deliberately unequal to the candidate below.
+    cand_differs = _rank_mrr_arm("cand-differs", {f"q{i:02d}": 0.60 for i in range(10)})
+    cand_differs = dataclasses.replace(cand_differs, designEffect=2.5, basis="measured")
+    # A same-as-reference candidate too, so the assertion below is not "always reports 2.5/
+    # measured regardless of input" — it must differ per candidate.
+    cand_same = _rank_mrr_arm("cand-same", {f"q{i:02d}": 0.55 for i in range(10)})
+
+    calls: dict[str, dict] = {}
+    real_continuous_verdict = stats.continuous_verdict
+
+    def spy(diffs, **kwargs):
+        calls[kwargs["b_label"]] = kwargs
+        return real_continuous_verdict(diffs, **kwargs)
+
+    monkeypatch.setattr(stats, "continuous_verdict", spy)
+
+    rank_report([reference, cand_differs, cand_same], pack=pack, reference="reference")
+
+    # max(1.0, 2.5) = 2.5; min(("by-construction", "measured"), key=strength) = "measured"
+    # (`_BASIS_STRENGTH` ranks it weaker than "by-construction").
+    assert calls["cand-differs"]["design_effect"] == 2.5
+    assert calls["cand-differs"]["basis"] == "measured"
+    # max(1.0, 1.0) = 1.0; min of two equal "by-construction" bases is "by-construction" — proves
+    # the selection is genuinely per-candidate, not a constant leaking from the other row.
+    assert calls["cand-same"]["design_effect"] == 1.0
+    assert calls["cand-same"]["basis"] == "by-construction"
+
+
+def test_rank_report_reference_family_continuous_support_prefers_reference_falls_back_to_cand(
+    monkeypatch,
+) -> None:
+    """Self-review pass (requested alongside the `design_effect`/`basis` gate finding above) over
+    every other `stats.continuous_verdict` call argument in `_render_reference_family_continuous`
+    for the identical "always-identical/always-present-across-fixtures" blind spot:
+
+    `support_metric = _metric_aggregate(reference_run, metric) or _metric_aggregate(candidate,
+    metric)` (report.py) is a preference-with-fallback, exactly the same shape as `design_effect`'s
+    `max`/`basis`'s `min` selection — and every continuous fixture elsewhere in this suite gives
+    the reference its own aggregate, so the `or`'s fallback arm (reference declares none, so
+    `candidate`'s support is used) was never exercised either. Confirmed unreached the same way:
+    swapping the `or`'s operand order in a scratch copy (never touching the tracked tree) left the
+    full suite green, then reverted.
+
+    Two rows, mirroring the `design_effect`/`basis` test's shape: `cand-pref` against a reference
+    that DOES declare its own (distinctively different) support, proving the reference's own is
+    preferred over the candidate's; `cand-fallback` against a reference that declares literally no
+    aggregate for `mrr` at all (but the metric still resolves cleanly to `"continuous"` because
+    every candidate agrees) — the case DC-10 does not exclude, since it only cross-checks a
+    declared aggregate against its own items, never the reverse — proving the candidate's own
+    support is used when the reference's is absent, not a crash and not `None`."""
+    import dataclasses
+
+    pack = _embedder_pack()
+    reference_with_support = _rank_mrr_arm(
+        "reference-with-support", {f"q{i:02d}": 0.50 for i in range(10)}
+    )
+    reference_with_support = dataclasses.replace(
+        reference_with_support,
+        aggregates=RetrievalAggregates(
+            mrr=ContinuousMetric(name="mrr", mean=0.50, n=10, support=(-2.0, 2.0))
+        ),
+    )
+    cand_pref = _rank_mrr_arm("cand-pref", {f"q{i:02d}": 0.60 for i in range(10)})
+
+    calls: dict[str, dict] = {}
+    real_continuous_verdict = stats.continuous_verdict
+
+    def spy(diffs, **kwargs):
+        calls[kwargs["b_label"]] = kwargs
+        return real_continuous_verdict(diffs, **kwargs)
+
+    monkeypatch.setattr(stats, "continuous_verdict", spy)
+
+    rank_report(
+        [reference_with_support, cand_pref], pack=pack, reference="reference-with-support"
+    )
+
+    # The reference's own (distinctively different) support is preferred over the candidate's.
+    assert calls["cand-pref"]["support"] == (-2.0, 2.0)
+
+    calls.clear()
+    reference_no_aggregate_items = [_mrr_item(f"q{i:02d}", 0.50) for i in range(10)]
+    reference_no_aggregate = run(
+        "reference-no-aggregate", role="embedder", call_surface="embeddings",
+        items=reference_no_aggregate_items, aggregates=RetrievalAggregates(),
+        fingerprint_fields=embeddings_fields(
+            packId="embedder-graphrag-retrieval", modelKey="reference-no-aggregate"
+        ),
+    )
+    cand_fallback = _rank_mrr_arm("cand-fallback", {f"q{i:02d}": 0.60 for i in range(10)})
+
+    rank_report(
+        [reference_no_aggregate, cand_fallback], pack=pack, reference="reference-no-aggregate"
+    )
+
+    # No crash, no `None` reaching `continuous_verdict` — the candidate's own support is used.
+    assert calls["cand-fallback"]["support"] == (0.0, 1.0)
+
+
+def _mixed_reference_pack(
+    verdicts: tuple[str, ...] = ("mrr", "precisionAt1"), headline: str | None = None
+) -> PackRef:
+    return PackRef(
+        packId="embedder-mixed-reference-family", packVersion="1.0.0", contentHash="b" * 64,
+        role="embedder", metrics=PackMetrics(verdictMetrics=verdicts, headlineMetric=headline),
+        pairingKey=("itemId",), analysisUnit="itemId", seed=20260902,
+    )
+
+
+def _rank_mixed_arm(model_key: str, mrr_values: dict[str, float], precision_hits: dict[str, bool]):
+    items = [
+        ItemResult(
+            itemId=qid, pairingKey=(qid,), outcome="pass",
+            scoreable={"mrr": True, "precisionAt1": True},
+            counts={"precisionAt1": int(precision_hits[qid])}, timing=None,
+            measures={"mrr": mrr_values[qid]}, detail={},
+        )
+        for qid in mrr_values
+    ]
+    agg = RetrievalAggregates(
+        mrr=ContinuousMetric(
+            name="mrr", mean=sum(mrr_values.values()) / len(mrr_values), n=len(mrr_values),
+            support=(0.0, 1.0),
+        ),
+        precisionAt1=BinaryMetric(
+            name="precisionAt1", successes=sum(precision_hits.values()), n=len(precision_hits),
+            unit="query",
+        ),
+    )
+    return run(
+        model_key, role="embedder", call_surface="embeddings", items=items, aggregates=agg,
+        fingerprint_fields=embeddings_fields(
+            packId="embedder-mixed-reference-family", modelKey=model_key
+        ),
+    )
+
+
+def test_rank_report_reference_family_mixed_pack_refuses_whole_no_partial_table() -> None:
+    """Plan §5 test 13 — a synthetic pack with one binary and one continuous verdict metric,
+    `--reference` given, 2 candidates. Both metrics' reference-family sections render
+    `_MIXED_REFERENCE_FAMILY_MEMBER`'s text, no candidate table (no `| candidate |` header row)
+    appears under either, and the `#### Reference-anchored family` header still appears (so a
+    reader knows FR-8 was requested and explicitly refused, not silently skipped).
+
+    **m1 fold-in** (`docs/reviews/rank-continuous-reference.md`): for this ordinary
+    pre-registered-mixed case, each metric's own kind is still individually resolved cleanly — only
+    the *combination* is mixed — so this plan mirrors `compare_report`'s own mixed-kind refusal
+    precedent and still renders each metric's own per-candidate `_pairing_tally` diagnostic under
+    the refusal message."""
+    pack = _mixed_reference_pack()
+    ids = [f"q{i:02d}" for i in range(5)]
+    reference = _rank_mixed_arm(
+        "reference", {qid: 0.5 for qid in ids}, {qid: False for qid in ids}
+    )
+    cand_a = _rank_mixed_arm("cand-a", {qid: 0.9 for qid in ids}, {qid: True for qid in ids})
+    cand_b = _rank_mixed_arm("cand-b", {qid: 0.3 for qid in ids}, {qid: False for qid in ids})
+
+    md = rank_report([reference, cand_a, cand_b], pack=pack, reference="reference")
+
+    assert md.count("#### Reference-anchored family") == 2
+    mrr_family = md.split("#### Reference-anchored family — mrr")[1].split(
+        "#### Reference-anchored family"
+    )[0]
+    precision_family = md.split("#### Reference-anchored family — precisionAt1")[1]
+    for section in (mrr_family, precision_family):
+        assert "no reference-anchored verdict" in section
+        assert "mixes binary and continuous members" in section
+        assert "| candidate |" not in section
+        assert "is better than" not in section
+        assert "distinguishable" not in section
+        # m1 — the per-candidate tally still renders, mirroring `compare_report`'s precedent.
+        assert "paired n: 5 of 5" in section
+
+
+def test_rank_report_reference_family_kind_disagreement_prints_the_named_banner_and_refuses() -> (
+    None
+):
+    """Plan §5 test 14 — the reference declares no aggregate at all for a single-metric pack's own
+    verdict metric, and two candidates disagree with each other on its kind (mirroring unit test
+    7's fixture, driven through the full `rank_report`). Assert: the `> **REFERENCE-FAMILY KIND
+    DISAGREEMENT**` banner appears once, before any `#### Reference-anchored family` header,
+    naming the metric and both candidates' distinct kinds; the metric's own reference-family
+    section renders `_REFERENCE_KIND_DISAGREEMENT_MEMBER`'s text, not `_MIXED_REFERENCE_FAMILY_
+    MEMBER`'s; no candidate table renders."""
+    pack = _embedder_pack()
+    reference = run(
+        "reference", role="embedder", call_surface="embeddings", items=[],
+        aggregates=RetrievalAggregates(),
+        fingerprint_fields=embeddings_fields(
+            packId="embedder-graphrag-retrieval", modelKey="reference"
+        ),
+    )
+    cand_continuous = _rank_mrr_arm("cand-continuous", {f"q{i:02d}": 0.9 for i in range(5)})
+    cand_binary_items = [
+        ItemResult(
+            itemId=f"q{i:02d}", pairingKey=(f"q{i:02d}",), outcome="pass",
+            scoreable={"mrr": True}, counts={"mrr": 1}, timing=None, measures={}, detail={},
+        )
+        for i in range(5)
+    ]
+    cand_binary = run(
+        "cand-binary", role="embedder", call_surface="embeddings", items=cand_binary_items,
+        aggregates=RetrievalAggregates(
+            precisionAt1=BinaryMetric(name="mrr", successes=5, n=5, unit="query")
+        ),
+        fingerprint_fields=embeddings_fields(
+            packId="embedder-graphrag-retrieval", modelKey="cand-binary"
+        ),
+    )
+
+    md = rank_report([reference, cand_continuous, cand_binary], pack=pack, reference="reference")
+
+    assert md.count("**REFERENCE-FAMILY KIND DISAGREEMENT**") == 1
+    banner_pos = md.index("REFERENCE-FAMILY KIND DISAGREEMENT")
+    family_pos = md.index("#### Reference-anchored family")
+    assert banner_pos < family_pos
+    assert "`mrr`" in md
+    assert "cand-continuous" in md and "continuous" in md
+    assert "cand-binary" in md and "binary" in md
+    family_section = md.split("#### Reference-anchored family")[1]
+    assert "do not agree" in family_section
+    assert "mixes binary and continuous members" not in family_section
+    assert "|---|" not in family_section
+    assert "is better than" not in family_section
+
+
+def test_rank_report_reference_family_disagreement_banner_never_fires_for_ordinary_mixed() -> None:
+    """Plan §5 test 15 — negative pin: the ordinary mixed-family fixture (test 13's) must **not**
+    print the `REFERENCE-FAMILY KIND DISAGREEMENT` banner, guarding against the two refusal paths
+    being conflated in the implementation."""
+    pack = _mixed_reference_pack()
+    ids = [f"q{i:02d}" for i in range(5)]
+    reference = _rank_mixed_arm(
+        "reference", {qid: 0.5 for qid in ids}, {qid: False for qid in ids}
+    )
+    cand_a = _rank_mixed_arm("cand-a", {qid: 0.9 for qid in ids}, {qid: True for qid in ids})
+    cand_b = _rank_mixed_arm("cand-b", {qid: 0.3 for qid in ids}, {qid: False for qid in ids})
+
+    md = rank_report([reference, cand_a, cand_b], pack=pack, reference="reference")
+
+    assert "REFERENCE-FAMILY KIND DISAGREEMENT" not in md
+
+
+def test_rank_report_reference_family_sibling_disagreement_message_differs_from_mixed() -> None:
+    """Plan §5 test 16 — a three-metric family (one binary, one continuous, one disagreeing) with
+    `--reference` given: the disagreeing metric's block uses `_REFERENCE_KIND_DISAGREEMENT_
+    MEMBER`; the *other two*, cleanly-resolved metrics' blocks use `_REFERENCE_FAMILY_SIBLING_
+    DISAGREEMENT_MEMBER`, **never** `_MIXED_REFERENCE_FAMILY_MEMBER`'s "mixes binary and
+    continuous members" wording — which would misstate the reason for a metric that did not
+    itself disagree with anything."""
+    pack = PackRef(
+        packId="embedder-triple-family", packVersion="1.0.0", contentHash="c" * 64,
+        role="embedder",
+        metrics=PackMetrics(verdictMetrics=("mrr", "precisionAt1", "sneaky"), headlineMetric=None),
+        pairingKey=("itemId",), analysisUnit="itemId", seed=20260902,
+    )
+    ids = [f"q{i:02d}" for i in range(5)]
+
+    def arm(model_key: str, mrr_values, precision_hits, sneaky_metric):
+        items = [
+            ItemResult(
+                itemId=qid, pairingKey=(qid,), outcome="pass",
+                scoreable={"mrr": True, "precisionAt1": True, "sneaky": True},
+                counts={"precisionAt1": int(precision_hits[qid]), **sneaky_metric[1]},
+                timing=None, measures={"mrr": mrr_values[qid], **sneaky_metric[0]}, detail={},
+            )
+            for qid in ids
+        ]
+        sneaky_agg = sneaky_metric[2]
+        agg = RetrievalAggregates(
+            mrr=ContinuousMetric(
+                name="mrr", mean=sum(mrr_values.values()) / len(mrr_values), n=len(mrr_values),
+                support=(0.0, 1.0),
+            ),
+            precisionAt1=BinaryMetric(
+                name="precisionAt1", successes=sum(precision_hits.values()), n=len(ids),
+                unit="query",
+            ),
+            recallAtK=(sneaky_agg,) if sneaky_agg is not None else (),
+        )
+        return run(
+            model_key, role="embedder", call_surface="embeddings", items=items, aggregates=agg,
+            fingerprint_fields=embeddings_fields(
+                packId="embedder-triple-family", modelKey=model_key
+            ),
+        )
+
+    mrr_ref = {qid: 0.5 for qid in ids}
+    mrr_a = {qid: 0.9 for qid in ids}
+    mrr_b = {qid: 0.3 for qid in ids}
+    prec_ref, prec_a, prec_b = (
+        {qid: False for qid in ids}, {qid: True for qid in ids}, {qid: False for qid in ids},
+    )
+    reference = arm(
+        "reference", mrr_ref, prec_ref,
+        ({}, {}, None),  # reference declares no aggregate at all for "sneaky"
+    )
+    cand_a = arm(
+        "cand-a", mrr_a, prec_a,
+        ({}, {"sneaky": 1}, BinaryMetric(name="sneaky", successes=5, n=5, unit="query")),
+    )
+    cand_b = arm(
+        "cand-b", mrr_b, prec_b,
+        ({"sneaky": 0.5}, {}, ContinuousMetric(name="sneaky", mean=0.5, n=5, support=(0.0, 1.0))),
+    )
+
+    md = rank_report([reference, cand_a, cand_b], pack=pack, reference="reference")
+
+    sneaky_section = md.split("#### Reference-anchored family — sneaky")[1].split(
+        "#### Reference-anchored family"
+    )[0]
+    mrr_section = md.split("#### Reference-anchored family — mrr")[1].split(
+        "#### Reference-anchored family"
+    )[0]
+    precision_section = md.split("#### Reference-anchored family — precisionAt1")[1]
+    assert "do not agree" in sneaky_section or "kind disagreement" in sneaky_section
+    for section in (mrr_section, precision_section):
+        assert "A sibling metric" in section
+        assert "mixes binary and continuous members" not in section
+
+
+_GUARD_JUDGE_REFERENCE_FAMILY_GOLDEN = (
+    '# Ranked comparison — guard-judge-understanding@1.0.0 (guard-judge)\n'
+    '\n'
+    '### falseAdvanceRate\n'
+    '\n'
+    '> Two co-equal class-conditional error rates, no single headline: floor 15.0/20.0 pp, MDD80 '
+    '21.9/28.7 pp for falseAdvanceRate/falseSuspendRate at the two-member alpha_mdd=0.025 (`-ml` '
+    '§7.3).\n'
+    '\n'
+    '| rank | model | k/n | rate | 95% Wilson | latency p95 | footprint |\n'
+    '|---|---|---|---|---|---|---|\n'
+    '| 1 | reference | 0/40 | 0.000 | [0.000, 0.088] | — | — |\n'
+    '| 2 | cand-a | 2/40 | 0.050 | [0.014, 0.165] | — | — |\n'
+    '| 3 | cand-b | 8/40 | 0.200 | [0.105, 0.348] | — | — |\n'
+    '\n'
+    "_Per-arm intervals are Wilson score intervals over the arm's own items: **descriptive, not "
+    'the comparison instrument**. The comparison is the paired difference below (`-ml` §3.2)._\n'
+    '\n'
+    '<!-- rank-report: pack=guard-judge-understanding metric=falseAdvanceRate top=reference '
+    'value=0.0000 ci=[0.0000,0.0876] -->\n'
+    '\n'
+    'This pack resolves differences of >=21.9 pp with 80% power at n=40 effective items (40 '
+    'units, design effect 1.00, by-construction, alpha=0.025). Differences below 15.0 pp cannot '
+    'reach significance at any observed outcome, at any Holm step (alpha <= 0.05). Best case — '
+    'assumes the candidate wins every item the models differ on. Inference is conditional on the '
+    '40 items in guard-judge-understanding@1.0.0; generalization to unwritten items is not '
+    'certified by any interval in this report.\n'
+    '\n'
+    "If this pack's optional reference-anchored family (FR-8) were run — any one of the 3 models "
+    'here designated as the reference, the other 2 compared against it jointly across both '
+    'verdict metrics, — that family of 4 tests would resolve differences of >=24.6 pp with 80% '
+    'power (alpha_mdd = 0.05/4).\n'
+    '\n'
+    '#### Reference-anchored family — falseAdvanceRate vs `reference`\n'
+    '\n'
+    '_exploratory — no significance claim outside this family_\n'
+    '\n'
+    '| candidate | diff | 95% CI | Holm-adjusted threshold | decision |\n'
+    '|---|---|---|---|---|\n'
+    '| cand-a | -5.0 pp | [-16.5, 4.5] pp | 0.0500 | not tested (Holm stops here) |\n'
+    '| cand-b | -20.0 pp | [-34.8, -7.1] pp | 0.0167 | distinguishable |\n'
+    '\n'
+    '### falseSuspendRate\n'
+    '\n'
+    '> Two co-equal class-conditional error rates, no single headline: floor 15.0/20.0 pp, MDD80 '
+    '21.9/28.7 pp for falseAdvanceRate/falseSuspendRate at the two-member alpha_mdd=0.025 (`-ml` '
+    '§7.3).\n'
+    '\n'
+    '| rank | model | k/n | rate | 95% Wilson | latency p95 | footprint |\n'
+    '|---|---|---|---|---|---|---|\n'
+    '| 1 | reference | 0/40 | 0.000 | [0.000, 0.088] | — | — |\n'
+    '| 2 | cand-b | 4/40 | 0.100 | [0.040, 0.231] | — | — |\n'
+    '| 3 | cand-a | 10/40 | 0.250 | [0.142, 0.402] | — | — |\n'
+    '\n'
+    "_Per-arm intervals are Wilson score intervals over the arm's own items: **descriptive, not "
+    'the comparison instrument**. The comparison is the paired difference below (`-ml` §3.2)._\n'
+    '\n'
+    '<!-- rank-report: pack=guard-judge-understanding metric=falseSuspendRate top=reference '
+    'value=0.0000 ci=[0.0000,0.0876] -->\n'
+    '\n'
+    'This pack resolves differences of >=21.9 pp with 80% power at n=40 effective items (40 '
+    'units, design effect 1.00, by-construction, alpha=0.025). Differences below 15.0 pp cannot '
+    'reach significance at any observed outcome, at any Holm step (alpha <= 0.05). Best case — '
+    'assumes the candidate wins every item the models differ on. Inference is conditional on the '
+    '40 items in guard-judge-understanding@1.0.0; generalization to unwritten items is not '
+    'certified by any interval in this report.\n'
+    '\n'
+    "If this pack's optional reference-anchored family (FR-8) were run — any one of the 3 models "
+    'here designated as the reference, the other 2 compared against it jointly across both '
+    'verdict metrics, — that family of 4 tests would resolve differences of >=24.6 pp with 80% '
+    'power (alpha_mdd = 0.05/4).\n'
+    '\n'
+    '#### Reference-anchored family — falseSuspendRate vs `reference`\n'
+    '\n'
+    '_exploratory — no significance claim outside this family_\n'
+    '\n'
+    '| candidate | diff | 95% CI | Holm-adjusted threshold | decision |\n'
+    '|---|---|---|---|---|\n'
+    '| cand-a | -25.0 pp | [-40.2, -11.1] pp | 0.0125 | distinguishable |\n'
+    '| cand-b | -10.0 pp | [-23.1, 0.6] pp | 0.0250 | not distinguishable |\n'
+    '\n'
+)
+
+
+def test_rank_report_guard_judge_binary_reference_family_is_byte_for_byte_unchanged() -> None:
+    """Plan §5 test 19 — the non-negotiable regression constraint (the coordination ledger's own
+    stated note): `guard-judge-understanding`'s existing binary reference-family rendering must be
+    byte-for-byte identical before and after this change. The golden string above was captured
+    from the tree immediately after steps 1-6 landed (all binary-path-preserving by construction
+    and by the still-green suite) and before step 7's dispatch rewrite touched `rank_report`'s
+    binary block at all. Combine with `test_rank_report_guard_judge_reference_family_uses_one_
+    combined_ladder` and `test_rank_report_guard_judge_family_k_does_not_shrink_when_a_candidate_
+    has_no_paired_data` (already passing) as the three tests that jointly satisfy the constraint —
+    those two also assert *mechanism* (one combined `holm_steps` call, `k` not shrinking) that a
+    byte-for-byte string diff alone would not localize on failure."""
+    pack = guard_pack(headline=None, verdicts=("falseAdvanceRate", "falseSuspendRate"))
+    reference = _guard_judge_arm("reference", 0, 0)
+    cand_a = _guard_judge_arm("cand-a", 2, 10)
+    cand_b = _guard_judge_arm("cand-b", 8, 4)
+
+    md = rank_report([reference, cand_a, cand_b], pack=pack, reference="reference")
+
+    assert md == _GUARD_JUDGE_REFERENCE_FAMILY_GOLDEN

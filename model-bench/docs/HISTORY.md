@@ -2,6 +2,51 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-20 — U188 — `rank --reference` fixed on a continuous verdict metric (D-1)
+
+**What:** Fixed a real, shipped crash `qa-engineer` found while testing the user manual (D-1,
+`docs/test-reports/small-model-benchmarking-manual-additions-report.md`): `./run.sh rank --pack
+<id> --reference <modelKey>` used to exit 2 with an uncaught `MetricKindError` on any pack whose
+verdict metric is continuous rather than boolean, including the real shipped
+`embedder-graphrag-retrieval` pack (metric: `mrr`). Root cause went deeper than a wiring gap:
+`stats.continuous_verdict`'s own multiplicity correction was hard-wired to `k = len(family)` (the
+pack's own metric-count axis) with no way to substitute FR-8's independent candidate-count axis,
+unlike the binary path's `stats.verdict()`, which already had this decoupling via `correction_k`.
+
+`data-scientist` (`docs/plans/rank-continuous-reference-ml.md`) designed the fix: give
+`continuous_verdict` the same `correction_k` parameter, combined divisor `k = len(family) *
+len(candidates)` (identical formula/reasoning to the binary path's), a "refuse whole" guard for a
+mixed binary/continuous family in `rank_report`'s reference path (mirroring `compare_report`'s
+existing one), and two adjacent already-shipped defects fixed in the same unit: `_rank_
+resolving_power_lines` was silently printing McNemar/Wilson-shaped "pp"/"80% power" language for
+`mrr` on every rank report regardless of `--reference`, and `ContinuousVerdict.text` hardcoded the
+literal `"95% CI"` instead of reading its own computed `alpha_used`. `architect`
+(`docs/plans/rank-continuous-reference.md`) resolved two open design questions the note left
+open — an N-ary cross-arm kind resolver (`_resolve_reference_kinds`, since the two-arg
+`_metric_kind` pattern under-detects disagreement among more than two arms) and how a genuine
+cross-arm kind *disagreement* should be rendered (refused whole, plus a louder, distinct banner,
+vs. the calmer pre-registered-mixed-family message) — then `tdd-engineer` implemented it, adding a
+shared `stats.alpha_used` helper along the way (closing a duplicate-formula finding from the plan
+gate) and 22 new tests across three implementation rounds.
+
+Two independent gate passes, each run twice (plan-level and post-implementation): `analyst` +
+`data-scientist`, both approve with suggestions both times, no blockers. `teco` independently
+verified throughout — reproduced the live crash and its fix, re-ran the full suite at every round
+(1778 → 1798 → 1800 passed), and ran its own data-plumbing mutation tests (not just the ones each
+delegate already reported) at three points, twice finding real, same-class test-coverage gaps
+(the reference-family row's actual `correction_k`, then its `design_effect`/`basis` selection —
+both confirmed live-correct in the shipped code but previously unpinned by any test) that were
+closed before acceptance; `tdd-engineer`'s own follow-up self-review caught a third instance
+(`support` preference-with-fallback) unprompted. Live-verified after every round:
+`./run.sh rank --pack embedder-graphrag-retrieval --reference bm25` renders the correct
+`k=4, alpha_used=0.0125 (98.75% CI)` continuous reference-family table, exit 0;
+`guard-judge-understanding`'s existing binary reference-family output confirmed byte-for-byte
+unchanged (a dedicated regression test, plus a live spot-check). Committed alongside this entry.
+
+Closes the `docs/BACKLOG.md` item filed for D-1. The manual's known-issue callout + `compare`
+workaround (`docs/manuals/small-model-benchmarking.md`, committed `460057d3`) is now stale and
+routed to `tico` to update or remove.
+
 ## 2026-09-20 — U187 — catalog-sweep closed: consolidated document, final gate, requirements scope lock
 
 **What:** `data-scientist` assembled `reports/catalog-sweep-2026-09-19-consolidated.md` (FR-9/

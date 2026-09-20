@@ -36,6 +36,7 @@ from modelbench.stats import (
     _family_ci_levels,
     _support_clamp,
     _widen,
+    alpha_used,
     b_min,
     cluster_bootstrap,
     conservative_envelope,
@@ -2830,6 +2831,96 @@ def test_continuous_verdict_alpha_used_is_alpha_family_over_k() -> None:
         design_effect=1.0, basis="by-construction", B=100, seed=1, support=(0.0, 1.0),
     )
     assert v2.alpha_used == pytest.approx(0.025)
+
+
+def test_alpha_used_is_alpha_family_over_k() -> None:
+    """M1 (`docs/reviews/rank-continuous-reference.md`) — the one home for `alpha_family / k`,
+    shared by `continuous_verdict` and `report._render_reference_family_continuous`'s caption
+    rather than each computing it independently."""
+    assert alpha_used(0.05, 1) == pytest.approx(0.05)
+    assert alpha_used(0.05, 4) == pytest.approx(0.0125)
+
+
+def test_continuous_verdict_correction_k_defaults_to_len_family_and_matches_the_omitted_path() -> (
+    None
+):
+    """Plan §3.1/`-ml` §3.1 test 1 — `correction_k=None` (the default) and the omitted keyword
+    produce identical `ContinuousVerdict` objects on a `len(family) == 1` fixture, mirroring
+    `test_verdict_correction_k_defaults_to_len_family_and_matches_the_omitted_path`
+    (`tests/test_stats.py:567-584`)."""
+    diffs = [0.1, -0.2, 0.3, 0.15, -0.1, 0.2]
+    v_omitted = continuous_verdict(
+        diffs, metric_name="mrr", family=["mrr"], alpha_family=0.05, unit_kind="query",
+        design_effect=1.0, basis="by-construction", B=500, seed=1, support=(0.0, 1.0),
+    )
+    v_none = continuous_verdict(
+        diffs, metric_name="mrr", family=["mrr"], alpha_family=0.05, unit_kind="query",
+        design_effect=1.0, basis="by-construction", B=500, seed=1, support=(0.0, 1.0),
+        correction_k=None,
+    )
+    v_explicit = continuous_verdict(
+        diffs, metric_name="mrr", family=["mrr"], alpha_family=0.05, unit_kind="query",
+        design_effect=1.0, basis="by-construction", B=500, seed=1, support=(0.0, 1.0),
+        correction_k=1,
+    )
+    assert v_omitted.text == v_none.text == v_explicit.text
+    assert v_omitted.ci == v_none.ci == v_explicit.ci
+    assert v_omitted.alpha_used == v_none.alpha_used == v_explicit.alpha_used == pytest.approx(0.05)
+
+
+def test_continuous_verdict_correction_k_decouples_the_divisor_from_the_familys_own_length() -> (
+    None
+):
+    """Plan §3.1/`-ml` §3.1 test 2 — `correction_k=16` on a `len(family) == 1` fixture produces
+    `alpha_used = alpha_family / 16`, a materially wider interval than `correction_k=None` on
+    identical `diffs`, and flips `distinguishable` from `True` to `False` on a fixture engineered
+    to be significant only at the uncorrected level."""
+    diffs = [0.18, 1.01, 0.95, -0.39, 1.40, -0.05]
+    v_uncorrected = continuous_verdict(
+        diffs, metric_name="sep_z", family=["sep_z"], alpha_family=0.05, unit_kind="query",
+        design_effect=1.0, basis="by-construction", B=3000, seed=11, support=None,
+    )
+    v_corrected = continuous_verdict(
+        diffs, metric_name="sep_z", family=["sep_z"], alpha_family=0.05, unit_kind="query",
+        design_effect=1.0, basis="by-construction", B=3000, seed=11, support=None,
+        correction_k=16,
+    )
+    assert v_uncorrected.alpha_used == pytest.approx(0.05)
+    assert v_corrected.alpha_used == pytest.approx(0.05 / 16)
+    width_uncorrected = v_uncorrected.ci[1] - v_uncorrected.ci[0]
+    width_corrected = v_corrected.ci[1] - v_corrected.ci[0]
+    assert width_corrected > width_uncorrected
+    assert v_uncorrected.distinguishable is True
+    assert v_corrected.distinguishable is False
+
+
+def test_continuous_verdict_text_reports_the_correct_coverage_at_k_greater_than_1() -> None:
+    """Plan §3.2/§3.6, test 3 — `family=["mrr", "sep_z"]` (`k=2`, `alpha_used=0.025`) must print
+    `"97.5% CI"`, never the hardcoded `"95% CI"`."""
+    diffs = [0.1, -0.2, 0.3, 0.15, -0.1, 0.2]
+    v = continuous_verdict(
+        diffs, metric_name="mrr", family=["mrr", "sep_z"], alpha_family=0.05, unit_kind="query",
+        design_effect=1.0, basis="by-construction", B=500, seed=1, support=(0.0, 1.0),
+    )
+    assert v.alpha_used == pytest.approx(0.025)
+    assert "97.5% CI" in v.text
+    assert "95% CI" not in v.text
+
+
+def test_continuous_verdict_correction_k_boundary_value_does_not_silently_round() -> None:
+    """Plan §3.1, test 4 — `k=100` is large enough that `alpha_family/(2k)` is a small but exact
+    `Fraction`; `.alpha_used` and the printed coverage must be numerically exact against the
+    closed-form expression, not merely close (this codebase's real scale tops out at `k=36`, so
+    this is a boundary check, not a realistic-scale one)."""
+    diffs = [0.1, -0.2, 0.3, 0.15, -0.1, 0.2]
+    v = continuous_verdict(
+        diffs, metric_name="mrr", family=["mrr"], alpha_family=0.05, unit_kind="query",
+        design_effect=1.0, basis="by-construction", B=500, seed=1, support=(0.0, 1.0),
+        correction_k=100,
+    )
+    assert v.alpha_used == 0.05 / 100
+    coverage = 100 * (1 - v.alpha_used)
+    assert f"{coverage:g}% CI" in v.text
 
 
 def test_continuous_verdict_mrr_worked_case_from_the_note() -> None:

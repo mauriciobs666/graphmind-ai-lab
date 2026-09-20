@@ -1594,6 +1594,16 @@ def _family_ci_levels(alpha_family: float, k: int) -> tuple[Fraction, Fraction]:
     return lo, 1 - lo
 
 
+def alpha_used(alpha_family: float, k: int) -> float:
+    """The two-sided alpha a `k`-member-corrected continuous interval is actually taken at —
+    `alpha_family / k` — the one home for this formula (`docs/reviews/rank-continuous-reference.md`
+    M1): `continuous_verdict` and `report._render_reference_family_continuous`'s caption both call
+    this rather than each computing `alpha_family / k` independently, which is exactly the
+    "two copies of a formula is one copy and one bug" seam this component's own convention refuses
+    (`AGENTS.md`)."""
+    return alpha_family / k
+
+
 def _support_clamp(support: tuple[float, float] | None) -> tuple[float, float] | None:
     """The clamp `continuous_verdict()` derives from a metric's declared `support` (`-ml` §3.4
     Rule 8).
@@ -1660,11 +1670,23 @@ def continuous_verdict(
     B: int,
     seed: int,
     support: tuple[float, float] | None,
+    correction_k: int | None = None,
     a_label: str = "A",
     b_label: str = "B",
 ) -> ContinuousVerdict:
     """Decide one continuous metric — MRR, score separation — from its per-unit differences
     (`-ml` §3.4 Rule 8).
+
+    **`correction_k`** decouples the divisor `_family_ci_levels`/`alpha_used` are computed from
+    from `family`'s membership role (plan §3.1, mirroring `verdict()`'s own `correction_k` exactly
+    — `stats.py:1270`). `family` still does exactly one job — `metric_name in family` still
+    requires a genuinely pre-registered metric — but the divisor is `correction_k` when given,
+    `len(family)` otherwise. `None` (the default) reproduces the one existing call site's
+    behaviour unchanged (`compare_report`'s continuous branch, which passes no `correction_k`):
+    it is not the anti-conservative-by-omission shape this module's "nothing that shapes a
+    decision carries a default" rule refuses, because it reproduces exactly the one
+    already-shipped, already-audited call. FR-8's reference-anchored family always passes this
+    explicitly.
 
     `diffs` is one difference per **analysis unit** (§3.2d), never per observation. For a
     continuous metric the bootstrap interval **is** the test (§3.2d): there is no separate
@@ -1716,9 +1738,10 @@ def continuous_verdict(
             "measurement (-ml §3.4 Rule 8)"
         )
 
-    k = len(family)
+    k = correction_k if correction_k is not None else len(family)
     levels = _family_ci_levels(alpha_family, k)
-    alpha_used = alpha_family / k
+    used_alpha = alpha_used(alpha_family, k)
+    coverage_label = f"{100 * (1 - used_alpha):g}% CI"
 
     # `paired_cluster_bootstrap` is §3.2d's entry point for every continuous verdict — it is what
     # inherits refusals 1-3 above (empty `diffs`, a non-finite difference, `design_effect < 1.0`)
@@ -1739,17 +1762,17 @@ def continuous_verdict(
         shown_ci = ci if diff >= 0 else (-ci[1], -ci[0])
         text = (
             f"{winner} is better than {loser} on {metric_name}: {diff:+.3f} "
-            f"(95% CI [{shown_ci[0]:+.3f}, {shown_ci[1]:+.3f}]), n={n_units} paired "
+            f"({coverage_label} [{shown_ci[0]:+.3f}, {shown_ci[1]:+.3f}]), n={n_units} paired "
             f"{unit_plural} (unit: {unit_kind}, design effect {design_effect:.2f}, {basis}), "
             f"decided by paired bootstrap on per-{unit_kind} differences (B={B}, seed={seed})."
         )
     else:
         text = (
-            f"Not distinguishable at this sample size. Observed difference {diff:+.3f}, 95% CI "
-            f"[{ci[0]:+.3f}, {ci[1]:+.3f}] covers zero, n={n_units} paired {unit_plural} (unit: "
-            f"{unit_kind}, design effect {design_effect:.2f}, {basis}), decided by paired "
-            f"bootstrap on per-{unit_kind} differences (B={B}, seed={seed}). Neither model is "
-            "ranked above the other."
+            f"Not distinguishable at this sample size. Observed difference {diff:+.3f}, "
+            f"{coverage_label} [{ci[0]:+.3f}, {ci[1]:+.3f}] covers zero, n={n_units} paired "
+            f"{unit_plural} (unit: {unit_kind}, design effect {design_effect:.2f}, {basis}), "
+            f"decided by paired bootstrap on per-{unit_kind} differences (B={B}, seed={seed}). "
+            "Neither model is ranked above the other."
         )
 
     return ContinuousVerdict(
@@ -1764,6 +1787,6 @@ def continuous_verdict(
         basis=basis,
         B=B,
         seed=seed,
-        alpha_used=alpha_used,
+        alpha_used=used_alpha,
         decided_by="paired-bootstrap",
     )
