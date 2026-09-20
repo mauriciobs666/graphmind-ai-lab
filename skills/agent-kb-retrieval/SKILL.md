@@ -37,16 +37,8 @@ this file.
    text — a claim can (rarely) split across two chunks of the same document (a mitigated,
    not eliminated, chunking residual — see the plan's §1/§8). If you need the complete text,
    follow up with `get_document(documentId)` rather than trusting one chunk's excerpt.
-4. **Applying the score floor yourself is no longer required for `search_documents`.** Since
-   K-030 item 2 (`falkor-chat/docs/plans/agent-knowledge-base-strategy7-impl.md`), every row
-   `search_documents` returns has already passed this same admissibility gate server-side
-   (`falkorchat/services.py`'s `VECTOR_ADMISSIBILITY_FLOOR`/`LEXICAL_ADMISSIBILITY_RANK`
-   constants — 0.43 cosine distance OR lexical rank ≤2, cited not restated). Re-applying
-   "`score > 0.43` → reject" yourself against a `search_documents` result is actively wrong now:
-   `score` narrowed to mean only the vector cosine distance, `None` when the chunk was absent
-   from the vector signal entirely (even though it was validly admitted via the lexical rank
-   gate) — either crashing the comparison or incorrectly discarding a valid hit. See below for
-   the value's derivation and caveats; it still governs what gets admitted, just server-side now.
+4. **Apply the score floor yourself** — reject any returned hit with `score > 0.43`. See
+   below for the value's derivation and caveats. Do not invent a different number.
 
 ## The query-instruction prefix (exact, fenced — do not paraphrase or reformat)
 
@@ -74,10 +66,7 @@ choice.
 
 ## Score floor — 0.43, with a named class of residual risk near tight score clusters
 
-**As of K-030 item 2, this gate is enforced server-side for `search_documents`** (step 4
-above) — this section's derivation and caveats remain the operative history of the 0.43 value
-itself, which is unchanged, only where it's applied. **Reject any hit with `score > 0.43`**
-(cosine distance; lower = more similar). Landed
+**Reject any hit with `score > 0.43`** (cosine distance; lower = more similar). Landed
 2026-09-19 by `qa-engineer` (Stage 8 Phase 2, `claude/docs/test-reports/
 agent-knowledge-base-strategy-ac2-report.md`, revised in place per `analyst`'s review,
 `claude/docs/reviews/agent-knowledge-base-strategy4-stage8-phase2.md`), executing the 29

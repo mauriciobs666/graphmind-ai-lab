@@ -2108,67 +2108,6 @@ deliberately: that receipt stays at the documented `{documentId, chunkCount, sta
 Always traversed from an already-anchored `Document`, never independently scanned — no new index
 needed, same posture as `ABOUT`/`RELATES_TO` (`document-ingestion-graph.md` §2.2).
 
-### 14.3a Lexical+semantic RRF fusion for `search_documents` (K-030 item 2)
-
-`Services.search_documents` (§14.4) fuses §14.3's vector signal with a second, lexical signal —
-`Repository.search_chunks_fulltext`, the full-text half — via Reciprocal Rank Fusion plus an
-admissibility gate (`claude/docs/plans/agent-knowledge-base-strategy7-impl.md`, formula decided
-by `data-scientist`, `claude/docs/plans/agent-knowledge-base-strategy-ml.md` "Item 2" — this
-section states where it lands, not the derivation).
-
-**`search_chunks_fulltext` — the lexical half**
-```cypher
-CALL db.idx.fulltext.queryNodes('Chunk', $query)
-YIELD node AS seed, score
-WHERE seed.documentCurrent = true
-RETURN seed.chunkId, seed.text, seed.documentId, seed.seq, score
-ORDER BY score DESC
-LIMIT $limit
-```
-Mirrors §14.3's `search_chunks` shape (same post-`YIELD` `documentCurrent` exclusion, same
-denormalized `documentId`/`seq`) with `db.idx.fulltext.queryNodes('Chunk', ...)` in place of
-`db.idx.vector.queryNodes(...)` — the same `Message`→`Chunk` label swap §5's `search_messages`
-already demonstrates for full-text. `score` is a RediSearch TF-IDF-family score, **higher is
-better** (`ORDER BY score DESC`) — the OPPOSITE convention from §14.3's cosine-distance `ASC`; do
-not re-sort, and never compare the two scores directly. `query` must be the caller's raw,
-unwrapped situation text, never the vector-only query-instruction prefix (below) — this method
-does no stripping itself.
-
-**Fusion + gate (pure Python, `falkorchat/services.py`)**
-
-`_fuse_chunk_hits_rrf(vector_hits, lexical_hits, *, limit)` computes each chunk's Reciprocal Rank
-Fusion score — `1/(k + vector_rank) + 1/(k + lexical_rank)`, a chunk absent from a signal
-contributing `0` for that term — sorts descending by that score (ties broken on `chunkId`
-ascending), then walks the fused order keeping the first `limit` candidates that pass an
-admissibility gate: a candidate is admissible if its vector cosine distance is at or under
-`VECTOR_ADMISSIBILITY_FLOOR`, OR it ranks at or above `LEXICAL_ADMISSIBILITY_RANK` on the lexical
-side (OR, not AND) — continuing past any rejected candidate is the backfill this design counts
-on. Four named constants, all in `falkorchat/services.py` (their canonical location):
-
-| Constant | Value | Meaning |
-|---|---|---|
-| `RRF_K` | 60 | RRF's own `k` constant (literature default, not re-derived for this corpus) |
-| `HYBRID_OVERFETCH_K` | 20 | floor for each signal's own over-fetch depth |
-| `VECTOR_ADMISSIBILITY_FLOOR` | 0.43 | vector cosine-distance admissibility threshold |
-| `LEXICAL_ADMISSIBILITY_RANK` | 2 | lexical rank admissibility threshold (1-indexed) |
-
-**Over-fetch depth scales with `limit`.** `search_documents` requests
-`depth = max(HYBRID_OVERFETCH_K, limit)` from both signals — the floor for the
-`skills/agent-kb-retrieval/SKILL.md` convention's fixed `limit=5` (`depth` reduces to
-`HYBRID_OVERFETCH_K` unchanged), scaling up for a caller requesting more so `search_documents`'s
-own `limit`-many-results contract holds regardless of `limit`'s size.
-
-**The query-instruction prefix must never reach the lexical call.** A compliant caller of
-`search_documents` always sends `query` already wrapped in `skills/agent-kb-retrieval/SKILL.md`'s
-asymmetric query-instruction template (Qwen3-Embedding's own convention) — needed verbatim by the
-vector signal, but the lexical signal must see only the raw situation text, or the boilerplate
-instruction terms pollute every lexical query's TF-IDF signal identically.
-`_strip_query_instruction_prefix(query)` recovers the raw text by splitting on the first
-occurrence of `QUERY_INSTRUCTION_MARKER` (`"\nQuery: "`) — first, not last, so a situation
-description that itself contains the literal substring `"Query: "` is not truncated into the
-middle of it — and passes `query` through unchanged if the marker is absent (a caller outside the
-convention; nothing here repairs a missing prefix).
-
 ### 14.4 MCP / REST surface (Stages 1-2 slice of plan §3.5, bulk row added Stage 6a)
 
 | MCP tool | REST | Service method |
@@ -2185,12 +2124,9 @@ the REST pydantic boundary — an MCP caller has no schema layer, so this is the
 transports are bound by the same cap.
 
 `search_documents` embeds `query` through the injected `ModelGateway` (mirrors
-`GraphragRetrieveTool`/`AgentResponder`'s own text→vector step), then fuses `search_chunks`
-(§14.3) with `search_chunks_fulltext` (§14.3a) via Reciprocal Rank Fusion and an admissibility
-gate — see §14.3a for the fused retrieval itself. Raises `SearchNotAvailableError` (maps to REST
-503, mirroring `WorkflowEngineDisabledError`) when no `ModelGateway` is wired into this
-deployment — a configuration gap, not a caller mistake — and `InvalidSearchQueryError` (maps to
-REST 400) if the lexical call rejects `query`'s RediSearch syntax.
+`GraphragRetrieveTool`/`AgentResponder`'s own text→vector step) then calls `search_chunks` (§14.3)
+above. Raises `SearchNotAvailableError` (maps to REST 503, mirroring `WorkflowEngineDisabledError`)
+when no `ModelGateway` is wired into this deployment — a configuration gap, not a caller mistake.
 `GET /documents/search` is registered **before** `GET /documents/{document_id}` in `api.py` —
 Starlette matches routes in registration order, and the dynamic path would otherwise swallow the
 literal `search` segment as a `document_id`.

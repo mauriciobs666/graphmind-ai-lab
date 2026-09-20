@@ -378,24 +378,11 @@ def get_document(document_id: str) -> dict[str, Any] | None:
 def search_documents(query: str, limit: int = 20) -> list[dict[str, Any]]:
     """Rank ingested document chunks by similarity to `query` (K-050 M5 Stage 2,
     FR-3 standalone KB search — independent of chat/`search_messages`).
-    Hybrid lexical (full-text) + semantic (vector) retrieval, fused by
-    Reciprocal Rank Fusion and gated server-side by an admissibility rule
-    (K-030 item 2, `claude/docs/plans/agent-knowledge-base-strategy7-impl.md`;
-    formula: `falkorchat/services.py`, `_fuse_chunk_hits_rrf`).
 
-    Returns chunks ordered most-fused-relevant-first, each carrying its source
-    `documentId` so a caller can `get_document` the full text, plus `rrfScore`,
-    `vectorRank`, `lexicalRank` (`int | None`, 1-indexed rank in that signal's
-    own top-K, `None` if absent from it). `score` is now **only** the vector
-    cosine distance (lower is more similar) — `None` if and only if the chunk
-    was absent from the vector signal entirely; a chunk admitted solely via the
-    lexical rank gate can still carry a real, floor-failing `score`, so
-    `score is None` is not a synonym for "admitted via the lexical gate." Every
-    returned row has already passed the server-side admissibility gate (vector
-    cosine distance ≤0.43, OR lexical rank ≤2) — a caller does not need to
-    re-apply a score-floor check itself. Raises a tool error if no embedding
-    model is configured for this deployment, or if `query`'s lexical (RediSearch)
-    syntax is rejected.
+    Returns chunks ordered most-similar-first (`score` is cosine distance —
+    lower is more similar), each carrying its source `documentId` so a caller
+    can `get_document` the full text. Raises a tool error if no embedding
+    model is configured for this deployment.
     """
     ctx = _get_context()
     return _svc().search_documents(ctx, query=query, limit=limit)

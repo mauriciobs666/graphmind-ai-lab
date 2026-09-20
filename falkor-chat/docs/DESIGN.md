@@ -613,14 +613,12 @@ rather than a node property (`SAME_AS`, K-050):
 > introduced, or if §18.4's raise stops being an acceptable failure mode
 > (`docs/plans/salesperson-ui-graph.md` §9).
 
-**Full-text index (RediSearch):** `Message.text`, `Entity.name`, `Document.title`, `Chunk.text`,
-via `db.idx.fulltext.createNodeIndex('Message', 'text')` /
+**Full-text index (RediSearch):** `Message.text`, `Entity.name`, `Document.title`, via
+`db.idx.fulltext.createNodeIndex('Message', 'text')` /
 `db.idx.fulltext.createNodeIndex('Entity', 'name')` /
-`db.idx.fulltext.createNodeIndex('Document', 'title')` /
-`db.idx.fulltext.createNodeIndex('Chunk', 'text')` — backs §5's keyword search, the FR-9
-suggested-tier fusion lookup, the FR-9 suggested-tier title-fuzzy booster
-(document-ingestion2 Stage D), and the FR-3 standalone-KB hybrid lexical+semantic fusion
-(K-030 item 2, `Services.search_documents`, `docs/QUERIES.md` §14.3a) respectively.
+`db.idx.fulltext.createNodeIndex('Document', 'title')` — backs §5's keyword search, the FR-9
+suggested-tier fusion lookup, and the FR-9 suggested-tier title-fuzzy booster
+(document-ingestion2 Stage D) respectively.
 
 **Vector indexes:** `Message.embedding` and `Chunk.embedding`, created via **DDL**
 (`CREATE VECTOR INDEX … OPTIONS {dimension, similarityFunction:'cosine'}`).

@@ -26,15 +26,10 @@ from falkorchat.schemas import (
 from falkorchat.services import (
     CHAT_START_ANCHOR_KEYS,
     DEMO_EXPECTED_DEFS,
-    HYBRID_OVERFETCH_K,
-    LEXICAL_ADMISSIBILITY_RANK,
     POST_SUCCESS_SAMPLE_SIZE,
-    QUERY_INSTRUCTION_MARKER,
     RAG_QUERY_TIMEOUT_MS,
     RESERVED_CTX_KEYS,
-    RRF_K,
     SEARCH_DOCUMENTS_OVERFETCH,
-    VECTOR_ADMISSIBILITY_FLOOR,
     AgentNotFoundError,
     BatchTooLargeError,
     ChannelNotFoundError,
@@ -55,8 +50,6 @@ from falkorchat.services import (
     WorkflowInputRejectedError,
     WorkflowRunNotFoundError,
     _diff_structures,
-    _fuse_chunk_hits_rrf,
-    _strip_query_instruction_prefix,
     _structural_diffs,
 )
 
@@ -119,13 +112,6 @@ class FakeRepo:
         # independent Message/Chunk pools (K-050 M5 Stage 5).
         self.hybrid_rows: list[dict] | None = None
         self.chunk_rows: list[dict] | None = None
-        # K-030 item 2: the lexical (full-text) half of `search_documents`'s
-        # hybrid fusion. Defaults to `[]` (not `since_rows`) — the common,
-        # unremarkable degenerate case (ml note §2) should be the fixture
-        # default, and reusing `since_rows` would silently couple this new
-        # call to whatever other test in the file happens to have set it for
-        # an unrelated reason.
-        self.chunk_fulltext_rows: list[dict] | Exception = []
         self.matches: dict[str, dict] = {}  # matchId -> match state (K-050 M5 Stage 4)
         # document_updates: matchId -> SUPERSEDES state (document-ingestion2
         # Stage B); document_histories: documentId -> scripted history rows
@@ -350,12 +336,6 @@ class FakeRepo:
     def search_chunks(self, ws, *, q_vec, k, limit, timeout=None):
         self.calls.append(("search_chunks", ws, tuple(q_vec), k, limit, timeout))
         return self.since_rows if self.chunk_rows is None else self.chunk_rows
-
-    def search_chunks_fulltext(self, ws, *, query, limit, timeout=None):
-        self.calls.append(("search_chunks_fulltext", ws, query, limit, timeout))
-        if isinstance(self.chunk_fulltext_rows, Exception):
-            raise self.chunk_fulltext_rows
-        return self.chunk_fulltext_rows
 
     # ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ─────────────
 
@@ -1351,273 +1331,6 @@ class FakeEmbeddingGateway:
         return list(self._vector)
 
 
-# ── §5.1 `_strip_query_instruction_prefix` — direct unit tests (K-030 item 2) ───
-
-
-def test_strip_query_instruction_prefix_removes_prefix_when_present():
-    query = (
-        "Instruct: Given a coding agent's description of its current situation, retrieve the "
-        "distilled technique or rule that applies to it.\nQuery: real situation text"
-    )
-    assert _strip_query_instruction_prefix(query) == "real situation text"
-
-
-def test_strip_query_instruction_prefix_passthrough_when_absent():
-    # Graceful-degradation case (plan §3.3) — nothing here repairs a missing
-    # prefix, mirroring the skill's own "nothing strips one you forget to add."
-    assert _strip_query_instruction_prefix("bare query, no prefix") == "bare query, no prefix"
-
-
-def test_strip_query_instruction_prefix_keeps_first_occurrence_only():
-    # Fixed per `analyst`'s Pass 1 finding (docs/reviews/
-    # agent-knowledge-base-strategy7-impl.md, Blocker): a genuine SECOND
-    # `\nQuery: ` occurrence embedded in the situation text itself, using a
-    # real single-backslash newline (not `\\n`, which would collapse to one
-    # occurrence and make partition/rpartition indistinguishable).
-    query = "Instruct: ...\nQuery: does the situation text mention \"\nQuery: \" literally?"
-    assert query.count(QUERY_INSTRUCTION_MARKER) == 2
-
-    first_split = query.partition(QUERY_INSTRUCTION_MARKER)[2]
-    last_split = query.rpartition(QUERY_INSTRUCTION_MARKER)[2]
-    # Sanity check the fixture itself is discriminating before asserting the
-    # function's actual output.
-    assert first_split != last_split
-
-    # Catches a mutation swapping `partition` for `rpartition`: the first
-    # occurrence's tail keeps the embedded marker intact; the last
-    # occurrence's tail would truncate into the middle of it.
-    assert _strip_query_instruction_prefix(query) == first_split
-    assert _strip_query_instruction_prefix(query) != last_split
-
-
-def test_strip_query_instruction_prefix_allows_empty_tail():
-    # Template with nothing substituted — the tail is legitimately "", not
-    # the original wrapped string. Catches a naive `tail or query` fallback
-    # (falsy-empty-string bug) in place of the `sep`-presence check the
-    # design actually uses.
-    query = "Instruct: ...\nQuery: "
-    assert _strip_query_instruction_prefix(query) == ""
-
-
-# ── §5.2 `_fuse_chunk_hits_rrf` — direct unit tests (K-030 item 2) ──────────────
-# Each test names the specific defect it exists to catch (plan §5.2).
-
-
-def test_fuse_chunk_hits_rrf_vector_only_admit():
-    """Baseline correctness. `rrfScore` is a hardcoded literal (`1/61`, not
-    `1/(RRF_K+1)`) so this test actually pins `RRF_K`'s real value of 60
-    rather than trivially agreeing with whatever `RRF_K` happens to be."""
-    vector_hits = [{"chunkId": "c1", "text": "x", "documentId": "d1", "seq": 0, "score": 0.1}]
-
-    rows = _fuse_chunk_hits_rrf(vector_hits, [], limit=5)
-
-    assert rows == [
-        {
-            "chunkId": "c1", "text": "x", "documentId": "d1", "seq": 0,
-            "score": 0.1, "rrfScore": 1.0 / 61,
-            "vectorRank": 1, "lexicalRank": None,
-        },
-    ]
-
-
-def test_fuse_chunk_hits_rrf_lexical_only_admit():
-    """Proves the OR-gate's lexical half actually admits something the
-    vector floor alone never would. `rrfScore` hardcoded, same reasoning as
-    the vector-only test above."""
-    lexical_hits = [{"chunkId": "c1", "text": "x", "documentId": "d1", "seq": 0, "score": 5.0}]
-
-    rows = _fuse_chunk_hits_rrf([], lexical_hits, limit=5)
-
-    assert rows == [
-        {
-            "chunkId": "c1", "text": "x", "documentId": "d1", "seq": 0,
-            "score": None, "rrfScore": 1.0 / 61,
-            "vectorRank": None, "lexicalRank": 1,
-        },
-    ]
-
-
-def test_fuse_chunk_hits_rrf_lexical_only_rejected_below_rank_gate():
-    """Catches "a gate that never rejects anything" — the one mutation the
-    brief names explicitly; without this test a gate that always returns
-    `True` still passes every other case in this list."""
-    # `LEXICAL_ADMISSIBILITY_RANK` fillers ahead of c1 push it one rank past
-    # the gate (rank `LEXICAL_ADMISSIBILITY_RANK + 1`).
-    lexical_hits = [
-        {"chunkId": f"l{i}", "text": "", "documentId": "d", "seq": i, "score": 100.0 - i}
-        for i in range(LEXICAL_ADMISSIBILITY_RANK)
-    ] + [
-        {
-            "chunkId": "c1", "text": "x", "documentId": "d1",
-            "seq": LEXICAL_ADMISSIBILITY_RANK, "score": 1.0,
-        },
-    ]
-
-    rows = _fuse_chunk_hits_rrf([], lexical_hits, limit=5)
-
-    # c1 is one rank past `LEXICAL_ADMISSIBILITY_RANK` — despite having a
-    # nonzero rrfScore and outranking nothing admitted here by much.
-    assert "c1" not in {row["chunkId"] for row in rows}
-
-
-def test_fuse_chunk_hits_rrf_rejected_when_both_signals_fail_their_half_of_the_gate():
-    """Proves the OR is evaluated on both halves, not short-circuited to
-    "admit if present in either list at all" regardless of threshold."""
-    vector_hits = [
-        {
-            "chunkId": "c1", "text": "x", "documentId": "d1", "seq": 0,
-            "score": VECTOR_ADMISSIBILITY_FLOOR + 0.01,  # just above the floor
-        },
-    ]
-    # `LEXICAL_ADMISSIBILITY_RANK` fillers ahead of c1 push it one rank past
-    # the gate on the lexical side too.
-    lexical_hits = [
-        {"chunkId": f"l{i}", "text": "", "documentId": "d", "seq": i, "score": 100.0 - i}
-        for i in range(LEXICAL_ADMISSIBILITY_RANK)
-    ] + [
-        {
-            "chunkId": "c1", "text": "x", "documentId": "d1",
-            "seq": LEXICAL_ADMISSIBILITY_RANK, "score": 1.0,
-        },
-    ]
-
-    rows = _fuse_chunk_hits_rrf(vector_hits, lexical_hits, limit=5)
-
-    # c1: vector score just above the floor AND lexical rank one past the gate.
-    assert "c1" not in {row["chunkId"] for row in rows}
-
-
-def test_fuse_chunk_hits_rrf_vector_score_at_exact_floor_admits():
-    """Catches narrowing the floor comparison from `<=` to `<`: a chunk
-    sitting at exactly `VECTOR_ADMISSIBILITY_FLOOR`, with no lexical
-    presence at all, must still admit and report that exact score."""
-    vector_hits = [
-        {
-            "chunkId": "c1", "text": "x", "documentId": "d1", "seq": 0,
-            "score": VECTOR_ADMISSIBILITY_FLOOR,
-        },
-    ]
-
-    rows = _fuse_chunk_hits_rrf(vector_hits, [], limit=5)
-
-    assert len(rows) == 1
-    assert rows[0]["chunkId"] == "c1"
-    assert rows[0]["score"] == VECTOR_ADMISSIBILITY_FLOOR
-
-
-def test_fuse_chunk_hits_rrf_score_reports_real_vector_value_when_admitted_via_lexical():
-    """Per §3.6: `score` means the chunk's real vector distance whenever it
-    was present in `vector_hits`, never a stand-in for "admitted via the
-    lexical half of the gate." A chunk present in both signals, with a
-    floor-failing vector score, is admitted here only because it also
-    passes the lexical rank gate — but its output `score` must still be
-    that real, floor-failing value, not `None`. Catches collapsing `score`
-    to `None` whenever admission came via the lexical half."""
-    vector_hits = [
-        {
-            "chunkId": "c1", "text": "x", "documentId": "d1", "seq": 0,
-            "score": VECTOR_ADMISSIBILITY_FLOOR + 0.17,  # fails the vector floor
-        },
-    ]
-    lexical_hits = [
-        {"chunkId": "c1", "text": "x", "documentId": "d1", "seq": 0, "score": 1.0},
-    ]
-
-    rows = _fuse_chunk_hits_rrf(vector_hits, lexical_hits, limit=5)
-
-    assert len(rows) == 1
-    assert rows[0]["chunkId"] == "c1"
-    assert rows[0]["score"] == VECTOR_ADMISSIBILITY_FLOOR + 0.17
-    assert rows[0]["lexicalRank"] == 1
-
-
-def test_fuse_chunk_hits_rrf_pins_rrf_arithmetic_and_sort_direction():
-    """Candidate A: vector rank 1, no lexical. Candidate B: vector rank 5,
-    lexical rank 1. `rrfScore`s are hardcoded literals (`1/61`, `1/65 + 1/61`
-    — not expressed via `RRF_K`), per the plan's own §5.2 item 5: any `k !=
-    60` changes both numbers, so this test's exact-value assertion fails —
-    which it would NOT if the expected values were computed from `RRF_K`
-    itself. Also catches a flipped sort direction (ascending would put A
-    first)."""
-    vector_hits = [
-        {"chunkId": "A", "text": "a", "documentId": "d", "seq": 0, "score": 0.1},
-        {"chunkId": "p1", "text": "", "documentId": "d", "seq": 1, "score": 0.9},
-        {"chunkId": "p2", "text": "", "documentId": "d", "seq": 2, "score": 0.9},
-        {"chunkId": "p3", "text": "", "documentId": "d", "seq": 3, "score": 0.9},
-        {"chunkId": "B", "text": "b", "documentId": "d", "seq": 4, "score": 0.9},
-    ]
-    lexical_hits = [
-        {"chunkId": "B", "text": "b", "documentId": "d", "seq": 4, "score": 100.0},
-    ]
-
-    rows = _fuse_chunk_hits_rrf(vector_hits, lexical_hits, limit=10)
-
-    by_id = {row["chunkId"]: row for row in rows}
-    # p1-p3 fail the gate (score 0.9, no lexical presence) — only A and B admit.
-    assert set(by_id) == {"A", "B"}
-    assert by_id["A"]["rrfScore"] == 1.0 / 61
-    assert by_id["B"]["rrfScore"] == 1.0 / 65 + 1.0 / 61
-    assert [row["chunkId"] for row in rows] == ["B", "A"]
-
-
-def test_fuse_chunk_hits_rrf_backfills_past_rejected_candidates():
-    """Four candidates in fused order; the first two fail the gate, the
-    third and fourth pass. Directly exercises U2's named backfill
-    requirement — not `[]` or a `len()==0` short-circuit."""
-    vector_hits = [
-        {"chunkId": "c1", "text": "", "documentId": "d", "seq": 0, "score": 0.9},  # rejected
-        {"chunkId": "c2", "text": "", "documentId": "d", "seq": 1, "score": 0.9},  # rejected
-        {"chunkId": "c3", "text": "", "documentId": "d", "seq": 2, "score": 0.2},  # admitted
-        {"chunkId": "c4", "text": "", "documentId": "d", "seq": 3, "score": 0.3},  # admitted
-    ]
-
-    rows = _fuse_chunk_hits_rrf(vector_hits, [], limit=2)
-
-    assert [row["chunkId"] for row in rows] == ["c3", "c4"]
-
-
-def test_fuse_chunk_hits_rrf_empty_inputs_returns_empty_list():
-    """Matches the existing floor's graceful degradation — no exception."""
-    assert _fuse_chunk_hits_rrf([], [], limit=5) == []
-
-
-def test_fuse_chunk_hits_rrf_tie_break_is_deterministic_by_chunk_id():
-    """X (vector rank 2 only) and Y (lexical rank 2 only) accumulate the
-    identical fused RRF score, `1/(RRF_K+2)` — catches removal of the
-    explicit `(-rrf(cid), cid)` secondary sort key."""
-    vector_hits = [
-        {"chunkId": "v-filler", "text": "", "documentId": "d", "seq": 0, "score": 0.9},
-        {"chunkId": "X", "text": "x", "documentId": "d", "seq": 1, "score": 0.1},
-    ]
-    lexical_hits = [
-        {"chunkId": "l-filler", "text": "", "documentId": "d", "seq": 0, "score": 100.0},
-        {"chunkId": "Y", "text": "y", "documentId": "d", "seq": 1, "score": 50.0},
-    ]
-
-    rows = _fuse_chunk_hits_rrf(vector_hits, lexical_hits, limit=10)
-
-    by_id = {row["chunkId"]: row for row in rows}
-    assert by_id["X"]["rrfScore"] == by_id["Y"]["rrfScore"] == 1.0 / (RRF_K + 2)
-    order = [row["chunkId"] for row in rows]
-    assert order.index("X") < order.index("Y")  # "X" < "Y" ascending, the tie-break key
-
-
-def test_fuse_chunk_hits_rrf_limit_caps_after_gating_not_before():
-    """Five candidates all pass the gate; `limit` still caps after gating,
-    not before — the top 2 by fused order."""
-    vector_hits = [
-        {"chunkId": f"c{i}", "text": "", "documentId": "d", "seq": i, "score": 0.1}
-        for i in range(5)
-    ]
-
-    rows = _fuse_chunk_hits_rrf(vector_hits, [], limit=2)
-
-    assert [row["chunkId"] for row in rows] == ["c0", "c1"]
-
-
-# ── §5.3 `Services.search_documents` — `FakeRepo`-level wiring tests (K-030 item 2) ──
-
-
 def test_search_documents_embeds_the_query_then_searches_chunks():
     repo = FakeRepo()
     repo.since_rows = [
@@ -1626,65 +1339,32 @@ def test_search_documents_embeds_the_query_then_searches_chunks():
     models = FakeEmbeddingGateway([1.0, 0.0])
     svc = make_service(repo, models=models)
 
-    # No query-instruction prefix — this test is about the embed/over-fetch
-    # wiring, not the strip behavior (its own dedicated test, below).
-    # `limit=5` keeps `depth = max(HYBRID_OVERFETCH_K, 5) == HYBRID_OVERFETCH_K`
-    # — the floor branch of §3.7's formula, not its scaling branch (also its
-    # own dedicated test, below).
     rows = svc.search_documents(CTX, query="hello", limit=5)
 
+    assert rows == repo.since_rows
     assert models.embedded == ["hello"]
     assert models.embedder_calls == [("embedding", "test")]
-    vector_call = next(c for c in repo.calls if c[0] == "search_chunks")
-    assert vector_call == (
+    call = next(c for c in repo.calls if c[0] == "search_chunks")
+    # document-ingestion2 Stage C (plan §3.3): `k` over-fetches
+    # (`limit * SEARCH_DOCUMENTS_OVERFETCH`) so `search_chunks`'s new
+    # `documentCurrent` post-filter can discard rows without under-filling
+    # below `limit`; the final response is still capped at `limit`.
+    assert call == (
         "search_chunks", "test", (1.0, 0.0),
-        HYBRID_OVERFETCH_K * SEARCH_DOCUMENTS_OVERFETCH, HYBRID_OVERFETCH_K,
-        RAG_QUERY_TIMEOUT_MS,
+        5 * SEARCH_DOCUMENTS_OVERFETCH, 5, RAG_QUERY_TIMEOUT_MS,
     )
-    lexical_call = next(c for c in repo.calls if c[0] == "search_chunks_fulltext")
-    assert lexical_call == (
-        "search_chunks_fulltext", "test", "hello", HYBRID_OVERFETCH_K,
-        RAG_QUERY_TIMEOUT_MS,
-    )
-    assert rows == [
-        {
-            **repo.since_rows[0],
-            "rrfScore": 1.0 / (RRF_K + 1), "vectorRank": 1, "lexicalRank": None,
-        },
-    ]
 
 
-def test_search_documents_hybrid_overfetch_depth_is_the_floor_below_it():
-    # Replaces the old `test_search_documents_defaults_limit_to_20` — pins
-    # §3.7's `max(...)` floor half of the formula (the old test's name/intent,
-    # "defaults to 20," no longer describes anything meaningful once 20 is a
-    # floor rather than a fixed constant or a default parameter value).
+def test_search_documents_defaults_limit_to_20():
     repo = FakeRepo()
     models = FakeEmbeddingGateway([1.0])
     svc = make_service(repo, models=models)
 
-    svc.search_documents(CTX, query="hello", limit=3)  # below the floor
+    svc.search_documents(CTX, query="hello")
 
-    vector_call = next(c for c in repo.calls if c[0] == "search_chunks")
-    assert vector_call[3:5] == (HYBRID_OVERFETCH_K * SEARCH_DOCUMENTS_OVERFETCH, HYBRID_OVERFETCH_K)
-    lexical_call = next(c for c in repo.calls if c[0] == "search_chunks_fulltext")
-    assert lexical_call[3] == HYBRID_OVERFETCH_K
-
-
-def test_search_documents_overfetch_depth_scales_up_for_a_large_limit():
-    # Pins §3.7's scaling half of the formula — the actual fix for the Major
-    # finding. Together with the floor test above, this is what
-    # "depth is max(HYBRID_OVERFETCH_K, limit)" actually means.
-    repo = FakeRepo()
-    models = FakeEmbeddingGateway([1.0])
-    svc = make_service(repo, models=models)
-
-    svc.search_documents(CTX, query="hello", limit=50)  # above the floor
-
-    vector_call = next(c for c in repo.calls if c[0] == "search_chunks")
-    assert vector_call[3:5] == (50 * SEARCH_DOCUMENTS_OVERFETCH, 50)
-    lexical_call = next(c for c in repo.calls if c[0] == "search_chunks_fulltext")
-    assert lexical_call[3] == 50
+    call = next(c for c in repo.calls if c[0] == "search_chunks")
+    # k over-fetches (Stage C, plan §3.3); limit still caps the response.
+    assert call[3:5] == (20 * SEARCH_DOCUMENTS_OVERFETCH, 20)
 
 
 def test_search_documents_raises_when_no_models_wired():
@@ -1694,7 +1374,7 @@ def test_search_documents_raises_when_no_models_wired():
     with pytest.raises(SearchNotAvailableError):
         svc.search_documents(CTX, query="hello")
 
-    assert repo.calls == []  # never reaches search_chunks/search_chunks_fulltext
+    assert repo.calls == []  # never reaches search_chunks
 
 
 class _RankedChunkRepo(FakeRepo):
@@ -1720,40 +1400,15 @@ class _RankedChunkRepo(FakeRepo):
         return [row for row in candidates if row["documentCurrent"]][:limit]
 
 
-def test_search_documents_large_limit_is_not_capped_by_the_hybrid_overfetch_floor():
-    # End-to-end regression test for the Major finding itself: 50 vector-hit
-    # rows, all `documentCurrent`, all `score` at or under 0.43 (so every one
-    # clears the gate), no lexical hits. Fails under the plan's pre-fix Step
-    # 4 (fixed `limit=HYBRID_OVERFETCH_K=20` passed to the repository call
-    # would slice the pool down to 20 rows before fusion ever sees the other
-    # 30) and passes once §3.7's `depth` scaling lands.
-    pool = [
-        {
-            "chunkId": f"nc{i}", "documentCurrent": True, "text": "x",
-            "documentId": "d1", "seq": i, "score": 0.1,
-        }
-        for i in range(50)
-    ]
-    repo = _RankedChunkRepo(pool)
-    models = FakeEmbeddingGateway([1.0])
-    svc = make_service(repo, models=models)
-
-    rows = svc.search_documents(CTX, query="hello", limit=50)
-
-    assert len(rows) == 50
-
-
 def test_search_documents_overfetch_prevents_under_fill_when_superseded_chunks_rank_first():
     # Hard negative for the Stage C over-fetch fix (plan §3.3): 5 superseded
     # chunks rank ahead of 3 current ones in the ANN pool. `k=limit` alone (no
     # over-fetch) would only ever see superseded candidates and under-fill to
     # zero; `k = limit * SEARCH_DOCUMENTS_OVERFETCH` must reach deep enough
-    # into the pool to surface all 3 current chunks. Every row now also
-    # carries a `score` (K-030 item 2) — `_fuse_chunk_hits_rrf`'s
-    # `vector_score` dict-comprehension requires the key to exist.
+    # into the pool to surface all 3 current chunks.
     pool = (
-        [{"chunkId": f"oc{i}", "documentCurrent": False, "score": 0.1} for i in range(5)]
-        + [{"chunkId": f"nc{i}", "documentCurrent": True, "score": 0.1} for i in range(3)]
+        [{"chunkId": f"oc{i}", "documentCurrent": False} for i in range(5)]
+        + [{"chunkId": f"nc{i}", "documentCurrent": True} for i in range(3)]
     )
     repo = _RankedChunkRepo(pool)
     models = FakeEmbeddingGateway([1.0])
@@ -1761,66 +1416,7 @@ def test_search_documents_overfetch_prevents_under_fill_when_superseded_chunks_r
 
     rows = svc.search_documents(CTX, query="hello", limit=3)
 
-    # Ordering invariant under test is unchanged by fusion when there are no
-    # lexical hits at all (the default `[]`).
     assert [r["chunkId"] for r in rows] == ["nc0", "nc1", "nc2"]
-
-
-def test_search_documents_raises_invalid_search_query_on_lexical_syntax_error():
-    # Mirrors `test_search_messages_maps_syntax_error_to_service_error` exactly.
-    repo = FakeRepo()
-    repo.since_rows = [{"chunkId": "c1", "text": "x", "documentId": "d1", "seq": 0, "score": 0.1}]
-    repo.chunk_fulltext_rows = ResponseError("RediSearch: Syntax error at offset 6")
-    models = FakeEmbeddingGateway([1.0])
-    svc = make_service(repo, models=models)
-
-    with pytest.raises(InvalidSearchQueryError):
-        svc.search_documents(CTX, query='hello"unbalanced', limit=5)
-
-
-def test_search_documents_fuses_vector_and_lexical_hits_end_to_end():
-    # The one test that would catch a wiring defect the pure-function tests
-    # structurally cannot — e.g. passing the two lists to `_fuse_chunk_hits_rrf`
-    # in swapped order — since §5.2's tests always label their own fixtures
-    # correctly by construction.
-    repo = FakeRepo()
-    repo.since_rows = [
-        {"chunkId": "v1", "text": "v1", "documentId": "d1", "seq": 0, "score": 0.1},
-        {"chunkId": "v2", "text": "v2", "documentId": "d1", "seq": 1, "score": 0.2},
-        {"chunkId": "v3", "text": "v3", "documentId": "d1", "seq": 2, "score": 0.25},
-    ]
-    repo.chunk_fulltext_rows = [
-        {"chunkId": "l1", "text": "l1", "documentId": "d2", "seq": 0, "score": 100.0},
-        {"chunkId": "v1", "text": "v1", "documentId": "d1", "seq": 0, "score": 90.0},
-    ]
-    models = FakeEmbeddingGateway([1.0])
-    svc = make_service(repo, models=models)
-
-    rows = svc.search_documents(CTX, query="hello", limit=5)
-
-    expected = _fuse_chunk_hits_rrf(repo.since_rows, repo.chunk_fulltext_rows, limit=5)
-    assert rows == expected
-
-
-def test_search_documents_strips_query_instruction_prefix_for_lexical_call_only():
-    # The one test that would catch this plan's own originally-wrong
-    # resolution of §3.3 reappearing (e.g. a future edit that removes the
-    # strip call while leaving `_strip_query_instruction_prefix` itself
-    # correctly tested in isolation, §5.1 — those tests alone cannot catch a
-    # call site that stops invoking the function).
-    repo = FakeRepo()
-    models = FakeEmbeddingGateway([1.0])
-    svc = make_service(repo, models=models)
-    prefixed_query = (
-        "Instruct: Given a coding agent's description of its current situation, retrieve the "
-        "distilled technique or rule that applies to it.\nQuery: raw situation text"
-    )
-
-    svc.search_documents(CTX, query=prefixed_query, limit=5)
-
-    assert models.embedded == [prefixed_query]  # vector side keeps it verbatim
-    lexical_call = next(c for c in repo.calls if c[0] == "search_chunks_fulltext")
-    assert lexical_call[2] == "raw situation text"  # lexical side stripped
 
 
 # ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ────────────────

@@ -192,152 +192,6 @@ POST_SUCCESS_SAMPLE_SIZE = 20
 # never caps `limit`.
 MAX_WAIT_FOR_SECONDS = 180 * 24 * 3600
 
-# ── K-030 item 2: hybrid lexical+semantic RRF fusion + admissibility gate ──
-# (claude/docs/plans/agent-knowledge-base-strategy7-impl.md; formula decided by
-# data-scientist, claude/docs/plans/agent-knowledge-base-strategy-ml.md "Item 2" —
-# this file executes it, does not re-derive it.)
-RRF_K = 60  # Cormack/Clarke/Buettcher 2009 literature default, not re-derived for
-            # this corpus (ml note, Risks) — retune here first if a future eval
-            # result is close but not clean.
-HYBRID_OVERFETCH_K = 20  # each signal's own top-K depth fed into RRF — the
-    # FLOOR for that depth, matching the depth Stage 8's golden-set evaluation
-    # already probed to (ml note §1). `search_documents` computes the actual
-    # per-call depth as `max(HYBRID_OVERFETCH_K, limit)` (§3.7) — this constant
-    # alone does NOT bound the depth for a caller requesting `limit` >20; it
-    # only sets the depth used by the `skills/agent-kb-retrieval/SKILL.md`
-    # convention's fixed `limit=5`, where it is the effective, unchanged value.
-VECTOR_ADMISSIBILITY_FLOOR = 0.43  # canonical value now lives here — moved from
-    # being solely a client-side convention (skills/agent-kb-retrieval/SKILL.md,
-    # which now cites this constant rather than restating the number). A
-    # candidate is admissible if its vector cosine distance is at or under this
-    # floor, OR it passes the lexical rank gate below (OR, not AND).
-LEXICAL_ADMISSIBILITY_RANK = 2  # ...it ranks at or above this 1-indexed position
-    # in the lexical OR-term result list (ml note §2).
-
-# skills/agent-kb-retrieval/SKILL.md's exact fenced query-instruction-prefix
-# template (quoted verbatim there, not re-derived here):
-#
-#   f"Instruct: Given a coding agent's description of its current situation,
-#   retrieve the distilled technique or rule that applies to it.\nQuery:
-#   {situation}"
-#
-# A compliant caller of `search_documents` substitutes its own {situation}
-# text into this f-string and sends the WHOLE result as `query` (that skill's
-# step 1/2 — "nothing strips one you forget to add," i.e. this is not an
-# optional extra a caller sometimes omits). The vector signal
-# (`embedder.embed(query)`) needs this prefix verbatim; the lexical signal
-# must never see it (ml note, Item 2 §2) — the boilerplate terms (`Instruct`,
-# `retrieve`, `situation`, `technique`...) would otherwise pollute every
-# lexical query's TF-IDF signal with the same constant, query-independent
-# term set. `QUERY_INSTRUCTION_MARKER` anchors the strip on the template's
-# structural boundary (Qwen3-Embedding's own `Instruct:.../nQuery:...` shape)
-# rather than the full instruction sentence, which is more likely to be
-# reworded over time — see `_strip_query_instruction_prefix`'s own docstring
-# for why the split uses the FIRST occurrence, not the last. **Not a
-# decoupled copy, though**: if `SKILL.md`'s template ever drops this
-# `\nQuery: ` shape entirely, this constant needs a matching update, with
-# nothing automated to catch a miss (that file's own drift check,
-# `claude/scripts/audit-team.sh`, greps only `claude/`-side prompts).
-QUERY_INSTRUCTION_MARKER = "\nQuery: "
-
-
-def _strip_query_instruction_prefix(query: str) -> str:
-    """Recover raw situation text from a `search_documents` `query` argument
-    that (per `skills/agent-kb-retrieval/SKILL.md`'s calling convention) a
-    compliant caller always sends already wrapped in the query-instruction
-    prefix. Used only for the lexical (full-text) call — the vector call
-    keeps `query` unchanged, since Qwen3-Embedding's own asymmetric
-    query/document convention needs the prefix verbatim.
-
-    Splits on the FIRST occurrence of `QUERY_INSTRUCTION_MARKER`, not the
-    last: the template's own marker is always the earliest occurrence in a
-    correctly-constructed `query` string, so anchoring on the first
-    occurrence is what keeps a situation description that happens to itself
-    contain the literal substring `"Query: "` intact in the returned tail,
-    rather than truncating into the middle of it (the failure mode
-    `str.rpartition` would introduce). If the marker is absent entirely (a
-    caller that omitted the prefix, or any caller outside this convention),
-    `query` is returned unchanged — nothing here repairs a missing prefix,
-    mirroring the skill's own "nothing strips one you forget to add" posture;
-    there is simply nothing to strip.
-    """
-    _, sep, tail = query.partition(QUERY_INSTRUCTION_MARKER)
-    return tail if sep else query
-
-
-def _fuse_chunk_hits_rrf(
-    vector_hits: list[dict[str, Any]],
-    lexical_hits: list[dict[str, Any]],
-    *, limit: int,
-    k: int = RRF_K,
-    vector_floor: float = VECTOR_ADMISSIBILITY_FLOOR,
-    lexical_rank_gate: int = LEXICAL_ADMISSIBILITY_RANK,
-) -> list[dict[str, Any]]:
-    """Reciprocal Rank Fusion (equal weights) over `vector_hits` (`search_chunks`
-    shape, cosine distance ASC — list position 0 = rank 1) and `lexical_hits`
-    (`search_chunks_fulltext` shape, RediSearch score DESC — list position 0 =
-    rank 1), then U2's admissibility gate, walking the fused order and keeping
-    the first `limit` candidates that pass — continuing past any that don't is
-    the backfill (ml note §1/§2; mirrors `Services.search_documents`'s existing
-    over-fetch-then-filter idiom, `SEARCH_DOCUMENTS_OVERFETCH`).
-
-    Trusts each input list's own order as its rank; does not re-sort by `score`
-    itself (both repository calls already return their own `ORDER BY`). A chunk
-    absent from one list contributes 0 to that side's RRF term — plain RRF, no
-    special-casing. Ties in fused RRF score break on `chunkId` ascending, for
-    determinism.
-
-    Each returned row carries the original `chunkId`/`text`/`documentId`/`seq`
-    plus `score` (the vector cosine distance if this chunk was in `vector_hits`
-    at all, else `None`), `rrfScore`, `vectorRank`, `lexicalRank` (the latter
-    two `None` when absent from that signal). **`score is None` iff the chunk
-    was absent from `vector_hits` — it is NOT a synonym for "admitted via the
-    lexical gate"**: a chunk present in `vector_hits` with a floor-failing
-    score, admitted only because it also passes `lexical_rank_gate`, still
-    reports that real (floor-failing) score here, not `None` (§3.6).
-    """
-    vector_rank = {row["chunkId"]: i + 1 for i, row in enumerate(vector_hits)}
-    vector_score = {row["chunkId"]: row["score"] for row in vector_hits}
-    lexical_rank = {row["chunkId"]: i + 1 for i, row in enumerate(lexical_hits)}
-
-    by_id: dict[str, dict[str, Any]] = {}
-    for row in lexical_hits:
-        by_id[row["chunkId"]] = row
-    for row in vector_hits:  # vector's own text/documentId/seq wins on overlap
-        by_id[row["chunkId"]] = row
-
-    def rrf(chunk_id: str) -> float:
-        score = 0.0
-        if chunk_id in vector_rank:
-            score += 1.0 / (k + vector_rank[chunk_id])
-        if chunk_id in lexical_rank:
-            score += 1.0 / (k + lexical_rank[chunk_id])
-        return score
-
-    fused_order = sorted(by_id, key=lambda cid: (-rrf(cid), cid))
-
-    def admissible(chunk_id: str) -> bool:
-        vs = vector_score.get(chunk_id)
-        if vs is not None and vs <= vector_floor:
-            return True
-        lr = lexical_rank.get(chunk_id)
-        return lr is not None and lr <= lexical_rank_gate
-
-    out: list[dict[str, Any]] = []
-    for chunk_id in fused_order:
-        if not admissible(chunk_id):
-            continue
-        row = dict(by_id[chunk_id])
-        row["score"] = vector_score.get(chunk_id)
-        row["rrfScore"] = rrf(chunk_id)
-        row["vectorRank"] = vector_rank.get(chunk_id)
-        row["lexicalRank"] = lexical_rank.get(chunk_id)
-        out.append(row)
-        if len(out) >= limit:
-            break
-    return out
-
-
 # ── errors ─────────────────────────────────────────────────────────────────────
 
 
@@ -1507,41 +1361,36 @@ class Services:
         self, ctx: CallContext, *, query: str, limit: int = 20,
     ) -> list[dict[str, Any]]:
         """FR-3 standalone KB search: rank ingested `Chunk`s by similarity to
-        `query` — hybrid lexical (full-text, `search_chunks_fulltext`) + semantic
-        (vector, `search_chunks`) signals, fused by Reciprocal Rank Fusion and
-        gated by `_fuse_chunk_hits_rrf` (K-030 item 2,
-        `claude/docs/plans/agent-knowledge-base-strategy7-impl.md`).
+        `query` (plan §3.5/§3.7; K-050 M5 Stage 2's done-condition).
 
-        Both signals are over-fetched to `depth = max(HYBRID_OVERFETCH_K, limit)`
-        — at least `HYBRID_OVERFETCH_K` (=20, matching the depth this KB's own
-        golden-set evaluation already probed to; the effective, unchanged value
-        for `skills/agent-kb-retrieval/SKILL.md`'s fixed `limit=5` convention),
-        or `limit` itself when a caller requests more than that (REST's
-        `le=200`, MCP's uncapped `limit`) — so a large-`limit` caller still gets
-        up to `limit` admissible rows when the corpus can supply them, rather
-        than being silently capped at a fixed ~20-40-row ceiling regardless of
-        corpus size (§3.7; `docs/reviews/agent-knowledge-base-strategy7-impl.md`
-        Pass 1 Major finding). The vector call additionally over-fetches its own
-        ANN candidate pool via `k = depth * SEARCH_DOCUMENTS_OVERFETCH`, the same
-        document-ingestion2 Stage C under-fill protection `search_chunks`'s
-        `documentCurrent` post-filter already requires.
+        Embeds `query` through the injected `ModelGateway` first — mirrors
+        `GraphragRetrieveTool`/`AgentResponder`'s own text→`q_vec` step
+        (`tools.py`/`responder.py`), since `repository.search_chunks` (like
+        `hybrid_search`) takes a vector, not text.
 
-        Raises `SearchNotAvailableError` when no `ModelGateway` is wired (503) —
-        unchanged; the vector signal is mandatory even though the lexical one
-        would not need an embedder, because the admissibility gate's primary path
-        depends on a calibrated vector floor (ml note §1/§3; no floor exists for
-        lexical scores alone, they are corpus/query-dependent and unbounded).
+        **Over-fetches `k` (document-ingestion2 Stage C, plan §3.3):**
+        `repository.search_chunks` now excludes superseded-document chunks
+        post-`YIELD`, so `k=limit` alone (this method's original posture, when
+        "there is no downstream scope traversal to over-fetch for" still
+        held) can under-fill below `limit`. `k = limit *
+        SEARCH_DOCUMENTS_OVERFETCH` requests a larger bounded ANN candidate
+        pool while `limit` still caps the final response. `Services.
+        hybrid_search`'s `chunk_hits` pool applies the identical
+        `SEARCH_DOCUMENTS_OVERFETCH` treatment to the same underlying
+        `repository.search_chunks` call, for the same reason — **not**,
+        despite the similar-sounding "over-fetch, then filter, then cap at a
+        separate `limit`" shape, the idiom `repository.hybrid_search` itself
+        uses for its own scope join: that join's `Thread`/`Channel` matches
+        are required, not optional, but (a) the `Thread` match holds for any
+        message reachable via this codebase's self-guarding HEAD/NEXT write
+        paths, and (b) a channel-scoped match narrowing to fewer results is
+        the caller's own intended scope, not a staleness exclusion — so
+        neither currently has this under-fill risk to over-fetch against.
 
-        Raises `InvalidSearchQueryError` (400) if the lexical call rejects
-        `query`'s RediSearch syntax — mirrors `search_messages`.
-
-        **`query` carries the query-instruction prefix verbatim for the vector
-        call** (`embedder.embed(query)`, unchanged from today) **but is stripped
-        of it for the lexical call** (`_strip_query_instruction_prefix(query)`) —
-        a compliant caller always sends the wrapped form
-        (`skills/agent-kb-retrieval/SKILL.md` step 1/2; §3.3 above), so this
-        method, not the caller, is responsible for recovering the raw situation
-        text the lexical signal needs.
+        Raises `SearchNotAvailableError` when no gateway is wired (`Services`
+        built with `models=None`, e.g. `FALKORCHAT_ENABLE_AGENT` off) — mirrors
+        `WorkflowEngineDisabledError`'s "deployment gap, not a caller mistake"
+        posture (503, not 400).
         """
         if self._models is None:
             raise SearchNotAvailableError(
@@ -1550,21 +1399,10 @@ class Services:
             )
         embedder = self._models.embedder("embedding", ws=ctx.ws)
         q_vec = embedder.embed(query)
-        depth = max(HYBRID_OVERFETCH_K, limit)
-        vector_hits = self._repo.search_chunks(
-            ctx.ws, q_vec=q_vec,
-            k=depth * SEARCH_DOCUMENTS_OVERFETCH,
-            limit=depth, timeout=RAG_QUERY_TIMEOUT_MS,
+        return self._repo.search_chunks(
+            ctx.ws, q_vec=q_vec, k=limit * SEARCH_DOCUMENTS_OVERFETCH,
+            limit=limit, timeout=RAG_QUERY_TIMEOUT_MS,
         )
-        lexical_query = _strip_query_instruction_prefix(query)
-        try:
-            lexical_hits = self._repo.search_chunks_fulltext(
-                ctx.ws, query=lexical_query, limit=depth,
-                timeout=RAG_QUERY_TIMEOUT_MS,
-            )
-        except ResponseError as exc:
-            raise InvalidSearchQueryError(str(exc)) from exc
-        return _fuse_chunk_hits_rrf(vector_hits, lexical_hits, limit=limit)
 
     # ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ─────────────
 

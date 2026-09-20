@@ -117,50 +117,41 @@ infrastructure and ready on demand — not any particular migration.
   `bootstrap_schema.sh` then `pin_workspace_embedding_model.sh` by hand before this chain) and out of
   scope for `create_workspace.sh` to fix; noted for a future backlog item.
 
-## 2026-09-20 — K-030 item 2: hybrid lexical+semantic RRF fusion for `search_documents`
+## 2026-09-20 — K-030 item 2: hybrid lexical+semantic RRF fusion for `search_documents` — shipped, then reverted same day
 
-**What:** `Services.search_documents` (FR-3 standalone-KB search, `ws:agent-team`'s query
-surface) now fuses a lexical (full-text) signal with the existing semantic (vector) signal via
-Reciprocal Rank Fusion, gated by an admissibility rule — closing the P1/G2 failure pattern
-(strong lexical overlap, weak embedding match) strategy6 identified for item 1.
-`claude/docs/plans/agent-knowledge-base-strategy7-coordination.md` U4, implementing
-`claude/docs/plans/agent-knowledge-base-strategy7-impl.md` (`architect`, `analyst`-approved with
-suggestions after two revision rounds).
+**What:** `Services.search_documents` briefly fused a lexical (full-text) signal with the
+existing semantic (vector) signal via Reciprocal Rank Fusion, gated by an admissibility rule,
+implementing `claude/docs/plans/agent-knowledge-base-strategy7-impl.md`
+(`architect`/`analyst`-approved) and landing in commits `af535ecb` + `b56e80ea`. Post-deployment
+validation against the actually-fused, correctly-running server (not the pre-deployment
+mutation-test suite) found three problems the implementation review had not caught: (1) the
+feature's own stated acceptance criterion failed outright — the target query (G2) returned zero
+admissible candidates, not merely a low rank; (2) a genuine regression — a previously clean
+rank-1 hit (C2) was completely absent from top-5 after fusion; (3) a production-facing crash bug
+— the raw query text was never escaped before hitting RediSearch's OR-term query parser, so
+roughly 9% of realistic queries (ones containing parens, `$()`, `%`, etc.) threw a hard
+`RediSearch: Syntax error` instead of returning results. Full analysis:
+`claude/docs/plans/agent-knowledge-base-strategy-ml.md` (the `## Item 2 — U5 re-test, second
+attempt` section). Both the stakeholder and an independent `architect` consult confirmed:
+revert rather than patch forward.
 
-**Landed:** a new `Chunk.text` RediSearch full-text index (`scripts/bootstrap_schema.sh`, applied
-live to `ws:agent-team` and verified — `db.indexes()` shows `Chunk.text: [FULLTEXT]`
-`OPERATIONAL`, a functional `db.idx.fulltext.queryNodes('Chunk', 'falkordb')` smoke query returns
-35 chunks); `Repository.search_chunks_fulltext` (`server/falkorchat/repository.py`), mirroring
-`search_chunks`'s shape with the full-text procedure in place of vector ANN;
-`_fuse_chunk_hits_rrf`/`_strip_query_instruction_prefix` plus four named constants (`RRF_K=60`,
-`HYBRID_OVERFETCH_K=20`, `VECTOR_ADMISSIBILITY_FLOOR=0.43`, `LEXICAL_ADMISSIBILITY_RANK=2`,
-`QUERY_INSTRUCTION_MARKER`) in `server/falkorchat/services.py`; wired into
-`Services.search_documents`, including the depth-scaling fix
-(`depth = max(HYBRID_OVERFETCH_K, limit)`) that closes a large-`limit` capacity regression the
-plan's own review caught before implementation. No change needed to `mcp.py`/`api.py` call
-sites — both call `search_documents` with the same signature, confirmed by `cpg_falkorchat`'s
-call-graph to be its only two production callers, neither pinning a `response_model`.
+**Reverted:** `server/falkorchat/services.py`/`repository.py`/`mcp.py` and
+`scripts/bootstrap_schema.sh` restored to their pre-`af535ecb` state —
+`_fuse_chunk_hits_rrf`, `_strip_query_instruction_prefix`, `Repository.search_chunks_fulltext`,
+the `Chunk.text` full-text DDL, and the four named constants (`RRF_K`, `HYBRID_OVERFETCH_K`,
+`VECTOR_ADMISSIBILITY_FLOOR`, `LEXICAL_ADMISSIBILITY_RANK`) are gone from the codebase;
+`Services.search_documents` is vector-ANN-only again, exactly as before this entry's original
+commit. `server/tests/test_services.py` reverted to match (fusion-specific tests removed, the
+three rewritten-for-fusion tests restored to their pre-fusion form). `docs/DESIGN.md`,
+`docs/QUERIES.md` §14.3a, and `skills/agent-kb-retrieval/SKILL.md` step 4 reverted to describe
+the vector-only/client-side-floor-recheck convention. The live `Chunk.text` RediSearch index
+already created on `ws:agent-team` is deliberately left in place (unused by reverted code; its
+removal is a separate, sequenced `graph-dba` follow-up, not part of this revert).
 
-**Return-shape change (additive, not breaking):** every row now also carries `rrfScore`,
-`vectorRank`, `lexicalRank`; `score` narrows to mean only the vector cosine distance (`None` iff
-absent from the vector signal — not a synonym for "admitted via the lexical gate"). Documented in
-`mcp.py`'s tool docstring, `docs/DESIGN.md`'s full-text register (which also gained the
-pre-existing `Document.title` entry this change's edit found missing), `docs/QUERIES.md` §14.3a,
-and `skills/agent-kb-retrieval/SKILL.md` (step 4 of the calling convention is no longer a
-required client action for `search_documents` — the gate is enforced server-side).
-
-**Tests:** `server/tests/test_services.py` — 4 direct `_strip_query_instruction_prefix` cases, 9
-direct `_fuse_chunk_hits_rrf` cases (RRF arithmetic pinned exactly, admissibility gate both
-halves, tie-break, backfill, limit truncation), and 9 `FakeRepo`-level wiring tests (3 rewrites of
-existing tests, 6 new, including one end-to-end 50-row regression test for the depth-scaling fix
-itself). Mutation-tested: RRF `k`, sort direction, and the admissibility gate were each
-deliberately broken and confirmed the corresponding test failed.
-
-**Accepted, carried-forward limitation:** U2's RRF/gate reasoning was only ever validated at
-depth=20; the depth-scaling fix makes `limit > 20` reachable but exercises that regime
-unvalidated. No real caller today requests `limit > 20` (`skills/agent-kb-retrieval/SKILL.md`'s
-convention is pinned at `limit=5`) — not fixed here, U5 (re-test against DEF-1's criterion) is
-scoped to the `limit=5` convention by design.
+**Accepted:** the P1/G2 failure pattern (strong lexical overlap, weak embedding match) that
+motivated item 2 remains unresolved — reverting removes the broken attempt, not the underlying
+gap. Any future attempt needs its own acceptance-criterion re-test against the live server before
+being called done, not only a mutation-tested unit suite.
 
 ## 2026-09-18 — K-065/DEF-6: Mitigation D live-verified — 0/25 wrong-language trials; stakeholder sufficiency call pending; K-066 filed (engine-stability finding)
 
