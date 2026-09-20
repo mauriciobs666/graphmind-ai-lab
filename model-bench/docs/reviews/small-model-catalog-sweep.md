@@ -282,3 +282,153 @@ I found nothing else needing changes.
 - **Whether §2.1's fix should extend `stats.py` or duplicate a slice of `verdict()`'s logic** is a
   real design fork this review surfaces but doesn't resolve — it's `architect`'s (and likely
   `data-scientist`'s, since either path touches Rule 7) to decide before Unit A starts.
+
+## Pass 3 — Consolidated document, final gate — 2026-09-20
+
+Reviewed `reports/catalog-sweep-2026-09-19-consolidated.md` — the FR-9/FR-10 consolidated
+document `data-scientist` just produced from the five gated per-pack reports
+(`reports/*-rank-20260920-02.md`) — against `docs/requirements/small-model-catalog-sweep.md`'s
+FR-9, FR-10, FR-11 and its acceptance criteria. This is the coordination's final gate: I checked
+the assembly and narrative, not the underlying report correctness (already double-gated by two
+prior review rounds, `docs/reviews/small-model-catalog-sweep-impl.md`).
+
+**Verdict: approve with suggestions.** No blocker. One major finding (§ below) in the exact spot
+the brief asked me to scrutinize hardest — the guard-judge section's explanation for sidelining its
+reference-anchored family table. Everything else I checked (FR-9's no-cross-pack-arithmetic rule,
+the resolving-power table's verbatim-copy discipline, all five FR-11 restated caveats, the index
+table's byte-for-byte fidelity to each report's marker line, and roughly two dozen specific numeric
+claims spot-checked line-by-line against the five source reports) held up.
+
+**CPG:** not applicable — this review is of a generated markdown report's narrative accuracy
+against its own cited source reports and the requirements doc; no code changed and no call-graph
+question was in scope.
+
+### Findings
+
+**[MAJOR] Guard-judge section mischaracterizes why its reference-anchored family's diff column is
+sidelined — the column is not unreliable, it's already the fixed rendering.**
+
+The guard-judge subsection (lines 100-109) says the family table's diff column shows a sign
+"reversed" relative to marginal per-arm rates and calls this "consistent with the documented,
+non-blocking `stats.verdict()` polarity-blind-wording caveat" — implying the column is suspect and
+justifying avoiding it. I confirmed the raw observation is correct: I cross-checked every row of
+both `falseAdvanceRate` and `falseSuspendRate` family tables against the per-arm rate table
+(`reports/guard-judge-understanding-rank-20260920-02.md:7-24,60-77` vs. `:38-54,91-107`) and the
+sign is indeed flipped relative to a naive `candidateRate - referenceRate` in every non-zero row
+(e.g. `gemma-3-4b-vl-it-...`: candidate 0.950 vs. reference 0.100 = +85.0pp marginal, family shows
+-85.0pp; `mistralai/ministral-3-3b`: 0.000 vs 0.100 = -10.0pp marginal, family shows +10.0pp). I
+also confirmed this reversal is specific to guard-judge's two `_LOWER_IS_BETTER` metrics and does
+*not* occur on the other three packs' higher-is-better metrics — exactly as the narrative claims.
+
+But the cause is not the live bug. `report.py:1226-1243`'s `_polarity_corrected` — the function
+that builds this exact family table — was written specifically to *avoid* inheriting
+`stats.verdict()`'s polarity-blind `winner, loser` labeling for `_LOWER_IS_BETTER` metrics
+(`report.py:122`: `_LOWER_IS_BETTER = frozenset({"falseAdvanceRate", "falseSuspendRate"})`): for
+these two metrics it deliberately applies **no flip**, because the raw `diff = (b-c)/n`
+(`stats.py:1305`, `a`=reference, `b`=reference-only-correct, `c`=candidate-only-correct) already
+reads `positive = candidate ahead` once you account for `scored_outcome`'s `True` meaning "the bad
+event happened." That's exactly why it differs in sign from a naive rate subtraction — it's the
+*correct*, already-applied fix, not a defect. The plan that shipped this code says so directly:
+`docs/plans/small-model-catalog-sweep.md:119-121` — "the new ranked-table/family code... is
+polarity-aware from the start... it does not touch or reuse `Verdict.text`" — and the `BACKLOG.md`
+entry itself (`:108-111`) scopes the live bug to `Verdict.text`/`stats.verdict()`'s generic winner
+text, citing this very plan section as "a scoped design that avoids the defect in new code."
+
+The consequence is not a wrong claim about any model's standing (the section's ultimate
+recommendation — `qwen/qwen3-4b-2507` or `nemotron-3-nano-4b` as the only two balanced picks — is
+unaffected either way), but it does cause the section to silently discard real evidence: once the
+sign convention is understood correctly (positive = candidate better), the family tables show 2
+Holm-confirmed `distinguishable` verdicts on `falseAdvanceRate` and 8 on `falseSuspendRate` — real,
+certified findings the chat-responder section below (lines 185-193) *does* use from its own,
+correctly-signed family table ("does add one certified finding... Holm-confirmed distinguishably
+worse than the reference"). Guard-judge's narrative could have made the identical move and didn't,
+for a reason that turns out not to hold.
+
+**Suggested fix:** rewrite lines 100-109 to state the true mechanism — `_polarity_corrected`
+already reorients the diff for `_LOWER_IS_BETTER` metrics to "positive = candidate better," which
+is why it doesn't match a naive rate subtraction — and then either (a) cite the family's actual
+`distinguishable` rows as additional certified evidence, matching the chat-responder section's
+pattern, or (b) if the two-metric family is judged harder to read than the per-arm table for other
+reasons, state that reason honestly instead of implying the column is unreliable.
+
+**[MINOR] Embedder section's latency-ratio range slightly undersells granite's actual speedup.**
+"3-4x lower p95 latency" (line 64) describes both `nomic-embed-text-v1.5` (17ms) and
+`granite-embedding-278m-multilingual` (12ms) against the top model's 55ms. `55/17 ≈ 3.2x` fits, but
+`55/12 ≈ 4.6x` doesn't — the true range is closer to "3-5x." Low-stakes (doesn't change the
+section's conclusion that both are much faster), but worth a one-number fix.
+
+### What's solid
+
+- **FR-9's hard rule holds everywhere.** Read every sentence of all five "Insights and
+  recommendations" subsections plus the preamble; no cell, column, or sentence combines a score
+  from more than one pack anywhere in the document.
+- **The resolving-power table (lines 18-25) and the index table (lines 35-42) are both genuinely
+  verbatim.** I checked all 6 resolving-power rows and all 6 index rows against each source
+  report's own `resolves differences of >=...` sentence and `<!-- rank-report: ... -->` marker line
+  respectively (`reports/*-rank-20260920-02.md`) — byte-for-byte matches throughout, zero
+  arithmetic performed across rows.
+- **All five FR-11 caveats are genuinely restated, not cited.** Embedder's recall@10 ceiling,
+  guard-judge's two-class-conditional shape, nlq's true n=34 denominator, tool-caller's
+  underpowering, and chat-responder's grounding-is-not-quality distinction each appear as full,
+  paraphrased sentences carrying the same content as the source report's own caveat, not a "see
+  report" pointer.
+- **Numeric accuracy is otherwise excellent.** Spot-checked roughly two dozen specific claims —
+  latency ratios, footprint ratios, CI values, pp gaps, k/n counts, the "only two models under
+  0.20 on both guard-judge rates" claim (a nontrivial 16-row × 2-table cross-reference, verified
+  correct), the tool-caller 7-of-16/9-of-16 split, nlq's five-perfect-scorers-on-different-bases
+  breakdown — against the five source reports directly, not the document's own citations. All
+  checked out except the one minor latency-ratio rounding above.
+- **The preamble (lines 3-13) states plainly, before any per-role data, what this sweep's sample
+  sizes can and cannot prove**, in language that tracks the acceptance criterion's own wording
+  closely enough to leave no ambiguity about intent.
+
+### Open questions
+
+- None. The major finding above has a concrete, self-contained fix that doesn't require anyone
+  else's input — `data-scientist` (or whoever revises the document) can apply it directly.
+
+## Pass 4 — Fix verification, final gate — 2026-09-20
+
+Re-read the revised `reports/catalog-sweep-2026-09-19-consolidated.md` guard-judge (lines 74-130)
+and embedder (lines 62-66) sections against the two Pass-3 findings.
+
+**Verdict: approve.** Both findings resolved, independently re-verified against
+`reports/guard-judge-understanding-rank-20260920-02.md`'s two family tables — not taken on the
+document's or the coordinator's word.
+
+**Disposition of Pass 3 findings:**
+
+1. **[MAJOR] Guard-judge mechanism mischaracterization — fixed.** Lines 100-106 now correctly
+   attribute the unflipped diff to `report.py`'s `_polarity_corrected`/`_LOWER_IS_BETTER` handling,
+   explicitly distinguished from "the unrelated, still-open `stats.verdict()` wording caveat in
+   `docs/BACKLOG.md`" — matching the mechanism I traced in Pass 3 (`report.py:122,1226-1243`).
+   I independently re-counted both family tables row-by-row: falseAdvanceRate has exactly 2
+   `distinguishable` rows (`gemma-3-4b-vl-it-...`, `stablelm-zephyr-3b`, both -85.0 pp) and
+   falseSuspendRate has exactly 8 (`google/gemma-4-e2b` -80.0, `mistralai/ministral-3-3b` -53.3,
+   `mistralai_ministral-3-3b-instruct-2512` -53.3, `prism-ml/bonsai-27b` -86.7,
+   `qwen/qwen3-4b-thinking-2507` -83.3, `qwen2.5-3b-instruct` -80.0,
+   `qwen3.5-2b-claude-4.6-opus-reasoning-distilled` -73.3, `stable-code-instruct-3b` -63.3) — 10
+   total, no overlap between the two sets, matching the document's list exactly. I also verified
+   the document's stronger claim — "every one of the seven models that led either metric's own top
+   row is Holm-confirmed worse... on the other metric" — against all seven: true in every case. And
+   I confirmed no row in either table shows a positive diff reaching `distinguishable` (i.e. no
+   candidate is certified better than the reference), supporting "no row... shows
+   `qwen/qwen3-4b-2507` certified worse than any candidate." The recommendation logic (§ item 3 of
+   the brief) holds together: `qwen/qwen3-4b-2507` as the certified-stronger pick (10 confirmed
+   worse, 0 confirmed better) and `nemotron-3-nano-4b` correctly described as untested against the
+   reference (its own diffs, +0.0 pp and -3.3 pp, both fall in Holm's untested region) rather than
+   disproven or confirmed similar.
+2. **[MINOR] Embedder latency-ratio wording — fixed.** Line 64-65 now reads "3-5x lower p95
+   latency (55 ms vs. 17 ms and 12 ms respectively — ~3.2x and ~4.6x)" — both multipliers check out
+   (55/17 ≈ 3.24, 55/12 ≈ 4.58) and the stated "3-5x" range now covers both instead of undershooting
+   the larger one.
+
+**One non-blocking nit, new this pass:** line 105-106's clause "...which this family renderer never
+calls" is ambiguous on a literal read — `_render_reference_family` *does* call `stats.verdict()`
+(for the correctly-computed CI/p-value), it just never reuses `stats.verdict()`'s own
+polarity-blind `Verdict.text` wording. The intended meaning ("never exhibits/reuses that wording
+caveat") is recoverable from context and the surrounding sentence is otherwise accurate, so this is
+a clarity polish, not a correctness issue — worth a one-word tighten ("never reuses" instead of
+"never calls") if the document is touched again, not worth reopening it for.
+
+I found nothing else needing changes.
