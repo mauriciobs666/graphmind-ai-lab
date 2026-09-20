@@ -1283,6 +1283,53 @@ class Repository:
             for row in res.result_set
         ]
 
+    def search_chunks_fulltext(
+        self, ws: str, *, query: str, limit: int = 10, timeout: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """`Chunk`-only full-text (RediSearch) retrieval — the lexical half of the
+        FR-3 standalone-KB hybrid search (K-030 item 2,
+        `claude/docs/plans/agent-knowledge-base-strategy7-impl.md`). Read path (`ro_query`).
+
+        Mirrors `search_chunks`'s shape (same post-`YIELD` `WHERE seed.documentCurrent
+        = true` superseded-chunk exclusion, same denormalized `documentId`/`seq`) with
+        `db.idx.fulltext.queryNodes('Chunk', ...)` in place of
+        `db.idx.vector.queryNodes(...)` — the same `Message`-to-`Chunk` label swap
+        `search_messages` (§5) already demonstrates for full-text.
+
+        `score` is a RediSearch TF-IDF-family score, **higher is better**
+        (`ORDER BY score DESC`) — the OPPOSITE convention from `search_chunks`'s
+        cosine-distance `ASC` (`claude/docs/plans/agent-knowledge-base-strategy-graph.md`
+        §3). Do not re-sort, and never compare this score directly against
+        `search_chunks`'s.
+
+        `query` must be the caller's raw, unwrapped situation text — never a
+        vector-only query-instruction prefix (`skills/agent-kb-retrieval/SKILL.md`);
+        this method does no stripping itself, mirroring `search_chunks`'s own
+        "caller is responsible for what it hands in" posture toward `q_vec`.
+
+        Raises `redis.exceptions.ResponseError` on RediSearch syntax rejection,
+        uncaught here — `Services.search_documents` wraps it into
+        `InvalidSearchQueryError`, mirroring `Services.search_messages`.
+        """
+        res = self._graph(ws).ro_query(
+            "CALL db.idx.fulltext.queryNodes('Chunk', $query) "
+            "YIELD node AS seed, score "
+            "WHERE seed.documentCurrent = true "
+            "RETURN seed.chunkId AS chunkId, seed.text AS text, "
+            "seed.documentId AS documentId, seed.seq AS seq, score "
+            "ORDER BY score DESC "
+            "LIMIT $limit",
+            {"query": query, "limit": limit},
+            timeout=timeout,
+        )
+        return [
+            {
+                "chunkId": row[0], "text": row[1], "documentId": row[2],
+                "seq": row[3], "score": row[4],
+            }
+            for row in res.result_set
+        ]
+
     # ── §14.7 Delete + list (document-ingestion2 Stage A, FR-4/FR-8) ─────────────
 
     def delete_document(

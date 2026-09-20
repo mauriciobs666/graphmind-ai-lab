@@ -372,6 +372,14 @@ bootstrap_workspace() {
   echo "[fulltext] Document.title"
   gquery "$g" "CALL db.idx.fulltext.createNodeIndex('Document', 'title')"
 
+  # K-030 item 2 (claude/docs/plans/agent-knowledge-base-strategy7-impl.md): the lexical half
+  # of the FR-3 standalone-KB hybrid search fusion (Services.search_documents). Backfills
+  # automatically on the already-populated Chunk label — confirmed live, no reindex step, no
+  # observed async PENDING window at this corpus's scale (graph-dba,
+  # agent-knowledge-base-strategy-graph.md §4).
+  echo "[fulltext] Chunk.text"
+  gquery "$g" "CALL db.idx.fulltext.createNodeIndex('Chunk', 'text')"
+
   # ── vector indexes ───────────────────────────────────────────
   # Dimension must match the embedding model and is FIXED at index creation —
   # it cannot be altered in place, so choose it per model BEFORE creating the
