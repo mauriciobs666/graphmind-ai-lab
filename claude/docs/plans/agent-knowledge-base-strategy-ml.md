@@ -1409,3 +1409,278 @@ Embeddings: `http://localhost:1234/v1/embeddings`, model id `text-embedding-qwen
 run 2026-09-19. Query/expected-answer source: this file's own Stage 8 Phase 1 table (§"Stage 8
 Phase 1") and `claude/docs/test-reports/agent-knowledge-base-strategy-ac2-report.md`. Coordination:
 `claude/docs/plans/agent-knowledge-base-strategy6-coordination.md`, U2.
+
+## Item 2 — hybrid lexical+semantic score fusion method (2026-09-20)
+
+**The question this section answers.** `claude/docs/plans/agent-knowledge-base-strategy7-coordination.md`
+(U2, `teco`) executes item 2 of my own DEF-1 recommendation above: hybrid lexical+semantic score
+fusion for `search_documents`/`search_chunks` over `ws:agent-team`, motivated specifically by P1
+and G2 — the two DEF-1 misses whose query and expected document share strong exact-phrase/lexical
+overlap the embedding didn't reward. `graph-dba` (U1, `claude/docs/plans/
+agent-knowledge-base-strategy-graph.md`) confirmed feasibility (a full-text index on `Chunk.text`
+costs ≈2.9 MiB, favorable scaling, no migration hazard) and measured the actual score
+characteristics of `db.idx.fulltext.queryNodes` this design has to reconcile with: unbounded,
+TF-IDF-family, magnitude tracking term rarity not fixed relevance (0.026–4.00 across real probes),
+higher-is-better/`DESC`, opposite direction from the vector signal's cosine-distance/`ASC`; and
+confirmed exact-phrase queries enforce strict contiguous adjacency (1 of 3 tested phrases matched).
+This section decides the fusion formula, the lexical query shape, the acceptance bar, and U5's test
+design — method only, nothing here implemented or trial-run (per the brief; U3/U4 build it, U5 runs
+it).
+
+### 1. Fusion formula — Reciprocal Rank Fusion, not magnitude normalization
+
+**Decision: Reciprocal Rank Fusion (RRF), not per-query min-max normalization onto `[0,1]`.**
+
+RRF's fused score for a chunk `d` is `Σ_{s ∈ {vector, lexical}} w_s / (k + rank_s(d))`, where
+`rank_s(d)` is `d`'s 1-indexed position within signal `s`'s own returned, ranked list, and a chunk
+absent from a signal's list contributes 0 for that signal — no special-casing needed, this is
+plain RRF, not a variant I'm inventing. **`k = 60`** (the standard default from the RRF literature,
+Cormack/Clarke/Buettcher 2009) and **`w_vector = w_lexical = 1`** (equal weight — no evidence yet
+justifies asymmetric weighting; see Risks). Each signal is over-fetched to **`K = 20`** before
+fusion (vector: `db.idx.vector.queryNodes` top 20 by cosine distance ascending; lexical:
+`db.idx.fulltext.queryNodes` top 20 by RediSearch score descending) — 20 matches the depth this
+file's own DEF-1 diagnosis and the Recommendation-1-execution trial already probed to (`limit=20`),
+so results stay comparable to that existing evidence, and it gives RRF real room: a candidate at
+vector rank 9 under the 0.6B model (P1), or absent from the 0.6B model's vector top-20 entirely
+(C1, G2 both — the DEF-1 diagnosis's own Finding 1 table, not the separate 4B-trial numbers, which
+found C1 at rank 14 only under the unadopted 4B model), still has a chance to be pulled in if it
+ranks well on the lexical side.
+
+**Why RRF over normalize-then-weighted-sum, against U1's actual numbers, not in the abstract.** A
+min-max approach has to solve U1's "magnitude tracks term rarity, not relevance" problem itself —
+concretely, min-max-ing lexical scores *within one query's own returned set* doesn't fix this: a
+query whose only real lexical signal is a common word (U1's `"the"`, capping at 1.00 despite
+95%-of-corpus incidence) would still get rescaled to a full `1.0` for its top hit, indistinguishable
+from a query whose top hit scored `4.00` on a genuinely rare, high-value term (`"falkordb"`) — the
+distortion U1 measured doesn't disappear under per-query rescaling, it just becomes invisible.
+Min-max is also degenerate whenever a list has 0 or 1 members (exactly what a lexical query returns
+routinely at this corpus's scale — see §3's OR-term design, which usually returns *something*, but
+a pathological single-hit case still needs a special-cased scale). **RRF sidesteps all of this by
+never reading raw magnitude at all** — only ordinal position, which is comparable across queries by
+construction regardless of what drove a given score's absolute value. This is exactly U1's own
+framing of RRF's appeal (§3, "a rank-based method that never looks at raw magnitude"), and I am
+adopting it as the concrete choice rather than leaving it a stated option.
+
+**What RRF gives up, named honestly, not hidden.** RRF discards *margin* information a
+magnitude-aware method would keep — a vector hit at cosine distance 0.15 (a strong, confident
+match) and one at 0.40 (barely inside the floor) both count as "rank 1" if each is its own query's
+top vector hit, so RRF cannot express "the vector signal was much more confident here than there."
+This is a real, accepted cost of picking RRF, not a free upgrade — a document that is a genuinely
+excellent vector match but shares literally no vocabulary with the query could, in principle, be
+outranked by some other document that is only a mediocre vector match but a strong lexical one.
+I judge this an acceptable trade against the magnitude-comparability problem RRF avoids, because
+(a) this corpus's own measured pattern (DEF-1 diagnosis, Finding 3) shows `b-code` queries tend to
+score well on *both* signals at once (their correct document's unique low-frequency tokens —
+`RESULTSET_SIZE`, `GRAPH.RO_QUERY` — are exactly what both a sharp vector embedding and a
+high-IDF lexical match reward), so the risk case (strong-vector/zero-lexical-overlap losing to
+weak-vector/strong-lexical) is not the corpus's dominant pattern; and (b) it is a testable risk,
+not an assumed-safe one — U5's regression check (§4 below) is specifically designed to catch it if
+it happens on the already-passing rows.
+
+### 2. Lexical query shape — OR-term for ranking, a rank-based admissibility gate, phrase held in reserve
+
+**Decision: run the RediSearch default OR-term query as the lexical side's sole contribution to
+the fused ranking; do not run the whole query string as a quoted phrase, and do not build a
+phrase-first/OR-fallback pipeline.** Reasoning against U1's own measurement, not restated in the
+abstract: U1's phrase-match test used a *favorable, artificial* condition — a contiguous 3-word run
+copied verbatim from a real chunk's own text as the query — as "a stand-in for a situation
+description that shares vocabulary with its correct answer" (U1's own words). That stand-in
+overstates what a real situation-style golden-set query does: P1's and G2's own queries are
+free-worded paraphrases (`"A plan states a completeness claim… but I only have the author's word
+for it. What would actually make that check able to fail, rather than just being transcribed as
+true?"` vs. the stored title `"A completeness claim must be derived, not transcribed — and its
+check must be able to fail"`) — real overlapping technical terms (`completeness claim`, `able to
+fail`, `transcribed`), but scattered across a differently-structured sentence, not a single
+contiguous run spanning the query. A whole-query phrase search against text shaped like this has a
+near-zero expected hit rate on a genuinely paraphrased query — querying it as a phrase would
+reproduce U1's own "2 of 3 tested phrases returned 0 rows" finding as the *common* case here, not
+the exception, defeating the entire lexical signal on exactly the queries item 2 exists to fix.
+OR-term, by contrast, sums TF-IDF across whatever terms *do* overlap regardless of adjacency or
+sentence structure — the realistic overlap pattern P1/G2 actually exhibit — and it does so without
+needing a fallback branch, since it isn't the thing that returns 0 rows in the common case. **This
+also directly answers the brief's fallback question: a lexical signal contributing 0 for a query is
+the correct, unremarkable degenerate case of RRF (that query's fused score reduces to the vector
+signal alone) — not a defect needing a rescue path** — it just shouldn't be the *common* case, which
+is why OR-term, not phrase, is the primary shape.
+
+**The admissibility gate — a second, separate design decision from the ranking formula, needed
+because RRF alone reopens the exact risk the vector floor exists to close.** The vector floor
+(**0.43**, `skills/agent-kb-retrieval/SKILL.md`'s current operative value, landed by Stage 8 Phase
+2's full-set gate — not this file's own earlier 0.42 Stage 8 Phase 1 provisional figure, which that
+phase's own text already flagged as due for refinement and which Phase 2 superseded) exists because
+"the failure mode this system exists to avoid is not nothing came back, it's an agent trusted an
+irrelevant top-1" (Recommendation 3, above). RRF's fused ranking has no floor of its own — a
+document with a poor vector score (nowhere near 0.43) but a decent OR-term lexical rank could be
+pulled into the fused top-5 purely on loose term co-occurrence (U1 measured `"the"` matching 95% of
+the corpus — an extreme case, but it shows how permissive default OR-scoring can be). Decision: a
+candidate is eligible for the returned top-5 only if **vector cosine distance ≤ 0.43 (the current
+`SKILL.md` floor, unchanged by this design) OR the candidate ranks in the lexical OR-term list's
+own top 2.** Both halves of this gate are
+rank/threshold-based on a *calibrated* signal (the floor) or *rank position* (never raw lexical
+magnitude) — deliberately consistent with §1's core reason for choosing RRF over magnitude
+normalization: nothing in this design ever compares a raw lexical score against a fixed number,
+because U1 already showed that number has no stable meaning across queries. Ranking (RRF, over the
+union of both top-20 lists) and admissibility (this gate) are applied in that order — rank first,
+then walk down the fused list keeping the first 5 that pass the gate, backfilling from further down
+the list for any that don't — mirroring `Services.search_documents`'s own existing over-fetch-then-
+filter idiom (Findings, above), not a new pattern. If fewer than 5 pass, return fewer — the same
+graceful-degradation behavior the floor already produces today for a negative query.
+
+**Phrase queries stay available, unused by default — an evidence-triggered fallback, not built
+now.** The same full-text index serves both query shapes at zero extra migration or schema cost
+(RediSearch query syntax is a call-site choice, not an index property) — so nothing is lost by not
+using phrase matching in v1. If U5's negative-stratum re-run (§4) shows the rank-≤2 OR-term gate
+admitting a false positive a stricter check would have caught, the concrete, already-designed
+fallback is to require a genuine contiguous-phrase match (via `db.idx.fulltext.queryNodes` in
+phrase mode) as an additional condition for any candidate admitted through the lexical-rank half of
+the gate specifically — named here so a follow-up dispatch doesn't have to redesign it, not applied
+speculatively before evidence shows it's needed.
+
+**One implementation-facing correctness note for U3/U4, worth stating explicitly since it's an easy
+mistake:** the lexical query must run against the **raw situation text only**, never the
+`"Instruct: …\nQuery: {situation}"` wrapper (Recommendation 1). That wrapper is a property of
+Qwen3-Embedding's trained query/document asymmetry — it means nothing to RediSearch's lexical
+scorer, and feeding it in would inject the same boilerplate terms (`retrieve`, `situation`,
+`technique`) into every single lexical query, polluting the TF-IDF signal with a constant,
+query-independent term set. Stored documents are already unprefixed (Recommendation 1's write side);
+the lexical query side should match that convention, stripped of the vector-only wrapper.
+
+### 3. Acceptance criterion — retire the inherited "≥3 of 4," replace with a mechanism-specific bar
+
+**Decision: the strategy6 bar ("≥3 of 4 target queries land in top-5") does not transfer to item 2,
+and I am not silently inheriting it.** That bar was designed for item 1, a uniform lever (more
+model capacity) tested against 4 queries treated as interchangeable instances of one hypothesis.
+Item 2 is not that: the DEF-1 diagnosis itself (Finding 3, above) split the 4 into two different
+mechanisms — P1/G2 (lexical-overlap-without-embedding-win, fusion's actual target) and C1/X1
+(crowded-neighborhood dilution and document-length dilution respectively, mechanisms fusion was
+never expected to fix) — treating all 4 as fungible inputs to one fraction was already a
+simplification strategy6 made for a different lever; carrying it forward for a structural lever
+whose own motivating diagnosis explicitly names only 2 of the 4 as its target would be adopting a
+bar shaped for a different hypothesis, not re-deriving one for this one.
+
+**Reconciling item 1's result — what's actually left for fusion to prove.** Item 1's held-out trial
+(`qwen3-embedding-4b`, above) showed P1 and X1 flip to top-5 hits and C1/G2 stay misses — but
+**that trial was never adopted**: its own verdict explicitly declined to commit to a fuller corpus
+re-embed ("do not commit… The acceptance criterion I set myself is not met"), so **production is
+unchanged, still the 0.6B model**, and under production settings today **all 4 of C1, P1, X1, G2
+still fail** — nothing item 1 found has actually shipped. So item 2 is not chasing 2 already-solved
+queries; it is being layered onto a baseline where none of the 4 currently succeed. What item 1's
+result *does* change is which subset item 2 should expect to move, and how much weight a given
+outcome should carry:
+- **G2 is the single necessary target.** It is the one query in the lexical-overlap bucket where
+  model capacity gave *zero* improvement (rank 53 of 302 under 4B, worse if anything than "absent at
+  limit 20" under 0.6B) — the cleanest evidence available that this specific failure needs a
+  structural, not capacity, fix. If fusion cannot move G2, the mechanism this unit exists to test
+  has not been demonstrated, regardless of what happens to the other three.
+- **P1 is an expected, confirmatory win, not the deciding signal.** It sits in the same
+  lexical-overlap bucket as G2 and should respond to the same mechanism (OR-term rewarding
+  `completeness claim`/`transcribed`/`able to fail` overlap) — but because item 1 already showed
+  P1 is *also* fixable by capacity alone, a P1-only win (with G2 unmoved) would show fusion adds
+  nothing this corpus doesn't already have a documented, simpler alternative for, not that fusion
+  earns its complexity.
+- **C1 and X1 are out of scope for this lever — not fungible "misses" fusion must also flip.** C1's
+  diagnosis (Finding 3) is explicitly *not* a lexical-overlap case — it's outcompeted by ~15
+  topically-adjacent, only-loosely-related documents from the same dense neighborhood, with no
+  single lexical trigger to reward. X1's is document-length/dilution (Finding 2), the same
+  mechanism model capacity partially addressed, not an overlap gap. Neither should be scored
+  pass/fail against fusion; record what happens to both (informative, and a real regression check —
+  next bullet — but not a required win).
+
+**The replacement bar, concrete and gradeable, four conditions:**
+1. **G2 lands in top-5 under fusion.** Necessary condition — without this, judge the unit "hybrid
+   didn't help" regardless of the other three.
+2. **No regression on the other 45-pair rows already recorded as hits** (Stage 8 Phase 1/Phase 2):
+   every row that lands in top-5 today under vector-only must still land in top-5 under fusion — a
+   rank/inclusion check per row, not a re-derivation of the whole set from scratch.
+3. **No regression on the negative stratum (N1–N6):** every negative query must still return either
+   nothing, or nothing that passes the admissibility gate — this is the concrete, mechanism-specific
+   check for the new failure mode fusion introduces (§2's gate risk), and it did not exist as a
+   concern under vector-only.
+4. **P1, C1, X1 outcomes are reported, not graded.** State whether each moved, and if so how, but
+   don't let a P1-only win read as "3 of 4," and don't let a C1/X1 non-win read as "hybrid failed."
+
+**"Hybrid helped" for this unit's own bottom-line verdict = condition 1 holds AND conditions 2–3
+hold.** "Hybrid didn't help" = condition 1 fails, regardless of 2–3 (a regression-free result that
+still misses the one thing this lever was built to fix is not a positive result for item 2, even
+though it would still be worth shipping-neutral information about the mechanism's safety).
+
+### 4. Evaluation plan for U5
+
+**Sequencing:** run only after U3's plan and U4's implementation land against the real
+`ws:agent-team` (per the coordination doc's own note — never a probe graph for this final check,
+since it's validating the actual shipped mechanism, not feasibility).
+
+- **Queries:** the full 45-pair golden-set design (Stage 8 Phase 1's table, above) — not just the 4
+  DEF-1 misses. Fusion changes the retrieval mechanism for every query, not only the failing ones,
+  so a full re-run is the only way to catch condition 2/3's regression checks; at 45 pairs against a
+  ~558-chunk corpus this is cheap, and it's the scope Stage 8 already established as this KB's
+  standing regression gate.
+- **Corpus:** production `ws:agent-team`, post-U4 (real full-text index landed via
+  `bootstrap_schema.sh`, real fusion code path), not a probe graph — U1's probe work already closed
+  the feasibility question; U5 is validating shipped behavior.
+- **Baseline:** the already-recorded vector-only Stage 8 Phase 1 (16 rows) + Phase 2 (remaining 29,
+  `claude/docs/test-reports/agent-knowledge-base-strategy-ac2-report.md`) per-row ranks/scores — do
+  **not** re-run vector-only fresh; pull the existing recorded figures as the comparison baseline,
+  the same discipline U1 used citing existing evidence rather than rederiving it.
+- **Per-query "helped" vs. "didn't help," specifically for the 4 target queries:**
+  - **G2** — helped: expected document in top-5. Partially-helped, worth recording but not passing:
+    now appears within the fused top-20 (an improvement over "absent at limit 20" even if it misses
+    top-5). Didn't help: still absent from the fused top-20 equivalent.
+  - **P1** — helped (expected/confirmatory): top-5. Didn't help: still misses — this outcome would
+    be a genuine negative finding worth its own flag (it would mean OR-term didn't catch overlap the
+    diagnosis itself identified as strong — check whether the OR-term query actually fired on the
+    right terms before concluding the mechanism itself is unsound).
+  - **C1, X1** — record rank/score movement either way; do not gate the unit's verdict on either.
+    An unexpected win on either is a bonus to note, not a claim to build the mechanism's case on.
+- **Regression checks (conditions 2–3 above), concretely:** recompute recall@5 across all strata
+  (`b-code`, `b-prose`, negative, near-dup stress `(d)`, multi-facet `(e)`) and compare to the
+  recorded baseline per stratum — flag any stratum whose recall@5 drops, not just the aggregate
+  figure, since a stratum-level regression could hide inside an unchanged aggregate. Pay particular
+  attention to the near-dup stress pairs `(d)` (R7, F1) and the negative stratum (N1–N6): both are
+  exactly where §1's named RRF trade-off (magnitude-blind ranking) and §2's named gate risk (loose
+  OR-term admission) would first show up as a real defect rather than a theoretical one.
+- **What to compare against, one more time, explicitly:** the comparison is fusion-over-0.6B vs.
+  vector-only-0.6B (both on the model actually in production) — **not** vs. item 1's 4B trial
+  numbers. The 4B figures are cited above only to reconcile which subset fusion targets (§3); they
+  are not a baseline U5 measures against, since that model was never adopted.
+
+## Risks & open questions (mine to flag, not mine to resolve) — item 2 addendum
+
+- **RRF's magnitude-blindness (§1) is an accepted, not a resolved, trade-off.** A vector-confident
+  match with zero lexical overlap could in principle be outranked by a lexical-strong/vector-weak
+  document. Judged low-risk given this corpus's own measured pattern (unique-token `b-code` claims
+  tend to score well on both signals at once), but that judgment is a prediction from the existing
+  DEF-1 evidence, not a fresh measurement — U5's stratified regression check (§4) is what would
+  actually catch it if the prediction is wrong.
+- **G2's rescue depends on an unverified premise I cannot check in this unit:** that G2's expected
+  document scores well enough on the OR-term lexical query to either pass the admissibility gate or
+  contribute enough RRF weight to be pulled into the fused top-5. Nothing in U1's or my own work
+  measured G2's actual lexical score — the diagnosis's "striking exact-phrase overlap" language
+  described the *title's* wording relative to the query, not a measured RediSearch score against
+  the full stored document text. This is squarely what U5 tests; I am not asserting the mechanism
+  will work, only that this design gives it the best-available structural chance to.
+- **The `k=60` RRF constant is the literature default, not re-derived for this corpus's shallow
+  (top-20) list depth.** At this depth the difference between lexical/vector rank 1 and rank 20 is
+  fairly narrow (`1/61` vs. `1/80`) — deliberately gentle, so no single signal at a weak rank
+  dominates, but untested against a smaller `k` (sharper preference for near-top ranks) on this
+  specific corpus. Not blocking U3/U4 — ship `k=60` as the default, documented as a single named
+  constant (same "one canonical, cited artifact" discipline as the prefix/floor,
+  `skills/agent-kb-retrieval/SKILL.md`), and treat a `k` retune as the first lever to pull if U5's
+  result is close but not clean, before redesigning the formula itself.
+- **The admissibility gate's rank-≤2 lexical threshold is a judgment call, not a calibrated number**
+  — unlike the vector floor (calibrated against a measured true-positive/negative score gap), this
+  threshold has no equivalent calibration exercise behind it, because U1 already showed raw lexical
+  magnitude isn't stable enough to calibrate a threshold against. Rank-2 vs. rank-1 vs. rank-3 is a
+  reasonable-but-unverified choice; U5's negative-stratum results are the first real evidence either
+  way, and the phrase-match fallback named in §2 is the designed response if rank-2 proves too loose.
+- **Item 1's own open item (code/regex-heavy retrieval strength, and the "code/regex encoder
+  quality" question named in Recommendation 1) is unaffected by this design** — fusion changes
+  ranking, not the underlying vector signal's own quality, and none of this section's decisions
+  depend on that question being resolved either way.
+
+**Traceability.** Inputs: `claude/docs/plans/agent-knowledge-base-strategy-graph.md` (U1,
+`graph-dba`, 2026-09-20) for feasibility and score characterization; this file's own DEF-1
+diagnosis and Recommendation-1-execution sections (above) for the target-query reconciliation.
+Coordination: `claude/docs/plans/agent-knowledge-base-strategy7-coordination.md`, U2. No trial run
+in this unit — every number cited above is either U1's measurement or this file's own prior,
+already-recorded pilot/trial results; nothing new was executed here.
