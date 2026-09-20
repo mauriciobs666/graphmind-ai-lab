@@ -26,6 +26,7 @@ embedding code) — usable for structural navigation, not rebuilt for this chain
 | U6 | `coder` | `a2cb87d5a804deb2b` | accepted | `scripts/embedding_migration.py` (`pin`) + `scripts/pin_workspace_embedding_model.sh` + `server/tests/test_embedding_migration.py` (§5 step 1) | `analyst` (`aefe5f0b369f3e4d4`) → **approve** | 182k tok / 12 tool uses (follow-up turn; 346k/66 cumulative) |
 | U7 | `coder` | `a6bef11910ee45ad3` | accepted | `scripts/embedding_migration.py` (`migrate`) + `scripts/migrate_embeddings.sh` + interrupt/resume tests (§5 steps 4-5) | `analyst` (`a009a2e28690c7b65`) → **approve** | 234k tok / 16 tool uses (follow-up turn; 447k/88 cumulative) |
 | U8 | `coder` | `ac2fd2b646978a9e3` | accepted | `scripts/create_workspace.sh` + call-site swaps + doc clauses (§5 step 2) | `analyst` (`a009a2e28690c7b65`, joint w/ U7) → **approve** | 199k tok / 8 tool uses (follow-up turn; 380k/104 cumulative) |
+| U9 | `qa-engineer` | `a5c2e4d188f8f891b` | accepted | `docs/test-reports/embedding-migration-report.md` — live acceptance pass, real embedder | teco (independent re-verification) → **PASS WITH FINDINGS** | 160k tok / 62 tool uses |
 
 _U4 correction, 2026-09-19: this row was logged `in-flight` before the revision brief was actually
 sent — the agent sat idle since U1's handback until a status-check message (not a revision request)
@@ -143,6 +144,29 @@ this dev box.
 `pin_workspace_embedding_model.sh` against every existing real workspace once, before the global
 default in `config/models.json` is ever edited) — an ops decision for whoever performs the actual
 model swap, out of this chain's scope per the requirements doc's own "Open questions."
+
+**U9 verification (teco):** independently confirmed the throwaway workspace
+(`ws:qa-embmig-acceptance-20260920`) is absent from a live `GRAPH.LIST` — cleanup genuine;
+`git status` shows only the new report file — no source/script/config was touched; the shared
+`$HOME/.config/opencode/opencode.json`'s LAN-IP `baseURL` is exactly as the report describes,
+confirming it wasn't edited. D-1 (the traceback-vs-clean-exit defect, now confirmed live on all
+three trigger paths) was fixed directly by teco as a genuinely trivial single-function change — a
+`try/except MigrationAbortedError` wrap in `main()`, exactly as both the code review and this QA
+pass independently specified — with a new regression test, mutation-tested (reverting the fix
+reproduces the uncaught traceback; the new test catches it). Full suite reran clean: 2606 passed
+(minus `test_services.py`'s unrelated concurrent work). Committed `e933c4fd`.
+
+**Coordination status: all planned units (U1-U9) delivered, reviewed/verified, and committed.**
+`pin`, `migrate`, and FR-2's enforcement mechanism are built, code-reviewed clean (two `analyst`
+passes), and live-verified against real infrastructure (`qa-engineer`, PASS WITH FINDINGS, one
+Minor found and fixed). What remains is explicitly out of this chain's scope per the requirements
+doc itself: FR-1's one-time production sweep (an ops runbook action for whoever performs the actual
+model swap), and FR-6/FR-8b's `model-bench` golden-set validation + a live retrieval-sanity check
+(both require an actual destination-model decision and a real migration target, neither of which
+this chain was ever scoped to choose). Whether to flip `docs/requirements/embedding-migration.md`
+and this coordination doc to `archived` now, or leave them `active` until an actual production
+migration exercises the remaining items, is a stakeholder call (`tico` owns the requirements-doc
+flip) — not made here.
 
 ## Pause (2026-09-19, user-requested) — resumed 2026-09-20
 
