@@ -23,9 +23,9 @@ embedding code) — usable for structural navigation, not rebuilt for this chain
 | U3 | `graph-dba` | `a49343cae70f94e54` | delivered | `docs/plans/embedding-migration-graph.md` (+ `claude/graph-dba/falkordb-quirks.md` update) | teco (spot-check) → verified | 185k tok / 42 tool uses |
 | U4 | `architect` (resume U1) | `a2ce9950345d8a80a` | delivered | `docs/plans/embedding-migration.md` rev. (in place) | `analyst` (re-review, U5) → **approve** | 343k tok / 125 tool uses (this turn; 547k/189 cumulative across U1+U4) |
 | U5 | `analyst` (re-review of U4) | `a84297e88678205db` | delivered | `docs/reviews/embedding-migration.md` Pass 2 (in place) | teco (spot-check) → verified | 116k tok / 16 tool uses |
-| U6 | `coder` | — | queued | `scripts/embedding_migration.py` (`pin`) + `scripts/pin_workspace_embedding_model.sh` (§5 step 1) | `analyst` → — | — |
+| U6 | `coder` | `a2cb87d5a804deb2b` | accepted | `scripts/embedding_migration.py` (`pin`) + `scripts/pin_workspace_embedding_model.sh` + `server/tests/test_embedding_migration.py` (§5 step 1) | `analyst` (`aefe5f0b369f3e4d4`) → **approve** | 182k tok / 12 tool uses (follow-up turn; 346k/66 cumulative) |
 | U7 | `coder` (after U6, same file) | — | queued | `scripts/embedding_migration.py` (`migrate`) + `scripts/migrate_embeddings.sh` + interrupt/resume tests (§5 steps 4-5) | `analyst` → — | — |
-| U8 | `coder` (after U6; parallel-safe with U7, disjoint files) | — | queued, blocked on stakeholder's Option A/B pick (§3.2) | FR-2 enforcement mechanism (§5 step 2) | `analyst` → — | — |
+| U8 | `coder` (after U6; parallel-safe with U7, disjoint files) | — | queued | FR-2 enforcement mechanism — **Option B**, decided (§5 step 2) | `analyst` → — | — |
 
 _U4 correction, 2026-09-19: this row was logged `in-flight` before the revision brief was actually
 sent — the agent sat idle since U1's handback until a status-check message (not a revision request)
@@ -55,6 +55,31 @@ reached only after the `if not config.ENABLE_AGENT: return ...` early-return at 
 other hit at line 289 is inside a docstring's illustrative code example, not live code, so it
 doesn't undercut the claim. All confirmed exactly as Pass 2 states. Verdict **approve** stands.
 
+**U6 verification (teco):** independently reread `pin()` against `repository.py`'s
+`write_model_overrides`/`read_model_overrides` and `modelconfig.py`'s `resolve()`/
+`Resolution.primary.ref` — every call shape and key name matches exactly, no bugs found there.
+Per the "mutate one argument yourself, beyond the implementer's own table" rule, swapped
+`guard=`/`responder=` in the write call — the delegate's own two mutations (agent/guard→`None`,
+idempotent check disabled) didn't cover this. **All 9 tests still passed** — no test sets distinct
+non-`None` `guardModel`/`responderModel` on the same workspace, so the swap was invisible. Mutation
+reverted (confirmed clean diff, suite green again); sent back to the same delegate, who added
+`test_pin_preserves_guard_and_responder_overrides_in_their_own_slots` and confirmed it catches the
+exact swap. Independently reran: `test_embedding_migration.py` alone → 10 passed; full suite minus
+`test_services.py` → 2585 passed, clean.
+
+**Unrelated concurrent work detected, not ours — noted, not acted on.** `git status` shows
+`server/falkorchat/services.py`/`mcp.py`/`repository.py` and `scripts/bootstrap_schema.sh` +
+`server/tests/test_services.py` modified on disk by some other, unrelated session (a hybrid
+full-text/vector retrieval feature — `search_chunks_fulltext` — mid-flight, judging by
+`repository.py`'s diff hunk at line 1283 and the `test_services.py` failure shape changing between
+two runs seconds apart). Confirmed disjoint from this chain: `repository.py`'s diff is a pure
+insertion at line 1283, nowhere near `write_model_overrides`/`read_model_overrides` (~3237+,
+content unaffected, only shifted); none of U6's three files overlap; `test_services.py`'s 2-3
+failing tests are unrelated to `pin()` (`KeyError: 'score'` / `AttributeError` inside
+`services.search_documents`, nothing this chain touches). **Do not stage or commit any of those
+five files under this coordination** — not ours, not reviewed by us, actively being edited by
+someone else.
+
 ## Pause (2026-09-19, user-requested) — resumed 2026-09-20
 
 Paused at the user's request for exclusive `model-bench` machine access; resumed in a new session
@@ -68,6 +93,7 @@ Two things remain open, tracked as U6-U8 above:
 - **Implementation, unblocked now:** `graph-dba`'s companion note (U3) is final (item 6 verified
   safe), so both `pin` (§5 step 1, U6) and `migrate` (§5 steps 4-5, U7) can be built regardless of
   the item below. U7 is sequenced after U6 (both touch `scripts/embedding_migration.py`).
-- **A stakeholder decision, independent of U6/U7:** Option A vs. Option B for FR-2's enforcement
-  mechanism (§3.2, plan recommends B) — blocks only U8 (§5 step 2 specifically); steps 1/3/4/5 are
-  unaffected either way. Surfaced to the user alongside this resume.
+- **Stakeholder decision (resolved 2026-09-20):** Option B chosen for FR-2's enforcement mechanism
+  (§3.2) — `create_workspace.sh` replaces `bootstrap_schema.sh` as the canonical entry point at the
+  three named call sites, per the plan's own recommendation. U8 (§5 step 2) is queued behind U6
+  (needs `pin()` to exist); once U6 lands, U7 and U8 can run in parallel (disjoint files).
