@@ -2,6 +2,68 @@
 
 > Dated log of actual changes to the `tico` agent. Most recent first.
 
+## 2026-09-20 — K-016 ✅ closed: eager-provider-resolution trap published into `llm-provider-config.md` (U10, last unit of the pass)
+
+U10 of `claude/docs/plans/kaizen-distillation3-coordination.md` (curator: `cobb`) — the pass's
+one anomaly-shaped unit, dispatched to `cobb` directly rather than to `tico`, since the underlying
+graph node carries no producer identity at all (see the anomaly note below).
+
+- **What:** published the clause `K-016` has tracked since 2026-09-09 into
+  `falkor-chat/docs/manuals/llm-provider-config.md` §2 ("Declaring a provider and its models"), as
+  a new bullet immediately after the existing "Never write a secret literally into the file" one —
+  the two belong together, since this is the direct operational consequence of that same
+  `{env:}`/`{file:}` substitution mechanism. New bullet: every declared provider is validated the
+  moment falkor-chat builds its model resolver — at real server startup, and identically in any
+  script that builds the same resolver offline — whether or not anything ends up routing to it; an
+  unresolved `{env:...}`/`{file:...}` reference on a provider block fails startup by name even if
+  no default/role/workflow step names that provider; names the shipped example's own `openai`
+  block as the concrete trap a first-time deployer hits.
+- **Re-derived fresh against the live code, not re-cited from the entry or from K-016's own prior
+  text.** Read `falkor-chat/server/falkorchat/modelconfig.py` directly:
+  `ModelGateway.from_env()` (line 625) → `__init__` (609) → `_build_providers(catalog, overlay)`
+  (556-560) builds a `ProviderSpec` for **every** id in `catalog.provider_ids() |
+  overlay.providers` — not a filtered subset of what's later dispatched to. `_build_provider_spec`
+  (501-553) calls `_substitute` (282-296) on `baseURL`/`apiKey`/`headers`, and `_substitute`
+  raises `ModelConfigError` by name (289-295) the instant an `{env:NAME}` reference isn't in
+  `os.environ` — unconditional on whether that provider ever gets dispatched to afterward. Also
+  read `config/opencode.example.json` directly: it ships exactly the trap case — an `openai`
+  provider block with `apiKey: "{env:OPENAI_API_KEY}"`, declared but never referenced by any
+  default/role in the shipped `config/models.json`, so a deployer who copies the example
+  (Walkthrough 1's own first step) and only ever uses `lmstudio` still needs `OPENAI_API_KEY` set
+  (or that block removed) or the server refuses to start.
+- **Confirmed still unpublished for this document's audience before writing.** Grepped the manual
+  for "eager"/"every declared"/"even if"/"unused"/"construction" — no hit; the existing
+  secret-handling bullet says a missing `{env:}` var fails startup, never that this fires for a
+  provider nothing ever routes to. The fact **is** incidentally documented three times in
+  `falkor-chat/docs/reviews/salesperson-tool-reliability-ml.md` (§16.1/§17.1/§18.1, `data-scientist`'s
+  own review, as a live-harness-script workaround footnote) — judged **not** equal-or-greater depth
+  for *this* document's actual audience (a deployer hand-editing config files, not a data-scientist
+  writing a live-model probe), and that review doc never states the general operational principle
+  either, only the one instance it hit. Promoted rather than discarded on that basis.
+- **Origin/history, folded in rather than restated as a dated update stack:** graph entry
+  `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` (2026-08-31) — tagged `MENTIONS → tico` by
+  `data-scientist`'s U14 (2026-09-07), re-homed to this agent's plan as K-016 by U31 (2026-09-09,
+  kept open — `manuals/` sat outside `cobb`'s write remit at the time), re-confirmed untouched by
+  the 2026-09-13 standing pass (still correct, still blocked on the same gap). Also tracked as
+  `data-scientist` K-003, the origin record, closed in that agent's own `history.md` today,
+  cross-referencing here rather than duplicating this entry's evidence.
+- **Anomaly note (a different topic from this fact's own disposition):** by the time U10 re-queried
+  this entry fresh, it carried **0 `PRODUCED` edges and no `author` property at all** — an orphaned
+  producer identity, distinct from (and in addition to) the `MENTIONS → tico` edge this whole chain
+  has used as its routing signal since 2026-09-07. Investigated in
+  `claude/cobb/kaizen/history.md`, 2026-09-20 — it does not change this fact's own disposition,
+  which was independently re-verified above regardless of who produced the entry.
+- **Graph:** `0 PRODUCED / 1 MENTIONS (→tico)` confirmed immediately before mutation (a fresh
+  re-query, not the pinned coordination-doc snapshot). `MENTIONS` edge resolved (`DELETE m`);
+  `otherRemaining` reached `0`; full node `DETACH DELETE`. `tico` producer/mentioned count after
+  this pass: **0**.
+- **A pre-existing drift, fixed in passing, not left to perpetuate:** K-016's body section existed
+  in `plan.md` but was never added to the Active summary table when U31 created it (2026-09-09) —
+  removing the now-closed section removes the drift too; no table row needed cleanup.
+- **Docs touched:** `falkor-chat/docs/manuals/llm-provider-config.md` (§2, new bullet),
+  `claude/tico/kaizen/{history.md,plan.md}` (K-016 closed).
+- **Plan items:** K-016 closed.
+
 ## 2026-09-18 — `kaizen_team` distillation: `f3d8a1c2…` (requirements docs going stale post-ship) — 3 named cases already fixed; the general lesson promoted into `teco.md`, not here
 
 U9 of `docs/plans/kaizen-team-distillation2-coordination.md` (curator: `cobb`).

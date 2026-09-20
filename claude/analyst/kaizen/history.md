@@ -2,6 +2,112 @@
 
 > Dated log of actual changes to the `analyst` agent. Most recent first.
 
+## 2026-09-20 — standing distillation pass, `cobb`, U1 of `docs/plans/kaizen-distillation3-coordination.md`: all 16 remaining `analyst` current-shape entries — 7 promoted, 9 discarded, 0 kept open
+
+- **What:** `cobb` distilled every `analyst`-produced current-shape `:KaizenEntry` still in
+  `kaizen_team` (this pass is explicitly scoped to draining `kaizen_team` toward eventual
+  deletion, not `analyst`'s post-2026-09-19 `ws:agent-team` captures — separate, later pass). A
+  live current-shape read at open confirmed 16 entries, matching the coordination doc's snapshot.
+  Every `fact`/`evidence` cell longer than the MCP tool's 300-char cut was paged with `substring`
+  before dispositioning. Every fact was re-derived against the live tree/graph in this run
+  (`git grep`, direct file reads, live `mcp__cypher__query` reads of `cypher-mcp/server.py`,
+  `model-bench/modelbench/results.py`/`stats.py`) — no figure travelled into a promotion
+  unverified. Per the distillation procedure's "grep the repo before promoting" step, 9 of the 16
+  turned out to already be documented (word-for-word or in fuller, more authoritative form) in a
+  sibling artifact — mostly `skills/agent-maintenance/SKILL.md`'s own origin notes (the same K-030
+  Stage 9 gap-finding chain this pass's entries were captured during) and
+  `claude/cobb/scripts/check_content_loss.py`'s own LIMITATIONS docstring — so those were
+  discarded as redundant rather than promoted a second time.
+- **Discarded (9), already documented elsewhere — verified, not merely cited:**
+  - `f3b6a2b1…` (default offline pytest run wipes falkor-chat's shared `reference` graph) —
+    `falkor-chat/AGENTS.md` already states this exact fact plus the re-seed recipe (the "A default
+    (offline) `pytest` run wipes the `reference` graph..." paragraph).
+  - `bb058e98…` (a kaizen sweep's own gate-written entry legitimately pre-dates the unit's
+    clearing commit; compare `createdAt`, never the day-granular `date`) — already fully captured
+    in `skills/agent-maintenance/SKILL.md` §5's "A count delta between two census reads is a lead
+    to attribute, not a clearing defect to assume" paragraph, including the `createdAt`-not-`date`
+    instruction.
+  - `f1c2a3d4…` (cypher-mcp's authorizer recognizes exactly 4 curator-gated shapes, one regex
+    shared by legacy-clear and current-shape full-node clear) — verified directly against
+    `cypher-mcp/server.py` (`_CURATOR_CLEAR_RE`/`_MENTIONS_WRITE_RE`/`_PRODUCER_EDGE_RESOLVE_RE`/
+    `_MENTION_EDGE_RESOLVE_RE`, `_CURATOR_CLEAR_RE` used at both the legacy and current-shape
+    full-node clear sites) and already spelled out in `cypher-mcp/README.md`'s six-numbered-shapes
+    section (items 3–6 are the 4 curator shapes; item 6, curator-clear, is explicitly one skeleton
+    covering both the legacy and current-shape full-node case).
+  - `a3f1e2c4…` (`model-bench` `rank_report()`'s `ValueError` message appends " and session" only
+    when `runs` is non-empty — reads backwards but is "not a bug, just oddly worded") — trivial,
+    non-actionable, no consequence stated beyond "worth a second look if this string is ever
+    touched"; discarded rather than promoted.
+  - `b3e6f6b0…` (a sibling, still-open interruption window one step past Pass 2's fixed gap in the
+    Stage 9 delete-then-ingest sync sequence) — already fixed and documented: `SKILL.md`'s own
+    "Same day, a follow-up unit" origin note records the title-match adopt-or-ingest split that
+    closed exactly this gap.
+  - `7f3a1c2e…` (`check_content_loss.py` false-positive-flags a legitimate 2-way claim split that
+    shares one duplicated context/label sentence) — verified word-for-word already present in the
+    script's own `LIMITATIONS` docstring (the "False positive: a claim pair sharing one duplicated
+    context/label sentence" bullet, same worked example, same documentId pairs cited).
+  - `a3f1d9d2…` (`model-bench` `stats.py` hard-ties its Holm divisor to `len(family)`, blocking
+    reuse for FR-8's larger N-1-candidate-model ladder) — already identified, designed, and shipped
+    in far more depth than the raw entry: `model-bench/docs/plans/small-model-catalog-sweep.md`
+    §3.2 adds an explicit `correction_k` parameter for exactly this, and
+    `model-bench/docs/reviews/small-model-catalog-sweep.md` gates it; confirmed shipped by reading
+    `stats.py`'s `k = correction_k if correction_k is not None else len(family)`.
+  - `b3f2a6c1…` (`search_documents` scores can be materially non-reproducible run-to-run for a
+    specific borderline query) — already fully captured, with the exact scores/documentId/rank
+    this entry cites, in `skills/agent-kb-retrieval/SKILL.md`'s score-floor section (escalated to
+    `data-scientist` there).
+  - `d4b2e6f1…` (a `"pending"`-marker recovery check needs a byte-exact-against-source comparison,
+    not a bare null check, and the comparison must run *before* any manifest write) — already
+    fixed and documented: `SKILL.md`'s "Same day, a Pass 4 correction" origin note records moving
+    the `get_document` confirmation ahead of the manifest write for exactly this reason.
+- **Promoted (7):**
+  - `e3b6f2a4…` (falkor-chat's `executor._assemble_messages` resends `systemPrompt` every tool-loop
+    iteration while a per-turn `CONTEXT` block gets coalesced into the prior user turn by
+    `_append_turn`, making `systemPrompt` structurally more salient) → verified against
+    `executor.py:1243-1278`; the *instance* fix (K-065/DEF-6 Mitigation D) was already in
+    `docs/HISTORY.md`, but the general mechanism wasn't documented anywhere — new
+    `falkor-chat/docs/SERVER.md` §1.9, "Message assembly: `systemPrompt` vs. per-turn `CONTEXT`".
+  - `f7a2c9e1…` (`RunResult.sessionId` is a top-level field, not nested in `fingerprint` — a naive
+    `fingerprint.sessionId` read silently returns nothing) → verified against `results.py:688`;
+    new bullet in `model-bench/AGENTS.md`'s "Load-bearing invariants", next to the sibling
+    "stored run record never persists raw reply text" bullet.
+  - `a1e6f3c2…` (mutation-test a small pure module with zero repo edits: import it, monkeypatch
+    the target function on the imported module object in-process, call the test function
+    directly, revert is automatic) → not present in `review-techniques.md` (grepped
+    `monkeypatch`/existing loading-technique sections; genuinely distinct from the HEAD-diffing
+    techniques (a)–(d) already there). New section, "Mutation-testing a small pure module without
+    ever editing the repo file". Overrode the entry's own `suggestedHome` ("prompt") to knowledge
+    base — this is a specific on-demand technique, not a rule that changes most-session behavior;
+    `analyst`'s prompt already states the source-editing guardrail this technique works around.
+  - `a1f3c9d2…` (a design doc's own prose summary of a count is a separately falsifiable claim
+    from its own table) → not present; new section, "A document's own prose summary of a count is
+    a separate claim from its own table — count the rows", cross-referenced to the existing
+    external-citation sibling technique.
+  - `e3f1a9c2…` (verify a mutation-tested checker covers its own added matching mechanism by
+    disabling that mechanism and re-running the checker's own selftest) → not present as a
+    generalized recipe (only the specific `check_content_loss.py` instance existed, itself
+    discarded above as already-documented); promoted per the entry's own suggested destination —
+    new section, "Verifying a mutation-tested checker actually covers its own signature-matching
+    mechanism", explicitly generalizing `guard-testing-techniques.md`'s docstring pattern.
+  - `a3f1c8e2…` (a citation that resolves is not the same as a citation that endorses — check the
+    cited document's actual verb/section, not just shared file names) → close in genre to the
+    existing "A 'this already exists' claim is a grep away from confirmation" section but a
+    distinct nuance (existence vs. endorsement); folded in as a new paragraph plus a fifth
+    `Origin:` instance in that section rather than a duplicate section. Overrode `suggestedHome`
+    ("prompt") to knowledge base for the same reason as `a1e6f3c2…` above.
+  - `f3a6b2d1…` (a skill rollout that points N agents at a new MCP-tool-backed capability must also
+    add that tool to each restricted `tools:` allowlist individually, or the pointer is dead for
+    that agent) → promoted exactly where the entry's own `suggestedHome` named it:
+    `skills/agent-maintenance/SKILL.md` §2, new step 3a in "Order of operations when you create or
+    edit an artifact" — this is `cobb`'s own rollout duty, not an `analyst`-facing rule, but
+    `analyst` produced the entry and this pass processes `analyst`'s queue.
+- **Kept open:** none. **Dedup/backlog:** no `analyst` backlog item opened — nothing unresolved.
+  Dispositions match `kaizen-distillation3-coordination.md` U1.
+- **Graph:** all 16 entries cleared from `kaizen_team` after this log entry was confirmed written
+  (current-shape clear: resolved this pass's own `PRODUCED` edge per entry, `otherRemaining == 0`
+  in all 16 cases so each cleared as a full `DETACH DELETE`). Final count query for
+  `agentId: 'analyst'` returned 0.
+
 ## 2026-09-18 — standing distillation pass, `analyst` chunk B (U2 of `docs/plans/kaizen-team-distillation2-coordination.md`): 6 code facts — 5 promoted (as 3 promotions: 2 merged into one new `review-techniques.md` section, 1 into `model-bench/AGENTS.md`, 2 merged into `falkor-chat/docs/SERVER.md` §1.3), 1 kept open (`model-bench/docs/BACKLOG.md`), 0 discarded
 
 - **What:** `cobb` distilled the 6 `analyst`-produced `kaizen_team` entries captured during

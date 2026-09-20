@@ -160,3 +160,25 @@ allowlist, a key whose value feeds a shell command). Worked instance:
 `opencode/agents/tank/scripts/lib.sh`'s `resolve_slug()` reads `environments.json` with
 `json.load()` + `data.get(slug)` for exactly this reason, built test-first for
 `devops-opencode-headless`.
+
+## falkor-chat's `ingest_document` MCP tool auto-supersedes on identical text+title — an ingest-then-delete probe/verification script must account for the successor document it silently creates
+
+Live-verified 2026-09-18 during `start_agent_team.sh`'s Stage 3 bring-up verification (Tier 2
+health check, K-030 Track 1; `claude/docs/plans/agent-knowledge-base-strategy3-coordination.md`
+U7). Running the same two-step probe sequence twice in a row — `ingest_document` a fixed probe
+text+title, confirm it landed, `delete_document` it — the **second** run's `ingest_document` call
+silently re-triggered `document-ingestion2`'s auto-supersede path (byte-identical-modulo-whitespace
+text+title, FR-8/9/10) against the still-live probe the **first** run had left behind (because that
+first run's own cleanup hadn't happened yet, or targeted the wrong id). `GRAPH.RO_QUERY` against the
+workspace then showed **two** `Document` nodes for one probe — the original, still `currentVersion:
+false`, and a new one carrying `autoSuperseded: true`/`supersededDocumentId` pointing at the first —
+and both needed their own explicit `delete_document` call before the workspace was actually clean
+(0 `Document` nodes left).
+
+**Consequence:** a bring-up/health-check script that unconditionally `ingest_document`s a fixed
+probe text+title, then `delete_document`s only the id that call just returned, is not idempotent
+across repeated runs and does not fully clean up after itself — a prior run's undeleted (or
+mis-targeted) probe silently becomes a second live document via auto-supersede rather than erroring.
+Verify cleanup by querying the workspace's actual `Document` count back to what it was before the
+probe (or to 0, for a dedicated probe workspace), not by trusting a single successful
+`delete_document` call on the id the last `ingest_document` handed back.

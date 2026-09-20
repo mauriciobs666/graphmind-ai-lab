@@ -111,6 +111,15 @@ A few things worth knowing:
   variable at startup) or `{file:/path/to/secret}` (reads a file). falkor-chat resolves these the
   same way OpenCode does. If the variable/file isn't there, startup fails naming exactly what was
   missing and where it was referenced.
+- **Every declared provider is validated the moment falkor-chat builds its model resolver —
+  whether or not anything actually routes to it.** This happens at real server startup and
+  identically in any script that builds the same resolver offline. A provider block left in the
+  shared file with an unresolved `{env:...}`/`{file:...}` reference fails startup by name even if
+  no default, role, or workflow step currently names that provider — including the shipped
+  example's `openai` block (`config/opencode.example.json`), whose `{env:OPENAI_API_KEY}` must
+  resolve even for a deployment that only ever calls the local `lmstudio` provider. Delete or
+  comment out a provider you're not using yet, or give it a real credential — don't leave it
+  half-declared.
 - **The `models` map under a provider is informational, not an allow-list.** You can call any
   model id your endpoint actually serves — falkor-chat doesn't check it against what's listed
   here. Only the *provider id* has to exist.

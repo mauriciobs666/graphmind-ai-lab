@@ -115,6 +115,12 @@ split reads the decimal point as a sentence end, truncating whatever span was sc
 and silently reopening the abstention-detection misclassification the span exists to prevent. A new
 same-sentence heuristic reuses that regex; a second boundary definition is a second copy of the bug.
 
+**`sessionId` sits at the top level of a stored `RunResult`, not inside `fingerprint`.** A query
+that reads `fingerprint.sessionId` to filter stored runs by session silently gets nothing — every
+record reads as if `sessionId` were absent — because the field lives on `RunResult` itself
+(`results.py:688`, populated straight from `RunResult.from_dict`'s own `d.get("sessionId")`, not
+through `Fingerprint`). Read `run.sessionId` directly.
+
 **A stored run record never persists a model's raw reply text — auditing a scorer's verdict against
 a real reply after the fact needs a fresh live call, never a read of `results/runs/*.json`.**
 `RunResult`/`ItemResult` keep only `outcome`, `scoreable`, `counts`, and a scorer-defined `detail`

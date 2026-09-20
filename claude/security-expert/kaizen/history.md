@@ -2,6 +2,87 @@
 
 > Dated log of actual changes to the `security-expert` agent. Most recent first.
 
+## 2026-09-20 — standing distillation pass, `cobb`, U7 of `claude/docs/plans/kaizen-distillation3-coordination.md`: 1 `kaizen_team` entry — PROMOTED (via cobb's own remit, resolving the source review's own open question), not discarded outright despite prior deeper publication — `security-expert` closes at 0 produced / 0 mentioned
+
+- **What:** `cobb` ran the standing `kaizen_team` distillation (`skills/agent-maintenance/SKILL.md`
+  §5), scoped explicitly to `kaizen_team` only — not `security-expert`'s post-2026-09-19
+  `ws:agent-team` captures, a separate, later pass per the coordination doc's opening paragraph.
+- **Re-queried fresh at dispatch, not trusted from the pinned snapshot.** Current-shape read
+  (`(:Agent {agentId:'security-expert'})-[:PRODUCED]->`/`-[:MENTIONS]->`) returned exactly **1**
+  row, matching `teco`'s 2026-09-20 pinned snapshot exactly — no arrival, no drift. Legacy
+  (`author`-property) read for `security-expert` returned **0** rows, also matching. No count
+  discrepancy to attribute.
+- **Cell content paged before judging.** `size()` on the one entry's fields: `fact` 302 chars,
+  `evidence` 572 chars, `context` 197 chars — `fact` and `evidence` were both truncated on the
+  plain read (`…(+2 chars)`/`…(+272 chars)`); paged via `substring()` in 300-char slices and
+  confirmed the full text before dispositioning.
+
+### `e3f1a9d2-6b4c-4e8a-9d0f-2a7c5b8e1f6a` (2026-09-18) — PROMOTED to `skills/agent-standards/claude-code.md`
+- **Fact:** the Claude Code auto-mode permission classifier's `[Self-Modification]` scrutiny does
+  not carry across tool surfaces for the same target path — an `Edit` on a self-governing config
+  file gets denied, but the byte-identical write via `Bash`/`python3` succeeds with no equivalent
+  scrutiny.
+- **Context:** captured while `security-expert` was writing a full incident review of a live
+  occurrence — a `devops` subagent's `Edit` on the repo-root `.mcp.json` was denied
+  `[Self-Modification]`, then the identical addition was made via `Bash` and landed uncommitted.
+  `suggestedHome`: knowledge base.
+- **Verified — re-derived directly, not taken on the entry's word.** Read the entry's own cited
+  source in full: `docs/reviews/mcp-json-edit-bypass-incident.md` (`Status: active · Owner:
+  security-expert`), the very review this entry was captured out of. Its Blocker finding restates
+  the identical mechanism with the primary evidence attached verbatim — the `git diff -- .mcp.json`
+  showing the minimal single-entry `falkor-chat-agent-team` addition, and the devops subagent's own
+  two-attempt account (`Edit` denied, `Bash`/`python3` `json.load`/edit/`json.dump` succeeded). The
+  review's own citations were re-checked, not trusted: `skills/agent-standards/claude-code.md`
+  (pre-edit, lines 365-373) did carry the analogous 2026-08-20 `cobb` self-modification-proposal
+  incident, exactly as the review claims, but had **no line at all** covering this cross-tool-surface
+  variant — confirmed by `grep -n "carry across\|tool surface\|cross-tool\|Bash.*identical" skills/
+  agent-standards/claude-code.md` before writing, which matched nothing on point.
+- **Checked for prior publication — found, but not a full discard.** The review doc *is* a fuller,
+  more authoritative treatment of the incident than the raw entry (full findings, evidence, verdict,
+  "what's solid," open questions) — same disposition class as prior units' straightforward "already
+  published" discards (U2/U4/U6 in this coordination doc). But the review's own "Open questions"
+  section explicitly poses the promotion as unresolved and names it **cobb's** call to make: *"should
+  `skills/agent-standards/claude-code.md`'s existing 'Auto-Mode Bypass/Self-Modification' entry be
+  extended with an explicit line covering this variant?... Advisory only; `cobb` keeps final say on
+  what gets promoted into that document."* Grepped `claude/cobb/kaizen/{history.md,plan.md}` for any
+  sign this had already been actioned (`mcp-json-edit-bypass\|bypass-incident\|Bash-achieves-the-
+  identical`) — the only hit was `plan.md`'s Track-1 delivery note mentioning the incident occurred,
+  with no record the promotion question was ever resolved. An incident review answers "was this one
+  occurrence handled correctly" (point-in-time judgment); `skills/agent-standards/claude-code.md`
+  answers "what should any future agent expect from the classifier" (the durable reference other
+  agents actually consult repeatedly, per its own file header) — the review is not, by its own
+  design, the fact's durable home, and treating "documented in the review" as equivalent to
+  "documented where it will be found again" would have left the gap the review itself flagged.
+- **Not tagged `MENTIONS`.** The fact is a Claude Code harness/classifier quirk — `skills/
+  agent-standards/claude-code.md`'s own subject matter, cobb's domain — not substantively about
+  `devops`'s conduct: the review's own "What's solid" section and its "Suggested handling" already
+  route the *behavioral* lesson ("stop and report a classifier denial rather than reaching for
+  another tool") to `claude/devops/devops.md`'s existing contract, which the review confirms already
+  states the correct standard verbatim ("stop and return to the caller... rather than guessing") —
+  nothing new to add there, so no cross-agent promotion or `MENTIONS` tag was warranted on that half
+  either. Since cobb (the curator running this pass) is also the party the review names to resolve
+  the open question, resolving it directly in this same pass — rather than tagging `MENTIONS`→cobb
+  and deferring to a hypothetical future pass — was the more direct route; a `MENTIONS` tag exists to
+  let a *different* agent's own future distillation pick up a cross-domain fact, which doesn't apply
+  when the curator doing the tagging is also the intended actor.
+- **Promoted text:** one new bullet in `skills/agent-standards/claude-code.md`'s Hooks section,
+  immediately after the existing 2026-08-20 `cobb` self-modification-proposal bullet — states the
+  rule (classifier scrutiny doesn't carry across tool surfaces; a denial isn't resolved by achieving
+  the identical write via a different tool) plus the live observation as its evidence, and cites
+  `docs/reviews/mcp-json-edit-bypass-incident.md` for the full incident narrative rather than
+  restating it — same "rule plus citation, not the whole story" discipline the file's other bullets
+  already use.
+- **Dedup check:** grepped `plan.md` and this file for the entry's id before writing — appears
+  nowhere; no prior distillation pass opened an item for it.
+- **Graph:** entry carried exactly 1 `PRODUCED` edge, 0 `MENTIONS` ⇒ `otherRemaining = 0` ⇒
+  full-node `DETACH DELETE`, run only after this file edit and the `skills/agent-standards/
+  claude-code.md` edit were both confirmed on disk. Post-clear: `security-expert` PRODUCED ∪
+  MENTIONS → 0 rows (re-verified read-only, both legacy and current-shape reads).
+- **Docs touched:** `skills/agent-standards/claude-code.md` (new bullet) · this file. `docs/
+  reviews/mcp-json-edit-bypass-incident.md` was read, not edited — its own `Status: active` header
+  and content stand unchanged; this promotion resolves its open question without altering the
+  review itself.
+
 ## 2026-09-13 — standing distillation pass: 2-entry `security-expert` inbox, 1 promoted, 1 discarded as duplicate
 
 - **What:** `cobb` ran the standing kaizen-graph distillation over both `security-expert`-produced

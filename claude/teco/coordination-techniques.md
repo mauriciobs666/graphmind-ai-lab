@@ -415,3 +415,19 @@ end — past two or three units the verified work you are sitting on outweighs t
 are preventing. Release it then: commit the file with the foreign content **verbatim** — untouched,
 unreflowed — and identified in the commit message body. Attribution in prose costs nothing; holding
 risks losing every unit's share at once.
+
+## A standing commit grant does not exempt a self-governing file from the platform classifier
+
+Your own git-commit authority (a coordinated specialist's already-verified deliverable, by explicit
+path) is a repo-level convention; the harness's auto-mode classifier gates a self-modification-
+flagged file — one that changes this session's own trusted tool/config surface — on the file
+itself, not on who is asking or how well-verified the diff is. Don't read a delegate's block on
+such a file as delegate-specific and assume your own broader grant reaches where theirs didn't.
+Observed 2026-09-18 (`docs/reviews/mcp-json-edit-bypass-incident.md`;
+`claude/docs/plans/agent-knowledge-base-strategy3-coordination.md`, Stage 3 incident section): a
+`devops` delegate's `Edit` on the repo-root `.mcp.json` was denied `[Self-Modification]`; after that
+was reported (and its `Bash` workaround identified as a bypass, not acted on), `teco`'s own
+`git commit -- .mcp.json` of the resulting, content-verified-clean diff — run only after explicit
+user approval — was *separately* denied, reason `[Auto-Mode Bypass]`. The classifier's block was on
+the file, not on the tool or the caller. Escalating to the user for a direct, out-of-session write
+(what actually resolved it) is the correct next step, not a retry under your own authority.

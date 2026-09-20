@@ -705,6 +705,21 @@ ANN, so retrieval quietly finds nothing with no error anywhere in the chain.
 Full design + rationale: `docs/plans/llm-provider-config.md` §3–§4, §7; graph design:
 `docs/plans/llm-provider-config-graph.md`; requirements: `docs/requirements/llm-provider-config.md`.
 
+### 1.9 Message assembly: `systemPrompt` vs. per-turn `CONTEXT`
+
+`executor._assemble_messages` sends a node's `systemPrompt` as the sole `role: "system"` message,
+once per node execution — but that message is **resent on every `llm.chat` call inside that
+node's own tool loop**, not sent once and left to persist across iterations. Per-run context (e.g.
+a participant's configured language) that instead reaches the model only via a `CONTEXT: …` block
+appended to the user turn gets **coalesced into the prior user turn** by `_append_turn` whenever
+the thread already ends on `user` — so on a tool-loop iteration it does not get a fresh turn of
+its own the way `systemPrompt` does. A fact that needs to stay salient on *every* reply (an
+anti-drift instruction, a standing constraint) is therefore structurally more reliable placed in
+`systemPrompt` than left solely in a per-turn `CONTEXT` block. This is why Mitigation D for
+K-065/DEF-6 (`docs/HISTORY.md`, 2026-09-18) added its anti-drift sentence to `salesperson@v8`'s
+`systemPrompt` rather than strengthening the `CONTEXT` block an earlier diagnostic spike had found
+to be a weak signal.
+
 ---
 
 ## 2. MCP transport — the agent front door

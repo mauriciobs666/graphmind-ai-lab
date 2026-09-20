@@ -2,6 +2,97 @@
 
 > Dated log of actual changes to the `coder` agent. Most recent first.
 
+## 2026-09-20 — standing distillation pass, `cobb`, U3 of `claude/docs/plans/kaizen-distillation3-coordination.md`: the 1 remaining `coder` current-shape entry — PROMOTED into `claude/tdd-engineer/test-design-techniques.md`, 0 discarded, 0 kept open — `coder` closes at 0 produced / 0 mentioned
+
+- **What:** `cobb` ran the standing `kaizen_team` distillation (`skills/agent-maintenance/SKILL.md`
+  §5), scoped explicitly to `kaizen_team` only (not `coder`'s post-2026-09-19 `ws:agent-team`
+  captures — separate, later pass per the coordination doc's opening paragraph). Re-queried fresh
+  at dispatch, not trusted from the pinned snapshot: current-shape read (`(:Agent
+  {agentId:'coder'})-[:PRODUCED]->`/`-[:MENTIONS]->`) returned exactly **1** row, matching the
+  brief's pinned count exactly (no arrival, no drift); legacy (`author`-property) read for
+  `coder` returned **0** rows, also matching. No count discrepancy to attribute.
+- **The entry:** `a1c4e6b2-3f7d-4b1a-9c2e-7d8f6a1b0c3e` (dated 2026-09-18, `suggestedHome:
+  knowledge base`). Both `fact` (427 chars) and `evidence` (487 chars) exceeded the `cypher` MCP
+  tool's 300-char cut and were paged whole via `substring` cross-checked against `size()` before
+  judging.
+  - **Fact:** a hand-derived "single shared query, nullable param" mutant can accidentally fix its
+    `CASE` guard on the `OPTIONAL MATCH` result (`pa IS NOT NULL`) instead of the parameter
+    (`$producedBy IS NOT NULL`) — the former silently reintroduces an actor-fallback bug distinct
+    from the perf regression under test, and fails 4 unrelated correctness tests instead of only
+    reproducing the intended query-plan (index-scan vs. label-scan) regression.
+  - **Evidence:** falkor-chat/server — mutating `create_document_with_auto_supersede` to the design
+    note's rejected single-query alternative first failed
+    `test_create_document_with_auto_supersede_produced_by_missing_agent_nothing_written` + 3 others
+    when gated on `pa IS NOT NULL`; regating on `$producedBy IS NOT NULL` made all 768 correctness
+    tests pass while a live `EXPLAIN` still showed `Node By Index Scan` → `Filter`+`Node By Label
+    Scan` for the null-vs-bound param, isolating the intended regression cleanly.
+  - **Context:** `agent-knowledge-base-strategy` Track 1 Stage 1 (`produced_by` attribution)
+    mutation-testing pass, mutant (b): reproducing the design note's named rejected alternative to
+    prove the two-branch design is load-bearing.
+- **Verified — re-derived directly, not taken on the entry's own wording.** Read
+  `falkor-chat/docs/plans/agent-team-ingestion-graph.md` §2.2/§2.3 (`agent-team-ingestion-graph.md`
+  is `graph-dba`'s design note this entry was captured while mutation-testing against): it states
+  the rejected "single shared query, possibly-`NULL` `$producedBy` parameter" alternative and the
+  live `EXPLAIN` proof of the query-plan regression it was rejected for (`Node By Index Scan` when
+  `$producedBy` is bound, `Node By Label Scan` + `Filter` when `NULL`) — the exact mechanism the
+  entry's `evidence` cites. Located the shipped method at
+  `falkor-chat/server/falkorchat/repository.py:1806` (`create_document_with_auto_supersede`),
+  confirming the entry's own citation resolves to real code.
+- **Checked for prior publication before promoting (§5 step 2's sibling-doc grep).** Three
+  candidate homes checked, none republishing the *entry's own* fact in equal or greater depth:
+  - `falkor-chat/docs/plans/agent-team-ingestion-graph.md` §2.2/§2.3 — documents the rejected
+    design and the index-vs-label-scan mechanism the mutant rests on, but never mentions the
+    mutation-testing construction hazard (guarding on `pa IS NOT NULL` vs. `$producedBy IS NOT
+    NULL`) — this is the underlying quirk, not the entry's fact.
+  - `claude/graph-dba/falkordb-quirks.md` (grepped for `producedBy`/`index-scan`/`label-scan`,
+    read the hit whole at the file's own current line numbers): carries a 2026-09-18 entry
+    documenting the same bare-pattern-property-match index/label-scan mechanism and the two-branch
+    remedy — the *quirk*, again, not the mutation-testing pitfall of reconstructing it by hand.
+  - `falkor-chat/docs/reviews/agent-team-ingestion-produced-by.md` — its "Mutation-testing sanity
+    checks" finding explicitly **names this entry by id** ("the `kaizen_team` entry (`entryId
+    a1c4e6b2…`, dated 2026-09-18, authored `coder`) matches the claimed reconstruction trap almost
+    verbatim") and confirms the `falkordb-quirks.md` entry corroborates the underlying quirk — but
+    the review only *attests to* the entry's accuracy, it never republishes the reconstruction
+    trap's content; its own worked mutation example (finding (a)) is a different mutant entirely
+    (deleting the `AgentNotFoundError` raise). Not a duplicate.
+  - `claude/tdd-engineer/tdd-engineer.md:54` carries the adjacent, more general principle ("when a
+    plan explicitly rejected an alternative, the mutant is that alternative") — genuinely the
+    sibling rule this entry refines at the *construction* step, not an existing statement of the
+    entry's own fact.
+  - **Conclusion: not previously published anywhere in equal or greater depth — promote.**
+- **Routing.** `suggestedHome` said `knowledge base`; agreed. `coder` has no knowledge base of its
+  own (unchanged from every prior pass), and the fact is a mutation-testing construction technique,
+  not a fact about falkor-chat's code per se (that half is already in the design note and the
+  quirks file) — home is `tdd-engineer`'s domain, per the same "mutation-testing doctrine lives in
+  `tdd-engineer`, not `coder`" precedent this file already established for entry `4e9b1c07…`
+  (2026-09-09). Within `tdd-engineer`'s two candidate files, routed to the **on-demand**
+  `test-design-techniques.md` (situational, narrow, FalkorDB-query-specific) rather than the
+  always-loaded `tdd-engineer.md` — the always-loaded prompt already carries the general sibling
+  rule at line 54; this refinement is rare enough in scope that inlining it there would be
+  prompt-waste for the common session. **Promoted:** new section, "A hand-built 'rejected
+  alternative' mutant can reconstruct a different bug than the one being proven load-bearing," in
+  `claude/tdd-engineer/test-design-techniques.md`, explicitly cross-referencing `tdd-engineer.md`'s
+  resident rule as the one it refines, citing `falkor-chat/docs/plans/
+  agent-team-ingestion-graph.md` §2.2/§2.3 for the design-note mechanism. Also logged in
+  `claude/tdd-engineer/kaizen/history.md` per the cross-agent-KB-promotion convention.
+- **`coder.md` untouched** — no entry warranted the always-loaded-prompt bar for `coder` itself.
+- **0 kept open, 0 `MENTIONS` tags.** The entry is a direct-KB-write (an existing destination file,
+  `tdd-engineer`'s own on-demand KB), dispositioned directly per the established precedent that a
+  single-target technical/methodology fact with a clear existing home is promoted directly rather
+  than deferred via `MENTIONS` — same shape as this file's own `7517488c…`→`graph-dba` precedent
+  (2026-09-17).
+- **Graph ops.** Edge-count read immediately before clearing:
+  `MATCH (k:KaizenEntry {entryId:'a1c4e6b2-3f7d-4b1a-9c2e-7d8f6a1b0c3e'}) OPTIONAL MATCH
+  (:Agent)-[p:PRODUCED]->(k) OPTIONAL MATCH (k)-[m:MENTIONS]->(:Agent) RETURN
+  count(DISTINCT p), count(DISTINCT m)` → `producedEdges=1, mentionEdges=0` ⇒ `otherRemaining =
+  1 + 0 − 1 = 0` ⇒ full-node `DETACH DELETE`, run only after this history entry and the
+  `tdd-engineer/kaizen/history.md` cross-reference were confirmed written. Post-clear re-query for
+  `agentId: 'coder'` (`PRODUCED` ∪ `MENTIONS`): **0 rows.**
+- **Not touched:** `claude/docs/plans/kaizen-distillation3-coordination.md` (`teco`'s ledger, read
+  only for scope/brief).
+- **Why:** unit U3 of `claude/docs/plans/kaizen-distillation3-coordination.md` (`teco`-owned
+  ledger, not touched here).
+
 ## 2026-09-18 — `kaizen_team` distillation pass 2, U7: 1 `coder` entry (model-bench/AGENTS.md word-count creep across stage closes) — DISCARDED, already covered by root `AGENTS.md`'s existing compaction convention
 
 - **What:** `cobb` ran `agent-maintenance` §5 over the one `coder`-produced `kaizen_team` entry

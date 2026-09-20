@@ -2,6 +2,60 @@
 
 > Dated log of actual changes to the `architect` agent. Most recent first.
 
+## 2026-09-20 — kaizen distillation pass 3, `architect`'s 2-entry inbox (U2 of `claude/docs/plans/kaizen-distillation3-coordination.md`): 0 promoted, 2 discarded as already published more deeply, 0 kept open — **`architect` closes at 0 produced / 0 mentioned**
+
+- **What:** `cobb` ran the standing `kaizen_team` distillation (`skills/agent-maintenance/SKILL.md`
+  §5) over `architect`'s current-shape inbox. Re-queried fresh at dispatch: exactly 2 current-shape
+  `PRODUCED` entries (both dated 2026-09-19), 0 legacy `author` entries — matching the count the
+  coordination brief pinned. One cell (`b3f0b9b1…`'s `context`) exceeded `CYPHER_MCP_MAX_CELL` and
+  was paged whole with `substring` (346 chars, read in two 300-char slices); every other cell read
+  under the cutoff on the plain read.
+- **`b3f0b9b1-6b3a-4c1a-8b1e-9c1a2d3e4f5a` (falkor-chat `modelconfig.ModelGateway.resolve()`/
+  `.embedder()` only consults the per-workspace hard-cap override when `ws=`/`overrides=` is
+  passed; `embedder(kind, requested=ref)` with no `ws=` bypasses the workspace override entirely) —
+  DISCARDED, already published more deeply, verbatim in substance.** Re-derived directly against
+  `falkor-chat/server/falkorchat/modelconfig.py`: `_workspace_override_ref` (`:708-727`) returns
+  `None` whenever both `overrides` is `None` and `ws` is `None`; `resolve()` (`:729-755`) then falls
+  straight through to `requested or self._overlay.default_for(kind)` — confirms the fact exactly.
+  Grepped `falkor-chat/docs/plans/embedding-migration.md` before promoting (per §5 step 2's
+  sibling-doc check) and found the identical mechanism already stated there in more detail and
+  under its own name, "the hard-cap trap": §2.3 (`:80-88`) states the same precedence and the same
+  no-`ws=`-bypass condition; §3.2 (`:309-316`) names it "the hard-cap trap" and spells out the exact
+  same migration-script consequence the entry's `context` field describes (a re-embed step must
+  call `gateway.embedder("embedding", requested=targetRef)` with no `ws=`/`overrides=`, or the
+  workspace's still-old `embeddingModelOverride` would silently win over the new target). The
+  entry was captured **while `architect` was writing this exact plan** (`context`: "Designing
+  falkor-chat/docs/plans/embedding-migration.md"), so this is the established
+  captured-mid-writing-the-document-that-already-states-it-more-deeply pattern — nothing left to
+  promote, project docs already the fuller, more authoritative treatment.
+- **`c9c1b0d0-6b1a-4e0b-9b1e-9c9a0a1d6a11` (model-bench `RunConfig.referenceKey`/`run --reference`
+  is accepted by the CLI and stored but read nowhere in `runner.py` — no run-time effect) —
+  DISCARDED, already published more deeply, verbatim in substance, and still true today.**
+  Re-derived live: `grep -rn referenceKey model-bench/` still returns exactly the same three hits
+  as the entry's own evidence — the field declaration (`runner.py:127`), the CLI assignment
+  (`cli.py:526`), and one unrelated test default (`test_runner.py:809`); nothing in `run_pack`
+  consults it. Grepped `model-bench/docs/` before promoting: the identical fact, word for
+  mechanism, is already stated in `model-bench/docs/plans/small-model-catalog-sweep.md:58-65,251`
+  ("`runner.RunConfig.referenceKey` … is accepted by the CLI but **read nowhere**" — the same grep,
+  the same two-hit count, and the explicit design consequence that FR-8's reference-anchored family
+  is wired through a new `rank --reference` CLI flag instead, never through the inert field) — and
+  independently re-confirmed twice more, in `model-bench/docs/reviews/small-model-catalog-sweep-ml.md:384-385`
+  and `model-bench/docs/reviews/small-model-catalog-sweep.md:190-191`. `small-model-catalog-sweep`
+  is gated/approved and delivered (per recent `model-bench/docs/HISTORY.md` entries), so this fact
+  is both stale-checked (still true) and already recorded at its point of use — no home left to
+  fill.
+- **Graph ops (per entry, count → clear, one query per `entryId`):** both entries edge-counted
+  individually immediately before clearing (`OPTIONAL MATCH` + `count(DISTINCT …)`, never
+  `exists()`): `producedEdges=1, mentionEdges=0` each → `otherRemaining = 0` → full-node
+  `DETACH DELETE` for both. No `MENTIONS` tag added — neither entry is substantively about a
+  different agent (both are code facts about falkor-chat/model-bench, already fully covered in
+  each component's own docs). Post-clear re-query: `architect` current-shape `PRODUCED`/`MENTIONS`
+  → 0 rows.
+- **Docs touched:** `claude/architect/kaizen/history.md` only — nothing promoted, `plan.md`
+  untouched (nothing kept open, no new idea from this pass).
+- **Why:** unit U2 of `claude/docs/plans/kaizen-distillation3-coordination.md` (`teco`-owned
+  ledger, not touched here).
+
 ## 2026-09-18 — kaizen distillation pass 2, `architect`'s 2-entry inbox (U3 of `docs/plans/kaizen-team-distillation2-coordination.md`): 1 promoted as one sentence in `falkor-chat/docs/SERVER.md` §1.3, 1 discarded as fixed-and-recorded, 0 kept open
 
 - **What:** `cobb` ran the standing `kaizen_team` distillation (`skills/agent-maintenance/SKILL.md`

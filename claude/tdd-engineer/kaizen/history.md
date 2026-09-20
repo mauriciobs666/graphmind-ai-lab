@@ -2,6 +2,96 @@
 
 > Dated log of actual changes to the `tdd-engineer` agent. Most recent first.
 
+## 2026-09-20 — one self-produced `kaizen_team` entry discarded as already covered in greater depth, including the operational guidance it would have recommended (U8 of `claude/docs/plans/kaizen-distillation3-coordination.md`)
+
+- **What:** `cobb` ran the standing `agent-maintenance` §5 distillation over `tdd-engineer`'s
+  `kaizen_team` inbox — U8 of the pass-3 coordination. **Re-verified fresh, not trusted from the
+  coordination doc's pinned snapshot:** current-shape read (`MATCH (a:Agent
+  {agentId:'tdd-engineer'})` + `PRODUCED`/`MENTIONS` union) returned exactly **1** entry; legacy
+  `author`-property read (`MATCH (e:KaizenEntry {author:'tdd-engineer'})`) returned **0**. Matches
+  the pinned count of 1 exactly — unchanged since dispatch.
+- **The entry:** `a1e5c9d2-4f3b-4e6a-9c1d-7f2b6a8e0d31` (2026-09-18, `suggestedHome: unsure`,
+  `fact` 256 chars / `evidence` 277 chars / `context` 93 chars — all under the 300-char cell-truncation
+  threshold, confirmed via `size()`, so read whole on the first pull, no paging needed) — editing
+  `salesperson/README.md` via the `Edit` tool was denied by the harness permission system with no
+  explanation, while an identical-shape `Edit` on `falkor-chat/AGENTS.md` and `falkor-chat/README.md`
+  succeeded in the same session; captured mid the K-065 Mitigation D `v8` `SALESPERSON_DEF` bump
+  task (`falkor-chat/docs/HISTORY.md`, 2026-09-18, "Mitigation D implemented and statically
+  reviewed").
+- **Re-derivation attempted, inconclusive on the specific instance — not taken on the entry's own
+  word.** First checked whether `tdd-engineer`'s own `PreToolUse` write guard could explain an
+  asymmetric denial between the two paths: read
+  `claude/tdd-engineer/hooks/guard-tdd-broad-write.sh` and its shared core
+  `claude/scripts/guard-broad-write.sh` — neither `salesperson/README.md` nor `falkor-chat/README.md`
+  matches any of the guard's deny-list globs (`docs/plans/*`, `docs/reviews/*`,
+  `docs/requirements/*`, `docs/manuals/*`, `docs/test-plans/*`, `docs/test-reports/*`,
+  `claude/*/*.md`, `claude/README.md`/`AGENTS.md`/`CLAUDE.md`, `skills/agent-maintenance/*`,
+  `skills/agent-standards/*`, `cypher-mcp/README.md`, `docs/BACKLOG.md`), so this repo's own hook
+  cannot be the mechanism — consistent with the entry's own framing (an unexplained *harness*
+  denial, not a hook `"ask"` escalation, which would have surfaced reason text). Then searched this
+  machine's session transcripts (`~/.claude/projects/-home-mauricio-prg-graphmind-ai-lab/*.jsonl`)
+  for the exact denial text ("Permission for this tool use was denied") co-occurring with
+  `salesperson/README.md`, across every 2026-09-18-dated file and every file mentioning
+  `salesperson/README.md` at all (57 files checked) — **no matching transcript found.** Delegated
+  subagent tool-call/tool-result streams are not reliably reconstructable from the parent
+  coordinator's own `.jsonl` (only its hand-back text survives there), so this is inconclusive
+  evidence, not a refutation — consistent with the same "1418-line diff" precedent
+  (2026-09-16 entry, below) where a specific cited detail had no corroborating trace either.
+- **Discarded as already published in materially greater depth — the general lesson this instance
+  would teach, and the exact operational guidance that follows from it, are both already in
+  `skills/agent-standards/claude-code.md`'s "A classifier denial is an *event*, not a *state*"
+  entry (verified by direct read, that file's Hooks section):** a `seed_salesperson.sh` Bash
+  invocation was refused once and succeeded later in the same session with no settings change,
+  while two sibling scripts (`seed_workflows.sh`, `seed_catalog.sh`) passed at the same moment the
+  first was refused — the identical *shape* this entry reports (one path denied, a sibling path
+  in the same session unaffected, no settings-rule explanation). That entry's own prescribed
+  response — *"never convert one denial into a documented standing blocker that the user and later
+  sessions plan around... escalate the specific still-denied command, not the class"* — is exactly
+  the guidance a promotion of this new entry would have to restate, and restating it a second time
+  under a second file-pair instance adds no new decision rule. The one genuinely open question —
+  whether this also holds for the `Edit`/`Write` tool specifically, since that same file elsewhere
+  documents `Write`/`Edit` and `Bash` diverging under background dispatch (the 2026-09-01 entry,
+  "the gap is specific to file-editing tools, not permission/mode inheritance in general") — is a
+  real gap, but this entry's own unconfirmable specifics (an untraceable exact quote, an
+  unlocatable session) are not a sound instance to close it with; a future `Edit`-tool denial,
+  caught with its session transcript intact, is the fact that should fill it, not this one.
+- **No `MENTIONS` tag** — the fact is squarely Claude Code harness/permission-classifier behavior,
+  `cobb`'s own domain (`skills/agent-standards/claude-code.md`); `cobb` is the one distilling it
+  right now, not a future agent's inbox to route into, so no cross-agent tag applies (same
+  reasoning this file's 2026-09-16 entry gives for FalkorDB-engine facts routed directly rather
+  than tagged).
+- **Graph:** producer-write shape (real `:Agent`/`PRODUCED` edge, post-M8). Edge count immediately
+  before clearing: 1 `PRODUCED`, 0 `MENTIONS` → `otherRemaining = 0` → full-node `DETACH DELETE`,
+  same shape as a legacy clear.
+- **Plan items:** none opened — the open half (does this also happen on `Edit`, not just `Bash`) is
+  not independently actionable from this entry alone (no reliable repro, and the destination
+  document's own doctrine already warns against building a standing investigation from one denial
+  instance); a future, independently-corroborated `Edit`-tool instance is the right trigger to
+  reopen it, not a backlog item pinned to this now-cleared entry.
+
+## 2026-09-20 — cross-agent promotion from `coder`'s `kaizen_team` entry: new `test-design-techniques.md` section on a mutation-construction hazard (U3 of `claude/docs/plans/kaizen-distillation3-coordination.md`)
+
+- **What:** `cobb`, distilling `coder`'s `kaizen_team` inbox (full detail in
+  `claude/coder/kaizen/history.md`, 2026-09-20), promoted `coder`-produced entry `a1c4e6b2…`
+  (2026-09-18) into `claude/tdd-engineer/test-design-techniques.md` as a new section, "A hand-built
+  'rejected alternative' mutant can reconstruct a different bug than the one being proven
+  load-bearing" — a mutation-testing construction pitfall found while mutation-testing falkor-chat's
+  `produced_by`-attribution design (`agent-knowledge-base-strategy` Track 1 Stage 1): guarding a
+  hand-reconstructed "rejected alternative" mutant on the wrong variable (an `OPTIONAL MATCH`-bound
+  node instead of the query parameter itself) silently builds a *different* bug than the one the
+  design note actually rejected, and the correctness suite reacting to it is not evidence the real
+  design decision is load-bearing.
+- **Why here, not `coder`'s own artifacts:** this is a refinement of `tdd-engineer.md:54`'s own
+  resident rule ("when a plan explicitly rejected an alternative, the mutant is that alternative")
+  at the construction step — mutation-testing doctrine lives in `tdd-engineer`'s domain per this
+  file's and `coder/kaizen/history.md`'s established precedent (2026-09-09, entry `4e9b1c07…`).
+  Routed to the on-demand `test-design-techniques.md` rather than the always-loaded prompt: narrow,
+  situational, FalkorDB-query-specific — the always-loaded file already states the general sibling
+  rule, and inlining this refinement there would pay a token cost most sessions never need.
+- **Files touched:** `claude/tdd-engineer/test-design-techniques.md` (+1 section, no reflow of
+  existing sections) · this file · `claude/coder/kaizen/history.md` (source disposition).
+- **Plan items:** none opened — direct promotion, nothing left open.
+
 ## 2026-09-18 — one self-produced `kaizen_team` entry discarded as superseded by the very fix chain it was captured mid-writing (U6 of the kaizen-team distillation pass 2)
 
 - **The entry:** `a1f3c2e4-7b6d-4e9a-9c1f-2d5b8a6e4f10` (2026-09-17, `suggestedHome: project

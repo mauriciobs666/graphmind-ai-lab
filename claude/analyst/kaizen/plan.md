@@ -36,6 +36,14 @@
 - **Blocked on:** nothing, but it is the analyst-side analogue of `K-016` progressive disclosure and deliberately out of scope for the prompt-waste plan (its finding 6 routes floor-bound files here rather than to cutting rules to reach a number).
 
 ## Parking lot / ideas
+- **No `analyst` backlog item opened by the 2026-09-20 sweep (U1 of
+  `docs/plans/kaizen-distillation3-coordination.md`, all 16 remaining `analyst` `kaizen_team`
+  entries).** 7 promoted, 9 discarded as already documented elsewhere (verified, not just cited);
+  nothing kept open, so nothing needs a `K-`number. Dedup check run on all 16 `entryId`s — none
+  appears anywhere in this file. Dispositions: `kaizen/history.md`, 2026-09-20. This sweep also
+  drains `analyst`'s queue in `kaizen_team` to zero — see that history entry for the graph-clear
+  confirmation; `analyst`'s learnings capture moved to `ws:agent-team` team-wide since 2026-09-19,
+  so no further entries are expected here.
 - **No `analyst` backlog item opened by U2 of the 2026-09-18 sweep (6 code facts).** Five promoted
   (two merged into `review-techniques.md`, one into `model-bench/AGENTS.md`, two merged into
   `falkor-chat/docs/SERVER.md` §1.3); the one kept-open item — `validate_pack`'s

@@ -28,6 +28,7 @@
 | K-031 | 2026-09-10 | medium | 🔵 | **Shared-working-tree commit knowledge is fragmented by *audience*, not by topic — and the split leaks.** Five statements now cover it: `claude/AGENTS.md`'s atomicity paragraph (index race, path-limited remedy, and — U44 — the unconditional index-ignored rule), its universal interactive-mode grant, `teco.md`'s grant bullet (path-limited form + the U43 disjointness condition), `teco.md`'s new holding-cost bullet (U44), and `teco.md`'s grant-scoping bullet. **Within a `teco` session the set is coherent** — the two `teco.md` bullets are adjacent and cite `claude/AGENTS.md` twice by section title. **For every other agent it is not:** `claude/AGENTS.md` grants all twelve agents path-limited committing into this shared tree and gives them the index race, but the two facts that bound the grant — *path-limiting protects nobody where the paths are not disjoint*, and *holding a shared file out has a rising cost with no natural end* — exist **only** in `teco`'s prompt, and nothing in `claude/AGENTS.md` points at them. Recommended home: the `claude/AGENTS.md` atomicity paragraph, because the grant that creates the hazard is already stated there for everyone. **Cost, and why it is not free either way:** moving prose *into* the always-loaded context file makes eleven other agents pay tokens for it every session (~+100 w on a file already 53 past its smell, forcing the K-032 trim first), while leaving it in `teco.md` keeps the cost narrow and leaves the other agents granted-but-uninformed. The deciding question is empirical and unmeasured: **how often does a non-`teco` agent actually commit into this tree under the interactive-mode grant?** Measure that before moving anything. Not performed in U44 by instruction. |
 | K-033 | 2026-09-13 | medium | 🔵 | **Corrected 2026-09-16** (`docs/reviews/commit-granularity.md` finding): the original word-count claim materially understated the 2026-09-13 growth. Independently re-measured (`git show 320f682^:<path> \| wc -w` vs. `git show 320f682:<path> \| wc -w`): `claude/AGENTS.md` **2,783→3,074 (+291**, not the originally-claimed +33 — ~9x), `teco.md` **10,765→10,899 (+134**, not ~450), `tico.md` **5,623→5,809 (+186**, close to the originally-claimed ~250). `claude/AGENTS.md` now sits 574 words over root `AGENTS.md`'s own ~2,500-word smell line — a real, not marginal, overage. Priority raised low→medium on the corrected figures. |
 | K-032 | 2026-09-10 | low | 🔵 | **`claude/AGENTS.md`'s roster enumerates each agent's knowledge-base *topics*, duplicating `claude/README.md`, and the two have now measurably diverged.** `AGENTS.md:37-41` lists `guard-testing-techniques.md` as *coverage probe vs. mutation test, the two axes of a hand-written resolver, the docstring-states-more-than-the-body defect*; `README.md`'s parallel entry carries those **plus** the probe/oracle split U43 added. **The divergence is not the defect — the enumeration is.** A context file is always loaded in full, `README.md` is the catalog of record, and no agent routes to another agent's knowledge base (routing runs on the injected `description`), so the topic lists buy nothing and create a standing two-place update duty on the copy that rots unnoticed. **Recommended fix: do not add the missing topic — delete the enumerations**, leaving the roster to name each KB and point at `README.md` (~35 words back on a file 53 past its smell, and it retires the duty). Same judgement applies to the six other roster entries carrying topic lists. **Deliberately not fixed silently in U44**; U44 likewise added no `README.md` entry because it created **zero** new sections anywhere. Carries the K-031 dependency: this trim is what makes room for that consolidation. |
+| K-053 | 2026-09-20 | low | 🔵 | `agent-maintenance` §5 doesn't warn a reviewer that `0 PRODUCED`/live `MENTIONS` on a post-M8 node can be a correctly-functioning kept-open state, not a write-path defect |
 | K-019 | 2026-08-21 | **high — filed upstream** | 🔵 | **Systemic, now confirmed matcher-agnostic too. `PreToolUse` "ask" hooks do not reliably pause execution in this session under Auto Mode, on either `Bash` or `Write`/`Edit`, regardless of hook source or execution context.** Four independent, isolated live tests, 2026-08-21, Claude Code 2.1.238, all under Auto Mode: (1) `graph-dba`'s own frontmatter `Bash` hook, Task-dispatched with `subagent_type` explicitly correct — didn't fire. (2) The identical guard mirrored as a session-wide `.claude/settings.local.json` `Bash` hook, run from `cobb`'s own **main session** — didn't fire. (3) Same test repeated after the user explicitly reloaded hook config via `/hooks` (visibly listed as registered, `[Local] Bash — 1 hook`) — still didn't fire. (4) **`cobb`'s own frontmatter `Write`/`Edit` hook** (`guard-cobb-topic-writes.sh`) — a `Write` to a path plainly outside cobb's allowlist (`docs/_hook_test_k019_scratch.md`) went through with zero interruption; re-fed the exact real payload to the script directly afterward and confirmed it correctly returns `ask` for that path. **Every test used a real, disposable payload (scratch graph or scratch file, immediately cleaned up) and independently pipe-test-confirmed correct hook logic** — ruling out `subagent_type` omission, stale config, hook-not-registered, and matcher-specific quirks as explanations. **Working hypothesis:** Auto Mode's classifier layer silently resolves/overrides a correctly-emitted `ask` decision before a human ever sees it, across both tool matchers tested. **Filed upstream 2026-08-21** via `/feedback` (user-submitted, confirmed "Feedback / bug report submitted") with the 3-test Bash repro; the 4th (Write/Edit) test landed after filing, not yet included in a follow-up report. **Practical consequence, effective immediately: every "harness-enforced" Guardrails claim across every guarded agent in this team — all three destructive-ops guards, all eight doc-write allow-list guards, the one broad-write deny-list guard — is currently unverified, and actively disconfirmed on the two mechanisms tested, under Auto Mode, in every execution context tried.** Not yet tested: the Write/Edit + Task-dispatched-subagent combination specifically (all 4 tests covered 3 of the 4 matcher×context cells) — very likely shares the gap given the pattern, not confirmed. **Next steps:** (1) monitor for an Anthropic response to the filed report; (2) treat this as the standing state of the team's enforcement model — Auto Mode being off is the only known workaround, untested/not decided; (3) fill the last untested cell (Write/Edit, subagent-dispatched) if a clean answer is ever needed before Anthropic responds. |
 
 ### K-001 — Re-verify standards against live docs
@@ -652,8 +653,43 @@ them, and rewriting a routing `description` has a behavioural surface for no ben
   not a same-session `Agent` dispatch, and the probe method used here (attempt a real call, not a
   self-reported tool list — the self-report is separately unreliable, see the Grep/Glob miss)
   should be named as the right technique either way.
-- **Notes:** not yet reproduced a second time; filed rather than promoted on a single incident,
-  per the standing "don't write a team-wide rule from one instance" discipline. Test document
+- **Notes:** not yet reproduced a second time on the *original* shape (a subagent spawning a
+  nested grandchild to verify its own edit); filed rather than promoted on a single incident, per
+  the standing "don't write a team-wide rule from one instance" discipline. Test document
   `38c4883cea374065866755616ce7edc9` (the control probe's real write) cleaned up via
   `delete_document` immediately after use — no leftover artifact in `ws:agent-team`.
+- **2026-09-20 (`kaizen_team` distillation pass 3, U9, teco's own entry) — a contrasting
+  corroboration, not a reproduction: refines the boundary to nesting depth.** `teco`, dispatching
+  from its own top-level (unchanged) session right after the same `cobb` subagent above had
+  completed its `security-expert.md` edit, sent a *fresh* `security-expert` probe that **did** see
+  and successfully call the new tool — the opposite outcome from the nested-grandchild case this
+  item describes. Promoted as a caveat on the matching `skills/agent-standards/claude-code.md`
+  bullet (this file's own destination for K-052 once promoted): the failure mode looks like a
+  subagent verifying its own edit via a nested spawn within its own session, not "the session that
+  made the edit" as a whole — a top-level coordinator's post-edit dispatch is a different case,
+  corroborated once. Still not enough to close this item or soften its "fresh session is the safe
+  method" conclusion; raises the bar for what "reproduced" should mean here — the next repro
+  attempt should test the nested-grandchild shape specifically, not just any same-session dispatch.
+
+### K-053 — Warn a future reviewer before "write-path defect" becomes the reflex read of a partial-edge node
+
+- **Status:** 🔵 proposed
+- **Priority:** low
+- **Origin:** U10 (`claude/docs/plans/kaizen-distillation3-coordination.md`), 2026-09-20 — see
+  `history.md`. The coordination doc's own "orphan" framing for entry `e1a6c4d2…` turned out, on
+  investigation, to be exactly the shape SKILL.md §5 step 5's partial-edge-resolve branch produces
+  on purpose (`data-scientist`'s U14, 2026-09-07, resolved the entry's `PRODUCED` edge while
+  deliberately leaving it alive on `MENTIONS → tico`), not a `cypher-mcp` defect.
+- **Rationale:** a bare `0 PRODUCED`-edge, non-legacy (`author IS NULL`) node is indistinguishable,
+  from its own shape alone, between "never had a producer" (a genuine write-path anomaly) and "had
+  its producer edge deliberately resolved as part of an earlier kept-open disposition" (working as
+  designed). Only the mentioned/producing agent's own `kaizen/history.md` settles which — and
+  nothing in §5 currently tells a future reviewer to check there before reaching for the defect
+  hypothesis.
+- **Proposed change:** one sentence in §5 step 5, near the partial-edge-resolve explanation: before
+  treating a `0 PRODUCED`/live-`MENTIONS` node as anomalous, check the mentioned agent's
+  `kaizen/history.md` for a prior kept-open disposition of that `entryId` — the shape alone cannot
+  tell the two cases apart.
+- **Notes:** low-priority documentation polish, not a defect fix — no `cypher-mcp` backlog item
+  was warranted this time (contrast K-020/K-021, both confirmed against live code).
 

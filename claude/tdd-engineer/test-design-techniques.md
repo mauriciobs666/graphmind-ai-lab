@@ -73,3 +73,23 @@ A consumer that re-validates the result before acting and a consumer that acts o
 not share a tolerance/safety contract, however identical their inputs appear — an overly permissive
 shared parser can silently widen the *acting* consumer's exposure. Test each caller from its own
 risk profile, not the shared implementation's.
+
+## A hand-built "rejected alternative" mutant can reconstruct a different bug than the one being proven load-bearing
+
+Refines `tdd-engineer.md`'s own "when a plan explicitly rejected an alternative, the mutant is that
+alternative" rule at the construction step: getting the reconstruction subtly wrong doesn't fail
+loud — it silently builds a *third* thing, and the correctness suite reacts to that instead. Worked
+case: a rejected design was folding two
+ingestor-resolution branches into one shared query text carrying a possibly-`NULL` parameter —
+rejected for a query-plan regression, not a correctness one (the design note proves it with a live
+`EXPLAIN`: `Node By Index Scan` when the parameter carries a value, `Node By Label Scan` + `Filter`
+when it's `NULL`; `falkor-chat/docs/plans/agent-team-ingestion-graph.md` §2.2/§2.3). Hand-reconstructing
+that single-query shape by gating the merged `CASE`/`WITH` on the `OPTIONAL MATCH`-bound variable
+(`pa IS NOT NULL`) instead of on the parameter itself (`$producedBy IS NOT NULL`) looks like the same
+mutant but silently reintroduces a different, unrelated bug — an actor-fallback regression — and
+reddens several correctness tests instead of leaving correctness alone. That isn't evidence the
+design decision is load-bearing; it's evidence the mutant is wrong. Diagnose which mutant you
+actually built by the mechanism the design note itself used to justify the rejection, not by which
+tests go red: verify the *intended* regression directly (here, a live `EXPLAIN` on the mutated query
+showing the plan degradation) with the full correctness suite still green. A mutant that reddens
+correctness tests instead needs fixing before it proves anything.

@@ -2,6 +2,69 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-09-20 — Anomaly investigated and resolved: the "orphaned producer" entry was a correctly-functioning kept-open node, not a `cypher-mcp` defect
+
+U10 (last unit) of `claude/docs/plans/kaizen-distillation3-coordination.md`. The coordination
+doc's "One anomaly found at open" paragraph flagged `kaizen_team` entry
+`e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e` as having "no `PRODUCED` edge and no `author` property at
+all — orphaned producer identity" and floated "possibly a `cypher-mcp` write-path defect" as the
+leading hypothesis, worth investigating before dispositioning the fact and clearing the node.
+
+- **Verified the raw shape first, fresh.** `OPTIONAL MATCH (:Agent)-[p:PRODUCED]->(k)` /
+  `OPTIONAL MATCH (k)-[m:MENTIONS]->(:Agent)` against the entry: `producedEdges=0`,
+  `mentionEdges=1` (→ `tico`), `k.author IS NULL`. Also swept the **whole graph** for any other
+  node shaped the same way (`author IS NULL` and `producedEdges=0`) — this entry was the only hit;
+  the coordination doc's "exactly one" claim held.
+- **Investigated `cypher-mcp/server.py`'s write-path code directly before concluding anything.**
+  The producer-write is authorized only as **one** Cypher statement —
+  `MERGE (:Agent {agentId:...}) CREATE (...)-[:PRODUCED {...}]->(...:KaizenEntry {...})`
+  (`_producer_write_agent_id`/`_producer_write_shape_match`, `server.py:430-493`) — sent to
+  FalkorDB as a single `GRAPH.QUERY`, so a partial write (`Agent` merged, `KaizenEntry` +
+  `PRODUCED` never created) isn't possible through this shape: the `CREATE` clause creates the
+  edge and the node together or not at all. Nor could the node have been created bare — every
+  non-matching write shape is rejected outright by `authorize_write` before it ever reaches
+  FalkorDB (`server.py:564-639`; the six recognized shapes are producer-write, legacy author-write,
+  curator `MENTIONS`-write, curator `PRODUCED`/`MENTIONS` edge-resolve, and curator full-node
+  clear — nothing produces a bare `CREATE (k:KaizenEntry {...})` with neither an edge nor an
+  `author:` literal). So the *code path* itself gives no route to this shape by accident.
+- **Checked the mentioned/producing agents' own kaizen histories before concluding anything —
+  and found the real explanation there, not in the graph or the code.** `data-scientist`'s
+  `kaizen/history.md`, 2026-09-07, U14 chunk B: this exact entry was **kept open** that pass (the
+  manual clause it names is `tico`-owned, outside `cobb`'s write remit at the time), tagged
+  `MENTIONS → tico`, and — per `agent-maintenance` SKILL.md §5 step 5's own "Resolving `PRODUCED`
+  (the producing agent's own pass) — always resolve it, regardless of `otherRemaining`" rule — its
+  `PRODUCED` edge was deliberately resolved (`DELETE p`) that same pass, quoted verbatim: *"`e1a6c4d2`
+  had only its `PRODUCED` edge resolved, leaving the node alive on its `MENTIONS → tico` edge."*
+  `tico`'s own history re-confirms the same state twice more (2026-09-09 U31, 2026-09-13 standing
+  pass) without ever re-resolving anything, exactly as a correctly-functioning kept-open,
+  partial-edge node should read on every subsequent pass until its target document exists.
+- **Verdict: not a defect.** `0 PRODUCED / 1 MENTIONS / author IS NULL` is precisely what SKILL.md
+  §5 step 5's own partial-edge-resolve branch is *designed* to leave behind for a post-M8 entry
+  (no `author` property because the entry postdates M8 — 2026-08-31 vs. M8's 2026-08-22 — so it
+  was never legacy-shaped to begin with) kept open on a still-live `MENTIONS` edge. The
+  coordination doc's "orphaned producer identity... possibly a `cypher-mcp` write-path defect"
+  framing was a reasonable-looking read of the node's bare shape in isolation, but a bare edge
+  count cannot distinguish "never had a producer" from "had its producer edge deliberately
+  resolved as part of a kept-open disposition" — only the tagging/producing agent's own
+  `history.md` settles which one occurred, and in this case it settles it unambiguously.
+  **No `cypher-mcp` backlog item filed** — there is no code defect to fix; U9's `cypher-mcp`
+  precedent (`claude/docs/plans/kaizen-distillation2-coordination.md`'s K-020/K-021, a genuine
+  string-bug and an `entryId`-collision hazard both confirmed against the live code) does not
+  apply here.
+- **One process note, logged as a parking-lot idea rather than a defect fix** (`plan.md`): a future
+  distillation pass hitting a `0 PRODUCED`-edge, non-legacy node should check the
+  mentioned/producing agent's `kaizen/history.md` for a prior kept-open partial-resolve **before**
+  reaching for "write-path defect" as the leading hypothesis — `agent-maintenance` SKILL.md §5
+  already documents the partial-edge-resolve mechanism itself but doesn't explicitly flag this
+  read-order trap for a *future reviewer* encountering the resulting shape cold.
+- **This finding does not change the fact's own disposition** — `K-016`/`K-003`'s closure
+  (`claude/tico/kaizen/history.md`/`claude/data-scientist/kaizen/history.md`, both 2026-09-20) was
+  independently re-verified against the live repo regardless of how the node arrived in this
+  state.
+- **Did not touch** `claude/docs/plans/kaizen-distillation3-coordination.md` — `teco` owns that
+  ledger; this note is the investigation the coordination doc asked `cobb` to log, not an edit to
+  the doc itself.
+
 ## 2026-09-19 — Pass 4 correction: Finding-2 fix reopened the same hazard one pass later (`agent-knowledge-base-strategy5-coordination.md`)
 
 Same-day correction to the entry directly below. `analyst`'s Pass 4 re-check of commit `b7e39a1`

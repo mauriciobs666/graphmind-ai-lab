@@ -2,6 +2,214 @@
 
 > Dated log of actual changes to the `data-scientist` agent. Most recent first.
 
+## 2026-09-20 — K-003 ✅ closed: eager-provider-resolution trap published (actionable copy landed on `tico`'s document; full record there)
+
+U10 of `claude/docs/plans/kaizen-distillation3-coordination.md` (curator: `cobb`) — the pass's
+one anomaly-shaped, orphaned-producer unit; run separately from this agent's own U4 above.
+
+- **What:** the fact `K-003` tracked (`falkor-chat`'s `ModelGateway.from_env()` eagerly resolving
+  **every** declared provider, not just the one a caller dispatches to) was published into
+  `falkor-chat/docs/manuals/llm-provider-config.md` §2 — `tico` `K-016`, the actionable copy of
+  this same item, owned the target document and is where the work landed. Full re-derivation
+  evidence (read directly against `modelconfig.py` and `config/opencode.example.json`) and the
+  promoted text are recorded there (`claude/tico/kaizen/history.md`, 2026-09-20 entry) — not
+  restated here, to avoid two drifting copies of the same story.
+- **This closes `K-003` as the origin record.** The mechanism itself was already fully verified
+  when this item opened (2026-09-07, U14) — only its home was ever open, and that home is now
+  filled.
+- **Underlying `kaizen_team` entry `e1a6c4d2-8b3f-4b1a-9c7e-3f2a6d9b1c4e`** — by the time this pass
+  re-queried it fresh, it carried **0 `PRODUCED` edges and no `author` property at all** (an
+  orphaned producer identity — not confidently attributable to `data-scientist` or any other
+  agent, despite the `ds_`-prefixed script name in its own `evidence` field). Only the
+  `MENTIONS → tico` edge survived, which is what routed this pass's disposition to `tico`'s
+  document rather than reopening a `data-scientist`-owned home. See
+  `claude/cobb/kaizen/history.md`, 2026-09-20, for the anomaly investigation itself — it does not
+  change this item's disposition.
+- **Graph:** cleared as part of `tico`'s U10 disposition (see that entry) — not duplicated here.
+- **Docs touched:** `claude/data-scientist/kaizen/{history.md,plan.md}` (K-003 closed); the actual
+  publication landed in `falkor-chat/docs/manuals/llm-provider-config.md` (see `tico`'s entry).
+- **Plan items:** K-003 closed.
+
+## 2026-09-20 — standing distillation pass, `cobb`, U4 of `claude/docs/plans/kaizen-distillation3-coordination.md`: all 8 `data-scientist` current-shape entries — 8 DISCARDED (already published at equal or greater depth), 0 promoted, 0 kept open — `data-scientist` closes at 0 produced / 0 mentioned
+
+- **What:** `cobb` ran the standing `kaizen_team` distillation (`skills/agent-maintenance/SKILL.md`
+  §5), scoped explicitly to `kaizen_team` only (not `data-scientist`'s post-2026-09-19
+  `ws:agent-team` captures — separate, later pass per the coordination doc's opening paragraph).
+  Re-queried fresh at dispatch, not trusted from the pinned snapshot: current-shape read
+  (`(:Agent {agentId:'data-scientist'})-[:PRODUCED]->`/`-[:MENTIONS]->`) returned exactly **8**
+  rows, matching the brief's pinned count exactly (no arrival, no drift since teco's 2026-09-20
+  snapshot); legacy (`author`-property) read for `data-scientist` returned **0** rows, also
+  matching. No count discrepancy to attribute.
+- **Every entry's cell content was paged via `substring`+`size()` before judging** — all 8 entries'
+  `fact`/`evidence` exceeded the `cypher` MCP tool's 300-char per-cell cut (sizes 268-685 chars for
+  `fact`, 137-429 for `evidence`); the truncated `…(+N chars)` tails would otherwise have hidden
+  exactly the scope caveats each entry's later grep-verification turned on.
+- **Common pattern across all 8: every one of these entries was captured *while* `data-scientist`
+  was mid-authoring or mid-reviewing the very document (or review, or shipped code) that now states
+  the same fact at equal or greater depth** — the same shape the coordination doc's U4 dispatch
+  brief and SKILL.md §5 step 2 both flag as the commonest "already published" case. None concerned a
+  different agent's domain substantively enough to warrant a `MENTIONS` tag (all 8 are
+  `data-scientist`'s own methodology/model-selection findings, even where `architect`/`coder`
+  implemented the resulting fix).
+
+### 1. `e8f1a2b3-4c5d-4e6f-9a1b-2c3d4e5f6a7b` (2026-09-19) — DISCARDED, already published
+- **Fact:** A cross-session embedding score discrepancy that reproduces to 15 decimal places on
+  each side is evidence of a discrete backend-state split, not continuous per-call floating-point
+  jitter — jitter would not byte-match across independent sessions by chance.
+- **Context:** K-030 Track 2 U8 — floor-instability methodology consult on R6/h40 score instability
+  escalated by qa-engineer/analyst. `suggestedHome`: knowledge base.
+- **Verified — re-derived directly.** Read `claude/docs/plans/agent-knowledge-base-strategy-ml.md`
+  lines 765-864, "Stage 8 Phase 2 addendum — R6/h40 score-instability consult" (2026-09-19): the
+  section's own "A third data point, collected live for this consult" subsection (lines 779-817)
+  states this exact conclusion — "Byte-exact match at 15 decimal places (`0.440489292144775`)
+  against `analyst`'s Pass 2 number... does not reproduce to 15 decimal places by chance across
+  independent sessions — that degree of match is the signature of a discrete, quantized backend
+  state... not continuous per-call jitter" (lines 789-795) — verbatim the same reasoning, with more
+  depth (a ranked, later-corrected causal analysis spanning to line 864) than the raw entry.
+- **Disposition:** discard. The document this entry cites in its own `context` field already states
+  the fact more completely, including a same-day correction (U4, lines 812-817) the raw entry never
+  saw.
+
+### 2. `f4c2d3e1-8a5b-4c6d-9e1f-2a3b4c5d6e7f` (2026-09-19) — DISCARDED, already published (and the
+   fix has since shipped)
+- **Fact:** model-bench `stats.verdict()`'s Holm path (`report.py` ~1244-1266) already enforces the
+  "k is fixed by pre-registration, not by how much data arrived" rule by appending
+  `mcnemar_exact(0,0)=1.0` even when a metric's paired intersection is empty
+  (`outcomes.n_units==0`); a new N-arm/candidate-axis Holm ladder reusing this pattern needs an
+  explicit test pinning that a missing-candidate cell still occupies its ladder slot.
+  `suggestedHome`: "model-bench AGENTS.md load-bearing invariants section, if a future `stats.py`
+  change generalizes Holm-family construction beyond `compare_report`."
+- **Verified — re-derived directly.** Read
+  `model-bench/docs/reviews/small-model-catalog-sweep-impl.md` lines 557-563: "Pre-registration
+  discipline for a missing-data candidate... landed, not merely acknowledged. `report.py:1364-1372`'s
+  comment cites 'review Pass2-1' by name and unconditionally appends `stats.mcnemar_exact(b_, c_)`
+  for every `(metric, candidate)` pair regardless of whether `outcomes.n_units == 0`... `tests/
+  test_report.py` carries a dedicated test for this
+  (`test_rank_report_guard_judge_family_k_does_not_shrink_when_a_candidate_has_no_paired_data`,
+  `:3425` on)." The exact generalization and exact test the entry called for both shipped.
+- **Disposition:** discard. The contingency the `suggestedHome` was conditioned on ("if a future
+  `stats.py` change generalizes...") already happened, was reviewed, and is test-pinned by name —
+  nothing left to route.
+
+### 3. `c7e1f5b8-3d4a-4e9c-b2a6-5f8d1e0c9a4b` (2026-09-19) — DISCARDED, already published
+- **Fact:** When re-verifying a fix to a cross-metric pooling defect, reproducing the real
+  (asymmetric) data shape end-to-end and diffing the rendered output beats trusting the new
+  fixture's assertions alone — monkeypatching the fixed function back to the old defective body
+  in-process and re-running the new regression test is a fast way to confirm the test is
+  load-bearing rather than decorative.
+- **Context:** Second code-gate round on the small-model-catalog-sweep Unit A `n_units` pooling
+  defect, `model-bench/docs/reviews/small-model-catalog-sweep-impl.md` Unit A.7. `suggestedHome`:
+  "prompt (data-scientist self-technique)."
+- **Verified — re-derived directly.** Read the cited review file, Unit A.5 (lines 576-632) and its
+  closing verification (lines 717-722): "ran the new test [against] the original pooled-`max(ns)`-
+  across-`family` implementation, then ran the new test... Reverting the monkeypatch (i.e. the
+  shipped fix) passes clean" — the exact technique, applied and narrated in the same document the
+  entry's own `context` field names.
+- **Disposition:** discard. This is `data-scientist`'s own review artifact restating the technique
+  more completely (with the actual before/after numbers) than the raw entry could. Not promoted to
+  `statistical-method-techniques.md` — the document instance is the fuller, citable record; a KB
+  restatement would be a strictly thinner duplicate of a document `data-scientist` itself authored
+  days earlier and can cite by path if the pattern recurs.
+
+### 4. `b8e4f1a2-3c5d-4e6f-9a1b-2c3d4e5f6a7b` (2026-09-19) — DISCARDED, already published
+- **Fact:** IBM Granite Embedding models (e.g. `granite-embedding-278m-multilingual`, 278M params,
+  768-dim, explicit PT support) ship as `lmstudio-community`-curated GGUF quants — a smaller
+  first-class-LM-Studio alternative to the Qwen3-Embedding family.
+- **Context:** falkor-chat urgent embedding-model-swap requirements interview
+  (`embedding-migration.md`) — LM Studio process overrunning host memory on Qwen3-Embedding-0.6B.
+  `suggestedHome`: knowledge base.
+- **Verified — re-derived directly.** Read `falkor-chat/docs/requirements/embedding-migration.md`
+  line 130: "...`granite-embedding-278m-` [multilingual]" is named as the swap candidate with the
+  same specs (278M params, GGUF/LM-Studio-compatible, EN+PT-BR capable). The migration this
+  requirement drove is now delivered — `falkor-chat/docs/HISTORY.md` (2026-09-20 commit
+  `e16d3916`, "embedding-migration ledger — U6-U8 all accepted, code phase complete") — with Granite
+  also appearing across `falkor-chat/docs/plans/embedding-migration.md`,
+  `falkor-chat/docs/manuals/embedding-migration.md`, `falkor-chat/docs/test-reports/
+  embedding-migration-report.md`, and `falkor-chat/docs/reviews/embedding-migration*.md`.
+- **Disposition:** discard. Not merely already-published — the fact is now historical (the swap it
+  informed has shipped and closed); `claude/data-scientist/lm-studio-model-notes.md` was checked
+  and does not need this entry, since falkor-chat's own requirements/HISTORY chain is the
+  authoritative, more detailed record.
+
+### 5. `c7e2a6b4-5f1a-4c9e-9b3a-2e8d7f0a1b6c` (2026-09-19) — DISCARDED, already published
+- **Fact:** A `search_documents` miss at `limit=5` can mean two different things — a `limit=20`
+  re-run distinguishes "just outside the cutoff" from "genuinely far away, no top-K/floor tweak
+  helps" — worth checking before recommending a K or floor change.
+- **Context:** DEF-1 diagnosis (K-030 U2), `claude/docs/plans/agent-knowledge-base-strategy-ml.md`
+  DEF-1 diagnosis section. `suggestedHome`: "knowledge base (`statistical-method-techniques.md` or a
+  retrieval-diagnostics note)."
+- **Verified — re-derived directly.** Read the cited section itself,
+  `claude/docs/plans/agent-knowledge-base-strategy-ml.md` lines 1050-1083 ("DEF-1 diagnosis —
+  prose/narrative retrieval quality"), "Method": "re-ran all 4 exact prefixed queries live against
+  `ws:agent-team` at `limit=20` (not the standard `limit=5`) to see how far each expected document
+  actually sits from its query — a `limit=5` miss alone cannot distinguish 'just outside the
+  cutoff' from 'genuinely far away'" — this entry's `context` field names the exact section that
+  already states the fact, with the actual 4-query result table (lines 1071-1076) the raw entry
+  never carried.
+- **Disposition:** discard. The entry was captured mid-authorship of the very section it duplicates.
+
+### 6. `e3b1b1a0-6f6a-4a3d-9c2a-6e6f6a8b1c3d` (2026-09-19) — DISCARDED, already published (and the
+   fix has since shipped)
+- **Fact:** model-bench `stats.verdict()` hard-codes its only multiplicity axis to `len(family)`
+  and cannot be reused unchanged for a second multiplicity axis (e.g. a reference-anchored family
+  across N candidate models) — raises `ValueError` on the first tested member either way.
+- **Context:** Methodology review of `model-bench/docs/plans/small-model-catalog-sweep.md`, Q3/
+  blocker resolution. `suggestedHome`: "project docs (`small-model-benchmarking-ml.md`, if/when
+  `stats.verdict()` gains `correction_k`)."
+- **Verified — re-derived directly.** Read `model-bench/modelbench/stats.py` lines 1222-1270: the
+  function signature already carries `correction_k: int | None = None`, with a docstring explaining
+  "decouples precondition 3's correction divisor from `family`'s membership" and precondition 3
+  computed as `k = correction_k if correction_k is not None else len(family)` — the exact fix,
+  shipped. Cross-confirmed in `model-bench/docs/reviews/small-model-catalog-sweep-impl.md`
+  ("Unit A.1 — `correction_k` ... confirmed faithful") and `model-bench/docs/HISTORY.md` line 125.
+- **Disposition:** discard. The contingency the `suggestedHome` was conditioned on already
+  happened and is documented in the source file's own docstring plus two review passes — no
+  routing action left.
+
+### 7. `a9d4e8f2-1c3b-4d5e-8f6a-7b8c9d0e1f2a` (2026-09-19) — DISCARDED, already published
+- **Fact:** A test-helper fixture that gives two co-equal verdict metrics with genuinely different
+  real item counts (guard-judge `falseAdvanceRate` n=40 vs `falseSuspendRate` n=30) the same
+  uniform n will mask any bug that pools/maxes/mins `n_units` across a multi-metric family, since
+  `max(n)==min(n)` whenever both metrics share one n.
+- **Context:** Code-level statistical-validity review (Unit A implementation),
+  `model-bench/docs/reviews/small-model-catalog-sweep-impl.md` Unit A.5. `suggestedHome`:
+  "model-bench AGENTS.md or test-writing convention."
+- **Verified — re-derived directly.** Read the cited review, Unit A.5 (lines 576-632): "`n_units =
+  max(...)` overstates power for a two-metric family — reproduced, not just argued... `n=30,
+  alpha_mdd=0.05/4`: floor 20.0 pp, MDD80 32.3 pp... Why the test suite didn't catch this.
+  `_guard_judge_arm`... gives `falseAdvanceRate`/`falseSuspendRate` the same n, so `max(ns) ==
+  min(ns)` always in every test that exists today" — the exact fact, with the exact figures
+  (MDD80 24.6pp vs 32.3pp) the raw entry's evidence field also cited, stated at greater depth
+  including the fix confirmation ("the cross-metric `max`/`min` pooling is gone entirely," line
+  431) and a new asymmetric-n fixture requirement (line 662) that closes the "test-writing
+  convention" suggestion this entry's `suggestedHome` proposed.
+- **Disposition:** discard. Both the defect-report and the convention fix the entry proposed are
+  already in the review and (per `model-bench/docs/HISTORY.md` lines 107/135/146) shipped.
+
+### 8. `a3f6e1c2-8b4d-4e7a-9c1f-2d5b6e8a0f13` (2026-09-19) — DISCARDED, already published
+- **Fact:** `search_documents` over `ws:agent-team` can return multiple chunks of the same
+  already-matched Document filling several top-K slots, crowding out a genuinely different sibling
+  Document that then never appears in top-K at all — no score-floor value can fix this, since the
+  missing document is never retrieved in the first place.
+- **Context:** AC-2 golden-set pilot for `skills/agent-kb-retrieval/SKILL.md` score-floor
+  calibration, `claude/docs/plans/agent-knowledge-base-strategy-ml.md` Stage 8 Phase 1.
+  `suggestedHome`: project docs.
+- **Verified — re-derived directly.** Read `claude/docs/plans/agent-knowledge-base-strategy-ml.md`
+  lines 728-739 ("Risks & open questions"): "the 4th (family h39, R3 above) recovered only one of
+  two — the missing sibling never reached the top 5 at all, crowded out by three duplicate chunks
+  of the *other*, already-found sibling document... no score-floor value could have fixed it (the
+  document wasn't retrieved, so a floor never got a chance to reject or admit it)" — verbatim the
+  same fact and mechanism, in the same document the entry's own `context` field names, plus the
+  document names it as a still-open Phase 2 question (lines 736-739) rather than a settled one.
+- **Disposition:** discard. Already published at equal depth, in the exact project doc the
+  `suggestedHome` field pointed to — nothing left for a separate promotion to add.
+
+- **Files touched:** `claude/data-scientist/kaizen/history.md` only — `plan.md` unchanged (no entry
+  warranted a kept-open backlog item; K-003 in `plan.md`, referencing the unrelated orphaned entry
+  `e1a6c4d2…`, is U10's business, not this unit's, and was left untouched).
+- **Duplicate-heading check:** `grep '^## ' claude/data-scientist/kaizen/history.md | sort | uniq -d`
+  — empty, before and after this edit.
+
 ## 2026-09-18 — one self-produced `kaizen_team` entry discarded as a duplicate of the very document it was captured while revising (U5 of the kaizen-team distillation pass 2)
 
 - **The entry:** `7a3e9c1b-4f2d-4e8a-9b6c-2d1f7e5a8c3d` (2026-09-17, `suggestedHome: project

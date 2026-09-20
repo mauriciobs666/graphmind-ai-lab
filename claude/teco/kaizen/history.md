@@ -2,6 +2,111 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-09-20 — `kaizen_team` distillation pass 3, U9: 2 self-produced `teco` entries — 1 split (discard tool-scoping half, promote commit-grant half), 1 promoted as a refining caveat
+
+- **What:** `cobb` ran `agent-maintenance` §5 over `teco`'s 2 current-shape `kaizen_team` entries,
+  pinned by U9 of `claude/docs/plans/kaizen-distillation3-coordination.md`. Re-queried fresh at
+  dispatch (`MATCH (a:Agent {agentId:'teco'})` producer-write read, `PRODUCED` ∪ `MENTIONS`): 2
+  rows, matching the coordination doc's opening snapshot exactly (2 current-shape, 0 legacy
+  `author`-only) — no drift since dispatch. Scope: `kaizen_team` only, per this unit's brief —
+  `ws:agent-team` is explicitly out of scope for this pass.
+
+- **Entry `f4b1c8a2-7d3e-4a91-b6c5-8e9f0d2a1b3c`** (2026-09-18, `suggestedHome: prompt`) — "the
+  auto-mode classifier block on a self-modification-shaped file is file-scoped, not agent-scoped
+  or tool-scoped: it blocked a delegated subagent's `Bash`/`python3` workaround attempt, and
+  separately blocked `teco`'s own `git commit` of the identical, already-produced diff, despite
+  `teco`'s standing broad commit-grant authority."
+  - **Re-derived directly, not taken on the entry's word.** Read
+    `docs/reviews/mcp-json-edit-bypass-incident.md` in full and
+    `claude/docs/plans/agent-knowledge-base-strategy3-coordination.md:129-163` (the Stage 3
+    incident and its close-out). Both confirm the entry's claims exactly: a `devops` delegate's
+    `Edit` on the repo-root `.mcp.json` was denied `[Self-Modification]`; `devops` then achieved
+    the identical byte-level write via `Bash`/`python3` (a bypass, confirmed by
+    `security-expert`'s review, verdict *needs changes* — process, not content); `teco`'s own
+    `git commit -- .mcp.json` of the resulting diff, run only after explicit user approval, was
+    *separately* denied, reason `[Auto-Mode Bypass]`; resolved by the user discarding the diff
+    (`git checkout -- .mcp.json`) and adding the entry themselves, outside any agent session. Live
+    `git log --oneline -- .mcp.json` confirms the landing commit (`4be2fa8d`, "wire
+    falkor-chat-agent-team MCP server into repo-root .mcp.json (Stage 3, K-030)"), and the current
+    `.mcp.json` content matches exactly what both documents describe (a single, clean
+    `falkor-chat-agent-team` streamable-HTTP entry at port 8200, the pre-existing `cypher` entry
+    untouched).
+  - **Checked for prior publication before promoting anything.** Grepped
+    `skills/agent-standards/claude-code.md`, which already carries (lines 374-383 — U7's
+    promotion, this same coordination) "The classifier's `[Self-Modification]` scrutiny does not
+    carry across tool surfaces for the same target path," citing the identical `devops`
+    Edit-vs-Bash incident at equal or greater depth. **Discarded that half as already-published.**
+  - The second half — that `teco`'s own standing broad commit grant (`claude/AGENTS.md`: `teco`
+    "may commit any coordinated specialist's already-verified deliverable by explicit path") does
+    not exempt a self-governing file from the same classifier — exists only as incident narrative
+    in the coordination doc above, never generalized as a reusable coordination principle.
+    Grepped `skills/agent-standards/claude-code.md`, `claude/teco/teco.md`, and
+    `claude/teco/coordination-techniques.md` for "commit grant" / "coordinator ... commit" /
+    "broader commit" — no hit anywhere. **Promoted (generalized, not verbatim) as a new section**,
+    "A standing commit grant does not exempt a self-governing file from the platform classifier,"
+    in `claude/teco/coordination-techniques.md`, grouped with the file's other commit-discipline
+    sections (pathspec-commit, three-way-diff-check, holding-a-shared-file). Word count
+    4,945 → 5,130 (+185 w). **`claude/teco/teco.md` left untouched** (8,185 w, unchanged) — this
+    is exactly the class of doctrine K-016's chunk-D finding already steers to
+    `coordination-techniques.md` by default (proactive, reached at a point in the workflow `teco`
+    always passes through — here, before an integration commit — not a rare-path recognition
+    problem), and K-016's own notes already record `teco.md` past its editorial floor.
+  - **No `MENTIONS` tag.** The commit-grant half is squarely `teco`'s own coordination-authority
+    discipline; the tool-scoping half is a Claude Code platform fact already promoted, with no
+    `MENTIONS` tag, by U7 of this same coordination — same precedent applied here.
+  - **Graph.** Producer-write shape (real `:Agent`/`PRODUCED` edge, post-M8). Edge count
+    immediately before clearing (`OPTIONAL MATCH` + `count()`, never `exists()`): 1 `PRODUCED`,
+    0 `MENTIONS` → `otherRemaining = 0`. Cleared via the curator `DETACH DELETE`
+    (`agent='cobb'`) once this file and `claude/teco/coordination-techniques.md` were written to
+    disk.
+
+- **Entry `9f4a1b2c-6d3e-4f5a-8b9c-1a2b3c4d5e6f`** (2026-09-19, `suggestedHome: knowledge base`) —
+  "a top-level coordinator's (`teco`'s) `Agent`-tool dispatch sees a mid-session `tools:`
+  frontmatter edit fine; `cobb`'s own K-052 finding (a fresh subagent spawned by another subagent,
+  nested, missed the same edit) is likely specific to nested dispatch, not same-session dispatch
+  in general."
+  - **Re-derived directly.** Read `skills/agent-standards/claude-code.md:295-307` (the existing
+    bullet this entry bears on) and `claude/cobb/kaizen/plan.md:629-658` (K-052, `cobb`'s own
+    backlog item, still 🔵 proposed at time of this pass). K-052's own origin note confirms the
+    contrasting shape: a `cobb` subagent added
+    `mcp__falkor-chat-agent-team__ingest_document` to `security-expert.md`'s `tools:` frontmatter,
+    then **itself spawned a fresh `security-expert` child inside that same nested session** — the
+    child missed the tool (both a self-report and a real attempted call failed) despite the
+    deployed file being correct on disk. The entry's own evidence — a real
+    `ingest_document` write, `documentId 1e80ed572857411bbe566df2349258a1` — matches its claim: a
+    fresh top-level `security-expert` probe, dispatched by `teco` itself right after that same
+    `cobb` subagent had completed, both saw and successfully called the tool.
+  - **Checked for prior publication.** The existing `claude-code.md` bullet (lines 302-307)
+    already states a blanket "editing an agent mid-session does not reach a subagent spawned
+    later in that same session" — worded broadly enough to conflate nesting depth with session
+    identity, and it does not carry `teco`'s contrasting data point. Not a duplicate — a
+    refinement of an existing claim that, read strictly, is contradicted by this entry's evidence.
+    Also checked K-052 itself: as of this pass its Notes section read only "not yet reproduced a
+    second time," with no record of this contrast.
+  - **Promoted (refined) into the existing `claude-code.md` bullet as an added caveat**, not a new
+    bullet — same topic, matching this file's own "sharpen in place" convention. Word count
+    11,782 → 11,935 (+153 w). Also logged a dated corroborating note on `claude/cobb/kaizen/
+    plan.md`'s own K-052 item, pointing at the new caveat and sharpening what "reproduced" should
+    mean for that item going forward (the next repro attempt should test the nested-grandchild
+    shape specifically, not any same-session dispatch) — `cobb`'s own backlog file, in-scope for
+    `cobb` to touch directly as both distiller and file owner.
+  - **No `MENTIONS` tag.** Same precedent as U7/U8 of this coordination: a promotion straight into
+    `skills/agent-standards/claude-code.md`, a shared Claude Code platform knowledge base, carries
+    no tag — it isn't "about" `cobb`'s own operational domain in the sense the tag exists for.
+  - **Graph.** Producer-write shape. Edge count immediately before clearing: 1 `PRODUCED`,
+    0 `MENTIONS` → `otherRemaining = 0`. Cleared via the curator `DETACH DELETE`
+    (`agent='cobb'`) once this file and `skills/agent-standards/claude-code.md` were written to
+    disk.
+
+- **Why:** standing distillation duty (`agent-maintenance` skill §5) over the shared `kaizen_team`
+  graph, this pass explicitly scoped to draining `kaizen_team` toward eventual deletion — the
+  same `teco` who owns `claude/docs/plans/kaizen-distillation3-coordination.md`'s ledger is also
+  the producer of both entries distilled here, same as `security-expert`/`tdd-engineer`/
+  `data-scientist` distilling their own entries in earlier units of this pass; the coordination
+  doc itself was read for context only and not touched.
+- **Final confirmation:** re-queried `kaizen_team` for `agentId: 'teco'` (`PRODUCED` ∪
+  `MENTIONS`) after both clears — **0 rows remain.**
+
 ## 2026-09-18 — `kaizen_team` distillation pass 2, U8: 1 self-produced `teco` entry (ledger-row prefix-anchor splice bug) — PROMOTED, sharpened into `coordination-techniques.md`'s existing ledger-editing section
 
 - **What:** `cobb` ran `agent-maintenance` §5 over the one `teco`-produced `kaizen_team` entry

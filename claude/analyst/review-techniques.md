@@ -430,7 +430,15 @@ honestly run, it was true when it was run, and the document lands days later aga
 that moved. Re-run every cited grep at review time — above all a *negative* one ("→ no matches"),
 which reads as settled and is the one nobody thinks to re-check.
 
-Origin: three independent instances. (1) A `cobb`-authored plan cited a NULL-backfill decision as
+**A citation that resolves is not the same claim as a citation that endorses.** "The review
+recommends X" or "the review requires X" is a claim about the cited document's own **verb and
+section**, not merely about whether it discusses the same file names — a review can discuss a
+tool a later unit depends on without ever endorsing the specific, narrower use that unit
+attributes to it. Grep the cited document for the actual recommending/requiring language
+(`grep -n -i "recommend\|require\|should" <file>`), not just for the shared noun, before citing it
+as authority for a specific design choice.
+
+Origin: three independent instances (plus a fourth, on the endorsement variant above). (1) A `cobb`-authored plan cited a NULL-backfill decision as
 having surfaced during a specific past investigation; `grep -rn -i backfill claude/docs/` found
 zero occurrences outside the plan doc itself, and the cited investigation was unrelated
 (hook/permission engineering, no migrations at all) — the example was plausible-sounding but
@@ -450,7 +458,12 @@ last recounted: `docs/plans/cypher-mcp-tool-surface.md` §2 and `cypher-mcp/READ
 74 passed / 7 deselected offline (7 passed / 74 deselected live); running
 `cypher-mcp/.venv/bin/pytest tests -q` (and `-m live`) gave 113 passed / 10 deselected (10 passed /
 113 deselected live) instead. A copied test-run count is exactly the same kind of claim as a
-pasted grep result — re-run it, never cite it from a doc.
+pasted grep result — re-run it, never cite it from a doc. (5) A K-030 Track 2 Stage 9 unit cited a
+prior Stage 6 migration review as "recommending" `kb-claim-manifest.json` reuse for the Stage 9 sync
+procedure; `grep -n -i "recommend" <that review>` returned zero matches, and its only two
+Stage-9-relevant passages both named a *different* artifact (`check_content_loss.py`, the fidelity
+checker) as what Stage 9 relies on — not the manifest at all. The manifest-reuse design choice
+itself was sound on its own merits; only its claimed grounding in that specific review was false.
 
 ## A grep that finds a name has found a REFERENCE, not a definition — and `bash -n` is not evidence a script works
 
@@ -1688,3 +1701,46 @@ grounding + report suite green while its scoring math was mutation-pair tested; 
 "search only after the idiom" contrastive check, mutated to an order-insensitive search, passed
 every one of its new tests. Both closed by later units (U170's directive-content tests; U175's
 redesign of the ordering rule), so the technique, not the instances, is what carries.
+
+## Mutation-testing a small pure module without ever editing the repo file
+
+To verify a proposed mutation (a guardrail forbids editing source directly, or the change is only
+hypothetical), don't edit the tracked file at all: import the real module in a scratch script,
+monkeypatch the target function **on the imported module object itself** in-process, then call the
+actual test function directly against the mutated module and assert it fails. Revert is automatic
+— only the in-memory module object was ever changed, so zero edits touch any tracked file and no
+before/after `git status` check is needed.
+
+Origin: mutation-testing the no-cross-pack-arithmetic invariant in
+`model-bench/scripts/consolidate_sweep_reports.py` — monkeypatched `_index_table` in-process to
+inject `sum(float(m.value) for m in markers)` across packs, called
+`test_assembler_never_combines_two_packs_values` directly, observed a real `AssertionError`, with
+zero edits to any tracked file.
+
+## A document's own prose summary of a count is a separate claim from its own table — count the rows
+
+A design doc's prose summary of "N of M items used, K held in reserve" is falsifiable
+independently of the table it describes — grep/count the actual tagged rows rather than trusting
+the summary sentence, even when checking a document against **itself** rather than against an
+external citation. Same discipline as verifying an external "this already exists" claim (above),
+one level more local: the two halves of a single document can drift from each other just as
+easily as a document can drift from reality.
+
+Origin: a K-030 golden-set design doc claimed "7 real split families named, I used 6 plus one held
+in reserve" for one stratum; counting the actual rows tagged for that stratum in the doc's own
+table showed all 7 appearing as design rows, none held in reserve — the prose sentence was simply
+wrong while the table itself was correct.
+
+## Verifying a mutation-tested checker actually covers its own signature-matching mechanism
+
+Generalizes the "docstring states more than the body" pattern
+(`claude/tdd-engineer/guard-testing-techniques.md`) into a concrete recipe: when a checker was
+fixed to add some matching mechanism (e.g. a whitespace-normalization step, added against a real
+observed defect), monkeypatch that mechanism to a no-op/naive passthrough and re-run the checker's
+own existing mutation selftest. If it still reports ALL PASS, the mechanism has **zero** regression
+coverage of its own, however many lines the module's docstring spends justifying why it exists.
+
+Origin: `claude/cobb/scripts/check_content_loss.py` — monkeypatched `build_normalized()` to an
+identity passthrough and reran `check_content_loss_selftest.main()`; all 5 existing mutation
+checks still passed (exit 0), despite the module docstring spending ~15 lines justifying
+normalization against a real observed re-wrapped-claim defect in `coordination-techniques.md`.

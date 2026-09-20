@@ -2,6 +2,141 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-09-20 — standing distillation pass, `cobb`, U5 of `claude/docs/plans/kaizen-distillation3-coordination.md`: all 3 `devops` current-shape entries — 1 PROMOTED into `claude/devops/ops-quirks.md`, 2 DISCARDED (already published at equal or greater depth), 0 kept open — `devops` closes at 0 produced / 0 mentioned
+
+- **What:** `cobb` ran the standing `kaizen_team` distillation (`skills/agent-maintenance/SKILL.md`
+  §5), scoped explicitly to `kaizen_team` only — not `devops`'s post-2026-09-19 `ws:agent-team`
+  captures, a separate, later pass per the coordination doc's opening paragraph.
+- **Re-queried fresh at dispatch, not trusted from the pinned snapshot.** Current-shape read
+  (`(:Agent {agentId:'devops'})-[:PRODUCED]->`/`-[:MENTIONS]->`) returned exactly **3** rows,
+  matching `teco`'s 2026-09-20 pinned snapshot exactly — no arrival, no drift. Legacy
+  (`author`-property) read for `devops` returned **0** rows, also matching. No count discrepancy
+  to attribute.
+- **Every entry's cell content was paged via `substring`+`size()` before judging** — all 3 entries'
+  `fact`/`evidence` exceeded the `cypher` MCP tool's 300-char per-cell cut (`fact` 335-430 chars,
+  `evidence` 307-691 chars); the truncated `…(+N chars)` tails would otherwise have hidden exactly
+  the mechanism/remedy detail each disposition below turns on.
+
+### 1. `7dd400c6-fedf-46d0-8230-4b24db3e027b` (2026-09-18) — PROMOTED to `claude/devops/ops-quirks.md`
+- **Fact:** falkor-chat's `ingest_document` MCP tool auto-supersedes on identical text+title
+  (`document-ingestion2`), so a probe/verification script that unconditionally calls
+  `ingest_document` before a conditional `delete_document` silently leaves a second live document
+  behind unless both the original and its auto-superseding successor id are cleaned up.
+- **Context:** Live bring-up verification of `falkor-chat/scripts/start_agent_team.sh` (Stage 3,
+  K-030) — the two-tier (liveness + ws-pinning) health check over the MCP streamable-HTTP
+  endpoint. `suggestedHome`: knowledge base.
+- **Verified — re-derived directly, not taken on the entry's word.** Two independent lines of
+  corroboration. (a) `document-ingestion2`'s auto-supersede design is real and matches the entry's
+  mechanism exactly: `falkor-chat/docs/plans/document-ingestion2.md` (FR-8/9/10, the atomic
+  auto-supersede write) and `falkor-chat/docs/reviews/document-ingestion2-impl.md` both describe
+  `create_document_with_auto_supersede`/`autoSuperseded`/`supersededDocumentId` triggering on
+  byte-identical-modulo-whitespace text+title — the same fields and trigger condition the entry
+  names. (b) The *instance* the entry describes is independently confirmed in
+  `claude/docs/plans/agent-knowledge-base-strategy3-coordination.md`'s own U7 ledger row (the
+  `devops`-delivered Stage 3 process bring-up unit): "`teco`... re-confirmed 0 Documents/13 Agents
+  in `ws:agent-team`... kaizen entry `7dd400c6…` confirmed" — `teco` independently re-ran the
+  workspace query after cleanup and found the document count genuinely back to 0, corroborating
+  that two documents (not one) needed deleting, exactly as this entry claims.
+- **Grepped for prior publication before promoting.** The U7 ledger row above confirms this
+  specific *instance* passed cleanup correctly, but neither it nor any other doc in the repo states
+  the **general** lesson for whoever next writes a similar ingest/delete probe script — grepped
+  `claude/devops/ops-quirks.md` (no existing section on `ingest_document`/`delete_document`/
+  `auto-super*`), `falkor-chat/scripts/start_agent_team.sh` itself (no in-script warning — its
+  health check is a plain `/health` curl, not this two-tier probe), and every
+  `agent-knowledge-base-strategy*` coordination/review doc repo-wide for
+  `autoSuperseded`/`auto-supersed*` (all hits are the feature's own design/review/test docs, none
+  of them framed as an operational gotcha for a *caller* writing verification tooling). This is
+  genuinely new, not-yet-generalized content squarely in `ops-quirks.md`'s remit ("obvious but
+  wrong" traps for devops's own operational scripts against this lab's infra) — not
+  falkor-chat/graph-dba's design domain, so no `MENTIONS` tag.
+- **Disposition:** promoted, new dated section in `claude/devops/ops-quirks.md` ("falkor-chat's
+  `ingest_document` MCP tool auto-supersedes on identical text+title…"), generalized from the one
+  instance into a standing check: verify the workspace's actual `Document` count returns to
+  baseline after cleanup, don't trust a single successful `delete_document` call on the id the last
+  `ingest_document` handed back.
+
+### 2. `b3f2c1a4-7e6d-4b9a-9c3f-2d8e5a1f6b9c` (2026-09-18) — DISCARDED, already published in substance
+- **Fact:** LM Studio on the Windows host can list a model via `/v1/models` yet still 400 `"Model
+  is unloaded.."` on `/v1/embeddings`/`/v1/chat/completions` — reachability is necessary but not
+  sufficient; use the Windows `lms.exe` CLI (WSL2 path `/mnt/c/Users/<user>/.lmstudio/bin/lms.exe`)
+  to check/force actual load state (`lms.exe ps`/`lms.exe load <model-id>`) before trusting a 400
+  as an application bug.
+- **Context:** Root-causing a `ws:agent-team` `search_documents` failure (K-030 follow-up), after
+  fixing a stale LAN-IP `baseURL` in the `FALKORCHAT_OPENCODE_CONFIG` override. `suggestedHome`:
+  knowledge base.
+- **Verified — re-derived directly against the current, far deeper existing treatment**, not taken
+  on the entry's word. Read `claude/data-scientist/lm-studio-model-notes.md:159-218` whole
+  ("The machine-readable measurement surface is on `/api/v0/`, not `/v1/`…" section) — it already
+  and independently establishes every mechanic that explains and remedies this exact symptom: (i)
+  `/v1/models`/`/api/v0/models` list the whole catalog regardless of load state (line 132-137, and
+  the `state: loaded|not-loaded` field at line 101/134); (ii) this LM Studio config holds **exactly
+  one model resident at a time**, loading a second silently evicting the first with no explicit
+  unload (line 215-218) — the direct mechanism behind "listed but not currently loaded"; (iii) a
+  request naming an unloaded model triggers JIT auto-load, and that cold load **can itself fail**
+  (line 172-180, a related-but-distinct HTTP 400 string, `"Failed to load model … Error loading
+  model"`); (iv) `lms.exe` is reachable from WSL only via the identical path
+  (`/mnt/c/Users/<user>/.lmstudio/bin/lms.exe`, line 159-160) and is the documented tool for
+  checking real state (`lms ps --json`, line 161). Independently corroborates the fact rather than
+  merely citing it — this is `data-scientist`'s own live-verified measurement of the same LM Studio
+  instance's behavior, not a secondhand reference.
+- **Grepped for prior publication before deciding.** No hit anywhere in the repo for `"Model is
+  unloaded"` (the exact string) outside this entry and one unrelated `falkor-chat/docs/
+  test-reports/document-ingestion-report.md:162` mention describing the same symptom class, and no
+  hit for `"stale LAN-IP"`/`"LAN-IP baseURL"` at all — so this exact incident's narrative is
+  nowhere else, but the underlying mechanism and remedy are.
+- **Disposition:** discard, not promoted. The entry's actionable content — reachability ≠
+  loaded-state, use `lms.exe` to check/force load — is a direct, narrower application of mechanics
+  `lm-studio-model-notes.md` already documents in substantially greater depth (the one-resident-model
+  rule, JIT-load-can-fail, the exact `lms.exe` path and commands). Promoting it into
+  `ops-quirks.md` as well would duplicate an already-authoritative treatment living in a sibling
+  agent's KB rather than add anything a future reader of either file couldn't already derive from
+  `lm-studio-model-notes.md` alone. Not `MENTIONS`-tagged: nothing is left to route since the
+  destination file already covers it — `MENTIONS` exists to get an unpublished fact to the right
+  agent's future pass, not to flag a duplicate.
+
+### 3. `c1e6f8a2-3b4d-4e2a-9f7a-2d6c4b9a1e35` (2026-09-18) — DISCARDED, already published
+- **Fact:** LM Studio (Windows host, reached from WSL2 via `localhost:1234`) crashed a specific
+  model mid-request under concurrent multi-model load, returning HTTP 400 `{"error":"terminated"}`
+  then HTTP 500 for a tight burst of consecutive requests, then fully recovered with zero further
+  errors — a hard crash/evict-and-restart signature, not graceful degradation or a rate limit.
+- **Context:** K-030 Track 2 Stage 6 KB migration into `ws:agent-team` — diagnosing why one
+  12-item `ingest_documents` batch landed all-failed while three earlier comparable batches
+  succeeded. `suggestedHome`: knowledge base.
+- **Verified — re-derived directly against `devops`'s own already-delivered work product**, not
+  taken on the entry's word. This is the exact diagnosis `devops` itself produced as unit U3b of
+  `claude/docs/plans/agent-knowledge-base-strategy4-coordination.md` (line 35): "root cause:
+  transient LM Studio crash of extractor model `qwen3-4b-2507` under cross-model contention (14
+  extract failures, 0 embed failures — `teco`-reverified via log grep) — recommends retry now,
+  smaller batches." Every specific figure matches: 14 extract-role failures, 0 embed-role
+  failures, model `qwen3-4b-2507`, cross-model contention as the cause. `teco` independently
+  re-verified this same finding against the raw log directly (same coordination doc, "skipped,
+  diagnostic finding independently re-verified by teco against raw log + graph state instead").
+  The fuller narrative (the HTTP 400→500 sequence, the concurrent `mistralai/ministral-3-3b`
+  chat-model activity) is additionally on record in `claude/cobb/kaizen/history.md`'s 2026-09-18
+  Stage 6 entries, cross-referenced by name from the same coordination-doc row ("see... `claude/
+  cobb/kaizen/history.md` for the full diagnosis").
+- **Grepped for prior publication before deciding.** `grep -rn "start_agent_team\|Model is
+  unloaded"` and a direct read of the U3b ledger row confirm this is `devops`'s own delivered
+  diagnostic unit, already accepted and cited by `entryId`-adjacent figures in project docs — the
+  textbook "captured while producing the very artifact that now states the same fact" case SKILL.md
+  §5 step 2 and U4's precedent both flag as the commonest already-published shape.
+- **Disposition:** discard. Already published at equal or greater depth, as `devops`'s own accepted
+  work product (`agent-knowledge-base-strategy4-coordination.md` U3b row) with independent
+  `teco` re-verification and a fuller narrative cross-referenced in `cobb`'s own kaizen history.
+  Nothing left for a separate KB promotion to add.
+
+- **Files touched:** `claude/devops/ops-quirks.md` (1 new dated section, entry 1's promotion),
+  `claude/devops/kaizen/history.md` (this entry) — `plan.md` unchanged, no entry warranted a
+  kept-open backlog item.
+- **Duplicate-heading check:** `grep '^## ' claude/devops/kaizen/history.md | sort | uniq -d` —
+  empty, before and after this edit.
+- **Graph:** all 3 entries were pure producer-write current-shape (1 `PRODUCED` edge each, 0
+  `MENTIONS`) — confirmed by the per-entry edge count immediately before each clear (see graph
+  query log below). `otherRemaining == 0` in all three cases → full-node `DETACH DELETE`, run only
+  after this history entry was durably written (append-before-mutate). Re-queried both the
+  current-shape `PRODUCED`/`MENTIONS` read and the legacy `author`-property read for `devops`
+  afterward: **zero** raw entries remain, either shape.
+
 ## 2026-09-18 — `ops-quirks.md`: `jq` absence + python3 `dict.get()` exact-match lookup (inbound `MENTIONS` promotion, U11)
 
 - **What:** U11 of `docs/plans/kaizen-team-distillation2-coordination.md` — the sweep's 3

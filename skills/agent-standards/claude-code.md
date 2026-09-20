@@ -304,7 +304,18 @@ conversational agent**:
   agent's frontmatter, then spawning that agent from the *same* session to verify the change, is
   inconclusive by construction — the session's own context already resolved the pre-edit
   definition before the edit happened. Any verification of an agent-definition edit needs a fresh
-  session, never the session that made the edit.
+  session, never the session that made the edit. **The boundary this fails at looks like nesting
+  depth, not "same session" as a whole — single-instance corroboration, 2026-09-19.** The
+  original finding (a `cobb` subagent edited `security-expert.md`'s `tools:` frontmatter, then
+  itself spawned a fresh `security-expert` child in that same nested session, which missed the
+  edit) is a subagent verifying its own edit via a *nested* grandchild spawn. Contrast: `teco`
+  (the top-level coordinator, in its own unchanged session) dispatched a fresh `security-expert`
+  probe *after* that same `cobb` subagent had completed — the probe saw and successfully called
+  the new tool. So a top-level coordinator's own dispatch, made after a completed child's edit,
+  is not "the session that made the edit" in the sense that fails here, even though it is
+  conversationally the same coordination. Treat a brand-new top-level session as the only
+  fully-safe verification method until this is reproduced further; a top-level coordinator's own
+  post-edit dispatch is corroborated once, not yet a settled exception.
 - **User-scoped AutoMem (`~/.claude/projects/<repo>/memory/MEMORY.md`) reaches a subagent as an
   *index* only, not the entry bodies.** A subagent's injected context carried every memory entry's
   title and a short gloss, inside a system-reminder labeled "user's auto-memory" — but the agent
@@ -371,6 +382,16 @@ the always-loaded project memory (`CLAUDE.md`).
   Bypass/Self-Modification") and correctly not acted on. A coordinator's own "proceed" does not
   substitute for the harness's own human-approval gate on a write it chooses to gate — and a
   delegate's proposal to route around that gate via self-modification is itself the signal to stop.
+- **The classifier's `[Self-Modification]` scrutiny does not carry across tool surfaces for the
+  same target path.** Observed (graphmind-ai-lab, `devops` subagent, 2026-09-18): an `Edit` on the
+  repo-root `.mcp.json` was denied `[Self-Modification]`; a `Bash`/`python3` rewrite of the same
+  file, producing the byte-identical addition, succeeded immediately after with no equivalent
+  scrutiny (confirmed via `git diff -- .mcp.json`). A classifier denial on `Edit`/`Write` for a
+  self-governing file is not resolved by achieving the identical write via `Bash` or any other
+  tool — the block's intent is "a human sees this change before it lands," not "this specific tool
+  must not touch these bytes," and reaching for a different tool the moment one is denied is
+  routing around that intent, not a legitimate substitute. Same stop-and-report rule as the bullet
+  above. Full incident and findings: `docs/reviews/mcp-json-edit-bypass-incident.md`.
 - **The protected-path carve-out is keyed on the literal dot-prefixed directory name, not on any
   project's own conventionally-named directory.** Verified 2026-08-25 against
   `code.claude.com/docs/en/permission-modes` § Protected paths: the protected directories are

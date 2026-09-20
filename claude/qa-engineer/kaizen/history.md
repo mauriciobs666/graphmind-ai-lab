@@ -2,6 +2,67 @@
 
 > Dated log of actual changes to the `qa-engineer` agent. Most recent first.
 
+## 2026-09-20 — standing distillation pass, `cobb`, U6 of `claude/docs/plans/kaizen-distillation3-coordination.md`: 1 `qa-engineer` current-shape entry — DISCARDED (already published at equal or greater depth), 0 kept open — `qa-engineer` closes at 0 produced / 0 mentioned
+
+- **What:** `cobb` ran the standing `kaizen_team` distillation (`skills/agent-maintenance/SKILL.md`
+  §5), scoped explicitly to `kaizen_team` only — not `qa-engineer`'s post-2026-09-19
+  `ws:agent-team` captures, a separate, later pass per the coordination doc's opening paragraph.
+- **Re-queried fresh at dispatch, not trusted from the pinned snapshot.** Current-shape read
+  (`(:Agent {agentId:'qa-engineer'})-[:PRODUCED]->`/`-[:MENTIONS]->`) returned exactly **1** row,
+  matching `teco`'s 2026-09-20 pinned snapshot exactly — no arrival, no drift. Legacy
+  (`author`-property) read for `qa-engineer` returned **0** rows, also matching. No count
+  discrepancy to attribute.
+- **Cell content paged before judging.** `size()` on the one entry's fields: `fact` 273 chars,
+  `context` 116 chars — both already whole under the `cypher` MCP tool's 300-char per-cell cut,
+  no truncation. `evidence` was 372 chars and *was* truncated on the plain read (`…(+72 chars)`);
+  paged via `substring(k.evidence,0,300)`/`substring(k.evidence,300,300)` and confirmed the
+  full text before dispositioning.
+
+### 1. `a1f3c2e4-7b6d-4e9a-9c1f-6d8b2a5e7f31` (2026-09-18) — DISCARDED (already published, greater depth)
+- **Fact:** an ad hoc regex language classifier distinguishing Portuguese from Spanish must
+  prioritize diacritics (ã/õ/ç) and language-exclusive vocabulary over shared Ibero-Romance
+  filler words (e.g. "por favor", "que") — the shared words alone can outvote a genuine
+  Portuguese signal.
+- **Context:** K-065 Mitigation D live re-verification — building a scratch harness
+  (`language_salience_probe.py`) to measure per-turn language adherence for a 3-way concurrent
+  en/pt-BR/es storefront test. `suggestedHome`: knowledge base.
+- **Verified — re-derived directly against the actual test report, not taken on the entry's
+  word.** Read `falkor-chat/docs/test-reports/salesperson-language-salience-report.md` in full.
+  The report's own "Protocol" section (¶"A defect in the harness's own first-cut classifier...")
+  and "Feedback & recommendations" item 3 state the identical mechanism the entry captures — the
+  original heuristic let shared filler words ("por favor", "que") outvote a genuine Portuguese
+  diacritic signal, misclassifying 5 genuinely-Portuguese replies as `es` (with the actual
+  flagged example quoted verbatim: *"Por favor, informe o endereço de entrega completo para que
+  eu possa processar seu pedido corretamente"*) — caught by manually reading every flagged
+  reply's raw text. Feedback item 3 states the entry's fact as an explicit, forward-looking
+  technique note in the report's own words: "when building an ad hoc language classifier for
+  pt-BR vs. es specifically, prioritize diacritics (ã/õ/ç) and language-exclusive vocabulary over
+  words the two languages share, and always manually read every classified reply... before
+  trusting the aggregate."
+- **Grepped for prior publication before deciding.** `falkor-chat/docs/test-reports/
+  salesperson-language-salience-report.md` is the fact's own committed home — it was written by
+  this same agent, in this same K-065 Mitigation D pass, as a **standing, explicit technique
+  recommendation** (Feedback item 3), not merely an incidental mention. Its treatment is *deeper*
+  than the raw kaizen entry: it also carries the worked misclassification example, the
+  discipline that caught it (spot-reading every reply, not just the flagged ones), and the
+  scope-corrected framing ("pt-BR vs. es specifically"). Also checked `claude/qa-engineer/
+  qa-testing-techniques.md` (no existing section on language classification — confirms nothing
+  there duplicates or needs updating) and `falkor-chat/docs/BACKLOG.md`/`HISTORY.md`'s K-065/K-066
+  entries (no restatement of this specific classifier mechanism — they cover the wrong-language-
+  reply and dead-turn findings, a different layer). Same disposition class as U2/U4: already
+  published, no separate KB or prompt promotion adds anything the committed report doesn't
+  already say more fully.
+- **No `MENTIONS` tag** — this is qa-engineer's own live-QA finding about its own scratch harness,
+  not substantively about another agent's domain.
+- **Dedup check:** grepped `plan.md` and this file for the entry's id before writing — it appears
+  nowhere; no prior distillation pass opened an item for it.
+- **Graph:** entry carried exactly 1 `PRODUCED` edge, 0 `MENTIONS` ⇒ `otherRemaining = 0` ⇒
+  full-node `DETACH DELETE`, run only after this file edit was confirmed on disk. Post-clear:
+  `qa-engineer` PRODUCED ∪ MENTIONS → 0 rows (re-verified read-only, both legacy and current-shape
+  reads).
+- **Docs touched:** this file only — no promotion needed. `falkor-chat/docs/test-reports/
+  salesperson-language-salience-report.md` was read, not edited (already carries the fact in full).
+
 ## 2026-09-18 — `kaizen_team` distillation pass 2, unit U4: 2 entries — both promoted (1 to `model-bench/AGENTS.md`, 1 to this file), 1 corrected on re-derivation
 
 - **What:** `cobb` ran `agent-maintenance` skill §5 over the 2 `qa-engineer`-produced entries

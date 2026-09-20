@@ -211,6 +211,17 @@ protects whoever runs it.
    it). Better still: don't create enumerated summary facts ("all N agents use
    model X") in always-loaded context docs at all — they duplicate frontmatter
    ground truth, cost tokens every session, and rot; delete them when found.
+3a. **If you pointed N existing agents at a new MCP-tool-backed skill/capability
+   (a skill's `SKILL.md` body naming a tool like `search_documents`/
+   `get_document`):** check each of those N agents' frontmatter `tools:` field.
+   A skill's allowed-tools declaration only *pre-approves* a tool for a session
+   that already has it — it never *grants* one to an agent whose frontmatter
+   carries an explicit, narrower `tools:` allowlist that omits it, and that
+   agent silently can't call the tool the rollout just pointed it at. Add the
+   tool name to every such allowlist in the same change, not just the pointer
+   itself (origin: 2026-09-19, K-030 Track 2 Stage 7 — a `search_documents`/
+   `get_document` rollout to nine agents missed the tool on four of them that
+   declare explicit `tools:` allowlists).
 4. Update `README.md` (humans) and the relevant context file(s) (agents).
 5. Mention at the end which docs you touched.
 
