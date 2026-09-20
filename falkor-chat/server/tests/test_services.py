@@ -1487,6 +1487,50 @@ def test_fuse_chunk_hits_rrf_rejected_when_both_signals_fail_their_half_of_the_g
     assert "c1" not in {row["chunkId"] for row in rows}
 
 
+def test_fuse_chunk_hits_rrf_vector_score_at_exact_floor_admits():
+    """Catches narrowing the floor comparison from `<=` to `<`: a chunk
+    sitting at exactly `VECTOR_ADMISSIBILITY_FLOOR`, with no lexical
+    presence at all, must still admit and report that exact score."""
+    vector_hits = [
+        {
+            "chunkId": "c1", "text": "x", "documentId": "d1", "seq": 0,
+            "score": VECTOR_ADMISSIBILITY_FLOOR,
+        },
+    ]
+
+    rows = _fuse_chunk_hits_rrf(vector_hits, [], limit=5)
+
+    assert len(rows) == 1
+    assert rows[0]["chunkId"] == "c1"
+    assert rows[0]["score"] == VECTOR_ADMISSIBILITY_FLOOR
+
+
+def test_fuse_chunk_hits_rrf_score_reports_real_vector_value_when_admitted_via_lexical():
+    """Per §3.6: `score` means the chunk's real vector distance whenever it
+    was present in `vector_hits`, never a stand-in for "admitted via the
+    lexical half of the gate." A chunk present in both signals, with a
+    floor-failing vector score, is admitted here only because it also
+    passes the lexical rank gate — but its output `score` must still be
+    that real, floor-failing value, not `None`. Catches collapsing `score`
+    to `None` whenever admission came via the lexical half."""
+    vector_hits = [
+        {
+            "chunkId": "c1", "text": "x", "documentId": "d1", "seq": 0,
+            "score": VECTOR_ADMISSIBILITY_FLOOR + 0.17,  # fails the vector floor
+        },
+    ]
+    lexical_hits = [
+        {"chunkId": "c1", "text": "x", "documentId": "d1", "seq": 0, "score": 1.0},
+    ]
+
+    rows = _fuse_chunk_hits_rrf(vector_hits, lexical_hits, limit=5)
+
+    assert len(rows) == 1
+    assert rows[0]["chunkId"] == "c1"
+    assert rows[0]["score"] == VECTOR_ADMISSIBILITY_FLOOR + 0.17
+    assert rows[0]["lexicalRank"] == 1
+
+
 def test_fuse_chunk_hits_rrf_pins_rrf_arithmetic_and_sort_direction():
     """Candidate A: vector rank 1, no lexical. Candidate B: vector rank 5,
     lexical rank 1. `rrfScore`s are hardcoded literals (`1/61`, `1/65 + 1/61`
