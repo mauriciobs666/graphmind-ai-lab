@@ -155,3 +155,72 @@ this is the one behavior in the plan documented as intentional but currently unv
   be worth a short, separate design note if a production migration is ever scheduled; not
   necessary to resolve before `ws:eval`'s own migration, given that workspace's already-established
   no-live-traffic status.
+
+## Pass 2
+
+Reviewed: the current (revised) `falkor-chat/docs/plans/embedding-migration.md` against Pass 1's
+five findings above, plus an interaction check across the revisions and one fresh read of
+`falkor-chat/docs/requirements/embedding-migration.md`'s decision log. Verified against live
+source, not the plan's paraphrase, for every new substantive claim the revision makes (the
+already-teco-confirmed facts listed in the brief were taken as given, not re-verified).
+
+**Verdict: approve.** All two blockers, the major, and the three minors are fixed, each with
+grounded evidence; the interaction check surfaced no new problems.
+
+**CPG:** considered, not relevant — same reasoning as Pass 1 and the plan's own §0: every new claim
+in this revision (script call sites, `ENABLE_AGENT`/`OPENCODE_CONFIG` gating, `seed_eval_corpus.py`'s
+imports) was cheaper to settle with a direct grep/read than a graph traversal.
+
+### Disposition of Pass 1 findings
+
+- **Blocker 1 (FR-2 gating) — fixed.** §3.2 now presents Option A (brief — it is genuinely the
+  simpler design, nothing left unspecified) and Option B (named call sites with logic changes —
+  verified at `scripts/start_server.sh:148`, `scripts/start_demo.sh:166`,
+  `scripts/start_agent_team.sh:205`; five doc-only scripts confirmed to hold only precondition
+  *comments*, never an actual `bootstrap_schema.sh` call, via `grep -n bootstrap_schema.sh
+  scripts/seed_*.sh`; the one named regression risk — `create_workspace.sh`'s pin step calling
+  `ModelGateway.from_env()` unconditionally — checked against `server/falkorchat/app.py:588`
+  (`ModelGateway.from_env()` is called only inside the `if config.ENABLE_AGENT` branch) and
+  `scripts/start_server.sh:16-17` (its own header: "Set 0 to serve the UI/REST without the AI
+  loop" — verbatim, backing the plan's claim word-for-word)). §5 step 2 is split from steps 1/3 and
+  explicitly gated ("Do not build both; do not default to A"), matching the review's suggested fix.
+- **Blocker 2 (no traffic-stop precondition) — fixed.** New §3.4 step 0 names the concrete action
+  ("stop the one `falkorchat.app` process whose `FALKORCHAT_WS_ID` equals the target workspace"),
+  grounded in new §2.6 (which itself rests on the already-teco-confirmed `config.py:279`
+  docstring). Wired into §5 step 4 as sub-step `a`, first in sequence, gated by
+  `--i-have-stopped-traffic`/an interactive prompt, and covered by test 6 (asserts zero
+  `GRAPH.QUERY` calls before the flag is set) — an implementer reading §5 alone hits this before
+  any graph access, not just in §3.4's narrative.
+- **Major (risk ranking) — fixed.** §7 now names the hard-cap bypass and the pre-migration
+  traffic race as "two comparably severe" risks, both mitigated; no longer claims the hard-cap
+  bypass is the plan's sole highest-severity item.
+- **Minor (FR-19 bypass unstated) — fixed.** §3.3's new "Deliberate, by-construction bypass of the
+  FR-19 guard" paragraph states it explicitly and ties it to step 0 (migration and the guarded hot
+  path are "never simultaneously active against the same workspace").
+- **Minor (undefined vanished-row behavior) — fixed.** §3.3's new "Vanished row mid-migration"
+  paragraph commits to "skip and log, never abort the batch or retry"; §5 step 4c and test 13
+  implement/cover it.
+- **Minor (no self-healing test) — fixed.** Test 5a added, explicit: a pre-migration row with
+  `embedding IS NULL` ends up embedded and marked like every other row.
+
+### Interaction check
+
+- **Step 0 (Blocker 2) vs. Option A/B (Blocker 1):** no negative interaction found. Step 0 governs
+  *migrating* an existing workspace; Option A/B governs *creating* a new one — disjoint operations.
+  The one plausible collision — restarting the target process at §3.4 step 5 potentially re-running
+  `start_server.sh`/`create_workspace.sh` and re-triggering `pin()` — is safe: `pin()` (§5 step 1)
+  is a no-op once `embeddingModel` is already set, and step 4 (FR-5) sets it to `target_ref` before
+  step 5's restart runs, so a re-invoked `pin()` reads that value back unchanged.
+- **§7 risk ranking vs. Blocker 1/2's resolution:** still consistent — the ranking talks about the
+  hard-cap bypass and the traffic race, neither of which Blocker 1's fix (an FR-2/bootstrap-time
+  concern) touches.
+- **Test 5a vs. revised §3.4 ordering:** unaffected — §6's preamble states every `migrate` test
+  except test 6 runs with `traffic_stopped=True`, so test 5a never exercises step 0 at all.
+- No other revision-introduced defect found. One near-miss not worth a finding: §3.2's claim that
+  only `start_server.sh` has a "no-config escape hatch" (vs. `start_demo.sh`/`start_agent_team.sh`)
+  is true only for the *documented* mode (`start_server.sh`'s header literally says "Set 0 to serve
+  the UI/REST without the AI loop"; `start_demo.sh` has no equivalent sentence, though nothing
+  stops an operator from setting `FALKORCHAT_ENABLE_AGENT=0` there too). This doesn't matter in
+  practice: `pin()`'s `ModelConfigError`-is-non-fatal behavior (§5 step 1) applies unconditionally
+  at every call site, documented mode or not, so the safety property holds regardless of the
+  attribution being slightly loose.
