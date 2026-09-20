@@ -1,0 +1,2855 @@
+{
+  "aggregates": {
+    "kind": "classification",
+    "n": 85,
+    "parseFailures": 27,
+    "perClass": [
+      {
+        "n": 40,
+        "name": "falseAdvanceRate",
+        "successes": 0,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 30,
+        "name": "falseSuspendRate",
+        "successes": 28,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 30,
+        "name": "advanceRecall",
+        "successes": 2,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 15,
+        "name": "falseAdvanceRateBoundary",
+        "successes": 0,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 24,
+        "name": "falseAdvanceRateByUnderstanding",
+        "successes": 0,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 16,
+        "name": "falseAdvanceRateByTurns",
+        "successes": 0,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 18,
+        "name": "falseSuspendRateByUnderstanding",
+        "successes": 18,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 12,
+        "name": "falseSuspendRateByTurns",
+        "successes": 10,
+        "type": "binary",
+        "unit": "item"
+      }
+    ]
+  },
+  "armKind": "model",
+  "attestationTripWire": "compared",
+  "basis": "by-construction",
+  "designEffect": 1.0,
+  "fingerprint": {
+    "arch": "gemma4",
+    "armKind": "model",
+    "benchSchemaVersion": 1,
+    "benchVersion": "0.1.0",
+    "callSurface": "chat",
+    "compatibilityType": "gguf",
+    "endedAt": "2026-09-20T01:53:39Z",
+    "hostOs": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "hostRamGb": 16,
+    "kvCacheSetting": "f16",
+    "lmStudioAppVersion": "0.4.24+1",
+    "loadedContextLength": 8192,
+    "maxContextLength": 131072,
+    "maxTokens": 256,
+    "modelCapabilities": [
+      "tool_use"
+    ],
+    "modelCapabilitiesPresent": true,
+    "modelKey": "google/gemma-4-e2b",
+    "modelPublisher": "google",
+    "modelType": "vlm",
+    "otherResidentWorkloads": [],
+    "packContentHash": "245f1af9d3a7ad95457ee02bd961a992d777fa419a71e7297a317bb057341369",
+    "packId": "guard-judge-understanding",
+    "packVersion": "1.0.0",
+    "pythonVersion": "3.12.3",
+    "quantization": "Q4_K_M",
+    "residencySource": "lmstudio-api-v0",
+    "residentModelsAtEnd": [
+      {
+        "id": "google/gemma-4-e2b",
+        "state": "loaded"
+      }
+    ],
+    "residentModelsAtStart": [
+      {
+        "id": "google/gemma-3-4b",
+        "state": "loaded"
+      }
+    ],
+    "runtimeName": "llama.cpp-win-x86_64-nvidia-cuda12-avx2",
+    "runtimeVersion": "2.40.0",
+    "startedAt": "2026-09-20T01:51:10Z",
+    "temperature": 0.0
+  },
+  "items": [
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-01",
+      "latencyMs": 3188.6162669979967,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "ca-01"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3280.885,
+            "promptTokens": 303,
+            "tokensPerSecond": 79.56382797489152,
+            "ttftMs": 75.911,
+            "wallClockMs": 3188.6162669979967
+          }
+        ],
+        "wallClockMs": 3188.6162669979967,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-02",
+      "latencyMs": 405.3055019758176,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ca-02"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 404.048,
+            "promptTokens": 252,
+            "tokensPerSecond": 77.24164156313316,
+            "ttftMs": 67.442,
+            "wallClockMs": 405.3055019758176
+          }
+        ],
+        "wallClockMs": 405.3055019758176,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-03",
+      "latencyMs": 3196.350173006067,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "ca-03"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3295.606,
+            "promptTokens": 283,
+            "tokensPerSecond": 79.02348051017559,
+            "ttftMs": 68.717,
+            "wallClockMs": 3196.350173006067
+          }
+        ],
+        "wallClockMs": 3196.350173006067,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-04",
+      "latencyMs": 377.8376849950291,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ca-04"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 374.515,
+            "promptTokens": 279,
+            "tokensPerSecond": 78.46419417272585,
+            "ttftMs": 68.643,
+            "wallClockMs": 377.8376849950291
+          }
+        ],
+        "wallClockMs": 377.8376849950291,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-05",
+      "latencyMs": 3221.9182639964856,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "ca-05"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3308.833,
+            "promptTokens": 301,
+            "tokensPerSecond": 78.8468935560753,
+            "ttftMs": 74.717,
+            "wallClockMs": 3221.9182639964856
+          }
+        ],
+        "wallClockMs": 3221.9182639964856,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-06",
+      "latencyMs": 432.1630640188232,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ca-06"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 424.08299999999997,
+            "promptTokens": 245,
+            "tokensPerSecond": 75.11831134036107,
+            "ttftMs": 64.65,
+            "wallClockMs": 432.1630640188232
+          }
+        ],
+        "wallClockMs": 432.1630640188232,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-07",
+      "latencyMs": 347.6711839903146,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ca-07"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 346.36899999999997,
+            "promptTokens": 281,
+            "tokensPerSecond": 76.4047560141458,
+            "ttftMs": 71.517,
+            "wallClockMs": 347.6711839903146
+          }
+        ],
+        "wallClockMs": 347.6711839903146,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-08",
+      "latencyMs": 382.9523370077368,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ca-08"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 383.78099999999995,
+            "promptTokens": 277,
+            "tokensPerSecond": 79.0511334351512,
+            "ttftMs": 67.53,
+            "wallClockMs": 382.9523370077368
+          }
+        ],
+        "wallClockMs": 382.9523370077368,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-01",
+      "latencyMs": 3253.014179004822,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "cs-01"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3322.301,
+            "promptTokens": 245,
+            "tokensPerSecond": 78.2479576515916,
+            "ttftMs": 63.43,
+            "wallClockMs": 3253.014179004822
+          }
+        ],
+        "wallClockMs": 3253.014179004822,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-02",
+      "latencyMs": 3232.98804499791,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cs-02"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3298.776,
+            "promptTokens": 246,
+            "tokensPerSecond": 78.827150914735,
+            "ttftMs": 63.85,
+            "wallClockMs": 3232.98804499791
+          }
+        ],
+        "wallClockMs": 3232.98804499791,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-03",
+      "latencyMs": 3289.676611981122,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cs-03"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3284.125,
+            "promptTokens": 257,
+            "tokensPerSecond": 79.17501497339254,
+            "ttftMs": 63.412,
+            "wallClockMs": 3289.676611981122
+          }
+        ],
+        "wallClockMs": 3289.676611981122,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-04",
+      "latencyMs": 3247.0955720054917,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "cs-04"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3301.255,
+            "promptTokens": 211,
+            "tokensPerSecond": 78.69355126406532,
+            "ttftMs": 60.837,
+            "wallClockMs": 3247.0955720054917
+          }
+        ],
+        "wallClockMs": 3247.0955720054917,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-05",
+      "latencyMs": 3210.595934011508,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "cs-05"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3291.0,
+            "promptTokens": 257,
+            "tokensPerSecond": 79.07006165604336,
+            "ttftMs": 66.012,
+            "wallClockMs": 3210.595934011508
+          }
+        ],
+        "wallClockMs": 3210.595934011508,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-06",
+      "latencyMs": 3185.5172029754613,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "cs-06"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3293.808,
+            "promptTokens": 251,
+            "tokensPerSecond": 78.97984062797336,
+            "ttftMs": 65.136,
+            "wallClockMs": 3185.5172029754613
+          }
+        ],
+        "wallClockMs": 3185.5172029754613,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-07",
+      "latencyMs": 375.71778800338507,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cs-07"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 373.283,
+            "promptTokens": 240,
+            "tokensPerSecond": 77.15057220007715,
+            "ttftMs": 62.203,
+            "wallClockMs": 375.71778800338507
+          }
+        ],
+        "wallClockMs": 375.71778800338507,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "boundary"
+      },
+      "itemId": "bd-01",
+      "latencyMs": 3208.433802006766,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "bd-01"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3291.139,
+            "promptTokens": 256,
+            "tokensPerSecond": 79.0554271550742,
+            "ttftMs": 65.554,
+            "wallClockMs": 3208.433802006766
+          }
+        ],
+        "wallClockMs": 3208.433802006766,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "boundary"
+      },
+      "itemId": "bd-02",
+      "latencyMs": 3232.0101440127473,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "bd-02"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3295.14,
+            "promptTokens": 247,
+            "tokensPerSecond": 78.90637619218252,
+            "ttftMs": 63.462,
+            "wallClockMs": 3232.0101440127473
+          }
+        ],
+        "wallClockMs": 3232.0101440127473,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "boundary"
+      },
+      "itemId": "bd-03",
+      "latencyMs": 3236.371256003622,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "bd-03"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3302.2740000000003,
+            "promptTokens": 249,
+            "tokensPerSecond": 78.41616632624583,
+            "ttftMs": 63.14600000000001,
+            "wallClockMs": 3236.371256003622
+          }
+        ],
+        "wallClockMs": 3236.371256003622,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "boundary"
+      },
+      "itemId": "bd-04",
+      "latencyMs": 3240.5938869924285,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "bd-04"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3302.08,
+            "promptTokens": 279,
+            "tokensPerSecond": 78.9087690850915,
+            "ttftMs": 70.5,
+            "wallClockMs": 3240.5938869924285
+          }
+        ],
+        "wallClockMs": 3240.5938869924285,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_advance"
+      },
+      "itemId": "tn-01",
+      "latencyMs": 392.67898601247,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-01"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 385.51,
+            "promptTokens": 258,
+            "tokensPerSecond": 78.16994771993897,
+            "ttftMs": 65.694,
+            "wallClockMs": 392.67898601247
+          }
+        ],
+        "wallClockMs": 392.67898601247,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_advance"
+      },
+      "itemId": "tn-02",
+      "latencyMs": 381.9080569955986,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-02"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 381.366,
+            "promptTokens": 219,
+            "tokensPerSecond": 79.03563875022526,
+            "ttftMs": 65.053,
+            "wallClockMs": 381.9080569955986
+          }
+        ],
+        "wallClockMs": 381.9080569955986,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_advance"
+      },
+      "itemId": "tn-03",
+      "latencyMs": 404.99316799105145,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-03"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 405.003,
+            "promptTokens": 259,
+            "tokensPerSecond": 76.61570739871993,
+            "ttftMs": 65.647,
+            "wallClockMs": 404.99316799105145
+          }
+        ],
+        "wallClockMs": 404.99316799105145,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-04",
+      "latencyMs": 359.79238999425434,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-04"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 359.843,
+            "promptTokens": 196,
+            "tokensPerSecond": 76.83904225145075,
+            "ttftMs": 60.516,
+            "wallClockMs": 359.79238999425434
+          }
+        ],
+        "wallClockMs": 359.79238999425434,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-05",
+      "latencyMs": 357.0994659967255,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-05"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 355.532,
+            "promptTokens": 214,
+            "tokensPerSecond": 78.34908263443681,
+            "ttftMs": 61.974,
+            "wallClockMs": 357.0994659967255
+          }
+        ],
+        "wallClockMs": 357.0994659967255,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-06",
+      "latencyMs": 368.0118129996117,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-06"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 368.266,
+            "promptTokens": 208,
+            "tokensPerSecond": 80.5627793514374,
+            "ttftMs": 57.949,
+            "wallClockMs": 368.0118129996117
+          }
+        ],
+        "wallClockMs": 368.0118129996117,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "boundary"
+      },
+      "itemId": "tn-07",
+      "latencyMs": 361.3410470134113,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-07"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 360.96400000000006,
+            "promptTokens": 241,
+            "tokensPerSecond": 76.7795325795586,
+            "ttftMs": 61.405,
+            "wallClockMs": 361.3410470134113
+          }
+        ],
+        "wallClockMs": 361.3410470134113,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-09",
+      "latencyMs": 3249.438855011249,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "ca-09"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3318.165,
+            "promptTokens": 286,
+            "tokensPerSecond": 78.49042293717935,
+            "ttftMs": 69.361,
+            "wallClockMs": 3249.438855011249
+          }
+        ],
+        "wallClockMs": 3249.438855011249,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-10",
+      "latencyMs": 3300.0814800034277,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "ca-10"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3299.201,
+            "promptTokens": 273,
+            "tokensPerSecond": 78.88684779911881,
+            "ttftMs": 66.723,
+            "wallClockMs": 3300.0814800034277
+          }
+        ],
+        "wallClockMs": 3300.0814800034277,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-11",
+      "latencyMs": 352.4604289850686,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ca-11"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 337.317,
+            "promptTokens": 286,
+            "tokensPerSecond": 78.2913107829504,
+            "ttftMs": 69.088,
+            "wallClockMs": 352.4604289850686
+          }
+        ],
+        "wallClockMs": 352.4604289850686,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-12",
+      "latencyMs": 417.6606420078315,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ca-12"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 416.943,
+            "promptTokens": 283,
+            "tokensPerSecond": 77.37875179475715,
+            "ttftMs": 68.01,
+            "wallClockMs": 417.6606420078315
+          }
+        ],
+        "wallClockMs": 417.6606420078315,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-13",
+      "latencyMs": 344.0528539940715,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ca-13"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 341.221,
+            "promptTokens": 264,
+            "tokensPerSecond": 76.87182903705222,
+            "ttftMs": 68.039,
+            "wallClockMs": 344.0528539940715
+          }
+        ],
+        "wallClockMs": 344.0528539940715,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-14",
+      "latencyMs": 437.38393098465167,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ca-14"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 438.09299999999996,
+            "promptTokens": 269,
+            "tokensPerSecond": 78.18734766947782,
+            "ttftMs": 67.189,
+            "wallClockMs": 437.38393098465167
+          }
+        ],
+        "wallClockMs": 437.38393098465167,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-15",
+      "latencyMs": 3255.0390889809933,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "ca-15"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3325.722,
+            "promptTokens": 258,
+            "tokensPerSecond": 78.35073846339145,
+            "ttftMs": 71.126,
+            "wallClockMs": 3255.0390889809933
+          }
+        ],
+        "wallClockMs": 3255.0390889809933,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-16",
+      "latencyMs": 3226.7488870129455,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "ca-16"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3333.733,
+            "promptTokens": 281,
+            "tokensPerSecond": 78.299278264888,
+            "ttftMs": 76.998,
+            "wallClockMs": 3226.7488870129455
+          }
+        ],
+        "wallClockMs": 3226.7488870129455,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-17",
+      "latencyMs": 435.95074000768363,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "ca-17"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 435.541,
+            "promptTokens": 269,
+            "tokensPerSecond": 79.24731447247248,
+            "ttftMs": 69.598,
+            "wallClockMs": 435.95074000768363
+          }
+        ],
+        "wallClockMs": 435.95074000768363,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_advance"
+      },
+      "itemId": "ca-18",
+      "latencyMs": 3225.665559992194,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "ca-18"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3323.511,
+            "promptTokens": 269,
+            "tokensPerSecond": 78.38255296585747,
+            "ttftMs": 70.236,
+            "wallClockMs": 3225.665559992194
+          }
+        ],
+        "wallClockMs": 3225.665559992194,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_advance"
+      },
+      "itemId": "tn-08",
+      "latencyMs": 377.591862983536,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-08"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 369.009,
+            "promptTokens": 266,
+            "tokensPerSecond": 76.13146248539435,
+            "ttftMs": 66.9,
+            "wallClockMs": 377.591862983536
+          }
+        ],
+        "wallClockMs": 377.591862983536,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_advance"
+      },
+      "itemId": "tn-10",
+      "latencyMs": 370.4769799951464,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-10"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 367.701,
+            "promptTokens": 278,
+            "tokensPerSecond": 76.8657489564639,
+            "ttftMs": 68.478,
+            "wallClockMs": 370.4769799951464
+          }
+        ],
+        "wallClockMs": 370.4769799951464,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_advance"
+      },
+      "itemId": "tn-11",
+      "latencyMs": 379.1106650023721,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-11"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 378.103,
+            "promptTokens": 247,
+            "tokensPerSecond": 76.26625821848376,
+            "ttftMs": 63.416,
+            "wallClockMs": 379.1106650023721
+          }
+        ],
+        "wallClockMs": 379.1106650023721,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_advance"
+      },
+      "itemId": "tn-12",
+      "latencyMs": 3225.2778350084554,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "tn-12"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3296.056,
+            "promptTokens": 243,
+            "tokensPerSecond": 78.8337306965563,
+            "ttftMs": 61.4,
+            "wallClockMs": 3225.2778350084554
+          }
+        ],
+        "wallClockMs": 3225.2778350084554,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_advance"
+      },
+      "itemId": "tn-13",
+      "latencyMs": 374.85033701523207,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-13"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 367.891,
+            "promptTokens": 273,
+            "tokensPerSecond": 77.40354844789059,
+            "ttftMs": 70.747,
+            "wallClockMs": 374.85033701523207
+          }
+        ],
+        "wallClockMs": 374.85033701523207,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_advance"
+      },
+      "itemId": "tn-14",
+      "latencyMs": 351.2803020130377,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-14"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 350.197,
+            "promptTokens": 225,
+            "tokensPerSecond": 79.24448992389084,
+            "ttftMs": 59.956,
+            "wallClockMs": 351.2803020130377
+          }
+        ],
+        "wallClockMs": 351.2803020130377,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_advance"
+      },
+      "itemId": "tn-15",
+      "latencyMs": 370.9086890157778,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-15"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 369.978,
+            "promptTokens": 250,
+            "tokensPerSecond": 75.41403947105249,
+            "ttftMs": 64.995,
+            "wallClockMs": 370.9086890157778
+          }
+        ],
+        "wallClockMs": 370.9086890157778,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_advance"
+      },
+      "itemId": "tn-16",
+      "latencyMs": 378.7471849936992,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-16"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 380.10699999999997,
+            "promptTokens": 249,
+            "tokensPerSecond": 75.94167679222357,
+            "ttftMs": 64.075,
+            "wallClockMs": 378.7471849936992
+          }
+        ],
+        "wallClockMs": 378.7471849936992,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseSuspendRate": 1
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_advance"
+      },
+      "itemId": "tn-17",
+      "latencyMs": 367.6247579860501,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-17"
+      ],
+      "scoreable": {
+        "falseSuspendRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 365.30199999999996,
+            "promptTokens": 244,
+            "tokensPerSecond": 75.65714812024882,
+            "ttftMs": 61.299,
+            "wallClockMs": 367.6247579860501
+          }
+        ],
+        "wallClockMs": 367.6247579860501,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-08",
+      "latencyMs": 3141.787356988061,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cs-08"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3207.609,
+            "promptTokens": 235,
+            "tokensPerSecond": 78.6760508827007,
+            "ttftMs": 68.153,
+            "wallClockMs": 3141.787356988061
+          }
+        ],
+        "wallClockMs": 3141.787356988061,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-09",
+      "latencyMs": 372.9754090018105,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cs-09"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 365.88,
+            "promptTokens": 232,
+            "tokensPerSecond": 79.21236505018433,
+            "ttftMs": 62.89699999999999,
+            "wallClockMs": 372.9754090018105
+          }
+        ],
+        "wallClockMs": 372.9754090018105,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-10",
+      "latencyMs": 327.8854349919129,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cs-10"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 326.464,
+            "promptTokens": 213,
+            "tokensPerSecond": 78.2122905027933,
+            "ttftMs": 57.964,
+            "wallClockMs": 327.8854349919129
+          }
+        ],
+        "wallClockMs": 327.8854349919129,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-11",
+      "latencyMs": 396.752648986876,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cs-11"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 395.387,
+            "promptTokens": 247,
+            "tokensPerSecond": 75.42888866092603,
+            "ttftMs": 63.94899999999999,
+            "wallClockMs": 396.752648986876
+          }
+        ],
+        "wallClockMs": 396.752648986876,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-12",
+      "latencyMs": 3232.8923210152425,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "cs-12"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3297.93,
+            "promptTokens": 248,
+            "tokensPerSecond": 78.8769652350549,
+            "ttftMs": 65.047,
+            "wallClockMs": 3232.8923210152425
+          }
+        ],
+        "wallClockMs": 3232.8923210152425,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-13",
+      "latencyMs": 378.4425080229994,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cs-13"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 371.827,
+            "promptTokens": 238,
+            "tokensPerSecond": 74.08337923281829,
+            "ttftMs": 61.366,
+            "wallClockMs": 378.4425080229994
+          }
+        ],
+        "wallClockMs": 378.4425080229994,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-14",
+      "latencyMs": 442.9929629841354,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cs-14"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 443.31100000000004,
+            "promptTokens": 229,
+            "tokensPerSecond": 78.54842510407666,
+            "ttftMs": 61.381,
+            "wallClockMs": 442.9929629841354
+          }
+        ],
+        "wallClockMs": 442.9929629841354,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-15",
+      "latencyMs": 3248.504903021967,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "cs-15"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3306.686,
+            "promptTokens": 255,
+            "tokensPerSecond": 78.68495531311675,
+            "ttftMs": 65.914,
+            "wallClockMs": 3248.504903021967
+          }
+        ],
+        "wallClockMs": 3248.504903021967,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-16",
+      "latencyMs": 3355.871109990403,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "cs-16"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3356.9539999999997,
+            "promptTokens": 261,
+            "tokensPerSecond": 77.45554583226895,
+            "ttftMs": 64.743,
+            "wallClockMs": 3355.871109990403
+          }
+        ],
+        "wallClockMs": 3355.871109990403,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-17",
+      "latencyMs": 3226.7009950010106,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "cs-17"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3291.078,
+            "promptTokens": 252,
+            "tokensPerSecond": 79.02034603474355,
+            "ttftMs": 64.061,
+            "wallClockMs": 3226.7009950010106
+          }
+        ],
+        "wallClockMs": 3226.7009950010106,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-18",
+      "latencyMs": 3108.332733012503,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cs-18"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3208.61,
+            "promptTokens": 255,
+            "tokensPerSecond": 79.4798078368998,
+            "ttftMs": 63.15699999999999,
+            "wallClockMs": 3108.332733012503
+          }
+        ],
+        "wallClockMs": 3108.332733012503,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-19",
+      "latencyMs": 381.74068002263084,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cs-19"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 382.756,
+            "promptTokens": 244,
+            "tokensPerSecond": 75.8372910919622,
+            "ttftMs": 66.289,
+            "wallClockMs": 381.74068002263084
+          }
+        ],
+        "wallClockMs": 381.74068002263084,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-20",
+      "latencyMs": 3171.2179119931534,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "cs-20"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3284.1530000000002,
+            "promptTokens": 252,
+            "tokensPerSecond": 79.2137768600715,
+            "ttftMs": 65.016,
+            "wallClockMs": 3171.2179119931534
+          }
+        ],
+        "wallClockMs": 3171.2179119931534,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-21",
+      "latencyMs": 3225.000677019125,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "cs-21"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3288.447,
+            "promptTokens": 249,
+            "tokensPerSecond": 79.18703792034343,
+            "ttftMs": 68.223,
+            "wallClockMs": 3225.000677019125
+          }
+        ],
+        "wallClockMs": 3225.000677019125,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-22",
+      "latencyMs": 368.17891598911956,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cs-22"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 359.85699999999997,
+            "promptTokens": 231,
+            "tokensPerSecond": 78.69785839175793,
+            "ttftMs": 67.6,
+            "wallClockMs": 368.17891598911956
+          }
+        ],
+        "wallClockMs": 368.17891598911956,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-23",
+      "latencyMs": 3244.9992970214225,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "cs-23"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3317.89,
+            "promptTokens": 261,
+            "tokensPerSecond": 78.56430056667969,
+            "ttftMs": 72.141,
+            "wallClockMs": 3244.9992970214225
+          }
+        ],
+        "wallClockMs": 3244.9992970214225,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "clear_suspend"
+      },
+      "itemId": "cs-24",
+      "latencyMs": 3238.046354992548,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "cs-24"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3299.6,
+            "promptTokens": 251,
+            "tokensPerSecond": 78.83775221510896,
+            "ttftMs": 65.109,
+            "wallClockMs": 3238.046354992548
+          }
+        ],
+        "wallClockMs": 3238.046354992548,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-09",
+      "latencyMs": 350.66222099703737,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-09"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 341.342,
+            "promptTokens": 251,
+            "tokensPerSecond": 75.53494930166141,
+            "ttftMs": 63.325,
+            "wallClockMs": 350.66222099703737
+          }
+        ],
+        "wallClockMs": 350.66222099703737,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-18",
+      "latencyMs": 369.88115301937796,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-18"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 368.82800000000003,
+            "promptTokens": 244,
+            "tokensPerSecond": 74.90295182763202,
+            "ttftMs": 61.764,
+            "wallClockMs": 369.88115301937796
+          }
+        ],
+        "wallClockMs": 369.88115301937796,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-19",
+      "latencyMs": 383.76037299167365,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-19"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 381.13399999999996,
+            "promptTokens": 255,
+            "tokensPerSecond": 75.63557519279193,
+            "ttftMs": 63.82300000000001,
+            "wallClockMs": 383.76037299167365
+          }
+        ],
+        "wallClockMs": 383.76037299167365,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-20",
+      "latencyMs": 360.22671998944134,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-20"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 357.518,
+            "promptTokens": 219,
+            "tokensPerSecond": 78.91955695246985,
+            "ttftMs": 66.082,
+            "wallClockMs": 360.22671998944134
+          }
+        ],
+        "wallClockMs": 360.22671998944134,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-21",
+      "latencyMs": 364.75386199890636,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-21"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 365.371,
+            "promptTokens": 247,
+            "tokensPerSecond": 76.34043852603209,
+            "ttftMs": 64.089,
+            "wallClockMs": 364.75386199890636
+          }
+        ],
+        "wallClockMs": 364.75386199890636,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-22",
+      "latencyMs": 359.35340501600876,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-22"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 358.99800000000005,
+            "promptTokens": 216,
+            "tokensPerSecond": 76.691463573222,
+            "ttftMs": 59.095,
+            "wallClockMs": 359.35340501600876
+          }
+        ],
+        "wallClockMs": 359.35340501600876,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-23",
+      "latencyMs": 353.87735700351186,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-23"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 352.035,
+            "promptTokens": 210,
+            "tokensPerSecond": 78.14596987642743,
+            "ttftMs": 57.714,
+            "wallClockMs": 353.87735700351186
+          }
+        ],
+        "wallClockMs": 353.87735700351186,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-24",
+      "latencyMs": 375.1386500080116,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-24"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 374.125,
+            "promptTokens": 259,
+            "tokensPerSecond": 77.44533649998709,
+            "ttftMs": 64.229,
+            "wallClockMs": 375.1386500080116
+          }
+        ],
+        "wallClockMs": 375.1386500080116,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-25",
+      "latencyMs": 369.1839690145571,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-25"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 365.66,
+            "promptTokens": 217,
+            "tokensPerSecond": 78.90013215772136,
+            "ttftMs": 61.478,
+            "wallClockMs": 369.1839690145571
+          }
+        ],
+        "wallClockMs": 369.1839690145571,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-26",
+      "latencyMs": 382.21136399079114,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-26"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 379.631,
+            "promptTokens": 252,
+            "tokensPerSecond": 76.7091763352191,
+            "ttftMs": 66.761,
+            "wallClockMs": 382.21136399079114
+          }
+        ],
+        "wallClockMs": 382.21136399079114,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-27",
+      "latencyMs": 3200.9233399876393,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "tn-27"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3267.027,
+            "promptTokens": 237,
+            "tokensPerSecond": 79.52849271986821,
+            "ttftMs": 60.629,
+            "wallClockMs": 3200.9233399876393
+          }
+        ],
+        "wallClockMs": 3200.9233399876393,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-28",
+      "latencyMs": 364.32913001044653,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-28"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 359.38,
+            "promptTokens": 265,
+            "tokensPerSecond": 78.17545290778696,
+            "ttftMs": 65.17,
+            "wallClockMs": 364.32913001044653
+          }
+        ],
+        "wallClockMs": 364.32913001044653,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRate": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "clear_suspend"
+      },
+      "itemId": "tn-29",
+      "latencyMs": 484.84100197674707,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-29"
+      ],
+      "scoreable": {
+        "falseAdvanceRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 485.78499999999997,
+            "promptTokens": 200,
+            "tokensPerSecond": 76.77114521611078,
+            "ttftMs": 55.936,
+            "wallClockMs": 484.84100197674707
+          }
+        ],
+        "wallClockMs": 484.84100197674707,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "boundary"
+      },
+      "itemId": "bd-05",
+      "latencyMs": 2998.623151011998,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "bd-05"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2997.457,
+            "promptTokens": 262,
+            "tokensPerSecond": 79.6184329315507,
+            "ttftMs": 70.999,
+            "wallClockMs": 2998.623151011998
+          }
+        ],
+        "wallClockMs": 2998.623151011998,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "boundary"
+      },
+      "itemId": "bd-06",
+      "latencyMs": 3236.7602959857322,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "bd-06"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3247.683,
+            "promptTokens": 250,
+            "tokensPerSecond": 79.16954912941772,
+            "ttftMs": 64.641,
+            "wallClockMs": 3236.7602959857322
+          }
+        ],
+        "wallClockMs": 3236.7602959857322,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "boundary"
+      },
+      "itemId": "bd-07",
+      "latencyMs": 3187.581621983554,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "bd-07"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3254.815,
+            "promptTokens": 252,
+            "tokensPerSecond": 78.32747652682183,
+            "ttftMs": 63.087,
+            "wallClockMs": 3187.581621983554
+          }
+        ],
+        "wallClockMs": 3187.581621983554,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "boundary"
+      },
+      "itemId": "bd-08",
+      "latencyMs": 390.72372700320557,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "bd-08"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 385.618,
+            "promptTokens": 273,
+            "tokensPerSecond": 78.25191482435575,
+            "ttftMs": 66.137,
+            "wallClockMs": 390.72372700320557
+          }
+        ],
+        "wallClockMs": 390.72372700320557,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "understanding",
+        "tier": "boundary"
+      },
+      "itemId": "bd-09",
+      "latencyMs": 3167.2256010060664,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "bd-09"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3265.2419999999997,
+            "promptTokens": 256,
+            "tokensPerSecond": 79.6541199453604,
+            "ttftMs": 63.900999999999996,
+            "wallClockMs": 3167.2256010060664
+          }
+        ],
+        "wallClockMs": 3167.2256010060664,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "boundary"
+      },
+      "itemId": "tn-30",
+      "latencyMs": 367.1765740145929,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-30"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 360.698,
+            "promptTokens": 255,
+            "tokensPerSecond": 77.67121437255167,
+            "ttftMs": 64.578,
+            "wallClockMs": 367.1765740145929
+          }
+        ],
+        "wallClockMs": 367.1765740145929,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "boundary"
+      },
+      "itemId": "tn-31",
+      "latencyMs": 360.2260799962096,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-31"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 361.257,
+            "promptTokens": 236,
+            "tokensPerSecond": 76.75698405123362,
+            "ttftMs": 61.61,
+            "wallClockMs": 360.2260799962096
+          }
+        ],
+        "wallClockMs": 360.2260799962096,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "boundary"
+      },
+      "itemId": "tn-32",
+      "latencyMs": 3194.7071159956977,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "tn-32"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 3298.398,
+            "promptTokens": 238,
+            "tokensPerSecond": 78.79733634102251,
+            "ttftMs": 62.248,
+            "wallClockMs": 3194.7071159956977
+          }
+        ],
+        "wallClockMs": 3194.7071159956977,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "boundary"
+      },
+      "itemId": "tn-33",
+      "latencyMs": 365.4671040130779,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-33"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 364.98400000000004,
+            "promptTokens": 216,
+            "tokensPerSecond": 78.2692069372607,
+            "ttftMs": 58.35,
+            "wallClockMs": 365.4671040130779
+          }
+        ],
+        "wallClockMs": 365.4671040130779,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "falseAdvanceRateBoundary": 0
+      },
+      "detail": {
+        "path": "turns",
+        "tier": "boundary"
+      },
+      "itemId": "tn-34",
+      "latencyMs": 716.8628160143271,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "tn-34"
+      ],
+      "scoreable": {
+        "falseAdvanceRateBoundary": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 718.14,
+            "promptTokens": 252,
+            "tokensPerSecond": 72.12513711289087,
+            "ttftMs": 385.385,
+            "wallClockMs": 716.8628160143271
+          }
+        ],
+        "wallClockMs": 716.8628160143271,
+        "withheldFor": null
+      }
+    }
+  ],
+  "latency": {
+    "callCount": 85,
+    "latencyItemCount": 85,
+    "latencyMsMax": null,
+    "latencyMsP50": 405.3055019758176,
+    "latencyMsP95": 3253.014179004822,
+    "latencyTimedCount": 85,
+    "latencyWithheldForLoad": 0,
+    "latencyWithheldForNoResponse": 0,
+    "prefillMsPer1kMedian": 258.48627450980393,
+    "statsCoveredCount": 85,
+    "tokensPerSecondMedian": 78.34908263443681,
+    "ttftMsMedian": 64.995,
+    "unexplainedMsMax": -53.9445710149314
+  },
+  "role": "guard-judge",
+  "runId": "guard-judge-understanding-google_gemma-4-e2b-2026-09-20T01:51:10Z",
+  "sessionId": "catalog-sweep-2026-09-19"
+}

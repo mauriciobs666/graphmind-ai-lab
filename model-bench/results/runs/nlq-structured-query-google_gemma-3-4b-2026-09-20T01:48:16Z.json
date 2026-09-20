@@ -1,0 +1,1208 @@
+{
+  "aggregates": {
+    "byShape": [
+      {
+        "n": 2,
+        "name": "exactMatchByAggregation",
+        "successes": 1,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 1,
+        "name": "exactMatchByCompoundFilter",
+        "successes": 1,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 0,
+        "name": "unanswerableAbstainRate",
+        "successes": 0,
+        "type": "binary",
+        "unit": "item"
+      }
+    ],
+    "exactMatch": {
+      "n": 3,
+      "name": "layer1ExactMatchRate",
+      "successes": 2,
+      "type": "binary",
+      "unit": "item"
+    },
+    "kind": "extraction",
+    "luckyPassCount": 0,
+    "malformedSpecCount": 29,
+    "parseFailures": 7,
+    "schemaViolationCount": 1
+  },
+  "armKind": "model",
+  "attestationTripWire": "compared",
+  "basis": "by-construction",
+  "designEffect": 1.0,
+  "fingerprint": {
+    "arch": "gemma3",
+    "armKind": "model",
+    "benchSchemaVersion": 1,
+    "benchVersion": "0.1.0",
+    "callSurface": "chat",
+    "compatibilityType": "gguf",
+    "endedAt": "2026-09-20T01:49:32Z",
+    "hostOs": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "hostRamGb": 16,
+    "kvCacheSetting": "f16",
+    "lmStudioAppVersion": "0.4.24+1",
+    "loadedContextLength": 8192,
+    "maxContextLength": 131072,
+    "maxTokens": 512,
+    "modelCapabilities": [],
+    "modelCapabilitiesPresent": false,
+    "modelKey": "google/gemma-3-4b",
+    "modelPublisher": "google",
+    "modelType": "vlm",
+    "otherResidentWorkloads": [],
+    "packContentHash": "8f975842302b0c720a992d9051a058707582d87f0eb6ed81191b5384473f3ccf",
+    "packId": "nlq-structured-query",
+    "packVersion": "1.2.0",
+    "pythonVersion": "3.12.3",
+    "quantization": "Q4_K_M",
+    "residencySource": "lmstudio-api-v0",
+    "residentModelsAtEnd": [
+      {
+        "id": "google/gemma-3-4b",
+        "state": "loaded"
+      }
+    ],
+    "residentModelsAtStart": [
+      {
+        "id": "google/gemma-3-4b",
+        "state": "loaded"
+      }
+    ],
+    "runtimeName": "llama.cpp-win-x86_64-nvidia-cuda12-avx2",
+    "runtimeVersion": "2.40.0",
+    "startedAt": "2026-09-20T01:48:16Z",
+    "temperature": 0.0
+  },
+  "items": [
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-01",
+      "latencyMs": 2030.1652099878993,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-01"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2067.077,
+            "promptTokens": 696,
+            "tokensPerSecond": 58.78968371694509,
+            "ttftMs": 230.02,
+            "wallClockMs": 2030.1652099878993
+          }
+        ],
+        "wallClockMs": 2030.1652099878993,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-02",
+      "latencyMs": 2174.178256012965,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-02"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2213.107,
+            "promptTokens": 698,
+            "tokensPerSecond": 58.719935023184505,
+            "ttftMs": 186.538,
+            "wallClockMs": 2174.178256012965
+          }
+        ],
+        "wallClockMs": 2174.178256012965,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-03",
+      "latencyMs": 2013.146986020729,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-03"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2046.5209999999997,
+            "promptTokens": 700,
+            "tokensPerSecond": 59.12722835741872,
+            "ttftMs": 186.126,
+            "wallClockMs": 2013.146986020729
+          }
+        ],
+        "wallClockMs": 2013.146986020729,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-04",
+      "latencyMs": 1937.6370700192638,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-04"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1971.2930000000001,
+            "promptTokens": 699,
+            "tokensPerSecond": 59.131162401506174,
+            "ttftMs": 178.668,
+            "wallClockMs": 1937.6370700192638
+          }
+        ],
+        "wallClockMs": 1937.6370700192638,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-05",
+      "latencyMs": 2057.096978998743,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-05"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2093.198,
+            "promptTokens": 705,
+            "tokensPerSecond": 58.86130699429991,
+            "ttftMs": 190.42,
+            "wallClockMs": 2057.096978998743
+          }
+        ],
+        "wallClockMs": 2057.096978998743,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "no_json"
+      },
+      "itemId": "nlq-06",
+      "latencyMs": 1977.6618519972544,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "nlq-06"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2016.613,
+            "promptTokens": 696,
+            "tokensPerSecond": 59.17008794629311,
+            "ttftMs": 174.466,
+            "wallClockMs": 1977.6618519972544
+          }
+        ],
+        "wallClockMs": 1977.6618519972544,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-07",
+      "latencyMs": 1682.962684019003,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-07"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1715.244,
+            "promptTokens": 696,
+            "tokensPerSecond": 59.19026417720655,
+            "ttftMs": 177.829,
+            "wallClockMs": 1682.962684019003
+          }
+        ],
+        "wallClockMs": 1682.962684019003,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-08",
+      "latencyMs": 1687.4745739914943,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-08"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1719.9740000000002,
+            "promptTokens": 696,
+            "tokensPerSecond": 58.96222594713745,
+            "ttftMs": 176.613,
+            "wallClockMs": 1687.4745739914943
+          }
+        ],
+        "wallClockMs": 1687.4745739914943,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-09",
+      "latencyMs": 1676.0663320019376,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-09"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1707.972,
+            "promptTokens": 697,
+            "tokensPerSecond": 58.7645344281819,
+            "ttftMs": 176.436,
+            "wallClockMs": 1676.0663320019376
+          }
+        ],
+        "wallClockMs": 1676.0663320019376,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "no_json"
+      },
+      "itemId": "nlq-10",
+      "latencyMs": 1703.5677239764482,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "nlq-10"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1736.39,
+            "promptTokens": 698,
+            "tokensPerSecond": 59.030400014372624,
+            "ttftMs": 177.871,
+            "wallClockMs": 1703.5677239764482
+          }
+        ],
+        "wallClockMs": 1703.5677239764482,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByCompoundFilter": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "exact set match",
+        "shape": "compound-filter"
+      },
+      "itemId": "nlq-11",
+      "latencyMs": 1690.036974992836,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-11"
+      ],
+      "scoreable": {
+        "exactMatchByCompoundFilter": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1722.452,
+            "promptTokens": 698,
+            "tokensPerSecond": 58.960506827108354,
+            "ttftMs": 179.046,
+            "wallClockMs": 1690.036974992836
+          }
+        ],
+        "wallClockMs": 1690.036974992836,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "no_json"
+      },
+      "itemId": "nlq-12",
+      "latencyMs": 1740.0852800055873,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "nlq-12"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1774.227,
+            "promptTokens": 700,
+            "tokensPerSecond": 58.726728744397285,
+            "ttftMs": 190.621,
+            "wallClockMs": 1740.0852800055873
+          }
+        ],
+        "wallClockMs": 1740.0852800055873,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-13",
+      "latencyMs": 1995.07093502325,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-13"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2036.016,
+            "promptTokens": 698,
+            "tokensPerSecond": 59.10870520769187,
+            "ttftMs": 175.038,
+            "wallClockMs": 1995.07093502325
+          }
+        ],
+        "wallClockMs": 1995.07093502325,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-14",
+      "latencyMs": 1990.759122010786,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-14"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2031.1310000000003,
+            "promptTokens": 698,
+            "tokensPerSecond": 58.917422097925076,
+            "ttftMs": 181.084,
+            "wallClockMs": 1990.759122010786
+          }
+        ],
+        "wallClockMs": 1990.759122010786,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-15",
+      "latencyMs": 1958.1592039903626,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-15"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1997.631,
+            "promptTokens": 699,
+            "tokensPerSecond": 59.1368997121083,
+            "ttftMs": 188.27,
+            "wallClockMs": 1958.1592039903626
+          }
+        ],
+        "wallClockMs": 1958.1592039903626,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByAggregation": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "'Gaming Mouse Pad XL' matches expected 'Gaming Mouse Pad XL'",
+        "shape": "aggregation"
+      },
+      "itemId": "nlq-16",
+      "latencyMs": 1121.349045977695,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-16"
+      ],
+      "scoreable": {
+        "exactMatchByAggregation": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1139.536,
+            "promptTokens": 693,
+            "tokensPerSecond": 59.211305411913315,
+            "ttftMs": 176.882,
+            "wallClockMs": 1121.349045977695
+          }
+        ],
+        "wallClockMs": 1121.349045977695,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByAggregation": 0,
+        "layer1ExactMatchRate": 0
+      },
+      "detail": {
+        "reason": "expected a single scalar row/column, got [{'p.name': '27-inch 4K Monitor'}, {'p.name': 'Smartwatch Series 5'}, {'p.name': 'Noise Cancelling Headphones X3'}, {'p.name': 'Action Camera 4K'}, {'p.name': 'Portable SSD 1TB'}]",
+        "shape": "aggregation"
+      },
+      "itemId": "nlq-17",
+      "latencyMs": 1446.225919004064,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-17"
+      ],
+      "scoreable": {
+        "exactMatchByAggregation": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1472.307,
+            "promptTokens": 694,
+            "tokensPerSecond": 58.65166007349979,
+            "ttftMs": 176.521,
+            "wallClockMs": 1446.225919004064
+          }
+        ],
+        "wallClockMs": 1446.225919004064,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-18",
+      "latencyMs": 1721.2614769814536,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-18"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1754.73,
+            "promptTokens": 698,
+            "tokensPerSecond": 58.678708558162086,
+            "ttftMs": 186.87,
+            "wallClockMs": 1721.2614769814536
+          }
+        ],
+        "wallClockMs": 1721.2614769814536,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-19",
+      "latencyMs": 1632.0007060130592,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-19"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1662.652,
+            "promptTokens": 697,
+            "tokensPerSecond": 59.20910097708473,
+            "ttftMs": 176.394,
+            "wallClockMs": 1632.0007060130592
+          }
+        ],
+        "wallClockMs": 1632.0007060130592,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-20",
+      "latencyMs": 1970.8218370215036,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-20"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2000.6050000000002,
+            "promptTokens": 698,
+            "tokensPerSecond": 58.9788067650345,
+            "ttftMs": 186.394,
+            "wallClockMs": 1970.8218370215036
+          }
+        ],
+        "wallClockMs": 1970.8218370215036,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-21",
+      "latencyMs": 1986.8506620114204,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-21"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2016.7890000000002,
+            "promptTokens": 722,
+            "tokensPerSecond": 58.65485237341104,
+            "ttftMs": 192.558,
+            "wallClockMs": 1986.8506620114204
+          }
+        ],
+        "wallClockMs": 1986.8506620114204,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-22",
+      "latencyMs": 1944.5165430079214,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-22"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1974.2659999999998,
+            "promptTokens": 723,
+            "tokensPerSecond": 58.90814593062529,
+            "ttftMs": 191.83,
+            "wallClockMs": 1944.5165430079214
+          }
+        ],
+        "wallClockMs": 1944.5165430079214,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-23",
+      "latencyMs": 1968.4446180181112,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-23"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1997.8980000000001,
+            "promptTokens": 726,
+            "tokensPerSecond": 58.62997241625731,
+            "ttftMs": 189.949,
+            "wallClockMs": 1968.4446180181112
+          }
+        ],
+        "wallClockMs": 1968.4446180181112,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-24",
+      "latencyMs": 1964.932734001195,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-24"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2008.5670000000002,
+            "promptTokens": 722,
+            "tokensPerSecond": 58.946913392247495,
+            "ttftMs": 176.41,
+            "wallClockMs": 1964.932734001195
+          }
+        ],
+        "wallClockMs": 1964.932734001195,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-25",
+      "latencyMs": 1946.1957329767756,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-25"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1990.2530000000002,
+            "promptTokens": 721,
+            "tokensPerSecond": 59.02640631792173,
+            "ttftMs": 177.505,
+            "wallClockMs": 1946.1957329767756
+          }
+        ],
+        "wallClockMs": 1946.1957329767756,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-26",
+      "latencyMs": 1967.1949199982919,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-26"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2012.4020000000003,
+            "promptTokens": 721,
+            "tokensPerSecond": 58.30007867786319,
+            "ttftMs": 177.07,
+            "wallClockMs": 1967.1949199982919
+          }
+        ],
+        "wallClockMs": 1967.1949199982919,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "schema_violation"
+      },
+      "itemId": "nlq-27",
+      "latencyMs": 1413.4382079937495,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-27"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1442.8919999999998,
+            "promptTokens": 724,
+            "tokensPerSecond": 58.94685861038357,
+            "ttftMs": 187.524,
+            "wallClockMs": 1413.4382079937495
+          }
+        ],
+        "wallClockMs": 1413.4382079937495,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-28",
+      "latencyMs": 1930.5677119991742,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-28"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1974.821,
+            "promptTokens": 723,
+            "tokensPerSecond": 59.031153969956485,
+            "ttftMs": 179.159,
+            "wallClockMs": 1930.5677119991742
+          }
+        ],
+        "wallClockMs": 1930.5677119991742,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-29",
+      "latencyMs": 1945.2864470076747,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-29"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1990.603,
+            "promptTokens": 722,
+            "tokensPerSecond": 58.49624906599149,
+            "ttftMs": 178.521,
+            "wallClockMs": 1945.2864470076747
+          }
+        ],
+        "wallClockMs": 1945.2864470076747,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "no_json"
+      },
+      "itemId": "nlq-30",
+      "latencyMs": 1938.107071997365,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "nlq-30"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1983.469,
+            "promptTokens": 726,
+            "tokensPerSecond": 59.06157838167932,
+            "ttftMs": 188.732,
+            "wallClockMs": 1938.107071997365
+          }
+        ],
+        "wallClockMs": 1938.107071997365,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "no_json"
+      },
+      "itemId": "nlq-31",
+      "latencyMs": 1582.117270998424,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "nlq-31"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1616.44,
+            "promptTokens": 723,
+            "tokensPerSecond": 59.1015726580828,
+            "ttftMs": 178.238,
+            "wallClockMs": 1582.117270998424
+          }
+        ],
+        "wallClockMs": 1582.117270998424,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-32",
+      "latencyMs": 1606.0524909989908,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-32"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1639.993,
+            "promptTokens": 725,
+            "tokensPerSecond": 58.5685434554476,
+            "ttftMs": 188.702,
+            "wallClockMs": 1606.0524909989908
+          }
+        ],
+        "wallClockMs": 1606.0524909989908,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "no_json"
+      },
+      "itemId": "nlq-33",
+      "latencyMs": 1586.5572400216479,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "nlq-33"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1616.507,
+            "promptTokens": 722,
+            "tokensPerSecond": 59.02072807970159,
+            "ttftMs": 176.335,
+            "wallClockMs": 1586.5572400216479
+          }
+        ],
+        "wallClockMs": 1586.5572400216479,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-34",
+      "latencyMs": 1982.7181409928016,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-34"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2021.175,
+            "promptTokens": 720,
+            "tokensPerSecond": 59.1270140478191,
+            "ttftMs": 177.686,
+            "wallClockMs": 1982.7181409928016
+          }
+        ],
+        "wallClockMs": 1982.7181409928016,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-35",
+      "latencyMs": 2072.6162100036163,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-35"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2114.598,
+            "promptTokens": 719,
+            "tokensPerSecond": 58.859185079093315,
+            "ttftMs": 177.772,
+            "wallClockMs": 2072.6162100036163
+          }
+        ],
+        "wallClockMs": 2072.6162100036163,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-36",
+      "latencyMs": 2041.0735280020162,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-36"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2082.46,
+            "promptTokens": 722,
+            "tokensPerSecond": 59.11538055526232,
+            "ttftMs": 187.86,
+            "wallClockMs": 2041.0735280020162
+          }
+        ],
+        "wallClockMs": 2041.0735280020162,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-37",
+      "latencyMs": 2024.084689997835,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-37"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2039.4680000000003,
+            "promptTokens": 720,
+            "tokensPerSecond": 58.507908766309754,
+            "ttftMs": 176.472,
+            "wallClockMs": 2024.084689997835
+          }
+        ],
+        "wallClockMs": 2024.084689997835,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-38",
+      "latencyMs": 2004.4792460103054,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-38"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2020.088,
+            "promptTokens": 722,
+            "tokensPerSecond": 59.017651195845154,
+            "ttftMs": 190.127,
+            "wallClockMs": 2004.4792460103054
+          }
+        ],
+        "wallClockMs": 2004.4792460103054,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-39",
+      "latencyMs": 2196.7317220114637,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-39"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2213.966,
+            "promptTokens": 730,
+            "tokensPerSecond": 58.61463806206098,
+            "ttftMs": 200.817,
+            "wallClockMs": 2196.7317220114637
+          }
+        ],
+        "wallClockMs": 2196.7317220114637,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "no_json"
+      },
+      "itemId": "nlq-40",
+      "latencyMs": 1725.6169700121973,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "nlq-40"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1736.042,
+            "promptTokens": 698,
+            "tokensPerSecond": 59.083132536310444,
+            "ttftMs": 178.914,
+            "wallClockMs": 1725.6169700121973
+          }
+        ],
+        "wallClockMs": 1725.6169700121973,
+        "withheldFor": null
+      }
+    }
+  ],
+  "latency": {
+    "callCount": 40,
+    "latencyItemCount": 40,
+    "latencyMsMax": null,
+    "latencyMsP50": 1945.2864470076747,
+    "latencyMsP95": 2072.6162100036163,
+    "latencyTimedCount": 40,
+    "latencyWithheldForLoad": 0,
+    "latencyWithheldForNoResponse": 0,
+    "prefillMsPer1kMedian": 255.6051502145923,
+    "statsCoveredCount": 40,
+    "tokensPerSecondMedian": 58.960506827108354,
+    "ttftMsMedian": 178.914,
+    "unexplainedMsMax": -189.33902998780263
+  },
+  "role": "nlq-generator",
+  "runId": "nlq-structured-query-google_gemma-3-4b-2026-09-20T01:48:16Z",
+  "sessionId": "catalog-sweep-2026-09-19"
+}

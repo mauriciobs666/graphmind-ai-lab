@@ -1,0 +1,1469 @@
+{
+  "aggregates": {
+    "byShape": [
+      {
+        "n": 8,
+        "name": "exactMatchByAggregation",
+        "successes": 8,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 3,
+        "name": "exactMatchByCompoundFilter",
+        "successes": 3,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 2,
+        "name": "exactMatchByConflictingFacts",
+        "successes": 0,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 6,
+        "name": "exactMatchByFilterList",
+        "successes": 6,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 6,
+        "name": "exactMatchByNotFound",
+        "successes": 6,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 1,
+        "name": "exactMatchByRelationshipTraversal",
+        "successes": 0,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 9,
+        "name": "exactMatchBySingleFact",
+        "successes": 9,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 3,
+        "name": "unanswerableAbstainRate",
+        "successes": 0,
+        "type": "binary",
+        "unit": "item"
+      }
+    ],
+    "exactMatch": {
+      "n": 32,
+      "name": "layer1ExactMatchRate",
+      "successes": 32,
+      "type": "binary",
+      "unit": "item"
+    },
+    "kind": "extraction",
+    "luckyPassCount": 0,
+    "malformedSpecCount": 3,
+    "parseFailures": 1,
+    "schemaViolationCount": 1
+  },
+  "armKind": "model",
+  "attestationTripWire": "compared",
+  "basis": "by-construction",
+  "designEffect": 1.0,
+  "fingerprint": {
+    "arch": "mistral3",
+    "armKind": "model",
+    "benchSchemaVersion": 1,
+    "benchVersion": "0.1.0",
+    "callSurface": "chat",
+    "compatibilityType": "gguf",
+    "endedAt": "2026-09-20T01:38:00Z",
+    "hostOs": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "hostRamGb": 16,
+    "kvCacheSetting": "f16",
+    "lmStudioAppVersion": "0.4.24+1",
+    "loadedContextLength": 8192,
+    "maxContextLength": 262144,
+    "maxTokens": 512,
+    "modelCapabilities": [
+      "tool_use"
+    ],
+    "modelCapabilitiesPresent": true,
+    "modelKey": "mistralai/ministral-3-3b",
+    "modelPublisher": "mistralai",
+    "modelType": "vlm",
+    "otherResidentWorkloads": [],
+    "packContentHash": "8f975842302b0c720a992d9051a058707582d87f0eb6ed81191b5384473f3ccf",
+    "packId": "nlq-structured-query",
+    "packVersion": "1.2.0",
+    "pythonVersion": "3.12.3",
+    "quantization": "Q8_0",
+    "residencySource": "lmstudio-api-v0",
+    "residentModelsAtEnd": [
+      {
+        "id": "mistralai/ministral-3-3b",
+        "state": "loaded"
+      }
+    ],
+    "residentModelsAtStart": [
+      {
+        "id": "mistralai/ministral-3-3b",
+        "state": "loaded"
+      }
+    ],
+    "runtimeName": "llama.cpp-win-x86_64-nvidia-cuda12-avx2",
+    "runtimeVersion": "2.40.0",
+    "startedAt": "2026-09-20T01:36:40Z",
+    "temperature": 0.0
+  },
+  "items": [
+    {
+      "counts": {
+        "exactMatchBySingleFact": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "24.99 matches expected 24.99",
+        "shape": "single-fact"
+      },
+      "itemId": "nlq-01",
+      "latencyMs": 1936.2318169733044,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-01"
+      ],
+      "scoreable": {
+        "exactMatchBySingleFact": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1950.345,
+            "promptTokens": 694,
+            "tokensPerSecond": 38.07310844432702,
+            "ttftMs": 216.838,
+            "wallClockMs": 1936.2318169733044
+          }
+        ],
+        "wallClockMs": 1936.2318169733044,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchBySingleFact": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "'Storage' matches expected 'Storage'",
+        "shape": "single-fact"
+      },
+      "itemId": "nlq-02",
+      "latencyMs": 1773.1528410222381,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-02"
+      ],
+      "scoreable": {
+        "exactMatchBySingleFact": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1805.5739999999998,
+            "promptTokens": 695,
+            "tokensPerSecond": 38.34759634976671,
+            "ttftMs": 58.398,
+            "wallClockMs": 1773.1528410222381
+          }
+        ],
+        "wallClockMs": 1773.1528410222381,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchBySingleFact": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "249.99 matches expected 249.99",
+        "shape": "single-fact"
+      },
+      "itemId": "nlq-03",
+      "latencyMs": 1751.18215099792,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-03"
+      ],
+      "scoreable": {
+        "exactMatchBySingleFact": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1784.3,
+            "promptTokens": 696,
+            "tokensPerSecond": 38.233142225551205,
+            "ttftMs": 58.049,
+            "wallClockMs": 1751.18215099792
+          }
+        ],
+        "wallClockMs": 1751.18215099792,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchBySingleFact": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "'Cameras' matches expected 'Cameras'",
+        "shape": "single-fact"
+      },
+      "itemId": "nlq-04",
+      "latencyMs": 1756.2782120076008,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-04"
+      ],
+      "scoreable": {
+        "exactMatchBySingleFact": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1787.347,
+            "promptTokens": 696,
+            "tokensPerSecond": 38.28819290751835,
+            "ttftMs": 63.57800000000001,
+            "wallClockMs": 1756.2782120076008
+          }
+        ],
+        "wallClockMs": 1756.2782120076008,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchBySingleFact": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "349.99 matches expected 349.99",
+        "shape": "single-fact"
+      },
+      "itemId": "nlq-05",
+      "latencyMs": 1824.5588059944566,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-05"
+      ],
+      "scoreable": {
+        "exactMatchBySingleFact": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1858.812,
+            "promptTokens": 701,
+            "tokensPerSecond": 38.19782654366967,
+            "ttftMs": 78.606,
+            "wallClockMs": 1824.5588059944566
+          }
+        ],
+        "wallClockMs": 1824.5588059944566,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByFilterList": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "exact set match",
+        "shape": "filter-list"
+      },
+      "itemId": "nlq-06",
+      "latencyMs": 2089.557308005169,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-06"
+      ],
+      "scoreable": {
+        "exactMatchByFilterList": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2129.204,
+            "promptTokens": 694,
+            "tokensPerSecond": 38.10302866022999,
+            "ttftMs": 55.878,
+            "wallClockMs": 2089.557308005169
+          }
+        ],
+        "wallClockMs": 2089.557308005169,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByFilterList": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "exact set match",
+        "shape": "filter-list"
+      },
+      "itemId": "nlq-07",
+      "latencyMs": 2092.807578999782,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-07"
+      ],
+      "scoreable": {
+        "exactMatchByFilterList": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2130.5409999999997,
+            "promptTokens": 693,
+            "tokensPerSecond": 38.041855672088836,
+            "ttftMs": 53.881,
+            "wallClockMs": 2092.807578999782
+          }
+        ],
+        "wallClockMs": 2092.807578999782,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByFilterList": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "exact set match",
+        "shape": "filter-list"
+      },
+      "itemId": "nlq-08",
+      "latencyMs": 2085.802004003199,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-08"
+      ],
+      "scoreable": {
+        "exactMatchByFilterList": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2127.737,
+            "promptTokens": 693,
+            "tokensPerSecond": 38.10630017731488,
+            "ttftMs": 54.589,
+            "wallClockMs": 2085.802004003199
+          }
+        ],
+        "wallClockMs": 2085.802004003199,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByFilterList": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "exact set match",
+        "shape": "filter-list"
+      },
+      "itemId": "nlq-09",
+      "latencyMs": 2036.4975460106507,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-09"
+      ],
+      "scoreable": {
+        "exactMatchByFilterList": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2072.933,
+            "promptTokens": 694,
+            "tokensPerSecond": 38.18728432863283,
+            "ttftMs": 56.555,
+            "wallClockMs": 2036.4975460106507
+          }
+        ],
+        "wallClockMs": 2036.4975460106507,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByCompoundFilter": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "exact set match",
+        "shape": "compound-filter"
+      },
+      "itemId": "nlq-10",
+      "latencyMs": 2634.8953820124734,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-10"
+      ],
+      "scoreable": {
+        "exactMatchByCompoundFilter": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2689.31,
+            "promptTokens": 696,
+            "tokensPerSecond": 38.09457053324018,
+            "ttftMs": 64.264,
+            "wallClockMs": 2634.8953820124734
+          }
+        ],
+        "wallClockMs": 2634.8953820124734,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByCompoundFilter": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "exact set match",
+        "shape": "compound-filter"
+      },
+      "itemId": "nlq-11",
+      "latencyMs": 2659.7097830090206,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-11"
+      ],
+      "scoreable": {
+        "exactMatchByCompoundFilter": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2714.25,
+            "promptTokens": 696,
+            "tokensPerSecond": 38.10077088044846,
+            "ttftMs": 63.385,
+            "wallClockMs": 2659.7097830090206
+          }
+        ],
+        "wallClockMs": 2659.7097830090206,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-12",
+      "latencyMs": 2126.5134109999053,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-12"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2167.33,
+            "promptTokens": 697,
+            "tokensPerSecond": 38.096290278493406,
+            "ttftMs": 67.388,
+            "wallClockMs": 2126.5134109999053
+          }
+        ],
+        "wallClockMs": 2126.5134109999053,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByNotFound": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "result is genuinely empty",
+        "shape": "not-found"
+      },
+      "itemId": "nlq-13",
+      "latencyMs": 1704.728434997378,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-13"
+      ],
+      "scoreable": {
+        "exactMatchByNotFound": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1733.935,
+            "promptTokens": 694,
+            "tokensPerSecond": 38.216233419976696,
+            "ttftMs": 59.254,
+            "wallClockMs": 1704.728434997378
+          }
+        ],
+        "wallClockMs": 1704.728434997378,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByNotFound": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "result is genuinely empty",
+        "shape": "not-found"
+      },
+      "itemId": "nlq-14",
+      "latencyMs": 1783.8205049920361,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-14"
+      ],
+      "scoreable": {
+        "exactMatchByNotFound": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1815.286,
+            "promptTokens": 696,
+            "tokensPerSecond": 38.263499591094536,
+            "ttftMs": 64.27,
+            "wallClockMs": 1783.8205049920361
+          }
+        ],
+        "wallClockMs": 1783.8205049920361,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByNotFound": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "result is genuinely empty",
+        "shape": "not-found"
+      },
+      "itemId": "nlq-15",
+      "latencyMs": 1732.0693890214898,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-15"
+      ],
+      "scoreable": {
+        "exactMatchByNotFound": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1761.78,
+            "promptTokens": 696,
+            "tokensPerSecond": 38.306612015900185,
+            "ttftMs": 64.945,
+            "wallClockMs": 1732.0693890214898
+          }
+        ],
+        "wallClockMs": 1732.0693890214898,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByAggregation": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "'Gaming Mouse Pad XL' matches expected 'Gaming Mouse Pad XL'",
+        "shape": "aggregation"
+      },
+      "itemId": "nlq-16",
+      "latencyMs": 1795.541198021965,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-16"
+      ],
+      "scoreable": {
+        "exactMatchByAggregation": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1830.6370000000002,
+            "promptTokens": 691,
+            "tokensPerSecond": 38.189545948763104,
+            "ttftMs": 50.045,
+            "wallClockMs": 1795.541198021965
+          }
+        ],
+        "wallClockMs": 1795.541198021965,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByAggregation": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "'27-inch 4K Monitor' matches expected '27-inch 4K Monitor'",
+        "shape": "aggregation"
+      },
+      "itemId": "nlq-17",
+      "latencyMs": 1602.7400240127463,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-17"
+      ],
+      "scoreable": {
+        "exactMatchByAggregation": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1631.409,
+            "promptTokens": 691,
+            "tokensPerSecond": 38.3222157025593,
+            "ttftMs": 39.643,
+            "wallClockMs": 1602.7400240127463
+          }
+        ],
+        "wallClockMs": 1602.7400240127463,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByAggregation": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "10 matches expected 10",
+        "shape": "aggregation"
+      },
+      "itemId": "nlq-18",
+      "latencyMs": 1704.3948259961326,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-18"
+      ],
+      "scoreable": {
+        "exactMatchByAggregation": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1732.532,
+            "promptTokens": 695,
+            "tokensPerSecond": 38.245853910399525,
+            "ttftMs": 59.148,
+            "wallClockMs": 1704.3948259961326
+          }
+        ],
+        "wallClockMs": 1704.3948259961326,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByAggregation": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "4 matches expected 4",
+        "shape": "aggregation"
+      },
+      "itemId": "nlq-19",
+      "latencyMs": 1714.9595580121968,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-19"
+      ],
+      "scoreable": {
+        "exactMatchByAggregation": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1747.081,
+            "promptTokens": 695,
+            "tokensPerSecond": 38.347607492768525,
+            "ttftMs": 52.06,
+            "wallClockMs": 1714.9595580121968
+          }
+        ],
+        "wallClockMs": 1714.9595580121968,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByAggregation": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "'Fitness Tracker Band' matches expected 'Fitness Tracker Band'",
+        "shape": "aggregation"
+      },
+      "itemId": "nlq-20",
+      "latencyMs": 2331.0919239884242,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-20"
+      ],
+      "scoreable": {
+        "exactMatchByAggregation": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2375.619,
+            "promptTokens": 696,
+            "tokensPerSecond": 38.07297117573229,
+            "ttftMs": 64.268,
+            "wallClockMs": 2331.0919239884242
+          }
+        ],
+        "wallClockMs": 2331.0919239884242,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchBySingleFact": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "'Organization' matches expected 'Organization'",
+        "shape": "single-fact"
+      },
+      "itemId": "nlq-21",
+      "latencyMs": 1759.6831319970079,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-21"
+      ],
+      "scoreable": {
+        "exactMatchBySingleFact": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1789.6019999999999,
+            "promptTokens": 721,
+            "tokensPerSecond": 38.0274143086789,
+            "ttftMs": 54.012,
+            "wallClockMs": 1759.6831319970079
+          }
+        ],
+        "wallClockMs": 1759.6831319970079,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchBySingleFact": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "'Product' matches expected 'Product'",
+        "shape": "single-fact"
+      },
+      "itemId": "nlq-22",
+      "latencyMs": 1713.518528995337,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-22"
+      ],
+      "scoreable": {
+        "exactMatchBySingleFact": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1740.6779999999999,
+            "promptTokens": 720,
+            "tokensPerSecond": 37.94386916005317,
+            "ttftMs": 53.976,
+            "wallClockMs": 1713.518528995337
+          }
+        ],
+        "wallClockMs": 1713.518528995337,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchBySingleFact": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "'Person' matches expected 'Person'",
+        "shape": "single-fact"
+      },
+      "itemId": "nlq-23",
+      "latencyMs": 1720.8917699754238,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-23"
+      ],
+      "scoreable": {
+        "exactMatchBySingleFact": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1750.3310000000001,
+            "promptTokens": 723,
+            "tokensPerSecond": 38.001320545888966,
+            "ttftMs": 66.179,
+            "wallClockMs": 1720.8917699754238
+          }
+        ],
+        "wallClockMs": 1720.8917699754238,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchBySingleFact": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "'Product' matches expected 'Product'",
+        "shape": "single-fact"
+      },
+      "itemId": "nlq-24",
+      "latencyMs": 1686.2849540193565,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-24"
+      ],
+      "scoreable": {
+        "exactMatchBySingleFact": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1714.712,
+            "promptTokens": 719,
+            "tokensPerSecond": 37.89733551654068,
+            "ttftMs": 52.326,
+            "wallClockMs": 1686.2849540193565
+          }
+        ],
+        "wallClockMs": 1686.2849540193565,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByFilterList": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "exact set match",
+        "shape": "filter-list"
+      },
+      "itemId": "nlq-25",
+      "latencyMs": 2029.6020199893974,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-25"
+      ],
+      "scoreable": {
+        "exactMatchByFilterList": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2067.1530000000002,
+            "promptTokens": 718,
+            "tokensPerSecond": 38.11596261863593,
+            "ttftMs": 47.002,
+            "wallClockMs": 2029.6020199893974
+          }
+        ],
+        "wallClockMs": 2029.6020199893974,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByFilterList": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "exact set match",
+        "shape": "filter-list"
+      },
+      "itemId": "nlq-26",
+      "latencyMs": 2032.7910360065289,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-26"
+      ],
+      "scoreable": {
+        "exactMatchByFilterList": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2070.967,
+            "promptTokens": 718,
+            "tokensPerSecond": 38.06074098825455,
+            "ttftMs": 47.885,
+            "wallClockMs": 2032.7910360065289
+          }
+        ],
+        "wallClockMs": 2032.7910360065289,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "schema_violation"
+      },
+      "itemId": "nlq-27",
+      "latencyMs": 1574.4797610095702,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-27"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1601.186,
+            "promptTokens": 720,
+            "tokensPerSecond": 37.96788174613645,
+            "ttftMs": 47.241,
+            "wallClockMs": 1574.4797610095702
+          }
+        ],
+        "wallClockMs": 1574.4797610095702,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByNotFound": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "result is genuinely empty",
+        "shape": "not-found"
+      },
+      "itemId": "nlq-28",
+      "latencyMs": 1771.5090840065386,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-28"
+      ],
+      "scoreable": {
+        "exactMatchByNotFound": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1806.8,
+            "promptTokens": 722,
+            "tokensPerSecond": 37.80895934849435,
+            "ttftMs": 61.182,
+            "wallClockMs": 1771.5090840065386
+          }
+        ],
+        "wallClockMs": 1771.5090840065386,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByNotFound": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "result is genuinely empty",
+        "shape": "not-found"
+      },
+      "itemId": "nlq-29",
+      "latencyMs": 1717.8950599918608,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-29"
+      ],
+      "scoreable": {
+        "exactMatchByNotFound": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1746.905,
+            "promptTokens": 719,
+            "tokensPerSecond": 38.2346643702339,
+            "ttftMs": 46.877,
+            "wallClockMs": 1717.8950599918608
+          }
+        ],
+        "wallClockMs": 1717.8950599918608,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByNotFound": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "result is genuinely empty",
+        "shape": "not-found"
+      },
+      "itemId": "nlq-30",
+      "latencyMs": 1721.8783220159821,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-30"
+      ],
+      "scoreable": {
+        "exactMatchByNotFound": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1752.305,
+            "promptTokens": 724,
+            "tokensPerSecond": 37.993447317632935,
+            "ttftMs": 67.804,
+            "wallClockMs": 1721.8783220159821
+          }
+        ],
+        "wallClockMs": 1721.8783220159821,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByAggregation": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "17 matches expected 17",
+        "shape": "aggregation"
+      },
+      "itemId": "nlq-31",
+      "latencyMs": 1680.6662699964363,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-31"
+      ],
+      "scoreable": {
+        "exactMatchByAggregation": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1708.633,
+            "promptTokens": 719,
+            "tokensPerSecond": 38.04784365355928,
+            "ttftMs": 52.823,
+            "wallClockMs": 1680.6662699964363
+          }
+        ],
+        "wallClockMs": 1680.6662699964363,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByAggregation": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "5 matches expected 5",
+        "shape": "aggregation"
+      },
+      "itemId": "nlq-32",
+      "latencyMs": 1675.9343409794383,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-32"
+      ],
+      "scoreable": {
+        "exactMatchByAggregation": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1704.989,
+            "promptTokens": 720,
+            "tokensPerSecond": 38.08763784097505,
+            "ttftMs": 50.909,
+            "wallClockMs": 1675.9343409794383
+          }
+        ],
+        "wallClockMs": 1675.9343409794383,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByAggregation": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "3 matches expected 3",
+        "shape": "aggregation"
+      },
+      "itemId": "nlq-33",
+      "latencyMs": 1679.7366789833177,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-33"
+      ],
+      "scoreable": {
+        "exactMatchByAggregation": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1707.8890000000001,
+            "promptTokens": 719,
+            "tokensPerSecond": 38.08648655184296,
+            "ttftMs": 53.759,
+            "wallClockMs": 1679.7366789833177
+          }
+        ],
+        "wallClockMs": 1679.7366789833177,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-34",
+      "latencyMs": 1909.4914039887954,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-34"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1943.319,
+            "promptTokens": 719,
+            "tokensPerSecond": 38.04207982390744,
+            "ttftMs": 50.678,
+            "wallClockMs": 1909.4914039887954
+          }
+        ],
+        "wallClockMs": 1909.4914039887954,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "no_json"
+      },
+      "itemId": "nlq-35",
+      "latencyMs": 2589.507702999981,
+      "measures": {},
+      "outcome": "parse_failure",
+      "pairingKey": [
+        "nlq-35"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2643.4880000000003,
+            "promptTokens": 718,
+            "tokensPerSecond": 38.05564119142603,
+            "ttftMs": 42.034,
+            "wallClockMs": 2589.507702999981
+          }
+        ],
+        "wallClockMs": 2589.507702999981,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {},
+      "detail": {
+        "failureClass": "malformed_spec"
+      },
+      "itemId": "nlq-36",
+      "latencyMs": 2273.0661839887034,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "nlq-36"
+      ],
+      "scoreable": {},
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2319.2360000000003,
+            "promptTokens": 721,
+            "tokensPerSecond": 38.04725557624559,
+            "ttftMs": 58.889,
+            "wallClockMs": 2273.0661839887034
+          }
+        ],
+        "wallClockMs": 2273.0661839887034,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByRelationshipTraversal": 0,
+        "unanswerableAbstainRate": 0
+      },
+      "detail": {
+        "dataset": "knowledge_base",
+        "shape": "relationship-traversal"
+      },
+      "itemId": "nlq-37",
+      "latencyMs": 2114.90427001263,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-37"
+      ],
+      "scoreable": {
+        "exactMatchByRelationshipTraversal": true,
+        "unanswerableAbstainRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2154.888,
+            "promptTokens": 719,
+            "tokensPerSecond": 37.980951603247185,
+            "ttftMs": 48.569,
+            "wallClockMs": 2114.90427001263
+          }
+        ],
+        "wallClockMs": 2114.90427001263,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByConflictingFacts": 0,
+        "unanswerableAbstainRate": 0
+      },
+      "detail": {
+        "dataset": "knowledge_base",
+        "shape": "conflicting-facts"
+      },
+      "itemId": "nlq-38",
+      "latencyMs": 1836.0069830087014,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-38"
+      ],
+      "scoreable": {
+        "exactMatchByConflictingFacts": true,
+        "unanswerableAbstainRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1871.1870000000001,
+            "promptTokens": 721,
+            "tokensPerSecond": 38.072641496420346,
+            "ttftMs": 58.862,
+            "wallClockMs": 1836.0069830087014
+          }
+        ],
+        "wallClockMs": 1836.0069830087014,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByConflictingFacts": 0,
+        "unanswerableAbstainRate": 0
+      },
+      "detail": {
+        "dataset": "knowledge_base",
+        "shape": "conflicting-facts"
+      },
+      "itemId": "nlq-39",
+      "latencyMs": 1914.224580017617,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-39"
+      ],
+      "scoreable": {
+        "exactMatchByConflictingFacts": true,
+        "unanswerableAbstainRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 1950.479,
+            "promptTokens": 729,
+            "tokensPerSecond": 37.996259241519745,
+            "ttftMs": 81.874,
+            "wallClockMs": 1914.224580017617
+          }
+        ],
+        "wallClockMs": 1914.224580017617,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "exactMatchByCompoundFilter": 1,
+        "layer1ExactMatchRate": 1
+      },
+      "detail": {
+        "reason": "exact set match",
+        "shape": "compound-filter"
+      },
+      "itemId": "nlq-40",
+      "latencyMs": 2656.8724359967746,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "nlq-40"
+      ],
+      "scoreable": {
+        "exactMatchByCompoundFilter": true,
+        "layer1ExactMatchRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 2713.724,
+            "promptTokens": 696,
+            "tokensPerSecond": 38.107156562109516,
+            "ttftMs": 89.545,
+            "wallClockMs": 2656.8724359967746
+          }
+        ],
+        "wallClockMs": 2656.8724359967746,
+        "withheldFor": null
+      }
+    }
+  ],
+  "latency": {
+    "callCount": 40,
+    "latencyItemCount": 40,
+    "latencyMsMax": null,
+    "latencyMsP50": 1783.8205049920361,
+    "latencyMsP95": 2634.8953820124734,
+    "latencyTimedCount": 40,
+    "latencyWithheldForLoad": 0,
+    "latencyWithheldForNoResponse": 0,
+    "prefillMsPer1kMedian": 81.4913544668588,
+    "statsCoveredCount": 40,
+    "tokensPerSecondMedian": 38.08763784097505,
+    "ttftMsMedian": 56.555,
+    "unexplainedMsMax": -68.31197598725385
+  },
+  "role": "nlq-generator",
+  "runId": "nlq-structured-query-mistralai_ministral-3-3b-2026-09-20T01:36:40Z",
+  "sessionId": "catalog-sweep-2026-09-19"
+}

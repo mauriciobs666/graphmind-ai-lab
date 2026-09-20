@@ -1,0 +1,617 @@
+{
+  "aggregates": {
+    "cleanThroughTurn": {
+      "n": 3,
+      "name": "cleanThroughTurnH",
+      "successes": 0,
+      "type": "binary",
+      "unit": "conversation"
+    },
+    "determinismProbe": {
+      "differingTurns": [
+        {
+          "scriptId": "A-01",
+          "turns": [
+            2,
+            3,
+            4,
+            5,
+            8
+          ]
+        }
+      ],
+      "identical": false,
+      "ran": true,
+      "scriptIds": [
+        "A-01",
+        "B-01"
+      ]
+    },
+    "funnel": [
+      {
+        "n": 65,
+        "name": "iterationCapHitRate",
+        "successes": 18,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 61,
+        "name": "native",
+        "successes": 59,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 59,
+        "name": "rightToolChosen",
+        "successes": 57,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 124,
+        "name": "allArgsCorrect",
+        "successes": 53,
+        "type": "binary",
+        "unit": "call"
+      },
+      {
+        "n": 59,
+        "name": "spurious",
+        "successes": 28,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 59,
+        "name": "duplicateWithinTurn",
+        "successes": 17,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 59,
+        "name": "duplicateCrossTurn",
+        "successes": 31,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 59,
+        "name": "stoppingWhenDone",
+        "successes": 15,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 24,
+        "name": "replyMatchesTool",
+        "successes": 15,
+        "type": "binary",
+        "unit": "turn"
+      }
+    ],
+    "funnelCounts": {
+      "argsBoundaryUnit": 0,
+      "argsOmittedRequired": 10,
+      "argsWrongValue": 68,
+      "dispatchedCalls": 237,
+      "factBearingReturns": 24,
+      "nativeCallEmitted": 59,
+      "noAttempt": 2,
+      "prosePseudoCall": 0,
+      "requiredCallTurns": 61,
+      "restraintTurns": 4,
+      "turnsDriven": 81,
+      "turnsScoredAfterUnrunnable": 40,
+      "turnsWithAnyCall": 59,
+      "unrunnableModelChannel": 16,
+      "unrunnableToolChannel": 0,
+      "unscoreableReturns": 35
+    },
+    "hazard": [
+      {
+        "censored": 3,
+        "metric": {
+          "n": 9,
+          "name": "hazard",
+          "successes": 9,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 0
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 1
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 2
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 3
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 4
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 5
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 6
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 7
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 8
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 9
+      }
+    ],
+    "iterationSummary": {
+      "capHitCount": 18,
+      "mean": 4.384615384615385,
+      "meanCensored": true,
+      "n": 65,
+      "p95": 8,
+      "p95Censored": true,
+      "y": 81,
+      "yCalls": 354
+    },
+    "kind": "toolcalls",
+    "perTurnPosition": [
+      {
+        "metric": {
+          "n": 9,
+          "name": "hazard",
+          "successes": 9,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 0
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 1
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 2
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 3
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 4
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 5
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 6
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 7
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 8
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 9
+      }
+    ],
+    "prosePseudoCallDetector": {
+      "n": 20,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "restraint": {
+      "n": 4,
+      "name": "restraint",
+      "successes": 3,
+      "type": "binary",
+      "unit": "turn"
+    }
+  },
+  "armKind": "model",
+  "attestationTripWire": "compared",
+  "basis": "assumed",
+  "designEffect": 1.0,
+  "fingerprint": {
+    "arch": "llama",
+    "armKind": "model",
+    "benchSchemaVersion": 1,
+    "benchVersion": "0.1.0",
+    "callSurface": "chat",
+    "compatibilityType": "gguf",
+    "endedAt": "2026-09-20T01:11:51Z",
+    "hostOs": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "hostRamGb": 16,
+    "kvCacheSetting": "f16",
+    "lmStudioAppVersion": "0.4.24+1",
+    "loadedContextLength": 8192,
+    "maxContextLength": 131072,
+    "maxTokens": 1024,
+    "modelCapabilities": [
+      "tool_use"
+    ],
+    "modelCapabilitiesPresent": true,
+    "modelKey": "llama-3.2-3b-instruct",
+    "modelPublisher": "bartowski",
+    "modelType": "llm",
+    "otherResidentWorkloads": [],
+    "packContentHash": "9171ad4cbc439dc7bd3b029c982548760d0026d19e7f247629d955c93cfa92ad",
+    "packId": "tool-caller-shop-assistant",
+    "packVersion": "0.2.0",
+    "pythonVersion": "3.12.3",
+    "quantization": "Q8_0",
+    "residencySource": "lmstudio-api-v0",
+    "residentModelsAtEnd": [
+      {
+        "id": "llama-3.2-3b-instruct",
+        "state": "loaded"
+      }
+    ],
+    "residentModelsAtStart": [
+      {
+        "id": "llama-3.2-3b-instruct",
+        "state": "loaded"
+      }
+    ],
+    "runtimeName": "llama.cpp-win-x86_64-nvidia-cuda12-avx2",
+    "runtimeVersion": "2.40.0",
+    "startedAt": "2026-09-20T01:08:17Z",
+    "temperature": 0.0
+  },
+  "items": [
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "A-01",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "A-01",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "A-02",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "A-02",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "cleanThroughTurnH": 0
+      },
+      "detail": {},
+      "itemId": "A-03",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "A-03",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "A-04",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "A-04",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "B-01",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "B-01",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "B-02",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "B-02",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "B-03",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "B-03",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "cleanThroughTurnH": 0
+      },
+      "detail": {},
+      "itemId": "B-04",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "B-04",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "cleanThroughTurnH": 0
+      },
+      "detail": {},
+      "itemId": "C-01",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "C-01",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "C-02",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "C-02",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "C-03",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "C-03",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    },
+    {
+      "counts": {},
+      "detail": {},
+      "itemId": "C-04",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "unrunnable",
+      "pairingKey": [
+        "C-04",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": false
+      },
+      "timing": null
+    }
+  ],
+  "latency": null,
+  "role": "tool-caller",
+  "runId": "tool-caller-shop-assistant-llama-3.2-3b-instruct-2026-09-20T01:08:17Z",
+  "sessionId": "catalog-sweep-2026-09-19"
+}

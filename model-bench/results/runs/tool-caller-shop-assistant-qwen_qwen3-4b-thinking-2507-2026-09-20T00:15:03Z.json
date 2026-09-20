@@ -1,0 +1,635 @@
+{
+  "aggregates": {
+    "cleanThroughTurn": {
+      "n": 12,
+      "name": "cleanThroughTurnH",
+      "successes": 6,
+      "type": "binary",
+      "unit": "conversation"
+    },
+    "determinismProbe": {
+      "differingTurns": [
+        {
+          "scriptId": "A-01",
+          "turns": [
+            2,
+            4,
+            5,
+            7,
+            8
+          ]
+        }
+      ],
+      "identical": false,
+      "ran": true,
+      "scriptIds": [
+        "A-01",
+        "B-01"
+      ]
+    },
+    "funnel": [
+      {
+        "n": 81,
+        "name": "iterationCapHitRate",
+        "successes": 0,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 75,
+        "name": "native",
+        "successes": 59,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 59,
+        "name": "rightToolChosen",
+        "successes": 58,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 58,
+        "name": "allArgsCorrect",
+        "successes": 56,
+        "type": "binary",
+        "unit": "call"
+      },
+      {
+        "n": 59,
+        "name": "spurious",
+        "successes": 1,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 59,
+        "name": "duplicateWithinTurn",
+        "successes": 0,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 59,
+        "name": "duplicateCrossTurn",
+        "successes": 7,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 59,
+        "name": "stoppingWhenDone",
+        "successes": 51,
+        "type": "binary",
+        "unit": "turn"
+      },
+      {
+        "n": 27,
+        "name": "replyMatchesTool",
+        "successes": 22,
+        "type": "binary",
+        "unit": "turn"
+      }
+    ],
+    "funnelCounts": {
+      "argsBoundaryUnit": 0,
+      "argsOmittedRequired": 0,
+      "argsWrongValue": 2,
+      "dispatchedCalls": 59,
+      "factBearingReturns": 27,
+      "nativeCallEmitted": 59,
+      "noAttempt": 16,
+      "prosePseudoCall": 0,
+      "requiredCallTurns": 75,
+      "restraintTurns": 6,
+      "turnsDriven": 81,
+      "turnsScoredAfterUnrunnable": 0,
+      "turnsWithAnyCall": 59,
+      "unrunnableModelChannel": 0,
+      "unrunnableToolChannel": 0,
+      "unscoreableReturns": 32
+    },
+    "hazard": [
+      {
+        "censored": 0,
+        "metric": {
+          "n": 12,
+          "name": "hazard",
+          "successes": 1,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 0
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 11,
+          "name": "hazard",
+          "successes": 1,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 1
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 10,
+          "name": "hazard",
+          "successes": 3,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 2
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 7,
+          "name": "hazard",
+          "successes": 1,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 3
+      },
+      {
+        "censored": 2,
+        "metric": {
+          "n": 4,
+          "name": "hazard",
+          "successes": 2,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 4
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 2,
+          "name": "hazard",
+          "successes": 1,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 5
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 1,
+          "name": "hazard",
+          "successes": 1,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 6
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 7
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 8
+      },
+      {
+        "censored": 0,
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 9
+      }
+    ],
+    "iterationSummary": {
+      "capHitCount": 0,
+      "mean": 1.728395061728395,
+      "meanCensored": false,
+      "n": 81,
+      "p95": 2,
+      "p95Censored": false,
+      "y": 81,
+      "yCalls": 140
+    },
+    "kind": "toolcalls",
+    "perTurnPosition": [
+      {
+        "metric": {
+          "n": 12,
+          "name": "hazard",
+          "successes": 1,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 0
+      },
+      {
+        "metric": {
+          "n": 11,
+          "name": "hazard",
+          "successes": 1,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 1
+      },
+      {
+        "metric": {
+          "n": 10,
+          "name": "hazard",
+          "successes": 3,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 2
+      },
+      {
+        "metric": {
+          "n": 7,
+          "name": "hazard",
+          "successes": 1,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 3
+      },
+      {
+        "metric": {
+          "n": 4,
+          "name": "hazard",
+          "successes": 2,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 4
+      },
+      {
+        "metric": {
+          "n": 2,
+          "name": "hazard",
+          "successes": 1,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 5
+      },
+      {
+        "metric": {
+          "n": 1,
+          "name": "hazard",
+          "successes": 1,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 6
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 7
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 8
+      },
+      {
+        "metric": {
+          "n": 0,
+          "name": "hazard",
+          "successes": 0,
+          "type": "binary",
+          "unit": "conversation"
+        },
+        "turnIndex": 9
+      }
+    ],
+    "prosePseudoCallDetector": {
+      "n": 20,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "restraint": {
+      "n": 6,
+      "name": "restraint",
+      "successes": 6,
+      "type": "binary",
+      "unit": "turn"
+    }
+  },
+  "armKind": "model",
+  "attestationTripWire": "compared",
+  "basis": "assumed",
+  "designEffect": 1.0,
+  "fingerprint": {
+    "arch": "qwen3",
+    "armKind": "model",
+    "benchSchemaVersion": 1,
+    "benchVersion": "0.1.0",
+    "callSurface": "chat",
+    "compatibilityType": "gguf",
+    "endedAt": "2026-09-20T00:40:40Z",
+    "hostOs": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "hostRamGb": 16,
+    "kvCacheSetting": "f16",
+    "lmStudioAppVersion": "0.4.24+1",
+    "loadedContextLength": 8192,
+    "maxContextLength": 262144,
+    "maxTokens": 1024,
+    "modelCapabilities": [
+      "tool_use"
+    ],
+    "modelCapabilitiesPresent": true,
+    "modelKey": "qwen/qwen3-4b-thinking-2507",
+    "modelPublisher": "qwen",
+    "modelType": "llm",
+    "otherResidentWorkloads": [],
+    "packContentHash": "9171ad4cbc439dc7bd3b029c982548760d0026d19e7f247629d955c93cfa92ad",
+    "packId": "tool-caller-shop-assistant",
+    "packVersion": "0.2.0",
+    "pythonVersion": "3.12.3",
+    "quantization": "Q4_K_M",
+    "residencySource": "lmstudio-api-v0",
+    "residentModelsAtEnd": [
+      {
+        "id": "qwen/qwen3-4b-thinking-2507",
+        "state": "loaded"
+      }
+    ],
+    "residentModelsAtStart": [
+      {
+        "id": "qwen/qwen3-4b-thinking-2507",
+        "state": "loaded"
+      }
+    ],
+    "runtimeName": "llama.cpp-win-x86_64-nvidia-cuda12-avx2",
+    "runtimeVersion": "2.40.0",
+    "startedAt": "2026-09-20T00:15:03Z",
+    "temperature": 0.0
+  },
+  "items": [
+    {
+      "counts": {
+        "cleanThroughTurnH": 0
+      },
+      "detail": {},
+      "itemId": "A-01",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "A-01",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "cleanThroughTurnH": 0
+      },
+      "detail": {},
+      "itemId": "A-02",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "A-02",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "cleanThroughTurnH": 1
+      },
+      "detail": {},
+      "itemId": "A-03",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "A-03",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "cleanThroughTurnH": 1
+      },
+      "detail": {},
+      "itemId": "A-04",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "A-04",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "cleanThroughTurnH": 1
+      },
+      "detail": {},
+      "itemId": "B-01",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "B-01",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "cleanThroughTurnH": 0
+      },
+      "detail": {},
+      "itemId": "B-02",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "B-02",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "cleanThroughTurnH": 0
+      },
+      "detail": {},
+      "itemId": "B-03",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "B-03",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "cleanThroughTurnH": 1
+      },
+      "detail": {},
+      "itemId": "B-04",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "B-04",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "cleanThroughTurnH": 0
+      },
+      "detail": {},
+      "itemId": "C-01",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "C-01",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "cleanThroughTurnH": 1
+      },
+      "detail": {},
+      "itemId": "C-02",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "C-02",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "cleanThroughTurnH": 0
+      },
+      "detail": {},
+      "itemId": "C-03",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "fail",
+      "pairingKey": [
+        "C-03",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    },
+    {
+      "counts": {
+        "cleanThroughTurnH": 1
+      },
+      "detail": {},
+      "itemId": "C-04",
+      "latencyMs": null,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "C-04",
+        "1",
+        "3"
+      ],
+      "scoreable": {
+        "cleanThroughTurnH": true
+      },
+      "timing": null
+    }
+  ],
+  "latency": null,
+  "role": "tool-caller",
+  "runId": "tool-caller-shop-assistant-qwen_qwen3-4b-thinking-2507-2026-09-20T00:15:03Z",
+  "sessionId": "catalog-sweep-2026-09-19"
+}

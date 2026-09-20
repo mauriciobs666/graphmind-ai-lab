@@ -1,0 +1,1276 @@
+{
+  "aggregates": {
+    "checklistPass": {
+      "n": 30,
+      "name": "groundingRate",
+      "successes": 3,
+      "type": "binary",
+      "unit": "item"
+    },
+    "kind": "grounding",
+    "parseFailures": 0,
+    "perCheck": [
+      {
+        "n": 30,
+        "name": "formatMaxWords",
+        "successes": 30,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 30,
+        "name": "formatSingleParagraph",
+        "successes": 30,
+        "type": "binary",
+        "unit": "item"
+      },
+      {
+        "n": 30,
+        "name": "formatNoForbiddenPatterns",
+        "successes": 30,
+        "type": "binary",
+        "unit": "item"
+      }
+    ]
+  },
+  "armKind": "model",
+  "attestationTripWire": "compared",
+  "basis": "by-construction",
+  "designEffect": 1.0,
+  "fingerprint": {
+    "arch": "qwen35",
+    "armKind": "model",
+    "benchSchemaVersion": 1,
+    "benchVersion": "0.1.0",
+    "callSurface": "chat",
+    "compatibilityType": "gguf",
+    "endedAt": "2026-09-20T03:56:29Z",
+    "hostOs": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "hostRamGb": 16,
+    "kvCacheSetting": "f16",
+    "lmStudioAppVersion": "0.4.24+1",
+    "loadedContextLength": 8192,
+    "maxContextLength": 262144,
+    "maxTokens": 512,
+    "modelCapabilities": [
+      "tool_use"
+    ],
+    "modelCapabilitiesPresent": true,
+    "modelKey": "prism-ml/bonsai-27b",
+    "modelPublisher": "prism-ml",
+    "modelType": "vlm",
+    "otherResidentWorkloads": [],
+    "packContentHash": "31981c09482d800cbda2682b81fc5208b547921886c7f7d823a26ca9a444ebdf",
+    "packId": "chat-responder-grounded-answers",
+    "packVersion": "0.1.0",
+    "pythonVersion": "3.12.3",
+    "quantization": "Q1_0",
+    "residencySource": "lmstudio-api-v0",
+    "residentModelsAtEnd": [
+      {
+        "id": "prism-ml/bonsai-27b",
+        "state": "loaded"
+      }
+    ],
+    "residentModelsAtStart": [
+      {
+        "id": "prism-ml/bonsai-27b",
+        "state": "loaded"
+      }
+    ],
+    "runtimeName": "llama.cpp-win-x86_64-nvidia-cuda12-avx2",
+    "runtimeVersion": "2.40.0",
+    "startedAt": "2026-09-20T03:44:30Z",
+    "temperature": 0.0
+  },
+  "items": [
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-01",
+      "latencyMs": 23725.618914002553,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-01"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 24348.994,
+            "promptTokens": 333,
+            "tokensPerSecond": 21.73201894453666,
+            "ttftMs": 835.302,
+            "wallClockMs": 23725.618914002553
+          }
+        ],
+        "wallClockMs": 23725.618914002553,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-02",
+      "latencyMs": 23372.518870979548,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-02"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23854.9,
+            "promptTokens": 322,
+            "tokensPerSecond": 21.81489976437774,
+            "ttftMs": 430.543,
+            "wallClockMs": 23372.518870979548
+          }
+        ],
+        "wallClockMs": 23372.518870979548,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 1
+      },
+      "detail": {
+        "abstained": true,
+        "checklistPass": true,
+        "wordCount": 31
+      },
+      "itemId": "cr-03",
+      "latencyMs": 21074.30419701268,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-03"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 21487.716,
+            "promptTokens": 337,
+            "tokensPerSecond": 21.828236035992337,
+            "ttftMs": 459.906,
+            "wallClockMs": 21074.30419701268
+          }
+        ],
+        "wallClockMs": 21074.30419701268,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-04",
+      "latencyMs": 23404.425802000333,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-04"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23889.738,
+            "promptTokens": 327,
+            "tokensPerSecond": 21.79048166175322,
+            "ttftMs": 439.132,
+            "wallClockMs": 23404.425802000333
+          }
+        ],
+        "wallClockMs": 23404.425802000333,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-05",
+      "latencyMs": 23317.239607014926,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-05"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23824.536,
+            "promptTokens": 291,
+            "tokensPerSecond": 21.815659724548052,
+            "ttftMs": 400.995,
+            "wallClockMs": 23317.239607014926
+          }
+        ],
+        "wallClockMs": 23317.239607014926,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-06",
+      "latencyMs": 23395.24388097925,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-06"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23865.767,
+            "promptTokens": 320,
+            "tokensPerSecond": 21.821413297354333,
+            "ttftMs": 448.402,
+            "wallClockMs": 23395.24388097925
+          }
+        ],
+        "wallClockMs": 23395.24388097925,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-07",
+      "latencyMs": 23488.776197016705,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-07"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23999.082,
+            "promptTokens": 364,
+            "tokensPerSecond": 21.786614057038893,
+            "ttftMs": 544.313,
+            "wallClockMs": 23488.776197016705
+          }
+        ],
+        "wallClockMs": 23488.776197016705,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-08",
+      "latencyMs": 23736.590478976723,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-08"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 24234.004999999997,
+            "promptTokens": 291,
+            "tokensPerSecond": 21.77899156705513,
+            "ttftMs": 771.027,
+            "wallClockMs": 23736.590478976723
+          }
+        ],
+        "wallClockMs": 23736.590478976723,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 1
+      },
+      "detail": {
+        "abstained": true,
+        "checklistPass": true,
+        "wordCount": 36
+      },
+      "itemId": "cr-09",
+      "latencyMs": 19687.87829397479,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-09"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 20032.348,
+            "promptTokens": 338,
+            "tokensPerSecond": 21.786794328416693,
+            "ttftMs": 479.219,
+            "wallClockMs": 19687.87829397479
+          }
+        ],
+        "wallClockMs": 19687.87829397479,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-10",
+      "latencyMs": 23275.107108987868,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-10"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23813.677,
+            "promptTokens": 277,
+            "tokensPerSecond": 21.814491866417615,
+            "ttftMs": 388.882,
+            "wallClockMs": 23275.107108987868
+          }
+        ],
+        "wallClockMs": 23275.107108987868,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-11",
+      "latencyMs": 23455.08026299649,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-11"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23957.433,
+            "promptTokens": 343,
+            "tokensPerSecond": 21.74902417746659,
+            "ttftMs": 462.126,
+            "wallClockMs": 23455.08026299649
+          }
+        ],
+        "wallClockMs": 23455.08026299649,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-12",
+      "latencyMs": 23349.733193026623,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-12"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23848.303,
+            "promptTokens": 285,
+            "tokensPerSecond": 21.792416443781278,
+            "ttftMs": 399.779,
+            "wallClockMs": 23349.733193026623
+          }
+        ],
+        "wallClockMs": 23349.733193026623,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-13",
+      "latencyMs": 23351.17292799987,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-13"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23875.48,
+            "promptTokens": 275,
+            "tokensPerSecond": 21.758210754627974,
+            "ttftMs": 390.093,
+            "wallClockMs": 23351.17292799987
+          }
+        ],
+        "wallClockMs": 23351.17292799987,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-14",
+      "latencyMs": 23492.012522008736,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-14"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23883.659,
+            "promptTokens": 314,
+            "tokensPerSecond": 21.78522918828492,
+            "ttftMs": 427.399,
+            "wallClockMs": 23492.012522008736
+          }
+        ],
+        "wallClockMs": 23492.012522008736,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-15",
+      "latencyMs": 23385.054875019705,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-15"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23854.799,
+            "promptTokens": 310,
+            "tokensPerSecond": 21.798316768958788,
+            "ttftMs": 412.622,
+            "wallClockMs": 23385.054875019705
+          }
+        ],
+        "wallClockMs": 23385.054875019705,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-16",
+      "latencyMs": 23395.357684988994,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-16"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 24005.663999999997,
+            "promptTokens": 283,
+            "tokensPerSecond": 21.6516643795419,
+            "ttftMs": 404.707,
+            "wallClockMs": 23395.357684988994
+          }
+        ],
+        "wallClockMs": 23395.357684988994,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-17",
+      "latencyMs": 23371.948106010677,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-17"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23917.276,
+            "promptTokens": 320,
+            "tokensPerSecond": 21.759673729235054,
+            "ttftMs": 433.468,
+            "wallClockMs": 23371.948106010677
+          }
+        ],
+        "wallClockMs": 23371.948106010677,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-18",
+      "latencyMs": 23433.566669991706,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-18"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23890.318,
+            "promptTokens": 284,
+            "tokensPerSecond": 21.748981596488463,
+            "ttftMs": 394.965,
+            "wallClockMs": 23433.566669991706
+          }
+        ],
+        "wallClockMs": 23433.566669991706,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-19",
+      "latencyMs": 23439.270929986378,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-19"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23917.617000000002,
+            "promptTokens": 308,
+            "tokensPerSecond": 21.750061908933553,
+            "ttftMs": 423.431,
+            "wallClockMs": 23439.270929986378
+          }
+        ],
+        "wallClockMs": 23439.270929986378,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-20",
+      "latencyMs": 23371.02209299337,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-20"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23923.247,
+            "promptTokens": 323,
+            "tokensPerSecond": 21.760998822180614,
+            "ttftMs": 440.869,
+            "wallClockMs": 23371.02209299337
+          }
+        ],
+        "wallClockMs": 23371.02209299337,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-21",
+      "latencyMs": 23333.308508008486,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-21"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23823.813,
+            "promptTokens": 288,
+            "tokensPerSecond": 21.806807052432355,
+            "ttftMs": 390.763,
+            "wallClockMs": 23333.308508008486
+          }
+        ],
+        "wallClockMs": 23333.308508008486,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-22",
+      "latencyMs": 23773.84516299935,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-22"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 24223.62,
+            "promptTokens": 275,
+            "tokensPerSecond": 21.77292543113908,
+            "ttftMs": 754.105,
+            "wallClockMs": 23773.84516299935
+          }
+        ],
+        "wallClockMs": 23773.84516299935,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-23",
+      "latencyMs": 23467.392338992795,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-23"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23943.068000000003,
+            "promptTokens": 328,
+            "tokensPerSecond": 21.755054772075567,
+            "ttftMs": 454.274,
+            "wallClockMs": 23467.392338992795
+          }
+        ],
+        "wallClockMs": 23467.392338992795,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 1
+      },
+      "detail": {
+        "abstained": true,
+        "checklistPass": true,
+        "wordCount": 36
+      },
+      "itemId": "cr-24",
+      "latencyMs": 23203.18140499876,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-24"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23905.257999999998,
+            "promptTokens": 282,
+            "tokensPerSecond": 21.739826856531224,
+            "ttftMs": 400.011,
+            "wallClockMs": 23203.18140499876
+          }
+        ],
+        "wallClockMs": 23203.18140499876,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-25",
+      "latencyMs": 23490.607772022486,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-25"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23896.166,
+            "promptTokens": 321,
+            "tokensPerSecond": 21.77903426562375,
+            "ttftMs": 433.234,
+            "wallClockMs": 23490.607772022486
+          }
+        ],
+        "wallClockMs": 23490.607772022486,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-26",
+      "latencyMs": 23469.763316010358,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-26"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23949.647,
+            "promptTokens": 318,
+            "tokensPerSecond": 21.74343638630044,
+            "ttftMs": 448.302,
+            "wallClockMs": 23469.763316010358
+          }
+        ],
+        "wallClockMs": 23469.763316010358,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-27",
+      "latencyMs": 23115.770887001418,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-27"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23847.751999999997,
+            "promptTokens": 280,
+            "tokensPerSecond": 21.775166083580842,
+            "ttftMs": 380.652,
+            "wallClockMs": 23115.770887001418
+          }
+        ],
+        "wallClockMs": 23115.770887001418,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-28",
+      "latencyMs": 23289.032631000737,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-28"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23948.93,
+            "promptTokens": 312,
+            "tokensPerSecond": 21.73805028321574,
+            "ttftMs": 441.762,
+            "wallClockMs": 23289.032631000737
+          }
+        ],
+        "wallClockMs": 23289.032631000737,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-29",
+      "latencyMs": 23257.419158006087,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-29"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23826.811,
+            "promptTokens": 308,
+            "tokensPerSecond": 21.83309000048323,
+            "ttftMs": 421.97,
+            "wallClockMs": 23257.419158006087
+          }
+        ],
+        "wallClockMs": 23257.419158006087,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "formatMaxWords": 1,
+        "formatNoForbiddenPatterns": 1,
+        "formatSingleParagraph": 1,
+        "groundingRate": 0
+      },
+      "detail": {
+        "abstained": false,
+        "checklistPass": false,
+        "wordCount": 0
+      },
+      "itemId": "cr-30",
+      "latencyMs": 23620.24720100453,
+      "measures": {},
+      "outcome": "pass",
+      "pairingKey": [
+        "cr-30"
+      ],
+      "scoreable": {
+        "formatMaxWords": true,
+        "formatNoForbiddenPatterns": true,
+        "formatSingleParagraph": true,
+        "groundingRate": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": 23938.279,
+            "promptTokens": 321,
+            "tokensPerSecond": 21.76676810008999,
+            "ttftMs": 462.125,
+            "wallClockMs": 23620.24720100453
+          }
+        ],
+        "wallClockMs": 23620.24720100453,
+        "withheldFor": null
+      }
+    }
+  ],
+  "latency": {
+    "callCount": 30,
+    "latencyItemCount": 30,
+    "latencyMsMax": null,
+    "latencyMsP50": 23385.054875019705,
+    "latencyMsP95": 23736.590478976723,
+    "latencyTimedCount": 30,
+    "latencyWithheldForLoad": 0,
+    "latencyWithheldForNoResponse": 0,
+    "prefillMsPer1kMedian": 1384.9817073170732,
+    "statsCoveredCount": 30,
+    "tokensPerSecondMedian": 21.775166083580842,
+    "ttftMsMedian": 433.234,
+    "unexplainedMsMax": -780.1567989954674
+  },
+  "role": "chat-responder",
+  "runId": "chat-responder-grounded-answers-prism-ml_bonsai-27b-2026-09-20T03:44:30Z",
+  "sessionId": "catalog-sweep-2026-09-19"
+}

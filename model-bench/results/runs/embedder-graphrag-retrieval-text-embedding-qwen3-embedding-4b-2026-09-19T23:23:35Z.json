@@ -1,0 +1,1721 @@
+{
+  "aggregates": {
+    "kind": "retrieval",
+    "mrr": {
+      "mean": 0.6609649122807018,
+      "n": 38,
+      "name": "mrr",
+      "support": [
+        0.0,
+        1.0
+      ],
+      "type": "continuous"
+    },
+    "precisionAt1": {
+      "n": 38,
+      "name": "precisionAt1",
+      "successes": 18,
+      "type": "binary",
+      "unit": "query"
+    },
+    "recallAtK": [
+      {
+        "n": 38,
+        "name": "recallAt5",
+        "successes": 35,
+        "type": "binary",
+        "unit": "query"
+      },
+      {
+        "n": 38,
+        "name": "recallAt10",
+        "successes": 36,
+        "type": "binary",
+        "unit": "query"
+      }
+    ],
+    "separationRaw": {
+      "median": -0.0128661461601568,
+      "n": 38,
+      "name": "separationRaw",
+      "p10": -0.13674015530942218,
+      "support": [
+        -1.0,
+        1.0
+      ],
+      "type": "distribution",
+      "unit": "query"
+    },
+    "separationZ": {
+      "median": -0.10684644487376804,
+      "n": 38,
+      "name": "separationZ",
+      "p10": -1.6651425232851922,
+      "support": null,
+      "type": "distribution",
+      "unit": "query"
+    }
+  },
+  "armKind": "model",
+  "attestationTripWire": "unavailable",
+  "basis": "by-construction",
+  "designEffect": 1.0,
+  "fingerprint": {
+    "arch": "qwen3",
+    "armKind": "model",
+    "benchSchemaVersion": 1,
+    "benchVersion": "0.1.0",
+    "callSurface": "embeddings",
+    "compatibilityType": "gguf",
+    "endedAt": "2026-09-19T23:23:47Z",
+    "hostOs": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "hostRamGb": 16,
+    "kvCacheSetting": "f16",
+    "lmStudioAppVersion": "0.4.24+1",
+    "loadedContextLength": 2048,
+    "maxContextLength": 40960,
+    "modelCapabilities": [
+      "tool_use"
+    ],
+    "modelCapabilitiesPresent": true,
+    "modelKey": "text-embedding-qwen3-embedding-4b",
+    "modelPublisher": "Qwen",
+    "modelType": "embeddings",
+    "otherResidentWorkloads": [],
+    "packContentHash": "1fbc53f951a7ccf288f5a50768eeec51be24e3f9cb0f47ef18ccd2e8530e4306",
+    "packId": "embedder-graphrag-retrieval",
+    "packVersion": "1.1.0",
+    "pythonVersion": "3.12.3",
+    "quantization": "Q4_K_M",
+    "residencySource": "lmstudio-api-v0",
+    "residentModelsAtEnd": [
+      {
+        "id": "text-embedding-qwen3-embedding-4b",
+        "state": "loaded"
+      }
+    ],
+    "residentModelsAtStart": [
+      {
+        "id": "text-embedding-granite-embedding-278m-multilingual",
+        "state": "loaded"
+      }
+    ],
+    "startedAt": "2026-09-19T23:23:35Z"
+  },
+  "items": [
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 0
+      },
+      "detail": {
+        "queryNorm": 1.000000003918003
+      },
+      "itemId": "gr-01",
+      "latencyMs": 35.82705999724567,
+      "measures": {
+        "mrr": 0.16666666666666666,
+        "separationRaw": -0.08358245336629311,
+        "separationZ": -0.6738655816900482
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-01"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 35.82705999724567
+          }
+        ],
+        "wallClockMs": 35.82705999724567,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.999999991836912
+      },
+      "itemId": "gr-02",
+      "latencyMs": 36.30360699025914,
+      "measures": {
+        "mrr": 0.2,
+        "separationRaw": -0.08902754428069615,
+        "separationZ": -0.8996959567926099
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-02"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 36.30360699025914
+          }
+        ],
+        "wallClockMs": 36.30360699025914,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.9999999870668618
+      },
+      "itemId": "gr-03",
+      "latencyMs": 36.60116100218147,
+      "measures": {
+        "mrr": 0.25,
+        "separationRaw": -0.12906132766342016,
+        "separationZ": -1.1620821761829156
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-03"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 36.60116100218147
+          }
+        ],
+        "wallClockMs": 36.60116100218147,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.0000000101178705
+      },
+      "itemId": "gr-04",
+      "latencyMs": 35.20916900015436,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -0.0128661461601568,
+        "separationZ": -0.10684644487376804
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-04"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 35.20916900015436
+          }
+        ],
+        "wallClockMs": 35.20916900015436,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.9999999889038551
+      },
+      "itemId": "gr-05",
+      "latencyMs": 50.38851499557495,
+      "measures": {
+        "mrr": 0.2,
+        "separationRaw": -0.10085622079761758,
+        "separationZ": -0.9611771431256686
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-05"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 50.38851499557495
+          }
+        ],
+        "wallClockMs": 50.38851499557495,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.0000000069261894
+      },
+      "itemId": "gr-06",
+      "latencyMs": 35.78002698486671,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -0.04452668467317855,
+        "separationZ": -0.5012954454667858
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-06"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 35.78002698486671
+          }
+        ],
+        "wallClockMs": 35.78002698486671,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.9999999825294802
+      },
+      "itemId": "gr-07",
+      "latencyMs": 36.53112301253714,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -0.0027153449415632247,
+        "separationZ": -0.025048118825631495
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-07"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 36.53112301253714
+          }
+        ],
+        "wallClockMs": 36.53112301253714,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.0000000114396725
+      },
+      "itemId": "gr-08",
+      "latencyMs": 51.8611739971675,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.10825265096436798,
+        "separationZ": 0.945786238033436
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-08"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 51.8611739971675
+          }
+        ],
+        "wallClockMs": 51.8611739971675,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.0000000190236702
+      },
+      "itemId": "gr-09",
+      "latencyMs": 35.283115983475,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.053428065015059145,
+        "separationZ": 0.6003654394256686
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-09"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 35.283115983475
+          }
+        ],
+        "wallClockMs": 35.283115983475,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.999999968592774
+      },
+      "itemId": "gr-10",
+      "latencyMs": 35.106412979075685,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -0.019422329722373566,
+        "separationZ": -0.1699058605749272
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-10"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 35.106412979075685
+          }
+        ],
+        "wallClockMs": 35.106412979075685,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.000000019409509
+      },
+      "itemId": "gr-11",
+      "latencyMs": 34.826652001356706,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.006908470111572695,
+        "separationZ": 0.06991662572145657
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-11"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 34.826652001356706
+          }
+        ],
+        "wallClockMs": 34.826652001356706,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.000000013663518
+      },
+      "itemId": "gr-12",
+      "latencyMs": 37.3848189774435,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.08654773340341126,
+        "separationZ": 0.8919762657528099
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-12"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 37.3848189774435
+          }
+        ],
+        "wallClockMs": 37.3848189774435,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.9999999724232624
+      },
+      "itemId": "gr-13",
+      "latencyMs": 34.408531995723024,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.017892910486268176,
+        "separationZ": 0.15925603114177883
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-13"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 34.408531995723024
+          }
+        ],
+        "wallClockMs": 34.408531995723024,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.9999999857644449
+      },
+      "itemId": "gr-14",
+      "latencyMs": 54.7297390003223,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.02069351788986351,
+        "separationZ": 0.20011557771316563
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-14"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 54.7297390003223
+          }
+        ],
+        "wallClockMs": 54.7297390003223,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 2,
+        "recallAt5": 2
+      },
+      "detail": {
+        "queryNorm": 0.9999999851666481
+      },
+      "itemId": "gr-15",
+      "latencyMs": 37.2130979958456,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.03410972283107461,
+        "separationZ": 0.3143161469328165
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-15"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 37.2130979958456
+          }
+        ],
+        "wallClockMs": 37.2130979958456,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 0,
+        "recallAt5": 0
+      },
+      "detail": {
+        "queryNorm": 0.9999999811105341
+      },
+      "itemId": "gr-16",
+      "latencyMs": 41.45685600815341,
+      "measures": {
+        "mrr": 0.03333333333333333,
+        "separationRaw": -0.4344521838686422,
+        "separationZ": -4.035195308718952
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-16"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 41.45685600815341
+          }
+        ],
+        "wallClockMs": 41.45685600815341,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.9999999913862357
+      },
+      "itemId": "gr-17",
+      "latencyMs": 54.95647600037046,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.13966880234054224,
+        "separationZ": 1.2908212974662034
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-17"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 54.95647600037046
+          }
+        ],
+        "wallClockMs": 54.95647600037046,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.0000000122703394
+      },
+      "itemId": "gr-18",
+      "latencyMs": 37.31542400782928,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -0.04987183962388453,
+        "separationZ": -0.5246546450754442
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-18"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 37.31542400782928
+          }
+        ],
+        "wallClockMs": 37.31542400782928,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.9999999837808544
+      },
+      "itemId": "gr-19",
+      "latencyMs": 54.03298101737164,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.09698185682654104,
+        "separationZ": 1.0951152337601473
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-19"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 54.03298101737164
+          }
+        ],
+        "wallClockMs": 54.03298101737164,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 0,
+        "recallAt5": 0
+      },
+      "detail": {
+        "queryNorm": 0.9999999544338957
+      },
+      "itemId": "gr-20",
+      "latencyMs": 36.718787014251575,
+      "measures": {
+        "mrr": 0.06666666666666667,
+        "separationRaw": -0.22532836348113983,
+        "separationZ": -2.7325105445927615
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-20"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 36.718787014251575
+          }
+        ],
+        "wallClockMs": 36.718787014251575,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.9999999717486528
+      },
+      "itemId": "gr-21",
+      "latencyMs": 35.29016498941928,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.1802917919871907,
+        "separationZ": 2.1487107541420247
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-21"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 35.29016498941928
+          }
+        ],
+        "wallClockMs": 35.29016498941928,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.0000000227991537
+      },
+      "itemId": "gr-22",
+      "latencyMs": 37.132034020032734,
+      "measures": {
+        "mrr": 0.2,
+        "separationRaw": -0.34703498337043603,
+        "separationZ": -3.939792975477941
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-22"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 37.132034020032734
+          }
+        ],
+        "wallClockMs": 37.132034020032734,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.000000022829761
+      },
+      "itemId": "gr-23",
+      "latencyMs": 34.6210389980115,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.06541034790486044,
+        "separationZ": 0.8263291355284629
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-23"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 34.6210389980115
+          }
+        ],
+        "wallClockMs": 34.6210389980115,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.9999999905693666
+      },
+      "itemId": "gr-24",
+      "latencyMs": 49.29718602215871,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -0.07226715572649478,
+        "separationZ": -0.8594222781214049
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-24"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 49.29718602215871
+          }
+        ],
+        "wallClockMs": 49.29718602215871,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.9999999993448704
+      },
+      "itemId": "gr-25",
+      "latencyMs": 51.17564302054234,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.0640714733542801,
+        "separationZ": 0.8079587082514562
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-25"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 51.17564302054234
+          }
+        ],
+        "wallClockMs": 51.17564302054234,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.0000000256861852
+      },
+      "itemId": "gr-26",
+      "latencyMs": 48.19633500301279,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.0006005031628978363,
+        "separationZ": 0.007441624560812581
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-26"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 48.19633500301279
+          }
+        ],
+        "wallClockMs": 48.19633500301279,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.0000000223408982
+      },
+      "itemId": "gr-27",
+      "latencyMs": 38.02197999903001,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -0.11997022314855288,
+        "separationZ": -1.4078810321342015
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-27"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 38.02197999903001
+          }
+        ],
+        "wallClockMs": 38.02197999903001,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.0000000209410946
+      },
+      "itemId": "gr-28",
+      "latencyMs": 37.44617500342429,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -0.13674015530942218,
+        "separationZ": -1.6651425232851922
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-28"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 37.44617500342429
+          }
+        ],
+        "wallClockMs": 37.44617500342429,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.000000004409976
+      },
+      "itemId": "gr-29",
+      "latencyMs": 36.374841001816094,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.05458259039908664,
+        "separationZ": 0.5802109010193809
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-29"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 36.374841001816094
+          }
+        ],
+        "wallClockMs": 36.374841001816094,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.0000000311025976
+      },
+      "itemId": "gr-30",
+      "latencyMs": 37.64898399822414,
+      "measures": {
+        "mrr": 0.3333333333333333,
+        "separationRaw": -0.04494528338742221,
+        "separationZ": -0.46392544197680186
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-30"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 37.64898399822414
+          }
+        ],
+        "wallClockMs": 37.64898399822414,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.9999999815402163
+      },
+      "itemId": "gr-31",
+      "latencyMs": 37.78751500067301,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.03882144849083846,
+        "separationZ": 0.6129121366286212
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-31"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 37.78751500067301
+          }
+        ],
+        "wallClockMs": 37.78751500067301,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.9999999729714427
+      },
+      "itemId": "gr-32",
+      "latencyMs": 53.925141983199865,
+      "measures": {
+        "mrr": 0.3333333333333333,
+        "separationRaw": -0.0649018911729925,
+        "separationZ": -0.8069039454375321
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-32"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 53.925141983199865
+          }
+        ],
+        "wallClockMs": 53.925141983199865,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.9999999918587494
+      },
+      "itemId": "gr-33",
+      "latencyMs": 38.176390022272244,
+      "measures": {
+        "mrr": 0.3333333333333333,
+        "separationRaw": -0.06568867379108922,
+        "separationZ": -0.6437377512378658
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-33"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 38.176390022272244
+          }
+        ],
+        "wallClockMs": 38.176390022272244,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 2,
+        "recallAt5": 2
+      },
+      "detail": {
+        "queryNorm": 1.0000000145549766
+      },
+      "itemId": "gr-34",
+      "latencyMs": 48.52082999423146,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -0.014107076999295587,
+        "separationZ": -0.1405738174804014
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-34"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 48.52082999423146
+          }
+        ],
+        "wallClockMs": 48.52082999423146,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 0.999999956151723
+      },
+      "itemId": "gr-35",
+      "latencyMs": 40.483510005287826,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.06045529965141749,
+        "separationZ": 0.7397996646752374
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-35"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 40.483510005287826
+          }
+        ],
+        "wallClockMs": 40.483510005287826,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 0,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.0000000183987827
+      },
+      "itemId": "gr-36",
+      "latencyMs": 39.3306509940885,
+      "measures": {
+        "mrr": 0.5,
+        "separationRaw": -0.12467177365036275,
+        "separationZ": -1.3936996001889064
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-36"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 39.3306509940885
+          }
+        ],
+        "wallClockMs": 39.3306509940885,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.0000000173702335
+      },
+      "itemId": "gr-37",
+      "latencyMs": 39.06334299244918,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.09832066108262683,
+        "separationZ": 1.2327651632326273
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-37"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 39.06334299244918
+          }
+        ],
+        "wallClockMs": 39.06334299244918,
+        "withheldFor": null
+      }
+    },
+    {
+      "counts": {
+        "precisionAt1": 1,
+        "recallAt10": 1,
+        "recallAt5": 1
+      },
+      "detail": {
+        "queryNorm": 1.0000000062122911
+      },
+      "itemId": "gr-38",
+      "latencyMs": 38.161304022651166,
+      "measures": {
+        "mrr": 1.0,
+        "separationRaw": 0.045556466616121005,
+        "separationZ": 0.47114260223017534
+      },
+      "outcome": "pass",
+      "pairingKey": [
+        "gr-38"
+      ],
+      "scoreable": {
+        "mrr": true,
+        "precisionAt1": true,
+        "recallAt10": true,
+        "recallAt5": true,
+        "separationRaw": true,
+        "separationZ": true
+      },
+      "timing": {
+        "calls": [
+          {
+            "generationMs": null,
+            "promptTokens": null,
+            "tokensPerSecond": null,
+            "ttftMs": null,
+            "wallClockMs": 38.161304022651166
+          }
+        ],
+        "wallClockMs": 38.161304022651166,
+        "withheldFor": null
+      }
+    }
+  ],
+  "latency": {
+    "callCount": 38,
+    "latencyItemCount": 38,
+    "latencyMsMax": null,
+    "latencyMsP50": 37.44617500342429,
+    "latencyMsP95": 54.7297390003223,
+    "latencyTimedCount": 38,
+    "latencyWithheldForLoad": 0,
+    "latencyWithheldForNoResponse": 0,
+    "prefillMsPer1kMedian": null,
+    "statsCoveredCount": null,
+    "tokensPerSecondMedian": null,
+    "ttftMsMedian": null,
+    "unexplainedMsMax": null
+  },
+  "role": "embedder",
+  "runId": "embedder-graphrag-retrieval-text-embedding-qwen3-embedding-4b-2026-09-19T23:23:35Z",
+  "sessionId": "catalog-sweep-2026-09-19"
+}
