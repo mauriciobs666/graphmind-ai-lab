@@ -123,3 +123,42 @@ delivered work leaves this file and is recorded in `HISTORY.md`.
   (`docs/reviews/small-model-catalog-sweep-impl.md`, "Unit B Implementation Review"). Worth a
   one-line reword (tie the suffix to whether `session` was actually passed to `rank_report`, not
   to whether `runs` is non-empty) the next time this function is touched.
+
+- **`report.rank_report()`'s zero-`n` exclusion banner double-counts a run's items when two
+  verdict metrics on the same run both have `scoreable={}` items — the same overcount the banner
+  exists to prevent, triggered by a different scorer path than the one that motivated it.**
+  `_attempted_for_metric` (`report.py`, Defect-1 fix) counts an item toward `metric`'s attempted
+  total when it either declares `metric` in `scoreable` or declares nothing at all
+  (`scoreable == {}`) — the second clause is what lets it correctly read `nlq-structured-query`'s
+  real parse-failure shape (a received-but-unparseable response, whose `scoreable` is genuinely
+  `{}`, not `{metric: False}`) without regressing to "0 items attempted." But `scoreable == {}` is
+  also exactly what every scorer in the package emits on a **no-response** item — `classification.py:
+  239-244`'s `score_item`: `if result is None: return ItemResult(..., scoreable={}, counts={},
+  ...)`, returned *before* the tier→metric mapping (`_METRIC_BY_TIER`) is ever consulted, so a
+  timed-out/unrunnable item carries no record of which verdict metric its tier would have scored.
+  `extraction.py`, `retrieval.py`, and `grounding.py` all emit the identical `scoreable={}` shape
+  on their own no-response path. For guard-judge — the only shipped pack with two verdict metrics
+  sharing one run's `items` list — a run whose items from **both** tiers time out (a total or
+  partial outage, not a parse failure) makes `_attempted_for_metric` count every one of those
+  empty items toward **both** `falseAdvanceRate`'s and `falseSuspendRate`'s own banners: reproduced
+  directly (40 `falseAdvanceRate`-tier + 30 `falseSuspendRate`-tier items, all `scoreable={}`,
+  mirroring `classification.py`'s own no-response `ItemResult` exactly) — both banners read "70
+  item(s) attempted" where the true split is 40/30, the identical overcount shape Defect 1's fix
+  exists to close. **Read-verified by tracing the real scorer code and reproducing against a
+  fixture built from its own no-response `ItemResult` shape; never yet observed live** — every
+  stored guard-judge run in the current sweep (`results/runs/guard-judge-understanding-*.json`,
+  17 files) was checked and none carries a single `scoreable == {}` item, so this has not produced
+  a wrong number in any rendered report to date.
+
+  The fix is not "guess which tier an empty item belonged to" — that information is not in the
+  stored record (a no-response `ItemResult` carries no `detail`/tier field, per
+  `classification.py:241-248`), and inventing a split would itself violate the "declared, never
+  inferred" rule this component holds everywhere else (`AGENTS.md`'s load-bearing invariants) —
+  the exact rule the empty-scoreable-item design already leans on for every other case. The honest
+  shape is to make the banner say what it actually knows once more than one verdict metric shares
+  a run's items and an ambiguous item count exists: the number of items that explicitly declared
+  `metric`, plus a separate, named count of items that recorded no response for *any* metric in
+  this run and cannot be attributed to `metric` specifically — never a single confident total that
+  silently assumes an even (or any particular) split. Full mechanism, reproduction, and the
+  precedent this follows: `docs/reviews/small-model-catalog-sweep-impl.md`, "Verification round 2
+  — 2026-09-20" under the Defect 1 fix section.

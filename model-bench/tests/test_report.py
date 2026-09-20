@@ -3292,6 +3292,155 @@ def test_rank_report_excludes_a_model_with_no_aggregate_without_dropping_it() ->
     assert "model-c" not in section
 
 
+def test_rank_report_names_a_model_with_a_declared_zero_n_aggregate_not_silently_drops_it() -> (
+    None
+):
+    """Catalog-sweep Defect 1 (`docs/test-reports/small-model-catalog-sweep-report.md`) —
+    `qwen/qwen3-4b-thinking-2507` and `stable-code-instruct-3b` both ran the full 40-item
+    `nlq-structured-query` pack and produced a genuine, internally-consistent record: every item's
+    `scoreable` is `{}` (100% `parse_failure`), so the pack's own extraction scorer honestly
+    declares `layer1ExactMatchRate` with `n=0`. `_aggregate_item_mismatches` finds no disagreement
+    (0 items counted, `n=0` declared) so this never reaches the `INVALID RESULTS EXCLUDED` (AC-2)
+    path — but `_metric_value`'s `BinaryMetric.rate` divide-by-zero guard returns `None` for this
+    run exactly as it does for a run that never declared the metric at all, and `_rank_rows` then
+    drops it from the table with no banner, footnote, or any other mention (FR-6 violation).
+
+    A model that ran and declares a real, consistent `n=0` aggregate must still be **named** as
+    excluded — distinct from `model-b` here, which declares no aggregate for this metric at all
+    and must stay silently absent per `_metric_value`'s own correct rule for that other case."""
+    pack = _rank_pack()
+    a = _rank_arm("model-a", 30, 40)
+    b = run(
+        "model-b", items=[], aggregates=RetrievalAggregates(),
+        fingerprint_fields=model_fields(modelKey="model-b", packId=pack.packId),
+    )
+    unscored = [
+        item(f"q{i:02d}", correct=False, metric="layer1ExactMatchRate", scoreable=False)
+        for i in range(40)
+    ]
+    failed = run(
+        "model-failed", items=unscored,
+        aggregates=classification_aggregates(0, 0, metric="layer1ExactMatchRate"),
+        fingerprint_fields=model_fields(modelKey="model-failed", packId=pack.packId),
+    )
+
+    md = rank_report([a, b, failed], pack=pack)
+
+    section = md.split("### layer1ExactMatchRate")[1]
+    # Named: appears somewhere in this metric's own section...
+    assert "`model-failed`" in section
+    # ...but never as a ranked row claiming a rate it does not have.
+    assert "| model-failed |" not in section
+    # The n=0-vs-no-aggregate distinction is preserved: model-b stays silently absent.
+    assert "model-b" not in section
+
+
+def test_rank_report_zero_n_banner_reads_the_real_empty_scoreable_shape_correctly() -> None:
+    """`data-scientist`'s methodology-gate MAJOR (`docs/reviews/small-model-catalog-sweep-impl.md`)
+    — the real, live `nlq-structured-query` parse-failure records this fix exists for declare a
+    fully **empty** `scoreable` map (`{}`) per item, never `{metric: False}`: the extraction scorer
+    never reaches the point of declaring scoreability when parsing itself fails, confirmed by
+    reading `results/runs/nlq-structured-query-stable-code-instruct-3b-*.json` directly. The
+    review's own suggested one-liner, `metric in it.scoreable`, reads this exact shape as "0 items
+    attempted" — silently regressing the live Defect-1 report from its currently-correct 40 down to
+    0. This pins the attempted-count against the real shape, not just a hand-built stand-in for
+    it."""
+    pack = _rank_pack()
+    a = _rank_arm("model-a", 30, 40)
+    unscored = [
+        ItemResult(
+            itemId=f"q{i:02d}", pairingKey=(f"q{i:02d}",), outcome="parse_failure",
+            scoreable={}, counts={}, timing=None, detail={},
+        )
+        for i in range(40)
+    ]
+    failed = run(
+        "model-failed", items=unscored,
+        aggregates=classification_aggregates(0, 0, metric="layer1ExactMatchRate"),
+        fingerprint_fields=model_fields(modelKey="model-failed", packId=pack.packId),
+    )
+
+    md = rank_report([a, failed], pack=pack)
+
+    section = md.split("### layer1ExactMatchRate")[1]
+    assert "`model-failed` — 40 item(s) attempted, n=0 scored" in section
+
+
+def test_rank_report_zero_n_banner_reads_the_metrics_own_item_count_not_the_runs_whole_list() -> (
+    None
+):
+    """`data-scientist`'s methodology-gate MAJOR, reproduced against real guard-judge run records
+    (`docs/reviews/small-model-catalog-sweep-impl.md`): every stored guard-judge item's `scoreable`
+    map carries exactly one verdict-metric key, never both — so `len(run.items)` (the run's whole
+    item list across *every* metric its pack scores) overcounts a metric-scoped banner by every
+    sibling metric's own items. A candidate with a real `n=0` aggregate on `falseAdvanceRate` (40
+    items, all declared unscoreable) and real, normal data on the sibling `falseSuspendRate` (30
+    items, mirroring the pack's own true 40/30 split, `-ml` §7.3, and `_guard_judge_arm`'s
+    asymmetric-item convention) must show `falseAdvanceRate`'s own banner reading 40 attempted,
+    never 70 — and (`analyst`'s MINOR, the per-metric-scoping pin) must still rank normally, with
+    its real data, under `falseSuspendRate`'s own section."""
+    pack = guard_pack(headline=None, verdicts=("falseAdvanceRate", "falseSuspendRate"))
+    advance_items = [
+        item(f"a{i:02d}", correct=False, metric="falseAdvanceRate", scoreable=False)
+        for i in range(40)
+    ]
+    suspend_items = [
+        item(f"s{i:02d}", correct=i < 12, metric="falseSuspendRate") for i in range(30)
+    ]
+    agg = ClassificationAggregates(
+        perClass=(
+            BinaryMetric(name="falseAdvanceRate", successes=0, n=0, unit="item"),
+            _agg_from(suspend_items, metric="falseSuspendRate").perClass[0],
+        ),
+        parseFailures=40, n=30,
+    )
+    cand = run(
+        "zero-advance-cand", items=advance_items + suspend_items, aggregates=agg,
+        fingerprint_fields=model_fields(modelKey="zero-advance-cand", packId=PACK_ID),
+    )
+
+    md = rank_report([cand], pack=pack)
+
+    advance_section = md.split("### falseAdvanceRate")[1].split("### falseSuspendRate")[0]
+    suspend_section = md.split("### falseSuspendRate")[1]
+    assert "`zero-advance-cand` — 40 item(s) attempted, n=0 scored" in advance_section
+    assert "70 item(s)" not in advance_section
+    assert "| zero-advance-cand |" not in advance_section
+    assert "EXCLUDED" not in suspend_section
+    assert "| 1 | zero-advance-cand | 12/30 |" in suspend_section
+
+
+def test_rank_report_names_a_zero_n_continuous_aggregate_not_silently_drops_it() -> None:
+    """`analyst`'s MINOR (`docs/reviews/small-model-catalog-sweep-impl.md`) — `_metric_value`'s
+    `ContinuousMetric` guard (`agg.mean if agg.n else None`) had no test: reverting it to a bare
+    `agg.mean` passed the whole suite. No shipped scorer constructs a zero-`n` `ContinuousMetric`
+    today, but the guard exists for the same reason the `BinaryMetric` one does — a mean over zero
+    observations is not a number this module can sort — and without it a zero-`n` continuous arm
+    would be *named* excluded by the banner while still rendered in the ranked table with a
+    meaningless mean, the exact contradiction this fix exists to prevent."""
+    pack = _embedder_pack()
+    items_a = [_mrr_item(f"q{i:02d}", 0.5) for i in range(10)]
+    agg_a = RetrievalAggregates(
+        mrr=ContinuousMetric(name="mrr", mean=0.5, n=10, support=(0.0, 1.0))
+    )
+    a = run("model-a", role="embedder", call_surface="embeddings", items=items_a,
+            aggregates=agg_a, fingerprint_fields=embeddings_fields(packId=pack.packId,
+                                                                     modelKey="model-a"))
+    zero = run(
+        "zero-mrr-cand", role="embedder", call_surface="embeddings", items=[],
+        aggregates=RetrievalAggregates(
+            mrr=ContinuousMetric(name="mrr", mean=0.0, n=0, support=(0.0, 1.0))
+        ),
+        fingerprint_fields=embeddings_fields(packId=pack.packId, modelKey="zero-mrr-cand"),
+    )
+
+    md = rank_report([a, zero], pack=pack)
+
+    section = md.split("### mrr")[1]
+    assert "`zero-mrr-cand` — 0 item(s) attempted, n=0 scored" in section
+    assert "| zero-mrr-cand |" not in section
+
+
 def test_rank_report_excludes_and_names_an_arm_whose_aggregate_disagrees_with_its_items() -> None:
     """§5 test 7 — S1 done-condition 10's cross-check, reused: the same exclude-and-name block
     `compare_report` already renders (`_aggregate_item_mismatches`)."""

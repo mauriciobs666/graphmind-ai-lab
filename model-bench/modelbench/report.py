@@ -126,7 +126,10 @@ def _metric_value(run: RunResult, metric: str) -> float | None:
     """The one sortable number for `metric` on `run`'s own aggregate (plan §3.1.1):
     `BinaryMetric.rate` or `ContinuousMetric.mean`. `None` when `run` declares no aggregate for
     `metric` at all — excluded from ranking, never ranked last: a model with no data for this pack
-    is absent, not "worst".
+    is absent, not "worst". Also `None` when `run` **does** declare an aggregate but its own `n`
+    is honestly zero — a mean or rate over zero observations is not a number this module can sort,
+    and `_zero_n_arms` is what tells that case apart from "no aggregate at all" so it can be named
+    rather than silently conflated with it (catalog-sweep Defect 1).
 
     Raises `PackConfigError` for a `DistributionSummary` — no shipped pack's headline/
     `verdictMetrics` member resolves to one today, and silently picking median over p10 would be a
@@ -141,8 +144,79 @@ def _metric_value(run: RunResult, metric: str) -> float | None:
             "no sortable single number for a median+p10 aggregate (plan §3.1.1)"
         )
     if isinstance(agg, ContinuousMetric):
-        return agg.mean
+        return agg.mean if agg.n else None
     return agg.rate
+
+
+def _zero_n_arms(runs: Sequence[RunResult], metric: str) -> list[RunResult]:
+    """Runs that declare a real, own aggregate for `metric` whose `n` is honestly zero — ran, and
+    produced an internally-consistent record (it clears `_aggregate_item_mismatches`, since a
+    declared `n=0` agrees with zero items counting as scored), but every item failed to produce a
+    scoreable outcome for this metric.
+
+    Distinct from a run that declares **no aggregate at all** for `metric`: `_metric_value` returns
+    `None` for both, and both are excluded from `_rank_rows`, but only this case ran and is owed a
+    name in the report — the other stays silently absent, which is `_metric_value`'s own correct
+    rule for a model that never attempted this pack (catalog-sweep Defect 1's root cause: the two
+    were rendered identically, with neither named)."""
+    out = []
+    for r in runs:
+        agg = _metric_aggregate(r, metric)
+        if isinstance(agg, (BinaryMetric, ContinuousMetric)) and agg.n == 0:
+            out.append(r)
+    return out
+
+
+def _attempted_for_metric(run: RunResult, metric: str) -> int:
+    """How many of `run`'s own items belong to `metric`'s item set — the banner's "N item(s)
+    attempted" figure (methodology-gate MAJOR, `docs/reviews/small-model-catalog-sweep-impl.md`).
+
+    **Not `len(run.items)`**: that is the run's whole item list across *every* metric its pack
+    scores, and a multi-verdict-metric pack (guard-judge: `falseAdvanceRate`/`falseSuspendRate`)
+    partitions `items` disjointly between them — `len(run.items)` overcounts by every sibling
+    metric's own items (reproduced against real guard-judge run records: each item's `scoreable`
+    carries exactly one metric key, never both).
+
+    **Also not the literal `metric in it.scoreable`** the review's own suggested one-liner reads:
+    checked against the real, live `nlq-structured-query` parse-failure records this fix exists
+    for (`results/runs/nlq-structured-query-stable-code-instruct-3b-*.json`), a fully-failed
+    item's `scoreable` is `{}` — the key is *absent*, not `False` — because the extraction scorer
+    never reaches the point of declaring scoreability when parsing itself fails. The literal
+    one-liner reads that shape as "0 items attempted", regressing the exact scenario Defect 1
+    reported (it would have shipped `nlq`'s real defect-1 rows reading "0 item(s) attempted"
+    instead of the correct 40).
+
+    The predicate an item satisfies to belong to `metric`'s set: it either **declares** `metric`
+    (present in `scoreable`, `True` or `False` — `_guard_judge_arm`'s asymmetric-fixture shape) or
+    it **declares nothing at all** (`scoreable == {}` — a single-verdict-metric pack's own
+    total-failure shape, where there is no sibling metric to have been declared instead). An item
+    that positively declares a *different* metric (guard-judge's sibling-metric items, and its own
+    exploratory `falseAdvanceRateBoundary` items) is excluded either way — it was never part of
+    this metric's item set to begin with."""
+    return sum(1 for it in run.items if metric in it.scoreable or not it.scoreable)
+
+
+def _rank_zero_n_lines(runs: Sequence[RunResult], metric: str) -> list[str]:
+    """The exclusion banner for `_zero_n_arms(runs, metric)` — same shape as `rank_report`'s own
+    `INVALID RESULTS EXCLUDED` (AC-2) block, for the same reason: an excluded arm is named, never
+    merely absent, so a reader cannot mistake "ran, scored nothing" for "never attempted this
+    pack." Scoped to one metric's own section, because the zero-`n` state is per metric — a run can
+    carry a real aggregate for a sibling verdict metric while declaring `n=0` on this one."""
+    zero_n = _zero_n_arms(runs, metric)
+    if not zero_n:
+        return []
+    lines = [
+        f"> **EXCLUDED — n=0 for `{metric}`**",
+        ">",
+        "> Ran, and the stored record is internally consistent, but the declared aggregate "
+        "honestly reports zero scoreable observations for this metric — excluded from the "
+        "ranking below, never ranked \"worst\" and never silently absent either:",
+    ]
+    for r in zero_n:
+        attempted = _attempted_for_metric(r, metric)
+        lines.append(f"> - `{r.modelKey}` — {attempted} item(s) attempted, n=0 scored")
+    lines.append("")
+    return lines
 
 
 def _better(metric: str, value: float, other: float) -> bool:
@@ -1093,6 +1167,7 @@ def _render_one_rank_table(
     on (plan §3.5)."""
     lines: list[str] = [f"### {metric}", ""]
     lines += _rank_caveat_lines(pack)
+    lines += _rank_zero_n_lines(runs, metric)
     rows = _rank_rows(runs, metric)
     if not rows:
         lines += [

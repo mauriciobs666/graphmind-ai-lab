@@ -901,3 +901,528 @@ needed.
 
 - None blocking. Whether the two minor findings (the zero-arms test, the README exit-2 clause) are
   worth a follow-up commit now or batched with a later documentation pass is `teco`'s call.
+
+---
+
+# Defect fix code gate — `nlq`/`rank` n=0-vs-no-aggregate naming (`analyst`, 2026-09-20)
+
+**Scope.** Reviewed the uncommitted working-tree diff (`git diff HEAD -- modelbench/report.py
+tests/test_report.py`) that fixes Defect 1 from `docs/test-reports/small-model-catalog-sweep-report.md`:
+`rank_report`'s ranked table silently dropped `qwen/qwen3-4b-thinking-2507` and
+`stable-code-instruct-3b` from `nlq-structured-query`'s table with no mention anywhere, because a
+run's real, internally-consistent `n=0` aggregate (100% item parse-failure) rendered identically to
+a run declaring no aggregate at all. `tdd-engineer`'s fix adds `_zero_n_arms`/`_rank_zero_n_lines`
+and a one-line change to `_metric_value`'s `ContinuousMetric` branch. Verified against the real diff
+and the real code around it (`_metric_aggregate`, `_aggregate_item_mismatches`,
+`_render_one_rank_table`, `BinaryMetric.rate`), not against the fix's own docstring claims, and
+against `AGENTS.md`'s honesty-rule invariants (the exclude-and-name rule, "an item's outcome is
+declared, never inferred"). Also spot-checked all five regenerated `*-20260920-02.md` reports.
+
+**Verdict: approve with suggestions.** The root-cause diagnosis is correct, the fix is minimal and
+correctly composes with the pre-existing `INVALID RESULTS EXCLUDED` (AC-2) banner (provably, not
+just plausibly, mutually exclusive with it), and the pinning test is a genuine mutation-catcher for
+the exact reported scenario. Two minor, non-blocking test-coverage gaps, found by mutation, not
+inference.
+
+**CPG:** considered, not relevant — no `cpg_model-bench` graph exists (`GRAPHS` unchanged from prior
+sections' checks); a ~60-line diff across two files needed no call-graph tooling.
+
+## Findings
+
+### [MINOR] The `ContinuousMetric` half of the fix is untested — reverting it passes the whole suite
+
+`_metric_value`'s new guard (`report.py:146-147`, `return agg.mean if agg.n else None`) is necessary
+for symmetry with `_zero_n_arms` (which treats `BinaryMetric`/`ContinuousMetric` identically at
+`report.py:165`) — without it, a `ContinuousMetric` with `n=0` would be *named* as excluded by the
+new banner **and still rendered** in the ranked table with a meaningless mean, which is the exact
+contradiction this fix exists to prevent. But no test exercises it: I copied `modelbench/` to a
+scratch location, reverted this one line to the pre-fix `return agg.mean`, and ran the full
+`tests/test_report.py` against the mutant — **156 passed**, zero failures (see Appendix). No shipped
+scorer currently constructs a `ContinuousMetric(n=0, ...)` either (`retrieval.py:476-486` returns
+`mrr=None` outright when `scored` is empty, never a zero-`n` `ContinuousMetric`), so this is
+currently dead code protecting against a shape no pack produces today — correct to add defensively,
+but its only current guarantee is "I read it and it's right," not "the suite would catch me being
+wrong." **Suggested fix:** one test mirroring the existing binary one, built directly
+(`ContinuousMetric(name=..., mean=0.0, n=0, support=(0.0, 1.0))` in a hand-built aggregate, the same
+way `test_rank_report_ranks_a_continuous_headline_metric_by_mean` builds its fixtures) asserting the
+model is named in the banner and absent from the ranked rows — this closes the metric-type axis the
+current single test doesn't cover.
+
+### [MINOR] The per-metric scoping claim (a two-metric family, n=0 on only one member) is asserted in the docstring but has no test
+
+`_rank_zero_n_lines`'s docstring (`report.py:174-175`) explicitly claims: "a run can carry a real
+aggregate for a sibling verdict metric while declaring `n=0` on this one" — the guard-judge shape
+Defect 1's own root-cause writeup distinguishes from the single-metric `nlq` case. I verified this
+claim holds by building the scenario directly (a `guard_pack` two-metric family, one run with a real
+`falseAdvanceRate` aggregate and `n=0` `falseSuspendRate`) and calling `rank_report` — the banner
+correctly appears only under `### falseSuspendRate`, the row renders normally under
+`### falseAdvanceRate`, exactly as claimed (see Appendix for the script and output). But nothing in
+`tests/test_report.py` pins this — the one new test uses `_rank_pack()`'s single-headline-metric
+shape throughout. **Suggested fix:** extend (or add alongside) the existing guard-judge no-headline
+fixture pattern (`test_rank_report_with_no_headline_renders_two_independently_sorted_tables`) with
+one candidate declaring `n=0` on exactly one of the two verdict metrics, asserting the banner is
+scoped to that metric's own `###` section and absent from the sibling's.
+
+Together, these two gaps are a coverage probe over the same two axes Defect 1's own root-cause
+section named (metric type: binary vs. continuous; family shape: single vs. multi-member) — the
+shipped test covers exactly one cell of that 2×2, the cell the defect happened to surface in.
+
+### [NIT] `docs/HISTORY.md` carries no entry for this fix yet
+
+Consistent with the same nit already raised for Unit C above (§2.2) — likely deferred to a
+coordinated close rather than dropped, not gating.
+
+## Verification performed
+
+- **Root cause, re-derived against the real code, not the fix's docstring.** Confirmed
+  `BinaryMetric.rate` (`results.py:110-112`, `self.successes / self.n if self.n else None`) already
+  returned `None` for `n=0` **before this diff** — untouched by it — so the true gap was never in
+  `BinaryMetric.rate` itself but in `_metric_value`/`_rank_rows` treating that `None` identically to
+  "no aggregate declared at all." This matches the QA report's own root-cause section
+  (`docs/test-reports/small-model-catalog-sweep-report.md`, Defect 1) precisely — confirmed by
+  reading, not assumed from its prose.
+- **Banner/mismatch mutual exclusion, proved structurally, not just observed.** `rank_report`
+  (`report.py:1362-1364`) filters `runs` via `_aggregate_item_mismatches` — which flags a run if
+  *any* of its verdict-metric aggregates disagrees with its own items — **before** any run reaches
+  `_render_one_rank_table`/`_zero_n_arms`. A run reaching the new banner has therefore already
+  cleared that check for every verdict metric, so the same run can never simultaneously trigger
+  `INVALID RESULTS EXCLUDED` and `EXCLUDED — n=0` on the same or a sibling metric. Also confirmed the
+  `n=0` case genuinely clears the mismatch check by construction: `_aggregate_item_mismatches`
+  (`report.py:434-473`) counts items whose `scored_outcome`/`scored_value` is not `None`; every item
+  in the zero-n case is declared unscoreable for that metric, so `counted == 0 == metric.n` — no
+  disagreement, exactly as both the fix's docstring and the QA report claim.
+- **The pinning test, run and read.** `.venv/bin/python -m pytest -q tests/test_report.py -k
+  "zero_n or rank_report"` → 19 passed. Full suite: `.venv/bin/python -m pytest -q` → **1775 passed,
+  3 deselected** (1774 on the pre-diff tree, confirmed by `git stash`/re-run — the delta is exactly
+  this diff's one new test). `.venv/bin/ruff check .` → **All checks passed!**
+- **Two coverage gaps found by mutation, not inference** — see Findings above; scripts and output in
+  the Appendix.
+- **Five regenerated reports spot-checked.** `diff`ed all five `*-20260920-01.md` against
+  `*-20260920-02.md`: the four clean packs (`embedder-graphrag-retrieval`,
+  `guard-judge-understanding`, `tool-caller-shop-assistant`, `chat-responder-grounded-answers`) are
+  **byte-identical** — the fix introduces zero false positives on this sweep's real data.
+  `nlq-structured-query-rank-20260920-02.md` gains exactly the expected banner, naming both
+  Defect-1 models with the correct item count (`40 item(s) attempted, n=0 scored`), positioned
+  between the pack's own restated caveat and the ranked table; the two models still separately
+  appear as `no verdict — no paired data` in the reference-anchored family table lower down,
+  consistent with (not duplicating) the new banner.
+- **Marker-comment (`<!-- rank-report: ... -->`) placement unaffected, confirmed by reading.** The
+  new banner is inserted before the table (`report.py:1140`); the marker comment is emitted after
+  the table (`report.py:1185-1189`), so Unit C's consolidator — which matches that comment
+  line-by-line regardless of surrounding content — is untouched by this diff.
+
+## What's solid
+
+- Root-cause diagnosis is correct and precisely scoped: the fix touches exactly the two places the
+  conflation lived (`_metric_value`'s `ContinuousMetric` branch, and the missing naming step in
+  `_render_one_rank_table`), not the presentation code around them.
+- The shipped test is a real mutation-catcher for the reported scenario: it distinguishes "declares
+  a real `n=0` aggregate" (named, excluded) from "declares no aggregate at all" (silently absent)
+  using both cases in one fixture, matching the exact confusion Defect 1 reported.
+- Zero regressions on real sweep data — four of five regenerated reports are byte-identical to their
+  pre-fix versions, and the fifth changes in exactly the way the QA report asked for.
+- The new banner cannot collide with the pre-existing `INVALID RESULTS EXCLUDED` banner by
+  construction (verified structurally, not just by absence of an observed collision), and is scoped
+  correctly per-metric for a multi-metric family (verified by direct construction, §Findings above).
+
+## Open questions
+
+- None blocking. Whether the two coverage-gap suggestions above land now or batch with a later test
+  hardening pass is `teco`'s call.
+
+## Appendix — mutation checks
+
+**`ContinuousMetric` guard, reverted in a scratch copy (no repo file touched):**
+
+```
+$ cp -r modelbench tests <scratch>/
+$ python3 -c "... replace 'return agg.mean if agg.n else None' with 'return agg.mean' in <scratch>/modelbench/report.py"
+$ PYTHONPATH=<scratch> .venv/bin/python -m pytest <scratch>/tests/test_report.py -q
+156 passed in 0.65s
+```
+
+**Per-metric scoping in a two-metric family, verified directly (no repo file touched):**
+
+```python
+pack = guard_pack(headline=None, verdicts=("falseAdvanceRate", "falseSuspendRate"))
+# model-x: real aggregate for falseAdvanceRate (n=40), n=0 for falseSuspendRate
+x = run("model-x", items=advance_items + suspend_items, aggregates=agg_x, ...)
+md = rank_report([x], pack=pack)
+```
+
+Output:
+```
+EXCLUDED in advance section: False
+EXCLUDED in suspend section: True
+model-x ranked row in advance: True
+model-x ranked row in suspend: False
+```
+
+Matches the docstring's claim exactly: the banner and the row-exclusion are both scoped to
+`falseSuspendRate`'s own section only.
+
+## Verification round 2 — 2026-09-20 (`analyst`)
+
+Re-verified `tdd-engineer`'s follow-up diff (`git diff HEAD -- modelbench/report.py
+tests/test_report.py`, new `_attempted_for_metric`), which addresses both my minors below in the
+same pass that fixed `data-scientist`'s MAJOR (the `len(r.items)` overcount — see their section
+below; not re-argued here). Re-checked by re-deriving, not by trusting either the dispatch message
+or the new tests' own assertions.
+
+**Correction to my own prior methodology, disclosed rather than buried.** My original Appendix
+above (`PYTHONPATH=<scratch> pytest ...`) reported "156 passed" for the reverted `ContinuousMetric`
+guard and I read that as "untested." Re-running the same technique on this pass, I found it
+**silently imports the real, installed `modelbench.report`, not the scratch mutant** — this
+component installs as an editable package, so `PYTHONPATH` prepending does not override it, and
+every one of my `PYTHONPATH`-scratch mutation checks in the original section was therefore
+verifying the *unmutated* code, not the mutant. My qualitative conclusion (no test existed) was
+still correct at the time — because no test existed, full stop — but I should not have presented a
+broken-harness "156 passed, zero failures" as evidence for it. Redone correctly this round via
+`importlib.util.spec_from_file_location` (the technique my own round-1 Unit A section already used
+successfully, and which I should have reused instead of reintroducing `PYTHONPATH`): loading the
+mutant `report.py` as an isolated module while letting its own `from modelbench import stats`/etc.
+resolve normally confirms the revert now genuinely **crashes** —
+`stats.mean_bootstrap_interval` raises `ValueError: ... needs at least two values` when a zero-`n`
+continuous arm reaches the bootstrap call unguarded — matching `tdd-engineer`'s own reported
+mutation exactly. Flagging this so nobody treats my original Appendix's "156 passed" line as
+verified; the new fix and new test are confirmed correct by this round's redone check, not by that
+one.
+
+**1. Minor #1 (`ContinuousMetric` zero-n, untested) — closed, mutation-confirmed with a working
+harness this time.** `test_rank_report_names_a_zero_n_continuous_aggregate_not_silently_drops_it`
+exercises exactly the guard: I reproduced the crash above independently, and separately confirmed
+the real (unmutated) code passes the same fixture cleanly. No further gap.
+
+**2. Minor #2 (per-metric scoping for a multi-metric family, unpinned) — closed, and the new test
+does more than I asked for.** `test_rank_report_zero_n_banner_reads_the_metrics_own_item_count_not_the_runs_whole_list`
+covers the scoping claim I asked for (banner in `falseAdvanceRate`'s section only, normal ranking
+under `falseSuspendRate`) **and** the attempted-count correctness `data-scientist` separately
+required — reproduced via the same isolated-module technique: mutating `_attempted_for_metric` back
+to `len(run.items)` makes the banner read "70 item(s)" where the test asserts "70 item(s)" is
+**not** present, and the assertion catches it. Confirmed.
+
+**3. A third gap, found independently before reading `data-scientist`'s own round-2 section below —
+their finding, not a new one of mine, but worth recording that two reviewers reproduced it
+separately.** `_attempted_for_metric`'s "declares nothing at all" fallback
+(`metric in it.scoreable or not it.scoreable`) cannot distinguish which metric a **fully empty**
+(`scoreable == {}`) item belonged to when a run's pack has more than one verdict metric and items
+from more than one of them are all empty on the same run — I constructed exactly this (70 items,
+half nominally `falseAdvanceRate`'s, half `falseSuspendRate`'s, all `scoreable={}`) against the real
+`_attempted_for_metric` and got 70/70, not the true 40/30 split. `data-scientist`'s own section
+below traces this to a concrete, real trigger (`classification.py:239-248`'s `result is None`
+no-response path, shared by every scorer in the package) and confirms it hasn't shipped wrong in any
+of the 17 stored guard-judge records today. I have nothing to add to their analysis or severity call
+— citing it here only so a reader of my section doesn't read "both my minors closed" as "the whole
+diff is clean."
+
+**Stopping signal, scoped precisely, same shape as `data-scientist`'s own below.** For my own two
+minors — the untested `ContinuousMetric` branch and the unpinned multi-metric scoping — both are
+now correctly fixed and correctly tested; I have no further findings there and consider that part of
+the gate closed. This is **not** a stopping signal for `_attempted_for_metric` as a whole: the
+cross-metric empty-scoreable ambiguity `data-scientist` found (and I independently reproduced) is
+real, unresolved, and — per their assessment, which I share — should not be treated as closed. My
+own suite/lint re-run: `.venv/bin/python -m pytest -q` → **1778 passed, 3 deselected**;
+`.venv/bin/ruff check .` → **All checks passed!**
+
+---
+
+# Defect 1 fix — `rank_report`'s n=0 exclusion banner (`data-scientist`, methodology gate) — 2026-09-20
+
+**Scope.** Reviewed the uncommitted working-tree diff (`git diff HEAD -- modelbench/report.py
+tests/test_report.py`) that fixes Defect 1 from
+`docs/test-reports/small-model-catalog-sweep-report.md` — the ranked table silently dropping
+`qwen/qwen3-4b-thinking-2507`/`stable-code-instruct-3b` on `nlq-structured-query` (both 100%
+parse-failure, real `n=0` aggregate). Read the diff's new `_zero_n_arms`/`_rank_zero_n_lines`, the
+one-line `_metric_value` change, `_render_one_rank_table`'s call site, `docs/plans/
+small-model-benchmarking-ml.md` (`-ml`, this file's authoritative stats source) for anything
+bearing on zero-`n` handling, and `AGENTS.md`'s "Load-bearing invariants"/five-honesty-rules
+section. Independent of `analyst`'s parallel general-correctness pass on the same diff.
+
+**Verdict: needs changes.** The exclusion-and-naming *design* is correct and is the right fix for
+Defect 1 as reported — but the banner's own "N item(s) attempted" figure is wrong for any pack
+whose per-run `items` list spans more than one verdict metric, which I reproduced against
+guard-judge's real production data shape, not a hypothetical. Guard-judge is one of only two
+multi-verdict-metric packs this sweep runs, and the defect fires the moment guard-judge's own
+scorer ever produces a real `n=0` (it doesn't in the current live sweep, only because its
+classifier has a parse-failure fallback the nlq extractor lacks — a data accident, not a structural
+guarantee).
+
+## Findings
+
+### [MAJOR] `_rank_zero_n_lines`'s "item(s) attempted" count uses the run's whole item list, not the metric's own — wrong for any multi-metric-per-run pack, reproduced against guard-judge
+
+`_rank_zero_n_lines` (`modelbench/report.py`) renders:
+
+```python
+lines.append(f"> - `{r.modelKey}` — {len(r.items)} item(s) attempted, n=0 scored")
+```
+
+`len(r.items)` is the run's **entire** stored item list — every item across every metric that run's
+pack scores — not the count of items that made any declaration (`scoreable[metric]` present, true
+or false) about the one `metric` this banner section is for. For `nlq-structured-query` (a
+single-verdict-metric pack: `_rank_pack`'s default `verdicts=("layer1ExactMatchRate",)`), every
+item in `r.items` does declare that one metric, so `len(r.items) == 40` happens to be correct for
+the exact case Defect 1 reported. It is not correct in general, and the function's own docstring
+already reasons about the case where it isn't: *"a run can carry a real aggregate for a sibling
+verdict metric while declaring `n=0` on this one"* — i.e., the author explicitly considered the
+guard-judge shape when scoping *which table the banner appears in*, but the attempted-item count
+inside that banner was left unscoped to the metric.
+
+**Confirmed against real production data, not just a constructed fixture.** Every stored
+guard-judge run record declares each item's `scoreable` map with exactly one metric key — never
+both:
+
+```
+$ python3 -c "... json.load(open('results/runs/guard-judge-understanding-qwen_qwen3-4b-2507-...json'))..."
+distinct scoreable key sets: {('falseSuspendRate',), ('falseAdvanceRate',), ('falseAdvanceRateBoundary',)}
+```
+
+85 total items on that record, split across the two verdict metrics (plus the exploratory boundary
+metric) — never 85 items each individually scoreable for both `falseAdvanceRate` and
+`falseSuspendRate`. `ItemResult.scored_outcome`'s own three-state contract (`results.py:390-429`)
+gates on `self.scoreable.get(metric, False)` per metric — the codebase already has the concept of
+"did this item make a declaration for this specific metric," and `_rank_zero_n_lines` doesn't use
+it.
+
+**Reproduced end to end**, not argued from reading alone: built a guard-judge pack (`verdicts=
+("falseAdvanceRate", "falseSuspendRate")`, mirroring `_guard_judge_arm`'s asymmetric-item shape)
+with one candidate whose 40 `falseAdvanceRate` items are all `scoreable=False` (parse failure, real
+`n=0`) and whose 30 `falseSuspendRate` items are normal, real data (no monkeypatching, no
+repository file touched — only in-memory fixtures via the real `rank_report`). Result, the rendered
+`falseAdvanceRate` section:
+
+```
+> **EXCLUDED — n=0 for `falseAdvanceRate`**
+>
+> Ran, and the stored record is internally consistent, but the declared aggregate honestly reports
+> zero scoreable observations for this metric — excluded from the ranking below, never ranked
+> "worst" and never silently absent either:
+> - `zero-advance-cand` — 70 item(s) attempted, n=0 scored
+```
+
+**70, not 40.** The banner counts all 70 items on the run record (40 `falseAdvanceRate` +
+30 `falseSuspendRate`), overstating by 75% how many items were actually presented to the model for
+the metric this section is about. The correct figure — confirmed by re-deriving it as
+`sum(1 for it in r.items if metric in it.scoreable)` — is 40, matching what the pack's own FR-11
+caveat two lines above already states for this exact metric ("floor 15.0/20.0 pp... for
+falseAdvanceRate/falseSuspendRate," `-ml` §7.3's published 40/30 split) — so the banner would ship
+a number that visibly disagrees with the report's own caveat text sitting directly above it.
+
+**Why this is major, not cosmetic.** This component's own established standard — the exact phrase
+used earlier in this document for the `n_units = max(...)` defect (Unit A.5) — is that a
+"wrong-but-plausible-looking number" is never to ship silently. This is precisely that shape: 70 is
+plausible (it's a real count that exists somewhere in the record), attached with confident,
+specific-sounding language ("N item(s) attempted"), and wrong for the metric the sentence is
+about. It doesn't corrupt the ranking or any statistical test — the *exclusion* itself is correctly
+scoped to `agg.n == 0` on the metric-specific aggregate, verified below — but it corrupts the one
+piece of free-text context a reader has for judging *how much data was actually thrown away*,
+which is the entire reason Defect 1 asked for a named banner instead of a silent drop.
+
+**Route: `coder`/`tdd-engineer`, cheap.** Suggested fix: `attempted = sum(1 for it in r.items if
+metric in it.scoreable)`, replacing `len(r.items)`. Suggested test: a guard-judge fixture (reusing
+`_guard_judge_arm`'s asymmetric-shape convention) with one candidate whose `falseAdvanceRate` items
+are all `scoreable=False` and whose `falseSuspendRate` items are real, asserting the banner in the
+`falseAdvanceRate` section reads the metric-specific attempted count (40, not 70) — this is the
+test that would have caught the defect, and the existing single-metric `nlq` fixture provably
+cannot (`len(r.items)` and the correct count coincide there by construction).
+
+## Answers to the brief's four questions
+
+**1. Is excluding the `n=0` aggregate from the ranked table (vs. rendering 0/0, imputing, or
+excluding some other way) statistically correct?** Yes, and it's the only defensible choice. A
+`BinaryMetric.rate`/`ContinuousMetric.mean` and a `wilson_interval` are both undefined at `n=0` —
+there is no rate to sort by and no interval to print, so "render it as 0/0" is not a real
+alternative, it's a different bug (a `0.000` rate cell reading as a legitimate, worst-observed
+score rather than "undefined"). Imputing a value would violate the "declared, never inferred"
+honesty rule directly (`AGENTS.md`'s load-bearing invariants) — there is no principled value to
+impute for a scorer that produced zero scoreable observations. Excluding-and-naming is exactly the
+pattern this file already uses for the *other* case where real data can't be ranked
+(`_aggregate_item_mismatches` → `INVALID RESULTS EXCLUDED` (AC-2)) — this fix is that same
+pattern applied to a second cause of unrankability, which is the right level of consistency to
+hold. It also composes correctly with the pre-existing "absent, not worst" rule for a run with no
+aggregate at all: both states return `None` from `_metric_value` and are excluded from `_rank_rows`
+identically, and the new banner is what tells the two apart for a reader — the ranking mechanics
+did not need to change, and didn't.
+
+**2. Does naming the excluded model create a risk of misreading it as a real 0% rate?** The
+banner's own wording is fine as a proposition — "declared aggregate honestly reports zero
+scoreable observations for this metric" and "n=0 scored" are both explicit that the denominator
+itself is zero, not that a rate of `0/N` was observed, and the phrase "never ranked 'worst'"
+directly forecloses the reading a rate-focused skim might reach. The one place this answer flips is
+the finding above: a wrong, inflated "item(s) attempted" count is its own, different misreading
+risk — not "mistaken for a 0% rate" but "mistaken for a worse failure than actually occurred" (a
+guard-judge reader could conclude the model failed all 70 of its guard-judge items, when it
+produced 30 perfectly normal `falseSuspendRate` results one table below). Fix the count and this
+question's answer is clean; as shipped, it is not.
+
+**3. Interaction with the five honesty rules?** The exclusion mechanism itself reads cleanly off
+`agg.n == 0` (a declared fact on the stored aggregate) — compliant with "an item's outcome for a
+metric is declared, never inferred," and it introduces no new Wilson-interval call, so the
+analysis-unit rule is untouched (excluded arms never reach `stats.wilson_interval` at all, at any
+unit). The attempted-count defect above is a **soft** violation of the same declared-not-inferred
+spirit one level up the stack: the report presents a number about "this metric" that isn't actually
+read from any metric-scoped source, it's inferred (incorrectly) from an unrelated whole-run
+count. It's not the same class of violation the rule is written to prevent (no `ItemResult` state
+is misread), but the practical effect — a report asserting a specific-sounding fact about a metric
+that isn't true of that metric — is the failure mode the rule exists to prevent one level up.
+
+**4. Does the per-metric scoping hold up for guard-judge's two-class-conditional-metric shape?**
+The *routing* — which table gets the banner, and whether the excluded candidate still renders
+normally in its sibling metric's table — holds up correctly, verified by direct reproduction (see
+above and Verification): the banner fires only in `falseAdvanceRate`'s own section, the
+`falseSuspendRate` section carries no banner and lists `zero-advance-cand` as an ordinary ranked
+row with its own real `12/30` data, and the family/Holm-ladder machinery (untouched by this diff)
+is unaffected. What does **not** hold up is the attempted-count figure inside the banner, which is
+the Finding above. I also checked `guard-judge-understanding-rank-20260920-02.md` (the brief's
+suggested spot-check): no model has a real `n=0` in that report today (guard-judge's classifier has
+a parse-failure fallback, per the QA report's own root-cause note), so the live sweep's rendered
+reports do not currently exhibit either the fix's benefit or its defect — this is a latent-but-real
+bug in delivered code, not something already shipped wrong to a stakeholder.
+
+## Verification performed
+
+- Read the full diff (`git diff HEAD -- modelbench/report.py tests/test_report.py`) and the
+  surrounding, unchanged code: `_metric_aggregate`, `_rank_rows`, `_render_one_rank_table`,
+  `_rank_resolving_power_lines`, `ItemResult.scored_outcome`/`scored_value` (`results.py:390-447`).
+- Read `AGENTS.md`'s "Load-bearing invariants" section in full (the five honesty rules,
+  `-ml`-implements-`stats.py` rule, Wilson-over-analysis-unit rule) and grepped `docs/plans/
+  small-model-benchmarking-ml.md` for `n=0`/zero-observation handling — found no section
+  prescribing report-layer treatment of a real `n=0` aggregate specifically (this is `report.py`'s
+  own presentation-layer judgment call, not something `-ml` already rules on), so I evaluated it
+  against the honesty rules and this file's own established exclude-and-name precedent instead.
+- **Independent reproduction, no repository file touched, in-memory fixtures only**: built a
+  guard-judge two-metric pack and a candidate with a real `n=0` aggregate on `falseAdvanceRate`
+  (all 40 items `scoreable=False`) and a real, normal aggregate on `falseSuspendRate` (30 items),
+  called `rank_report` directly with `reference=` set to exercise the family path too. Confirmed:
+  (a) the `falseAdvanceRate` section carries the exclusion banner naming the candidate; (b) the
+  `falseSuspendRate` section carries no banner and ranks the candidate normally with its real
+  `12/30` data; (c) the banner's attempted-item count reads 70, not the correct 40 — the Finding
+  above. Full script and output are in this session's scratchpad, reproducible from
+  `guard_pack`/`item`/`run`/`ClassificationAggregates`/`BinaryMetric` (`tests/conftest.py`,
+  `modelbench/results.py`) without touching any repository file.
+- **Checked the real production data shape**, not assumed: loaded a real stored guard-judge run
+  record (`results/runs/guard-judge-understanding-qwen_qwen3-4b-2507-*.json`) and confirmed every
+  item's `scoreable` dict carries exactly one metric key — never both verdict metrics on the same
+  item — which is what makes `len(r.items)` structurally wrong as a per-metric attempted count for
+  this pack, not merely wrong for a contrived fixture.
+- **Confirmed the resolving-power sentence (`_rank_resolving_power_lines`) is not newly affected by
+  this diff.** Its `ns` list is built from `_metric_aggregate` (not `_metric_value`) and already
+  included a zero-`n` aggregate's `0` before this change — `git diff` shows no touch to that
+  function. Since it takes `max(ns)`, a lone zero-`n` arm cannot lower the reported `n_units` unless
+  every arm for that metric is zero-`n`, an edge case this diff neither introduces nor worsens. Not
+  raised as a finding against this diff; noting only that a future all-arms-zero-`n` scenario
+  (not observed in any live data) is untested territory for `resolving_power`'s own zero-`n_units`
+  behavior, unrelated to Defect 1.
+- Confirmed the new test (`test_rank_report_names_a_model_with_a_declared_zero_n_aggregate_not_
+  silently_drops_it`) uses `_rank_pack`'s single-metric shape only, so it structurally cannot catch
+  the Finding above — consistent with why the defect shipped in the diff without a red test.
+- `.venv/bin/python -m pytest -q` and `.venv/bin/ruff check .` were not re-run by me for this pass
+  (no source file was touched by this review); `analyst`'s parallel general-correctness gate on the
+  same diff covers suite/lint.
+
+## What's solid
+
+- The core Defect 1 fix — excluding a real `n=0` aggregate from ranking while naming it, rather
+  than conflating it with "never attempted" — is the statistically correct choice, matches this
+  file's own established exclude-and-name precedent (`INVALID RESULTS EXCLUDED`), and is exactly
+  scoped per metric (not per run), which is the right granularity for a pack like guard-judge.
+  Confirmed correct in both directions: correctly fires when it should, correctly stays silent for
+  a run's other, unaffected metric.
+- The wording distinguishing "ran but scored nothing" from a real rate is clear and does the honesty
+  work it needs to.
+- The gap found here is narrow and cheap to close — one expression inside one function, one new
+  fixture reusing an existing helper's asymmetric-shape convention.
+
+## Open questions
+
+- None beyond the required fix above. Whether it lands as a follow-up to this same diff or a
+  separate commit is `teco`'s call; it should land before this fix is considered complete for any
+  pack beyond `nlq-structured-query`, since guard-judge is squarely in scope for this sweep and the
+  defect is real, reproduced, and currently invisible to the test suite.
+
+## Verification round 2 — 2026-09-20
+
+Second pass, on `tdd-engineer`'s follow-up diff (`git diff -- modelbench/report.py
+tests/test_report.py`, new `_attempted_for_metric`), after being told my own suggested one-liner
+(`metric in it.scoreable`) was deliberately not applied.
+
+**1. The rejection of my literal one-liner is correct — verified against the real data myself, not
+taken on the report.** Pulled `results/runs/nlq-structured-query-stable-code-instruct-3b-
+2026-09-20T01:18:34Z.json` directly: every one of its 40 parse-failure items carries `scoreable:
+{}` — the key is genuinely absent, not `{metric: False}`. My suggested `metric in it.scoreable`
+would read every one of those as "not attempted," so the fixed banner would have shipped "0
+item(s) attempted" for the exact live Defect-1 rows this whole fix exists to name correctly. Good
+catch; my original suggestion was wrong on the real data shape, and `_attempted_for_metric`'s
+"declares `metric`, or declares nothing at all" predicate correctly fixes that case — confirmed by
+re-running the pack against the real fixture shape, 40 attempted, as expected.
+
+**2. The asymmetric guard-judge case (only my finding's own reproduction) is now correct.**
+Rebuilt my Verification-round-1 fixture (one candidate, real `n=0` on `falseAdvanceRate` via
+40 `scoreable=False` items, real normal data on `falseSuspendRate`) against the new code: banner
+now reads "40 item(s) attempted," not 70; the `falseSuspendRate` section is unaffected. Matches
+`tdd-engineer`'s own new regression test
+(`test_rank_report_zero_n_banner_reads_the_metrics_own_item_count_not_the_runs_whole_list`), which
+I independently re-derive rather than trust.
+
+**3. A real, reproduced gap remains — the "declares nothing at all" fallback is ambiguous, not
+just permissive, once *two* verdict metrics both have empty-scoreable items on the same run.**
+`_attempted_for_metric`'s predicate (`metric in it.scoreable or not it.scoreable`) treats every
+truly-empty item as belonging to *every* metric being asked about, because a `scoreable == {}`
+item's *original* tier/metric is not recoverable from the stored record — and this is not a
+theoretical gap: `classification.py`'s own `score_item` (guard-judge's real scorer) emits
+`scoreable={}` whenever `result is None` (`:239-248`, a timeout or no-response item), **before**
+the tier→metric mapping (`_METRIC_BY_TIER`) is ever consulted — the same "the call never happened"
+shape every scorer in this package uses (`extraction.py`, `retrieval.py`, `grounding.py` all emit
+an identical `scoreable={}` on their own no-response path). So a guard-judge run in which items
+from *both* tiers time out — a total outage, not a hypothetical — produces exactly the
+cross-metric ambiguity my finding was about, just triggered by "no response" instead of "response
+received but unparseable."
+
+**Reproduced directly**, no repository file touched: built a guard-judge run with 40
+`falseAdvanceRate`-tier items and 30 `falseSuspendRate`-tier items, **all 70** with
+`scoreable={}`/`counts={}` (mirroring `classification.py:239-248`'s own `ItemResult` shape for a
+`result is None` item) and a real `n=0` aggregate on both metrics. Result:
+
+```
+falseAdvanceRate banner:  `total-outage-cand` — 70 item(s) attempted, n=0 scored
+falseSuspendRate banner:  `total-outage-cand` — 70 item(s) attempted, n=0 scored
+```
+
+Both read 70. The true split is 40/30 (the pack's own published `-ml` §7.3 figures, restated in
+this exact report's own FR-11 caveat two lines above each banner) — this is the identical
+70-instead-of-(40,30) overcount my original finding reported, now reachable via a different,
+equally real trigger. `report.py` cannot recover the true split from the stored record: a
+`result is None` `ItemResult` carries no `detail`/tier information (`classification.py:241-248`
+passes no `detail` kwarg on that branch), so which of the two tiers a fully-empty item belonged to
+is genuinely not present in the data `_attempted_for_metric` has to work with — this isn't a
+missed lookup, the information doesn't exist in the record.
+
+**Checked whether this has already shipped wrong**: no. Scanned every stored guard-judge run file
+in the current sweep (`results/runs/guard-judge-understanding-*.json`) for any item with
+`scoreable == {}` — none exist in any of the 17 stored guard-judge records. The gap is real and
+reachable but has not yet produced a wrong number in any of the five rendered reports this sweep
+has shipped.
+
+**Severity and recommendation.** Narrower than the original defect — it requires a total or
+partial *outage* (no response at all) hitting items from more than one verdict metric in the same
+run, on a pack that has more than one verdict metric sharing one run's items (today, only
+guard-judge). Not a blocker for the current five reports (confirmed absent from all live data
+above). But it is the same failure class this whole fix exists to close, reachable through a
+documented, general code path every scorer in the package shares, and the honest fix is not "guess
+a split" (that would itself be an inferred number this file's own "declared, never inferred" rule
+forbids) — it's to stop presenting a single, specific-looking attempted count when the record
+cannot support one. Suggested shape: when a run's ambiguous (`scoreable == {}}`) item count is
+shared across more than one of the pack's verdict metrics, the banner should say so explicitly —
+e.g. "N item(s) declared `{metric}`, plus M further item(s) that recorded no response for any
+metric in this run and cannot be attributed to `{metric}` specifically from the stored record" —
+rather than folding the ambiguous M into a single confident number. Route:
+`coder`/`tdd-engineer`, via `teco`.
+
+**Stopping signal, scoped precisely**: for the scenario Defect 1 actually reported (a response
+that arrives and fails to parse) and for the asymmetric single-metric-zero-n case (my own original
+reproduction), this fix is correct and complete, and I have no further findings there — that part
+of the gate is closed. It is **not** a full stopping signal for `_attempted_for_metric` as a
+general-purpose function: the total-outage/cross-metric-ambiguity scenario above is real,
+reproduced, and unresolved. Given it's unreachable in today's live data, whether it blocks this
+diff or is tracked as a fast-follow is `teco`'s sequencing call, not mine — but it should not be
+treated as closed.
