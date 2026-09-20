@@ -284,6 +284,28 @@ def test_cli_migrate_defaults_batch_size_and_traffic_flag():
     assert args.traffic_stopped is False
 
 
+# ── D-1 (analyst review + live QA pass, docs/test-reports/embedding-migration-
+# report.md): `main()`'s `migrate` branch must surface a `MigrationAbortedError`
+# as a clean one-line error + exit 1, never an uncaught traceback — confirmed
+# live on all three trigger paths (no traffic-stop flag, interactive "n", an
+# undeclared target dim); this pins the fix at the CLI-entry-point level. ──────
+
+def test_cli_migrate_reports_aborted_error_cleanly_instead_of_a_traceback(
+    monkeypatch, capsys,
+):
+    def _explode(*args, **kwargs):
+        raise embedding_migration.MigrationAbortedError("traffic must be stopped first")
+
+    monkeypatch.setattr(embedding_migration, "migrate", _explode)
+    monkeypatch.setattr(embedding_migration, "_confirm_traffic_stopped", lambda ws: False)
+
+    exit_code = embedding_migration.main(["migrate", "eval", "lmstudio/new-model"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "ERROR: traffic must be stopped first" in captured.err
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # `migrate` (FR-3/FR-4/FR-5/FR-8/FR-10, §5 step 4 / §6 tests 5-14).
 #

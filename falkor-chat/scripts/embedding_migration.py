@@ -433,10 +433,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "migrate":
         traffic_stopped = args.traffic_stopped or _confirm_traffic_stopped(args.workspace)
-        migrate(
-            args.workspace, args.target_ref,
-            batch_size=args.batch_size, traffic_stopped=traffic_stopped,
-        )
+        try:
+            migrate(
+                args.workspace, args.target_ref,
+                batch_size=args.batch_size, traffic_stopped=traffic_stopped,
+            )
+        except MigrationAbortedError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
         return 0
 
     raise AssertionError(f"unhandled command {args.command!r}")  # pragma: no cover
