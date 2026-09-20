@@ -1684,3 +1684,337 @@ diagnosis and Recommendation-1-execution sections (above) for the target-query r
 Coordination: `claude/docs/plans/agent-knowledge-base-strategy7-coordination.md`, U2. No trial run
 in this unit — every number cited above is either U1's measurement or this file's own prior,
 already-recorded pilot/trial results; nothing new was executed here.
+
+## Item 2 — U5 evaluation attempt: blocked, stale server process, no valid result (2026-09-20)
+
+**The question this section answers.** U5's brief (`claude/docs/plans/
+agent-knowledge-base-strategy7-coordination.md`) asked me to execute my own §4 evaluation plan
+above exactly: run the full 45-pair golden set live against production `ws:agent-team` and judge
+whether hybrid fusion helped G2 (necessary), P1/C1/X1 (reported), with no stratum-level
+regression. **I ran all 45 queries. The result is not usable as evidence for or against the hybrid
+mechanism, because the live server this session's `search_documents` calls reached is running
+code from before U4's fusion commit landed — every one of my 45 live calls exercised the old,
+pre-item-2, vector-only pipeline, not the hybrid mechanism U5 exists to validate.** This is a
+deployment-state fact outside methodology, not a design or grading judgment call, so I am
+reporting it rather than resolving it myself, per the coordination's own "MCP tool errors / corpus
+looks different" stop condition.
+
+### The evidence, in the order it surfaced
+
+1. **All 4 target queries (G2, P1, C1, X1) missed the fused top-5** — at first read, a clean
+   "hybrid didn't help" (condition 1 fails). I checked each at `limit=20` to distinguish "just
+   outside the cutoff" from "genuinely far" (same diagnostic convention as the original DEF-1
+   pass): G2 absent even at `limit=20` (unchanged from the DEF-1 baseline's "absent even at
+   `limit=20`"); P1 present at rank 9, score 0.4486 — **byte-for-byte the same rank and
+   near-identical score as the recorded 0.6B vector-only baseline** (rank 9, 0.4487); X1 present at
+   rank 8 (best chunk), score 0.4632 — again matching the vector-only baseline's rank ~11/score
+   0.4632 almost exactly; C1 absent even at `limit=20`, matching baseline exactly. Every one of
+   these numbers is consistent with "nothing changed," not with "fusion ran and didn't help."
+2. **32 single-answer regression rows: every hit's score matched the recorded vector-only baseline
+   score to 3-4 decimal places**, not just the same rank. A genuine RRF fusion re-ranks by a fused
+   reciprocal-rank score, not raw vector distance — two independent signals combining would not be
+   expected to reproduce the *exact* pre-existing vector cosine distance on every single row,
+   especially for rows admitted (per the design) via the lexical gate rather than the vector floor.
+   Exact reproduction of the old numbers, row after row, is the signature of "nothing changed,"
+   not "fusion agrees with the old ranking by coincidence" — the latter would not explain the
+   precision of the match.
+3. **The negative stratum (N1-N6) is the decisive tell.** Every one of the 6 negative queries
+   returned a full 5 rows, every row's vector score far above the 0.43 floor (0.45-0.69) — e.g. N1
+   ("rotate a Postgres TLS certificate") returned 5 documents scoring 0.648-0.688, none
+   floor-admissible. Under the shipped admissibility gate (`vs <= 0.43 OR lexical_rank <= 2`,
+   `falkor-chat/server/falkorchat/services.py:319-324`), **at most 2 chunks per query can ever pass
+   via the lexical half** (rank is a strict 1-indexed list position — only one chunk can hold rank
+   1, only one can hold rank 2), so a genuine negative query should return 0-2 rows under the new
+   code, never 5. Getting exactly `limit` rows back, unconditionally, for every negative query is
+   precisely the **old**, pre-item-2 behavior ("returns top `limit` rows ordered by score ascending
+   — no floor parameter, no traversal," this file's own Findings section, above) — not a symptom of
+   a loose gate, a symptom of *no gate at all*.
+4. **Decisive, structural confirmation: not one of my 45 × 5 ≈ 225 returned rows carried
+   `rrfScore`, `vectorRank`, or `lexicalRank`.** `_fuse_chunk_hits_rrf` (`services.py:326-335`)
+   unconditionally stamps all three onto every row it returns — there is no code path in the new
+   function that omits them. Their total absence across every single call this session means the
+   function that adds them was never invoked. This is not a scoring ambiguity; it is a direct,
+   mechanical proof the responding code predates the shipped shape.
+5. **Root cause, confirmed against the actual deployment.** `.mcp.json` points
+   `falkor-chat-agent-team` at `http://localhost:8200/mcp`. `ps -eo pid,lstart,cmd` shows the
+   uvicorn process bound to port 8200 (`falkor-chat/server/.venv/bin/uvicorn falkorchat.app:app
+   --port 8200`, PID 172892) has been running continuously since **2026-09-18 23:42:59** — with no
+   `--reload` flag, so it loaded `services.py` into memory once, at that start time, and has never
+   re-imported it since. `git log` on the file that carries `_fuse_chunk_hits_rrf`/
+   `HYBRID_OVERFETCH_K` shows the commit that introduced them, `af535ecb` (U4), landed at
+   **2026-09-20T10:09:03-03:00** — almost a day and a half *after* this server process started.
+   Every `search_documents` call routed through this MCP connection during this entire session hit
+   the in-memory, pre-U4 module. This also retroactively explains an anomaly I found and initially
+   flagged as a possible ranking-mechanism defect (O1: present and floor-passing at rank 1 under
+   `limit=20`, absent under a separately-issued, reproducible `limit=5` call) — the **old** code's
+   `k = limit * SEARCH_DOCUMENTS_OVERFETCH` ANN candidate-pool size scales with `limit`, and
+   FalkorDB's `db.idx.vector.queryNodes` is HNSW-based approximate search, whose candidate set is
+   already documented elsewhere in this file as sensitive to exactly this kind of pool-size change
+   (Stage 8 Phase 2 addendum, "HNSW's approximation nondeterminism affects *which* candidates get
+   exact-distance-scored"). That anomaly is a known property of the **old** pipeline, not a new
+   defect in the hybrid one — I am withdrawing it as a hybrid-specific finding, not carrying it
+   forward as one.
+
+### Why this is a blocker, not a "hybrid didn't help" verdict
+
+Every one of U3/U4's own re-verification steps that confirmed the shipped code was correct
+(`teco`'s independent full-suite run, the direct `db.indexes()`/`db.idx.fulltext.queryNodes` schema
+checks, the mutation tests against `FakeRepo`) exercised the **code and the schema** — none of them
+exercised the **live, already-running server process** that this KB's actual callers reach through
+`.mcp.json`. A schema DDL change (the fulltext index) is visible to any fresh connection against
+FalkorDB immediately; a Python code change is not visible to an already-running, non-reloading
+uvicorn process until it restarts. This gap sits exactly between U4's "code is correct" verification
+and U5's "the shipped behavior is correct" validation — neither unit's own scope caught it, because
+neither was asked to confirm the *serving process* had actually picked up the new import. I am
+naming this precisely so it is fixed as a process gap (confirm the live server was restarted, not
+just that the code and schema are correct, before any future live-server-dependent gate), not
+re-litigated as a mystery.
+
+**I have not restarted the process.** Restarting a shared, long-running production server that
+other sessions may depend on is an operational action outside my remit (advisory/analysis only) —
+it is exactly the class of action this coordination's own dispatch discipline routes to `teco`/
+`devops`/`graph-dba`, not something I take unilaterally mid-evaluation.
+
+### Verdict
+
+**No verdict on "hybrid helped" vs. "hybrid didn't help" can be produced from this session's data
+— the mechanism under test was never exercised.** None of §3's four conditions can be scored: not
+condition 1 (G2), not conditions 2-3 (regression), because every number gathered describes the old
+system. Restating the raw numbers above as if they answered the question would be reporting a null
+result under the label of a real one — exactly the false-precision failure mode this file's own
+Recommendation 4 and Stage 8 Phase 2 addendum both already refused to commit elsewhere.
+
+### What unblocks this
+
+1. Restart the `ws:agent-team`-serving uvicorn process (`falkor-chat/scripts/start_agent_team.sh`,
+   port 8200) so it re-imports `falkorchat/services.py` and picks up `af535ecb`'s code. A minimal
+   live smoke check that the restart actually took — confirm at least one `search_documents`
+   response now carries `rrfScore`/`vectorRank`/`lexicalRank` — is a five-second, decisive check
+   before trusting anything downstream of it; today's episode is the concrete argument for making
+   that check a standing step, not a one-off.
+2. Re-run this exact U5 evaluation (the same 45 queries, same convention, same judging rules
+   in §3/§4 above) against the restarted process. I did not discard my raw per-query results from
+   this run — they are reproduced in the evidence above and in this session's own tool trace — but
+   they are baseline-identical numbers, not a second measurement, so they add nothing to re-cite
+   once the process is fixed; a fresh run is needed, not a relabeling of this one.
+3. **One thing this blocked run did *not* invalidate, and is worth keeping**: the negative-stratum
+   check above is now a **precise, mechanical litmus test** for "is the live process actually
+   running the hybrid code" that any future re-run (mine or anyone else's) should apply first,
+   before trusting any other number from the same session — run any one negative query, and if it
+   returns exactly `limit` rows with no `rrfScore` field, stop and check the server process before
+   reading anything else from that session as evidence.
+
+**Traceability.** MCP wiring: `.mcp.json` (`falkor-chat-agent-team` → `http://localhost:8200/mcp`).
+Process evidence: `ps -eo pid,lstart,etime,cmd` (PID 172892, started 2026-09-18T23:42:59-03:00).
+Commit evidence: `git log --format='%ad %H %s' --date=iso-strict -S'HYBRID_OVERFETCH_K' --
+falkor-chat/server/falkorchat/services.py` → `af535ecb`, `2026-09-20T10:09:03-03:00`. Code read
+directly: `falkor-chat/server/falkorchat/services.py:195-338` (constants, `_fuse_chunk_hits_rrf`,
+`search_documents`), `falkor-chat/server/falkorchat/mcp.py:370-401` (`search_documents` MCP tool,
+confirms it calls `Services.search_documents` — the correct, not a different, code path). Baseline
+compared against: this file's own "Stage 8 Phase 1"/"DEF-1 diagnosis" sections and
+`claude/docs/test-reports/agent-knowledge-base-strategy-ac2-report.md`. Coordination:
+`claude/docs/plans/agent-knowledge-base-strategy7-coordination.md`, U5.
+
+## Item 2 — U5 re-test, second attempt: genuine result, verdict "hybrid didn't help" (2026-09-20)
+
+**The question this section answers.** `teco` restarted the `ws:agent-team`-serving process
+(`start_agent_team.sh`, port 8200, new PID 436673, started 2026-09-20T19:59:34-03:00 — after the
+fusion commit) and independently confirmed a smoke-test response now carries `rrfScore`; I
+independently re-confirmed the same PID/start-time myself before touching anything. This section is
+the genuine second run my own §4 evaluation plan (above) specifies — the full 45-pair golden set,
+same convention, same judging rules — against the now-actually-hybrid live server. Unlike the first
+attempt, every one of the ~185 rows below carries `rrfScore`/`vectorRank`/`lexicalRank`, confirmed
+row-by-row as I went, so this run's numbers are real evidence about the shipped mechanism, not a
+repeat of the stale-process artifact.
+
+### The 4 target queries, and one previously-flagged control
+
+| Query | Result | Target present? | Rank/score | Baseline (vector-only) | Verdict |
+|---|---|---|---|---|---|
+| **G2** | **0 rows returned** — nothing cleared the gate at all | No | — | absent even at `limit=20` | **didn't help — necessary condition fails** |
+| P1 | 4 rows (only 4 candidates admissible) | No | — | rank 9, 0.4487 | didn't help (reported, not graded) |
+| C1 | 5 rows | No | — | absent even at `limit=20` | didn't help (out of scope for this lever, unchanged) |
+| X1 | 3 rows | No | — | rank ~11, 0.4632 | didn't help (out of scope for this lever, unchanged) |
+| O1 (last session's flagged anomaly) | 1 row, only 1 admissible candidate | **Yes** | rank 1, 0.3049 | rank 1, 0.2967/0.305 | **clean hit — confirms the earlier "regression" was purely the stale-server artifact, not a real hybrid defect; withdrawn for good** |
+
+**G2 is the single necessary condition (per my own §3), and it fails in the starkest possible way:
+not "still ranks below the cutoff," but zero candidates clear the admissibility gate at all** — no
+chunk anywhere in the vector top-20 scores ≤0.43, and (per the empty result) no chunk anywhere in
+the lexical top-20 ranks ≤2 either, so there is nothing to backfill from. **Condition 1 fails.
+Per my own bottom-line rule ("hybrid helped" = condition 1 AND conditions 2-3; "didn't help" =
+condition 1 fails regardless of 2-3), the unit's verdict is already settled by this row alone** —
+but I ran the full 45-pair set anyway, per the brief, because conditions 2-3 (regression) still need
+reporting on their own terms, and because they surfaced defects worth knowing about independent of
+G2's own outcome.
+
+### Condition 2 — regression on the 28 already-recorded single-answer hits (excludes the 4 target
+misses above)
+
+All 28 rows, baseline (Stage 8 Phase 1/2) vs. this run:
+
+| Row | Baseline rank/score | This run rank/score | Status |
+|---|---|---|---|
+| R7 | 1 / 0.294 | 1 / 0.2939 | unchanged |
+| R8 | 1 / 0.179 | 1 / 0.1792 | unchanged |
+| R9 | 2 / 0.340 | **4** / 0.3403 | **hit, but displaced** — see below |
+| F1 | 1 / 0.200 | 1 / 0.2002 | unchanged (only 1 admissible candidate total) |
+| F2 | 1 / 0.267 | 1 / 0.2670 | unchanged |
+| F3 | 1 / 0.165 | 1 / 0.1654 | unchanged |
+| F4 | 1 / 0.2918 | 1 / 0.2918 | unchanged |
+| F5 | 1 / 0.2421 | 1 / 0.2421 | unchanged |
+| F6 | 1 / 0.2431 | 1 / 0.2431 | unchanged |
+| F7 | 1 / 0.2631 | 1 / 0.2631 | unchanged |
+| F8 | 1 / 0.3543 | 1 / 0.3543 | unchanged |
+| F9 | 1 / 0.2569 | 1 / 0.2569 | unchanged |
+| C2 | 1 / 0.3026 | **absent from top-5** | **REGRESSION — clean miss** |
+| C3 | 1 / 0.2777 | 1 / 0.2796 | unchanged (score delta within known jitter) |
+| C4 | 1 / 0.4140 | 1 / 0.4140 | unchanged |
+| C5 | 1 / 0.3501 | **2** / 0.3501 | **hit, but displaced** — see below |
+| Q2 | 1 / 0.2197 | 1 / 0.2197 | unchanged |
+| O2 | 1 / 0.2967 | 1 / 0.2967 | unchanged |
+| P2 | 1 / 0.3027 | 1 / 0.3027 | unchanged |
+| S1 | 1 / 0.3406 | **query raises `RediSearch: Syntax error`** | **REGRESSION — hard failure, not a miss** |
+| E1 | 1 / 0.1916 | 1 / 0.1916 | unchanged |
+| T1 | 1 / 0.3463 | **5** / 0.3463 | **hit, but at the very edge** — see below |
+| G1 | 1 / 0.1947 | **2** / 0.1947 | hit, displaced one position |
+| D1 | 1 / 0.3412 | 1 / 0.3412 | unchanged |
+| D2 | 1 / 0.3206 | 1 / 0.3206 | unchanged |
+| L1 | 1 / 0.2553 | 1 / 0.2553 | unchanged |
+| L2 | 1 / 0.3146 | 1 / 0.3146 (also admitted via `lexicalRank:2`) | unchanged, doubly-confirmed |
+
+**Result: 26/28 still hit, but condition 2 does not hold clean — 1 genuine regression (C2) plus 1
+hard failure (S1), and 4 more hits (R9, C5, T1, G1) show real, measured rank displacement caused by
+the fusion mechanism, not noise.**
+
+**C2 (mutation-testing-alternatives query) — the clearest, cleanest regression in this run.**
+Previously a clean rank-1 hit (score 0.3026, far under the floor). This run: the expected document
+(`ef4c32cc11c44747994bb60e62bb5940`) does not appear anywhere in the returned top 5. The 5 returned
+rows are all from the same crowded mutation-testing/oracle-mutant neighborhood this file's own
+DEF-1 diagnosis already named as dense (Finding 3, above) — `rrfScore` 0.0286-0.0315, meaning each
+of them scores well on *both* signals at once (vector rank 4-9 *and* lexical rank 4-17). The true
+target, by contrast, is presumably vector-rank-1-or-near with **no lexical presence at all**
+(never showed a `lexicalRank`, consistent with a document phrased differently enough from the query
+that the OR-term signal doesn't reward it) — its RRF contribution (~0.0164, vector-only) is simply
+lower than five *other*, only-thematically-adjacent documents that happen to hit both signals. This
+is exactly the "vector-confident/zero-lexical-overlap loses to weak-vector/strong-lexical" trade-off
+my own §1 named as RRF's accepted cost, materializing for real, on a row that previously had zero
+ambiguity. Not a bug in the fusion arithmetic — a correctly-computed instance of the named risk.
+
+**S1 is a different, more severe failure mode: a total query failure, not a ranking miss.** The
+raw situation text ("Two groups' 95% confidence intervals don't overlap...") makes the lexical call
+raise `RediSearch: Syntax error`, which `Services.search_documents` re-raises as
+`InvalidSearchQueryError` — the caller gets an exception, not degraded results. See "A new,
+higher-priority defect" below; this is not a ranking-quality issue at all.
+
+**Three "hit but displaced toward the edge" cases (R9, C5, T1) are the same mechanism as C2, just
+not (yet) severe enough to cause a miss.** T1 is the most exposed: displaced from rank 1 to rank 5
+by four documents that either have no lexical presence contributing meaningfully or rank far worse
+on vector than T1's own target — one more thematically-adjacent, lexically-boosted competitor would
+push it out of the top 5 entirely on the next corpus growth or re-embed. These are not failures
+today, but they are measured evidence that C2's mechanism is not a one-off — it is the leading
+indicator of where fusion is structurally weakest: a dense, single-voice KB neighborhood
+(`coordination-techniques.md`, `guard-testing-techniques.md`, `test-design-techniques.md` — exactly
+the same `b-prose` neighborhood DEF-1 already flagged as crowded) where several documents share
+enough vocabulary that OR-term lexical matching rewards near-neighbors almost as readily as the
+true target.
+
+### Condition 2/3 — the stratum-e (multi-facet) families and a new, higher-priority defect
+
+| Family | Baseline set-recall | This run | Status |
+|---|---|---|---|
+| R1 (h13) | 1.0 | **query raises `RediSearch: Syntax error` — cannot measure** | **REGRESSION — hard failure** |
+| R2 (h21) | 1.0 | **query raises `RediSearch: Syntax error` — cannot measure** | **REGRESSION — hard failure** |
+| R3 (h39) | 0.5 (known gap) | 0.5 (both chunks of sibling 1 crowd out sibling 2, unchanged) | unchanged, known gap |
+| R4 (h14) | 1.0 | 1.0 (rank 1/0.3948, rank 2/0.4111 — exact baseline match) | unchanged |
+| R5 (h22) | 1.0 | 1.0 (rank 1/0.2936, rank 4/0.3602 — exact baseline match) | unchanged |
+| R6 (h40) | 1.0 raw (floor-unstable on 2nd sibling) | **query raises `RediSearch: Syntax error` — cannot measure** | **REGRESSION — hard failure** |
+| Q1 (model-bench) | 1.0 | 1.0 (rank 1/0.2054, rank 2/0.3398 — exact baseline match) | unchanged |
+
+**A new, higher-priority defect than anything named in my own item-2 design note: the raw
+situation text is handed to RediSearch's OR-term query with no escaping of RediSearch-reserved
+characters, and this corpus's own realistic queries hit it routinely, not as an edge case.**
+R1 (`"K-028 v2-to-v3"`), R2 (`"authorize_write()"`), R6 (`` `if ! VAR="$(cmd)"` ``) and S1
+(`"95%"` alongside a possessive) all raise a hard `RediSearch: Syntax error` — **3 of the 7
+stratum-e families (43%) and 1 of the 28 single-answer regression rows fail outright**, not
+degraded, not miss-ranked, **thrown**. `_strip_query_instruction_prefix` correctly recovers the raw
+situation text (confirmed — none of these are prefix-stripping bugs), but nothing downstream of it
+sanitizes that text before it becomes a RediSearch query string. This was invisible to every prior
+check in this coordination: U3's plan and U4's tests exercised `_fuse_chunk_hits_rrf` directly
+against hand-built fixtures (never a real RediSearch call with adversarial-looking-but-ordinary
+text), and Stage 8's original vector-only golden set never touched a lexical index at all. **This
+is squarely a gap in my own §2 design** — I specified the lexical query's *semantics* (OR-term, not
+phrase) but never specified that the raw text needs escaping before hitting RediSearch's query
+parser, and the corpus's own realistic queries (which routinely quote a code identifier, a shell
+snippet, or a percentage) are exactly the shape that trips it. **Concretely, for whoever picks this
+up:** RediSearch's query-string syntax treats `()`, `"`, `$`, `%`, `-` (as a leading NOT), `|`, `@`,
+and `*` specially; a full fix escapes or strips these before building the OR-term query (or moves to
+RediSearch's structured/parameterized query API if the client library exposes one), not a
+narrower fix for this run's 4 observed triggers alone — the observed set is a sample of the failure
+mode, not its boundary.
+
+**I did not diagnose G2's empty-result cause with certainty, but this same defect class is a live
+hypothesis worth naming rather than silently dropping.** G2's query contains a single-quoted phrase
+(`'which object is this'`). Given R1/R2/R6/S1 above show RediSearch-reserved characters routinely
+break or reshape the query, it is plausible G2's embedded quotes caused the lexical call to parse as
+an exact-phrase clause (which doesn't match anything, contributing 0 lexical hits) rather than
+degrading gracefully to OR-term matching on the remaining words — this would fully explain why the
+lexical side apparently contributed nothing to a query that, per Finding 3's own diagnosis, has
+"striking exact-phrase overlap" with its target's title. I have not confirmed this mechanism (I did
+not instrument the raw lexical call independently), so I am naming it as an unverified hypothesis
+for a follow-up to check, not asserting it as G2's root cause.
+
+### Condition 3 — negative stratum (6 queries): clean pass, an actual improvement
+
+| Query | Old code (stale-server run) | This run |
+|---|---|---|
+| N1 | 5 rows, closest 0.648 (no gate) | **0 rows — correctly rejected** |
+| N2 | 5 rows, closest 0.559 (no gate) | **0 rows — correctly rejected** |
+| N3 | 5 rows, closest 0.552 (no gate) | **0 rows — correctly rejected** |
+| N4 | 5 rows, closest 0.446 (no gate) | **0 rows — correctly rejected** |
+| N5 | 5 rows, closest 0.614 (no gate) | **0 rows — correctly rejected** |
+| N6 | 5 rows, closest 0.463 (no gate) | **0 rows — correctly rejected** |
+
+**All 6 negative queries now return literally nothing, with no query error** — a clean pass on
+condition 3, and a genuine improvement over the vector-only system this replaces: previously a
+negative query still returned a plausible-looking (if wrong) top-5 with no signal to the caller that
+nothing was actually relevant; now it returns an honest empty list. This is the one part of the
+fusion mechanism that performed exactly as designed, with no caveat.
+
+### Bottom-line verdict: **hybrid didn't help**
+
+Per my own §3 rule, stated once and applied without softening: **"hybrid helped" = condition 1
+(G2 in top-5) AND conditions 2-3 (no regression). Condition 1 fails outright (G2: zero admissible
+candidates, not merely below the cutoff) — the verdict is "hybrid didn't help," full stop,
+regardless of what conditions 2-3 show.** Conditions 2-3 are reported anyway because they are not
+merely academic here: this run found a genuine regression (C2), a genuine new class of hard failure
+this KB has never exhibited before (RediSearch syntax errors on ordinary text, hitting 4 of 45 rows
+including 3 of 7 stratum-e families), several rows now sitting on a thin margin they didn't have
+before (R9, C5, T1), and one clean improvement (the negative stratum). **None of this changes the
+headline verdict — G2 alone already settles it — but it means the honest framing for whoever
+decides what happens next is not "a neutral miss, ship it anyway for the negative-stratum win," it
+is "the lever this unit exists to test did not work, and trying it surfaced a real defect (the
+RediSearch-escaping gap) that would need fixing before this mechanism could be trusted at all,
+independent of whether G2 is ever rescued."**
+
+**What this does and does not tell you about the underlying model-capacity-vs-structural-lever
+question (DEF-1 diagnosis, above).** G2's complete failure to clear the gate — worse than "still
+ranks low," genuinely zero admissible candidates — is consistent with, and arguably sharpens, the
+diagnosis's own Finding 3: G2 is outcompeted by many only-loosely-related documents from a dense
+semantic neighborhood, with (per this run) no lexical rescue available either, which is exactly the
+"structural property of a small embedding model over a densely homogeneous corpus region... not
+something a prefix or title-convention change can be expected to fix" the diagnosis already named
+as the honest residual. Item 2 was the one structural lever both the diagnosis and this coordination
+thought had a real chance against exactly this failure mode; it did not move it. I am not aware of
+a third lever left to try from this file's own recommendations — the residual named in the DEF-1
+diagnosis's item 5 ("name the residual honestly rather than closing it silently") is now the
+operative disposition for G2 specifically, not a fallback to reach for only if items 1-2 both fail.
+
+**Traceability.** Live run: 2026-09-20, against `ws:agent-team` post-restart (PID 436673, confirmed
+independently before and via `rrfScore` presence on every returned row throughout). Baseline:
+this file's own "Stage 8 Phase 1"/"DEF-1 diagnosis" sections and
+`claude/docs/test-reports/agent-knowledge-base-strategy-ac2-report.md`. Prior (invalid) attempt:
+this file's own "U5 evaluation attempt: blocked, stale server process" section, immediately above —
+not superseded, kept as the record of what was learned diagnosing the stale process, since the
+litmus test it produced (negative-query-full-rows / `rrfScore`-absence) is exactly what confirmed
+this run is genuine. Coordination: `claude/docs/plans/agent-knowledge-base-strategy7-coordination.md`,
+U5.
