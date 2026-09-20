@@ -5,6 +5,118 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-09-20 — Embedding-model migration & index-rebuild capability: `pin`/`migrate` tooling built and live-verified
+
+**What:** delivered the reusable, on-demand mechanism `docs/requirements/embedding-migration.md`
+(FR-1…FR-10, now archived) asked for: re-embedding a workspace's stored `Message`/`Chunk` vectors
+and rebuilding its vector index whenever the embedding model changes, plus the workspace-level
+model-pinning safety net (FR-1/FR-2/FR-5) so a global default swap never silently shifts an
+existing workspace's behavior. Triggered by an urgent LM-Studio memory-pressure swap off the
+current default (Qwen3-Embedding-0.6B), but the deliverable is the *mechanism*, not that one swap —
+`architect`'s plan (`docs/plans/embedding-migration.md`, archived), `graph-dba`'s companion Cypher/
+DDL note (`docs/plans/embedding-migration-graph.md`, archived), two `analyst` review passes
+(`docs/reviews/embedding-migration.md` Pass 1 → needs changes/2 blockers, Pass 2 → approve; plus
+two implementation reviews, `-pin-impl.md` and `-migrate-impl.md`, both approve), and `qa-engineer`'s
+live acceptance pass (`docs/test-reports/embedding-migration-report.md`, PASS WITH FINDINGS) — full
+ledger in `docs/plans/embedding-migration-coordination.md` (archived, U1-U9).
+
+**Landed:** `scripts/embedding_migration.py`, a new Python module (importing `falkorchat` directly,
+`seed_eval_corpus.py`'s established shape) exposing two subcommands, plus thin wrappers
+`scripts/pin_workspace_embedding_model.sh` and `scripts/migrate_embeddings.sh` (`a07e6805`,
+`09e30282`):
+- **`pin`** (FR-1/FR-2/FR-5's shared primitive) — idempotently writes a workspace's
+  `WorkspaceConfig.embeddingModelOverride` to the current global default if unset, preserving the
+  three sibling override kinds (`agentModelOverride`/`guardModelOverride`/`responderModelOverride`)
+  byte-for-byte via a read-before-write discipline around `Repository.write_model_overrides`'
+  clear-on-`None` semantics. Degrades a `ModelConfigError` (e.g. no valid
+  `FALKORCHAT_OPENCODE_CONFIG`) to a printed WARNING rather than aborting, so it's safe to call
+  unconditionally from workspace creation.
+- **`migrate`** (FR-3/FR-4/FR-5/FR-8a/FR-10) — re-embeds every `Message`/`Chunk` row to a named
+  target model via a keyset-paginated read (`WHERE id > $lastId AND coalesce(embeddingModel,'') <>
+  $target`, index-anchored on the existing `msgId`/`chunkId` range index — `graph-dba` profiled this
+  against a `SKIP`-based page and confirmed the keyset form is `O(rows)` total vs. `O(rows²/
+  batchSize)`), then drops and recreates both vector indexes at the new dimension, then moves the
+  workspace's override to the target model.
+- **FR-2's enforcement mechanism** (`09e30282`) — `scripts/create_workspace.sh`, a new canonical
+  entry point wrapping `bootstrap_schema.sh` + `pin` in one call, replacing direct
+  `bootstrap_schema.sh` calls at the three real-workspace call sites (`start_server.sh:148`,
+  `start_demo.sh:166`, `start_agent_team.sh:205`); `ws:test`'s offline-suite bootstrap deliberately
+  left untouched. The stakeholder's decision-log line ("[FR-2] to be built into workspace bootstrap
+  itself, not left as a manual convention") ruled out the plan's cheaper first-draft alternative (a
+  documented `bootstrap_schema.sh && pin_workspace_embedding_model.sh` recipe) after Pass 1's review
+  named the conflict as a blocker.
+
+**Key design decisions, for the historical record:**
+- **The hard-cap-bypass call:** `migrate` resolves its embedder via
+  `gateway.embedder("embedding", requested=target_ref)` with **no `ws=`/`overrides=`** — deliberately
+  skipping `ModelGateway`'s workspace-override hard cap, because the workspace's own
+  `embeddingModelOverride` still names the *old* model until FR-5's final step; resolving with `ws=`
+  would silently re-embed every row with the model the migration is trying to leave. Getting this
+  backwards produces no error and a report that reads as success — reviewed as the plan's single
+  highest-severity correctness risk and pinned by a dedicated regression test
+  (`test_migrate_bypasses_the_workspace_hard_cap`).
+- **The FR-19 dimension-guard bypass is deliberate, not a gap:** `migrate`'s raw write queries never
+  route through `EmbeddingWorker`'s pre-flight `EmbeddingDimensionError` guard, because by
+  construction the old vector index is still at the old dimension while the target model resolves to
+  the new one for the entire re-embed pass — routing through the guard would reject every row. The
+  guard keeps protecting the *ordinary* hot write path throughout, which the traffic-stop precondition
+  below keeps disjoint from the migration path.
+- **The traffic-stop precondition:** `migrate` requires an explicit `--i-have-stopped-traffic` flag
+  (or an interactive y/n confirmation) before touching the graph at all — added after Pass 1's review
+  found the plan's first draft designed the *post*-migration server restart in detail but had no step
+  actually creating the outage FR-7 assumes; a live write landing between the count check and the
+  index rebuild would reproduce the same silent, ANN-invisible vector corruption the feature exists to
+  prevent.
+- **The `DROP VECTOR INDEX` resume guard:** `graph-dba` live-verified that `DROP VECTOR INDEX`
+  hard-errors (`"no such index"`) when no vector index exists at all, so a crash landing between a
+  prior run's `DROP` and `CREATE` would make a naive unconditional retry fail loudly on resume.
+  `migrate` guards the drop with `Repository.read_index_dimension(ws, label=...) is not None`,
+  skipping it when already absent — covered by
+  `test_migrate_resume_after_index_dropped_but_not_recreated`, which reproduces the exact
+  intermediate state.
+
+**Tests:** `server/tests/test_embedding_migration.py` — 27 tests (`grep -c '^def test_'`) covering
+`pin`'s idempotency/read-before-write discipline, `migrate`'s hard-cap bypass, the self-healing sweep
+of never-embedded rows, the traffic-stop refusal, the DROP-guard resume hazard, idempotent
+interrupt/resume, and the vanished-row skip-and-log path, plus `server/tests/
+test_create_workspace_script.py` — 4 tests for the new entry point and its call-site swaps (31
+total). Both `analyst` implementation reviews (`-pin-impl.md`, `-migrate-impl.md`) verdict
+**approve**, no blockers/majors either pass; full suite reran clean at 2605 passed (minus
+`test_services.py`'s unrelated concurrent work) at review time. `qa-engineer` then ran a live
+acceptance pass (`docs/test-reports/embedding-migration-report.md`) against a real, throwaway
+FalkorDB workspace and **two real LM Studio embedding models** (1024-dim
+`text-embedding-qwen3-embedding-0.6b`, 768-dim `text-embedding-granite-embedding-278m-
+multilingual`) — the one thing the fake-embedder suite couldn't exercise. Verdict **PASS WITH
+FINDINGS**: every FR exercised (FR-2/3/4/5/8a/10) matched the requirements doc exactly against real
+infrastructure, including the self-healing null-embedding sweep and real multi-batch keyset
+pagination; one Minor defect (D-1 — `migrate`'s CLI let `MigrationAbortedError` surface as an
+uncaught traceback instead of a clean one-line error on all three abort paths, though zero graph
+writes ever occurred on any of them) found live, fixed in the same session with a mutation-tested
+regression test (`e933c4fd`), full suite 2606 passed after the fix.
+
+**Not done — explicitly out of scope for this chain, which is why the requirements doc could be
+archived without them:** the actual production migration itself — destination-model choice (a
+`data-scientist` shortlist recommended `granite-embedding-278m-multilingual` as the lead candidate,
+never confirmed), which real workspace(s) to migrate, FR-1's one-time pin sweep across existing
+workspaces, and FR-6/FR-8b's `model-bench` golden-set validation run + live retrieval-sanity check
+against `ws:eval`. The delivered scope is the tool being built, reviewed, and proven against real
+infrastructure and ready on demand — not any particular migration.
+
+**Accepted, carried-forward limitations:**
+- `migrate`'s multi-batch keyset paging (crossing a page boundary mid-migration) is exercised by no
+  test at default `batch_size=50` against the small fixtures used throughout the suite — `analyst`
+  confirmed by mutation (breaking the cursor-advance line left all 26 tests then passing) that this
+  has no correctness consequence today (the `coalesce(embeddingModel,'') <> $target` clause, not
+  `$lastId`, is the actual gate), but it does mean a `--batch-size`-is-silently-ignored regression
+  would also go undetected. `qa-engineer`'s live pass separately closed the live-behavior half of this
+  gap (TP-007, real multi-batch pagination against real HTTP calls) but the unit-level coverage gap
+  itself was left as a follow-up, not fixed.
+- A pre-existing, unexercised gap in `bootstrap_schema.sh` — a partial DDL failure that still leaves
+  a workspace's graph key materialized would let `pin()` "succeed" over an incompletely-schemaed
+  graph — was confirmed genuinely pre-existing (identical exposure existed for an operator running
+  `bootstrap_schema.sh` then `pin_workspace_embedding_model.sh` by hand before this chain) and out of
+  scope for `create_workspace.sh` to fix; noted for a future backlog item.
+
 ## 2026-09-20 — K-030 item 2: hybrid lexical+semantic RRF fusion for `search_documents`
 
 **What:** `Services.search_documents` (FR-3 standalone-KB search, `ws:agent-team`'s query
