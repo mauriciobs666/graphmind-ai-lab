@@ -1,6 +1,6 @@
 # Embedding model migration & index rebuild — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (M6+)
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — (M6+)
 
 ## 1. Goal & scope
 

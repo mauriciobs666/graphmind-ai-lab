@@ -1,5 +1,5 @@
 # Embedding model migration & index rebuild — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — (M6+) · **Last updated:** 2026-09-19
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — (M6+) · **Last updated:** 2026-09-19
 
 ## Intent
 The current embedding model, running in LM Studio, is consuming more host RAM/VRAM than the box

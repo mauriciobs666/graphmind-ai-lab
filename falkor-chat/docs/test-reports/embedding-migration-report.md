@@ -1,6 +1,6 @@
 # Embedding model migration & index rebuild — Test Report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** — (M6+)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** — (M6+)
 
 ## Summary
 

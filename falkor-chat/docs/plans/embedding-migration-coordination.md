@@ -1,6 +1,6 @@
 # Embedding model migration & index rebuild — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (M6+)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** — (M6+)
 
 Coordinates delivery of `docs/requirements/embedding-migration.md` (Status: Ready for design,
 2026-09-19): a reusable, on-demand capability to re-embed a workspace's `Message`/`Chunk` data and

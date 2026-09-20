@@ -1,6 +1,6 @@
 # Embedding model migration — `migrate` (U7) and FR-2 enforcement (U8) — Implementation Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (M6+)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — (M6+)
 
 ## Scope & verdict
 

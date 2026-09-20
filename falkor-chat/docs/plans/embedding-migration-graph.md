@@ -1,6 +1,6 @@
 # Embedding model migration & index rebuild — Graph Design Note
 
-> **Status:** active · **Owner:** `graph-dba` · **Tracks:** — (M6+)
+> **Status:** archived · **Owner:** `graph-dba` · **Tracks:** — (M6+)
 
 Companion to `falkor-chat/docs/plans/embedding-migration.md` §4 (the six-item handoff). Answers
 every item precisely enough for `coder`/`tdd-engineer` to implement `scripts/embedding_migration.py`

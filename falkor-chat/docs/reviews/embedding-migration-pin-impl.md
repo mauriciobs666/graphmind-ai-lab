@@ -1,6 +1,6 @@
 # Embedding-migration `pin` implementation — Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (M6+)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — (M6+)
 
 ## Scope & verdict
 
