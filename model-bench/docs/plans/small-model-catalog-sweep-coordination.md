@@ -60,7 +60,7 @@ both reviewers.
 | U3br | `coder` (resume) | `a04e75a1454a5ec5d` | accepted | fold 2 minor suggestions (missing zero-arms test, README clause) — committed `4433e56` | — | 186.8k tok / 19 tools |
 | U3c | `coder` | `a20f36e22226f0479` | delivered | `scripts/consolidate_sweep_reports.py` (plan Unit C, fixture-built, parallel to U3a) | `analyst` (light) → in-flight | 158.9k tok / 26 tools |
 | U4c | `analyst` (fresh) | `ac2c3f299cd822b87` | accepted | `docs/reviews/small-model-catalog-sweep-impl.md` (own `-impl` doc, not a section of the plan review — analyst's own correct call per the closed role set) | `analyst` → **approve** (2 non-blocking: a `main()`-level test gap, HISTORY.md entry deferred) | 120.8k tok / 31 tools |
-| U5 | `devops` | `aa7e668860b23a794` | in-flight | 76-run sweep under one session id, `results/` | — | — |
+| U5 | `devops` | `aa7e668860b23a794` | delivered | 68-run sweep, session `catalog-sweep-2026-09-19`, `results/runs/` (committed `00f3b83`) | `teco` (independent re-verification, no specialist gate — data-collection execution, not design/code) → **confirmed**: file counts match exactly, 0 failures | 161.5k tok / 60 tools (across 3 resumes, ~10.4h wall incl. LM Studio runtime) |
 | U6 | TBD | — | queued | five per-pack reports via `rank` (needs U3a+U3b gated, U5 data) | `analyst`/`data-scientist` → — | — |
 | U7 | TBD | — | queued | consolidated document via U3c's script (FR-9/FR-10) | `analyst` (+`qa-engineer` if it has walkthrough claims) → — | — |
 
@@ -139,3 +139,29 @@ is dated 2026-09-17T18:19:13Z — now 2 days old; freshness against the plan's s
 precondition check, since the requirements doc's Out-of-scope section assumes current attestation
 going in rather than the sweep producing it. Dispatching U5 (the 72-run sweep) to `devops` now;
 U6/U7 stay `queued` behind U5's data, unaffected by this release.
+
+**2026-09-20 — Fourth scope correction: drop two unofficial 9B community finetunes.** Stakeholder
+decision, direct: `qwen3.5-9b-uncensored-hauhaucs-aggressive` and
+`qwen3.5-9b-claude-4.6-opus-uncensored-distilled` dropped from scope — `prism-ml/bonsai-27b` stays
+in scope on its existing footprint-criterion clearance (aggressive Q1_0 quantization), but these two
+are unofficial third-party finetunes (publishers `HauhauCS`, `LuffyTheFox`, non-standard `qwen35`
+arch tag) judged unlikely to work reliably under this harness — a functional-risk call, not a
+footprint one. Caught mid-run: `devops` had reached combo 7/72 (in flight, nothing stored yet) when
+the instruction landed; it killed the loop cleanly rather than editing the plan file live under a
+running read-loop, rebuilt the plan files down to 68/64 lines, and resumed on a 58-combo queue that
+also skipped the 6 chat-role combos already OK'd. `tico` amended the doc accordingly (18/72/153/76/76
+→ 16/64/120/68/68, 20 models/68 total runs), independently re-verified by `teco` (arithmetic +
+stale-reference grep) and committed (`356a5bd`).
+
+**2026-09-20 — U5 complete: 68/68 runs, 0 failures.** `devops` finished the corrected 68-run sweep
+(all 16 confirmed chat/vlm models × 4 packs + 4 embedding models × the embedder pack), reported a
+full close-out (session id, per-pack breakdown, host.json freshness action, artifact paths, and a
+flagged-not-fixed observation that `bonsai-27b` is a severe latency outlier — 12-42 min per pack vs.
+low-single-digits for the 3-4B models — worth a footnote in U6's report rather than a surprise).
+`teco` independently re-verified before accepting: counted the actual stored JSON files by
+`sessionId` and per-pack `modelKey`, confirming 72 files (68 real runs + 4 auto BM25 reference-arm
+records the embedder pack always stores alongside an embedding run), all 16 chat/vlm models present
+in each of the 4 chat-role packs, all 4 embedding models present, neither dropped 9b model present
+anywhere. Committed the 68 run records as `00f3b83` (the 4 auxiliary BM25 records included in the
+same commit, same file set). U5 marked `delivered`. **U6 and U7 are now unblocked** — proceeding to
+dispatch both next.
