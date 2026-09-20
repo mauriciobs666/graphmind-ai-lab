@@ -1,6 +1,6 @@
 ---
 name: agent-maintenance
-description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), the learnings-graph distillation procedure (verify → route → log → clear each agent's raw capture from the shared `kaizen_team` FalkorDB graph), and the single-artifact prompt-quality lint (§7 — contradiction, ambiguity, persona, cognitive-load, coverage, composition-conflict, and prompt-waste review of one prompt/skill/steering doc). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team, lint a single prompt's quality, or process its learnings graphs.
+description: Procedures for maintaining agent/skill artifacts — kaizen plan & history upkeep, dual-audience documentation (human README catalog + agent-context files), file-location conventions, the audit/reconcile method for already-drifted context docs, the team-coherence certification pass (inter-agent rosters, handoff contracts, hook enforcement parity), the learnings-graph distillation procedure (verify → route → log → clear each agent's raw capture from the shared `ws:agent-team` falkor-chat workspace), and the single-artifact prompt-quality lint (§7 — contradiction, ambiguity, persona, cognitive-load, coverage, composition-conflict, and prompt-waste review of one prompt/skill/steering doc). Use whenever creating, editing, renaming, removing, or reviewing a Claude Code / OpenCode / Kiro agent, subagent, skill, steering doc, or memory file — or when asked to certify/audit an agent team, lint a single prompt's quality, or process its learnings graphs.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
@@ -58,10 +58,10 @@ Example (per-agent folders): `~/.claude/agents/cobb/kaizen/plan.md` and `.../his
    entry and `plan.md` with improvements you already foresee. In collections
    that run the learning-capture loop (§5 — graphmind-ai-lab's `claude/` does),
    point the new agent's Learning-capture prompt section directly at the
-   `kaizen_team` producer-write recipe (§5) — the `:Agent`/`PRODUCED` edge
-   shape, **never** the legacy `author` string property. **No `inbox.md` is seeded for a new agent** — `kaizen_team`
-   is a shared graph, already provisioned; a new agent's entries just carry a
-   new `agentId`, nothing to pre-create.
+   `ws:agent-team` `ingest_document` write (§5), attributed via `produced_by`.
+   **No `inbox.md` is seeded for a new agent** — `ws:agent-team` is a shared
+   workspace, already provisioned; a new agent's entries just carry a new
+   `agentId`, nothing to pre-create.
 2. **Modifying:** before editing, check `plan.md` for relevant items; after
    editing, append a dated `history.md` entry (*what* changed and *why*), and
    update the status of any plan items you advanced — move completed ones out of
@@ -201,7 +201,7 @@ protects whoever runs it.
 
 1. Write/edit the agent or skill source.
 2. Update its `kaizen/{plan,history}.md` (§1; agents also write into the
-   shared `kaizen_team` learnings graph, §5 — no `inbox.md` is created for a
+   shared `ws:agent-team` learnings store, §5 — no `inbox.md` is created for a
    new agent).
 3. **If you added, renamed, or removed an agent:** update every prompt that
    **enumerates the team** in the same change — an orchestrator's roster (e.g.
@@ -336,47 +336,37 @@ answerable from the log.
 ## 5. Learnings graphs — capture & distillation
 
 The self-improvement loop for a stateless agent team: **capture is cheap and
-unreviewed; promotion is curated.** Every agent's raw capture writes into one
-shared working-memory FalkorDB graph, `kaizen_team`, as a `:KaizenEntry` node
-(`entryId`, `date`, `fact`, `evidence`, `context`, `suggestedHome`,
-`createdAt`) connected by a
-`(:Agent {agentId})-[:PRODUCED {sessionId}]->(:KaizenEntry)` edge to a real
-`:Agent` node identifying the producer — the **producer-write** shape (locked
-name/direction, M8, `docs/plans/kaizen-agent-ontology-graph.md` §2):
-
-```cypher
-MERGE (a:Agent {agentId: '<agent-slug>'})
-CREATE (a)-[:PRODUCED {
-  sessionId: '<value of $CLAUDE_CODE_SESSION_ID, or omit this key entirely if unavailable>'
-}]->(k:KaizenEntry {
-  entryId: '<uuid4>', date: '<YYYY-MM-DD>', fact: '<the fact, one line>',
-  evidence: '<what was run/read/observed>', context: '<the task where it surfaced, one line>',
-  suggestedHome: 'prompt | knowledge base | project docs | unsure',
-  createdAt: '<ISO-8601 write time>'
-})
-```
-called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>, agent='<agent-slug>')`.
-
-M8 (2026-08-22, `docs/plans/kaizen-agent-ontology.md`) replaced the plain
-`author` string property with this real `:Agent` node + `PRODUCED` edge, for
-every entry created from that point on — entries that already existed when
-M8 shipped keep their `author` property and no edges at all, unretrofitted
-(FR-2's no-retrofit rule; both a legacy and a current-shape read are needed
-below for exactly this reason). This pattern was piloted on `graph-dba`, then
-migrated team-wide 2026-08-20 (graphmind-ai-lab; see the Origin note below for
-the two-step migration lineage — one graph per agent, then consolidated onto
-this single shared graph the same day, then given real `:Agent` identity by
-M8). The 12 agents that existed at the 2026-08-20 migration each used to carry
-`<agent>/kaizen/inbox.md` (sibling of plan/history, but no longer required by
-`audit-team.sh` check 1 — plan+history alone suffice): frozen from the
-migration onward, then **removed outright on 2026-08-21** once every entry it
-ever held had been distilled into `kaizen_team` and cleared (git history
+unreviewed; promotion is curated.** Every agent's raw capture writes a dated,
+evidence-backed document into one shared falkor-chat workspace,
+`ws:agent-team`, via `mcp__falkor-chat-agent-team__ingest_document(title=<the
+fact, one line>, text=<labeled Fact:/Evidence:/Context:/Suggested home:
+blocks>, produced_by=<the writer's own, already-seeded Agent.agentId>)` — an
+unresolvable `produced_by` raises `AgentNotFoundError` loudly, never a silent
+fallback. The 12 agents that existed at the 2026-08-20 migration (the
+predecessor store's own migration — see "Predecessor store, now retired"
+below, and the Origin note at the end of this section for the full lineage)
+each used to carry `<agent>/kaizen/inbox.md` (sibling of plan/history, but no
+longer required by `audit-team.sh` check 1 — plan+history alone suffice):
+frozen from that migration onward, then **removed outright on 2026-08-21**
+once every entry it ever held had been distilled and cleared (git history
 retains each file). **A new agent created from here on gets no `inbox.md` at
 all** (FR-12/AC-9) — its Learning-capture section points straight at the
-`kaizen_team` producer-write recipe above. During runs, every agent writes
-dated, evidence-backed observations of **durable, non-obvious environment
-facts in its discipline** — tool quirks, undocumented behaviors, conventions
-that live only in the code — as new graph nodes.
+`ws:agent-team` write above. During runs, every agent writes dated,
+evidence-backed observations of **durable, non-obvious environment facts in
+its discipline** — tool quirks, undocumented behaviors, conventions that
+live only in the code — as new documents.
+
+**Predecessor store, now retired.** This capture loop previously ran on a
+shared FalkorDB graph, `kaizen_team` (`:KaizenEntry` nodes, plain `author`
+property pre-M8, then `(:Agent)-[:PRODUCED]->(:KaizenEntry)` /
+`(:KaizenEntry)-[:MENTIONS]->(:Agent)` edges to real `:Agent` nodes from M8
+onward, 2026-08-22). The whole team cut over onto `ws:agent-team` by
+2026-09-19 (piloted on `cobb`/`teco` the day before), the third team-wide
+distillation pass then drained `kaizen_team` to zero entries
+(`claude/docs/plans/kaizen-distillation3-coordination.md`), and the graph was
+deleted (`claude/docs/plans/kaizen-team-retirement-coordination.md`) — it no
+longer exists, and nothing in this section's live procedure below reads,
+writes, or clears it any more.
 
 **What capture systematically misses, and how a distiller should read around
 it.** The trigger for writing an entry is **surprise** — the environment
@@ -398,132 +388,41 @@ evidence in the coordination document or in `history.md`, not in an entry.
 (Note the shape of that second point: it is a claim about an **absence**, so
 it is checked by asking *where would such an entry be if it existed, and did I
 look there* — not by the reach check, which a negative passes vacuously.) Agents never promote their
-own entries, never edit or delete a `:KaizenEntry` once created, and never tag
-a `MENTIONS` edge onto one — the MCP tool's producer-write authorization only
-lets an agent *create* its own entry (and, incidentally, the `:Agent` node
-identifying it); tagging a different agent onto an entry, editing, or
-clearing one all require the curator role below. The maintainer (cobb)
+own entries, and never edit or delete a document once ingested —
+`ingest_document`'s `produced_by` attribution is the extent of what a writing
+agent does; verifying, routing, promoting, and clearing all require the
+curator role below. The maintainer (cobb)
 distills — on request, and folded into every certification pass (§4):
 
-1. **Read the team-wide raw capture.** Two `kaizen_team` queries, needed
-   **side by side for as long as any pre-M8 entry remains uncleared** — once
-   every legacy entry has been cleared through step 4 below, the legacy query
-   permanently returns nothing and can eventually be dropped, but don't drop
-   it while any legacy entry still exists (`docs/plans/
-   kaizen-agent-ontology-graph.md` §7) — plus a **third, separate read
-   source**, `ws:agent-team` (below), needed *alongside* these two for as long
-   as any pre-cutover entry remains in `kaizen_team` unread/uncleared. Track
-   1's write-convention rollout (`claude/docs/plans/agent-knowledge-base-strategy.md`
-   §3 Stage 4) completed its team-wide cutover 2026-09-19 (piloted 2026-09-18
-   with `cobb`/`teco`, the remaining 11 agents cut over the next day, K-030's
-   last Track 1 item) — every agent's own `<name>.md` now writes new captures
-   to `ws:agent-team`, not `kaizen_team`. `kaizen_team` is no longer a live
-   write target for any agent going forward; its two reads above exist solely
-   to reach what a pre-cutover session already wrote there (both the pre-M8
-   legacy shape and the post-M8 current shape) — nothing existing there needs
-   migrating (this cutover's own no-retrofit rule, same as FR-2's) — so which
-   of the three sources holds a given entry depends on when it was written
-   relative to the cutover, not on which agent produced it:
-   - **Legacy read** (pre-M8 entries — `author` property, no edges):
-     `mcp__cypher__query(graph='kaizen_team', cypher="MATCH (e:KaizenEntry)
-     RETURN e.entryId, e.date, e.fact, e.evidence, e.context, e.suggestedHome,
-     e.author ORDER BY e.date")` — a plain read, no `agent` needed (reads are
-     unrestricted). To scope to one agent's legacy entries, add
-     `{author: '<agent>'}` to the `MATCH` pattern.
-   - **Current-shape read** (entries created after M8 — real
-     `:Agent`/`PRODUCED`/`MENTIONS` edges): "every note produced by or
-     mentioning agent X," using the verified-idiom fallback
-     (`docs/plans/kaizen-agent-ontology-graph.md` §5 — its `UNION` form is
-     flagged there as unverified on this build, so use this one instead):
-     ```cypher
-     MATCH (a:Agent {agentId: '<agent-slug>'})
-     OPTIONAL MATCH (a)-[:PRODUCED]->(produced:KaizenEntry)
-     WITH a, collect(DISTINCT produced) AS producedList
-     OPTIONAL MATCH (mentioned:KaizenEntry)-[:MENTIONS]->(a)
-     WITH producedList, collect(DISTINCT mentioned) AS mentionedList
-     UNWIND (producedList + mentionedList) AS k
-     RETURN DISTINCT k.entryId AS entryId, k.date AS date, k.fact AS fact,
-            k.evidence AS evidence, k.context AS context,
-            k.suggestedHome AS suggestedHome ORDER BY date
-     ```
-     A plain read, no `agent` needed. A historical entry has no edge for
-     either `OPTIONAL MATCH` to traverse, so it is silently absent from this
-     query — expected under FR-2's no-retrofit rule, not a gap; the legacy
-     read above is what still reaches it.
-   - **`ws:agent-team` read** (entries produced via Track 1's write-convention
-     pilot, §3 Stage 4/5 above): `mcp__falkor-chat-agent-team__list_documents()`
-     (default `current_only=True`, `limit=50`) on the dedicated
-     `falkor-chat-agent-team` MCP server lists every current document's
-     `documentId`/`title`/`ingestedByKind`/`ingestedById`/`status`;
-     `mcp__falkor-chat-agent-team__get_document(document_id)` fetches one
-     document's verbatim `text`. `ingestedById` is this source's
-     producer-identity field — the direct analogue of `kaizen_team`'s
-     `:Agent`/`PRODUCED` edge (§4.1 of the plan above: `produced_by` resolves
-     only against a real `Agent` node, raising `AgentNotFoundError` rather
-     than silently falling back, so `ingestedById` is trustworthy the same
-     way `PRODUCED` is). No `agent`/authorization argument needed — reads are
-     unrestricted on this MCP server too. **Live-verified 2026-09-18**
-     against the two real pilot documents from Stage 4
-     (`e3ddf8bc…`/`0afbe08b…`, produced by `cobb`/`teco`): `list_documents()`
-     surfaced both with correct `ingestedById`, and `get_document` on each
-     returned its full labeled `Fact:`/`Evidence:`/`Context:`/`Suggested
-     home:` text verbatim.
+1. **Read the team-wide raw capture.** `ws:agent-team` is the sole live read
+   source: `mcp__falkor-chat-agent-team__list_documents()` (default
+   `current_only=True`, `limit=50`) on the dedicated `falkor-chat-agent-team`
+   MCP server lists every current document's
+   `documentId`/`title`/`ingestedByKind`/`ingestedById`/`status`;
+   `mcp__falkor-chat-agent-team__get_document(document_id)` fetches one
+   document's verbatim `text`, untruncated — confirmed 2026-09-18 against the
+   two real pilot documents from Stage 4 (`e3ddf8bc…`/`0afbe08b…`, produced
+   by `cobb`/`teco`): `list_documents()` surfaced both with correct
+   `ingestedById`, and `get_document` on each returned its full labeled
+   `Fact:`/`Evidence:`/`Context:`/`Suggested home:` text verbatim, no
+   `…(+N chars)` tail. No `agent`/authorization argument needed — reads are
+   unrestricted on this MCP server. `ingestedById` is this source's
+   producer-identity field: `produced_by` resolves only against a real,
+   already-seeded `Agent` node, raising `AgentNotFoundError` rather than
+   silently falling back, so `ingestedById` is trustworthy for attribution.
 
-   **Both `kaizen_team` reads truncate every cell — page the long ones before
-   dispositioning anything.** (`ws:agent-team`'s `get_document` does not —
-   confirmed in the same 2026-09-18 verification above, both pilot documents'
-   full text came back on one call, no `…(+N chars)` tail — so this paging
-   step is specific to the two `kaizen_team` reads, not a concern on the third
-   source.) The `cypher` MCP tool cuts each cell at `CYPHER_MCP_MAX_CELL`
-   chars (default **300**) and appends `…(+N chars)`, so any `fact` or
-   `evidence` longer than that is read **short** — and the tail is exactly
-   where an entry's scope caveats, negative results and self-corrections sit.
-   Page past it in the same tool with OpenCypher `substring`; no `redis-cli`
-   fallback is needed. Project several offsets in one row and check them
-   against `size()` so you know you reached the end:
-   ```cypher
-   MATCH (k:KaizenEntry {entryId: '<id>'})
-   RETURN size(k.fact) AS n, substring(k.fact,0,240) AS f1,
-          substring(k.fact,240,240) AS f2, substring(k.fact,480,240) AS f3
-   ```
-   Verified 2026-09-09 against `kaizen_team`: a 656-char `evidence` came back
-   as 300 chars plus `…(+356 chars)` on a plain read, and whole under the
-   slicing above. A disposition argued from a truncated cell is argued from
-   the half of the entry that makes the strongest claim, with the half that
-   bounds it missing.
-
-   `kaizen_team` is a shared graph provisioned once up front — there is no
-   per-agent "graph not found" case; an agent simply has zero matching
-   entries (of either shape) until it writes one.
-
-   **A count delta between two census reads is a lead to attribute, not a
-   clearing defect to assume.** `PRODUCED.sessionId` names which coordination
-   wrote a node — `MATCH (a:Agent)-[p:PRODUCED]->(k) RETURN a.agentId,
-   p.sessionId` separates a concurrent writer's entries from this
-   coordination's own before you treat a moved figure as a miscount. Two
-   caveats keep it a lead rather than a verdict: `sessionId` is optional on
-   the producer-write shape and reads `null` on any entry whose writer
-   omitted it, and **inside a subagent `$CLAUDE_CODE_SESSION_ID` resolves to
-   the *parent* session, not the producing agent** — so the value identifies
-   *which coordination* captured an entry, never *which agent* or *which
-   unit*, and two units of the same coordination are indistinguishable by
-   this method alone. An agent whose unit cleared it to zero and that then
-   ran further sessions in the same coordination (its own gate review is
-   one) legitimately reads non-zero again. The exact instrument for telling
-   a refill from a miscount is the unit's **pinned `entryId` set** (the
-   brief/ledger): a survivor whose id is in it is the miscount; one outside
-   it is an arrival, whatever its clock says. Only when no pinned set exists
-   fall back to time, and then the clearing commit's timestamp
-   (`git show -s --format=%ci <sha>`) is an **upper bound** on the clear,
-   not the clear itself — the unit's gate runs between the clear and the
-   commit, so a gate-written entry legitimately pre-dates it; a survivor
-   dated before the commit is a lead only if its `context` names nothing in
-   that unit. Compare `createdAt`, never the day-granular `date`, and read
-   `createdAt` sceptically too: writers stamp placeholder midnights
-   (`…T00:00:00Z`) and mixed timezones. Worked example, including a mis-attribution this
-   caught and corrected: `claude/docs/plans/kaizen-distillation2-coordination.md`
-   (Follow-ups, "`$CLAUDE_CODE_SESSION_ID` resolves to the *parent* session
-   inside a subagent").
+   **The predecessor store's two reads (a legacy `author`-property query and
+   a post-M8 `PRODUCED`/`MENTIONS`-edge traversal against `kaizen_team`), its
+   truncated-cell paging discipline, and its `PRODUCED.sessionId`
+   census-delta technique are retired along with the graph itself** — deleted
+   (`claude/docs/plans/kaizen-team-retirement-coordination.md`) after the
+   third team-wide distillation pass drained it to zero entries
+   (`claude/docs/plans/kaizen-distillation3-coordination.md`). None of it
+   applies to a live pass any more; the Origin note at the end of this
+   section is the historical record, and
+   `claude/docs/plans/kaizen-distillation2-coordination.md` (Follow-ups) is
+   the worked example of the retired census-delta technique catching a
+   mis-attribution, kept for reference only.
 2. **Verify each entry** — is it still true? Re-check cheaply against the live
    system or docs; environment facts rot on upgrades. **Re-derive the fact
    yourself; don't just confirm the entry's cited evidence still exists at that
@@ -582,67 +481,28 @@ distills — on request, and folded into every certification pass (§4):
      reading it fresh would have no signal a backlog item already exists
      without this check). The raw entry itself does not survive being kept
      open past this pass — see step 4.
-   - **New (M8) — tag a `MENTIONS` edge when the entry is really about a
-     different agent.** If, during review, an entry (legacy or current-shape)
-     turns out to be substantively about an agent other than the one who
-     produced it, `cobb` tags it — this is `cobb`'s job during distillation
-     (FR-4), never the producing agent's:
-     ```cypher
-     MATCH (k:KaizenEntry {entryId: '<entry-id>'})
-     MERGE (a:Agent {agentId: '<mentioned-agent-slug>'})
-     MERGE (k)-[:MENTIONS]->(a)
-     ```
-     called as `mcp__cypher__query(graph='kaizen_team', cypher=<that text>,
-     agent='cobb')` — the `MENTIONS`-write curator shape
-     (`docs/plans/kaizen-agent-ontology-graph.md` §3). `MERGE` throughout: for
-     the `Agent` node, because the mentioned agent may never have produced an
-     entry itself (no node yet); for the edge itself, as a free idempotency
-     guard against double-tagging the same pair across two passes. A tagged
-     entry then surfaces again in the mentioned agent's own future
-     distillation pass (FR-5) — this applies equally to a legacy entry (once
-     read via the legacy query and judged to be about another agent) and a
-     current-shape one; tagging a legacy entry is not "retrofitting" it
-     (FR-2's no-retrofit rule is about the *producer* link, not about whether
-     a `cobb`-added reference edge can ever point at a pre-M8 node). **This
-     tag, if added, must land before step 4 runs for this same entry in this
-     same pass — see the ordering invariant in step 4's per-entry sequence
-     below (item 3); do not treat this tagging and step 4's count-and-decide
-     as reorderable or parallelizable.**
+   - **Cross-agent credit (`MENTIONS`, retired with `kaizen_team`).** The
+     predecessor store let `cobb` tag an entry as substantively about a
+     different agent via a curator-scoped `(:KaizenEntry)-[:MENTIONS]->
+     (:Agent)` edge. `ws:agent-team`'s `Document` model has no equivalent
+     (the "`MENTIONS`-equivalent tagging" note under step 5 below is the live
+     record of that gap). If a surviving entry is genuinely about a different
+     agent, fold the credit into the promotion's own prose at its routed
+     destination instead — there is currently no standing cross-agent
+     pointer mechanism to attach it to.
 4. **Log & clear.** Every disposition — promoted, discarded, or kept open —
    gets a dated entry in the agent's `history.md` (what, why, where it went,
    or why it's still open) — **the history entry (and, for a kept-open item,
    the `plan.md` backlog entry) is the durable record, not the raw capture
-   itself.**
-
-   Clearing a **legacy** entry (pre-M8, `author` property, no edges) is
-   unchanged: always the one curator-clear shape, unconditionally. Clearing a
-   **current-shape** entry (real `PRODUCED`/`MENTIONS` edges) is instead a
-   **read-then-decide** sequence, because the node may still be needed by an
-   edge nobody has resolved yet (FR-6, `docs/plans/kaizen-agent-ontology-graph.md`
-   §4). Clearing a **`ws:agent-team`** entry is a third shape again, closer in
-   spirit to the legacy case than the current-shape one: falkor-chat's
-   `Document`/`Chunk` model has no producer/mentions-edge analogue for `cobb`
-   to resolve first, so it runs unconditionally too, just via a different
-   tool (`delete_document`, below) — no read-then-decide, no count-what-
-   remains step. Concretely, for each entry being disposed of (promoted, discarded, or
-   kept open), for agent `<agent>`:
-   1. Read the raw entry (already done in step 1, or re-read by id) — the
-      legacy, current-shape, or `ws:agent-team` read as applicable.
+   itself.** Clearing a `ws:agent-team` entry is unconditional and
+   single-step: falkor-chat's `Document`/`Chunk` model carries no
+   producer/mentions-edge analogue for `cobb` to resolve first, so there is
+   no read-then-decide, no count-what-remains step — just log, then delete.
+   Concretely, for each entry being disposed of (promoted, discarded, or kept
+   open), for agent `<agent>`:
+   1. Read the raw entry (already done in step 1, or re-read by id).
    2. Verify it (step 2, above).
-   3. **Ordering invariant (load-bearing, not incidental — state this
-      explicitly, don't rely on step numbering alone):** if step 3 (above)
-      tagged *this* entry with a new `MENTIONS` edge during *this same pass*,
-      that write must be confirmed durably committed to the graph **before**
-      item 5's count-and-decide read (below) runs for this same entry. If the
-      count ran before a same-pass `MENTIONS` tag landed, `otherRemaining`
-      could read one edge short, and a full `DETACH DELETE` (item 5's
-      last-edge branch) could fire before the just-added `MENTIONS` edge was
-      ever attached — silently discarding the exact cross-agent link
-      FR-3/FR-4 exist to create, with no error raised, since a `DETACH DELETE`
-      on an already-gone timeline has nothing to complain about. A future
-      edit that reorders or parallelizes per-entry work for speed must not
-      violate this.
-   4. `Edit` `claude/<agent>/kaizen/history.md`, appending the disposition
+   3. `Edit` `claude/<agent>/kaizen/history.md`, appending the disposition
       (promoted/discarded/kept-open, with reasoning) in the existing format,
       and `plan.md` too if a backlog item is opened for a kept-open entry.
       Two mechanical self-checks on the entry before moving on: its header
@@ -655,104 +515,43 @@ distills — on request, and folded into every certification pass (§4):
       line-by-line diff read misses.
       **Confirm the edit(s) succeeded** before the next step — do not proceed
       on an error. **This append-before-mutate ordering is non-negotiable
-      regardless of disposition, and regardless of whether the next step is a
-      partial-edge or full-node clear**: the two writes are independent tool
-      calls, not one transaction, so append-then-mutate is the only sequence
-      that fails safe (a crash between the two leaves the entry harmlessly
-      duplicated, or only partially resolved, rather than silently lost).
-   5. Only then, mutate the graph:
-      - **Legacy entry** — the one recognized curator-clear shape,
-        unconditionally, unchanged from before M8:
-        `mcp__cypher__query(graph='kaizen_team', cypher="MATCH
-        (e:KaizenEntry {entryId: '<id>'}) DETACH DELETE e", agent='cobb')`.
-      - **Current-shape entry** — first count what remains
-        (`docs/plans/kaizen-agent-ontology-graph.md` §4.1):
-        ```cypher
-        MATCH (k:KaizenEntry {entryId: '<entry-id>'})
-        OPTIONAL MATCH (:Agent)-[p:PRODUCED]->(k)
-        OPTIONAL MATCH (k)-[m:MENTIONS]->(:Agent)
-        RETURN count(DISTINCT p) AS producedEdges, count(DISTINCT m) AS mentionEdges
-        ```
-        **A zero-row read on an `entryId` you believe exists is an id error
-        before it's an absence.** A UUID recalled from context (rather than
-        copy-pasted) can be misremembered on the suffix while the leading
-        characters read right — a sibling risk to two different entries
-        colliding on a shared 8-char prefix (`claude/docs/plans/
-        kaizen-distillation2-coordination.md`, U17) — same consequence: a
-        lookup that reads as *already gone* when it never existed as typed.
-        Before concluding the node was already cleared (by an earlier pass,
-        or a concurrent session), re-list the producer/mentions edges for
-        the entry you actually have in front of you and get the `entryId`
-        verbatim from that result, not from memory. **A sibling trap in the
-        same read:** `exists()` over a relationship pattern does not
-        reliably scope to the bound node — it can read `true` for a node
-        with zero matching edges even when the node appears directly in the
-        pattern (`claude/graph-dba/falkordb-quirks.md`, "Cypher dialect &
-        query behavior"). Always use the `OPTIONAL MATCH` + `count()` form
-        above, never `exists()`, to check what edges remain. Compute
-        `otherRemaining = producedEdges + mentionEdges - 1` (subtracting the
-        one edge this pass is about to resolve), then either resolve just
-        that one edge or clear the whole node:
-        - **Resolving `PRODUCED`** (the producing agent's own pass) — always
-          resolve it, regardless of `otherRemaining` (FR-6, AC-4):
-          `MATCH (:Agent)-[p:PRODUCED]->(k:KaizenEntry {entryId: '<id>'})
-          DELETE p`.
-        - **Resolving one `MENTIONS` edge** (that mentioned agent's own pass)
-          — resolve only that one edge, regardless of `otherRemaining` (AC-3):
-          `MATCH (k:KaizenEntry {entryId: '<id>'})-[m:MENTIONS]->
-          (:Agent {agentId: '<mentioned-agent-slug>'}) DELETE m`.
-        - **If `otherRemaining == 0`** (this was the last edge — nothing else
-          points at the node), delete the whole node instead of just the one
-          edge — the same unchanged curator-clear shape as the legacy case:
-          `MATCH (k:KaizenEntry {entryId: '<id>'}) DETACH DELETE k` (removes
-          only `k`'s own incident edges and `k` itself; the `Agent` node(s) on
-          the other end are never deleted).
-      - **`ws:agent-team` entry** — one call, unconditional, no Cypher and no
-        count-what-remains step: `mcp__falkor-chat-agent-team__delete_document
-        (document_id)` — a real hard delete
-        (`document-ingestion2` FR-4). **Live-verified 2026-09-18**: a
-        disposable test document (title prefixed `[Stage 5 hook verification,
-        disposable]`, never one of the two real pilot documents) round-tripped
-        `ingest_document` → `get_document` (text back verbatim) →
-        `delete_document` (`{"deleted": true}`) → `get_document` on the same
-        id (`None`) and absent from a follow-up `list_documents()` — matching
-        the tool's own documented contract exactly. Item 3's same-pass
-        ordering invariant (land a `MENTIONS` tag before the count-and-decide
-        read) does not apply to this shape: falkor-chat's `Document` model
-        carries no `MENTIONS`-equivalent edge for `cobb` to tag in the first
-        place — that gap is named and left open by the parent plan
-        (`agent-knowledge-base-strategy.md` §5, Track 2 Stage 9 bullet), not
-        resolved here.
-        All of the `kaizen_team` Cypher shapes above (legacy, and the
-        current-shape entry's `PRODUCED`-resolve/`MENTIONS`-resolve/full-node
-        variants) are curator-gated; `cobb` is a recognized curator agent
-        (`CYPHER_MCP_CURATOR_AGENTS`), so each is authorized when called with
-        `agent='cobb'`. **One call per `entryId`, never batched:** `UNWIND
-        [...] AS eid MATCH (k:KaizenEntry {entryId: eid}) DETACH DELETE k`
-        over several ids is rejected outright by the authorizer (it matches
-        none of the six recognized shapes) — clearing several `kaizen_team`
-        entries means issuing the single-id `DETACH DELETE` form above once
-        per `entryId`, not batching them. The `ws:agent-team` shape just
-        described carries no analogous curator-authorization gate —
-        `delete_document` is a plain MCP tool call, explicit-id-only by its
-        own contract (never automatic, never batched), not a Cypher shape the
-        `cypher` MCP server's authorizer inspects.
+      regardless of disposition**: `Edit` and `delete_document` are
+      independent tool calls, not one transaction, so append-then-mutate is
+      the only sequence that fails safe (a crash between the two leaves the
+      entry harmlessly duplicated rather than silently lost).
+   4. Only then, clear it: `mcp__falkor-chat-agent-team__delete_document
+      (document_id)` — a real hard delete (`document-ingestion2` FR-4),
+      unconditional, explicit-id-only by its own contract (never automatic,
+      never batched). **Live-verified 2026-09-18**: a disposable test
+      document (title prefixed `[Stage 5 hook verification, disposable]`,
+      never one of the two real pilot documents) round-tripped
+      `ingest_document` → `get_document` (text back verbatim) →
+      `delete_document` (`{"deleted": true}`) → `get_document` on the same
+      id (`None`) and absent from a follow-up `list_documents()` — matching
+      the tool's own documented contract exactly.
 
    This runs for **every** disposition, kept-open included — an unresolved
    question lives on in `history.md`'s dated note (and `plan.md` if
-   actionable), not by leaving a live node (or live edge) sitting in the graph
-   next to entries nobody has reviewed yet. The graph is working memory for
-   capture **not yet reviewed**, not a permanent store for reviewed-but-still-
-   unresolved questions. (Decided 2026-08-18, `analyst`-gated review of
+   actionable), not by leaving a live, unreviewed document sitting in
+   `ws:agent-team` next to entries nobody has reviewed yet. The store is
+   working memory for capture **not yet reviewed**, not a permanent store for
+   reviewed-but-still-unresolved questions. (Decided 2026-08-18 for the
+   predecessor store — `analyst`-gated review of
    `docs/reviews/graph-dba-kaizen-distillation.md`, piloted on `graph-dba`
-   before the 2026-08-20 team-wide migration; extended to the partial-edge
-   case by M8, `docs/plans/kaizen-agent-ontology.md` §3.3/Finding 2 — the
-   alternative of leaving a partially-resolved node's remaining edges live as
-   a standing "still unresolved" marker was not reopened, same reasoning as
-   the original decision: nothing reads the graph for that signal that
-   `history.md`/`plan.md` don't already serve just as well.)
-   Promotion into a prompt or catalog is a normal agent edit: full §1/§2
-   bookkeeping applies.
+   before the 2026-08-20 team-wide migration — and carried over unchanged
+   onto `ws:agent-team` at the 2026-09-19 cutover: nothing reads either store
+   for a "still open" signal that `history.md`/`plan.md` don't already serve
+   just as well.) Promotion into a prompt or catalog is a normal agent edit:
+   full §1/§2 bookkeeping applies.
+
+   **The predecessor store's clearing mechanics are retired along with
+   `kaizen_team` itself** — its unconditional legacy-entry `DETACH DELETE`,
+   its read-then-decide partial-edge resolution for a post-M8
+   `PRODUCED`/`MENTIONS`-edge entry (count what remains, resolve one edge or
+   the whole node), and the curator-authorization gate
+   (`CYPHER_MCP_CURATOR_AGENTS`) those Cypher shapes ran under. The graph is
+   deleted (`claude/docs/plans/kaizen-team-retirement-coordination.md`); the
+   Origin note at the end of this section is the historical record.
 5. **Sync `ws:agent-team` after a KB `.md` file edit** (Track 2 Stage 9,
    `claude/docs/plans/agent-knowledge-base-strategy.md` §4.5/§5, closing item
    c). Fires whenever step 3 routes a promotion to "An on-demand knowledge
@@ -932,14 +731,14 @@ distills — on request, and folded into every certification pass (§4):
    **`MENTIONS`-equivalent tagging stays an open item, not solved here.**
    `ws:agent-team`'s `Document` model has no edge for crediting a second
    agent a KB claim substantively concerns — falkor-chat has no analogue to
-   `kaizen_team`'s `(:KaizenEntry)-[:MENTIONS]->(:Agent)` edge, and the plan
+   the predecessor store's `(:KaizenEntry)-[:MENTIONS]->(:Agent)` edge
+   (retired along with `kaizen_team` itself, deleted per
+   `claude/docs/plans/kaizen-team-retirement-coordination.md`), and the plan
    explicitly leaves this open
    (`agent-knowledge-base-strategy.md` §5, Track 2 Stage 9 bullet). If a KB
    claim genuinely needs that credit, express it in the claim's own prose (as
-   today), or, if a standing cross-agent pointer is truly needed, write it as
-   a `kaizen_team` `:KaizenEntry` with a curator `MENTIONS` tag instead —
-   `kaizen_team` keeps running in parallel for exactly this gap (§3). Do not
-   invent a `ws:agent-team`-native workaround for it.
+   today) — there is currently no standing cross-agent pointer mechanism to
+   fall back to. Do not invent a `ws:agent-team`-native workaround for it.
 
 > Origin: 2026-07-12 — the user asked how the agents could self-improve from
 > what they learn exploring their areas; the answer generalized graph-dba's
@@ -997,7 +796,17 @@ distills — on request, and folded into every certification pass (§4):
 > only after a match, and a mismatch leaves the entry exactly as it was at
 > the top of the recovery attempt, so a future pass safely re-enters this
 > same ambiguous-`None` branch rather than the upstream unconditional-delete
-> one.
+> one. **2026-09-20 (`kaizen-distillation3-coordination`):** the third
+> team-wide distillation pass drained `kaizen_team` to zero `KaizenEntry`
+> nodes — every agent's queue cleared, with the deletion decision left open
+> to the user. **Same day (`kaizen-team-retirement-coordination`):** the
+> user confirmed the deletion; `devops` ran `GRAPH.DELETE kaizen_team`
+> against the shared `falkordb-dev` instance, independently reverified by
+> `teco`. In the same sweep, this section's legacy-graph mechanics — the two
+> `kaizen_team` reads in step 1, the `MENTIONS`-tag write formerly in step
+> 3, and the legacy/current-shape clearing shapes in step 4 — were retired
+> from the live procedure: `ws:agent-team` is now the sole live source, end
+> to end, for every read, write, and clear this section describes.
 
 ---
 

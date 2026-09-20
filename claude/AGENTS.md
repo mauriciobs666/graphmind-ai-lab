@@ -22,18 +22,15 @@ This directory (`claude/`) holds custom Claude Code subagents.
   `produced_by` must be the writer's own, already-seeded `Agent.agentId` (this roster, kept
   current via `seed_agent_team.sh`) — an unresolvable id raises `AgentNotFoundError` loudly, never
   a silent fallback. Reread with `list_documents`/`get_document` on the same MCP server, or a
-  direct `mcp__cypher__query` read against `ws:agent-team`. **`kaizen_team` is no longer a live
-  write target for any agent** — the shared graph, `:KaizenEntry` nodes via `mcp__cypher__query`,
-  stays available unchanged and not decommissioned, holding only whatever any agent wrote there
-  before this cutover; nothing existing there needs migrating (this cutover's own no-retrofit
-  rule). Historical, pre-M8 `kaizen_team` entries may still carry only a plain `author` property
-  and no edges.
+  direct `mcp__cypher__query` read against `ws:agent-team`. **`kaizen_team`, the pre-cutover
+  shared FalkorDB graph, is deleted** (`claude/docs/plans/kaizen-team-retirement-coordination.md`)
+  — `ws:agent-team` is the sole live raw-capture store, for every agent, with no entry left to
+  migrate (this cutover's own no-retrofit rule; the prior pass had already drained it to zero,
+  `claude/docs/plans/kaizen-distillation3-coordination.md`).
 - **Distillation** — `cobb` periodically verifies each entry, routes it (agent prompt /
   knowledge base / project docs / discard), logs the promotion in that agent's `history.md`, and
-  clears it. Procedure: `agent-maintenance` skill §5, which now reads/clears **both** sources in
-  parallel — `kaizen_team`'s curator-scoped `DETACH DELETE` (unchanged), and, for an entry produced
-  against `ws:agent-team` under the pilot above, `list_documents`/`get_document` to review and
-  `delete_document` to clear.
+  clears it. Procedure: `agent-maintenance` skill §5, which reads/clears `ws:agent-team` via
+  `list_documents`/`get_document` to review and `delete_document` to clear.
 - **Skills do not live here** — their home is the repo-root [`skills/`](../skills/) (see
   [`skills/README.md`](../skills/README.md)); cobb's `agent-maintenance`, `agent-standards`, and
   `agent-kb-retrieval` skills are there. `agent-kb-retrieval` holds the exact query-instruction

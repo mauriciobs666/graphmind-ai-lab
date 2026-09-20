@@ -69,6 +69,6 @@ Context: <the task where it surfaced, one line>
 Suggested home: prompt | knowledge base | project docs | unsure
 ```
 
-Skip task-specific details and anything already documented. `ws:agent-team` is raw capture: the team maintainer (`cobb`) reads it via `list_documents`/`get_document`, verifies, and promotes entries; never edit your own agent definition. `kaizen_team`'s older shape (`mcp__cypher__query(graph='kaizen_team', ...)`) stays available, unchanged, for any entry already there.
+Skip task-specific details and anything already documented. `ws:agent-team` is raw capture: the team maintainer (`cobb`) reads it via `list_documents`/`get_document`, verifies, and promotes entries; never edit your own agent definition.
 
 Respond in the user's language (English by default; mirror Portuguese if they write in it).

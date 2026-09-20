@@ -17,8 +17,10 @@ The team keeps two kinds of knowledge in one place — a dedicated `falkor-chat`
 **`ws:agent-team`**:
 
 - **Raw kaizen capture** — every agent's day-to-day "here's something I learned" note, written
-  the moment it's learned. This used to live only in a separate graph (`kaizen_team`); it still
-  does, in parallel, but every agent's writes have moved to `ws:agent-team` as of 2026-09-19.
+  the moment it's learned. This used to live only in a separate graph (`kaizen_team`); every
+  agent's writes moved to `ws:agent-team` as of 2026-09-19, and `kaizen_team` itself was fully
+  distilled and deleted on 2026-09-20 — it's no longer part of this system at all, live or
+  historical (see the FAQ below if you're wondering what happened to what was in it).
 - **Distilled knowledge** — the curated, "this is worth remembering" version `cobb` produces by
   reviewing raw capture over time. It still lives first as git-tracked Markdown files (each
   agent's own on-demand knowledge-base file); those files get *ingested* into `ws:agent-team` too,
@@ -257,10 +259,18 @@ unresolved id, not the exception name or an explanation) — if you see a failur
 check that `produced_by` is spelled correctly and that the team roster has been re-seeded since
 this agent was added (`seed_agent_team.sh`) before assuming something else is wrong.
 
-**"Why does `kaizen_team` (the old graph) still exist? Is my old data lost?"** No — `kaizen_team`
-was never decommissioned and keeps running in parallel; every agent's *new* writes just go to
-`ws:agent-team` instead, as of 2026-09-19. Nothing already in `kaizen_team` was migrated there,
-and nothing needs to be — that's a deliberate scope decision, not a gap.
+**"What happened to `kaizen_team` (the old graph)? Is my old data lost?"** `kaizen_team` was the
+system's original home for raw kaizen capture, before every agent's writes moved to
+`ws:agent-team` on 2026-09-19. It was retired at that point but deliberately left running
+unchanged rather than migrated — nothing in it needed to move, because `cobb`'s ordinary
+distillation duty (see "Distilled knowledge," above) had already been working through it in
+place, same as it does for `ws:agent-team` today: reviewing each raw entry, routing anything
+worth keeping into an agent prompt, an on-demand knowledge base, or project docs, and only then
+clearing the entry. By 2026-09-20 that process had fully drained it — every entry it ever held had
+already been reviewed and either promoted or discarded, across three distillation passes — so the
+graph itself was deleted as a pure infrastructure cleanup. Nothing was lost in that deletion: any
+raw entry actually worth keeping is already git-committed wherever `cobb` routed it, not sitting
+only in a graph. `kaizen_team` no longer exists in any form, live or dormant.
 
 **"I just wrote a document, and `list_documents` doesn't show it."** `list_documents` is genuinely
 oldest-first, with a default `limit=50` — on a workspace whose corpus has grown into the hundreds

@@ -119,4 +119,4 @@ Context: <the task where it surfaced, one line>
 Suggested home: prompt | knowledge base | project docs | unsure
 ```
 
-Skip task-specific details and anything already documented — a fact about *a project* belongs in that project's docs, flagged in your report, not in this workspace. `ws:agent-team` is raw capture: the team maintainer (`cobb`) reads it via `list_documents`/`get_document`, verifies, and promotes entries; never edit your own agent definition. `kaizen_team`'s older shape (`mcp__cypher__query(graph='kaizen_team', ...)`) stays available, unchanged, for any entry already there.
+Skip task-specific details and anything already documented — a fact about *a project* belongs in that project's docs, flagged in your report, not in this workspace. `ws:agent-team` is raw capture: the team maintainer (`cobb`) reads it via `list_documents`/`get_document`, verifies, and promotes entries; never edit your own agent definition.
