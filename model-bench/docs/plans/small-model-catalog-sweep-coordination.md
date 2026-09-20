@@ -61,8 +61,9 @@ both reviewers.
 | U3c | `coder` | `a20f36e22226f0479` | delivered | `scripts/consolidate_sweep_reports.py` (plan Unit C, fixture-built, parallel to U3a) | `analyst` (light) → in-flight | 158.9k tok / 26 tools |
 | U4c | `analyst` (fresh) | `ac2c3f299cd822b87` | accepted | `docs/reviews/small-model-catalog-sweep-impl.md` (own `-impl` doc, not a section of the plan review — analyst's own correct call per the closed role set) | `analyst` → **approve** (2 non-blocking: a `main()`-level test gap, HISTORY.md entry deferred) | 120.8k tok / 31 tools |
 | U5 | `devops` | `aa7e668860b23a794` | delivered | 68-run sweep, session `catalog-sweep-2026-09-19`, `results/runs/` (committed `00f3b83`) | `teco` (independent re-verification, no specialist gate — data-collection execution, not design/code) → **confirmed**: file counts match exactly, 0 failures | 161.5k tok / 60 tools (across 3 resumes, ~10.4h wall incl. LM Studio runtime) |
-| U6 | TBD | — | queued | five per-pack reports via `rank` (needs U3a+U3b gated, U5 data) | `analyst`/`data-scientist` → — | — |
-| U7 | TBD | — | queued | consolidated document via U3c's script (FR-9/FR-10) | `analyst` (+`qa-engineer` if it has walkthrough claims) → — | — |
+| U6 | `qa-engineer` | `a7d1766672e6f8dca` | delivered | `docs/test-reports/small-model-catalog-sweep-report.md`, `footprints.json`, 5 reports (4 clean, 1 defective) | `teco` (independent re-verification: confirmed defect against raw run data + row counts on all 5) → **defect confirmed, real** | 192.8k tok / 51 tools |
+| U6-fix | `tdd-engineer` | `a59c9478f8c3c4d1d` | in-flight | `report.py` fix for the n=0-vs-no-run conflation (Defect 1) + regenerated reports | `analyst`+`data-scientist` → — | — |
+| U7 | TBD | — | queued, blocked on U6-fix | consolidated document via U3c's script (FR-9/FR-10) | `analyst` (+`qa-engineer` if it has walkthrough claims) → — | — |
 
 Status legend: `queued` · `in-flight` · `delivered` · `gated` · `accepted` · `abandoned` · `paused`.
 
