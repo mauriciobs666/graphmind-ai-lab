@@ -196,13 +196,23 @@ Two optional flags change what the table can claim:
   row. Leave it off and the table states only descriptive intervals — no verdict column, no p-value
   anywhere. Naming a model with no stored result for this pack is a usage error (exit `2`) —
   nothing is written.
-  > ⚠️ **Known bug:** `--reference` currently crashes (exit `2`, an internal error naming
-  > `scored_value`) against any pack whose headline metric is *continuous* rather than a plain
-  > success/failure rate — `embedder-graphrag-retrieval`'s `mrr` is exactly this case, so
-  > `./run.sh rank --pack embedder-graphrag-retrieval --reference <key>` does not work today. It's
-  > fine on a boolean-outcome pack (e.g. `guard-judge-understanding`). Until this is fixed, use
-  > `compare` instead for a reference-style question against a continuous-metric pack — `compare`
-  > already handles `mrr` correctly.
+
+  This works the same way on a *continuous* headline metric (e.g. `embedder-graphrag-retrieval`'s
+  `mrr`) as on a boolean one (e.g. `guard-judge-understanding`) — same command, same idea (a
+  per-candidate diff, interval, and decision against the named reference). The continuous table
+  itself is a touch simpler (no per-row Holm threshold column — every candidate is decided at the
+  same family-wide `alpha_used`, printed once above the table: `alpha_family=0.05, k=4,
+  alpha_used=0.0125 (98.75% CI)` for a 4-candidate family, say):
+
+  ```bash
+  ./run.sh rank --pack embedder-graphrag-retrieval --reference bm25
+  ```
+
+  A candidate with no paired data against the reference reads `no verdict — no paired data` rather
+  than being silently dropped (true on either metric kind); a continuous-metric family adds one
+  more state, `no verdict — one paired unit`, for a candidate with exactly one pair — too few to
+  form an interval from. Neither is an error — both just mean this particular candidate has no
+  comparison to make against this reference model with what's stored so far.
 - **`--footprints <path.json>`** — a flat `{"<modelKey>": "<display string>"}` map, e.g.
   `{"qwen/qwen3-4b-2507": "4B, Q4_K_M, 2.4 GB"}`, rendered verbatim in its own column. A missing or
   malformed value just shows as a dash or its raw string — never parsed as a number; a malformed
@@ -305,8 +315,8 @@ before touching production data.
 than B for this job?"). `rank` is for "how does everything I've already tested stack up?" — one
 table across every model with a stored result, and it's the only one of the two that can name a
 single `--reference` model and get corrected verdicts against the whole rest of the field at once
-— **except on a continuous-metric pack like `embedder-graphrag-retrieval`, where `--reference`
-currently crashes; use `compare` there instead** (see the callout in Walkthrough 7a).
+— on any pack, continuous headline metric (e.g. `embedder-graphrag-retrieval`'s `mrr`) or boolean
+one alike (see Walkthrough 7a).
 
 **What are all the exit codes?** `0` — ran and reported, whatever the scores (a `compare`/`rank`
 that finds every stored record invalid still exits `0`; that's a report, not a failure). `2` — bad
