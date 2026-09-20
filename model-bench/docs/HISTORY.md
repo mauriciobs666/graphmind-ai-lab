@@ -2,6 +2,155 @@
 
 > Dated log of actual changes to the `model-bench` component. Most recent first.
 
+## 2026-09-20 — U187 — catalog-sweep closed: consolidated document, final gate, requirements scope lock
+
+**What:** `data-scientist` assembled `reports/catalog-sweep-2026-09-19-consolidated.md` (FR-9/
+FR-10) from the five gated `*-rank-20260920-02.md` reports: a resolving-power table and an index
+table (both verbatim copies of each source report's own sentence/marker line, zero arithmetic
+across packs), plus five narrative "insights and recommendations" sections (embedder, guard-judge,
+nlq-generator, tool-caller, chat-responder), each grounded only in its own pack's data. `teco`
+independently verified the index byte-for-byte against the source marker lines and reproduced the
+claimed guard-judge polarity sign-flip with real arithmetic before accepting.
+
+Final gate (`analyst`, Pass 3) found one **MAJOR**: the guard-judge section misattributed its
+reference-anchored family table's sign-reversed diff column to the known, unrelated
+`stats.verdict()` polarity-blind-wording defect already in `docs/BACKLOG.md`, when the real cause
+is `report.py`'s own deliberate, correct `_polarity_corrected` handling for `_LOWER_IS_BETTER`
+metrics — and, as a result, silently discarded 10 real Holm-confirmed "distinguishably worse than
+the reference" findings (2 on `falseAdvanceRate`, 8 on `falseSuspendRate`) from the section's own
+recommendation. One **MINOR**: the embedder section's "3-4x lower p95 latency" undersold
+`granite-embedding-278m-multilingual`'s actual ~4.6x speedup. `data-scientist` rewrote the
+guard-judge section with the correct mechanism and the 10 Holm-confirmed findings folded in
+(re-ranking `qwen/qwen3-4b-2507` as the certified-stronger pick — Holm-confirmed better than 10
+rivals on at least one axis, worse than none — vs. `nvidia/nemotron-3-nano-4b`, which stays a
+plausible but never-actually-tested second option), and fixed the embedder wording to "3-5x."
+Pass 4 (`analyst`): approve, explicit stopping signal — both findings independently re-verified
+(both family tables recounted row-by-row: 2 + 8 = 10 distinguishable rows, no overlap; `55/17≈3.2x`
+and `55/12≈4.6x` recomputed). Committed `c81e4c8e` (consolidated document + review document
+together).
+
+The requirements doc (`docs/requirements/small-model-catalog-sweep.md`) went through four
+stakeholder-driven scope amendments over the course of this coordination before locking: two
+embedding-model additions (`granite-embedding-278m-multilingual`, then
+`text-embedding-qwen3-embedding-4b`), a stakeholder-resolved internal contradiction present since
+the document's first commit (its Chat/VLM bullet list held 18 models throughout while the summary
+line/FR-2/AC math said 17 — ruled 18, correct, by the stakeholder directly), and dropping two
+unofficial 9B community finetunes on functional-risk grounds. Final locked scope: 20 models (4
+embedding + 16 chat/vlm), 68 total runs — matching what U186 below actually ran. Coordination fully
+closed: every row in `docs/plans/small-model-catalog-sweep-coordination.md`'s ledger is
+accepted/gated-closed; the requirements doc, the implementation plan, both review documents, and
+the test-report document are all `Status: archived`.
+
+## 2026-09-20 — U186 — catalog-sweep Track B: 68-run live sweep, five ranked reports, n=0-exclusion defect wave
+
+**What:** `devops` ran the live sweep against the coordination's final locked scope (20 models — 4
+embedding + 16 chat/vlm — across the applicable packs), session `catalog-sweep-2026-09-19`: 68 runs
+attempted, 0 operational failures. Stored-file count independently re-verified (`teco`): 72 files
+under the session tag (68 real runs + 4 auto BM25 reference-arm records the embedder pack always
+stores alongside an embedding run), all 16 chat/vlm models present in each of the 4 chat-role packs,
+all 4 embedding models present, neither of the two dropped unofficial 9B finetunes present anywhere.
+Flagged, not fixed: `prism-ml/bonsai-27b` is a severe latency outlier (12–42 min per pack vs.
+low-single-digits for the 3–4B models). Committed `00f3b83`.
+
+`qa-engineer` then rendered `footprints.json` and the five per-pack `rank` reports (`./run.sh
+rank`), and ran an acceptance pass against FR-6–FR-12/AC-3/AC-4
+(`docs/test-reports/small-model-catalog-sweep-report.md`): four of five reports pass cleanly;
+`nlq-structured-query` has a real FR-6 violation (**Defect 1**) — `rank_report`'s ranked table
+silently omitted `qwen/qwen3-4b-thinking-2507` and `stable-code-instruct-3b`, both genuine stored
+runs with a real, internally-consistent `n=0` aggregate (100% item parse-failure), with no banner
+or mention anywhere in the report — a real `n=0` aggregate rendered identically to "no aggregate
+declared at all." `teco` independently confirmed the defect against raw run data and row counts on
+all five reports.
+
+`tdd-engineer` fixed it in two rounds. **Round 1:** new `_zero_n_arms`/`_rank_zero_n_lines` plus a
+one-line `_metric_value` guard name and exclude a real `n=0` aggregate rather than silently
+dropping it, provably mutually exclusive with the pre-existing `INVALID RESULTS EXCLUDED` banner.
+Gate: `analyst` → approve with 2 minor suggestions (own lens clean); `data-scientist` → needs
+changes — a real, reproduced **MAJOR**: the new banner's own "N item(s) attempted" count used
+`len(r.items)` (the run's *entire* stored item list) rather than the metric-specific count, wrong
+for any pack whose items span more than one verdict metric — reproduced against real guard-judge
+production data (the only shipped multi-verdict-metric pack), overstating the count by 75% (70
+reported vs. the true 40-item split for `falseAdvanceRate`). **Round 2:** new
+`_attempted_for_metric` helper (deliberately not the reviewer's literal one-line suggestion, which
+would have misread `nlq`'s real parse-failure shape — `scoreable == {}` — as "0 items attempted")
+plus 3 new tests. Both rounds independently confirmed by `teco` (diff review, own mutation test via
+`git stash`, full suite rerun) and gated: `analyst` + `data-scientist` → both approve, explicit
+stopping signal.
+
+Both gate rounds independently converged on one further real-but-not-live-affecting gap, logged to
+`docs/BACKLOG.md` rather than blocking: `_attempted_for_metric`'s "declares nothing at all"
+fallback cannot distinguish which of a run's several verdict metrics a fully-empty
+(`scoreable == {}`) item belonged to once a total/partial outage produces such items spanning more
+than one metric on the same run (guard-judge, the only pack with two verdict metrics sharing one
+run's items) — confirmed absent from all 17 stored guard-judge records to date.
+
+**Verification:** Round 1 fix — `.venv/bin/python -m pytest -q` → `1775 passed, 3 deselected` (up
+from 1774). Round 2 fix — `1778 passed, 3 deselected`. `.venv/bin/ruff check .` → `All checks
+passed!` both rounds. Four of the five regenerated `*-rank-20260920-02.md` reports are
+byte-identical to their pre-fix versions; `nlq-structured-query`'s gains exactly the expected
+banner. (`docs/test-reports/small-model-catalog-sweep-report.md`;
+`docs/reviews/small-model-catalog-sweep-impl.md`, "Defect fix code gate" and "Defect 1 fix —
+`rank_report`'s n=0 exclusion banner (`data-scientist`, methodology gate)"; `docs/BACKLOG.md`.)
+
+## 2026-09-20 — U185 — catalog-sweep Unit C: `scripts/consolidate_sweep_reports.py` (`coder`)
+
+**What:** A ~270-line assembler (plan Unit C, FR-9/FR-10) that stitches the five per-pack `rank`
+reports' own `<!-- rank-report: ... -->` marker comment lines — one per rendered table, six across
+the five files since `guard-judge-understanding` has no single headline metric and renders two
+tables/markers — into one consolidated index, with zero arithmetic performed across packs (FR-9's
+hard rule: every `RankMarker` field is typed `str`, only ever f-string-interpolated, never parsed
+as a number). Explicit `--reports` file paths only, never glob-discovered, matching
+`scripts/refresh_golden.py`'s existing house style.
+
+**Gate:** `analyst` (light-touch, fixture-based per the plan's own framing) → approve. The
+no-cross-pack-arithmetic invariant was independently verified by construction, not by trusting the
+implementer's own mutation report: the reviewer monkeypatched `_index_table` in-process (no
+repository file touched) to inject a genuine cross-pack sum, confirmed the real test
+`test_assembler_never_combines_two_packs_values` fails against the mutant and passes clean against
+the shipped code. One minor (the unknown-pack refusal path, pinned at the function level only, not
+through `main()` — the reviewer drove it through the CLI directly and confirmed the wiring is
+correct today, just unpinned) deferred as a follow-up, not gating.
+
+**Verification:** `.venv/bin/python -m pytest -q tests/test_consolidate_sweep_reports.py` → `16
+passed` (16 new tests). `.venv/bin/ruff check scripts/consolidate_sweep_reports.py
+tests/test_consolidate_sweep_reports.py` → `All checks passed!`. Committed `acb7e5e` (together with
+its `-impl.md` gate section). (`docs/reviews/small-model-catalog-sweep-impl.md`, §1–5.)
+
+## 2026-09-20 — U184 — catalog-sweep Unit A: `rank_report()`/`stats.py` core (`tdd-engineer`)
+
+**What:** Built the new report-generation core FR-6–FR-12 need — a per-pack **ranked** comparison
+across every in-scope arm (not the existing `compare_report`'s fixed two), plus an optional
+pre-registered, reference-anchored Holm–Bonferroni family (FR-8) — resolving the architect's plan
+blocker (`docs/reviews/small-model-catalog-sweep.md` §2.1): `stats.verdict()` gained
+`correction_k: int | None = None`, decoupling the Holm-step-count divisor from `family`'s own
+length (`family` now serves membership-checking only). Also landed `data-scientist`'s Pass 1/Pass 2
+methodology findings: Q1 (`mean_bootstrap_interval` clamps directly to the metric's own support,
+sharing one resample engine, `_bootstrap_means`, with `paired_bootstrap` rather than a second
+implementation) and Q3 (guard-judge's two verdict metrics run through **one** combined Holm ladder,
+`correction_k = len(family) * len(candidates)`, not two independent ladders that would
+under-correct the true family-wise error rate).
+
+Gate round 1 found a real defect in Q4's resolving-power sentence (`data-scientist`, needs
+changes): `_rank_resolving_power_lines` pooled guard-judge's two verdict metrics' differing item
+counts (40 for `falseAdvanceRate`, 30 for `falseSuspendRate`) into one `n_units = max(ns)`, silently
+applying the better metric's resolving power to both — reproduced against the pack's real
+asymmetric shape, understating `falseSuspendRate`'s true MDD by 7.7 percentage points. Fixed by
+restructuring the function to print one published+hypothetical resolving-power sentence pair per
+member of `family`, called from inside `rank_report`'s existing per-metric loop. The same fix round
+also landed two of `analyst`'s own minor findings: a `headlineMetric ∈ verdictMetrics` guard
+mirroring `compare_report`'s own (`rank_report` previously had none), and a fixture pinning Rule 7's
+floor at the new candidate-axis `correction_k` scale.
+
+**Gates:** `analyst` → approve with suggestions (round 1, general code-correctness; both round-2
+suggestions confirmed landed and mutation-independently reproduced round 2); `data-scientist` →
+needs changes (round 1, the `n_units` defect) → approve (round 2, fix confirmed correct against the
+pack's real 40/30 split, mutation-reproduced). Both explicit stopping signals.
+
+**Verification:** `.venv/bin/python -m pytest -q` → `1757 passed, 3 deselected` (round 1) →
+`1760 passed, 3 deselected` (round 2, 3 new tests). `.venv/bin/ruff check .` → `All checks passed!`
+both rounds. Committed `b605bed`. (`docs/reviews/small-model-catalog-sweep-impl.md`, "Unit A
+Implementation Review" + "Unit A — statistical validity".)
+
 ## 2026-09-19 — U183 — catalog-sweep Unit B: `rank` CLI wiring (`coder`)
 
 **What:** Wired Unit A's already-gated `report.rank_report()` (`docs/plans/small-model-catalog-

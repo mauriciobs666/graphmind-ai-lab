@@ -1,6 +1,6 @@
 # Small-Model Catalog Sweep — Report-Generation Plan Review
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (M9)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — (M9)
 
 ## 1. Scope & verdict
 

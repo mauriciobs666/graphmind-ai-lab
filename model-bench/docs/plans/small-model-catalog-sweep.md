@@ -1,6 +1,6 @@
 # Small-Model Catalog Sweep — Implementation Plan
 
-> **Status:** active · **Owner:** `architect` · **Tracks:** — (M9) · **Version:** 2
+> **Status:** archived · **Owner:** `architect` · **Tracks:** — (M9) · **Version:** 2
 
 **2026-09-19 revision:** addressed `analyst`'s and `data-scientist`'s "needs changes" reviews
 (`docs/reviews/small-model-catalog-sweep.md`, `docs/reviews/small-model-catalog-sweep-ml.md`) —

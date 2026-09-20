@@ -1,6 +1,6 @@
 # Small-Model Catalog Sweep — Test Report
 
-> **Status:** active · **Owner:** `qa-engineer` · **Tracks:** — (M9)
+> **Status:** archived · **Owner:** `qa-engineer` · **Tracks:** — (M9)
 
 ## Summary
 

@@ -1,5 +1,5 @@
 # Small-Model Catalog Sweep — Feature Requirements
-> **Status:** Ready for design · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-09-19
+> **Status:** archived · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-09-19
 
 ## Intent
 

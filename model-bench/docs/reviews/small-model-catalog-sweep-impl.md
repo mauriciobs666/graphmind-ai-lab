@@ -1,6 +1,6 @@
 # Small-Model Catalog Sweep — Unit C Implementation Review (`consolidate_sweep_reports.py`)
 
-> **Status:** active · **Owner:** `analyst` · **Tracks:** — (M9)
+> **Status:** archived · **Owner:** `analyst` · **Tracks:** — (M9)
 
 **Filename note:** the dispatching brief asked for this to land as a new section inside the
 existing `docs/reviews/small-model-catalog-sweep.md` (the plan review). I deviated: that document

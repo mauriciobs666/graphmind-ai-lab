@@ -1,6 +1,6 @@
 # Small-Model Catalog Sweep — Coordination
 
-> **Status:** active · **Owner:** `teco` · **Tracks:** — (M9)
+> **Status:** archived · **Owner:** `teco` · **Tracks:** — (M9)
 
 Requirements: `model-bench/docs/requirements/small-model-catalog-sweep.md` (Status: Ready for
 design, `tico`). Its own Decision log assigns execution ownership to `teco`: dispatch whoever runs
@@ -55,10 +55,10 @@ both reviewers.
 | U4a | `analyst` (resume) | `a5aa07976df6f4a5d` | gated | code-gate, `-impl.md` new section | `analyst` → **approve w/ suggestions** (own lens clean; defers to U4a-ds's needs-changes as the binding verdict) | 295.1k tok / 39 tools |
 | U3ar | `tdd-engineer` (resume) | `a24170310c31e20de` | accepted | Unit A fix: Q4 `n_units` + 2 minor suggestions | `analyst` + `data-scientist` → **both approve, explicit stopping signals — Unit A closed** | 465.4k tok / 53 tools |
 | U4a-ds | `data-scientist` (resume) | `acce2accdfd2c07ce` | gated | code-gate, `-impl.md` new section | `data-scientist` → **needs changes** (Q4 `n_units` pooling defect, real & reproduced) | 311.7k tok / 33 tools |
-| U3b | `coder` | `a04e75a1454a5ec5d` | delivered | `cli.py` wiring + README (plan Unit B, depends on U3a) | `analyst` (fresh, moderate) → in-flight | 173.2k tok / 55 tools |
+| U3b | `coder` | `a04e75a1454a5ec5d` | accepted | `cli.py` wiring + README (plan Unit B, depends on U3a) | `analyst` (fresh, moderate) → **approve w/ suggestions** (see U4b below), folded in U3br | 173.2k tok / 55 tools |
 | U4b | `analyst` (fresh) | `a79ed69e7e24cc7e1` | gated | code-gate, `-impl.md` new section | `analyst` → **approve w/ suggestions**, no blockers | 129.6k tok / 19 tools |
 | U3br | `coder` (resume) | `a04e75a1454a5ec5d` | accepted | fold 2 minor suggestions (missing zero-arms test, README clause) — committed `4433e56` | — | 186.8k tok / 19 tools |
-| U3c | `coder` | `a20f36e22226f0479` | delivered | `scripts/consolidate_sweep_reports.py` (plan Unit C, fixture-built, parallel to U3a) | `analyst` (light) → in-flight | 158.9k tok / 26 tools |
+| U3c | `coder` | `a20f36e22226f0479` | accepted | `scripts/consolidate_sweep_reports.py` (plan Unit C, fixture-built, parallel to U3a) | `analyst` (light) → **approve** (see U4c below) | 158.9k tok / 26 tools |
 | U4c | `analyst` (fresh) | `ac2c3f299cd822b87` | accepted | `docs/reviews/small-model-catalog-sweep-impl.md` (own `-impl` doc, not a section of the plan review — analyst's own correct call per the closed role set) | `analyst` → **approve** (2 non-blocking: a `main()`-level test gap, HISTORY.md entry deferred) | 120.8k tok / 31 tools |
 | U5 | `devops` | `aa7e668860b23a794` | delivered | 68-run sweep, session `catalog-sweep-2026-09-19`, `results/runs/` (committed `00f3b83`) | `teco` (independent re-verification, no specialist gate — data-collection execution, not design/code) → **confirmed**: file counts match exactly, 0 failures | 161.5k tok / 60 tools (across 3 resumes, ~10.4h wall incl. LM Studio runtime) |
 | U6 | `qa-engineer` | `a7d1766672e6f8dca` | delivered | `docs/test-reports/small-model-catalog-sweep-report.md`, `footprints.json`, 5 reports (4 clean, 1 defective) | `teco` (independent re-verification: confirmed defect against raw run data + row counts on all 5) → **defect confirmed, real** | 192.8k tok / 51 tools |
@@ -69,7 +69,13 @@ both reviewers.
 | U7 | `data-scientist` | `aad5d24b5ea8c03ca` | delivered | `reports/catalog-sweep-2026-09-19-consolidated.md` | `teco` (independent: index verified byte-for-byte against source markers, reproduced the claimed guard-judge polarity sign-flip with real arithmetic — confirmed) → **confirmed correct**; final gate below | 110.2k tok / 23 tools |
 | U7-gate | `analyst` | `a5b164398a049b820` | gated | `docs/reviews/small-model-catalog-sweep.md` "Pass 3" section | `analyst` → **approve w/ suggestions** (1 MAJOR, 1 minor) — MAJOR independently re-verified by `teco` against the actual code (`_polarity_corrected`, `_LOWER_IS_BETTER`, plan §2.4): `data-scientist` misattributed a deliberate, correct polarity-fix to the known `stats.verdict()` bug and silently dropped 10 real Holm-confirmed findings in the guard-judge section as a result | 133.9k tok / 27 tools |
 | U7-fix | `data-scientist` (resume) | `aad5d24b5ea8c03ca` | delivered | rewrote guard-judge section (mechanism explanation + 10 Holm-confirmed findings incorporated, shortlist re-ranked) + embedder minor latency wording fix, both in `reports/catalog-sweep-2026-09-19-consolidated.md` | `teco` (independent: re-read both reference-anchored family tables in `reports/guard-judge-understanding-rank-20260920-02.md`, recounted the 10 distinguishable-worse rows — 2 falseAdvanceRate + 8 falseSuspendRate, no overlap, none showing the reference distinguishably worse — matches; confirmed the "all 7 top-row models certified worse on the other metric" claim against both tables' rank-1..5/1..2 rows; confirmed the 55/17≈3.2x and 55/12≈4.6x latency arithmetic; `git status` confirms only the consolidated doc was touched by this delegate) → **confirmed correct**; final re-gate dispatched to `analyst` (same agent, resumed) below | 146.8k tok / 9 tools |
-| U7-fix-gate | `analyst` (resume) | `a5b164398a049b820` | in-flight | final confirmation pass on U7-fix, same doc | — | — |
+| U7-fix-gate | `analyst` (resume) | `a5b164398a049b820` | accepted | `docs/reviews/small-model-catalog-sweep.md` "Pass 4" section | `analyst` → **approve, explicit stopping signal** — both Pass 3 findings independently re-verified against the two family tables (own recount, not the coordinator's or delegate's word); 1 new non-blocking wording nit, not worth reopening for. Committed `c81e4c8e` (consolidated doc + review doc together). **U7 fully closed.** | 154.9k tok / 3 tools |
+| U8 | `qa-engineer` (fresh) | `acc445ba79b5559b0` | accepted | `docs/HISTORY.md` entries U184-U187 (Unit A core+Q4 fix, Unit C, Track B defect wave, coordination close) | `teco` (independent: spot-checked the hardest-to-get-right figures against their own source docs — the Q4 defect's "7.7pp" understatement and the round-1 banner's "70 vs 40 / 75%" overcount both grepped verbatim out of `docs/reviews/small-model-catalog-sweep-impl.md`; the "72 files"/session-tag claim recounted directly against `results/runs/`; all 4 cited commit hashes confirmed in `git log`) → **confirmed correct**. `git diff --stat` confirms only `docs/HISTORY.md` touched (149 insertions, 0 deletions) | 180.8k tok / 19 tools |
+
+**Milestone close:** all of U1–U8 (and their gates/fixes) are terminal (`accepted` or gate-closed).
+Requirements doc, implementation plan, both review docs, and the test-report doc are
+`Status: archived` (mechanical one-token edits, this coordination doc's own header included),
+committed together with U8's HISTORY.md entry below. **Coordination fully closed.**
 
 Status legend: `queued` · `in-flight` · `delivered` · `gated` · `accepted` · `abandoned` · `paused`.
 
