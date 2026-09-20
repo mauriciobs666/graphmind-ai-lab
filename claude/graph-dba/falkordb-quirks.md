@@ -76,6 +76,23 @@ to the general fact here.
   actually created; don't infer "the index exists and this is a true empty result" from a clean
   zero-row response alone — confirm the index itself first (`CALL db.indexes()` or a bootstrap
   script's own idempotent creation) before trusting a fulltext-search miss.
+- **`db.idx.fulltext.createNodeIndex` run against an already-populated label backfills existing
+  nodes automatically, with no observed async delay at small scale** (verified 2026-09-20, module
+  `41811`, disposable `ws:gdba_kbftprobe` seeded with a read-only copy of `ws:agent-team`'s 558
+  real `Chunk` rows, deleted after — `claude/docs/plans/agent-knowledge-base-strategy-graph.md`
+  §4). Sequence: write all 558 nodes first, **then** `CALL
+  db.idx.fulltext.createNodeIndex('Chunk','text')` — `CALL db.indexes() YIELD status` read
+  immediately after (no sleep) already shows `OPERATIONAL`, and a full-text query for a term
+  known only in the pre-existing data returned all 31 correct matches in 1.16ms with zero settle
+  delay. This is a **different** lifecycle from `GRAPH.CONSTRAINT CREATE`'s documented async
+  `PENDING`→`OPERATIONAL` behavior (above) — at this scale (558 short, ~683-char-avg documents),
+  full-text index creation-plus-backfill behaved as effectively synchronous. Not tested: a much
+  larger backfill (tens of thousands of nodes) might behave differently — re-check `db.indexes()`
+  status immediately after `createNodeIndex` on a large populated label rather than assuming the
+  same instantaneous behavior holds. Also confirmed consistent with the vector-index entry below:
+  re-running `createNodeIndex` on an already-fulltext-indexed property is rejected outright
+  (`"Attribute 'text' is already indexed"`), never silently re-applied — same non-reapplying
+  contract as `CREATE VECTOR INDEX`.
 - **A RediSearch `%token%` fuzzy term must not be escaped by stripping every non-word character
   from it.** `re.sub(r"[^\w]", "", tok)` avoids a `RediSearch: Syntax error` on a fuzzy term
   carrying metacharacters (parens, hyphen, colon, quotes, brackets, pipe) — but it also silently
