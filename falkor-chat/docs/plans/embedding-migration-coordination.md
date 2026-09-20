@@ -24,8 +24,8 @@ embedding code) — usable for structural navigation, not rebuilt for this chain
 | U4 | `architect` (resume U1) | `a2ce9950345d8a80a` | delivered | `docs/plans/embedding-migration.md` rev. (in place) | `analyst` (re-review, U5) → **approve** | 343k tok / 125 tool uses (this turn; 547k/189 cumulative across U1+U4) |
 | U5 | `analyst` (re-review of U4) | `a84297e88678205db` | delivered | `docs/reviews/embedding-migration.md` Pass 2 (in place) | teco (spot-check) → verified | 116k tok / 16 tool uses |
 | U6 | `coder` | `a2cb87d5a804deb2b` | accepted | `scripts/embedding_migration.py` (`pin`) + `scripts/pin_workspace_embedding_model.sh` + `server/tests/test_embedding_migration.py` (§5 step 1) | `analyst` (`aefe5f0b369f3e4d4`) → **approve** | 182k tok / 12 tool uses (follow-up turn; 346k/66 cumulative) |
-| U7 | `coder` (after U6, same file) | — | queued | `scripts/embedding_migration.py` (`migrate`) + `scripts/migrate_embeddings.sh` + interrupt/resume tests (§5 steps 4-5) | `analyst` → — | — |
-| U8 | `coder` (after U6; parallel-safe with U7, disjoint files) | — | queued | FR-2 enforcement mechanism — **Option B**, decided (§5 step 2) | `analyst` → — | — |
+| U7 | `coder` | `a6bef11910ee45ad3` | accepted | `scripts/embedding_migration.py` (`migrate`) + `scripts/migrate_embeddings.sh` + interrupt/resume tests (§5 steps 4-5) | `analyst` (`a009a2e28690c7b65`) → **approve** | 234k tok / 16 tool uses (follow-up turn; 447k/88 cumulative) |
+| U8 | `coder` | `ac2fd2b646978a9e3` | accepted | `scripts/create_workspace.sh` + call-site swaps + doc clauses (§5 step 2) | `analyst` (`a009a2e28690c7b65`, joint w/ U7) → **approve** | 199k tok / 8 tool uses (follow-up turn; 380k/104 cumulative) |
 
 _U4 correction, 2026-09-19: this row was logged `in-flight` before the revision brief was actually
 sent — the agent sat idle since U1's handback until a status-check message (not a revision request)
@@ -79,6 +79,70 @@ failing tests are unrelated to `pin()` (`KeyError: 'score'` / `AttributeError` i
 `services.search_documents`, nothing this chain touches). **Do not stage or commit any of those
 five files under this coordination** — not ours, not reviewed by us, actively being edited by
 someone else.
+
+**U8 verification (teco):** independently confirmed against source — all three call-site swaps
+(`start_server.sh:148`, `start_demo.sh:166`, `start_agent_team.sh:205`) forward existing env vars
+unchanged; `seed_eval_corpus.py`'s in-process `embedding_migration.pin(EVAL_WS, gateway=gateway)`
+reuses the already-resolved `gateway` from line 579, no re-resolve; all five doc-only seed-script
+clauses and `AGENTS.md`'s new `create_workspace.sh` row are comment-only, content matches claim
+exactly; `create_workspace.sh` itself has no error-handling that would defeat `pin()`'s non-fatal
+WARNING path. Ran `test_create_workspace_script.py` independently: 3 passed. Per the "mutate one
+argument yourself" rule, tried a mutation distinct from the delegate's own two (order-swap,
+swallow-failure): narrowed the pin loop from `for wid in "$@"` to `for wid in "$1"` — bootstrap
+still runs against every given id, only the *pin* step silently narrows to the first. **All 3 tests
+still passed** — none calls `create_workspace.sh` with more than one workspace id, despite the
+script's own usage line advertising `<wsId> [<wsId> ...]`. Reverted (confirmed clean, suite green);
+sent back to the same delegate for a two-workspace-id test closing that gap before `analyst`.
+
+**Also flagged by U8, worth tracking but out of scope for this chain:** (1) the full test suite is
+markedly more nondeterministic than the "2-3 `test_services.py` failures" baseline once a second
+concurrent coder (U7) and two live `uvicorn` processes are also hitting the same shared FalkorDB
+instance — a live-instance-contention risk, not a defect of this unit; U8's own `test_repository.py`
+ran clean (328/328) both times isolation was checked. (2) A pre-existing, unexercised gap in
+`bootstrap_schema.sh`: a *partial* DDL failure that still leaves the workspace's graph key
+materialized would let `pin()` "succeed" over an incompletely-schemaed graph — not introduced by
+this chain, not caught by any test here or elsewhere; noted for a future backlog item, not blocking
+FR-2's delivery.
+
+**U7 verification (teco):** independently confirmed `pin()` is byte-identical to U6's committed
+version (diff shows only additions); all four Cypher helpers
+(`_read_unmigrated_batch`/`_write_embedding`/`_count_unmigrated`/`_rebuild_vector_index`) match
+`docs/plans/embedding-migration-graph.md`'s confirmed shapes exactly — predicate direction (`>`
+only), no-op detection (`properties_set > 0`), the `DROP` guard (`read_index_dimension(...) is not
+None`); `resolve()`/`embedder()` call shapes (no `ws=`/`overrides=`) match `modelconfig.py` exactly,
+and `.embed(text)` matches this codebase's standard embedder interface (`responder.py`,
+`services.py`, `tools.py`). Independently reran: `test_embedding_migration.py` alone → 25 passed;
+full suite minus `test_services.py` → 2604 passed — matches the delegate's own counts exactly.
+
+Per the "mutate one argument yourself" rule, tried a mutation distinct from the delegate's own
+three (guard/responder swap, count-check-always-passes, drop-guard-always-skips): in the re-embed
+loop, embedded each row's **id** instead of its **text** (`embedder.embed(row_id)` instead of
+`embedder.embed(text)`). **All 25 tests still passed** — nothing asserts on the actual embedding
+vector's value, only on `embeddingModel`/counts/index dimension, none of which would change under
+this bug. In production this would silently ship every row with a nonsense, id-derived embedding —
+indistinguishable from success by every signal `migrate()` reports, while destroying retrieval
+quality on that workspace. Reverted (confirmed clean, suite green); sent back to the same delegate
+for a test asserting the actual embedded vector against each row's own text before this goes to
+`analyst` alongside U6/U8.
+
+**U7/U8 joint review verified (teco), committed.** Independently re-read the joint review
+(`docs/reviews/embedding-migration-migrate-impl.md`) and reran the suite myself (30 passed across
+both new test files) before committing `09e30282`. Two non-blocking minors filed by the review, not
+acted on further (both explicitly judged non-blocking by the reviewer's own analysis, not just
+deferred by convenience): (1) `migrate`'s multi-batch keyset paging has no dedicated test proving
+`batch_size` changes anything observable — proven to have no correctness consequence today (the
+`coalesce(embeddingModel,'') <> $target` clause is the real correctness gate, not the cursor), so
+left as a coverage follow-up rather than spinning up another implement→review round for a
+zero-risk gap; (2) `main()`'s `migrate` branch surfaces `MigrationAbortedError` as an uncaught
+traceback instead of a clean exit — a CLI-polish nit with no functional consequence (confirmed: the
+graph is still never touched either way), left for whenever this tool is operator-facing beyond
+this dev box.
+
+**All of §5's code-bearing steps (1, 2, 4, 5) are now delivered, reviewed, and committed.** Step 3
+(FR-1's one-time sweep) is explicitly not code — a runbook action (run
+`pin_workspace_embedding_model.sh` against every existing real workspace once, before the global
+default in `config/models.json` is ever edited) — an ops decision for whoever performs the actual
+model swap, out of this chain's scope per the requirements doc's own "Open questions."
 
 ## Pause (2026-09-19, user-requested) — resumed 2026-09-20
 
