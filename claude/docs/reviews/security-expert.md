@@ -136,8 +136,8 @@ by default too, and carry the identical structural gap for their own `GRAPH.DELE
 guards today. `cobb` gave `security-expert` the same tool shape as its closest sibling, `analyst`
 (also `Agent`-equipped) — a reasonable, convention-following choice, not an oversight specific to
 this design. Flagging as a cross-cutting open question for the team (a candidate for a future
-`kaizen_team` entry or a `cobb`-led team-wide look at per-agent vs. per-action hook scoping) rather
-than a defect in this deliverable.
+`ws:agent-team` entry or a `cobb`-led team-wide look at per-agent vs. per-action hook scoping)
+rather than a defect in this deliverable.
 
 ### Minor — `skills/cpg-analysis/SKILL.md`'s own consumer list wasn't updated
 
