@@ -11,7 +11,7 @@ evidence instead of the handful of one-off runs done so far.
 
 ## Problem & current state
 
-Today only 5 of the 76 possible (model × applicable-pack) combinations in the in-scope list have
+Today only 5 of the 68 possible (model × applicable-pack) combinations in the in-scope list have
 a stored result at all, and they were produced incidentally across separate, earlier sessions —
 not as one coordinated, directly-comparable batch:
 
@@ -56,10 +56,8 @@ the model's currently-configured quantization (not raw parameter count) — see 
 - `qwen3.5-2b-claude-4.6-opus-reasoning-distilled`
 - `nvidia/nemotron-3-nano-4b`
 - `prism-ml/bonsai-27b` (27B parameters, included on estimated footprint — see Decision log)
-- `qwen3.5-9b-uncensored-hauhaucs-aggressive`
-- `qwen3.5-9b-claude-4.6-opus-uncensored-distilled`
 
-22 models total (4 embedding + 18 chat/vlm).
+20 models total (4 embedding + 16 chat/vlm).
 
 ## User stories
 
@@ -73,7 +71,7 @@ the model's currently-configured quantization (not raw parameter count) — see 
 ## Functional requirements
 
 - **FR-1.** Each of the 4 embedding models is run against `embedder-graphrag-retrieval`.
-- **FR-2.** Each of the 18 chat/vlm models is run against all four chat-role packs:
+- **FR-2.** Each of the 16 chat/vlm models is run against all four chat-role packs:
   `guard-judge-understanding`, `nlq-structured-query`, `tool-caller-shop-assistant`,
   `chat-responder-grounded-answers`.
 - **FR-3.** Every run produced by this sweep is tagged with one shared session identifier, so the
@@ -91,8 +89,8 @@ the model's currently-configured quantization (not raw parameter count) — see 
 - **FR-7.** Each per-pack report ranks every in-scope model by that pack's headline metric (or
   each `verdictMetrics` member, for a pack with no headline metric), with each model's own
   confidence interval and the pack's resolving-power sentence recomputed for the model count
-  actually in that report. It does **not** contain a full pairwise comparison matrix (153 cells
-  for 18 models is both unreadable and statistically unsupportable — see the Decision log).
+  actually in that report. It does **not** contain a full pairwise comparison matrix (120 cells
+  for 16 models is both unreadable and statistically unsupportable — see the Decision log).
 - **FR-8.** If pairwise significance verdicts are included, they are limited to one
   pre-registered, reference-anchored family per pack: each of the other in-scope chat/vlm models
   compared against one designated reference model (recommended: `qwen/qwen3-4b-2507`, already
@@ -126,8 +124,10 @@ the model's currently-configured quantization (not raw parameter count) — see 
 - A full pairwise comparison matrix across all in-scope models within a pack (superseded by the
   ranked-table + reference-anchored-family design in FR-7/FR-8).
 
-- Any model not on the 22-model list above (including the two 12B-parameter catalog models
-  already discussed and excluded, `google/gemma-4-12b-qat` and `google/gemma-3-12b`).
+- Any model not on the 20-model list above (including the two 12B-parameter catalog models
+  already discussed and excluded, `google/gemma-4-12b-qat` and `google/gemma-3-12b`, and the two
+  unofficial 9B community finetunes discussed and excluded, `qwen3.5-9b-uncensored-hauhaucs-
+  aggressive` and `qwen3.5-9b-claude-4.6-opus-uncensored-distilled` — see the Decision log).
 - Declaring a "winning" model for any role, or any pass/fail threshold — `model-bench` has no
   gate by design, and this sweep does not add one. Interpreting the resulting reports is a
   separate, later activity.
@@ -139,10 +139,10 @@ the model's currently-configured quantization (not raw parameter count) — see 
 
 ## Acceptance criteria
 
-- **Given** the 22-model list and the five packs, **when** the sweep completes without
+- **Given** the 20-model list and the five packs, **when** the sweep completes without
   operational failures, **then** there are 4 stored runs for `embedder-graphrag-retrieval` (one
-  per embedding model) and 18 × 4 = 72 stored runs across the four chat-role packs, all tagged
-  with the sweep's shared session identifier — 76 stored runs in total.
+  per embedding model) and 16 × 4 = 64 stored runs across the four chat-role packs, all tagged
+  with the sweep's shared session identifier — 68 stored runs in total.
 - **Given** a (model, pack) combination fails for an operational reason, **when** the sweep
   finishes, **then** that failure is visible in the sweep's own summary/record (not silently
   absent from it) and every other combination was still attempted.
@@ -249,3 +249,22 @@ the model's currently-configured quantization (not raw parameter count) — see 
   2026-09-18 Decision log entry above, which computed "up to C(17,2)=136 pairs per chat pack" as
   part of the `data-scientist` consult record, is left as-is — it documents what was actually
   found and decided at that time under the then-believed 17-count, and this log is append-only.
+- 2026-09-19 — Stakeholder decision, direct: drop `qwen3.5-9b-uncensored-hauhaucs-aggressive` and
+  `qwen3.5-9b-claude-4.6-opus-uncensored-distilled` from the locked-in scope list. Reasoning
+  given: `prism-ml/bonsai-27b` stays in scope on the existing footprint criterion — its ~3.5–5.5 GB
+  quantized footprint already clears the threshold, per the first Decision log entry above; the
+  stakeholder additionally names its quantization scheme as Q1_0 (not previously recorded in that
+  entry). The two removed 9B models are a different case: unofficial third-party "uncensored"/
+  "distilled" community finetunes (publishers `HauhauCS` and `LuffyTheFox`, non-standard `qwen35`
+  arch tag) at Q4_K_M, judged by the stakeholder unlikely to work reliably under this harness
+  (broken chat templates or malformed tool-call output being the specific risk on unofficial
+  finetunes) — a **functional-risk** judgment, distinct from the footprint criterion, and not a
+  re-litigation of it. Scope, FR-2, FR-7's pairwise-matrix illustration, the Problem &
+  current-state combo count, and the acceptance criteria corrected from 18/72/153/76/76 to
+  16/64/120/68/68 (22/4-embedding/76-total overall to 20/4-embedding/68-total overall)
+  accordingly; the two removed models were also added to the Out of scope section's named-
+  exclusions list, alongside the existing 12B-parameter precedent, so a future reader sees why
+  they're out rather than just that they're absent. This is the third same-day scope correction to
+  this document (the two embedding additions above, then the 17-vs-18 chat/vlm correction, now
+  this removal) — scope is treated as locked as of this entry pending actual sweep execution;
+  any further change should re-open rather than assume the list is still moving.
