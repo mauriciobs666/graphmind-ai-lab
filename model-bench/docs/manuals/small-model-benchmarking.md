@@ -1,6 +1,6 @@
 # Small-Model Benchmarking — User Manual
 
-> **Status:** active · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-09-18
+> **Status:** active · **Owner:** `tico` · **Tracks:** — · **Last updated:** 2026-09-20
 
 ## Who this is for
 
@@ -173,7 +173,148 @@ sequenceDiagram
     CLI-->>You: markdown report (reports/ + screen)
 ```
 
+### 7a. Ranking every model tested against a pack, not just two
+
+`compare` is always a two-arm comparison. Once three or more models have a stored result for the
+same pack, `rank` gives you the whole field in one table instead of running `compare` repeatedly:
+
+```bash
+./run.sh rank --pack embedder-graphrag-retrieval
+```
+
+This prints (and saves to `reports/`) one row per model with a stored result — its point estimate,
+a descriptive confidence interval, p95 latency, and footprint — sorted, never as a pairwise
+matrix. A pack with two co-equal metrics and no single headline (e.g. `guard-judge-understanding`)
+gets one table per metric instead of one overall table.
+
+Two optional flags change what the table can claim:
+
+- **`--reference <modelKey>`** adds a statistically-corrected verdict column against that one named
+  model — `distinguishable` or `not distinguishable` (direction, when distinguishable, comes from
+  the row's own signed diff column, not from the word "better"/"worse" itself), corrected for
+  testing every other model at once (a Holm-Bonferroni family), never a raw uncorrected p-value per
+  row. Leave it off and the table states only descriptive intervals — no verdict column, no p-value
+  anywhere. Naming a model with no stored result for this pack is a usage error (exit `2`) —
+  nothing is written.
+  > ⚠️ **Known bug:** `--reference` currently crashes (exit `2`, an internal error naming
+  > `scored_value`) against any pack whose headline metric is *continuous* rather than a plain
+  > success/failure rate — `embedder-graphrag-retrieval`'s `mrr` is exactly this case, so
+  > `./run.sh rank --pack embedder-graphrag-retrieval --reference <key>` does not work today. It's
+  > fine on a boolean-outcome pack (e.g. `guard-judge-understanding`). Until this is fixed, use
+  > `compare` instead for a reference-style question against a continuous-metric pack — `compare`
+  > already handles `mrr` correctly.
+- **`--footprints <path.json>`** — a flat `{"<modelKey>": "<display string>"}` map, e.g.
+  `{"qwen/qwen3-4b-2507": "4B, Q4_K_M, 2.4 GB"}`, rendered verbatim in its own column. A missing or
+  malformed value just shows as a dash or its raw string — never parsed as a number; a malformed
+  *file* is a usage error, exit `2`.
+
+Like `compare`, a same-day re-run never overwrites an earlier report — `rank` uses its own
+`-rank-` sequence in the filename, so `compare` and `rank` reports for the same pack and day don't
+collide.
+
+### 8. Recovering the results index
+
+`results/index.csv` is an **optional, on-demand** flat summary of everything under
+`results/runs/` — nothing else writes it or reads it. `compare`, `rank`, and `models --tested` all
+read the actual result files under `results/runs/` directly, never this file; the only way
+`index.csv` ever gets created or refreshed is by asking for it explicitly:
+
+```bash
+./run.sh index rebuild
+```
+
+This reads every file in `results/runs/` and regenerates `results/index.csv` from scratch — it
+never edits a stored run record, only this derived file. Useful if you want one flat file to skim
+or feed to something else (a spreadsheet, a quick `grep`); model-bench itself never needs it to
+exist.
+
+## On-disk data shapes
+
+`model-bench` has no database and no server — every "record" is a plain JSON (or CSV) file. The
+three that matter, and how they relate:
+
+```mermaid
+flowchart LR
+    subgraph "packs/<pack-id>/"
+        Pack["pack.json<br/>role, scorer, sampling,<br/>metrics, packContentHash"]
+        Golden["golden data<br/>(queries.jsonl, corpus.jsonl, ...)<br/>+ PROVENANCE.md"]
+    end
+    Host["host.json<br/>(gitignored, per-machine)<br/>operator-attested facts"]
+    Run["results/runs/*.json<br/>one RunResult per<br/>model x pack x time"]
+    Idx["results/index.csv<br/>derived summary,<br/>rebuilt from Run files"]
+
+    Pack -- "declares" --> Golden
+    Pack -- "packContentHash + packId/packVersion<br/>stamped into" --> Run
+    Host -- "attested fields copied into" --> Run
+    Run -- "./run.sh index rebuild" --> Idx
+    Run -- "read by" --> Compare["compare / rank"]
+```
+
+- **`pack.json`** — one job's declaration. Key fields: `packId`, `packVersion`, `role` (one of the
+  five FR-21 roles), `scorer` (the module that judges this pack's results), `environment.requires`
+  (what the model must support — e.g. `lmstudio-embeddings`), `data` (paths to the golden files
+  under the same pack directory), `sampling` (`seed`, `pairingKey`, `analysisUnit` — what makes two
+  runs comparable at all), and `metrics` (`verdictMetrics`, `headlineMetric`). `packContentHash`
+  covers the pack directory's content — a golden item, a prompt, or a tool schema changing all
+  produce a new, distinguishable hash (its one deliberate exclusion is `PROVENANCE.md` itself) — a
+  stored result always names the exact pack version it was measured against, never just a pack id.
+- **`host.json`** — one file per machine, never checked into git (it describes *your* hardware, not
+  the project). Its `attested` block holds four fields (`lmStudioAppVersion`, `kvCacheSetting`,
+  `hostRamGb`, `otherResidentWorkloads`) that nothing in LM Studio exposes programmatically, so
+  `attest` asks you once and remembers. Written by `./run.sh attest`; every later `run` copies these
+  into its own result record.
+- **`results/runs/*.json`** (one file per model × pack × timestamp) — the result itself. Three parts:
+  a **`fingerprint`** block (pack identity + version, the model's own reported capabilities, every
+  `host.json` field, timing of the run) that makes the record self-contained and honestly
+  comparable later; an **`aggregates`** block (the scored metrics — shape depends on the pack's
+  scorer, e.g. `mrr`/`recallAtK`/`precisionAt1` for an embedder pack); and an **`items`** list (one
+  scored entry per pack item — never the model's raw reply text, only outcome/score detail). A
+  top-level `sessionId` (not inside `fingerprint`) is what `--session` groups runs by.
+- **`results/index.csv`** — a flat, derived summary of every file in `results/runs/`, written only
+  by `index rebuild`, on demand — no other command creates, refreshes, or reads it. `compare`/
+  `rank`/`models --tested` all go straight to `results/runs/`, never this file. Purely an optional
+  convenience export; model-bench itself works the same whether it exists or not.
+
+## Configuration & integration
+
+**There is no environment-variable configuration** — deliberately, per the project's "zero runtime
+dependencies, standalone" design: every setting is either a CLI flag (this manual's Walkthroughs)
+or a file you can inspect directly (`host.json`, a pack's `pack.json`). Nothing here reads
+`falkor-chat`'s own configuration, its model gateway, or its golden data live — any data that
+originated in `falkor-chat` (e.g. the eval corpus behind `embedder-graphrag-retrieval`) was copied
+in once, with its origin recorded in that pack's `PROVENANCE.md`, and stays a versioned, static
+copy from then on.
+
+**Integration with `falkor-chat`'s embedding-model migration workflow.** Before committing a
+workspace to a new embedding model (see `falkor-chat`'s embedding-migration manual), the
+recommended path is to validate the candidate here first, using the `embedder-graphrag-retrieval`
+pack — no real workspace touched, no migration risked on a model that turns out to underperform.
+This has already been exercised for real: a catalog sweep run against this pack found that
+`granite-embedding-278m-multilingual` (the embedding-migration feature's lead replacement
+candidate) scores within ~2-3 percentage points of MRR of the top-ranked model in the sweep, while
+running at roughly **1/8th the footprint and ~4.6x lower p95 latency** — well inside the pack's own
+statistical resolving power, so no model in the top cluster can be called definitively better or
+worse than another from that data alone, but footprint/latency become the deciding factor once
+quality is indistinguishable (`reports/catalog-sweep-2026-09-19-consolidated.md`, "embedder"
+section). That is exactly the kind of evidence FR-6 of the embedding-migration feature asks for
+before touching production data.
+
 ## FAQ / troubleshooting
+
+**Should I use `compare` or `rank`?** `compare` is for a specific two-model question ("is A better
+than B for this job?"). `rank` is for "how does everything I've already tested stack up?" — one
+table across every model with a stored result, and it's the only one of the two that can name a
+single `--reference` model and get corrected verdicts against the whole rest of the field at once
+— **except on a continuous-metric pack like `embedder-graphrag-retrieval`, where `--reference`
+currently crashes; use `compare` there instead** (see the callout in Walkthrough 7a).
+
+**What are all the exit codes?** `0` — ran and reported, whatever the scores (a `compare`/`rank`
+that finds every stored record invalid still exits `0`; that's a report, not a failure). `2` — bad
+arguments/usage (including a `rank --reference` naming a model with no stored result, or a
+malformed `--footprints` file). `3` — LM Studio unreachable, or didn't answer within
+`--first-call-timeout`. `4` — an invalid pack, an environment requirement the model doesn't meet,
+or (for `tool-caller`) a conversation cut short by a tool-dispatch failure. `5` — `host.json`
+missing or stale. Nothing here is score-driven — see Overview.
 
 **How do I view a report after it's written?** You don't need to hunt for it — `compare` prints
 the same markdown to your screen as it runs. The saved copy is plain text at
