@@ -373,3 +373,47 @@ class TestCompileAndExecute:
         }
         result = exec_mod.compile_and_execute(spec, tables=_TABLES, schema=_SCHEMA)
         assert result == {"items": [{"p.name": "Widget A"}]}
+
+
+# ==================================================================================================
+# 4. Known gap, deferred — `order_by` over a sparse property (docs/BACKLOG.md)
+# ==================================================================================================
+
+# One row lacks `price`, placed mid-list so neither an unsorted pass-through nor a sort that drops
+# the null row can coincidentally produce either expected order.
+_SPARSE_TABLES = {
+    "Product": [
+        {"name": "A", "price": 2.0},
+        {"name": "B"},
+        {"name": "C", "price": 1.0},
+        {"name": "D", "price": 3.0},
+    ]
+}
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=TypeError,
+    reason=(
+        "docs/BACKLOG.md: exec.py's order_by sort raises TypeError on a None sort key; the fix "
+        "(FalkorDB null ordering) is deferred to the next deliberate packVersion bump of "
+        "nlq-structured-query. When the fix lands, remove this marker."
+    ),
+)
+@pytest.mark.parametrize(
+    ("order_dir", "expected_names"),
+    [
+        ("ASC", ["C", "A", "D", "B"]),  # FalkorDB: nulls last ascending
+        ("DESC", ["B", "D", "A", "C"]),  # FalkorDB: nulls first descending
+    ],
+)
+def test_order_by_a_sparse_property_places_nulls_the_way_falkordb_does(order_dir, expected_names):
+    spec = {
+        "matches": [{"var": "p", "label": "Product", "filters": []}],
+        "returns": ["p.name"],
+        "order_by": "p.price",
+        "order_dir": order_dir,
+        "limit": 10,
+    }
+    result = exec_mod.compile_and_execute(spec, tables=_SPARSE_TABLES, schema=_SCHEMA)
+    assert [item["p.name"] for item in result["items"]] == expected_names
