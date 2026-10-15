@@ -2,6 +2,17 @@
 
 > Dated log of actual changes to the `devops` agent. Most recent first.
 
+## 2026-10-14 — `ops-quirks.md`: WSL2 process-spawn stall (~13.1s, about 1 in 3,000–6,000 spawns), promoted by `cobb`
+
+- **What:** a new entry at the top of `claude/devops/ops-quirks.md`. On this host any spawned
+  process can occasionally stall ~13.1s, `timeout`-wrapped or not. So a hook or CI timeout is
+  sized for one stall on top of the real worst case.
+- **Why:** it surfaced as review finding P2-m1 (`claude/docs/reviews/teco-env-autostart.md`),
+  read there as specific to GNU `timeout`. Two 6,000-run controls, timed with the builtin clock,
+  showed a bare `/bin/true` stalls at the same rate. That is a host/toolchain trap, which is
+  `devops`'s knowledge base. It was promoted straight to a file because the `ws:agent-team`
+  ingest MCP was not connected in that session.
+
 ## 2026-09-20 — standing distillation pass, `cobb`, U5 of `claude/docs/plans/kaizen-distillation3-coordination.md`: all 3 `devops` current-shape entries — 1 PROMOTED into `claude/devops/ops-quirks.md`, 2 DISCARDED (already published at equal or greater depth), 0 kept open — `devops` closes at 0 produced / 0 mentioned
 
 - **What:** `cobb` ran the standing `kaizen_team` distillation (`skills/agent-maintenance/SKILL.md`

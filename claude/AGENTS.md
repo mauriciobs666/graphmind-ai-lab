@@ -170,7 +170,10 @@ exploitation-shaped agent is ever added (`security-expert/kaizen/plan.md` K-003)
 carries two: its `Bash` destructive-ops guard alongside the `Write|Edit` doc-write guard above.
 `teco` and `tico` each also carry two: alongside their `Write|Edit` wrapper, an `Agent|Task`
 dispatch guard (`teco/hooks/guard-agent-dispatch.sh`, `tico/hooks/guard-tico-agent-dispatch.sh`)
-thin-wrapping the shared `scripts/guard-agent-dispatch.sh` core described above. `tdd-engineer`
+thin-wrapping the shared `scripts/guard-agent-dispatch.sh` core described above; `teco` also
+carries a non-guard `SessionStart` hook, `teco/hooks/ensure-environment.sh` (also teco's step-1
+probe), that brings FalkorDB and the `ws:agent-team` server up and reports CPG freshness (contract
+in its header). `tdd-engineer`
 and `coder` also carry two each (since 2026-09-11): their `Write|Edit` `guard-broad-write.sh`
 wrapper, alongside a `Bash` `guard-broad-bash.sh` wrapper closing the gap where `acceptEdits`
 covers file edits but not Bash.

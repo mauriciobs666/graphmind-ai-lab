@@ -2,6 +2,36 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-10-14 — Readiness script becomes the step-1 probe and adds a CPG freshness report (K-054 revision, U4)
+
+- **What:**
+  - Step 1 now runs `claude/teco/hooks/ensure-environment.sh </dev/null` per goal, in both
+    modes, not only at session start.
+  - The script also reports stale or unassessable `cpg_*` graphs, per `freshness.md`, and never
+    rebuilds. A graph list it cannot read is reported, never treated as "no graphs".
+  - A refused `/health` now always starts the server, whatever FalkorDB's state. When another
+    launch already holds the lock, the report says "already being started" instead.
+  - The server is launched under an allowlisted `env -i`.
+  - Step 3 states that its dispatch-time freshness check stays authoritative.
+  - The `coordination-techniques.md` recipe is now "run the script, act on its report".
+  - The matcher gains `fork`. The `SessionStart` timeout rises from 15s to 30s.
+  - The new tracked test is `hooks/test-ensure-environment.sh`.
+- **Why:** analyst review `claude/docs/reviews/teco-env-autostart.md` (Pass 1 M1/M2; Pass 2
+  P2-M1, P2-m1 to P2-m3), and the stakeholder's check-and-report choice for CPGs. Evidence:
+  `claude/cobb/kaizen/history.md`, same date.
+
+## 2026-10-14 — Environment readiness moves into a `SessionStart` hook (cobb K-054)
+
+- **What:** new frontmatter `SessionStart` hook, `hooks/ensure-environment.sh`: at agent start
+  (main-session mode) it starts FalkorDB and the `ws:agent-team` server (:8200) detached if
+  either is down, silent otherwise; never restarts anything. Step 1's "Environment readiness"
+  rewritten to defer to it and to cover `ws:agent-team` too; `coordination-techniques.md`'s
+  recipe now covers the delegated-run and mid-session cases plus the `/mcp` → Reconnect step
+  (the MCP client gives up after ~7s and teco has no tool to reconnect it).
+- **Why:** 2026-10-14 session started with :8200 down and the `falkor-chat-agent-team` MCP
+  failed; step 1 covered only FalkorDB, and only when a unit touched it. Full evidence:
+  `claude/cobb/kaizen/history.md`, 2026-10-14.
+
 ## 2026-09-20 — `kaizen_team` distillation pass 3, U9: 2 self-produced `teco` entries — 1 split (discard tool-scoping half, promote commit-grant half), 1 promoted as a refining caveat
 
 - **What:** `cobb` ran `agent-maintenance` §5 over `teco`'s 2 current-shape `kaizen_team` entries,

@@ -358,6 +358,27 @@ the always-loaded project memory (`CLAUDE.md`).
 - The **harness** runs them, not the model — this is how you enforce
   deterministic "always do X" behavior. Prefer a hook over hopeful prompt text
   whenever the requirement is "must always happen."
+- **A `SessionStart` hook in an agent's own frontmatter fires for `claude --agent
+  <name>`** (main-session mode) — live-verified 2026-10-14, Claude Code 2.1.300, user-scoped
+  agent, both `-p` and interactive, under the user's `defaultMode: auto`; its
+  `systemMessage` shows in the TUI as `SessionStart:startup says: …` and its
+  `additionalContext` reaches the model. Verified by having the model quote it back verbatim; it
+  arrives framed as "SessionStart hook additional context". One run of a small model (haiku)
+  quoted the right values while denying it had any hook report, so a "did a hook tell you X"
+  probe can return a false NONE. Ask for the text instead. Input carries `agent_type` when launched with
+  `--agent`, so a *settings* `SessionStart` hook can filter per agent instead. A
+  frontmatter `SessionStart` does not fire for a Task-dispatched subagent (no session
+  starts; inferred from docs — use a settings `SubagentStart` with an agent-name matcher
+  there). Launch-time `SessionStart` runs in the background (the user can type; the first
+  response waits for it), default timeout 600s. **To start a long-lived service from it,
+  detach fully** — `setsid nohup … >>log 2>&1 </dev/null &` (plus `flock -n` for
+  single-flight across concurrent sessions) — so the hook returns in ms and the service
+  outlives the session; verified surviving `claude -p` exit. Worked example:
+  `claude/teco/hooks/ensure-environment.sh`, which doubles as a by-hand probe
+  (`</dev/null`, since the hook drains stdin). Matchers include `fork`; leave `compact` out when a
+  per-task re-run already covers it. Verified against
+  `code.claude.com/docs/en/hooks` and `/en/sub-agents` ("All hook events are supported"
+  in frontmatter) 2026-10-14.
 - **A distinct layer: auto mode's built-in Bash safety classifier.** Separate
   from any project's `PreToolUse` hooks — it's a product-level check, not
   something a repo's `guard-*.sh` scripts can see or special-case. Observed
@@ -1025,6 +1046,19 @@ prompts surface as slash commands: `/mcp__<server>__<prompt>`.
   crash-proof and must never write to stdout (the transport owns it).
 - `list_changed` notifications refresh a server's tools/prompts/resources without a
   reconnect; a failed refresh keeps the previously discovered set (v2.1.214+).
+- **MCP connection at launch does not wait for `SessionStart` hooks — a hook cannot
+  "start the server first".** Live-verified 2026-10-14, Claude Code 2.1.300
+  (graphmind-ai-lab, cobb K-054, `--debug-file` timelines): the HTTP server's first
+  connect fires in parallel with the hook (a 10s-sleeping `SessionStart` hook did not
+  delay it at all), then retries `ECONNREFUSED` exactly 3 times at 1s/2s/4s backoff
+  (`Transient ECONNREFUSED on initial connect — retry n/3`) — a ~7s window — and then
+  never again: `/mcp` shows `✘ failed` until the user picks **Reconnect**, and no tool
+  lets the model reconnect. A server the hook launches *detached* that is healthy
+  inside those ~7s connects unaided (observed: ~3.5s start, connected on retry 2).
+  Under `-p`, the stream-json `init` event reported `failed` even when a synchronous
+  hook had waited until the server was healthy. Docs only state that launch-time
+  `SessionStart` runs before MCP servers are *available to hooks* (its `mcp_tool`
+  hooks are skipped) — `code.claude.com/docs/en/hooks`.
 - **A containerized stdio MCP server is itself a running container for the whole
   session** — its process owns the session's pipe for the session's lifetime. A
   verification/orphan-check step written as "`docker ps -a --filter

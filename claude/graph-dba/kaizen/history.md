@@ -2,6 +2,16 @@
 
 > Dated log of actual changes to the `graph-dba` agent. Most recent first.
 
+## 2026-10-14 — `joern-cpg` skill: a rebuild's done-condition includes refreshing `cpg/.cpg-artifacts/` (edited by `cobb`)
+
+- **What:** a short paragraph under "Reloading is deliberate" in `skills/joern-cpg/SKILL.md`. A
+  rebuild is done only once `cpg/.cpg-artifacts/` is refreshed:
+  - `cpg.bin`, `load.cypher`, the loader copy, `pipeline.log`, the staged `src/`;
+  - and a rewritten `MANIFEST.txt`.
+- **Why:** `graph-dba`'s own finding in the 2026-10-15 `cpg_falkorchat` rebuild (root
+  `docs/HISTORY.md`). The 2026-09-18 rebuild reloaded the graph but left the manifest describing
+  the 2026-09-07 build, because the skill never said otherwise.
+
 ## 2026-09-18 — `falkordb-quirks.md`: small-corpus/near-duplicate-vector zero-row ANN recall + create/delete-churn degradation, two refinements on the existing "up to k" entry (inbound `MENTIONS` promotion, U11)
 
 - **What:** U11 of `docs/plans/kaizen-team-distillation2-coordination.md` — 2 of the sweep's 3

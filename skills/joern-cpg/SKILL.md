@@ -261,6 +261,12 @@ redis-cli GRAPH.DELETE cpg_myrepo   # destructive, shared-state — escalates vi
 This keeps the reset an explicit, guard-visible command rather than a hidden
 side effect. Use `--append` to add into an existing graph instead.
 
+**A rebuild is done only once its durable reload artifacts are refreshed as well.** In this repo
+those are under `cpg/.cpg-artifacts/` (gitignored): `cpg.bin`, `load.cypher`, the loader copy,
+`pipeline.log`, the staged `src/`, and a rewritten `MANIFEST.txt` that names the new build.
+Reloading the graph alone leaves the manifest describing an older build. The 2026-09-18 rebuild
+did exactly that (root `docs/HISTORY.md`, 2026-10-15).
+
 ## CPGQL cheat-sheet (in the `joern` REPL)
 
 CPGQL is a Scala traversal DSL over the CPG. Common starting points:

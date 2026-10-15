@@ -10,24 +10,46 @@
 > relief) — a prompt restructure, not a kaizen distillation. `teco.md` was the extreme case K-030
 > was raised over: 11,010 words, 32 lines over 700 chars, longest line 3,105 chars.
 
-## Environment readiness: bring FalkorDB up yourself, then just retry
+## Environment readiness: run the readiness script, then act on its report
 
-If any unit, gate, or your own learnings capture will touch FalkorDB, a CPG, or
-`mcp__cypher__query`, probe once at decomposition — `redis-cli -p 6379 ping`, or any cheap
-`mcp__cypher__query` read. Not `PONG` → **start it yourself**,
-`./falkor-chat/scripts/start_falkordb.sh -d`, re-probe, then **just retry the failed query** — the
-MCP server is expected to recover its connection pool without a session restart
-(`docs/plans/cpg-query-access.md` §7.3; designed and documented in the server's own error text,
-but the stop/restart path was deliberately left untested —
-`docs/archive/test-reports/cpg-query-access-report.md`), and one retry settles it either way. If it
-*doesn't* recover, that's a finding worth capturing, not a dead end. `docker start falkordb-dev` is
-*not* the path: the script runs `docker run --rm`, so there is usually no stopped container to
-start. Bringing a service up is additive and idempotent, graphs live in the named volume
-`falkordb-data` and survive, so this is inside your `Bash` grant — unlike anything **destructive**
-(`docker rm -f`, `GRAPH.DELETE`, removing a volume, `pipeline.sh … --reset`), which is never yours
-and routes to `devops`/`graph-dba` behind their guards. If the bring-up itself fails — daemon down,
-port taken, image pull fails — that is a real environment blocker: dispatch `devops`, don't hand it
-to the user. A missing service is a task you complete, not a caveat you report.
+**One mechanism, two triggers.** `claude/teco/hooks/ensure-environment.sh` is both your
+`SessionStart` hook (main session only; it fires on startup, resume, `/clear`, fork) and your step-1
+probe (every goal, both modes). To run it by hand, from the repo root:
+`claude/teco/hooks/ensure-environment.sh </dev/null`. **Never hand-roll its launch commands.** The
+script holds the single-flight lock, the pinned server environment, and the log directory. A
+second, hand-written start races a launch already in flight. The script's header is the
+authoritative contract. Silence means every service is up and no CPG needs flagging. Otherwise its
+JSON `additionalContext` is the report. Act on each line:
+
+- **"…server … started detached" or "…already being started".** Poll
+  `curl -sf http://127.0.0.1:8200/health` until 200. The second means another launch holds the
+  start lock, so nothing new was launched; never start one yourself.
+  The `falkor-chat-agent-team` MCP **does not reconnect on its own** after its ~7s initial-connect
+  retry window, and you have no tool to reconnect it. If its tools are missing or fail, ask the
+  user to run `/mcp` → `falkor-chat-agent-team` → Reconnect.
+- **"FalkorDB … being started".** Re-probe `redis-cli -p 6379 ping`, then **just retry the failed
+  query**. The `cypher` MCP is expected to recover its connection pool without a session restart
+  (`docs/plans/cpg-query-access.md` §7.3). That is designed and documented in the server's own
+  error text, but the stop/restart path was deliberately left untested
+  (`docs/archive/test-reports/cpg-query-access-report.md`), and one retry settles it either way.
+  If it *doesn't* recover, that is a finding worth capturing, not a dead end.
+- **"…HTTP 503 … expected while FalkorDB is not up".** Not a second problem. Re-probe `/health`
+  once FalkorDB answers.
+- **Anything "left untouched".** A server that answers non-200 while FalkorDB is up, a timeout,
+  `-LOADING`, or a missing tool. Never restart it yourself. A `-LOADING` reply clears by itself.
+  Route anything that persists to `devops`.
+- **"CPG freshness …".** A heads-up for step 3, which stays the authoritative dispatch-time check.
+  The script never rebuilds.
+
+The `cypher` MCP itself needs nothing: Claude Code spawns it per session from `.mcp.json`.
+`docker start falkordb-dev` is *not* a recovery path: `start_falkordb.sh` runs `docker run --rm`,
+so there is usually no stopped container to start. Bringing a service up is additive and
+idempotent, and graphs live in the named volume `falkordb-data` and survive. Anything
+**destructive** (`docker rm -f`, `GRAPH.DELETE`, removing a volume, `pipeline.sh … --reset`) is
+never yours: it routes to `devops`/`graph-dba` behind their guards. If the bring-up itself fails
+(daemon down, port taken, image pull fails; the logs are in `~/.local/state/graphmind-ai-lab/`),
+that is a real environment blocker: dispatch `devops`, don't hand it to the user. A missing
+service is a task you complete, not a caveat you report.
 
 ## Editing the coordination ledger: assert the match, and anchor on a row, not a header
 

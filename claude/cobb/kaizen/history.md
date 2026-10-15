@@ -2,6 +2,128 @@
 
 > Dated log of actual changes to the `cobb` agent. Most recent first.
 
+## 2026-10-14 — K-054 revision: analyst Pass 1 and Pass 2 findings addressed, CPG freshness report (U4), tracked test
+
+Inputs:
+- review `claude/docs/reviews/teco-env-autostart.md`: Pass 1, then Pass 2's five-point
+  done-condition;
+- `teco`'s U4: the stakeholder chose check-and-report for CPGs at start, not auto-rebuild.
+
+The hook and its docs went through two revision rounds. This entry records the shipped end state.
+
+**Pass 1 dispositions:**
+- **M1 fixed.** Step 1 runs the script by hand per goal, in both modes. A start-time report is
+  described as stale by construction.
+- **M2 fixed.** The recipe is now "run the script, never hand-roll its launch". The stdin drain
+  is a bash builtin loop (`read -t 1`, 2s cap), so it spawns nothing.
+- **m1 fixed.** "Down" means `Connection refused` only.
+- **m2 fixed.** A non-200 `/health` while FalkorDB is down goes to context as expected, not as a
+  second, user-facing problem.
+- **m3 not mine.** Fixed in `e7a020cc`.
+- **m4 fixed** by an allowlist; see P2-m2.
+- **n1 fixed.** The matcher is `startup|resume|clear|fork`. `compact` is left out because step 1
+  re-runs the script per goal.
+- **n2 fixed** (dependencies; no `python3`).
+- **n3 fixed.** The model quoted `additionalContext` back verbatim (`run6.jsonl`).
+- **Open question 1, the `cypher` MCP:** nothing to start. It is a stdio container Claude Code
+  spawns per session.
+
+**Pass 2 dispositions:**
+- **P2-M1 accepted.** New tracked `claude/teco/hooks/test-ensure-environment.sh`, ~16s, using
+  its own `--rm` FalkorDB on :6396, stubs, and a sandbox git repo. It covers:
+  - a 20-cell probe matrix;
+  - env leak, a held lock, and a `GRAPH.LIST` error reply;
+  - stdin left open;
+  - 16 CPG shapes, including a hand-authored marker with a pipeline provenance, no
+    `SOURCE_DIRTY`, and `BUILT_AT` set to `''` or `now`.
+
+  `--mutants` runs the review's three mutants on copies, and each dies on exactly its cell.
+  Three more ad-hoc mutants also die on their cells: the old denylist, no lock pre-check, and a
+  `date -d`-only timestamp test. `GRAPH.LIST` failures are now detected by reply text, because
+  redis-cli 7.0.15 exits 0 on an error reply.
+- **P2-m1 accepted, root cause corrected.** The drain no longer uses `timeout`, and the
+  `SessionStart` timeout went from 15s to 30s. The CPG loop now starts a graph only while 2s of
+  budget remain.
+  - **The stall is not `timeout`-specific.** Over 6,000 runs timed with the builtin clock, bare
+    `/bin/true` stalled once and `timeout 2 true` stalled once, both at 13.15s.
+  - It is a process-spawn stall on this WSL2 host, so only the 30s budget actually covers it.
+    Every other `timeout 2` probe is kept, since a stall bounds each of them the same way.
+  - Promoted to `claude/devops/ops-quirks.md`.
+  - My Pass 1 "harness artifact" ruling was wrong. It rested on 10 retries, which could not see a
+    1-in-4,000 event.
+- **P2-m2 accepted, as an allowlist rather than an enumeration.** The server is launched as
+  `env -i` + `KEEP_ENV` (PATH, HOME/USER/LOGNAME, locale, TMPDIR, XDG dirs, Docker endpoint,
+  proxy/CA vars), plus the pinned `FALKORCHAT_WS_ID`/`FALKORDB_*`/`AGENT_TEAM_PORT`.
+- **P2-m3 accepted.**
+  - The "FalkorDB unclear → don't start" gate is dropped. Since `e7a020cc`, the start script
+    waits on a loading `falkordb-dev`. Every other unclear state fails under the lock without
+    side effects, because `start_falkordb.sh` is `docker run --rm` and can only fail to bind or
+    name-clash.
+  - The lock is tested first. When it is held, the report says "already being started".
+  - `lock_held` checks only flock's conflict code (`-E 75`), so a broken `flock` cannot fake a
+    launch in flight. The test's curated PATH caught that.
+- **Nit accepted.** `BUILT_AT` must match `YYYY-MM-DDTHH:MM` before `date -d`.
+
+**U4, the CPG check.** It reads `GRAPH.RO_QUERY` over every `cpg_*` graph and follows
+`freshness.md`, which is cited rather than restated:
+- check 0 decides fresh vs. stale, and check 2's count is added when the source moved;
+- every shape needing a human read is reported "not assessed";
+- it has a 6s budget and never rebuilds.
+
+**Live, read-only:** with :8200 at 200 and :6379 PONG, the shipped hook was silent in 38ms, so
+`cpg_falkorchat` is fresh. In Pass 1, `claude -p --agent teco` fired the hook with the new
+matcher. The 30s timeout itself was not re-run live.
+
+**Also this change:**
+- `skills/joern-cpg/SKILL.md` now says a rebuild is done only once `cpg/.cpg-artifacts/` and
+  `MANIFEST.txt` are refreshed (`graph-dba`'s finding, root `docs/HISTORY.md` 2026-10-15).
+- K-055 (a) now records that m3 is fixed in `e7a020cc`.
+
+## 2026-10-14 — K-054 closed: `teco` brings its environment up at agent start via a `SessionStart` hook
+
+Dispatched by `teco` on the stakeholder's request. **What:** new
+`claude/teco/hooks/ensure-environment.sh`, wired as a frontmatter `SessionStart` hook (matcher
+`startup|resume|clear`, timeout 15) in `claude/teco/teco.md`. It probes FalkorDB (:6379) and the
+`ws:agent-team` server (:8200 `/health`); on connection-refused it launches
+`falkor-chat/scripts/start_agent_team.sh` detached (`setsid nohup flock -n`, which also starts
+FalkorDB), or `start_falkordb.sh -d` when only FalkorDB is down; silent when both are up; never
+restarts a listening-but-unhealthy service; no-op outside this repo; logs to
+`~/.local/state/graphmind-ai-lab/`. `teco.md` step 1 and `coordination-techniques.md`'s readiness
+recipe rewritten to defer to the hook (recipe kept only for delegated runs and mid-session
+deaths, and now covers the :8200 server). Catalogs: `claude/README.md` (teco row, Deployment
+hooks), `claude/AGENTS.md` (hook machinery). Verified facts promoted to
+`skills/agent-standards/claude-code.md` (Hooks, MCP Lifecycle). **Why:** the 2026-10-14 session
+started with :8200 down → `falkor-chat-agent-team` `ECONNREFUSED`, and step 1's prose covered
+only FalkorDB and only when a unit touched it.
+
+**The four open questions, answered (Claude Code 2.1.300):**
+1. *Can a hook run for `claude --agent teco` specifically?* Yes — a frontmatter `SessionStart`
+   fires in main-session mode: live `-p` (stream-json `hook_started`/`hook_response`
+   `SessionStart:startup`) and interactive tmux runs (`SessionStart:startup says: …`), under the
+   user's `defaultMode: auto`. A settings hook could filter on input `agent_type` instead; not
+   needed. Delegated `teco` gets no `SessionStart` (doc-inferred, not tested) → K-055(b).
+2. *Can it beat MCP connection?* No. `--debug-file` timelines: MCP connect runs in parallel and
+   does not wait (a 10s-sleeping hook did not delay it); it retries `ECONNREFUSED` 3× at
+   1s/2s/4s, then gives up for the session. Detached launch + fast hook (82-88ms) is therefore
+   right: a warm server start (~3.5s) connected unaided on retry 2 (:8206, :8208); past ~7s
+   `/mcp` showed `✘ failed` with no later retry, and `/mcp` → Reconnect fixed it (:8207). The
+   hook's message tells the user exactly that. Under `-p` the init event reported `failed` even
+   with a synchronous wait-until-healthy hook (:8204).
+3. *Process lifetime?* Detached in its own session (`setsid`; PGID/SID = the `flock` pid), so it
+   survives the hook and the Claude session — verified healthy after `claude -p` exited (:8203).
+   `flock -n` on a per-port lock held for the server's life makes concurrent starts
+   single-flight: two back-to-back launches on :8202 → one `[1/5]` run, one uvicorn.
+4. *Additive/idempotent?* Starts only on curl exit 7 (nothing listening) / no `PONG`; any HTTP
+   answer or timeout is reported and left alone. Doesn't widen teco's grants (a hook is
+   harness-run; teco's `tools` unchanged).
+
+**Testing hygiene:** shared :8200/`falkordb-dev` never touched (all-up path tested against them —
+silent, 17ms). Bring-up tested only on scratch ports 8201-8208 via `AGENT_TEAM_PORT` + a scratch
+`--mcp-config --strict-mcp-config`; all eight test servers stopped and their logs/locks removed
+afterwards. Note those test runs bootstrapped/seeded the real `ws:agent-team` graph (idempotent,
+same as any `start_agent_team.sh` run). `audit-team.sh`: its only FAILs are pre-existing
+personal-info hits in files this change did not touch. Follow-ups: K-055.
+
 ## 2026-09-20 — Anomaly investigated and resolved: the "orphaned producer" entry was a correctly-functioning kept-open node, not a `cypher-mcp` defect
 
 U10 (last unit) of `claude/docs/plans/kaizen-distillation3-coordination.md`. The coordination

@@ -8,6 +8,35 @@
 > agent's learnings inbox via `agent-maintenance` skill §5. `devops.md` (the always-on prompt)
 > points here and stays lean.
 
+## On this WSL2 host, about 1 in 3,000–6,000 process spawns stalls for ~13.1s. It hits any process, not just GNU `timeout`
+
+Verified 2026-10-14 on kernel 5.15.167.4-microsoft-standard-WSL2 with coreutils 9.4. Each loop
+was timed with bash's builtin `$EPOCHREALTIME`, so the loop spawns nothing but the command under
+test:
+
+| Command | Runs | Stalls |
+|---|---|---|
+| `/bin/true` | 6,000 | 1, at 13.15s |
+| `timeout 2 true` | 6,000 | 1, at 13.15s |
+
+Earlier `date`-timed loops showed the same rate. The stalls cluster at 13.05–13.21s. Everything
+else finished in milliseconds.
+
+A `timeout N` wrapper does not bound this: the stall happens while the process is being spawned,
+before the timer is armed. A script that spawns K processes therefore has roughly a K/4,000
+chance per run of taking 13s longer. Two consequences:
+- **Size a hook or CI timeout for one stall on top of the real worst case.** Example:
+  `claude/teco/hooks/ensure-environment.sh` worst case is ~12s, so its `SessionStart` timeout is
+  30s.
+- **Don't blame the wrapper.** Removing a `timeout` drops one spawn, which barely changes the
+  odds.
+
+A 10-run retest can't confirm or rule this out. Use thousands of runs, timed with the builtin
+clock.
+Origin: `claude/docs/reviews/teco-env-autostart.md` Pass 2, P2-m1. The reviewer saw 1 stall in
+1,500 `timeout` runs and 0 in 1,500 bare `true` runs, and read that as `timeout`-specific. The
+6,000-run controls above rule that out.
+
 ## `.mcp.json`'s launch shape can be verified end-to-end from a plain shell, without restarting the harness
 
 Spawning `command`+`args` verbatim (with `CLAUDE_PROJECT_DIR` injected, matching where Claude Code
