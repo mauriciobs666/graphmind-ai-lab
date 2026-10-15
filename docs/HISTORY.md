@@ -5,6 +5,53 @@
 > [`requirements/joern-cpg-pipeline.md`](./requirements/joern-cpg-pipeline.md) and, for the read
 > path, [`requirements/cpg-query-access.md`](./requirements/cpg-query-access.md).
 
+## 2026-10-15 — `cpg_falkorchat` rebuilt to current source; reload artifacts refreshed
+
+**What:** teco-dispatched, stakeholder-approved rebuild of `cpg_falkorchat` by `graph-dba`, using
+the standard `joern-cpg` pipeline (`pythonsrc`, Joern v4.0.579, JDK 21.0.12). The freshness check
+(`skills/cpg-analysis/references/freshness.md`) had found the 2026-09-18 build (commit `07c252de`,
+tree `bbc647b4`) 7 commits / +1137 −12 behind under `falkor-chat/server`. The only key touched was
+`cpg_falkorchat`, with an explicit `GRAPH.DELETE` before the load.
+
+**Source:** commit `5c82170f2b87f703aa21e155b3c01b003672207f`. The `falkor-chat/server` tree is
+`9e41122ef7c9e6b12b93b44ea33ba618920a93d3`, with `SOURCE_DIRTY false`. Staged with
+`git archive 5c82170f:falkor-chat/server falkorchat tests` (same scope as previous builds), and
+`diff -rq` showed it identical to the working tree: 97 `.py` + 10 `.json` + 4 `.jsonl`. HEAD moved to
+`e7a020cc` mid-build, but that commit does not touch `falkor-chat/server` (the tree is unchanged),
+so the graph also matches it. Marker: `PARSED_AT 2026-10-15T00:34:39Z`,
+`BUILT_AT 2026-10-15T00:39:12Z`, `PROVENANCE source-origin`, read back by the pipeline.
+
+| Query (`GRAPH.RO_QUERY cpg_falkorchat`) | 2026-09-18 build | This build |
+|---|---|---|
+| `MATCH (n) RETURN count(n)` | 380,601 | 387,483 |
+| `MATCH ()-[r]->() RETURN count(r)` | 2,597,827 | 2,642,844 |
+| `CpgNode` count / distinct `id` | — | 387,482 / 387,482 |
+| `METHOD` | — | 6,140 |
+| `METHOD` `FILENAME STARTS WITH 'falkorchat/'` / `'tests/'` | — | 1,534 / 3,885 |
+| `(:CALL)-[:CALL]->(:METHOD)` | — | 6,866 |
+
+(— = not observed by this run. The 2026-09-18 figures are the two counts taken from the live
+graph just before the delete.) Load stats: 6,083 statements, 0 failed. The pre-dedup export was
+801,564 nodes and 5,506,826 edges. Spot check:
+`tests/test_embedding_migration.py` has 108 `METHOD`s and `tests/test_create_workspace_script.py`
+has 10. `pin` ×11 and `migrate` ×15 `CALL`s were found via `(:METHOD)-[:CONTAINS]->(:CALL)`. No
+`falkorchat/` `METHOD` matches rrf/fusion/lexical, so the K-030 RRF revert held.
+
+**Scope caveat:** the embedding-migration `pin`/`migrate` subcommands are implemented in
+`falkor-chat/scripts/embedding_migration.py`. That file is outside the `falkor-chat/server` parse
+root, so the graph has only their tests and call sites. I did not widen the scope, because doing
+so would change the source origin and the `falkorchat/`/`tests/` `FILENAME` prefixes the
+`cpg-analysis` recipes filter on.
+
+**Facts surfaced:**
+- **The 2026-09-18 rebuild reloaded the graph but never refreshed `cpg/.cpg-artifacts/`.** That
+  directory's `MANIFEST.txt` still described the 2026-09-07 build until this run. Refreshing the
+  artifacts (`cpg.bin`, `load.cypher`, loader copy, `pipeline.log`, staged `src/`, `MANIFEST.txt`)
+  is part of a rebuild's done-condition. All of them were refreshed this time.
+- **This end-to-end run took ~4.5 min** (parse → export → transform → load → verify → stamp,
+  00:34:39Z → 00:39:15Z), not the ~3 h the 2026-09-07 manifest budgeted. I did not investigate
+  why the old figure didn't reproduce.
+
 ## 2026-09-18 — `cpg_deprecated_salesperson` deleted; skill-doc/script references corrected
 
 **What:** teco-coordinated FalkorDB cleanup, at the stakeholder's explicit request (RAM cost —
