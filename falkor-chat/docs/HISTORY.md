@@ -5,6 +5,11 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-14 — `start_agent_team.sh` step 1 decides FalkorDB is up by port, not container name
+
+- **What:** step 1 now treats any server answering PONG on `$FALKORDB_HOST:$FALKORDB_PORT` as running and only runs `start_falkordb.sh -d` when none does (the container-name check remains as a wait-for-boot branch). Fixes the abort when FalkorDB is served by another container (e.g. the `compose.yaml` stack). Found as m3 in `claude/docs/reviews/teco-env-autostart.md`.
+- **Why:** the teco SessionStart hook decides by port and then calls this script, which previously tried to bind :6379 again and aborted.
+
 ## 2026-09-20 — Embedding-model migration & index-rebuild capability: `pin`/`migrate` tooling built and live-verified
 
 **What:** delivered the reusable, on-demand mechanism `docs/requirements/embedding-migration.md`
