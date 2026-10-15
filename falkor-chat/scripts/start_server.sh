@@ -117,11 +117,19 @@ SERVER_DIR="$REPO_DIR/server"
 VENV_DIR="$SERVER_DIR/.venv"
 
 # ── 1. FalkorDB ───────────────────────────────────────────────────────────────
-if docker inspect falkordb-dev --format '{{.State.Status}}' 2>/dev/null | grep -q running; then
-  echo "[1/6] FalkorDB already running — ok"
+# Decided by port first, container name second (precedent: start_agent_team.sh,
+# commit e7a020cc): whatever answers PONG on $FALKORDB_HOST:$FALKORDB_PORT counts as
+# up, e.g. the falkor-chat/compose.yaml stack, which has no container_name. Starting
+# falkordb-dev in that case would fail to bind the port and abort under set -e.
+if redis-cli -h "$FALKORDB_HOST" -p "$FALKORDB_PORT" ping 2>/dev/null | grep -q PONG; then
+  echo "[1/6] FalkorDB already serving on ${FALKORDB_HOST}:${FALKORDB_PORT} — ok"
 else
-  echo "[1/6] Starting FalkorDB (detached)..."
-  "$REPO_DIR/scripts/start_falkordb.sh" -d
+  if docker inspect falkordb-dev --format '{{.State.Status}}' 2>/dev/null | grep -q running; then
+    echo "[1/6] Container falkordb-dev is running but not answering yet — waiting"
+  else
+    echo "[1/6] Starting FalkorDB (detached)..."
+    "$REPO_DIR/scripts/start_falkordb.sh" -d
+  fi
   echo "      Waiting for FalkorDB to be ready..."
   for i in $(seq 1 30); do
     if redis-cli -h "$FALKORDB_HOST" -p "$FALKORDB_PORT" ping 2>/dev/null | grep -q PONG; then

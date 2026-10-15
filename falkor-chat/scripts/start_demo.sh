@@ -131,9 +131,15 @@ FALKORCHAT_STOREFRONT_DIR="${FALKORCHAT_STOREFRONT_DIR:-$SALESPERSON_DIR/dist}"
 TOTAL_STEPS=8
 
 # ── 1. FalkorDB ───────────────────────────────────────────────────────────────
+# Decided by port first, container name second (precedent: start_agent_team.sh,
+# commit e7a020cc): whatever answers PONG on $FALKORDB_HOST:$FALKORDB_PORT counts as
+# up, e.g. the falkor-chat/compose.yaml stack, which has no container_name. Starting
+# falkordb-dev in that case would fail to bind the port and abort under set -e.
 echo "[1/$TOTAL_STEPS] FalkorDB"
-if docker inspect falkordb-dev --format '{{.State.Status}}' 2>/dev/null | grep -q running; then
-  echo "      Already running — ok"
+if redis-cli -h "$FALKORDB_HOST" -p "$FALKORDB_PORT" ping 2>/dev/null | grep -q PONG; then
+  echo "      Already serving on ${FALKORDB_HOST}:${FALKORDB_PORT} — ok"
+elif docker inspect falkordb-dev --format '{{.State.Status}}' 2>/dev/null | grep -q running; then
+  echo "      Container falkordb-dev is running but not answering yet — waiting"
 else
   echo "      Starting FalkorDB (detached)..."
   "$REPO_DIR/scripts/start_falkordb.sh" -d

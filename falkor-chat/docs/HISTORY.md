@@ -5,6 +5,12 @@
 > [`BACKLOG.md`](./BACKLOG.md) + this file; file paths in old entries have been
 > updated so they still resolve.)
 
+## 2026-10-14 — `start_server.sh` and `start_demo.sh` step 1 decide FalkorDB is up by port, not container name
+
+- **What:** the same decision as the `start_agent_team.sh` entry below, applied to both siblings. Step 1 treats any server answering PONG on `$FALKORDB_HOST:$FALKORDB_PORT` as up; the `falkordb-dev` running check only selects a wait-for-boot branch; `start_falkordb.sh -d` runs only when neither holds. In `start_server.sh` the wait loop now runs for both the "running but not answering" and "started now" branches (before, a running-but-silent container skipped the wait and failed later). `start_demo.sh`'s preflight is unchanged: its 30s wait still fails loudly before uvicorn when nothing answers.
+- **Why:** precedent `e7a020cc` (`start_agent_team.sh`, finding m3 in `claude/docs/reviews/teco-env-autostart.md`). FalkorDB served by another container (e.g. the `compose.yaml` stack, no `container_name`) made these scripts try to bind :6379 again and abort.
+- **Verified:** scratch harness (stub `docker`, stub `start_falkordb.sh` recording calls and exiting 125, fake PONG listener on a spare port) over the extracted step-1 blocks: served + no container → ok, no start call; nothing served + no container → start called; nothing served + container running → 30s wait, then the existing ERROR exit; served + container running → ok; container running with a listener appearing after ~3s → waits and reports Ready. Pre-change blocks on the served + no-container case call `start_falkordb.sh`, confirming the old name-only logic was the fault. `bash -n` clean on both. Neither script was run end to end.
+
 ## 2026-10-14 — `start_agent_team.sh` step 1 decides FalkorDB is up by port, not container name
 
 - **What:** step 1 now treats any server answering PONG on `$FALKORDB_HOST:$FALKORDB_PORT` as running and only runs `start_falkordb.sh -d` when none does (the container-name check remains as a wait-for-boot branch). Fixes the abort when FalkorDB is served by another container (e.g. the `compose.yaml` stack). Found as m3 in `claude/docs/reviews/teco-env-autostart.md`.
