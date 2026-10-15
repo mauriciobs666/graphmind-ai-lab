@@ -167,7 +167,7 @@ engineering** (Claude Code and OpenCode artifacts).
     living document that tracks **work status** rather than the system itself: a "currently in
     progress" header, a plan-doc row for a document that now exists, a delivered-ticket
     annotation. **The human applies the list** — the by-kind owner table below routes none of
-    these document kinds, and `teco`'s write guard allows only the `archived` flip.
+    these document kinds, and deleting a delivered item is a judgment call, not a mechanical edit.
     **Verify it is in `HISTORY.md` before deleting** — a closeout is a move, not a discard.
   - **`BACKLOG.md` is forward-looking only — a delivered item does not stay in it, not even as an
     index row.** Its record is `HISTORY.md`, which indexes every delivered item by milestone; the
@@ -247,8 +247,7 @@ engineering** (Claude Code and OpenCode artifacts).
     stakeholder confirmation) · `active` (the producing agent, at creation; amendable in place
     until the document has been approved, gated, or executed against) · `superseded` (whoever
     writes the successor) · `archived` (**`teco`, at milestone close** — `teco` performs the
-    mechanical flips itself: its write guard auto-allows an `Edit` on a `docs/**.md` file whose
-    old/new strings differ only in the canonical `Status:` field flipping to `archived`). For any
+    mechanical flips itself: its write guard allows any in-repo edit). For any
     `archived` flip that is **more than** that mechanical one-token edit — bundled with other
     changes, disputed, or needing judgment about what freezes — the flip still routes to the
     by-kind owner:

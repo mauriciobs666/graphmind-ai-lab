@@ -2,6 +2,24 @@
 
 > Dated log of actual changes to the `teco` agent. Most recent first.
 
+## 2026-10-14 — Write guard becomes repository-bounded (`guard-repo-writes.sh`)
+
+- **What:** replaced `hooks/guard-coordination-doc-writes.sh` (allowlist `docs/plans/*` + `/tmp`,
+  plus the `Status:`→`archived` flip carve-out, over `scripts/guard-doc-writes.sh`) with a
+  standalone `hooks/guard-repo-writes.sh`: **allow** any path inside the git repo the session was
+  started in (`git rev-parse --show-toplevel` from `$CLAUDE_PROJECT_DIR`; `realpath -m` on both
+  sides, so `..` and out-pointing symlinks count as outside) or under `/tmp`; **ask** for anything
+  outside, and for the repo's own `.git/`; fail-open on an unextractable path. The flip carve-out
+  is subsumed. Prompt (Guardrails, milestone-close freeze, commit-grant scope), root `AGENTS.md`,
+  `claude/AGENTS.md` and `claude/README.md` updated to match.
+- **Why:** stakeholder request — teco should be able to change any kind of file inside the repo;
+  the only restriction is outside it. Role unchanged by stakeholder choice: trivial-only
+  self-implementation is now prompt-held, not hook-backed. Outside-repo stays `ask`, not `deny`,
+  because teco's frontmatter hooks also gate its delegates' calls (2026-09-09 observation in
+  `skills/agent-standards/claude-code.md`) — a deny would block a delegate's legitimate
+  out-of-repo write. Side effect: delegates' in-repo writes no longer get spurious asks from
+  teco's guard (their own guards still apply; strictest decision wins).
+
 ## 2026-10-14 — Readiness script becomes the step-1 probe and adds a CPG freshness report (K-054 revision, U4)
 
 - **What:**

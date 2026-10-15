@@ -89,9 +89,9 @@ approval every time) ·
 symlink):
 
 - **`scripts/guard-doc-writes.sh`** — an ALLOW-LIST core for a doc-scoped (or topic-scoped)
-  agent: escalate everything except a small set of paths that ARE the whole remit. Eight
-  `Write|Edit` wrappers sit on this core today: the original five doc-scoped agents (`architect`,
-  `analyst`, `data-scientist`, `teco`, `tico`), plus `security-expert`'s review guard, plus
+  agent: escalate everything except a small set of paths that ARE the whole remit. Seven
+  `Write|Edit` wrappers sit on this core today: four of the original doc-scoped agents (`architect`,
+  `analyst`, `data-scientist`, `tico`), plus `security-expert`'s review guard, plus
   `cobb` (topic-bounded — any agent's own
   definition file, kaizen curation for the team, and a small explicitly-maintained list of
   MCP/agent-standards docs outside `claude/`/`skills/`, e.g. `cypher-mcp/README.md` — cuts across
@@ -100,16 +100,15 @@ symlink):
   globs (every `claude/`/`skills/`-rooted glob doubled — a bare form plus a `*/`-prefixed sibling
   — because `tool_input.file_path` can arrive absolute, and a leading `*` is what lets the doubled
   form absorb an arbitrary absolute prefix ahead of the literal directory), an escalation message,
-  and an optional third arg, `on_mismatch` (`ask`, the default — seven of the eight wrappers use
+  and an optional third arg, `on_mismatch` (`ask`, the default — six of the seven wrappers use
   this; or `pass`, used only by `qa-engineer`, whose remit is genuinely wider than its two doc
   kinds — it also authors source/test files as part of execution, and those must fall through to
   the ambient permission flow unmediated rather than newly escalate). On a match the core emits an
   explicit `permissionDecision: "allow"`; on a mismatch (`on_mismatch="ask"`) it emits
-  `permissionDecision: "ask"`. `teco`'s wrapper is **not** purely thin: before deferring to the
-  core it auto-allows one mechanically-verified edit shape — an `Edit` on a `docs/**.md` file
-  whose old/new strings differ only in the canonical `Status:` field flipping to `archived` (the
-  milestone-close archival flip) — checked in
-  python3 by masking the Status field on both strings and requiring byte-equality of the rest.
+  `permissionDecision: "ask"`. `teco` left this core 2026-10-14 for a standalone,
+  repository-bounded guard, `teco/hooks/guard-repo-writes.sh`: allow any path inside the git repo
+  the session started in (or `/tmp`), ask for anything outside it or inside its `.git/` (contract
+  in its header).
 - **`scripts/guard-broad-write.sh`** — the DENY-LIST inverse: for an
   implementer agent whose remit is genuinely "the whole codebase, this task" and has no single
   folder/kind to allowlist. Allow everything except a small set of paths KNOWN to belong to a
@@ -168,7 +167,7 @@ standalone, agent-owned script with the same mechanics/contract as the shared co
 `ask`-only, jq→python3 extraction) — extract it into a shared core only if a second
 exploitation-shaped agent is ever added (`security-expert/kaizen/plan.md` K-003). `qa-engineer`
 carries two: its `Bash` destructive-ops guard alongside the `Write|Edit` doc-write guard above.
-`teco` and `tico` each also carry two: alongside their `Write|Edit` wrapper, an `Agent|Task`
+`teco` and `tico` each also carry two: alongside their `Write|Edit` guard, an `Agent|Task`
 dispatch guard (`teco/hooks/guard-agent-dispatch.sh`, `tico/hooks/guard-tico-agent-dispatch.sh`)
 thin-wrapping the shared `scripts/guard-agent-dispatch.sh` core described above; `teco` also
 carries a non-guard `SessionStart` hook, `teco/hooks/ensure-environment.sh` (also teco's step-1
